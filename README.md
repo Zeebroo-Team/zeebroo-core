@@ -44,7 +44,7 @@ Zeebroo is a modular Laravel application (`nwidart/laravel-modules`) for running
 
 | Tool | Version |
 |------|---------|
-| **PHP** | 8.3+ |
+| **PHP** | 8.4+ |
 | **Composer** | 2.x |
 | **Database** | MySQL / MariaDB / PostgreSQL / SQLite |
 | **Node.js** | Optional — UI is maintained without a frontend build step for most changes |
@@ -162,7 +162,7 @@ git commit -m "Bump pos-desktop submodule."
 
 ### Web application (Laravel)
 
-1. **Server** — PHP 8.3+, Composer, web server (Nginx/Apache) or `php-fpm`, database, Redis optional for cache/queues.
+1. **Server** — PHP 8.4+, Composer, web server (Nginx/Apache) or `php-fpm`, database, Redis optional for cache/queues.
 2. **Code** — deploy the repo **with submodules**:
    ```bash
    git clone --recurse-submodules git@github.com:Zeebroo-Team/zeebroo-core.git
