@@ -13,7 +13,7 @@
   ·
   <a href="#installation">Installation</a>
   ·
-  <a href="#git-submodules">Submodules</a>
+  <a href="#pos-desktop-pos-desktop">POS desktop</a>
   ·
   <a href="#deployment">Deployment</a>
   ·
@@ -49,30 +49,24 @@ Zeebroo is a modular Laravel application (`nwidart/laravel-modules`) for running
 | **Database** | MySQL / MariaDB / PostgreSQL / SQLite |
 | **Node.js** | Optional — UI is maintained without a frontend build step for most changes |
 
-For the **Qt POS desktop client**, see the [`pos-desktop`](#git-submodules) submodule (Qt 6, CMake 3.21+).
+For the **Qt POS desktop client**, see [`pos-desktop/`](#pos-desktop-pos-desktop) (Qt 6, CMake 3.21+).
 
 ---
 
 ## Installation
 
-### 1. Clone with submodules
+### 1. Clone
 
 ```bash
-git clone --recurse-submodules git@github.com:Zeebroo-Team/zeebroo-portal.git zeebroo-portal
-cd zeebroo-portal
-```
-
-If you already cloned without submodules:
-
-```bash
-git submodule update --init --recursive
+git clone git@github.com:Zeebroo-Team/zeebroo-core.git zeebroo-core
+cd zeebroo-core
 ```
 
 HTTPS:
 
 ```bash
-git clone --recurse-submodules https://github.com/Zeebroo-Team/zeebroo-portal.git zeebroo-portal
-cd zeebroo-portal
+git clone https://github.com/Zeebroo-Team/zeebroo-core.git zeebroo-core
+cd zeebroo-core
 ```
 
 ### 2. PHP dependencies
@@ -114,49 +108,21 @@ Open `APP_URL` in your browser and sign in with your seeded or created user.
 
 ---
 
-## Git submodules
+## POS desktop (`pos-desktop/`)
 
-### `pos-desktop` — Qt POS terminal
-
-The desktop point-of-sale app is a separate repository included as a submodule:
+The Qt 6 terminal client lives in **`pos-desktop/`** in this repository (also published separately at [Zeebroo-Team/pos-desktop](https://github.com/Zeebroo-Team/pos-desktop)).
 
 | | |
 |--|--|
 | **Path** | `pos-desktop/` |
-| **Remote** | [github.com/Zeebroo-Team/pos-desktop](https://github.com/Zeebroo-Team/pos-desktop) |
 | **Docs** | [`pos-desktop/README.md`](pos-desktop/README.md) |
 
-#### Initialize or update
-
-```bash
-git submodule update --init --recursive
-```
-
-#### Pull latest desktop client
+Build from the repo root:
 
 ```bash
 cd pos-desktop
-git fetch origin
-git checkout main
-git pull origin main
-cd ..
-git add pos-desktop
-git commit -m "Bump pos-desktop submodule."
-```
-
-#### Add submodule to another fork (first time)
-
-```bash
-git submodule add https://github.com/Zeebroo-Team/pos-desktop.git pos-desktop
-git submodule update --init --recursive
-```
-
-If HTTPS clone fails in your environment, use SSH:
-
-```bash
-git config submodule.pos-desktop.url git@github.com:Zeebroo-Team/pos-desktop.git
-git submodule sync pos-desktop
-git submodule update --init pos-desktop
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build
 ```
 
 ---
@@ -168,8 +134,8 @@ git submodule update --init pos-desktop
 1. **Server** — PHP 8.3+, Composer, web server (Nginx/Apache) or `php-fpm`, database, Redis optional for cache/queues.
 2. **Code** — deploy the repo **with submodules**:
    ```bash
-   git clone --recurse-submodules git@github.com:Zeebroo-Team/zeebroo-portal.git
-   cd zeebroo-portal   # or your deploy path
+   git clone git@github.com:Zeebroo-Team/zeebroo-core.git
+   cd zeebroo-core   # or your deploy path
    ```
 3. **Install**
    ```bash
@@ -227,7 +193,7 @@ Example terminal config (`config.json`):
 |--------|--------|--------|
 | **Web Online POS** | `/pos/online` (session auth) | Browser terminal in the Zeebroo UI |
 | **REST API** | `/api/v1/pos/*` | Same business logic; used by mobile and desktop |
-| **Desktop (Qt)** | `pos-desktop/` submodule | [pos-desktop](https://github.com/Zeebroo-Team/pos-desktop) repo |
+| **Desktop (Qt)** | `pos-desktop/` in this repo | [pos-desktop](https://github.com/Zeebroo-Team/pos-desktop) (standalone) |
 
 ---
 
@@ -268,12 +234,12 @@ php artisan boost:install
 ## Project structure
 
 ```
-zeebroo-portal/
+zeebroo-core/
   app/                 Application core
   Modules/             Feature modules (Pos, Product, Business, …)
   public/
     logo.png           Brand logo (README & app assets)
-  pos-desktop/         Git submodule — Qt POS desktop client
+  pos-desktop/         Qt POS desktop client
   resources/           Shared views/assets
   routes/              Web & API entry routes
 ```
@@ -284,8 +250,8 @@ zeebroo-portal/
 
 | Repository | Description |
 |------------|-------------|
-| [Zeebroo-Team/zeebroo-portal](https://github.com/Zeebroo-Team/zeebroo-portal) | This Laravel application |
-| [Zeebroo-Team/pos-desktop](https://github.com/Zeebroo-Team/pos-desktop) | Qt 6 POS desktop client (`pos-desktop/` submodule) |
+| [Zeebroo-Team/zeebroo-core](https://github.com/Zeebroo-Team/zeebroo-core) | This Laravel application (monorepo) |
+| [Zeebroo-Team/pos-desktop](https://github.com/Zeebroo-Team/pos-desktop) | Standalone Qt POS desktop repo (optional) |
 
 ---
 
