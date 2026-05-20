@@ -1,0 +1,5 @@
+/Users/mac/Documents/Projects/socibiz/desktop/build/CMakeFiles/socibiz-desktop.dir
+/Users/mac/Documents/Projects/socibiz/desktop/build/CMakeFiles/edit_cache.dir
+/Users/mac/Documents/Projects/socibiz/desktop/build/CMakeFiles/rebuild_cache.dir
+/Users/mac/Documents/Projects/socibiz/desktop/build/CMakeFiles/socibiz-desktop_autogen_timestamp_deps.dir
+/Users/mac/Documents/Projects/socibiz/desktop/build/CMakeFiles/socibiz-desktop_autogen.dir

@@ -1,0 +1,42 @@
+<?php
+
+use Illuminate\Support\Facades\Route;
+use Modules\Pos\Http\Controllers\Api\PosAuthApiController;
+use Modules\Pos\Http\Controllers\Api\PosBusinessesApiController;
+use Modules\Pos\Http\Controllers\Api\PosApiDocsController;
+use Modules\Pos\Http\Controllers\Api\PosCatalogApiController;
+use Modules\Pos\Http\Controllers\Api\PosCheckoutApiController;
+use Modules\Pos\Http\Controllers\Api\PosOnlineBootstrapApiController;
+use Modules\Pos\Http\Controllers\Api\PosProductApiController;
+use Modules\Pos\Http\Controllers\Api\PosSaleApiController;
+use Modules\Pos\Http\Controllers\Api\PosSettingsApiController;
+
+Route::prefix('v1/pos')->group(function (): void {
+    Route::post('auth/token', [PosAuthApiController::class, 'token'])->name('auth.token');
+
+    Route::get('docs', [PosApiDocsController::class, 'index'])->name('pos.docs');
+    Route::get('docs/openapi.yaml', [PosApiDocsController::class, 'openapi'])->name('pos.docs.openapi');
+    Route::get('docs/openapi.json', [PosApiDocsController::class, 'openapiJson'])->name('pos.docs.openapi.json');
+    Route::get('docs/readme', [PosApiDocsController::class, 'readme'])->name('pos.docs.readme');
+});
+
+Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(function (): void {
+    Route::post('auth/revoke', [PosAuthApiController::class, 'revoke'])->name('auth.revoke');
+    Route::get('businesses', [PosBusinessesApiController::class, 'index'])->name('businesses.index');
+    Route::get('online/bootstrap', PosOnlineBootstrapApiController::class)->name('online.bootstrap');
+
+    Route::get('online/categories', [PosCatalogApiController::class, 'categories'])->name('online.categories');
+    Route::get('online/products', [PosCatalogApiController::class, 'products'])->name('online.products');
+    Route::get('online/products/sku/{sku}', [PosCatalogApiController::class, 'productBySku'])->name('online.products.sku');
+
+    Route::post('online/products', [PosProductApiController::class, 'store'])->name('online.products.store');
+    Route::post('online/checkout', [PosCheckoutApiController::class, 'store'])->name('online.checkout');
+
+    Route::get('online/settings', [PosSettingsApiController::class, 'show'])->name('online.settings.show');
+    Route::put('online/settings', [PosSettingsApiController::class, 'update'])->name('online.settings.update');
+    Route::patch('online/settings', [PosSettingsApiController::class, 'update']);
+
+    Route::get('sales', [PosSaleApiController::class, 'index'])->name('sales.index');
+    Route::get('sales/{sale}', [PosSaleApiController::class, 'show'])->name('sales.show');
+    Route::post('sales/{sale}/void', [PosSaleApiController::class, 'void'])->name('sales.void');
+});

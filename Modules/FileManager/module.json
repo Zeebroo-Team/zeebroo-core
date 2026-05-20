@@ -1,0 +1,11 @@
+{
+    "name": "FileManager",
+    "alias": "filemanager",
+    "description": "Business file storage and folders.",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\FileManager\\Providers\\FileManagerServiceProvider"
+    ],
+    "files": []
+}

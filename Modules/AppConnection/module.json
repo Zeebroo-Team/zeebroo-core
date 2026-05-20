@@ -1,0 +1,11 @@
+{
+    "name": "AppConnection",
+    "alias": "appconnection",
+    "description": "Third-party app connections and integrations hub.",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\AppConnection\\Providers\\AppConnectionServiceProvider"
+    ],
+    "files": []
+}

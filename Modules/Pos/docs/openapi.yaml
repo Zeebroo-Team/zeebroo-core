@@ -1,0 +1,558 @@
+openapi: 3.0.3
+info:
+  title: Socibiz POS Online API
+  description: |
+    REST API for the online POS terminal: catalog, cart checkout, quick product create, settings, and sales.
+
+    ## Authentication
+    1. `POST /api/v1/pos/auth/token` with email and password to receive a Bearer token.
+    2. Send `Authorization: Bearer {access_token}` on all protected routes.
+
+    ## Business scope
+    Most endpoints require a business context. Send either:
+    - Header `X-Business-Id: {id}` (recommended for mobile apps), or
+    - Query `business_id={id}`
+
+    If omitted, the API uses the user's session-selected business (web) or latest business.
+
+  version: 1.0.0
+servers:
+  - url: /api/v1/pos
+    description: POS API base path (prepend your app URL, e.g. https://example.com)
+
+tags:
+  - name: Auth
+  - name: Docs
+  - name: Online bootstrap
+  - name: Catalog
+  - name: Checkout
+  - name: Products
+  - name: Settings
+  - name: Sales
+
+paths:
+  /auth/token:
+    post:
+      tags: [Auth]
+      summary: Create API access token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, format: password }
+                device_name: { type: string, example: pos-tablet-1 }
+      responses:
+        '200':
+          description: Token issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokenResponse'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /auth/revoke:
+    post:
+      tags: [Auth]
+      summary: Revoke current token
+      responses:
+        '200':
+          description: Token revoked
+
+  /businesses:
+    get:
+      tags: [Auth]
+      summary: List businesses for the authenticated user
+      responses:
+        '200':
+          description: Business list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: integer }
+                        name: { type: string }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /docs/openapi.yaml:
+    get:
+      tags: [Docs]
+      summary: OpenAPI specification (YAML)
+      security: []
+      responses:
+        '200':
+          description: YAML document
+
+  /docs:
+    get:
+      tags: [Docs]
+      summary: Swagger UI documentation page
+      security: []
+      responses:
+        '200':
+          description: HTML page
+
+  /online/bootstrap:
+    get:
+      tags: [Online bootstrap]
+      summary: Load full online POS session data
+      parameters:
+        - $ref: '#/components/parameters/BusinessIdHeader'
+        - $ref: '#/components/parameters/BusinessIdQuery'
+        - name: q
+          in: query
+          schema: { type: string }
+          description: Product search (name or SKU)
+        - name: category
+          in: query
+          schema: { type: integer }
+          description: Filter by category id
+      responses:
+        '200':
+          description: Bootstrap payload
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/OnlineBootstrap'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /online/categories:
+    get:
+      tags: [Catalog]
+      summary: List POS categories
+      parameters:
+        - $ref: '#/components/parameters/BusinessIdHeader'
+        - $ref: '#/components/parameters/BusinessIdQuery'
+      responses:
+        '200':
+          description: Category list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Category'
+
+  /online/products:
+    get:
+      tags: [Catalog]
+      summary: List sellable product cards
+      parameters:
+        - $ref: '#/components/parameters/BusinessIdHeader'
+        - $ref: '#/components/parameters/BusinessIdQuery'
+        - name: q
+          in: query
+          schema: { type: string }
+        - name: category
+          in: query
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Product cards
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ProductCard'
+    post:
+      tags: [Products]
+      summary: Quick-create product from POS
+      parameters:
+        - $ref: '#/components/parameters/BusinessIdHeader'
+        - $ref: '#/components/parameters/BusinessIdQuery'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuickCreateProduct'
+      responses:
+        '201':
+          description: Product created
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /online/products/sku/{sku}:
+    get:
+      tags: [Catalog]
+      summary: Find product by SKU (barcode)
+      parameters:
+        - $ref: '#/components/parameters/BusinessIdHeader'
+        - $ref: '#/components/parameters/BusinessIdQuery'
+        - name: sku
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Product card
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ProductCard'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /online/checkout:
+    post:
+      tags: [Checkout]
+      summary: Complete a sale
+      parameters:
+        - $ref: '#/components/parameters/BusinessIdHeader'
+        - $ref: '#/components/parameters/BusinessIdQuery'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckoutRequest'
+      responses:
+        '201':
+          description: Sale completed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  data:
+                    $ref: '#/components/schemas/Sale'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /online/settings:
+    get:
+      tags: [Settings]
+      summary: Get POS settings
+      parameters:
+        - $ref: '#/components/parameters/BusinessIdHeader'
+        - $ref: '#/components/parameters/BusinessIdQuery'
+      responses:
+        '200':
+          description: Settings
+    put:
+      tags: [Settings]
+      summary: Update POS settings
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PosSettings'
+      responses:
+        '200':
+          description: Settings saved
+    patch:
+      tags: [Settings]
+      summary: Update POS settings (partial)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PosSettings'
+
+  /sales:
+    get:
+      tags: [Sales]
+      summary: List sales
+      parameters:
+        - $ref: '#/components/parameters/BusinessIdHeader'
+        - $ref: '#/components/parameters/BusinessIdQuery'
+        - name: q
+          in: query
+          schema: { type: string }
+        - name: channel
+          in: query
+          schema:
+            type: string
+            enum: [online, retail]
+      responses:
+        '200':
+          description: Sale list
+
+  /sales/{sale}:
+    get:
+      tags: [Sales]
+      summary: Get sale details
+      parameters:
+        - name: sale
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Sale detail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Sale'
+
+  /sales/{sale}/void:
+    post:
+      tags: [Sales]
+      summary: Void a sale and restore stock
+      parameters:
+        - name: sale
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Sale voided
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: Sanctum
+
+  parameters:
+    BusinessIdHeader:
+      name: X-Business-Id
+      in: header
+      schema: { type: integer }
+      description: Active business id
+    BusinessIdQuery:
+      name: business_id
+      in: query
+      schema: { type: integer }
+      description: Active business id (alternative to header)
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid token
+    NotFound:
+      description: Resource not found
+    ValidationError:
+      description: Validation failed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  schemas:
+    AuthTokenResponse:
+      type: object
+      properties:
+        token_type: { type: string, example: Bearer }
+        access_token: { type: string }
+        user:
+          type: object
+          properties:
+            id: { type: integer }
+            name: { type: string }
+            email: { type: string, format: email }
+
+    ErrorResponse:
+      type: object
+      properties:
+        message: { type: string }
+        errors:
+          type: object
+          additionalProperties:
+            type: array
+            items: { type: string }
+
+    Category:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+
+    StockLayer:
+      type: object
+      properties:
+        id: { type: integer }
+        label: { type: string }
+        quantity_remaining: { type: number }
+        unit_cost: { type: number }
+        unit_sell_price: { type: number }
+        received_at: { type: string, format: date, nullable: true }
+
+    ProductCard:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        sku: { type: string, nullable: true }
+        unit: { type: string, nullable: true }
+        image_url: { type: string, nullable: true }
+        unit_sell_price: { type: number, nullable: true }
+        stock_quantity: { type: number }
+        has_layers: { type: boolean }
+        layer_count: { type: integer }
+        requires_layer_pick: { type: boolean }
+        has_multiple_prices: { type: boolean }
+        layers:
+          type: array
+          items:
+            $ref: '#/components/schemas/StockLayer'
+        category_ids:
+          type: array
+          items: { type: integer }
+
+    QuickCreateProduct:
+      type: object
+      required: [name, unit_price]
+      properties:
+        name: { type: string }
+        sku: { type: string, nullable: true }
+        unit_price: { type: number, minimum: 0 }
+        stock_quantity: { type: number, minimum: 0 }
+        product_unit_id: { type: integer, nullable: true }
+
+    CartItem:
+      type: object
+      required: [product_id, quantity]
+      properties:
+        product_id: { type: integer }
+        quantity: { type: number, minimum: 0.001 }
+        product_stock_layer_id:
+          type: integer
+          nullable: true
+          description: Required when selling from a specific stock batch
+
+    CheckoutRequest:
+      type: object
+      required: [items, payment_method]
+      properties:
+        items:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/CartItem'
+        payment_method:
+          type: string
+          enum: [cash, card, credit]
+        channel:
+          type: string
+          enum: [online, retail]
+          default: online
+        credit_account_id:
+          type: integer
+          description: Required for cash and card payments
+        amount_tendered:
+          type: number
+          description: Required for cash
+        amount_paid: { type: number }
+        discount_percent: { type: number, minimum: 0, maximum: 100 }
+        notes: { type: string, maxLength: 2000 }
+
+    PosSettings:
+      type: object
+      properties:
+        default_deposit_account_id: { type: integer, nullable: true }
+        discount_field_enabled: { type: boolean }
+        display_theme:
+          type: string
+          enum: [light, dark]
+
+    OnlineBootstrap:
+      type: object
+      properties:
+        business:
+          type: object
+          properties:
+            id: { type: integer }
+            name: { type: string }
+        currency: { type: string }
+        channel: { type: string, example: online }
+        categories:
+          type: array
+          items:
+            $ref: '#/components/schemas/Category'
+        products:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductCard'
+        accounts:
+          type: array
+          items:
+            type: object
+        today:
+          type: object
+          properties:
+            count: { type: integer }
+            total: { type: number }
+            online_count: { type: integer }
+            online_total: { type: number }
+        settings:
+          $ref: '#/components/schemas/PosSettings'
+        product_units:
+          type: array
+          items:
+            type: object
+
+    SaleItem:
+      type: object
+      properties:
+        id: { type: integer }
+        product_id: { type: integer }
+        product_stock_layer_id: { type: integer, nullable: true }
+        product_name: { type: string }
+        sku: { type: string, nullable: true }
+        quantity: { type: number }
+        unit_cost: { type: number, nullable: true }
+        unit_sell_price: { type: number }
+        line_total: { type: number }
+
+    Sale:
+      type: object
+      properties:
+        id: { type: integer }
+        sale_number: { type: string }
+        status: { type: string }
+        payment_method: { type: string }
+        payment_method_label: { type: string }
+        channel: { type: string }
+        channel_label: { type: string }
+        subtotal: { type: number }
+        discount_percent: { type: number, nullable: true }
+        discount_amount: { type: number }
+        total: { type: number }
+        amount_paid: { type: number }
+        amount_tendered: { type: number, nullable: true }
+        change_amount: { type: number, nullable: true }
+        notes: { type: string, nullable: true }
+        sold_at: { type: string, format: date-time, nullable: true }
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SaleItem'
+
+security:
+  - bearerAuth: []

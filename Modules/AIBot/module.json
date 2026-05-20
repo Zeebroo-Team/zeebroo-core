@@ -1,0 +1,11 @@
+{
+    "name": "AIBot",
+    "alias": "aibot",
+    "description": "AI assistant and automation integrations for the SociBiz workspace.",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\AIBot\\Providers\\AIBotServiceProvider"
+    ],
+    "files": []
+}

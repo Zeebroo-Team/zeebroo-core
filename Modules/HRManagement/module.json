@@ -1,0 +1,11 @@
+{
+    "name": "HRManagement",
+    "alias": "hrmanagement",
+    "description": "Human resources (people, payroll, leave) scaffold for the SociBiz workspace.",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\HRManagement\\Providers\\HRManagementServiceProvider"
+    ],
+    "files": []
+}

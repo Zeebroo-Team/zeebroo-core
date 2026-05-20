@@ -1,0 +1,11 @@
+{
+    "name": "Modification",
+    "alias": "modification",
+    "description": "Modification overview and create screens.",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\Modification\\Providers\\ModificationServiceProvider"
+    ],
+    "files": []
+}

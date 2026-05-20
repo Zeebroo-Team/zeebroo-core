@@ -1,0 +1,16 @@
+{
+    "Auth": true,
+    "Theme": true,
+    "Business": true,
+    "Account": true,
+    "Settings": true,
+    "Transaction": true,
+    "HRManagement": true,
+    "AIBot": true,
+    "AppConnection": true,
+    "Modification": true,
+    "Product": true,
+    "FileManager": true,
+    "Purchase": true,
+    "Pos": true
+}

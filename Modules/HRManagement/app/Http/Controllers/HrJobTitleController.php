@@ -1,0 +1,86 @@
+<?php
+
+namespace Modules\HRManagement\Http\Controllers;
+
+use App\Http\Controllers\Controller;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
+use Illuminate\View\View;
+use Modules\Business\Models\Business;
+use Modules\HRManagement\Models\JobTitle;
+use Modules\HRManagement\Services\HrPayrollSettingsService;
+use Modules\HRManagement\Services\JobTitleService;
+
+class HrJobTitleController extends Controller
+{
+    public function __construct(
+        private readonly HrPayrollSettingsService $hrPayrollSettings,
+        private readonly JobTitleService $jobTitleService,
+    ) {}
+
+    public function index(Request $request): RedirectResponse|View
+    {
+        $business = Business::currentForNavbar($request->user());
+        abort_if($business === null, 403);
+
+        if (! $this->hrPayrollSettings->optedIn($business)) {
+            return redirect()->route('hr.onboarding');
+        }
+
+        abort_unless($request->user()->businesses()->whereKey($business->id)->exists(), 403);
+
+        return view('hrmanagement::job-titles.index', [
+            'business' => $business,
+            'jobTitles' => $business->jobTitles()->withCount('employees')->orderBy('name')->orderBy('id')->get(),
+        ]);
+    }
+
+    public function store(Request $request): RedirectResponse
+    {
+        $business = Business::currentForNavbar($request->user());
+        abort_if($business === null, 403);
+
+        if (! $this->hrPayrollSettings->optedIn($business)) {
+            return redirect()->route('hr.onboarding');
+        }
+
+        abort_unless($request->user()->businesses()->whereKey($business->id)->exists(), 403);
+
+        $validated = $request->validate([
+            'name' => [
+                'required', 'string', 'max:255',
+                Rule::unique('hr_job_titles', 'name')->where(
+                    fn ($query) => $query->where('business_id', $business->id)
+                ),
+            ],
+        ]);
+
+        $this->jobTitleService->create($business, $validated['name']);
+
+        return redirect()->route('hr.job-titles.index')->with('status', __('Designation saved.'));
+    }
+
+    public function destroy(Request $request, JobTitle $jobTitle): RedirectResponse
+    {
+        $business = Business::currentForNavbar($request->user());
+        abort_if($business === null, 403);
+
+        if (! $this->hrPayrollSettings->optedIn($business)) {
+            return redirect()->route('hr.onboarding');
+        }
+
+        abort_unless($request->user()->businesses()->whereKey($business->id)->exists(), 403);
+        abort_unless((int) $jobTitle->business_id === (int) $business->id, 403);
+
+        if ($jobTitle->employees()->exists()) {
+            return redirect()->route('hr.job-titles.index')->withErrors([
+                'designation' => __('Cannot delete a designation that still has employees assigned.'),
+            ]);
+        }
+
+        $jobTitle->delete();
+
+        return redirect()->route('hr.job-titles.index')->with('status', __('Designation deleted.'));
+    }
+}

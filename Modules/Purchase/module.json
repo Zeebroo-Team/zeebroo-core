@@ -1,0 +1,11 @@
+{
+    "name": "Purchase",
+    "alias": "purchase",
+    "description": "Suppliers, purchase orders, goods receive notes, and stock intake.",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\Purchase\\Providers\\PurchaseServiceProvider"
+    ],
+    "files": []
+}

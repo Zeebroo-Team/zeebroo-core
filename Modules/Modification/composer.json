@@ -1,0 +1,15 @@
+{
+    "name": "nwidart/modification",
+    "description": "",
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": []
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\Modification\\": "app/"
+        }
+    }
+}
