@@ -210,24 +210,28 @@ The web UI remains available; clients can use either session cookies or API toke
 
 ## POS Desktop (Qt)
 
-The **Qt 6 desktop client** lives in the [`pos-desktop`](../../../pos-desktop) git submodule:
+The **Qt 6 desktop client** is pulled in as a git submodule at [`pos-desktop/`](../../../pos-desktop) from [Zeebroo-Team/zeebroo-pos-desktop](https://github.com/Zeebroo-Team/zeebroo-pos-desktop). The CMake project is under **`pos-desktop/pos-desktop/`** (same layout as the standalone repo).
 
-- Repository: [github.com/Zeebroo-Team/pos-desktop](https://github.com/Zeebroo-Team/pos-desktop)
 - Same REST API as this document
 
-### Clone Zeebroo with the submodule
+### Clone Zeebroo Core with the submodule
 
 ```bash
-git clone --recurse-submodules https://github.com/Zeebroo-Team/zeebroo-portal.git
-# or, after a normal clone:
+git clone --recurse-submodules https://github.com/Zeebroo-Team/zeebroo-core.git
+cd zeebroo-core
+```
+
+If you already cloned without submodules:
+
+```bash
 git submodule update --init --recursive
 ```
 
 ### Work on the desktop app
 
 ```bash
-cd pos-desktop
-# see pos-desktop/README.md for build steps (CMake + Qt 6)
+cd pos-desktop/pos-desktop
+# see https://github.com/Zeebroo-Team/zeebroo-pos-desktop for build steps (CMake + Qt 6)
 ```
 
-To bump the pinned submodule commit in Zeebroo: commit inside `pos-desktop`, push to `pos-desktop`, then in the parent repo run `git add pos-desktop` and commit the updated submodule pointer.
+To bump the pinned submodule in Zeebroo Core: commit and push inside `pos-desktop` on the `zeebroo-pos-desktop` repo, then in this repo run `git add pos-desktop` and commit the updated submodule pointer.
