@@ -36,6 +36,7 @@
         'singleLocationSetup' => true,
         'submitLabel' => 'Save and continue',
         'showBranchCreateErrorBanner' => false,
+        'defaultBranchName' => $business->name ?? '',
     ])
 </div>
 @endsection

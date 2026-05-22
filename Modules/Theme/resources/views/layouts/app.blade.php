@@ -267,6 +267,17 @@
         }
         $navBusiness = \Modules\Business\Models\Business::currentForNavbar(auth()->user());
         $navBusinesses = \Modules\Business\Models\Business::allForNavbar(auth()->user());
+
+        // Load feature flags first — used to gate sidebar sections below.
+        $businessFeatures = $navBusiness
+            ? (function () use ($navBusiness) {
+                $saved = (array) ($navBusiness->getSetting('business.features', []) ?: []);
+                $defaults = ['account_management' => true, 'bill_management' => true, 'human_resources' => true, 'point_of_sale' => true, 'product_management' => true, 'social_media_campaign' => true, 'stock_management' => true];
+                return !empty($saved) ? array_merge($defaults, array_map('boolval', $saved)) : $defaults;
+            })()
+            : [];
+        $featureOn = fn (string $key) => (bool) ($businessFeatures[$key] ?? true);
+
         $showSidebarLoansLink = $navBusiness && $navBusiness->loans()->exists();
         $sidebarLoanDueHighlight = $showSidebarLoansLink && $navBusiness
             ? app(\Modules\Account\Services\LoanOverviewTooltipService::class)->businessHasOverdueLoanInstallments($navBusiness)
@@ -276,26 +287,46 @@
             ? app(\Modules\Account\Services\RentalService::class)->businessHasOverdueRentalPayments($navBusiness)
             : false;
         $showSidebarBillsLink = $navBusiness && $navBusiness->bills()->exists();
-        $showSidebarProductBrandsLink = $navBusiness && Route::has('product.brands.index') && $navBusiness->productBrands()->exists();
-        $showSidebarProductCategoriesLink = $navBusiness && Route::has('product.categories.index') && $navBusiness->productCategories()->exists();
-        $showSidebarProductUnitsLink = $navBusiness && Route::has('product.units.index') && $navBusiness->productUnits()->exists();
-        $showSidebarProductsLink = $navBusiness && Route::has('product.index') && $navBusiness->products()->exists();
+
+        // Catalog — always visible when Product Management feature is enabled.
+        $productFeatureOn = $navBusiness && $featureOn('product_management');
+        $showSidebarProductBrandsLink = $navBusiness && Route::has('product.brands.index')
+            && ($productFeatureOn || $navBusiness->productBrands()->exists());
+        $showSidebarProductCategoriesLink = $navBusiness && Route::has('product.categories.index')
+            && ($productFeatureOn || $navBusiness->productCategories()->exists());
+        $showSidebarProductUnitsLink = $navBusiness && Route::has('product.units.index')
+            && ($productFeatureOn || $navBusiness->productUnits()->exists());
+        $showSidebarProductsLink = $navBusiness && Route::has('product.index')
+            && ($productFeatureOn || $navBusiness->products()->exists());
         $showSidebarProductSection = $showSidebarProductBrandsLink
             || $showSidebarProductCategoriesLink
             || $showSidebarProductUnitsLink
             || $showSidebarProductsLink;
-        $showSidebarPurchasesLink = $navBusiness && Route::has('purchase.index') && $navBusiness->purchases()->exists();
-        $showSidebarGrnLink = $navBusiness && Route::has('purchase.grn.index') && $navBusiness->goodsReceiveNotes()->exists();
-        $showSidebarSuppliersLink = $navBusiness && Route::has('purchase.suppliers.index') && $navBusiness->suppliers()->exists();
-        $showSidebarChequesLink = $navBusiness && Route::has('purchase.cheques.index') && $navBusiness->chequePayments()->exists();
+
+        // Stock Management — always visible when Stock Management feature is enabled.
+        $stockFeatureOn = $navBusiness && $featureOn('stock_management');
+        $showSidebarPurchasesLink = $navBusiness && Route::has('purchase.index')
+            && ($stockFeatureOn || $navBusiness->purchases()->exists());
+        $showSidebarGrnLink = $navBusiness && Route::has('purchase.grn.index')
+            && ($stockFeatureOn || $navBusiness->goodsReceiveNotes()->exists());
+        $showSidebarSuppliersLink = $navBusiness && Route::has('purchase.suppliers.index')
+            && ($stockFeatureOn || $navBusiness->suppliers()->exists());
+        $showSidebarChequesLink = $navBusiness && Route::has('purchase.cheques.index')
+            && ($stockFeatureOn || $navBusiness->chequePayments()->exists());
         $showSidebarPurchaseSection = $showSidebarPurchasesLink
             || $showSidebarGrnLink
             || $showSidebarSuppliersLink
             || $showSidebarChequesLink;
-        $showSidebarPosRegisterLink = $navBusiness && Route::has('pos.online') && $navBusiness->products()->where('is_active', true)->where('is_bundle', false)->exists();
-        $showSidebarPosHubLink = $navBusiness && Route::has('pos.index');
-        $showSidebarPosSalesLink = $navBusiness && Route::has('pos.sales.index') && $navBusiness->sales()->exists();
+
+        // POS — always visible when Point of Sale feature is enabled.
+        $posFeatureOn = $navBusiness && $featureOn('point_of_sale');
+        $showSidebarPosHubLink = $navBusiness && Route::has('pos.index') && $posFeatureOn;
+        $showSidebarPosRegisterLink = $navBusiness && Route::has('pos.online')
+            && ($posFeatureOn || $navBusiness->products()->where('is_active', true)->where('is_bundle', false)->exists());
+        $showSidebarPosSalesLink = $navBusiness && Route::has('pos.sales.index')
+            && ($posFeatureOn || $navBusiness->sales()->exists());
         $showSidebarPosSection = $showSidebarPosHubLink || $showSidebarPosRegisterLink || $showSidebarPosSalesLink;
+
         $showSidebarFilesLink = $navBusiness && (
             $navBusiness->fileManagerFiles()->exists() || $navBusiness->fileManagerFolders()->exists()
         );
@@ -308,6 +339,7 @@
         $sidebarBillDueHighlight = $showSidebarBillsLink && $navBusiness
             ? app(\Modules\Account\Services\BillService::class)->businessHasOverdueBillPayments($navBusiness)
             : false;
+        $hrFeatureOn = $navBusiness && $featureOn('human_resources');
         $hrPayrollOptedIn = $navBusiness
             ? (bool) get_settings('hr.payroll.opted_in', false, $navBusiness)
             : false;
@@ -349,6 +381,7 @@
             $showSidebarProductUnitsLink = false;
             $showSidebarProductsLink = false;
             $showSidebarProductSection = false;
+            $stockFeatureOn = false;
             $showSidebarPurchasesLink = false;
             $showSidebarGrnLink = false;
             $showSidebarSuppliersLink = false;
@@ -364,6 +397,7 @@
             $sidebarLoanDueHighlight = false;
             $sidebarRentalDueHighlight = false;
             $sidebarBillDueHighlight = false;
+            $hrFeatureOn = false;
             $sidebarPayrollOverdueHighlight = false;
             $sidebarPayrollCyclesOverdueHighlight = false;
         }
@@ -455,9 +489,9 @@
             @endif
             @if($showSidebarPurchaseSection)
                 <div class="menu-group-title">
-                    <i class="fa fa-cart-shopping"></i><span>Purchase orders</span>
+                    <i class="fa fa-warehouse"></i><span>Stock management</span>
                 </div>
-                <div class="submenu" aria-label="Purchase orders">
+                <div class="submenu" aria-label="Stock management">
                     @if($showSidebarPurchasesLink)
                         <a href="{{ route('purchase.index') }}" @class([
                             'active' => request()->routeIs('purchase.index', 'purchase.store', 'purchase.show', 'purchase.edit', 'purchase.update', 'purchase.place-order', 'purchase.receive', 'purchase.cancel', 'purchase.destroy'),
@@ -502,7 +536,7 @@
             @if($showSidebarFilesLink && Route::has('filemanager.index'))
                 <a href="{{ route('filemanager.index') }}" class="{{ request()->routeIs('filemanager.*') ? 'active' : '' }}"><i class="fa fa-folder-open"></i><span>Files</span></a>
             @endif
-            @if($navBusiness && $hrPayrollOptedIn)
+            @if($navBusiness && ($hrFeatureOn || $hrPayrollOptedIn))
                 <div class="menu-group-title">
                     <i class="fa fa-users-gear"></i><span>HR</span>
                 </div>
@@ -517,6 +551,7 @@
                     @if(Route::has('hr.attendance.index'))
                         <a href="{{ route('hr.attendance.index') }}" class="{{ request()->routeIs('hr.attendance.*') ? 'active' : '' }}"><i class="fa fa-calendar-check"></i><span>Attendance</span></a>
                     @endif
+                    @if($hrPayrollOptedIn)
                     <div class="menu-payroll-nested">
                         <a href="{{ route('hr.payroll.index') }}" @class([
                             'active' => request()->routeIs('hr.payroll.*'),
@@ -535,6 +570,7 @@
                             </a>
                         </div>
                     </div>
+                    @endif
                     <a href="{{ route('hr.departments.index') }}" class="{{ request()->routeIs('hr.departments.*') ? 'active' : '' }}"><i class="fa fa-folder-tree"></i><span>Departments</span></a>
                     <a href="{{ route('hr.job-titles.index') }}" class="{{ request()->routeIs('hr.job-titles.*') ? 'active' : '' }}"><i class="fa fa-id-badge"></i><span>Designations</span></a>
                 </div>
@@ -770,6 +806,14 @@
                                 </form>
                             </div>
                         @endif
+                        @if($navBusiness)
+                        <div class="menu-row" style="display:block;padding-top:2px;padding-bottom:2px;">
+                            <button type="button" id="openFeaturesModalBtn" style="width:100%;display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:10px;border:1px solid var(--border);background:color-mix(in srgb,var(--primary) 8%,transparent);color:var(--text);cursor:pointer;font-size:13px;font-weight:600;text-align:left;">
+                                <i class="fa fa-sliders" style="color:var(--primary);width:14px;text-align:center;"></i>
+                                <span>Manage Features</span>
+                            </button>
+                        </div>
+                        @endif
                         <form method="post" action="{{ route('logout') }}" style="margin-top:6px;">
                             @csrf
                             <button type="submit" style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;">
@@ -820,6 +864,342 @@
             accountDropdownMenu.classList.remove('open');
         }
     });
+</script>
+@if($navBusiness)
+<style>
+.bfm-overlay{position:fixed;inset:0;z-index:400;display:none;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;}
+.bfm-overlay.bfm-open{display:flex;}
+.bfm-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.48);backdrop-filter:blur(3px);}
+:is(html[data-theme="light"],html[data-theme="light_blue"]) .bfm-backdrop{background:rgba(15,23,42,.35);}
+.bfm-card{position:relative;z-index:1;width:100%;max-width:680px;background:var(--card);border:1px solid var(--border);border-radius:16px;box-shadow:0 24px 56px rgba(0,0,0,.32);display:flex;flex-direction:column;max-height:min(90vh,700px);overflow:hidden;}
+.bfm-head{padding:20px 20px 14px;border-bottom:1px solid var(--border);flex-shrink:0;position:relative;}
+.bfm-title{margin:0 0 4px;font-size:18px;font-weight:800;letter-spacing:-.02em;color:var(--text);}
+.bfm-sub{margin:0;font-size:13px;color:var(--muted);}
+.bfm-close{position:absolute;top:16px;right:16px;width:30px;height:30px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;display:grid;place-items:center;font-size:16px;line-height:1;padding:0;}
+.bfm-close:hover{border-color:var(--primary);color:var(--text);}
+.bfm-body{padding:18px 20px;overflow-y:auto;flex:1;min-height:0;}
+.bfm-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px;}
+.bfm-card-item{border:2px solid var(--border);border-radius:13px;padding:14px 12px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;transition:all .18s ease;user-select:none;background:var(--card);position:relative;}
+.bfm-card-item:hover{transform:translateY(-2px);border-color:var(--primary);box-shadow:0 6px 16px color-mix(in srgb,var(--primary) 16%,transparent);}
+.bfm-card-item.bfm-enabled{border-color:var(--primary);background:color-mix(in srgb,var(--primary) 6%,var(--card));}
+.bfm-card-item.bfm-disabled{opacity:.52;filter:grayscale(.8);border-color:color-mix(in srgb,var(--border) 80%,transparent);}
+.bfm-feat-img{width:52px;height:52px;object-fit:contain;pointer-events:none;}
+.bfm-feat-name{font-size:12.5px;font-weight:700;color:var(--text);text-align:center;line-height:1.25;pointer-events:none;}
+.bfm-feat-badge{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:2px 8px;border-radius:999px;pointer-events:none;}
+.bfm-feat-badge.bfm-badge-on{background:color-mix(in srgb,#22c55e 14%,transparent);color:#16a34a;}
+.bfm-feat-badge.bfm-badge-off{background:color-mix(in srgb,var(--muted) 14%,transparent);color:var(--muted);}
+.bfm-feat-badge.bfm-badge-required{background:color-mix(in srgb,#6366f1 14%,transparent);color:#4f46e5;}
+html[data-theme="light"] .bfm-feat-badge.bfm-badge-on,html[data-theme="light_blue"] .bfm-feat-badge.bfm-badge-on{background:#dcfce7;color:#15803d;}
+html[data-theme="light"] .bfm-feat-badge.bfm-badge-off,html[data-theme="light_blue"] .bfm-feat-badge.bfm-badge-off{background:#f3f4f6;color:#6b7280;}
+html[data-theme="light"] .bfm-feat-badge.bfm-badge-required,html[data-theme="light_blue"] .bfm-feat-badge.bfm-badge-required{background:#ede9fe;color:#4338ca;}
+.bfm-card-item.bfm-required{cursor:default;}
+.bfm-card-item.bfm-required:hover{border-color:var(--border);transform:none;}
+.bfm-card-item.bfm-dep-blocked{opacity:.45;filter:grayscale(.6);border-style:dashed;}
+.bfm-card-item.bfm-dep-blocked:hover{border-color:color-mix(in srgb,#f59e0b 55%,var(--border));transform:none;}
+.bfm-dep-hint{font-size:10px;font-weight:600;color:#b45309;margin-top:3px;text-align:center;pointer-events:none;}
+html[data-theme="light"] .bfm-dep-hint,html[data-theme="light_blue"] .bfm-dep-hint{color:#92400e;}
+.bfm-foot{padding:14px 20px;border-top:1px solid var(--border);display:flex;align-items:center;gap:10px;justify-content:flex-end;flex-shrink:0;}
+.bfm-cancel{background:transparent;border:1px solid var(--border);color:var(--text);padding:9px 16px;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;}
+.bfm-cancel:hover{border-color:var(--primary);}
+.bfm-save{padding:9px 20px;font-size:13px;font-weight:700;}
+.bfm-status{font-size:12px;font-weight:600;margin-right:auto;display:none;}
+.bfm-status.bfm-ok{color:#16a34a;display:block;}
+.bfm-status.bfm-err{color:#dc2626;display:block;}
+</style>
+<div id="bizFeaturesModal" class="bfm-overlay" role="dialog" aria-modal="true" aria-labelledby="bfm-title" aria-hidden="true">
+    <div class="bfm-backdrop" id="bfmBackdrop"></div>
+    <div class="bfm-card">
+        <div class="bfm-head">
+            <h2 class="bfm-title" id="bfm-title">Business Features</h2>
+            <p class="bfm-sub">Enable or disable features for <strong>{{ $navBusiness->name }}</strong>. Changes are saved immediately.</p>
+            <button type="button" class="bfm-close" id="bfmCloseBtn" aria-label="Close modal">&times;</button>
+        </div>
+        <div class="bfm-body">
+            <div class="bfm-grid" id="bfmGrid">
+                @php
+                    $bfmItems = [
+                        ['key' => 'account_management',   'label' => 'Account Management',   'img' => 'features/account-management.png'],
+                        ['key' => 'bill_management',      'label' => 'Bill Management',       'img' => 'features/bill-management.png'],
+                        ['key' => 'human_resources',      'label' => 'Human Resources',       'img' => 'features/human-resource-management.png'],
+                        ['key' => 'point_of_sale',        'label' => 'Point of Sale',         'img' => 'features/point-of-sale.png'],
+                        ['key' => 'product_management',   'label' => 'Product Management',    'img' => 'features/product-management.svg'],
+                        ['key' => 'social_media_campaign','label' => 'Social Media Campaign', 'img' => 'features/social-media-campaign.png'],
+                        ['key' => 'stock_management',     'label' => 'Stock Management',      'img' => 'features/stock-management.png'],
+                    ];
+                @endphp
+                @foreach($bfmItems as $bfmItem)
+                    @php
+                        $bfmRequired       = $bfmItem['key'] === 'account_management';
+                        $bfmNeedsAccount   = $bfmItem['key'] === 'bill_management' && ! $assignedAccount;
+                        $bfmOn = $bfmRequired ? true : ($businessFeatures[$bfmItem['key']] ?? true);
+                    @endphp
+                    @if($bfmRequired)
+                    <div class="bfm-card-item bfm-enabled bfm-required"
+                         data-feature="{{ $bfmItem['key'] }}"
+                         role="checkbox"
+                         aria-checked="true"
+                         aria-disabled="true"
+                         tabindex="0"
+                         title="Account Management is always required and cannot be disabled."
+                         onkeydown="">
+                        <img src="{{ asset($bfmItem['img']) }}" class="bfm-feat-img" alt="{{ $bfmItem['label'] }}">
+                        <div class="bfm-feat-name">{{ $bfmItem['label'] }}</div>
+                        <span class="bfm-feat-badge bfm-badge-required">Required</span>
+                    </div>
+                    @else
+                    <div class="bfm-card-item {{ $bfmOn ? 'bfm-enabled' : 'bfm-disabled' }} {{ $bfmNeedsAccount ? 'bfm-dep-blocked' : '' }}"
+                         data-feature="{{ $bfmItem['key'] }}"
+                         @if($bfmNeedsAccount) data-locked="no-account" @endif
+                         role="checkbox"
+                         aria-checked="{{ $bfmOn ? 'true' : 'false' }}"
+                         tabindex="0"
+                         onclick="bfmToggle(this)"
+                         onkeydown="if(event.key===' '||event.key==='Enter'){event.preventDefault();bfmToggle(this);}">
+                        <img src="{{ asset($bfmItem['img']) }}" class="bfm-feat-img" alt="{{ $bfmItem['label'] }}">
+                        <div class="bfm-feat-name">{{ $bfmItem['label'] }}</div>
+                        <span class="bfm-feat-badge {{ $bfmOn ? 'bfm-badge-on' : 'bfm-badge-off' }}">{{ $bfmOn ? 'Enabled' : 'Disabled' }}</span>
+                        @if($bfmItem['key'] === 'point_of_sale')
+                            <span class="bfm-dep-hint" id="bfmPosDepHint" style="display:none;">Needs Stock + Product</span>
+                        @endif
+                        @if($bfmNeedsAccount)
+                            <span class="bfm-dep-hint">Needs an account</span>
+                        @endif
+                    </div>
+                    @endif
+                @endforeach
+            </div>
+        </div>
+        <div class="bfm-foot">
+            <span class="bfm-status" id="bfmStatus"></span>
+            <button type="button" class="bfm-cancel" id="bfmCancelBtn">Cancel</button>
+            <button type="button" class="linkbtn bfm-save" id="bfmSaveBtn">Save changes</button>
+        </div>
+    </div>
+</div>
+<script>
+(function () {
+    var modal   = document.getElementById('bizFeaturesModal');
+    var openBtn = document.getElementById('openFeaturesModalBtn');
+    var closeBtn= document.getElementById('bfmCloseBtn');
+    var cancelBtn=document.getElementById('bfmCancelBtn');
+    var saveBtn = document.getElementById('bfmSaveBtn');
+    var backdrop= document.getElementById('bfmBackdrop');
+    var status  = document.getElementById('bfmStatus');
+    if (!modal || !openBtn) return;
+
+    function openModal() {
+        modal.classList.add('bfm-open');
+        modal.setAttribute('aria-hidden', 'false');
+        document.body.style.overflow = 'hidden';
+        status.className = 'bfm-status';
+        status.textContent = '';
+        var userMenu = document.getElementById('userDropdownMenu');
+        if (userMenu) userMenu.classList.remove('open');
+        bfmUpdateDepStates();
+        // Focus first card
+        var first = modal.querySelector('.bfm-card-item');
+        if (first) setTimeout(function(){ first.focus(); }, 60);
+    }
+
+    function closeModal() {
+        modal.classList.remove('bfm-open');
+        modal.setAttribute('aria-hidden', 'true');
+        document.body.style.overflow = '';
+        if (openBtn) openBtn.focus();
+    }
+
+    openBtn.addEventListener('click', openModal);
+    closeBtn.addEventListener('click', closeModal);
+    cancelBtn.addEventListener('click', closeModal);
+    backdrop.addEventListener('click', closeModal);
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && modal.classList.contains('bfm-open')) closeModal();
+    });
+
+    // POS dependencies: both must be enabled to allow POS
+    var BFM_POS_DEPS = ['stock_management', 'product_management'];
+
+    function bfmIsEnabled(feature) {
+        var c = modal.querySelector('[data-feature="' + feature + '"]');
+        return c && c.classList.contains('bfm-enabled');
+    }
+
+    function bfmSetCard(feature, enable) {
+        var c = modal.querySelector('[data-feature="' + feature + '"]');
+        if (!c || c.classList.contains('bfm-required')) return;
+        var b = c.querySelector('.bfm-feat-badge');
+        if (enable) {
+            c.classList.replace('bfm-disabled', 'bfm-enabled');
+            c.setAttribute('aria-checked', 'true');
+            if (b) { b.textContent = 'Enabled'; b.className = 'bfm-feat-badge bfm-badge-on'; }
+        } else {
+            c.classList.replace('bfm-enabled', 'bfm-disabled');
+            c.setAttribute('aria-checked', 'false');
+            if (b) { b.textContent = 'Disabled'; b.className = 'bfm-feat-badge bfm-badge-off'; }
+        }
+    }
+
+    function bfmPosDepsOk() {
+        return BFM_POS_DEPS.every(function(f) { return bfmIsEnabled(f); });
+    }
+
+    function bfmUpdateDepStates() {
+        var posCard = modal.querySelector('[data-feature="point_of_sale"]');
+        var hint    = document.getElementById('bfmPosDepHint');
+        if (!posCard) return;
+        var depsOk = bfmPosDepsOk();
+        if (depsOk) {
+            posCard.classList.remove('bfm-dep-blocked');
+            if (hint) hint.style.display = 'none';
+        } else {
+            posCard.classList.add('bfm-dep-blocked');
+            if (hint) hint.style.display = 'block';
+        }
+    }
+
+    window.bfmToggle = function(card) {
+        if (card.classList.contains('bfm-required')) return;
+        var feature = card.dataset.feature;
+        var isOn    = card.classList.contains('bfm-enabled');
+        var badge   = card.querySelector('.bfm-feat-badge');
+
+        // Block enabling Bill Management when no account exists
+        if (!isOn && card.dataset.locked === 'no-account') {
+            showToast('Bill Management requires an account to be set up first.', 'warning');
+            return;
+        }
+
+        // Block enabling POS when dependencies are not met
+        if (!isOn && feature === 'point_of_sale' && !bfmPosDepsOk()) {
+            showToast('Point of Sale requires Stock Management and Product Management to be enabled first.', 'warning');
+            return;
+        }
+
+        if (isOn) {
+            card.classList.replace('bfm-enabled', 'bfm-disabled');
+            card.setAttribute('aria-checked', 'false');
+            if (badge) { badge.textContent = 'Disabled'; badge.className = 'bfm-feat-badge bfm-badge-off'; }
+        } else {
+            card.classList.replace('bfm-disabled', 'bfm-enabled');
+            card.setAttribute('aria-checked', 'true');
+            if (badge) { badge.textContent = 'Enabled'; badge.className = 'bfm-feat-badge bfm-badge-on'; }
+        }
+
+        // Auto-disable POS if one of its dependencies is being turned off
+        if (isOn && BFM_POS_DEPS.indexOf(feature) !== -1 && bfmIsEnabled('point_of_sale')) {
+            bfmSetCard('point_of_sale', false);
+            showToast('Point of Sale was disabled because it requires ' +
+                (feature === 'stock_management' ? 'Stock Management' : 'Product Management') + '.', 'warning');
+        }
+
+        bfmUpdateDepStates();
+        syncSidebarFromModal();
+    };
+
+    function syncSidebarFromModal() {
+        var posPreview = document.getElementById('sidebar-pos-wizard-preview');
+        if (!posPreview) return;
+        var posCard = modal.querySelector('[data-feature="point_of_sale"]');
+        if (!posCard) return;
+        posPreview.style.display = posCard.classList.contains('bfm-enabled') ? 'block' : 'none';
+    }
+
+    saveBtn.addEventListener('click', function() {
+        var cards = modal.querySelectorAll('.bfm-card-item[data-feature]');
+        var features = {};
+        cards.forEach(function(card) {
+            features[card.dataset.feature] = card.classList.contains('bfm-enabled') ? 1 : 0;
+        });
+        features['account_management'] = 1; // always required
+
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Saving…';
+        status.className = 'bfm-status';
+        status.textContent = '';
+
+        fetch('{{ route('business.features.update') }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content ?? '',
+                'Accept': 'application/json',
+            },
+            body: JSON.stringify({ features: features }),
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+            if (data.ok) {
+                status.className = 'bfm-status bfm-ok';
+                status.textContent = 'Saved successfully.';
+                setTimeout(closeModal, 900);
+            } else {
+                throw new Error(data.error || 'Save failed.');
+            }
+        })
+        .catch(function(err) {
+            status.className = 'bfm-status bfm-err';
+            status.textContent = err.message || 'Something went wrong.';
+        })
+        .finally(function() {
+            saveBtn.disabled = false;
+            saveBtn.textContent = 'Save changes';
+        });
+    });
+})();
+</script>
+@endif
+
+{{-- Global toast notifications --}}
+<div id="app-toast-container" aria-live="assertive" aria-atomic="false"></div>
+<style>
+#app-toast-container{position:fixed;bottom:24px;right:24px;z-index:99999;display:flex;flex-direction:column-reverse;gap:10px;pointer-events:none;}
+.app-toast{
+    pointer-events:auto;display:flex;align-items:flex-start;gap:10px;
+    padding:13px 16px;border-radius:12px;font-size:13px;font-weight:600;line-height:1.45;
+    max-width:360px;min-width:220px;
+    box-shadow:0 6px 28px rgba(0,0,0,.28);border:1px solid transparent;
+    animation:appToastIn .22s cubic-bezier(.34,1.28,.64,1) forwards;
+    cursor:pointer;
+}
+.app-toast i{flex-shrink:0;margin-top:2px;font-size:13px;}
+.app-toast--error{background:color-mix(in srgb,#ef4444 13%,var(--card));color:color-mix(in srgb,#ef4444 85%,var(--text));border-color:color-mix(in srgb,#ef4444 38%,var(--border));}
+.app-toast--warning{background:color-mix(in srgb,#f59e0b 13%,var(--card));color:color-mix(in srgb,#b45309 90%,var(--text));border-color:color-mix(in srgb,#f59e0b 40%,var(--border));}
+.app-toast--success{background:color-mix(in srgb,#22c55e 13%,var(--card));color:color-mix(in srgb,#16a34a 90%,var(--text));border-color:color-mix(in srgb,#22c55e 38%,var(--border));}
+html[data-theme="light"] .app-toast--error,html[data-theme="light_blue"] .app-toast--error{background:#fef2f2;color:#b91c1c;border-color:#fca5a5;}
+html[data-theme="light"] .app-toast--warning,html[data-theme="light_blue"] .app-toast--warning{background:#fffbeb;color:#92400e;border-color:#fcd34d;}
+html[data-theme="light"] .app-toast--success,html[data-theme="light_blue"] .app-toast--success{background:#f0fdf4;color:#15803d;border-color:#86efac;}
+.app-toast--closing{animation:appToastOut .18s ease forwards;}
+@keyframes appToastIn{from{opacity:0;transform:translateY(14px) scale(.96);}to{opacity:1;transform:translateY(0) scale(1);}}
+@keyframes appToastOut{from{opacity:1;transform:translateY(0) scale(1);}to{opacity:0;transform:translateY(10px) scale(.96);}}
+@media(max-width:480px){#app-toast-container{bottom:16px;right:12px;left:12px;}.app-toast{max-width:100%;}}
+</style>
+<script>
+window.showToast = (function() {
+    var icons = {error: 'fa-circle-exclamation', warning: 'fa-triangle-exclamation', success: 'fa-circle-check'};
+    return function(msg, type) {
+        type = type || 'error';
+        var container = document.getElementById('app-toast-container');
+        if (!container) return;
+        var toast = document.createElement('div');
+        toast.className = 'app-toast app-toast--' + type;
+        toast.setAttribute('role', 'alert');
+        var icon = document.createElement('i');
+        icon.className = 'fa ' + (icons[type] || icons.error);
+        icon.setAttribute('aria-hidden', 'true');
+        var text = document.createElement('span');
+        text.textContent = msg;
+        toast.appendChild(icon);
+        toast.appendChild(text);
+        container.appendChild(toast);
+        function dismiss() {
+            if (toast.classList.contains('app-toast--closing')) return;
+            toast.classList.add('app-toast--closing');
+            setTimeout(function() { toast.parentNode && toast.parentNode.removeChild(toast); }, 200);
+        }
+        toast.addEventListener('click', dismiss);
+        setTimeout(dismiss, 4500);
+    };
+})();
 </script>
 </body>
 </html>

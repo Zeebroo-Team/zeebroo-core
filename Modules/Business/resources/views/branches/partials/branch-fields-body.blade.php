@@ -11,7 +11,7 @@
 @endphp
 <div class="branch-field" style="grid-column:1/-1;">
     <label for="{{ $idName }}">Branch name</label>
-    <input id="{{ $idName }}" name="name" value="{{ old('name') }}" maxlength="255" placeholder="e.g. Colombo HQ"@if($requireBranchName) required @endif>
+    <input id="{{ $idName }}" name="name" value="{{ old('name', $defaultBranchName ?? '') }}" maxlength="255" placeholder="e.g. Colombo HQ"@if($requireBranchName) required @endif>
     @error('name')<div style="color:#f87171;font-size:12px;margin-top:4px;">{{ $message }}</div>@enderror
 </div>
 <div class="branch-field" style="grid-column:1/-1;">

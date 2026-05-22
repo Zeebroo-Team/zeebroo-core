@@ -33,6 +33,7 @@ Route::middleware(['auth'])->group(function (): void {
     Route::post('/business/profile/logo/generation/apply', [BusinessLogoGenerationController::class, 'apply'])->name('business.profile.logo.generation.apply');
 
     Route::post('/business/onboarding', [BusinessController::class, 'storeOnboarding'])->name('business.onboarding.store');
+    Route::post('/business/features', [BusinessController::class, 'updateFeatures'])->name('business.features.update');
     Route::post('/business/warehouse-intro', [BusinessController::class, 'acknowledgeWarehouseIntro'])
         ->name('business.warehouse-intro.store');
 

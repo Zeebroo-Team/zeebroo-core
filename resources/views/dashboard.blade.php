@@ -141,7 +141,7 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                     <p class="wh-intro-copy" id="wh-intro-branch-copy">Add the details we’ll attach to <strong>{{ $business?->name ?? 'your business' }}</strong>.</p>
                     <fieldset class="wh-intro-fieldset" id="wh-intro-branch-fieldset" disabled>
                         <div class="wh-intro-branch-grid wh-intro-branch-grid--2">
-                            @include('business::branches.partials.branch-fields-body', ['fieldIdPrefix' => 'wh-intro-b', 'requireName' => false])
+                            @include('business::branches.partials.branch-fields-body', ['fieldIdPrefix' => 'wh-intro-b', 'requireName' => false, 'defaultBranchName' => $business?->name ?? ''])
                         </div>
                     </fieldset>
                     <button type="submit" class="linkbtn wh-intro-submit" id="wh-intro-finish" disabled>Finish setup</button>
@@ -374,7 +374,7 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
         }
         .wiz-textarea{resize:vertical;min-height:96px;max-height:min(130px,22vh)}
         .wizard-actions{margin-top:clamp(12px,2vh,18px);display:flex;gap:10px;justify-content:center;flex-shrink:0}
-        #wizardStep2 .wizard-step-fields{
+        #wizardStep3 .wizard-step-fields{
             display:grid;
             gap:12px;
             max-height:min(42vh,320px);
@@ -384,6 +384,111 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
             text-align:left;
         }
         .btn-soft{background:#475569}
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 16px;
+            width: 100%;
+            max-height: min(45vh, 320px);
+            overflow-y: auto;
+            overscroll-behavior: contain;
+            padding: 8px 4px;
+            box-sizing: border-box;
+            margin-top: 10px;
+            margin-bottom: 10px;
+        }
+        @media (max-width: 480px) {
+            .features-grid {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 10px;
+            }
+        }
+        .feature-card {
+            background: #ffffff;
+            border: 2px solid #e5e7eb;
+            border-radius: 14px;
+            padding: 14px;
+            cursor: pointer;
+            transition: all 0.2s ease-in-out;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
+            box-sizing: border-box;
+            user-select: none;
+        }
+        .feature-card:hover {
+            transform: translateY(-2px);
+            border-color: #a78bfa;
+            box-shadow: 0 8px 16px rgba(167, 139, 250, 0.15);
+        }
+        .feature-card.enabled {
+            border-color: #a78bfa;
+            background: #fdfcff;
+        }
+        .feature-card.disabled {
+            opacity: 0.55;
+            border-color: #f3f4f6;
+            background: #f9fafb;
+            filter: grayscale(0.85);
+        }
+        .feature-image {
+            width: 60px;
+            height: 60px;
+            object-fit: contain;
+            margin-bottom: 10px;
+            pointer-events: none;
+        }
+        .feature-title {
+            font-size: 13px;
+            font-weight: 700;
+            color: #1f2937;
+            margin: 0 0 6px 0;
+            text-align: center;
+            pointer-events: none;
+            line-height: 1.2;
+        }
+        .feature-badge {
+            padding: 3px 8px;
+            border-radius: 999px;
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            pointer-events: none;
+        }
+        .feature-badge.enabled-badge {
+            background: #ecfdf5;
+            color: #10b981;
+        }
+        .feature-badge.disabled-badge {
+            background: #f3f4f6;
+            color: #6b7280;
+        }
+        .feature-badge.required-badge {
+            background: #ede9fe;
+            color: #4f46e5;
+        }
+        .feature-card--required {
+            cursor: default;
+        }
+        .feature-card--required:hover {
+            transform: none;
+            border-color: #a78bfa;
+            box-shadow: none;
+        }
+        .feature-card--dep-blocked {
+            opacity: 0.45;
+            filter: grayscale(.6);
+            border-style: dashed;
+        }
+        .feature-card--dep-blocked:hover {
+            transform: none;
+            border-color: #fbbf24;
+            box-shadow: none;
+        }
         @keyframes fadeSlide{
             from{opacity:0;transform:translateY(10px)}
             to{opacity:1;transform:translateY(0)}
@@ -427,7 +532,7 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                     </div>
                 </div>
 
-                <div id="wizardStep2" style="display:none;" class="wizard-card">
+                <div id="wizardStep3" style="display:none;" class="wizard-card">
                     <h2 class="wizard-q">What is your business category?</h2>
                     <p class="wizard-help">Tell us about your business in this quick quiz.</p>
                     <div class="wizard-step-fields">
@@ -463,7 +568,7 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                         </div>
                     </div>
                     <div class="wizard-actions">
-                        <button type="button" class="linkbtn btn-soft" id="backStepBtn">Back</button>
+                        <button type="button" class="linkbtn btn-soft" id="backToStep1Btn">Back</button>
                         <button type="submit" class="linkbtn">Finish Setup</button>
                     </div>
                 </div>
@@ -660,14 +765,14 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 
 <script>
-    const stepBadge = document.getElementById('stepBadge');
+    const stepBadge   = document.getElementById('stepBadge');
     const wizardStep1 = document.getElementById('wizardStep1');
-    const wizardStep2 = document.getElementById('wizardStep2');
-    const nextStepBtn = document.getElementById('nextStepBtn');
-    const backStepBtn = document.getElementById('backStepBtn');
-    const wizardForm = document.getElementById('businessWizardForm');
+    const wizardStep3 = document.getElementById('wizardStep3');
+    const nextStepBtn  = document.getElementById('nextStepBtn');
+    const backToStep1Btn = document.getElementById('backToStep1Btn');
+    const wizardForm   = document.getElementById('businessWizardForm');
 
-    if (nextStepBtn && wizardStep1 && wizardStep2 && stepBadge && wizardForm) {
+    if (nextStepBtn && wizardStep1 && wizardStep3 && stepBadge && wizardForm) {
         nextStepBtn.addEventListener('click', () => {
             const nameInput = wizardForm.querySelector('input[name="name"]');
             if (!nameInput.value.trim()) {
@@ -675,23 +780,23 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                 return;
             }
             wizardStep1.style.display = 'none';
-            wizardStep2.style.display = 'block';
+            wizardStep3.style.display = 'block';
             stepBadge.textContent = 'Step 2 of 2';
         });
     }
 
-    if (backStepBtn && wizardStep1 && wizardStep2 && stepBadge) {
-        backStepBtn.addEventListener('click', () => {
-            wizardStep2.style.display = 'none';
+    if (backToStep1Btn && wizardStep1 && wizardStep3 && stepBadge) {
+        backToStep1Btn.addEventListener('click', () => {
+            wizardStep3.style.display = 'none';
             wizardStep1.style.display = 'block';
             stepBadge.textContent = 'Step 1 of 2';
         });
     }
 
     @if($errors->has('company_category_slug') || $errors->has('description'))
-        if (wizardStep1 && wizardStep2 && stepBadge) {
+        if (wizardStep1 && wizardStep3 && stepBadge) {
             wizardStep1.style.display = 'none';
-            wizardStep2.style.display = 'block';
+            wizardStep3.style.display = 'block';
             stepBadge.textContent = 'Step 2 of 2';
         }
     @endif

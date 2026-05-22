@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Modules\Account\Models\Account;
 use Modules\Business\Models\Business;
 use Modules\Business\Services\BranchService;
 use Modules\Business\Services\BusinessBrandCopyGeneratorService;
@@ -23,6 +24,16 @@ use Modules\Settings\Services\SettingsService;
 
 class BusinessController extends Controller
 {
+    private const FEATURE_KEYS = [
+        'account_management',
+        'bill_management',
+        'human_resources',
+        'point_of_sale',
+        'product_management',
+        'social_media_campaign',
+        'stock_management',
+    ];
+
     public function __construct(
         private readonly BusinessService $businessService,
         private readonly BranchService $branchService,
@@ -332,13 +343,53 @@ class BusinessController extends Controller
         $slug = $validated['company_category_slug'];
         $label = BrandCompanyCategoryCatalog::labelsByValue()[$slug] ?? $slug;
 
-        $this->businessService->upsertForUser($request->user(), [
+        $business = $this->businessService->upsertForUser($request->user(), [
             'name' => $validated['name'],
             'category' => $label,
             'company_category_slug' => $slug,
             'description' => $validated['description'] ?? null,
         ]);
 
+        // Only Account Management is enabled by default; user enables others via the feature management modal.
+        $features = array_fill_keys(self::FEATURE_KEYS, false);
+        $features['account_management'] = true;
+        $business->setSetting('business.features', $features);
+
         return redirect()->route('dashboard')->with('status', 'Business profile saved.');
+    }
+
+    public function updateFeatures(Request $request): JsonResponse
+    {
+        $business = Business::currentForNavbar($request->user());
+        if (! $business instanceof Business) {
+            return response()->json(['error' => 'No business found.'], 404);
+        }
+        abort_unless((int) $business->user_id === (int) $request->user()->id, 403);
+
+        $validated = $request->validate([
+            'features'   => ['required', 'array'],
+            'features.*' => ['boolean'],
+        ]);
+
+        $features = [];
+        foreach (self::FEATURE_KEYS as $key) {
+            $features[$key] = (bool) ($validated['features'][$key] ?? false);
+        }
+        $features['account_management'] = true; // always required
+        // POS requires both stock and product management
+        if (! $features['stock_management'] || ! $features['product_management']) {
+            $features['point_of_sale'] = false;
+        }
+        // Bill Management requires an account to be set up
+        $hasAccount = Account::where('user_id', $request->user()->id)
+            ->where('business_id', $business->id)
+            ->exists();
+        if (! $hasAccount) {
+            $features['bill_management'] = false;
+        }
+
+        $business->setSetting('business.features', $features);
+
+        return response()->json(['ok' => true, 'features' => $features]);
     }
 }
