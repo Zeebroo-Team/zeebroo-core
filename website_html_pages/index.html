@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Zeebroo helps you grow your business with stock, POS, accounts, bills, HR, social campaigns, and more — all in one simple platform.">
+    <title>Zeebroo — Grow your business with one platform</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,700;0,9..40,800;1,9..40,400&family=IBM+Plex+Mono:wght@400&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" referrerpolicy="no-referrer">
+    <link rel="stylesheet" href="css/site.css">
+    <link rel="icon" href="assets/logo.png" type="image/png">
+</head>
+<body>
+    <header class="site-header">
+        <nav class="site-nav" aria-label="Main">
+            <a class="brand brand--logo-only" href="index.html" aria-label="Zeebroo home">
+                <img src="assets/logo.png" alt="Zeebroo">
+            </a>
+            <ul class="nav-links">
+                <li><a href="#benefits">Benefits</a></li>
+                <li><a href="#solutions">Solutions</a></li>
+                <li><a href="#pos">Point of sale</a></li>
+                <li><a href="#why">Why Zeebroo</a></li>
+            </ul>
+            <div class="nav-actions">
+                <a class="btn btn-ghost" href="#contact">Contact</a>
+                <a class="btn btn-primary" href="#contact">Get started</a>
+            </div>
+            <button type="button" class="nav-toggle" aria-label="Open menu" aria-expanded="false">
+                <span></span><span></span><span></span>
+            </button>
+        </nav>
+    </header>
+
+    <section class="hero" id="top">
+        <div class="hero__inner">
+            <div class="hero__content">
+                <p class="hero__badge">
+                    <span class="hero__badge-dot" aria-hidden="true"></span>
+                    All-in-one for your business
+                </p>
+                <h1>Grow your business with <em>clarity and control</em></h1>
+                <p class="hero__lead">
+                    Zeebroo brings sales, stock, money, people, and marketing into one calm workspace — so you spend less time switching apps and more time serving customers and scaling up.
+                </p>
+                <div class="hero__cta">
+                    <a class="btn btn-primary" href="#contact">Request a demo</a>
+                    <a class="btn btn-secondary" href="#solutions">See what’s included</a>
+                </div>
+            </div>
+            <div class="hero__media">
+                <div class="hero__video-wrap is-loading" id="heroVideoWrap">
+                    <div class="hero__video-loader" id="heroVideoLoader" role="status" aria-live="polite" aria-busy="true">
+                        <div class="hero__video-spinner" aria-hidden="true"></div>
+                        <span class="hero__video-loader-text">Loading video…</span>
+                    </div>
+                    <video
+                        class="hero__video"
+                        id="heroVideo"
+                        autoplay
+                        muted
+                        loop
+                        playsinline
+                        preload="auto"
+                        poster="assets/hero-poster.png"
+                        aria-label="Zeebroo platform overview"
+                    >
+                        <source src="assets/demo.mp4" type="video/mp4">
+                    </video>
+                    <div class="hero__video-controls">
+                        <button
+                            type="button"
+                            class="hero__video-btn"
+                            id="heroVideoSound"
+                            aria-pressed="true"
+                            aria-label="Enable sound"
+                            title="Enable sound"
+                        >
+                            <svg class="hero__video-icon hero__video-icon--muted" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                                <line x1="23" y1="9" x2="17" y2="15"></line>
+                                <line x1="17" y1="9" x2="23" y2="15"></line>
+                            </svg>
+                            <svg class="hero__video-icon hero__video-icon--unmuted" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                                <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
+                                <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                            </svg>
+                        </button>
+                        <button
+                            type="button"
+                            class="hero__video-btn"
+                            id="heroVideoFullscreen"
+                            aria-pressed="false"
+                            aria-label="Full screen"
+                            title="Full screen"
+                        >
+                            <svg class="hero__video-icon hero__video-icon--enter-fs" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <path d="M8 3H5a2 2 0 0 0-2 2v3"></path>
+                                <path d="M21 8V5a2 2 0 0 0-2-2h-3"></path>
+                                <path d="M3 16v3a2 2 0 0 0 2 2h3"></path>
+                                <path d="M16 21h3a2 2 0 0 0 2-2v-3"></path>
+                            </svg>
+                            <svg class="hero__video-icon hero__video-icon--exit-fs" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <path d="M8 3v3a2 2 0 0 1-2 2H3"></path>
+                                <path d="M21 8h-3a2 2 0 0 1-2-2V3"></path>
+                                <path d="M3 16h3a2 2 0 0 1 2 2v3"></path>
+                                <path d="M16 21v-3a2 2 0 0 1 2-2h3"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="section section--cream" id="benefits">
+        <div class="container">
+            <span class="section__eyebrow">Why business owners choose Zeebroo</span>
+            <h2>Less chaos. More growth.</h2>
+            <p class="section__intro">
+                Whether you run a shop, a small chain, or a growing company, you need answers fast: What sold today? What’s low in stock? Who owes what? Zeebroo keeps it in one place your whole team can trust.
+            </p>
+            <div class="features-grid">
+                <article class="feature-card">
+                    <div class="feature-card__icon" aria-hidden="true"><i class="fa fa-arrow-trend-up"></i></div>
+                    <h3>Focus on growth</h3>
+                    <p>See sales, costs, and activity together so you can spot what works, cut waste, and invest where it pays off.</p>
+                </article>
+                <article class="feature-card">
+                    <div class="feature-card__icon" aria-hidden="true"><i class="fa fa-clock"></i></div>
+                    <h3>Save time every day</h3>
+                    <p>No more copying numbers between spreadsheets, tills, and HR sheets. Your team works in one familiar system.</p>
+                </article>
+                <article class="feature-card">
+                    <div class="feature-card__icon" aria-hidden="true"><i class="fa fa-eye"></i></div>
+                    <h3>Clear picture of the business</h3>
+                    <p>Owners and managers get a real-time view of cash flow, stock levels, bills, and staff — without digging through folders.</p>
+                </article>
+                <article class="feature-card">
+                    <div class="feature-card__icon" aria-hidden="true"><i class="fa fa-handshake"></i></div>
+                    <h3>Built for real operations</h3>
+                    <p>From the counter to the back office, Zeebroo matches how shops and offices actually work — not how software manuals imagine they do.</p>
+                </article>
+            </div>
+        </div>
+    </section>
+
+    <section class="section section--white section--solutions" id="solutions">
+        <div class="solutions-ascii solutions-ascii--panel" aria-hidden="true">
+            <pre class="solutions-ascii__pre" id="solutionsAsciiPre"></pre>
+        </div>
+        <div class="solutions__fade" aria-hidden="true"></div>
+        <div class="container solutions__content">
+            <span class="section__eyebrow">Everything in one solution</span>
+            <h2>Run sales, stock, money, people &amp; marketing together</h2>
+            <p class="section__intro">
+                Pick what you need today and add more as you grow. Every part connects so your data stays consistent from the register to the ledger.
+            </p>
+            <div class="features-grid">
+                <article class="feature-card">
+                    <div class="feature-card__icon"><i class="fa fa-boxes-stacked"></i></div>
+                    <h3>Stock management</h3>
+                    <p>Know what you have, what’s running low, and what to reorder. Track products and batches so shelves and warehouses stay accurate.</p>
+                </article>
+                <article class="feature-card">
+                    <div class="feature-card__icon"><i class="fa fa-cash-register"></i></div>
+                    <h3>Point of sale (POS)</h3>
+                    <p>Fast checkout in the browser: scan items, take cash or card, and finish sales without slowing the queue.</p>
+                </article>
+                <article class="feature-card">
+                    <div class="feature-card__icon"><i class="fa fa-users"></i></div>
+                    <h3>Human resource management</h3>
+                    <p>Organize your team, roles, and HR workflows so people operations sit alongside sales and finance — not in a separate silo.</p>
+                </article>
+                <article class="feature-card">
+                    <div class="feature-card__icon"><i class="fa fa-bullhorn"></i></div>
+                    <h3>Social media campaign management</h3>
+                    <p>Plan and manage campaigns from the same platform you use to run the business — keep promotions aligned with stock and sales.</p>
+                </article>
+                <article class="feature-card">
+                    <div class="feature-card__icon"><i class="fa fa-wallet"></i></div>
+                    <h3>Account management</h3>
+                    <p>Manage business accounts, branches, and balances in one view — built for owners who need the full financial picture.</p>
+                </article>
+                <article class="feature-card">
+                    <div class="feature-card__icon"><i class="fa fa-file-invoice-dollar"></i></div>
+                    <h3>Bill management</h3>
+                    <p>Create, track, and pay bills on time. Stay on top of what you owe suppliers and what customers owe you.</p>
+                </article>
+                <article class="feature-card">
+                    <div class="feature-card__icon"><i class="fa fa-book"></i></div>
+                    <h3>Transaction ledgers</h3>
+                    <p>Every in and out recorded clearly — a proper ledger your accountant and your team can follow without guesswork.</p>
+                </article>
+                <article class="feature-card">
+                    <div class="feature-card__icon"><i class="fa fa-building"></i></div>
+                    <h3>Multi-business &amp; branches</h3>
+                    <p>Run more than one location or brand under one roof, with the right people seeing only what they need.</p>
+                </article>
+            </div>
+        </div>
+    </section>
+
+    <section class="section section--cream" id="pos">
+        <div class="container">
+            <div class="pos-highlight">
+                <div>
+                    <span class="section__eyebrow">Point of sale</span>
+                    <h2>Sell at the counter — on the web or on a desktop app</h2>
+                    <p class="section__intro" style="margin-bottom: 20px;">
+                        Use POS in your browser during the day, or install the dedicated desktop app on each till. Same smooth checkout: products, payments, and receipts — built for busy shops.
+                    </p>
+                    <div class="hero__cta" style="margin-bottom: 0;">
+                        <a class="btn btn-primary" href="#contact">Get POS for your store</a>
+                        <a class="btn btn-secondary" href="#solutions">All features</a>
+                    </div>
+                    <div class="pos-tags">
+                        <span><i class="fa-brands fa-windows" aria-hidden="true"></i> Windows</span>
+                        <span><i class="fa-brands fa-linux" aria-hidden="true"></i> Linux</span>
+                        <span><i class="fa-brands fa-apple" aria-hidden="true"></i> macOS</span>
+                        <span>Web POS</span>
+                        <span>Thermal receipts</span>
+                    </div>
+                </div>
+                <div class="pos-highlight__panel pos-highlight__panel--benefits">
+                    <h3 class="pos-panel__title">Desktop POS app</h3>
+                    <ul class="pos-panel__list">
+                        <li><i class="fa fa-check" aria-hidden="true"></i> Works on <strong>Windows</strong>, <strong>Linux</strong>, and <strong>Mac</strong></li>
+                        <li><i class="fa fa-check" aria-hidden="true"></i> Fast product search and barcode scan</li>
+                        <li><i class="fa fa-check" aria-hidden="true"></i> Cash, card &amp; credit payments</li>
+                        <li><i class="fa fa-check" aria-hidden="true"></i> Print receipts for customers</li>
+                        <li><i class="fa fa-check" aria-hidden="true"></i> Stays in sync with your stock &amp; accounts</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="section section--white" id="get-started">
+        <div class="container">
+            <span class="section__eyebrow">Simple to start</span>
+            <h2>From first login to first sale</h2>
+            <div class="steps">
+                <article class="step">
+                    <h3>Tell us about your business</h3>
+                    <p>We help you set up your company, branches, and team so everyone starts on the right foot.</p>
+                </article>
+                <article class="step">
+                    <h3>Turn on what you need</h3>
+                    <p>Stock, POS, bills, HR, campaigns — enable the tools that matter now and add more as you expand.</p>
+                </article>
+                <article class="step">
+                    <h3>Grow with confidence</h3>
+                    <p>Train staff once, sell everywhere, and watch your numbers stay aligned from the shop floor to your reports.</p>
+                </article>
+            </div>
+        </div>
+    </section>
+
+    <section class="section section--cream" id="why">
+        <div class="container">
+            <div class="opensource">
+                <div>
+                    <h2>Your business. Your data. Your pace.</h2>
+                    <p>
+                        Zeebroo is designed for owners who want one dependable platform — not a pile of subscriptions. Stay in control as you add locations, staff, and sales channels.
+                    </p>
+                </div>
+                <a class="btn btn-primary" href="#contact">Talk to our team</a>
+            </div>
+        </div>
+    </section>
+
+    <section class="section section--white" id="contact">
+        <div class="container">
+            <div class="cta-band">
+                <h2>Ready to grow with one platform?</h2>
+                <p>Tell us about your shop or company — we’ll show you how Zeebroo fits the way you already work.</p>
+                <div class="hero__cta">
+                    <a class="btn btn-primary" href="mailto:hello@zeebroo.com">Email us</a>
+                    <a class="btn btn-secondary" href="#top">Back to top</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <footer class="site-footer">
+        <div class="container">
+            <div class="footer-grid">
+                <div>
+                    <a class="brand brand--logo-only" href="index.html" aria-label="Zeebroo home">
+                        <img src="assets/logo.png" alt="Zeebroo">
+                    </a>
+                    <p style="margin: 16px 0 0; max-width: 32ch;">The all-in-one platform to run, track, and grow your business.</p>
+                </div>
+                <div>
+                    <h4>Explore</h4>
+                    <ul>
+                        <li><a href="#benefits">Benefits</a></li>
+                        <li><a href="#solutions">Solutions</a></li>
+                        <li><a href="#pos">Point of sale</a></li>
+                    </ul>
+                </div>
+                <div>
+                    <h4>Get in touch</h4>
+                    <ul>
+                        <li><a href="#contact">Contact</a></li>
+                        <li><a href="mailto:hello@zeebroo.com">hello@zeebroo.com</a></li>
+                    </ul>
+                </div>
+                <div>
+                    <h4>Includes</h4>
+                    <ul>
+                        <li>Stock &amp; POS</li>
+                        <li>Accounts &amp; bills</li>
+                        <li>HR &amp; campaigns</li>
+                        <li>Desktop POS app</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <span>&copy; <span id="year"></span> Zeebroo. All rights reserved.</span>
+                <span>Built for business owners</span>
+            </div>
+        </div>
+    </footer>
+
+    <script src="js/ascii-hero.js"></script>
+    <script src="js/main.js"></script>
+    <script src="js/hero-video.js"></script>
+    <script>document.getElementById('year').textContent = new Date().getFullYear();</script>
+</body>
+</html>

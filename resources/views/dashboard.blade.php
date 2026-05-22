@@ -229,30 +229,60 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
 @endif
 
 @if(!$business)
+    <script>document.documentElement.classList.add('business-wizard-active');</script>
     <style>
-        .content-inner{padding:0 !important;}
+        html.business-wizard-active,
+        html.business-wizard-active body{
+            overflow:hidden;
+            height:100%;
+        }
+        html.business-wizard-active .layout{
+            height:100vh;
+            max-height:100vh;
+            overflow:hidden;
+        }
+        html.business-wizard-active .content{
+            display:flex;
+            flex-direction:column;
+            min-height:0;
+            height:100vh;
+            max-height:100vh;
+            overflow:hidden;
+        }
+        html.business-wizard-active .content-inner{
+            flex:1;
+            min-height:0;
+            display:flex;
+            flex-direction:column;
+            padding:0 !important;
+            overflow:hidden;
+        }
         .wizard-shell{
-            min-height:calc(100vh - 73px);
-            display:grid;
-            place-items:center;
+            flex:1;
+            min-height:0;
             width:100%;
             margin:0;
             padding:0;
+            display:flex;
+            flex-direction:column;
             background:var(--bg);
             overflow:hidden;
         }
         .wizard-panel{
             position:relative;
-            overflow:hidden;
+            flex:1;
+            min-height:0;
+            max-height:100%;
             width:100%;
-            min-height:calc(100vh - 92px);
+            overflow:hidden;
             display:flex;
             flex-direction:column;
             justify-content:center;
             align-items:center;
             border:none;
             border-radius:0;
-            padding:36px;
+            padding:clamp(20px,4vh,36px);
+            box-sizing:border-box;
             background:#ffffff;
             color:#1f2937;
             box-shadow:none;
@@ -292,18 +322,34 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
         .wizard-circles li:nth-child(8){left:50%;width:25px;height:25px;animation-delay:15s;animation-duration:45s;}
         .wizard-circles li:nth-child(9){left:20%;width:15px;height:15px;animation-delay:2s;animation-duration:35s;}
         .wizard-circles li:nth-child(10){left:85%;width:150px;height:150px;animation-delay:0s;animation-duration:11s;}
-        .wizard-head{display:flex;justify-content:center;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:18px}
+        .wizard-head{
+            flex-shrink:0;
+            display:flex;
+            justify-content:center;
+            align-items:center;
+            gap:14px;
+            flex-wrap:wrap;
+            margin-bottom:clamp(12px,2vh,18px);
+        }
         .wizard-head,.wizard-body,.wizard-help,.wizard-step{color:#4b5563}
         .wizard-title{margin:0 0 8px;font-size:34px;line-height:1.1}
         .wizard-sub{margin:0;color:var(--muted)}
         .wizard-step{display:inline-flex;align-items:center;gap:8px;padding:8px 14px;border-radius:999px;border:none;color:var(--muted);font-size:14px}
         .wizard-step .dot{width:8px;height:8px;border-radius:50%;background:#9ca3af}
-        .wizard-body{width:min(760px,100%);margin:0 auto;text-align:center}
+        .wizard-body{
+            flex:0 1 auto;
+            min-height:0;
+            max-height:100%;
+            width:min(760px,100%);
+            margin:0 auto;
+            text-align:center;
+            overflow:hidden;
+        }
         .wizard-card{animation:fadeSlide .35s ease}
         .wizard-body,.wizard-head{position:relative;z-index:1}
-        .wizard-q{margin:0 0 8px;font-size:28px}
-        .wizard-help{margin:0 0 18px;color:var(--muted)}
-        .wiz-input,.wiz-textarea{
+        .wizard-q{margin:0 0 8px;font-size:clamp(22px,3.2vw,28px);line-height:1.15}
+        .wizard-help{margin:0 0 clamp(12px,2vh,18px);color:var(--muted)}
+        .wiz-input,.wiz-textarea,.wiz-select{
             width:100%;
             padding:14px 16px;
             border-radius:12px;
@@ -312,13 +358,31 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
             color:#111827;
             outline:none;
             transition:all .2s ease;
+            box-sizing:border-box;
         }
-        .wiz-input:focus,.wiz-textarea:focus{
+        .wiz-select{
+            appearance:none;
+            padding-right:40px;
+            background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%2364748b' d='M1 1l5 5 5-5'/%3E%3C/svg%3E");
+            background-repeat:no-repeat;
+            background-position:right 14px center;
+            cursor:pointer;
+        }
+        .wiz-input:focus,.wiz-textarea:focus,.wiz-select:focus{
             border-color:#a78bfa;
             background:#ffffff;
         }
-        .wiz-textarea{resize:vertical;min-height:130px}
-        .wizard-actions{margin-top:18px;display:flex;gap:10px;justify-content:center}
+        .wiz-textarea{resize:vertical;min-height:96px;max-height:min(130px,22vh)}
+        .wizard-actions{margin-top:clamp(12px,2vh,18px);display:flex;gap:10px;justify-content:center;flex-shrink:0}
+        #wizardStep2 .wizard-step-fields{
+            display:grid;
+            gap:12px;
+            max-height:min(42vh,320px);
+            overflow-y:auto;
+            overscroll-behavior:contain;
+            padding-right:4px;
+            text-align:left;
+        }
         .btn-soft{background:#475569}
         @keyframes fadeSlide{
             from{opacity:0;transform:translateY(10px)}
@@ -366,18 +430,23 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                 <div id="wizardStep2" style="display:none;" class="wizard-card">
                     <h2 class="wizard-q">What is your business category?</h2>
                     <p class="wizard-help">Tell us about your business in this quick quiz.</p>
-                    <div style="display:grid;gap:14px;">
+                    <div class="wizard-step-fields">
                         <div>
-                            <label style="display:block;margin-bottom:6px;color:var(--muted);">Business Category</label>
-                            <input
-                                type="text"
-                                name="category"
-                                value="{{ old('category') }}"
-                                placeholder="e.g. SaaS, Retail, Healthcare"
+                            <label for="wizard-company-category" style="display:block;margin-bottom:6px;color:var(--muted);">Business Category</label>
+                            <select
+                                id="wizard-company-category"
+                                name="company_category_slug"
                                 required
-                                class="wiz-input"
+                                class="wiz-select"
                             >
-                            @error('category')
+                                <option value="" disabled {{ old('company_category_slug') ? '' : 'selected' }}>Select category…</option>
+                                @foreach($businessCategoryOptions ?? [] as $categoryOption)
+                                    <option value="{{ $categoryOption['value'] }}" @selected((string) old('company_category_slug') === (string) $categoryOption['value'])>
+                                        {{ $categoryOption['label'] }}
+                                    </option>
+                                @endforeach
+                            </select>
+                            @error('company_category_slug')
                                 <div style="color:#ef4444;margin-top:8px;">{{ $message }}</div>
                             @enderror
                         </div>
@@ -619,7 +688,7 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
         });
     }
 
-    @if($errors->has('category') || $errors->has('description'))
+    @if($errors->has('company_category_slug') || $errors->has('description'))
         if (wizardStep1 && wizardStep2 && stepBadge) {
             wizardStep1.style.display = 'none';
             wizardStep2.style.display = 'block';

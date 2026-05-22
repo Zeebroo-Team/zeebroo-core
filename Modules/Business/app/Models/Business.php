@@ -30,6 +30,7 @@ use Modules\HRManagement\Models\LeaveRequest;
 use Modules\HRManagement\Models\PayrollCustomTemplate;
 use Modules\HRManagement\Models\PayrollCycle;
 use Modules\HRManagement\Models\PayrollRuleSet;
+use Modules\Modification\Models\Modification;
 use Modules\Settings\Concerns\HasSettings;
 
 class Business extends Model
@@ -104,6 +105,11 @@ class Business extends Model
     public function bills(): HasMany
     {
         return $this->hasMany(Bill::class);
+    }
+
+    public function modifications(): HasMany
+    {
+        return $this->hasMany(Modification::class);
     }
 
     public function branches(): HasMany

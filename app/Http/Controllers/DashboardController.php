@@ -9,6 +9,7 @@ use Illuminate\Http\Response;
 use Modules\Account\Services\LoanOverviewTooltipService;
 use Illuminate\Http\RedirectResponse;
 use Modules\Business\Models\Business;
+use Modules\Business\Models\BusinessCategory;
 
 class DashboardController extends Controller
 {
@@ -26,6 +27,7 @@ class DashboardController extends Controller
             ->view('dashboard', [
                 'loanOverviewTooltip' => $loanOverviewTooltip,
                 'needsWarehouseBranchIntro' => $needsWarehouseBranchIntro,
+                'businessCategoryOptions' => BusinessCategory::optionsForSelect(),
             ])
             ->header('Cache-Control', 'private, no-store, no-cache, must-revalidate')
             ->header('Pragma', 'no-cache');

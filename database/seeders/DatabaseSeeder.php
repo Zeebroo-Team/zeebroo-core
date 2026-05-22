@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use Modules\Account\Database\Seeders\AccountDatabaseSeeder;
+use Modules\Business\Database\Seeders\BusinessCategorySeeder;
 use Modules\Settings\Database\Seeders\SettingsDatabaseSeeder;
 
 class DatabaseSeeder extends Seeder
@@ -18,6 +19,7 @@ class DatabaseSeeder extends Seeder
     {
         $this->call([
             AuthLoginSeeder::class,
+            BusinessCategorySeeder::class,
             AccountDatabaseSeeder::class,
             SettingsDatabaseSeeder::class,
         ]);

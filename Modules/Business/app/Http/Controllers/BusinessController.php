@@ -318,13 +318,26 @@ class BusinessController extends Controller
 
     public function storeOnboarding(Request $request): RedirectResponse
     {
-        $data = $request->validate([
+        $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'category' => ['required', 'string', 'max:255'],
+            'company_category_slug' => [
+                'required',
+                'string',
+                'max:64',
+                Rule::exists('business_categories', 'slug')->where(fn ($q) => $q->where('is_active', true)),
+            ],
             'description' => ['nullable', 'string', 'max:2000'],
         ]);
 
-        $this->businessService->upsertForUser($request->user(), $data);
+        $slug = $validated['company_category_slug'];
+        $label = BrandCompanyCategoryCatalog::labelsByValue()[$slug] ?? $slug;
+
+        $this->businessService->upsertForUser($request->user(), [
+            'name' => $validated['name'],
+            'category' => $label,
+            'company_category_slug' => $slug,
+            'description' => $validated['description'] ?? null,
+        ]);
 
         return redirect()->route('dashboard')->with('status', 'Business profile saved.');
     }

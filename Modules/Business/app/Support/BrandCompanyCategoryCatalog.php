@@ -9,6 +9,14 @@ final class BrandCompanyCategoryCatalog
      */
     public static function options(): array
     {
+        return \Modules\Business\Models\BusinessCategory::optionsForSelect();
+    }
+
+    /**
+     * @return list<array{value: string, label: string}>
+     */
+    public static function defaultOptions(): array
+    {
         return [
             ['value' => 'education', 'label' => 'Education'],
             ['value' => 'software_industry', 'label' => 'Software industry'],
@@ -31,11 +39,6 @@ final class BrandCompanyCategoryCatalog
      */
     public static function labelsByValue(): array
     {
-        $map = [];
-        foreach (self::options() as $row) {
-            $map[$row['value']] = $row['label'];
-        }
-
-        return $map;
+        return \Modules\Business\Models\BusinessCategory::labelsBySlug();
     }
 }

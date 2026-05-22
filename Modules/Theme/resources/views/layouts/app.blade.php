@@ -57,6 +57,9 @@
         .sidebar--employee-portal .brand:before{content:"HR";}
         .brand{font-weight:800;font-size:19px;letter-spacing:.2px;margin-bottom:16px;display:flex;align-items:center;gap:10px}
         .brand:before{content:"SB";width:28px;height:28px;display:grid;place-items:center;border-radius:8px;background:linear-gradient(135deg,var(--primary),color-mix(in srgb,var(--primary) 45%,#fff));color:#fff;font-size:11px;font-weight:800}
+        .brand.brand--logo{display:block;margin-bottom:18px;text-decoration:none;line-height:0}
+        .brand.brand--logo:before{display:none;content:none}
+        .brand.brand--logo img{display:block;width:100%;max-width:224px;height:auto;max-height:52px;object-fit:contain;object-position:left center}
         .menu-section{font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin:4px 2px 2px}
         .menu{display:flex;flex-direction:column;gap:6px}
         .menu a{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid transparent;border-radius:10px;text-decoration:none;color:var(--text);font-weight:500;font-size:13px;transition:all .2s ease}
@@ -299,6 +302,9 @@
         $showSidebarPropertiesLink = $navBusiness
             ? \Modules\Account\Models\Property::query()->where('business_id', $navBusiness->id)->exists()
             : false;
+        $showSidebarModificationsLink = $navBusiness
+            && Route::has('modification.index')
+            && $navBusiness->modifications()->exists();
         $sidebarBillDueHighlight = $showSidebarBillsLink && $navBusiness
             ? app(\Modules\Account\Services\BillService::class)->businessHasOverdueBillPayments($navBusiness)
             : false;
@@ -354,6 +360,7 @@
             $showSidebarPosSection = false;
             $showSidebarFilesLink = false;
             $showSidebarPropertiesLink = false;
+            $showSidebarModificationsLink = false;
             $sidebarLoanDueHighlight = false;
             $sidebarRentalDueHighlight = false;
             $sidebarBillDueHighlight = false;
@@ -378,12 +385,14 @@
                 @endif
             </nav>
         @else
-        <div class="brand">SociBiz Panel</div>
+        <a href="{{ route('dashboard') }}" class="brand brand--logo" aria-label="Zeebroo">
+            <img src="{{ asset('logo.png') }}" alt="Zeebroo" width="224" height="75">
+        </a>
         <nav class="menu">
             <div class="menu-section">Main</div>
             <a href="{{ route('dashboard') }}" class="{{ request()->routeIs('dashboard') ? 'active' : '' }}"><i class="fa fa-gauge-high"></i><span>Overview</span></a>
             <a href="{{ route('aibot.index') }}" class="{{ request()->routeIs('aibot.*') ? 'active' : '' }}"><i class="fa fa-robot"></i><span>AI Agent</span></a>
-            @if(Route::has('modification.index'))
+            @if($showSidebarModificationsLink)
                 <a href="{{ route('modification.index') }}" class="{{ request()->routeIs('modification.*') ? 'active' : '' }}"><i class="fa fa-screwdriver-wrench"></i><span>Modification</span></a>
             @endif
             @if($showSidebarPropertiesLink && Route::has('account.properties.index'))

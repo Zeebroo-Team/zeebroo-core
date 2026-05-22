@@ -14,6 +14,7 @@ class BusinessService
             [
                 'name' => $data['name'],
                 'category' => $data['category'],
+                'company_category_slug' => $data['company_category_slug'] ?? null,
                 'description' => $data['description'] ?? null,
             ]
         );
