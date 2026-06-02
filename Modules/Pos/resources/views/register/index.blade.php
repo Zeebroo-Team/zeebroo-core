@@ -24,7 +24,9 @@
             'id' => $p['id'],
             'name' => $p['name'],
             'sku' => $p['sku'] ?? '',
+            'unit' => $p['unit'] ?? '',
             'layers' => $p['layers'] ?? [],
+            'selling_units' => $p['selling_units'] ?? [],
             'unit_sell_price' => $p['unit_sell_price'],
             'stock_quantity' => $p['stock_quantity'],
         ];
@@ -173,6 +175,7 @@ body.pos-walking-active .pos-page__top-search .pos-search button{padding:6px 8px
                                 data-unit-price="{{ $price !== null ? number_format((float) $price, 2, '.', '') : '0' }}"
                                 data-stock="{{ $formatQty((float) $product['stock_quantity']) }}"
                                 data-product-layers='@json($product['layers'] ?? [])'
+                                data-selling-units='@json($product['selling_units'] ?? [])'
                                 @if($outOfStock) disabled @endif
                             >
                                 @if($product['image_url'])
@@ -238,6 +241,7 @@ body.pos-walking-active .pos-page__top-search .pos-search button{padding:6px 8px
 
 @include('pos::partials.pos-add-product-modal', ['productUnits' => $productUnits ?? collect(), 'currency' => $currency])
 @include('pos::partials.pos-stock-layer-picker', ['currency' => $currency])
+@include('pos::partials.pos-selling-unit-picker', ['currency' => $currency])
 @include('pos::partials.pos-cart-layers-script')
 
 @once
@@ -308,7 +312,7 @@ body.pos-walking-active .pos-page__top-search .pos-search button{padding:6px 8px
                 '</div>';
 
             wrap.querySelector('.pos-cart-row__name').textContent = row.name;
-            let subLine = (row.sku ? row.sku + ' · ' : '') + money(row.unitPrice) + ' each';
+            let subLine = (row.sku ? row.sku + ' · ' : '') + money(row.unitPrice) + (row.sellingUnitLabel ? ' / ' + row.sellingUnitLabel : ' each');
             if (row.layerLabel) subLine += ' · ' + row.layerLabel;
             subLine += ' · stock ' + row.stock;
             wrap.querySelector('.pos-cart-row__sub').textContent = subLine;
@@ -327,7 +331,7 @@ body.pos-walking-active .pos-page__top-search .pos-search button{padding:6px 8px
             const qtyHidden = document.createElement('input');
             qtyHidden.type = 'hidden';
             qtyHidden.name = 'items[' + index + '][quantity]';
-            qtyHidden.value = String(row.quantity);
+            qtyHidden.value = String(row.quantity * (row.sellingUnitFactor || 1.0));
             qtyHidden.dataset.qtyHidden = '1';
             qtyHidden.setAttribute('form', 'pos-checkout-form');
             wrap.appendChild(qtyHidden);
@@ -339,6 +343,21 @@ body.pos-walking-active .pos-page__top-search .pos-search button{padding:6px 8px
                 layerInput.value = String(row.layerId);
                 layerInput.setAttribute('form', 'pos-checkout-form');
                 wrap.appendChild(layerInput);
+            }
+
+            if (row.sellingUnitLabel) {
+                const suLabel = document.createElement('input');
+                suLabel.type = 'hidden';
+                suLabel.name = 'items[' + index + '][selling_unit_label]';
+                suLabel.value = row.sellingUnitLabel;
+                suLabel.setAttribute('form', 'pos-checkout-form');
+                wrap.appendChild(suLabel);
+                const suFactor = document.createElement('input');
+                suFactor.type = 'hidden';
+                suFactor.name = 'items[' + index + '][selling_unit_factor]';
+                suFactor.value = String(row.sellingUnitFactor || 1.0);
+                suFactor.setAttribute('form', 'pos-checkout-form');
+                wrap.appendChild(suFactor);
             }
 
             qtyInput.addEventListener('change', function () {
@@ -354,7 +373,7 @@ body.pos-walking-active .pos-page__top-search .pos-search button{padding:6px 8px
                 }
                 row.quantity = qty;
                 qtyInput.value = String(qty);
-                qtyHidden.value = String(qty);
+                qtyHidden.value = String(qty * (row.sellingUnitFactor || 1.0));
                 renderCart();
             });
 
@@ -382,7 +401,7 @@ body.pos-walking-active .pos-page__top-search .pos-search button{padding:6px 8px
     productsEl?.addEventListener('click', function (event) {
         const btn = event.target.closest('[data-pos-product]');
         if (!btn || btn.disabled) return;
-        void window.posAddProductFromButton(btn, cart, posProductCatalog).then(function (added) {
+        void window.posAddProductWithUnit(btn, cart, posProductCatalog, currencySuffix).then(function (added) {
             if (!added) return;
             renderCart();
             if (typeof window.playPosBeep === 'function') {
@@ -419,7 +438,7 @@ body.pos-walking-active .pos-page__top-search .pos-search button{padding:6px 8px
         gridVariant: 'register',
         storeUrl: @json(route('pos.products.store')),
         onProductAdded: function (btn) {
-            void window.posAddProductFromButton(btn, cart, posProductCatalog).then(function (added) {
+            void window.posAddProductWithUnit(btn, cart, posProductCatalog, currencySuffix).then(function (added) {
                 if (!added) return;
                 renderCart();
                 if (typeof window.playPosBeep === 'function') {

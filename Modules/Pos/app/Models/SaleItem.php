@@ -17,6 +17,8 @@ class SaleItem extends Model
         'product_stock_layer_id',
         'product_name',
         'sku',
+        'selling_unit_label',
+        'selling_unit_factor',
         'quantity',
         'unit_cost',
         'unit_sell_price',

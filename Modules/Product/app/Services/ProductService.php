@@ -128,6 +128,7 @@ class ProductService
             'productImages.file',
             'bundleItems.itemProduct.productUnit',
             'bundleItems.itemProduct.imageFile',
+            'sellingUnits',
         ]);
     }
 }

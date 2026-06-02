@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Modules\Business\Models\Business;
 use Modules\FileManager\Models\FileManagerFile;
+use Modules\Product\Models\ProductSellingUnit;
 use Modules\Product\Models\ProductStockLayer;
 
 class Product extends Model
@@ -89,6 +90,11 @@ class Product extends Model
     public function stockLayers(): HasMany
     {
         return $this->hasMany(ProductStockLayer::class)->orderByDesc('received_at')->orderByDesc('id');
+    }
+
+    public function sellingUnits(): HasMany
+    {
+        return $this->hasMany(ProductSellingUnit::class)->where('is_active', true)->orderBy('sort_order')->orderBy('id');
     }
 
     public function imageUrl(): ?string

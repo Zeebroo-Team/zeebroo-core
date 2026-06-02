@@ -202,6 +202,12 @@
         <a href="{{ $productTabUrl('overview') }}" class="product-show-tabs__tab @if($activeTab === 'overview') is-active @endif" @if($activeTab === 'overview') aria-current="page" @endif>
             <i class="fa fa-circle-info" aria-hidden="true"></i> Overview
         </a>
+        <a href="{{ $productTabUrl('selling-units') }}" class="product-show-tabs__tab @if($activeTab === 'selling-units') is-active @endif" @if($activeTab === 'selling-units') aria-current="page" @endif>
+            <i class="fa fa-cubes" aria-hidden="true"></i> Selling Units
+            @if($product->sellingUnits->isNotEmpty())
+                <span class="product-show-tabs__count">{{ $product->sellingUnits->count() }}</span>
+            @endif
+        </a>
         <a href="{{ $productTabUrl('stock') }}" class="product-show-tabs__tab @if($activeTab === 'stock') is-active @endif" @if($activeTab === 'stock') aria-current="page" @endif>
             <i class="fa fa-warehouse" aria-hidden="true"></i> Stock
             @if(($summary['purchase_lines_count'] ?? 0) + ($summary['grn_lines_count'] ?? 0) > 0)
@@ -279,6 +285,81 @@
             <p class="muted" style="margin:0 0 6px;font-size:11px;font-weight:700;">Description</p>
             <div class="product-show-desc">{{ $product->description }}</div>
         @endif
+    </section>
+
+    <section class="product-show-panel" @if($activeTab !== 'selling-units') hidden @endif>
+        <p style="margin:0 0 10px;font-size:13px;color:var(--muted);line-height:1.5;">
+            Define pack sizes customers can buy (e.g. 500g bag, per gram). The <strong>conversion factor</strong> is how many base units equal 1 of this selling unit (e.g. 0.5 for 500g when base = kg).
+        </p>
+
+        @if($product->sellingUnits->isNotEmpty())
+            <div class="pcat-table-wrap" style="margin-bottom:16px;">
+                <table class="pcat-table">
+                    <thead>
+                        <tr>
+                            <th>Label</th>
+                            <th>Conversion Factor</th>
+                            <th>Selling Price</th>
+                            <th>Sort</th>
+                            <th style="text-align:right;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach($product->sellingUnits as $sellingUnit)
+                            <tr>
+                                <td><strong style="color:var(--text);">{{ $sellingUnit->label }}</strong></td>
+                                <td>{{ number_format((float) $sellingUnit->conversion_factor, 6) }}</td>
+                                <td>
+                                    @if($sellingUnit->selling_price !== null)
+                                        {{ number_format((float) $sellingUnit->selling_price, 2) }}{{ filled($currency ?? '') ? ' '.($currency ?? '') : '' }}
+                                    @else
+                                        <span class="muted">Derived</span>
+                                    @endif
+                                </td>
+                                <td class="muted">{{ $sellingUnit->sort_order }}</td>
+                                <td style="text-align:right;">
+                                    <form method="POST" action="{{ route('product.selling-units.destroy', [$product, $sellingUnit]) }}" style="display:inline;" onsubmit="return confirm('Remove this selling unit?')">
+                                        @csrf
+                                        @method('DELETE')
+                                        <button type="submit" class="pcat-link" style="color:#f87171;font-size:12px;" title="Remove"><i class="fa fa-trash"></i></button>
+                                    </form>
+                                </td>
+                            </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            </div>
+        @else
+            <p class="muted" style="margin:0 0 16px;font-size:13px;">No selling units defined yet.</p>
+        @endif
+
+        <div style="padding:14px 16px;border:1px solid var(--border);border-radius:10px;background:color-mix(in srgb,var(--card) 96%,transparent);">
+            <p style="margin:0 0 12px;font-size:13px;font-weight:700;color:var(--text);">Add selling unit</p>
+            <form method="POST" action="{{ route('product.selling-units.store', $product) }}">
+                @csrf
+                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;margin-bottom:12px;">
+                    <div class="pos-field">
+                        <label for="su-label">Label <span style="color:#f87171;">*</span></label>
+                        <input type="text" id="su-label" name="label" value="{{ old('label') }}" placeholder="e.g. 500g bag" maxlength="80" required style="width:100%;box-sizing:border-box;padding:8px 10px;font-size:13px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);">
+                    </div>
+                    <div class="pos-field">
+                        <label for="su-factor">Conversion Factor <span style="color:#f87171;">*</span></label>
+                        <input type="number" id="su-factor" name="conversion_factor" value="{{ old('conversion_factor') }}" placeholder="e.g. 0.5" step="any" min="0.000001" required style="width:100%;box-sizing:border-box;padding:8px 10px;font-size:13px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);">
+                    </div>
+                    <div class="pos-field">
+                        <label for="su-price">Selling Price (optional)</label>
+                        <input type="number" id="su-price" name="selling_price" value="{{ old('selling_price') }}" placeholder="Leave blank to derive" step="any" min="0" style="width:100%;box-sizing:border-box;padding:8px 10px;font-size:13px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);">
+                    </div>
+                    <div class="pos-field">
+                        <label for="su-sort">Sort Order</label>
+                        <input type="number" id="su-sort" name="sort_order" value="{{ old('sort_order', 0) }}" min="0" style="width:100%;box-sizing:border-box;padding:8px 10px;font-size:13px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);">
+                    </div>
+                </div>
+                <button type="submit" class="linkbtn" style="padding:8px 14px;font-size:13px;font-weight:700;">
+                    <i class="fa fa-plus"></i> Add selling unit
+                </button>
+            </form>
+        </div>
     </section>
 
     <section class="product-show-panel" @if($activeTab !== 'stock') hidden @endif>

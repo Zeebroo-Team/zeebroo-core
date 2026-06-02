@@ -16,10 +16,16 @@
 .product-badge{font-size:11px;font-weight:700;padding:3px 8px;border-radius:999px;border:1px solid var(--border);display:inline-block;}
 .product-badge--on{border-color:color-mix(in srgb,#22c55e 45%,var(--border));background:color-mix(in srgb,#22c55e 12%,transparent);color:color-mix(in srgb,#bbf7d0 70%,var(--text));}
 .product-badge--off{opacity:.8;color:var(--muted);}
-.product-actions{display:flex;flex-wrap:wrap;gap:6px;}
-.product-link{color:var(--primary);font-weight:600;text-decoration:none;font-size:12px;} .product-link:hover{text-decoration:underline;}
-.product-btn-del{padding:6px 9px;font-size:11px;font-weight:600;border-radius:7px;border:1px solid color-mix(in srgb,#ef4444 42%,var(--border));background:transparent;color:#f97373;cursor:pointer;}
-:is(html[data-theme="light"],html[data-theme="light_blue"]) .product-btn-del{color:#dc2626;}
+.product-actions{display:flex;flex-wrap:nowrap;gap:5px;align-items:center;}
+.product-action-btn{display:inline-flex;align-items:center;gap:5px;padding:6px 11px;font-size:11.5px;font-weight:700;border-radius:8px;border:1px solid var(--border);background:color-mix(in srgb,var(--card) 90%,transparent);color:var(--text);cursor:pointer;text-decoration:none;white-space:nowrap;transition:border-color .15s,background .15s,box-shadow .15s;}
+.product-action-btn:hover{box-shadow:0 2px 8px rgba(0,0,0,.1);}
+.product-action-btn--view{border-color:color-mix(in srgb,var(--primary) 30%,var(--border));color:var(--primary);}
+.product-action-btn--view:hover{background:color-mix(in srgb,var(--primary) 10%,transparent);border-color:color-mix(in srgb,var(--primary) 55%,var(--border));}
+.product-action-btn--edit{border-color:color-mix(in srgb,var(--primary) 45%,var(--border));background:color-mix(in srgb,var(--primary) 12%,transparent);color:var(--text);}
+.product-action-btn--edit:hover{background:color-mix(in srgb,var(--primary) 22%,transparent);border-color:color-mix(in srgb,var(--primary) 65%,var(--border));}
+.product-action-btn--del{border-color:color-mix(in srgb,#ef4444 35%,var(--border));background:transparent;color:#f97373;}
+.product-action-btn--del:hover{background:color-mix(in srgb,#ef4444 10%,transparent);border-color:color-mix(in srgb,#ef4444 60%,var(--border));}
+:is(html[data-theme="light"],html[data-theme="light_blue"]) .product-action-btn--del{color:#dc2626;}
 .product-toolbar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;}
 .product-modal{position:fixed;inset:0;z-index:120;display:flex;justify-content:center;align-items:center;padding:4vh 6vw;overflow:auto;box-sizing:border-box;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .22s ease,visibility .22s ease;}
 .product-modal.product-modal--open{opacity:1;visibility:visible;pointer-events:auto;}
@@ -228,12 +234,18 @@ html.product-modal-open-html,html.product-modal-open-html body{overflow:hidden;}
                             </td>
                             <td style="text-align:right;">
                                 <div class="product-actions" style="justify-content:flex-end;">
-                                    <a class="product-link" href="{{ route('product.show', $product) }}"><i class="fa fa-eye" style="margin-right:5px;"></i>View</a>
-                                    <a class="product-link" href="{{ route('product.edit', $product) }}"><i class="fa fa-pen" style="margin-right:5px;"></i>Edit</a>
-                                    <form method="post" action="{{ route('product.destroy', $product) }}" style="margin:0;" onsubmit="return confirm('Delete this product?');">
+                                    <a class="product-action-btn product-action-btn--view" href="{{ route('product.show', $product) }}">
+                                        <i class="fa fa-eye" aria-hidden="true"></i> View
+                                    </a>
+                                    <a class="product-action-btn product-action-btn--edit" href="{{ route('product.edit', $product) }}">
+                                        <i class="fa fa-pen-to-square" aria-hidden="true"></i> Edit
+                                    </a>
+                                    <form method="post" action="{{ route('product.destroy', $product) }}" style="margin:0;" onsubmit="return confirm('Delete {{ addslashes($product->name) }}?');">
                                         @csrf
                                         @method('DELETE')
-                                        <button type="submit" class="product-btn-del"><i class="fa fa-trash-can" style="margin-right:4px;"></i>Delete</button>
+                                        <button type="submit" class="product-action-btn product-action-btn--del">
+                                            <i class="fa fa-trash-can" aria-hidden="true"></i>
+                                        </button>
                                     </form>
                                 </div>
                             </td>

@@ -5,6 +5,7 @@ use Modules\Product\Http\Controllers\ProductBrandController;
 use Modules\Product\Http\Controllers\ProductCategoryController;
 use Modules\Product\Http\Controllers\ProductController;
 use Modules\Product\Http\Controllers\ProductImageController;
+use Modules\Product\Http\Controllers\ProductSellingUnitController;
 use Modules\Product\Http\Controllers\ProductUnitController;
 
 Route::middleware(['auth', 'verified'])->group(function (): void {
@@ -33,6 +34,9 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
     Route::post('/products/images/upload', [ProductImageController::class, 'upload'])->name('product.images.upload');
     Route::post('/products/images/generate', [ProductImageController::class, 'generate'])->name('product.images.generate');
     Route::post('/products', [ProductController::class, 'store'])->name('product.store');
+    Route::post('/products/{product}/selling-units', [ProductSellingUnitController::class, 'store'])->name('product.selling-units.store');
+    Route::put('/products/{product}/selling-units/{sellingUnit}', [ProductSellingUnitController::class, 'update'])->name('product.selling-units.update');
+    Route::delete('/products/{product}/selling-units/{sellingUnit}', [ProductSellingUnitController::class, 'destroy'])->name('product.selling-units.destroy');
     Route::get('/products/{product}', [ProductController::class, 'show'])->name('product.show');
     Route::put('/products/{product}/stock-layers/{stockLayer}', [ProductController::class, 'updateStockLayer'])->name('product.stock-layers.update');
     Route::get('/products/{product}/edit', [ProductController::class, 'edit'])->name('product.edit');

@@ -88,5 +88,76 @@ window.posAddProductFromButton = async function (btn, cart, catalog) {
     const line = window.posBuildCartLineFromButton(btn, layer, catalog);
     return window.posAddCartLine(cart, line, 1);
 };
+
+window.posCartKeyWithUnit = function (productId, layerId, unitId) {
+    var base = String(productId) + ':' + (layerId != null ? String(layerId) : 'fifo');
+    return base + ':u' + (unitId != null ? String(unitId) : '0');
+};
+
+window.posAddProductWithUnit = async function (btn, cart, catalog, currencySuffix) {
+    if (!btn || btn.disabled) return false;
+    var productId = parseInt(btn.dataset.productId, 10);
+    var catalogEntry = catalog[productId] || {};
+    var sellingUnits = catalogEntry.selling_units || window.posParseProductLayers(btn.getAttribute('data-selling-units')) || [];
+    var layers = window.posLayersFromButton(btn, catalog);
+
+    var chosenUnit = null;
+    if (sellingUnits.length > 0) {
+        chosenUnit = await window.posPickSellingUnit(
+            { id: productId, name: btn.dataset.productName || '', unit: catalogEntry.unit || '', unit_sell_price: parseFloat(btn.dataset.unitPrice) || 0, stock_quantity: parseFloat(btn.dataset.stock) || 0 },
+            sellingUnits,
+            currencySuffix
+        );
+        if (chosenUnit === null) return false; // cancelled
+    }
+
+    // Now pick the stock layer (if multiple layers exist)
+    var layer = null;
+    if (layers.length > 1) {
+        layer = await window.posPickStockLayer({ id: productId, name: btn.dataset.productName || '' }, layers);
+        if (!layer) return false;
+    } else if (layers.length === 1) {
+        layer = layers[0];
+    }
+
+    // Build cart line
+    var layerId = layer ? parseInt(layer.id, 10) : null;
+    var unitId  = chosenUnit && chosenUnit.id != null ? parseInt(chosenUnit.id, 10) : null;
+    var cartKey = window.posCartKeyWithUnit(productId, layerId, unitId);
+
+    // Calculate price and stock
+    var baseUnitPrice = layer ? parseFloat(layer.unit_sell_price) : parseFloat(btn.dataset.unitPrice) || 0;
+    var unitPrice, factor, unitLabel, stockInUnits;
+
+    if (chosenUnit && chosenUnit.id != null) {
+        factor        = parseFloat(chosenUnit.conversion_factor) || 1.0;
+        unitLabel     = chosenUnit.label;
+        unitPrice     = chosenUnit.display_price != null ? parseFloat(chosenUnit.display_price) : (baseUnitPrice * factor);
+        stockInUnits  = chosenUnit.stock_in_units != null ? parseFloat(chosenUnit.stock_in_units) : Math.floor((parseFloat(btn.dataset.stock) || 0) / factor);
+    } else {
+        // custom / no selling unit
+        factor        = 1.0;
+        unitLabel     = null;
+        unitPrice     = baseUnitPrice;
+        stockInUnits  = layer ? parseFloat(layer.quantity_remaining) : parseFloat(btn.dataset.stock) || 0;
+    }
+
+    var line = {
+        cartKey:      cartKey,
+        id:           productId,
+        layerId:      layerId,
+        layerLabel:   layer ? (layer.label || ('Batch #' + layer.id)) : '',
+        sellingUnitId:    unitId,
+        sellingUnitLabel: unitLabel,
+        sellingUnitFactor: factor,
+        name:         btn.dataset.productName || 'Product',
+        sku:          btn.dataset.productSku || '',
+        unitPrice:    unitPrice,
+        quantity:     0,
+        stock:        stockInUnits,
+    };
+
+    return window.posAddCartLine(cart, line, 1);
+};
 </script>
 @endonce

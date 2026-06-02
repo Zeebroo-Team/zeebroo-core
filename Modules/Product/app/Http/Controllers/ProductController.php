@@ -119,7 +119,7 @@ class ProductController extends Controller
         $currency = (string) (get_settings('business.currency', '', $business) ?: '');
         $product = $this->productService->loadForShow($product);
         $activeTab = (string) $request->query('tab', 'overview');
-        $allowedTabs = ['overview', 'stock', 'bundle', 'gallery'];
+        $allowedTabs = ['overview', 'selling-units', 'stock', 'bundle', 'gallery'];
         if (! in_array($activeTab, $allowedTabs, true)) {
             $activeTab = 'overview';
         }

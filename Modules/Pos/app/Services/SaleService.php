@@ -131,6 +131,8 @@ class SaleService
                         'product_stock_layer_id' => $allocation['product_stock_layer_id'],
                         'product_name' => $product->name,
                         'sku' => $product->sku,
+                        'selling_unit_label'  => $line['selling_unit_label'] ?? null,
+                        'selling_unit_factor' => isset($line['selling_unit_factor']) ? round((float) $line['selling_unit_factor'], 6) : null,
                         'quantity' => $allocation['quantity'],
                         'unit_cost' => $allocation['unit_cost'],
                         'unit_sell_price' => $allocation['unit_sell_price'],
@@ -236,8 +238,8 @@ class SaleService
     }
 
     /**
-     * @param  list<array{product_id: int, quantity: float|string, product_stock_layer_id?: int|null}>  $items
-     * @return list<array{product: Product, quantity: float, product_stock_layer_id: ?int}>
+     * @param  list<array{product_id: int, quantity: float|string, product_stock_layer_id?: int|null, selling_unit_label?: ?string, selling_unit_factor?: float|null}>  $items
+     * @return list<array{product: Product, quantity: float, product_stock_layer_id: ?int, selling_unit_label: ?string, selling_unit_factor: ?float}>
      */
     private function normalizeCartItems(Business $business, array $items): array
     {
@@ -247,7 +249,7 @@ class SaleService
             ]);
         }
 
-        /** @var array<string, array{product_id: int, quantity: float, product_stock_layer_id: ?int}> $merged */
+        /** @var array<string, array{product_id: int, quantity: float, product_stock_layer_id: ?int, selling_unit_label: ?string, selling_unit_factor: ?float}> $merged */
         $merged = [];
         foreach ($items as $row) {
             $productId = (int) ($row['product_id'] ?? 0);
@@ -255,6 +257,8 @@ class SaleService
             $layerId = isset($row['product_stock_layer_id']) && $row['product_stock_layer_id'] !== ''
                 ? (int) $row['product_stock_layer_id']
                 : null;
+            $sellingUnitLabel  = isset($row['selling_unit_label']) && $row['selling_unit_label'] !== '' ? trim((string) $row['selling_unit_label']) : null;
+            $sellingUnitFactor = isset($row['selling_unit_factor']) && (float) $row['selling_unit_factor'] > 0 ? (float) $row['selling_unit_factor'] : null;
             if ($productId <= 0 || $quantity <= 0) {
                 continue;
             }
@@ -264,9 +268,14 @@ class SaleService
                     'product_id' => $productId,
                     'quantity' => 0.0,
                     'product_stock_layer_id' => $layerId,
+                    'selling_unit_label' => $sellingUnitLabel,
+                    'selling_unit_factor' => $sellingUnitFactor,
                 ];
             }
             $merged[$key]['quantity'] = round($merged[$key]['quantity'] + $quantity, 3);
+            // carry the last-seen selling unit metadata
+            $merged[$key]['selling_unit_label'] = $sellingUnitLabel;
+            $merged[$key]['selling_unit_factor'] = $sellingUnitFactor;
         }
 
         if ($merged === []) {
@@ -309,6 +318,8 @@ class SaleService
                 'product' => $product,
                 'quantity' => round((float) $row['quantity'], 3),
                 'product_stock_layer_id' => $layerId,
+                'selling_unit_label' => $row['selling_unit_label'] ?? null,
+                'selling_unit_factor' => $row['selling_unit_factor'] ?? null,
             ];
         }
 

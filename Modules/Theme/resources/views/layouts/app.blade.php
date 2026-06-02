@@ -514,23 +514,19 @@
                 </div>
             @endif
             @if($showSidebarPosSection)
-                @if($showSidebarPosHubLink)
-                    <a href="{{ route('pos.index') }}" @class(['menu-group-title', 'active' => request()->routeIs('pos.index')])>
-                        <i class="fa fa-cash-register"></i><span>Sales</span>
-                    </a>
-                @else
-                    <div class="menu-group-title">
-                        <i class="fa fa-cash-register"></i><span>Sales</span>
-                    </div>
-                @endif
+                <div class="menu-group-title">
+                    <i class="fa fa-cash-register"></i><span>Sales</span>
+                </div>
                 <div class="submenu" aria-label="Point of sale">
+                    @if($showSidebarPosHubLink)
+                        <a href="{{ route('pos.index') }}" @class([
+                            'active' => request()->routeIs('pos.index'),
+                        ])><i class="fa fa-gauge-high"></i><span>Sales hub</span></a>
+                    @endif
                     @if($showSidebarPosRegisterLink)
                         <a href="{{ route('pos.online') }}" @class([
                             'active' => request()->routeIs('pos.online', 'pos.checkout'),
                         ])><i class="fa fa-store"></i><span>Online POS</span></a>
-                        <a href="{{ route('pos.register') }}" @class([
-                            'active' => request()->routeIs('pos.register'),
-                        ])><i class="fa fa-cash-register"></i><span>Register</span></a>
                     @endif
                     @if($showSidebarPosSalesLink)
                         <a href="{{ route('pos.sales.index') }}" @class([

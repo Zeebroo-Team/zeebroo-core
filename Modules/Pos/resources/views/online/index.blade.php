@@ -29,7 +29,9 @@
             'id' => $p['id'],
             'name' => $p['name'],
             'sku' => $p['sku'] ?? '',
+            'unit' => $p['unit'] ?? '',
             'layers' => $p['layers'] ?? [],
+            'selling_units' => $p['selling_units'] ?? [],
             'unit_sell_price' => $p['unit_sell_price'],
             'stock_quantity' => $p['stock_quantity'],
         ];
@@ -207,6 +209,7 @@ body.pos-walking-active .pos-online__top-fields .pos-online__scan-row button{pad
                             data-unit-price="{{ $product['unit_sell_price'] !== null ? number_format((float) $product['unit_sell_price'], 2, '.', '') : '0' }}"
                             data-stock="{{ $formatQty((float) $product['stock_quantity']) }}"
                             data-product-layers='@json($product['layers'] ?? [])'
+                            data-selling-units='@json($product['selling_units'] ?? [])'
                             @if($outOfStock) disabled @endif
                         >
                             @if($product['image_url'])
@@ -271,6 +274,7 @@ body.pos-walking-active .pos-online__top-fields .pos-online__scan-row button{pad
 
 @include('pos::partials.pos-add-product-modal', ['productUnits' => $productUnits ?? collect(), 'currency' => $currency])
 @include('pos::partials.pos-stock-layer-picker', ['currency' => $currency])
+@include('pos::partials.pos-selling-unit-picker', ['currency' => $currency])
 @include('pos::partials.pos-cart-layers-script')
 
 @once
@@ -306,7 +310,7 @@ body.pos-walking-active .pos-online__top-fields .pos-online__scan-row button{pad
     }
 
     async function addProductFromButton(btn) {
-        const added = await window.posAddProductFromButton(btn, cart, posProductCatalog);
+        const added = await window.posAddProductWithUnit(btn, cart, posProductCatalog, currencySuffix);
         if (!added) return false;
         renderCart();
         if (typeof window.playPosBeep === 'function') {
@@ -328,27 +332,14 @@ body.pos-walking-active .pos-online__top-fields .pos-online__scan-row button{pad
             await addProductFromButton(btn);
             return;
         }
-        const catalogCard = posProductCatalog[card.id] || card;
-        const layers = catalogCard.layers || card.layers || [];
-        let layer = null;
-        if (layers.length > 1) {
-            layer = await window.posPickStockLayer({ id: card.id, name: card.name }, layers);
-            if (!layer) return;
-        } else if (layers.length) {
-            layer = layers[0];
-        }
-        const line = {
-            cartKey: window.posCartKey(card.id, layer ? layer.id : null),
-            id: parseInt(card.id, 10),
-            layerId: layer ? parseInt(layer.id, 10) : null,
-            layerLabel: layer ? (layer.label || '') : '',
-            name: card.name,
-            sku: card.sku || '',
-            unitPrice: layer ? parseFloat(layer.unit_sell_price) : parseFloat(card.unit_sell_price) || 0,
-            quantity: 0,
-            stock: layer ? parseFloat(layer.quantity_remaining) : parseFloat(card.stock_quantity) || 0,
-        };
-        if (window.posAddCartLine(cart, line, 1)) {
+        const fakeBtn = document.createElement('button');
+        fakeBtn.dataset.productId = String(card.id);
+        fakeBtn.dataset.productName = card.name || '';
+        fakeBtn.dataset.productSku = card.sku || '';
+        fakeBtn.dataset.unitPrice = String(card.unit_sell_price || 0);
+        fakeBtn.dataset.stock = String(card.stock_quantity || 0);
+        const added = await window.posAddProductWithUnit(fakeBtn, cart, posProductCatalog, currencySuffix);
+        if (added) {
             renderCart();
             if (typeof window.playPosBeep === 'function') {
                 window.playPosBeep();
@@ -388,7 +379,7 @@ body.pos-walking-active .pos-online__top-fields .pos-online__scan-row button{pad
                     '<button type="button" class="pos-online__line__rm" data-remove aria-label="Remove">&times;</button>' +
                 '</div>';
             wrap.querySelector('.pos-online__line__name').textContent = row.name;
-            let subLine = (row.sku ? row.sku + ' · ' : '') + money(row.unitPrice) + ' each';
+            let subLine = (row.sku ? row.sku + ' · ' : '') + money(row.unitPrice) + (row.sellingUnitLabel ? ' / ' + row.sellingUnitLabel : ' each');
             if (row.layerLabel) subLine += ' · ' + row.layerLabel;
             wrap.querySelector('.pos-online__line__sub').textContent = subLine;
             const qtyInput = wrap.querySelector('[data-qty]');
@@ -403,7 +394,7 @@ body.pos-walking-active .pos-online__top-fields .pos-online__scan-row button{pad
             const qtyHidden = document.createElement('input');
             qtyHidden.type = 'hidden';
             qtyHidden.name = 'items[' + index + '][quantity]';
-            qtyHidden.value = String(row.quantity);
+            qtyHidden.value = String(row.quantity * (row.sellingUnitFactor || 1.0));
             qtyHidden.setAttribute('form', 'pos-checkout-form');
             wrap.appendChild(qtyHidden);
             if (row.layerId) {
@@ -413,6 +404,20 @@ body.pos-walking-active .pos-online__top-fields .pos-online__scan-row button{pad
                 layerInput.value = String(row.layerId);
                 layerInput.setAttribute('form', 'pos-checkout-form');
                 wrap.appendChild(layerInput);
+            }
+            if (row.sellingUnitLabel) {
+                const suLabel = document.createElement('input');
+                suLabel.type = 'hidden';
+                suLabel.name = 'items[' + index + '][selling_unit_label]';
+                suLabel.value = row.sellingUnitLabel;
+                suLabel.setAttribute('form', 'pos-checkout-form');
+                wrap.appendChild(suLabel);
+                const suFactor = document.createElement('input');
+                suFactor.type = 'hidden';
+                suFactor.name = 'items[' + index + '][selling_unit_factor]';
+                suFactor.value = String(row.sellingUnitFactor || 1.0);
+                suFactor.setAttribute('form', 'pos-checkout-form');
+                wrap.appendChild(suFactor);
             }
             qtyInput.addEventListener('change', function () {
                 let qty = parseFloat(qtyInput.value);

@@ -7,6 +7,7 @@ use Illuminate\Support\Collection;
 use Modules\Business\Models\Business;
 use Modules\Product\Models\Product;
 use Modules\Product\Models\ProductCategory;
+use Modules\Product\Models\ProductSellingUnit;
 use Modules\Product\Models\ProductStockLayer;
 use Modules\Product\Services\ProductStockLayerService;
 
@@ -75,7 +76,7 @@ class PosCatalogService
      */
     public function productCardForProduct(Product $product): array
     {
-        $product->loadMissing(['productUnit', 'imageFile', 'categories', 'business']);
+        $product->loadMissing(['productUnit', 'imageFile', 'categories', 'business', 'sellingUnits']);
         $layers = $this->sellableLayersForProduct($product);
         $meta = $this->posMetaForProduct($product);
         $defaultLayer = $layers[0] ?? null;
@@ -97,6 +98,7 @@ class PosCatalogService
             'requires_layer_pick' => count($layers) > 1,
             'has_multiple_prices' => count($sellPrices) > 1,
             'layers' => $layers,
+            'selling_units' => $this->sellingUnitsForProduct($product),
             'category_ids' => $product->categories->pluck('id')->map(fn ($id) => (int) $id)->all(),
         ];
     }
@@ -196,6 +198,27 @@ class PosCatalogService
             'stock_quantity' => round((float) $product->stock_quantity, 3),
             'has_layers' => $layer !== null,
         ];
+    }
+
+    /**
+     * @return list<array{id: int, label: string, conversion_factor: float, selling_price: ?float, display_price: float, stock_in_units: float}>
+     */
+    private function sellingUnitsForProduct(Product $product): array
+    {
+        $basePrice = $product->unit_price !== null ? (float) $product->unit_price : null;
+        $stockQty  = (float) $product->stock_quantity;
+
+        return $product->sellingUnits->map(function (ProductSellingUnit $u) use ($basePrice, $stockQty) {
+            $factor = max(0.000001, (float) $u->conversion_factor);
+            return [
+                'id'              => (int) $u->id,
+                'label'           => $u->label,
+                'conversion_factor' => $factor,
+                'selling_price'   => $u->selling_price !== null ? round((float) $u->selling_price, 2) : null,
+                'display_price'   => $u->displaySellingPrice($basePrice),
+                'stock_in_units'  => floor($stockQty / $factor),
+            ];
+        })->all();
     }
 
     public function nextFifoLayer(Product $product): ?ProductStockLayer
