@@ -14,7 +14,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('business_id')->constrained()->cascadeOnDelete();
             $table->foreignId('user_id')->constrained()->cascadeOnDelete();
-            $table->morphs('transactionable');
+            $table->morphs('transactionable', 'ledger_tx_morphs_index');
             $table->foreignId('deduct_account_id')->nullable()->constrained('accounts')->restrictOnDelete();
             $table->date('occurrence_date');
             $table->unsignedSmallInteger('period_number')->nullable();
