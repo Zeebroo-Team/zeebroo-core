@@ -231,320 +231,172 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
 @if(!$business)
     <script>document.documentElement.classList.add('business-wizard-active');</script>
     <style>
-        html.business-wizard-active,
-        html.business-wizard-active body{
-            overflow:hidden;
-            height:100%;
-        }
-        html.business-wizard-active .layout{
-            height:100vh;
-            max-height:100vh;
-            overflow:hidden;
-        }
-        html.business-wizard-active .content{
-            display:flex;
-            flex-direction:column;
-            min-height:0;
-            height:100vh;
-            max-height:100vh;
-            overflow:hidden;
-        }
-        html.business-wizard-active .content-inner{
-            flex:1;
-            min-height:0;
-            display:flex;
-            flex-direction:column;
-            padding:0 !important;
-            overflow:hidden;
-        }
-        .wizard-shell{
-            flex:1;
-            min-height:0;
-            width:100%;
-            margin:0;
-            padding:0;
-            display:flex;
-            flex-direction:column;
+        html.business-wizard-active,html.business-wizard-active body{overflow:hidden;height:100%;}
+        html.business-wizard-active .layout{height:100vh;max-height:100vh;overflow:hidden;}
+        html.business-wizard-active .content{display:flex;flex-direction:column;min-height:0;height:100vh;max-height:100vh;overflow:hidden;}
+        html.business-wizard-active .content-inner{flex:1;min-height:0;display:flex;flex-direction:column;padding:0!important;overflow:hidden;}
+
+        /* Shell & panel */
+        .wiz-shell{flex:1;min-height:0;width:100%;display:flex;flex-direction:column;overflow:hidden;}
+        .wiz-panel{
+            position:relative;flex:1;min-height:0;width:100%;overflow:hidden;
+            display:flex;flex-direction:column;align-items:center;justify-content:center;
+            padding:clamp(24px,5vh,56px) clamp(16px,4vw,32px);box-sizing:border-box;
             background:var(--bg);
-            overflow:hidden;
         }
-        .wizard-panel{
-            position:relative;
-            flex:1;
-            min-height:0;
-            max-height:100%;
-            width:100%;
-            overflow:hidden;
-            display:flex;
-            flex-direction:column;
-            justify-content:center;
-            align-items:center;
-            border:none;
-            border-radius:0;
-            padding:clamp(20px,4vh,36px);
-            box-sizing:border-box;
-            background:#ffffff;
-            color:#1f2937;
-            box-shadow:none;
+        .wiz-panel::before{
+            content:'';position:absolute;inset:0;pointer-events:none;
+            background-image:radial-gradient(circle,color-mix(in srgb,var(--primary) 7%,transparent) 1px,transparent 1px);
+            background-size:28px 28px;
         }
-        .wizard-bg{
-            position:absolute;
-            inset:0;
-            overflow:hidden;
-            pointer-events:none;
+        /* Decorative blobs */
+        .wiz-blob{position:absolute;border-radius:50%;pointer-events:none;filter:blur(60px);opacity:.45;}
+        .wiz-blob--a{width:320px;height:320px;top:-80px;left:-80px;background:radial-gradient(circle,color-mix(in srgb,var(--primary) 55%,transparent),transparent 70%);}
+        .wiz-blob--b{width:260px;height:260px;bottom:-60px;right:-40px;background:radial-gradient(circle,color-mix(in srgb,var(--primary) 25%,transparent),transparent 70%);}
+
+        /* Step indicator */
+        .wiz-stepper{
+            position:relative;z-index:1;display:flex;align-items:flex-start;gap:0;
+            margin-bottom:22px;flex-shrink:0;
         }
-        .wizard-circles{
-            position:absolute;
-            top:0;
-            left:0;
-            width:100%;
-            height:100%;
-            margin:0;
-            padding:0;
-            list-style:none;
+        .wiz-step-item{display:flex;flex-direction:column;align-items:center;gap:5px;}
+        .wiz-step-dot{
+            width:34px;height:34px;border-radius:50%;display:grid;place-items:center;
+            font-size:13px;font-weight:800;transition:all .3s ease;
+            background:var(--border);color:var(--muted);border:2px solid transparent;
         }
-        .wizard-circles li{
-            position:absolute;
-            display:block;
-            width:20px;
-            height:20px;
-            background:rgba(107,114,128,0.18);
-            bottom:-150px;
-            animation:wizardFloat 25s linear infinite;
+        .wiz-step-dot--current{background:var(--card);color:var(--primary);border-color:var(--primary);box-shadow:0 0 0 4px color-mix(in srgb,var(--primary) 15%,transparent);}
+        .wiz-step-dot--done{background:var(--primary);color:var(--card);border-color:var(--primary);}
+        .wiz-step-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);transition:color .3s;}
+        .wiz-step-lbl--active{color:var(--primary);}
+        .wiz-step-connector{width:56px;height:2px;background:var(--border);margin:17px 4px 0;flex-shrink:0;transition:background .3s ease;border-radius:2px;}
+        .wiz-step-connector--done{background:var(--primary);}
+
+        /* Card */
+        .wiz-card{
+            position:relative;z-index:1;width:100%;max-width:468px;
+            flex-shrink:1;min-height:0;overflow-y:auto;overflow-x:hidden;
         }
-        .wizard-circles li:nth-child(1){left:25%;width:80px;height:80px;animation-delay:0s;}
-        .wizard-circles li:nth-child(2){left:10%;width:20px;height:20px;animation-delay:2s;animation-duration:12s;}
-        .wizard-circles li:nth-child(3){left:70%;width:20px;height:20px;animation-delay:4s;}
-        .wizard-circles li:nth-child(4){left:40%;width:60px;height:60px;animation-delay:0s;animation-duration:18s;}
-        .wizard-circles li:nth-child(5){left:65%;width:20px;height:20px;animation-delay:0s;}
-        .wizard-circles li:nth-child(6){left:75%;width:110px;height:110px;animation-delay:3s;}
-        .wizard-circles li:nth-child(7){left:35%;width:150px;height:150px;animation-delay:7s;}
-        .wizard-circles li:nth-child(8){left:50%;width:25px;height:25px;animation-delay:15s;animation-duration:45s;}
-        .wizard-circles li:nth-child(9){left:20%;width:15px;height:15px;animation-delay:2s;animation-duration:35s;}
-        .wizard-circles li:nth-child(10){left:85%;width:150px;height:150px;animation-delay:0s;animation-duration:11s;}
-        .wizard-head{
-            flex-shrink:0;
-            display:flex;
-            justify-content:center;
-            align-items:center;
-            gap:14px;
-            flex-wrap:wrap;
-            margin-bottom:clamp(12px,2vh,18px);
+        .wiz-card-eyebrow{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--primary);margin:0 0 6px;text-align:center;}
+        .wiz-card-title{font-size:clamp(20px,2.8vw,25px);font-weight:800;color:var(--text);margin:0 0 6px;line-height:1.2;letter-spacing:-.025em;text-align:center;}
+        .wiz-card-sub{font-size:13.5px;color:var(--muted);margin:0 0 22px;line-height:1.5;text-align:center;}
+
+        /* Fields */
+        .wiz-field{margin-bottom:14px;}
+        .wiz-field label{display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text);margin-bottom:6px;}
+        .wiz-input,.wiz-select,.wiz-textarea{
+            width:100%;padding:12px 14px;border-radius:10px;
+            border:1.5px solid var(--border);background:color-mix(in srgb,var(--card) 94%,transparent);
+            color:var(--text);font-size:14px;font-family:inherit;
+            outline:none;transition:border-color .2s,box-shadow .2s,background .2s;box-sizing:border-box;
         }
-        .wizard-head,.wizard-body,.wizard-help,.wizard-step{color:#4b5563}
-        .wizard-title{margin:0 0 8px;font-size:34px;line-height:1.1}
-        .wizard-sub{margin:0;color:var(--muted)}
-        .wizard-step{display:inline-flex;align-items:center;gap:8px;padding:8px 14px;border-radius:999px;border:none;color:var(--muted);font-size:14px}
-        .wizard-step .dot{width:8px;height:8px;border-radius:50%;background:#9ca3af}
-        .wizard-body{
-            flex:0 1 auto;
-            min-height:0;
-            max-height:100%;
-            width:min(760px,100%);
-            margin:0 auto;
-            text-align:center;
-            overflow:hidden;
-        }
-        .wizard-card{animation:fadeSlide .35s ease}
-        .wizard-body,.wizard-head{position:relative;z-index:1}
-        .wizard-q{margin:0 0 8px;font-size:clamp(22px,3.2vw,28px);line-height:1.15}
-        .wizard-help{margin:0 0 clamp(12px,2vh,18px);color:var(--muted)}
-        .wiz-input,.wiz-textarea,.wiz-select{
-            width:100%;
-            padding:14px 16px;
-            border-radius:12px;
-            border:1px solid #d1d5db;
-            background:#f9fafb;
-            color:#111827;
-            outline:none;
-            transition:all .2s ease;
-            box-sizing:border-box;
+        .wiz-input::placeholder,.wiz-textarea::placeholder{color:var(--muted);}
+        .wiz-input:focus,.wiz-select:focus,.wiz-textarea:focus{
+            border-color:var(--primary);background:var(--card);
+            box-shadow:0 0 0 3px color-mix(in srgb,var(--primary) 12%,transparent);
         }
         .wiz-select{
-            appearance:none;
-            padding-right:40px;
-            background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%2364748b' d='M1 1l5 5 5-5'/%3E%3C/svg%3E");
-            background-repeat:no-repeat;
-            background-position:right 14px center;
-            cursor:pointer;
+            appearance:none;padding-right:36px;cursor:pointer;
+            background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%236b7280' d='M1 1l5 5 5-5'/%3E%3C/svg%3E");
+            background-repeat:no-repeat;background-position:right 13px center;background-color:color-mix(in srgb,var(--card) 94%,transparent);
         }
-        .wiz-input:focus,.wiz-textarea:focus,.wiz-select:focus{
-            border-color:#a78bfa;
-            background:#ffffff;
+        .wiz-select:focus{background-color:var(--card);}
+        .wiz-textarea{resize:vertical;min-height:88px;max-height:min(140px,20vh);line-height:1.5;}
+        .wiz-field-error{color:#ef4444;font-size:12px;margin-top:5px;}
+
+        /* Buttons */
+        .wiz-btn-primary{
+            display:flex;align-items:center;justify-content:center;gap:8px;
+            width:100%;padding:13px 20px;border-radius:11px;border:none;
+            background:var(--btn-bg);
+            color:var(--card);font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;
+            transition:opacity .2s,transform .15s,box-shadow .2s;
+            box-shadow:0 4px 14px color-mix(in srgb,var(--primary) 38%,transparent);margin-top:20px;
         }
-        .wiz-textarea{resize:vertical;min-height:96px;max-height:min(130px,22vh)}
-        .wizard-actions{margin-top:clamp(12px,2vh,18px);display:flex;gap:10px;justify-content:center;flex-shrink:0}
-        #wizardStep3 .wizard-step-fields{
-            display:grid;
-            gap:12px;
-            max-height:min(42vh,320px);
-            overflow-y:auto;
-            overscroll-behavior:contain;
-            padding-right:4px;
-            text-align:left;
+        .wiz-btn-primary:hover{opacity:.9;transform:translateY(-1px);box-shadow:0 6px 20px color-mix(in srgb,var(--primary) 45%,transparent);}
+        .wiz-btn-primary:active{transform:translateY(0);}
+        .wiz-btn-back{
+            display:inline-flex;align-items:center;gap:6px;
+            padding:13px 20px;border-radius:11px;
+            background:transparent;border:1.5px solid var(--border);
+            font-size:14px;font-weight:700;color:var(--muted);
+            cursor:pointer;font-family:inherit;
+            transition:border-color .2s,color .2s,background .2s;
         }
-        .btn-soft{background:#475569}
-        .features-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 16px;
-            width: 100%;
-            max-height: min(45vh, 320px);
-            overflow-y: auto;
-            overscroll-behavior: contain;
-            padding: 8px 4px;
-            box-sizing: border-box;
-            margin-top: 10px;
-            margin-bottom: 10px;
+        .wiz-btn-back:hover{border-color:var(--primary);color:var(--text);background:color-mix(in srgb,var(--primary) 6%,transparent);}
+        .wiz-actions-row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:20px;}
+        .wiz-actions-row .wiz-btn-primary{flex:1;margin-top:0;}
+
+        /* Footer note */
+        .wiz-footer-note{
+            position:relative;z-index:1;margin-top:16px;font-size:12px;
+            color:var(--muted);text-align:center;display:flex;align-items:center;
+            justify-content:center;gap:5px;flex-shrink:0;
         }
-        @media (max-width: 480px) {
-            .features-grid {
-                grid-template-columns: repeat(2, 1fr);
-                gap: 10px;
-            }
-        }
-        .feature-card {
-            background: #ffffff;
-            border: 2px solid #e5e7eb;
-            border-radius: 14px;
-            padding: 14px;
-            cursor: pointer;
-            transition: all 0.2s ease-in-out;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            position: relative;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
-            box-sizing: border-box;
-            user-select: none;
-        }
-        .feature-card:hover {
-            transform: translateY(-2px);
-            border-color: #a78bfa;
-            box-shadow: 0 8px 16px rgba(167, 139, 250, 0.15);
-        }
-        .feature-card.enabled {
-            border-color: #a78bfa;
-            background: #fdfcff;
-        }
-        .feature-card.disabled {
-            opacity: 0.55;
-            border-color: #f3f4f6;
-            background: #f9fafb;
-            filter: grayscale(0.85);
-        }
-        .feature-image {
-            width: 60px;
-            height: 60px;
-            object-fit: contain;
-            margin-bottom: 10px;
-            pointer-events: none;
-        }
-        .feature-title {
-            font-size: 13px;
-            font-weight: 700;
-            color: #1f2937;
-            margin: 0 0 6px 0;
-            text-align: center;
-            pointer-events: none;
-            line-height: 1.2;
-        }
-        .feature-badge {
-            padding: 3px 8px;
-            border-radius: 999px;
-            font-size: 10px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.04em;
-            pointer-events: none;
-        }
-        .feature-badge.enabled-badge {
-            background: #ecfdf5;
-            color: #10b981;
-        }
-        .feature-badge.disabled-badge {
-            background: #f3f4f6;
-            color: #6b7280;
-        }
-        .feature-badge.required-badge {
-            background: #ede9fe;
-            color: #4f46e5;
-        }
-        .feature-card--required {
-            cursor: default;
-        }
-        .feature-card--required:hover {
-            transform: none;
-            border-color: #a78bfa;
-            box-shadow: none;
-        }
-        .feature-card--dep-blocked {
-            opacity: 0.45;
-            filter: grayscale(.6);
-            border-style: dashed;
-        }
-        .feature-card--dep-blocked:hover {
-            transform: none;
-            border-color: #fbbf24;
-            box-shadow: none;
-        }
-        @keyframes fadeSlide{
-            from{opacity:0;transform:translateY(10px)}
-            to{opacity:1;transform:translateY(0)}
-        }
-        @keyframes wizardFloat{
-            0%{transform:translateY(0) rotate(0deg);opacity:1;border-radius:0;}
-            100%{transform:translateY(-1000px) rotate(720deg);opacity:0;border-radius:50%;}
-        }
+
+        /* Step slide animations */
+        @keyframes wizSlideIn{from{opacity:0;transform:translateX(20px);}to{opacity:1;transform:translateX(0);}}
+        @keyframes wizSlideBack{from{opacity:0;transform:translateX(-20px);}to{opacity:1;transform:translateX(0);}}
+        .wiz-slide{animation:wizSlideIn .28s cubic-bezier(.4,0,.2,1) forwards;}
+        .wiz-slide-back{animation:wizSlideBack .28s cubic-bezier(.4,0,.2,1) forwards;}
     </style>
 
-    <div class="wizard-shell">
-        <div class="wizard-panel">
-            <div class="wizard-bg" aria-hidden="true">
-                <ul class="wizard-circles">
-                    <li></li><li></li><li></li><li></li><li></li>
-                    <li></li><li></li><li></li><li></li><li></li>
-                </ul>
-            </div>
-            <div class="wizard-head">
-                <span class="wizard-step" id="stepBadge"><span class="dot"></span>Step 1 of 2</span>
-            </div>
+    <div class="wiz-shell">
+        <div class="wiz-panel">
+            <div class="wiz-blob wiz-blob--a" aria-hidden="true"></div>
+            <div class="wiz-blob wiz-blob--b" aria-hidden="true"></div>
 
-            <form id="businessWizardForm" method="post" action="{{ route('business.onboarding.store') }}" class="wizard-body">
-                @csrf
-                <div id="wizardStep1" class="wizard-card">
-                    <h2 class="wizard-q">What is your business/company name?</h2>
-                    <p class="wizard-help">Use your public brand name.</p>
-                    <input
-                        type="text"
-                        name="name"
-                        value="{{ old('name') }}"
-                        placeholder="e.g. SociBiz Solutions"
-                        required
-                        class="wiz-input"
-                    >
-                    @error('name')
-                        <div style="color:#ef4444;margin-top:8px;">{{ $message }}</div>
-                    @enderror
-                    <div class="wizard-actions">
-                        <button type="button" class="linkbtn" id="nextStepBtn">Next</button>
-                    </div>
+            {{-- Step indicator --}}
+            <div class="wiz-stepper" aria-label="Setup progress">
+                <div class="wiz-step-item">
+                    <div class="wiz-step-dot wiz-step-dot--current" id="wizDot1">1</div>
+                    <span class="wiz-step-lbl wiz-step-lbl--active">Business</span>
                 </div>
+                <div class="wiz-step-connector" id="wizStepLine"></div>
+                <div class="wiz-step-item">
+                    <div class="wiz-step-dot" id="wizDot2">2</div>
+                    <span class="wiz-step-lbl" id="wizLbl2">Category</span>
+                </div>
+            </div>
 
-                <div id="wizardStep3" style="display:none;" class="wizard-card">
-                    <h2 class="wizard-q">What is your business category?</h2>
-                    <p class="wizard-help">Tell us about your business in this quick quiz.</p>
-                    <div class="wizard-step-fields">
-                        <div>
-                            <label for="wizard-company-category" style="display:block;margin-bottom:6px;color:var(--muted);">Business Category</label>
-                            <select
-                                id="wizard-company-category"
-                                name="company_category_slug"
+            {{-- Card --}}
+            <div class="wiz-card">
+                <form id="businessWizardForm" method="post" action="{{ route('business.onboarding.store') }}">
+                    @csrf
+
+                    {{-- Step 1: Business name --}}
+                    <div id="wizardStep1" class="wiz-slide">
+                        <h2 class="wiz-card-title">What's your business name?</h2>
+                        <p class="wiz-card-sub">Use your public brand name — you can update it any time.</p>
+                        <div class="wiz-field">
+                            <label for="wiz-name-input">Business name</label>
+                            <input
+                                id="wiz-name-input"
+                                type="text"
+                                name="name"
+                                value="{{ old('name') }}"
+                                placeholder="e.g. Zeebroo Solutions"
                                 required
-                                class="wiz-select"
+                                autocomplete="organization"
+                                class="wiz-input"
                             >
-                                <option value="" disabled {{ old('company_category_slug') ? '' : 'selected' }}>Select category…</option>
+                            @error('name')
+                                <div class="wiz-field-error">{{ $message }}</div>
+                            @enderror
+                        </div>
+                        <button type="button" class="wiz-btn-primary" id="nextStepBtn">
+                            Continue <i class="fa fa-arrow-right" aria-hidden="true"></i>
+                        </button>
+                    </div>
+
+                    {{-- Step 2: Category & description --}}
+                    <div id="wizardStep3" style="display:none;">
+                        <h2 class="wiz-card-title">Tell us about your business</h2>
+                        <p class="wiz-card-sub">Help us personalise your workspace from day one.</p>
+                        <div class="wiz-field">
+                            <label for="wizard-company-category">Business category</label>
+                            <select id="wizard-company-category" name="company_category_slug" required class="wiz-select">
+                                <option value="" disabled {{ old('company_category_slug') ? '' : 'selected' }}>Select a category…</option>
                                 @foreach($businessCategoryOptions ?? [] as $categoryOption)
                                     <option value="{{ $categoryOption['value'] }}" @selected((string) old('company_category_slug') === (string) $categoryOption['value'])>
                                         {{ $categoryOption['label'] }}
@@ -552,62 +404,86 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                                 @endforeach
                             </select>
                             @error('company_category_slug')
-                                <div style="color:#ef4444;margin-top:8px;">{{ $message }}</div>
+                                <div class="wiz-field-error">{{ $message }}</div>
                             @enderror
                         </div>
-                        <div>
-                            <label style="display:block;margin-bottom:6px;color:var(--muted);">Tell me about that business</label>
+                        <div class="wiz-field">
+                            <label for="wiz-desc">Short description <span style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--muted);">(optional)</span></label>
                             <textarea
+                                id="wiz-desc"
                                 name="description"
                                 placeholder="Describe what your company does, your target customers, and your key offering."
                                 class="wiz-textarea"
                             >{{ old('description') }}</textarea>
                             @error('description')
-                                <div style="color:#ef4444;margin-top:8px;">{{ $message }}</div>
+                                <div class="wiz-field-error">{{ $message }}</div>
                             @enderror
                         </div>
+                        <div class="wiz-actions-row">
+                            <button type="button" class="wiz-btn-back" id="backToStep1Btn">
+                                <i class="fa fa-arrow-left" aria-hidden="true"></i> Back
+                            </button>
+                            <button type="submit" class="wiz-btn-primary">
+                                Finish setup <i class="fa fa-check" aria-hidden="true"></i>
+                            </button>
+                        </div>
                     </div>
-                    <div class="wizard-actions">
-                        <button type="button" class="linkbtn btn-soft" id="backToStep1Btn">Back</button>
-                        <button type="submit" class="linkbtn">Finish Setup</button>
-                    </div>
-                </div>
-            </form>
+                </form>
+            </div>
+
+            <p class="wiz-footer-note"><i class="fa fa-lock" aria-hidden="true"></i> Your data is secure and private.</p>
         </div>
     </div>
 @elseif(!$hasBankAccountForBusiness)
+    <script>document.documentElement.classList.add('business-wizard-active');</script>
     <style>
         .account-notice-shell{
-            min-height:calc(100vh - 73px);
-            display:grid;
-            place-items:center;
-            width:100%;
-            margin:0;
-            padding:0;
+            position:relative;flex:1;min-height:0;width:100%;overflow:hidden;
+            display:flex;align-items:center;justify-content:center;
+            padding:clamp(24px,5vh,56px) clamp(16px,4vw,32px);box-sizing:border-box;
+            background:var(--bg);
         }
-        .account-notice-panel{
-            width:100%;
-            min-height:calc(100vh - 92px);
-            display:grid;
-            place-items:center;
-            background:#ffffff;
-            color:#1f2937;
+        .account-notice-shell::before{
+            content:'';position:absolute;inset:0;pointer-events:none;
+            background-image:radial-gradient(circle,color-mix(in srgb,var(--primary) 7%,transparent) 1px,transparent 1px);
+            background-size:28px 28px;
         }
+        .account-notice-blob{position:absolute;border-radius:50%;pointer-events:none;filter:blur(60px);opacity:.45;}
+        .account-notice-blob--a{width:320px;height:320px;top:-80px;left:-80px;background:radial-gradient(circle,color-mix(in srgb,var(--primary) 55%,transparent),transparent 70%);}
+        .account-notice-blob--b{width:260px;height:260px;bottom:-60px;right:-40px;background:radial-gradient(circle,color-mix(in srgb,var(--primary) 25%,transparent),transparent 70%);}
         .account-notice-card{
-            text-align:center;
-            max-width:620px;
-            padding:24px;
+            position:relative;z-index:1;text-align:center;width:100%;max-width:440px;
         }
+        .account-notice-icon{
+            width:52px;height:52px;border-radius:14px;margin:0 auto 18px;
+            background:var(--btn-bg);
+            display:grid;place-items:center;color:var(--card);font-size:22px;
+            box-shadow:0 4px 14px color-mix(in srgb,var(--primary) 38%,transparent);
+        }
+        .account-notice-title{margin:0 0 8px;font-size:clamp(18px,2.5vw,22px);font-weight:800;color:var(--text);letter-spacing:-.02em;line-height:1.2;}
+        .account-notice-sub{margin:0 0 24px;font-size:14px;color:var(--muted);line-height:1.5;}
+        .account-notice-btn{
+            display:inline-flex;align-items:center;justify-content:center;gap:8px;
+            padding:12px 24px;border-radius:11px;border:none;cursor:pointer;
+            background:var(--btn-bg);
+            color:var(--card);font-size:14px;font-weight:700;text-decoration:none;
+            box-shadow:0 4px 14px color-mix(in srgb,var(--primary) 38%,transparent);
+            transition:opacity .2s,transform .15s;
+        }
+        .account-notice-btn:hover{opacity:.9;transform:translateY(-1px);}
     </style>
     <div class="account-notice-shell">
-        <div class="account-notice-panel">
-            <div class="account-notice-card">
-                <h2 style="margin:0 0 8px;">No bank account for this business</h2>
-                <p style="margin:0 0 18px;color:#6b7280;">
-                    Add at least one bank account for <strong>{{ $business?->name ?? 'your business' }}</strong> to continue here.
-                </p>
-                <a class="linkbtn" href="{{ route('account.onboarding') }}">Please add account</a>
-            </div>
+        <div class="account-notice-blob account-notice-blob--a" aria-hidden="true"></div>
+        <div class="account-notice-blob account-notice-blob--b" aria-hidden="true"></div>
+        <div class="account-notice-card">
+            <div class="account-notice-icon"><i class="fa fa-building-columns" aria-hidden="true"></i></div>
+            <h2 class="account-notice-title">No bank account yet</h2>
+            <p class="account-notice-sub">
+                Add at least one bank account for <strong>{{ $business?->name ?? 'your business' }}</strong> to unlock your workspace.
+            </p>
+            <a class="account-notice-btn" href="{{ route('account.onboarding') }}">
+                <i class="fa fa-plus" aria-hidden="true"></i> Add bank account
+            </a>
         </div>
     </div>
 @else
@@ -765,39 +641,57 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 
 <script>
-    const stepBadge   = document.getElementById('stepBadge');
-    const wizardStep1 = document.getElementById('wizardStep1');
-    const wizardStep3 = document.getElementById('wizardStep3');
-    const nextStepBtn  = document.getElementById('nextStepBtn');
+    const wizardStep1    = document.getElementById('wizardStep1');
+    const wizardStep3    = document.getElementById('wizardStep3');
+    const nextStepBtn    = document.getElementById('nextStepBtn');
     const backToStep1Btn = document.getElementById('backToStep1Btn');
-    const wizardForm   = document.getElementById('businessWizardForm');
+    const wizardForm     = document.getElementById('businessWizardForm');
+    const wizDot1        = document.getElementById('wizDot1');
+    const wizDot2        = document.getElementById('wizDot2');
+    const wizLbl2        = document.getElementById('wizLbl2');
+    const wizStepLine    = document.getElementById('wizStepLine');
 
-    if (nextStepBtn && wizardStep1 && wizardStep3 && stepBadge && wizardForm) {
+    function setWizStep(num) {
+        if (num === 1) {
+            wizDot1.className = 'wiz-step-dot wiz-step-dot--current';
+            wizDot2.className = 'wiz-step-dot';
+            if (wizStepLine) wizStepLine.classList.remove('wiz-step-connector--done');
+            if (wizLbl2) wizLbl2.classList.remove('wiz-step-lbl--active');
+        } else {
+            wizDot1.className = 'wiz-step-dot wiz-step-dot--done';
+            wizDot2.className = 'wiz-step-dot wiz-step-dot--current';
+            if (wizStepLine) wizStepLine.classList.add('wiz-step-connector--done');
+            if (wizLbl2) wizLbl2.classList.add('wiz-step-lbl--active');
+        }
+    }
+
+    if (nextStepBtn && wizardStep1 && wizardStep3 && wizardForm) {
         nextStepBtn.addEventListener('click', () => {
             const nameInput = wizardForm.querySelector('input[name="name"]');
-            if (!nameInput.value.trim()) {
-                nameInput.focus();
-                return;
-            }
+            if (!nameInput.value.trim()) { nameInput.focus(); return; }
             wizardStep1.style.display = 'none';
             wizardStep3.style.display = 'block';
-            stepBadge.textContent = 'Step 2 of 2';
+            wizardStep3.classList.remove('wiz-slide-back');
+            wizardStep3.classList.add('wiz-slide');
+            setWizStep(2);
         });
     }
 
-    if (backToStep1Btn && wizardStep1 && wizardStep3 && stepBadge) {
+    if (backToStep1Btn && wizardStep1 && wizardStep3) {
         backToStep1Btn.addEventListener('click', () => {
             wizardStep3.style.display = 'none';
             wizardStep1.style.display = 'block';
-            stepBadge.textContent = 'Step 1 of 2';
+            wizardStep1.classList.remove('wiz-slide');
+            wizardStep1.classList.add('wiz-slide-back');
+            setWizStep(1);
         });
     }
 
     @if($errors->has('company_category_slug') || $errors->has('description'))
-        if (wizardStep1 && wizardStep3 && stepBadge) {
+        if (wizardStep1 && wizardStep3) {
             wizardStep1.style.display = 'none';
             wizardStep3.style.display = 'block';
-            stepBadge.textContent = 'Step 2 of 2';
+            setWizStep(2);
         }
     @endif
 </script>

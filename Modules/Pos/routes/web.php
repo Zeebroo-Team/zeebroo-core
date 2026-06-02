@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Modules\Pos\Http\Controllers\CustomerController;
 use Modules\Pos\Http\Controllers\PosController;
 use Modules\Pos\Http\Controllers\PosProductController;
 use Modules\Pos\Http\Controllers\SaleController;
@@ -13,6 +14,12 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
     Route::post('/pos/settings', [PosController::class, 'saveSettings'])->name('pos.settings.save');
     Route::post('/pos/checkout', [PosController::class, 'checkout'])->name('pos.checkout');
     Route::post('/pos/products', [PosProductController::class, 'store'])->name('pos.products.store');
+
+    Route::get('/pos/customers/search', [CustomerController::class, 'search'])->name('pos.customers.search');
+    Route::get('/pos/customers', [CustomerController::class, 'index'])->name('pos.customers.index');
+    Route::post('/pos/customers', [CustomerController::class, 'store'])->name('pos.customers.store');
+    Route::put('/pos/customers/{customer}', [CustomerController::class, 'update'])->name('pos.customers.update');
+    Route::delete('/pos/customers/{customer}', [CustomerController::class, 'destroy'])->name('pos.customers.destroy');
 
     Route::get('/pos/sales', [SaleController::class, 'index'])->name('pos.sales.index');
     Route::get('/pos/sales/{sale}', [SaleController::class, 'show'])->name('pos.sales.show');

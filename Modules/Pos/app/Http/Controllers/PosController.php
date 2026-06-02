@@ -80,6 +80,7 @@ class PosController extends Controller
             'amount_tendered' => ['nullable', 'numeric', 'min:0', 'required_if:payment_method,cash'],
             'discount_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'notes' => ['nullable', 'string', 'max:2000'],
+            'pos_customer_id' => ['nullable', 'integer', 'min:1'],
         ]);
 
         $channel = $validated['channel'] ?? Sale::CHANNEL_RETAIL;
@@ -95,6 +96,7 @@ class PosController extends Controller
             $channel,
             isset($validated['discount_percent']) ? (float) $validated['discount_percent'] : null,
             isset($validated['amount_tendered']) ? (float) $validated['amount_tendered'] : null,
+            isset($validated['pos_customer_id']) ? (int) $validated['pos_customer_id'] : null,
         );
 
         $redirectRoute = $channel === Sale::CHANNEL_ONLINE ? 'pos.online' : 'pos.register';
@@ -132,7 +134,12 @@ class PosController extends Controller
         $validated = $request->validate([
             'default_deposit_account_id' => ['nullable', 'integer', 'min:1'],
             'discount_field_enabled' => ['nullable'],
+            'checkout_modal_enabled' => ['nullable', 'boolean'],
             'display_theme' => ['nullable', 'string', 'in:light,dark'],
+            'receipt_header' => ['nullable', 'string', 'max:200'],
+            'receipt_footer' => ['nullable', 'string', 'max:200'],
+            'show_business_name' => ['nullable'],
+            'show_business_address' => ['nullable'],
             'redirect' => ['nullable', 'string', 'max:2000'],
         ]);
 

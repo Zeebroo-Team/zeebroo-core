@@ -355,7 +355,9 @@ class BusinessController extends Controller
         $features['account_management'] = true;
         $business->setSetting('business.features', $features);
 
-        return redirect()->route('dashboard')->with('status', 'Business profile saved.');
+        return redirect()->route('dashboard')
+            ->with('status', 'Business profile saved.')
+            ->with('open_features_modal', true);
     }
 
     public function updateFeatures(Request $request): JsonResponse
@@ -380,14 +382,6 @@ class BusinessController extends Controller
         if (! $features['stock_management'] || ! $features['product_management']) {
             $features['point_of_sale'] = false;
         }
-        // Bill Management requires an account to be set up
-        $hasAccount = Account::where('user_id', $request->user()->id)
-            ->where('business_id', $business->id)
-            ->exists();
-        if (! $hasAccount) {
-            $features['bill_management'] = false;
-        }
-
         $business->setSetting('business.features', $features);
 
         return response()->json(['ok' => true, 'features' => $features]);

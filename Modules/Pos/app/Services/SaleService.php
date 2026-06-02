@@ -86,12 +86,13 @@ class SaleService
         string $channel = Sale::CHANNEL_RETAIL,
         ?float $discountPercent = null,
         ?float $amountTendered = null,
+        ?int $customerId = null,
     ): Sale {
         $lines = $this->normalizeCartItems($business, $items);
         $paymentMethod = $this->normalizePaymentMethod($paymentMethod);
         $channel = $this->normalizeChannel($channel);
 
-        return DB::transaction(function () use ($business, $user, $lines, $paymentMethod, $creditAccountId, $amountPaid, $notes, $channel, $discountPercent, $amountTendered) {
+        return DB::transaction(function () use ($business, $user, $lines, $paymentMethod, $creditAccountId, $amountPaid, $notes, $channel, $discountPercent, $amountTendered, $customerId) {
             $sale = $business->sales()->create([
                 'user_id' => $user->id,
                 'sale_number' => $this->nextSaleNumber($business),
@@ -101,6 +102,7 @@ class SaleService
                 'credit_account_id' => in_array($paymentMethod, [Sale::PAYMENT_CASH, Sale::PAYMENT_CARD], true)
                     ? $creditAccountId
                     : null,
+                'pos_customer_id' => $customerId,
                 'subtotal' => 0,
                 'total' => 0,
                 'amount_paid' => 0,

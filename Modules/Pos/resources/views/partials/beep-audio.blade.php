@@ -1,7 +1,7 @@
 @once
 <script>
 window.playPosBeep = (function () {
-    const url = @json(asset('pos/beep.wav'));
+    const url = @json(asset('sounds/beep.wav'));
     let audio = null;
 
     return function playPosBeep() {

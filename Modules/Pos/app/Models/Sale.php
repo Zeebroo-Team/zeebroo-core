@@ -37,6 +37,7 @@ class Sale extends Model
         'payment_method',
         'channel',
         'credit_account_id',
+        'pos_customer_id',
         'subtotal',
         'discount_percent',
         'discount_amount',
@@ -75,6 +76,11 @@ class Sale extends Model
     public function creditAccount(): BelongsTo
     {
         return $this->belongsTo(Account::class, 'credit_account_id');
+    }
+
+    public function customer(): BelongsTo
+    {
+        return $this->belongsTo(Customer::class, 'pos_customer_id');
     }
 
     public function items(): HasMany

@@ -27,6 +27,32 @@
 .pos-checkout-form__scroll{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px;}
 .pos-checkout-form__footer{flex-shrink:0;padding:10px 12px 12px;border-top:1px solid var(--border);background:color-mix(in srgb,var(--card) 98%,transparent);}
 .pos-checkout-form__footer .pos-online__pay-btn,.pos-checkout-form__footer .pos-btn--primary{width:100%;margin-top:8px;box-sizing:border-box;}
+.pos-pay-credit-panel{margin-top:10px;}
+.pos-customer-search-wrap{position:relative;}
+.pos-customer-search-input{width:100%;box-sizing:border-box;padding:9px 12px 9px 32px;font-size:13px;border-radius:9px;border:1px solid var(--border);background:var(--card);color:var(--text);}
+.pos-customer-search-input:focus{outline:none;border-color:var(--primary);}
+.pos-customer-dropdown{position:absolute;left:0;right:0;top:calc(100% + 4px);background:var(--card);border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.18);z-index:9999;max-height:200px;overflow-y:auto;}
+.pos-customer-dropdown[hidden]{display:none!important;}
+.pos-customer-option{padding:9px 13px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px;}
+.pos-customer-option:last-child{border-bottom:none;}
+.pos-customer-option:hover,.pos-customer-option.is-focused{background:color-mix(in srgb,var(--primary) 10%,transparent);}
+.pos-customer-option__name{font-weight:700;color:var(--text);}
+.pos-customer-option__sub{font-size:11px;color:var(--muted);}
+.pos-customer-option--add{color:var(--primary);font-weight:700;display:flex;align-items:center;gap:6px;}
+.pos-customer-chip{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px;border-radius:9px;border:1px solid color-mix(in srgb,var(--primary) 35%,var(--border));background:color-mix(in srgb,var(--primary) 8%,transparent);font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px;}
+.pos-customer-chip[hidden]{display:none!important;}
+.pos-customer-chip button{background:none;border:none;cursor:pointer;color:var(--muted);font-size:16px;line-height:1;padding:0;}
+/* Quick-add customer inline form */
+.pos-customer-quickadd{margin-top:10px;padding:12px;border:1px solid var(--border);border-radius:10px;background:color-mix(in srgb,var(--card) 96%,transparent);}
+.pos-customer-quickadd[hidden]{display:none!important;}
+.pos-customer-quickadd__title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:10px;}
+.pos-customer-quickadd__row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;}
+.pos-customer-quickadd__field label{display:block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:4px;}
+.pos-customer-quickadd__field input{width:100%;box-sizing:border-box;padding:8px 10px;font-size:13px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);}
+.pos-customer-quickadd__field input:focus{outline:none;border-color:var(--primary);}
+.pos-customer-quickadd__actions{display:flex;gap:6px;justify-content:flex-end;}
+.pos-customer-quickadd__btn{padding:7px 12px;font-size:12px;font-weight:700;border-radius:7px;border:1px solid var(--border);background:color-mix(in srgb,var(--card) 90%,transparent);color:var(--text);cursor:pointer;}
+.pos-customer-quickadd__btn--primary{border-color:color-mix(in srgb,var(--primary) 50%,var(--border));background:color-mix(in srgb,var(--primary) 14%,transparent);}
 </style>
 @endonce
 
@@ -52,7 +78,7 @@
     <div id="pos-pay-cash-panel" class="pos-pay-cash-panel" @if($selectedPayment !== 'cash') hidden @endif>
         <div class="pos-pay-cash-input">
             <label for="pos-cash-tendered-input">Amount customer gave</label>
-            <input type="text" id="pos-cash-tendered-input" value="{{ old('amount_tendered') }}" inputmode="none" placeholder="0.00" autocomplete="off" data-pos-numpad="money" readonly>
+            <input type="text" id="pos-cash-tendered-input" value="{{ old('amount_tendered') }}" inputmode="decimal" placeholder="0.00" autocomplete="off" data-pos-numpad="money">
         </div>
         <div class="pos-pay-cash-row">
             <span>Amount due</span>
@@ -68,9 +94,29 @@
     <p id="pos-pay-card-hint" class="pos-pay-hint" @if($selectedPayment !== 'card') hidden @endif>
         Card payment is recorded to your default deposit account from POS settings.
     </p>
-    <p id="pos-pay-credit-hint" class="pos-pay-hint" @if($selectedPayment !== 'credit') hidden @endif>
-        Credit payment — no ledger entry. Customer pays later.
-    </p>
+    <div id="pos-pay-credit-panel" class="pos-pay-cash-panel" @if($selectedPayment !== 'credit') hidden @endif>
+        <input type="hidden" name="pos_customer_id" id="pos-customer-id" value="">
+
+        <div class="pos-customer-field" id="pos-customer-field">
+            <p class="pos-pay-hint" style="margin-bottom:8px;">Credit sale — customer pays later. No ledger entry.</p>
+
+            <div id="pos-customer-selected" class="pos-customer-chip" hidden>
+                <span id="pos-customer-chip-label"></span>
+                <button type="button" id="pos-customer-clear" aria-label="Remove customer">&times;</button>
+            </div>
+
+            <div id="pos-customer-search-wrap" class="pos-customer-search-wrap">
+                <div style="position:relative;">
+                    <i class="fa fa-search" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:12px;pointer-events:none;"></i>
+                    <input type="text" id="pos-customer-search-input"
+                           class="pos-customer-search-input"
+                           placeholder="Search customer by name or phone…"
+                           autocomplete="off" spellcheck="false">
+                </div>
+                <div id="pos-customer-dropdown" class="pos-customer-dropdown" hidden></div>
+            </div>
+        </div>
+    </div>
 
 </div>
 
@@ -92,7 +138,7 @@ window.initPosPaymentField = function (options) {
     const cashChangeEl = document.getElementById('pos-cash-change');
     const cashHintEl = document.getElementById('pos-pay-cash-hint');
     const cardHintEl = document.getElementById('pos-pay-card-hint');
-    const creditHintEl = document.getElementById('pos-pay-credit-hint');
+    const creditPanelEl = document.getElementById('pos-pay-credit-panel');
     const methodBtns = field.querySelectorAll('[data-pos-pay-method]');
     const completeBtn = options.completeBtn || document.getElementById('pos-complete-sale');
     const checkoutForm = options.checkoutForm || document.getElementById('pos-checkout-form');
@@ -227,7 +273,10 @@ window.initPosPaymentField = function (options) {
         });
         if (cashPanel) cashPanel.hidden = method !== 'cash';
         if (cardHintEl) cardHintEl.hidden = method !== 'card';
-        if (creditHintEl) creditHintEl.hidden = method !== 'credit';
+        if (creditPanelEl) creditPanelEl.hidden = method !== 'credit';
+        if (method !== 'credit') {
+            clearCustomerSelection();
+        }
         if (method === 'cash') {
             setNumpadTarget(cashInput);
         }
@@ -304,9 +353,6 @@ window.initPosPaymentField = function (options) {
         cartTotal = Math.max(0, Number(total) || 0);
         const hasItems = cartHasItems !== false && cartTotal > 0;
         if (amountPaidEl) amountPaidEl.value = cartTotal.toFixed(2);
-        if (getMethod() === 'cash' && cashInput && hasItems && !String(cashInput.value || '').trim()) {
-            cashInput.value = cartTotal.toFixed(2);
-        }
         syncCashPanel();
         validateComplete(hasItems);
         syncNumpadState(hasItems);
@@ -368,6 +414,194 @@ window.initPosPaymentField = function (options) {
             validateComplete(cartTotal > 0);
         });
     }
+
+    // ── Customer search ─────────────────────────────────────────────────────
+    var customerSearchUrl = @json(route('pos.customers.search'));
+    var customerStoreUrl  = @json(route('pos.customers.store'));
+
+    var customerIdEl       = document.getElementById('pos-customer-id');
+    var customerChip       = document.getElementById('pos-customer-selected');
+    var customerChipLabel  = document.getElementById('pos-customer-chip-label');
+    var customerClearBtn   = document.getElementById('pos-customer-clear');
+    var customerSearchWrap = document.getElementById('pos-customer-search-wrap');
+    var customerSearchInput= document.getElementById('pos-customer-search-input');
+    var customerDropdown   = document.getElementById('pos-customer-dropdown');
+
+    // Inject quick-add form after the search wrap, inside the credit panel
+    if (customerSearchWrap) {
+        var quickAddHtml = '<div id="pos-customer-quickadd" class="pos-customer-quickadd" hidden>'
+            + '<div class="pos-customer-quickadd__title">New customer</div>'
+            + '<div class="pos-customer-quickadd__row">'
+            + '<div class="pos-customer-quickadd__field"><label>Name <span style="color:#f87171">*</span></label><input type="text" id="pos-qa-name" maxlength="120" placeholder="Full name" autocomplete="off"></div>'
+            + '<div class="pos-customer-quickadd__field"><label>Phone</label><input type="text" id="pos-qa-phone" maxlength="40" placeholder="+1 555 0000" autocomplete="off"></div>'
+            + '</div>'
+            + '<div class="pos-customer-quickadd__actions">'
+            + '<button type="button" class="pos-customer-quickadd__btn" id="pos-qa-cancel">Cancel</button>'
+            + '<button type="button" class="pos-customer-quickadd__btn pos-customer-quickadd__btn--primary" id="pos-qa-save">Save &amp; select</button>'
+            + '</div>'
+            + '</div>';
+        customerSearchWrap.insertAdjacentHTML('afterend', quickAddHtml);
+    }
+
+    var quickAddEl    = document.getElementById('pos-customer-quickadd');
+    var qaNameInput   = document.getElementById('pos-qa-name');
+    var qaPhoneInput  = document.getElementById('pos-qa-phone');
+    var qaCancelBtn   = document.getElementById('pos-qa-cancel');
+    var qaSaveBtn     = document.getElementById('pos-qa-save');
+
+    var _custDebounce = null;
+    var _focusedIndex = -1;
+
+    function clearCustomerSelection() {
+        if (customerIdEl) customerIdEl.value = '';
+        if (customerChip) customerChip.hidden = true;
+        if (customerChipLabel) customerChipLabel.textContent = '';
+        if (customerSearchWrap) customerSearchWrap.hidden = false;
+        if (customerSearchInput) customerSearchInput.value = '';
+        if (customerDropdown) { customerDropdown.hidden = true; customerDropdown.innerHTML = ''; }
+        if (quickAddEl) quickAddEl.hidden = true;
+    }
+
+    function selectCustomer(id, label) {
+        if (customerIdEl) customerIdEl.value = id;
+        if (customerChipLabel) customerChipLabel.textContent = label;
+        if (customerChip) customerChip.hidden = false;
+        if (customerSearchWrap) customerSearchWrap.hidden = true;
+        if (customerDropdown) { customerDropdown.hidden = true; customerDropdown.innerHTML = ''; }
+        if (quickAddEl) quickAddEl.hidden = true;
+        if (customerSearchInput) customerSearchInput.value = '';
+    }
+
+    function showDropdown(items, query) {
+        if (!customerDropdown) return;
+        customerDropdown.innerHTML = '';
+        _focusedIndex = -1;
+
+        items.forEach(function (c) {
+            var div = document.createElement('div');
+            div.className = 'pos-customer-option';
+            div.innerHTML = '<div class="pos-customer-option__name">' + escHtml(c.name) + '</div>'
+                + (c.phone || c.email ? '<div class="pos-customer-option__sub">' + escHtml(c.phone || '') + (c.phone && c.email ? ' · ' : '') + escHtml(c.email || '') + '</div>' : '');
+            div.addEventListener('mousedown', function (e) {
+                e.preventDefault();
+                selectCustomer(c.id, c.label);
+            });
+            customerDropdown.appendChild(div);
+        });
+
+        // "+ Add customer" row
+        var addDiv = document.createElement('div');
+        addDiv.className = 'pos-customer-option pos-customer-option--add';
+        addDiv.innerHTML = '<i class="fa fa-plus"></i> Add customer' + (query ? ': ' + escHtml(query) : '');
+        addDiv.addEventListener('mousedown', function (e) {
+            e.preventDefault();
+            openQuickAdd(query);
+        });
+        customerDropdown.appendChild(addDiv);
+        customerDropdown.hidden = false;
+    }
+
+    function openQuickAdd(prefillName) {
+        if (!quickAddEl) return;
+        if (customerDropdown) { customerDropdown.hidden = true; customerDropdown.innerHTML = ''; }
+        if (qaNameInput) qaNameInput.value = prefillName || '';
+        if (qaPhoneInput) qaPhoneInput.value = '';
+        quickAddEl.hidden = false;
+        if (qaNameInput) qaNameInput.focus();
+    }
+
+    function escHtml(str) {
+        return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function fetchCustomers(q) {
+        var url = customerSearchUrl + (q ? '?q=' + encodeURIComponent(q) : '');
+        fetch(url, { headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(function (r) { return r.json(); })
+            .then(function (data) { showDropdown(data, q); })
+            .catch(function () {});
+    }
+
+    if (customerSearchInput) {
+        customerSearchInput.addEventListener('input', function () {
+            clearTimeout(_custDebounce);
+            var q = customerSearchInput.value.trim();
+            _custDebounce = setTimeout(function () { fetchCustomers(q); }, 250);
+        });
+
+        customerSearchInput.addEventListener('focus', function () {
+            fetchCustomers(customerSearchInput.value.trim());
+        });
+
+        customerSearchInput.addEventListener('keydown', function (e) {
+            if (!customerDropdown || customerDropdown.hidden) return;
+            var opts = customerDropdown.querySelectorAll('.pos-customer-option');
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                _focusedIndex = Math.min(_focusedIndex + 1, opts.length - 1);
+                opts.forEach(function (o, i) { o.classList.toggle('is-focused', i === _focusedIndex); });
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                _focusedIndex = Math.max(_focusedIndex - 1, 0);
+                opts.forEach(function (o, i) { o.classList.toggle('is-focused', i === _focusedIndex); });
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                if (_focusedIndex >= 0 && opts[_focusedIndex]) opts[_focusedIndex].dispatchEvent(new Event('mousedown'));
+            } else if (e.key === 'Escape') {
+                customerDropdown.hidden = true;
+            }
+        });
+    }
+
+    if (customerClearBtn) {
+        customerClearBtn.addEventListener('click', clearCustomerSelection);
+    }
+
+    if (qaCancelBtn) {
+        qaCancelBtn.addEventListener('click', function () {
+            if (quickAddEl) quickAddEl.hidden = true;
+        });
+    }
+
+    if (qaSaveBtn) {
+        qaSaveBtn.addEventListener('click', function () {
+            var name = qaNameInput ? qaNameInput.value.trim() : '';
+            if (!name) { if (qaNameInput) qaNameInput.focus(); return; }
+            var phone = qaPhoneInput ? qaPhoneInput.value.trim() : '';
+
+            var csrfMeta = document.querySelector('meta[name="csrf-token"]');
+            var csrf = csrfMeta ? csrfMeta.getAttribute('content') : '';
+
+            qaSaveBtn.disabled = true;
+            fetch(customerStoreUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': csrf,
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                body: JSON.stringify({ name: name, phone: phone || null }),
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                qaSaveBtn.disabled = false;
+                if (data && data.id) {
+                    selectCustomer(data.id, data.label || data.name);
+                }
+            })
+            .catch(function () { qaSaveBtn.disabled = false; });
+        });
+    }
+
+    document.addEventListener('click', function (e) {
+        if (!customerDropdown || customerDropdown.hidden) return;
+        var wrap = customerSearchWrap;
+        if (wrap && !wrap.contains(e.target) && e.target !== customerSearchInput) {
+            customerDropdown.hidden = true;
+        }
+    });
+    // ── End customer search ──────────────────────────────────────────────────
 
     setMethod(getMethod());
     setNumpadTarget(cashInput);

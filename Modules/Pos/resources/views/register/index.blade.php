@@ -1,8 +1,9 @@
 @php
-    $posWalkingCustomer = (bool) ($posWalkingCustomer ?? session('pos_walking_customer', true));
-    $posSettings = $posSettings ?? [];
-    $posShellClass = $posShellClass ?? '';
+    $posWalkingCustomer   = (bool) ($posWalkingCustomer ?? session('pos_walking_customer', true));
+    $posSettings          = $posSettings ?? [];
+    $posShellClass        = $posShellClass ?? '';
     $discountFieldEnabled = (bool) ($posSettings['discount_field_enabled'] ?? false);
+    $checkoutModalEnabled = (bool) ($posSettings['checkout_modal_enabled'] ?? false);
     $defaultDepositAccountId = $defaultDepositAccountId ?? null;
 @endphp
 @include('pos::partials.pos-shell-and-modal-styles')
@@ -118,9 +119,7 @@ body.pos-walking-active .pos-page__top-search .pos-search button{padding:6px 8px
         @endunless
 
         <div class="pos-page__scroll">
-        @if(session('status'))
-            <div class="pos-banner pos-banner--ok" style="font-weight:600;">{{ session('status') }}</div>
-        @endif
+        {{-- POS flash status intentionally hidden in POS flow (modal shows completion) --}}
         @if($errors->any())
             <div class="pos-banner pos-banner--err" role="alert">
                 @foreach($errors->all() as $error)
@@ -209,37 +208,29 @@ body.pos-walking-active .pos-page__top-search .pos-search button{padding:6px 8px
                 </div>
                 @include('pos::partials.pos-cart-totals-bar', [
                     'discountFieldEnabled' => $discountFieldEnabled,
+                    'checkoutModalEnabled' => $checkoutModalEnabled,
                     'currency' => $currency,
                 ])
                 </div>
             </section>
 
-            <section class="pos-three-panel__right pos-panel pos-fixed-cart" aria-label="Checkout">
-                <div class="pos-panel__head">
-                    <h2>Checkout</h2>
-                </div>
-                <div class="pos-panel__body">
-                    <form method="post" action="{{ route('pos.checkout') }}" id="pos-checkout-form" class="pos-checkout-form">
-                        @csrf
-                        <input type="hidden" name="channel" value="retail">
-                        <div class="pos-checkout-form__scroll">
-                        <div class="pos-checkout-grid">
-                            @include('pos::partials.pos-payment-field', ['defaultDepositAccountId' => $defaultDepositAccountId])
-                            <div class="pos-field">
-                                <label for="pos-notes">Notes</label>
-                                <textarea name="notes" id="pos-notes" maxlength="2000" placeholder="Optional">{{ old('notes') }}</textarea>
-                            </div>
-                        </div>
-                        </div>
-                        <div class="pos-checkout-form__footer">
-                            @include('pos::partials.pos-numpad')
-                            <button type="submit" class="pos-btn pos-btn--primary" id="pos-complete-sale" style="width:100%;padding:11px 14px;font-size:14px;" disabled>
-                                Complete sale
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            </section>
+            @if($checkoutModalEnabled)
+                @include('pos::partials.pos-checkout-modal', [
+                    'defaultDepositAccountId' => $defaultDepositAccountId,
+                    'currency'               => $currency,
+                    'channel'                => 'retail',
+                    'discountFieldEnabled'   => $discountFieldEnabled,
+                ])
+            @else
+                <section class="pos-three-panel__right pos-panel pos-fixed-cart" aria-label="Checkout">
+                    <div class="pos-panel__head">
+                        <h2>Checkout</h2>
+                    </div>
+                    <div class="pos-panel__body">
+                        @include('pos::partials.pos-checkout-panel', ['defaultDepositAccountId' => $defaultDepositAccountId, 'currency' => $currency, 'channel' => 'retail'])
+                    </div>
+                </section>
+            @endif
         </div>
         </div>
     </div>
@@ -263,6 +254,7 @@ body.pos-walking-active .pos-page__top-search .pos-search button{padding:6px 8px
     const cartTotalEl = document.getElementById('pos-cart-total');
     const completeBtn = document.getElementById('pos-complete-sale');
     const clearBtn = document.getElementById('pos-clear-cart');
+    const openCheckoutBtn = document.getElementById('pos-open-checkout-modal');
     const checkoutForm = document.getElementById('pos-checkout-form');
     const cartSummaryEl = document.getElementById('pos-cart-summary');
     const cartSubtotalEl = document.getElementById('pos-cart-subtotal');
@@ -281,6 +273,7 @@ body.pos-walking-active .pos-page__top-search .pos-search button{padding:6px 8px
         if (cart.size === 0) {
             cartEmptyEl.hidden = false;
             if (clearBtn) clearBtn.disabled = true;
+            if (openCheckoutBtn) openCheckoutBtn.disabled = true;
             completeBtn.disabled = true;
             if (cartSummaryEl) cartSummaryEl.hidden = true;
             cartTotalEl.textContent = money(0);
@@ -290,6 +283,7 @@ body.pos-walking-active .pos-page__top-search .pos-search button{padding:6px 8px
 
         cartEmptyEl.hidden = true;
         if (clearBtn) clearBtn.disabled = false;
+        if (openCheckoutBtn) openCheckoutBtn.disabled = false;
         if (cartSummaryEl) cartSummaryEl.hidden = false;
 
         let subtotal = 0;
@@ -436,11 +430,16 @@ body.pos-walking-active .pos-page__top-search .pos-search button{padding:6px 8px
     });
     renderCart();
     document.getElementById('pos-register-search')?.focus();
+
+    // Listen for print completion and reset
+    document.addEventListener('pos-clear-cart-and-reset', function () {
+        clearCart();
+    });
 })();
 </script>
 @endonce
 
 @if($printSale)
-    @include('pos::partials.pos-print-bill-modal', ['printSale' => $printSale, 'currency' => $currency, 'business' => $business])
+    @include('pos::partials.pos-sale-completed-modal', ['completedSale' => $printSale, 'currency' => $currency, 'business' => $business])
 @endif
 @endsection

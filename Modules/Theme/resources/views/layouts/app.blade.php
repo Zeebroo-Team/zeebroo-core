@@ -142,6 +142,10 @@
             .menu a.menu-payroll-cycles--due i{color:#f87171!important;}
         }
         .menu-group-title{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:12px;font-weight:600;background:color-mix(in srgb,var(--primary) 8%,transparent)}
+        a.menu-group-title{text-decoration:none;transition:border-color .2s ease,background .2s ease}
+        a.menu-group-title:hover,a.menu-group-title.active{border-color:color-mix(in srgb,var(--primary) 45%,var(--border));background:color-mix(in srgb,var(--primary) 16%,transparent)}
+        a.menu-group-title i{color:var(--muted)}
+        a.menu-group-title:hover i,a.menu-group-title.active i{color:var(--primary)}
         .submenu{display:flex;flex-direction:column;gap:4px;margin-left:12px;padding-left:8px;border-left:1px dashed color-mix(in srgb,var(--primary) 35%,var(--border))}
         .submenu a{padding:7px 9px;font-size:12px}
         /* Payroll hub: extra indent under main Payroll link */
@@ -320,12 +324,13 @@
 
         // POS — always visible when Point of Sale feature is enabled.
         $posFeatureOn = $navBusiness && $featureOn('point_of_sale');
-        $showSidebarPosHubLink = $navBusiness && Route::has('pos.index') && $posFeatureOn;
         $showSidebarPosRegisterLink = $navBusiness && Route::has('pos.online')
             && ($posFeatureOn || $navBusiness->products()->where('is_active', true)->where('is_bundle', false)->exists());
         $showSidebarPosSalesLink = $navBusiness && Route::has('pos.sales.index')
             && ($posFeatureOn || $navBusiness->sales()->exists());
-        $showSidebarPosSection = $showSidebarPosHubLink || $showSidebarPosRegisterLink || $showSidebarPosSalesLink;
+        // Hub link shows whenever the Sales section is visible (feature on, or data-driven links are showing).
+        $showSidebarPosSection = $showSidebarPosRegisterLink || $showSidebarPosSalesLink || ($navBusiness && $posFeatureOn);
+        $showSidebarPosHubLink = $navBusiness && Route::has('pos.index') && $showSidebarPosSection;
 
         $showSidebarFilesLink = $navBusiness && (
             $navBusiness->fileManagerFiles()->exists() || $navBusiness->fileManagerFolders()->exists()
@@ -509,15 +514,16 @@
                 </div>
             @endif
             @if($showSidebarPosSection)
-                <div class="menu-group-title">
-                    <i class="fa fa-cash-register"></i><span>Sales</span>
-                </div>
+                @if($showSidebarPosHubLink)
+                    <a href="{{ route('pos.index') }}" @class(['menu-group-title', 'active' => request()->routeIs('pos.index')])>
+                        <i class="fa fa-cash-register"></i><span>Sales</span>
+                    </a>
+                @else
+                    <div class="menu-group-title">
+                        <i class="fa fa-cash-register"></i><span>Sales</span>
+                    </div>
+                @endif
                 <div class="submenu" aria-label="Point of sale">
-                    @if($showSidebarPosHubLink)
-                        <a href="{{ route('pos.index') }}" @class([
-                            'active' => request()->routeIs('pos.index'),
-                        ])><i class="fa fa-gauge-high"></i><span>Sales hub</span></a>
-                    @endif
                     @if($showSidebarPosRegisterLink)
                         <a href="{{ route('pos.online') }}" @class([
                             'active' => request()->routeIs('pos.online', 'pos.checkout'),
@@ -912,7 +918,7 @@ html[data-theme="light"] .bfm-dep-hint,html[data-theme="light_blue"] .bfm-dep-hi
         <div class="bfm-head">
             <h2 class="bfm-title" id="bfm-title">Business Features</h2>
             <p class="bfm-sub">Enable or disable features for <strong>{{ $navBusiness->name }}</strong>. Changes are saved immediately.</p>
-            <button type="button" class="bfm-close" id="bfmCloseBtn" aria-label="Close modal">&times;</button>
+            <button type="button" class="bfm-close" id="bfmCloseBtn" aria-label="Close modal" @if(session('open_features_modal')) style="display:none;" @endif>&times;</button>
         </div>
         <div class="bfm-body">
             <div class="bfm-grid" id="bfmGrid">
@@ -930,7 +936,6 @@ html[data-theme="light"] .bfm-dep-hint,html[data-theme="light_blue"] .bfm-dep-hi
                 @foreach($bfmItems as $bfmItem)
                     @php
                         $bfmRequired       = $bfmItem['key'] === 'account_management';
-                        $bfmNeedsAccount   = $bfmItem['key'] === 'bill_management' && ! $assignedAccount;
                         $bfmOn = $bfmRequired ? true : ($businessFeatures[$bfmItem['key']] ?? true);
                     @endphp
                     @if($bfmRequired)
@@ -947,9 +952,8 @@ html[data-theme="light"] .bfm-dep-hint,html[data-theme="light_blue"] .bfm-dep-hi
                         <span class="bfm-feat-badge bfm-badge-required">Required</span>
                     </div>
                     @else
-                    <div class="bfm-card-item {{ $bfmOn ? 'bfm-enabled' : 'bfm-disabled' }} {{ $bfmNeedsAccount ? 'bfm-dep-blocked' : '' }}"
+                    <div class="bfm-card-item {{ $bfmOn ? 'bfm-enabled' : 'bfm-disabled' }}"
                          data-feature="{{ $bfmItem['key'] }}"
-                         @if($bfmNeedsAccount) data-locked="no-account" @endif
                          role="checkbox"
                          aria-checked="{{ $bfmOn ? 'true' : 'false' }}"
                          tabindex="0"
@@ -961,9 +965,6 @@ html[data-theme="light"] .bfm-dep-hint,html[data-theme="light_blue"] .bfm-dep-hi
                         @if($bfmItem['key'] === 'point_of_sale')
                             <span class="bfm-dep-hint" id="bfmPosDepHint" style="display:none;">Needs Stock + Product</span>
                         @endif
-                        @if($bfmNeedsAccount)
-                            <span class="bfm-dep-hint">Needs an account</span>
-                        @endif
                     </div>
                     @endif
                 @endforeach
@@ -971,7 +972,7 @@ html[data-theme="light"] .bfm-dep-hint,html[data-theme="light_blue"] .bfm-dep-hi
         </div>
         <div class="bfm-foot">
             <span class="bfm-status" id="bfmStatus"></span>
-            <button type="button" class="bfm-cancel" id="bfmCancelBtn">Cancel</button>
+            <button type="button" class="bfm-cancel" id="bfmCancelBtn">{{ session('open_features_modal') ? 'Skip for now' : 'Cancel' }}</button>
             <button type="button" class="linkbtn bfm-save" id="bfmSaveBtn">Save changes</button>
         </div>
     </div>
@@ -1008,13 +1009,19 @@ html[data-theme="light"] .bfm-dep-hint,html[data-theme="light_blue"] .bfm-dep-hi
         if (openBtn) openBtn.focus();
     }
 
+    var bfmOnboarding = @json((bool) session('open_features_modal'));
+
     openBtn.addEventListener('click', openModal);
     closeBtn.addEventListener('click', closeModal);
     cancelBtn.addEventListener('click', closeModal);
-    backdrop.addEventListener('click', closeModal);
+    backdrop.addEventListener('click', function() { if (!bfmOnboarding) closeModal(); });
     document.addEventListener('keydown', function(e) {
-        if (e.key === 'Escape' && modal.classList.contains('bfm-open')) closeModal();
+        if (e.key === 'Escape' && modal.classList.contains('bfm-open') && !bfmOnboarding) closeModal();
     });
+
+    @if(session('open_features_modal'))
+    setTimeout(openModal, 0);
+    @endif
 
     // POS dependencies: both must be enabled to allow POS
     var BFM_POS_DEPS = ['stock_management', 'product_management'];
@@ -1062,12 +1069,6 @@ html[data-theme="light"] .bfm-dep-hint,html[data-theme="light_blue"] .bfm-dep-hi
         var feature = card.dataset.feature;
         var isOn    = card.classList.contains('bfm-enabled');
         var badge   = card.querySelector('.bfm-feat-badge');
-
-        // Block enabling Bill Management when no account exists
-        if (!isOn && card.dataset.locked === 'no-account') {
-            showToast('Bill Management requires an account to be set up first.', 'warning');
-            return;
-        }
 
         // Block enabling POS when dependencies are not met
         if (!isOn && feature === 'point_of_sale' && !bfmPosDepsOk()) {
@@ -1131,6 +1132,7 @@ html[data-theme="light"] .bfm-dep-hint,html[data-theme="light_blue"] .bfm-dep-hi
             if (data.ok) {
                 status.className = 'bfm-status bfm-ok';
                 status.textContent = 'Saved successfully.';
+                bfmOnboarding = false;
                 setTimeout(closeModal, 900);
             } else {
                 throw new Error(data.error || 'Save failed.');

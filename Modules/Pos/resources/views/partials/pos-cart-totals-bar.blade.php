@@ -1,5 +1,6 @@
 @php
-    $discountFieldEnabled = (bool) ($discountFieldEnabled ?? false);
+    $discountFieldEnabled  = (bool) ($discountFieldEnabled ?? false);
+    $checkoutModalEnabled  = (bool) ($checkoutModalEnabled ?? false);
     $currency = $currency ?? '';
 @endphp
 
@@ -25,10 +26,12 @@ body.pos-walking-active .pos-catalog-totals__row--grand{font-size:15px;}
             <span>Subtotal</span>
             <strong id="pos-cart-subtotal">0.00</strong>
         </div>
-        <div class="pos-catalog-totals__row" id="pos-discount-row" @if(!$discountFieldEnabled) hidden @endif>
+        @if($discountFieldEnabled && !$checkoutModalEnabled)
+        <div class="pos-catalog-totals__row" id="pos-discount-row">
             <span>Discount (%)</span>
             <input type="text" name="discount_percent" id="pos-discount-percent" form="pos-checkout-form" value="{{ old('discount_percent', '0') }}" inputmode="none" data-pos-numpad="percent" readonly>
         </div>
+        @endif
         <div class="pos-catalog-totals__row" id="pos-discount-amount-row" hidden>
             <span>Discount amount</span>
             <strong id="pos-cart-discount">0.00</strong>
@@ -38,4 +41,9 @@ body.pos-walking-active .pos-catalog-totals__row--grand{font-size:15px;}
         <span>Total</span>
         <strong id="pos-cart-total">0.00{{ filled($currency) ? ' '.$currency : '' }}</strong>
     </div>
+    @if($checkoutModalEnabled)
+    <button type="button" id="pos-open-checkout-modal" class="pco-trigger" disabled>
+        <i class="fa fa-arrow-right" aria-hidden="true"></i> Proceed to checkout
+    </button>
+    @endif
 </div>
