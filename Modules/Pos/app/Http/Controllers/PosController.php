@@ -87,6 +87,9 @@ class PosController extends Controller
 
         $channel = $validated['channel'] ?? Sale::CHANNEL_RETAIL;
 
+        $posSettings = $this->posSettings->forBusiness($business);
+        $deferSettlement = ($posSettings['payment_settlement_mode'] ?? 'immediate') === 'end_of_day';
+
         $sale = $this->sales->checkout(
             $business,
             $request->user(),
@@ -99,6 +102,7 @@ class PosController extends Controller
             isset($validated['discount_percent']) ? (float) $validated['discount_percent'] : null,
             isset($validated['amount_tendered']) ? (float) $validated['amount_tendered'] : null,
             isset($validated['pos_customer_id']) ? (int) $validated['pos_customer_id'] : null,
+            $deferSettlement,
         );
 
         $redirectRoute = $channel === Sale::CHANNEL_ONLINE ? 'pos.online' : 'pos.register';
@@ -142,6 +146,8 @@ class PosController extends Controller
             'receipt_footer' => ['nullable', 'string', 'max:200'],
             'show_business_name' => ['nullable'],
             'show_business_address' => ['nullable'],
+            'show_account_info' => ['nullable'],
+            'payment_settlement_mode' => ['nullable', 'string', 'in:immediate,end_of_day'],
             'redirect' => ['nullable', 'string', 'max:2000'],
         ]);
 

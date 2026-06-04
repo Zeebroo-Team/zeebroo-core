@@ -47,6 +47,8 @@ class Sale extends Model
         'change_amount',
         'notes',
         'sold_at',
+        'is_settled',
+        'settled_at',
     ];
 
     protected function casts(): array
@@ -60,6 +62,8 @@ class Sale extends Model
             'amount_tendered' => 'decimal:2',
             'change_amount' => 'decimal:2',
             'sold_at' => 'datetime',
+            'is_settled' => 'boolean',
+            'settled_at' => 'datetime',
         ];
     }
 

@@ -31,13 +31,21 @@ window.posLayersFromButton = function (btn, catalog) {
     return [];
 };
 
-window.posBuildCartLineFromButton = function (btn, layer, catalog) {
-    const layers = window.posLayersFromButton(btn, catalog);
-    const picked = layer || (layers.length ? layers[0] : null);
-    const id = parseInt(btn.dataset.productId, 10);
-    const layerId = picked ? parseInt(picked.id, 10) : null;
-    const stock = picked ? parseFloat(picked.quantity_remaining) : parseFloat(btn.dataset.stock) || 0;
-    const unitPrice = picked ? parseFloat(picked.unit_sell_price) : parseFloat(btn.dataset.unitPrice) || 0;
+window.posLayersDifferInPrice = function (layers) {
+    if (!layers || layers.length < 2) return false;
+    var first = Number(layers[0].unit_sell_price || 0).toFixed(2);
+    for (var i = 1; i < layers.length; i++) {
+        if (Number(layers[i].unit_sell_price || 0).toFixed(2) !== first) return true;
+    }
+    return false;
+};
+
+window.posBuildCartLineFromButton = function (btn, layer, catalog, useFifo) {
+    var id = parseInt(btn.dataset.productId, 10);
+    var picked = useFifo ? null : (layer || null);
+    var layerId = picked ? parseInt(picked.id, 10) : null;
+    var stock = picked ? parseFloat(picked.quantity_remaining) : parseFloat(btn.dataset.stock) || 0;
+    var unitPrice = picked ? parseFloat(picked.unit_sell_price) : parseFloat(btn.dataset.unitPrice) || 0;
 
     return {
         cartKey: window.posCartKey(id, layerId),
@@ -71,21 +79,28 @@ window.posAddProductFromButton = async function (btn, cart, catalog) {
     if (!btn || btn.disabled) return false;
     const layers = window.posLayersFromButton(btn, catalog);
     let layer = null;
+    let useFifo = false;
+
     if (layers.length > 1) {
-        const pick = window.posPickStockLayer;
-        if (typeof pick !== 'function') {
-            console.error('POS stock picker not initialized');
-            return false;
+        if (window.posLayersDifferInPrice(layers)) {
+            const pick = window.posPickStockLayer;
+            if (typeof pick !== 'function') {
+                console.error('POS stock picker not initialized');
+                return false;
+            }
+            layer = await pick({
+                id: parseInt(btn.dataset.productId, 10),
+                name: btn.dataset.productName || '',
+            }, layers);
+            if (!layer) return false;
+        } else {
+            useFifo = true;
         }
-        layer = await pick({
-            id: parseInt(btn.dataset.productId, 10),
-            name: btn.dataset.productName || '',
-        }, layers);
-        if (!layer) return false;
     } else if (layers.length === 1) {
         layer = layers[0];
     }
-    const line = window.posBuildCartLineFromButton(btn, layer, catalog);
+
+    const line = window.posBuildCartLineFromButton(btn, layer, catalog, useFifo);
     return window.posAddCartLine(cart, line, 1);
 };
 
@@ -111,22 +126,27 @@ window.posAddProductWithUnit = async function (btn, cart, catalog, currencySuffi
         if (chosenUnit === null) return false; // cancelled
     }
 
-    // Now pick the stock layer (if multiple layers exist)
+    // Now pick the stock layer (if multiple layers exist with different prices)
     var layer = null;
+    var useFifo = false;
     if (layers.length > 1) {
-        layer = await window.posPickStockLayer({ id: productId, name: btn.dataset.productName || '' }, layers);
-        if (!layer) return false;
+        if (window.posLayersDifferInPrice(layers)) {
+            layer = await window.posPickStockLayer({ id: productId, name: btn.dataset.productName || '' }, layers);
+            if (!layer) return false;
+        } else {
+            useFifo = true;
+        }
     } else if (layers.length === 1) {
         layer = layers[0];
     }
 
     // Build cart line
-    var layerId = layer ? parseInt(layer.id, 10) : null;
+    var layerId = (!useFifo && layer) ? parseInt(layer.id, 10) : null;
     var unitId  = chosenUnit && chosenUnit.id != null ? parseInt(chosenUnit.id, 10) : null;
     var cartKey = window.posCartKeyWithUnit(productId, layerId, unitId);
 
     // Calculate price and stock
-    var baseUnitPrice = layer ? parseFloat(layer.unit_sell_price) : parseFloat(btn.dataset.unitPrice) || 0;
+    var baseUnitPrice = (!useFifo && layer) ? parseFloat(layer.unit_sell_price) : parseFloat(btn.dataset.unitPrice) || 0;
     var unitPrice, factor, unitLabel, stockInUnits;
 
     if (chosenUnit && chosenUnit.id != null) {
@@ -139,7 +159,7 @@ window.posAddProductWithUnit = async function (btn, cart, catalog, currencySuffi
         factor        = 1.0;
         unitLabel     = null;
         unitPrice     = baseUnitPrice;
-        stockInUnits  = layer ? parseFloat(layer.quantity_remaining) : parseFloat(btn.dataset.stock) || 0;
+        stockInUnits  = (!useFifo && layer) ? parseFloat(layer.quantity_remaining) : parseFloat(btn.dataset.stock) || 0;
     }
 
     var line = {

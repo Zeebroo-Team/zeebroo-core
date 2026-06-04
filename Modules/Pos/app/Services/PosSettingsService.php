@@ -24,6 +24,11 @@ class PosSettingsService
 
     public const KEY_CHECKOUT_MODAL_ENABLED = 'pos.checkout_modal_enabled';
 
+    public const KEY_SHOW_ACCOUNT_INFO = 'pos.show_account_info';
+
+    /** @var string `immediate` | `end_of_day` */
+    public const KEY_PAYMENT_SETTLEMENT_MODE = 'pos.payment_settlement_mode';
+
     /**
      * @return array{
      *     default_deposit_account_id: ?int,
@@ -34,6 +39,8 @@ class PosSettingsService
      *     receipt_footer: string,
      *     show_business_name: bool,
      *     show_business_address: bool,
+     *     show_account_info: bool,
+     *     payment_settlement_mode: string,
      * }
      */
     public function forBusiness(Business $business): array
@@ -55,6 +62,8 @@ class PosSettingsService
             'receipt_footer' => (string) $business->getSetting(self::KEY_RECEIPT_FOOTER, 'Thank you for your purchase!'),
             'show_business_name' => (bool) $business->getSetting(self::KEY_SHOW_BUSINESS_NAME, true),
             'show_business_address' => (bool) $business->getSetting(self::KEY_SHOW_BUSINESS_ADDRESS, true),
+            'show_account_info' => (bool) $business->getSetting(self::KEY_SHOW_ACCOUNT_INFO, true),
+            'payment_settlement_mode' => (string) $business->getSetting(self::KEY_PAYMENT_SETTLEMENT_MODE, 'immediate'),
         ];
     }
 
@@ -67,6 +76,7 @@ class PosSettingsService
      *     receipt_footer?: string|null,
      *     show_business_name?: bool|string|null,
      *     show_business_address?: bool|string|null,
+     *     show_account_info?: bool|string|null,
      * }  $data
      */
     public function saveForBusiness(Business $business, array $data): void
@@ -105,5 +115,12 @@ class PosSettingsService
         $business->setSetting(self::KEY_RECEIPT_FOOTER, substr(trim((string) ($data['receipt_footer'] ?? '')), 0, 200));
         $business->setSetting(self::KEY_SHOW_BUSINESS_NAME, filter_var($data['show_business_name'] ?? true, FILTER_VALIDATE_BOOLEAN));
         $business->setSetting(self::KEY_SHOW_BUSINESS_ADDRESS, filter_var($data['show_business_address'] ?? true, FILTER_VALIDATE_BOOLEAN));
+        $business->setSetting(self::KEY_SHOW_ACCOUNT_INFO, filter_var($data['show_account_info'] ?? true, FILTER_VALIDATE_BOOLEAN));
+
+        $mode = strtolower(trim((string) ($data['payment_settlement_mode'] ?? 'immediate')));
+        if (!in_array($mode, ['immediate', 'end_of_day'], true)) {
+            $mode = 'immediate';
+        }
+        $business->setSetting(self::KEY_PAYMENT_SETTLEMENT_MODE, $mode);
     }
 }

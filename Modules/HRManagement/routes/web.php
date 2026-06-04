@@ -80,6 +80,8 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
     Route::delete('hr-management/departments/{department}', [HrDepartmentController::class, 'destroy'])->name('hr.departments.destroy');
     Route::get('hr-management/designations', [HrJobTitleController::class, 'index'])->name('hr.job-titles.index');
     Route::post('hr-management/designations', [HrJobTitleController::class, 'store'])->name('hr.job-titles.store');
+    Route::get('hr-management/designations/{jobTitle}', [HrJobTitleController::class, 'show'])->name('hr.job-titles.show');
+    Route::put('hr-management/designations/{jobTitle}', [HrJobTitleController::class, 'update'])->name('hr.job-titles.update');
     Route::delete('hr-management/designations/{jobTitle}', [HrJobTitleController::class, 'destroy'])->name('hr.job-titles.destroy');
     Route::get('hr-management/allowance-types', [HrAllowanceTypeController::class, 'index'])->name('hr.allowance-types.index');
     Route::post('hr-management/allowance-types', [HrAllowanceTypeController::class, 'store'])->name('hr.allowance-types.store');

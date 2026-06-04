@@ -107,6 +107,35 @@
                     </div>
 
                     <div class="psm-section">
+                        <p class="psm-section__label"><i class="fa fa-clock" aria-hidden="true"></i> Settlement timing</p>
+                        <div class="psm-card">
+                            <div class="psm-row">
+                                <div class="psm-row__info">
+                                    <span class="psm-row__name">Payment settlement mode</span>
+                                    <span class="psm-row__desc">When to deposit sales revenue to your bank account</span>
+                                </div>
+                            </div>
+                            <div style="padding:0 16px 14px;">
+                                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                                    <label class="psm-settle-option @if(($posSettings['payment_settlement_mode'] ?? 'immediate') === 'immediate') is-active @endif" id="psm-settle-immediate-label">
+                                        <input type="radio" name="_settlement_ui" value="immediate" {{ ($posSettings['payment_settlement_mode'] ?? 'immediate') === 'immediate' ? 'checked' : '' }} style="display:none;">
+                                        <i class="fa fa-bolt"></i>
+                                        <span class="psm-settle-option__title">Immediate</span>
+                                        <span class="psm-settle-option__desc">Deposit after each sale</span>
+                                    </label>
+                                    <label class="psm-settle-option @if(($posSettings['payment_settlement_mode'] ?? 'immediate') === 'end_of_day') is-active @endif" id="psm-settle-eod-label">
+                                        <input type="radio" name="_settlement_ui" value="end_of_day" {{ ($posSettings['payment_settlement_mode'] ?? 'immediate') === 'end_of_day' ? 'checked' : '' }} style="display:none;">
+                                        <i class="fa fa-moon"></i>
+                                        <span class="psm-settle-option__title">End of day</span>
+                                        <span class="psm-settle-option__desc">Batch approve at day end</span>
+                                    </label>
+                                </div>
+                                <input type="hidden" name="payment_settlement_mode" id="psm-settlement-mode-value" value="{{ $posSettings['payment_settlement_mode'] ?? 'immediate' }}">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="psm-section">
                         <p class="psm-section__label"><i class="fa fa-cart-shopping" aria-hidden="true"></i> Checkout options</p>
                         <div class="psm-card">
                             <div class="psm-row">
@@ -177,6 +206,17 @@
                                 <label class="psm-switch">
                                     <input type="hidden" name="show_business_address" value="0">
                                     <input type="checkbox" name="show_business_address" value="1" @checked($posSettings['show_business_address'] ?? true)>
+                                    <span class="psm-switch__track" aria-hidden="true"><span class="psm-switch__thumb"></span></span>
+                                </label>
+                            </div>
+                            <div class="psm-row psm-row--border">
+                                <div class="psm-row__info">
+                                    <span class="psm-row__name">Show account info</span>
+                                    <span class="psm-row__desc">Print the deposit or credit account name on the receipt</span>
+                                </div>
+                                <label class="psm-switch">
+                                    <input type="hidden" name="show_account_info" value="0">
+                                    <input type="checkbox" name="show_account_info" value="1" @checked($posSettings['show_account_info'] ?? true)>
                                     <span class="psm-switch__track" aria-hidden="true"><span class="psm-switch__thumb"></span></span>
                                 </label>
                             </div>
@@ -292,6 +332,14 @@ html.pos-settings-modal-open,html.pos-settings-modal-open body{overflow:hidden;}
 .psm-btn--primary{background:var(--primary);border-color:var(--primary);color:#fff;}
 .psm-btn--primary:hover{opacity:.9;box-shadow:0 4px 14px color-mix(in srgb,var(--primary) 35%,transparent);}
 
+/* ── Settlement mode toggle ─────────────────────────────────────── */
+.psm-settle-option{display:flex;flex-direction:column;align-items:center;gap:4px;padding:12px 10px;border-radius:10px;border:1px solid var(--border);background:color-mix(in srgb,var(--card) 94%,var(--border) 6%);cursor:pointer;transition:all .15s;text-align:center;}
+.psm-settle-option i{font-size:18px;color:var(--muted);}
+.psm-settle-option.is-active{border-color:color-mix(in srgb,var(--primary) 45%,var(--border));background:color-mix(in srgb,var(--primary) 10%,transparent);}
+.psm-settle-option.is-active i{color:var(--primary);}
+.psm-settle-option__title{font-size:12px;font-weight:700;color:var(--text);}
+.psm-settle-option__desc{font-size:10px;color:var(--muted);}
+
 /* ── Responsive ─────────────────────────────────────────────────── */
 @media (max-width:580px){
     .psm-dialog{flex-direction:column;max-height:96vh;}
@@ -391,6 +439,20 @@ html.pos-settings-modal-open,html.pos-settings-modal-open body{overflow:hidden;}
     if (darkLabel) {
         darkLabel.addEventListener('click', function () { applyTheme(true); });
     }
+
+    // Settlement mode toggle
+    var settleImmediate = document.getElementById('psm-settle-immediate-label');
+    var settleEod = document.getElementById('psm-settle-eod-label');
+    var settleModeValue = document.getElementById('psm-settlement-mode-value');
+
+    function applySettlementMode(mode) {
+        if (settleModeValue) settleModeValue.value = mode;
+        if (settleImmediate) settleImmediate.classList.toggle('is-active', mode === 'immediate');
+        if (settleEod) settleEod.classList.toggle('is-active', mode === 'end_of_day');
+    }
+
+    if (settleImmediate) settleImmediate.addEventListener('click', function () { applySettlementMode('immediate'); });
+    if (settleEod) settleEod.addEventListener('click', function () { applySettlementMode('end_of_day'); });
 })();
 </script>
 @endonce

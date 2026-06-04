@@ -20,7 +20,7 @@
 .product-switch input:focus-visible + .product-switch-slider{box-shadow:0 0 0 3px color-mix(in srgb,var(--primary) 45%,transparent);}
 </style>
 
-<div class="card" style="max-width:720px;margin:0 auto;padding:16px;">
+<div class="card" style="max-width:100%;padding:16px;">
     @include('product::partials.product-hub-nav')
 
     <p class="muted" style="margin:0 0 14px;font-size:13px;">Updating <strong style="color:var(--text);">{{ $product->name }}</strong> under {{ $business->name }}</p>

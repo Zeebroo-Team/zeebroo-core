@@ -112,9 +112,34 @@ html.pos-layer-picker-open,html.pos-layer-picker-open body{overflow:hidden;}
                 subtitleEl.textContent = (product?.name || 'Product')
                     + ' — tap a batch to add it to the sale at that price.';
             }
-            list.innerHTML = '';
+
+            // Group layers by price — same-price batches become one row
+            var priceMap = {};
             layers.forEach(function (layer) {
-                const btn = document.createElement('button');
+                var key = Number(layer.unit_sell_price || 0).toFixed(2);
+                if (!priceMap[key]) priceMap[key] = [];
+                priceMap[key].push(layer);
+            });
+            var displayOptions = Object.keys(priceMap).map(function (priceKey) {
+                var group = priceMap[priceKey];
+                if (group.length === 1) return { layer: group[0], merged: false };
+                // Merge: use first (oldest) layer for id/price, combined stock for display
+                var totalStock = group.reduce(function (s, l) { return s + (parseFloat(l.quantity_remaining) || 0); }, 0);
+                var labels = group.map(function (l) { return l.label || ('Batch #' + l.id); });
+                var mergedLabel = labels[0] + ' + ' + (group.length - 1) + ' more batch' + (group.length > 2 ? 'es' : '');
+                return {
+                    layer: Object.assign({}, group[0], { quantity_remaining: totalStock }),
+                    merged: true,
+                    mergedLabel: mergedLabel,
+                    batchCount: group.length,
+                    totalStock: totalStock,
+                };
+            });
+
+            list.innerHTML = '';
+            displayOptions.forEach(function (opt) {
+                var layer = opt.layer;
+                var btn = document.createElement('button');
                 btn.type = 'button';
                 btn.className = 'pos-layer-picker__option';
                 btn.setAttribute('role', 'option');
@@ -125,19 +150,28 @@ html.pos-layer-picker-open,html.pos-layer-picker-open body{overflow:hidden;}
                     '</span>' +
                     '<span class="pos-layer-picker__option__price"></span>';
                 btn.querySelector('.pos-layer-picker__option__label').textContent =
-                    layer.label || ('Batch #' + layer.id);
-                btn.querySelector('.pos-layer-picker__option__meta').textContent =
-                    formatQty(layer.quantity_remaining) + ' in stock · cost ' + money(layer.unit_cost);
+                    opt.merged ? opt.mergedLabel : (layer.label || ('Batch #' + layer.id));
+                var metaStock = opt.merged
+                    ? formatQty(opt.totalStock) + ' total in stock (' + opt.batchCount + ' batches)'
+                    : formatQty(layer.quantity_remaining) + ' in stock · cost ' + money(layer.unit_cost);
+                btn.querySelector('.pos-layer-picker__option__meta').textContent = metaStock;
                 btn.querySelector('.pos-layer-picker__option__price').textContent =
                     money(layer.unit_sell_price);
                 btn.addEventListener('click', function () {
-                    const chosen = layer;
                     pendingResolve = null;
                     setOpen(false);
-                    resolve(chosen);
+                    resolve(layer);
                 });
                 list.appendChild(btn);
             });
+
+            // Auto-resolve if grouping reduced to a single price option
+            if (displayOptions.length === 1) {
+                pendingResolve = null;
+                resolve(displayOptions[0].layer);
+                return;
+            }
+
             setOpen(true);
         });
     };

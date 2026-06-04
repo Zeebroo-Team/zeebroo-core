@@ -513,6 +513,6 @@ body.pos-walking-active .pos-online__top-fields .pos-online__scan-row button{pad
 @endonce
 
 @if($printSale)
-    @include('pos::partials.pos-sale-completed-modal', ['completedSale' => $printSale, 'currency' => $currency, 'business' => $business])
+    @include('pos::partials.pos-sale-completed-modal', ['completedSale' => $printSale, 'currency' => $currency, 'business' => $business, 'posSettings' => $posSettings])
 @endif
 @endsection

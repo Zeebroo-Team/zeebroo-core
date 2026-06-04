@@ -459,6 +459,6 @@ body.pos-walking-active .pos-page__top-search .pos-search button{padding:6px 8px
 @endonce
 
 @if($printSale)
-    @include('pos::partials.pos-sale-completed-modal', ['completedSale' => $printSale, 'currency' => $currency, 'business' => $business])
+    @include('pos::partials.pos-sale-completed-modal', ['completedSale' => $printSale, 'currency' => $currency, 'business' => $business, 'posSettings' => $posSettings])
 @endif
 @endsection

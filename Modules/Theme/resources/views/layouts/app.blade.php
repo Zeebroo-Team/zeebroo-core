@@ -60,10 +60,10 @@
         .brand.brand--logo{display:block;margin-bottom:18px;text-decoration:none;line-height:0}
         .brand.brand--logo:before{display:none;content:none}
         .brand.brand--logo img{display:block;width:100%;max-width:224px;height:auto;max-height:52px;object-fit:contain;object-position:left center}
-        .menu-section{font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin:4px 2px 2px}
-        .menu{display:flex;flex-direction:column;gap:6px}
-        .menu a{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid transparent;border-radius:10px;text-decoration:none;color:var(--text);font-weight:500;font-size:13px;transition:all .2s ease}
-        .menu a i{width:14px;text-align:center;color:var(--muted);font-size:12px}
+        .menu-section{font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin:3px 2px 1px}
+        .menu{display:flex;flex-direction:column;gap:2px}
+        .menu a{display:flex;align-items:center;gap:7px;padding:6px 8px;border:1px solid transparent;border-radius:8px;text-decoration:none;color:var(--text);font-weight:500;font-size:12px;transition:all .2s ease}
+        .menu a i{width:13px;text-align:center;color:var(--muted);font-size:11px}
         .menu a.active{border-color:color-mix(in srgb,var(--primary) 45%,var(--border));background:color-mix(in srgb,var(--primary) 14%,transparent)}
         .menu a:hover{border-color:color-mix(in srgb,var(--primary) 45%,var(--border));background:transparent;font-weight:700}
         .menu a.active i,.menu a:hover i{color:var(--primary)}
@@ -141,13 +141,13 @@
             .menu a.menu-payroll-cycles--due{border-color:color-mix(in srgb,#ef4444 55%,var(--border));background:color-mix(in srgb,#ef4444 14%,transparent);}
             .menu a.menu-payroll-cycles--due i{color:#f87171!important;}
         }
-        .menu-group-title{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:12px;font-weight:600;background:color-mix(in srgb,var(--primary) 8%,transparent)}
+        .menu-group-title{display:flex;align-items:center;gap:7px;padding:6px 8px;border:1px solid transparent;border-radius:8px;color:var(--text);font-size:11px;font-weight:600;background:transparent}
         a.menu-group-title{text-decoration:none;transition:border-color .2s ease,background .2s ease}
         a.menu-group-title:hover,a.menu-group-title.active{border-color:color-mix(in srgb,var(--primary) 45%,var(--border));background:color-mix(in srgb,var(--primary) 16%,transparent)}
-        a.menu-group-title i{color:var(--muted)}
+        a.menu-group-title i{color:var(--muted);font-size:11px}
         a.menu-group-title:hover i,a.menu-group-title.active i{color:var(--primary)}
-        .submenu{display:flex;flex-direction:column;gap:4px;margin-left:12px;padding-left:8px;border-left:1px dashed color-mix(in srgb,var(--primary) 35%,var(--border))}
-        .submenu a{padding:7px 9px;font-size:12px}
+        .submenu{display:flex;flex-direction:column;gap:1px;margin-left:10px;padding-left:7px;border-left:1px dashed color-mix(in srgb,var(--primary) 35%,var(--border))}
+        .submenu a{padding:5px 8px;font-size:11px}
         /* Payroll hub: extra indent under main Payroll link */
         .menu-payroll-nested{display:flex;flex-direction:column;gap:2px}
         .menu-payroll-nested__sub{
@@ -328,6 +328,10 @@
             && ($posFeatureOn || $navBusiness->products()->where('is_active', true)->where('is_bundle', false)->exists());
         $showSidebarPosSalesLink = $navBusiness && Route::has('pos.sales.index')
             && ($posFeatureOn || $navBusiness->sales()->exists());
+        $showSidebarPosEodLink = $navBusiness && Route::has('pos.end-of-day')
+            && ($posFeatureOn || $navBusiness->sales()->where('is_settled', false)->exists());
+        $showSidebarPosCustomersLink = $navBusiness && Route::has('pos.customers.index')
+            && ($posFeatureOn || \Modules\Pos\Models\Customer::query()->where('business_id', $navBusiness->id)->exists());
         // Hub link shows whenever the Sales section is visible (feature on, or data-driven links are showing).
         $showSidebarPosSection = $showSidebarPosRegisterLink || $showSidebarPosSalesLink || ($navBusiness && $posFeatureOn);
         $showSidebarPosHubLink = $navBusiness && Route::has('pos.index') && $showSidebarPosSection;
@@ -395,6 +399,8 @@
             $showSidebarPosRegisterLink = false;
             $showSidebarPosHubLink = false;
             $showSidebarPosSalesLink = false;
+            $showSidebarPosEodLink = false;
+            $showSidebarPosCustomersLink = false;
             $showSidebarPosSection = false;
             $showSidebarFilesLink = false;
             $showSidebarPropertiesLink = false;
@@ -532,6 +538,16 @@
                         <a href="{{ route('pos.sales.index') }}" @class([
                             'active' => request()->routeIs('pos.sales.*'),
                         ])><i class="fa fa-receipt"></i><span>Sales history</span></a>
+                    @endif
+                    @if($showSidebarPosEodLink)
+                        <a href="{{ route('pos.end-of-day') }}" @class([
+                            'active' => request()->routeIs('pos.end-of-day*'),
+                        ])><i class="fa fa-building-columns"></i><span>End of day</span></a>
+                    @endif
+                    @if($showSidebarPosCustomersLink)
+                        <a href="{{ route('pos.customers.index') }}" @class([
+                            'active' => request()->routeIs('pos.customers.*'),
+                        ])><i class="fa fa-users"></i><span>Customers</span></a>
                     @endif
                 </div>
             @endif

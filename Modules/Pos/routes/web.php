@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use Modules\Pos\Http\Controllers\CustomerController;
+use Modules\Pos\Http\Controllers\EndOfDayController;
 use Modules\Pos\Http\Controllers\PosController;
 use Modules\Pos\Http\Controllers\PosProductController;
 use Modules\Pos\Http\Controllers\SaleController;
@@ -24,4 +25,7 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
     Route::get('/pos/sales', [SaleController::class, 'index'])->name('pos.sales.index');
     Route::get('/pos/sales/{sale}', [SaleController::class, 'show'])->name('pos.sales.show');
     Route::post('/pos/sales/{sale}/void', [SaleController::class, 'void'])->name('pos.sales.void');
+
+    Route::get('/pos/end-of-day', [EndOfDayController::class, 'index'])->name('pos.end-of-day');
+    Route::post('/pos/end-of-day/settle', [EndOfDayController::class, 'settle'])->name('pos.end-of-day.settle');
 });

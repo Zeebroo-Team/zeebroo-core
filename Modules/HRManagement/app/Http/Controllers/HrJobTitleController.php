@@ -61,6 +61,65 @@ class HrJobTitleController extends Controller
         return redirect()->route('hr.job-titles.index')->with('status', __('Designation saved.'));
     }
 
+    public function show(Request $request, JobTitle $jobTitle): RedirectResponse|View
+    {
+        $business = Business::currentForNavbar($request->user());
+        abort_if($business === null, 403);
+
+        if (! $this->hrPayrollSettings->optedIn($business)) {
+            return redirect()->route('hr.onboarding');
+        }
+
+        abort_unless($request->user()->businesses()->whereKey($business->id)->exists(), 403);
+        abort_unless((int) $jobTitle->business_id === (int) $business->id, 403);
+
+        $activeTab = (string) $request->query('tab', 'overview');
+        if (! in_array($activeTab, ['overview', 'employees'], true)) {
+            $activeTab = 'overview';
+        }
+
+        $employees = $jobTitle->employees()
+            ->with(['department'])
+            ->orderBy('full_name')
+            ->get();
+
+        $currency = (string) (get_settings('business.currency', '', $business) ?: '');
+
+        return view('hrmanagement::job-titles.show', [
+            'business'   => $business,
+            'jobTitle'   => $jobTitle,
+            'employees'  => $employees,
+            'currency'   => $currency,
+            'activeTab'  => $activeTab,
+        ]);
+    }
+
+    public function update(Request $request, JobTitle $jobTitle): RedirectResponse
+    {
+        $business = Business::currentForNavbar($request->user());
+        abort_if($business === null, 403);
+
+        if (! $this->hrPayrollSettings->optedIn($business)) {
+            return redirect()->route('hr.onboarding');
+        }
+
+        abort_unless($request->user()->businesses()->whereKey($business->id)->exists(), 403);
+        abort_unless((int) $jobTitle->business_id === (int) $business->id, 403);
+
+        $validated = $request->validate([
+            'name' => [
+                'required', 'string', 'max:255',
+                Rule::unique('hr_job_titles', 'name')
+                    ->where(fn ($q) => $q->where('business_id', $business->id))
+                    ->ignore($jobTitle->id),
+            ],
+        ]);
+
+        $jobTitle->update(['name' => trim($validated['name'])]);
+
+        return redirect()->route('hr.job-titles.show', $jobTitle)->with('status', 'Designation renamed.');
+    }
+
     public function destroy(Request $request, JobTitle $jobTitle): RedirectResponse
     {
         $business = Business::currentForNavbar($request->user());

@@ -95,7 +95,7 @@ class PosCatalogService
             'stock_quantity' => $meta['stock_quantity'],
             'has_layers' => $layers !== [],
             'layer_count' => count($layers),
-            'requires_layer_pick' => count($layers) > 1,
+            'requires_layer_pick' => count($layers) > 1 && count($sellPrices) > 1,
             'has_multiple_prices' => count($sellPrices) > 1,
             'layers' => $layers,
             'selling_units' => $this->sellingUnitsForProduct($product),

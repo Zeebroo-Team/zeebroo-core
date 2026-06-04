@@ -87,12 +87,13 @@ class SaleService
         ?float $discountPercent = null,
         ?float $amountTendered = null,
         ?int $customerId = null,
+        bool $deferSettlement = false,
     ): Sale {
         $lines = $this->normalizeCartItems($business, $items);
         $paymentMethod = $this->normalizePaymentMethod($paymentMethod);
         $channel = $this->normalizeChannel($channel);
 
-        return DB::transaction(function () use ($business, $user, $lines, $paymentMethod, $creditAccountId, $amountPaid, $notes, $channel, $discountPercent, $amountTendered, $customerId) {
+        return DB::transaction(function () use ($business, $user, $lines, $paymentMethod, $creditAccountId, $amountPaid, $notes, $channel, $discountPercent, $amountTendered, $customerId, $deferSettlement) {
             $sale = $business->sales()->create([
                 'user_id' => $user->id,
                 'sale_number' => $this->nextSaleNumber($business),
@@ -108,6 +109,8 @@ class SaleService
                 'amount_paid' => 0,
                 'notes' => filled($notes) ? trim((string) $notes) : null,
                 'sold_at' => now(),
+                'is_settled' => !$deferSettlement,
+                'settled_at' => $deferSettlement ? null : now(),
             ]);
 
             $subtotal = 0.0;
@@ -181,7 +184,7 @@ class SaleService
                 'change_amount' => $change,
             ]);
 
-            if (in_array($paymentMethod, [Sale::PAYMENT_CASH, Sale::PAYMENT_CARD], true)) {
+            if (!$deferSettlement && in_array($paymentMethod, [Sale::PAYMENT_CASH, Sale::PAYMENT_CARD], true)) {
                 $this->payments->settle($sale, $business, $user, (int) $creditAccountId, $total, $paymentMethod);
             }
 

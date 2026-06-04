@@ -16,6 +16,8 @@
         ? ' ('.rtrim(rtrim(number_format($discountPercent, 2, '.', ''), '0'), '.').'%)'
         : '';
 
+    $showAccountInfo = (bool) (($posSettings ?? [])['show_account_info'] ?? true);
+
     $saleCompletionData = [
         'saleId' => $completedSale->id,
         'businessName' => $business->name,
@@ -26,7 +28,7 @@
         'soldAt' => $completedSale->sold_at?->format('M j, Y g:i A') ?? '',
         'soldAtIso' => $completedSale->sold_at?->toIso8601String() ?? '',
         'payment' => $completedSale->paymentMethodLabel(),
-        'account' => $completedSale->creditAccount?->deductOptionLabel() ?? '',
+        'account' => $showAccountInfo ? ($completedSale->creditAccount?->deductOptionLabel() ?? '') : '',
         'channel' => $completedSale->channelLabel(),
         'currency' => trim($currencyLabel),
         'subtotal' => number_format($subtotal, 2, '.', ''),
@@ -109,7 +111,7 @@
                             <span>Payment</span>
                             <strong>{{ $completedSale->paymentMethodLabel() }}</strong>
                         </div>
-                        @if($completedSale->creditAccount)
+                        @if($showAccountInfo && $completedSale->creditAccount)
                             <div class="pos-thermal-receipt-row">
                                 <span>Account</span>
                                 <strong>{{ $completedSale->creditAccount->deductOptionLabel() }}</strong>
@@ -225,7 +227,7 @@
                             <label>Payment Method</label>
                             <span>{{ $completedSale->paymentMethodLabel() }}</span>
                         </div>
-                        @if($completedSale->creditAccount)
+                        @if($showAccountInfo && $completedSale->creditAccount)
                             <div class="pos-details-row">
                                 <label>Deposit Account</label>
                                 <span>{{ $completedSale->creditAccount->deductOptionLabel() }}</span>
@@ -450,18 +452,16 @@
 }
 
 .pos-sale-completed-modal__tab-content {
+    display: none;
     flex: 1;
     min-height: 0;
     overflow-y: auto;
     padding: 16px 20px;
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.15s ease;
 }
 
 .pos-sale-completed-modal__tab-content.is-active {
-    opacity: 1;
-    pointer-events: auto;
+    display: block;
+    overflow-y: auto;
 }
 
 .pos-sale-completed-modal__details {
@@ -794,6 +794,22 @@
         modal.classList.toggle('is-open', open);
         modal.setAttribute('aria-hidden', open ? 'false' : 'true');
         document.documentElement.classList.toggle('pos-sale-completed-modal-open', open);
+        if (!open) {
+            // After the opacity transition ends, set display:none so the
+            // fixed+backdrop-filter element is fully out of the render tree
+            // and cannot intercept pointer events on any browser.
+            setTimeout(function () {
+                if (!modal.classList.contains('is-open')) {
+                    modal.style.display = 'none';
+                }
+            }, 250);
+            // Reset the cart so the POS is ready for a new sale
+            document.dispatchEvent(new CustomEvent('pos-clear-cart-and-reset', {
+                detail: { completedSaleId: completionData.saleId }
+            }));
+        } else {
+            modal.style.display = '';
+        }
     }
 
     modal.querySelectorAll('[data-pos-completed-close]').forEach(el => {
