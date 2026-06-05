@@ -19,8 +19,10 @@
 .cat-table th{text-align:left;padding:9px 12px;background:color-mix(in srgb,var(--card) 92%,transparent);font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);border-bottom:1px solid var(--border);}
 .cat-table td{padding:10px 12px;border-bottom:1px solid color-mix(in srgb,var(--border) 80%,transparent);}
 .cat-table tr:last-child td{border-bottom:none;}
-.cat-btn-del{padding:6px 9px;font-size:11px;font-weight:600;border-radius:7px;border:1px solid color-mix(in srgb,#ef4444 42%,var(--border));background:transparent;color:#f97373;cursor:pointer;}
+.cat-btn-del{padding:6px 9px;font-size:11px;font-weight:600;border-radius:7px;border:1px solid color-mix(in srgb,#ef4444 42%,var(--border));background:transparent;color:#f97373;cursor:pointer;text-decoration:none;}
 :is(html[data-theme="light"],html[data-theme="light_blue"]) .cat-btn-del{color:#dc2626;}
+.cat-btn-view{padding:6px 9px;font-size:11px;font-weight:600;border-radius:7px;border:1px solid var(--border);background:transparent;color:var(--primary);cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;}
+.cat-btn-view:hover{background:color-mix(in srgb,var(--primary) 8%,transparent);border-color:color-mix(in srgb,var(--primary) 35%,var(--border));}
 .cat-modal{
     position:fixed;inset:0;z-index:120;display:flex;justify-content:center;align-items:flex-start;
     padding:max(12px,2.5vh) max(14px,env(safe-area-inset-right)) calc(14px + env(safe-area-inset-bottom)) max(14px,env(safe-area-inset-left));
@@ -94,18 +96,27 @@ html.cat-modal-open-html,html.cat-modal-open-html body{overflow:hidden;}
                 <tbody>
                     @foreach($jobTitles as $jt)
                         <tr>
-                            <td><strong style="color:var(--text);">{{ $jt->name }}</strong></td>
-                            <td class="muted">{{ (int) $jt->employees_count }}</td>
-                            <td style="text-align:right;">
-                                @if(((int) $jt->employees_count) === 0)
-                                    <form method="post" action="{{ route('hr.job-titles.destroy', $jt) }}" style="margin:0;display:inline;" onsubmit="return confirm('Delete this designation?');">
-                                        @csrf
-                                        @method('DELETE')
-                                        <button type="submit" class="cat-btn-del"><i class="fa fa-trash-can" style="margin-right:4px;"></i>Delete</button>
-                                    </form>
+                            <td>
+                                <a href="{{ route('hr.job-titles.show', $jt) }}" style="color:var(--text);font-weight:700;text-decoration:none;">{{ $jt->name }}</a>
+                            </td>
+                            <td>
+                                @if((int) $jt->employees_count > 0)
+                                    <a href="{{ route('hr.job-titles.show', ['jobTitle' => $jt, 'tab' => 'employees']) }}" style="color:var(--primary);font-size:13px;text-decoration:none;font-weight:600;">{{ (int) $jt->employees_count }}</a>
                                 @else
-                                    <span class="muted" style="font-size:12px;">In use</span>
+                                    <span class="muted">0</span>
                                 @endif
+                            </td>
+                            <td style="text-align:right;">
+                                <div style="display:inline-flex;align-items:center;gap:8px;">
+                                    <a href="{{ route('hr.job-titles.show', $jt) }}" class="cat-btn-view"><i class="fa fa-eye" style="margin-right:4px;"></i>View</a>
+                                    @if(((int) $jt->employees_count) === 0)
+                                        <form method="post" action="{{ route('hr.job-titles.destroy', $jt) }}" style="margin:0;display:inline;" onsubmit="return confirm('Delete this designation?');">
+                                            @csrf
+                                            @method('DELETE')
+                                            <button type="submit" class="cat-btn-del"><i class="fa fa-trash-can" style="margin-right:4px;"></i>Delete</button>
+                                        </form>
+                                    @endif
+                                </div>
                             </td>
                         </tr>
                     @endforeach
