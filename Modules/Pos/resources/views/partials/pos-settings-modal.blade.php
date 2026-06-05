@@ -48,7 +48,7 @@
                 </button>
             </div>
 
-            <form method="post" action="{{ route('pos.settings.save') }}" class="psm-form">
+            <form method="post" action="{{ $settingsFormAction ?? route('pos.settings.save') }}" class="psm-form">
                 @csrf
                 <input type="hidden" name="redirect" value="{{ $redirectUrl }}">
 

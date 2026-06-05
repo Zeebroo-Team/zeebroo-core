@@ -23,6 +23,15 @@ Route::middleware('auth')->group(function (): void {
     Route::get('hr-portal/complaints', [HrEmployeePortalController::class, 'complaints'])->name('hr.portal.complaints');
     Route::post('hr-portal/complaints', [HrEmployeePortalController::class, 'storeComplaint'])->name('hr.portal.complaints.store');
     Route::get('hr-portal/salary', [HrEmployeePortalController::class, 'salary'])->name('hr.portal.salary');
+    Route::get('hr-portal/pos-online', [HrEmployeePortalController::class, 'posOnline'])->name('hr.portal.pos-online');
+    Route::post('hr-portal/pos-online/checkout', [HrEmployeePortalController::class, 'posOnlineCheckout'])->name('hr.portal.pos-online.checkout');
+    Route::post('hr-portal/pos-online/toggle-walking', [HrEmployeePortalController::class, 'togglePortalWalkingCustomer'])->name('hr.portal.pos-online.toggle-walking');
+    Route::post('hr-portal/pos-online/settings', [HrEmployeePortalController::class, 'posOnlineSaveSettings'])->name('hr.portal.pos-online.settings-save');
+    Route::post('hr-portal/pos-online/products', [HrEmployeePortalController::class, 'posOnlineStoreProduct'])->name('hr.portal.pos-online.products.store');
+    Route::get('hr-portal/pos-returns', [HrEmployeePortalController::class, 'portalReturnsIndex'])->name('hr.portal.pos-returns.index');
+    Route::get('hr-portal/pos-returns/create', [HrEmployeePortalController::class, 'portalCreateReturn'])->name('hr.portal.pos-returns.create');
+    Route::post('hr-portal/pos-returns', [HrEmployeePortalController::class, 'portalStoreOpenReturn'])->name('hr.portal.pos-returns.store-open');
+    Route::post('hr-portal/pos-sales/{sale}/returns', [HrEmployeePortalController::class, 'portalStoreReturn'])->name('hr.portal.pos-sales.returns.store');
     Route::post('hr-portal/switch-employer', [HrEmployeePortalController::class, 'switchEmployer'])->name('hr.portal.switch-employer');
 });
 

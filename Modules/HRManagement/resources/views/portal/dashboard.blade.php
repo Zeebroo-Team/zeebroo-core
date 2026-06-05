@@ -23,7 +23,9 @@
     ];
 @endphp
 
-@php($pf = $portalFeatures ?? ['leaves' => true, 'complaints' => true, 'salary' => true])
+@php
+    $pf = $portalFeatures ?? ['leaves' => true, 'complaints' => true, 'salary' => true, 'pos_online' => true];
+@endphp
 
 @if(session('status'))
     <p class="emp-show__flash" role="status" style="max-width:920px;">{{ session('status') }}</p>
@@ -49,6 +51,11 @@
     @if($pf['salary'] ?? true)
         <a href="{{ route('hr.portal.salary') }}" class="linkbtn" style="padding:8px 14px;font-size:13px;text-decoration:none;display:inline-flex;align-items:center;gap:6px;">
             <i class="fa fa-money-bill-wave"></i>{{ __('My salary') }}
+        </a>
+    @endif
+    @if($pf['pos_online'] ?? false)
+        <a href="{{ route('hr.portal.pos-online') }}" class="linkbtn" style="padding:8px 14px;font-size:13px;text-decoration:none;display:inline-flex;align-items:center;gap:6px;">
+            <i class="fa fa-store"></i>{{ __('POS Online') }}
         </a>
     @endif
 </div>

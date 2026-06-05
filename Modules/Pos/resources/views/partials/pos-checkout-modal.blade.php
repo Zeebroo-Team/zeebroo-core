@@ -26,7 +26,7 @@
         </div>
 
         {{-- ── Two-column form body ────────────────────────────────── --}}
-        <form method="post" action="{{ route('pos.checkout') }}" id="pos-checkout-form" class="pco-form">
+        <form method="post" action="{{ $checkoutFormAction ?? route('pos.checkout') }}" id="pos-checkout-form" class="pco-form">
             @csrf
             <input type="hidden" name="channel" value="{{ $channel }}">
 

@@ -92,6 +92,11 @@ class Sale extends Model
         return $this->hasMany(SaleItem::class, 'pos_sale_id')->orderBy('sort_order')->orderBy('id');
     }
 
+    public function returns(): HasMany
+    {
+        return $this->hasMany(SaleReturn::class, 'pos_sale_id')->orderBy('returned_at');
+    }
+
     public function ledgerTransactions(): MorphMany
     {
         return $this->morphMany(LedgerTransaction::class, 'transactionable');

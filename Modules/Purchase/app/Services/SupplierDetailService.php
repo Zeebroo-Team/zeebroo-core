@@ -3,8 +3,10 @@
 namespace Modules\Purchase\Services;
 
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
+use Modules\Pos\Models\SaleReturnItem;
 use Modules\Purchase\Models\ChequePayment;
 use Modules\Purchase\Models\GoodsReceiveNote;
+use Modules\Purchase\Models\GoodsReceiveNoteItem;
 use Modules\Purchase\Models\Purchase;
 use Modules\Purchase\Models\Supplier;
 use Modules\Transaction\Models\LedgerTransaction;
@@ -24,6 +26,7 @@ class SupplierDetailService
      *     cashPayments: EloquentCollection<int, LedgerTransaction>,
      *     cheques: EloquentCollection<int, ChequePayment>,
      *     creditGrns: EloquentCollection<int, GoodsReceiveNote>,
+     *     supplierReturnedItems: EloquentCollection<int, SaleReturnItem>,
      * }
      */
     public function forShowPage(Supplier $supplier): array
@@ -33,6 +36,7 @@ class SupplierDetailService
         $cashPayments = $this->cashLedgerForSupplier($supplier);
         $cheques = $this->chequesForSupplier($supplier);
         $creditGrns = $this->creditGrnsForSupplier($grns);
+        $supplierReturnedItems = $this->supplierReturnedItems($supplier);
 
         return [
             'summary' => $this->buildSummary($purchases, $grns, $cashPayments, $cheques, $creditGrns),
@@ -41,7 +45,35 @@ class SupplierDetailService
             'cashPayments' => $cashPayments,
             'cheques' => $cheques,
             'creditGrns' => $creditGrns,
+            'supplierReturnedItems' => $supplierReturnedItems,
         ];
+    }
+
+    /**
+     * Returns SaleReturnItems for products sourced from this supplier, filtered to quality-related reasons.
+     *
+     * @return EloquentCollection<int, SaleReturnItem>
+     */
+    public function supplierReturnedItems(Supplier $supplier): EloquentCollection
+    {
+        $productIds = GoodsReceiveNoteItem::query()
+            ->whereHas('goodsReceiveNote.purchase', fn ($q) => $q->where('supplier_id', $supplier->id))
+            ->pluck('product_id')
+            ->unique()
+            ->values();
+
+        if ($productIds->isEmpty()) {
+            return new EloquentCollection;
+        }
+
+        $qualityReasons = ['expired', 'damaged', 'low_quality', 'wrong_item'];
+
+        return SaleReturnItem::query()
+            ->whereIn('product_id', $productIds)
+            ->whereHas('saleReturn', fn ($q) => $q->whereIn('refund_reason', $qualityReasons))
+            ->with(['saleReturn.sale:id,sale_number', 'product:id,name,sku'])
+            ->orderByDesc('id')
+            ->get();
     }
 
     /**

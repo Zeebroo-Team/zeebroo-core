@@ -10,7 +10,7 @@ use Modules\Business\Models\Business;
 class JobTitle extends Model
 {
     /** Portal feature keys that can be toggled per designation. */
-    public const PORTAL_FEATURES = ['leaves', 'complaints', 'salary'];
+    public const PORTAL_FEATURES = ['leaves', 'complaints', 'salary', 'pos_online'];
 
     protected $table = 'hr_job_titles';
 

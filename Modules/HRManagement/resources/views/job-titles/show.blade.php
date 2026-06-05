@@ -166,6 +166,7 @@
                         'leaves'     => ['label' => __('Leave requests'), 'desc' => __('Employees can view and submit their leave requests.'), 'icon' => 'fa-calendar-days'],
                         'complaints' => ['label' => __('Complaints'),     'desc' => __('Employees can file and track their complaints.'),       'icon' => 'fa-comment-dots'],
                         'salary'     => ['label' => __('Salary & payslip'), 'desc' => __('Employees can view their salary and allowances.'),    'icon' => 'fa-money-bill-wave'],
+                        'pos_online' => ['label' => __('POS Online'),     'desc' => __('Employees can process sales via the online POS terminal.'), 'icon' => 'fa-store'],
                     ];
                 @endphp
                 <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:16px;">

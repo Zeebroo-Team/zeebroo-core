@@ -22,9 +22,13 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
     Route::put('/pos/customers/{customer}', [CustomerController::class, 'update'])->name('pos.customers.update');
     Route::delete('/pos/customers/{customer}', [CustomerController::class, 'destroy'])->name('pos.customers.destroy');
 
+    Route::get('/pos/returns', [SaleController::class, 'returnsIndex'])->name('pos.returns.index');
+    Route::get('/pos/returns/create', [SaleController::class, 'createReturn'])->name('pos.returns.create');
+    Route::post('/pos/returns', [SaleController::class, 'storeOpenReturn'])->name('pos.returns.store-open');
     Route::get('/pos/sales', [SaleController::class, 'index'])->name('pos.sales.index');
     Route::get('/pos/sales/{sale}', [SaleController::class, 'show'])->name('pos.sales.show');
     Route::post('/pos/sales/{sale}/void', [SaleController::class, 'void'])->name('pos.sales.void');
+    Route::post('/pos/sales/{sale}/returns', [SaleController::class, 'storeReturn'])->name('pos.sales.returns.store');
 
     Route::get('/pos/end-of-day', [EndOfDayController::class, 'index'])->name('pos.end-of-day');
     Route::post('/pos/end-of-day/settle', [EndOfDayController::class, 'settle'])->name('pos.end-of-day.settle');

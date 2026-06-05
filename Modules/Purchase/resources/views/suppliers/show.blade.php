@@ -140,6 +140,11 @@
             <i class="fa fa-truck-ramp-box" aria-hidden="true"></i> Goods receive notes
             <span class="supplier-show-tabs__count">{{ (int) ($summary['grns_count'] ?? 0) }}</span>
         </a>
+        @php $returnsCount = isset($supplierReturnedItems) ? $supplierReturnedItems->count() : 0; @endphp
+        <a href="{{ $supplierTabUrl('returns') }}" class="supplier-show-tabs__tab @if($activeTab === 'returns') is-active @endif" @if($activeTab === 'returns') aria-current="page" @endif>
+            <i class="fa fa-rotate-left" aria-hidden="true"></i> Returns
+            @if($returnsCount > 0)<span class="supplier-show-tabs__count">{{ $returnsCount }}</span>@endif
+        </a>
     </nav>
 
     <section class="supplier-show-panel" id="supplier-show-overview" @if($activeTab !== 'overview') hidden @endif>
@@ -156,6 +161,10 @@
 
     <section class="supplier-show-panel" id="supplier-show-grns" @if($activeTab !== 'grns') hidden @endif>
         @include('purchase::suppliers.partials.show-tab-grns')
+    </section>
+
+    <section class="supplier-show-panel" id="supplier-show-returns" @if($activeTab !== 'returns') hidden @endif>
+        @include('purchase::suppliers.partials.show-tab-returns')
     </section>
 </div>
 @endsection

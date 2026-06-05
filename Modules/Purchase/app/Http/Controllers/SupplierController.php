@@ -68,7 +68,7 @@ class SupplierController extends Controller
 
         $currency = (string) (get_settings('business.currency', '', $business) ?: '');
         $activeTab = (string) $request->query('tab', 'overview');
-        $allowedTabs = ['overview', 'payments', 'purchases', 'grns'];
+        $allowedTabs = ['overview', 'payments', 'purchases', 'grns', 'returns'];
         if (! in_array($activeTab, $allowedTabs, true)) {
             $activeTab = 'overview';
         }

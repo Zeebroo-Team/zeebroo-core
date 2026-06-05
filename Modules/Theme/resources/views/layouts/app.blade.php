@@ -253,12 +253,59 @@
         button,.linkbtn{border:0;border-radius:10px;padding:10px 14px;background:var(--btn-bg);color:#fff;cursor:pointer;text-decoration:none;display:inline-block;transition:all .2s ease}
         button:hover,.linkbtn:hover{background:var(--btn-hover);color:var(--btn-hover-fg);transform:translateY(-1px)}
         .navbar-portal-meta{font-size:13px;color:var(--muted);font-weight:600;max-width:min(100%,42ch);line-height:1.35}
-        @media (max-width:900px){.sidebar{position:static;width:auto;height:auto;border-right:0;border-bottom:1px solid var(--border)}.content{margin-left:0;border-left:0}}
+        /* ── Mobile sidebar overlay ──────────────────────────────── */
+        @media (max-width:900px){
+            .sidebar{position:fixed;transform:translateX(-100%);transition:transform .26s cubic-bezier(.4,0,.2,1)!important;z-index:31;width:260px!important;padding:24px 18px!important;overflow:auto;}
+            .sidebar.sidebar--mobile-open{transform:translateX(0);}
+            .content{margin-left:0!important;border-left:0;transition:none!important;}
+            .sidebar-toggle-btn{display:none!important;}
+            .navbar-hamburger{display:flex!important;}
+        }
+        /* ── Sidebar mobile backdrop ─────────────────────────────── */
+        .sidebar-mobile-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.48);backdrop-filter:blur(3px);z-index:30;}
+        .sidebar-mobile-backdrop.is-open{display:block;}
+        /* ── Sidebar collapse (desktop) ──────────────────────────── */
+        @media (min-width:901px){
+            .sidebar{transition:width .22s cubic-bezier(.4,0,.2,1),padding .22s cubic-bezier(.4,0,.2,1);}
+            .content{transition:margin-left .22s cubic-bezier(.4,0,.2,1);}
+        }
+        .sidebar--collapsed{width:58px;padding:20px 8px;overflow:hidden;}
+        .sidebar--collapsed .brand{display:none;}
+        .sidebar--collapsed .menu-section{display:none;}
+        .sidebar--collapsed .menu a span,
+        .sidebar--collapsed .menu-group-title span,
+        .sidebar--collapsed .submenu,
+        .sidebar--collapsed .menu-payroll-nested__sub,
+        .sidebar--collapsed .menu-loan-mgmt__pulse,
+        .sidebar--collapsed .menu-rentals__pulse{display:none;}
+        .sidebar--collapsed .menu a{justify-content:center;padding:8px 6px;}
+        .sidebar--collapsed .menu a i{width:auto;margin:0;font-size:14px;}
+        .sidebar--collapsed .menu-group-title{justify-content:center;padding:8px 6px;}
+        .sidebar--collapsed .menu-group-title i{width:auto;margin:0;font-size:14px;}
+        .sidebar--collapsed .menu-payroll-nested{gap:0;}
+        .content--sidebar-collapsed{margin-left:80px;}
+        /* ── Sidebar toggle & hamburger ──────────────────────────── */
+        .sidebar-toggle-btn{
+            display:flex;align-items:center;justify-content:center;
+            width:28px;height:28px;border-radius:7px;
+            border:1px solid var(--border);background:transparent;color:var(--muted);
+            cursor:pointer;font-size:11px;flex-shrink:0;padding:0;
+            transition:color .15s,border-color .15s;
+        }
+        .sidebar-toggle-btn:hover{color:var(--primary);border-color:color-mix(in srgb,var(--primary) 55%,var(--border));}
+        .navbar-hamburger{
+            display:none;align-items:center;justify-content:center;
+            width:34px;height:34px;border-radius:9px;
+            border:1px solid var(--border);background:transparent;color:var(--text);
+            cursor:pointer;font-size:14px;padding:0;flex-shrink:0;
+        }
+        .navbar-hamburger:hover{border-color:var(--primary);color:var(--primary);}
     </style>
 </head>
 @php
     $posWalkingCustomer = (bool) session('pos_walking_customer', true);
-    $posOnlyShell = $posWalkingCustomer && request()->routeIs('pos.online', 'pos.register', 'pos.checkout');
+    $posOnlyShell = ($posWalkingCustomer && request()->routeIs('pos.online', 'pos.register', 'pos.checkout'))
+        || request()->routeIs('hr.portal.pos-online', 'hr.portal.pos-online.checkout');
 @endphp
 <body @class(['pos-walking-active' => $posOnlyShell])>
 <div class="layout">
@@ -332,6 +379,8 @@
             && ($posFeatureOn || $navBusiness->sales()->where('is_settled', false)->exists());
         $showSidebarPosCustomersLink = $navBusiness && Route::has('pos.customers.index')
             && ($posFeatureOn || \Modules\Pos\Models\Customer::query()->where('business_id', $navBusiness->id)->exists());
+        $showSidebarPosReturnsLink = $navBusiness && Route::has('pos.returns.index')
+            && ($posFeatureOn || \Modules\Pos\Models\SaleReturn::query()->where('business_id', $navBusiness->id)->exists());
         // Hub link shows whenever the Sales section is visible (feature on, or data-driven links are showing).
         $showSidebarPosSection = $showSidebarPosRegisterLink || $showSidebarPosSalesLink || ($navBusiness && $posFeatureOn);
         $showSidebarPosHubLink = $navBusiness && Route::has('pos.index') && $showSidebarPosSection;
@@ -401,6 +450,7 @@
             $showSidebarPosSalesLink = false;
             $showSidebarPosEodLink = false;
             $showSidebarPosCustomersLink = false;
+            $showSidebarPosReturnsLink = false;
             $showSidebarPosSection = false;
             $showSidebarFilesLink = false;
             $showSidebarPropertiesLink = false;
@@ -413,8 +463,9 @@
             $sidebarPayrollCyclesOverdueHighlight = false;
         }
     @endphp
+    <div id="sidebarMobileBackdrop" class="sidebar-mobile-backdrop" aria-hidden="true"></div>
     @unless($minimalAppShell)
-    <aside class="sidebar{{ $employeePortal ? ' sidebar--employee-portal' : '' }}">
+    <aside id="appSidebar" class="sidebar{{ $employeePortal ? ' sidebar--employee-portal' : '' }}">
         @if($employeePortal)
             <div class="brand">{{ __('HR portal') }}</div>
             <nav class="menu" aria-label="{{ __('Employee HR portal navigation') }}">
@@ -424,6 +475,9 @@
                 <a href="{{ route('hr.portal.leaves') }}" class="{{ request()->routeIs('hr.portal.leaves') ? 'active' : '' }}"><i class="fa fa-calendar-days" aria-hidden="true"></i><span>{{ __('My leaves') }}</span></a>
                 <a href="{{ route('hr.portal.complaints') }}" class="{{ request()->routeIs(['hr.portal.complaints', 'hr.portal.complaints.store']) ? 'active' : '' }}"><i class="fa fa-comments" aria-hidden="true"></i><span>{{ __('Complaints') }}</span></a>
                 <a href="{{ route('hr.portal.salary') }}" class="{{ request()->routeIs('hr.portal.salary') ? 'active' : '' }}"><i class="fa fa-money-check-dollar" aria-hidden="true"></i><span>{{ __('My salary') }}</span></a>
+                @if(Route::has('hr.portal.pos-online'))
+                    <a href="{{ route('hr.portal.pos-online') }}" class="{{ request()->routeIs('hr.portal.pos-online', 'hr.portal.pos-online.checkout') ? 'active' : '' }}"><i class="fa fa-store" aria-hidden="true"></i><span>{{ __('POS Online') }}</span></a>
+                @endif
                 @if(Route::has('dashboard') && auth()->user() && ! auth()->user()->isHrPortalOnlyUser())
                     <div class="menu-section">{{ __('More') }}</div>
                     <a href="{{ route('dashboard') }}" class="{{ request()->routeIs('dashboard') ? 'active' : '' }}"><i class="fa fa-briefcase" aria-hidden="true"></i><span>{{ __('Workspace') }}</span></a>
@@ -549,6 +603,19 @@
                             'active' => request()->routeIs('pos.customers.*'),
                         ])><i class="fa fa-users"></i><span>Customers</span></a>
                     @endif
+                    @if($showSidebarPosReturnsLink)
+                        <a href="{{ route('pos.returns.index') }}" @class([
+                            'active' => request()->routeIs('pos.returns.index'),
+                        ])><i class="fa fa-rotate-left"></i><span>Return items</span></a>
+                        <div class="submenu" aria-label="Return items">
+                            <a href="{{ route('pos.returns.create') }}" @class([
+                                'active' => request()->routeIs('pos.returns.create') && request()->query('mode') !== 'open',
+                            ])><i class="fa fa-receipt"></i><span>With sale reference</span></a>
+                            <a href="{{ route('pos.returns.create', ['mode' => 'open']) }}" @class([
+                                'active' => request()->routeIs('pos.returns.create') && request()->query('mode') === 'open',
+                            ])><i class="fa fa-box-open"></i><span>Without sale reference</span></a>
+                        </div>
+                    @endif
                 </div>
             @endif
             @if($showSidebarFilesLink && Route::has('filemanager.index'))
@@ -620,15 +687,21 @@
     </aside>
     @endunless
     <main class="content{{ $minimalAppShell ? ' content--minimal' : '' }}{{ $posOnlyShell ? ' content--pos-only' : '' }}{{ $chatWorkspace ? ' content--chat-workspace' : '' }}">
-        @unless($posOnlyShell)
+        @unless($posOnlyShell || ($hideNavbar ?? false))
         <div class="navbar">
-            <div>
+            <div style="display:flex;align-items:center;gap:10px;">
+                @unless($minimalAppShell)
+                <button type="button" class="navbar-hamburger" id="sidebarHamburgerBtn" aria-label="{{ __('Open menu') }}" aria-expanded="false" aria-controls="appSidebar"><i class="fa fa-bars" aria-hidden="true"></i></button>
+                <button type="button" class="sidebar-toggle-btn" id="sidebarDesktopToggle" title="{{ __('Collapse sidebar') }}" aria-label="{{ __('Collapse sidebar') }}"><i class="fa fa-chevron-left" aria-hidden="true"></i></button>
+                @endunless
+                <div>
                 <div class="navtitle">{{ $heading ?? 'Overview' }}</div>
                 @if($employeePortal && isset($portalEmployee))
                     <div class="navmeta navbar-portal-meta">{{ $portalEmployee->full_name }} · {{ $portalEmployee->employee_id }}</div>
                 @else
                     <div class="navmeta">{{ __('Welcome, :name', ['name' => auth()->user()->name ?? __('User')]) }}</div>
                 @endif
+                </div>
             </div>
             <div class="nav-right">
                 @if($employeePortal)
@@ -1213,6 +1286,57 @@ window.showToast = (function() {
         toast.addEventListener('click', dismiss);
         setTimeout(dismiss, 4500);
     };
+})();
+</script>
+<script>
+(function () {
+    var sidebar    = document.getElementById('appSidebar');
+    var content    = document.querySelector('.content');
+    var toggleBtn  = document.getElementById('sidebarDesktopToggle');
+    var hamburger  = document.getElementById('sidebarHamburgerBtn');
+    var backdrop   = document.getElementById('sidebarMobileBackdrop');
+    if (!sidebar) return;
+
+    /* ── Desktop collapse ─────────────────────────────────────────── */
+    var collapsed  = localStorage.getItem('sb_collapsed') === '1';
+    function applyCollapsed(c, skipStorage) {
+        sidebar.classList.toggle('sidebar--collapsed', c);
+        if (content) content.classList.toggle('content--sidebar-collapsed', c);
+        if (toggleBtn) {
+            var icon = toggleBtn.querySelector('i');
+            if (icon) icon.className = c ? 'fa fa-chevron-right' : 'fa fa-chevron-left';
+            toggleBtn.title = c ? 'Expand sidebar' : 'Collapse sidebar';
+            toggleBtn.setAttribute('aria-label', c ? 'Expand sidebar' : 'Collapse sidebar');
+        }
+        if (!skipStorage) localStorage.setItem('sb_collapsed', c ? '1' : '0');
+    }
+    applyCollapsed(collapsed, true);
+
+    if (toggleBtn) {
+        toggleBtn.addEventListener('click', function () {
+            collapsed = !collapsed;
+            applyCollapsed(collapsed, false);
+        });
+    }
+
+    /* ── Mobile open / close ──────────────────────────────────────── */
+    function openMobile() {
+        sidebar.classList.add('sidebar--mobile-open');
+        if (backdrop) { backdrop.classList.add('is-open'); backdrop.setAttribute('aria-hidden', 'false'); }
+        if (hamburger) hamburger.setAttribute('aria-expanded', 'true');
+        document.body.style.overflow = 'hidden';
+    }
+    function closeMobile() {
+        sidebar.classList.remove('sidebar--mobile-open');
+        if (backdrop) { backdrop.classList.remove('is-open'); backdrop.setAttribute('aria-hidden', 'true'); }
+        if (hamburger) hamburger.setAttribute('aria-expanded', 'false');
+        document.body.style.overflow = '';
+    }
+    if (hamburger) hamburger.addEventListener('click', openMobile);
+    if (backdrop)  backdrop.addEventListener('click', closeMobile);
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && sidebar.classList.contains('sidebar--mobile-open')) closeMobile();
+    });
 })();
 </script>
 </body>

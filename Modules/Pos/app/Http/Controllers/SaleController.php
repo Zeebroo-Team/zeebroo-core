@@ -7,8 +7,12 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 use Modules\Pos\Http\Controllers\Concerns\ResolvesPosBusiness;
+use Modules\Account\Models\Account;
 use Modules\Pos\Models\Sale;
+use Modules\Pos\Models\SaleReturn;
+use Modules\Pos\Services\SaleReturnService;
 use Modules\Pos\Services\SaleService;
+use Modules\Product\Models\Product;
 
 class SaleController extends Controller
 {
@@ -16,7 +20,120 @@ class SaleController extends Controller
 
     public function __construct(
         private readonly SaleService $sales,
+        private readonly SaleReturnService $saleReturns,
     ) {
+    }
+
+    public function createReturn(Request $request): View|RedirectResponse
+    {
+        $business = $this->requireBusiness($request);
+        if ($business instanceof RedirectResponse) {
+            return $business;
+        }
+
+        $mode        = $request->query('mode') === 'open' ? 'open' : 'ref';
+        $saleNumber  = trim((string) $request->query('sale', ''));
+        $sale        = null;
+        $returnedQtys = [];
+        $accounts    = collect();
+        $saleNotFound = false;
+        $products    = collect();
+
+        if ($mode === 'open') {
+            $accounts = Account::query()
+                ->where('business_id', $business->id)
+                ->orderBy('account_name')
+                ->get();
+            $products = Product::query()
+                ->where('business_id', $business->id)
+                ->where('is_active', true)
+                ->where('is_bundle', false)
+                ->orderBy('name')
+                ->get(['id', 'name', 'sku', 'unit_price']);
+        } elseif (filled($saleNumber)) {
+            $sale = Sale::query()
+                ->where('business_id', $business->id)
+                ->where('sale_number', $saleNumber)
+                ->with(['items.product', 'returns.items'])
+                ->first();
+
+            if ($sale === null) {
+                $saleNotFound = true;
+            } elseif ($sale->isCompleted()) {
+                $returnedQtys = $this->saleReturns->returnedQuantitiesForSale($sale);
+                $accounts = Account::query()
+                    ->where('business_id', $business->id)
+                    ->orderBy('account_name')
+                    ->get();
+            }
+        }
+
+        $currency = (string) (get_settings('business.currency', '', $business) ?: '');
+
+        return view('pos::sales.create-return', compact(
+            'business', 'currency', 'mode', 'saleNumber', 'sale',
+            'returnedQtys', 'accounts', 'saleNotFound', 'products'
+        ));
+    }
+
+    public function storeOpenReturn(Request $request): RedirectResponse
+    {
+        $business = $this->requireBusiness($request);
+        if ($business instanceof RedirectResponse) {
+            return $business;
+        }
+
+        $validated = $request->validate([
+            'items'                  => ['required', 'array', 'min:1'],
+            'items.*.product_id'     => ['required', 'integer', 'min:1'],
+            'items.*.quantity'       => ['required', 'numeric', 'min:0.001'],
+            'items.*.unit_price'     => ['required', 'numeric', 'min:0'],
+            'refund_method'          => ['required', 'string', 'in:cash,credit,none'],
+            'refund_reason'          => ['nullable', 'string', 'max:100'],
+            'credit_account_id'      => ['nullable', 'integer', 'min:1'],
+            'notes'                  => ['nullable', 'string', 'max:2000'],
+        ]);
+
+        $ret = $this->saleReturns->processOpenReturn(
+            $business,
+            $request->user(),
+            $validated['items'],
+            $validated['refund_method'],
+            isset($validated['credit_account_id']) ? (int) $validated['credit_account_id'] : null,
+            $validated['notes'] ?? null,
+            $validated['refund_reason'] ?? null,
+        );
+
+        return redirect()
+            ->route('pos.returns.index')
+            ->with('status', "Return {$ret->return_number} processed successfully.");
+    }
+
+    public function returnsIndex(Request $request): View|RedirectResponse
+    {
+        $business = $this->requireBusiness($request);
+        if ($business instanceof RedirectResponse) {
+            return $business;
+        }
+
+        $search   = (string) $request->query('q', '');
+        $currency = (string) (get_settings('business.currency', '', $business) ?: '');
+
+        $returns = SaleReturn::query()
+            ->where('business_id', $business->id)
+            ->with(['sale:id,sale_number,sold_at', 'user:id,name', 'items'])
+            ->when($search !== '', function ($q) use ($search) {
+                $q->where(function ($q) use ($search) {
+                    $q->where('return_number', 'like', '%'.$search.'%')
+                      ->orWhereHas('sale', fn ($q) => $q->where('sale_number', 'like', '%'.$search.'%'));
+                });
+            })
+            ->orderByDesc('returned_at')
+            ->paginate(50);
+
+        $hasReturns = SaleReturn::query()->where('business_id', $business->id)->exists();
+
+        return view('pos::sales.returns', compact('business', 'currency', 'search', 'returns', 'hasReturns'));
     }
 
     public function index(Request $request): View|RedirectResponse
@@ -47,15 +164,57 @@ class SaleController extends Controller
         }
 
         $sale = $this->saleForBusiness($business, $sale);
-        $sale->load(['items.product', 'creditAccount', 'user', 'ledgerTransactions.deductAccount']);
+        $sale->load(['items.product', 'creditAccount', 'user', 'ledgerTransactions.deductAccount', 'returns.items', 'returns.user', 'returns.creditAccount']);
 
         $currency = (string) (get_settings('business.currency', '', $business) ?: '');
+        $returnedQtys = $this->saleReturns->returnedQuantitiesForSale($sale);
+        $accounts = Account::query()
+            ->where('business_id', $business->id)
+            ->orderBy('account_name')
+            ->get();
 
         return view('pos::sales.show', [
-            'business' => $business,
-            'currency' => $currency,
-            'sale' => $sale,
+            'business'     => $business,
+            'currency'     => $currency,
+            'sale'         => $sale,
+            'returnedQtys' => $returnedQtys,
+            'accounts'     => $accounts,
         ]);
+    }
+
+    public function storeReturn(Request $request, Sale $sale): RedirectResponse
+    {
+        $business = $this->requireBusiness($request);
+        if ($business instanceof RedirectResponse) {
+            return $business;
+        }
+
+        $sale = $this->saleForBusiness($business, $sale);
+
+        $validated = $request->validate([
+            'items'                    => ['required', 'array', 'min:1'],
+            'items.*.sale_item_id'     => ['required', 'integer', 'min:1'],
+            'items.*.quantity'         => ['required', 'numeric', 'min:0.001'],
+            'refund_method'            => ['required', 'string', 'in:cash,credit,none'],
+            'refund_reason'            => ['nullable', 'string', 'max:100'],
+            'credit_account_id'        => ['nullable', 'integer', 'min:1'],
+            'notes'                    => ['nullable', 'string', 'max:2000'],
+        ]);
+
+        $ret = $this->saleReturns->processReturn(
+            $sale,
+            $business,
+            $request->user(),
+            $validated['items'],
+            $validated['refund_method'],
+            isset($validated['credit_account_id']) ? (int) $validated['credit_account_id'] : null,
+            $validated['notes'] ?? null,
+            $validated['refund_reason'] ?? null,
+        );
+
+        return redirect()
+            ->route('pos.sales.show', $sale)
+            ->with('status', "Return {$ret->return_number} processed successfully.");
     }
 
     public function void(Request $request, Sale $sale): RedirectResponse

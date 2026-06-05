@@ -5,7 +5,7 @@
     $checkoutModalEnabled    = (bool) ($checkoutModalEnabled ?? false);
 @endphp
 
-<form method="post" action="{{ route('pos.checkout') }}" id="pos-checkout-form" class="pos-checkout-form">
+<form method="post" action="{{ $checkoutFormAction ?? route('pos.checkout') }}" id="pos-checkout-form" class="pos-checkout-form">
     @csrf
     <input type="hidden" name="channel" value="{{ $channel ?? 'online' }}">
     <div class="pos-checkout-form__scroll">
