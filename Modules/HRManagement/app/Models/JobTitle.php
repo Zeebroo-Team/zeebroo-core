@@ -9,11 +9,24 @@ use Modules\Business\Models\Business;
 
 class JobTitle extends Model
 {
+    /** Portal feature keys that can be toggled per designation. */
+    public const PORTAL_FEATURES = ['leaves', 'complaints', 'salary'];
+
     protected $table = 'hr_job_titles';
 
-    protected $fillable = [
-        'name',
-    ];
+    protected $fillable = ['name', 'portal_features'];
+
+    protected $casts = ['portal_features' => 'array'];
+
+    /** null = all features enabled (legacy/default); array = explicit allow-list. */
+    public function hasPortalFeature(string $feature): bool
+    {
+        if ($this->portal_features === null) {
+            return true;
+        }
+
+        return in_array($feature, $this->portal_features, true);
+    }
 
     public function business(): BelongsTo
     {

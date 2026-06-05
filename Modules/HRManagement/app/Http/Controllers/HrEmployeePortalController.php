@@ -105,6 +105,8 @@ class HrEmployeePortalController extends Controller
 
         $employee->load(['leaveRequests' => fn ($q) => $q->orderByDesc('created_at')->limit(20)]);
 
+        $portalFeatures = $this->resolvePortalFeatures($employee);
+
         return view('hrmanagement::portal.dashboard', [
             'employee' => $employee,
             'heading' => __('HR portal'),
@@ -112,6 +114,7 @@ class HrEmployeePortalController extends Controller
             'portalEmployerBusiness' => $business,
             'portalEmployee' => $employee,
             'portalEmployeeChoices' => $this->employeePortal->linkedEmployeesForUser($user),
+            'portalFeatures' => $portalFeatures,
         ]);
     }
 
@@ -170,6 +173,10 @@ class HrEmployeePortalController extends Controller
         /** @var array{user: User, employee: Employee, business: Business, choices: Collection} $gate */
         ['employee' => $employee, 'business' => $business, 'choices' => $choices] = $gate;
 
+        if ($denied = $this->denyPortalFeature($employee, 'leaves')) {
+            return $denied;
+        }
+
         $leaveRequests = LeaveRequest::query()
             ->where('employee_id', $employee->id)
             ->orderByDesc('created_at')
@@ -196,6 +203,10 @@ class HrEmployeePortalController extends Controller
 
         /** @var array{user: User, employee: Employee, business: Business, choices: Collection} $gate */
         ['employee' => $employee, 'business' => $business, 'choices' => $choices] = $gate;
+
+        if ($denied = $this->denyPortalFeature($employee, 'complaints')) {
+            return $denied;
+        }
 
         $complaints = HrComplaint::query()
             ->where('employee_id', $employee->id)
@@ -224,6 +235,10 @@ class HrEmployeePortalController extends Controller
 
         /** @var array{user: User, employee: Employee, business: Business, choices: Collection} $gate */
         ['user' => $user, 'employee' => $employee] = $gate;
+
+        if ($denied = $this->denyPortalFeature($employee, 'complaints')) {
+            return $denied;
+        }
 
         $validated = $request->validate([
             'subject' => ['required', 'string', 'max:255'],
@@ -254,6 +269,10 @@ class HrEmployeePortalController extends Controller
         /** @var array{user: User, employee: Employee, business: Business, choices: Collection} $gate */
         ['employee' => $employee, 'business' => $business, 'choices' => $choices] = $gate;
 
+        if ($denied = $this->denyPortalFeature($employee, 'salary')) {
+            return $denied;
+        }
+
         $employee->load(['employeeAllowances.allowanceType']);
 
         return view('hrmanagement::portal.salary', [
@@ -278,7 +297,7 @@ class HrEmployeePortalController extends Controller
         }
 
         $choices = $this->employeePortal->linkedEmployeesForUser($user);
-        $employee->loadMissing('business');
+        $employee->loadMissing(['business', 'jobTitle']);
         $business = $employee->business;
 
         if ($business === null || ! $this->hrPayrollSettings->optedIn($business)) {
@@ -290,6 +309,33 @@ class HrEmployeePortalController extends Controller
         }
 
         return compact('user', 'employee', 'business', 'choices');
+    }
+
+    /** Returns null if allowed, or a redirect if the designation blocks this feature. */
+    private function denyPortalFeature(Employee $employee, string $feature): ?RedirectResponse
+    {
+        $employee->loadMissing('jobTitle');
+
+        if ($employee->jobTitle !== null && ! $employee->jobTitle->hasPortalFeature($feature)) {
+            return redirect()->route('hr.portal.dashboard')
+                ->withErrors(['access' => __('This feature is not available for your role.')]);
+        }
+
+        return null;
+    }
+
+    /** Returns a keyed bool array of which features are accessible for this employee. */
+    private function resolvePortalFeatures(Employee $employee): array
+    {
+        $employee->loadMissing('jobTitle');
+
+        return array_combine(
+            \Modules\HRManagement\Models\JobTitle::PORTAL_FEATURES,
+            array_map(
+                fn (string $f) => $employee->jobTitle === null || $employee->jobTitle->hasPortalFeature($f),
+                \Modules\HRManagement\Models\JobTitle::PORTAL_FEATURES
+            )
+        );
     }
 
     private function googleOAuthConfigured(): bool

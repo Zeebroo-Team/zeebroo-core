@@ -23,16 +23,37 @@
     ];
 @endphp
 
+@php($pf = $portalFeatures ?? ['leaves' => true, 'complaints' => true, 'salary' => true])
+
 @if(session('status'))
     <p class="emp-show__flash" role="status" style="max-width:920px;">{{ session('status') }}</p>
+@endif
+@if($errors->has('access'))
+    <p class="emp-portal-access-err" role="alert" style="max-width:920px;">{{ $errors->first('access') }}</p>
 @endif
 
 <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:18px;max-width:920px;">
     <a href="{{ route('hr.portal.profile') }}" class="linkbtn" style="padding:8px 14px;font-size:13px;text-decoration:none;display:inline-flex;align-items:center;gap:6px;">
         <i class="fa fa-id-card"></i>{{ __('My profile') }}
     </a>
+    @if($pf['leaves'] ?? true)
+        <a href="{{ route('hr.portal.leaves') }}" class="linkbtn" style="padding:8px 14px;font-size:13px;text-decoration:none;display:inline-flex;align-items:center;gap:6px;">
+            <i class="fa fa-calendar-days"></i>{{ __('My leaves') }}
+        </a>
+    @endif
+    @if($pf['complaints'] ?? true)
+        <a href="{{ route('hr.portal.complaints') }}" class="linkbtn" style="padding:8px 14px;font-size:13px;text-decoration:none;display:inline-flex;align-items:center;gap:6px;">
+            <i class="fa fa-comment-dots"></i>{{ __('Complaints') }}
+        </a>
+    @endif
+    @if($pf['salary'] ?? true)
+        <a href="{{ route('hr.portal.salary') }}" class="linkbtn" style="padding:8px 14px;font-size:13px;text-decoration:none;display:inline-flex;align-items:center;gap:6px;">
+            <i class="fa fa-money-bill-wave"></i>{{ __('My salary') }}
+        </a>
+    @endif
 </div>
 
+@if($pf['leaves'] ?? true)
 <div class="card" style="max-width:920px;">
     <h2 style="margin:0 0 14px;font-size:1rem;font-weight:700;">{{ __('Your recent leave requests') }}</h2>
     @if($employee->leaveRequests->isEmpty())
@@ -73,6 +94,7 @@
         </div>
     @endif
 </div>
+@endif
 
 <style>
     .emp-docs-pill{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:2px 8px;border-radius:999px;white-space:nowrap;display:inline-block;}
@@ -84,5 +106,6 @@
     .emp-docs-table td{padding:9px 10px;border-bottom:1px solid color-mix(in srgb,var(--border)82%,transparent);vertical-align:middle;}
     .emp-docs-table tr:last-child td{border-bottom:none;}
     .emp-docs-table__meta{font-size:11px;color:var(--muted);}
+    .emp-portal-access-err{margin:0 0 14px;padding:10px 12px;border-radius:10px;font-size:13px;border:1px solid color-mix(in srgb,#f87171 40%,var(--border));background:color-mix(in srgb,#f87171 8%,transparent);}
 </style>
 @endsection

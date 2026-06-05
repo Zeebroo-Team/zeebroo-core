@@ -4,7 +4,9 @@
 ])
 
 @section('content')
-@php($tab = $activeTab ?? 'overview')
+@php
+    $tab = $activeTab ?? 'overview';
+@endphp
 <style>
     .jt-show{max-width:100%;margin:0;}
     .jt-show__head{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start;justify-content:space-between;margin-bottom:14px;}
@@ -38,6 +40,8 @@
     .jt-dept-pill{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:650;background:color-mix(in srgb,var(--primary) 11%,transparent);color:var(--primary);border:1px solid color-mix(in srgb,var(--primary) 24%,var(--border));white-space:nowrap;}
     .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;}
     .jt-del-section{border-radius:12px;border:1px solid color-mix(in srgb,#f87171 35%,var(--border));background:color-mix(in srgb,#f87171 5%,transparent);padding:14px 16px;}
+    .jt-feature-row:has(input:checked){border-color:color-mix(in srgb,var(--primary) 35%,var(--border));background:color-mix(in srgb,var(--primary) 6%,transparent);}
+    .jt-feature-row:hover{border-color:color-mix(in srgb,var(--primary) 28%,var(--border));}
 </style>
 
 <div class="jt-show card" style="max-width:100%;padding:14px 16px;">
@@ -62,8 +66,10 @@
         </span>
     </div>
 
-    @php($overviewUrl = route('hr.job-titles.show', $jobTitle))
-    @php($employeesUrl = route('hr.job-titles.show', ['jobTitle' => $jobTitle, 'tab' => 'employees']))
+    @php
+        $overviewUrl  = route('hr.job-titles.show', $jobTitle);
+        $employeesUrl = route('hr.job-titles.show', ['jobTitle' => $jobTitle, 'tab' => 'employees']);
+    @endphp
 
     <nav class="jt-tabs" aria-label="{{ __('Designation sections') }}">
         <a href="{{ $overviewUrl }}" @class(['active' => $tab === 'overview'])>{{ __('Overview') }}</a>
@@ -90,7 +96,9 @@
             </dl>
         </div>
 
-        @php($deptGroups = $employees->groupBy(fn ($e) => $e->department?->name ?? __('No department')))
+        @php
+            $deptGroups = $employees->groupBy(fn ($e) => $e->department?->name ?? __('No department'));
+        @endphp
         @if($deptGroups->isNotEmpty())
             <h2 class="jt-sub">{{ __('Department breakdown') }}</h2>
             <div class="jt-stat-grid">
@@ -107,7 +115,9 @@
         @if($employees->isEmpty())
             <p class="muted" style="margin:0 0 16px;line-height:1.5;font-size:13px;">{{ __('No employees hold this designation yet.') }}</p>
         @else
-            @php($recentEmployees = $employees->sortByDesc('date_of_joining')->take(5))
+            @php
+                $recentEmployees = $employees->sortByDesc('date_of_joining')->take(5);
+            @endphp
             <div class="jt-table-wrap">
                 <table class="jt-table">
                     <thead>
@@ -143,7 +153,49 @@
             @endif
         @endif
 
-        <h2 class="jt-sub" style="margin-top:20px;">{{ __('Rename designation') }}</h2>
+        <h2 class="jt-sub" style="margin-top:20px;">{{ __('Portal access') }}</h2>
+        <div class="jt-mgmt-card">
+            <p style="margin:0 0 12px;font-size:13px;line-height:1.5;color:var(--muted);">{{ __('Choose which HR portal features employees with this designation can access. All features are enabled by default.') }}</p>
+            @if(session('status') === 'Portal access updated.')
+                {{-- status banner already shown above --}}
+            @endif
+            <form method="post" action="{{ route('hr.job-titles.portal-features.update', $jobTitle) }}">
+                @csrf
+                @php
+                    $allFeatures = [
+                        'leaves'     => ['label' => __('Leave requests'), 'desc' => __('Employees can view and submit their leave requests.'), 'icon' => 'fa-calendar-days'],
+                        'complaints' => ['label' => __('Complaints'),     'desc' => __('Employees can file and track their complaints.'),       'icon' => 'fa-comment-dots'],
+                        'salary'     => ['label' => __('Salary & payslip'), 'desc' => __('Employees can view their salary and allowances.'),    'icon' => 'fa-money-bill-wave'],
+                    ];
+                @endphp
+                <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:16px;">
+                    @foreach($allFeatures as $featureKey => $meta)
+                        @php
+                            $isEnabled = $jobTitle->hasPortalFeature($featureKey);
+                        @endphp
+                        <label style="display:flex;align-items:flex-start;gap:12px;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:color-mix(in srgb,var(--card) 97%,transparent);cursor:pointer;" class="jt-feature-row">
+                            <input type="checkbox" name="portal_features[]" value="{{ $featureKey }}"
+                                @checked($isEnabled)
+                                style="width:16px;height:16px;margin-top:2px;flex-shrink:0;accent-color:var(--primary);">
+                            <span style="display:flex;align-items:flex-start;gap:10px;flex:1;min-width:0;">
+                                <span style="width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:color-mix(in srgb,var(--primary) 11%,transparent);color:var(--primary);font-size:14px;">
+                                    <i class="fa {{ $meta['icon'] }}" aria-hidden="true"></i>
+                                </span>
+                                <span>
+                                    <span style="display:block;font-size:13px;font-weight:700;color:var(--text);">{{ $meta['label'] }}</span>
+                                    <span style="display:block;font-size:12px;line-height:1.45;color:var(--muted);margin-top:2px;">{{ $meta['desc'] }}</span>
+                                </span>
+                            </span>
+                        </label>
+                    @endforeach
+                </div>
+                <div style="display:flex;justify-content:flex-end;">
+                    <button type="submit" class="linkbtn" style="padding:8px 16px;font-size:13px;">{{ __('Save access') }}</button>
+                </div>
+            </form>
+        </div>
+
+        <h2 class="jt-sub" style="margin-top:4px;">{{ __('Rename designation') }}</h2>
         <div class="jt-mgmt-card">
             @if($errors->has('name'))
                 <p class="jt-banner jt-banner--err" role="alert" style="margin-bottom:12px;">{{ $errors->first('name') }}</p>

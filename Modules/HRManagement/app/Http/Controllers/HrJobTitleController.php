@@ -94,6 +94,32 @@ class HrJobTitleController extends Controller
         ]);
     }
 
+    public function updatePortalFeatures(Request $request, JobTitle $jobTitle): RedirectResponse
+    {
+        $business = Business::currentForNavbar($request->user());
+        abort_if($business === null, 403);
+
+        if (! $this->hrPayrollSettings->optedIn($business)) {
+            return redirect()->route('hr.onboarding');
+        }
+
+        abort_unless($request->user()->businesses()->whereKey($business->id)->exists(), 403);
+        abort_unless((int) $jobTitle->business_id === (int) $business->id, 403);
+
+        $selected = array_values(array_intersect(
+            (array) $request->input('portal_features', []),
+            JobTitle::PORTAL_FEATURES
+        ));
+
+        // Store null when all features are selected (= default "all enabled" state)
+        $jobTitle->update([
+            'portal_features' => count($selected) === count(JobTitle::PORTAL_FEATURES) ? null : $selected,
+        ]);
+
+        return redirect()->route('hr.job-titles.show', $jobTitle)
+            ->with('status', __('Portal access updated.'));
+    }
+
     public function update(Request $request, JobTitle $jobTitle): RedirectResponse
     {
         $business = Business::currentForNavbar($request->user());

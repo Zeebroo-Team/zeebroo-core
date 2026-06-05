@@ -82,6 +82,7 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
     Route::post('hr-management/designations', [HrJobTitleController::class, 'store'])->name('hr.job-titles.store');
     Route::get('hr-management/designations/{jobTitle}', [HrJobTitleController::class, 'show'])->name('hr.job-titles.show');
     Route::put('hr-management/designations/{jobTitle}', [HrJobTitleController::class, 'update'])->name('hr.job-titles.update');
+    Route::post('hr-management/designations/{jobTitle}/portal-features', [HrJobTitleController::class, 'updatePortalFeatures'])->name('hr.job-titles.portal-features.update');
     Route::delete('hr-management/designations/{jobTitle}', [HrJobTitleController::class, 'destroy'])->name('hr.job-titles.destroy');
     Route::get('hr-management/allowance-types', [HrAllowanceTypeController::class, 'index'])->name('hr.allowance-types.index');
     Route::post('hr-management/allowance-types', [HrAllowanceTypeController::class, 'store'])->name('hr.allowance-types.store');
