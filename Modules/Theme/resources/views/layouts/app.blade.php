@@ -300,6 +300,25 @@
             cursor:pointer;font-size:14px;padding:0;flex-shrink:0;
         }
         .navbar-hamburger:hover{border-color:var(--primary);color:var(--primary);}
+        /* ── Sidebar search ─────────────────────────────────────────── */
+        .sidebar-search{position:relative;margin-bottom:12px;flex-shrink:0;}
+        .sidebar-search__input{width:100%;box-sizing:border-box;padding:7px 10px 7px 30px;font-size:12px;border-radius:9px;border:1px solid var(--border);background:color-mix(in srgb,var(--card) 86%,transparent);color:var(--text);outline:none;transition:border-color .15s,background .15s;}
+        .sidebar-search__input::placeholder{color:var(--muted);}
+        .sidebar-search__input:focus{border-color:color-mix(in srgb,var(--primary) 55%,var(--border));background:color-mix(in srgb,var(--card) 94%,transparent);}
+        .sidebar-search__icon{position:absolute;left:9px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:10px;pointer-events:none;}
+        .sidebar-search__clear{position:absolute;right:7px;top:50%;transform:translateY(-50%);width:16px;height:16px;border-radius:50%;border:none;background:color-mix(in srgb,var(--muted) 28%,transparent);color:var(--muted);cursor:pointer;display:none;align-items:center;justify-content:center;font-size:9px;padding:0;line-height:1;}
+        .sidebar-search__clear.visible{display:flex;}
+        .sidebar-search__clear:hover{background:color-mix(in srgb,var(--muted) 46%,transparent);}
+        .sidebar-suggestions{position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--card);border:1px solid var(--border);border-radius:10px;box-shadow:0 14px 30px rgba(0,0,0,.26);overflow:hidden;z-index:50;display:none;max-height:260px;overflow-y:auto;}
+        .sidebar-suggestions.is-open{display:block;}
+        .sidebar-suggestion{display:flex;align-items:center;gap:8px;padding:7px 10px;font-size:12px;font-weight:500;color:var(--text);text-decoration:none;cursor:pointer;transition:background .1s;}
+        .sidebar-suggestion:hover,.sidebar-suggestion.is-active{background:color-mix(in srgb,var(--primary) 13%,transparent);}
+        .sidebar-suggestion i{width:13px;text-align:center;font-size:11px;color:var(--muted);flex-shrink:0;}
+        .sidebar-suggestion:hover i,.sidebar-suggestion.is-active i{color:var(--primary);}
+        .sidebar-suggestion__label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+        .sidebar-suggestion__section{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);flex-shrink:0;opacity:.7;}
+        .sidebar-suggestions__empty{padding:10px 12px;font-size:12px;color:var(--muted);text-align:center;}
+        .sidebar--collapsed .sidebar-search{display:none;}
     </style>
 </head>
 @php
@@ -487,6 +506,17 @@
         <a href="{{ route('dashboard') }}" class="brand brand--logo" aria-label="Zeebroo">
             <img src="{{ asset('logo.png') }}" alt="Zeebroo" width="224" height="75">
         </a>
+        <div class="sidebar-search" id="sidebarSearchWrap">
+            <i class="fa fa-magnifying-glass sidebar-search__icon" aria-hidden="true"></i>
+            <input type="text" class="sidebar-search__input" id="sidebarSearchInput"
+                placeholder="Quick search…" autocomplete="off" spellcheck="false"
+                aria-label="Search navigation" aria-autocomplete="list"
+                aria-owns="sidebarSuggestions" aria-expanded="false">
+            <button type="button" class="sidebar-search__clear" id="sidebarSearchClear" aria-label="Clear search" tabindex="-1">
+                <i class="fa fa-xmark" aria-hidden="true"></i>
+            </button>
+            <div class="sidebar-suggestions" id="sidebarSuggestions" role="listbox"></div>
+        </div>
         <nav class="menu">
             <div class="menu-section">Main</div>
             <a href="{{ route('dashboard') }}" class="{{ request()->routeIs('dashboard') ? 'active' : '' }}"><i class="fa fa-gauge-high"></i><span>Overview</span></a>
@@ -955,6 +985,123 @@
             accountDropdownMenu.classList.remove('open');
         }
     });
+
+    // ── Sidebar search ───────────────────────────────────────────────
+    (function () {
+        const searchInput = document.getElementById('sidebarSearchInput');
+        const clearBtn    = document.getElementById('sidebarSearchClear');
+        const suggestions = document.getElementById('sidebarSuggestions');
+        if (!searchInput || !suggestions) return;
+
+        // Collect every rendered sidebar nav link
+        const sidebar = document.getElementById('appSidebar');
+        if (!sidebar) return;
+
+        const navItems = [];
+        sidebar.querySelectorAll('nav.menu a[href]').forEach(function (a) {
+            const label = a.querySelector('span')?.textContent?.trim() || a.textContent.trim();
+            if (!label) return;
+
+            // Determine parent section label for the hint chip
+            let section = '';
+            const parent = a.closest('.submenu, .menu-payroll-nested__sub');
+            if (parent) {
+                const groupTitle = parent.previousElementSibling;
+                if (groupTitle) section = groupTitle.querySelector('span')?.textContent?.trim() || '';
+            }
+
+            // Get the icon class string
+            const iconEl = a.querySelector('i');
+            const iconClass = iconEl ? iconEl.className.replace('aria-hidden', '').trim() : 'fa fa-link';
+
+            navItems.push({ label, href: a.href, iconClass, section });
+        });
+
+        let activeIdx = -1;
+        let currentItems = [];
+
+        function escH(s) {
+            return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+
+        function closeSuggestions() {
+            suggestions.classList.remove('is-open');
+            suggestions.innerHTML = '';
+            searchInput.setAttribute('aria-expanded', 'false');
+            activeIdx = -1;
+            currentItems = [];
+        }
+
+        function renderSuggestions(items) {
+            activeIdx = -1;
+            currentItems = items;
+            if (items.length === 0) {
+                suggestions.innerHTML = '<div class="sidebar-suggestions__empty">No results</div>';
+                suggestions.classList.add('is-open');
+                searchInput.setAttribute('aria-expanded', 'true');
+                return;
+            }
+            suggestions.innerHTML = items.slice(0, 10).map(function (item, i) {
+                return '<a href="' + escH(item.href) + '" class="sidebar-suggestion" role="option" data-idx="' + i + '">' +
+                    '<i class="' + escH(item.iconClass) + '" aria-hidden="true"></i>' +
+                    '<span class="sidebar-suggestion__label">' + escH(item.label) + '</span>' +
+                    (item.section ? '<span class="sidebar-suggestion__section">' + escH(item.section) + '</span>' : '') +
+                '</a>';
+            }).join('');
+            suggestions.classList.add('is-open');
+            searchInput.setAttribute('aria-expanded', 'true');
+        }
+
+        function setActive(idx) {
+            const all = suggestions.querySelectorAll('.sidebar-suggestion');
+            all.forEach(function (el) { el.classList.remove('is-active'); });
+            activeIdx = Math.max(-1, Math.min(all.length - 1, idx));
+            if (activeIdx >= 0 && all[activeIdx]) {
+                all[activeIdx].classList.add('is-active');
+                all[activeIdx].scrollIntoView({ block: 'nearest' });
+            }
+        }
+
+        searchInput.addEventListener('input', function () {
+            const q = this.value.trim().toLowerCase();
+            clearBtn.classList.toggle('visible', q.length > 0);
+            if (!q) { closeSuggestions(); return; }
+            const filtered = navItems.filter(function (item) {
+                return item.label.toLowerCase().includes(q) || item.section.toLowerCase().includes(q);
+            });
+            renderSuggestions(filtered);
+        });
+
+        searchInput.addEventListener('keydown', function (e) {
+            if (!suggestions.classList.contains('is-open')) return;
+            if (e.key === 'ArrowDown') { e.preventDefault(); setActive(activeIdx + 1); }
+            else if (e.key === 'ArrowUp') { e.preventDefault(); setActive(activeIdx - 1); }
+            else if (e.key === 'Enter') {
+                e.preventDefault();
+                const all = suggestions.querySelectorAll('.sidebar-suggestion');
+                if (activeIdx >= 0 && all[activeIdx]) { all[activeIdx].click(); }
+                else if (currentItems.length > 0) { window.location.href = currentItems[0].href; }
+            }
+            else if (e.key === 'Escape') { closeSuggestions(); searchInput.value = ''; clearBtn.classList.remove('visible'); }
+        });
+
+        clearBtn.addEventListener('click', function () {
+            searchInput.value = '';
+            clearBtn.classList.remove('visible');
+            closeSuggestions();
+            searchInput.focus();
+        });
+
+        suggestions.addEventListener('mousedown', function (e) {
+            // prevent blur on input when clicking a suggestion
+            e.preventDefault();
+        });
+
+        document.addEventListener('click', function (e) {
+            const wrap = document.getElementById('sidebarSearchWrap');
+            if (wrap && !wrap.contains(e.target)) closeSuggestions();
+        });
+    })();
 </script>
 @if($navBusiness)
 <style>

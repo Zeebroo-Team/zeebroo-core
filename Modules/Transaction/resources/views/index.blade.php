@@ -17,8 +17,7 @@
         .tx-table td{padding:9px 10px;border-bottom:1px solid color-mix(in srgb,var(--border) 80%,transparent);vertical-align:top;}
         .tx-table tbody tr:last-child td{border-bottom:none;}
         .tx-amt{font-weight:700;font-variant-numeric:tabular-nums;color:color-mix(in srgb,var(--primary) 40%,var(--text));}
-        .tx-pagination{margin-top:12px;display:flex;justify-content:flex-end;font-size:12px;color:var(--muted);}
-        .tx-pagination a,.tx-pagination span{margin-left:10px;color:var(--text);text-decoration:none;}
+        .tx-pagination{margin-top:12px;display:flex;justify-content:flex-end;}
         .tx-badge{display:inline-block;font-size:10px;font-weight:600;padding:2px 6px;border-radius:6px;background:color-mix(in srgb,var(--primary) 10%,transparent);border:1px solid color-mix(in srgb,var(--primary) 24%,var(--border));}
     </style>
 
@@ -28,8 +27,6 @@
         </div>
     @else
         <div class="tx-card">
-            <p class="tx-lead">Polymorphic <strong style="color:var(--text);">ledger</strong> for loans, rentals, bills, and other sources. Loan installments and deduct-account balances are applied <strong style="color:var(--text);">automatically</strong> daily via the Laravel task scheduler (<strong>00:10</strong> server time). Other record types can append rows on the same table via <code style="font-size:11px;">LedgerTransaction</code> / <code style="font-size:11px;">transactionable</code>.</p>
-
             @if($transactions instanceof \Illuminate\Contracts\Pagination\LengthAwarePaginator && $transactions->isEmpty())
                 <div class="tx-empty">
                     <div class="tx-empty__ico" aria-hidden="true"><i class="fa fa-receipt"></i></div>
