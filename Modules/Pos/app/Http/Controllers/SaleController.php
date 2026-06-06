@@ -3,6 +3,7 @@
 namespace Modules\Pos\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -214,6 +215,125 @@ class SaleController extends Controller
 
         return redirect()
             ->route('pos.sales.show', $sale)
+            ->with('status', "Return {$ret->return_number} processed successfully.");
+    }
+
+    public function saleLookup(Request $request): JsonResponse
+    {
+        $business = $this->requireBusiness($request);
+        if ($business instanceof RedirectResponse) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
+        $saleNumber = trim((string) $request->query('sale', ''));
+        if (! filled($saleNumber)) {
+            return response()->json(['error' => 'Sale number required'], 422);
+        }
+
+        $sale = Sale::query()
+            ->where('business_id', $business->id)
+            ->where('sale_number', $saleNumber)
+            ->with(['items', 'returns.items'])
+            ->first();
+
+        if ($sale === null) {
+            return response()->json(['found' => false]);
+        }
+
+        $returnedQtys = $this->saleReturns->returnedQuantitiesForSale($sale);
+
+        $items = $sale->items->map(function ($item) use ($returnedQtys) {
+            $retQty     = round((float) ($returnedQtys[$item->id] ?? 0), 3);
+            $returnable = round((float) $item->quantity - $retQty, 3);
+
+            return [
+                'id'              => $item->id,
+                'product_name'    => $item->product_name,
+                'sku'             => $item->sku ?? '',
+                'quantity'        => round((float) $item->quantity, 3),
+                'returned'        => $retQty,
+                'returnable'      => $returnable,
+                'unit_sell_price' => round((float) $item->unit_sell_price, 2),
+            ];
+        })->values();
+
+        return response()->json([
+            'found'        => true,
+            'is_void'      => $sale->isVoid(),
+            'all_returned' => $items->every(fn ($i) => $i['returnable'] <= 0),
+            'sale'         => [
+                'id'                   => $sale->id,
+                'sale_number'          => $sale->sale_number,
+                'sold_at'              => $sale->sold_at?->format('M j, Y g:i A') ?? '—',
+                'payment_method_label' => $sale->paymentMethodLabel(),
+                'total'                => round((float) $sale->total, 2),
+            ],
+            'items' => $items,
+        ]);
+    }
+
+    public function onlineModalReturn(Request $request, Sale $sale): RedirectResponse
+    {
+        $business = $this->requireBusiness($request);
+        if ($business instanceof RedirectResponse) {
+            return $business;
+        }
+
+        $sale = $this->saleForBusiness($business, $sale);
+
+        $validated = $request->validate([
+            'items'                => ['required', 'array', 'min:1'],
+            'items.*.sale_item_id' => ['required', 'integer', 'min:1'],
+            'items.*.quantity'     => ['required', 'numeric', 'min:0.001'],
+            'refund_method'        => ['required', 'string', 'in:cash,credit,none'],
+            'refund_reason'        => ['nullable', 'string', 'max:100'],
+            'credit_account_id'    => ['nullable', 'integer', 'min:1'],
+            'notes'                => ['nullable', 'string', 'max:2000'],
+        ]);
+
+        $ret = $this->saleReturns->processReturn(
+            $sale, $business, $request->user(),
+            $validated['items'],
+            $validated['refund_method'],
+            isset($validated['credit_account_id']) ? (int) $validated['credit_account_id'] : null,
+            $validated['notes'] ?? null,
+            $validated['refund_reason'] ?? null,
+        );
+
+        return redirect()
+            ->route('pos.online')
+            ->with('status', "Return {$ret->return_number} processed successfully.");
+    }
+
+    public function onlineModalReturnOpen(Request $request): RedirectResponse
+    {
+        $business = $this->requireBusiness($request);
+        if ($business instanceof RedirectResponse) {
+            return $business;
+        }
+
+        $validated = $request->validate([
+            'items'              => ['required', 'array', 'min:1'],
+            'items.*.product_id' => ['required', 'integer', 'min:1'],
+            'items.*.quantity'   => ['required', 'numeric', 'min:0.001'],
+            'items.*.unit_price' => ['required', 'numeric', 'min:0'],
+            'refund_method'      => ['required', 'string', 'in:cash,credit,none'],
+            'refund_reason'      => ['nullable', 'string', 'max:100'],
+            'credit_account_id'  => ['nullable', 'integer', 'min:1'],
+            'notes'              => ['nullable', 'string', 'max:2000'],
+        ]);
+
+        $ret = $this->saleReturns->processOpenReturn(
+            $business, $request->user(),
+            $validated['items'],
+            $validated['refund_method'],
+            isset($validated['credit_account_id']) ? (int) $validated['credit_account_id'] : null,
+            $validated['notes'] ?? null,
+            $validated['refund_reason'] ?? null,
+        );
+
+        return redirect()
+            ->route('pos.online')
             ->with('status', "Return {$ret->return_number} processed successfully.");
     }
 

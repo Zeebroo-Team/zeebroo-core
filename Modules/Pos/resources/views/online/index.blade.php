@@ -146,6 +146,7 @@ body.pos-walking-active .pos-online__top-fields .pos-online__scan-row button{pad
             @include('pos::partials.pos-keyboard-shortcuts')
             @include('pos::partials.pos-fullscreen-button')
             @include('pos::partials.walking-customer-toggle')
+            <button type="button" class="pos-online__link" id="posReturnModalOpen" title="Process return" aria-label="Process return"><i class="fa fa-rotate-left" aria-hidden="true"></i></button>
             @unless($posWalkingCustomer)
                 <a href="{{ route('pos.index') }}" class="pos-online__link" title="Hub"><i class="fa fa-gauge-high"></i></a>
                 <a href="{{ route('pos.sales.index') }}" class="pos-online__link" title="Sales"><i class="fa fa-receipt"></i></a>
@@ -276,6 +277,14 @@ body.pos-walking-active .pos-online__top-fields .pos-online__scan-row button{pad
 @include('pos::partials.pos-stock-layer-picker', ['currency' => $currency])
 @include('pos::partials.pos-selling-unit-picker', ['currency' => $currency])
 @include('pos::partials.pos-cart-layers-script')
+@include('pos::partials.pos-return-modal', [
+    'accounts'           => $accounts,
+    'currency'           => $currency,
+    'saleLookupUrl'      => route('pos.sale-lookup'),
+    'modalReturnBaseUrl' => url('pos/online/modal-return'),
+    'modalReturnOpenUrl' => route('pos.online.modal-return-open'),
+    'returnsListUrl'     => route('pos.returns.index'),
+])
 
 @once
 @include('pos::partials.beep-audio')

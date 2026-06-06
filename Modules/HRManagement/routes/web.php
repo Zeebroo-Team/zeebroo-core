@@ -28,6 +28,9 @@ Route::middleware('auth')->group(function (): void {
     Route::post('hr-portal/pos-online/toggle-walking', [HrEmployeePortalController::class, 'togglePortalWalkingCustomer'])->name('hr.portal.pos-online.toggle-walking');
     Route::post('hr-portal/pos-online/settings', [HrEmployeePortalController::class, 'posOnlineSaveSettings'])->name('hr.portal.pos-online.settings-save');
     Route::post('hr-portal/pos-online/products', [HrEmployeePortalController::class, 'posOnlineStoreProduct'])->name('hr.portal.pos-online.products.store');
+    Route::get('hr-portal/pos-online/sale-lookup', [HrEmployeePortalController::class, 'posOnlineSaleLookup'])->name('hr.portal.pos-online.sale-lookup');
+    Route::post('hr-portal/pos-online/modal-return-open', [HrEmployeePortalController::class, 'posOnlineModalReturnOpen'])->name('hr.portal.pos-online.modal-return-open');
+    Route::post('hr-portal/pos-online/modal-return/{sale}', [HrEmployeePortalController::class, 'posOnlineModalReturn'])->name('hr.portal.pos-online.modal-return');
     Route::get('hr-portal/pos-returns', [HrEmployeePortalController::class, 'portalReturnsIndex'])->name('hr.portal.pos-returns.index');
     Route::get('hr-portal/pos-returns/create', [HrEmployeePortalController::class, 'portalCreateReturn'])->name('hr.portal.pos-returns.create');
     Route::post('hr-portal/pos-returns', [HrEmployeePortalController::class, 'portalStoreOpenReturn'])->name('hr.portal.pos-returns.store-open');

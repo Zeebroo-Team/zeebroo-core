@@ -174,7 +174,7 @@ body.pos-walking-active .pos-online__top-fields .pos-online__scan-row button{pad
                 </label>
             </form>
 
-            <a href="{{ route('hr.portal.pos-returns.index') }}" class="pos-online__link" title="{{ __('Return items') }}" aria-label="{{ __('Return items') }}"><i class="fa fa-rotate-left" aria-hidden="true"></i></a>
+            <button type="button" class="pos-online__link" id="posReturnModalOpen" title="{{ __('Process return') }}" aria-label="{{ __('Process return') }}"><i class="fa fa-rotate-left" aria-hidden="true"></i></button>
             @unless($posWalkingCustomer)
                 <a href="{{ route('hr.portal.dashboard') }}" class="pos-online__link" title="{{ __('HR Portal') }}"><i class="fa fa-gauge-high"></i></a>
             @endunless
@@ -313,6 +313,14 @@ body.pos-walking-active .pos-online__top-fields .pos-online__scan-row button{pad
 @include('pos::partials.pos-stock-layer-picker', ['currency' => $currency])
 @include('pos::partials.pos-selling-unit-picker', ['currency' => $currency])
 @include('pos::partials.pos-cart-layers-script')
+@include('hrmanagement::portal.partials.pos-return-modal', [
+    'accounts'   => $accounts,
+    'currency'   => $currency,
+    'saleLookupUrl'      => route('hr.portal.pos-online.sale-lookup'),
+    'modalReturnBaseUrl' => url('hr-portal/pos-online/modal-return'),
+    'modalReturnOpenUrl' => route('hr.portal.pos-online.modal-return-open'),
+    'returnsListUrl'     => route('hr.portal.pos-returns.index'),
+])
 
 @once
 @include('pos::partials.beep-audio')

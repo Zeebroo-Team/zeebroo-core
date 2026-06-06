@@ -22,6 +22,9 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
     Route::put('/pos/customers/{customer}', [CustomerController::class, 'update'])->name('pos.customers.update');
     Route::delete('/pos/customers/{customer}', [CustomerController::class, 'destroy'])->name('pos.customers.destroy');
 
+    Route::get('/pos/sale-lookup', [SaleController::class, 'saleLookup'])->name('pos.sale-lookup');
+    Route::post('/pos/online/modal-return-open', [SaleController::class, 'onlineModalReturnOpen'])->name('pos.online.modal-return-open');
+    Route::post('/pos/online/modal-return/{sale}', [SaleController::class, 'onlineModalReturn'])->name('pos.online.modal-return');
     Route::get('/pos/returns', [SaleController::class, 'returnsIndex'])->name('pos.returns.index');
     Route::get('/pos/returns/create', [SaleController::class, 'createReturn'])->name('pos.returns.create');
     Route::post('/pos/returns', [SaleController::class, 'storeOpenReturn'])->name('pos.returns.store-open');

@@ -7,6 +7,7 @@ namespace Modules\HRManagement\Http\Controllers;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Contracts\View\View;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -506,6 +507,146 @@ class HrEmployeePortalController extends Controller
                 'errors'  => $e->errors(),
             ], 422);
         }
+    }
+
+    public function posOnlineSaleLookup(Request $request): JsonResponse
+    {
+        $gate = $this->assertPortalEmployerAvailable($request);
+        if ($gate instanceof RedirectResponse || $gate instanceof View) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
+        /** @var array{employee: Employee, business: Business} $gate */
+        ['employee' => $employee, 'business' => $business] = $gate;
+
+        if ($employee->jobTitle !== null && ! $employee->jobTitle->hasPortalFeature('pos_online')) {
+            return response()->json(['error' => 'Access denied'], 403);
+        }
+
+        $saleNumber = trim((string) $request->query('sale', ''));
+        if (! filled($saleNumber)) {
+            return response()->json(['error' => 'Sale number required'], 422);
+        }
+
+        $sale = Sale::query()
+            ->where('business_id', $business->id)
+            ->where('sale_number', $saleNumber)
+            ->with(['items', 'returns.items'])
+            ->first();
+
+        if ($sale === null) {
+            return response()->json(['found' => false]);
+        }
+
+        $returnedQtys = $this->saleReturns->returnedQuantitiesForSale($sale);
+
+        $items = $sale->items->map(function ($item) use ($returnedQtys) {
+            $retQty     = round((float) ($returnedQtys[$item->id] ?? 0), 3);
+            $returnable = round((float) $item->quantity - $retQty, 3);
+
+            return [
+                'id'              => $item->id,
+                'product_name'    => $item->product_name,
+                'sku'             => $item->sku ?? '',
+                'quantity'        => round((float) $item->quantity, 3),
+                'returned'        => $retQty,
+                'returnable'      => $returnable,
+                'unit_sell_price' => round((float) $item->unit_sell_price, 2),
+            ];
+        })->values();
+
+        return response()->json([
+            'found'       => true,
+            'is_void'     => $sale->isVoid(),
+            'all_returned'=> $items->every(fn ($i) => $i['returnable'] <= 0),
+            'sale'        => [
+                'id'                  => $sale->id,
+                'sale_number'         => $sale->sale_number,
+                'sold_at'             => $sale->sold_at?->format('M j, Y g:i A') ?? '—',
+                'payment_method_label'=> $sale->paymentMethodLabel(),
+                'total'               => round((float) $sale->total, 2),
+            ],
+            'items' => $items,
+        ]);
+    }
+
+    public function posOnlineModalReturn(Request $request, Sale $sale): RedirectResponse
+    {
+        $gate = $this->assertPortalEmployerAvailable($request);
+        if ($gate instanceof RedirectResponse || $gate instanceof View) {
+            return $gate instanceof RedirectResponse ? $gate : redirect()->route('hr.portal.pos-online');
+        }
+
+        /** @var array{employee: Employee, business: Business} $gate */
+        ['employee' => $employee, 'business' => $business] = $gate;
+
+        if ($denied = $this->denyPortalFeature($employee, 'pos_online')) {
+            return $denied;
+        }
+
+        abort_unless($sale->business_id === $business->id, 404);
+
+        $validated = $request->validate([
+            'items'                => ['required', 'array', 'min:1'],
+            'items.*.sale_item_id' => ['required', 'integer', 'min:1'],
+            'items.*.quantity'     => ['required', 'numeric', 'min:0.001'],
+            'refund_method'        => ['required', 'string', 'in:cash,credit,none'],
+            'refund_reason'        => ['nullable', 'string', 'max:100'],
+            'credit_account_id'    => ['nullable', 'integer', 'min:1'],
+            'notes'                => ['nullable', 'string', 'max:2000'],
+        ]);
+
+        $ret = $this->saleReturns->processReturn(
+            $sale, $business, $request->user(),
+            $validated['items'],
+            $validated['refund_method'],
+            isset($validated['credit_account_id']) ? (int) $validated['credit_account_id'] : null,
+            $validated['notes'] ?? null,
+            $validated['refund_reason'] ?? null,
+        );
+
+        return redirect()
+            ->route('hr.portal.pos-online')
+            ->with('status', "Return {$ret->return_number} processed successfully.");
+    }
+
+    public function posOnlineModalReturnOpen(Request $request): RedirectResponse
+    {
+        $gate = $this->assertPortalEmployerAvailable($request);
+        if ($gate instanceof RedirectResponse || $gate instanceof View) {
+            return $gate instanceof RedirectResponse ? $gate : redirect()->route('hr.portal.pos-online');
+        }
+
+        /** @var array{employee: Employee, business: Business} $gate */
+        ['employee' => $employee, 'business' => $business] = $gate;
+
+        if ($denied = $this->denyPortalFeature($employee, 'pos_online')) {
+            return $denied;
+        }
+
+        $validated = $request->validate([
+            'items'              => ['required', 'array', 'min:1'],
+            'items.*.product_id' => ['required', 'integer', 'min:1'],
+            'items.*.quantity'   => ['required', 'numeric', 'min:0.001'],
+            'items.*.unit_price' => ['required', 'numeric', 'min:0'],
+            'refund_method'      => ['required', 'string', 'in:cash,credit,none'],
+            'refund_reason'      => ['nullable', 'string', 'max:100'],
+            'credit_account_id'  => ['nullable', 'integer', 'min:1'],
+            'notes'              => ['nullable', 'string', 'max:2000'],
+        ]);
+
+        $ret = $this->saleReturns->processOpenReturn(
+            $business, $request->user(),
+            $validated['items'],
+            $validated['refund_method'],
+            isset($validated['credit_account_id']) ? (int) $validated['credit_account_id'] : null,
+            $validated['notes'] ?? null,
+            $validated['refund_reason'] ?? null,
+        );
+
+        return redirect()
+            ->route('hr.portal.pos-online')
+            ->with('status', "Return {$ret->return_number} processed successfully.");
     }
 
     public function togglePortalWalkingCustomer(Request $request): RedirectResponse
