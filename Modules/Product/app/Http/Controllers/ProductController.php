@@ -81,14 +81,34 @@ class ProductController extends Controller
         $currency = (string) (get_settings('business.currency', '', $business) ?: '');
         $catalog = $this->catalogOptionsService->optionsForBusiness($business);
 
+        $search         = trim((string) $request->query('q', ''));
+        $filterCategory = $request->query('category') ? (int) $request->query('category') : null;
+        $filterBrand    = $request->query('brand')    ? (int) $request->query('brand')    : null;
+        $filterStatus   = in_array($request->query('status'), ['active', 'inactive'], true)
+            ? (string) $request->query('status')
+            : null;
+
+        $products = $this->productService->listForBusiness(
+            $business, $search, $filterCategory, $filterBrand, $filterStatus,
+        );
+
+        $totalProductCount = ($search === '' && $filterCategory === null && $filterBrand === null && $filterStatus === null)
+            ? $products->total()
+            : $business->products()->count();
+
         return view('product::products.index', [
-            'business' => $business,
-            'products' => $this->productService->listForBusiness($business),
-            'currency' => $currency,
-            'categories' => $catalog['categories'],
-            'brands' => $catalog['brands'],
-            'units' => $catalog['units'],
+            'business'          => $business,
+            'products'          => $products,
+            'totalProductCount' => $totalProductCount,
+            'currency'          => $currency,
+            'categories'        => $catalog['categories'],
+            'brands'            => $catalog['brands'],
+            'units'             => $catalog['units'],
             'bundlePickerCatalog' => $this->productBundleService->pickerCatalogForBusiness($business),
+            'search'            => $search,
+            'filterCategory'    => $filterCategory,
+            'filterBrand'       => $filterBrand,
+            'filterStatus'      => $filterStatus,
         ]);
     }
 

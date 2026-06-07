@@ -15,13 +15,19 @@ class ProductService
     ) {
     }
 
-    public function listForBusiness(?Business $business, int $perPage = 20): LengthAwarePaginator|Collection
-    {
+    public function listForBusiness(
+        ?Business $business,
+        string $search = '',
+        ?int $categoryId = null,
+        ?int $brandId = null,
+        ?string $status = null,
+        int $perPage = 20,
+    ): LengthAwarePaginator|Collection {
         if (!$business instanceof Business) {
             return new Collection();
         }
 
-        return $business->products()
+        $query = $business->products()
             ->with([
                 'categories',
                 'brands',
@@ -30,8 +36,32 @@ class ProductService
                 'productImages.file',
                 'bundleItems.itemProduct',
             ])
-            ->orderBy('name')
-            ->paginate($perPage);
+            ->orderBy('name');
+
+        if ($search !== '') {
+            $term = '%' . $search . '%';
+            $query->where(function ($q) use ($term): void {
+                $q->where('name', 'like', $term)
+                  ->orWhere('sku', 'like', $term)
+                  ->orWhere('description', 'like', $term);
+            });
+        }
+
+        if ($categoryId !== null) {
+            $query->whereHas('categories', fn ($q) => $q->where('product_categories.id', $categoryId));
+        }
+
+        if ($brandId !== null) {
+            $query->whereHas('brands', fn ($q) => $q->where('product_brands.id', $brandId));
+        }
+
+        if ($status === 'active') {
+            $query->where('is_active', true);
+        } elseif ($status === 'inactive') {
+            $query->where('is_active', false);
+        }
+
+        return $query->paginate($perPage);
     }
 
     public function create(Business $business, array $data): Product

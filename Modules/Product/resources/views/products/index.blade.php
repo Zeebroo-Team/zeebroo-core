@@ -27,6 +27,18 @@
 .product-action-btn--del:hover{background:color-mix(in srgb,#ef4444 10%,transparent);border-color:color-mix(in srgb,#ef4444 60%,var(--border));}
 :is(html[data-theme="light"],html[data-theme="light_blue"]) .product-action-btn--del{color:#dc2626;}
 .product-toolbar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;}
+.product-search-bar{display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin-bottom:12px;}
+.product-search-input-wrap{position:relative;flex:1 1 200px;min-width:160px;}
+.product-search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px;pointer-events:none;}
+.product-search-input{width:100%;box-sizing:border-box;padding:8px 10px 8px 32px;font-size:13px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);outline:none;transition:border-color .15s,box-shadow .15s;}
+.product-search-input:focus{border-color:var(--primary);box-shadow:0 0 0 2px color-mix(in srgb,var(--primary) 18%,transparent);}
+.product-filter-select{padding:8px 28px 8px 10px;font-size:13px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);cursor:pointer;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2394a3b8' d='M2.5 4.5 6 8l3.5-3.5'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 8px center;outline:none;transition:border-color .15s;}
+.product-filter-select:focus{border-color:var(--primary);}
+.product-filter-btn{display:inline-flex;align-items:center;gap:5px;padding:8px 14px;font-size:13px;font-weight:700;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);cursor:pointer;transition:border-color .15s,background .15s;}
+.product-filter-btn:hover{border-color:color-mix(in srgb,var(--primary) 55%,var(--border));background:color-mix(in srgb,var(--primary) 8%,transparent);}
+.product-filter-clear{display:inline-flex;align-items:center;gap:5px;padding:8px 12px;font-size:13px;font-weight:600;border-radius:8px;border:1px solid color-mix(in srgb,#ef4444 35%,var(--border));background:transparent;color:#f97373;text-decoration:none;cursor:pointer;transition:border-color .15s,background .15s;}
+.product-filter-clear:hover{background:color-mix(in srgb,#ef4444 8%,transparent);border-color:color-mix(in srgb,#ef4444 55%,var(--border));}
+:is(html[data-theme="light"],html[data-theme="light_blue"]) .product-filter-clear{color:#dc2626;}
 .product-modal{position:fixed;inset:0;z-index:120;display:flex;justify-content:center;align-items:center;padding:4vh 6vw;overflow:auto;box-sizing:border-box;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .22s ease,visibility .22s ease;}
 .product-modal.product-modal--open{opacity:1;visibility:visible;pointer-events:auto;}
 .product-modal__backdrop{position:fixed;inset:0;z-index:0;background:rgba(15,23,42,.55);backdrop-filter:blur(4px);}
@@ -115,21 +127,70 @@ html.product-modal-open-html,html.product-modal-open-html body{overflow:hidden;}
     @endif
     <p class="muted" style="margin:0 0 14px;font-size:13px;line-height:1.45;">Products for <strong style="color:var(--text);">{{ $business->name }}</strong>. Track items you buy, sell, or stock for this business.</p>
 
-    @php $productModalOpen = $products->isNotEmpty() && $errors->any(); @endphp
+    @php
+        $isFiltering = $search !== '' || $filterCategory !== null || $filterBrand !== null || $filterStatus !== null;
+        $productModalOpen = $products->isNotEmpty() && $errors->any();
+        $clearUrl = route('product.index');
+    @endphp
+
+    {{-- Search & filter bar --}}
+    @if($totalProductCount > 0 || $isFiltering)
+    <form method="get" action="{{ route('product.index') }}" class="product-search-bar" role="search">
+        <div class="product-search-input-wrap">
+            <i class="fa fa-magnifying-glass product-search-icon" aria-hidden="true"></i>
+            <input
+                type="search"
+                name="q"
+                value="{{ $search }}"
+                placeholder="Search by name, SKU or description…"
+                class="product-search-input"
+                autocomplete="off"
+                aria-label="Search products">
+        </div>
+        @if($categories->isNotEmpty())
+        <select name="category" class="product-filter-select" aria-label="Filter by category">
+            <option value="">All categories</option>
+            @foreach($categories as $cat)
+                <option value="{{ $cat->id }}" @selected($filterCategory === $cat->id)>{{ $cat->name }}</option>
+            @endforeach
+        </select>
+        @endif
+        @if($brands->isNotEmpty())
+        <select name="brand" class="product-filter-select" aria-label="Filter by brand">
+            <option value="">All brands</option>
+            @foreach($brands as $brand)
+                <option value="{{ $brand->id }}" @selected($filterBrand === $brand->id)>{{ $brand->name }}</option>
+            @endforeach
+        </select>
+        @endif
+        <select name="status" class="product-filter-select" aria-label="Filter by status">
+            <option value="">All status</option>
+            <option value="active"   @selected($filterStatus === 'active')>Active</option>
+            <option value="inactive" @selected($filterStatus === 'inactive')>Inactive</option>
+        </select>
+        <button type="submit" class="product-filter-btn"><i class="fa fa-filter" aria-hidden="true"></i> Filter</button>
+        @if($isFiltering)
+            <a href="{{ $clearUrl }}" class="product-filter-clear" title="Clear filters"><i class="fa fa-xmark" aria-hidden="true"></i> Clear</a>
+        @endif
+    </form>
+    @endif
+
     <div class="product-toolbar">
         <span class="muted" style="margin:0;font-size:13px;">
-            @if($products->isEmpty())
+            @if($totalProductCount === 0)
                 Use the form below to add your <strong style="color:var(--text);">first product</strong>.
+            @elseif($isFiltering)
+                {{ $products->total() }} result{{ $products->total() === 1 ? '' : 's' }} of {{ $totalProductCount }} product{{ $totalProductCount === 1 ? '' : 's' }}.
             @else
                 {{ $products->total() }} product{{ $products->total() === 1 ? '' : 's' }}.
             @endif
         </span>
-        @if($products->isNotEmpty())
+        @if($totalProductCount > 0)
             <button type="button" id="product-modal-open" class="linkbtn" style="padding:8px 16px;font-size:13px;display:inline-flex;align-items:center;gap:6px;"><i class="fa fa-plus"></i> Add product</button>
         @endif
     </div>
 
-    @if($products->isEmpty())
+    @if($totalProductCount === 0)
         <section class="product-inline-create" aria-labelledby="product-inline-title">
             <header class="product-inline-create__head">
                 <h2 id="product-inline-title">Add your first product</h2>
@@ -144,6 +205,12 @@ html.product-modal-open-html,html.product-modal-open-html body{overflow:hidden;}
                 'bundlePickerCatalog' => $bundlePickerCatalog,
             ])
         </section>
+    @elseif($products->isEmpty())
+        <div style="padding:32px 16px;text-align:center;border:1px dashed var(--border);border-radius:10px;color:var(--muted);">
+            <i class="fa fa-magnifying-glass" aria-hidden="true" style="font-size:22px;margin-bottom:10px;display:block;opacity:.45;"></i>
+            <p style="margin:0 0 10px;font-size:14px;font-weight:600;">No products match your filters.</p>
+            <a href="{{ $clearUrl }}" class="product-filter-clear" style="font-size:13px;"><i class="fa fa-xmark"></i> Clear filters</a>
+        </div>
     @else
         <div class="product-table-wrap">
             <table class="product-table">

@@ -2,10 +2,30 @@
 
 @php
     $catalogModalOpen = $categories->isNotEmpty() && $errors->any() && ! $errors->has('category');
+    $clearUrl = route('product.categories.index');
 @endphp
 
 @section('content')
 @include('product::partials.catalog-hub-styles')
+
+<style>
+.pcat-search-bar{display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin-bottom:12px;}
+.pcat-search-input-wrap{position:relative;flex:1 1 200px;min-width:160px;}
+.pcat-search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px;pointer-events:none;}
+.pcat-search-input{width:100%;box-sizing:border-box;padding:8px 10px 8px 32px;font-size:13px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);outline:none;transition:border-color .15s,box-shadow .15s;}
+.pcat-search-input:focus{border-color:var(--primary);box-shadow:0 0 0 2px color-mix(in srgb,var(--primary) 18%,transparent);}
+.pcat-filter-select{padding:8px 28px 8px 10px;font-size:13px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);cursor:pointer;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2394a3b8' d='M2.5 4.5 6 8l3.5-3.5'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 8px center;outline:none;transition:border-color .15s;}
+.pcat-filter-select:focus{border-color:var(--primary);}
+.pcat-filter-btn{display:inline-flex;align-items:center;gap:5px;padding:8px 14px;font-size:13px;font-weight:700;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);cursor:pointer;transition:border-color .15s,background .15s;}
+.pcat-filter-btn:hover{border-color:color-mix(in srgb,var(--primary) 55%,var(--border));background:color-mix(in srgb,var(--primary) 8%,transparent);}
+.pcat-filter-clear{display:inline-flex;align-items:center;gap:5px;padding:8px 12px;font-size:13px;font-weight:600;border-radius:8px;border:1px solid color-mix(in srgb,#ef4444 35%,var(--border));background:transparent;color:#f97373;text-decoration:none;cursor:pointer;transition:border-color .15s,background .15s;}
+.pcat-filter-clear:hover{background:color-mix(in srgb,#ef4444 8%,transparent);border-color:color-mix(in srgb,#ef4444 55%,var(--border));}
+:is(html[data-theme="light"],html[data-theme="light_blue"]) .pcat-filter-clear{color:#dc2626;}
+.pcat-results-table{width:100%;border-collapse:collapse;font-size:13px;min-width:540px;}
+.pcat-results-table th{text-align:left;padding:9px 12px;background:color-mix(in srgb,var(--card) 92%,transparent);font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);border-bottom:1px solid var(--border);}
+.pcat-results-table td{padding:10px 12px;border-bottom:1px solid color-mix(in srgb,var(--border) 80%,transparent);vertical-align:middle;}
+.pcat-results-table tr:last-child td{border-bottom:none;}
+</style>
 
 <div class="pcat-page-card card" style="max-width:100%;padding:14px;">
     @include('product::partials.product-hub-nav')
@@ -21,21 +41,43 @@
         Group products for <strong style="color:var(--text);">{{ $business->name }}</strong>. Use top-level categories and nested subcategories at any depth (e.g. Electronics → Phones → Cases).
     </p>
 
+    {{-- Search & filter bar --}}
+    @if($totalCount > 0 || $isFiltering)
+    <form method="get" action="{{ route('product.categories.index') }}" class="pcat-search-bar" role="search">
+        <div class="pcat-search-input-wrap">
+            <i class="fa fa-magnifying-glass pcat-search-icon" aria-hidden="true"></i>
+            <input type="search" name="q" value="{{ $search }}" placeholder="Search categories…"
+                class="pcat-search-input" autocomplete="off" aria-label="Search categories">
+        </div>
+        <select name="status" class="pcat-filter-select" aria-label="Filter by status">
+            <option value="">All status</option>
+            <option value="active"   @selected($filterStatus === 'active')>Active</option>
+            <option value="inactive" @selected($filterStatus === 'inactive')>Inactive</option>
+        </select>
+        <button type="submit" class="pcat-filter-btn"><i class="fa fa-filter" aria-hidden="true"></i> Filter</button>
+        @if($isFiltering)
+            <a href="{{ $clearUrl }}" class="pcat-filter-clear"><i class="fa fa-xmark" aria-hidden="true"></i> Clear</a>
+        @endif
+    </form>
+    @endif
+
     <div class="pcat-toolbar">
         <span class="muted" style="margin:0;font-size:13px;">
-            @if($categories->isEmpty())
+            @if($totalCount === 0)
                 Add your <strong style="color:var(--text);">first category</strong> below.
+            @elseif($isFiltering)
+                {{ $searchResults->total() }} result{{ $searchResults->total() === 1 ? '' : 's' }} of {{ $totalCount }} {{ $totalCount === 1 ? 'category' : 'categories' }}.
             @else
-                {{ $categories->count() }} {{ $categories->count() === 1 ? 'category' : 'categories' }}. Drag cards between lists to reorder or change parent at any level.
+                {{ $totalCount }} {{ $totalCount === 1 ? 'category' : 'categories' }}. Drag cards between lists to reorder or change parent at any level.
             @endif
         </span>
-        @if($categories->isNotEmpty())
+        @if($totalCount > 0)
             <span id="pcat-reorder-status" class="pcat-reorder-status" hidden aria-live="polite"></span>
             <button type="button" id="pcat-modal-open" class="linkbtn" style="padding:8px 16px;font-size:13px;display:inline-flex;align-items:center;gap:6px;"><i class="fa fa-plus"></i> Add category</button>
         @endif
     </div>
 
-    @if($categories->isEmpty())
+    @if($totalCount === 0)
         <section class="pcat-inline">
             <h2>Create category</h2>
             <p class="pcat-muted">Examples: Office supplies, Raw materials, Finished goods.</p>
@@ -50,6 +92,63 @@
                 </div>
             </form>
         </section>
+    @elseif($isFiltering)
+        {{-- Flat search results table --}}
+        @if($searchResults->isEmpty())
+            <div style="padding:32px 16px;text-align:center;border:1px dashed var(--border);border-radius:10px;color:var(--muted);">
+                <i class="fa fa-magnifying-glass" aria-hidden="true" style="font-size:22px;margin-bottom:10px;display:block;opacity:.45;"></i>
+                <p style="margin:0 0 10px;font-size:14px;font-weight:600;">No categories match your filters.</p>
+                <a href="{{ $clearUrl }}" class="pcat-filter-clear" style="font-size:13px;"><i class="fa fa-xmark"></i> Clear filters</a>
+            </div>
+        @else
+            <div style="border:1px solid var(--border);border-radius:11px;overflow:auto;margin-bottom:14px;">
+                <table class="pcat-results-table">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Parent</th>
+                            <th>Products</th>
+                            <th>Subcategories</th>
+                            <th>Status</th>
+                            <th style="text-align:right;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach($searchResults as $cat)
+                        <tr>
+                            <td><strong style="color:var(--text);">{{ $cat->name }}</strong></td>
+                            <td>
+                                @if($cat->parent)
+                                    <span style="font-size:12px;color:var(--muted);">{{ $cat->parent->name }}</span>
+                                @else
+                                    <span class="muted">—</span>
+                                @endif
+                            </td>
+                            <td>{{ $cat->products_count }}</td>
+                            <td>{{ $cat->children_count }}</td>
+                            <td>
+                                @if($cat->is_active)
+                                    <span class="product-badge product-badge--on">Active</span>
+                                @else
+                                    <span class="product-badge product-badge--off">Inactive</span>
+                                @endif
+                            </td>
+                            <td style="text-align:right;">
+                                <a href="{{ route('product.categories.edit', $cat) }}" class="product-action-btn product-action-btn--edit" style="display:inline-flex;align-items:center;gap:5px;padding:6px 11px;font-size:11.5px;font-weight:700;border-radius:8px;border:1px solid var(--border);text-decoration:none;color:var(--text);background:color-mix(in srgb,var(--primary) 12%,transparent);border-color:color-mix(in srgb,var(--primary) 45%,var(--border));">
+                                    <i class="fa fa-pen-to-square" aria-hidden="true"></i> Edit
+                                </a>
+                            </td>
+                        </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            </div>
+            @if($searchResults->hasPages())
+                <div style="margin-bottom:14px;">
+                    {{ $searchResults->withQueryString()->links() }}
+                </div>
+            @endif
+        @endif
     @else
         <div id="pcat-sort-top" class="pcat-list">
             @foreach($categoryTree as $root)
@@ -61,6 +160,7 @@
                 </div>
             </div>
         </div>
+    @endif
 
         <div id="pcat-modal" class="pcat-modal {{ $catalogModalOpen ? 'pcat-modal--open' : '' }}" role="dialog" aria-modal="true" aria-labelledby="pcat-modal-title" aria-hidden="{{ $catalogModalOpen ? 'false' : 'true' }}">
             <div class="pcat-modal__backdrop" data-pcat-close tabindex="-1"></div>
@@ -92,7 +192,7 @@
     </a>
 </div>
 
-@if($categories->isNotEmpty())
+@if($categories->isNotEmpty() && ! $isFiltering)
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 <script>
 (function () {

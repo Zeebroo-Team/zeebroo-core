@@ -2,6 +2,7 @@
 
 namespace Modules\Product\Services;
 
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Collection as SupportCollection;
 use Illuminate\Support\Facades\DB;
@@ -65,6 +66,33 @@ class ProductCategoryService
         $this->loadChildrenRecursively($roots);
 
         return $roots;
+    }
+
+    /**
+     * Flat paginated search results — used when the user has typed a query or applied a status filter.
+     */
+    public function searchFlatForBusiness(
+        Business $business,
+        string $search = '',
+        ?string $status = null,
+        int $perPage = 20,
+    ): LengthAwarePaginator {
+        $query = $business->productCategories()
+            ->with('parent')
+            ->withCount(['products', 'children'])
+            ->orderBy('name');
+
+        if ($search !== '') {
+            $query->where('name', 'like', '%' . $search . '%');
+        }
+
+        if ($status === 'active') {
+            $query->where('is_active', true);
+        } elseif ($status === 'inactive') {
+            $query->where('is_active', false);
+        }
+
+        return $query->paginate($perPage);
     }
 
     /**

@@ -29,12 +29,28 @@ class ProductCategoryController extends Controller
             return $business;
         }
 
-        $categoryTree = $this->categoryService->categoryTreeForIndex($business);
+        $search       = trim((string) $request->query('q', ''));
+        $filterStatus = in_array($request->query('status'), ['active', 'inactive'], true)
+            ? (string) $request->query('status')
+            : null;
+        $isFiltering  = $search !== '' || $filterStatus !== null;
+
+        $categories     = $this->categoryService->listTreeFlatForBusiness($business);
+        $totalCount     = $categories->count();
+        $categoryTree   = $isFiltering ? collect() : $this->categoryService->categoryTreeForIndex($business);
+        $searchResults  = $isFiltering
+            ? $this->categoryService->searchFlatForBusiness($business, $search, $filterStatus)
+            : null;
 
         return view('product::categories.index', [
-            'business' => $business,
-            'categories' => $this->categoryService->listTreeFlatForBusiness($business),
-            'categoryTree' => $categoryTree,
+            'business'      => $business,
+            'categories'    => $categories,
+            'totalCount'    => $totalCount,
+            'categoryTree'  => $categoryTree,
+            'searchResults' => $searchResults,
+            'isFiltering'   => $isFiltering,
+            'search'        => $search,
+            'filterStatus'  => $filterStatus,
             'parentOptions' => $this->categoryService->parentOptionsForForm($business),
             'presetParentId' => $request->integer('parent') ?: null,
         ]);
