@@ -23,13 +23,38 @@ class PosSupplierApiController extends Controller
             ->get(['id', 'name', 'contact_name', 'email', 'phone']);
 
         return response()->json([
-            'data' => $suppliers->map(fn (Supplier $s) => [
-                'id'           => $s->id,
-                'name'         => $s->name,
-                'contact_name' => $s->contact_name,
-                'email'        => $s->email,
-                'phone'        => $s->phone,
-            ])->values(),
+            'data' => $suppliers->map(fn (Supplier $s) => $this->format($s))->values(),
         ]);
+    }
+
+    public function store(Request $request): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+
+        $validated = $request->validate([
+            'name'         => ['required', 'string', 'max:255'],
+            'contact_name' => ['nullable', 'string', 'max:255'],
+            'email'        => ['nullable', 'email', 'max:255'],
+            'phone'        => ['nullable', 'string', 'max:50'],
+            'notes'        => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        $supplier = Supplier::create(array_merge($validated, [
+            'business_id' => $business->id,
+            'is_active'   => true,
+        ]));
+
+        return response()->json(['data' => $this->format($supplier)], 201);
+    }
+
+    private function format(Supplier $s): array
+    {
+        return [
+            'id'           => $s->id,
+            'name'         => $s->name,
+            'contact_name' => $s->contact_name,
+            'email'        => $s->email,
+            'phone'        => $s->phone,
+        ];
     }
 }

@@ -45,6 +45,7 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
     Route::post('sales/{sale}/return', [PosSaleReturnApiController::class, 'store'])->name('sales.return');
 
     Route::get('suppliers', [PosSupplierApiController::class, 'index'])->name('suppliers.index');
+    Route::post('suppliers', [PosSupplierApiController::class, 'store'])->name('suppliers.store');
 
     Route::get('purchase-orders', [PosPurchaseOrderApiController::class, 'index'])->name('purchase-orders.index');
     Route::post('purchase-orders', [PosPurchaseOrderApiController::class, 'store'])->name('purchase-orders.store');
