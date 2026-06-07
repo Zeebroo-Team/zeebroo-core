@@ -9,6 +9,7 @@ use Modules\Pos\Http\Controllers\Api\PosCheckoutApiController;
 use Modules\Pos\Http\Controllers\Api\PosOnlineBootstrapApiController;
 use Modules\Pos\Http\Controllers\Api\PosProductApiController;
 use Modules\Pos\Http\Controllers\Api\PosSaleApiController;
+use Modules\Pos\Http\Controllers\Api\PosSaleReturnApiController;
 use Modules\Pos\Http\Controllers\Api\PosSettingsApiController;
 
 Route::prefix('v1/pos')->group(function (): void {
@@ -39,4 +40,5 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
     Route::get('sales', [PosSaleApiController::class, 'index'])->name('sales.index');
     Route::get('sales/{sale}', [PosSaleApiController::class, 'show'])->name('sales.show');
     Route::post('sales/{sale}/void', [PosSaleApiController::class, 'void'])->name('sales.void');
+    Route::post('sales/{sale}/return', [PosSaleReturnApiController::class, 'store'])->name('sales.return');
 });
