@@ -338,7 +338,8 @@ class HrEmployeePortalController extends Controller
             $business,
             $search !== '' ? $search : null,
             $categoryId,
-        );
+            perPage: 500,
+        )['data'];
         $today = $this->posSales->todaySummaryForBusiness($business);
         $posSettings = $this->posSettings->forBusiness($business);
         $posShellClass = match ($posSettings['display_theme'] ?? '') {

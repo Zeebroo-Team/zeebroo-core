@@ -183,7 +183,8 @@ class PosController extends Controller
             $business,
             $search !== '' ? $search : null,
             $categoryId,
-        );
+            perPage: 500,
+        )['data'];
         $today = $this->sales->todaySummaryForBusiness($business);
         $posSettings = $this->posSettings->forBusiness($business);
         $posShellClass = match ($posSettings['display_theme']) {

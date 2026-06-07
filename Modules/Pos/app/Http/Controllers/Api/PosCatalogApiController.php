@@ -36,12 +36,20 @@ class PosCatalogApiController extends Controller
         $categoryId = $request->query('category');
         $categoryId = is_numeric($categoryId) ? (int) $categoryId : null;
 
+        $page    = max(1, (int) $request->query('page', 1));
+        $perPage = max(1, min(100, (int) $request->query('per_page', 40)));
+
+        $paginated = $this->catalog->productCardsForPos(
+            $business,
+            $search !== '' ? $search : null,
+            $categoryId,
+            $page,
+            $perPage,
+        );
+
         return response()->json([
-            'data' => $this->catalog->productCardsForPos(
-                $business,
-                $search !== '' ? $search : null,
-                $categoryId,
-            ),
+            'data' => $paginated['data'],
+            'meta' => $paginated['meta'],
         ]);
     }
 
