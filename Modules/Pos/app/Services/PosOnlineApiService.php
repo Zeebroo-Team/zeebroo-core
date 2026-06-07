@@ -24,21 +24,32 @@ class PosOnlineApiService
     /**
      * @return array<string, mixed>
      */
-    public function bootstrap(Business $business, ?User $user = null, ?string $search = null, ?int $categoryId = null): array
-    {
+    public function bootstrap(
+        Business $business,
+        ?User $user = null,
+        ?string $search = null,
+        ?int $categoryId = null,
+        int $page = 1,
+        int $perPage = 40,
+    ): array {
         $currency = (string) (get_settings('business.currency', '', $business) ?: '');
         $catalogOptions = $this->catalogOptions->optionsForBusiness($business);
+
+        $paginated = $this->catalog->productCardsForPos(
+            $business,
+            filled($search) ? $search : null,
+            $categoryId,
+            $page,
+            $perPage,
+        );
 
         return [
             'business' => $this->formatBusiness($business),
             'currency' => $currency,
             'channel' => Sale::CHANNEL_ONLINE,
             'categories' => $this->formatCategories($this->catalog->posCategories($business)),
-            'products' => $this->catalog->productCardsForPos(
-                $business,
-                filled($search) ? $search : null,
-                $categoryId,
-            ),
+            'products' => $paginated['data'],
+            'products_meta' => $paginated['meta'],
             'accounts' => $this->formatAccounts(
                 $this->paymentAccounts($business, $user),
             ),

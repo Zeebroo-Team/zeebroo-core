@@ -61,14 +61,54 @@ class PosCatalogService
     }
 
     /**
-     * @return list<array<string, mixed>>
+     * @return array{data: list<array<string, mixed>>, meta: array{current_page: int, last_page: int, per_page: int, total: int}}
      */
-    public function productCardsForPos(Business $business, ?string $search = null, ?int $categoryId = null): array
-    {
-        return $this->sellableProducts($business, $search, $categoryId)
-            ->map(fn (Product $product) => $this->productCardForProduct($product))
-            ->values()
-            ->all();
+    public function productCardsForPos(
+        Business $business,
+        ?string $search = null,
+        ?int $categoryId = null,
+        int $page = 1,
+        int $perPage = 40,
+    ): array {
+        $page    = max(1, $page);
+        $perPage = max(1, min(100, $perPage));
+
+        $query = $business->products()
+            ->where('is_active', true)
+            ->where('is_bundle', false)
+            ->with(['productUnit', 'imageFile', 'categories'])
+            ->orderBy('name');
+
+        if ($categoryId !== null && $categoryId > 0) {
+            $query->whereHas('categories', fn ($builder) => $builder->whereKey($categoryId));
+        }
+
+        $term = trim((string) $search);
+        if ($term !== '') {
+            $like = '%'.addcslashes($term, '%_\\').'%';
+            $query->where(function ($builder) use ($like) {
+                $builder->where('name', 'like', $like)
+                    ->orWhere('sku', 'like', $like);
+            });
+        }
+
+        $total    = $query->count();
+        $lastPage = max(1, (int) ceil($total / $perPage));
+        $page     = min($page, $lastPage);
+        $items    = $query->skip(($page - 1) * $perPage)->take($perPage)->get();
+
+        return [
+            'data' => $items
+                ->map(fn (Product $product) => $this->productCardForProduct($product))
+                ->values()
+                ->all(),
+            'meta' => [
+                'current_page' => $page,
+                'last_page'    => $lastPage,
+                'per_page'     => $perPage,
+                'total'        => $total,
+            ],
+        ];
     }
 
     /**
