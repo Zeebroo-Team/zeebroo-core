@@ -2,6 +2,7 @@
 
 namespace Modules\Product\Services;
 
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Collection;
 use Modules\Business\Models\Business;
 use Modules\Product\Models\Product;
@@ -14,7 +15,7 @@ class ProductService
     ) {
     }
 
-    public function listForBusiness(?Business $business): Collection
+    public function listForBusiness(?Business $business, int $perPage = 20): LengthAwarePaginator|Collection
     {
         if (!$business instanceof Business) {
             return new Collection();
@@ -30,7 +31,7 @@ class ProductService
                 'bundleItems.itemProduct',
             ])
             ->orderBy('name')
-            ->get();
+            ->paginate($perPage);
     }
 
     public function create(Business $business, array $data): Product

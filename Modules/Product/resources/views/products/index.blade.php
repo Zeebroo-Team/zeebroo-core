@@ -121,7 +121,7 @@ html.product-modal-open-html,html.product-modal-open-html body{overflow:hidden;}
             @if($products->isEmpty())
                 Use the form below to add your <strong style="color:var(--text);">first product</strong>.
             @else
-                {{ $products->count() }} product{{ $products->count() === 1 ? '' : 's' }}.
+                {{ $products->total() }} product{{ $products->total() === 1 ? '' : 's' }}.
             @endif
         </span>
         @if($products->isNotEmpty())
@@ -254,6 +254,12 @@ html.product-modal-open-html,html.product-modal-open-html body{overflow:hidden;}
                 </tbody>
             </table>
         </div>
+
+        @if($products->hasPages())
+            <div style="margin-top:14px;">
+                {{ $products->withQueryString()->links() }}
+            </div>
+        @endif
 
         <div id="product-modal"
             class="product-modal {{ $productModalOpen ? 'product-modal--open' : '' }}"
