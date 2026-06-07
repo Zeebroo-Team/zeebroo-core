@@ -15,6 +15,7 @@ class ProductServiceProvider extends ModuleServiceProvider
      */
     protected array $commands = [
         \Modules\Product\Console\Commands\InsertDemoProductsCommand::class,
+        \Modules\Product\Console\Commands\TestDataFeedCommand::class,
     ];
 
     protected array $providers = [
