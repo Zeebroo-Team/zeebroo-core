@@ -8,9 +8,11 @@ use Modules\Pos\Http\Controllers\Api\PosCatalogApiController;
 use Modules\Pos\Http\Controllers\Api\PosCheckoutApiController;
 use Modules\Pos\Http\Controllers\Api\PosOnlineBootstrapApiController;
 use Modules\Pos\Http\Controllers\Api\PosProductApiController;
+use Modules\Pos\Http\Controllers\Api\PosPurchaseOrderApiController;
 use Modules\Pos\Http\Controllers\Api\PosSaleApiController;
 use Modules\Pos\Http\Controllers\Api\PosSaleReturnApiController;
 use Modules\Pos\Http\Controllers\Api\PosSettingsApiController;
+use Modules\Pos\Http\Controllers\Api\PosSupplierApiController;
 
 Route::prefix('v1/pos')->group(function (): void {
     Route::post('auth/token', [PosAuthApiController::class, 'token'])->name('auth.token');
@@ -41,4 +43,13 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
     Route::get('sales/{sale}', [PosSaleApiController::class, 'show'])->name('sales.show');
     Route::post('sales/{sale}/void', [PosSaleApiController::class, 'void'])->name('sales.void');
     Route::post('sales/{sale}/return', [PosSaleReturnApiController::class, 'store'])->name('sales.return');
+
+    Route::get('suppliers', [PosSupplierApiController::class, 'index'])->name('suppliers.index');
+
+    Route::get('purchase-orders', [PosPurchaseOrderApiController::class, 'index'])->name('purchase-orders.index');
+    Route::post('purchase-orders', [PosPurchaseOrderApiController::class, 'store'])->name('purchase-orders.store');
+    Route::get('purchase-orders/{purchase}', [PosPurchaseOrderApiController::class, 'show'])->name('purchase-orders.show');
+    Route::post('purchase-orders/{purchase}/place', [PosPurchaseOrderApiController::class, 'placeOrder'])->name('purchase-orders.place');
+    Route::post('purchase-orders/{purchase}/receive', [PosPurchaseOrderApiController::class, 'receive'])->name('purchase-orders.receive');
+    Route::post('purchase-orders/{purchase}/cancel', [PosPurchaseOrderApiController::class, 'cancel'])->name('purchase-orders.cancel');
 });
