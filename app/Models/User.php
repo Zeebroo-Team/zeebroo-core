@@ -69,7 +69,7 @@ class User extends Authenticatable
      */
     public function isHrPortalOnlyUser(): bool
     {
-        if ($this->hasRole('admin')) {
+        if ($this->hasRole('admin') || $this->hasRole('user')) {
             return false;
         }
 

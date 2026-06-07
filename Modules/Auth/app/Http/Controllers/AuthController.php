@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\View\View;
 use Modules\Auth\Services\AuthService;
+use Modules\HRManagement\Models\Employee;
 
 class AuthController extends Controller
 {
@@ -45,7 +46,13 @@ class AuthController extends Controller
 
         $user = $request->user();
         if ($user !== null && $user->isHrPortalOnlyUser()) {
-            return redirect()->route('hr.portal.dashboard');
+            $this->authService->logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+
+            return redirect()->route('hr.portal.login')
+                ->withErrors(['email' => __('Employee accounts must sign in via the HR portal.')])
+                ->onlyInput('email');
         }
 
         return redirect()->intended(route('dashboard'));
@@ -53,6 +60,14 @@ class AuthController extends Controller
 
     public function register(Request $request): RedirectResponse
     {
+        // Check employee email before running unique validation so provisioned accounts don't get blocked.
+        $rawEmail = $request->input('email', '');
+        if ($rawEmail && Employee::whereRaw('LOWER(personal_email) = ?', [strtolower(trim($rawEmail))])->exists()) {
+            session(['emp_verify_email' => $rawEmail]);
+
+            return redirect()->route('register.employee-verify');
+        }
+
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', 'unique:users,email', 'confirmed'],
