@@ -15,7 +15,7 @@ use Modules\Transaction\Models\LedgerTransaction;
 class TransactionService
 {
     /** @return LengthAwarePaginator<LedgerTransaction>|Collection<int, LedgerTransaction> */
-    public function listForBusiness(?Business $business, int $perPage = 40): LengthAwarePaginator|Collection
+    public function listForBusiness(?Business $business, int $perPage = 20): LengthAwarePaginator|Collection
     {
         if (! $business) {
             return collect();

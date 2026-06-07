@@ -35,6 +35,14 @@
                 </div>
             @elseif($transactions instanceof \Illuminate\Contracts\Pagination\LengthAwarePaginator)
                 @php($cadenceLabels = \Modules\Account\Models\Loan::recurringTypes())
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;flex-wrap:wrap;">
+                    <span class="tx-muted" style="margin:0;">
+                        {{ $transactions->total() }} transaction{{ $transactions->total() === 1 ? '' : 's' }}
+                        @if($transactions->hasPages())
+                            &nbsp;·&nbsp; page {{ $transactions->currentPage() }} of {{ $transactions->lastPage() }}
+                        @endif
+                    </span>
+                </div>
                 <div class="tx-wrap">
                     <table class="tx-table">
                         <thead>
@@ -67,9 +75,11 @@
                         </tbody>
                     </table>
                 </div>
+                @if($transactions->hasPages())
                 <div class="tx-pagination">
-                    {{ $transactions->links() }}
+                    {{ $transactions->withQueryString()->links() }}
                 </div>
+                @endif
             @else
                 <div class="tx-empty"><p>No data.</p></div>
             @endif
