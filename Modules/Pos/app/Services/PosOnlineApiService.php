@@ -53,9 +53,9 @@ class PosOnlineApiService
             $branchStockSeparate,
         );
 
-        $branches = $branchPosSeparate
-            ? $business->branches()->get()->map(fn ($b) => ['id' => (int) $b->id, 'name' => $b->name])->values()->all()
-            : [];
+        $branches = $business->branches()->get()
+            ->map(fn ($b) => ['id' => (int) $b->id, 'name' => $b->name])
+            ->values()->all();
 
         return [
             'business' => $this->formatBusiness($business),
@@ -71,6 +71,7 @@ class PosOnlineApiService
             'settings' => $this->posSettings->forBusiness($business),
             'product_units' => $this->formatProductUnits($catalogOptions['units']),
             'branch_pos_separate' => $branchPosSeparate,
+            'branch_product_separate' => $branchProductSeparate,
             'branches' => $branches,
             'selected_branch_id' => $effectiveBranchId,
         ];

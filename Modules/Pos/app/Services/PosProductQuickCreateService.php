@@ -32,6 +32,10 @@ class PosProductQuickCreateService
         $openingStock = (float) ($validated['stock_quantity'] ?? 0);
         $unitPrice = (float) ($validated['unit_price'] ?? 0);
 
+        $branchId = isset($validated['branch_id']) && $validated['branch_id'] > 0
+            ? (int) $validated['branch_id']
+            : null;
+
         $data = $this->catalogOptions->normalizeProductCatalogFields($business, [
             'name' => $validated['name'],
             'sku' => $validated['sku'] ?? null,
@@ -43,6 +47,10 @@ class PosProductQuickCreateService
             'is_active' => true,
             'is_bundle' => false,
         ]);
+
+        if ($branchId !== null) {
+            $data['branch_id'] = $branchId;
+        }
 
         $product = $this->productService->create($business, $data);
 
@@ -78,6 +86,11 @@ class PosProductQuickCreateService
                 'nullable',
                 'integer',
                 Rule::exists('product_units', 'id')->where(fn ($q) => $q->where('business_id', $business->id)),
+            ],
+            'branch_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('branches', 'id')->where(fn ($q) => $q->where('business_id', $business->id)),
             ],
         ]);
 
