@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Modules\Business\Models\Branch;
 use Modules\Business\Models\Business;
 use Modules\FileManager\Models\FileManagerFile;
 use Modules\Product\Models\ProductSellingUnit;
@@ -15,6 +16,7 @@ class Product extends Model
 {
     protected $fillable = [
         'business_id',
+        'branch_id',
         'file_manager_file_id',
         'product_unit_id',
         'name',
@@ -40,6 +42,11 @@ class Product extends Model
     public function business(): BelongsTo
     {
         return $this->belongsTo(Business::class);
+    }
+
+    public function branch(): BelongsTo
+    {
+        return $this->belongsTo(Branch::class);
     }
 
     public function categories(): BelongsToMany

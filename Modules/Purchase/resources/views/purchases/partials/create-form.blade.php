@@ -8,6 +8,8 @@
     $isEdit = $purchase instanceof Purchase;
     $formAction = $formAction ?? route('purchase.store');
     $formMethod = strtoupper($formMethod ?? 'POST');
+    $branchStockSeparate = $branchStockSeparate ?? false;
+    $branchOptions = $branchOptions ?? collect();
 
     if ($isEdit) {
         $oldItems = old('items');
@@ -81,6 +83,18 @@
         </select>
         @error('supplier_id')<div style="color:#f87171;font-size:12px;margin-top:4px;">{{ $message }}</div>@enderror
     </div>
+    @if($branchStockSeparate && $branchOptions->isNotEmpty())
+    <div class="pcat-field">
+        <label for="purchase-branch">Branch</label>
+        <select id="purchase-branch" name="branch_id">
+            <option value="">— Not assigned —</option>
+            @foreach($branchOptions as $branchRow)
+                <option value="{{ $branchRow->id }}" @selected((string) old('branch_id', $isEdit ? $purchase->branch_id : '') === (string) $branchRow->id)>{{ $branchRow->name }}</option>
+            @endforeach
+        </select>
+        @error('branch_id')<div style="color:#f87171;font-size:12px;margin-top:4px;">{{ $message }}</div>@enderror
+    </div>
+    @endif
     <div class="pcat-field">
         <label for="purchase-reference">Supplier reference</label>
         <input id="purchase-reference" type="text" name="reference" value="{{ old('reference', $isEdit ? $purchase->reference : '') }}" maxlength="120" placeholder="Their quote or invoice #…">

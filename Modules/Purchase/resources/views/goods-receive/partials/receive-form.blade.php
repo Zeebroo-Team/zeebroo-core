@@ -1,6 +1,9 @@
 @php
     $currencyLabel = filled($currency ?? null) ? (string) $currency : '';
     $stockSellingMarkupPercent = (float) ($stockSellingMarkupPercent ?? 25);
+    $branchStockSeparate = $branchStockSeparate ?? false;
+    $branchOptions = $branchOptions ?? collect();
+    $purchaseBranchId = $purchaseBranchId ?? null;
     $suggestSellingPrice = static function (float $unitCost, $product) use ($stockSellingMarkupPercent): ?float {
         if ($unitCost <= 0) {
             return $product?->unit_price !== null ? round((float) $product->unit_price, 2) : null;
@@ -30,6 +33,18 @@
         <input id="grn-reference" type="text" name="reference" value="{{ old('reference') }}" maxlength="120" placeholder="Delivery note #, carrier ref…">
         @error('reference')<div style="color:#f87171;font-size:12px;margin-top:4px;">{{ $message }}</div>@enderror
     </div>
+    @if($branchStockSeparate && $branchOptions->isNotEmpty())
+    <div class="pcat-field">
+        <label for="grn-branch">Receiving branch</label>
+        <select id="grn-branch" name="branch_id">
+            <option value="">— Not assigned —</option>
+            @foreach($branchOptions as $branchRow)
+                <option value="{{ $branchRow->id }}" @selected((string) old('branch_id', $purchaseBranchId) === (string) $branchRow->id)>{{ $branchRow->name }}</option>
+            @endforeach
+        </select>
+        @error('branch_id')<div style="color:#f87171;font-size:12px;margin-top:4px;">{{ $message }}</div>@enderror
+    </div>
+    @endif
     @include('purchase::goods-receive.partials.payment-fields', [
         'canPayByCheque' => $canPayByCheque ?? false,
         'accounts' => $accounts ?? collect(),

@@ -5,6 +5,9 @@
     $discountFieldEnabled = (bool) ($posSettings['discount_field_enabled'] ?? false);
     $checkoutModalEnabled = (bool) ($posSettings['checkout_modal_enabled'] ?? false);
     $defaultDepositAccountId = $defaultDepositAccountId ?? null;
+    $branchPosSeparate    = $branchPosSeparate ?? false;
+    $branchOptions        = $branchOptions ?? collect();
+    $branchId             = $branchId ?? null;
 @endphp
 @include('pos::partials.pos-shell-and-modal-styles')
 @extends('theme::layouts.app', [
@@ -18,12 +21,26 @@
     $formatQty = static function (float $value): string {
         return rtrim(rtrim(number_format($value, 3, '.', ''), '0'), '.');
     };
-    $onlineRouteParams = static function (?int $catId = null) use ($search): array {
+    $onlineRouteParams = static function (?int $catId = null, ?int $bId = null) use ($search, $branchId): array {
+        // $bId=null means "inherit current branch", $bId=0 means "reset to all branches"
+        $bid = ($bId !== null) ? ($bId > 0 ? $bId : null) : $branchId;
         return array_filter([
             'category' => $catId,
             'q' => filled($search) ? $search : null,
+            'branch' => $bid,
         ], fn ($v) => $v !== null && $v !== '');
     };
+    $branchNavOptions = [];
+    if ($branchPosSeparate && $branchOptions->isNotEmpty()) {
+        $branchNavOptions[] = ['url' => route('pos.online', $onlineRouteParams(null, 0)), 'label' => 'All branches', 'selected' => !$branchId];
+        foreach ($branchOptions as $_b) {
+            $branchNavOptions[] = [
+                'url'      => route('pos.online', $onlineRouteParams(null, (int) $_b->id)),
+                'label'    => $_b->name,
+                'selected' => (int) $branchId === (int) $_b->id,
+            ];
+        }
+    }
     $posProductCatalog = collect($products)->keyBy('id')->map(static function (array $p): array {
         return [
             'id' => $p['id'],
@@ -128,9 +145,22 @@ body.pos-walking-active .pos-online__top-fields .pos-online__scan-row button{pad
             <span class="pos-online__stat"><strong>{{ number_format((float) ($today['online_total'] ?? 0), 2) }}</strong>{{ filled($currency) ? ' '.$currency : '' }}</span>
         </div>
         <div class="pos-online__top-fields" aria-label="Search and scan">
+            @if($branchPosSeparate && $branchOptions->isNotEmpty())
+            <div class="pos-online__scan-row">
+                <select id="pos-branch-select" aria-label="Branch" style="padding:7px 28px 7px 9px;font-size:12px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);appearance:none;background-image:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2394a3b8' d='M2.5 4.5 6 8l3.5-3.5'/%3E%3C/svg%3E\");background-repeat:no-repeat;background-position:right 8px center;cursor:pointer;min-width:110px;">
+                    <option value="{{ route('pos.online', $onlineRouteParams(null, 0)) }}" @selected(!$branchId)>All branches</option>
+                    @foreach($branchOptions as $branch)
+                        <option value="{{ route('pos.online', $onlineRouteParams(null, (int) $branch->id)) }}" @selected((int) $branchId === (int) $branch->id)>{{ $branch->name }}</option>
+                    @endforeach
+                </select>
+            </div>
+            @endif
             <form method="get" action="{{ route('pos.online') }}" class="pos-online__scan-row" id="pos-online-search-form">
                 @if($categoryId)
                     <input type="hidden" name="category" value="{{ $categoryId }}">
+                @endif
+                @if($branchId)
+                    <input type="hidden" name="branch" value="{{ $branchId }}">
                 @endif
                 <input type="search" name="q" value="{{ $search }}" placeholder="Search name…" autocomplete="off" id="pos-online-search">
                 <button type="submit" aria-label="Search"><i class="fa fa-search"></i></button>
@@ -142,7 +172,7 @@ body.pos-walking-active .pos-online__top-fields .pos-online__scan-row button{pad
         </div>
         <div class="pos-online__actions">
             <button type="button" class="pos-online__link" data-pos-add-product-open title="Add product" aria-label="Add product"><i class="fa fa-plus" aria-hidden="true"></i></button>
-            @include('pos::partials.pos-settings-modal', ['posSettings' => $posSettings, 'accounts' => $accounts, 'hasAccounts' => $hasAccounts])
+            @include('pos::partials.pos-settings-modal', ['posSettings' => $posSettings, 'accounts' => $accounts, 'hasAccounts' => $hasAccounts, 'branchNavOptions' => $branchNavOptions])
             @include('pos::partials.pos-keyboard-shortcuts')
             @include('pos::partials.pos-fullscreen-button')
             @include('pos::partials.walking-customer-toggle')
@@ -512,6 +542,14 @@ body.pos-walking-active .pos-online__top-fields .pos-online__scan-row button{pad
     });
     renderCart();
     skuInput?.focus();
+
+    // Branch selector — navigate to branch-scoped URL on change
+    var branchSelect = document.getElementById('pos-branch-select');
+    if (branchSelect) {
+        branchSelect.addEventListener('change', function () {
+            if (branchSelect.value) window.location.href = branchSelect.value;
+        });
+    }
 
     // Listen for print completion and reset
     document.addEventListener('pos-clear-cart-and-reset', function () {

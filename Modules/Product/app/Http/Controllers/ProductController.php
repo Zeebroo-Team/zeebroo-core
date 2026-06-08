@@ -80,6 +80,8 @@ class ProductController extends Controller
 
         $currency = (string) (get_settings('business.currency', '', $business) ?: '');
         $catalog = $this->catalogOptionsService->optionsForBusiness($business);
+        $branchProductSeparate = (bool) get_settings('business.branch_product_separate', false, $business);
+        $branchOptions = $branchProductSeparate ? $business->branches()->get() : collect();
 
         $search         = trim((string) $request->query('q', ''));
         $filterCategory = $request->query('category') ? (int) $request->query('category') : null;
@@ -97,18 +99,20 @@ class ProductController extends Controller
             : $business->products()->count();
 
         return view('product::products.index', [
-            'business'          => $business,
-            'products'          => $products,
-            'totalProductCount' => $totalProductCount,
-            'currency'          => $currency,
-            'categories'        => $catalog['categories'],
-            'brands'            => $catalog['brands'],
-            'units'             => $catalog['units'],
-            'bundlePickerCatalog' => $this->productBundleService->pickerCatalogForBusiness($business),
-            'search'            => $search,
-            'filterCategory'    => $filterCategory,
-            'filterBrand'       => $filterBrand,
-            'filterStatus'      => $filterStatus,
+            'business'             => $business,
+            'products'             => $products,
+            'totalProductCount'    => $totalProductCount,
+            'currency'             => $currency,
+            'categories'           => $catalog['categories'],
+            'brands'               => $catalog['brands'],
+            'units'                => $catalog['units'],
+            'bundlePickerCatalog'  => $this->productBundleService->pickerCatalogForBusiness($business),
+            'search'               => $search,
+            'filterCategory'       => $filterCategory,
+            'filterBrand'          => $filterBrand,
+            'filterStatus'         => $filterStatus,
+            'branchProductSeparate' => $branchProductSeparate,
+            'branchOptions'        => $branchOptions,
         ]);
     }
 
@@ -158,6 +162,7 @@ class ProductController extends Controller
 
         $stockActivity = $this->productStockActivity->forProduct($product);
         $stockSellingMarkupPercent = (float) get_settings('product.stock_selling_markup_percent', 25, $business);
+        $branchStockSeparate = (bool) get_settings('business.branch_stock_separate', false, $business);
 
         $salesPeriod = (string) $request->query('sales_period', 'weekly');
         if (! in_array($salesPeriod, ['daily', 'weekly', 'monthly'], true)) {
@@ -166,14 +171,15 @@ class ProductController extends Controller
         $salesChart = $this->productSalesChart->build($product, $salesPeriod);
 
         return view('product::products.show', array_merge([
-            'business' => $business,
-            'product' => $product,
-            'currency' => $currency,
-            'activeTab' => $activeTab,
-            'stockView' => $stockView,
+            'business'             => $business,
+            'product'              => $product,
+            'currency'             => $currency,
+            'activeTab'            => $activeTab,
+            'stockView'            => $stockView,
             'stockSellingMarkupPercent' => $stockSellingMarkupPercent,
-            'salesChart' => $salesChart,
-            'salesPeriod' => $salesPeriod,
+            'branchStockSeparate'  => $branchStockSeparate,
+            'salesChart'           => $salesChart,
+            'salesPeriod'          => $salesPeriod,
         ], $stockActivity));
     }
 
@@ -210,16 +216,20 @@ class ProductController extends Controller
 
         $currency = (string) (get_settings('business.currency', '', $business) ?: '');
         $catalog = $this->catalogOptionsService->optionsForBusiness($business);
+        $branchProductSeparate = (bool) get_settings('business.branch_product_separate', false, $business);
+        $branchOptions = $branchProductSeparate ? $business->branches()->get() : collect();
         $product->load(['categories', 'brands', 'productUnit', 'imageFile', 'productImages.file', 'bundleItems.itemProduct']);
 
         return view('product::products.edit', [
-            'business' => $business,
-            'product' => $product,
-            'currency' => $currency,
-            'categories' => $catalog['categories'],
-            'brands' => $catalog['brands'],
-            'units' => $catalog['units'],
-            'bundlePickerCatalog' => $this->productBundleService->pickerCatalogForBusiness($business, $product),
+            'business'             => $business,
+            'product'              => $product,
+            'currency'             => $currency,
+            'categories'           => $catalog['categories'],
+            'brands'               => $catalog['brands'],
+            'units'                => $catalog['units'],
+            'bundlePickerCatalog'  => $this->productBundleService->pickerCatalogForBusiness($business, $product),
+            'branchProductSeparate' => $branchProductSeparate,
+            'branchOptions'        => $branchOptions,
         ]);
     }
 
@@ -268,8 +278,13 @@ class ProductController extends Controller
      */
     private function validatedProduct(Request $request, Business $business): array
     {
+        $branchProductSeparate = (bool) get_settings('business.branch_product_separate', false, $business);
+
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
+            'branch_id' => $branchProductSeparate
+                ? ['nullable', 'integer', Rule::exists('branches', 'id')->where(fn ($q) => $q->where('business_id', $business->id))]
+                : ['nullable'],
             'sku' => ['nullable', 'string', 'max:120'],
             'description' => ['nullable', 'string', 'max:5000'],
             'product_category_ids' => ['nullable', 'array'],
@@ -336,6 +351,10 @@ class ProductController extends Controller
 
         if (empty($validated['product_unit_id'])) {
             $validated['product_unit_id'] = null;
+        }
+
+        if (! $branchProductSeparate || empty($validated['branch_id'])) {
+            $validated['branch_id'] = null;
         }
 
         return $validated;

@@ -23,6 +23,9 @@
             'accounts' => $accounts,
             'hasPaymentAccounts' => $hasPaymentAccounts,
             'stockSellingMarkupPercent' => $stockSellingMarkupPercent ?? 25,
+            'branchStockSeparate' => $branchStockSeparate,
+            'branchOptions' => $branchOptions,
+            'purchaseBranchId' => $purchaseBranchId,
         ])
     </section>
 </div>

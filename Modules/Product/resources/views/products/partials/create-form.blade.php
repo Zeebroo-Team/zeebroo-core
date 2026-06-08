@@ -12,6 +12,8 @@
         'brands' => $brands ?? collect(),
         'units' => $units ?? collect(),
         'bundlePickerCatalog' => $bundlePickerCatalog ?? [],
+        'branchProductSeparate' => $branchProductSeparate ?? false,
+        'branchOptions' => $branchOptions ?? collect(),
     ])
     <div style="grid-column:1/-1;display:flex;justify-content:flex-end;">
         <button type="submit" class="linkbtn" style="padding:8px 16px;font-size:13px;">{{ $submitLabel }}</button>

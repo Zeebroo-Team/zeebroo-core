@@ -23,8 +23,16 @@ class PosCatalogApiController extends Controller
     {
         $business = $this->businessOrAbort($request);
 
+        $branchId   = $request->query('branch');
+        $branchId   = is_numeric($branchId) ? (int) $branchId : null;
+        $branchPosSeparate     = (bool) get_settings('business.branch_pos_separate', false, $business);
+        $branchProductSeparate = (bool) get_settings('business.branch_product_separate', false, $business);
+        $effectiveBranchId = $branchPosSeparate ? $branchId : null;
+
         return response()->json([
-            'data' => $this->api->formatCategories($this->catalog->posCategories($business)),
+            'data' => $this->api->formatCategories(
+                $this->catalog->posCategories($business, $effectiveBranchId, $branchProductSeparate)
+            ),
         ]);
     }
 
@@ -35,9 +43,16 @@ class PosCatalogApiController extends Controller
         $search = (string) $request->query('q', '');
         $categoryId = $request->query('category');
         $categoryId = is_numeric($categoryId) ? (int) $categoryId : null;
+        $branchId   = $request->query('branch');
+        $branchId   = is_numeric($branchId) ? (int) $branchId : null;
 
         $page    = max(1, (int) $request->query('page', 1));
         $perPage = max(1, min(100, (int) $request->query('per_page', 40)));
+
+        $branchPosSeparate     = (bool) get_settings('business.branch_pos_separate', false, $business);
+        $branchProductSeparate = (bool) get_settings('business.branch_product_separate', false, $business);
+        $branchStockSeparate   = (bool) get_settings('business.branch_stock_separate', false, $business);
+        $effectiveBranchId = $branchPosSeparate ? $branchId : null;
 
         $paginated = $this->catalog->productCardsForPos(
             $business,
@@ -45,6 +60,9 @@ class PosCatalogApiController extends Controller
             $categoryId,
             $page,
             $perPage,
+            $effectiveBranchId,
+            $branchProductSeparate,
+            $branchStockSeparate,
         );
 
         return response()->json([

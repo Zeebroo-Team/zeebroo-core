@@ -2,6 +2,7 @@
     $posSettings = $posSettings ?? [];
     $redirectUrl = url()->current();
     $isDarkMode = ($posSettings['display_theme'] ?? 'inherit') === 'dark';
+    $branchNavOptions = $branchNavOptions ?? [];
 @endphp
 
 <div id="pos-settings-modal" class="psm-overlay" role="dialog" aria-modal="true" aria-labelledby="pos-settings-title" aria-hidden="true">
@@ -54,6 +55,25 @@
 
                 {{-- ── General panel ──────────────────────────────── --}}
                 <div class="psm-panel is-active" id="psm-panel-general" role="tabpanel" aria-labelledby="psm-tab-general">
+                    @if(!empty($branchNavOptions))
+                    <div class="psm-section">
+                        <p class="psm-section__label"><i class="fa fa-code-branch" aria-hidden="true"></i> Branch</p>
+                        <div class="psm-card">
+                            <div class="psm-field" style="margin-bottom:0;">
+                                <label class="psm-field__label" for="psm-branch-select">Active branch</label>
+                                <p class="psm-field__hint">Show products and stock for the selected branch only</p>
+                                <div class="psm-select-wrap">
+                                    <select id="psm-branch-select" class="psm-select">
+                                        @foreach($branchNavOptions as $opt)
+                                            <option value="{{ $opt['url'] }}" @selected($opt['selected'])>{{ $opt['label'] }}</option>
+                                        @endforeach
+                                    </select>
+                                    <span class="psm-select-wrap__icon"><i class="fa fa-chevron-down" aria-hidden="true"></i></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    @endif
                     <div class="psm-section">
                         <p class="psm-section__label"><i class="fa fa-palette" aria-hidden="true"></i> Appearance</p>
                         <div class="psm-card">
@@ -453,6 +473,14 @@ html.pos-settings-modal-open,html.pos-settings-modal-open body{overflow:hidden;}
 
     if (settleImmediate) settleImmediate.addEventListener('click', function () { applySettlementMode('immediate'); });
     if (settleEod) settleEod.addEventListener('click', function () { applySettlementMode('end_of_day'); });
+
+    // Branch selection — navigate immediately when branch changes
+    var branchModalSelect = document.getElementById('psm-branch-select');
+    if (branchModalSelect) {
+        branchModalSelect.addEventListener('change', function () {
+            if (branchModalSelect.value) window.location.href = branchModalSelect.value;
+        });
+    }
 })();
 </script>
 @endonce

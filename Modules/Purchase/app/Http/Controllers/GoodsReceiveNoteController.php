@@ -162,15 +162,20 @@ class GoodsReceiveNoteController extends Controller
 
         $currency = (string) (get_settings('business.currency', '', $business) ?: '');
         $accounts = $this->accountsForPurchasePayment($business, $request);
+        $branchStockSeparate = (bool) get_settings('business.branch_stock_separate', false, $business);
+        $branchOptions = $branchStockSeparate ? $business->branches()->get() : collect();
 
         return view('purchase::goods-receive.create', [
-            'business' => $business,
-            'purchase' => $purchase,
-            'currency' => $currency,
-            'canPayByCheque' => $this->businessHasCurrentAccount($business, $request),
-            'accounts' => $accounts,
-            'hasPaymentAccounts' => $accounts->isNotEmpty(),
+            'business'            => $business,
+            'purchase'            => $purchase,
+            'currency'            => $currency,
+            'canPayByCheque'      => $this->businessHasCurrentAccount($business, $request),
+            'accounts'            => $accounts,
+            'hasPaymentAccounts'  => $accounts->isNotEmpty(),
             'stockSellingMarkupPercent' => (float) get_settings('product.stock_selling_markup_percent', 25, $business),
+            'branchStockSeparate' => $branchStockSeparate,
+            'branchOptions'       => $branchOptions,
+            'purchaseBranchId'    => $purchase->branch_id,
         ]);
     }
 
@@ -413,8 +418,12 @@ class GoodsReceiveNoteController extends Controller
         $paymentMethod = (string) $request->input('payment_method');
         $requiresAccount = in_array($paymentMethod, [Purchase::PAYMENT_CASH, Purchase::PAYMENT_CHEQUE], true);
         $paymentOption = (string) $request->input('payment_option', 'full');
+        $branchStockSeparate = (bool) get_settings('business.branch_stock_separate', false, $business);
 
         $validated = $request->validate([
+            'branch_id' => $branchStockSeparate
+                ? ['nullable', 'integer', Rule::exists('branches', 'id')->where(fn ($q) => $q->where('business_id', $business->id))]
+                : ['nullable'],
             'received_date' => ['required', 'date'],
             'reference' => ['nullable', 'string', 'max:120'],
             'notes' => ['nullable', 'string', 'max:5000'],
@@ -458,6 +467,10 @@ class GoodsReceiveNoteController extends Controller
 
         $validated['deduct_account_id'] = filled($validated['deduct_account_id'] ?? null)
             ? (int) $validated['deduct_account_id']
+            : null;
+
+        $validated['branch_id'] = ($branchStockSeparate && !empty($validated['branch_id']))
+            ? (int) $validated['branch_id']
             : null;
 
         if ($requiresAccount && $this->accountsForPurchasePayment($business, $request)->isEmpty()) {

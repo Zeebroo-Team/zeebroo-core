@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use Modules\Pos\Http\Controllers\Api\PosAuthApiController;
 use Modules\Pos\Http\Controllers\Api\PosBusinessesApiController;
+use Modules\Pos\Http\Controllers\Api\PosBranchesApiController;
 use Modules\Pos\Http\Controllers\Api\PosApiDocsController;
 use Modules\Pos\Http\Controllers\Api\PosCatalogApiController;
 use Modules\Pos\Http\Controllers\Api\PosCheckoutApiController;
@@ -27,6 +28,7 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
     Route::post('auth/revoke', [PosAuthApiController::class, 'revoke'])->name('auth.revoke');
     Route::get('businesses', [PosBusinessesApiController::class, 'index'])->name('businesses.index');
     Route::get('online/bootstrap', PosOnlineBootstrapApiController::class)->name('online.bootstrap');
+    Route::get('online/branches', PosBranchesApiController::class)->name('online.branches');
 
     Route::get('online/categories', [PosCatalogApiController::class, 'categories'])->name('online.categories');
     Route::get('online/products', [PosCatalogApiController::class, 'products'])->name('online.products');

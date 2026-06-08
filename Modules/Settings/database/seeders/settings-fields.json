@@ -137,6 +137,45 @@
       "is_disabled": false
     },
     {
+      "tab": "business",
+      "key": "business.branch_product_separate",
+      "name": "Product Manage Separately Branch Wise",
+      "type": "checkbox",
+      "default": false,
+      "options": [],
+      "required": false,
+      "description": "When enabled, products are managed independently per branch. Requires Multi warehouse / branches to be active.",
+      "placeholder": "Manage products separately per branch",
+      "is_enabled": true,
+      "is_disabled": false
+    },
+    {
+      "tab": "business",
+      "key": "business.branch_stock_separate",
+      "name": "Stock Manage Separately Branch Wise",
+      "type": "checkbox",
+      "default": false,
+      "options": [],
+      "required": false,
+      "description": "When enabled, stock levels are tracked independently per branch. Requires Multi warehouse / branches to be active.",
+      "placeholder": "Manage stock separately per branch",
+      "is_enabled": true,
+      "is_disabled": false
+    },
+    {
+      "tab": "business",
+      "key": "business.branch_pos_separate",
+      "name": "POS System Manage Separately Branch Wise",
+      "type": "checkbox",
+      "default": false,
+      "options": [],
+      "required": false,
+      "description": "When enabled, POS sessions and sales are tracked independently per branch. Requires Multi warehouse / branches to be active.",
+      "placeholder": "Manage POS separately per branch",
+      "is_enabled": true,
+      "is_disabled": false
+    },
+    {
       "tab": "invoice",
       "key": "invoice.prefix",
       "name": "Invoice Prefix",

@@ -4,6 +4,7 @@ namespace Modules\Product\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Modules\Business\Models\Branch;
 use Modules\Business\Models\Business;
 use Modules\Purchase\Models\GoodsReceiveNoteItem;
 
@@ -11,6 +12,7 @@ class ProductStockLayer extends Model
 {
     protected $fillable = [
         'business_id',
+        'branch_id',
         'product_id',
         'goods_receive_note_item_id',
         'quantity_received',
@@ -34,6 +36,11 @@ class ProductStockLayer extends Model
     public function business(): BelongsTo
     {
         return $this->belongsTo(Business::class);
+    }
+
+    public function branch(): BelongsTo
+    {
+        return $this->belongsTo(Branch::class);
     }
 
     public function product(): BelongsTo

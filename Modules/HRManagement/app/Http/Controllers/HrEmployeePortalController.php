@@ -328,17 +328,39 @@ class HrEmployeePortalController extends Controller
         $categoryId = is_numeric($categoryId) ? (int) $categoryId : null;
 
         $currency = (string) (get_settings('business.currency', '', $business) ?: '');
+
+        $branchPosSeparate     = (bool) get_settings('business.branch_pos_separate', false, $business);
+        $branchProductSeparate = (bool) get_settings('business.branch_product_separate', false, $business);
+        $branchStockSeparate   = (bool) get_settings('business.branch_stock_separate', false, $business);
+
+        $branchId = null;
+        $branchOptions = collect();
+        if ($branchPosSeparate) {
+            $branchOptions = $business->branches()->get();
+            $rawBranchId = $request->query('branch');
+            if (is_numeric($rawBranchId)) {
+                $candidate = (int) $rawBranchId;
+                if ($branchOptions->contains('id', $candidate)) {
+                    $branchId = $candidate;
+                }
+            }
+        }
+
         $accounts = Account::query()
             ->with(['bankType', 'bank', 'warehouse'])
             ->where('business_id', $business->id)
             ->orderBy('account_name')
             ->get();
-        $categories = $this->posCatalog->posCategories($business);
+        $categories = $this->posCatalog->posCategories($business, $branchId, $branchProductSeparate);
         $products = $this->posCatalog->productCardsForPos(
             $business,
             $search !== '' ? $search : null,
             $categoryId,
-            perPage: 500,
+            1,
+            500,
+            $branchId,
+            $branchProductSeparate,
+            $branchStockSeparate,
         )['data'];
         $today = $this->posSales->todaySummaryForBusiness($business);
         $posSettings = $this->posSettings->forBusiness($business);
@@ -384,6 +406,10 @@ class HrEmployeePortalController extends Controller
             'defaultDepositAccountId' => $posSettings['default_deposit_account_id'] ?? null,
             'printSale' => $printSale,
             'checkoutFormAction' => route('hr.portal.pos-online.checkout'),
+            'branchPosSeparate' => $branchPosSeparate,
+            'branchOptions' => $branchOptions,
+            'branchId' => $branchId,
+            'portalBranchRoute' => 'hr.portal.pos-online',
         ]);
     }
 

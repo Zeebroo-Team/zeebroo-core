@@ -198,8 +198,13 @@ class GoodsReceiveNoteService
         return DB::transaction(function () use ($purchase, $user, $data, $lines) {
             $purchase->load('business');
 
+            $branchId = isset($data['branch_id']) && (int) $data['branch_id'] > 0
+                ? (int) $data['branch_id']
+                : ($purchase->branch_id ?? null);
+
             $grn = $purchase->goodsReceiveNotes()->create([
                 'business_id' => $purchase->business_id,
+                'branch_id' => $branchId,
                 'grn_number' => $this->nextGrnNumber($purchase->business),
                 'received_date' => $data['received_date'],
                 'reference' => filled($data['reference'] ?? null) ? trim((string) $data['reference']) : null,

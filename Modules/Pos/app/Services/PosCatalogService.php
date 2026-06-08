@@ -48,13 +48,20 @@ class PosCatalogService
     /**
      * @return Collection<int, ProductCategory>
      */
-    public function posCategories(Business $business): Collection
-    {
+    public function posCategories(
+        Business $business,
+        ?int $branchId = null,
+        bool $branchProductSeparate = false,
+    ): Collection {
         return $business->productCategories()
             ->where('is_active', true)
             ->whereHas('products', fn ($query) => $query
                 ->where('is_active', true)
-                ->where('is_bundle', false))
+                ->where('is_bundle', false)
+                ->when(
+                    $branchProductSeparate && $branchId !== null,
+                    fn ($q) => $q->where('branch_id', $branchId),
+                ))
             ->orderBy('sort_order')
             ->orderBy('name')
             ->get(['id', 'name']);
@@ -69,6 +76,9 @@ class PosCatalogService
         ?int $categoryId = null,
         int $page = 1,
         int $perPage = 40,
+        ?int $branchId = null,
+        bool $branchProductSeparate = false,
+        bool $branchStockSeparate = false,
     ): array {
         $page    = max(1, $page);
         $perPage = max(1, min(100, $perPage));
@@ -78,6 +88,10 @@ class PosCatalogService
             ->where('is_bundle', false)
             ->with(['productUnit', 'imageFile', 'categories'])
             ->orderBy('name');
+
+        if ($branchProductSeparate && $branchId !== null) {
+            $query->where('branch_id', $branchId);
+        }
 
         if ($categoryId !== null && $categoryId > 0) {
             $query->whereHas('categories', fn ($builder) => $builder->whereKey($categoryId));
@@ -99,7 +113,7 @@ class PosCatalogService
 
         return [
             'data' => $items
-                ->map(fn (Product $product) => $this->productCardForProduct($product))
+                ->map(fn (Product $product) => $this->productCardForProduct($product, $branchId, $branchStockSeparate))
                 ->values()
                 ->all(),
             'meta' => [
@@ -114,11 +128,14 @@ class PosCatalogService
     /**
      * @return array<string, mixed>
      */
-    public function productCardForProduct(Product $product): array
-    {
+    public function productCardForProduct(
+        Product $product,
+        ?int $branchId = null,
+        bool $branchStockSeparate = false,
+    ): array {
         $product->loadMissing(['productUnit', 'imageFile', 'categories', 'business', 'sellingUnits']);
-        $layers = $this->sellableLayersForProduct($product);
-        $meta = $this->posMetaForProduct($product);
+        $layers = $this->sellableLayersForProduct($product, $branchId, $branchStockSeparate);
+        $meta = $this->posMetaForProduct($product, $branchId, $branchStockSeparate);
         $defaultLayer = $layers[0] ?? null;
         $sellPrices = array_values(array_unique(array_map(
             static fn (array $layer) => number_format((float) $layer['unit_sell_price'], 2, '.', ''),
@@ -153,14 +170,21 @@ class PosCatalogService
      *     received_at: ?string,
      * }>
      */
-    public function sellableLayersForProduct(Product $product): array
-    {
+    public function sellableLayersForProduct(
+        Product $product,
+        ?int $branchId = null,
+        bool $branchStockSeparate = false,
+    ): array {
         $product->loadMissing('business');
 
         $layers = ProductStockLayer::query()
             ->where('product_id', $product->id)
             ->where('business_id', $product->business_id)
             ->where('quantity_remaining', '>', 0)
+            ->when(
+                $branchStockSeparate && $branchId !== null,
+                fn ($q) => $q->where('branch_id', $branchId),
+            )
             ->with(['goodsReceiveNoteItem.goodsReceiveNote'])
             ->orderBy('received_at')
             ->orderBy('id')
@@ -216,10 +240,13 @@ class PosCatalogService
      *     has_layers: bool,
      * }
      */
-    public function posMetaForProduct(Product $product): array
-    {
+    public function posMetaForProduct(
+        Product $product,
+        ?int $branchId = null,
+        bool $branchStockSeparate = false,
+    ): array {
         $product->loadMissing('business');
-        $layer = $this->nextFifoLayer($product);
+        $layer = $this->nextFifoLayer($product, $branchId, $branchStockSeparate);
 
         $unitSell = $layer !== null
             ? ($layer->selling_unit_price !== null ? (float) $layer->selling_unit_price : null)
@@ -261,12 +288,19 @@ class PosCatalogService
         })->all();
     }
 
-    public function nextFifoLayer(Product $product): ?ProductStockLayer
-    {
+    public function nextFifoLayer(
+        Product $product,
+        ?int $branchId = null,
+        bool $branchStockSeparate = false,
+    ): ?ProductStockLayer {
         return ProductStockLayer::query()
             ->where('product_id', $product->id)
             ->where('business_id', $product->business_id)
             ->where('quantity_remaining', '>', 0)
+            ->when(
+                $branchStockSeparate && $branchId !== null,
+                fn ($q) => $q->where('branch_id', $branchId),
+            )
             ->orderBy('received_at')
             ->orderBy('id')
             ->first();

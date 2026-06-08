@@ -26,6 +26,8 @@
             'products' => $products,
             'suppliers' => $suppliers,
             'submitLabel' => 'Save purchase order',
+            'branchStockSeparate' => $branchStockSeparate,
+            'branchOptions' => $branchOptions,
         ])
     </section>
 

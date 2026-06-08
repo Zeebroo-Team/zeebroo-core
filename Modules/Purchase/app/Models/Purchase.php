@@ -5,6 +5,7 @@ namespace Modules\Purchase\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Modules\Business\Models\Branch;
 use Modules\Business\Models\Business;
 
 class Purchase extends Model
@@ -27,6 +28,7 @@ class Purchase extends Model
 
     protected $fillable = [
         'business_id',
+        'branch_id',
         'po_number',
         'supplier_id',
         'reference',
@@ -53,6 +55,11 @@ class Purchase extends Model
     public function business(): BelongsTo
     {
         return $this->belongsTo(Business::class);
+    }
+
+    public function branch(): BelongsTo
+    {
+        return $this->belongsTo(Branch::class);
     }
 
     public function supplier(): BelongsTo

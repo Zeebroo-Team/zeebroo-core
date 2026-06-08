@@ -177,13 +177,35 @@ class PosController extends Controller
         $categoryId = is_numeric($categoryId) ? (int) $categoryId : null;
 
         $currency = (string) (get_settings('business.currency', '', $business) ?: '');
+
+        $branchPosSeparate     = (bool) get_settings('business.branch_pos_separate', false, $business);
+        $branchProductSeparate = (bool) get_settings('business.branch_product_separate', false, $business);
+        $branchStockSeparate   = (bool) get_settings('business.branch_stock_separate', false, $business);
+
+        $branchId = null;
+        $branchOptions = collect();
+        if ($branchPosSeparate) {
+            $branchOptions = $business->branches()->get();
+            $rawBranchId = $request->query('branch');
+            if (is_numeric($rawBranchId)) {
+                $candidate = (int) $rawBranchId;
+                if ($branchOptions->contains('id', $candidate)) {
+                    $branchId = $candidate;
+                }
+            }
+        }
+
         $accounts = $this->accountsForPosPayment($business, $request);
-        $categories = $this->catalog->posCategories($business);
+        $categories = $this->catalog->posCategories($business, $branchId, $branchProductSeparate);
         $products = $this->catalog->productCardsForPos(
             $business,
             $search !== '' ? $search : null,
             $categoryId,
-            perPage: 500,
+            1,
+            500,
+            $branchId,
+            $branchProductSeparate,
+            $branchStockSeparate,
         )['data'];
         $today = $this->sales->todaySummaryForBusiness($business);
         $posSettings = $this->posSettings->forBusiness($business);
@@ -223,6 +245,9 @@ class PosController extends Controller
             'posShellClass' => $posShellClass,
             'defaultDepositAccountId' => $posSettings['default_deposit_account_id'],
             'printSale' => $printSale,
+            'branchPosSeparate' => $branchPosSeparate,
+            'branchOptions' => $branchOptions,
+            'branchId' => $branchId,
         ]);
     }
 }

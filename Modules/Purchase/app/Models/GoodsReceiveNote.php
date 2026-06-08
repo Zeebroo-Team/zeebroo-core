@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
+use Modules\Business\Models\Branch;
 use Modules\Business\Models\Business;
 use Modules\Purchase\Services\GrnPaymentSettlementService;
 use Modules\Transaction\Models\LedgerTransaction;
@@ -14,6 +15,7 @@ class GoodsReceiveNote extends Model
 {
     protected $fillable = [
         'business_id',
+        'branch_id',
         'purchase_id',
         'grn_number',
         'received_date',
@@ -41,6 +43,11 @@ class GoodsReceiveNote extends Model
     public function business(): BelongsTo
     {
         return $this->belongsTo(Business::class);
+    }
+
+    public function branch(): BelongsTo
+    {
+        return $this->belongsTo(Branch::class);
     }
 
     public function purchase(): BelongsTo

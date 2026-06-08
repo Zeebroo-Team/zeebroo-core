@@ -31,9 +31,16 @@ class PosOnlineApiService
         ?int $categoryId = null,
         int $page = 1,
         int $perPage = 40,
+        ?int $branchId = null,
     ): array {
         $currency = (string) (get_settings('business.currency', '', $business) ?: '');
         $catalogOptions = $this->catalogOptions->optionsForBusiness($business);
+
+        $branchPosSeparate     = (bool) get_settings('business.branch_pos_separate', false, $business);
+        $branchProductSeparate = (bool) get_settings('business.branch_product_separate', false, $business);
+        $branchStockSeparate   = (bool) get_settings('business.branch_stock_separate', false, $business);
+
+        $effectiveBranchId = $branchPosSeparate ? $branchId : null;
 
         $paginated = $this->catalog->productCardsForPos(
             $business,
@@ -41,13 +48,20 @@ class PosOnlineApiService
             $categoryId,
             $page,
             $perPage,
+            $effectiveBranchId,
+            $branchProductSeparate,
+            $branchStockSeparate,
         );
+
+        $branches = $branchPosSeparate
+            ? $business->branches()->get()->map(fn ($b) => ['id' => (int) $b->id, 'name' => $b->name])->values()->all()
+            : [];
 
         return [
             'business' => $this->formatBusiness($business),
             'currency' => $currency,
             'channel' => Sale::CHANNEL_ONLINE,
-            'categories' => $this->formatCategories($this->catalog->posCategories($business)),
+            'categories' => $this->formatCategories($this->catalog->posCategories($business, $effectiveBranchId, $branchProductSeparate)),
             'products' => $paginated['data'],
             'products_meta' => $paginated['meta'],
             'accounts' => $this->formatAccounts(
@@ -56,6 +70,9 @@ class PosOnlineApiService
             'today' => $this->sales->todaySummaryForBusiness($business),
             'settings' => $this->posSettings->forBusiness($business),
             'product_units' => $this->formatProductUnits($catalogOptions['units']),
+            'branch_pos_separate' => $branchPosSeparate,
+            'branches' => $branches,
+            'selected_branch_id' => $effectiveBranchId,
         ];
     }
 

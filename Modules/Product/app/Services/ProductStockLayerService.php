@@ -96,6 +96,7 @@ class ProductStockLayerService
             ['goods_receive_note_item_id' => $item->id],
             [
                 'business_id' => (int) $grn->business_id,
+                'branch_id' => $grn->branch_id ?? null,
                 'product_id' => (int) $item->product_id,
                 'quantity_received' => (float) $item->quantity_received,
                 'quantity_remaining' => (float) $item->quantity_received,
@@ -145,7 +146,7 @@ class ProductStockLayerService
         return ProductStockLayer::query()
             ->where('product_id', $product->id)
             ->where('business_id', $product->business_id)
-            ->with(['goodsReceiveNoteItem.goodsReceiveNote.purchase'])
+            ->with(['goodsReceiveNoteItem.goodsReceiveNote.purchase', 'branch'])
             ->orderByDesc('received_at')
             ->orderByDesc('id')
             ->get();

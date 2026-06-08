@@ -26,6 +26,8 @@ class PosOnlineBootstrapApiController extends Controller
         $categoryId = is_numeric($categoryId) ? (int) $categoryId : null;
         $page       = max(1, (int) $request->query('page', 1));
         $perPage    = max(1, min(100, (int) $request->query('per_page', 40)));
+        $branchId   = $request->query('branch');
+        $branchId   = is_numeric($branchId) ? (int) $branchId : null;
 
         return response()->json([
             'data' => $this->api->bootstrap(
@@ -35,6 +37,7 @@ class PosOnlineBootstrapApiController extends Controller
                 $categoryId,
                 $page,
                 $perPage,
+                $branchId,
             ),
         ]);
     }

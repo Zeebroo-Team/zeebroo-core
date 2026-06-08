@@ -162,6 +162,7 @@
         </div>
     @endif
 
+    @if($totalCount > 0)
         <div id="pcat-modal" class="pcat-modal {{ $catalogModalOpen ? 'pcat-modal--open' : '' }}" role="dialog" aria-modal="true" aria-labelledby="pcat-modal-title" aria-hidden="{{ $catalogModalOpen ? 'false' : 'true' }}">
             <div class="pcat-modal__backdrop" data-pcat-close tabindex="-1"></div>
             <div class="pcat-modal__panel">

@@ -121,13 +121,7 @@ final class HrHubSummaryService
             ->first();
 
         if ($cycle === null) {
-            return [
-                'overdue' => true,
-                'year' => $year,
-                'month' => $month,
-                'month_label' => $monthLabel,
-                'reason' => 'missing_cycle',
-            ];
+            return ['overdue' => false];
         }
 
         if ($cycle->status !== PayrollCycle::STATUS_FINALIZED) {
@@ -139,21 +133,6 @@ final class HrHubSummaryService
                 'cycle_id' => $cycle->id,
                 'status' => $cycle->status,
                 'reason' => 'not_finalized',
-            ];
-        }
-
-        $rowCount = PayrollItem::query()
-            ->where('payroll_cycle_id', $cycle->id)
-            ->count();
-
-        if ($rowCount === 0) {
-            return [
-                'overdue' => true,
-                'year' => $year,
-                'month' => $month,
-                'month_label' => $monthLabel,
-                'cycle_id' => $cycle->id,
-                'reason' => 'no_rows',
             ];
         }
 

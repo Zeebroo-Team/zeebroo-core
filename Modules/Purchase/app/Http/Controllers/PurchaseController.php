@@ -32,6 +32,8 @@ class PurchaseController extends Controller
         }
 
         $currency = (string) (get_settings('business.currency', '', $business) ?: '');
+        $branchStockSeparate = (bool) get_settings('business.branch_stock_separate', false, $business);
+        $branchOptions = $branchStockSeparate ? $business->branches()->get() : collect();
 
         $search = trim((string) $request->query('q', ''));
         $statusFilter = (string) $request->query('status', 'all');
@@ -41,16 +43,18 @@ class PurchaseController extends Controller
         $suppliers = $this->supplierService->listForBusiness($business)->where('is_active', true)->values();
 
         return view('purchase::purchases.index', [
-            'business' => $business,
-            'hasPurchases' => $this->purchaseService->businessHasPurchases($business),
-            'purchases' => $this->purchaseService->listForBusiness($business, $search, $statusFilter, $supplierId),
-            'suppliers' => $suppliers,
-            'products' => $business->products()->where('is_active', true)->orderBy('name')->get(['id', 'name', 'sku', 'unit_price']),
-            'currency' => $currency,
-            'search' => $search,
-            'statusFilter' => $statusFilter,
-            'supplierFilter' => $supplierId,
-            'statusTabs' => $this->purchaseStatusFilterTabs(),
+            'business'            => $business,
+            'hasPurchases'        => $this->purchaseService->businessHasPurchases($business),
+            'purchases'           => $this->purchaseService->listForBusiness($business, $search, $statusFilter, $supplierId),
+            'suppliers'           => $suppliers,
+            'products'            => $business->products()->where('is_active', true)->orderBy('name')->get(['id', 'name', 'sku', 'unit_price']),
+            'currency'            => $currency,
+            'search'              => $search,
+            'statusFilter'        => $statusFilter,
+            'supplierFilter'      => $supplierId,
+            'statusTabs'          => $this->purchaseStatusFilterTabs(),
+            'branchStockSeparate' => $branchStockSeparate,
+            'branchOptions'       => $branchOptions,
         ]);
     }
 
@@ -132,13 +136,17 @@ class PurchaseController extends Controller
         $purchase->load(['supplier', 'items.product']);
 
         $currency = (string) (get_settings('business.currency', '', $business) ?: '');
+        $branchStockSeparate = (bool) get_settings('business.branch_stock_separate', false, $business);
+        $branchOptions = $branchStockSeparate ? $business->branches()->get() : collect();
 
         return view('purchase::purchases.edit', [
-            'business' => $business,
-            'purchase' => $purchase,
-            'suppliers' => $this->supplierService->listForBusiness($business)->where('is_active', true)->values(),
-            'products' => $business->products()->where('is_active', true)->orderBy('name')->get(['id', 'name', 'sku', 'unit_price']),
-            'currency' => $currency,
+            'business'            => $business,
+            'purchase'            => $purchase,
+            'suppliers'           => $this->supplierService->listForBusiness($business)->where('is_active', true)->values(),
+            'products'            => $business->products()->where('is_active', true)->orderBy('name')->get(['id', 'name', 'sku', 'unit_price']),
+            'currency'            => $currency,
+            'branchStockSeparate' => $branchStockSeparate,
+            'branchOptions'       => $branchOptions,
         ]);
     }
 
@@ -250,7 +258,12 @@ class PurchaseController extends Controller
         $supplierId = $request->input('supplier_id');
         $supplierId = ($supplierId === null || $supplierId === '' || $supplierId === '0') ? null : (int) $supplierId;
 
+        $branchStockSeparate = (bool) get_settings('business.branch_stock_separate', false, $business);
+
         $validated = $request->validate([
+            'branch_id' => $branchStockSeparate
+                ? ['nullable', 'integer', Rule::exists('branches', 'id')->where(fn ($q) => $q->where('business_id', $business->id))]
+                : ['nullable'],
             'supplier_id' => [
                 'nullable',
                 'integer',
@@ -272,6 +285,9 @@ class PurchaseController extends Controller
         ]);
 
         $validated['supplier_id'] = $supplierId;
+        $validated['branch_id'] = ($branchStockSeparate && !empty($validated['branch_id']))
+            ? (int) $validated['branch_id']
+            : null;
         $validated['expected_delivery_date'] = filled($validated['expected_delivery_date'] ?? null)
             ? $validated['expected_delivery_date']
             : null;

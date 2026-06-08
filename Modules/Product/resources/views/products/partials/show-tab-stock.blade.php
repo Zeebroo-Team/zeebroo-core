@@ -5,6 +5,7 @@
     $grnItems = $grnItems ?? collect();
     $stockLayers = $stockLayers ?? collect();
     $stockSellingMarkupPercent = $stockSellingMarkupPercent ?? 25;
+    $branchStockSeparate = $branchStockSeparate ?? false;
     $productStockTabUrl = fn (string $view) => route('product.show', ['product' => $product, 'tab' => 'stock', 'stock' => $view]);
 @endphp
 <div class="product-stock-summary" role="region" aria-label="Stock summary">
@@ -64,6 +65,7 @@
                     <tr>
                         <th>Received</th>
                         <th>GRN / source</th>
+                        @if($branchStockSeparate)<th>Branch</th>@endif
                         <th>Qty left</th>
                         <th>Unit cost @if(filled($currency))({{ $currency }})@endif</th>
                         <th>Sell price @if(filled($currency))({{ $currency }})@endif</th>
@@ -89,6 +91,9 @@
                                     <div class="muted" style="font-size:11px;margin-top:2px;">PO {{ $grn->purchase->po_number }}</div>
                                 @endif
                             </td>
+                            @if($branchStockSeparate)
+                            <td class="muted" style="font-size:12px;">{{ $layer->branch?->name ?? '—' }}</td>
+                            @endif
                             <td>
                                 <strong style="color:var(--text);">{{ number_format((float) $layer->quantity_remaining, 3) }}</strong>
                                 <span class="muted" style="font-size:11px;"> / {{ number_format((float) $layer->quantity_received, 3) }}</span>

@@ -5,6 +5,7 @@
     $idSku = $pfxRaw !== '' ? $pfxRaw . '-sku' : 'product-sku';
     $productModel = $product ?? null;
     $idUnit = $pfxRaw !== '' ? $pfxRaw . '-unit' : 'product-unit';
+    $idBranch = $pfxRaw !== '' ? $pfxRaw . '-branch' : 'product-branch';
     $idDesc = $pfxRaw !== '' ? $pfxRaw . '-desc' : 'product-desc';
     $idPrice = $pfxRaw !== '' ? $pfxRaw . '-price' : 'product-price';
     $idStock = $pfxRaw !== '' ? $pfxRaw . '-stock' : 'product-stock';
@@ -15,12 +16,26 @@
     $units = $units ?? collect();
     $bundlePickerCatalog = $bundlePickerCatalog ?? [];
     $currency = $currency ?? '';
+    $branchProductSeparate = $branchProductSeparate ?? false;
+    $branchOptions = $branchOptions ?? collect();
 @endphp
 <div class="product-field">
     <label for="{{ $idName }}">Product name</label>
     <input id="{{ $idName }}" name="name" value="{{ old('name', $productModel?->name) }}" maxlength="255" placeholder="e.g. Office paper A4"@if($requireProductName) required @endif>
     @error('name')<div style="color:#f87171;font-size:12px;margin-top:4px;">{{ $message }}</div>@enderror
 </div>
+@if($branchProductSeparate && $branchOptions->isNotEmpty())
+<div class="product-field">
+    <label for="{{ $idBranch }}">Branch</label>
+    <select id="{{ $idBranch }}" name="branch_id">
+        <option value="">— Not assigned —</option>
+        @foreach($branchOptions as $branchRow)
+            <option value="{{ $branchRow->id }}" @selected((string) old('branch_id', $productModel?->branch_id) === (string) $branchRow->id)>{{ $branchRow->name }}</option>
+        @endforeach
+    </select>
+    @error('branch_id')<div style="color:#f87171;font-size:12px;margin-top:4px;">{{ $message }}</div>@enderror
+</div>
+@endif
 <div class="product-field">
     <label for="{{ $idSku }}">SKU / code</label>
     <div class="product-sku-row">

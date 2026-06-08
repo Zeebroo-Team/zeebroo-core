@@ -57,7 +57,9 @@
                 'showPurchaseCreateErrorBanner' => true,
                 'currency' => $currency,
                 'products' => $products,
-                'suppliers' => $suppliers
+                'suppliers' => $suppliers,
+                'branchStockSeparate' => $branchStockSeparate,
+                'branchOptions' => $branchOptions,
             ])
         </section>
     @else
@@ -126,6 +128,8 @@
                         'currency' => $currency,
                         'products' => $products,
                         'suppliers' => $suppliers,
+                        'branchStockSeparate' => $branchStockSeparate,
+                        'branchOptions' => $branchOptions,
                     ])
                 </div>
             </div>
