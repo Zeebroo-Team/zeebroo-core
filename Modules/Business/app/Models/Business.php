@@ -15,6 +15,7 @@ use Modules\FileManager\Models\FileManagerFolder;
 use Modules\Product\Models\Product;
 use Modules\Product\Models\ProductBrand;
 use Modules\Product\Models\ProductCategory;
+use Modules\Product\Models\ProductBarcodeSheet;
 use Modules\Product\Models\ProductUnit;
 use Modules\Purchase\Models\GoodsReceiveNote;
 use Modules\Purchase\Models\Purchase;
@@ -135,6 +136,11 @@ class Business extends Model
     public function productUnits(): HasMany
     {
         return $this->hasMany(ProductUnit::class)->orderBy('sort_order')->orderBy('name');
+    }
+
+    public function productBarcodeSheets(): HasMany
+    {
+        return $this->hasMany(ProductBarcodeSheet::class)->orderByDesc('created_at');
     }
 
     public function suppliers(): HasMany

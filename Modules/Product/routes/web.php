@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Modules\Product\Http\Controllers\ProductBarcodeSheetController;
 use Modules\Product\Http\Controllers\ProductBrandController;
 use Modules\Product\Http\Controllers\ProductCategoryController;
 use Modules\Product\Http\Controllers\ProductController;
@@ -9,6 +10,11 @@ use Modules\Product\Http\Controllers\ProductSellingUnitController;
 use Modules\Product\Http\Controllers\ProductUnitController;
 
 Route::middleware(['auth', 'verified'])->group(function (): void {
+    Route::get('/products/barcodes', [ProductBarcodeSheetController::class, 'index'])->name('product.barcodes.index');
+    Route::post('/products/barcodes', [ProductBarcodeSheetController::class, 'store'])->name('product.barcodes.store');
+    Route::get('/products/barcodes/{barcodeSheet}', [ProductBarcodeSheetController::class, 'show'])->name('product.barcodes.show');
+    Route::delete('/products/barcodes/{barcodeSheet}', [ProductBarcodeSheetController::class, 'destroy'])->name('product.barcodes.destroy');
+
     Route::get('/products/categories', [ProductCategoryController::class, 'index'])->name('product.categories.index');
     Route::post('/products/categories', [ProductCategoryController::class, 'store'])->name('product.categories.store');
     Route::post('/products/categories/reorder', [ProductCategoryController::class, 'reorder'])->name('product.categories.reorder');
