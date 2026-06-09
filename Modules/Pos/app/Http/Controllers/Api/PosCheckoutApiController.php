@@ -31,6 +31,7 @@ class PosCheckoutApiController extends Controller
             'items.*.product_id' => ['required', 'integer', 'min:1'],
             'items.*.quantity' => ['required', 'numeric', 'min:0.001'],
             'items.*.product_stock_layer_id' => ['nullable', 'integer', 'min:1'],
+            'items.*.product_selling_unit_id' => ['nullable', 'integer', 'min:1'],
             'payment_method' => ['required', 'string', 'in:cash,card,credit'],
             'channel' => ['nullable', 'string', 'in:retail,online'],
             'credit_account_id' => [
@@ -43,6 +44,7 @@ class PosCheckoutApiController extends Controller
             'amount_tendered' => ['nullable', 'numeric', 'min:0', 'required_if:payment_method,cash'],
             'discount_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'notes' => ['nullable', 'string', 'max:2000'],
+            'branch_id' => ['nullable', 'integer', 'min:1'],
         ]);
 
         $channel = $validated['channel'] ?? Sale::CHANNEL_ONLINE;
@@ -59,6 +61,9 @@ class PosCheckoutApiController extends Controller
                 $channel,
                 isset($validated['discount_percent']) ? (float) $validated['discount_percent'] : null,
                 isset($validated['amount_tendered']) ? (float) $validated['amount_tendered'] : null,
+                null,
+                false,
+                isset($validated['branch_id']) ? (int) $validated['branch_id'] : null,
             );
         } catch (ValidationException $e) {
             return response()->json([

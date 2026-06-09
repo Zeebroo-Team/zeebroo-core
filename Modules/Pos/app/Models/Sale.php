@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Modules\Account\Models\Account;
+use Modules\Business\Models\Branch;
 use Modules\Business\Models\Business;
 use Modules\Transaction\Models\LedgerTransaction;
 
@@ -31,6 +32,7 @@ class Sale extends Model
 
     protected $fillable = [
         'business_id',
+        'branch_id',
         'user_id',
         'sale_number',
         'status',
@@ -70,6 +72,11 @@ class Sale extends Model
     public function business(): BelongsTo
     {
         return $this->belongsTo(Business::class);
+    }
+
+    public function branch(): BelongsTo
+    {
+        return $this->belongsTo(Branch::class);
     }
 
     public function user(): BelongsTo

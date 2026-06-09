@@ -11,6 +11,7 @@ use Modules\Pos\Models\Sale;
 use Modules\Pos\Models\SaleItem;
 use Modules\Product\Models\Product;
 use Modules\Product\Models\ProductStockLayer;
+use Modules\Product\Services\ProductDiscountService;
 
 class SaleService
 {
@@ -19,6 +20,7 @@ class SaleService
     public function __construct(
         private readonly SaleStockConsumptionService $stockConsumption,
         private readonly SalePaymentSettlementService $payments,
+        private readonly ProductDiscountService $discountService,
     ) {
     }
 
@@ -28,7 +30,7 @@ class SaleService
     public function listForBusiness(Business $business, ?string $search = null): Collection
     {
         $query = $business->sales()
-            ->with(['user', 'creditAccount'])
+            ->with(['user', 'creditAccount', 'branch'])
             ->withCount('items');
 
         $term = trim((string) $search);
@@ -88,13 +90,19 @@ class SaleService
         ?float $amountTendered = null,
         ?int $customerId = null,
         bool $deferSettlement = false,
+        ?int $branchId = null,
     ): Sale {
         $lines = $this->normalizeCartItems($business, $items);
         $paymentMethod = $this->normalizePaymentMethod($paymentMethod);
         $channel = $this->normalizeChannel($channel);
 
-        return DB::transaction(function () use ($business, $user, $lines, $paymentMethod, $creditAccountId, $amountPaid, $notes, $channel, $discountPercent, $amountTendered, $customerId, $deferSettlement) {
+        // Load active discounts for all products in the cart in one query
+        $cartProductIds = array_map(fn ($l) => (int) $l['product']->id, $lines);
+        $activeDiscounts = $this->discountService->activeForProducts($business, $cartProductIds);
+
+        return DB::transaction(function () use ($business, $user, $lines, $paymentMethod, $creditAccountId, $amountPaid, $notes, $channel, $discountPercent, $amountTendered, $customerId, $deferSettlement, $branchId, $activeDiscounts) {
             $sale = $business->sales()->create([
+                'branch_id' => $branchId,
                 'user_id' => $user->id,
                 'sale_number' => $this->nextSaleNumber($business),
                 'status' => Sale::STATUS_COMPLETED,
@@ -124,8 +132,27 @@ class SaleService
                     ? $this->stockConsumption->consumeFromLayer($product, (int) $layerId, $line['quantity'])
                     : $this->stockConsumption->consumeFifo($product, $line['quantity']);
 
+                // Resolve the applicable discount for this line
+                $productDiscounts = $activeDiscounts->where('product_id', $product->id);
+                $suId = $line['product_selling_unit_id'] ?? null;
+                $discount = $suId !== null
+                    ? ($productDiscounts->firstWhere('product_selling_unit_id', $suId)
+                        ?? $productDiscounts->firstWhere('product_selling_unit_id', null))
+                    : $productDiscounts->firstWhere('product_selling_unit_id', null);
+
                 foreach ($allocations as $allocation) {
-                    $lineTotal = round($allocation['quantity'] * $allocation['unit_sell_price'], 2);
+                    $rawPrice = (float) $allocation['unit_sell_price'];
+
+                    // Apply product discount server-side
+                    $discountPerUnit = 0.0;
+                    if ($discount !== null) {
+                        $discountPerUnit = $discount->discount_type === 'percentage'
+                            ? round($rawPrice * ((float) $discount->discount_value / 100), 2)
+                            : min((float) $discount->discount_value, $rawPrice);
+                    }
+                    $finalSellPrice = round(max(0.0, $rawPrice - $discountPerUnit), 2);
+
+                    $lineTotal = round($allocation['quantity'] * $finalSellPrice, 2);
                     $subtotal = round($subtotal + $lineTotal, 2);
 
                     SaleItem::query()->create([
@@ -138,7 +165,8 @@ class SaleService
                         'selling_unit_factor' => isset($line['selling_unit_factor']) ? round((float) $line['selling_unit_factor'], 6) : null,
                         'quantity' => $allocation['quantity'],
                         'unit_cost' => $allocation['unit_cost'],
-                        'unit_sell_price' => $allocation['unit_sell_price'],
+                        'discount_amount' => $discountPerUnit,
+                        'unit_sell_price' => $finalSellPrice,
                         'line_total' => $lineTotal,
                         'sort_order' => $sortOrder++,
                     ]);
@@ -241,8 +269,8 @@ class SaleService
     }
 
     /**
-     * @param  list<array{product_id: int, quantity: float|string, product_stock_layer_id?: int|null, selling_unit_label?: ?string, selling_unit_factor?: float|null}>  $items
-     * @return list<array{product: Product, quantity: float, product_stock_layer_id: ?int, selling_unit_label: ?string, selling_unit_factor: ?float}>
+     * @param  list<array{product_id: int, quantity: float|string, product_stock_layer_id?: int|null, product_selling_unit_id?: int|null, selling_unit_label?: ?string, selling_unit_factor?: float|null}>  $items
+     * @return list<array{product: Product, quantity: float, product_stock_layer_id: ?int, product_selling_unit_id: ?int, selling_unit_label: ?string, selling_unit_factor: ?float}>
      */
     private function normalizeCartItems(Business $business, array $items): array
     {
@@ -252,7 +280,7 @@ class SaleService
             ]);
         }
 
-        /** @var array<string, array{product_id: int, quantity: float, product_stock_layer_id: ?int, selling_unit_label: ?string, selling_unit_factor: ?float}> $merged */
+        /** @var array<string, array{product_id: int, quantity: float, product_stock_layer_id: ?int, product_selling_unit_id: ?int, selling_unit_label: ?string, selling_unit_factor: ?float}> $merged */
         $merged = [];
         foreach ($items as $row) {
             $productId = (int) ($row['product_id'] ?? 0);
@@ -260,23 +288,28 @@ class SaleService
             $layerId = isset($row['product_stock_layer_id']) && $row['product_stock_layer_id'] !== ''
                 ? (int) $row['product_stock_layer_id']
                 : null;
+            $suId = isset($row['product_selling_unit_id']) && (int) $row['product_selling_unit_id'] > 0
+                ? (int) $row['product_selling_unit_id']
+                : null;
             $sellingUnitLabel  = isset($row['selling_unit_label']) && $row['selling_unit_label'] !== '' ? trim((string) $row['selling_unit_label']) : null;
             $sellingUnitFactor = isset($row['selling_unit_factor']) && (float) $row['selling_unit_factor'] > 0 ? (float) $row['selling_unit_factor'] : null;
             if ($productId <= 0 || $quantity <= 0) {
                 continue;
             }
-            $key = $productId.':'.($layerId ?? 'fifo');
+            $key = $productId.':'.($layerId ?? 'fifo').':'.($suId ?? '0');
             if (! isset($merged[$key])) {
                 $merged[$key] = [
                     'product_id' => $productId,
                     'quantity' => 0.0,
                     'product_stock_layer_id' => $layerId,
+                    'product_selling_unit_id' => $suId,
                     'selling_unit_label' => $sellingUnitLabel,
                     'selling_unit_factor' => $sellingUnitFactor,
                 ];
             }
             $merged[$key]['quantity'] = round($merged[$key]['quantity'] + $quantity, 3);
             // carry the last-seen selling unit metadata
+            $merged[$key]['product_selling_unit_id'] = $suId;
             $merged[$key]['selling_unit_label'] = $sellingUnitLabel;
             $merged[$key]['selling_unit_factor'] = $sellingUnitFactor;
         }
@@ -321,6 +354,7 @@ class SaleService
                 'product' => $product,
                 'quantity' => round((float) $row['quantity'], 3),
                 'product_stock_layer_id' => $layerId,
+                'product_selling_unit_id' => $row['product_selling_unit_id'] ?? null,
                 'selling_unit_label' => $row['selling_unit_label'] ?? null,
                 'selling_unit_factor' => $row['selling_unit_factor'] ?? null,
             ];

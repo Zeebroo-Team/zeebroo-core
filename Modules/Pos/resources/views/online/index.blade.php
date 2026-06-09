@@ -43,14 +43,16 @@
     }
     $posProductCatalog = collect($products)->keyBy('id')->map(static function (array $p): array {
         return [
-            'id' => $p['id'],
-            'name' => $p['name'],
-            'sku' => $p['sku'] ?? '',
-            'unit' => $p['unit'] ?? '',
-            'layers' => $p['layers'] ?? [],
-            'selling_units' => $p['selling_units'] ?? [],
-            'unit_sell_price' => $p['unit_sell_price'],
-            'stock_quantity' => $p['stock_quantity'],
+            'id'                   => $p['id'],
+            'name'                 => $p['name'],
+            'sku'                  => $p['sku'] ?? '',
+            'unit'                 => $p['unit'] ?? '',
+            'layers'               => $p['layers'] ?? [],
+            'selling_units'        => $p['selling_units'] ?? [],
+            'unit_sell_price'      => $p['discounted_sell_price'] ?? $p['unit_sell_price'],
+            'original_sell_price'  => $p['discounted_sell_price'] !== null ? $p['unit_sell_price'] : null,
+            'discount'             => $p['discount'] ?? null,
+            'stock_quantity'       => $p['stock_quantity'],
         ];
     })->all();
 @endphp
@@ -230,6 +232,11 @@ body.pos-walking-active .pos-online__top-fields .pos-online__scan-row button{pad
                 <div class="pos-online__grid" id="pos-online-products">
                     @foreach($products as $product)
                         @php $outOfStock = (float) $product['stock_quantity'] <= 0; @endphp
+                        @php
+                            $posCardDiscount     = $product['discount'] ?? null;
+                            $posCardDiscounted   = $product['discounted_sell_price'] ?? null;
+                            $posCardEffectivePrice = $posCardDiscounted ?? $product['unit_sell_price'];
+                        @endphp
                         <button
                             type="button"
                             class="pos-online__item @if($outOfStock) is-out @endif"
@@ -237,7 +244,7 @@ body.pos-walking-active .pos-online__top-fields .pos-online__scan-row button{pad
                             data-product-id="{{ $product['id'] }}"
                             data-product-name="{{ e($product['name']) }}"
                             data-product-sku="{{ e($product['sku'] ?? '') }}"
-                            data-unit-price="{{ $product['unit_sell_price'] !== null ? number_format((float) $product['unit_sell_price'], 2, '.', '') : '0' }}"
+                            data-unit-price="{{ $posCardEffectivePrice !== null ? number_format((float) $posCardEffectivePrice, 2, '.', '') : '0' }}"
                             data-stock="{{ $formatQty((float) $product['stock_quantity']) }}"
                             data-product-layers='@json($product['layers'] ?? [])'
                             data-selling-units='@json($product['selling_units'] ?? [])'
@@ -263,6 +270,14 @@ body.pos-walking-active .pos-online__top-fields .pos-online__scan-row button{pad
                                         $maxP = $prices->max();
                                     @endphp
                                     {{ number_format($minP, 2) }}–{{ number_format($maxP, 2) }}{{ filled($currency) ? ' '.$currency : '' }}
+                                @elseif($posCardDiscounted !== null)
+                                    <span style="font-size:11px;color:var(--muted);text-decoration:line-through;font-weight:600;">{{ number_format((float) $product['unit_sell_price'], 2) }}</span>
+                                    {{ number_format((float) $posCardDiscounted, 2) }}{{ filled($currency) ? ' '.$currency : '' }}
+                                    @if($posCardDiscount)
+                                        <span style="font-size:9px;background:color-mix(in srgb,#f59e0b 18%,transparent);color:#b45309;border:1px solid color-mix(in srgb,#f59e0b 40%,transparent);border-radius:4px;padding:1px 4px;font-weight:700;vertical-align:middle;line-height:1.4;">
+                                            {{ $posCardDiscount['type'] === 'percentage' ? '-'.number_format($posCardDiscount['value'], 0).'%' : '-'.number_format($posCardDiscount['amount'], 2) }}
+                                        </span>
+                                    @endif
                                 @elseif($product['unit_sell_price'] !== null)
                                     {{ number_format((float) $product['unit_sell_price'], 2) }}{{ filled($currency) ? ' '.$currency : '' }}
                                 @else
@@ -288,6 +303,7 @@ body.pos-walking-active .pos-online__top-fields .pos-online__scan-row button{pad
                 'currency'               => $currency,
                 'channel'                => 'online',
                 'discountFieldEnabled'   => $discountFieldEnabled,
+                'branchId'               => $branchId,
             ])
         @else
             <section class="pos-three-panel__right pos-online__checkout" aria-label="Checkout">
@@ -295,7 +311,7 @@ body.pos-walking-active .pos-online__top-fields .pos-online__scan-row button{pad
                     <strong style="font-size:14px;">Checkout</strong>
                 </div>
                 <div class="pos-online__checkout-body">
-                    @include('pos::partials.pos-checkout-panel', ['defaultDepositAccountId' => $defaultDepositAccountId, 'currency' => $currency, 'channel' => 'online'])
+                    @include('pos::partials.pos-checkout-panel', ['defaultDepositAccountId' => $defaultDepositAccountId, 'currency' => $currency, 'channel' => 'online', 'branchId' => $branchId])
                 </div>
             </section>
         @endif
@@ -443,6 +459,14 @@ body.pos-walking-active .pos-online__top-fields .pos-online__scan-row button{pad
                 layerInput.value = String(row.layerId);
                 layerInput.setAttribute('form', 'pos-checkout-form');
                 wrap.appendChild(layerInput);
+            }
+            if (row.sellingUnitId != null) {
+                const suId = document.createElement('input');
+                suId.type = 'hidden';
+                suId.name = 'items[' + index + '][product_selling_unit_id]';
+                suId.value = String(row.sellingUnitId);
+                suId.setAttribute('form', 'pos-checkout-form');
+                wrap.appendChild(suId);
             }
             if (row.sellingUnitLabel) {
                 const suLabel = document.createElement('input');

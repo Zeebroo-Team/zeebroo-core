@@ -68,6 +68,7 @@ class PosController extends Controller
             'items.*.product_id' => ['required', 'integer', 'min:1'],
             'items.*.quantity' => ['required', 'numeric', 'min:0.001'],
             'items.*.product_stock_layer_id' => ['nullable', 'integer', 'min:1'],
+            'items.*.product_selling_unit_id' => ['nullable', 'integer', 'min:1'],
             'items.*.selling_unit_label'  => ['nullable', 'string', 'max:80'],
             'items.*.selling_unit_factor' => ['nullable', 'numeric', 'min:0.000001'],
             'payment_method' => ['required', 'string', 'in:cash,card,credit'],
@@ -83,6 +84,10 @@ class PosController extends Controller
             'discount_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'notes' => ['nullable', 'string', 'max:2000'],
             'pos_customer_id' => ['nullable', 'integer', 'min:1'],
+            'branch_id' => [
+                'nullable', 'integer', 'min:1',
+                Rule::exists('branches', 'id')->where(fn ($q) => $q->where('business_id', $business->id)),
+            ],
         ]);
 
         $channel = $validated['channel'] ?? Sale::CHANNEL_RETAIL;
@@ -103,6 +108,7 @@ class PosController extends Controller
             isset($validated['amount_tendered']) ? (float) $validated['amount_tendered'] : null,
             isset($validated['pos_customer_id']) ? (int) $validated['pos_customer_id'] : null,
             $deferSettlement,
+            isset($validated['branch_id']) ? (int) $validated['branch_id'] : null,
         );
 
         $redirectRoute = $channel === Sale::CHANNEL_ONLINE ? 'pos.online' : 'pos.register';

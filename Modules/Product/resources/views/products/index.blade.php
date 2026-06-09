@@ -285,8 +285,34 @@ html.product-modal-open-html,html.product-modal-open-html body{overflow:hidden;}
                             </td>
                             <td>@if($product->sku){{ $product->sku }}@else<span class="muted">—</span>@endif</td>
                             <td>
+                                @php
+                                    $bDiscount = $baseDiscountByProduct[$product->id] ?? null;
+                                @endphp
                                 @if($product->unit_price !== null)
-                                    @if($currency){{ $currency }} @endif{{ number_format((float) $product->unit_price, 2) }}
+                                    @if($bDiscount)
+                                        @php
+                                            $bDiscount->setRelation('product', $product);
+                                            $finalP  = $bDiscount->finalPrice();
+                                            $discAmt = $bDiscount->discountAmount();
+                                        @endphp
+                                        <div style="font-weight:800;color:var(--text);font-size:13px;">
+                                            @if($currency){{ $currency }} @endif{{ number_format($finalP, 2) }}
+                                        </div>
+                                        <div style="display:flex;align-items:center;gap:5px;margin-top:2px;flex-wrap:wrap;">
+                                            <span style="text-decoration:line-through;font-size:11px;color:var(--muted);">
+                                                {{ number_format((float)$product->unit_price, 2) }}
+                                            </span>
+                                            <span style="display:inline-flex;align-items:center;gap:2px;padding:1px 6px;border-radius:999px;font-size:10px;font-weight:700;background:color-mix(in srgb,#f59e0b 12%,transparent);border:1px solid color-mix(in srgb,#f59e0b 30%,var(--border));color:#b45309;">
+                                                @if($bDiscount->discount_type === 'percentage')
+                                                    −{{ rtrim(rtrim(number_format((float)$bDiscount->discount_value,2),'0'),'.') }}%
+                                                @else
+                                                    −{{ number_format($discAmt, 2) }}
+                                                @endif
+                                            </span>
+                                        </div>
+                                    @else
+                                        @if($currency){{ $currency }} @endif{{ number_format((float) $product->unit_price, 2) }}
+                                    @endif
                                 @else
                                     <span class="muted">—</span>
                                 @endif

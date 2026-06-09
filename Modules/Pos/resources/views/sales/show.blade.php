@@ -112,6 +112,9 @@
         <div class="pos-receipt-meta__card">
             <p class="pos-receipt-meta__label">Channel</p>
             <p class="pos-receipt-meta__value">{{ $sale->channelLabel() }}</p>
+            @if($sale->branch)
+                <p class="muted" style="margin:4px 0 0;font-size:12px;"><i class="fa fa-code-branch" style="font-size:10px;"></i> {{ $sale->branch->name }}</p>
+            @endif
         </div>
         <div class="pos-receipt-meta__card">
             <p class="pos-receipt-meta__label">Amount paid</p>
@@ -141,20 +144,27 @@
                     <th>Qty sold</th>
                     <th>Returned</th>
                     <th>Unit price @if(filled($currency))({{ $currency }})@endif</th>
+                    <th>Discount / unit</th>
                     <th>Unit cost</th>
                     <th style="text-align:right;">Line total</th>
                 </tr>
             </thead>
             <tbody>
                 @foreach($sale->items as $item)
-                    @php $retQty = round((float) ($returnedQtys[$item->id] ?? 0), 3); @endphp
+                    @php
+                        $retQty = round((float) ($returnedQtys[$item->id] ?? 0), 3);
+                        $itemDiscount = (float) ($item->discount_amount ?? 0);
+                        $originalUnitPrice = $itemDiscount > 0 ? round((float) $item->unit_sell_price + $itemDiscount, 2) : null;
+                    @endphp
                     <tr>
                         <td>
                             <strong style="color:var(--text);">{{ $item->product_name }}</strong>
                             @if(filled($item->sku))
                                 <div class="muted" style="font-size:11px;margin-top:2px;">{{ $item->sku }}</div>
                             @endif
-                            @if($item->product_stock_layer_id)
+                            @if($item->selling_unit_label)
+                                <div class="muted" style="font-size:11px;margin-top:2px;">per {{ $item->selling_unit_label }}</div>
+                            @elseif($item->product_stock_layer_id)
                                 <div class="muted" style="font-size:11px;margin-top:2px;">Batch #{{ $item->product_stock_layer_id }}</div>
                             @endif
                         </td>
@@ -166,7 +176,23 @@
                                 <span class="muted">—</span>
                             @endif
                         </td>
-                        <td class="muted">{{ number_format((float) $item->unit_sell_price, 2) }}</td>
+                        <td class="muted">
+                            @if($originalUnitPrice !== null)
+                                <span style="text-decoration:line-through;color:var(--muted);font-size:11px;">{{ number_format($originalUnitPrice, 2) }}</span>
+                                <strong style="color:var(--text);">{{ number_format((float) $item->unit_sell_price, 2) }}</strong>
+                            @else
+                                {{ number_format((float) $item->unit_sell_price, 2) }}
+                            @endif
+                        </td>
+                        <td class="muted">
+                            @if($itemDiscount > 0)
+                                <span style="font-size:11px;background:color-mix(in srgb,#f59e0b 18%,transparent);color:#b45309;border:1px solid color-mix(in srgb,#f59e0b 40%,transparent);border-radius:4px;padding:2px 6px;font-weight:700;">
+                                    −{{ number_format($itemDiscount, 2) }}
+                                </span>
+                            @else
+                                <span class="muted">—</span>
+                            @endif
+                        </td>
                         <td class="muted">{{ $item->unit_cost !== null ? number_format((float) $item->unit_cost, 2) : '—' }}</td>
                         <td style="text-align:right;"><strong style="color:var(--text);">{{ number_format((float) $item->line_total, 2) }}</strong></td>
                     </tr>
@@ -174,7 +200,7 @@
             </tbody>
             <tfoot>
                 <tr>
-                    <td colspan="5" style="text-align:right;font-weight:700;">Total</td>
+                    <td colspan="6" style="text-align:right;font-weight:700;">Total</td>
                     <td style="text-align:right;font-weight:800;font-size:15px;color:var(--text);">{{ number_format((float) $sale->total, 2) }}</td>
                 </tr>
             </tfoot>

@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use Modules\Product\Http\Controllers\ProductBarcodeSheetController;
 use Modules\Product\Http\Controllers\ProductBrandController;
+use Modules\Product\Http\Controllers\ProductDiscountController;
 use Modules\Product\Http\Controllers\ProductCategoryController;
 use Modules\Product\Http\Controllers\ProductController;
 use Modules\Product\Http\Controllers\ProductImageController;
@@ -10,10 +11,14 @@ use Modules\Product\Http\Controllers\ProductSellingUnitController;
 use Modules\Product\Http\Controllers\ProductUnitController;
 
 Route::middleware(['auth', 'verified'])->group(function (): void {
+    Route::get('/products/discounts', [ProductDiscountController::class, 'index'])->name('product.discounts.index');
+    Route::post('/products/discounts', [ProductDiscountController::class, 'store'])->name('product.discounts.store');
+    Route::delete('/products/discounts/{discount}', [ProductDiscountController::class, 'destroy'])->name('product.discounts.destroy');
+
     Route::get('/products/barcodes', [ProductBarcodeSheetController::class, 'index'])->name('product.barcodes.index');
     Route::post('/products/barcodes', [ProductBarcodeSheetController::class, 'store'])->name('product.barcodes.store');
-    Route::get('/products/barcodes/{barcodeSheet}', [ProductBarcodeSheetController::class, 'show'])->name('product.barcodes.show');
-    Route::delete('/products/barcodes/{barcodeSheet}', [ProductBarcodeSheetController::class, 'destroy'])->name('product.barcodes.destroy');
+    Route::get('/products/barcodes/{sheet}', [ProductBarcodeSheetController::class, 'show'])->name('product.barcodes.show');
+    Route::delete('/products/barcodes/{sheet}', [ProductBarcodeSheetController::class, 'destroy'])->name('product.barcodes.destroy');
 
     Route::get('/products/categories', [ProductCategoryController::class, 'index'])->name('product.categories.index');
     Route::post('/products/categories', [ProductCategoryController::class, 'store'])->name('product.categories.store');

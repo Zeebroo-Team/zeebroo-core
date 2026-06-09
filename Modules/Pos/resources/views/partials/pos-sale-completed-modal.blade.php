@@ -50,7 +50,20 @@
             'qty' => $formatQty((float) $item->quantity),
             'unit' => number_format((float) $item->unit_sell_price, 2, '.', ''),
             'line' => number_format((float) $item->line_total, 2, '.', ''),
+            'discount' => (float) ($item->discount_amount ?? 0) > 0.001
+                ? number_format((float) $item->discount_amount, 2, '.', '')
+                : '',
+            'original_unit' => (float) ($item->discount_amount ?? 0) > 0.001
+                ? number_format((float) $item->unit_sell_price + (float) $item->discount_amount, 2, '.', '')
+                : '',
+            'discount_line' => (float) ($item->discount_amount ?? 0) > 0.001
+                ? number_format((float) $item->quantity * (float) $item->discount_amount, 2, '.', '')
+                : '',
         ])->values()->all(),
+        'productDiscountTotal' => (function () use ($completedSale) {
+            $total = $completedSale->items->sum(fn ($i) => round((float) $i->quantity * (float) ($i->discount_amount ?? 0), 2));
+            return $total > 0.001 ? number_format($total, 2, '.', '') : '';
+        })(),
     ];
 @endphp
 
@@ -133,17 +146,38 @@
                         </thead>
                         <tbody>
                             @foreach($completedSale->items as $item)
+                                @php $itemDisc = (float) ($item->discount_amount ?? 0); @endphp
                                 <tr>
                                     <td>
                                         <div class="pos-thermal-item-name">{{ $item->product_name }}</div>
                                         @if(filled($item->sku))
                                             <div class="pos-thermal-item-sku">{{ $item->sku }}</div>
                                         @endif
+                                        @if($item->selling_unit_label)
+                                            <div class="pos-thermal-item-sku">per {{ $item->selling_unit_label }}</div>
+                                        @endif
                                     </td>
                                     <td class="pos-thermal-col-center">{{ $formatQty((float) $item->quantity) }}</td>
-                                    <td class="pos-thermal-col-right">{{ number_format((float) $item->unit_sell_price, 2) }}{{ $currencyLabel }}</td>
+                                    <td class="pos-thermal-col-right">
+                                        @if($itemDisc > 0.001)
+                                            <del style="font-size:9px;color:#999;">{{ number_format((float) $item->unit_sell_price + $itemDisc, 2) }}</del>
+                                            <div>{{ number_format((float) $item->unit_sell_price, 2) }}{{ $currencyLabel }}</div>
+                                        @else
+                                            {{ number_format((float) $item->unit_sell_price, 2) }}{{ $currencyLabel }}
+                                        @endif
+                                    </td>
                                     <td class="pos-thermal-col-right"><strong>{{ number_format((float) $item->line_total, 2) }}{{ $currencyLabel }}</strong></td>
                                 </tr>
+                                @if($itemDisc > 0.001)
+                                    <tr class="pos-thermal-discount-row">
+                                        <td colspan="3" style="font-size:9px;color:#d97706;padding:0 2px 4px;line-height:1.3;">
+                                            &nbsp;&nbsp;↳ Discount −{{ number_format($itemDisc, 2) }}{{ $currencyLabel }} / unit
+                                        </td>
+                                        <td class="pos-thermal-col-right" style="font-size:9px;color:#d97706;padding:0 2px 4px;">
+                                            −{{ number_format((float) $item->quantity * $itemDisc, 2) }}{{ $currencyLabel }}
+                                        </td>
+                                    </tr>
+                                @endif
                             @endforeach
                         </tbody>
                     </table>
@@ -151,12 +185,22 @@
                     <div class="pos-thermal-receipt-divider"></div>
 
                     {{-- Totals --}}
+                    @php
+                        $productDiscTotal = $completedSale->items->sum(fn ($i) => round((float) $i->quantity * (float) ($i->discount_amount ?? 0), 2));
+                        $hasProductDisc   = $productDiscTotal > 0.001;
+                    @endphp
                     <div class="pos-thermal-receipt-totals">
-                        @if($discountAmount > 0.001 || $subtotal > (float) $completedSale->total + 0.001)
+                        @if($hasProductDisc || $discountAmount > 0.001 || $subtotal > (float) $completedSale->total + 0.001)
                             <div class="pos-thermal-total-row">
                                 <span>Subtotal</span>
                                 <span>{{ number_format($subtotal, 2) }}{{ $currencyLabel }}</span>
                             </div>
+                            @if($hasProductDisc)
+                                <div class="pos-thermal-total-row" style="color:#d97706;">
+                                    <span>Product discounts</span>
+                                    <span>−{{ number_format($productDiscTotal, 2) }}{{ $currencyLabel }}</span>
+                                </div>
+                            @endif
                             @if($discountAmount > 0.001)
                                 <div class="pos-thermal-total-row">
                                     <span>Discount{{ $discountPercentLabel }}</span>
@@ -178,6 +222,14 @@
                             <div class="pos-thermal-total-row">
                                 <span>Change</span>
                                 <span>{{ number_format((float) ($completedSale->change_amount ?? 0), 2) }}{{ $currencyLabel }}</span>
+                            </div>
+                        @endif
+
+                        @php $totalSaved = $productDiscTotal + $discountAmount; @endphp
+                        @if($totalSaved > 0.001)
+                            <div class="pos-thermal-savings-banner">
+                                <i class="fa fa-tag"></i>
+                                You saved {{ number_format($totalSaved, 2) }}{{ $currencyLabel }} on this purchase!
                             </div>
                         @endif
                     </div>
@@ -653,6 +705,18 @@
     margin-top: 2px;
 }
 
+.pos-thermal-savings-banner {
+    margin-top: 6px;
+    padding: 5px 8px;
+    background: #fff7ed;
+    border: 1px dashed #f59e0b;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    color: #b45309;
+    text-align: center;
+}
+
 .pos-sale-completed-modal__footer {
     display: flex;
     gap: 8px;
@@ -831,25 +895,53 @@
         (completionData.items || []).forEach(item => {
             const name = escHtml(item.name);
             const sku = item.sku ? '<div style="font-size:8px;color:#666;margin:1px 0 0;">' + escHtml(item.sku) + '</div>' : '';
+            // Show strikethrough original price if discounted
+            const unitPriceHtml = item.original_unit
+                ? '<del style="font-size:9px;color:#999;">' + escHtml(item.original_unit) + escHtml(cur) + '</del> ' + escHtml(item.unit) + escHtml(cur)
+                : escHtml(item.unit) + escHtml(cur);
             itemRows += '<tr>'
                 + '<td style="padding:3px 0;"><strong>' + name + '</strong>' + sku + '</td>'
                 + '<td style="padding:3px 0;text-align:center;width:60px;">' + escHtml(item.qty) + '</td>'
-                + '<td style="padding:3px 0;text-align:right;width:70px;">' + escHtml(item.unit) + escHtml(cur) + '</td>'
+                + '<td style="padding:3px 0;text-align:right;width:80px;">' + unitPriceHtml + '</td>'
                 + '<td style="padding:3px 0;text-align:right;width:70px;font-weight:600;">' + escHtml(item.line) + escHtml(cur) + '</td>'
                 + '</tr>';
+            // Discount sub-row
+            if (item.discount) {
+                itemRows += '<tr>'
+                    + '<td colspan="3" style="padding:0 0 4px;font-size:9px;color:#d97706;line-height:1.3;">'
+                    + '&nbsp;&nbsp;&#x21b3; Discount &minus;' + escHtml(item.discount) + escHtml(cur) + ' / unit'
+                    + '</td>'
+                    + '<td style="padding:0 0 4px;text-align:right;font-size:9px;color:#d97706;">&minus;' + escHtml(item.discount_line) + escHtml(cur) + '</td>'
+                    + '</tr>';
+            }
         });
 
+        const hasProductDisc = completionData.productDiscountTotal && parseFloat(completionData.productDiscountTotal) > 0;
         let totalsHtml = '';
-        if (completionData.discountAmount) {
+        if (hasProductDisc || completionData.discountAmount) {
             totalsHtml += '<div style="display:flex;justify-content:space-between;margin:2px 0;font-size:11px;"><span>Subtotal</span><span>' + escHtml(completionData.subtotal) + escHtml(cur) + '</span></div>';
-            const discLabel = completionData.discountPercent ? ' (' + escHtml(completionData.discountPercent) + '%)' : '';
-            totalsHtml += '<div style="display:flex;justify-content:space-between;margin:2px 0;font-size:11px;"><span>Discount' + discLabel + '</span><span>−' + escHtml(completionData.discountAmount) + escHtml(cur) + '</span></div>';
+            if (hasProductDisc) {
+                totalsHtml += '<div style="display:flex;justify-content:space-between;margin:2px 0;font-size:11px;color:#d97706;"><span>Product discounts</span><span>&minus;' + escHtml(completionData.productDiscountTotal) + escHtml(cur) + '</span></div>';
+            }
+            if (completionData.discountAmount) {
+                const discLabel = completionData.discountPercent ? ' (' + escHtml(completionData.discountPercent) + '%)' : '';
+                totalsHtml += '<div style="display:flex;justify-content:space-between;margin:2px 0;font-size:11px;"><span>Discount' + discLabel + '</span><span>&minus;' + escHtml(completionData.discountAmount) + escHtml(cur) + '</span></div>';
+            }
         }
         totalsHtml += '<div style="display:flex;justify-content:space-between;margin:6px 0 0;padding-top:4px;border-top:2px solid #000;font-size:13px;font-weight:bold;"><span>Total</span><span>' + escHtml(completionData.total) + escHtml(cur) + '</span></div>';
 
         if (completionData.amountTendered) {
             totalsHtml += '<div style="display:flex;justify-content:space-between;margin:2px 0;font-size:11px;"><span>Cash Received</span><span>' + escHtml(completionData.amountTendered) + escHtml(cur) + '</span></div>';
             totalsHtml += '<div style="display:flex;justify-content:space-between;margin:2px 0;font-size:11px;"><span>Change</span><span>' + escHtml(completionData.changeAmount) + escHtml(cur) + '</span></div>';
+        }
+
+        // "You saved" banner
+        const totalSaved = (parseFloat(completionData.productDiscountTotal || '0') + parseFloat(completionData.discountAmount || '0'));
+        if (totalSaved > 0) {
+            const savedFormatted = totalSaved.toFixed(2);
+            totalsHtml += '<div style="margin-top:8px;padding:5px 8px;border:1px dashed #f59e0b;border-radius:4px;font-size:10px;font-weight:700;color:#b45309;text-align:center;">'
+                + '&#127991; You saved ' + savedFormatted + escHtml(cur) + ' on this purchase!'
+                + '</div>';
         }
 
         const businessInfo = (completionData.businessAddress ? completionData.businessAddress + '<br>' : '')

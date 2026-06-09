@@ -29,6 +29,9 @@
         <form method="post" action="{{ $checkoutFormAction ?? route('pos.checkout') }}" id="pos-checkout-form" class="pco-form">
             @csrf
             <input type="hidden" name="channel" value="{{ $channel }}">
+            @if(!empty($branchId))
+                <input type="hidden" name="branch_id" value="{{ (int) $branchId }}">
+            @endif
 
             {{-- LEFT — Order summary --}}
             <div class="pco-left">

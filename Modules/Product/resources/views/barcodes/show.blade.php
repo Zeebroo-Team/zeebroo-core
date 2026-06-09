@@ -62,6 +62,9 @@
         </p>
     </div>
     <div class="bc-screen-toolbar__actions">
+        <button type="button" id="bc-export-pdf-btn" class="linkbtn" style="padding:8px 18px;font-size:13px;display:inline-flex;align-items:center;gap:6px;">
+            <i class="fa fa-file-pdf"></i> <span id="bc-export-pdf-label">Export PDF</span>
+        </button>
         <button type="button" onclick="window.print()" class="linkbtn" style="padding:8px 18px;font-size:13px;display:inline-flex;align-items:center;gap:6px;">
             <i class="fa fa-print"></i> Print
         </button>
@@ -173,16 +176,28 @@
 
 /* Print CSS */
 @media print {
+    /* Hide all app chrome */
+    .navbar,
+    #appSidebar,
+    .sidebar,
+    .sidebar-mobile-backdrop,
+    #app-toast-container,
+    #bc-screen-toolbar,
     .bc-screen-toolbar,
-    nav, header, footer,
-    [data-sidebar], .sidebar,
-    .pcat-nav, .pcat-page-card > *:not(#bc-print-root),
-    #bc-screen-toolbar { display:none !important; }
+    .pcat-nav,
+    .pcat-page-card > *:not(#bc-print-root) { display:none !important; }
 
-    body, html {
+    /* Remove all layout margins/padding so content fills the page */
+    html, body {
         margin:0 !important;
         padding:0 !important;
         background:#fff !important;
+    }
+    .content, .content-inner {
+        margin:0 !important;
+        padding:0 !important;
+        border:none !important;
+        min-height:unset !important;
     }
 
     @page {
@@ -279,4 +294,127 @@
 })();
 </script>
 @endif
+{{-- PDF Export --}}
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script>
+(function () {
+    var btn       = document.getElementById('bc-export-pdf-btn');
+    var btnLabel  = document.getElementById('bc-export-pdf-label');
+    if (!btn) return;
+
+    // Page dimensions in mm (portrait; swap for landscape)
+    var pageDims = {
+        'A4':     { w: 210,   h: 297   },
+        'A5':     { w: 148,   h: 210   },
+        'Letter': { w: 215.9, h: 279.4 },
+        'Legal':  { w: 215.9, h: 355.6 },
+    };
+
+    var pageSize        = {{ Js::from($sheet->page_size) }};
+    var pageOrientation = {{ Js::from($sheet->page_orientation) }};
+    var sheetName       = {{ Js::from($sheet->name) }};
+    var dims            = pageDims[pageSize] || pageDims['A4'];
+
+    // Swap for landscape
+    var pdfW = pageOrientation === 'landscape' ? dims.h : dims.w;
+    var pdfH = pageOrientation === 'landscape' ? dims.w : dims.h;
+
+    btn.addEventListener('click', function () {
+        btn.disabled = true;
+        btnLabel.textContent = 'Generating…';
+
+        var pages = Array.from(document.querySelectorAll('#bc-print-root .bc-page'));
+        if (!pages.length) {
+            btn.disabled = false;
+            btnLabel.textContent = 'Export PDF';
+            return;
+        }
+
+        // Apply clean white background during capture
+        document.body.classList.add('bc-pdf-capturing');
+
+        var { jsPDF } = window.jspdf;
+        var pdf = new jsPDF({
+            orientation: pageOrientation,
+            unit:        'mm',
+            format:      [pdfW, pdfH],
+        });
+
+        var margin   = 5; // mm
+        var imgW     = pdfW - margin * 2;
+        var imgH     = pdfH - margin * 2;
+        var scale    = 2;  // 2× for sharper output
+
+        function capturePage(index) {
+            if (index >= pages.length) {
+                document.body.classList.remove('bc-pdf-capturing');
+                var filename = sheetName.replace(/[^a-z0-9_\-\s]/gi, '_').replace(/\s+/g, '-').toLowerCase();
+                pdf.save(filename + '.pdf');
+                btn.disabled = false;
+                btnLabel.textContent = 'Export PDF';
+                return;
+            }
+
+            html2canvas(pages[index], {
+                scale:           scale,
+                backgroundColor: '#ffffff',
+                useCORS:         false,
+                logging:         false,
+                removeContainer: true,
+            }).then(function (canvas) {
+                var canvasW = canvas.width;
+                var canvasH = canvas.height;
+
+                // Fit canvas proportionally within the PDF content area
+                var ratio   = Math.min(imgW / (canvasW / scale), imgH / (canvasH / scale));
+                var drawW   = (canvasW / scale) * ratio;
+                var drawH   = (canvasH / scale) * ratio;
+                var offsetX = margin + (imgW - drawW) / 2;
+                var offsetY = margin + (imgH - drawH) / 2;
+
+                if (index > 0) {
+                    pdf.addPage([pdfW, pdfH], pageOrientation);
+                }
+
+                pdf.addImage(
+                    canvas.toDataURL('image/png'),
+                    'PNG',
+                    offsetX, offsetY,
+                    drawW, drawH,
+                    '', 'FAST'
+                );
+
+                btnLabel.textContent = 'Generating… ' + (index + 1) + '/' + pages.length;
+                capturePage(index + 1);
+            }).catch(function () {
+                document.body.classList.remove('bc-pdf-capturing');
+                btn.disabled = false;
+                btnLabel.textContent = 'Export PDF';
+            });
+        }
+
+        capturePage(0);
+    });
+})();
+</script>
+
+<style>
+/* Strip screen decorations during PDF capture so pages are clean white */
+body.bc-pdf-capturing .bc-page {
+    background: #fff !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    margin: 0 !important;
+}
+body.bc-pdf-capturing .bc-page::before {
+    display: none !important;
+}
+body.bc-pdf-capturing #bc-print-root {
+    background: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+}
+</style>
 @endsection

@@ -163,7 +163,7 @@ class PosOnlineApiService
      */
     public function formatSale(Sale $sale): array
     {
-        $sale->loadMissing(['items.product', 'creditAccount', 'user', 'returns.items']);
+        $sale->loadMissing(['items.product', 'creditAccount', 'user', 'branch', 'returns.items']);
 
         // Build returned-quantity map keyed by sale item id
         $returnedQtys = [];
@@ -182,6 +182,7 @@ class PosOnlineApiService
             'payment_method_label' => $sale->paymentMethodLabel(),
             'channel' => $sale->channel,
             'channel_label' => $sale->channelLabel(),
+            'branch' => $sale->branch ? ['id' => (int) $sale->branch->id, 'name' => $sale->branch->name] : null,
             'subtotal' => round((float) $sale->subtotal, 2),
             'discount_percent' => $sale->discount_percent !== null ? round((float) $sale->discount_percent, 2) : null,
             'discount_amount' => round((float) $sale->discount_amount, 2),
@@ -209,6 +210,7 @@ class PosOnlineApiService
                 'sku' => $item->sku,
                 'quantity' => round((float) $item->quantity, 3),
                 'unit_cost' => $item->unit_cost !== null ? round((float) $item->unit_cost, 2) : null,
+                'discount_amount' => round((float) ($item->discount_amount ?? 0), 2),
                 'unit_sell_price' => round((float) $item->unit_sell_price, 2),
                 'line_total' => round((float) $item->line_total, 2),
                 'returned_quantity' => round($returnedQtys[(int) $item->id] ?? 0.0, 3),

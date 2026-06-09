@@ -21,6 +21,7 @@ class SaleItem extends Model
         'selling_unit_factor',
         'quantity',
         'unit_cost',
+        'discount_amount',
         'unit_sell_price',
         'line_total',
         'sort_order',
@@ -31,6 +32,7 @@ class SaleItem extends Model
         return [
             'quantity' => 'decimal:3',
             'unit_cost' => 'decimal:2',
+            'discount_amount' => 'decimal:2',
             'unit_sell_price' => 'decimal:2',
             'line_total' => 'decimal:2',
             'sort_order' => 'integer',

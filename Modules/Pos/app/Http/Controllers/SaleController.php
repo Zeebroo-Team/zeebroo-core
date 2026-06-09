@@ -165,7 +165,7 @@ class SaleController extends Controller
         }
 
         $sale = $this->saleForBusiness($business, $sale);
-        $sale->load(['items.product', 'creditAccount', 'user', 'ledgerTransactions.deductAccount', 'returns.items', 'returns.user', 'returns.creditAccount']);
+        $sale->load(['items.product', 'creditAccount', 'user', 'branch', 'ledgerTransactions.deductAccount', 'returns.items', 'returns.user', 'returns.creditAccount']);
 
         $currency = (string) (get_settings('business.currency', '', $business) ?: '');
         $returnedQtys = $this->saleReturns->returnedQuantitiesForSale($sale);

@@ -198,10 +198,41 @@
     {{-- ── Stats strip ──────────────────────────────────────────── --}}
     <div class="ps-stats" role="region" aria-label="Product summary">
         <div class="ps-stat">
-            <span class="ps-stat__lbl">Price @if(filled($currency))({{ $currency }})@endif</span>
-            <span class="ps-stat__val">
-                @if($product->unit_price !== null){{ number_format((float) $product->unit_price, 2) }}@else —@endif
+            @php
+                $baseDiscount ??= null;
+                if ($baseDiscount && $product->unit_price !== null) {
+                    $baseDiscount->setRelation('product', $product);
+                    $statFinalPrice  = $baseDiscount->finalPrice();
+                    $statDiscountAmt = $baseDiscount->discountAmount();
+                }
+            @endphp
+            <span class="ps-stat__lbl">
+                @if($baseDiscount && $product->unit_price !== null)
+                    Discounted price @if(filled($currency))({{ $currency }})@endif
+                @else
+                    Price @if(filled($currency))({{ $currency }})@endif
+                @endif
             </span>
+            @if($product->unit_price !== null)
+                @if($baseDiscount)
+                    <span class="ps-stat__val" style="color:var(--text);">{{ number_format($statFinalPrice, 2) }}</span>
+                    <span style="display:flex;align-items:center;gap:5px;margin-top:3px;flex-wrap:wrap;">
+                        <span style="text-decoration:line-through;font-size:11px;color:var(--muted);">{{ number_format((float)$product->unit_price, 2) }}</span>
+                        <span style="display:inline-flex;align-items:center;gap:2px;padding:1px 6px;border-radius:999px;font-size:10px;font-weight:700;background:color-mix(in srgb,#f59e0b 12%,transparent);border:1px solid color-mix(in srgb,#f59e0b 30%,var(--border));color:#b45309;">
+                            @if($baseDiscount->discount_type === 'percentage')
+                                −{{ rtrim(rtrim(number_format((float)$baseDiscount->discount_value,2),'0'),'.') }}%
+                            @else
+                                −{{ number_format($statDiscountAmt, 2) }}
+                            @endif
+                        </span>
+                    </span>
+                    <span style="font-size:10px;color:var(--muted);margin-top:1px;">{{ $baseDiscount->name }}</span>
+                @else
+                    <span class="ps-stat__val">{{ number_format((float) $product->unit_price, 2) }}</span>
+                @endif
+            @else
+                <span class="ps-stat__val">—</span>
+            @endif
         </div>
         <div class="ps-stat">
             <span class="ps-stat__lbl">Stock</span>
@@ -335,14 +366,42 @@
                     </thead>
                     <tbody>
                         @foreach($product->sellingUnits as $su)
+                            @php
+                                $suDiscountById ??= collect();
+                                $suDiscount = $suDiscountById[$su->id] ?? null;
+                                $suDisplayPrice = (float) $su->displaySellingPrice((float)($product->unit_price ?? 0));
+                                if ($suDiscount) {
+                                    $suDiscount->setRelation('product', $product);
+                                    $suDiscount->setRelation('sellingUnit', $su);
+                                    $suFinalPrice  = $suDiscount->finalPrice();
+                                    $suDiscountAmt = $suDiscount->discountAmount();
+                                }
+                            @endphp
                             <tr>
                                 <td><strong style="color:var(--text);">{{ $su->label }}</strong></td>
                                 <td style="font-family:monospace;font-size:11px;">{{ rtrim(rtrim(number_format((float)$su->conversion_factor,6),'0'),'.') }}</td>
                                 <td>
-                                    @if($su->selling_price !== null)
-                                        {{ number_format((float)$su->selling_price,2) }}{{ filled($currency??'') ? ' '.$currency : '' }}
+                                    @if($su->selling_price !== null || $product->unit_price !== null)
+                                        @if($suDiscount)
+                                            <div style="font-weight:800;font-size:13px;">{{ number_format($suFinalPrice, 2) }}{{ filled($currency??'') ? ' '.$currency : '' }}</div>
+                                            <div style="display:flex;align-items:center;gap:4px;margin-top:2px;flex-wrap:wrap;">
+                                                <span style="text-decoration:line-through;font-size:11px;color:var(--muted);">{{ number_format($suDisplayPrice, 2) }}</span>
+                                                <span style="display:inline-flex;align-items:center;gap:2px;padding:1px 5px;border-radius:999px;font-size:10px;font-weight:700;background:color-mix(in srgb,#f59e0b 12%,transparent);border:1px solid color-mix(in srgb,#f59e0b 30%,var(--border));color:#b45309;">
+                                                    @if($suDiscount->discount_type === 'percentage')
+                                                        −{{ rtrim(rtrim(number_format((float)$suDiscount->discount_value,2),'0'),'.') }}%
+                                                    @else
+                                                        −{{ number_format($suDiscountAmt, 2) }}
+                                                    @endif
+                                                </span>
+                                            </div>
+                                            <div style="font-size:10px;color:var(--muted);margin-top:1px;">{{ $suDiscount->name }}</div>
+                                        @elseif($su->selling_price !== null)
+                                            {{ number_format((float)$su->selling_price,2) }}{{ filled($currency??'') ? ' '.$currency : '' }}
+                                        @else
+                                            <span class="muted" style="font-size:11px;">derived</span>
+                                        @endif
                                     @else
-                                        <span class="muted" style="font-size:11px;">derived</span>
+                                        <span class="muted" style="font-size:11px;">—</span>
                                     @endif
                                 </td>
                                 <td class="muted" style="font-size:11px;">{{ $su->sort_order }}</td>

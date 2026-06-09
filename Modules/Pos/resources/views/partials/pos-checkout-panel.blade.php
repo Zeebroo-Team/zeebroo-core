@@ -8,6 +8,9 @@
 <form method="post" action="{{ $checkoutFormAction ?? route('pos.checkout') }}" id="pos-checkout-form" class="pos-checkout-form">
     @csrf
     <input type="hidden" name="channel" value="{{ $channel ?? 'online' }}">
+    @if(!empty($branchId))
+        <input type="hidden" name="branch_id" value="{{ (int) $branchId }}">
+    @endif
     <div class="pos-checkout-form__scroll">
         <div class="pos-online__checkout">
 

@@ -368,10 +368,16 @@
             && ($productFeatureOn || $navBusiness->productUnits()->exists());
         $showSidebarProductsLink = $navBusiness && Route::has('product.index')
             && ($productFeatureOn || $navBusiness->products()->exists());
+        $showSidebarBarcodesLink = $navBusiness && Route::has('product.barcodes.index')
+            && ($productFeatureOn || $navBusiness->productBarcodeSheets()->exists());
+        $showSidebarDiscountsLink = $navBusiness && Route::has('product.discounts.index')
+            && ($productFeatureOn || $navBusiness->productDiscounts()->exists());
         $showSidebarProductSection = $showSidebarProductBrandsLink
             || $showSidebarProductCategoriesLink
             || $showSidebarProductUnitsLink
-            || $showSidebarProductsLink;
+            || $showSidebarProductsLink
+            || $showSidebarBarcodesLink
+            || $showSidebarDiscountsLink;
 
         // Stock Management — always visible when Stock Management feature is enabled.
         $stockFeatureOn = $navBusiness && $featureOn('stock_management');
@@ -579,6 +585,12 @@
                         <a href="{{ route('product.index') }}" @class([
                             'active' => request()->routeIs('product.index', 'product.store', 'product.show', 'product.edit', 'product.update', 'product.destroy', 'product.sku.*', 'product.images.*'),
                         ])><i class="fa fa-box"></i><span>Products</span></a>
+                    @endif
+                    @if($showSidebarDiscountsLink)
+                        <a href="{{ route('product.discounts.index') }}" class="{{ request()->routeIs('product.discounts.*') ? 'active' : '' }}"><i class="fa fa-percent"></i><span>Discounts</span></a>
+                    @endif
+                    @if($showSidebarBarcodesLink)
+                        <a href="{{ route('product.barcodes.index') }}" class="{{ request()->routeIs('product.barcodes.*') ? 'active' : '' }}"><i class="fa fa-barcode"></i><span>Barcodes</span></a>
                     @endif
                 </div>
             @endif

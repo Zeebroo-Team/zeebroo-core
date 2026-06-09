@@ -98,13 +98,23 @@ html.pos-unit-picker-open,html.pos-unit-picker-open body{overflow:hidden;}
                     ? fmtQty(u.stock_in_units) + ' available'
                     : '<span style="color:#f87171">Out of stock</span>';
                 if (u.stock_in_units <= 0) btn.disabled = true;
+                var priceHtml = money(u.display_price);
+                if (u.original_display_price != null) {
+                    priceHtml = '<span style="font-size:11px;text-decoration:line-through;color:var(--muted);margin-right:4px;">' + money(u.original_display_price) + '</span>' + money(u.display_price);
+                    if (u.discount && u.discount.type) {
+                        var pill = u.discount.type === 'percentage'
+                            ? '-' + Math.round(u.discount.value) + '%'
+                            : '-' + money(u.discount.amount);
+                        priceHtml += ' <span style="font-size:9px;background:color-mix(in srgb,#f59e0b 18%,transparent);color:#b45309;border:1px solid color-mix(in srgb,#f59e0b 40%,transparent);border-radius:4px;padding:1px 4px;font-weight:700;">' + escHtml(pill) + '</span>';
+                    }
+                }
                 btn.innerHTML =
                     '<div class="pos-unit-picker__option__main">'
                     + '<div class="pos-unit-picker__option__label">' + escHtml(u.label) + '</div>'
                     + '<div class="pos-unit-picker__option__meta">' + fmtQty(u.conversion_factor) + ' base unit each</div>'
                     + '</div>'
                     + '<div class="pos-unit-picker__option__right">'
-                    + '<div class="pos-unit-picker__option__price">' + money(u.display_price) + '</div>'
+                    + '<div class="pos-unit-picker__option__price">' + priceHtml + '</div>'
                     + '<div class="pos-unit-picker__option__stock">' + stockText + '</div>'
                     + '</div>';
                 btn.addEventListener('click', function () {

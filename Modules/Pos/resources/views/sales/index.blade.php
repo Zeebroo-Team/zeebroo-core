@@ -50,7 +50,7 @@
                         <th>Date</th>
                         <th>Items</th>
                         <th>Payment</th>
-                        <th>Channel</th>
+                        <th>Channel / Branch</th>
                         <th>Total @if(filled($currency))({{ $currency }})@endif</th>
                         <th>Status</th>
                         <th style="text-align:right;">Actions</th>
@@ -63,7 +63,14 @@
                             <td class="muted">{{ $sale->sold_at?->format('M j, Y g:i A') ?? '—' }}</td>
                             <td class="muted">{{ (int) $sale->items_count }}</td>
                             <td class="muted">{{ $sale->paymentMethodLabel() }}</td>
-                            <td class="muted">{{ $sale->channelLabel() }}</td>
+                            <td class="muted">
+                                {{ $sale->channelLabel() }}
+                                @if($sale->branch)
+                                    <span style="display:block;font-size:10px;margin-top:2px;color:var(--muted);">
+                                        <i class="fa fa-code-branch" style="font-size:9px;"></i> {{ $sale->branch->name }}
+                                    </span>
+                                @endif
+                            </td>
                             <td><strong style="color:var(--text);">{{ number_format((float) $sale->total, 2) }}</strong></td>
                             <td>
                                 @if($sale->isVoid())
@@ -78,7 +85,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="8" class="muted" style="padding:16px;">No sales match your search.</td>
+                            <td colspan="9" class="muted" style="padding:16px;">No sales match your search.</td>
                         </tr>
                     @endforelse
                 </tbody>

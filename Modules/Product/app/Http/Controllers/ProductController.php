@@ -13,6 +13,7 @@ use Modules\Product\Models\Product;
 use Modules\Product\Models\ProductStockLayer;
 use Modules\Product\Services\ProductBundleService;
 use Modules\Product\Services\ProductCatalogOptionsService;
+use Modules\Product\Services\ProductDiscountService;
 use Modules\Product\Services\ProductService;
 use Modules\Product\Services\ProductImageService;
 use Modules\Product\Services\ProductSkuGeneratorService;
@@ -31,6 +32,7 @@ class ProductController extends Controller
         private readonly ProductStockActivityService $productStockActivity,
         private readonly ProductStockLayerService $productStockLayers,
         private readonly ProductSalesChartService $productSalesChart,
+        private readonly ProductDiscountService $discountService,
     ) {
     }
 
@@ -98,6 +100,15 @@ class ProductController extends Controller
             ? $products->total()
             : $business->products()->count();
 
+        // Load active discounts for products on this page (single query)
+        $pageProductIds = $products->pluck('id')->all();
+        $activeDiscounts = $this->discountService->activeForProducts($business, $pageProductIds);
+        // Best base-price discount per product (null selling_unit_id)
+        $baseDiscountByProduct = $activeDiscounts
+            ->filter(fn ($d) => $d->product_selling_unit_id === null)
+            ->groupBy('product_id')
+            ->map(fn ($group) => $group->first());
+
         return view('product::products.index', [
             'business'             => $business,
             'products'             => $products,
@@ -113,6 +124,7 @@ class ProductController extends Controller
             'filterStatus'         => $filterStatus,
             'branchProductSeparate' => $branchProductSeparate,
             'branchOptions'        => $branchOptions,
+            'baseDiscountByProduct' => $baseDiscountByProduct,
         ]);
     }
 
@@ -170,6 +182,13 @@ class ProductController extends Controller
         }
         $salesChart = $this->productSalesChart->build($product, $salesPeriod);
 
+        // Active discounts for this product (base price + per selling unit)
+        $productDiscounts = $this->discountService->activeForProducts($business, [$product->id]);
+        $baseDiscount     = $productDiscounts->firstWhere('product_selling_unit_id', null);
+        $suDiscountById   = $productDiscounts
+            ->filter(fn ($d) => $d->product_selling_unit_id !== null)
+            ->keyBy('product_selling_unit_id');
+
         return view('product::products.show', array_merge([
             'business'             => $business,
             'product'              => $product,
@@ -180,6 +199,8 @@ class ProductController extends Controller
             'branchStockSeparate'  => $branchStockSeparate,
             'salesChart'           => $salesChart,
             'salesPeriod'          => $salesPeriod,
+            'baseDiscount'         => $baseDiscount,
+            'suDiscountById'       => $suDiscountById,
         ], $stockActivity));
     }
 
