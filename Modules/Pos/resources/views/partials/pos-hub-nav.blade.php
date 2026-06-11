@@ -6,4 +6,5 @@
     <a href="{{ route('pos.returns.index') }}" @class(['is-active' => request()->routeIs('pos.returns.index')])><i class="fa fa-rotate-left" style="margin-right:4px;"></i>Returns</a>
     <a href="{{ route('pos.returns.create') }}" @class(['is-active' => request()->routeIs('pos.returns.create')])><i class="fa fa-plus" style="margin-right:4px;"></i>New return</a>
     <a href="{{ route('pos.customers.index') }}" @class(['is-active' => request()->routeIs('pos.customers.*')])><i class="fa fa-users" style="margin-right:4px;"></i>Customers</a>
+    <a href="{{ route('pos.stock-audits.index') }}" @class(['is-active' => request()->routeIs('pos.stock-audits.*')])><i class="fa fa-clipboard-check" style="margin-right:4px;"></i>Stock audit</a>
 </nav>

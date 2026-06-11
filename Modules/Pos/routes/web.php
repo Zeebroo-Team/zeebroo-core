@@ -6,6 +6,7 @@ use Modules\Pos\Http\Controllers\EndOfDayController;
 use Modules\Pos\Http\Controllers\PosController;
 use Modules\Pos\Http\Controllers\PosProductController;
 use Modules\Pos\Http\Controllers\SaleController;
+use Modules\Pos\Http\Controllers\StockAuditController;
 
 Route::middleware(['auth', 'verified'])->group(function (): void {
     Route::get('/pos', [PosController::class, 'index'])->name('pos.index');
@@ -35,4 +36,12 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
 
     Route::get('/pos/end-of-day', [EndOfDayController::class, 'index'])->name('pos.end-of-day');
     Route::post('/pos/end-of-day/settle', [EndOfDayController::class, 'settle'])->name('pos.end-of-day.settle');
+
+    Route::get('/pos/stock-audits', [StockAuditController::class, 'index'])->name('pos.stock-audits.index');
+    Route::get('/pos/stock-audits/create', [StockAuditController::class, 'create'])->name('pos.stock-audits.create');
+    Route::post('/pos/stock-audits', [StockAuditController::class, 'store'])->name('pos.stock-audits.store');
+    Route::get('/pos/stock-audits/{stockAudit}', [StockAuditController::class, 'show'])->name('pos.stock-audits.show');
+    Route::put('/pos/stock-audits/{stockAudit}/lines', [StockAuditController::class, 'saveLines'])->name('pos.stock-audits.save-lines');
+    Route::post('/pos/stock-audits/{stockAudit}/finalize', [StockAuditController::class, 'finalize'])->name('pos.stock-audits.finalize');
+    Route::delete('/pos/stock-audits/{stockAudit}', [StockAuditController::class, 'destroy'])->name('pos.stock-audits.destroy');
 });

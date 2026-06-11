@@ -395,10 +395,13 @@
             && ($stockFeatureOn || $navBusiness->suppliers()->exists());
         $showSidebarChequesLink = $navBusiness && Route::has('purchase.cheques.index')
             && ($stockFeatureOn || $navBusiness->chequePayments()->exists());
+        $showSidebarStockAuditLink = $navBusiness && Route::has('pos.stock-audits.index')
+            && ($stockFeatureOn || \Modules\Pos\Models\StockAudit::query()->where('business_id', $navBusiness->id)->exists());
         $showSidebarPurchaseSection = $showSidebarPurchasesLink
             || $showSidebarGrnLink
             || $showSidebarSuppliersLink
-            || $showSidebarChequesLink;
+            || $showSidebarChequesLink
+            || $showSidebarStockAuditLink;
 
         // POS — always visible when Point of Sale feature is enabled.
         $posFeatureOn = $navBusiness && $featureOn('point_of_sale');
@@ -412,8 +415,12 @@
             && ($posFeatureOn || \Modules\Pos\Models\Customer::query()->where('business_id', $navBusiness->id)->exists());
         $showSidebarPosReturnsLink = $navBusiness && Route::has('pos.returns.index')
             && ($posFeatureOn || \Modules\Pos\Models\SaleReturn::query()->where('business_id', $navBusiness->id)->exists());
+        // Sales Quotations (always show when module is active)
+        $showSidebarQuotationsLink = $navBusiness && Route::has('sales.quotations.index');
+
         // Hub link shows whenever the Sales section is visible (feature on, or data-driven links are showing).
-        $showSidebarPosSection = $showSidebarPosRegisterLink || $showSidebarPosSalesLink || ($navBusiness && $posFeatureOn);
+        $showSidebarPosSection = $showSidebarPosRegisterLink || $showSidebarPosSalesLink
+            || $showSidebarQuotationsLink || ($navBusiness && $posFeatureOn);
         $showSidebarPosHubLink = $navBusiness && Route::has('pos.index') && $showSidebarPosSection;
 
         $showSidebarFilesLink = $navBusiness && (
@@ -476,6 +483,7 @@
             $showSidebarGrnLink = false;
             $showSidebarSuppliersLink = false;
             $showSidebarChequesLink = false;
+            $showSidebarStockAuditLink = false;
             $showSidebarPurchaseSection = false;
             $showSidebarPosRegisterLink = false;
             $showSidebarPosHubLink = false;
@@ -484,6 +492,7 @@
             $showSidebarPosCustomersLink = false;
             $showSidebarPosReturnsLink = false;
             $showSidebarPosSection = false;
+            $showSidebarQuotationsLink = false;
             $showSidebarFilesLink = false;
             $showSidebarPropertiesLink = false;
             $showSidebarModificationsLink = false;
@@ -621,6 +630,9 @@
                     @if($showSidebarChequesLink)
                         <a href="{{ route('purchase.cheques.index') }}" class="{{ request()->routeIs('purchase.cheques.*') ? 'active' : '' }}"><i class="fa fa-money-check"></i><span>Cheques</span></a>
                     @endif
+                    @if($showSidebarStockAuditLink)
+                        <a href="{{ route('pos.stock-audits.index') }}" @class(['active' => request()->routeIs('pos.stock-audits.*')])><i class="fa fa-clipboard-check"></i><span>Stock audit</span></a>
+                    @endif
                 </div>
             @endif
             @if($showSidebarPosSection)
@@ -666,8 +678,14 @@
                             ])><i class="fa fa-box-open"></i><span>Without sale reference</span></a>
                         </div>
                     @endif
+                    @if($showSidebarQuotationsLink)
+                        <a href="{{ route('sales.quotations.index') }}" @class(['active' => request()->routeIs('sales.quotations.*')])>
+                            <i class="fa fa-file-lines"></i><span>Quotations</span>
+                        </a>
+                    @endif
                 </div>
             @endif
+
             @if($showSidebarFilesLink && Route::has('filemanager.index'))
                 <a href="{{ route('filemanager.index') }}" class="{{ request()->routeIs('filemanager.*') ? 'active' : '' }}"><i class="fa fa-folder-open"></i><span>Files</span></a>
             @endif

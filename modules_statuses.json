@@ -13,5 +13,6 @@
     "FileManager": true,
     "Purchase": true,
     "Pos": true,
-    "DesignStudio": true
+    "DesignStudio": true,
+    "Sales": true
 }

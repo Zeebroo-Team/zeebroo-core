@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use Modules\DesignStudio\Http\Controllers\DesignEditorController;
 use Modules\DesignStudio\Http\Controllers\DesignStudioController;
+use Modules\DesignStudio\Http\Controllers\FacebookConnectionController;
 use Modules\DesignStudio\Http\Controllers\GenerateCompanyProfileController;
 use Modules\DesignStudio\Http\Controllers\GenerateLetterHeadController;
 
@@ -25,6 +26,19 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
 
     Route::delete('/design-studio/designs/{design}', [DesignEditorController::class, 'destroy'])
         ->name('designstudio.designs.destroy');
+
+    Route::get('/design-studio/social-media', [DesignStudioController::class, 'socialMedia'])
+        ->name('designstudio.social-media.index');
+
+    // Facebook Page OAuth
+    Route::get('/design-studio/facebook/connect',     [FacebookConnectionController::class, 'redirect'])
+        ->name('designstudio.facebook.redirect');
+    Route::get('/design-studio/facebook/callback',    [FacebookConnectionController::class, 'callback'])
+        ->name('designstudio.facebook.callback');
+    Route::post('/design-studio/facebook/connect-page', [FacebookConnectionController::class, 'connectPage'])
+        ->name('designstudio.facebook.connect-page');
+    Route::delete('/design-studio/facebook/disconnect/{connection}', [FacebookConnectionController::class, 'disconnect'])
+        ->name('designstudio.facebook.disconnect');
 
     Route::get('/design-studio/letterhead-links', [DesignStudioController::class, 'letterheadLinks'])
         ->name('designstudio.letterhead.links');

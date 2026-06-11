@@ -35,6 +35,12 @@ return [
         ],
     ],
 
+    'facebook' => [
+        'client_id'     => env('FACEBOOK_APP_ID'),
+        'client_secret' => env('FACEBOOK_APP_SECRET'),
+        'redirect'      => env('FACEBOOK_REDIRECT_URI', '/design-studio/facebook/callback'),
+    ],
+
     'google' => [
         'client_id' => env('GOOGLE_CLIENT_ID'),
         'client_secret' => env('GOOGLE_CLIENT_SECRET'),

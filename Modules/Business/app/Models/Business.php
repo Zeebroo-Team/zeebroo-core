@@ -174,6 +174,11 @@ class Business extends Model
         return $this->hasMany(\Modules\Purchase\Models\ChequePayment::class);
     }
 
+    public function quotations(): HasMany
+    {
+        return $this->hasMany(\Modules\Sales\Models\Quotation::class);
+    }
+
     public function fileManagerFolders(): HasMany
     {
         return $this->hasMany(FileManagerFolder::class)->orderBy('name');

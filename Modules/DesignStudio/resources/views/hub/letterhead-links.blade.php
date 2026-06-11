@@ -174,10 +174,11 @@ const SAVE_URL = '{{ route("designstudio.letterhead.links.toggle") }}';
 let   enabled  = @json($enabled);
 
 const DOC_NODES = [
-    { id: 'po',             label: 'Purchase Orders', sub: 'PO Invoice Print',  abbr: 'PO', color: '#3b82f6', angle: -90  },
-    { id: 'grn',            label: 'Goods Received',  sub: 'GRN Print',         abbr: 'GR', color: '#8b5cf6', angle:   0  },
-    { id: 'hr_salary_sheet',label: 'Salary Sheet',    sub: 'Monthly Payroll',   abbr: 'SS', color: '#10b981', angle:  90  },
-    { id: 'hr_payslip',     label: 'HR Payslips',     sub: 'Employee Payslip',  abbr: 'PS', color: '#f59e0b', angle: 180  },
+    { id: 'po',              label: 'Purchase Orders',  sub: 'PO Invoice Print',  abbr: 'PO', color: '#3b82f6', angle: -90  },
+    { id: 'grn',             label: 'Goods Received',   sub: 'GRN Print',         abbr: 'GR', color: '#8b5cf6', angle: -30  },
+    { id: 'hr_salary_sheet', label: 'Salary Sheet',     sub: 'Monthly Payroll',   abbr: 'SS', color: '#10b981', angle:  90  },
+    { id: 'hr_payslip',      label: 'HR Payslips',      sub: 'Employee Payslip',  abbr: 'PS', color: '#f59e0b', angle: 162  },
+    { id: 'sales_quotation', label: 'Sales Quotation',  sub: 'Quote Print',       abbr: 'QT', color: '#ec4899', angle: -150 },
 ];
 
 /* ── Dimensions ─────────────────────────────────────────────────── */

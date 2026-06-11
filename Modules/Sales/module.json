@@ -1,0 +1,11 @@
+{
+    "name": "Sales",
+    "alias": "sales",
+    "description": "Customers, sales quotations, and quote-to-order workflow.",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\Sales\\Providers\\SalesServiceProvider"
+    ],
+    "files": []
+}

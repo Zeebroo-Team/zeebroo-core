@@ -105,15 +105,18 @@
                             <td style="text-align:center;">{{ $row->labels_per_page }}</td>
                             <td style="text-align:center;">{{ $row->total_quantity }}</td>
                             <td style="text-align:center;">{{ $row->totalPages() }}</td>
-                            <td style="text-align:right;white-space:nowrap;">
-                                <a class="pcat-link" href="{{ route('product.barcodes.show', $row) }}" style="margin-right:8px;">
-                                    <i class="fa fa-print"></i> Print
-                                </a>
-                                <form method="post" action="{{ route('product.barcodes.destroy', $row) }}" style="margin:0;display:inline;" onsubmit="return confirm('Delete this barcode sheet?');">
-                                    @csrf
-                                    @method('DELETE')
-                                    <button type="submit" class="pcat-btn-del"><i class="fa fa-trash-can"></i> Delete</button>
-                                </form>
+                            <td style="text-align:right;">
+                                <div style="display:inline-flex;align-items:center;gap:6px;">
+                                    <a href="{{ route('product.barcodes.show', $row) }}"
+                                       class="linkbtn" style="padding:6px 12px;font-size:12px;display:inline-flex;align-items:center;gap:5px;text-decoration:none;">
+                                        <i class="fa fa-print" style="font-size:11px;opacity:.75;"></i> Print
+                                    </a>
+                                    <form method="post" action="{{ route('product.barcodes.destroy', $row) }}" style="margin:0;" onsubmit="return confirm('Delete this barcode sheet?');">
+                                        @csrf
+                                        @method('DELETE')
+                                        <button type="submit" class="pcat-btn-del" style="padding:6px 10px;" title="Delete"><i class="fa fa-trash-can"></i></button>
+                                    </form>
+                                </div>
                             </td>
                         </tr>
                     @endforeach

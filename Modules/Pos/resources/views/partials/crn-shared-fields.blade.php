@@ -3,11 +3,18 @@
     Variables: $formId (string), $cancelUrl (string), $accounts (Collection)
 --}}
 <div class="crn-total-bar">
-    <span class="crn-total-bar__label">Return total</span>
-    <span>
-        <span class="crn-total-bar__value" id="crnRunningTotal">0.00</span>
-        @if(filled($currency ?? ''))<span class="crn-total-bar__currency">{{ $currency }}</span>@endif
-    </span>
+    <div class="crn-total-bar__left">
+        <div class="crn-total-bar__icon"><i class="fa fa-calculator"></i></div>
+        <div>
+            <p class="crn-total-bar__label">Return total</p>
+            <span class="crn-total-bar__value" id="crnRunningTotal">0.00</span>
+            @if(filled($currency ?? ''))<span class="crn-total-bar__currency">{{ $currency }}</span>@endif
+        </div>
+    </div>
+    <div style="text-align:right;">
+        <p style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:0 0 3px;">Refund amount</p>
+        <p style="font-size:12px;color:var(--muted);margin:0;">Calculated from selected quantities</p>
+    </div>
 </div>
 
 <div class="crn-fields">

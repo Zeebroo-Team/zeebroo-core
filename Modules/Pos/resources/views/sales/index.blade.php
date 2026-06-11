@@ -205,7 +205,10 @@
                             @endif
                         </td>
                         <td style="text-align:right;">
-                            <a href="{{ route('pos.sales.show', $sale) }}" class="pcat-link" style="font-weight:700;">View</a>
+                            <a href="{{ route('pos.sales.show', $sale) }}"
+                               class="linkbtn" style="padding:6px 12px;font-size:12px;display:inline-flex;align-items:center;gap:5px;text-decoration:none;">
+                                <i class="fa fa-eye" style="font-size:11px;opacity:.75;"></i> View
+                            </a>
                         </td>
                     </tr>
                 @empty

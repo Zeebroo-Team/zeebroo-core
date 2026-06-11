@@ -120,7 +120,7 @@
     padding:8px 10px;border-radius:8px;border:1px solid var(--border);
     background:transparent;color:var(--muted);font-size:11px;font-weight:700;
     cursor:pointer;transition:all .15s;width:100%;box-sizing:border-box;
-    font-family:inherit;line-height:1;white-space:nowrap;
+    font-family:inherit;line-height:1;white-space:nowrap;text-decoration:none;
 }
 .ds-ql-btn:hover{background:var(--primary);border-color:var(--primary);color:#fff;}
 .ds-ql-btn--edit{
@@ -171,7 +171,11 @@
                 <p class="ds-ql-desc">{{ $item['desc'] }}</p>
                 <span class="ds-ql-size">{{ $item['w'] }} × {{ $item['h'] }} px</span>
                 <div class="ds-ql-btn-wrap">
-                    @if($existing)
+                    @if($item['type'] === 'social-media')
+                        <a href="{{ route('designstudio.social-media.index') }}" class="ds-ql-btn">
+                            <i class="fa fa-share-nodes" aria-hidden="true"></i> Manage Post
+                        </a>
+                    @elseif($existing)
                         @if($item['type'] === 'letterhead')
                         <div style="display:flex;gap:6px;">
                             <button class="ds-ql-btn ds-ql-btn--edit" style="flex:1;" onclick="window.location.href='{{ route('designstudio.editor.edit', $existing) }}'">

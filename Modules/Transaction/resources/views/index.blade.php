@@ -83,8 +83,6 @@
             @else
                 <div class="tx-empty"><p>No data.</p></div>
             @endif
-
-            <p class="tx-muted"><i class="fa fa-clock"></i> Scheduler: Transaction module registers <strong>daily 00:10</strong> — ensure your server cron runs <code style="font-size:11px;">php artisan schedule:run</code> every minute.</p>
         </div>
     @endif
 </div>

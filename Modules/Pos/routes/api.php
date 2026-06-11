@@ -8,6 +8,7 @@ use Modules\Pos\Http\Controllers\Api\PosApiDocsController;
 use Modules\Pos\Http\Controllers\Api\PosCatalogApiController;
 use Modules\Pos\Http\Controllers\Api\PosCheckoutApiController;
 use Modules\Pos\Http\Controllers\Api\PosOnlineBootstrapApiController;
+use Modules\Pos\Http\Controllers\Api\PosStockAuditApiController;
 use Modules\Pos\Http\Controllers\Api\PosProductApiController;
 use Modules\Pos\Http\Controllers\Api\PosPurchaseOrderApiController;
 use Modules\Pos\Http\Controllers\Api\PosSaleApiController;
@@ -55,4 +56,11 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
     Route::post('purchase-orders/{purchase}/place', [PosPurchaseOrderApiController::class, 'placeOrder'])->name('purchase-orders.place');
     Route::post('purchase-orders/{purchase}/receive', [PosPurchaseOrderApiController::class, 'receive'])->name('purchase-orders.receive');
     Route::post('purchase-orders/{purchase}/cancel', [PosPurchaseOrderApiController::class, 'cancel'])->name('purchase-orders.cancel');
+
+    Route::get('stock-audits', [PosStockAuditApiController::class, 'index'])->name('stock-audits.index');
+    Route::post('stock-audits', [PosStockAuditApiController::class, 'store'])->name('stock-audits.store');
+    Route::get('stock-audits/{stockAudit}', [PosStockAuditApiController::class, 'show'])->name('stock-audits.show');
+    Route::put('stock-audits/{stockAudit}/lines', [PosStockAuditApiController::class, 'saveLines'])->name('stock-audits.save-lines');
+    Route::post('stock-audits/{stockAudit}/finalize', [PosStockAuditApiController::class, 'finalize'])->name('stock-audits.finalize');
+    Route::delete('stock-audits/{stockAudit}', [PosStockAuditApiController::class, 'destroy'])->name('stock-audits.destroy');
 });
