@@ -144,16 +144,27 @@ class SaleController extends Controller
             return $business;
         }
 
-        $search = (string) $request->query('q', '');
-        $sales = $this->sales->listForBusiness($business, $search !== '' ? $search : null);
+        $filters = [
+            'q'         => (string)  $request->query('q', ''),
+            'status'    => (string)  $request->query('status', 'all'),
+            'date_from' => (string)  $request->query('date_from', ''),
+            'date_to'   => (string)  $request->query('date_to', ''),
+            'channel'   => (string)  $request->query('channel', 'all'),
+        ];
+
         $currency = (string) (get_settings('business.currency', '', $business) ?: '');
+        $hasSales = $this->sales->businessHasSales($business);
+
+        $sales   = $hasSales ? $this->sales->indexForBusiness($business, $filters) : null;
+        $summary = $hasSales ? $this->sales->indexSummary($business, $filters)     : null;
 
         return view('pos::sales.index', [
             'business' => $business,
             'currency' => $currency,
-            'search' => $search,
-            'sales' => $sales,
-            'hasSales' => $this->sales->businessHasSales($business),
+            'filters'  => $filters,
+            'sales'    => $sales,
+            'summary'  => $summary,
+            'hasSales' => $hasSales,
         ]);
     }
 

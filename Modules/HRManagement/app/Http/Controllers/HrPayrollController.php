@@ -24,6 +24,7 @@ use Modules\HRManagement\Services\PayrollCustomTemplateService;
 use Modules\HRManagement\Services\PayrollCyclePaymentService;
 use Modules\HRManagement\Services\PayrollSalarySheetExcelExportService;
 use Modules\HRManagement\Services\PayrollSalarySheetPresentationService;
+use Modules\DesignStudio\Models\Design;
 use Modules\Settings\Services\SettingsService;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -377,16 +378,21 @@ class HrPayrollController extends Controller
             'items.employee',
             'items.components',
         ]);
-        $sheet = $this->salarySheetPresentation->forCycle($cycle, $business);
-        $summary = $this->buildCycleSummary($cycle);
+        $sheet      = $this->salarySheetPresentation->forCycle($cycle, $business);
+        $summary    = $this->buildCycleSummary($cycle);
+        $mainBranch = $business->branches()->first();
+        $lh         = $this->letterheadViewData($business, 'hr_salary_sheet');
 
         return view('hrmanagement::payroll.salary-sheet', [
-            'business' => $business,
-            'cycle' => $cycle,
-            'sheetColumns' => $sheet['columns'],
-            'rows' => $sheet['rows'],
-            'varianceMeta' => $sheet['variance'] ?? [],
-            'summary' => $summary,
+            'business'             => $business,
+            'cycle'                => $cycle,
+            'sheetColumns'         => $sheet['columns'],
+            'rows'                 => $sheet['rows'],
+            'varianceMeta'         => $sheet['variance'] ?? [],
+            'summary'              => $summary,
+            'mainBranch'           => $mainBranch,
+            'accentColor'          => $lh['accentColor'],
+            'letterheadCanvasJson' => $lh['letterheadCanvasJson'],
         ]);
     }
 
@@ -479,12 +485,17 @@ class HrPayrollController extends Controller
         abort_if((int) $item->payroll_cycle_id !== (int) $cycle->id, 404);
         $item->load(['employee', 'components']);
         $leaveContext = $this->hrPayslipLeave->payslipLeaveContext($cycle, $item->employee);
+        $mainBranch   = $business->branches()->first();
+        $lh           = $this->letterheadViewData($business, 'hr_payslip');
 
         return view('hrmanagement::payroll.payslip', [
-            'business' => $business,
-            'cycle' => $cycle,
-            'item' => $item,
-            'leaveContext' => $leaveContext,
+            'business'             => $business,
+            'cycle'                => $cycle,
+            'item'                 => $item,
+            'leaveContext'         => $leaveContext,
+            'mainBranch'           => $mainBranch,
+            'accentColor'          => $lh['accentColor'],
+            'letterheadCanvasJson' => $lh['letterheadCanvasJson'],
         ]);
     }
 
@@ -496,12 +507,17 @@ class HrPayrollController extends Controller
 
         $item->load(['employee', 'components']);
         $leaveContext = $this->hrPayslipLeave->payslipLeaveContext($cycle, $item->employee);
+        $mainBranch   = $business->branches()->first();
+        $lh           = $this->letterheadViewData($business, 'hr_payslip');
         $html = view('hrmanagement::payroll.payslip', [
-            'business' => $business,
-            'cycle' => $cycle,
-            'item' => $item,
-            'leaveContext' => $leaveContext,
-            'isDownload' => true,
+            'business'             => $business,
+            'cycle'                => $cycle,
+            'item'                 => $item,
+            'leaveContext'         => $leaveContext,
+            'isDownload'           => true,
+            'mainBranch'           => $mainBranch,
+            'accentColor'          => $lh['accentColor'],
+            'letterheadCanvasJson' => $lh['letterheadCanvasJson'],
         ])->render();
 
         $filename = sprintf(
@@ -563,6 +579,55 @@ class HrPayrollController extends Controller
         }
 
         return $out;
+    }
+
+    /** @return array{letterheadCanvasJson: string|null, accentColor: string} */
+    private function letterheadViewData(Business $business, string $docType = ''): array
+    {
+        $accentColor          = '#3B82F6';
+        $letterheadCanvasJson = null;
+
+        if ($docType !== '') {
+            $lhLinks = (array) get_settings('design_studio.lh_links', ['po', 'grn', 'hr_payslip', 'hr_salary_sheet'], $business);
+            if (!in_array($docType, $lhLinks)) {
+                return compact('letterheadCanvasJson', 'accentColor');
+            }
+        }
+
+        $letterhead = Design::query()
+            ->where('business_id', $business->id)
+            ->where('type', 'letterhead')
+            ->latest('updated_at')
+            ->first();
+
+        if ($letterhead) {
+            try {
+                $raw     = (string) $letterhead->canvas_json;
+                $decoded = json_decode($raw, true);
+                $objs    = [];
+                if (is_array($decoded)) {
+                    if (isset($decoded['objects']) && is_array($decoded['objects'])) {
+                        $letterheadCanvasJson = $raw;
+                        $objs                 = $decoded['objects'];
+                    } elseif (!empty($decoded[0]['json'])) {
+                        $letterheadCanvasJson = $decoded[0]['json'];
+                        $objs                 = json_decode((string) $decoded[0]['json'], true)['objects'] ?? [];
+                    }
+                }
+                foreach ($objs as $obj) {
+                    if (($obj['type'] ?? '') === 'rect'
+                        && (float) ($obj['top'] ?? 99) < 4
+                        && (float) ($obj['height'] ?? 99) <= 8
+                        && !empty($obj['fill'])
+                        && preg_match('/^#[0-9a-fA-F]{3,8}$/', (string) $obj['fill'])) {
+                        $accentColor = $obj['fill'];
+                        break;
+                    }
+                }
+            } catch (\Throwable) {}
+        }
+
+        return compact('letterheadCanvasJson', 'accentColor');
     }
 
     private function resolveBusiness(Request $request): Business

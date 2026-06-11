@@ -4,6 +4,7 @@ namespace Modules\Pos\Services;
 
 use App\Models\User;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Modules\Business\Models\Business;
@@ -51,6 +52,85 @@ class SaleService
     public function businessHasSales(Business $business): bool
     {
         return $business->sales()->exists();
+    }
+
+    /**
+     * Paginated + filtered list for the web index page.
+     *
+     * @param  array{q?: string, status?: string, date_from?: string, date_to?: string, channel?: string}  $filters
+     * @return LengthAwarePaginator<Sale>
+     */
+    public function indexForBusiness(Business $business, array $filters = []): LengthAwarePaginator
+    {
+        $query = $business->sales()
+            ->with(['user', 'branch', 'customer'])
+            ->withCount('items');
+
+        $this->applyIndexFilters($query, $filters);
+
+        return $query->orderByDesc('sold_at')->orderByDesc('id')->paginate(25);
+    }
+
+    /**
+     * Aggregate stats for the same filter set shown on the index page.
+     *
+     * @param  array{q?: string, status?: string, date_from?: string, date_to?: string, channel?: string}  $filters
+     * @return array{count: int, completed_count: int, completed_total: float, void_count: int}
+     */
+    public function indexSummary(Business $business, array $filters = []): array
+    {
+        $query = $business->sales();
+        $this->applyIndexFilters($query, $filters);
+
+        $rows = (clone $query)->selectRaw(
+            "COUNT(*) as total_count,
+             SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as completed_count,
+             SUM(CASE WHEN status = ? THEN total ELSE 0 END) as completed_total,
+             SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as void_count",
+            [Sale::STATUS_COMPLETED, Sale::STATUS_COMPLETED, Sale::STATUS_VOID]
+        )->first();
+
+        return [
+            'count'           => (int)   ($rows->total_count     ?? 0),
+            'completed_count' => (int)   ($rows->completed_count ?? 0),
+            'completed_total' => (float) ($rows->completed_total ?? 0),
+            'void_count'      => (int)   ($rows->void_count      ?? 0),
+        ];
+    }
+
+    /** @param  array{q?: string, status?: string, date_from?: string, date_to?: string, channel?: string}  $filters */
+    private function applyIndexFilters(\Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Eloquent\Relations\Relation $query, array $filters): void
+    {
+        $term = trim((string) ($filters['q'] ?? ''));
+        if ($term !== '') {
+            $like = '%'.addcslashes($term, '%_\\').'%';
+            $query->where(function ($b) use ($like) {
+                $b->where('sale_number', 'like', $like)
+                  ->orWhere('notes', 'like', $like)
+                  ->orWhereHas('customer', fn ($q) => $q->where('name', 'like', $like));
+            });
+        }
+
+        $status = $filters['status'] ?? 'all';
+        if ($status === Sale::STATUS_COMPLETED) {
+            $query->where('status', Sale::STATUS_COMPLETED);
+        } elseif ($status === Sale::STATUS_VOID) {
+            $query->where('status', Sale::STATUS_VOID);
+        }
+
+        if (filled($filters['date_from'] ?? null)) {
+            $query->whereDate('sold_at', '>=', $filters['date_from']);
+        }
+        if (filled($filters['date_to'] ?? null)) {
+            $query->whereDate('sold_at', '<=', $filters['date_to']);
+        }
+
+        $channel = $filters['channel'] ?? 'all';
+        if ($channel === Sale::CHANNEL_RETAIL) {
+            $query->where('channel', Sale::CHANNEL_RETAIL);
+        } elseif ($channel === Sale::CHANNEL_ONLINE) {
+            $query->where('channel', Sale::CHANNEL_ONLINE);
+        }
     }
 
     /**

@@ -437,6 +437,9 @@
         <a href="{{ route('purchase.grn.index') }}" class="linkbtn" style="padding:7px 12px;font-size:12px;background:transparent;border:1px solid var(--border);color:var(--text);text-decoration:none;display:inline-flex;align-items:center;gap:6px;">
             <i class="fa fa-arrow-left"></i> All GRNs
         </a>
+        <a href="{{ route('purchase.grn.print', $grn) }}" target="_blank" class="linkbtn" style="padding:7px 12px;font-size:12px;background:transparent;border:1px solid var(--border);color:var(--text);text-decoration:none;display:inline-flex;align-items:center;gap:6px;">
+            <i class="fa fa-print"></i> Print
+        </a>
         @if($grn->purchase?->canReceiveGoods())
             <a href="{{ route('purchase.grn.create', $grn->purchase) }}" class="linkbtn" style="padding:7px 12px;font-size:12px;text-decoration:none;display:inline-flex;align-items:center;gap:6px;">
                 <i class="fa fa-plus"></i> Another receipt

@@ -20,6 +20,7 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
 
     Route::get('/purchases/goods-receive', [GoodsReceiveNoteController::class, 'index'])->name('purchase.grn.index');
     Route::get('/purchases/goods-receive/{goodsReceiveNote}', [GoodsReceiveNoteController::class, 'show'])->name('purchase.grn.show');
+    Route::get('/purchases/goods-receive/{goodsReceiveNote}/print', [GoodsReceiveNoteController::class, 'printInvoice'])->name('purchase.grn.print');
     Route::post('/purchases/goods-receive/{goodsReceiveNote}/pay', [GoodsReceiveNoteController::class, 'pay'])->name('purchase.grn.pay');
     Route::get('/purchases/{purchase}/goods-receive/create', [GoodsReceiveNoteController::class, 'create'])->name('purchase.grn.create');
     Route::post('/purchases/{purchase}/goods-receive', [GoodsReceiveNoteController::class, 'store'])->name('purchase.grn.store');
@@ -27,6 +28,7 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
     Route::get('/purchases', [PurchaseController::class, 'index'])->name('purchase.index');
     Route::post('/purchases', [PurchaseController::class, 'store'])->name('purchase.store');
     Route::get('/purchases/{purchase}', [PurchaseController::class, 'show'])->name('purchase.show');
+    Route::get('/purchases/{purchase}/print', [PurchaseController::class, 'printInvoice'])->name('purchase.print');
     Route::get('/purchases/{purchase}/edit', [PurchaseController::class, 'edit'])->name('purchase.edit');
     Route::put('/purchases/{purchase}', [PurchaseController::class, 'update'])->name('purchase.update');
     Route::post('/purchases/{purchase}/place-order', [PurchaseController::class, 'placeOrder'])->name('purchase.place-order');

@@ -1,0 +1,28 @@
+{
+    "name": "nwidart/designstudio",
+    "description": "",
+    "authors": [
+        {
+            "name": "Nicolas Widart",
+            "email": "n.widart@gmail.com"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {}
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\DesignStudio\\": "app/",
+            "Modules\\DesignStudio\\Database\\Factories\\": "database/factories/",
+            "Modules\\DesignStudio\\Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\DesignStudio\\Tests\\": "tests/"
+        }
+    }
+}

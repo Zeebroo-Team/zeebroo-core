@@ -9,6 +9,7 @@ use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 use Modules\Business\Models\Business;
+use Modules\DesignStudio\Models\Design;
 use Modules\Purchase\Http\Controllers\Concerns\ResolvesPurchaseBusiness;
 use Modules\Purchase\Models\Purchase;
 use Modules\Purchase\Services\PurchaseService;
@@ -117,6 +118,70 @@ class PurchaseController extends Controller
             'accounts' => $accounts,
             'hasPaymentAccounts' => $accounts->isNotEmpty(),
             'canPayByCheque' => $this->businessHasCurrentAccount($business, $request),
+        ]);
+    }
+
+    public function printInvoice(Request $request, Purchase $purchase): View|RedirectResponse
+    {
+        $business = $this->requirePurchase($request, $purchase);
+        if ($business instanceof RedirectResponse) {
+            return $business;
+        }
+
+        $purchase->load(['supplier', 'items.product.productUnit']);
+
+        $currency    = (string) (get_settings('business.currency', '', $business) ?: '');
+        $mainBranch  = $business->branches()->first();
+        $lhLinks     = (array) get_settings('design_studio.lh_links', ['po', 'grn', 'hr_payslip', 'hr_salary_sheet'], $business);
+        $letterhead  = in_array('po', $lhLinks) ? Design::query()
+            ->where('business_id', $business->id)
+            ->where('type', 'letterhead')
+            ->latest('updated_at')
+            ->first() : null;
+
+        // Extract accent colour + raw canvas JSON for client-side rendering.
+        // canvas_json is stored as either:
+        //   (a) direct Fabric.js JSON  {"version":"5.3.0","objects":[...]}
+        //   (b) multi-page wrapper     [{"json":"...fabric json..."}]
+        $accentColor          = '#3B82F6';
+        $letterheadCanvasJson = null;
+        $objs                 = [];
+        if ($letterhead) {
+            try {
+                $raw     = (string) $letterhead->canvas_json;
+                $decoded = json_decode($raw, true);
+                if (is_array($decoded)) {
+                    if (isset($decoded['objects']) && is_array($decoded['objects'])) {
+                        // Format (a): direct Fabric.js JSON
+                        $letterheadCanvasJson = $raw;
+                        $objs                 = $decoded['objects'];
+                    } elseif (!empty($decoded[0]['json'])) {
+                        // Format (b): multi-page wrapper
+                        $letterheadCanvasJson = $decoded[0]['json'];
+                        $objs                 = json_decode((string) $decoded[0]['json'], true)['objects'] ?? [];
+                    }
+                }
+                // Find the thin top accent strip (rect, near top, height ≤ 8)
+                foreach ($objs as $obj) {
+                    if (($obj['type'] ?? '') === 'rect'
+                        && (float) ($obj['top'] ?? 99) < 4
+                        && (float) ($obj['height'] ?? 99) <= 8
+                        && !empty($obj['fill'])
+                        && preg_match('/^#[0-9a-fA-F]{3,8}$/', (string) $obj['fill'])) {
+                        $accentColor = $obj['fill'];
+                        break;
+                    }
+                }
+            } catch (\Throwable) {}
+        }
+
+        return view('purchase::purchases.print', [
+            'business'            => $business,
+            'purchase'            => $purchase,
+            'currency'            => $currency,
+            'mainBranch'          => $mainBranch,
+            'accentColor'         => $accentColor,
+            'letterheadCanvasJson' => $letterheadCanvasJson,
         ]);
     }
 

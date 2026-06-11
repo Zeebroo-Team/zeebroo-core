@@ -1,0 +1,11 @@
+{
+    "name": "DesignStudio",
+    "alias": "designstudio",
+    "description": "Design studio for managing design projects, assets, and creative workflows.",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\DesignStudio\\Providers\\DesignStudioServiceProvider"
+    ],
+    "files": []
+}

@@ -1,0 +1,41 @@
+<?php
+
+use Illuminate\Support\Facades\Route;
+use Modules\DesignStudio\Http\Controllers\DesignEditorController;
+use Modules\DesignStudio\Http\Controllers\DesignStudioController;
+use Modules\DesignStudio\Http\Controllers\GenerateCompanyProfileController;
+use Modules\DesignStudio\Http\Controllers\GenerateLetterHeadController;
+
+Route::middleware(['auth', 'verified'])->group(function (): void {
+
+    Route::get('/design-studio', [DesignStudioController::class, 'index'])
+        ->name('designstudio.index');
+
+    Route::get('/design-studio/new', [DesignEditorController::class, 'create'])
+        ->name('designstudio.editor.create');
+
+    Route::get('/design-studio/editor/{design}', [DesignEditorController::class, 'edit'])
+        ->name('designstudio.editor.edit');
+
+    Route::post('/design-studio/designs', [DesignEditorController::class, 'store'])
+        ->name('designstudio.designs.store');
+
+    Route::put('/design-studio/designs/{design}', [DesignEditorController::class, 'update'])
+        ->name('designstudio.designs.update');
+
+    Route::delete('/design-studio/designs/{design}', [DesignEditorController::class, 'destroy'])
+        ->name('designstudio.designs.destroy');
+
+    Route::get('/design-studio/letterhead-links', [DesignStudioController::class, 'letterheadLinks'])
+        ->name('designstudio.letterhead.links');
+
+    Route::post('/design-studio/letterhead-links/toggle', [DesignStudioController::class, 'toggleLetterheadLink'])
+        ->name('designstudio.letterhead.links.toggle');
+
+    Route::post('/design-studio/generate/company-profile', GenerateCompanyProfileController::class)
+        ->name('designstudio.generate.company-profile');
+
+    Route::post('/design-studio/generate/letterhead', GenerateLetterHeadController::class)
+        ->name('designstudio.generate.letterhead');
+
+});

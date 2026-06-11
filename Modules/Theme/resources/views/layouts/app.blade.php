@@ -319,6 +319,12 @@
         .sidebar-suggestion__section{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);flex-shrink:0;opacity:.7;}
         .sidebar-suggestions__empty{padding:10px 12px;font-size:12px;color:var(--muted);text-align:center;}
         .sidebar--collapsed .sidebar-search{display:none;}
+        /* ── Collapsible sidebar groups ──────────────────────────── */
+        div.menu-group-title{cursor:pointer;user-select:none;}
+        .menu-group-chevron{margin-left:auto;font-size:9px;color:var(--muted);flex-shrink:0;transition:transform .2s ease;pointer-events:none;}
+        div.menu-group-title.group--collapsed .menu-group-chevron{transform:rotate(-90deg);}
+        .submenu{overflow:hidden;transition:max-height .28s cubic-bezier(.4,0,.2,1);}
+        .sidebar--collapsed .submenu{overflow:visible!important;max-height:none!important;transition:none!important;}
     </style>
 </head>
 @php
@@ -413,6 +419,7 @@
         $showSidebarFilesLink = $navBusiness && (
             $navBusiness->fileManagerFiles()->exists() || $navBusiness->fileManagerFolders()->exists()
         );
+        $showSidebarDesignStudioLink = $navBusiness && Route::has('designstudio.index');
         $showSidebarPropertiesLink = $navBusiness
             ? \Modules\Account\Models\Property::query()->where('business_id', $navBusiness->id)->exists()
             : false;
@@ -480,6 +487,7 @@
             $showSidebarFilesLink = false;
             $showSidebarPropertiesLink = false;
             $showSidebarModificationsLink = false;
+            $showSidebarDesignStudioLink = false;
             $sidebarLoanDueHighlight = false;
             $sidebarRentalDueHighlight = false;
             $sidebarBillDueHighlight = false;
@@ -662,6 +670,9 @@
             @endif
             @if($showSidebarFilesLink && Route::has('filemanager.index'))
                 <a href="{{ route('filemanager.index') }}" class="{{ request()->routeIs('filemanager.*') ? 'active' : '' }}"><i class="fa fa-folder-open"></i><span>Files</span></a>
+            @endif
+            @if($showSidebarDesignStudioLink)
+                <a href="{{ route('designstudio.index') }}" class="{{ request()->routeIs('designstudio.*') ? 'active' : '' }}"><i class="fa fa-palette"></i><span>Design Studio</span></a>
             @endif
             @if($navBusiness && ($hrFeatureOn || $hrPayrollOptedIn))
                 <div class="menu-group-title">
@@ -1461,22 +1472,20 @@ window.showToast = (function() {
     function applyCollapsed(c, skipStorage) {
         sidebar.classList.toggle('sidebar--collapsed', c);
         if (content) content.classList.toggle('content--sidebar-collapsed', c);
+        var chevronClass = c ? 'fa fa-chevron-right' : 'fa fa-chevron-left';
+        var label = c ? 'Expand sidebar' : 'Collapse sidebar';
         if (toggleBtn) {
             var icon = toggleBtn.querySelector('i');
-            if (icon) icon.className = c ? 'fa fa-chevron-right' : 'fa fa-chevron-left';
-            toggleBtn.title = c ? 'Expand sidebar' : 'Collapse sidebar';
-            toggleBtn.setAttribute('aria-label', c ? 'Expand sidebar' : 'Collapse sidebar');
+            if (icon) icon.className = chevronClass;
+            toggleBtn.title = label;
+            toggleBtn.setAttribute('aria-label', label);
         }
         if (!skipStorage) localStorage.setItem('sb_collapsed', c ? '1' : '0');
     }
     applyCollapsed(collapsed, true);
 
-    if (toggleBtn) {
-        toggleBtn.addEventListener('click', function () {
-            collapsed = !collapsed;
-            applyCollapsed(collapsed, false);
-        });
-    }
+    function doToggle() { collapsed = !collapsed; applyCollapsed(collapsed, false); }
+    if (toggleBtn) toggleBtn.addEventListener('click', doToggle);
 
     /* ── Mobile open / close ──────────────────────────────────────── */
     function openMobile() {
@@ -1496,6 +1505,101 @@ window.showToast = (function() {
     document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape' && sidebar.classList.contains('sidebar--mobile-open')) closeMobile();
     });
+})();
+</script>
+<script>
+(function () {
+    var nav = document.querySelector('#appSidebar nav.menu');
+    if (!nav) return;
+
+    // Build list of all collapsible groups
+    var groups = [];
+    nav.querySelectorAll('div.menu-group-title').forEach(function (title) {
+        var sub = title.nextElementSibling;
+        if (!sub || !sub.classList.contains('submenu')) return;
+        var chev = document.createElement('i');
+        chev.className = 'fa fa-chevron-down menu-group-chevron';
+        chev.setAttribute('aria-hidden', 'true');
+        title.appendChild(chev);
+        title.setAttribute('role', 'button');
+        title.setAttribute('tabindex', '0');
+        groups.push({ title: title, sub: sub });
+    });
+
+    var STORE_KEY = 'sb_open_group';
+    // Restore which group was open — default: none (all collapsed)
+    var openLabel = localStorage.getItem(STORE_KEY) || '';
+
+    function collapse(g, animate) {
+        if (animate) {
+            g.sub.style.maxHeight = g.sub.scrollHeight + 'px';
+            requestAnimationFrame(function () { g.sub.style.maxHeight = '0'; });
+        } else {
+            g.sub.style.maxHeight = '0';
+        }
+        g.title.classList.add('group--collapsed');
+        g.title.setAttribute('aria-expanded', 'false');
+    }
+
+    function expand(g, animate) {
+        if (animate) {
+            g.sub.style.maxHeight = g.sub.scrollHeight + 'px';
+            g.sub.addEventListener('transitionend', function h(e) {
+                if (e.propertyName !== 'max-height') return;
+                g.sub.removeEventListener('transitionend', h);
+                if (!g.title.classList.contains('group--collapsed')) g.sub.style.maxHeight = 'none';
+            });
+        } else {
+            g.sub.style.maxHeight = 'none';
+        }
+        g.title.classList.remove('group--collapsed');
+        g.title.setAttribute('aria-expanded', 'true');
+    }
+
+    function labelOf(g) {
+        return (g.title.querySelector('span') || g.title).textContent.trim();
+    }
+
+    // Apply initial state — all collapsed except the saved open group
+    groups.forEach(function (g) {
+        if (openLabel && labelOf(g) === openLabel) {
+            expand(g, false);
+        } else {
+            collapse(g, false);
+        }
+    });
+
+    // Click handler — accordion: open clicked, close all others
+    groups.forEach(function (g) {
+        function toggle() {
+            var isCollapsed = g.title.classList.contains('group--collapsed');
+            if (isCollapsed) {
+                // Close all others first
+                groups.forEach(function (other) {
+                    if (other !== g) collapse(other, true);
+                });
+                expand(g, true);
+                localStorage.setItem(STORE_KEY, labelOf(g));
+            } else {
+                collapse(g, true);
+                localStorage.setItem(STORE_KEY, '');
+            }
+        }
+        g.title.addEventListener('click', toggle);
+        g.title.addEventListener('keydown', function (e) {
+            if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); toggle(); }
+        });
+    });
+
+    // Auto-open the group containing the active link on page load
+    if (!openLabel) {
+        groups.forEach(function (g) {
+            if (g.sub.querySelector('a.active')) {
+                expand(g, false);
+                localStorage.setItem(STORE_KEY, labelOf(g));
+            }
+        });
+    }
 })();
 </script>
 </body>

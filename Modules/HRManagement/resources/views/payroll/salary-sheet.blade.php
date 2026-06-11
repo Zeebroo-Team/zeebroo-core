@@ -156,14 +156,56 @@
             .salary-sheet-scroll{max-height:min(58vh,min(720px,calc(100dvh - 240px)))}
         }
 
+        /* ── print-only elements ── */
+        .lh-print-zone{display:none}
+        .salary-sheet-print-info{display:none}
+
         @media print{
-            .salary-sheet-actions,.sidebar,.navbar,.content-inner > *:not(.salary-sheet-page){display:none!important}
-            .content,.content-inner{margin:0!important;padding:8px!important;max-width:none!important}
-            .salary-sheet-page{max-width:none;gap:10px}
-            .salary-sheet-scroll{max-height:none;overflow:visible;border:none}
-            .salary-sheet__table th,.salary-sheet__table td.salary-sheet__cell--employ{position:static!important;box-shadow:none!important}
-            .salary-sheet__table tbody tr:hover td{background:transparent!important}
-            .salary-sheet-hero,.salary-sheet-table-card{box-shadow:none;border:1px solid #ccc}
+            /* hide chrome */
+            .salary-sheet-actions,.sidebar,.navbar,
+            .content-inner > *:not(.salary-sheet-page),
+            .salary-sheet-hero,.salary-sheet-table-card__caption{display:none!important}
+
+            /* reset layout */
+            *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+            body,html{background:#fff!important}
+            .content,.content-inner{margin:0!important;padding:0!important;max-width:none!important;background:#fff!important}
+            .salary-sheet-page{max-width:none!important;gap:6px!important;padding:0!important;background:#fff!important}
+
+            /* table */
+            .salary-sheet-table-card{
+                box-shadow:none!important;border:1px solid #e2e8f0!important;
+                border-radius:6px!important;padding:0!important;background:#fff!important;
+            }
+            .salary-sheet-scroll{
+                max-height:none!important;overflow:visible!important;
+                border:none!important;border-radius:0!important;
+            }
+            .salary-sheet__table{width:100%!important;font-size:9.5px!important}
+            .salary-sheet__table thead th{
+                position:static!important;background:#f1f5f9!important;
+                color:#475569!important;font-size:8px!important;
+                padding:6px 7px!important;
+                box-shadow:none!important;border-bottom:1px solid #e2e8f0!important;
+            }
+            .salary-sheet__table tbody td{padding:5px 7px!important;font-size:9.5px!important}
+            .salary-sheet__table td.salary-sheet__cell--employ{
+                position:static!important;box-shadow:none!important;background:#fff!important;
+            }
+            .salary-sheet__table tbody tr:nth-child(even) td{background:#f8fafc!important}
+            .salary-sheet__table tbody tr:nth-child(even) td.salary-sheet__cell--employ{background:#f8fafc!important}
+            .salary-sheet__table tbody tr:hover td{background:inherit!important}
+            .salary-sheet__table th + th,.salary-sheet__table td + td{border-left:1px solid #e2e8f0!important}
+            .salary-sheet__table tbody tr:last-child td{border-bottom:none!important}
+            .salary-sheet__name{font-size:9.5px!important}
+            .salary-sheet__meta{font-size:8px!important;margin-top:1px!important}
+            .salary-sheet__num{font-size:9.5px!important}
+            .salary-sheet__status{font-size:7.5px!important;padding:2px 5px!important}
+
+            /* letterhead + print-only info */
+            .lh-print-zone{display:block!important}
+            .salary-sheet-print-info{display:block!important}
+            #lhRenderCanvas{display:none!important;visibility:hidden!important}
         }
     </style>
 
@@ -180,6 +222,47 @@
     @endif
 
     <div class="salary-sheet-page">
+        @include('hrmanagement::partials.print-letterhead', ['accentColor' => $accentColor ?? '#3B82F6', 'mainBranch' => $mainBranch ?? null])
+
+        {{-- print-only document title block shown below the letterhead --}}
+        <div class="salary-sheet-print-info" style="padding:10px 0 6px;border-bottom:2px solid #e2e8f0;margin-bottom:4px;">
+            <div style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:8px;">
+                <div>
+                    <div style="font-size:15px;font-weight:800;color:#0f172a;letter-spacing:-.02em;">{{ __('Monthly Salary Sheet') }}</div>
+                    <div style="font-size:11px;color:#475569;margin-top:3px;">
+                        {{ $cycle->name }}
+                        @if($cycle->period_start && $cycle->period_end)
+                            &nbsp;·&nbsp; {{ $cycle->period_start->format('M j') }} – {{ $cycle->period_end->format('M j, Y') }}
+                        @endif
+                        &nbsp;·&nbsp; {{ $cycleStatusLabel }}
+                        &nbsp;·&nbsp; {{ $sheetCurrency }}
+                    </div>
+                </div>
+                <div style="text-align:right;font-size:9px;color:#94a3b8;">
+                    {{ __('Printed') }}: {{ now()->format('M j, Y H:i') }}<br>
+                    {{ __('Employees') }}: {{ count($rows) }}
+                </div>
+            </div>
+            {{-- totals summary bar --}}
+            <div style="display:flex;gap:0;margin-top:8px;border:1px solid #e2e8f0;border-radius:6px;overflow:hidden;">
+                <div style="flex:1;padding:6px 10px;border-right:1px solid #e2e8f0;background:#f8fafc;">
+                    <div style="font-size:7.5px;text-transform:uppercase;letter-spacing:.06em;color:#64748b;font-weight:800;">{{ __('Total Gross') }}</div>
+                    <div style="font-size:13px;font-weight:800;color:#0f172a;font-variant-numeric:tabular-nums;">{{ number_format((float) $summary['total_gross'], 2) }}</div>
+                    <div style="font-size:7.5px;color:#94a3b8;margin-top:1px;">{{ $sheetCurrency }}</div>
+                </div>
+                <div style="flex:1;padding:6px 10px;border-right:1px solid #e2e8f0;background:#fff8f1;">
+                    <div style="font-size:7.5px;text-transform:uppercase;letter-spacing:.06em;color:#64748b;font-weight:800;">{{ __('Total Deductions') }}</div>
+                    <div style="font-size:13px;font-weight:800;color:#b45309;font-variant-numeric:tabular-nums;">{{ number_format((float) $summary['total_deductions'], 2) }}</div>
+                    <div style="font-size:7.5px;color:#94a3b8;margin-top:1px;">{{ $sheetCurrency }}</div>
+                </div>
+                <div style="flex:1;padding:6px 10px;background:#f0fdf4;">
+                    <div style="font-size:7.5px;text-transform:uppercase;letter-spacing:.06em;color:#64748b;font-weight:800;">{{ __('Total Net Pay') }}</div>
+                    <div style="font-size:13px;font-weight:800;color:#15803d;font-variant-numeric:tabular-nums;">{{ number_format((float) $summary['total_net'], 2) }}</div>
+                    <div style="font-size:7.5px;color:#94a3b8;margin-top:1px;">{{ $sheetCurrency }}</div>
+                </div>
+            </div>
+        </div>
+
         <header class="salary-sheet-hero">
             <div class="salary-sheet-hero__top">
                 <div>
@@ -197,6 +280,7 @@
                     </ul>
                 </div>
                 <div class="salary-sheet-actions">
+                    <button id="lhPrintBtn" type="button" onclick="window.print()" class="salary-sheet-btn" style="border-color:color-mix(in srgb,#6366f1 42%,var(--border));background:color-mix(in srgb,#6366f1 10%,transparent);"><i class="fa fa-print" aria-hidden="true"></i>{{ __('Print / PDF') }}</button>
                     <a href="{{ route('hr.payroll.cycles.salary-sheet.export', $cycle) }}" class="salary-sheet-btn"><i class="fa-solid fa-table" aria-hidden="true"></i>{{ __('Export Excel') }}</a>
                     <a href="{{ route('hr.payroll.cycles.show', $cycle) }}" class="salary-sheet-btn salary-sheet-btn--muted"><i class="fa fa-arrow-left" aria-hidden="true"></i>{{ __('Back to cycle') }}</a>
                     <a href="{{ route('hr.payroll.index') }}" class="salary-sheet-btn"><i class="fa fa-money-check-dollar" aria-hidden="true"></i>{{ __('Payroll home') }}</a>
@@ -295,5 +379,20 @@
                 </table>
             </div>
         </section>
+
+        <div id="lhFooterZone" class="lh-print-zone lh-print-zone--footer">
+            <img id="lhFooterImg" style="display:none;width:100%;vertical-align:bottom;max-width:100%;" alt="">
+            <div id="lhFooterFallback">
+                <div style="height:4px;background:{{ $accentColor ?? '#3B82F6' }};opacity:.18;margin:0 40px;"></div>
+                <div style="height:1px;background:rgba(0,0,0,.08);margin:0 40px;"></div>
+                <div style="padding:10px 40px 14px;display:flex;justify-content:space-between;align-items:center;">
+                    <div style="font-size:9px;color:#94a3b8;">{{ $business->name }}</div>
+                    <div style="font-size:9px;color:#94a3b8;">{{ now()->format('Y-m-d H:i') }}</div>
+                </div>
+                <div style="height:6px;background:{{ $accentColor ?? '#3B82F6' }};"></div>
+            </div>
+        </div>
     </div>
+
+    @include('hrmanagement::partials.print-letterhead-script', ['letterheadCanvasJson' => $letterheadCanvasJson ?? null])
 @endsection

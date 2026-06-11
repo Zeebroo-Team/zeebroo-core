@@ -96,7 +96,8 @@
     <div class="pos-receipt-meta">
         <div class="pos-receipt-meta__card">
             <p class="pos-receipt-meta__label">Sold at</p>
-            <p class="pos-receipt-meta__value">{{ $sale->sold_at?->format('M j, Y g:i A') ?? '—' }}</p>
+            <p class="pos-receipt-meta__value">{{ $sale->sold_at?->format('M j, Y') ?? '—' }}</p>
+            <p class="muted" style="margin:3px 0 0;font-size:12px;">{{ $sale->sold_at?->format('g:i A') }}</p>
         </div>
         <div class="pos-receipt-meta__card">
             <p class="pos-receipt-meta__label">Payment</p>
@@ -106,16 +107,27 @@
             @endif
         </div>
         <div class="pos-receipt-meta__card">
-            <p class="pos-receipt-meta__label">Total @if(filled($currency))({{ $currency }})@endif</p>
-            <p class="pos-receipt-meta__value">{{ number_format((float) $sale->total, 2) }}</p>
-        </div>
-        <div class="pos-receipt-meta__card">
             <p class="pos-receipt-meta__label">Channel</p>
             <p class="pos-receipt-meta__value">{{ $sale->channelLabel() }}</p>
             @if($sale->branch)
                 <p class="muted" style="margin:4px 0 0;font-size:12px;"><i class="fa fa-code-branch" style="font-size:10px;"></i> {{ $sale->branch->name }}</p>
             @endif
         </div>
+        @if($sale->customer)
+        <div class="pos-receipt-meta__card">
+            <p class="pos-receipt-meta__label"><i class="fa fa-user" style="font-size:9px;"></i> Customer</p>
+            <p class="pos-receipt-meta__value">{{ $sale->customer->name }}</p>
+            @if($sale->customer->phone)
+                <p class="muted" style="margin:3px 0 0;font-size:12px;">{{ $sale->customer->phone }}</p>
+            @endif
+        </div>
+        @endif
+        @if($sale->user)
+        <div class="pos-receipt-meta__card">
+            <p class="pos-receipt-meta__label"><i class="fa fa-user-tie" style="font-size:9px;"></i> Served by</p>
+            <p class="pos-receipt-meta__value">{{ $sale->user->name }}</p>
+        </div>
+        @endif
         <div class="pos-receipt-meta__card">
             <p class="pos-receipt-meta__label">Amount paid</p>
             <p class="pos-receipt-meta__value">{{ number_format((float) $sale->amount_paid, 2) }}@if(filled($currency)) {{ $currency }}@endif</p>
@@ -131,6 +143,29 @@
             </div>
         @endif
     </div>
+
+    {{-- ── order summary (subtotal / discount / total) ── --}}
+    @if((float)($sale->discount_amount ?? 0) > 0)
+    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;margin-bottom:14px;padding:10px 14px;border:1px solid var(--border);border-radius:10px;background:var(--card);">
+        <div style="display:flex;gap:24px;font-size:13px;color:var(--muted);">
+            <span>Subtotal</span>
+            <span>{{ number_format((float)$sale->subtotal, 2) }}@if(filled($currency)) {{ $currency }}@endif</span>
+        </div>
+        <div style="display:flex;gap:24px;font-size:13px;color:#b45309;">
+            <span>
+                Discount
+                @if((float)($sale->discount_percent ?? 0) > 0)
+                    ({{ rtrim(rtrim(number_format((float)$sale->discount_percent,2),'0'),'.') }}%)
+                @endif
+            </span>
+            <span>−{{ number_format((float)$sale->discount_amount, 2) }}@if(filled($currency)) {{ $currency }}@endif</span>
+        </div>
+        <div style="display:flex;gap:24px;font-size:15px;font-weight:800;color:var(--text);border-top:1px solid var(--border);padding-top:6px;margin-top:2px;">
+            <span>Total</span>
+            <span>{{ number_format((float)$sale->total, 2) }}@if(filled($currency)) {{ $currency }}@endif</span>
+        </div>
+    </div>
+    @endif
 
     @if(filled($sale->notes))
         <p class="muted" style="margin:0 0 14px;font-size:13px;line-height:1.45;"><strong style="color:var(--text);">Notes:</strong> {{ $sale->notes }}</p>

@@ -42,6 +42,9 @@
             <span class="purchase-status purchase-status--{{ $purchase->status }}" style="margin-top:8px;display:inline-block;">{{ $purchase->statusLabel() }}</span>
         </div>
         <div style="display:flex;flex-wrap:wrap;gap:8px;">
+            <a href="{{ route('purchase.print', $purchase) }}" target="_blank" class="linkbtn" style="padding:8px 14px;font-size:13px;background:transparent;border:1px solid var(--border);color:var(--text);text-decoration:none;display:inline-flex;align-items:center;gap:6px;">
+                <i class="fa fa-print"></i> Print
+            </a>
             @if($purchase->isEditable())
                 <a href="{{ route('purchase.edit', $purchase) }}" class="linkbtn" style="padding:8px 14px;font-size:13px;background:transparent;border:1px solid var(--border);color:var(--text);text-decoration:none;">Edit</a>
             @endif

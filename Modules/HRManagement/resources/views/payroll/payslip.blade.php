@@ -58,13 +58,122 @@
         .payslip-summary__net strong{font-size:16px}
         .payslip-reduction{margin-top:16px;padding:12px;border:1px solid color-mix(in srgb,#f59e0b 45%,var(--border));border-radius:12px;background:color-mix(in srgb,#f59e0b 9%,transparent)}
         .payslip-reduction__title{margin:0 0 8px;font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase}
+
+        .payslip-print-btn{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:10px;border:1px solid color-mix(in srgb,#6366f1 42%,var(--border));background:color-mix(in srgb,#6366f1 10%,transparent);color:var(--text);font-size:12px;font-weight:700;cursor:pointer}
+        .payslip-print-btn:hover{background:color-mix(in srgb,#6366f1 18%,transparent)}
+        .payslip-print-btn:disabled{opacity:.6;cursor:not-allowed}
+
+        .lh-print-zone{display:none}
+        .payslip-print-info{display:none}
+
+        @media print{
+            /* hide chrome */
+            .sidebar,.navbar,.payslip-back-btn,.payslip-issued,
+            .payslip-print-btn,.payslip-top,.payslip-links,
+            .content-inner > *:not(.payslip-wrap){display:none!important}
+
+            /* reset layout */
+            *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+            body,html{background:#fff!important}
+            .content,.content-inner{margin:0!important;padding:0!important;max-width:none!important;background:#fff!important}
+
+            /* sheet */
+            .payslip-wrap{max-width:none!important;background:#fff!important}
+            .payslip-sheet{border:none!important;box-shadow:none!important;border-radius:0!important;padding:0 16px 16px!important;background:#fff!important}
+
+            /* meta boxes → compact row */
+            .payslip-meta{
+                grid-template-columns:repeat(3,1fr)!important;
+                gap:0!important;
+                border:1px solid #e2e8f0!important;border-radius:6px!important;
+                overflow:hidden!important;
+                margin-bottom:10px!important;
+            }
+            .payslip-box{
+                border:none!important;border-right:1px solid #e2e8f0!important;
+                border-radius:0!important;padding:7px 10px!important;
+                background:#f8fafc!important;
+            }
+            .payslip-box:last-child{border-right:none!important}
+            .payslip-box small{font-size:7.5px!important}
+            .payslip-box strong{font-size:13px!important;margin-top:4px!important}
+            .payslip-box p{font-size:9px!important}
+
+            /* sections */
+            .payslip-section{
+                margin-top:8px!important;padding:8px!important;
+                border:1px solid #e2e8f0!important;border-radius:6px!important;
+                background:#fff!important;
+            }
+            .payslip-section__title{font-size:8px!important;margin-bottom:6px!important}
+            .payslip-table-wrap{border:1px solid #e2e8f0!important;border-radius:4px!important;overflow:visible!important}
+            .payslip-table{font-size:9.5px!important;min-width:0!important}
+            .payslip-table thead th{
+                background:#f1f5f9!important;color:#475569!important;
+                font-size:8px!important;padding:5px 8px!important;
+                border-bottom:1px solid #e2e8f0!important;
+            }
+            .payslip-table td{padding:5px 8px!important;border-bottom:1px solid #e2e8f0!important}
+            .payslip-table tr:last-child td{border-bottom:none!important}
+
+            /* summary */
+            .payslip-summary{margin-top:8px!important}
+            .payslip-summary__row{font-size:10px!important;gap:16px!important;min-width:220px!important}
+            .payslip-summary__net strong{font-size:12px!important}
+            .payslip-summary__net{border-top-color:#e2e8f0!important}
+
+            /* reduction note */
+            .payslip-reduction{margin-top:8px!important;padding:8px!important;border-radius:6px!important}
+            .payslip-reduction__title{font-size:8px!important}
+            .payslip-note{font-size:9.5px!important}
+
+            /* letterhead + print-only info */
+            .lh-print-zone{display:block!important}
+            .payslip-print-info{display:block!important}
+            #lhRenderCanvas{display:none!important;visibility:hidden!important}
+        }
     </style>
     <div class="payslip-wrap">
     <div class="payslip-sheet">
+        @include('hrmanagement::partials.print-letterhead', ['accentColor' => $accentColor ?? '#3B82F6', 'mainBranch' => $mainBranch ?? null])
+
+        {{-- print-only document header --}}
+        <div class="payslip-print-info" style="padding:10px 0 8px;border-bottom:2px solid #e2e8f0;margin-bottom:10px;">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;">
+                <div>
+                    <div style="font-size:15px;font-weight:800;color:#0f172a;letter-spacing:-.02em;">{{ __('Payslip') }}</div>
+                    <div style="font-size:11px;color:#475569;margin-top:3px;">
+                        {{ $business->name }}
+                        &nbsp;·&nbsp; {{ $cycle->name }}
+                        @if($cycle->period_start && $cycle->period_end)
+                            &nbsp;·&nbsp; {{ $cycle->period_start->format('M j') }} – {{ $cycle->period_end->format('M j, Y') }}
+                        @endif
+                        &nbsp;·&nbsp; {{ ucfirst((string) $item->status) }}
+                    </div>
+                    <div style="font-size:11px;color:#1e293b;margin-top:5px;font-weight:700;">
+                        {{ $item->employee?->full_name ?? '—' }}
+                        @if($item->employee?->employee_id)
+                            <span style="font-weight:400;color:#64748b;">&nbsp;·&nbsp; ID: {{ $item->employee->employee_id }}</span>
+                        @endif
+                    </div>
+                </div>
+                <div style="text-align:right;">
+                    <div style="font-size:8.5px;color:#94a3b8;margin-bottom:4px;">{{ __('Printed') }}: {{ now()->format('M j, Y H:i') }}</div>
+                    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;padding:6px 12px;text-align:center;">
+                        <div style="font-size:7.5px;text-transform:uppercase;letter-spacing:.06em;color:#15803d;font-weight:800;">{{ __('Net Pay') }}</div>
+                        <div style="font-size:16px;font-weight:800;color:#15803d;font-variant-numeric:tabular-nums;line-height:1.2;margin-top:2px;">{{ number_format((float) $item->net_pay, 2) }}</div>
+                        <div style="font-size:7.5px;color:#16a34a;margin-top:1px;">{{ $cycle->ruleSet?->currency ?: ($business->currency ?? '') }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         @unless($isDownload)
-            <p style="margin:0 0 12px;">
+            <div style="display:flex;align-items:center;gap:8px;margin:0 0 12px;flex-wrap:wrap;">
                 <a href="{{ route('hr.payroll.cycles.show', $cycle) }}" class="payslip-back-btn"><i class="fa fa-arrow-left" aria-hidden="true"></i>{{ __('Back to cycle') }}</a>
-            </p>
+                <button id="lhPrintBtn" type="button" onclick="window.print()" class="payslip-print-btn"><i class="fa fa-print" aria-hidden="true"></i>{{ __('Print / PDF') }}</button>
+                <a href="{{ route('hr.payroll.cycles.items.payslip.download', [$cycle, $item]) }}" class="payslip-back-btn" style="margin-left:auto;"><i class="fa fa-download" aria-hidden="true"></i>{{ __('Download HTML') }}</a>
+            </div>
         @endunless
 
         <header class="payslip-top">
@@ -212,6 +321,20 @@
                 </p>
             </section>
         @endif
+        <div id="lhFooterZone" class="lh-print-zone lh-print-zone--footer">
+            <img id="lhFooterImg" style="display:none;width:100%;vertical-align:bottom;max-width:100%;" alt="">
+            <div id="lhFooterFallback">
+                <div style="height:4px;background:{{ $accentColor ?? '#3B82F6' }};opacity:.18;margin:0 40px;"></div>
+                <div style="height:1px;background:rgba(0,0,0,.08);margin:0 40px;"></div>
+                <div style="padding:10px 40px 14px;display:flex;justify-content:space-between;align-items:center;">
+                    <div style="font-size:9px;color:#94a3b8;">{{ $business->name }}</div>
+                    <div style="font-size:9px;color:#94a3b8;">{{ now()->format('Y-m-d H:i') }}</div>
+                </div>
+                <div style="height:6px;background:{{ $accentColor ?? '#3B82F6' }};"></div>
+            </div>
+        </div>
     </div>
     </div>
+
+    @include('hrmanagement::partials.print-letterhead-script', ['letterheadCanvasJson' => $letterheadCanvasJson ?? null])
 @endsection
