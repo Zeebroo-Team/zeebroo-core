@@ -427,6 +427,9 @@
             $navBusiness->fileManagerFiles()->exists() || $navBusiness->fileManagerFolders()->exists()
         );
         $showSidebarDesignStudioLink = $navBusiness && Route::has('designstudio.index');
+        $showSidebarDocumentationLink = $navBusiness
+            && Route::has('documentation.documents.index')
+            && \Modules\Documentation\Models\Document::where('business_id', $navBusiness->id)->exists();
         $showSidebarPropertiesLink = $navBusiness
             ? \Modules\Account\Models\Property::query()->where('business_id', $navBusiness->id)->exists()
             : false;
@@ -497,6 +500,7 @@
             $showSidebarPropertiesLink = false;
             $showSidebarModificationsLink = false;
             $showSidebarDesignStudioLink = false;
+            $showSidebarDocumentationLink = false;
             $sidebarLoanDueHighlight = false;
             $sidebarRentalDueHighlight = false;
             $sidebarBillDueHighlight = false;
@@ -691,6 +695,9 @@
             @endif
             @if($showSidebarDesignStudioLink)
                 <a href="{{ route('designstudio.index') }}" class="{{ request()->routeIs('designstudio.*') ? 'active' : '' }}"><i class="fa fa-palette"></i><span>Design Studio</span></a>
+            @endif
+            @if($showSidebarDocumentationLink)
+                <a href="{{ route('documentation.documents.index') }}" class="{{ request()->routeIs('documentation.*') ? 'active' : '' }}"><i class="fa fa-book-open"></i><span>Documentation</span></a>
             @endif
             @if($navBusiness && ($hrFeatureOn || $hrPayrollOptedIn))
                 <div class="menu-group-title">

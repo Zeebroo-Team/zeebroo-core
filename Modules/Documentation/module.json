@@ -1,0 +1,11 @@
+{
+    "name": "Documentation",
+    "alias": "documentation",
+    "description": "Business documentation hub — create, organize, and publish internal documents, policies, guides, and SOPs.",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\Documentation\\Providers\\DocumentationServiceProvider"
+    ],
+    "files": []
+}

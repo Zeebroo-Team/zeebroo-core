@@ -4,8 +4,6 @@ use App\Http\Controllers\DashboardController;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/privacy-policy', fn () => view('privacy-policy'))->name('privacy-policy');
-
 Route::get('/', function () {
     if (Auth::check()) {
         return app(DashboardController::class)->dashboard(request());
