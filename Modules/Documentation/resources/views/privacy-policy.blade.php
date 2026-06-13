@@ -7,17 +7,19 @@
     <meta name="description" content="Privacy Policy for {{ config('app.name') }}">
     <link rel="preconnect" href="https://fonts.bunny.net">
     <link href="https://fonts.bunny.net/css?family=inter:400,500,600,700,800" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" referrerpolicy="no-referrer">
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
         :root {
-            --text:    #111827;
-            --muted:   #6b7280;
-            --border:  #e5e7eb;
-            --bg:      #f9fafb;
-            --card:    #ffffff;
-            --primary: #4f46e5;
-            --primary-light: #eef2ff;
+            --text:          #0a0a0a;
+            --muted:         #57534e;
+            --border:        #d6d3d1;
+            --bg:            #fafaf9;
+            --card:          #ffffff;
+            --primary:       #ca8a04;
+            --primary-dark:  #171717;
+            --primary-light: #fef9c3;
         }
 
         body {
@@ -33,26 +35,36 @@
             background: var(--card);
             border-bottom: 1px solid var(--border);
             padding: 0 24px;
-            height: 60px;
+            height: 64px;
             display: flex;
             align-items: center;
-            justify-content: space-between;
+            gap: 16px;
             position: sticky;
             top: 0;
-            z-index: 10;
+            z-index: 100;
+            box-shadow: 0 1px 3px rgba(0,0,0,.06);
         }
+        /* Logo */
         .pp-brand {
             display: flex;
             align-items: center;
             gap: 10px;
             text-decoration: none;
+            flex-shrink: 0;
+        }
+        .pp-brand img {
+            display: block;
+            height: 36px;
+            width: auto;
+            object-fit: contain;
+            object-position: left center;
         }
         .pp-brand__mark {
             width: 34px;
             height: 34px;
             border-radius: 9px;
-            background: var(--primary);
-            color: #fff;
+            background: var(--primary-dark);
+            color: #facc15;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -66,36 +78,174 @@
             font-weight: 700;
             color: var(--text);
         }
+        /* Search */
+        .pp-search {
+            flex: 1;
+            max-width: 420px;
+            position: relative;
+        }
+        .pp-search__icon {
+            position: absolute;
+            left: 11px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--muted);
+            font-size: 12px;
+            pointer-events: none;
+        }
+        .pp-search__input {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 8px 36px 8px 32px;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            background: var(--bg);
+            color: var(--text);
+            font-size: 13px;
+            font-family: inherit;
+            outline: none;
+            transition: border-color .15s, background .15s;
+        }
+        .pp-search__input::placeholder { color: var(--muted); }
+        .pp-search__input:focus {
+            border-color: color-mix(in srgb, var(--primary) 55%, var(--border));
+            background: var(--card);
+        }
+        .pp-search__clear {
+            position: absolute;
+            right: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            border: none;
+            background: none;
+            color: var(--muted);
+            cursor: pointer;
+            font-size: 11px;
+            padding: 2px 4px;
+            display: none;
+        }
+        .pp-search__clear.visible { display: block; }
+        /* Right side */
         .pp-topbar-right {
             display: flex;
-            gap: 10px;
+            gap: 8px;
             align-items: center;
+            margin-left: auto;
+            flex-shrink: 0;
         }
         .pp-topbar-link {
             font-size: 13px;
             font-weight: 600;
             color: var(--muted);
             text-decoration: none;
-            padding: 6px 12px;
+            padding: 7px 13px;
             border-radius: 8px;
-            transition: background .15s, color .15s;
+            border: 1px solid transparent;
+            transition: background .15s, color .15s, border-color .15s;
+            white-space: nowrap;
         }
-        .pp-topbar-link:hover { background: var(--bg); color: var(--text); }
+        .pp-topbar-link:hover {
+            background: var(--bg);
+            color: var(--text);
+            border-color: var(--border);
+        }
         .pp-topbar-btn {
             font-size: 13px;
             font-weight: 700;
-            color: #fff;
-            background: var(--primary);
+            color: #ffffff;
+            background: var(--primary-dark);
             text-decoration: none;
             padding: 7px 16px;
             border-radius: 8px;
-            transition: background .15s;
+            border: 1px solid var(--primary-dark);
+            transition: background .15s, color .15s, border-color .15s;
+            white-space: nowrap;
         }
-        .pp-topbar-btn:hover { background: #4338ca; }
+        .pp-topbar-btn:hover { background: #facc15; color: #0a0a0a; border-color: #facc15; }
+        /* User dropdown */
+        .pp-user-dropdown { position: relative; }
+        .pp-user-trigger {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 12px 6px 6px;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            background: var(--bg);
+            color: var(--text);
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: border-color .15s, background .15s;
+            white-space: nowrap;
+        }
+        .pp-user-trigger:hover { border-color: color-mix(in srgb, var(--primary) 45%, var(--border)); background: var(--card); }
+        .pp-user-avatar {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: var(--primary-dark);
+            color: #facc15;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            font-weight: 800;
+            flex-shrink: 0;
+        }
+        .pp-user-chevron { font-size: 9px; color: var(--muted); }
+        .pp-user-menu {
+            display: none;
+            position: absolute;
+            right: 0;
+            top: calc(100% + 6px);
+            min-width: 220px;
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 8px;
+            box-shadow: 0 12px 28px rgba(0,0,0,.12);
+            z-index: 200;
+        }
+        .pp-user-menu.open { display: block; }
+        .pp-user-menu__head {
+            padding: 8px 10px 10px;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 6px;
+        }
+        .pp-user-menu__name { font-size: 13px; font-weight: 700; color: var(--text); }
+        .pp-user-menu__email { font-size: 11px; color: var(--muted); margin-top: 1px; }
+        .pp-user-menu__item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 7px 10px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text);
+            text-decoration: none;
+            transition: background .12s;
+            width: 100%;
+            box-sizing: border-box;
+            border: none;
+            background: none;
+            cursor: pointer;
+            text-align: left;
+        }
+        .pp-user-menu__item:hover { background: var(--bg); }
+        .pp-user-menu__item i { width: 14px; text-align: center; color: var(--muted); font-size: 11px; }
+        .pp-user-menu__item--danger { color: #ef4444; }
+        .pp-user-menu__item--danger i { color: #ef4444; }
+        .pp-user-menu__divider { height: 1px; background: var(--border); margin: 4px 0; }
+        @media (max-width: 640px) {
+            .pp-search { display: none; }
+            .pp-topbar { padding: 0 14px; gap: 10px; }
+        }
 
         /* ── Hero ── */
         .pp-hero {
-            background: linear-gradient(135deg, var(--primary-light) 0%, #f5f3ff 100%);
+            background: linear-gradient(135deg, var(--primary-light) 0%, #fefce8 100%);
             border-bottom: 1px solid var(--border);
             padding: 56px 24px 48px;
             text-align: center;
@@ -225,7 +375,7 @@
         }
         .pp-section p {
             font-size: 14px;
-            color: #374151;
+            color: #1c1917;
             line-height: 1.75;
             margin-bottom: 12px;
         }
@@ -237,7 +387,7 @@
         }
         .pp-section ul li {
             font-size: 14px;
-            color: #374151;
+            color: #1c1917;
             line-height: 1.7;
             padding: 4px 0 4px 22px;
             position: relative;
@@ -266,13 +416,13 @@
         }
         .pp-highlight p {
             font-size: 13px;
-            color: #3730a3;
+            color: #713f12;
             margin-bottom: 0;
         }
 
         /* ── Contact card ── */
         .pp-contact {
-            background: linear-gradient(135deg, var(--primary) 0%, #7c3aed 100%);
+            background: linear-gradient(135deg, #171717 0%, #292524 100%);
             border-radius: 16px;
             padding: 28px 30px;
             color: #fff;
@@ -285,9 +435,9 @@
             display: inline-flex;
             align-items: center;
             gap: 7px;
-            background: rgba(255,255,255,.18);
-            border: 1px solid rgba(255,255,255,.3);
-            color: #fff;
+            background: #facc15;
+            border: 1px solid #fde047;
+            color: #0a0a0a;
             font-size: 13px;
             font-weight: 700;
             text-decoration: none;
@@ -295,7 +445,7 @@
             border-radius: 9px;
             transition: background .15s;
         }
-        .pp-contact a:hover { background: rgba(255,255,255,.28); }
+        .pp-contact a:hover { background: #fde047; }
 
         /* ── Footer ── */
         .pp-footer {
@@ -312,25 +462,78 @@
 
 {{-- Top bar --}}
 <nav class="pp-topbar">
-    <a href="{{ route('home') }}" class="pp-brand">
-        <div class="pp-brand__mark">{{ strtoupper(substr(config('app.name'), 0, 1)) }}</div>
-        <span class="pp-brand__name">{{ config('app.name') }}</span>
+
+    {{-- Logo --}}
+    <a href="{{ route('home') }}" class="pp-brand" aria-label="{{ config('app.name') }}">
+        @if(file_exists(public_path('logo.png')))
+            <img src="{{ asset('logo.png') }}" alt="{{ config('app.name') }}">
+        @else
+            <div class="pp-brand__mark">{{ strtoupper(substr(config('app.name'), 0, 1)) }}</div>
+            <span class="pp-brand__name">{{ config('app.name') }}</span>
+        @endif
     </a>
-    <div class="pp-topbar-right">
-        <a href="{{ route('home') }}" class="pp-topbar-link">Home</a>
-        <a href="{{ route('login') }}" class="pp-topbar-btn">Sign in</a>
+
+    {{-- Search --}}
+    <div class="pp-search">
+        <i class="fa fa-magnifying-glass pp-search__icon" aria-hidden="true"></i>
+        <input type="text" id="ppSearchInput" class="pp-search__input"
+               placeholder="Search policy…" autocomplete="off" spellcheck="false"
+               aria-label="Search privacy policy">
+        <button type="button" id="ppSearchClear" class="pp-search__clear" aria-label="Clear search">&#x2715;</button>
     </div>
+
+    {{-- Right actions --}}
+    <div class="pp-topbar-right">
+        <a href="{{ route('documentation.documents.index') }}" class="pp-topbar-link">
+            <i class="fa fa-book-open" style="margin-right:5px;font-size:11px;"></i>Documentation
+        </a>
+        @auth
+            <a href="{{ route('dashboard') }}" class="pp-topbar-link">
+                <i class="fa fa-gauge-high" style="margin-right:5px;font-size:11px;"></i>Dashboard
+            </a>
+            <div class="pp-user-dropdown">
+                <button type="button" class="pp-user-trigger" id="ppUserBtn" aria-haspopup="true" aria-expanded="false">
+                    <div class="pp-user-avatar" aria-hidden="true">{{ strtoupper(substr(auth()->user()->name ?? 'U', 0, 1)) }}</div>
+                    <span>{{ auth()->user()->name ?? 'Account' }}</span>
+                    <i class="fa fa-chevron-down pp-user-chevron" aria-hidden="true"></i>
+                </button>
+                <div class="pp-user-menu" id="ppUserMenu" role="menu">
+                    <div class="pp-user-menu__head">
+                        <div class="pp-user-menu__name">{{ auth()->user()->name ?? 'User' }}</div>
+                        <div class="pp-user-menu__email">{{ auth()->user()->email ?? '' }}</div>
+                    </div>
+                    <a href="{{ route('dashboard') }}" class="pp-user-menu__item" role="menuitem">
+                        <i class="fa fa-gauge-high" aria-hidden="true"></i> Dashboard
+                    </a>
+                    <a href="{{ route('settings.user') }}" class="pp-user-menu__item" role="menuitem">
+                        <i class="fa fa-user-gear" aria-hidden="true"></i> Settings
+                    </a>
+                    <div class="pp-user-menu__divider"></div>
+                    <form method="POST" action="{{ route('logout') }}" style="margin:0;">
+                        @csrf
+                        <button type="submit" class="pp-user-menu__item pp-user-menu__item--danger" role="menuitem">
+                            <i class="fa fa-right-from-bracket" aria-hidden="true"></i> Sign out
+                        </button>
+                    </form>
+                </div>
+            </div>
+        @else
+            <a href="{{ route('login') }}" class="pp-topbar-link">Sign in</a>
+            <a href="{{ route('register') }}" class="pp-topbar-btn">Sign up free</a>
+        @endauth
+    </div>
+
 </nav>
 
 {{-- Hero --}}
 <div class="pp-hero">
     <div class="pp-hero__badge">
-        &#x1F512; Legal
+        <i class="fa fa-lock" aria-hidden="true"></i> Legal
     </div>
     <h1>Privacy Policy</h1>
     <p class="pp-hero__sub">We respect your privacy. This policy explains what data we collect, how we use it, and the choices you have.</p>
     <div class="pp-hero__date">
-        &#x1F4C5; Last updated: {{ \Carbon\Carbon::parse('2026-06-12')->format('F j, Y') }}
+        <i class="fa fa-calendar-days" aria-hidden="true"></i> Last updated: {{ \Carbon\Carbon::parse('2026-06-12')->format('F j, Y') }}
     </div>
 </div>
 
@@ -514,7 +717,7 @@
             <h3>Have a privacy question?</h3>
             <p>Our team is happy to help with any data or privacy concerns.</p>
             <a href="mailto:privacy@{{ parse_url(config('app.url'), PHP_URL_HOST) ?: 'example.com' }}">
-                &#x2709;&#xFE0F; Contact Privacy Team
+                <i class="fa fa-envelope" aria-hidden="true"></i> Contact Privacy Team
             </a>
         </div>
 
@@ -529,5 +732,83 @@
     <a href="{{ route('home') }}">Home</a>
 </footer>
 
+<script>
+(function () {
+    // ── User dropdown ────────────────────────────────────────────────
+    var userBtn  = document.getElementById('ppUserBtn');
+    var userMenu = document.getElementById('ppUserMenu');
+    if (userBtn && userMenu) {
+        userBtn.addEventListener('click', function () {
+            var open = userMenu.classList.toggle('open');
+            userBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        });
+        document.addEventListener('click', function (e) {
+            if (!userBtn.contains(e.target) && !userMenu.contains(e.target)) {
+                userMenu.classList.remove('open');
+                userBtn.setAttribute('aria-expanded', 'false');
+            }
+        });
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' && userMenu.classList.contains('open')) {
+                userMenu.classList.remove('open');
+                userBtn.setAttribute('aria-expanded', 'false');
+                userBtn.focus();
+            }
+        });
+    }
+
+    // ── Page search ─────────────────────────────────────────────────
+    var searchInput = document.getElementById('ppSearchInput');
+    var searchClear = document.getElementById('ppSearchClear');
+    if (!searchInput) return;
+
+    // Collect all searchable sections
+    var sections = Array.from(document.querySelectorAll('.pp-section'));
+
+    function doSearch(q) {
+        var term = q.trim().toLowerCase();
+        searchClear.classList.toggle('visible', term.length > 0);
+        sections.forEach(function (sec) {
+            if (!term) {
+                sec.style.display = '';
+                clearHighlights(sec);
+                return;
+            }
+            var text = sec.textContent.toLowerCase();
+            if (text.includes(term)) {
+                sec.style.display = '';
+                highlightText(sec, term);
+            } else {
+                sec.style.display = 'none';
+                clearHighlights(sec);
+            }
+        });
+    }
+
+    function highlightText(el, term) {
+        clearHighlights(el);
+        // Only highlight text nodes inside <p> and <li>
+        el.querySelectorAll('p, li').forEach(function (node) {
+            node.innerHTML = node.textContent.replace(
+                new RegExp('(' + term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'gi'),
+                '<mark style="background:#fef08a;color:#0a0a0a;border-radius:3px;padding:0 1px;">$1</mark>'
+            );
+        });
+    }
+
+    function clearHighlights(el) {
+        el.querySelectorAll('mark').forEach(function (m) {
+            m.replaceWith(document.createTextNode(m.textContent));
+        });
+    }
+
+    searchInput.addEventListener('input', function () { doSearch(this.value); });
+    searchClear.addEventListener('click', function () {
+        searchInput.value = '';
+        doSearch('');
+        searchInput.focus();
+    });
+})();
+</script>
 </body>
 </html>

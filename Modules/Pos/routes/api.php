@@ -13,6 +13,8 @@ use Modules\Pos\Http\Controllers\Api\PosProductApiController;
 use Modules\Pos\Http\Controllers\Api\PosPurchaseOrderApiController;
 use Modules\Pos\Http\Controllers\Api\PosSaleApiController;
 use Modules\Pos\Http\Controllers\Api\PosSaleReturnApiController;
+use Modules\Pos\Http\Controllers\Api\PosExpenseBillApiController;
+use Modules\Pos\Http\Controllers\Api\PosLoanApiController;
 use Modules\Pos\Http\Controllers\Api\PosSettingsApiController;
 use Modules\Pos\Http\Controllers\Api\PosSupplierApiController;
 
@@ -56,6 +58,9 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
     Route::post('purchase-orders/{purchase}/place', [PosPurchaseOrderApiController::class, 'placeOrder'])->name('purchase-orders.place');
     Route::post('purchase-orders/{purchase}/receive', [PosPurchaseOrderApiController::class, 'receive'])->name('purchase-orders.receive');
     Route::post('purchase-orders/{purchase}/cancel', [PosPurchaseOrderApiController::class, 'cancel'])->name('purchase-orders.cancel');
+
+    Route::post('expenses/bills', [PosExpenseBillApiController::class, 'store'])->name('expenses.bills.store');
+    Route::get('loans', [PosLoanApiController::class, 'index'])->name('loans.index');
 
     Route::get('stock-audits', [PosStockAuditApiController::class, 'index'])->name('stock-audits.index');
     Route::post('stock-audits', [PosStockAuditApiController::class, 'store'])->name('stock-audits.store');

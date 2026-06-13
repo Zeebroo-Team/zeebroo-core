@@ -14,5 +14,6 @@
     "Purchase": true,
     "Pos": true,
     "DesignStudio": true,
-    "Sales": true
+    "Sales": true,
+    "Documentation": true
 }
