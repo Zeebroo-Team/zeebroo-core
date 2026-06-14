@@ -62,7 +62,11 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
     Route::post('purchase-orders/{purchase}/cancel', [PosPurchaseOrderApiController::class, 'cancel'])->name('purchase-orders.cancel');
 
     Route::post('expenses/bills', [PosExpenseBillApiController::class, 'store'])->name('expenses.bills.store');
+    Route::get('expenses/bills', [\Modules\Pos\Http\Controllers\Api\PosExpenseBillListApiController::class, 'index'])->name('expenses.bills.index');
     Route::get('expenses/bill-assignment-targets', [PosExpenseBillAssignmentApiController::class, 'index'])->name('expenses.bill-assignment-targets');
+    Route::get('expenses/rentals', [\Modules\Pos\Http\Controllers\Api\PosExpenseRentalListApiController::class, 'index'])->name('expenses.rentals.index');
+    Route::get('expenses/modifications', [\Modules\Pos\Http\Controllers\Api\PosExpenseModificationListApiController::class, 'index'])->name('expenses.modifications.index');
+    Route::get('hr/employees', [\Modules\Pos\Http\Controllers\Api\PosHrEmployeeListApiController::class, 'index'])->name('hr.employees.index');
     Route::get('loans', [PosLoanApiController::class, 'index'])->name('loans.index');
     Route::get('accounts', [PosAccountApiController::class, 'index'])->name('accounts.index');
 
