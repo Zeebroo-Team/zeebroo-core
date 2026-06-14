@@ -107,6 +107,11 @@ final class PayrollComputationService
             $ctx[$key] = $amount;
         }
 
+        // Bill-node context: pre-compute so the evaluator stays query-free.
+        $ctx['employee_id'] = $employee->id;
+        $ctx['business_id'] = $business->id;
+        $this->injectBillMetrics($ctx, $business->id, $employee->id);
+
         $build = $this->componentBuilder->build($ruleSet, $ctx);
         $components = $build['components'];
         $errors = $build['errors'];
@@ -182,6 +187,57 @@ final class PayrollComputationService
         });
 
         return ['item' => $item, 'errors' => $errors];
+    }
+
+    /**
+     * Inject bill_* keys for the `bill` flow-graph node type.
+     * Counts / sums bills whose due_date (or first_installment_due_date) is past today as "overdue".
+     * All bills in scope count as "available".
+     *
+     * @param  array<string, mixed>  $ctx
+     */
+    private function injectBillMetrics(array &$ctx, int $businessId, int $employeeId): void
+    {
+        try {
+            if (! \Illuminate\Support\Facades\Schema::hasTable('bills')) {
+                return;
+            }
+
+            $today = Carbon::today();
+
+            $billsForEmployee = \Modules\Account\Models\Bill::query()
+                ->where('business_id', $businessId)
+                ->where('employee_id', $employeeId)
+                ->get(['id', 'recurring_cost', 'due_date', 'first_installment_due_date']);
+
+            $billsForBusiness = \Modules\Account\Models\Bill::query()
+                ->where('business_id', $businessId)
+                ->get(['id', 'recurring_cost', 'due_date', 'first_installment_due_date']);
+
+            foreach ([['employee', $billsForEmployee], ['business', $billsForBusiness]] as [$scope, $bills]) {
+                $overdueCnt   = 0;
+                $overdueTotal = 0.0;
+                $availCnt     = $bills->count();
+                $availTotal   = 0.0;
+
+                foreach ($bills as $bill) {
+                    $cost = round((float) $bill->recurring_cost, 2);
+                    $availTotal += $cost;
+                    $dueAt = $bill->due_date ?? $bill->first_installment_due_date;
+                    if ($dueAt instanceof Carbon && $dueAt->lt($today)) {
+                        $overdueCnt++;
+                        $overdueTotal += $cost;
+                    }
+                }
+
+                $ctx['bill_' . $scope . '_overdue_total']   = round($overdueTotal, 2);
+                $ctx['bill_' . $scope . '_overdue_count']   = $overdueCnt;
+                $ctx['bill_' . $scope . '_available_total'] = round($availTotal, 2);
+                $ctx['bill_' . $scope . '_available_count'] = $availCnt;
+            }
+        } catch (\Throwable) {
+            // Bills module absent or schema mismatch — metrics default to 0.
+        }
     }
 
     /**

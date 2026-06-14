@@ -289,6 +289,20 @@ final class PayrollRuleEvaluationService
                     $value = $b['value'];
                 }
             }
+        } elseif ($type === 'bill') {
+            // Reads pre-computed bill metrics injected into context by PayrollComputationService.
+            // scope: 'employee' | 'business'
+            // metric: 'overdue_total' | 'overdue_count' | 'available_total' | 'available_count'
+            $scope  = (string) ($node['scope']  ?? 'employee');
+            $metric = (string) ($node['metric'] ?? 'overdue_total');
+            if (! in_array($scope,  ['employee', 'business'], true)) {
+                $scope = 'employee';
+            }
+            if (! in_array($metric, ['overdue_total', 'overdue_count', 'available_total', 'available_count'], true)) {
+                $metric = 'overdue_total';
+            }
+            $ctxKey = 'bill_' . $scope . '_' . $metric;
+            $value  = (float) ($context[$ctxKey] ?? 0);
         } else {
             $errors[] = 'Unsupported flow node type '.$type.' at '.$id.'.';
         }

@@ -42,6 +42,60 @@ class BusinessController extends Controller
         private readonly GoogleBusinessProfileApiClient $googleBusinessProfileApiClient,
     ) {}
 
+    public function map(Request $request): ViewContract|RedirectResponse
+    {
+        $business = Business::currentForNavbar($request->user());
+        if (! $business instanceof Business) {
+            return redirect()->route('dashboard')->withErrors(['business' => 'Create a business profile first.']);
+        }
+
+        $today = \Illuminate\Support\Carbon::today();
+
+        $loans = \Illuminate\Support\Facades\Schema::hasTable('loans')
+            ? \Modules\Account\Models\Loan::where('business_id', $business->id)
+                ->orderBy('name')->get(['id', 'name', 'borrowed_amount'])
+            : collect();
+
+        $rentals = \Illuminate\Support\Facades\Schema::hasTable('rentals')
+            ? \Modules\Account\Models\Rental::where('business_id', $business->id)
+                ->orderBy('property_type')->get(['id', 'property_type', 'purpose', 'recurring_cost'])
+            : collect();
+
+        $bills = \Illuminate\Support\Facades\Schema::hasTable('bills')
+            ? \Modules\Account\Models\Bill::where('business_id', $business->id)
+                ->orderBy('name')
+                ->get(['id', 'name', 'bill_category', 'recurring_cost', 'due_date', 'first_installment_due_date'])
+                ->map(fn ($b) => [
+                    'id'      => $b->id,
+                    'name'    => $b->name,
+                    'cat'     => $b->bill_category ?? 'other',
+                    'amount'  => (float) $b->recurring_cost,
+                    'overdue' => ($b->due_date ?? $b->first_installment_due_date)?->lt($today) ?? false,
+                ])
+            : collect();
+
+        $modifications = \Illuminate\Support\Facades\Schema::hasTable('modifications')
+            ? \Modules\Modification\Models\Modification::where('business_id', $business->id)
+                ->orderBy('name')->get(['id', 'name', 'estimated_cost'])
+            : collect();
+
+        $employees = \Illuminate\Support\Facades\Schema::hasTable('hr_employees')
+            ? \Modules\HRManagement\Models\Employee::where('business_id', $business->id)
+                ->orderBy('full_name')->get(['id', 'full_name', 'employment_type'])
+            : collect();
+
+        return view('business::map', [
+            'title'         => 'Business Map',
+            'heading'       => 'Business Map',
+            'business'      => $business,
+            'loans'         => $loans,
+            'rentals'       => $rentals,
+            'bills'         => $bills,
+            'modifications' => $modifications,
+            'employees'     => $employees,
+        ]);
+    }
+
     public function profile(Request $request): ViewContract|RedirectResponse
     {
         $business = Business::currentForNavbar($request->user());

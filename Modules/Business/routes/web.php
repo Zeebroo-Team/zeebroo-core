@@ -7,6 +7,7 @@ use Modules\Business\Http\Controllers\BusinessGoogleBusinessProfileController;
 use Modules\Business\Http\Controllers\BusinessLogoGenerationController;
 
 Route::middleware(['auth'])->group(function (): void {
+    Route::get('/business/map', [BusinessController::class, 'map'])->name('business.map');
     Route::get('/business/profile', [BusinessController::class, 'profile'])->name('business.profile');
     Route::post('/business/profile/brand', [BusinessController::class, 'updateBrand'])->name('business.profile.brand.update');
     Route::get('/business/profile/google-business/locations', [BusinessGoogleBusinessProfileController::class, 'locations'])

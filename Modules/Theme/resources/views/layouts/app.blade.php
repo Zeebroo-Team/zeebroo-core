@@ -830,6 +830,10 @@
                 @endif
                 <div class="navchip">{{ now()->format('d M Y') }}</div>
                 @if($navBusiness)
+                    <a href="{{ route('business.map') }}" class="user-trigger nav-business-profile @if(request()->routeIs('business.map')) nav-business-profile--active @endif" title="Business Map">
+                        <i class="fa fa-sitemap"></i>
+                        <span>Business Map</span>
+                    </a>
                     <a href="{{ route('business.profile') }}" class="user-trigger nav-business-profile @if(request()->routeIs('business.profile')) nav-business-profile--active @endif" title="Business profile">
                         <i class="fa fa-id-card"></i>
                         <span>Business profile</span>
