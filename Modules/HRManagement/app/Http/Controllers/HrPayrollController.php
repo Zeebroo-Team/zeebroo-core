@@ -79,10 +79,51 @@ class HrPayrollController extends Controller
             'rules' => fn ($query) => $query->orderBy('sort_order')->orderBy('id'),
         ]);
 
+        $flowBills = $this->loadFlowBills($business);
+
         return view('hrmanagement::payroll.rule-sets', [
-            'business' => $business,
-            'ruleSets' => $ruleSets,
+            'business'  => $business,
+            'ruleSets'  => $ruleSets,
+            'flowBills' => $flowBills,
         ]);
+    }
+
+    /** @return array<int, array<string, mixed>> */
+    private function loadFlowBills(Business $business): array
+    {
+        if (! \Illuminate\Support\Facades\Schema::hasTable('bills')) {
+            return [];
+        }
+
+        $today = \Illuminate\Support\Carbon::today();
+
+        $bills = \Modules\Account\Models\Bill::query()
+            ->where('business_id', $business->id)
+            ->with(['employee:id,full_name', 'department:id,name', 'warehouse:id,name'])
+            ->orderBy('name')
+            ->get(['id', 'name', 'bill_category', 'recurring_cost', 'payment_mode',
+                   'due_date', 'first_installment_due_date', 'employee_id', 'department_id', 'branch_id']);
+
+        return $bills->map(function ($b) use ($today) {
+            $dueAt  = $b->due_date ?? $b->first_installment_due_date;
+            $overdue = $dueAt instanceof \Illuminate\Support\Carbon && $dueAt->lt($today);
+
+            $assign = $b->employee?->full_name
+                ?? $b->department?->name
+                ?? $b->warehouse?->name
+                ?? null;
+
+            return [
+                'id'      => $b->id,
+                'name'    => $b->name,
+                'cat'     => $b->bill_category ?? 'other',
+                'amount'  => round((float) $b->recurring_cost, 2),
+                'mode'    => $b->payment_mode,
+                'due'     => $dueAt?->toDateString(),
+                'overdue' => $overdue,
+                'assign'  => $assign,
+            ];
+        })->values()->all();
     }
 
     public function applyTemplate(Request $request): RedirectResponse

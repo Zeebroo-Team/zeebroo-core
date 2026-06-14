@@ -378,6 +378,19 @@
         .payflow-node.selected rect{stroke:color-mix(in srgb,var(--primary)55%,var(--border));stroke-width:2px}
         .payflow-node--bill rect{fill:color-mix(in srgb,#f59e0b 18%,var(--card));stroke:color-mix(in srgb,#d97706 48%,var(--border))}
         .payflow-node--bill .payflow-t-title{fill:color-mix(in srgb,#92400e 80%,var(--text))}
+        .payflow-bill-list{margin-top:10px;display:flex;flex-direction:column;gap:5px;max-height:220px;overflow-y:auto;padding-right:2px}
+        .payflow-bill-item{display:flex;align-items:flex-start;gap:7px;padding:6px 8px;border-radius:8px;border:1px solid color-mix(in srgb,var(--border)70%,transparent);background:color-mix(in srgb,var(--card)95%,transparent);font-size:11px;line-height:1.35}
+        .payflow-bill-item--overdue{border-color:color-mix(in srgb,#f87171 44%,var(--border));background:color-mix(in srgb,#fef2f2 40%,var(--card))}
+        .payflow-bill-item__dot{flex-shrink:0;width:8px;height:8px;border-radius:50%;margin-top:3px}
+        .payflow-bill-item__dot--overdue{background:#ef4444}
+        .payflow-bill-item__dot--ok{background:#22c55e}
+        .payflow-bill-item__body{min-width:0;flex:1}
+        .payflow-bill-item__name{font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .payflow-bill-item__meta{color:var(--muted);font-size:10px;margin-top:1px}
+        .payflow-bill-badge{display:inline-block;padding:1px 5px;border-radius:4px;font-size:9px;font-weight:700;letter-spacing:.03em;vertical-align:middle}
+        .payflow-bill-badge--overdue{background:color-mix(in srgb,#fca5a5 55%,transparent);color:#991b1b}
+        .payflow-bill-badge--ok{background:color-mix(in srgb,#86efac 45%,transparent);color:#166534}
+        .payflow-bill-list-empty{font-size:11px;color:var(--muted);padding:6px 2px}
         .payflow-load-error{margin:12px;font-size:12px;color:#b91c1c;padding:10px;border-radius:10px;border:1px solid color-mix(in srgb,#f87171 38%,var(--border));background:color-mix(in srgb,#fef2f2 55%,var(--card))}
         .payflow-open-btn{font-size:10px!important;padding:4px 8px!important;white-space:nowrap}
         .payflow-logic-tools{
@@ -953,6 +966,9 @@
     </div>
 
     <script src="{{ asset('vendor/d3/d3.v7.min.js') }}"></script>
+    <script>
+        var PAYFLOW_BILLS = {!! json_encode($flowBills ?? []) !!};
+    </script>
     <script>
         (function () {
             const flowOverlay = document.getElementById('payflowEditorOverlay');
@@ -1647,6 +1663,38 @@
                         html += '<div class=”payroll-field”><label>' + '{{ __('Metric') }}' + '</label>';
                         html += '<select class=”payroll-input fv-flow-sel” data-fv-id=”' + esc(fvId) + '” data-fv-field=”metric”>' + billMetricOpts + '</select></div>';
                         html += '<p class=”payroll-flow-help”>{{ __('Employee: bills assigned to this employee. Business: all bills for the business. Overdue = due_date is past today; available = any active bill.') }}</p>';
+
+                        // ── Available bills list ──────────────────────────────
+                        var currentScope = d.scope || 'employee';
+                        var bills = typeof PAYFLOW_BILLS !== 'undefined' ? PAYFLOW_BILLS : [];
+                        var filtered = currentScope === 'employee'
+                            ? bills.filter(function (b) { return b.assign !== null && b.assign !== undefined; })
+                            : bills;
+                        html += '<h4 style=”margin:10px 0 5px;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)”>{{ __('Bills in scope') }}</h4>';
+                        if (!filtered.length) {
+                            html += '<p class=”payflow-bill-list-empty”>{{ __('No bills found for this scope.') }}</p>';
+                        } else {
+                            html += '<div class=”payflow-bill-list”>';
+                            filtered.forEach(function (b) {
+                                var isOverdue = !!b.overdue;
+                                var dotCls  = isOverdue ? 'payflow-bill-item__dot--overdue' : 'payflow-bill-item__dot--ok';
+                                var itemCls = isOverdue ? 'payflow-bill-item payflow-bill-item--overdue' : 'payflow-bill-item';
+                                var badge   = isOverdue
+                                    ? '<span class=”payflow-bill-badge payflow-bill-badge--overdue”>{{ __('Overdue') }}</span>'
+                                    : '<span class=”payflow-bill-badge payflow-bill-badge--ok”>{{ __('Available') }}</span>';
+                                var meta = [];
+                                if (b.amount) meta.push(esc(parseFloat(b.amount).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})));
+                                if (b.due)    meta.push(esc(b.due));
+                                if (b.assign) meta.push(esc(b.assign));
+                                html += '<div class=”' + itemCls + '”>';
+                                html += '<span class=”payflow-bill-item__dot ' + dotCls + '”></span>';
+                                html += '<div class=”payflow-bill-item__body”>';
+                                html += '<div class=”payflow-bill-item__name”>' + esc(b.name) + ' ' + badge + '</div>';
+                                if (meta.length) html += '<div class=”payflow-bill-item__meta”>' + meta.join(' · ') + '</div>';
+                                html += '</div></div>';
+                            });
+                            html += '</div>';
+                        }
                     }
                 } else if (node.role === 'formula') {
                     html += '<div class="payroll-field"><label>' + '{{ __('Expression') }}' + '</label>';
