@@ -376,6 +376,8 @@
         .payflow-node .payflow-t-title{fill:var(--text);font-weight:800}
         .payflow-node .payflow-sub{fill:var(--muted)}
         .payflow-node.selected rect{stroke:color-mix(in srgb,var(--primary)55%,var(--border));stroke-width:2px}
+        .payflow-node--bill rect{fill:color-mix(in srgb,#f59e0b 18%,var(--card));stroke:color-mix(in srgb,#d97706 48%,var(--border))}
+        .payflow-node--bill .payflow-t-title{fill:color-mix(in srgb,#92400e 80%,var(--text))}
         .payflow-load-error{margin:12px;font-size:12px;color:#b91c1c;padding:10px;border-radius:10px;border:1px solid color-mix(in srgb,#f87171 38%,var(--border));background:color-mix(in srgb,#fef2f2 55%,var(--card))}
         .payflow-open-btn{font-size:10px!important;padding:4px 8px!important;white-space:nowrap}
         .payflow-logic-tools{
@@ -907,6 +909,7 @@
                             <button type="button" class="payroll-btn payflow-toolbar-btn" id="payflowAddFvBin">{{ __('+ Math') }}</button>
                             <button type="button" class="payroll-btn payflow-toolbar-btn" id="payflowAddFvCmp">{{ __('+ Compare') }}</button>
                             <button type="button" class="payroll-btn payflow-toolbar-btn" id="payflowAddFvCond">{{ __('+ If / else') }}</button>
+                            <button type="button" class="payroll-btn payflow-toolbar-btn" id="payflowAddFvBill">{{ __('+ Bill') }}</button>
                             <button type="button" class="payroll-btn payroll-modal__btn-secondary payflow-toolbar-btn" id="payflowFvDeleteNode">{{ __('Delete selected') }}</button>
                         </div>
                         <div class="payflow-root-row">
@@ -1212,6 +1215,7 @@
                     if (t === 'binary') return (data.op || '?') + ' (…)';
                     if (t === 'compare') return (data.op || '?') + ' ?';
                     if (t === 'cond') return 'if / else';
+                    if (t === 'bill') return (data.scope === 'business' ? 'biz' : 'emp') + ' · ' + (data.metric || 'overdue_total').replace(/_/g, ' ');
                     return t;
                 }
 
@@ -1224,6 +1228,7 @@
                     else if (data.type === 'binary') title = '{{ __('Math') }}';
                     else if (data.type === 'compare') title = '{{ __('Compare') }}';
                     else if (data.type === 'cond') title = '{{ __('Condition') }}';
+                    else if (data.type === 'bill') title = '{{ __('Bill') }}';
                     else title = String(data.type || '');
 
                     nodes.push({
@@ -1382,6 +1387,7 @@
                         else if (n.flowType === 'binary') n.subtitle = (d.op || '?') + ' (…)';
                         else if (n.flowType === 'compare') n.subtitle = (d.op || '?') + ' ?';
                         else if (n.flowType === 'cond') n.subtitle = 'if / else';
+                        else if (n.flowType === 'bill') n.subtitle = (d.scope === 'business' ? 'biz' : 'emp') + ' · ' + (d.metric || 'overdue_total').replace(/_/g, ' ');
                         else n.subtitle = n.flowType;
                     }
                 });
@@ -1468,7 +1474,7 @@
                     .selectAll('g')
                     .data(nodes)
                     .join('g')
-                    .attr('class', 'payflow-node')
+                    .attr('class', function (d) { return 'payflow-node' + (d.flowType === 'bill' ? ' payflow-node--bill' : ''); })
                     .call(d3.drag()
                         .on('start', function (ev, d) {
                             if (ev.sourceEvent && ev.sourceEvent.stopPropagation) ev.sourceEvent.stopPropagation();
@@ -1625,10 +1631,22 @@
                         html += '<div class="payroll-field"><label>' + '{{ __('Right') }}' + '</label><select class="payroll-input fv-flow-sel" data-fv-id="' + esc(fvId) + '" data-fv-field="right">' + fvOpts(d.right || '') + '</select></div>';
                         html += '<p class="payroll-flow-help">' + '{{ __('Result is 1 if true, 0 if false.') }}' + '</p>';
                     } else if (node.flowType === 'cond') {
-                        html += '<div class="payroll-field"><label>' + '{{ __('Test (use a compare node)') }}' + '</label><select class="payroll-input fv-flow-sel" data-fv-id="' + esc(fvId) + '" data-fv-field="test">' + fvOpts(d.test || '') + '</select></div>';
-                        html += '<div class="payroll-field"><label>' + '{{ __('Then value') }}' + '</label><select class="payroll-input fv-flow-sel" data-fv-id="' + esc(fvId) + '" data-fv-field="then">' + fvOpts(d.then || '') + '</select></div>';
-                        html += '<div class="payroll-field"><label>' + '{{ __('Else value') }}' + '</label><select class="payroll-input fv-flow-sel" data-fv-id="' + esc(fvId) + '" data-fv-field="else">' + fvOpts(d['else'] || '') + '</select></div>';
-                        html += '<p class="payroll-flow-help">' + '{{ __('If test is non-zero, “then” is used; otherwise “else”.') }}' + '</p>';
+                        html += '<div class=”payroll-field”><label>' + '{{ __('Test (use a compare node)') }}' + '</label><select class=”payroll-input fv-flow-sel” data-fv-id=”' + esc(fvId) + '” data-fv-field=”test”>' + fvOpts(d.test || '') + '</select></div>';
+                        html += '<div class=”payroll-field”><label>' + '{{ __('Then value') }}' + '</label><select class=”payroll-input fv-flow-sel” data-fv-id=”' + esc(fvId) + '” data-fv-field=”then”>' + fvOpts(d.then || '') + '</select></div>';
+                        html += '<div class=”payroll-field”><label>' + '{{ __('Else value') }}' + '</label><select class=”payroll-input fv-flow-sel” data-fv-id=”' + esc(fvId) + '” data-fv-field=”else”>' + fvOpts(d['else'] || '') + '</select></div>';
+                        html += '<p class=”payroll-flow-help”>' + '{{ __('If test is non-zero, “then” is used; otherwise “else”.') }}' + '</p>';
+                    } else if (node.flowType === 'bill') {
+                        var billScopeOpts = '<option value=”employee”' + ((d.scope || 'employee') === 'employee' ? ' selected' : '') + '>{{ __('Employee') }}</option>';
+                        billScopeOpts    += '<option value=”business”' + (d.scope === 'business' ? ' selected' : '') + '>{{ __('Business') }}</option>';
+                        var billMetricOpts = '<option value=”overdue_total”'   + ((d.metric || 'overdue_total') === 'overdue_total'   ? ' selected' : '') + '>{{ __('Overdue total (amount)') }}</option>';
+                        billMetricOpts    += '<option value=”overdue_count”'   + (d.metric === 'overdue_count'   ? ' selected' : '') + '>{{ __('Overdue count') }}</option>';
+                        billMetricOpts    += '<option value=”available_total”' + (d.metric === 'available_total' ? ' selected' : '') + '>{{ __('Available total (amount)') }}</option>';
+                        billMetricOpts    += '<option value=”available_count”' + (d.metric === 'available_count' ? ' selected' : '') + '>{{ __('Available count') }}</option>';
+                        html += '<div class=”payroll-field”><label>' + '{{ __('Scope') }}' + '</label>';
+                        html += '<select class=”payroll-input fv-flow-sel” data-fv-id=”' + esc(fvId) + '” data-fv-field=”scope”>' + billScopeOpts + '</select></div>';
+                        html += '<div class=”payroll-field”><label>' + '{{ __('Metric') }}' + '</label>';
+                        html += '<select class=”payroll-input fv-flow-sel” data-fv-id=”' + esc(fvId) + '” data-fv-field=”metric”>' + billMetricOpts + '</select></div>';
+                        html += '<p class=”payroll-flow-help”>{{ __('Employee: bills assigned to this employee. Business: all bills for the business. Overdue = due_date is past today; available = any active bill.') }}</p>';
                     }
                 } else if (node.role === 'formula') {
                     html += '<div class="payroll-field"><label>' + '{{ __('Expression') }}' + '</label>';
@@ -1877,6 +1895,7 @@
                 else if (kind === 'binary') nodes[id] = { type: 'binary', op: '+', left: '', right: '' };
                 else if (kind === 'compare') nodes[id] = { type: 'compare', op: 'gt', left: '', right: '' };
                 else if (kind === 'cond') nodes[id] = { type: 'cond', test: '', then: '', 'else': '' };
+                else if (kind === 'bill') nodes[id] = { type: 'bill', scope: 'employee', metric: 'overdue_total' };
                 flowState.config.flow_v1.root = id;
                 syncFormulaChrome();
                 rebuildFormulaGraphFromConfig(false);
@@ -1906,6 +1925,7 @@
             document.getElementById('payflowAddFvBin') && document.getElementById('payflowAddFvBin').addEventListener('click', function () { addFormulaFlowNode('binary'); });
             document.getElementById('payflowAddFvCmp') && document.getElementById('payflowAddFvCmp').addEventListener('click', function () { addFormulaFlowNode('compare'); });
             document.getElementById('payflowAddFvCond') && document.getElementById('payflowAddFvCond').addEventListener('click', function () { addFormulaFlowNode('cond'); });
+            document.getElementById('payflowAddFvBill') && document.getElementById('payflowAddFvBill').addEventListener('click', function () { addFormulaFlowNode('bill'); });
             document.getElementById('payflowFvDeleteNode') && document.getElementById('payflowFvDeleteNode').addEventListener('click', deleteFormulaFlowSelected);
 
             document.querySelectorAll('.payroll-flow-editor-open-btn').forEach(function (btn) {
