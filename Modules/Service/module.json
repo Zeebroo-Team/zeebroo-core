@@ -1,0 +1,11 @@
+{
+    "name": "Service",
+    "alias": "service",
+    "description": "Service catalog and service request management for business operations.",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\Service\\Providers\\ServiceServiceProvider"
+    ],
+    "files": []
+}

@@ -145,6 +145,41 @@ class ProductController extends Controller
         return redirect()->route('product.index')->with('status', 'Product added.');
     }
 
+    public function quickStore(Request $request): JsonResponse
+    {
+        $business = Business::currentForNavbar($request->user());
+        if (!$business) {
+            return response()->json(['message' => 'No business selected.'], 403);
+        }
+
+        abort_unless($request->user()->businesses()->whereKey($business->id)->exists(), 403);
+
+        $data = $request->validate([
+            'name'       => ['required', 'string', 'max:255'],
+            'sku'        => ['nullable', 'string', 'max:120'],
+            'unit_price' => ['nullable', 'numeric', 'min:0'],
+            'description'=> ['nullable', 'string', 'max:5000'],
+        ]);
+
+        $product = $this->productService->create($business, array_filter([
+            'name'        => $data['name'],
+            'sku'         => $data['sku'] ?? null,
+            'unit_price'  => isset($data['unit_price']) ? (float) $data['unit_price'] : null,
+            'description' => $data['description'] ?? null,
+            'is_active'   => true,
+        ], fn ($v) => $v !== null));
+
+        return response()->json([
+            'message' => 'Product created.',
+            'product' => [
+                'id'         => $product->id,
+                'name'       => $product->name,
+                'sku'        => $product->sku,
+                'unit_price' => $product->unit_price,
+            ],
+        ], 201);
+    }
+
     public function show(Request $request, Product $product): View|RedirectResponse
     {
         $business = $this->resolveBusinessProduct($request, $product);

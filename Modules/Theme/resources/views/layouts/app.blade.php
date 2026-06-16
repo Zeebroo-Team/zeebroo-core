@@ -415,18 +415,20 @@
             && ($posFeatureOn || \Modules\Pos\Models\Customer::query()->where('business_id', $navBusiness->id)->exists());
         $showSidebarPosReturnsLink = $navBusiness && Route::has('pos.returns.index')
             && ($posFeatureOn || \Modules\Pos\Models\SaleReturn::query()->where('business_id', $navBusiness->id)->exists());
-        // Sales Quotations (always show when module is active)
+        // Sales Quotations and Invoices (always show when module is active)
         $showSidebarQuotationsLink = $navBusiness && Route::has('sales.quotations.index');
+        $showSidebarInvoicesLink   = $navBusiness && Route::has('sales.invoices.index');
 
         // Hub link shows whenever the Sales section is visible (feature on, or data-driven links are showing).
         $showSidebarPosSection = $showSidebarPosRegisterLink || $showSidebarPosSalesLink
-            || $showSidebarQuotationsLink || ($navBusiness && $posFeatureOn);
+            || $showSidebarQuotationsLink || $showSidebarInvoicesLink || ($navBusiness && $posFeatureOn);
         $showSidebarPosHubLink = $navBusiness && Route::has('pos.index') && $showSidebarPosSection;
 
         $showSidebarFilesLink = $navBusiness && (
             $navBusiness->fileManagerFiles()->exists() || $navBusiness->fileManagerFolders()->exists()
         );
         $showSidebarDesignStudioLink = $navBusiness && Route::has('designstudio.index');
+        $showSidebarServiceLink = $navBusiness && Route::has('service.catalog.index');
         $showSidebarDocumentationLink = $navBusiness
             && Route::has('documentation.documents.index')
             && \Modules\Documentation\Models\Document::where('business_id', $navBusiness->id)->exists();
@@ -687,6 +689,11 @@
                             <i class="fa fa-file-lines"></i><span>Quotations</span>
                         </a>
                     @endif
+                    @if($showSidebarInvoicesLink)
+                        <a href="{{ route('sales.invoices.index') }}" @class(['active' => request()->routeIs('sales.invoices.*')])>
+                            <i class="fa fa-file-invoice"></i><span>Invoices</span>
+                        </a>
+                    @endif
                 </div>
             @endif
 
@@ -695,6 +702,24 @@
             @endif
             @if($showSidebarDesignStudioLink)
                 <a href="{{ route('designstudio.index') }}" class="{{ request()->routeIs('designstudio.*') ? 'active' : '' }}"><i class="fa fa-palette"></i><span>Design Studio</span></a>
+                <div class="submenu">
+                    @if(Route::has('designstudio.social-media.index'))
+                        <a href="{{ route('designstudio.social-media.index') }}" @class(['active' => request()->routeIs('designstudio.social-media.*')])>
+                            <i class="fa fa-share-nodes"></i><span>Social Media</span>
+                        </a>
+                    @endif
+                </div>
+            @endif
+            @if($showSidebarServiceLink)
+                <a href="{{ route('service.catalog.index') }}" class="{{ request()->routeIs('service.*') ? 'active' : '' }}"><i class="fa fa-screwdriver-wrench"></i><span>Services</span></a>
+                <div class="submenu">
+                    <a href="{{ route('service.catalog.index') }}" @class(['active' => request()->routeIs('service.catalog.*')])>
+                        <i class="fa fa-list-check"></i><span>Catalog</span>
+                    </a>
+                    <a href="{{ route('service.requests.index') }}" @class(['active' => request()->routeIs('service.requests.*')])>
+                        <i class="fa fa-inbox"></i><span>Requests</span>
+                    </a>
+                </div>
             @endif
             @if($showSidebarDocumentationLink)
                 <a href="{{ route('documentation.documents.index') }}" class="{{ request()->routeIs('documentation.*') ? 'active' : '' }}"><i class="fa fa-book-open"></i><span>Documentation</span></a>
@@ -830,10 +855,6 @@
                 @endif
                 <div class="navchip">{{ now()->format('d M Y') }}</div>
                 @if($navBusiness)
-                    <a href="{{ route('business.map') }}" class="user-trigger nav-business-profile @if(request()->routeIs('business.map')) nav-business-profile--active @endif" title="Business Map">
-                        <i class="fa fa-sitemap"></i>
-                        <span>Business Map</span>
-                    </a>
                     <a href="{{ route('business.profile') }}" class="user-trigger nav-business-profile @if(request()->routeIs('business.profile')) nav-business-profile--active @endif" title="Business profile">
                         <i class="fa fa-id-card"></i>
                         <span>Business profile</span>
@@ -980,6 +1001,11 @@
                             </div>
                         @endif
                         @if($navBusiness)
+                        <div class="menu-row" style="display:block;padding-top:2px;padding-bottom:2px;">
+                            <a href="{{ route('business.map') }}" class="dropdown-action-btn">
+                                <i class="fa fa-sitemap" style="margin-right:6px;"></i>Business Map
+                            </a>
+                        </div>
                         <div class="menu-row" style="display:block;padding-top:2px;padding-bottom:2px;">
                             <button type="button" id="openFeaturesModalBtn" style="width:100%;display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:10px;border:1px solid var(--border);background:color-mix(in srgb,var(--primary) 8%,transparent);color:var(--text);cursor:pointer;font-size:13px;font-weight:600;text-align:left;">
                                 <i class="fa fa-sliders" style="color:var(--primary);width:14px;text-align:center;"></i>
