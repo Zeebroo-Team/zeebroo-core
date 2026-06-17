@@ -6,11 +6,16 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Modules\Business\Models\Business;
+use Modules\Pos\Services\SaleStockConsumptionService;
 use Modules\Sales\Models\Invoice;
 use Modules\Sales\Models\InvoiceItem;
 
 class InvoiceService
 {
+    public function __construct(
+        private readonly SaleStockConsumptionService $stockConsumption,
+    ) {}
+
     public function listForBusiness(
         Business $business,
         ?string $search = null,
@@ -106,11 +111,30 @@ class InvoiceService
 
     public function markPaid(Invoice $invoice): Invoice
     {
-        if (in_array($invoice->status, [Invoice::STATUS_DRAFT, Invoice::STATUS_SENT, Invoice::STATUS_OVERDUE])) {
-            $invoice->update(['status' => Invoice::STATUS_PAID]);
+        if (!in_array($invoice->status, [Invoice::STATUS_DRAFT, Invoice::STATUS_SENT, Invoice::STATUS_OVERDUE])) {
+            return $invoice;
         }
 
-        return $invoice;
+        return DB::transaction(function () use ($invoice): Invoice {
+            $invoice->update(['status' => Invoice::STATUS_PAID]);
+
+            $invoice->load('items.product');
+
+            foreach ($invoice->items as $item) {
+                if (!$item->product_id || !$item->product) {
+                    continue;
+                }
+
+                $qty = max(0.0, (float) $item->quantity);
+                if ($qty <= 0) {
+                    continue;
+                }
+
+                $this->stockConsumption->consumeFifo($item->product, $qty);
+            }
+
+            return $invoice;
+        });
     }
 
     public function markOverdue(Invoice $invoice): Invoice
@@ -184,13 +208,14 @@ class InvoiceService
         $normalized = $this->normalizeItems($rawItems);
         foreach ($normalized as $i => $item) {
             InvoiceItem::create([
-                'invoice_id'  => $invoice->id,
-                'product_id'  => $item['product_id'],
-                'description' => $item['description'],
-                'quantity'    => $item['quantity'],
-                'unit_price'  => $item['unit_price'],
-                'line_total'  => $item['line_total'],
-                'sort_order'  => $i,
+                'invoice_id'      => $invoice->id,
+                'product_id'      => $item['product_id'],
+                'service_item_id' => $item['service_item_id'],
+                'description'     => $item['description'],
+                'quantity'        => $item['quantity'],
+                'unit_price'      => $item['unit_price'],
+                'line_total'      => $item['line_total'],
+                'sort_order'      => $i,
             ]);
         }
     }
@@ -204,12 +229,14 @@ class InvoiceService
             if ($qty <= 0 && $price <= 0 && empty($item['description'])) {
                 continue;
             }
+            $type = $item['item_type'] ?? null;
             $normalized[] = [
-                'product_id'  => $this->nullableInt($item['product_id'] ?? null),
-                'description' => trim((string) ($item['description'] ?? '')),
-                'quantity'    => $qty,
-                'unit_price'  => $price,
-                'line_total'  => round($qty * $price, 2),
+                'product_id'      => $type === 'product' ? $this->nullableInt($item['product_id'] ?? null) : null,
+                'service_item_id' => $type === 'service' ? $this->nullableInt($item['service_item_id'] ?? null) : null,
+                'description'     => trim((string) ($item['description'] ?? '')),
+                'quantity'        => $qty,
+                'unit_price'      => $price,
+                'line_total'      => round($qty * $price, 2),
             ];
         }
 

@@ -185,15 +185,22 @@
                 </tr>
             </thead>
             <tbody>
+                @php $showBound = (bool) (($posSettings ?? [])['show_service_bound_products'] ?? true); @endphp
                 @foreach($sale->items as $item)
                     @php
                         $retQty = round((float) ($returnedQtys[$item->id] ?? 0), 3);
                         $itemDiscount = (float) ($item->discount_amount ?? 0);
                         $originalUnitPrice = $itemDiscount > 0 ? round((float) $item->unit_sell_price + $itemDiscount, 2) : null;
+                        $isServiceItem = $item->service_item_id !== null;
+                        $boundProds = ($showBound && $isServiceItem && $item->serviceItem) ? $item->serviceItem->products : collect();
+                        $formatQty = static fn (float $v): string => rtrim(rtrim(number_format($v, 3, '.', ''), '0'), '.');
                     @endphp
                     <tr>
                         <td>
                             <strong style="color:var(--text);">{{ $item->product_name }}</strong>
+                            @if($isServiceItem)
+                                <span style="display:inline-block;font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;background:color-mix(in srgb,#8b5cf6 14%,transparent);color:#8b5cf6;border:1px solid color-mix(in srgb,#8b5cf6 30%,transparent);margin-left:5px;vertical-align:middle;">Service</span>
+                            @endif
                             @if(filled($item->sku))
                                 <div class="muted" style="font-size:11px;margin-top:2px;">{{ $item->sku }}</div>
                             @endif
@@ -231,6 +238,19 @@
                         <td class="muted">{{ $item->unit_cost !== null ? number_format((float) $item->unit_cost, 2) : '—' }}</td>
                         <td style="text-align:right;"><strong style="color:var(--text);">{{ number_format((float) $item->line_total, 2) }}</strong></td>
                     </tr>
+                    @foreach($boundProds as $bp)
+                        <tr style="background:color-mix(in srgb,#8b5cf6 6%,transparent);">
+                            <td style="padding-left:24px;">
+                                <div style="display:flex;align-items:center;gap:5px;">
+                                    <i class="fa fa-angle-right" style="color:#8b5cf6;font-size:10px;"></i>
+                                    <span style="font-size:12px;color:var(--text);">{{ $bp->name }}</span>
+                                    @if($bp->sku)<span class="muted" style="font-size:11px;">({{ $bp->sku }})</span>@endif
+                                </div>
+                            </td>
+                            <td style="font-size:12px;color:var(--muted);">{{ $formatQty(round((float) $bp->pivot->qty * (float) $item->quantity, 3)) }}</td>
+                            <td></td><td></td><td></td><td></td>
+                        </tr>
+                    @endforeach
                 @endforeach
             </tbody>
             <tfoot>

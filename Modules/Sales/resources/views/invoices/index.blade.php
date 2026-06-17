@@ -76,11 +76,6 @@
         @endif
     </div>
 
-    @if($products->isEmpty())
-        <div class="pcat-banner pcat-banner--err" style="margin-bottom:12px;" role="alert">
-            Add at least one <a href="{{ route('product.index') }}" class="pcat-link">product</a> before creating invoices.
-        </div>
-    @endif
 
     {{-- Inline create when no invoices yet --}}
     @if(!$hasInvoices)

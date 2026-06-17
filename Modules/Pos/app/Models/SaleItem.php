@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Modules\Product\Models\Product;
 use Modules\Product\Models\ProductStockLayer;
+use Modules\Service\Models\ServiceItem;
 
 class SaleItem extends Model
 {
@@ -14,6 +15,7 @@ class SaleItem extends Model
     protected $fillable = [
         'pos_sale_id',
         'product_id',
+        'service_item_id',
         'product_stock_layer_id',
         'product_name',
         'sku',
@@ -52,5 +54,10 @@ class SaleItem extends Model
     public function stockLayer(): BelongsTo
     {
         return $this->belongsTo(ProductStockLayer::class, 'product_stock_layer_id');
+    }
+
+    public function serviceItem(): BelongsTo
+    {
+        return $this->belongsTo(ServiceItem::class);
     }
 }

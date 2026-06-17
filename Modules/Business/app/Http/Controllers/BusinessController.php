@@ -392,6 +392,14 @@ class BusinessController extends Controller
                 Rule::exists('business_categories', 'slug')->where(fn ($q) => $q->where('is_active', true)),
             ],
             'description' => ['nullable', 'string', 'max:2000'],
+            'features' => ['nullable', 'array'],
+            'features.*' => ['boolean'],
+            'multi_warehouse_branch' => ['nullable', Rule::in(['0', '1'])],
+            'branch_name' => ['required', 'string', 'max:255'],
+            'branch_description' => ['nullable', 'string', 'max:5000'],
+            'branch_address' => ['nullable', 'string', 'max:2000'],
+            'branch_phone' => ['nullable', 'string', 'max:40'],
+            'branch_email' => ['nullable', 'email', 'max:255'],
         ]);
 
         $slug = $validated['company_category_slug'];
@@ -404,14 +412,46 @@ class BusinessController extends Controller
             'description' => $validated['description'] ?? null,
         ]);
 
-        // Only Account Management is enabled by default; user enables others via the feature management modal.
-        $features = array_fill_keys(self::FEATURE_KEYS, false);
-        $features['account_management'] = true;
+        $features = [];
+        foreach (self::FEATURE_KEYS as $key) {
+            $features[$key] = (bool) ($validated['features'][$key] ?? false);
+        }
+        $features['account_management'] = true; // always required
+        if (! $features['stock_management'] || ! $features['product_management']) {
+            $features['point_of_sale'] = false;
+        }
         $business->setSetting('business.features', $features);
 
+        $multiEnabled = ($validated['multi_warehouse_branch'] ?? '0') === '1';
+        $branchData = [
+            'name' => $validated['branch_name'],
+            'description' => $validated['branch_description'] ?? null,
+            'address' => $validated['branch_address'] ?? null,
+            'phone' => $validated['branch_phone'] ?? null,
+            'email' => $validated['branch_email'] ?? null,
+            'is_active' => $request->boolean('branch_is_active'),
+        ];
+
+        DB::transaction(function () use ($business, $multiEnabled, $branchData): void {
+            $business->setSetting('business.multi_warehouse_branch', $multiEnabled);
+
+            Business::query()
+                ->whereKey($business->id)
+                ->whereNull('warehouse_branch_intro_acknowledged_at')
+                ->update([
+                    'warehouse_branch_intro_acknowledged_at' => now(),
+                    'updated_at' => now(),
+                ]);
+
+            $this->branchService->create($business, $branchData);
+        });
+
+        /** @var int|string $bizId */
+        $bizId = $business->getKey();
+        session()->put('warehouse_intro_ack.'.$bizId, true);
+
         return redirect()->route('dashboard')
-            ->with('status', 'Business profile saved.')
-            ->with('open_features_modal', true);
+            ->with('status', 'Business profile saved.');
     }
 
     public function updateFeatures(Request $request): JsonResponse

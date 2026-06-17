@@ -4,8 +4,11 @@ namespace Modules\Service\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Modules\Business\Models\Business;
+use Modules\HRManagement\Models\Employee;
+use Modules\Product\Models\Product;
 
 class ServiceItem extends Model
 {
@@ -17,7 +20,6 @@ class ServiceItem extends Model
         'description',
         'price',
         'duration_minutes',
-        'category',
         'is_active',
     ];
 
@@ -30,6 +32,41 @@ class ServiceItem extends Model
     public function business(): BelongsTo
     {
         return $this->belongsTo(Business::class);
+    }
+
+    public function categories(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            ServiceCategory::class,
+            'service_item_service_category',
+            'service_item_id',
+            'service_category_id',
+        )->withTimestamps();
+    }
+
+    public function employees(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            Employee::class,
+            'service_item_employee',
+            'service_item_id',
+            'employee_id',
+        )->withTimestamps();
+    }
+
+    public function products(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            Product::class,
+            'service_item_product',
+            'service_item_id',
+            'product_id',
+        )->withPivot('qty')->withTimestamps();
+    }
+
+    public function discounts(): HasMany
+    {
+        return $this->hasMany(ServiceDiscount::class);
     }
 
     public function serviceRequests(): HasMany

@@ -52,6 +52,7 @@ class AccountController extends Controller
             'businesses' => Business::where('user_id', Auth::id())->orderBy('name')->get(),
             'defaultBusiness' => Business::where('user_id', Auth::id())->latest()->first(),
             'defaultBankTypeId' => BankType::query()->where('slug', 'current-account')->value('id'),
+            'accountCategories' => Account::categories(),
         ], $this->warehousesFormContext()));
     }
 
@@ -66,6 +67,7 @@ class AccountController extends Controller
             ],
             'account_name' => ['required', 'string', 'max:255'],
             'bank_type_id' => ['required', 'exists:bank_types,id'],
+            'category' => ['nullable', 'string', 'in:' . implode(',', array_keys(Account::categories()))],
             'bank_id' => ['required', 'exists:banks,id'],
             'bank_account_number' => ['required', 'string', 'max:255'],
             'branch' => ['required', 'string', 'max:255'],

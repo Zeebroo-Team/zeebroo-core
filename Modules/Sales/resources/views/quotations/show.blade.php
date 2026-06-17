@@ -135,20 +135,47 @@
             </thead>
             <tbody>
                 @foreach($quotation->items as $item)
+                    @php
+                        $isService     = $item->service_item_id && $item->serviceItem;
+                        $boundProducts = $isService ? $item->serviceItem->products : collect();
+                        $label         = $item->serviceItem?->name ?? $item->product?->name ?? ($item->description ?: '—');
+                        $sublabel      = (!$item->serviceItem && $item->product && $item->description && $item->description !== $item->product->name)
+                                       ? $item->description : null;
+                    @endphp
                     <tr>
                         <td class="muted">{{ $loop->iteration }}</td>
                         <td>
-                            <strong style="color:var(--text);">
-                                {{ $item->product?->name ?? ($item->description ?: '—') }}
-                            </strong>
-                            @if($item->product && $item->description && $item->description !== $item->product->name)
-                                <div class="muted" style="font-size:11px;">{{ $item->description }}</div>
+                            <strong style="color:var(--text);">{{ $label }}</strong>
+                            @if($isService)
+                                <span style="display:inline-block;font-size:10px;font-weight:700;padding:1px 6px;border-radius:4px;background:color-mix(in srgb,#8b5cf6 13%,transparent);color:#8b5cf6;margin-left:6px;vertical-align:middle;">Service</span>
+                            @endif
+                            @if($sublabel)
+                                <div class="muted" style="font-size:11px;">{{ $sublabel }}</div>
                             @endif
                         </td>
                         <td style="text-align:right;">{{ rtrim(rtrim(number_format($item->quantity, 3), '0'), '.') }}</td>
                         <td style="text-align:right;">{{ number_format($item->unit_price, 2) }}</td>
                         <td style="text-align:right;font-weight:700;color:var(--text);">{{ number_format($item->line_total, 2) }}</td>
                     </tr>
+                    @foreach($boundProducts as $bp)
+                        <tr style="background:color-mix(in srgb,var(--card) 60%,transparent);">
+                            <td></td>
+                            <td style="padding-left:28px;">
+                                <div style="display:flex;align-items:center;gap:6px;">
+                                    <i class="fa fa-angle-right" style="color:var(--muted);font-size:11px;"></i>
+                                    <span style="font-size:12px;color:var(--text);">{{ $bp->name }}</span>
+                                    @if($bp->sku)
+                                        <span class="muted" style="font-size:11px;">({{ $bp->sku }})</span>
+                                    @endif
+                                </div>
+                            </td>
+                            <td style="text-align:right;font-size:12px;color:var(--muted);">
+                                {{ rtrim(rtrim(number_format((float)$bp->pivot->qty, 3), '0'), '.') }}
+                            </td>
+                            <td></td>
+                            <td></td>
+                        </tr>
+                    @endforeach
                 @endforeach
             </tbody>
         </table>

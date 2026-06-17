@@ -20,6 +20,7 @@ Route::middleware(['web', 'auth'])->group(function () {
     Route::post('/sales/quotations/{quotation}/mark-rejected', [QuotationController::class, 'markRejected'])   ->name('sales.quotations.mark-rejected');
     Route::delete('/sales/quotations/{quotation}',             [QuotationController::class, 'destroy'])        ->name('sales.quotations.destroy');
 
+    Route::get('/sales/line-items/search', [InvoiceController::class, 'lineItemSearch'])->name('sales.line-items.search');
     Route::get('/sales/invoices',                              [InvoiceController::class, 'index'])             ->name('sales.invoices.index');
     Route::post('/sales/invoices',                             [InvoiceController::class, 'store'])             ->name('sales.invoices.store');
     Route::get('/sales/invoices/{invoice}',                    [InvoiceController::class, 'show'])              ->name('sales.invoices.show');

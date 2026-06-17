@@ -15,10 +15,21 @@
 
     @if(!$hasItems)
         {{-- ── Inline create form when no services yet ── --}}
-        <div style="max-width:560px;margin:0 auto;padding:24px 0;">
-            <h3 style="margin:0 0 4px;font-size:16px;font-weight:800;">Add your first service</h3>
-            <p class="muted" style="margin:0 0 20px;font-size:13px;">Define the services your business offers — customers can then raise requests against them.</p>
-            @include('service::catalog.partials.item-form')
+        <div style="padding:24px 0 8px;">
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;">
+                <div style="display:grid;place-items:center;width:44px;height:44px;border-radius:12px;background:color-mix(in srgb,var(--primary) 12%,transparent);color:var(--primary);font-size:20px;flex-shrink:0;">
+                    <i class="fa fa-list-check" aria-hidden="true"></i>
+                </div>
+                <div>
+                    <h3 style="margin:0 0 3px;font-size:16px;font-weight:800;">Add your first service</h3>
+                    <p class="muted" style="margin:0;font-size:13px;">Define what your business offers — customers can then raise requests against them.</p>
+                </div>
+            </div>
+            @include('service::catalog.partials.item-form', [
+                'serviceCategories' => $serviceCategories,
+                'employees'         => $employees,
+                'products'          => $products,
+            ])
         </div>
     @else
         {{-- ── Search + New button ── --}}
@@ -29,7 +40,7 @@
                 <button type="submit" class="linkbtn" style="padding:7px 14px;font-size:13px;">Search</button>
                 @if($search)<a href="{{ route('service.catalog.index') }}" class="linkbtn" style="padding:7px 12px;font-size:13px;background:transparent;border:1px solid var(--border);color:var(--text);text-decoration:none;">Clear</a>@endif
             </form>
-            <button type="button" class="linkbtn" style="padding:7px 14px;font-size:13px;" onclick="document.getElementById('svc-new-modal').classList.add('pcat-modal--open');document.getElementById('svc-new-modal').setAttribute('aria-hidden','false');document.documentElement.classList.add('pcat-modal-open-html');document.getElementById('svc-item-name')?.focus();">
+            <button type="button" class="linkbtn" style="padding:7px 14px;font-size:13px;" onclick="svcModalOpen()">
                 <i class="fa fa-plus"></i> New service
             </button>
         </div>
@@ -67,7 +78,13 @@
                                     <div class="muted" style="font-size:11px;margin-top:2px;">{{ Str::limit($item->description, 60) }}</div>
                                 @endif
                             </td>
-                            <td class="muted">{{ $item->category ?: '—' }}</td>
+                            <td class="muted">
+                                @if($item->categories->isNotEmpty())
+                                    {{ $item->categories->pluck('name')->join(', ') }}
+                                @else
+                                    —
+                                @endif
+                            </td>
                             <td>{{ $item->price !== null ? number_format($item->price, 2) : '—' }}</td>
                             <td class="muted">{{ $item->durationLabel() }}</td>
                             <td>
@@ -93,18 +110,80 @@
 
         {{-- ── New service modal ── --}}
         <div id="svc-new-modal" class="pcat-modal" role="dialog" aria-modal="true" aria-labelledby="svc-new-modal-title" aria-hidden="true">
-            <div class="pcat-modal__backdrop" onclick="document.getElementById('svc-new-modal').classList.remove('pcat-modal--open');document.getElementById('svc-new-modal').setAttribute('aria-hidden','true');document.documentElement.classList.remove('pcat-modal-open-html');" tabindex="-1"></div>
+            <div class="pcat-modal__backdrop" onclick="svcModalClose()" tabindex="-1"></div>
             <div class="pcat-modal__panel">
                 <div class="pcat-modal__head">
                     <h2 id="svc-new-modal-title">New service</h2>
-                    <button type="button" class="pcat-modal__close" aria-label="Close"
-                            onclick="document.getElementById('svc-new-modal').classList.remove('pcat-modal--open');document.getElementById('svc-new-modal').setAttribute('aria-hidden','true');document.documentElement.classList.remove('pcat-modal-open-html');">&times;</button>
+                    <button type="button" class="pcat-modal__close" aria-label="Close" onclick="svcModalClose()">&times;</button>
                 </div>
                 <div class="pcat-modal__body">
-                    @include('service::catalog.partials.item-form')
+                    @include('service::catalog.partials.item-form', [
+                        'item'              => null,
+                        'serviceCategories' => $serviceCategories,
+                        'employees'         => $employees,
+                        'products'          => $products,
+                    ])
                 </div>
             </div>
         </div>
     @endif
 </div>
+
+<script>
+function svcModalOpen() {
+    const modal = document.getElementById('svc-new-modal');
+    if (!modal) return;
+
+    // ── clear every text/number/textarea inside the modal body ──
+    modal.querySelectorAll('input[type=text], input[type=number], textarea').forEach(el => {
+        el.value = '';
+        // also clear the defaultValue so it doesn't snap back
+        try { el.defaultValue = ''; } catch(e) {}
+    });
+    // clear duration hint
+    modal.querySelectorAll('[id$="-dur-hint"]').forEach(el => {
+        el.textContent = ''; el.classList.remove('is-visible');
+    });
+    // reset status to Active
+    const activeRadio = modal.querySelector('input[name="is_active"][value="1"]');
+    if (activeRadio) activeRadio.checked = true;
+
+    // ── reset category chips ──
+    modal.querySelectorAll('[data-svc-cat-chips]').forEach(el => el.innerHTML = '');
+    modal.querySelectorAll('[data-svc-cat-hidden]').forEach(el => el.innerHTML = '');
+
+    // ── reset employee chips + collapse panel ──
+    modal.querySelectorAll('[data-svc-emp-chips]').forEach(el => el.innerHTML = '');
+    modal.querySelectorAll('[data-svc-emp-hidden]').forEach(el => el.innerHTML = '');
+    modal.querySelectorAll('[id$="-emp-chk"]').forEach(el => el.checked = false);
+    modal.querySelectorAll('[id$="-emp-body"]').forEach(el => el.classList.remove('is-open'));
+    modal.querySelectorAll('[id$="-emp-section"]').forEach(el => el.classList.remove('is-on'));
+
+    // ── reset product lines + collapse panel + hide cost bar ──
+    modal.querySelectorAll('[id$="-prod-lines"]').forEach(el => el.innerHTML = '');
+    modal.querySelectorAll('[id$="-prod-hidden"]').forEach(el => el.innerHTML = '');
+    modal.querySelectorAll('[id$="-cost-bar"]').forEach(el => el.classList.remove('is-visible'));
+    modal.querySelectorAll('[id$="-prod-chk"]').forEach(el => el.checked = false);
+    modal.querySelectorAll('[id$="-prod-body"]').forEach(el => el.classList.remove('is-open'));
+    modal.querySelectorAll('[id$="-prod-section"]').forEach(el => el.classList.remove('is-on'));
+
+    // ── open modal ──
+    modal.classList.add('pcat-modal--open');
+    modal.setAttribute('aria-hidden', 'false');
+    document.documentElement.classList.add('pcat-modal-open-html');
+    setTimeout(() => modal.querySelector('input[type=text]')?.focus(), 50);
+}
+
+function svcModalClose() {
+    const modal = document.getElementById('svc-new-modal');
+    if (!modal) return;
+    modal.classList.remove('pcat-modal--open');
+    modal.setAttribute('aria-hidden', 'true');
+    document.documentElement.classList.remove('pcat-modal-open-html');
+}
+
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') svcModalClose();
+});
+</script>
 @endsection

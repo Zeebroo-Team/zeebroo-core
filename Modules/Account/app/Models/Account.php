@@ -10,12 +10,34 @@ use Modules\Business\Models\Business;
 
 class Account extends Model
 {
+    public const CATEGORY_OPERATING   = 'operating';
+    public const CATEGORY_SAVINGS     = 'savings';
+    public const CATEGORY_PETTY_CASH  = 'petty_cash';
+    public const CATEGORY_CREDIT_CARD = 'credit_card';
+    public const CATEGORY_PAYROLL     = 'payroll';
+    public const CATEGORY_INVESTMENT  = 'investment';
+    public const CATEGORY_LOAN        = 'loan';
+
+    public static function categories(): array
+    {
+        return [
+            self::CATEGORY_OPERATING   => ['label' => 'Operating',    'desc' => 'Day-to-day business transactions'],
+            self::CATEGORY_SAVINGS     => ['label' => 'Savings',      'desc' => 'Reserves or long-term funds'],
+            self::CATEGORY_PETTY_CASH  => ['label' => 'Petty Cash',   'desc' => 'Small daily business expenses'],
+            self::CATEGORY_CREDIT_CARD => ['label' => 'Credit Card',  'desc' => 'Credit spending account'],
+            self::CATEGORY_PAYROLL     => ['label' => 'Payroll',      'desc' => 'Employee salary disbursements'],
+            self::CATEGORY_INVESTMENT  => ['label' => 'Investment',   'desc' => 'Assets and investment funds'],
+            self::CATEGORY_LOAN        => ['label' => 'Loan',         'desc' => 'Borrowed capital management'],
+        ];
+    }
+
     protected $fillable = [
         'user_id',
         'business_id',
         'branch_id',
         'account_name',
         'bank_type_id',
+        'category',
         'bank_id',
         'bank_name',
         'bank_account_number',

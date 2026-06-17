@@ -16,7 +16,8 @@
         ? ' ('.rtrim(rtrim(number_format($discountPercent, 2, '.', ''), '0'), '.').'%)'
         : '';
 
-    $showAccountInfo = (bool) (($posSettings ?? [])['show_account_info'] ?? true);
+    $showAccountInfo         = (bool) (($posSettings ?? [])['show_account_info'] ?? true);
+    $showServiceBoundProducts = (bool) (($posSettings ?? [])['show_service_bound_products'] ?? true);
 
     $saleCompletionData = [
         'saleId' => $completedSale->id,
@@ -59,7 +60,16 @@
             'discount_line' => (float) ($item->discount_amount ?? 0) > 0.001
                 ? number_format((float) $item->quantity * (float) $item->discount_amount, 2, '.', '')
                 : '',
+            'is_service' => $item->service_item_id !== null,
+            'bound_products' => ($showServiceBoundProducts && $item->serviceItem)
+                ? $item->serviceItem->products->map(fn ($bp) => [
+                    'name' => $bp->name,
+                    'sku'  => $bp->sku ?? '',
+                    'qty'  => $formatQty(round((float) $bp->pivot->qty * (float) $item->quantity, 3)),
+                ])->all()
+                : [],
         ])->values()->all(),
+        'showServiceBoundProducts' => $showServiceBoundProducts,
         'productDiscountTotal' => (function () use ($completedSale) {
             $total = $completedSale->items->sum(fn ($i) => round((float) $i->quantity * (float) ($i->discount_amount ?? 0), 2));
             return $total > 0.001 ? number_format($total, 2, '.', '') : '';
@@ -146,10 +156,20 @@
                         </thead>
                         <tbody>
                             @foreach($completedSale->items as $item)
-                                @php $itemDisc = (float) ($item->discount_amount ?? 0); @endphp
+                                @php
+                                    $itemDisc = (float) ($item->discount_amount ?? 0);
+                                    $isServiceItem = $item->service_item_id !== null;
+                                    $boundProds = ($showServiceBoundProducts && $isServiceItem && $item->serviceItem)
+                                        ? $item->serviceItem->products : collect();
+                                @endphp
                                 <tr>
                                     <td>
-                                        <div class="pos-thermal-item-name">{{ $item->product_name }}</div>
+                                        <div class="pos-thermal-item-name">
+                                            {{ $item->product_name }}
+                                            @if($isServiceItem)
+                                                <span style="font-size:8px;font-weight:700;padding:1px 4px;border-radius:3px;background:#ede9fe;color:#7c3aed;margin-left:3px;">Svc</span>
+                                            @endif
+                                        </div>
                                         @if(filled($item->sku))
                                             <div class="pos-thermal-item-sku">{{ $item->sku }}</div>
                                         @endif
@@ -178,6 +198,17 @@
                                         </td>
                                     </tr>
                                 @endif
+                                @foreach($boundProds as $bp)
+                                    <tr style="background:#f5f3ff;">
+                                        <td colspan="2" style="padding:2px 2px 2px 12px;font-size:9px;color:#7c3aed;">
+                                            &#8627; {{ $bp->name }}@if($bp->sku) ({{ $bp->sku }})@endif
+                                        </td>
+                                        <td class="pos-thermal-col-center" style="font-size:9px;color:#7c3aed;">
+                                            {{ $formatQty(round((float) $bp->pivot->qty * (float) $item->quantity, 3)) }}
+                                        </td>
+                                        <td></td>
+                                    </tr>
+                                @endforeach
                             @endforeach
                         </tbody>
                     </table>
@@ -894,18 +925,17 @@
         let itemRows = '';
         (completionData.items || []).forEach(item => {
             const name = escHtml(item.name);
+            const svcBadge = item.is_service ? '<span style="font-size:8px;font-weight:700;padding:1px 4px;border-radius:3px;background:#ede9fe;color:#7c3aed;margin-left:3px;">Svc</span>' : '';
             const sku = item.sku ? '<div style="font-size:8px;color:#666;margin:1px 0 0;">' + escHtml(item.sku) + '</div>' : '';
-            // Show strikethrough original price if discounted
             const unitPriceHtml = item.original_unit
                 ? '<del style="font-size:9px;color:#999;">' + escHtml(item.original_unit) + escHtml(cur) + '</del> ' + escHtml(item.unit) + escHtml(cur)
                 : escHtml(item.unit) + escHtml(cur);
             itemRows += '<tr>'
-                + '<td style="padding:3px 0;"><strong>' + name + '</strong>' + sku + '</td>'
+                + '<td style="padding:3px 0;"><strong>' + name + '</strong>' + svcBadge + sku + '</td>'
                 + '<td style="padding:3px 0;text-align:center;width:60px;">' + escHtml(item.qty) + '</td>'
                 + '<td style="padding:3px 0;text-align:right;width:80px;">' + unitPriceHtml + '</td>'
                 + '<td style="padding:3px 0;text-align:right;width:70px;font-weight:600;">' + escHtml(item.line) + escHtml(cur) + '</td>'
                 + '</tr>';
-            // Discount sub-row
             if (item.discount) {
                 itemRows += '<tr>'
                     + '<td colspan="3" style="padding:0 0 4px;font-size:9px;color:#d97706;line-height:1.3;">'
@@ -914,6 +944,13 @@
                     + '<td style="padding:0 0 4px;text-align:right;font-size:9px;color:#d97706;">&minus;' + escHtml(item.discount_line) + escHtml(cur) + '</td>'
                     + '</tr>';
             }
+            (item.bound_products || []).forEach(function (bp) {
+                itemRows += '<tr style="background:#f5f3ff;">'
+                    + '<td colspan="2" style="padding:2px 2px 2px 12px;font-size:9px;color:#7c3aed;">&#8627; ' + escHtml(bp.name) + (bp.sku ? ' (' + escHtml(bp.sku) + ')' : '') + '</td>'
+                    + '<td style="padding:2px 0;text-align:center;font-size:9px;color:#7c3aed;">' + escHtml(bp.qty) + '</td>'
+                    + '<td></td>'
+                    + '</tr>';
+            });
         });
 
         const hasProductDisc = completionData.productDiscountTotal && parseFloat(completionData.productDiscountTotal) > 0;

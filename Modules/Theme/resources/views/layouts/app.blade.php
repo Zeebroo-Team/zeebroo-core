@@ -592,9 +592,9 @@
             @endif
             @if($showSidebarProductSection)
                 <div class="menu-group-title">
-                    <i class="fa fa-boxes-stacked"></i><span>Catalog</span>
+                    <i class="fa fa-boxes-stacked"></i><span>Products Catalog</span>
                 </div>
-                <div class="submenu" aria-label="Catalog">
+                <div class="submenu" aria-label="Products Catalog">
                     @if($showSidebarProductBrandsLink)
                         <a href="{{ route('product.brands.index') }}" class="{{ request()->routeIs('product.brands.*') ? 'active' : '' }}"><i class="fa fa-tag"></i><span>Brands</span></a>
                     @endif
@@ -711,10 +711,13 @@
                 </div>
             @endif
             @if($showSidebarServiceLink)
-                <a href="{{ route('service.catalog.index') }}" class="{{ request()->routeIs('service.*') ? 'active' : '' }}"><i class="fa fa-screwdriver-wrench"></i><span>Services</span></a>
+                <a href="{{ route('service.catalog.index') }}" class="{{ request()->routeIs('service.*') ? 'active' : '' }}"><i class="fa fa-screwdriver-wrench"></i><span>Service Catalog</span></a>
                 <div class="submenu">
                     <a href="{{ route('service.catalog.index') }}" @class(['active' => request()->routeIs('service.catalog.*')])>
-                        <i class="fa fa-list-check"></i><span>Catalog</span>
+                        <i class="fa fa-list-check"></i><span>Services</span>
+                    </a>
+                    <a href="{{ route('service.categories.index') }}" @class(['active' => request()->routeIs('service.categories.*')])>
+                        <i class="fa fa-folder-tree"></i><span>Categories</span>
                     </a>
                     <a href="{{ route('service.requests.index') }}" @class(['active' => request()->routeIs('service.requests.*')])>
                         <i class="fa fa-inbox"></i><span>Requests</span>

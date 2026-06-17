@@ -56,6 +56,7 @@
     .onboard-step{display:none;animation:fadeIn .25s ease}
     .onboard-step.active{display:grid;gap:12px}
     .type-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+    .type-grid--3{grid-template-columns:repeat(3,minmax(0,1fr))}
     .type-card{
         border:1px solid #d1d5db;
         border-radius:12px;
@@ -96,7 +97,11 @@
         0%{transform:translateY(0) rotate(0deg);opacity:.7;border-radius:4px}
         100%{transform:translateY(-110vh) rotate(520deg);opacity:0;border-radius:50%}
     }
-    @media (max-width:700px){.type-grid{grid-template-columns:1fr}}
+    @media (max-width:700px){
+        .type-grid{grid-template-columns:1fr}
+        .type-grid--3{grid-template-columns:repeat(2,minmax(0,1fr))}
+    }
+    @media (max-width:480px){.type-grid--3{grid-template-columns:1fr}}
 </style>
 
 <div class="account-onboard-shell">
@@ -108,13 +113,15 @@
             @csrf
             <input type="hidden" name="from_onboarding" value="1">
             <input type="hidden" name="bank_type_id" id="bankTypeId" value="{{ old('bank_type_id', $defaultBankTypeId) }}">
+            <input type="hidden" name="category" id="accountCategoryId" value="{{ old('category', '') }}">
 
             <div class="step-head">
                 <h2 style="margin:0;">Account Onboarding Wizard</h2>
-                <span class="step-badge" id="stepBadge">Step 1 of 4</span>
+                <span class="step-badge" id="stepBadge">Step 1 of 5</span>
             </div>
             <p class="muted" style="margin:0 0 10px;">Please setup account details for your business.</p>
 
+            {{-- Step 1: Account type --}}
             <div class="onboard-step active" id="step1">
                 <h3 style="margin:4px 0;">Select account type</h3>
                 <div class="type-grid">
@@ -134,7 +141,29 @@
                 </div>
             </div>
 
+            {{-- Step 2: Account category --}}
             <div class="onboard-step" id="step2">
+                <h3 style="margin:4px 0;">What is this account for?</h3>
+                <div class="type-grid type-grid--3">
+                    @foreach($accountCategories as $value => $cat)
+                        <button
+                            type="button"
+                            class="cat-card type-card {{ old('category') === $value ? 'active' : '' }}"
+                            data-cat-value="{{ $value }}"
+                        >
+                            <h4>{{ $cat['label'] }}</h4>
+                            <p>{{ $cat['desc'] }}</p>
+                        </button>
+                    @endforeach
+                </div>
+                <div class="onboard-actions">
+                    <button type="button" class="btn-soft" id="backToStep1">Back</button>
+                    <button type="button" id="toStep3">Next</button>
+                </div>
+            </div>
+
+            {{-- Step 3: Bank and account name --}}
+            <div class="onboard-step" id="step3">
                 <h3 style="margin:4px 0;">Bank and account name</h3>
                 <select name="bank_id" required>
                     <option value="">Select bank</option>
@@ -144,12 +173,13 @@
                 </select>
                 <input name="account_name" value="{{ old('account_name') }}" placeholder="Account name" required>
                 <div class="onboard-actions">
-                    <button type="button" class="btn-soft" id="backToStep1">Back</button>
-                    <button type="button" id="toStep3">Next</button>
+                    <button type="button" class="btn-soft" id="backToStep2">Back</button>
+                    <button type="button" id="toStep4">Next</button>
                 </div>
             </div>
 
-            <div class="onboard-step" id="step3">
+            {{-- Step 4: Other details --}}
+            <div class="onboard-step" id="step4">
                 <h3 style="margin:4px 0;">Other details</h3>
                 <select name="business_id" required>
                     <option value="">Select business</option>
@@ -161,18 +191,19 @@
                 <input name="bank_account_number" value="{{ old('bank_account_number') }}" placeholder="Bank account number" required>
                 <input name="branch" value="{{ old('branch') }}" placeholder="Branch" required>
                 <div class="onboard-actions">
-                    <button type="button" class="btn-soft" id="backToStep2">Back</button>
-                    <button type="button" id="toStep4">Next</button>
+                    <button type="button" class="btn-soft" id="backToStep3">Back</button>
+                    <button type="button" id="toStep5">Next</button>
                 </div>
             </div>
 
-            <div class="onboard-step" id="step4">
+            {{-- Step 5: Balance and notes --}}
+            <div class="onboard-step" id="step5">
                 <h3 style="margin:4px 0;">Current balance and other fields</h3>
                 <input name="current_balance" type="number" min="0" step="0.01" value="{{ old('current_balance') }}" placeholder="Current Balance of your account" required>
                 <input name="bank_officer_contact" value="{{ old('bank_officer_contact') }}" placeholder="Bank officer contact (optional)">
                 <textarea name="notes" placeholder="Notes (optional)">{{ old('notes') }}</textarea>
                 <div class="onboard-actions">
-                    <button type="button" class="btn-soft" id="backToStep3">Back</button>
+                    <button type="button" class="btn-soft" id="backToStep4">Back</button>
                     <button type="submit">Create Account</button>
                 </div>
             </div>
@@ -181,19 +212,21 @@
 </div>
 <script>
     const stepBadge = document.getElementById('stepBadge');
-    const step1 = document.getElementById('step1');
-    const step2 = document.getElementById('step2');
-    const step3 = document.getElementById('step3');
-    const step4 = document.getElementById('step4');
+    const steps = [
+        document.getElementById('step1'),
+        document.getElementById('step2'),
+        document.getElementById('step3'),
+        document.getElementById('step4'),
+        document.getElementById('step5'),
+    ];
     const bankTypeInput = document.getElementById('bankTypeId');
-    const typeCards = document.querySelectorAll('.type-card');
+    const categoryInput = document.getElementById('accountCategoryId');
+    const typeCards = document.querySelectorAll('.type-card:not(.cat-card)');
+    const catCards = document.querySelectorAll('.cat-card');
 
     const setStep = (num) => {
-        step1.classList.toggle('active', num === 1);
-        step2.classList.toggle('active', num === 2);
-        step3.classList.toggle('active', num === 3);
-        step4.classList.toggle('active', num === 4);
-        stepBadge.textContent = `Step ${num} of 4`;
+        steps.forEach((s, i) => s.classList.toggle('active', i + 1 === num));
+        stepBadge.textContent = `Step ${num} of 5`;
     };
 
     typeCards.forEach((card) => {
@@ -204,10 +237,16 @@
         });
     });
 
+    catCards.forEach((card) => {
+        card.addEventListener('click', () => {
+            catCards.forEach((c) => c.classList.remove('active'));
+            card.classList.add('active');
+            categoryInput.value = card.dataset.catValue;
+        });
+    });
+
     document.getElementById('toStep2')?.addEventListener('click', () => {
-        if (!bankTypeInput.value) {
-            return;
-        }
+        if (!bankTypeInput.value) return;
         setStep(2);
     });
     document.getElementById('backToStep1')?.addEventListener('click', () => setStep(1));
@@ -215,13 +254,15 @@
     document.getElementById('backToStep2')?.addEventListener('click', () => setStep(2));
     document.getElementById('toStep4')?.addEventListener('click', () => setStep(4));
     document.getElementById('backToStep3')?.addEventListener('click', () => setStep(3));
+    document.getElementById('toStep5')?.addEventListener('click', () => setStep(5));
+    document.getElementById('backToStep4')?.addEventListener('click', () => setStep(4));
 
     @if($errors->has('bank_id') || $errors->has('account_name'))
-        setStep(2);
-    @elseif($errors->has('business_id') || $errors->has('branch_id') || $errors->has('bank_account_number') || $errors->has('branch'))
         setStep(3);
-    @elseif($errors->has('current_balance') || $errors->has('bank_officer_contact') || $errors->has('notes'))
+    @elseif($errors->has('business_id') || $errors->has('branch_id') || $errors->has('bank_account_number') || $errors->has('branch'))
         setStep(4);
+    @elseif($errors->has('current_balance') || $errors->has('bank_officer_contact') || $errors->has('notes'))
+        setStep(5);
     @endif
 </script>
 @endsection

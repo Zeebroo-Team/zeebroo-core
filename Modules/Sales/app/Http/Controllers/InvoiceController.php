@@ -11,9 +11,11 @@ use Illuminate\View\View;
 use Modules\Business\Models\Business;
 use Modules\DesignStudio\Models\Design;
 use Modules\Pos\Models\Customer;
+use Modules\Product\Models\Product;
 use Modules\Sales\Http\Controllers\Concerns\ResolvesSalesBusiness;
 use Modules\Sales\Models\Invoice;
 use Modules\Sales\Services\InvoiceService;
+use Modules\Service\Models\ServiceItem;
 
 class InvoiceController extends Controller
 {
@@ -40,7 +42,6 @@ class InvoiceController extends Controller
             'hasInvoices'    => $this->invoiceService->businessHasInvoices($business),
             'invoices'       => $this->invoiceService->listForBusiness($business, $search, $statusFilter, $customerId),
             'customers'      => Customer::where('business_id', $business->id)->orderBy('name')->get(),
-            'products'       => $business->products()->where('is_active', true)->orderBy('name')->get(['id', 'name', 'sku', 'unit_price']),
             'currency'       => (string) (get_settings('business.currency', '', $business) ?: ''),
             'search'         => $search,
             'statusFilter'   => $statusFilter,
@@ -77,7 +78,7 @@ class InvoiceController extends Controller
             return $business;
         }
 
-        $invoice->load(['customer', 'items.product']);
+        $invoice->load(['customer', 'items.product', 'items.serviceItem.products']);
         $currency = (string) (get_settings('business.currency', '', $business) ?: '');
 
         return view('sales::invoices.show', [
@@ -99,13 +100,12 @@ class InvoiceController extends Controller
                 ->withErrors(['invoice' => 'This invoice can no longer be edited.']);
         }
 
-        $invoice->load(['customer', 'items.product']);
+        $invoice->load(['customer', 'items.product', 'items.serviceItem']);
 
         return view('sales::invoices.edit', [
             'business'  => $business,
             'invoice'   => $invoice,
             'customers' => Customer::where('business_id', $business->id)->orderBy('name')->get(),
-            'products'  => $business->products()->where('is_active', true)->orderBy('name')->get(['id', 'name', 'sku', 'unit_price']),
             'currency'  => (string) (get_settings('business.currency', '', $business) ?: ''),
         ]);
     }
@@ -152,10 +152,15 @@ class InvoiceController extends Controller
             return $business;
         }
 
-        $this->invoiceService->markPaid($invoice);
+        try {
+            $this->invoiceService->markPaid($invoice);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return redirect()->route('sales.invoices.show', $invoice)
+                ->withErrors($e->errors());
+        }
 
         return redirect()->route('sales.invoices.show', $invoice)
-            ->with('status', 'Invoice marked as paid.');
+            ->with('status', 'Invoice marked as paid. Stock deducted.');
     }
 
     public function markOverdue(Request $request, Invoice $invoice): RedirectResponse
@@ -191,7 +196,7 @@ class InvoiceController extends Controller
             return $business;
         }
 
-        $invoice->load(['customer', 'items.product']);
+        $invoice->load(['customer', 'items.product', 'items.serviceItem.products']);
 
         $currency   = (string) (get_settings('business.currency', '', $business) ?: '');
         $mainBranch = $business->branches()->first();
@@ -262,7 +267,7 @@ class InvoiceController extends Controller
     {
         $invoice = Invoice::query()
             ->where('share_token', $token)
-            ->with(['customer', 'items.product', 'business.branches'])
+            ->with(['customer', 'items.product', 'items.serviceItem.products', 'business.branches'])
             ->firstOrFail();
 
         $business   = $invoice->business;
@@ -306,21 +311,73 @@ class InvoiceController extends Controller
         return $business;
     }
 
+    public function lineItemSearch(Request $request): \Illuminate\Http\JsonResponse
+    {
+        $business = $this->requireBusiness($request);
+        if ($business instanceof RedirectResponse) {
+            return response()->json([], 401);
+        }
+
+        $q     = trim((string) $request->query('q', ''));
+        $limit = min(20, max(1, (int) $request->query('limit', 12)));
+
+        $products = Product::where('business_id', $business->id)
+            ->where('is_active', true)
+            ->when($q, fn ($qb) => $qb->where(fn ($w) => $w
+                ->where('name', 'like', "%{$q}%")
+                ->orWhere('sku', 'like', "%{$q}%")))
+            ->orderBy('name')
+            ->limit($limit)
+            ->get(['id', 'name', 'sku', 'unit_price', 'unit'])
+            ->map(fn ($p) => [
+                'id'    => $p->id,
+                'type'  => 'product',
+                'name'  => $p->name,
+                'sku'   => $p->sku ?? '',
+                'price' => number_format((float) $p->unit_price, 2, '.', ''),
+                'unit'  => $p->unit ?? '',
+            ]);
+
+        $services = ServiceItem::where('business_id', $business->id)
+            ->where('is_active', true)
+            ->when($q, fn ($qb) => $qb->where('name', 'like', "%{$q}%"))
+            ->orderBy('name')
+            ->limit($limit)
+            ->get(['id', 'name', 'price', 'duration_minutes'])
+            ->map(fn ($s) => [
+                'id'    => $s->id,
+                'type'  => 'service',
+                'name'  => $s->name,
+                'sku'   => '',
+                'price' => number_format((float) ($s->price ?? 0), 2, '.', ''),
+                'unit'  => $s->duration_minutes ? ($s->duration_minutes . 'min') : '',
+            ]);
+
+        $results = $products->concat($services)
+            ->sortBy('name')
+            ->values()
+            ->take($limit);
+
+        return response()->json($results);
+    }
+
     private function validatedHeader(Request $request, Business $business): array
     {
         return $request->validate([
-            'customer_id'     => ['nullable', 'integer', Rule::exists('pos_customers', 'id')->where(fn ($q) => $q->where('business_id', $business->id))],
-            'reference'       => ['nullable', 'string', 'max:120'],
-            'issue_date'      => ['required', 'date'],
-            'due_date'        => ['nullable', 'date', 'after_or_equal:issue_date'],
-            'notes'           => ['nullable', 'string', 'max:5000'],
-            'discount_amount' => ['nullable', 'numeric', 'min:0', 'max:9999999'],
-            'tax_amount'      => ['nullable', 'numeric', 'min:0', 'max:9999999'],
-            'items'           => ['required', 'array', 'min:1'],
-            'items.*.product_id'  => ['nullable', 'integer', Rule::exists('products', 'id')->where(fn ($q) => $q->where('business_id', $business->id))],
-            'items.*.description' => ['nullable', 'string', 'max:255'],
-            'items.*.quantity'    => ['required', 'numeric', 'min:0.001', 'max:999999'],
-            'items.*.unit_price'  => ['required', 'numeric', 'min:0', 'max:999999999'],
+            'customer_id'          => ['nullable', 'integer', Rule::exists('pos_customers', 'id')->where(fn ($q) => $q->where('business_id', $business->id))],
+            'reference'            => ['nullable', 'string', 'max:120'],
+            'issue_date'           => ['required', 'date'],
+            'due_date'             => ['nullable', 'date', 'after_or_equal:issue_date'],
+            'notes'                => ['nullable', 'string', 'max:5000'],
+            'discount_amount'      => ['nullable', 'numeric', 'min:0', 'max:9999999'],
+            'tax_amount'           => ['nullable', 'numeric', 'min:0', 'max:9999999'],
+            'items'                => ['required', 'array', 'min:1'],
+            'items.*.item_type'       => ['nullable', 'string', 'in:product,service'],
+            'items.*.product_id'      => ['nullable', 'integer', Rule::exists('products', 'id')->where(fn ($q) => $q->where('business_id', $business->id))],
+            'items.*.service_item_id' => ['nullable', 'integer', Rule::exists('service_items', 'id')->where(fn ($q) => $q->where('business_id', $business->id))],
+            'items.*.description'     => ['nullable', 'string', 'max:255'],
+            'items.*.quantity'        => ['required', 'numeric', 'min:0.001', 'max:999999'],
+            'items.*.unit_price'      => ['required', 'numeric', 'min:0', 'max:999999999'],
         ]);
     }
 
