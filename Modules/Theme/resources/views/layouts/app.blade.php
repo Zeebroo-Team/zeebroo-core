@@ -348,7 +348,7 @@
         $businessFeatures = $navBusiness
             ? (function () use ($navBusiness) {
                 $saved = (array) ($navBusiness->getSetting('business.features', []) ?: []);
-                $defaults = ['account_management' => true, 'bill_management' => true, 'human_resources' => true, 'point_of_sale' => true, 'product_management' => true, 'social_media_campaign' => true, 'stock_management' => true];
+                $defaults = ['account_management' => true, 'bill_management' => true, 'human_resources' => true, 'point_of_sale' => true, 'product_management' => true, 'service_management' => true, 'social_media_campaign' => true, 'stock_management' => true];
                 return !empty($saved) ? array_merge($defaults, array_map('boolval', $saved)) : $defaults;
             })()
             : [];
@@ -428,7 +428,7 @@
             $navBusiness->fileManagerFiles()->exists() || $navBusiness->fileManagerFolders()->exists()
         );
         $showSidebarDesignStudioLink = $navBusiness && Route::has('designstudio.index');
-        $showSidebarServiceLink = $navBusiness && Route::has('service.catalog.index');
+        $showSidebarServiceLink = $navBusiness && Route::has('service.catalog.index') && $featureOn('service_management');
         $showSidebarDocumentationLink = $navBusiness
             && Route::has('documentation.documents.index')
             && \Modules\Documentation\Models\Document::where('business_id', $navBusiness->id)->exists();
@@ -1242,6 +1242,7 @@ html[data-theme="light"] .bfm-dep-hint,html[data-theme="light_blue"] .bfm-dep-hi
                         ['key' => 'human_resources',      'label' => 'Human Resources',       'img' => 'features/human-resource-management.png'],
                         ['key' => 'point_of_sale',        'label' => 'Point of Sale',         'img' => 'features/point-of-sale.png'],
                         ['key' => 'product_management',   'label' => 'Product Management',    'img' => 'features/product-management.svg'],
+                        ['key' => 'service_management',   'label' => 'Service Management',    'img' => 'features/service.png'],
                         ['key' => 'social_media_campaign','label' => 'Social Media Campaign', 'img' => 'features/social-media-campaign.png'],
                         ['key' => 'stock_management',     'label' => 'Stock Management',      'img' => 'features/stock-management.png'],
                     ];
@@ -1446,7 +1447,7 @@ html[data-theme="light"] .bfm-dep-hint,html[data-theme="light_blue"] .bfm-dep-hi
                 status.className = 'bfm-status bfm-ok';
                 status.textContent = 'Saved successfully.';
                 bfmOnboarding = false;
-                setTimeout(closeModal, 900);
+                setTimeout(function () { window.location.reload(); }, 900);
             } else {
                 throw new Error(data.error || 'Save failed.');
             }

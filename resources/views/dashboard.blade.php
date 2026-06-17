@@ -11,13 +11,38 @@
         : false;
 
     $wizFeatureItems = [
-        ['key' => 'account_management',   'label' => 'Account Management',   'icon' => 'fa-wallet',             'image' => 'account-management.png',        'desc' => 'Track bank accounts, income, expenses and ledgers',      'required' => true],
-        ['key' => 'bill_management',      'label' => 'Bill Management',       'icon' => 'fa-file-invoice-dollar','image' => 'bill-management.png',           'desc' => 'Manage recurring utility and service bills with reminders'],
-        ['key' => 'human_resources',      'label' => 'Human Resources',       'icon' => 'fa-users-gear',         'image' => 'human-resource-management.png', 'desc' => 'Payroll, leave, attendance and employee management'],
-        ['key' => 'product_management',   'label' => 'Product Management',    'icon' => 'fa-boxes-stacked',      'image' => 'product-management.svg',        'desc' => 'Product catalogue, pricing, variants and categories'],
-        ['key' => 'stock_management',     'label' => 'Stock Management',      'icon' => 'fa-warehouse',          'image' => 'stock-management.png',          'desc' => 'Inventory levels, stock transfers and low-stock alerts'],
-        ['key' => 'point_of_sale',        'label' => 'Point of Sale',         'icon' => 'fa-cash-register',      'image' => 'point-of-sale.png',             'desc' => 'Counter sales, receipts, daily float and cashier shifts', 'dependsOn' => ['product_management', 'stock_management']],
-        ['key' => 'social_media_campaign','label' => 'Social Media Campaign', 'icon' => 'fa-bullhorn',           'image' => 'social-media-campaign.png',     'desc' => 'Design, schedule and track marketing campaigns'],
+        ['key' => 'account_management',   'label' => 'Account Management',   'icon' => 'fa-wallet',             'image' => 'account-management.png',        'desc' => 'Track bank accounts, income, expenses and ledgers',             'required' => true,
+            'fullDesc'   => 'The financial backbone of your SociBiz workspace. Track all your bank and cash accounts, record income and expenses with full ledger support, monitor loan repayments, manage rental cash flows, and view detailed transaction histories across your entire business.',
+            'highlights' => ['Bank and cash account tracking', 'Income and expense ledger', 'Loan and rental management', 'Full transaction history and reports'],
+        ],
+        ['key' => 'bill_management',      'label' => 'Bill Management',       'icon' => 'fa-file-invoice-dollar','image' => 'bill-management.png',           'desc' => 'Manage recurring utility and service bills with reminders',
+            'fullDesc'   => 'Stay on top of every recurring obligation. Track utility bills, subscriptions and service contracts with automated due-date reminders. View upcoming and overdue payments at a glance to keep your cash flow healthy.',
+            'highlights' => ['Recurring bill tracking', 'Due date and overdue alerts', 'Bill category organisation', 'Cash flow visibility'],
+        ],
+        ['key' => 'human_resources',      'label' => 'Human Resources',       'icon' => 'fa-users-gear',         'image' => 'human-resource-management.png', 'desc' => 'Payroll, leave, attendance and employee management',
+            'fullDesc'   => 'Manage your entire workforce from hire to payroll. Maintain employee records, configure job titles and departments, track attendance and leave balances, run payroll cycles, and issue payslips — all in one place.',
+            'highlights' => ['Employee profiles and records', 'Attendance and leave tracking', 'Payroll processing and payslips', 'Department and role management'],
+        ],
+        ['key' => 'product_management',   'label' => 'Product Management',    'icon' => 'fa-boxes-stacked',      'image' => 'product-management.svg',        'desc' => 'Product catalogue, pricing, variants and categories',
+            'fullDesc'   => 'Build and maintain a professional product catalogue. Organise products into categories, set pricing and variants, attach images and specifications, manage bundles, and keep your listings consistent across all sales channels.',
+            'highlights' => ['Product catalogue and categories', 'Pricing, variants and bundles', 'Product images and specifications', 'Multi-channel listing consistency'],
+        ],
+        ['key' => 'stock_management',     'label' => 'Stock Management',      'icon' => 'fa-warehouse',          'image' => 'stock-management.png',          'desc' => 'Inventory levels, stock transfers and low-stock alerts',
+            'fullDesc'   => 'Keep your inventory accurate and up to date. Set reorder thresholds, record stock-in and stock-out movements, track stock across multiple warehouse branches, and get notified before items run out.',
+            'highlights' => ['Real-time inventory levels', 'Stock-in and stock-out movements', 'Multi-warehouse tracking', 'Low-stock alerts and reorder points'],
+        ],
+        ['key' => 'point_of_sale',        'label' => 'Point of Sale',         'icon' => 'fa-cash-register',      'image' => 'point-of-sale.png',             'desc' => 'Counter sales, receipts, daily float and cashier shifts', 'dependsOn' => ['product_management', 'stock_management'],
+            'fullDesc'   => 'Run fast, reliable counter sales from any device. Process payments, print or email receipts, manage daily float, track cashier shifts, and keep a complete record of every transaction. Requires Product and Stock Management.',
+            'highlights' => ['Counter sales and receipts', 'Multiple payment methods', 'Daily float and cashier shifts', 'Full sales history and void management'],
+        ],
+        ['key' => 'service_management',   'label' => 'Service Management',    'icon' => 'fa-screwdriver-wrench', 'image' => 'service.png',                   'desc' => 'Service catalog, requests and service delivery management',
+            'fullDesc'   => 'Deliver and track services alongside your products. Build a service catalogue with pricing, manage customer requests from intake to completion, assign staff to jobs, and sell services directly through the POS terminal.',
+            'highlights' => ['Service catalogue and pricing', 'Customer request management', 'Staff assignment and job tracking', 'Sell services via POS'],
+        ],
+        ['key' => 'social_media_campaign','label' => 'Social Media Campaign', 'icon' => 'fa-bullhorn',           'image' => 'social-media-campaign.png',     'desc' => 'Design, schedule and track marketing campaigns',
+            'fullDesc'   => 'Plan and execute marketing campaigns without leaving SociBiz. Design campaign briefs, set targets and budgets, schedule content across platforms, and measure performance results to keep refining your strategy.',
+            'highlights' => ['Campaign planning and briefs', 'Budget and target setting', 'Content scheduling', 'Performance tracking and analytics'],
+        ],
     ];
 @endphp
 
@@ -300,8 +325,11 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
         #wizardStep1,#wizardStep4{
             max-width:640px;margin:0 auto;
         }
-        #wizardStep2,#wizardStep3{
+        #wizardStep2{
             max-width:900px;margin:0 auto;
+        }
+        #wizardStep3{
+            max-width:1160px;margin:0 auto;
         }
         .wiz-card-eyebrow{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--primary);margin:0 0 8px;text-align:center;}
         .wiz-card-title{font-size:clamp(26px,3.4vw,36px);font-weight:800;color:var(--text);margin:0 0 8px;line-height:1.2;letter-spacing:-.025em;text-align:center;}
@@ -488,41 +516,85 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
         .wiz-feat-sidebar-status--off{color:var(--muted);}
         .wiz-feat-sidebar-status--req{color:#6366f1;}
 
-        .wiz-feat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:8px;padding:3px;}
+        .wiz-feat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:8px;padding:3px;}
         @media(max-width:700px){.wiz-feat-grid{grid-template-columns:repeat(2,1fr);}}
         .wiz-feat-card{
-            position:relative;border:2px solid var(--border);border-radius:16px;overflow:hidden;cursor:pointer;
+            position:relative;border:2px solid var(--border);border-radius:12px;overflow:hidden;cursor:pointer;
             background:var(--card);transition:border-color .2s ease,box-shadow .2s ease,opacity .2s ease;user-select:none;
             display:flex;flex-direction:column;
         }
-        .wiz-feat-card:hover{border-color:color-mix(in srgb,var(--primary) 60%,var(--border));box-shadow:0 6px 24px -8px color-mix(in srgb,var(--primary) 18%,transparent);}
-        .wiz-feat-card--on{border-color:var(--primary);box-shadow:0 6px 24px -8px color-mix(in srgb,var(--primary) 28%,transparent);}
+        .wiz-feat-card:hover{border-color:color-mix(in srgb,var(--primary) 60%,var(--border));box-shadow:0 4px 14px -6px color-mix(in srgb,var(--primary) 18%,transparent);}
+        .wiz-feat-card--on{border-color:var(--primary);box-shadow:0 4px 14px -6px color-mix(in srgb,var(--primary) 28%,transparent);}
         .wiz-feat-card:not(.wiz-feat-card--on){opacity:.52;filter:grayscale(.55);}
         .wiz-feat-card--required{cursor:default;}
-        .wiz-feat-card--required:hover{box-shadow:0 6px 24px -8px color-mix(in srgb,var(--primary) 28%,transparent);}
+        .wiz-feat-card--required:hover{box-shadow:0 4px 14px -6px color-mix(in srgb,var(--primary) 28%,transparent);}
         .wiz-feat-card--dep-blocked{opacity:.35;filter:grayscale(.75);border-style:dashed;}
         /* Image area */
-        .wiz-feat-img-wrap{position:relative;width:100%;height:128px;overflow:hidden;background:color-mix(in srgb,var(--primary) 6%,var(--bg));}
-        .wiz-feat-img{width:100%;height:100%;object-fit:cover;transition:transform .35s ease;}
-        .wiz-feat-card:hover .wiz-feat-img{transform:scale(1.05);}
-        .wiz-feat-img-overlay{position:absolute;inset:0;background:linear-gradient(to bottom,transparent 40%,rgba(0,0,0,.28));}
+        .wiz-feat-img-wrap{position:relative;width:100%;overflow:hidden;background:color-mix(in srgb,var(--primary) 6%,var(--bg));}
+        .wiz-feat-img{width:100%;height:auto;display:block;object-fit:contain;transition:transform .35s ease;}
+        .wiz-feat-card:hover .wiz-feat-img{transform:scale(1.04);}
+        .wiz-feat-img-overlay{position:absolute;inset:0;background:linear-gradient(to bottom,transparent 40%,rgba(0,0,0,.22));}
         /* Check circle */
         .wiz-feat-check{
-            position:absolute;top:9px;right:9px;width:26px;height:26px;border-radius:50%;
+            position:absolute;top:6px;right:6px;width:18px;height:18px;border-radius:50%;
             border:2px solid rgba(255,255,255,.7);background:rgba(255,255,255,.2);
-            display:grid;place-items:center;font-size:11px;color:transparent;
+            display:grid;place-items:center;font-size:8px;color:transparent;
             transition:background .2s,border-color .2s,color .2s;
         }
         .wiz-feat-card--on .wiz-feat-check{background:var(--primary);border-color:var(--primary);color:#fff;}
         /* Body */
-        .wiz-feat-body{padding:12px 13px 13px;display:flex;flex-direction:column;gap:5px;flex:1;}
-        .wiz-feat-top{display:flex;align-items:flex-start;justify-content:space-between;gap:6px;}
-        .wiz-feat-name{font-size:13px;font-weight:700;color:var(--text);line-height:1.3;flex:1;}
-        .wiz-feat-badge{flex-shrink:0;font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:3px 8px;border-radius:999px;white-space:nowrap;background:color-mix(in srgb,var(--primary) 13%,transparent);color:var(--primary);}
+        .wiz-feat-body{padding:8px 10px 10px;display:flex;flex-direction:column;gap:3px;flex:1;}
+        .wiz-feat-top{display:flex;align-items:flex-start;justify-content:space-between;gap:5px;}
+        .wiz-feat-name{font-size:11.5px;font-weight:700;color:var(--text);line-height:1.3;flex:1;}
+        .wiz-feat-badge{flex-shrink:0;font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:2px 6px;border-radius:999px;white-space:nowrap;background:color-mix(in srgb,var(--primary) 13%,transparent);color:var(--primary);}
         .wiz-feat-card--required .wiz-feat-badge{background:color-mix(in srgb,#6366f1 13%,transparent);color:#6366f1;}
         .wiz-feat-card:not(.wiz-feat-card--on) .wiz-feat-badge{background:color-mix(in srgb,var(--muted) 13%,transparent);color:var(--muted);}
-        .wiz-feat-desc{font-size:11.5px;color:var(--muted);line-height:1.45;margin:0;}
+        .wiz-feat-desc{font-size:10.5px;color:var(--muted);line-height:1.4;margin:0;}
         .wiz-feat-dep-hint{font-size:10px;font-weight:600;color:#b45309;}
+        .wiz-feat-detail-btn{
+            display:inline-flex;align-items:center;gap:4px;margin-top:5px;padding:3px 8px;
+            font-size:10px;font-weight:650;border-radius:6px;border:1px solid var(--border);
+            background:color-mix(in srgb,var(--card) 90%,transparent);color:var(--muted);
+            cursor:pointer;font-family:inherit;line-height:1.2;transition:.15s ease;
+        }
+        .wiz-feat-detail-btn:hover{color:var(--text);border-color:color-mix(in srgb,var(--primary) 45%,var(--border));background:color-mix(in srgb,var(--primary) 8%,transparent);}
+        /* Feature detail modal */
+        .wiz-feat-modal{position:fixed;inset:0;z-index:10000;display:none;align-items:center;justify-content:center;padding:clamp(12px,3vw,24px);box-sizing:border-box;}
+        .wiz-feat-modal.is-open{display:flex;}
+        .wiz-feat-modal__backdrop{position:absolute;inset:0;background:rgba(2,6,23,.62);backdrop-filter:blur(5px);cursor:pointer;}
+        :is(html[data-theme="light"],html[data-theme="light_blue"]) .wiz-feat-modal__backdrop{background:rgba(17,24,39,.45);}
+        .wiz-feat-modal__shell{
+            position:relative;z-index:1;width:100%;max-width:560px;border-radius:20px;
+            border:1px solid var(--border);background:var(--card);
+            box-shadow:0 28px 64px rgba(0,0,0,.34);
+            display:flex;flex-direction:column;
+            max-height:min(88vh,760px);
+        }
+        .wiz-feat-modal__img-wrap{
+            flex-shrink:0;width:100%;height:200px;overflow:hidden;border-radius:20px 20px 0 0;
+            background:color-mix(in srgb,var(--primary) 6%,var(--bg));
+        }
+        .wiz-feat-modal__img{width:100%;height:100%;display:block;object-fit:cover;}
+        .wiz-feat-modal__scroll{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;}
+        .wiz-feat-modal__body{padding:24px 26px 8px;}
+        .wiz-feat-modal__header{display:flex;align-items:flex-start;gap:14px;margin-bottom:16px;}
+        .wiz-feat-modal__icon{
+            width:48px;height:48px;flex-shrink:0;border-radius:13px;display:grid;place-items:center;
+            font-size:21px;color:var(--primary);
+            background:color-mix(in srgb,var(--primary) 12%,transparent);
+            border:1px solid color-mix(in srgb,var(--primary) 28%,var(--border));
+        }
+        .wiz-feat-modal__header-text{flex:1;min-width:0;}
+        .wiz-feat-modal__title{margin:0 0 5px;font-size:20px;font-weight:800;letter-spacing:-.025em;line-height:1.2;color:var(--text);}
+        .wiz-feat-modal__badge{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:999px;font-size:11px;font-weight:700;background:color-mix(in srgb,#6366f1 13%,transparent);color:#6366f1;}
+        .wiz-feat-modal__desc{margin:0 0 22px;font-size:14px;line-height:1.7;color:var(--muted);}
+        .wiz-feat-modal__hl-title{margin:0 0 10px;font-size:10.5px;font-weight:780;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);}
+        .wiz-feat-modal__hl-list{margin:0 0 26px;padding:0;list-style:none;display:flex;flex-direction:column;gap:9px;}
+        .wiz-feat-modal__hl-item{display:flex;align-items:flex-start;gap:10px;font-size:13.5px;color:var(--text);line-height:1.45;font-weight:500;}
+        .wiz-feat-modal__hl-dot{width:22px;height:22px;border-radius:7px;display:grid;place-items:center;flex-shrink:0;margin-top:1px;font-size:10px;color:var(--primary);background:color-mix(in srgb,var(--primary) 12%,transparent);}
+        .wiz-feat-modal__foot{flex-shrink:0;padding:14px 26px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:flex-end;gap:10px;}
+        .wiz-feat-modal__close-btn{padding:9px 20px;font-size:13px;font-weight:700;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;font-family:inherit;transition:.15s ease;}
+        .wiz-feat-modal__close-btn:hover{border-color:color-mix(in srgb,var(--primary) 45%,var(--border));background:color-mix(in srgb,var(--primary) 6%,transparent);}
 
         /* Category search bar (step 2) */
         .wiz-cat-search-wrap{position:relative;display:flex;align-items:center;margin-bottom:12px;}
@@ -670,14 +742,14 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                             'software_industry'      => ['account_management', 'bill_management', 'human_resources', 'social_media_campaign', 'product_management'],
                             'local_retail'            => ['account_management', 'point_of_sale', 'product_management', 'stock_management', 'bill_management', 'social_media_campaign', 'human_resources'],
                             'food_beverage'           => ['account_management', 'point_of_sale', 'product_management', 'stock_management', 'bill_management', 'social_media_campaign', 'human_resources'],
-                            'healthcare'              => ['account_management', 'point_of_sale', 'bill_management', 'human_resources', 'product_management'],
+                            'healthcare'              => ['account_management', 'point_of_sale', 'bill_management', 'human_resources', 'product_management', 'service_management'],
                             'finance'                 => ['account_management', 'bill_management', 'human_resources', 'social_media_campaign'],
-                            'creative_media'          => ['account_management', 'social_media_campaign', 'bill_management', 'human_resources'],
+                            'creative_media'          => ['account_management', 'social_media_campaign', 'bill_management', 'human_resources', 'service_management'],
                             'ecommerce'               => ['account_management', 'point_of_sale', 'product_management', 'stock_management', 'social_media_campaign', 'bill_management', 'human_resources'],
                             'manufacturing'           => ['account_management', 'product_management', 'stock_management', 'bill_management', 'human_resources', 'point_of_sale'],
                             'real_estate'             => ['account_management', 'bill_management', 'human_resources', 'social_media_campaign'],
                             'nonprofit'               => ['account_management', 'bill_management', 'human_resources', 'social_media_campaign'],
-                            'professional_services'   => ['account_management', 'bill_management', 'human_resources', 'social_media_campaign'],
+                            'professional_services'   => ['account_management', 'bill_management', 'human_resources', 'social_media_campaign', 'service_management'],
                             'other'                   => ['account_management', 'bill_management', 'social_media_campaign'],
                         ];
                     @endphp
@@ -740,6 +812,7 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                                     'product_management'    => 'Products',
                                     'stock_management'      => 'Stock',
                                     'point_of_sale'         => 'POS',
+                                    'service_management'    => 'Services',
                                     'social_media_campaign' => 'Campaigns',
                                 ];
                             @endphp
@@ -841,6 +914,16 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                                                 @if(!empty($wizFeat['dependsOn']))
                                                     <span class="wiz-feat-dep-hint" style="display:none;"><i class="fa fa-triangle-exclamation" aria-hidden="true"></i> Needs Stock + Product</span>
                                                 @endif
+                                                <button type="button" class="wiz-feat-detail-btn"
+                                                    data-feat-label="{{ $wizFeat['label'] }}"
+                                                    data-feat-icon="{{ $wizFeat['icon'] }}"
+                                                    data-feat-img="{{ asset('features/' . $wizFeat['image']) }}"
+                                                    data-feat-fulldesc="{{ $wizFeat['fullDesc'] ?? ($wizFeat['desc'] ?? '') }}"
+                                                    data-feat-highlights="{{ json_encode($wizFeat['highlights'] ?? []) }}"
+                                                    data-feat-required="{{ !empty($wizFeat['required']) ? '1' : '0' }}"
+                                                    aria-label="View details for {{ $wizFeat['label'] }}">
+                                                    <i class="fa fa-circle-info" aria-hidden="true"></i> Details
+                                                </button>
                                             </div>
                                             @if(empty($wizFeat['required']))
                                                 <input type="checkbox" name="features[{{ $wizFeat['key'] }}]" value="1" @checked($wizFeatOn) style="position:absolute;opacity:0;pointer-events:none;width:0;height:0;">
@@ -1000,6 +1083,36 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
             </div>
         </div>
     </div>
+
+    {{-- Feature detail modal --}}
+    <div id="wizFeatModal" class="wiz-feat-modal" role="dialog" aria-modal="true" aria-labelledby="wizFeatModalTitle">
+        <div class="wiz-feat-modal__backdrop" id="wizFeatModalBackdrop"></div>
+        <div class="wiz-feat-modal__shell">
+            <div class="wiz-feat-modal__img-wrap">
+                <img id="wizFeatModalImg" src="" alt="" class="wiz-feat-modal__img">
+            </div>
+            <div class="wiz-feat-modal__scroll">
+                <div class="wiz-feat-modal__body">
+                    <div class="wiz-feat-modal__header">
+                        <div class="wiz-feat-modal__icon" id="wizFeatModalIcon" aria-hidden="true"></div>
+                        <div class="wiz-feat-modal__header-text">
+                            <h2 class="wiz-feat-modal__title" id="wizFeatModalTitle"></h2>
+                            <span id="wizFeatModalBadge" class="wiz-feat-modal__badge" style="display:none;"><i class="fa fa-lock" aria-hidden="true"></i> Required</span>
+                        </div>
+                    </div>
+                    <p class="wiz-feat-modal__desc" id="wizFeatModalDesc"></p>
+                    <p class="wiz-feat-modal__hl-title">What's included</p>
+                    <ul class="wiz-feat-modal__hl-list" id="wizFeatModalHlList"></ul>
+                </div>
+            </div>
+            <div class="wiz-feat-modal__foot">
+                <button type="button" class="wiz-feat-modal__close-btn" id="wizFeatModalCloseBtn">
+                    <i class="fa fa-arrow-left" aria-hidden="true"></i> Back
+                </button>
+            </div>
+        </div>
+    </div>
+
 @elseif(!$hasBankAccountForBusiness)
     <script>document.documentElement.classList.add('business-wizard-active');</script>
     <style>
@@ -1699,6 +1812,68 @@ $wizFeatMetaForJs = array_values(array_map(function ($f) {
     @elseif($errors->has('company_category_slug'))
         setWizStep(2, false);
     @endif
+
+    // ── Feature detail modal ──────────────────────────────────────────
+    (function () {
+        var modal     = document.getElementById('wizFeatModal');
+        var backdrop  = document.getElementById('wizFeatModalBackdrop');
+        var closeBtn  = document.getElementById('wizFeatModalCloseBtn');
+        var imgEl     = document.getElementById('wizFeatModalImg');
+        var iconEl    = document.getElementById('wizFeatModalIcon');
+        var badgeEl   = document.getElementById('wizFeatModalBadge');
+        var titleEl   = document.getElementById('wizFeatModalTitle');
+        var descEl    = document.getElementById('wizFeatModalDesc');
+        var hlList    = document.getElementById('wizFeatModalHlList');
+        if (!modal) return;
+
+        function openFeatModal(btn) {
+            var label      = btn.getAttribute('data-feat-label') || '';
+            var icon       = btn.getAttribute('data-feat-icon') || 'fa-star';
+            var img        = btn.getAttribute('data-feat-img') || '';
+            var fullDesc   = btn.getAttribute('data-feat-fulldesc') || '';
+            var required   = btn.getAttribute('data-feat-required') === '1';
+            var highlights = [];
+            try { highlights = JSON.parse(btn.getAttribute('data-feat-highlights') || '[]'); } catch (e) {}
+
+            imgEl.src = img;
+            imgEl.alt = label;
+            iconEl.innerHTML = '<i class="fa ' + icon + '" aria-hidden="true"></i>';
+            titleEl.textContent = label;
+            descEl.textContent  = fullDesc;
+            badgeEl.style.display = required ? 'inline-flex' : 'none';
+
+            hlList.innerHTML = '';
+            highlights.forEach(function (hl) {
+                var li = document.createElement('li');
+                li.className = 'wiz-feat-modal__hl-item';
+                li.innerHTML = '<span class="wiz-feat-modal__hl-dot"><i class="fa fa-check" aria-hidden="true"></i></span><span>' + hl + '</span>';
+                hlList.appendChild(li);
+            });
+
+            modal.classList.add('is-open');
+            document.body.style.overflow = 'hidden';
+            closeBtn && closeBtn.focus();
+        }
+
+        function closeFeatModal() {
+            modal.classList.remove('is-open');
+            document.body.style.overflow = '';
+        }
+
+        document.addEventListener('click', function (e) {
+            var btn = e.target.closest('.wiz-feat-detail-btn');
+            if (btn) {
+                e.stopPropagation();
+                openFeatModal(btn);
+            }
+        });
+
+        closeBtn && closeBtn.addEventListener('click', closeFeatModal);
+        backdrop && backdrop.addEventListener('click', closeFeatModal);
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' && modal.classList.contains('is-open')) closeFeatModal();
+        });
+    })();
 })();
 </script>
 @if($business && $hasBankAccountForBusiness)

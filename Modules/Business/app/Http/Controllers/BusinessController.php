@@ -30,6 +30,7 @@ class BusinessController extends Controller
         'human_resources',
         'point_of_sale',
         'product_management',
+        'service_management',
         'social_media_campaign',
         'stock_management',
     ];
