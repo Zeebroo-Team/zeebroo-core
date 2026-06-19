@@ -31,7 +31,7 @@ class HrLeaveRequestController extends Controller
             return redirect()->route('hr.onboarding');
         }
 
-        abort_unless($request->user()->businesses()->whereKey($business->id)->exists(), 403);
+        abort_unless(Business::canAccess($request->user(), $business), 403);
 
         return view('hrmanagement::leave-requests.index', [
             'business' => $business,
@@ -48,7 +48,7 @@ class HrLeaveRequestController extends Controller
             return redirect()->route('hr.onboarding');
         }
 
-        abort_unless($request->user()->businesses()->whereKey($business->id)->exists(), 403);
+        abort_unless(Business::canAccess($request->user(), $business), 403);
         abort_unless((int) $employee->business_id === (int) $business->id, 404);
 
         $validated = $request->validate([
@@ -82,7 +82,7 @@ class HrLeaveRequestController extends Controller
             return redirect()->route('hr.onboarding');
         }
 
-        abort_unless($request->user()->businesses()->whereKey($business->id)->exists(), 403);
+        abort_unless(Business::canAccess($request->user(), $business), 403);
         abort_unless((int) $leaveRequest->business_id === (int) $business->id, 404);
         abort_unless($leaveRequest->isPending(), 404);
 

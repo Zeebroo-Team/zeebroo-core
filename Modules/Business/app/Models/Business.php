@@ -39,6 +39,38 @@ class Business extends Model
 {
     use HasSettings;
 
+    /** Members (non-owner users assigned to this business). */
+    public function members(): HasMany
+    {
+        return $this->hasMany(BusinessMember::class);
+    }
+
+    /** Whether a given user can access this business (owner or active member). */
+    public static function canAccess(User $user, self $business): bool
+    {
+        if ((int) $business->user_id === (int) $user->id) {
+            return true;
+        }
+
+        return $business->members()
+            ->where('user_id', $user->id)
+            ->where('status', 'active')
+            ->exists();
+    }
+
+    /** Active member record for a user, or null if they are the owner / not a member. */
+    public function memberFor(User $user): ?BusinessMember
+    {
+        if ((int) $this->user_id === (int) $user->id) {
+            return null; // owner, not a member record
+        }
+
+        return $this->members()
+            ->where('user_id', $user->id)
+            ->where('status', 'active')
+            ->first();
+    }
+
     protected $fillable = [
         'user_id',
         'name',
@@ -253,7 +285,16 @@ class Business extends Model
             return new Collection([]);
         }
 
-        return static::query()->where('user_id', $user->id)->latest()->get();
+        $owned = static::query()->where('user_id', $user->id)->pluck('id');
+
+        $memberId = \Modules\Business\Models\BusinessMember::query()
+            ->where('user_id', $user->id)
+            ->where('status', 'active')
+            ->pluck('business_id');
+
+        $ids = $owned->merge($memberId)->unique()->values();
+
+        return static::query()->whereIn('id', $ids)->latest()->get();
     }
 
     /** Multi warehouse / branch mode enabled in business settings (default off). */
@@ -274,14 +315,15 @@ class Business extends Model
         $selectedId = (int) session('selected_business_id');
 
         if ($selectedId !== 0) {
-            $match = static::query()->where('user_id', $user->id)->where('id', $selectedId)->first();
+            $all  = static::allForNavbar($user);
+            $match = $all->firstWhere('id', $selectedId);
             if ($match) {
                 return $match;
             }
             session()->forget('selected_business_id');
         }
 
-        $latest = static::query()->where('user_id', $user->id)->latest()->first();
+        $latest = static::allForNavbar($user)->first();
         if ($latest) {
             session(['selected_business_id' => $latest->id]);
 

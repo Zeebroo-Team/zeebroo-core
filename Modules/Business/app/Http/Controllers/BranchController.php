@@ -23,7 +23,7 @@ class BranchController extends Controller
             return redirect()->route('dashboard')->withErrors(['business' => 'Select or create a business first.']);
         }
 
-        abort_unless($request->user()->businesses()->whereKey($business->id)->exists(), 403);
+        abort_unless(Business::canAccess($request->user(), $business), 403);
 
         if ($business->multiWarehouseBranchEnabled()) {
             return redirect()->route('business.branches.index');
@@ -64,7 +64,7 @@ class BranchController extends Controller
 
         $singleSetup = $request->boolean('single_location_setup');
 
-        abort_unless($request->user()->businesses()->whereKey($business->id)->exists(), 403);
+        abort_unless(Business::canAccess($request->user(), $business), 403);
 
         if ($singleSetup) {
             if ($business->multiWarehouseBranchEnabled() || $business->branches()->exists()) {
@@ -133,7 +133,7 @@ class BranchController extends Controller
     {
         $business = Business::currentForNavbar($request->user());
         abort_unless($business instanceof Business && (int) $branch->business_id === (int) $business->id, 403);
-        abort_unless($request->user()->businesses()->whereKey($business->id)->exists(), 403);
+        abort_unless(Business::canAccess($request->user(), $business), 403);
     }
 
     /**

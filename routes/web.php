@@ -16,8 +16,9 @@ Route::middleware('auth')->group(function (): void {
     Route::get('/dashboard', [DashboardController::class, 'dashboard'])->name('dashboard');
     Route::get('/admin', [DashboardController::class, 'adminPanel'])->middleware('role:admin')->name('admin.panel');
     Route::post('/business/select', function (\Illuminate\Http\Request $request) {
-        $id = (int) $request->input('business_id');
-        if ($request->user()->businesses()->where('id', $id)->exists()) {
+        $id       = (int) $request->input('business_id');
+        $business = \Modules\Business\Models\Business::find($id);
+        if ($business && \Modules\Business\Models\Business::canAccess($request->user(), $business)) {
             session(['selected_business_id' => $id]);
             session()->forget('selected_account_id');
         }

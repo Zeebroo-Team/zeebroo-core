@@ -27,7 +27,7 @@ class HrComplaintController extends Controller
             return redirect()->route('hr.onboarding');
         }
 
-        abort_unless($request->user()->businesses()->whereKey($business->id)->exists(), 403);
+        abort_unless(Business::canAccess($request->user(), $business), 403);
 
         $validated = $request->validate([
             'complaint_employee_id' => [
@@ -59,7 +59,7 @@ class HrComplaintController extends Controller
             return redirect()->route('hr.onboarding');
         }
 
-        abort_unless($request->user()->businesses()->whereKey($business->id)->exists(), 403);
+        abort_unless(Business::canAccess($request->user(), $business), 403);
         abort_unless((int) $hrComplaint->business_id === (int) $business->id, 404);
         abort_unless($hrComplaint->isOpen(), 404);
 

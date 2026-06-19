@@ -679,7 +679,7 @@ class HrPayrollController extends Controller
         if (! $this->hrPayrollSettings->optedIn($business)) {
             abort(403);
         }
-        abort_unless($request->user()->businesses()->whereKey($business->id)->exists(), 403);
+        abort_unless(Business::canAccess($request->user(), $business), 403);
 
         return $business;
     }

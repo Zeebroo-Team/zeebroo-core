@@ -43,7 +43,7 @@ class ProductController extends Controller
             return response()->json(['error' => 'No business selected.'], 422);
         }
 
-        abort_unless($request->user()->businesses()->whereKey($business->id)->exists(), 403);
+        abort_unless(Business::canAccess($request->user(), $business), 403);
 
         $validated = $request->validate([
             'product_id' => [
@@ -78,7 +78,7 @@ class ProductController extends Controller
             return redirect()->route('dashboard')->withErrors(['business' => 'Select or create a business first.']);
         }
 
-        abort_unless($request->user()->businesses()->whereKey($business->id)->exists(), 403);
+        abort_unless(Business::canAccess($request->user(), $business), 403);
 
         $currency = (string) (get_settings('business.currency', '', $business) ?: '');
         $catalog = $this->catalogOptionsService->optionsForBusiness($business);
@@ -135,7 +135,7 @@ class ProductController extends Controller
             return redirect()->route('dashboard')->withErrors(['business' => 'No business selected.']);
         }
 
-        abort_unless($request->user()->businesses()->whereKey($business->id)->exists(), 403);
+        abort_unless(Business::canAccess($request->user(), $business), 403);
 
         $data = $this->validatedProduct($request, $business);
         $data = $this->catalogOptionsService->normalizeProductCatalogFields($business, $data);
@@ -152,7 +152,7 @@ class ProductController extends Controller
             return response()->json(['message' => 'No business selected.'], 403);
         }
 
-        abort_unless($request->user()->businesses()->whereKey($business->id)->exists(), 403);
+        abort_unless(Business::canAccess($request->user(), $business), 403);
 
         $data = $request->validate([
             'name'       => ['required', 'string', 'max:255'],
@@ -323,7 +323,7 @@ class ProductController extends Controller
             return null;
         }
 
-        abort_unless($request->user()->businesses()->whereKey($business->id)->exists(), 403);
+        abort_unless(Business::canAccess($request->user(), $business), 403);
         abort_unless($this->productService->productForBusiness($business, $product) instanceof Product, 404);
 
         return $business;

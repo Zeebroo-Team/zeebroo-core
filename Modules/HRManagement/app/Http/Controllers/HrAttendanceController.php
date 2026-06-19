@@ -34,7 +34,7 @@ final class HrAttendanceController extends Controller
             return redirect()->route('hr.onboarding');
         }
 
-        abort_unless($request->user()->businesses()->whereKey($business->id)->exists(), 403);
+        abort_unless(Business::canAccess($request->user(), $business), 403);
 
         $month = trim((string) $request->query('month', now()->format('Y-m')));
         $monthDate = Carbon::createFromFormat('Y-m', preg_match('/^\d{4}-\d{2}$/', $month) ? $month : now()->format('Y-m'))->startOfMonth();
@@ -66,7 +66,7 @@ final class HrAttendanceController extends Controller
             return redirect()->route('hr.onboarding');
         }
 
-        abort_unless($request->user()->businesses()->whereKey($business->id)->exists(), 403);
+        abort_unless(Business::canAccess($request->user(), $business), 403);
 
         $validated = $request->validate([
             'employee_id' => [
@@ -114,7 +114,7 @@ final class HrAttendanceController extends Controller
             return redirect()->route('hr.onboarding');
         }
 
-        abort_unless($request->user()->businesses()->whereKey($business->id)->exists(), 403);
+        abort_unless(Business::canAccess($request->user(), $business), 403);
 
         $validated = $request->validate([
             'attendance_file' => ['required', 'file', 'mimes:xlsx,xls,csv', 'max:10240'],

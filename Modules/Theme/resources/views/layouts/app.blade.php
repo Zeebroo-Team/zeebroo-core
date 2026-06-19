@@ -429,6 +429,7 @@
         );
         $showSidebarDesignStudioLink = $navBusiness && Route::has('designstudio.index');
         $showSidebarServiceLink = $navBusiness && Route::has('service.catalog.index') && $featureOn('service_management');
+        $showSidebarRestaurantLink = $navBusiness && Route::has('restaurant.orders.index');
         $showSidebarDocumentationLink = $navBusiness
             && Route::has('documentation.documents.index')
             && \Modules\Documentation\Models\Document::where('business_id', $navBusiness->id)->exists();
@@ -724,6 +725,23 @@
                     </a>
                 </div>
             @endif
+            @if($showSidebarRestaurantLink)
+                <a href="{{ route('restaurant.orders.index') }}" class="{{ request()->routeIs('restaurant.*') ? 'active' : '' }}"><i class="fa fa-utensils"></i><span>Restaurant</span></a>
+                <div class="submenu">
+                    <a href="{{ route('restaurant.orders.index') }}" @class(['active' => request()->routeIs('restaurant.orders.*')])>
+                        <i class="fa fa-receipt"></i><span>Orders</span>
+                    </a>
+                    <a href="{{ route('restaurant.tables.index') }}" @class(['active' => request()->routeIs('restaurant.tables.*')])>
+                        <i class="fa fa-chair"></i><span>Tables</span>
+                    </a>
+                    <a href="{{ route('restaurant.reservations.index') }}" @class(['active' => request()->routeIs('restaurant.reservations.*')])>
+                        <i class="fa fa-calendar-check"></i><span>Reservations</span>
+                    </a>
+                    <a href="{{ route('restaurant.menu.items.index') }}" @class(['active' => request()->routeIs('restaurant.menu.*')])>
+                        <i class="fa fa-utensils"></i><span>Menu</span>
+                    </a>
+                </div>
+            @endif
             @if($showSidebarDocumentationLink)
                 <a href="{{ route('documentation.documents.index') }}" class="{{ request()->routeIs('documentation.*') ? 'active' : '' }}"><i class="fa fa-book-open"></i><span>Documentation</span></a>
             @endif
@@ -771,6 +789,9 @@
             @endif
             @if($navBusiness && $navBusiness->multiWarehouseBranchEnabled())
                 <a href="{{ route('business.branches.index') }}" class="{{ request()->routeIs('business.branches.*') ? 'active' : '' }}"><i class="fa fa-code-branch"></i><span>Branches</span></a>
+            @endif
+            @if($navBusiness && (int) $navBusiness->user_id === (int) auth()->id())
+                <a href="{{ route('business.users.index') }}" class="{{ request()->routeIs('business.users.*') ? 'active' : '' }}"><i class="fa fa-users"></i><span>User Management</span></a>
             @endif
             @if($showSidebarSettingsSection)
                 <div class="menu-section">Configuration</div>
@@ -874,15 +895,31 @@
                             <div class="menu-name">{{ $navBusiness?->name ?? 'No Business Yet' }}</div>
                             <div class="menu-email">{{ $navBusiness?->category ?? 'Complete onboarding in Overview' }}</div>
                         </div>
+                        @php
+                            $navCurrentUserRole = null;
+                            if ($navBusiness) {
+                                if ((int) $navBusiness->user_id === (int) auth()->id()) {
+                                    $navCurrentUserRole = 'owner';
+                                } else {
+                                    $navMember = $navBusiness->members()->where('user_id', auth()->id())->where('status', 'active')->first();
+                                    $navCurrentUserRole = $navMember?->role ?? null;
+                                }
+                            }
+                        @endphp
                         @if($navBusinesses->count() > 1)
                             <div class="menu-row" style="display:block;">
-                                <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">Selected business</div>
+                                <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">Switch business</div>
                                 <form method="post" action="{{ route('business.select') }}">
                                     @csrf
                                     <select name="business_id" class="dropdown-select" onchange="this.form.submit()">
                                         @foreach($navBusinesses as $businessOption)
+                                            @php
+                                                $isOwner = (int) $businessOption->user_id === (int) auth()->id();
+                                                $roleLabel = $isOwner ? 'Owner' : ($businessOption->members()->where('user_id', auth()->id())->value('role') ?? '');
+                                                $roleLabel = $roleLabel ? ' (' . ucfirst($roleLabel) . ')' : '';
+                                            @endphp
                                             <option value="{{ $businessOption->id }}" {{ (int) ($navBusiness?->id ?? 0) === (int) $businessOption->id ? 'selected' : '' }}>
-                                                {{ $businessOption->name }}
+                                                {{ $businessOption->name }}{{ $roleLabel }}
                                             </option>
                                         @endforeach
                                     </select>
@@ -894,10 +931,33 @@
                                 <span><i class="fa fa-layer-group" style="margin-right:6px;"></i>Category</span>
                                 <span class="pkg-badge">{{ $navBusiness->category }}</span>
                             </div>
-                            <div class="menu-row" style="display:block;">
-                                <div style="font-size:12px;color:var(--muted);margin-bottom:4px;">About Business</div>
-                                <div style="font-size:13px;line-height:1.4;">{{ $navBusiness->description ?: 'No description added yet.' }}</div>
+                            @if($navCurrentUserRole)
+                            <div class="menu-row">
+                                <span><i class="fa fa-id-badge" style="margin-right:6px;"></i>Your role</span>
+                                <span class="pkg-badge" style="
+                                    background:{{ match($navCurrentUserRole) {
+                                        'owner'   => 'color-mix(in srgb,#f59e0b 15%,transparent)',
+                                        'admin'   => 'color-mix(in srgb,#6366f1 15%,transparent)',
+                                        'manager' => 'color-mix(in srgb,#0ea5e9 15%,transparent)',
+                                        default   => 'color-mix(in srgb,#64748b 15%,transparent)',
+                                    } }};
+                                    color:{{ match($navCurrentUserRole) {
+                                        'owner'   => '#d97706',
+                                        'admin'   => '#6366f1',
+                                        'manager' => '#0ea5e9',
+                                        default   => '#64748b',
+                                    } }};">
+                                    {{ ucfirst($navCurrentUserRole) }}
+                                </span>
                             </div>
+                            @endif
+                            @if((int) $navBusiness->user_id === (int) auth()->id())
+                            <div class="menu-row">
+                                <a href="{{ route('business.users.index') }}" style="display:flex;align-items:center;gap:7px;color:var(--text);text-decoration:none;font-size:13px;font-weight:600;">
+                                    <i class="fa fa-users" style="color:var(--primary);"></i> Manage Users
+                                </a>
+                            </div>
+                            @endif
                         @endif
                     </div>
                 </div>
