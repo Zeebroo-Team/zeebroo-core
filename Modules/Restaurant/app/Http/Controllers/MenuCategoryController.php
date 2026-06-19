@@ -3,6 +3,7 @@
 namespace Modules\Restaurant\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Modules\Restaurant\Http\Controllers\Concerns\ResolvesRestaurantBusiness;
@@ -20,10 +21,39 @@ class MenuCategoryController extends Controller
         $business = $this->requireBusiness($request);
         if ($business instanceof RedirectResponse) return $business;
 
+        $search     = trim((string) $request->query('q', ''));
+        $categories = $this->menu->categoriesForBusiness($business);
+        $totalCount = $categories->count();
+
+        $filtered = $search !== ''
+            ? $categories->filter(fn ($c) => str_contains(mb_strtolower($c->name), mb_strtolower($search))
+                || str_contains(mb_strtolower((string) $c->description), mb_strtolower($search)))
+            : null;
+
         return view('restaurant::menu.categories.index', [
-            'business'   => $business,
-            'categories' => $this->menu->categoriesForBusiness($business),
+            'business'    => $business,
+            'categories'  => $categories,
+            'filtered'    => $filtered,
+            'totalCount'  => $totalCount,
+            'search'      => $search,
+            'isFiltering' => $search !== '',
         ]);
+    }
+
+    public function reorder(Request $request): JsonResponse
+    {
+        $business = $this->requireBusiness($request);
+        if ($business instanceof RedirectResponse) abort(403);
+
+        $ids = $request->validate(['ids' => ['required', 'array'], 'ids.*' => ['integer']])['ids'];
+
+        foreach ($ids as $order => $id) {
+            MenuCategory::where('id', $id)
+                ->where('business_id', $business->id)
+                ->update(['sort_order' => $order + 1]);
+        }
+
+        return response()->json(['success' => true]);
     }
 
     public function store(Request $request): RedirectResponse

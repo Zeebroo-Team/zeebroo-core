@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Modules\Business\Models\Business;
+use Modules\FileManager\Models\FileManagerFile;
 
 class MenuItem extends Model
 {
@@ -18,6 +19,7 @@ class MenuItem extends Model
         'description',
         'price',
         'image_path',
+        'file_manager_file_id',
         'is_available',
         'prep_time_minutes',
         'dietary_tags',
@@ -40,6 +42,11 @@ class MenuItem extends Model
     public function category(): BelongsTo
     {
         return $this->belongsTo(MenuCategory::class, 'menu_category_id');
+    }
+
+    public function imageFile(): BelongsTo
+    {
+        return $this->belongsTo(FileManagerFile::class, 'file_manager_file_id');
     }
 
     public function orderItems(): HasMany

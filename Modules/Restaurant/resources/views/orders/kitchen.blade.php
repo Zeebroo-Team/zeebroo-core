@@ -104,6 +104,9 @@
 /* Sub-row: type + customer + items count */
 .km-card__sub { display:flex;align-items:center;gap:6px;padding:0 12px 9px;flex-wrap:wrap;border-bottom:1px solid var(--border); }
 .km-card__sub-item { font-size:10px;color:var(--muted);display:flex;align-items:center;gap:3px; }
+.km-card__table-chip { font-weight:800;color:var(--text);
+                        background:color-mix(in srgb,var(--primary) 10%,transparent);
+                        color:var(--primary);padding:2px 8px;border-radius:6px; }
 
 /* Bulk bar */
 .km-bulk { display:flex;align-items:center;gap:5px;padding:7px 14px;flex-wrap:wrap;
@@ -249,13 +252,7 @@
             <i class="fa fa-receipt" style="font-size:9px;opacity:.7;"></i>
             #{{ $order->order_number ?? $order->id }}
           </span>
-          <span class="km-card__title">
-            @if($order->table)
-              <i class="fa fa-chair" style="font-size:10px;color:var(--muted);margin-right:3px;"></i>{{ $order->table->name }}
-            @else
-              {{ $order->typeLabel() }}
-            @endif
-          </span>
+          <span class="km-card__title">{{ $order->typeLabel() }}</span>
           <span class="km-card__type"
                 style="background:color-mix(in srgb,{{ $typeColor }} 11%,transparent);color:{{ $typeColor }};">
             <i class="fa {{ $typeIcon }}" style="font-size:9px;"></i> {{ $order->typeLabel() }}
@@ -270,8 +267,14 @@
           </button>
         </div>
 
-        {{-- Sub-row: badges --}}
+        {{-- Sub-row: table + customer + items --}}
         <div class="km-card__sub">
+          @if($order->table)
+            <span class="km-card__sub-item km-card__table-chip">
+              <i class="fa fa-chair" style="font-size:9px;"></i> {{ $order->table->name }}
+            </span>
+            <span class="km-card__sub-item" style="opacity:.3;">·</span>
+          @endif
           @if($order->customer_name)
             <span class="km-card__sub-item">
               <i class="fa fa-user" style="opacity:.5;"></i> {{ $order->customer_name }}

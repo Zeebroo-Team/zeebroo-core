@@ -57,6 +57,10 @@
 
   <div class="mi-show-card">
     <div class="mi-show-accent" style="background:{{ $available ? '#22c55e' : '#9ca3af' }};"></div>
+    @if($item->imageFile)
+      <img src="{{ $item->imageFile->publicUrl() }}" alt="{{ $item->name }}"
+           style="width:100%;height:220px;object-fit:cover;display:block;border-bottom:1px solid var(--border);">
+    @endif
     <div class="mi-show-body">
       <div class="mi-show-top">
         <div class="mi-show-info">

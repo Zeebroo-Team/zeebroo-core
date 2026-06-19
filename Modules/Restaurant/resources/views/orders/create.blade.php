@@ -114,7 +114,7 @@
 
 /* ── Menu item cards ── */
 .pos-products  { display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;
-                 overflow-y:auto;flex:1;min-height:0;padding-right:3px;align-content:start; }
+                 align-content:start; }
 
 .pos-product   { border:1px solid var(--border);border-radius:12px;background:var(--bg);
                  cursor:pointer;text-align:left;display:flex;flex-direction:column;
@@ -165,7 +165,7 @@
 .pos-cart-row  { display:flex;flex-direction:column;gap:0;flex-shrink:0;
                  border:1px solid var(--border);border-radius:12px;
                  overflow:hidden;background:var(--bg);
-                 transition:box-shadow .18s; }
+                 transition:box-shadow .25s,background .35s,border-color .35s; }
 .pos-cart-row:hover { box-shadow:0 2px 10px rgba(0,0,0,.07); }
 
 /* Coloured accent strip top */
@@ -484,51 +484,57 @@
         No items match your search.
       </div>
 
-      <div class="pos-products" id="menuGrid">
+      {{-- Each category gets its own inner grid — isolates row heights between sections --}}
+      <div id="menuGrid" style="overflow-y:auto;flex:1;min-height:0;display:flex;flex-direction:column;gap:16px;padding-right:3px;padding-bottom:8px;">
         @foreach($categories as $cat)
           @if($cat->menuItems->isNotEmpty())
-            <div class="cat-section" data-cat="{{ $cat->id }}"
-                 style="grid-column:1/-1;margin-top:4px;margin-bottom:2px;">
+            <div class="cat-section" data-cat="{{ $cat->id }}">
               <p class="rpos-sec-head">{{ $cat->name }}</p>
+              <div class="pos-products" style="overflow:visible;">
+                @foreach($cat->menuItems as $mi)
+                  <button type="button"
+                          class="pos-product cat-item{{ !$mi->is_available ? ' is-disabled' : '' }}"
+                          data-cat="{{ $cat->id }}"
+                          data-name="{{ strtolower($mi->name) }}"
+                          {{ !$mi->is_available ? 'disabled' : '' }}
+                          onclick="addMenuItem({{ $mi->id }},'{{ addslashes($mi->name) }}',{{ $mi->price }})">
+
+                    {{-- Thumbnail --}}
+                    <div class="pos-product__thumb">
+                      @if($mi->imageFile)
+                        <img src="{{ $mi->imageFile->publicUrl() }}" alt="{{ $mi->name }}"
+                             style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;">
+                      @else
+                        <i class="fa fa-utensils pos-product__thumb-icon"></i>
+                      @endif
+                      @if($mi->prep_time_minutes)
+                        <div class="pos-product__prep">
+                          <i class="fa fa-clock"></i> {{ $mi->prepLabel() }}
+                        </div>
+                      @endif
+                      @if(!$mi->is_available)
+                        <div class="pos-product__unavail">Unavailable</div>
+                      @endif
+                    </div>
+
+                    {{-- Body --}}
+                    <div class="pos-product__body">
+                      <div class="pos-product__name">{{ $mi->name }}</div>
+                      @if($mi->dietary_tags)
+                        <div class="pos-product__tags">
+                          {{ implode(' · ', array_map(fn($t) => str_replace('_',' ',$t), array_slice((array)$mi->dietary_tags,0,3))) }}
+                        </div>
+                      @endif
+                      <div class="pos-product__footer">
+                        <span class="pos-product__price">{{ $currency }}{{ number_format((float)$mi->price,2) }}</span>
+                        <span class="pos-product__add"><i class="fa fa-plus"></i></span>
+                      </div>
+                    </div>
+
+                  </button>
+                @endforeach
+              </div>
             </div>
-            @foreach($cat->menuItems as $mi)
-              <button type="button"
-                      class="pos-product cat-item{{ !$mi->is_available ? ' is-disabled' : '' }}"
-                      data-cat="{{ $cat->id }}"
-                      data-name="{{ strtolower($mi->name) }}"
-                      {{ !$mi->is_available ? 'disabled' : '' }}
-                      onclick="addMenuItem({{ $mi->id }},'{{ addslashes($mi->name) }}',{{ $mi->price }})"
-                      title="{{ !$mi->is_available ? 'Unavailable' : 'Add to order' }}">
-
-                {{-- Thumbnail --}}
-                <div class="pos-product__thumb">
-                  <i class="fa fa-utensils pos-product__thumb-icon"></i>
-                  @if($mi->prep_time_minutes)
-                    <div class="pos-product__prep">
-                      <i class="fa fa-clock"></i> {{ $mi->prepLabel() }}
-                    </div>
-                  @endif
-                  @if(!$mi->is_available)
-                    <div class="pos-product__unavail">Unavailable</div>
-                  @endif
-                </div>
-
-                {{-- Body --}}
-                <div class="pos-product__body">
-                  <div class="pos-product__name">{{ $mi->name }}</div>
-                  @if($mi->dietary_tags)
-                    <div class="pos-product__tags">
-                      {{ implode(' · ', array_map(fn($t) => str_replace('_',' ',$t), array_slice((array)$mi->dietary_tags,0,3))) }}
-                    </div>
-                  @endif
-                  <div class="pos-product__footer">
-                    <span class="pos-product__price">{{ $currency }}{{ number_format((float)$mi->price,2) }}</span>
-                    <span class="pos-product__add"><i class="fa fa-plus"></i></span>
-                  </div>
-                </div>
-
-              </button>
-            @endforeach
           @endif
         @endforeach
       </div>
@@ -811,6 +817,15 @@
           </button>
         </div>
 
+        {{-- Account selector (hidden, value still submitted) --}}
+        @if($accounts->isNotEmpty())
+        <select id="pmAccountSelect" style="display:none;">
+          @foreach($accounts as $acc)
+            <option value="{{ $acc->id }}">{{ $acc->account_name }}</option>
+          @endforeach
+        </select>
+        @endif
+
         {{-- Amount received display --}}
         <div class="pm-amount-wrap">
           <div class="pm-amount-label">Amount Received</div>
@@ -1027,17 +1042,17 @@
 
   window.filterCat = function (catId) {
     currentCatId = catId;
-    document.querySelectorAll('.rpos-cat-btn').forEach(function (b) {
-      b.classList.remove('active');
-    });
+    document.querySelectorAll('.rpos-cat-btn').forEach(function (b) { b.classList.remove('active'); });
     document.getElementById('cat_' + catId).classList.add('active');
 
     var isAll = catId === 'all';
-    document.querySelectorAll('.cat-section').forEach(function (s) {
-      s.style.display = isAll ? '' : 'none';
-    });
-    document.querySelectorAll('.cat-item').forEach(function (el) {
-      el.style.display = (isAll || el.dataset.cat == catId) ? '' : 'none';
+    document.querySelectorAll('#menuGrid .cat-section').forEach(function (sec) {
+      var match = isAll || sec.getAttribute('data-cat') == catId;
+      sec.style.display = match ? '' : 'none';
+      /* restore all items inside visible sections */
+      if (match) {
+        sec.querySelectorAll('.cat-item').forEach(function (el) { el.style.display = ''; });
+      }
     });
     var el = document.getElementById('menuSearch');
     if (el) el.value = '';
@@ -1048,25 +1063,18 @@
     var term = q.trim().toLowerCase();
     if (!term) { filterCat(currentCatId); return; }
 
-    document.querySelectorAll('.rpos-cat-btn').forEach(function (b) {
-      b.classList.remove('active');
-    });
+    document.querySelectorAll('.rpos-cat-btn').forEach(function (b) { b.classList.remove('active'); });
     document.getElementById('cat_all').classList.add('active');
-    document.querySelectorAll('.cat-section').forEach(function (s) { s.style.display = ''; });
 
     var any = false;
-    document.querySelectorAll('.cat-item').forEach(function (el) {
-      var match = el.dataset.name.indexOf(term) !== -1;
-      el.style.display = match ? '' : 'none';
-      if (match) any = true;
-    });
-    document.querySelectorAll('.cat-section').forEach(function (sec) {
-      var vis = false, n = sec.nextElementSibling;
-      while (n && !n.classList.contains('cat-section')) {
-        if (n.classList.contains('cat-item') && n.style.display !== 'none') vis = true;
-        n = n.nextElementSibling;
-      }
-      sec.style.display = vis ? '' : 'none';
+    document.querySelectorAll('#menuGrid .cat-section').forEach(function (sec) {
+      var hasMatch = false;
+      sec.querySelectorAll('.cat-item').forEach(function (el) {
+        var match = el.dataset.name.indexOf(term) !== -1;
+        el.style.display = match ? '' : 'none';
+        if (match) { hasMatch = true; any = true; }
+      });
+      sec.style.display = hasMatch ? '' : 'none';
     });
     document.getElementById('noResults').style.display = any ? 'none' : 'block';
   };
@@ -1211,6 +1219,10 @@
 
     var row = document.createElement('div');
     row.className = 'pos-cart-row';
+    if (km) {
+      row.style.background   = 'color-mix(in srgb,' + accentColor + ' 7%,var(--bg))';
+      row.style.borderColor  = 'color-mix(in srgb,' + accentColor + ' 30%,var(--border))';
+    }
     row.innerHTML =
       /* Accent strip */
       '<div class="pos-cart-row__accent" style="background:' + accentColor + ';"></div>' +
@@ -1527,6 +1539,10 @@
     confirmBtn.disabled = true;
     confirmBtn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Processing…';
 
+    var accountSelect = document.getElementById('pmAccountSelect');
+    var creditAccountId = accountSelect ? parseInt(accountSelect.value) || null : null;
+    var amountTendered = _pmMethod === 'cash' ? received : _pmTotal;
+
     var done = 0;
     var failed = false;
     _pmOrderIds.forEach(function (orderId) {
@@ -1534,6 +1550,11 @@
         method:  'POST',
         headers: { 'Content-Type':'application/json','Accept':'application/json',
                    'X-CSRF-TOKEN':csrf,'X-Requested-With':'XMLHttpRequest' },
+        body: JSON.stringify({
+          payment_method:    _pmMethod,
+          credit_account_id: creditAccountId,
+          amount_tendered:   amountTendered,
+        }),
       })
       .then(function (r) { return r.json(); })
       .then(function () {

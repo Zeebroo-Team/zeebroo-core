@@ -128,6 +128,16 @@
               @endforeach
             </div>
           </div>
+
+          <div class="mi-field mi-full">
+            <label>Item Image</label>
+            @include('restaurant::menu.items.partials.image-field', [
+                'fileId'   => old('file_manager_file_id', $item->file_manager_file_id),
+                'fileUrl'  => $item->imageFile?->publicUrl(),
+                'fileName' => $item->imageFile?->original_filename,
+                'fieldKey' => 'edit',
+            ])
+          </div>
         </div>
       </div>
       <div class="mi-edit-foot">

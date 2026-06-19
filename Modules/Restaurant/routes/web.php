@@ -11,6 +11,7 @@ Route::middleware(['web', 'auth'])->group(function (): void {
     // Menu categories
     Route::get('/restaurant/menu/categories',                          [MenuCategoryController::class, 'index'])   ->name('restaurant.menu.categories.index');
     Route::post('/restaurant/menu/categories',                         [MenuCategoryController::class, 'store'])   ->name('restaurant.menu.categories.store');
+    Route::post('/restaurant/menu/categories/reorder',                 [MenuCategoryController::class, 'reorder']) ->name('restaurant.menu.categories.reorder');
     Route::put('/restaurant/menu/categories/{menuCategory}',           [MenuCategoryController::class, 'update'])  ->name('restaurant.menu.categories.update');
     Route::delete('/restaurant/menu/categories/{menuCategory}',        [MenuCategoryController::class, 'destroy']) ->name('restaurant.menu.categories.destroy');
 
@@ -23,11 +24,12 @@ Route::middleware(['web', 'auth'])->group(function (): void {
     Route::delete('/restaurant/menu/{menuItem}',                       [MenuItemController::class, 'destroy']) ->name('restaurant.menu.items.destroy');
 
     // Tables
-    Route::get('/restaurant/tables',                                   [TableController::class, 'index'])    ->name('restaurant.tables.index');
-    Route::get('/restaurant/tables/statuses',                          [TableController::class, 'statuses']) ->name('restaurant.tables.statuses');
-    Route::post('/restaurant/tables',                                  [TableController::class, 'store'])    ->name('restaurant.tables.store');
-    Route::put('/restaurant/tables/{restaurantTable}',                 [TableController::class, 'update'])  ->name('restaurant.tables.update');
-    Route::delete('/restaurant/tables/{restaurantTable}',              [TableController::class, 'destroy']) ->name('restaurant.tables.destroy');
+    Route::get('/restaurant/tables',                                   [TableController::class, 'index'])         ->name('restaurant.tables.index');
+    Route::get('/restaurant/tables/statuses',                          [TableController::class, 'statuses'])      ->name('restaurant.tables.statuses');
+    Route::post('/restaurant/tables',                                  [TableController::class, 'store'])         ->name('restaurant.tables.store');
+    Route::post('/restaurant/tables/positions',                        [TableController::class, 'savePositions']) ->name('restaurant.tables.positions');
+    Route::put('/restaurant/tables/{restaurantTable}',                 [TableController::class, 'update'])        ->name('restaurant.tables.update');
+    Route::delete('/restaurant/tables/{restaurantTable}',              [TableController::class, 'destroy'])       ->name('restaurant.tables.destroy');
 
     // Orders
     Route::get('/restaurant/orders',                                            [OrderController::class, 'index'])            ->name('restaurant.orders.index');

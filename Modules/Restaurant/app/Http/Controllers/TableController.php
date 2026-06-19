@@ -62,6 +62,27 @@ class TableController extends Controller
         return redirect()->route('restaurant.tables.index')->with('status', 'Table updated.');
     }
 
+    public function savePositions(Request $request): JsonResponse
+    {
+        $business = $this->requireBusiness($request);
+        if ($business instanceof RedirectResponse) abort(403);
+
+        $positions = $request->validate([
+            'positions'       => ['required', 'array'],
+            'positions.*.id'  => ['required', 'integer'],
+            'positions.*.x'   => ['required', 'integer', 'min:0', 'max:9000'],
+            'positions.*.y'   => ['required', 'integer', 'min:0', 'max:9000'],
+        ])['positions'];
+
+        foreach ($positions as $pos) {
+            RestaurantTable::where('id', $pos['id'])
+                ->where('business_id', $business->id)
+                ->update(['pos_x' => $pos['x'], 'pos_y' => $pos['y']]);
+        }
+
+        return response()->json(['success' => true]);
+    }
+
     public function statuses(Request $request): JsonResponse
     {
         $business = $this->requireBusiness($request);

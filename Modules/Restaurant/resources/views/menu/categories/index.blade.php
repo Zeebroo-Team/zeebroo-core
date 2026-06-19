@@ -1,245 +1,403 @@
 @extends('theme::layouts.app', ['title' => 'Menu Categories', 'heading' => 'Restaurant'])
 
 @section('content')
+@include('product::partials.catalog-hub-styles')
+
 <style>
-/* ── Page header ── */
-.mcat-header { display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:22px; }
-.mcat-header__icon { width:48px;height:48px;border-radius:14px;flex-shrink:0;
-                      background:linear-gradient(135deg,#8b5cf6,#7c3aed);
-                      display:flex;align-items:center;justify-content:center;color:#fff;font-size:20px;
-                      box-shadow:0 4px 14px color-mix(in srgb,#8b5cf6 25%,transparent); }
-.mcat-header__text  { flex:1;min-width:0; }
-.mcat-header__title { margin:0 0 2px;font-size:20px;font-weight:900;letter-spacing:-.2px; }
-.mcat-header__sub   { margin:0;font-size:12px;color:var(--muted); }
-
-/* ── Card grid ── */
-.mcat-grid { display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px; }
-
-/* ── Category card ── */
-.mcat-card { background:var(--bg);border:1px solid var(--border);border-radius:14px;overflow:hidden;
-              display:flex;flex-direction:column;transition:box-shadow .2s,transform .15s; }
-.mcat-card:hover { box-shadow:0 6px 24px rgba(0,0,0,.09);transform:translateY(-2px); }
-.mcat-card__accent { height:4px;width:100%; }
-.mcat-card__body   { padding:16px;flex:1;display:flex;gap:12px;align-items:flex-start; }
-.mcat-card__badge  { width:42px;height:42px;border-radius:12px;flex-shrink:0;
-                      background:color-mix(in srgb,#8b5cf6 12%,transparent);
-                      display:flex;align-items:center;justify-content:center;
-                      color:#8b5cf6;font-size:17px; }
-.mcat-card__info   { flex:1;min-width:0; }
-.mcat-card__name   { font-size:14px;font-weight:900;margin-bottom:3px;
-                      white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
-.mcat-card__desc   { font-size:12px;color:var(--muted);line-height:1.4;
-                      display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden; }
-.mcat-card__foot   { display:flex;align-items:center;justify-content:space-between;
-                      padding:10px 16px;border-top:1px solid var(--border);
-                      background:color-mix(in srgb,var(--border) 15%,var(--bg)); }
-.mcat-card__meta   { display:flex;align-items:center;gap:8px; }
-.mcat-card__count  { font-size:11px;font-weight:700;color:var(--muted);
-                      display:flex;align-items:center;gap:4px; }
-.mcat-card__status { font-size:11px;font-weight:700;padding:3px 10px;border-radius:999px; }
-.mcat-card__acts   { display:flex;gap:4px; }
-.mcat-card__act    { width:30px;height:30px;border-radius:8px;border:1px solid var(--border);background:var(--bg);
-                      cursor:pointer;display:flex;align-items:center;justify-content:center;
-                      font-size:12px;color:var(--muted);transition:all .15s; }
-.mcat-card__act:hover     { border-color:var(--primary);color:var(--primary);background:color-mix(in srgb,var(--primary) 6%,var(--bg)); }
-.mcat-card__act--del:hover { border-color:#ef4444;color:#ef4444;background:color-mix(in srgb,#ef4444 6%,var(--bg)); }
-
-/* ── Empty state ── */
-.mcat-empty { text-align:center;padding:60px 20px;border:2px dashed var(--border);border-radius:16px; }
-.mcat-empty__icon  { font-size:38px;color:var(--muted);opacity:.4;margin-bottom:14px; }
-.mcat-empty__title { font-size:16px;font-weight:800;margin:0 0 6px; }
-.mcat-empty__sub   { font-size:13px;color:var(--muted);margin:0 0 20px; }
-
-/* ── Modal ── */
-.mcat-overlay { position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9000;
-                 display:none;align-items:center;justify-content:center;padding:20px; }
-.mcat-overlay.open { display:flex; }
-.mcat-modal  { background:var(--bg);border-radius:16px;width:100%;max-width:440px;
-                overflow:hidden;box-shadow:0 20px 70px rgba(0,0,0,.22);display:flex;flex-direction:column; }
-.mcat-modal__head { display:flex;align-items:center;gap:12px;padding:16px 20px;border-bottom:1px solid var(--border); }
-.mcat-modal__head-icon { width:34px;height:34px;border-radius:10px;flex-shrink:0;
-                          background:color-mix(in srgb,#8b5cf6 12%,transparent);
-                          color:#8b5cf6;display:flex;align-items:center;justify-content:center;font-size:14px; }
-.mcat-modal__head h3 { margin:0;font-size:15px;font-weight:800;flex:1; }
-.mcat-modal__close { width:30px;height:30px;border-radius:8px;border:1px solid var(--border);background:var(--bg);
-                      cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:12px; }
-.mcat-modal__close:hover { border-color:#ef4444;color:#ef4444; }
-.mcat-modal__body { padding:20px; }
-.mcat-modal__foot { padding:14px 20px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end; }
-.mcat-field { margin-bottom:14px; }
-.mcat-field label { display:block;font-size:12px;font-weight:700;margin-bottom:5px; }
-.mcat-field input,.mcat-field textarea {
-  width:100%;padding:9px 12px;border-radius:9px;border:1.5px solid var(--border);
-  background:var(--bg);color:var(--text);font-size:13px;box-sizing:border-box;outline:none;transition:border .15s; }
-.mcat-field input:focus,.mcat-field textarea:focus {
-  border-color:#8b5cf6;box-shadow:0 0 0 3px color-mix(in srgb,#8b5cf6 10%,transparent); }
-.mcat-field textarea { resize:vertical; }
-.mcat-toggle { display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:9px;
-                border:1.5px solid var(--border);background:color-mix(in srgb,var(--border) 15%,var(--bg));cursor:pointer; }
-.mcat-toggle input { width:15px;height:15px;cursor:pointer;accent-color:#8b5cf6; }
-.mcat-toggle span { font-size:13px;font-weight:600; }
-.mcat-btn-cancel { padding:9px 20px;border-radius:9px;border:1.5px solid var(--border);background:var(--bg);
-                    color:var(--text);font-size:13px;font-weight:700;cursor:pointer; }
-.mcat-btn-cancel:hover { border-color:var(--muted); }
-.mcat-btn-submit { padding:9px 24px;border-radius:9px;border:none;cursor:pointer;font-size:13px;font-weight:800;
-                    color:#fff;background:linear-gradient(135deg,#8b5cf6,#7c3aed); }
+.mcat-search-bar{display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin-bottom:12px;}
+.mcat-search-wrap{position:relative;flex:1 1 200px;min-width:160px;}
+.mcat-search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px;pointer-events:none;}
+.mcat-search-input{width:100%;box-sizing:border-box;padding:8px 10px 8px 32px;font-size:13px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);outline:none;transition:border-color .15s,box-shadow .15s;}
+.mcat-search-input:focus{border-color:var(--primary);box-shadow:0 0 0 2px color-mix(in srgb,var(--primary) 18%,transparent);}
+.mcat-filter-clear{display:inline-flex;align-items:center;gap:5px;padding:8px 12px;font-size:13px;font-weight:600;border-radius:8px;border:1px solid color-mix(in srgb,#ef4444 35%,var(--border));background:transparent;color:#f97373;text-decoration:none;cursor:pointer;}
+.mcat-filter-clear:hover{background:color-mix(in srgb,#ef4444 8%,transparent);}
+.mcat-results-table{width:100%;border-collapse:collapse;font-size:13px;}
+.mcat-results-table th{text-align:left;padding:9px 12px;background:color-mix(in srgb,var(--card) 92%,transparent);font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);border-bottom:1px solid var(--border);}
+.mcat-results-table td{padding:10px 12px;border-bottom:1px solid color-mix(in srgb,var(--border) 80%,transparent);vertical-align:middle;}
+.mcat-results-table tr:last-child td{border-bottom:none;}
 </style>
 
-<div style="max-width:100%;">
+<div class="pcat-page-card card" style="max-width:100%;padding:14px;">
   @include('restaurant::partials.nav')
 
   @if(session('status'))
-    <div class="pcat-banner pcat-banner--ok" style="margin-bottom:16px;font-weight:600;">{{ session('status') }}</div>
+    <div class="pcat-banner pcat-banner--ok" style="font-weight:600;">{{ session('status') }}</div>
   @endif
   @if($errors->any())
-    <div class="pcat-banner pcat-banner--err" style="margin-bottom:16px;">{{ $errors->first() }}</div>
+    <div class="pcat-banner pcat-banner--err">{{ $errors->first() }}</div>
   @endif
 
-  {{-- Header --}}
-  <div class="mcat-header">
-    <div class="mcat-header__icon"><i class="fa fa-layer-group"></i></div>
-    <div class="mcat-header__text">
-      <h1 class="mcat-header__title">Menu Categories</h1>
-      <p class="mcat-header__sub">Organise your menu into sections</p>
+  <p class="muted" style="margin:0 0 14px;font-size:13px;line-height:1.45;">
+    Organise your menu into sections for <strong style="color:var(--text);">{{ $business->name }}</strong>. Drag cards to reorder how categories appear on the POS.
+  </p>
+
+  {{-- Search bar (only when categories exist) --}}
+  @if($totalCount > 0)
+  <form method="GET" action="{{ route('restaurant.menu.categories.index') }}" class="mcat-search-bar" role="search">
+    <div class="mcat-search-wrap">
+      <i class="fa fa-magnifying-glass mcat-search-icon" aria-hidden="true"></i>
+      <input type="search" name="q" value="{{ $search }}" placeholder="Search categories…"
+             class="mcat-search-input" autocomplete="off" aria-label="Search categories">
     </div>
-    <button type="button" class="linkbtn" style="padding:9px 18px;font-size:13px;flex-shrink:0;"
-            onclick="document.getElementById('addCatModal').classList.add('open')">
-      <i class="fa fa-plus" style="font-size:11px;"></i> New Category
+    <button type="submit" class="pcat-filter-btn" style="display:inline-flex;align-items:center;gap:5px;padding:8px 14px;font-size:13px;font-weight:700;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);cursor:pointer;">
+      <i class="fa fa-filter" aria-hidden="true"></i> Filter
     </button>
+    @if($isFiltering)
+      <a href="{{ route('restaurant.menu.categories.index') }}" class="mcat-filter-clear">
+        <i class="fa fa-xmark" aria-hidden="true"></i> Clear
+      </a>
+    @endif
+  </form>
+  @endif
+
+  <div class="pcat-toolbar">
+    <span class="muted" style="margin:0;font-size:13px;">
+      @if($totalCount === 0)
+        Add your <strong style="color:var(--text);">first category</strong> below.
+      @elseif($isFiltering)
+        {{ $filtered->count() }} result{{ $filtered->count() === 1 ? '' : 's' }} of {{ $totalCount }} {{ $totalCount === 1 ? 'category' : 'categories' }}.
+      @else
+        {{ $totalCount }} {{ $totalCount === 1 ? 'category' : 'categories' }}. Drag cards to reorder.
+      @endif
+    </span>
+    @if($totalCount > 0)
+      <span id="mcat-reorder-status" class="pcat-reorder-status" hidden aria-live="polite"></span>
+      <button type="button" id="mcat-modal-open" class="linkbtn"
+              style="padding:8px 16px;font-size:13px;display:inline-flex;align-items:center;gap:6px;">
+        <i class="fa fa-plus"></i> Add category
+      </button>
+    @endif
   </div>
 
-  {{-- Category cards --}}
-  @if($categories->isEmpty())
-    <div class="mcat-empty">
-      <div class="mcat-empty__icon"><i class="fa fa-layer-group"></i></div>
-      <h3 class="mcat-empty__title">No categories yet</h3>
-      <p class="mcat-empty__sub">Add categories to organise your menu items into sections.</p>
-      <button type="button" class="linkbtn" style="padding:10px 24px;font-size:14px;"
-              onclick="document.getElementById('addCatModal').classList.add('open')">
-        <i class="fa fa-plus"></i> Add First Category
-      </button>
-    </div>
+  {{-- Empty state: inline create form --}}
+  @if($totalCount === 0)
+    <section class="pcat-inline">
+      <h2>Create category</h2>
+      <p class="pcat-muted">Examples: Starters, Main Course, Desserts, Drinks.</p>
+      <form method="POST" action="{{ route('restaurant.menu.categories.store') }}"
+            class="pcat-form-grid pcat-form-grid--2" style="margin-top:14px;">
+        @csrf
+        <div class="pcat-field" style="grid-column:1/-1;">
+          <label for="new-cat-name">Category name</label>
+          <input id="new-cat-name" name="name" value="{{ old('name') }}" maxlength="255" required
+                 placeholder="e.g. Main Course" autofocus>
+          @error('name')<div style="color:#f87171;font-size:12px;margin-top:4px;">{{ $message }}</div>@enderror
+        </div>
+        <div class="pcat-field" style="grid-column:1/-1;">
+          <label for="new-cat-desc">Description <span class="muted" style="font-weight:400;text-transform:none;">optional</span></label>
+          <textarea id="new-cat-desc" name="description" maxlength="1000"
+                    placeholder="Short description…">{{ old('description') }}</textarea>
+        </div>
+        <div style="grid-column:1/-1;display:flex;justify-content:flex-end;">
+          <button type="submit" class="linkbtn" style="padding:8px 16px;font-size:13px;">Save category</button>
+        </div>
+      </form>
+    </section>
+
+  {{-- Search results (flat table) --}}
+  @elseif($isFiltering)
+    @if($filtered->isEmpty())
+      <div style="padding:32px 16px;text-align:center;border:1px dashed var(--border);border-radius:10px;color:var(--muted);">
+        <i class="fa fa-magnifying-glass" aria-hidden="true" style="font-size:22px;margin-bottom:10px;display:block;opacity:.45;"></i>
+        <p style="margin:0 0 10px;font-size:14px;font-weight:600;">No categories match your search.</p>
+        <a href="{{ route('restaurant.menu.categories.index') }}" class="mcat-filter-clear" style="font-size:13px;">
+          <i class="fa fa-xmark"></i> Clear filters
+        </a>
+      </div>
+    @else
+      <div style="border:1px solid var(--border);border-radius:11px;overflow:auto;margin-bottom:14px;">
+        <table class="mcat-results-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Description</th>
+              <th>Items</th>
+              <th>Status</th>
+              <th style="text-align:right;">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            @foreach($filtered as $cat)
+            <tr>
+              <td><strong>{{ $cat->name }}</strong></td>
+              <td><span style="color:var(--muted);font-size:12px;">{{ Str::limit($cat->description ?? '—', 60) }}</span></td>
+              <td>{{ $cat->menu_items_count ?? 0 }}</td>
+              <td>
+                @if($cat->is_active)
+                  <span class="pcat-badge pcat-badge--on">Active</span>
+                @else
+                  <span class="pcat-badge pcat-badge--off">Inactive</span>
+                @endif
+              </td>
+              <td style="text-align:right;">
+                <button type="button"
+                        onclick="mcatOpenEdit({{ $cat->id }},'{{ addslashes($cat->name) }}','{{ addslashes($cat->description ?? '') }}',{{ $cat->is_active ? 'true' : 'false' }})"
+                        style="display:inline-flex;align-items:center;gap:5px;padding:6px 11px;font-size:11.5px;font-weight:700;border-radius:8px;border:1px solid color-mix(in srgb,var(--primary) 45%,var(--border));background:color-mix(in srgb,var(--primary) 12%,transparent);color:var(--text);cursor:pointer;">
+                  <i class="fa fa-pen-to-square" aria-hidden="true"></i> Edit
+                </button>
+              </td>
+            </tr>
+            @endforeach
+          </tbody>
+        </table>
+      </div>
+    @endif
+
+  {{-- Sortable card list --}}
   @else
-    <div class="mcat-grid">
+    <div id="mcat-sort-list" class="pcat-list">
       @foreach($categories as $cat)
-        <div class="mcat-card">
-          <div class="mcat-card__accent" style="background:{{ $cat->is_active ? '#8b5cf6' : '#9ca3af' }};"></div>
-          <div class="mcat-card__body">
-            <div class="mcat-card__badge"><i class="fa fa-layer-group"></i></div>
-            <div class="mcat-card__info">
-              <div class="mcat-card__name" title="{{ $cat->name }}">{{ $cat->name }}</div>
-              @if($cat->description)
-                <div class="mcat-card__desc">{{ $cat->description }}</div>
+        <article class="pcat-card pcat-card--parent"
+                 data-category-id="{{ $cat->id }}"
+                 style="cursor:default;">
+          <span class="pcat-drag-handle" title="Drag to reorder" aria-hidden="true">
+            <i class="fa fa-grip-vertical"></i>
+          </span>
+          <div class="pcat-card__body">
+            <div class="pcat-card__head">
+              <h3 class="pcat-card__title">{{ $cat->name }}</h3>
+            </div>
+            @if($cat->description)
+              <p class="pcat-card__desc muted">{{ Str::limit($cat->description, 80) }}</p>
+            @endif
+            <div class="pcat-card__meta">
+              <span class="muted">{{ $cat->menu_items_count ?? 0 }} item{{ ($cat->menu_items_count ?? 0) !== 1 ? 's' : '' }}</span>
+              @if($cat->is_active)
+                <span class="pcat-badge pcat-badge--on">Active</span>
               @else
-                <div class="mcat-card__desc" style="opacity:.4;font-style:italic;">No description</div>
+                <span class="pcat-badge pcat-badge--off">Inactive</span>
               @endif
             </div>
           </div>
-          <div class="mcat-card__foot">
-            <div class="mcat-card__meta">
-              <span class="mcat-card__count">
-                <i class="fa fa-utensils" style="font-size:9px;"></i>
-                {{ $cat->menu_items_count ?? 0 }} item{{ ($cat->menu_items_count ?? 0) !== 1 ? 's' : '' }}
-              </span>
-              <span class="mcat-card__status"
-                    style="background:{{ $cat->is_active ? 'color-mix(in srgb,#22c55e 12%,transparent)' : 'color-mix(in srgb,#9ca3af 12%,transparent)' }};
-                           color:{{ $cat->is_active ? '#16a34a' : '#6b7280' }};">
-                {{ $cat->is_active ? 'Active' : 'Inactive' }}
-              </span>
-            </div>
-            <div class="mcat-card__acts">
-              <button type="button" class="mcat-card__act" title="Edit"
-                      onclick="openEditCat({{ $cat->id }},'{{ addslashes($cat->name) }}','{{ addslashes($cat->description ?? '') }}',{{ $cat->is_active ? 'true' : 'false' }})">
-                <i class="fa fa-pen"></i>
-              </button>
-              <form method="POST" action="{{ route('restaurant.menu.categories.destroy', $cat) }}" style="display:contents;"
-                    onsubmit="return confirm('Delete {{ addslashes($cat->name) }}? Items will be uncategorised.')">
+          <div class="pcat-card__actions">
+            <button type="button" class="pcat-link"
+                    style="border:none;background:transparent;cursor:pointer;padding:0;font:inherit;"
+                    onclick="mcatOpenEdit({{ $cat->id }},'{{ addslashes($cat->name) }}','{{ addslashes($cat->description ?? '') }}',{{ $cat->is_active ? 'true' : 'false' }})">
+              <i class="fa fa-pen"></i> Edit
+            </button>
+            @if(($cat->menu_items_count ?? 0) > 0)
+              <span class="muted pcat-card__note">In use</span>
+            @else
+              <form method="POST" action="{{ route('restaurant.menu.categories.destroy', $cat) }}"
+                    style="margin:0;" onsubmit="return confirm('Delete {{ addslashes($cat->name) }}?');">
                 @csrf @method('DELETE')
-                <button type="submit" class="mcat-card__act mcat-card__act--del" title="Delete">
-                  <i class="fa fa-trash"></i>
+                <button type="submit" class="pcat-btn-del" title="Delete">
+                  <i class="fa fa-trash-can"></i>
                 </button>
               </form>
-            </div>
+            @endif
           </div>
-        </div>
+        </article>
       @endforeach
+    </div>
+  @endif
+
+  {{-- Add / Edit modals (only when categories exist) --}}
+  @if($totalCount > 0 || true)
+    {{-- Add modal --}}
+    <div id="mcat-add-modal" class="pcat-modal" role="dialog" aria-modal="true"
+         aria-labelledby="mcat-add-title" aria-hidden="true">
+      <div class="pcat-modal__backdrop" data-mcat-close tabindex="-1"></div>
+      <div class="pcat-modal__panel">
+        <div class="pcat-modal__head">
+          <h2 id="mcat-add-title">Add category</h2>
+          <button type="button" class="pcat-modal__close" data-mcat-close aria-label="Close">&times;</button>
+        </div>
+        <div class="pcat-modal__body">
+          <form method="POST" action="{{ route('restaurant.menu.categories.store') }}" class="pcat-form-grid">
+            @csrf
+            <div class="pcat-field">
+              <label for="mcat-add-name">Category name</label>
+              <input id="mcat-add-name" name="name" value="{{ old('name') }}" maxlength="255" required
+                     placeholder="e.g. Starters">
+            </div>
+            <div class="pcat-field">
+              <label for="mcat-add-desc">Description <span class="muted" style="font-weight:400;text-transform:none;">optional</span></label>
+              <textarea id="mcat-add-desc" name="description" maxlength="1000"
+                        placeholder="Short description…"></textarea>
+            </div>
+            <div class="pcat-active-row">
+              <label class="pcat-active-row__lbl" for="mcat-add-active">Active category</label>
+              <label class="pcat-switch">
+                <input type="checkbox" id="mcat-add-active" name="is_active" value="1" checked>
+                <span class="pcat-switch-slider"></span>
+              </label>
+            </div>
+            <div style="display:flex;justify-content:flex-end;gap:8px;padding-top:4px;">
+              <button type="button" class="pcat-btn-del"
+                      style="border-color:var(--border);color:var(--muted);background:transparent;"
+                      data-mcat-close>Cancel</button>
+              <button type="submit" class="linkbtn" style="padding:8px 18px;font-size:13px;">Save</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    {{-- Edit modal --}}
+    <div id="mcat-edit-modal" class="pcat-modal" role="dialog" aria-modal="true"
+         aria-labelledby="mcat-edit-title" aria-hidden="true">
+      <div class="pcat-modal__backdrop" data-mcat-edit-close tabindex="-1"></div>
+      <div class="pcat-modal__panel">
+        <div class="pcat-modal__head">
+          <h2 id="mcat-edit-title">Edit category</h2>
+          <button type="button" class="pcat-modal__close" data-mcat-edit-close aria-label="Close">&times;</button>
+        </div>
+        <div class="pcat-modal__body">
+          <form id="mcat-edit-form" method="POST" action="" class="pcat-form-grid">
+            @csrf @method('PUT')
+            <div class="pcat-field">
+              <label for="mcat-edit-name">Category name</label>
+              <input id="mcat-edit-name" name="name" maxlength="255" required>
+            </div>
+            <div class="pcat-field">
+              <label for="mcat-edit-desc">Description <span class="muted" style="font-weight:400;text-transform:none;">optional</span></label>
+              <textarea id="mcat-edit-desc" name="description" maxlength="1000"></textarea>
+            </div>
+            <div class="pcat-active-row">
+              <label class="pcat-active-row__lbl" for="mcat-edit-active">Active category</label>
+              <label class="pcat-switch">
+                <input type="checkbox" id="mcat-edit-active" name="is_active" value="1">
+                <span class="pcat-switch-slider"></span>
+              </label>
+            </div>
+            <div style="display:flex;justify-content:flex-end;gap:8px;padding-top:4px;">
+              <button type="button" class="pcat-btn-del"
+                      style="border-color:var(--border);color:var(--muted);background:transparent;"
+                      data-mcat-edit-close>Cancel</button>
+              <button type="submit" class="linkbtn" style="padding:8px 18px;font-size:13px;">Save changes</button>
+            </div>
+          </form>
+        </div>
+      </div>
     </div>
   @endif
 </div>
 
-{{-- Add category modal --}}
-<div id="addCatModal" class="mcat-overlay" onclick="if(event.target===this)this.classList.remove('open')">
-  <div class="mcat-modal">
-    <div class="mcat-modal__head">
-      <div class="mcat-modal__head-icon"><i class="fa fa-plus"></i></div>
-      <h3>New Category</h3>
-      <button type="button" class="mcat-modal__close" onclick="document.getElementById('addCatModal').classList.remove('open')">
-        <i class="fa fa-xmark"></i>
-      </button>
-    </div>
-    <form method="POST" action="{{ route('restaurant.menu.categories.store') }}">
-      @csrf
-      <div class="mcat-modal__body">
-        <div class="mcat-field">
-          <label>Name <span style="color:#ef4444;">*</span></label>
-          <input type="text" name="name" required maxlength="255" placeholder="e.g. Starters, Main Course, Desserts" autofocus>
-        </div>
-        <div class="mcat-field">
-          <label>Description</label>
-          <textarea name="description" rows="2" maxlength="1000" placeholder="Optional short description…"></textarea>
-        </div>
-      </div>
-      <div class="mcat-modal__foot">
-        <button type="button" class="mcat-btn-cancel"
-                onclick="document.getElementById('addCatModal').classList.remove('open')">Cancel</button>
-        <button type="submit" class="mcat-btn-submit">Add Category</button>
-      </div>
-    </form>
-  </div>
-</div>
-
-{{-- Edit category modal --}}
-<div id="editCatModal" class="mcat-overlay" onclick="if(event.target===this)this.classList.remove('open')">
-  <div class="mcat-modal">
-    <div class="mcat-modal__head">
-      <div class="mcat-modal__head-icon"><i class="fa fa-pen"></i></div>
-      <h3>Edit Category</h3>
-      <button type="button" class="mcat-modal__close" onclick="document.getElementById('editCatModal').classList.remove('open')">
-        <i class="fa fa-xmark"></i>
-      </button>
-    </div>
-    <form id="editCatForm" method="POST" action="">
-      @csrf @method('PUT')
-      <div class="mcat-modal__body">
-        <div class="mcat-field">
-          <label>Name <span style="color:#ef4444;">*</span></label>
-          <input type="text" id="editCatName" name="name" required maxlength="255">
-        </div>
-        <div class="mcat-field">
-          <label>Description</label>
-          <textarea id="editCatDesc" name="description" rows="2" maxlength="1000"></textarea>
-        </div>
-        <label class="mcat-toggle">
-          <input type="checkbox" id="editCatActive" name="is_active" value="1">
-          <span>Category is Active</span>
-        </label>
-      </div>
-      <div class="mcat-modal__foot">
-        <button type="button" class="mcat-btn-cancel"
-                onclick="document.getElementById('editCatModal').classList.remove('open')">Cancel</button>
-        <button type="submit" class="mcat-btn-submit">Save Changes</button>
-      </div>
-    </form>
-  </div>
-</div>
+@if($categories->isNotEmpty() && !$isFiltering)
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+@endif
 
 <script>
-function openEditCat(id, name, desc, active) {
-  document.getElementById('editCatForm').action = '/restaurant/menu/categories/' + id;
-  document.getElementById('editCatName').value   = name;
-  document.getElementById('editCatDesc').value   = desc;
-  document.getElementById('editCatActive').checked = active;
-  document.getElementById('editCatModal').classList.add('open');
-}
+/* ── Modal helpers ── */
+(function () {
+  var addModal  = document.getElementById('mcat-add-modal');
+  var editModal = document.getElementById('mcat-edit-modal');
+  var addBtn    = document.getElementById('mcat-modal-open');
+
+  function lockScroll(on) {
+    document.documentElement.classList.toggle('pcat-modal-open-html', Boolean(on));
+  }
+
+  function openModal(modal) {
+    if (!modal) return;
+    modal.classList.add('pcat-modal--open');
+    modal.setAttribute('aria-hidden', 'false');
+    lockScroll(true);
+  }
+
+  function closeModal(modal) {
+    if (!modal) return;
+    modal.classList.remove('pcat-modal--open');
+    modal.setAttribute('aria-hidden', 'true');
+    lockScroll(false);
+  }
+
+  addBtn && addBtn.addEventListener('click', function () {
+    openModal(addModal);
+    requestAnimationFrame(function () {
+      var n = document.getElementById('mcat-add-name');
+      if (n) n.focus();
+    });
+  });
+
+  if (addModal) {
+    addModal.querySelectorAll('[data-mcat-close]').forEach(function (el) {
+      el.addEventListener('click', function () { closeModal(addModal); });
+    });
+  }
+
+  if (editModal) {
+    editModal.querySelectorAll('[data-mcat-edit-close]').forEach(function (el) {
+      el.addEventListener('click', function () { closeModal(editModal); });
+    });
+  }
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    if (addModal && addModal.classList.contains('pcat-modal--open'))  closeModal(addModal);
+    if (editModal && editModal.classList.contains('pcat-modal--open')) closeModal(editModal);
+  });
+
+  window.mcatOpenEdit = function (id, name, desc, active) {
+    var form = document.getElementById('mcat-edit-form');
+    if (form) form.action = '/restaurant/menu/categories/' + id;
+    var n = document.getElementById('mcat-edit-name');
+    if (n) n.value = name;
+    var d = document.getElementById('mcat-edit-desc');
+    if (d) d.value = desc;
+    var a = document.getElementById('mcat-edit-active');
+    if (a) a.checked = active;
+    openModal(editModal);
+    requestAnimationFrame(function () { if (n) n.focus(); });
+  };
+})();
+
+/* ── Drag-and-drop reorder ── */
+(function () {
+  var list = document.getElementById('mcat-sort-list');
+  if (!list || typeof Sortable === 'undefined') return;
+
+  var statusEl  = document.getElementById('mcat-reorder-status');
+  var reorderUrl = @json(route('restaurant.menu.categories.reorder'));
+
+  function csrf() {
+    return document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')
+        || document.querySelector('input[name="_token"]')?.value || '';
+  }
+
+  function setStatus(text, cls) {
+    if (!statusEl) return;
+    statusEl.textContent = text || '';
+    statusEl.hidden = !text;
+    statusEl.classList.remove('is-saving', 'is-error');
+    if (cls) statusEl.classList.add(cls);
+  }
+
+  function save() {
+    var ids = Array.from(list.querySelectorAll('.pcat-card[data-category-id]'))
+                   .map(function (el) { return parseInt(el.getAttribute('data-category-id'), 10); })
+                   .filter(Boolean);
+    if (!ids.length) return;
+    setStatus('Saving…', 'is-saving');
+    fetch(reorderUrl, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-CSRF-TOKEN': csrf(),
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+      body: JSON.stringify({ ids: ids }),
+    })
+    .then(function (res) { return res.json().then(function (d) { return { ok: res.ok, d: d }; }); })
+    .then(function (r) {
+      if (!r.ok) { setStatus('Could not save.', 'is-error'); return; }
+      setStatus('Saved', '');
+      setTimeout(function () { setStatus('', ''); }, 1800);
+    })
+    .catch(function () { setStatus('Could not save.', 'is-error'); });
+  }
+
+  Sortable.create(list, {
+    animation: 150,
+    handle: '.pcat-drag-handle',
+    ghostClass: 'pcat-sort-ghost',
+    chosenClass: 'pcat-sort-chosen',
+    draggable: '.pcat-card',
+    onEnd: save,
+  });
+})();
 </script>
 @endsection

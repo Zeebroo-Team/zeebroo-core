@@ -5,6 +5,11 @@ namespace Modules\Restaurant\Http\Controllers;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Modules\Account\Models\Account;
+use Modules\Pos\Models\Sale;
+use Modules\Pos\Models\SaleItem;
+use Modules\Pos\Services\SalePaymentSettlementService;
 use Modules\Restaurant\Http\Controllers\Concerns\ResolvesRestaurantBusiness;
 use Illuminate\Http\JsonResponse;
 use Illuminate\View\View;
@@ -19,8 +24,9 @@ class OrderController extends Controller
     use ResolvesRestaurantBusiness;
 
     public function __construct(
-        private readonly OrderService $orders,
-        private readonly MenuService  $menu,
+        private readonly OrderService                 $orders,
+        private readonly MenuService                  $menu,
+        private readonly SalePaymentSettlementService $payments,
     ) {}
 
     public function index(Request $request): \Illuminate\View\View|RedirectResponse
@@ -54,7 +60,8 @@ class OrderController extends Controller
         return view('restaurant::orders.create', [
             'business'   => $business,
             'tables'     => RestaurantTable::where('business_id', $business->id)->where('status', '!=', 'inactive')->orderBy('name')->get(),
-            'categories' => $this->menu->categoriesForBusiness($business)->load('menuItems'),
+            'categories' => $this->menu->categoriesForBusiness($business)->load(['menuItems', 'menuItems.imageFile']),
+            'accounts'   => Account::where('business_id', $business->id)->orderBy('account_name')->get(['id', 'account_name', 'category']),
             'currency'   => (string) (get_settings('business.currency', '', $business) ?: ''),
         ]);
     }
@@ -194,13 +201,76 @@ class OrderController extends Controller
         if ($business instanceof RedirectResponse) abort(403);
         abort_unless((int) $order->business_id === (int) $business->id, 403);
 
-        // Force to paid regardless of current status (POS checkout bypasses the kitchen chain)
-        $order->update(['status' => 'paid']);
+        $data = $request->validate([
+            'payment_method'   => ['required', 'string', 'in:cash,card,transfer'],
+            'credit_account_id'=> ['required', 'integer', 'exists:accounts,id'],
+            'amount_tendered'  => ['nullable', 'numeric', 'min:0'],
+        ]);
 
-        if ($order->table_id) {
-            \Modules\Restaurant\Models\RestaurantTable::where('id', $order->table_id)
-                ->update(['status' => 'available']);
-        }
+        $user = $request->user();
+
+        $order->load('items');
+
+        DB::transaction(function () use ($order, $business, $user, $data) {
+            $orderTotal = round((float) $order->total, 2);
+
+            // Map frontend method names to POS constants
+            $paymentMethod = $data['payment_method'] === 'transfer' ? Sale::PAYMENT_CARD : $data['payment_method'];
+
+            // Generate next sale number (simple lock-safe approach)
+            $maxSeq = 0;
+            $existing = $business->sales()->whereNotNull('sale_number')->pluck('sale_number');
+            foreach ($existing as $num) {
+                if (preg_match('/^POS-(\d+)$/', (string) $num, $m)) {
+                    $maxSeq = max($maxSeq, (int) $m[1]);
+                }
+            }
+            $saleNumber = 'POS-' . str_pad((string) ($maxSeq + 1), 4, '0', STR_PAD_LEFT);
+
+            // Create the POS sale record
+            $sale = $business->sales()->create([
+                'user_id'          => $user->id,
+                'sale_number'      => $saleNumber,
+                'status'           => Sale::STATUS_COMPLETED,
+                'payment_method'   => $paymentMethod,
+                'channel'          => Sale::CHANNEL_RETAIL,
+                'credit_account_id'=> $data['credit_account_id'],
+                'subtotal'         => $orderTotal,
+                'total'            => $orderTotal,
+                'amount_paid'      => $orderTotal,
+                'amount_tendered'  => $data['amount_tendered'] ?? $orderTotal,
+                'change_amount'    => max(0, round(((float) ($data['amount_tendered'] ?? $orderTotal)) - $orderTotal, 2)),
+                'notes'            => 'Restaurant Order #' . $order->order_number,
+                'sold_at'          => now(),
+                'is_settled'       => true,
+                'settled_at'       => now(),
+            ]);
+
+            // Create sale line items from order items
+            $sortOrder = 0;
+            foreach ($order->items as $item) {
+                $lineTotal = round((float) $item->unit_price * (float) $item->quantity, 2);
+                SaleItem::create([
+                    'pos_sale_id'    => $sale->id,
+                    'product_name'   => $item->name,
+                    'quantity'       => $item->quantity,
+                    'unit_sell_price'=> $item->unit_price,
+                    'line_total'     => $lineTotal,
+                    'sort_order'     => $sortOrder++,
+                ]);
+            }
+
+            // Link sale to order and mark paid
+            $order->update(['sale_id' => $sale->id, 'status' => 'paid']);
+
+            // Free the table
+            if ($order->table_id) {
+                RestaurantTable::where('id', $order->table_id)->update(['status' => 'available']);
+            }
+
+            // Settle payment: updates account balance + creates LedgerTransaction
+            $this->payments->settle($sale, $business, $user, (int) $data['credit_account_id'], $orderTotal, $paymentMethod);
+        });
 
         return response()->json(['success' => true]);
     }

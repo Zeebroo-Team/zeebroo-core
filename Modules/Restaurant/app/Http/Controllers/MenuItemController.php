@@ -55,7 +55,7 @@ class MenuItemController extends Controller
 
         return view('restaurant::menu.items.show', [
             'business' => $business,
-            'item'     => $menuItem->load('category'),
+            'item'     => $menuItem->load(['category', 'imageFile']),
             'currency' => (string) (get_settings('business.currency', '', $business) ?: ''),
         ]);
     }
@@ -68,7 +68,7 @@ class MenuItemController extends Controller
 
         return view('restaurant::menu.items.edit', [
             'business'   => $business,
-            'item'       => $menuItem->load('category'),
+            'item'       => $menuItem->load(['category', 'imageFile']),
             'categories' => $this->menu->categoriesForBusiness($business),
             'currency'   => (string) (get_settings('business.currency', '', $business) ?: ''),
         ]);
@@ -99,14 +99,15 @@ class MenuItemController extends Controller
     private function validated(Request $request): array
     {
         return $request->validate([
-            'menu_category_id'  => ['nullable', 'integer', 'exists:restaurant_menu_categories,id'],
-            'name'              => ['required', 'string', 'max:255'],
-            'description'       => ['nullable', 'string', 'max:3000'],
-            'price'             => ['required', 'numeric', 'min:0'],
-            'is_available'      => ['nullable', 'boolean'],
-            'prep_time_minutes' => ['nullable', 'integer', 'min:1', 'max:9999'],
-            'dietary_tags'      => ['nullable', 'array'],
-            'dietary_tags.*'    => ['string', 'in:vegetarian,vegan,gluten_free,halal,spicy,nut_free,dairy_free'],
+            'menu_category_id'    => ['nullable', 'integer', 'exists:restaurant_menu_categories,id'],
+            'name'                => ['required', 'string', 'max:255'],
+            'description'         => ['nullable', 'string', 'max:3000'],
+            'price'               => ['required', 'numeric', 'min:0'],
+            'is_available'        => ['nullable', 'boolean'],
+            'prep_time_minutes'   => ['nullable', 'integer', 'min:1', 'max:9999'],
+            'dietary_tags'        => ['nullable', 'array'],
+            'dietary_tags.*'      => ['string', 'in:vegetarian,vegan,gluten_free,halal,spicy,nut_free,dairy_free'],
+            'file_manager_file_id'=> ['nullable', 'integer', 'exists:file_manager_files,id'],
         ]);
     }
 }

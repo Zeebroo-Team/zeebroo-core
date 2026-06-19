@@ -11,10 +11,12 @@ class RestaurantTable extends Model
 {
     protected $table = 'restaurant_tables';
 
-    protected $fillable = ['business_id', 'name', 'capacity', 'status', 'notes'];
+    protected $fillable = ['business_id', 'name', 'capacity', 'status', 'notes', 'pos_x', 'pos_y'];
 
     protected $casts = [
         'capacity' => 'integer',
+        'pos_x'    => 'integer',
+        'pos_y'    => 'integer',
     ];
 
     public const STATUS_AVAILABLE = 'available';

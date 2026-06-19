@@ -21,7 +21,7 @@ class MenuService
 
     public function itemsForBusiness(Business $business, string $search = '', string $status = 'all', ?int $categoryId = null): LengthAwarePaginator
     {
-        $query = MenuItem::where('business_id', $business->id)->with('category');
+        $query = MenuItem::where('business_id', $business->id)->with(['category', 'imageFile']);
 
         if ($search !== '') {
             $query->where('name', 'like', '%' . $search . '%');

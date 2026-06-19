@@ -59,6 +59,7 @@
             display:flex;flex-direction:column;transition:box-shadow .2s,transform .15s; }
 .mn-card:hover { box-shadow:0 6px 28px rgba(0,0,0,.10);transform:translateY(-2px); }
 .mn-card__accent { height:4px;width:100%;flex-shrink:0; }
+.mn-card__img    { width:100%;height:140px;object-fit:cover;display:block;border-bottom:1px solid var(--border);flex-shrink:0; }
 .mn-card__body   { padding:14px 16px;flex:1;display:flex;flex-direction:column;gap:8px; }
 .mn-card__top    { display:flex;align-items:flex-start;justify-content:space-between;gap:8px; }
 .mn-card__name   { font-size:14px;font-weight:900;line-height:1.3;flex:1;min-width:0;
@@ -256,6 +257,9 @@
           @endphp
           <div class="mn-card">
             <div class="mn-card__accent" style="background:{{ $accentColor }};"></div>
+            @if($item->imageFile)
+              <img class="mn-card__img" src="{{ $item->imageFile->publicUrl() }}" alt="{{ $item->name }}">
+            @endif
             <div class="mn-card__body">
               <div class="mn-card__top">
                 <a href="{{ route('restaurant.menu.items.show', $item) }}" class="mn-card__name">
@@ -368,6 +372,15 @@
                 </label>
               @endforeach
             </div>
+          </div>
+          <div class="mn-field mn-field-full">
+            <label>Item image</label>
+            @include('restaurant::menu.items.partials.image-field', [
+                'fileId'   => old('file_manager_file_id'),
+                'fileUrl'  => null,
+                'fileName' => null,
+                'fieldKey' => 'create',
+            ])
           </div>
         </div>
         <div class="mn-modal__foot" style="padding:0;border:none;margin-top:4px;">
