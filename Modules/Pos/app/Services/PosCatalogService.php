@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Collection;
 use Modules\Business\Models\Business;
 use Modules\Product\Models\Product;
+use Modules\Service\Models\ServiceItem;
 use Modules\Product\Models\ProductCategory;
 use Modules\Product\Models\ProductDiscount;
 use Modules\Product\Models\ProductSellingUnit;
@@ -280,6 +281,25 @@ class PosCatalogService
         }
 
         return $out;
+    }
+
+    /**
+     * @return list<array{id: int, name: string, price: float, item_type: string}>
+     */
+    public function serviceCardsForPos(Business $business): array
+    {
+        return ServiceItem::query()
+            ->where('business_id', $business->id)
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get(['id', 'name', 'price'])
+            ->map(static fn (ServiceItem $s): array => [
+                'id'        => (int) $s->id,
+                'name'      => $s->name,
+                'price'     => round((float) $s->price, 2),
+                'item_type' => 'service',
+            ])
+            ->all();
     }
 
     public function findSellableProductBySku(Business $business, string $sku): ?Product

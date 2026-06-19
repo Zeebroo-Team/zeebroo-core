@@ -348,7 +348,7 @@
         $businessFeatures = $navBusiness
             ? (function () use ($navBusiness) {
                 $saved = (array) ($navBusiness->getSetting('business.features', []) ?: []);
-                $defaults = ['account_management' => true, 'bill_management' => true, 'human_resources' => true, 'point_of_sale' => true, 'product_management' => true, 'social_media_campaign' => true, 'stock_management' => true];
+                $defaults = ['account_management' => true, 'bill_management' => true, 'human_resources' => true, 'point_of_sale' => true, 'product_management' => true, 'service_management' => true, 'social_media_campaign' => true, 'stock_management' => true];
                 return !empty($saved) ? array_merge($defaults, array_map('boolval', $saved)) : $defaults;
             })()
             : [];
@@ -415,18 +415,21 @@
             && ($posFeatureOn || \Modules\Pos\Models\Customer::query()->where('business_id', $navBusiness->id)->exists());
         $showSidebarPosReturnsLink = $navBusiness && Route::has('pos.returns.index')
             && ($posFeatureOn || \Modules\Pos\Models\SaleReturn::query()->where('business_id', $navBusiness->id)->exists());
-        // Sales Quotations (always show when module is active)
+        // Sales Quotations and Invoices (always show when module is active)
         $showSidebarQuotationsLink = $navBusiness && Route::has('sales.quotations.index');
+        $showSidebarInvoicesLink   = $navBusiness && Route::has('sales.invoices.index');
 
         // Hub link shows whenever the Sales section is visible (feature on, or data-driven links are showing).
         $showSidebarPosSection = $showSidebarPosRegisterLink || $showSidebarPosSalesLink
-            || $showSidebarQuotationsLink || ($navBusiness && $posFeatureOn);
+            || $showSidebarQuotationsLink || $showSidebarInvoicesLink || ($navBusiness && $posFeatureOn);
         $showSidebarPosHubLink = $navBusiness && Route::has('pos.index') && $showSidebarPosSection;
 
         $showSidebarFilesLink = $navBusiness && (
             $navBusiness->fileManagerFiles()->exists() || $navBusiness->fileManagerFolders()->exists()
         );
         $showSidebarDesignStudioLink = $navBusiness && Route::has('designstudio.index');
+        $showSidebarServiceLink = $navBusiness && Route::has('service.catalog.index') && $featureOn('service_management');
+        $showSidebarRestaurantLink = $navBusiness && Route::has('restaurant.orders.index');
         $showSidebarDocumentationLink = $navBusiness
             && Route::has('documentation.documents.index')
             && \Modules\Documentation\Models\Document::where('business_id', $navBusiness->id)->exists();
@@ -590,9 +593,9 @@
             @endif
             @if($showSidebarProductSection)
                 <div class="menu-group-title">
-                    <i class="fa fa-boxes-stacked"></i><span>Catalog</span>
+                    <i class="fa fa-boxes-stacked"></i><span>Products Catalog</span>
                 </div>
-                <div class="submenu" aria-label="Catalog">
+                <div class="submenu" aria-label="Products Catalog">
                     @if($showSidebarProductBrandsLink)
                         <a href="{{ route('product.brands.index') }}" class="{{ request()->routeIs('product.brands.*') ? 'active' : '' }}"><i class="fa fa-tag"></i><span>Brands</span></a>
                     @endif
@@ -687,6 +690,11 @@
                             <i class="fa fa-file-lines"></i><span>Quotations</span>
                         </a>
                     @endif
+                    @if($showSidebarInvoicesLink)
+                        <a href="{{ route('sales.invoices.index') }}" @class(['active' => request()->routeIs('sales.invoices.*')])>
+                            <i class="fa fa-file-invoice"></i><span>Invoices</span>
+                        </a>
+                    @endif
                 </div>
             @endif
 
@@ -695,6 +703,44 @@
             @endif
             @if($showSidebarDesignStudioLink)
                 <a href="{{ route('designstudio.index') }}" class="{{ request()->routeIs('designstudio.*') ? 'active' : '' }}"><i class="fa fa-palette"></i><span>Design Studio</span></a>
+                <div class="submenu">
+                    @if(Route::has('designstudio.social-media.index'))
+                        <a href="{{ route('designstudio.social-media.index') }}" @class(['active' => request()->routeIs('designstudio.social-media.*')])>
+                            <i class="fa fa-share-nodes"></i><span>Social Media</span>
+                        </a>
+                    @endif
+                </div>
+            @endif
+            @if($showSidebarServiceLink)
+                <a href="{{ route('service.catalog.index') }}" class="{{ request()->routeIs('service.*') ? 'active' : '' }}"><i class="fa fa-screwdriver-wrench"></i><span>Service Catalog</span></a>
+                <div class="submenu">
+                    <a href="{{ route('service.catalog.index') }}" @class(['active' => request()->routeIs('service.catalog.*')])>
+                        <i class="fa fa-list-check"></i><span>Services</span>
+                    </a>
+                    <a href="{{ route('service.categories.index') }}" @class(['active' => request()->routeIs('service.categories.*')])>
+                        <i class="fa fa-folder-tree"></i><span>Categories</span>
+                    </a>
+                    <a href="{{ route('service.requests.index') }}" @class(['active' => request()->routeIs('service.requests.*')])>
+                        <i class="fa fa-inbox"></i><span>Requests</span>
+                    </a>
+                </div>
+            @endif
+            @if($showSidebarRestaurantLink)
+                <a href="{{ route('restaurant.orders.index') }}" class="{{ request()->routeIs('restaurant.*') ? 'active' : '' }}"><i class="fa fa-utensils"></i><span>Restaurant</span></a>
+                <div class="submenu">
+                    <a href="{{ route('restaurant.orders.index') }}" @class(['active' => request()->routeIs('restaurant.orders.*')])>
+                        <i class="fa fa-receipt"></i><span>Orders</span>
+                    </a>
+                    <a href="{{ route('restaurant.tables.index') }}" @class(['active' => request()->routeIs('restaurant.tables.*')])>
+                        <i class="fa fa-chair"></i><span>Tables</span>
+                    </a>
+                    <a href="{{ route('restaurant.reservations.index') }}" @class(['active' => request()->routeIs('restaurant.reservations.*')])>
+                        <i class="fa fa-calendar-check"></i><span>Reservations</span>
+                    </a>
+                    <a href="{{ route('restaurant.menu.items.index') }}" @class(['active' => request()->routeIs('restaurant.menu.*')])>
+                        <i class="fa fa-utensils"></i><span>Menu</span>
+                    </a>
+                </div>
             @endif
             @if($showSidebarDocumentationLink)
                 <a href="{{ route('documentation.documents.index') }}" class="{{ request()->routeIs('documentation.*') ? 'active' : '' }}"><i class="fa fa-book-open"></i><span>Documentation</span></a>
@@ -743,6 +789,9 @@
             @endif
             @if($navBusiness && $navBusiness->multiWarehouseBranchEnabled())
                 <a href="{{ route('business.branches.index') }}" class="{{ request()->routeIs('business.branches.*') ? 'active' : '' }}"><i class="fa fa-code-branch"></i><span>Branches</span></a>
+            @endif
+            @if($navBusiness && (int) $navBusiness->user_id === (int) auth()->id())
+                <a href="{{ route('business.users.index') }}" class="{{ request()->routeIs('business.users.*') ? 'active' : '' }}"><i class="fa fa-users"></i><span>User Management</span></a>
             @endif
             @if($showSidebarSettingsSection)
                 <div class="menu-section">Configuration</div>
@@ -830,10 +879,6 @@
                 @endif
                 <div class="navchip">{{ now()->format('d M Y') }}</div>
                 @if($navBusiness)
-                    <a href="{{ route('business.map') }}" class="user-trigger nav-business-profile @if(request()->routeIs('business.map')) nav-business-profile--active @endif" title="Business Map">
-                        <i class="fa fa-sitemap"></i>
-                        <span>Business Map</span>
-                    </a>
                     <a href="{{ route('business.profile') }}" class="user-trigger nav-business-profile @if(request()->routeIs('business.profile')) nav-business-profile--active @endif" title="Business profile">
                         <i class="fa fa-id-card"></i>
                         <span>Business profile</span>
@@ -850,15 +895,31 @@
                             <div class="menu-name">{{ $navBusiness?->name ?? 'No Business Yet' }}</div>
                             <div class="menu-email">{{ $navBusiness?->category ?? 'Complete onboarding in Overview' }}</div>
                         </div>
+                        @php
+                            $navCurrentUserRole = null;
+                            if ($navBusiness) {
+                                if ((int) $navBusiness->user_id === (int) auth()->id()) {
+                                    $navCurrentUserRole = 'owner';
+                                } else {
+                                    $navMember = $navBusiness->members()->where('user_id', auth()->id())->where('status', 'active')->first();
+                                    $navCurrentUserRole = $navMember?->role ?? null;
+                                }
+                            }
+                        @endphp
                         @if($navBusinesses->count() > 1)
                             <div class="menu-row" style="display:block;">
-                                <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">Selected business</div>
+                                <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">Switch business</div>
                                 <form method="post" action="{{ route('business.select') }}">
                                     @csrf
                                     <select name="business_id" class="dropdown-select" onchange="this.form.submit()">
                                         @foreach($navBusinesses as $businessOption)
+                                            @php
+                                                $isOwner = (int) $businessOption->user_id === (int) auth()->id();
+                                                $roleLabel = $isOwner ? 'Owner' : ($businessOption->members()->where('user_id', auth()->id())->value('role') ?? '');
+                                                $roleLabel = $roleLabel ? ' (' . ucfirst($roleLabel) . ')' : '';
+                                            @endphp
                                             <option value="{{ $businessOption->id }}" {{ (int) ($navBusiness?->id ?? 0) === (int) $businessOption->id ? 'selected' : '' }}>
-                                                {{ $businessOption->name }}
+                                                {{ $businessOption->name }}{{ $roleLabel }}
                                             </option>
                                         @endforeach
                                     </select>
@@ -870,10 +931,33 @@
                                 <span><i class="fa fa-layer-group" style="margin-right:6px;"></i>Category</span>
                                 <span class="pkg-badge">{{ $navBusiness->category }}</span>
                             </div>
-                            <div class="menu-row" style="display:block;">
-                                <div style="font-size:12px;color:var(--muted);margin-bottom:4px;">About Business</div>
-                                <div style="font-size:13px;line-height:1.4;">{{ $navBusiness->description ?: 'No description added yet.' }}</div>
+                            @if($navCurrentUserRole)
+                            <div class="menu-row">
+                                <span><i class="fa fa-id-badge" style="margin-right:6px;"></i>Your role</span>
+                                <span class="pkg-badge" style="
+                                    background:{{ match($navCurrentUserRole) {
+                                        'owner'   => 'color-mix(in srgb,#f59e0b 15%,transparent)',
+                                        'admin'   => 'color-mix(in srgb,#6366f1 15%,transparent)',
+                                        'manager' => 'color-mix(in srgb,#0ea5e9 15%,transparent)',
+                                        default   => 'color-mix(in srgb,#64748b 15%,transparent)',
+                                    } }};
+                                    color:{{ match($navCurrentUserRole) {
+                                        'owner'   => '#d97706',
+                                        'admin'   => '#6366f1',
+                                        'manager' => '#0ea5e9',
+                                        default   => '#64748b',
+                                    } }};">
+                                    {{ ucfirst($navCurrentUserRole) }}
+                                </span>
                             </div>
+                            @endif
+                            @if((int) $navBusiness->user_id === (int) auth()->id())
+                            <div class="menu-row">
+                                <a href="{{ route('business.users.index') }}" style="display:flex;align-items:center;gap:7px;color:var(--text);text-decoration:none;font-size:13px;font-weight:600;">
+                                    <i class="fa fa-users" style="color:var(--primary);"></i> Manage Users
+                                </a>
+                            </div>
+                            @endif
                         @endif
                     </div>
                 </div>
@@ -980,6 +1064,11 @@
                             </div>
                         @endif
                         @if($navBusiness)
+                        <div class="menu-row" style="display:block;padding-top:2px;padding-bottom:2px;">
+                            <a href="{{ route('business.map') }}" class="dropdown-action-btn">
+                                <i class="fa fa-sitemap" style="margin-right:6px;"></i>Business Map
+                            </a>
+                        </div>
                         <div class="menu-row" style="display:block;padding-top:2px;padding-bottom:2px;">
                             <button type="button" id="openFeaturesModalBtn" style="width:100%;display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:10px;border:1px solid var(--border);background:color-mix(in srgb,var(--primary) 8%,transparent);color:var(--text);cursor:pointer;font-size:13px;font-weight:600;text-align:left;">
                                 <i class="fa fa-sliders" style="color:var(--primary);width:14px;text-align:center;"></i>
@@ -1213,6 +1302,7 @@ html[data-theme="light"] .bfm-dep-hint,html[data-theme="light_blue"] .bfm-dep-hi
                         ['key' => 'human_resources',      'label' => 'Human Resources',       'img' => 'features/human-resource-management.png'],
                         ['key' => 'point_of_sale',        'label' => 'Point of Sale',         'img' => 'features/point-of-sale.png'],
                         ['key' => 'product_management',   'label' => 'Product Management',    'img' => 'features/product-management.svg'],
+                        ['key' => 'service_management',   'label' => 'Service Management',    'img' => 'features/service.png'],
                         ['key' => 'social_media_campaign','label' => 'Social Media Campaign', 'img' => 'features/social-media-campaign.png'],
                         ['key' => 'stock_management',     'label' => 'Stock Management',      'img' => 'features/stock-management.png'],
                     ];
@@ -1417,7 +1507,7 @@ html[data-theme="light"] .bfm-dep-hint,html[data-theme="light_blue"] .bfm-dep-hi
                 status.className = 'bfm-status bfm-ok';
                 status.textContent = 'Saved successfully.';
                 bfmOnboarding = false;
-                setTimeout(closeModal, 900);
+                setTimeout(function () { window.location.reload(); }, 900);
             } else {
                 throw new Error(data.error || 'Save failed.');
             }

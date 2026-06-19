@@ -109,6 +109,7 @@
             <label style="margin:0;">Line items</label>
             <button type="button" class="linkbtn" style="padding:6px 12px;font-size:12px;" data-purchase-add-line><i class="fa fa-plus"></i> Add line</button>
         </div>
+        @include('purchase::purchases.partials.quick-add-product-modal')
         @error('items')<div style="color:#f87171;font-size:12px;margin-bottom:8px;">{{ $message }}</div>@enderror
         <div class="pcat-table-wrap">
             <table class="pcat-table purchase-lines-table">
@@ -130,12 +131,20 @@
                         @endphp
                         <tr data-purchase-line>
                             <td>
-                                <select name="items[{{ $index }}][product_id]" class="purchase-line-product" required data-purchase-product-select>
-                                    <option value="">Select product…</option>
-                                    @foreach($products as $productRow)
-                                        <option value="{{ $productRow->id }}" data-unit-price="{{ $productRow->unit_price }}" @selected((string) old('items.'.$index.'.product_id', $line['product_id'] ?? '') === (string) $productRow->id)>{{ $productRow->name }}@if($productRow->sku) ({{ $productRow->sku }})@endif</option>
-                                    @endforeach
-                                </select>
+                                <div style="display:flex;align-items:center;gap:4px;">
+                                    <select name="items[{{ $index }}][product_id]" class="purchase-line-product" required data-purchase-product-select style="flex:1;min-width:0;">
+                                        <option value="">Select product…</option>
+                                        @foreach($products as $productRow)
+                                            <option value="{{ $productRow->id }}" data-unit-price="{{ $productRow->unit_price }}" @selected((string) old('items.'.$index.'.product_id', $line['product_id'] ?? '') === (string) $productRow->id)>{{ $productRow->name }}@if($productRow->sku) ({{ $productRow->sku }})@endif</option>
+                                        @endforeach
+                                    </select>
+                                    <button type="button" data-po-product-open title="Add new product"
+                                            style="flex-shrink:0;width:28px;height:28px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:13px;transition:all .15s;"
+                                            onmouseover="this.style.borderColor='var(--primary)';this.style.color='var(--primary)'"
+                                            onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">
+                                        <i class="fa fa-plus"></i>
+                                    </button>
+                                </div>
                             </td>
                             <td>
                                 <input type="number" name="items[{{ $index }}][quantity]" value="{{ old('items.'.$index.'.quantity', $line['quantity'] ?? '1') }}" min="0.001" step="any" inputmode="decimal" required data-purchase-qty>

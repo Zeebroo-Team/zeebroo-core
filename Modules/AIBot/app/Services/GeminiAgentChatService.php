@@ -217,7 +217,7 @@ TXT;
      */
     private function tryDirectDepartmentCountAnswer(User $user, ?Business $business, array $messages): ?string
     {
-        if ($business === null || ! $user->businesses()->whereKey($business->id)->exists()) {
+        if ($business === null || ! Business::canAccess($user, $business)) {
             return null;
         }
 

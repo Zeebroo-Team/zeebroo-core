@@ -75,6 +75,28 @@
                     </div>
                     @endif
                     <div class="psm-section">
+                        <p class="psm-section__label"><i class="fa fa-layer-group" aria-hidden="true"></i> Catalog limits</p>
+                        <div class="psm-card">
+                            <div class="psm-field">
+                                <label class="psm-field__label" for="pos-settings-products-limit">Featured products limit</label>
+                                <p class="psm-field__hint">Maximum products shown on the POS page. Set to 0 to show all.</p>
+                                <input type="number" name="featured_products_limit" id="pos-settings-products-limit" class="psm-input"
+                                    min="0" max="9999" step="1"
+                                    value="{{ (int) ($posSettings['featured_products_limit'] ?? 0) }}"
+                                    placeholder="0 = show all">
+                            </div>
+                            <div class="psm-field" style="margin-bottom:0;">
+                                <label class="psm-field__label" for="pos-settings-categories-limit">Category carousel limit</label>
+                                <p class="psm-field__hint">Maximum categories shown in the carousel. Set to 0 to show all.</p>
+                                <input type="number" name="featured_categories_limit" id="pos-settings-categories-limit" class="psm-input"
+                                    min="0" max="9999" step="1"
+                                    value="{{ (int) ($posSettings['featured_categories_limit'] ?? 0) }}"
+                                    placeholder="0 = show all">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="psm-section">
                         <p class="psm-section__label"><i class="fa fa-palette" aria-hidden="true"></i> Appearance</p>
                         <div class="psm-card">
                             <div class="psm-row">
@@ -237,6 +259,17 @@
                                 <label class="psm-switch">
                                     <input type="hidden" name="show_account_info" value="0">
                                     <input type="checkbox" name="show_account_info" value="1" @checked($posSettings['show_account_info'] ?? true)>
+                                    <span class="psm-switch__track" aria-hidden="true"><span class="psm-switch__thumb"></span></span>
+                                </label>
+                            </div>
+                            <div class="psm-row psm-row--border">
+                                <div class="psm-row__info">
+                                    <span class="psm-row__name">Show service bound products</span>
+                                    <span class="psm-row__desc">List attached products under each service line on the receipt</span>
+                                </div>
+                                <label class="psm-switch">
+                                    <input type="hidden" name="show_service_bound_products" value="0">
+                                    <input type="checkbox" name="show_service_bound_products" value="1" @checked($posSettings['show_service_bound_products'] ?? true)>
                                     <span class="psm-switch__track" aria-hidden="true"><span class="psm-switch__thumb"></span></span>
                                 </label>
                             </div>

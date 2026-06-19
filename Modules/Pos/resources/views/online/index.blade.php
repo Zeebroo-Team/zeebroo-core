@@ -87,8 +87,12 @@
 .pos-online__scan-row{display:flex;gap:6px;align-items:center;}
 .pos-online__scan-row input[type="search"],.pos-online__scan-row input[type="text"]{box-sizing:border-box;padding:8px 10px;font-size:13px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);}
 .pos-online__scan-row button{padding:8px 10px;font-size:11px;font-weight:700;border-radius:8px;border:1px solid var(--border);background:color-mix(in srgb,var(--primary) 12%,transparent);color:var(--text);cursor:pointer;}
-.pos-online__cats{display:flex;flex-wrap:wrap;gap:6px;}
-.pos-online__cat{padding:6px 10px;font-size:11px;font-weight:700;border-radius:999px;border:1px solid var(--border);background:color-mix(in srgb,var(--card) 92%,transparent);color:var(--muted);text-decoration:none;white-space:nowrap;}
+.pos-online__cats-carousel{display:flex;align-items:center;gap:4px;}
+.pos-online__cats-track{display:flex;gap:6px;overflow-x:auto;scroll-behavior:smooth;scrollbar-width:none;flex:1;min-width:0;padding:2px 0;}
+.pos-online__cats-track::-webkit-scrollbar{display:none;}
+.pos-online__cats-arrow{flex-shrink:0;width:26px;height:26px;border:1px solid var(--border);border-radius:50%;background:var(--card);color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:10px;padding:0;transition:color .15s,border-color .15s;}
+.pos-online__cats-arrow:hover{color:var(--text);border-color:color-mix(in srgb,var(--primary) 40%,var(--border));}
+.pos-online__cat{padding:6px 10px;font-size:11px;font-weight:700;border-radius:999px;border:1px solid var(--border);background:color-mix(in srgb,var(--card) 92%,transparent);color:var(--muted);text-decoration:none;white-space:nowrap;flex-shrink:0;}
 .pos-online__catalog{display:flex;flex-direction:column;min-height:0;}
 .pos-online__catalog-body{flex:1;min-height:0;display:flex;flex-direction:column;min-width:0;}
 .pos-online__catalog-main{display:flex;flex-direction:column;flex:1;min-height:0;min-width:0;}
@@ -103,6 +107,8 @@
 .pos-online__item__name{font-size:13px;font-weight:700;line-height:1.3;color:var(--text);}
 .pos-online__item__meta{font-size:10px;color:var(--muted);line-height:1.35;}
 .pos-online__item__price{font-size:14px;font-weight:800;color:var(--text);}
+.pos-online__item--service .pos-online__item__ph{color:color-mix(in srgb,#8b5cf6 70%,var(--muted));background:color-mix(in srgb,#8b5cf6 12%,transparent);}
+.pos-svc-badge{display:inline-block;font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;background:color-mix(in srgb,#8b5cf6 14%,transparent);color:#8b5cf6;border:1px solid color-mix(in srgb,#8b5cf6 30%,transparent);}
 .pos-online__checkout-body{padding:0;display:flex;flex-direction:column;min-height:0;flex:1;overflow:hidden;}
 .pos-online__cart-list{display:flex;flex-direction:column;gap:8px;}
 .pos-online__sale-panel .pos-online__cart-list{min-height:80px;}
@@ -219,17 +225,42 @@ body.pos-walking-active .pos-online__top-fields .pos-online__scan-row button{pad
 
         <section class="pos-three-panel__center pos-online__catalog" aria-label="Product catalog">
             @if($categories->isNotEmpty())
-                <nav class="pos-online__cats-bar pos-online__cats" aria-label="Categories">
-                    <a href="{{ route('pos.online', $onlineRouteParams()) }}" @class(['pos-online__cat', 'is-active' => !$categoryId])>All</a>
-                    @foreach($categories as $category)
-                        <a href="{{ route('pos.online', $onlineRouteParams((int) $category->id)) }}" @class(['pos-online__cat', 'is-active' => (int) $categoryId === (int) $category->id])>{{ $category->name }}</a>
-                    @endforeach
+                <nav class="pos-online__cats-bar" aria-label="Categories">
+                    <div class="pos-online__cats-carousel">
+                        <button type="button" class="pos-online__cats-arrow pos-online__cats-arrow--prev" aria-label="Scroll categories left" hidden>
+                            <i class="fa fa-chevron-left"></i>
+                        </button>
+                        <div class="pos-online__cats-track" data-cats-track>
+                            <a href="{{ route('pos.online', $onlineRouteParams()) }}" @class(['pos-online__cat', 'is-active' => !$categoryId])>All</a>
+                            @foreach($categories as $category)
+                                <a href="{{ route('pos.online', $onlineRouteParams((int) $category->id)) }}" @class(['pos-online__cat', 'is-active' => (int) $categoryId === (int) $category->id])>{{ $category->name }}</a>
+                            @endforeach
+                        </div>
+                        <button type="button" class="pos-online__cats-arrow pos-online__cats-arrow--next" aria-label="Scroll categories right" hidden>
+                            <i class="fa fa-chevron-right"></i>
+                        </button>
+                    </div>
                 </nav>
             @endif
             <div class="pos-online__catalog-body">
             <div class="pos-online__catalog-main">
             <div class="pos-online__grid-wrap">
                 <div class="pos-online__grid" id="pos-online-products">
+                    @foreach($serviceItems ?? [] as $svc)
+                        <button
+                            type="button"
+                            class="pos-online__item pos-online__item--service"
+                            data-pos-service
+                            data-service-id="{{ $svc['id'] }}"
+                            data-service-name="{{ e($svc['name']) }}"
+                            data-unit-price="{{ number_format((float) $svc['price'], 2, '.', '') }}"
+                        >
+                            <div class="pos-online__item__ph"><i class="fa fa-wrench" aria-hidden="true"></i></div>
+                            <span class="pos-online__item__name">{{ $svc['name'] }}</span>
+                            <span class="pos-online__item__meta"><span class="pos-svc-badge">Service</span></span>
+                            <span class="pos-online__item__price">{{ number_format((float) $svc['price'], 2) }}{{ filled($currency) ? ' '.$currency : '' }}</span>
+                        </button>
+                    @endforeach
                     @foreach($products as $product)
                         @php $outOfStock = (float) $product['stock_quantity'] <= 0; @endphp
                         @php
@@ -440,12 +471,27 @@ body.pos-walking-active .pos-online__top-fields .pos-online__scan-row button{pad
             const qtyInput = wrap.querySelector('[data-qty]');
             qtyInput.value = String(row.quantity);
             wrap.querySelector('[data-line-total]').textContent = money(lineTotal);
-            const idInput = document.createElement('input');
-            idInput.type = 'hidden';
-            idInput.name = 'items[' + index + '][product_id]';
-            idInput.value = String(row.id);
-            idInput.setAttribute('form', 'pos-checkout-form');
-            wrap.appendChild(idInput);
+            if (row.itemType === 'service') {
+                const svcInput = document.createElement('input');
+                svcInput.type = 'hidden';
+                svcInput.name = 'items[' + index + '][service_item_id]';
+                svcInput.value = String(row.id);
+                svcInput.setAttribute('form', 'pos-checkout-form');
+                wrap.appendChild(svcInput);
+                const typeInput = document.createElement('input');
+                typeInput.type = 'hidden';
+                typeInput.name = 'items[' + index + '][item_type]';
+                typeInput.value = 'service';
+                typeInput.setAttribute('form', 'pos-checkout-form');
+                wrap.appendChild(typeInput);
+            } else {
+                const idInput = document.createElement('input');
+                idInput.type = 'hidden';
+                idInput.name = 'items[' + index + '][product_id]';
+                idInput.value = String(row.id);
+                idInput.setAttribute('form', 'pos-checkout-form');
+                wrap.appendChild(idInput);
+            }
             const qtyHidden = document.createElement('input');
             qtyHidden.type = 'hidden';
             qtyHidden.name = 'items[' + index + '][quantity]';
@@ -513,7 +559,37 @@ body.pos-walking-active .pos-online__top-fields .pos-online__scan-row button{pad
         window.posPaymentSyncTotal?.(total, true);
     }
 
+    function addServiceToCart(btn) {
+        const svcId = parseInt(btn.dataset.serviceId, 10);
+        if (!svcId) return;
+        const cartKey = 'svc-' + svcId;
+        const price = parseFloat(btn.dataset.unitPrice) || 0;
+        if (cart.has(cartKey)) {
+            cart.get(cartKey).quantity += 1;
+        } else {
+            cart.set(cartKey, {
+                cartKey: cartKey,
+                itemType: 'service',
+                id: svcId,
+                name: btn.dataset.serviceName || '',
+                sku: null,
+                unitPrice: price,
+                quantity: 1,
+                stock: Infinity,
+                layerId: null,
+                layerLabel: null,
+                sellingUnitId: null,
+                sellingUnitLabel: null,
+                sellingUnitFactor: null,
+            });
+        }
+        renderCart();
+        if (typeof window.playPosBeep === 'function') window.playPosBeep();
+    }
+
     productsEl?.addEventListener('click', function (event) {
+        const svcBtn = event.target.closest('[data-pos-service]');
+        if (svcBtn) { addServiceToCart(svcBtn); return; }
         const btn = event.target.closest('[data-pos-product]');
         if (btn) void addProductFromButton(btn);
     });
@@ -582,6 +658,44 @@ body.pos-walking-active .pos-online__top-fields .pos-online__scan-row button{pad
 })();
 </script>
 @endonce
+
+<script>
+(function () {
+    var track = document.querySelector('[data-cats-track]');
+    if (!track) return;
+
+    var nav   = track.closest('.pos-online__cats-bar');
+    var prev  = nav.querySelector('.pos-online__cats-arrow--prev');
+    var next  = nav.querySelector('.pos-online__cats-arrow--next');
+    var step  = 180;
+
+    function updateArrows() {
+        if (!prev || !next) return;
+        var atStart = track.scrollLeft <= 2;
+        var atEnd   = track.scrollLeft + track.clientWidth >= track.scrollWidth - 2;
+        var canScroll = track.scrollWidth > track.clientWidth + 4;
+        prev.hidden = atStart || !canScroll;
+        next.hidden = atEnd  || !canScroll;
+    }
+
+    if (prev) prev.addEventListener('click', function () {
+        track.scrollBy({ left: -step, behavior: 'smooth' });
+    });
+    if (next) next.addEventListener('click', function () {
+        track.scrollBy({ left: step, behavior: 'smooth' });
+    });
+
+    track.addEventListener('scroll', updateArrows, { passive: true });
+
+    var active = track.querySelector('.pos-online__cat.is-active');
+    if (active) {
+        active.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+    }
+
+    updateArrows();
+    setTimeout(updateArrows, 150);
+})();
+</script>
 
 @if($printSale)
     @include('pos::partials.pos-sale-completed-modal', ['completedSale' => $printSale, 'currency' => $currency, 'business' => $business, 'posSettings' => $posSettings])

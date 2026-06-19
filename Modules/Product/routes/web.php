@@ -45,6 +45,7 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
     Route::post('/products/images/upload', [ProductImageController::class, 'upload'])->name('product.images.upload');
     Route::post('/products/images/generate', [ProductImageController::class, 'generate'])->name('product.images.generate');
     Route::post('/products', [ProductController::class, 'store'])->name('product.store');
+    Route::post('/products/quick-add', [ProductController::class, 'quickStore'])->name('product.quick-store');
     Route::post('/products/{product}/selling-units', [ProductSellingUnitController::class, 'store'])->name('product.selling-units.store');
     Route::put('/products/{product}/selling-units/{sellingUnit}', [ProductSellingUnitController::class, 'update'])->name('product.selling-units.update');
     Route::delete('/products/{product}/selling-units/{sellingUnit}', [ProductSellingUnitController::class, 'destroy'])->name('product.selling-units.destroy');

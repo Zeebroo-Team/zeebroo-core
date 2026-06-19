@@ -5,12 +5,14 @@ namespace Modules\Sales\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Modules\Product\Models\Product;
+use Modules\Service\Models\ServiceItem;
 
 class QuotationItem extends Model
 {
     protected $fillable = [
         'quotation_id',
         'product_id',
+        'service_item_id',
         'description',
         'quantity',
         'unit_price',
@@ -32,5 +34,10 @@ class QuotationItem extends Model
     public function product(): BelongsTo
     {
         return $this->belongsTo(Product::class);
+    }
+
+    public function serviceItem(): BelongsTo
+    {
+        return $this->belongsTo(ServiceItem::class);
     }
 }

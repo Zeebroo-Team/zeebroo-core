@@ -51,10 +51,29 @@
 .ds-modal-btn--primary:hover{background:color-mix(in srgb,var(--primary) 85%,#000);}
 
 /* Empty state */
-.ds-empty{text-align:center;padding:40px 20px;border:2px dashed var(--border);border-radius:12px;color:var(--muted);}
-.ds-empty i{font-size:36px;display:block;margin-bottom:12px;opacity:.5;}
-.ds-empty h3{margin:0 0 6px;font-size:15px;font-weight:800;color:var(--text);}
-.ds-empty p{margin:0 0 16px;font-size:13px;}
+.ds-empty{
+    text-align:center;padding:52px 32px 44px;
+    border:1.5px dashed var(--border);
+    border-radius:16px;background:var(--card);
+}
+.ds-empty-icon{
+    width:80px;height:80px;border-radius:20px;margin:0 auto 20px;
+    background:color-mix(in srgb,var(--text) 7%,var(--card));
+    border:1px solid var(--border);
+    display:flex;align-items:center;justify-content:center;
+    font-size:32px;color:var(--muted);
+}
+.ds-empty h3{margin:0 0 8px;font-size:18px;font-weight:800;letter-spacing:-.02em;color:var(--text);}
+.ds-empty-sub{margin:0 auto 24px;font-size:13px;color:var(--muted);max-width:380px;line-height:1.6;}
+.ds-create-btn{
+    display:inline-flex;align-items:center;justify-content:center;gap:8px;
+    padding:10px 20px;border-radius:10px;border:0;cursor:pointer;font-family:inherit;
+    background:var(--text);color:var(--bg);font-size:13px;font-weight:700;
+    transition:all .2s ease;text-decoration:none;
+}
+.ds-create-btn:hover{opacity:.85;transform:translateY(-1px);}
+.ds-create-btn:active{transform:translateY(0);}
+.ds-empty-hint{margin-top:14px;font-size:12px;color:var(--muted);}
 
 /* ── Checklist quick-start cards ─────────────────────────── */
 .ds-ql-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px;}
@@ -68,13 +87,12 @@
     overflow:hidden;
 }
 .ds-ql-card:hover{
-    border-color:color-mix(in srgb,var(--primary) 55%,var(--border));
+    border-color:var(--primary);
     transform:translateY(-2px);
-    box-shadow:0 6px 22px color-mix(in srgb,var(--primary) 14%,transparent);
 }
 .ds-ql-card.checked{
-    border-color:color-mix(in srgb,var(--primary) 65%,var(--border));
-    background:color-mix(in srgb,var(--primary) 4%,var(--card));
+    border-color:var(--text);
+    background:var(--card);
 }
 
 /* header row: icon left, checkbox right */
@@ -82,12 +100,18 @@
 
 .ds-ql-icon{
     width:46px;height:46px;border-radius:11px;flex-shrink:0;
+    background:color-mix(in srgb,var(--text) 7%,var(--card));
+    border:1px solid var(--border);
+    color:var(--muted);display:flex;align-items:center;justify-content:center;
+    font-size:20px;transition:background .2s,color .2s,border-color .2s;
+}
+.ds-ql-card:hover .ds-ql-icon{
     background:color-mix(in srgb,var(--primary) 12%,var(--bg));
-    color:var(--primary);display:flex;align-items:center;justify-content:center;
-    font-size:20px;transition:background .2s;
+    color:var(--primary);
+    border-color:color-mix(in srgb,var(--primary) 35%,var(--border));
 }
 .ds-ql-card.checked .ds-ql-icon{
-    background:var(--primary);color:#fff;
+    background:var(--text);color:var(--bg);border-color:var(--text);
 }
 
 .ds-ql-check{
@@ -96,8 +120,8 @@
     display:flex;align-items:center;justify-content:center;
     transition:all .2s;
 }
-.ds-ql-card.checked .ds-ql-check{background:var(--primary);border-color:var(--primary);}
-.ds-ql-check i{font-size:11px;color:#fff;display:none;}
+.ds-ql-card.checked .ds-ql-check{background:var(--text);border-color:var(--text);}
+.ds-ql-check i{font-size:11px;color:var(--bg);display:none;}
 .ds-ql-card.checked .ds-ql-check i{display:block;}
 
 /* body text */
@@ -105,9 +129,9 @@
 .ds-ql-desc{font-size:11px;color:var(--muted);margin:0 0 10px;line-height:1.5;}
 .ds-ql-size{
     display:inline-block;font-size:10px;font-weight:700;letter-spacing:.03em;
-    font-family:monospace;color:var(--primary);
-    background:color-mix(in srgb,var(--primary) 10%,transparent);
-    border:1px solid color-mix(in srgb,var(--primary) 25%,transparent);
+    font-family:monospace;color:var(--muted);
+    background:transparent;
+    border:1px solid var(--border);
     border-radius:5px;padding:2px 8px;margin-bottom:14px;
 }
 
@@ -122,13 +146,13 @@
     cursor:pointer;transition:all .15s;width:100%;box-sizing:border-box;
     font-family:inherit;line-height:1;white-space:nowrap;text-decoration:none;
 }
-.ds-ql-btn:hover{background:var(--primary);border-color:var(--primary);color:#fff;}
+.ds-ql-btn:hover{background:var(--border);border-color:var(--border);color:var(--text);}
 .ds-ql-btn--edit{
-    background:color-mix(in srgb,var(--primary) 10%,transparent);
-    border-color:color-mix(in srgb,var(--primary) 40%,var(--border));
-    color:var(--primary);
+    background:color-mix(in srgb,var(--text) 6%,transparent);
+    border-color:var(--border);
+    color:var(--text);
 }
-.ds-ql-btn--edit:hover{background:var(--primary);border-color:var(--primary);color:#fff;}
+.ds-ql-btn--edit:hover{background:var(--text);border-color:var(--text);color:var(--bg);}
 </style>
 
 <div class="pcat-page-card card" style="max-width:100%;padding:18px 20px;">
@@ -213,12 +237,16 @@
 
     @if($designs->isEmpty())
         <div class="ds-empty">
-            <i class="fa fa-palette" aria-hidden="true"></i>
+            <div class="ds-empty-icon">
+                <i class="fa fa-palette" aria-hidden="true"></i>
+            </div>
             <h3>No designs yet</h3>
-            <p>Create your first design — social media post, banner, poster, or any custom size.</p>
-            <button class="ds-new-btn" onclick="openNewDesignModal()">
-                <i class="fa fa-plus" aria-hidden="true"></i> Create First Design
+            <p class="ds-empty-sub">Create social media graphics, business cards, letterheads, banners and more — pick a canvas size and open the editor.</p>
+            <button class="ds-create-btn" onclick="openNewDesignModal()">
+                <i class="fa fa-plus" aria-hidden="true"></i>
+                Create First Design
             </button>
+            <p class="ds-empty-hint">Or use a <strong style="color:var(--text);">Quick Start</strong> card above to jump into a template</p>
         </div>
     @else
         <div class="ds-design-grid">

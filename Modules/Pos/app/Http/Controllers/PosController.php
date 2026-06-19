@@ -65,7 +65,9 @@ class PosController extends Controller
 
         $validated = $request->validate([
             'items' => ['required', 'array', 'min:1'],
-            'items.*.product_id' => ['required', 'integer', 'min:1'],
+            'items.*.item_type' => ['nullable', 'string', 'in:product,service'],
+            'items.*.product_id' => ['nullable', 'integer', 'min:1'],
+            'items.*.service_item_id' => ['nullable', 'integer', 'min:1'],
             'items.*.quantity' => ['required', 'numeric', 'min:0.001'],
             'items.*.product_stock_layer_id' => ['nullable', 'integer', 'min:1'],
             'items.*.product_selling_unit_id' => ['nullable', 'integer', 'min:1'],
@@ -154,6 +156,9 @@ class PosController extends Controller
             'show_business_address' => ['nullable'],
             'show_account_info' => ['nullable'],
             'payment_settlement_mode' => ['nullable', 'string', 'in:immediate,end_of_day'],
+            'featured_products_limit' => ['nullable', 'integer', 'min:0'],
+            'featured_categories_limit' => ['nullable', 'integer', 'min:0'],
+            'show_service_bound_products' => ['nullable'],
             'redirect' => ['nullable', 'string', 'max:2000'],
         ]);
 
@@ -202,19 +207,30 @@ class PosController extends Controller
         }
 
         $accounts = $this->accountsForPosPayment($business, $request);
+        $posSettings = $this->posSettings->forBusiness($business);
+
+        $featuredProductsLimit   = (int) ($posSettings['featured_products_limit'] ?? 0);
+        $featuredCategoriesLimit = (int) ($posSettings['featured_categories_limit'] ?? 0);
+
         $categories = $this->catalog->posCategories($business, $branchId, $branchProductSeparate);
+        if ($featuredCategoriesLimit > 0) {
+            $categories = $categories->take($featuredCategoriesLimit);
+        }
+
+        $serviceItems = $this->catalog->serviceCardsForPos($business);
+
+        $perPage = $featuredProductsLimit > 0 ? $featuredProductsLimit : 500;
         $products = $this->catalog->productCardsForPos(
             $business,
             $search !== '' ? $search : null,
             $categoryId,
             1,
-            500,
+            $perPage,
             $branchId,
             $branchProductSeparate,
             $branchStockSeparate,
         )['data'];
         $today = $this->sales->todaySummaryForBusiness($business);
-        $posSettings = $this->posSettings->forBusiness($business);
         $posShellClass = match ($posSettings['display_theme']) {
             'dark' => 'pos-shell--dark',
             'light' => 'pos-shell--light',
@@ -227,7 +243,7 @@ class PosController extends Controller
             $printSale = Sale::query()
                 ->where('business_id', $business->id)
                 ->whereKey((int) $printSaleId)
-                ->with(['items', 'creditAccount', 'user'])
+                ->with(['items.serviceItem.products', 'creditAccount', 'user'])
                 ->first();
         }
 
@@ -241,6 +257,7 @@ class PosController extends Controller
             'categoryId' => $categoryId,
             'categories' => $categories,
             'products' => $products,
+            'serviceItems' => $serviceItems,
             'accounts' => $accounts,
             'hasAccounts' => $accounts->isNotEmpty(),
             'channel' => $channel,

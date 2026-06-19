@@ -28,7 +28,7 @@ class HrAllowanceTypeController extends Controller
             return redirect()->route('hr.onboarding');
         }
 
-        abort_unless($request->user()->businesses()->whereKey($business->id)->exists(), 403);
+        abort_unless(Business::canAccess($request->user(), $business), 403);
 
         return view('hrmanagement::allowance-types.index', [
             'business' => $business,
@@ -45,7 +45,7 @@ class HrAllowanceTypeController extends Controller
             return redirect()->route('hr.onboarding');
         }
 
-        abort_unless($request->user()->businesses()->whereKey($business->id)->exists(), 403);
+        abort_unless(Business::canAccess($request->user(), $business), 403);
 
         $validated = $request->validate([
             'name' => [
@@ -70,7 +70,7 @@ class HrAllowanceTypeController extends Controller
             return redirect()->route('hr.onboarding');
         }
 
-        abort_unless($request->user()->businesses()->whereKey($business->id)->exists(), 403);
+        abort_unless(Business::canAccess($request->user(), $business), 403);
         abort_unless((int) $allowanceType->business_id === (int) $business->id, 403);
 
         if ($allowanceType->employeeAllowances()->exists()) {

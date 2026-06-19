@@ -37,7 +37,7 @@ class HrDepartmentController extends Controller
             return redirect()->route('hr.onboarding');
         }
 
-        abort_unless($request->user()->businesses()->whereKey($business->id)->exists(), 403);
+        abort_unless(Business::canAccess($request->user(), $business), 403);
 
         $chart = $this->departmentGrowthChartService->build($business);
 
@@ -56,7 +56,7 @@ class HrDepartmentController extends Controller
             return redirect()->route('hr.onboarding');
         }
 
-        abort_unless($request->user()->businesses()->whereKey($business->id)->exists(), 403);
+        abort_unless(Business::canAccess($request->user(), $business), 403);
 
         $costCenterReport = $this->departmentCostCenterService->build($business);
 
@@ -76,7 +76,7 @@ class HrDepartmentController extends Controller
             return redirect()->route('hr.onboarding');
         }
 
-        abort_unless($request->user()->businesses()->whereKey($business->id)->exists(), 403);
+        abort_unless(Business::canAccess($request->user(), $business), 403);
         abort_unless((int) $department->business_id === (int) $business->id, 404);
 
         $members = $department->employees()->with('jobTitle')->orderBy('full_name')->orderBy('id')->get();
@@ -212,7 +212,7 @@ class HrDepartmentController extends Controller
             abort(403);
         }
 
-        abort_unless($request->user()->businesses()->whereKey($business->id)->exists(), 403);
+        abort_unless(Business::canAccess($request->user(), $business), 403);
         abort_unless((int) $department->business_id === (int) $business->id, 404);
 
         $query = trim((string) $request->query('q', ''));
@@ -251,7 +251,7 @@ class HrDepartmentController extends Controller
             return redirect()->route('hr.onboarding');
         }
 
-        abort_unless($request->user()->businesses()->whereKey($business->id)->exists(), 403);
+        abort_unless(Business::canAccess($request->user(), $business), 403);
         abort_unless((int) $department->business_id === (int) $business->id, 404);
 
         $request->merge([
@@ -305,7 +305,7 @@ class HrDepartmentController extends Controller
             return redirect()->route('hr.onboarding');
         }
 
-        abort_unless($request->user()->businesses()->whereKey($business->id)->exists(), 403);
+        abort_unless(Business::canAccess($request->user(), $business), 403);
         abort_unless((int) $department->business_id === (int) $business->id, 404);
 
         $validated = $request->validate([
@@ -332,7 +332,7 @@ class HrDepartmentController extends Controller
             return redirect()->route('hr.onboarding');
         }
 
-        abort_unless($request->user()->businesses()->whereKey($business->id)->exists(), 403);
+        abort_unless(Business::canAccess($request->user(), $business), 403);
         abort_unless((int) $department->business_id === (int) $business->id, 404);
 
         $request->merge([
@@ -369,7 +369,7 @@ class HrDepartmentController extends Controller
             return redirect()->route('hr.onboarding');
         }
 
-        abort_unless($request->user()->businesses()->whereKey($business->id)->exists(), 403);
+        abort_unless(Business::canAccess($request->user(), $business), 403);
         abort_unless((int) $department->business_id === (int) $business->id, 404);
 
         $validated = $request->validate([
@@ -400,7 +400,7 @@ class HrDepartmentController extends Controller
             return redirect()->route('hr.onboarding');
         }
 
-        abort_unless($request->user()->businesses()->whereKey($business->id)->exists(), 403);
+        abort_unless(Business::canAccess($request->user(), $business), 403);
 
         $validated = $request->validate([
             'name' => [
@@ -425,7 +425,7 @@ class HrDepartmentController extends Controller
             return redirect()->route('hr.onboarding');
         }
 
-        abort_unless($request->user()->businesses()->whereKey($business->id)->exists(), 403);
+        abort_unless(Business::canAccess($request->user(), $business), 403);
         abort_unless((int) $department->business_id === (int) $business->id, 403);
 
         if ($department->employees()->exists()) {

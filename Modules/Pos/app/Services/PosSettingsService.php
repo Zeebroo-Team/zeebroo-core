@@ -29,6 +29,12 @@ class PosSettingsService
     /** @var string `immediate` | `end_of_day` */
     public const KEY_PAYMENT_SETTLEMENT_MODE = 'pos.payment_settlement_mode';
 
+    public const KEY_FEATURED_PRODUCTS_LIMIT = 'pos.featured_products_limit';
+
+    public const KEY_FEATURED_CATEGORIES_LIMIT = 'pos.featured_categories_limit';
+
+    public const KEY_SHOW_SERVICE_BOUND_PRODUCTS = 'pos.show_service_bound_products';
+
     /**
      * @return array{
      *     default_deposit_account_id: ?int,
@@ -41,6 +47,9 @@ class PosSettingsService
      *     show_business_address: bool,
      *     show_account_info: bool,
      *     payment_settlement_mode: string,
+     *     featured_products_limit: int,
+     *     featured_categories_limit: int,
+     *     show_service_bound_products: bool,
      * }
      */
     public function forBusiness(Business $business): array
@@ -64,6 +73,9 @@ class PosSettingsService
             'show_business_address' => (bool) $business->getSetting(self::KEY_SHOW_BUSINESS_ADDRESS, true),
             'show_account_info' => (bool) $business->getSetting(self::KEY_SHOW_ACCOUNT_INFO, true),
             'payment_settlement_mode' => (string) $business->getSetting(self::KEY_PAYMENT_SETTLEMENT_MODE, 'immediate'),
+            'featured_products_limit' => max(0, (int) $business->getSetting(self::KEY_FEATURED_PRODUCTS_LIMIT, 0)),
+            'featured_categories_limit' => max(0, (int) $business->getSetting(self::KEY_FEATURED_CATEGORIES_LIMIT, 0)),
+            'show_service_bound_products' => (bool) $business->getSetting(self::KEY_SHOW_SERVICE_BOUND_PRODUCTS, true),
         ];
     }
 
@@ -122,5 +134,16 @@ class PosSettingsService
             $mode = 'immediate';
         }
         $business->setSetting(self::KEY_PAYMENT_SETTLEMENT_MODE, $mode);
+
+        $productsLimit = max(0, (int) ($data['featured_products_limit'] ?? 0));
+        $business->setSetting(self::KEY_FEATURED_PRODUCTS_LIMIT, $productsLimit > 0 ? $productsLimit : null);
+
+        $categoriesLimit = max(0, (int) ($data['featured_categories_limit'] ?? 0));
+        $business->setSetting(self::KEY_FEATURED_CATEGORIES_LIMIT, $categoriesLimit > 0 ? $categoriesLimit : null);
+
+        $business->setSetting(
+            self::KEY_SHOW_SERVICE_BOUND_PRODUCTS,
+            filter_var($data['show_service_bound_products'] ?? true, FILTER_VALIDATE_BOOLEAN),
+        );
     }
 }

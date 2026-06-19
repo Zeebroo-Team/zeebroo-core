@@ -12,6 +12,7 @@ use Modules\Account\Models\Account;
 use Modules\Pos\Models\Sale;
 use Modules\Pos\Models\SaleReturn;
 use Modules\Pos\Services\SaleReturnService;
+use Modules\Pos\Services\PosSettingsService;
 use Modules\Pos\Services\SaleService;
 use Modules\Product\Models\Product;
 
@@ -22,6 +23,7 @@ class SaleController extends Controller
     public function __construct(
         private readonly SaleService $sales,
         private readonly SaleReturnService $saleReturns,
+        private readonly PosSettingsService $posSettings,
     ) {
     }
 
@@ -176,7 +178,7 @@ class SaleController extends Controller
         }
 
         $sale = $this->saleForBusiness($business, $sale);
-        $sale->load(['items.product', 'creditAccount', 'user', 'branch', 'ledgerTransactions.deductAccount', 'returns.items', 'returns.user', 'returns.creditAccount']);
+        $sale->load(['items.product', 'items.serviceItem.products', 'creditAccount', 'user', 'branch', 'ledgerTransactions.deductAccount', 'returns.items', 'returns.user', 'returns.creditAccount']);
 
         $currency = (string) (get_settings('business.currency', '', $business) ?: '');
         $returnedQtys = $this->saleReturns->returnedQuantitiesForSale($sale);
@@ -185,12 +187,15 @@ class SaleController extends Controller
             ->orderBy('account_name')
             ->get();
 
+        $posSettings = $this->posSettings->forBusiness($business);
+
         return view('pos::sales.show', [
             'business'     => $business,
             'currency'     => $currency,
             'sale'         => $sale,
             'returnedQtys' => $returnedQtys,
             'accounts'     => $accounts,
+            'posSettings'  => $posSettings,
         ]);
     }
 

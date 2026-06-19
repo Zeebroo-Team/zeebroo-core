@@ -28,7 +28,7 @@ class HrJobTitleController extends Controller
             return redirect()->route('hr.onboarding');
         }
 
-        abort_unless($request->user()->businesses()->whereKey($business->id)->exists(), 403);
+        abort_unless(Business::canAccess($request->user(), $business), 403);
 
         return view('hrmanagement::job-titles.index', [
             'business' => $business,
@@ -45,7 +45,7 @@ class HrJobTitleController extends Controller
             return redirect()->route('hr.onboarding');
         }
 
-        abort_unless($request->user()->businesses()->whereKey($business->id)->exists(), 403);
+        abort_unless(Business::canAccess($request->user(), $business), 403);
 
         $validated = $request->validate([
             'name' => [
@@ -70,7 +70,7 @@ class HrJobTitleController extends Controller
             return redirect()->route('hr.onboarding');
         }
 
-        abort_unless($request->user()->businesses()->whereKey($business->id)->exists(), 403);
+        abort_unless(Business::canAccess($request->user(), $business), 403);
         abort_unless((int) $jobTitle->business_id === (int) $business->id, 403);
 
         $activeTab = (string) $request->query('tab', 'overview');
@@ -103,7 +103,7 @@ class HrJobTitleController extends Controller
             return redirect()->route('hr.onboarding');
         }
 
-        abort_unless($request->user()->businesses()->whereKey($business->id)->exists(), 403);
+        abort_unless(Business::canAccess($request->user(), $business), 403);
         abort_unless((int) $jobTitle->business_id === (int) $business->id, 403);
 
         $selected = array_values(array_intersect(
@@ -129,7 +129,7 @@ class HrJobTitleController extends Controller
             return redirect()->route('hr.onboarding');
         }
 
-        abort_unless($request->user()->businesses()->whereKey($business->id)->exists(), 403);
+        abort_unless(Business::canAccess($request->user(), $business), 403);
         abort_unless((int) $jobTitle->business_id === (int) $business->id, 403);
 
         $validated = $request->validate([
@@ -155,7 +155,7 @@ class HrJobTitleController extends Controller
             return redirect()->route('hr.onboarding');
         }
 
-        abort_unless($request->user()->businesses()->whereKey($business->id)->exists(), 403);
+        abort_unless(Business::canAccess($request->user(), $business), 403);
         abort_unless((int) $jobTitle->business_id === (int) $business->id, 403);
 
         if ($jobTitle->employees()->exists()) {

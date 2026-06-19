@@ -76,11 +76,7 @@
         @endif
     </div>
 
-    @if($products->isEmpty())
-        <div class="pcat-banner pcat-banner--err" style="margin-bottom:12px;" role="alert">
-            Add at least one <a href="{{ route('product.index') }}" class="pcat-link">product</a> before creating quotations.
-        </div>
-    @endif
+
 
     {{-- Inline create when no quotations yet --}}
     @if(!$hasQuotations)

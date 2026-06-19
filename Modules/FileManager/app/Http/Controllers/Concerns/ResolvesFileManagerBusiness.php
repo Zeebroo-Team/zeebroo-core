@@ -15,7 +15,7 @@ trait ResolvesFileManagerBusiness
             return redirect()->route('dashboard')->withErrors(['business' => 'Select or create a business first.']);
         }
 
-        abort_unless($request->user()->businesses()->whereKey($business->id)->exists(), 403);
+        abort_unless(Business::canAccess($request->user(), $business), 403);
 
         return $business;
     }

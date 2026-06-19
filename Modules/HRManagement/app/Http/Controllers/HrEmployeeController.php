@@ -55,7 +55,7 @@ class HrEmployeeController extends Controller
             return redirect()->route('hr.onboarding');
         }
 
-        abort_unless($request->user()->businesses()->whereKey($business->id)->exists(), 403);
+        abort_unless(Business::canAccess($request->user(), $business), 403);
 
         return view('hrmanagement::employees.index', [
             'business' => $business,
@@ -81,7 +81,7 @@ class HrEmployeeController extends Controller
             return redirect()->route('hr.onboarding');
         }
 
-        abort_unless($request->user()->businesses()->whereKey($business->id)->exists(), 403);
+        abort_unless(Business::canAccess($request->user(), $business), 403);
 
         $validator = Validator::make($request->all(), $this->employeeFieldRules($business));
 
@@ -224,7 +224,7 @@ class HrEmployeeController extends Controller
             return redirect()->route('hr.onboarding');
         }
 
-        abort_unless($request->user()->businesses()->whereKey($business->id)->exists(), 403);
+        abort_unless(Business::canAccess($request->user(), $business), 403);
         abort_if((int) $employee->business_id !== (int) $business->id, 404);
 
         $employee->load(['bank', 'department', 'jobTitle', 'employeeAllowances.allowanceType', 'documents', 'leaveRequests']);
@@ -262,7 +262,7 @@ class HrEmployeeController extends Controller
         if (! $this->hrPayrollSettings->optedIn($business)) {
             return redirect()->route('hr.onboarding');
         }
-        abort_unless($request->user()->businesses()->whereKey($business->id)->exists(), 403);
+        abort_unless(Business::canAccess($request->user(), $business), 403);
         abort_if((int) $employee->business_id !== (int) $business->id, 404);
 
         $request->validate([
@@ -281,7 +281,7 @@ class HrEmployeeController extends Controller
         if (! $this->hrPayrollSettings->optedIn($business)) {
             return redirect()->route('hr.onboarding');
         }
-        abort_unless($request->user()->businesses()->whereKey($business->id)->exists(), 403);
+        abort_unless(Business::canAccess($request->user(), $business), 403);
         abort_if((int) $employee->business_id !== (int) $business->id, 404);
 
         $this->employeeProfilePhoto->delete($employee);
@@ -296,7 +296,7 @@ class HrEmployeeController extends Controller
         if (! $this->hrPayrollSettings->optedIn($business)) {
             return redirect()->route('hr.onboarding');
         }
-        abort_unless($request->user()->businesses()->whereKey($business->id)->exists(), 403);
+        abort_unless(Business::canAccess($request->user(), $business), 403);
         abort_if((int) $employee->business_id !== (int) $business->id, 404);
 
         $validated = $request->validate([
@@ -327,7 +327,7 @@ class HrEmployeeController extends Controller
         if (! $this->hrPayrollSettings->optedIn($business)) {
             return redirect()->route('hr.onboarding');
         }
-        abort_unless($request->user()->businesses()->whereKey($business->id)->exists(), 403);
+        abort_unless(Business::canAccess($request->user(), $business), 403);
         abort_if((int) $employee->business_id !== (int) $business->id, 404);
         abort_unless((int) $document->employee_id === (int) $employee->id, 404);
         abort_unless((int) $document->business_id === (int) $business->id, 404);
@@ -343,7 +343,7 @@ class HrEmployeeController extends Controller
         if (! $this->hrPayrollSettings->optedIn($business)) {
             return redirect()->route('hr.onboarding');
         }
-        abort_unless($request->user()->businesses()->whereKey($business->id)->exists(), 403);
+        abort_unless(Business::canAccess($request->user(), $business), 403);
         abort_if((int) $employee->business_id !== (int) $business->id, 404);
         abort_unless((int) $document->employee_id === (int) $employee->id, 404);
         abort_unless((int) $document->business_id === (int) $business->id, 404);
@@ -363,7 +363,7 @@ class HrEmployeeController extends Controller
             return redirect()->route('hr.onboarding');
         }
 
-        abort_unless($request->user()->businesses()->whereKey($business->id)->exists(), 403);
+        abort_unless(Business::canAccess($request->user(), $business), 403);
         abort_if((int) $employee->business_id !== (int) $business->id, 404);
 
         $request->validate([

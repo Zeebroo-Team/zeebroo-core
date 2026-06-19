@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
+use Modules\Business\Models\Business;
 use Modules\Pos\Http\Controllers\Concerns\ResolvesPosBusiness;
 use Modules\Pos\Services\PosProductQuickCreateService;
 
@@ -25,7 +26,7 @@ class PosProductController extends Controller
             return response()->json(['message' => 'No business selected.'], 403);
         }
 
-        abort_unless($request->user()->businesses()->whereKey($business->id)->exists(), 403);
+        abort_unless(Business::canAccess($request->user(), $business), 403);
 
         try {
             $product = $this->quickCreate->create($business, $request->all());

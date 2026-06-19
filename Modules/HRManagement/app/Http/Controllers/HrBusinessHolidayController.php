@@ -25,7 +25,7 @@ class HrBusinessHolidayController extends Controller
             return redirect()->route('hr.onboarding');
         }
 
-        abort_unless($request->user()->businesses()->whereKey($business->id)->exists(), 403);
+        abort_unless(Business::canAccess($request->user(), $business), 403);
 
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
@@ -57,7 +57,7 @@ class HrBusinessHolidayController extends Controller
             return redirect()->route('hr.onboarding');
         }
 
-        abort_unless($request->user()->businesses()->whereKey($business->id)->exists(), 403);
+        abort_unless(Business::canAccess($request->user(), $business), 403);
         abort_unless((int) $holiday->business_id === (int) $business->id, 404);
 
         $holiday->delete();

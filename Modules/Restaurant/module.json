@@ -1,0 +1,11 @@
+{
+    "name": "Restaurant",
+    "alias": "restaurant",
+    "description": "Restaurant management: menu, tables, orders, and reservations.",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\Restaurant\\Providers\\RestaurantServiceProvider"
+    ],
+    "files": []
+}

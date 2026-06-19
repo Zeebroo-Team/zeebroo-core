@@ -13,6 +13,7 @@ use Modules\Pos\Models\SaleItem;
 use Modules\Product\Models\Product;
 use Modules\Product\Models\ProductStockLayer;
 use Modules\Product\Services\ProductDiscountService;
+use Modules\Service\Models\ServiceItem;
 
 class SaleService
 {
@@ -155,7 +156,7 @@ class SaleService
     }
 
     /**
-     * @param  list<array{product_id: int, quantity: float|string}>  $items
+     * @param  list<array{product_id?: int, service_item_id?: int, item_type?: string, quantity: float|string}>  $items
      */
     public function checkout(
         Business $business,
@@ -172,15 +173,30 @@ class SaleService
         bool $deferSettlement = false,
         ?int $branchId = null,
     ): Sale {
-        $lines = $this->normalizeCartItems($business, $items);
+        $rawProductItems = array_values(array_filter(
+            $items,
+            fn ($i) => ($i['item_type'] ?? 'product') !== 'service' && !empty($i['product_id']),
+        ));
+        $rawServiceItems = array_values(array_filter(
+            $items,
+            fn ($i) => ($i['item_type'] ?? '') === 'service' && !empty($i['service_item_id']),
+        ));
+
+        $productLines = $rawProductItems !== [] ? $this->normalizeCartItems($business, $rawProductItems) : [];
+        $serviceLines = $this->normalizeServiceCartItems($business, $rawServiceItems);
+
+        if ($productLines === [] && $serviceLines === []) {
+            throw ValidationException::withMessages(['items' => 'Add at least one item to the cart.']);
+        }
+
         $paymentMethod = $this->normalizePaymentMethod($paymentMethod);
         $channel = $this->normalizeChannel($channel);
 
         // Load active discounts for all products in the cart in one query
-        $cartProductIds = array_map(fn ($l) => (int) $l['product']->id, $lines);
+        $cartProductIds = array_map(fn ($l) => (int) $l['product']->id, $productLines);
         $activeDiscounts = $this->discountService->activeForProducts($business, $cartProductIds);
 
-        return DB::transaction(function () use ($business, $user, $lines, $paymentMethod, $creditAccountId, $amountPaid, $notes, $channel, $discountPercent, $amountTendered, $customerId, $deferSettlement, $branchId, $activeDiscounts) {
+        return DB::transaction(function () use ($business, $user, $productLines, $serviceLines, $paymentMethod, $creditAccountId, $amountPaid, $notes, $channel, $discountPercent, $amountTendered, $customerId, $deferSettlement, $branchId, $activeDiscounts) {
             $sale = $business->sales()->create([
                 'branch_id' => $branchId,
                 'user_id' => $user->id,
@@ -204,7 +220,7 @@ class SaleService
             $subtotal = 0.0;
             $sortOrder = 0;
 
-            foreach ($lines as $line) {
+            foreach ($productLines as $line) {
                 /** @var Product $product */
                 $product = $line['product'];
                 $layerId = $line['product_stock_layer_id'] ?? null;
@@ -253,6 +269,39 @@ class SaleService
                 }
             }
 
+            foreach ($serviceLines as $svcLine) {
+                /** @var ServiceItem $service */
+                $service  = $svcLine['service'];
+                $qty      = (float) $svcLine['quantity'];
+                $price    = round((float) $service->price, 2);
+                $lineTotal = round($qty * $price, 2);
+                $subtotal  = round($subtotal + $lineTotal, 2);
+
+                SaleItem::query()->create([
+                    'pos_sale_id'     => $sale->id,
+                    'service_item_id' => $service->id,
+                    'product_id'      => null,
+                    'product_name'    => $service->name,
+                    'sku'             => null,
+                    'quantity'        => $qty,
+                    'unit_cost'       => 0,
+                    'discount_amount' => 0,
+                    'unit_sell_price' => $price,
+                    'line_total'      => $lineTotal,
+                    'sort_order'      => $sortOrder++,
+                ]);
+
+                // Deduct bound products from stock (FIFO) scaled by service quantity
+                $service->loadMissing('products');
+                foreach ($service->products as $boundProduct) {
+                    $deductQty = round((float) $boundProduct->pivot->qty * $qty, 3);
+                    if ($deductQty <= 0) {
+                        continue;
+                    }
+                    $this->stockConsumption->consumeFifo($boundProduct, $deductQty);
+                }
+            }
+
             $discountPercentValue = $discountPercent !== null
                 ? round(max(0, min(100, $discountPercent)), 2)
                 : null;
@@ -296,7 +345,7 @@ class SaleService
                 $this->payments->settle($sale, $business, $user, (int) $creditAccountId, $total, $paymentMethod);
             }
 
-            return $sale->refresh()->load(['items.product', 'creditAccount', 'user']);
+            return $sale->refresh()->load(['items.product', 'items.serviceItem.products', 'creditAccount', 'user']);
         });
     }
 
@@ -313,19 +362,29 @@ class SaleService
         }
 
         return DB::transaction(function () use ($sale) {
-            $sale->load(['items.product']);
+            $sale->load(['items.product', 'items.serviceItem.products']);
 
             foreach ($sale->items as $item) {
-                $product = $item->product;
-                if (!$product instanceof Product) {
+                // Product line — restore directly
+                if ($item->product instanceof Product) {
+                    $this->stockConsumption->restoreSaleItem(
+                        $item->product_stock_layer_id !== null ? (int) $item->product_stock_layer_id : null,
+                        (float) $item->quantity,
+                        $item->product,
+                    );
                     continue;
                 }
 
-                $this->stockConsumption->restoreSaleItem(
-                    $item->product_stock_layer_id !== null ? (int) $item->product_stock_layer_id : null,
-                    (float) $item->quantity,
-                    $product,
-                );
+                // Service line — restore bound products
+                if ($item->serviceItem !== null) {
+                    foreach ($item->serviceItem->products as $boundProduct) {
+                        $restoreQty = round((float) $boundProduct->pivot->qty * (float) $item->quantity, 3);
+                        if ($restoreQty <= 0) {
+                            continue;
+                        }
+                        $this->stockConsumption->restoreSaleItem(null, $restoreQty, $boundProduct);
+                    }
+                }
             }
 
             $sale->update(['status' => Sale::STATUS_VOID]);
@@ -438,6 +497,45 @@ class SaleService
                 'selling_unit_label' => $row['selling_unit_label'] ?? null,
                 'selling_unit_factor' => $row['selling_unit_factor'] ?? null,
             ];
+        }
+
+        return $normalized;
+    }
+
+    /**
+     * @param  list<array{service_item_id: int, quantity: float|string}>  $items
+     * @return list<array{service: ServiceItem, quantity: float}>
+     */
+    private function normalizeServiceCartItems(Business $business, array $items): array
+    {
+        $merged = [];
+        foreach ($items as $row) {
+            $svcId   = (int) ($row['service_item_id'] ?? 0);
+            $qty     = (float) ($row['quantity'] ?? 0);
+            if ($svcId <= 0 || $qty <= 0) {
+                continue;
+            }
+            if (!isset($merged[$svcId])) {
+                $merged[$svcId] = ['service_item_id' => $svcId, 'quantity' => 0.0];
+            }
+            $merged[$svcId]['quantity'] = round($merged[$svcId]['quantity'] + $qty, 3);
+        }
+
+        $normalized = [];
+        foreach ($merged as $row) {
+            $service = ServiceItem::query()
+                ->whereKey($row['service_item_id'])
+                ->where('business_id', $business->id)
+                ->where('is_active', true)
+                ->first();
+
+            if ($service === null) {
+                throw ValidationException::withMessages([
+                    'items' => 'One or more services are invalid or unavailable for POS.',
+                ]);
+            }
+
+            $normalized[] = ['service' => $service, 'quantity' => $row['quantity']];
         }
 
         return $normalized;

@@ -769,7 +769,7 @@ readonly class SociBizAgentToolExecutor
 
     private function ownsBusiness(User $user, ?Business $business): bool
     {
-        return $business !== null && $user->businesses()->whereKey($business->id)->exists();
+        return $business !== null && Business::canAccess($user, $business);
     }
 
     private function hrOptedIn(?Business $business): bool

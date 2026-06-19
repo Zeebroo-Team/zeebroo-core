@@ -14,6 +14,7 @@ use Modules\Pos\Models\Customer;
 use Modules\Sales\Http\Controllers\Concerns\ResolvesSalesBusiness;
 use Modules\Sales\Models\Quotation;
 use Modules\Sales\Services\QuotationService;
+use Modules\Service\Models\ServiceItem;
 
 class QuotationController extends Controller
 {
@@ -40,7 +41,6 @@ class QuotationController extends Controller
             'hasQuotations'  => $this->quotationService->businessHasQuotations($business),
             'quotations'     => $this->quotationService->listForBusiness($business, $search, $statusFilter, $customerId),
             'customers'      => Customer::where('business_id', $business->id)->orderBy('name')->get(),
-            'products'       => $business->products()->where('is_active', true)->orderBy('name')->get(['id', 'name', 'sku', 'unit_price']),
             'currency'       => (string) (get_settings('business.currency', '', $business) ?: ''),
             'search'         => $search,
             'statusFilter'   => $statusFilter,
@@ -77,7 +77,7 @@ class QuotationController extends Controller
             return $business;
         }
 
-        $quotation->load(['customer', 'items.product']);
+        $quotation->load(['customer', 'items.product', 'items.serviceItem.products']);
 
         $currency = (string) (get_settings('business.currency', '', $business) ?: '');
 
@@ -100,13 +100,12 @@ class QuotationController extends Controller
                 ->withErrors(['quotation' => 'This quotation can no longer be edited.']);
         }
 
-        $quotation->load(['customer', 'items.product']);
+        $quotation->load(['customer', 'items.product', 'items.serviceItem']);
 
         return view('sales::quotations.edit', [
             'business'  => $business,
             'quotation' => $quotation,
             'customers' => Customer::where('business_id', $business->id)->orderBy('name')->get(),
-            'products'  => $business->products()->where('is_active', true)->orderBy('name')->get(['id', 'name', 'sku', 'unit_price']),
             'currency'  => (string) (get_settings('business.currency', '', $business) ?: ''),
         ]);
     }
@@ -179,7 +178,7 @@ class QuotationController extends Controller
             return $business;
         }
 
-        $quotation->load(['customer', 'items.product']);
+        $quotation->load(['customer', 'items.product', 'items.serviceItem.products']);
 
         $currency   = (string) (get_settings('business.currency', '', $business) ?: '');
         $mainBranch = $business->branches()->first();
@@ -260,18 +259,20 @@ class QuotationController extends Controller
     private function validatedHeader(Request $request, Business $business): array
     {
         return $request->validate([
-            'customer_id'     => ['nullable', 'integer', Rule::exists('pos_customers', 'id')->where(fn ($q) => $q->where('business_id', $business->id))],
-            'reference'       => ['nullable', 'string', 'max:120'],
-            'quote_date'      => ['required', 'date'],
-            'expiry_date'     => ['nullable', 'date', 'after_or_equal:quote_date'],
-            'notes'           => ['nullable', 'string', 'max:5000'],
-            'discount_amount' => ['nullable', 'numeric', 'min:0', 'max:9999999'],
-            'tax_amount'      => ['nullable', 'numeric', 'min:0', 'max:9999999'],
-            'items'           => ['required', 'array', 'min:1'],
-            'items.*.product_id'  => ['nullable', 'integer', Rule::exists('products', 'id')->where(fn ($q) => $q->where('business_id', $business->id))],
-            'items.*.description' => ['nullable', 'string', 'max:255'],
-            'items.*.quantity'    => ['required', 'numeric', 'min:0.001', 'max:999999'],
-            'items.*.unit_price'  => ['required', 'numeric', 'min:0', 'max:999999999'],
+            'customer_id'             => ['nullable', 'integer', Rule::exists('pos_customers', 'id')->where(fn ($q) => $q->where('business_id', $business->id))],
+            'reference'               => ['nullable', 'string', 'max:120'],
+            'quote_date'              => ['required', 'date'],
+            'expiry_date'             => ['nullable', 'date', 'after_or_equal:quote_date'],
+            'notes'                   => ['nullable', 'string', 'max:5000'],
+            'discount_amount'         => ['nullable', 'numeric', 'min:0', 'max:9999999'],
+            'tax_amount'              => ['nullable', 'numeric', 'min:0', 'max:9999999'],
+            'items'                   => ['required', 'array', 'min:1'],
+            'items.*.item_type'       => ['nullable', 'string', 'in:product,service'],
+            'items.*.product_id'      => ['nullable', 'integer', Rule::exists('products', 'id')->where(fn ($q) => $q->where('business_id', $business->id))],
+            'items.*.service_item_id' => ['nullable', 'integer', Rule::exists('service_items', 'id')->where(fn ($q) => $q->where('business_id', $business->id))],
+            'items.*.description'     => ['nullable', 'string', 'max:255'],
+            'items.*.quantity'        => ['required', 'numeric', 'min:0.001', 'max:999999'],
+            'items.*.unit_price'      => ['required', 'numeric', 'min:0', 'max:999999999'],
         ]);
     }
 

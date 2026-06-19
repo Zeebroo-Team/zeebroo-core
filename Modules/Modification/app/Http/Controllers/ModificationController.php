@@ -20,7 +20,7 @@ class ModificationController extends Controller
     {
         $business = Business::currentForNavbar($request->user());
         abort_if($business === null, 403);
-        abort_unless($request->user()->businesses()->whereKey($business->id)->exists(), 403);
+        abort_unless(Business::canAccess($request->user(), $business), 403);
 
         $modifications = Modification::query()
             ->where('business_id', $business->id)
@@ -63,7 +63,7 @@ class ModificationController extends Controller
     {
         $business = Business::currentForNavbar($request->user());
         abort_if($business === null, 403);
-        abort_unless($request->user()->businesses()->whereKey($business->id)->exists(), 403);
+        abort_unless(Business::canAccess($request->user(), $business), 403);
 
         return view('modification::create', [
             'business' => $business,
@@ -79,7 +79,7 @@ class ModificationController extends Controller
     {
         $business = Business::currentForNavbar($request->user());
         abort_if($business === null, 403);
-        abort_unless($request->user()->businesses()->whereKey($business->id)->exists(), 403);
+        abort_unless(Business::canAccess($request->user(), $business), 403);
         abort_unless((int) $modification->business_id === (int) $business->id, 404);
 
         $bills = Bill::query()
@@ -100,7 +100,7 @@ class ModificationController extends Controller
     {
         $business = Business::currentForNavbar($request->user());
         abort_if($business === null, 403);
-        abort_unless($request->user()->businesses()->whereKey($business->id)->exists(), 403);
+        abort_unless(Business::canAccess($request->user(), $business), 403);
         abort_unless((int) $modification->business_id === (int) $business->id, 404);
 
         $aref = $modification->assignment_reference;
@@ -152,7 +152,7 @@ class ModificationController extends Controller
     {
         $business = Business::currentForNavbar($request->user());
         abort_if($business === null, 403);
-        abort_unless($request->user()->businesses()->whereKey($business->id)->exists(), 403);
+        abort_unless(Business::canAccess($request->user(), $business), 403);
 
         $validated = $request->validate([
             'property_name' => ['required', 'string', 'max:255'],
@@ -194,7 +194,7 @@ class ModificationController extends Controller
     {
         $business = Business::currentForNavbar($request->user());
         abort_if($business === null, 403);
-        abort_unless($request->user()->businesses()->whereKey($business->id)->exists(), 403);
+        abort_unless(Business::canAccess($request->user(), $business), 403);
 
         $type = $request->input('assignment_type');
         $assignmentRules = [];
