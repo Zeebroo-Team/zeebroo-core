@@ -1,9 +1,11 @@
 name: Build Electron App
 
 on:
+  # Fires when you push a vX.Y.Z tag — the release job creates the GitHub Release automatically
   push:
     tags:
       - 'v*.*.*'
+  # Manual run from the Actions tab (e.g. for testing the pipeline)
   workflow_dispatch:
     inputs:
       draft_release:
@@ -18,9 +20,13 @@ concurrency:
 permissions:
   contents: write
 
+# ── Production API URL — injected into every build automatically ───────────
+env:
+  API_BASE_URL: https://platform.zeebroo.com/api/v1/pos
+
 jobs:
   # ──────────────────────────────────────────────────────────
-  #  Build — one job per platform, runs in parallel
+  #  Build — three platforms in parallel
   # ──────────────────────────────────────────────────────────
   build:
     name: Build — ${{ matrix.name }}
@@ -86,14 +92,13 @@ jobs:
           security set-keychain-settings -t 3600 -l build.keychain
           rm /tmp/certificate.p12
 
-      # ── macOS build ──
+      # ── macOS build (prebuild script auto-sets API_BASE_URL) ──
       - name: Build (macOS)
         if: runner.os == 'macOS'
         run: npm run build -- ${{ matrix.platform_flag }}
         env:
-          # Prevent electron-builder from trying keychain discovery when no cert
+          API_BASE_URL: ${{ env.API_BASE_URL }}
           CSC_IDENTITY_AUTO_DISCOVERY: false
-          # Notarisation (only active if secrets are set; empty strings are safe here)
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
@@ -115,11 +120,15 @@ jobs:
       - name: Build (Windows)
         if: runner.os == 'Windows'
         run: npm run build -- ${{ matrix.platform_flag }}
+        env:
+          API_BASE_URL: ${{ env.API_BASE_URL }}
 
-      # ── Linux build (no signing required) ──
+      # ── Linux build ──
       - name: Build (Linux)
         if: runner.os == 'Linux'
         run: npm run build -- ${{ matrix.platform_flag }}
+        env:
+          API_BASE_URL: ${{ env.API_BASE_URL }}
 
       # ── Collect distributable artefacts ──
       - name: Upload artifacts
@@ -140,7 +149,6 @@ jobs:
 
   # ──────────────────────────────────────────────────────────
   #  Release — runs after all three builds succeed
-  #  Only triggers on a version tag push (v*.*.*)
   # ──────────────────────────────────────────────────────────
   release:
     name: Create GitHub Release
