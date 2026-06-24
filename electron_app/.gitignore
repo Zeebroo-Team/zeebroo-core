@@ -23,6 +23,11 @@ yarn-error.log*
 # Runtime config written by the app
 renderer/config.json
 
+# Build assets — track plists but not generated icons
+build-assets/*.icns
+build-assets/*.ico
+build-assets/*.png
+
 # User data / local state
 *.key
 

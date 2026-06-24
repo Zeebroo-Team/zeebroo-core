@@ -5,7 +5,10 @@
   "main": "main.js",
   "scripts": {
     "start": "env -u ELECTRON_RUN_AS_NODE electron .",
-    "build": "electron-builder"
+    "build": "electron-builder",
+    "build:mac": "electron-builder --mac",
+    "build:win": "electron-builder --win",
+    "build:linux": "electron-builder --linux"
   },
   "dependencies": {
     "electron-store": "^8.1.0",
@@ -18,17 +21,65 @@
   "build": {
     "appId": "com.zeebroo.pos-desktop",
     "productName": "Zeebroo POS",
+    "copyright": "Copyright © 2025 Zeebroo",
     "directories": {
-      "output": "dist"
+      "output": "dist",
+      "buildResources": "build-assets"
     },
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**/*",
+      "node_modules/electron-store/**/*",
+      "node_modules/conf/**/*",
+      "node_modules/atomically/**/*",
+      "node_modules/dot-prop/**/*",
+      "node_modules/env-paths/**/*",
+      "node_modules/json-schema-typed/**/*",
+      "node_modules/onetime/**/*",
+      "node_modules/mimic-fn/**/*",
+      "node_modules/type-fest/**/*",
+      "node_modules/playwright-core/lib/**/*",
+      "node_modules/playwright-core/package.json",
+      "!node_modules/playwright-core/.local-browsers/**/*",
+      "!node_modules/playwright-core/bin/**/*",
+      "!**/*.map",
+      "!**/*.d.ts"
+    ],
     "mac": {
-      "category": "public.app-category.business"
+      "category": "public.app-category.business",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build-assets/entitlements.mac.plist",
+      "entitlementsInherit": "build-assets/entitlements.mac.plist",
+      "target": [
+        { "target": "dmg", "arch": ["x64", "arm64"] }
+      ]
+    },
+    "dmg": {
+      "title": "${productName} ${version}",
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
     },
     "win": {
-      "target": "nsis"
+      "target": [
+        { "target": "nsis", "arch": ["x64"] }
+      ],
+      "artifactName": "${productName}-Setup-${version}-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
     },
     "linux": {
-      "target": "AppImage"
-    }
+      "category": "Office",
+      "target": [
+        { "target": "AppImage", "arch": ["x64"] },
+        { "target": "deb",      "arch": ["x64"] }
+      ],
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
+    },
+    "publish": null
   }
 }
