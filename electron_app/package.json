@@ -27,6 +27,7 @@
     "appId": "com.zeebroo.pos-desktop",
     "productName": "Zeebroo POS",
     "copyright": "Copyright © 2025 Zeebroo",
+    "afterPack": "./scripts/afterPack.js",
     "directories": {
       "output": "dist",
       "buildResources": "build-assets"
