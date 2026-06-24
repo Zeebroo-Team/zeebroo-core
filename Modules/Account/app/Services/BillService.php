@@ -132,6 +132,30 @@ class BillService
         ];
     }
 
+    public function billIsFullyPaid(Bill $bill): bool
+    {
+        if (! $bill->relationLoaded('ledgerTransactions')) {
+            $bill->load('ledgerTransactions');
+        }
+
+        $anchor = $bill->due_date ?? $bill->first_installment_due_date;
+        if (! $anchor instanceof Carbon) {
+            return false;
+        }
+
+        if ($bill->isOneTime()) {
+            return $this->billPeriodFullyPaidAtDate($bill, $anchor->copy()->startOfDay());
+        }
+
+        // Recurring: fully paid only when the agreement period has ended AND no overdue remains
+        $scheduleEnd = $this->billScheduleEndInclusive($bill);
+        if (! $scheduleEnd instanceof Carbon) {
+            return false;
+        }
+
+        return $scheduleEnd->lt(Carbon::today()->startOfDay()) && ! $this->billHasOverduePayments($bill);
+    }
+
     public function billHasOverduePayments(Bill $bill, ?Carbon $asOf = null): bool
     {
         $today = ($asOf ?? Carbon::today())->copy()->startOfDay();
@@ -142,6 +166,12 @@ class BillService
 
         if (! $bill->relationLoaded('ledgerTransactions')) {
             $bill->load('ledgerTransactions');
+        }
+
+        // One-time bills have exactly one occurrence; stop after checking it.
+        if ($bill->isOneTime()) {
+            $due = $anchor->copy()->startOfDay();
+            return $due->lte($today) && ! $this->billPeriodFullyPaidAtDate($bill, $due);
         }
 
         $scheduleEnd = $this->billScheduleEndInclusive($bill);

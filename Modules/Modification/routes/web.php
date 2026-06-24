@@ -9,6 +9,7 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
     Route::get('modification/{modification}/bills', [ModificationController::class, 'bills'])->name('modification.bills');
     Route::get('modification/{modification}', [ModificationController::class, 'show'])->name('modification.show');
     Route::post('modification', [ModificationController::class, 'store'])->name('modification.store');
+    Route::delete('modification/{modification}', [ModificationController::class, 'destroy'])->name('modification.destroy');
     Route::post('modification/quick-property', [ModificationController::class, 'quickStoreProperty'])
         ->name('modification.quick-property.store');
 });

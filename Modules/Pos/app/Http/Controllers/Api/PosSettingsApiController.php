@@ -107,9 +107,19 @@ class PosSettingsApiController extends Controller
         $business = $this->businessOrAbort($request);
 
         $validated = $request->validate([
-            'default_deposit_account_id' => ['nullable', 'integer', 'min:1'],
-            'discount_field_enabled' => ['nullable', 'boolean'],
-            'display_theme' => ['nullable', 'string', 'in:light,dark'],
+            'default_deposit_account_id'  => ['nullable', 'integer', 'min:1'],
+            'discount_field_enabled'      => ['nullable', 'boolean'],
+            'checkout_modal_enabled'      => ['nullable', 'boolean'],
+            'display_theme'               => ['nullable', 'string', 'in:light,dark,inherit'],
+            'receipt_header'              => ['nullable', 'string', 'max:200'],
+            'receipt_footer'              => ['nullable', 'string', 'max:200'],
+            'show_business_name'          => ['nullable', 'boolean'],
+            'show_business_address'       => ['nullable', 'boolean'],
+            'show_account_info'           => ['nullable', 'boolean'],
+            'payment_settlement_mode'     => ['nullable', 'string', 'in:immediate,end_of_day'],
+            'featured_products_limit'     => ['nullable', 'integer', 'min:0', 'max:200'],
+            'featured_categories_limit'   => ['nullable', 'integer', 'min:0', 'max:200'],
+            'show_service_bound_products' => ['nullable', 'boolean'],
         ]);
 
         $this->posSettings->saveForBusiness($business, $validated);

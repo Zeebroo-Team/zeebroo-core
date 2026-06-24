@@ -24,7 +24,7 @@ class SalePaymentSettlementService
         Sale $sale,
         Business $business,
         User $user,
-        int $creditAccountId,
+        ?int $creditAccountId,
         ?float $amount = null,
         string $paymentMethod = Sale::PAYMENT_CASH,
     ): ?LedgerTransaction {
@@ -34,6 +34,11 @@ class SalePaymentSettlementService
 
         $saleTotal = round((float) $sale->total, 2);
         if ($saleTotal <= self::MONEY_TOLERANCE) {
+            return null;
+        }
+
+        // No account configured — skip ledger entry; sale still completes
+        if ($creditAccountId === null) {
             return null;
         }
 
@@ -55,7 +60,7 @@ class SalePaymentSettlementService
 
             if ($account === null) {
                 throw ValidationException::withMessages([
-                    'credit_account_id' => 'Choose an account belonging to your business.',
+                    'credit_account_id' => 'No deposit account is set. Go to POS Settings → Accounts and set a default deposit account.',
                 ]);
             }
 

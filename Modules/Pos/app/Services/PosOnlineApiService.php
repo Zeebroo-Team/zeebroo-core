@@ -32,6 +32,9 @@ class PosOnlineApiService
         int $page = 1,
         int $perPage = 40,
         ?int $branchId = null,
+        ?string $stockStatus = null,
+        ?int $brandId = null,
+        string $sort = 'name_asc',
     ): array {
         $currency = (string) (get_settings('business.currency', '', $business) ?: '');
         $catalogOptions = $this->catalogOptions->optionsForBusiness($business);
@@ -51,9 +54,20 @@ class PosOnlineApiService
             $effectiveBranchId,
             $branchProductSeparate,
             $branchStockSeparate,
+            $stockStatus,
+            $brandId,
+            $sort,
         );
 
         $branches = $business->branches()->get()
+            ->map(fn ($b) => ['id' => (int) $b->id, 'name' => $b->name])
+            ->values()->all();
+
+        $brands = \Modules\Product\Models\ProductBrand::query()
+            ->where('business_id', $business->id)
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get()
             ->map(fn ($b) => ['id' => (int) $b->id, 'name' => $b->name])
             ->values()->all();
 
@@ -74,6 +88,7 @@ class PosOnlineApiService
             'branch_product_separate' => $branchProductSeparate,
             'branches' => $branches,
             'selected_branch_id' => $effectiveBranchId,
+            'brands' => $brands,
         ];
     }
 
@@ -163,7 +178,7 @@ class PosOnlineApiService
      */
     public function formatSale(Sale $sale): array
     {
-        $sale->loadMissing(['items.product', 'creditAccount', 'user', 'branch', 'returns.items']);
+        $sale->loadMissing(['items.product', 'creditAccount', 'user', 'branch', 'customer', 'returns.items']);
 
         // Build returned-quantity map keyed by sale item id
         $returnedQtys = [];
@@ -191,6 +206,7 @@ class PosOnlineApiService
             'amount_tendered' => $sale->amount_tendered !== null ? round((float) $sale->amount_tendered, 2) : null,
             'change_amount' => $sale->change_amount !== null ? round((float) $sale->change_amount, 2) : null,
             'notes' => $sale->notes,
+            'customer_name' => $sale->customer?->name,
             'sold_at' => $sale->sold_at?->toIso8601String(),
             'credit_account' => $sale->creditAccount ? [
                 'id' => (int) $sale->creditAccount->id,
@@ -232,6 +248,7 @@ class PosOnlineApiService
             'total' => round((float) $sale->total, 2),
             'items_count' => (int) ($sale->items_count ?? $sale->items()->count()),
             'sold_at' => $sale->sold_at?->toIso8601String(),
+            'customer_name' => $sale->customer?->name,
         ])->values()->all();
     }
 }

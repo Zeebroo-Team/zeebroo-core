@@ -21,13 +21,19 @@ class PosOnlineBootstrapApiController extends Controller
     {
         $business = $this->businessOrAbort($request);
 
-        $search     = (string) $request->query('q', '');
-        $categoryId = $request->query('category');
-        $categoryId = is_numeric($categoryId) ? (int) $categoryId : null;
-        $page       = max(1, (int) $request->query('page', 1));
-        $perPage    = max(1, min(100, (int) $request->query('per_page', 40)));
-        $branchId   = $request->query('branch');
-        $branchId   = is_numeric($branchId) ? (int) $branchId : null;
+        $search      = (string) $request->query('q', '');
+        $categoryId  = $request->query('category');
+        $categoryId  = is_numeric($categoryId) ? (int) $categoryId : null;
+        $page        = max(1, (int) $request->query('page', 1));
+        $perPage     = max(1, min(100, (int) $request->query('per_page', 40)));
+        $branchId    = $request->query('branch') ?? $request->header('X-Branch-Id');
+        $branchId    = is_numeric($branchId) ? (int) $branchId : null;
+        $stockStatus = in_array($request->query('stock_status'), ['in_stock', 'low_stock', 'out_of_stock'], true)
+            ? $request->query('stock_status') : null;
+        $brandId     = $request->query('brand_id');
+        $brandId     = is_numeric($brandId) ? (int) $brandId : null;
+        $sort        = in_array($request->query('sort'), ['name_asc', 'name_desc', 'price_asc', 'price_desc', 'stock_asc', 'stock_desc'], true)
+            ? $request->query('sort') : 'name_asc';
 
         return response()->json([
             'data' => $this->api->bootstrap(
@@ -38,6 +44,9 @@ class PosOnlineBootstrapApiController extends Controller
                 $page,
                 $perPage,
                 $branchId,
+                $stockStatus,
+                $brandId,
+                $sort,
             ),
         ]);
     }

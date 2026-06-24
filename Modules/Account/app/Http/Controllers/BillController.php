@@ -77,6 +77,7 @@ class BillController extends Controller
 
         $nextPaymentInsight = $this->billService->nextPaymentInsight($billModel);
         $billPaymentOverdue = $this->billService->billHasOverduePayments($billModel);
+        $billIsFullyPaid    = $this->billService->billIsFullyPaid($billModel);
         $billScheduleRows = $this->billService->billBillingScheduleWithPaymentStatus($billModel);
         $billLedgerRows = $billModel->ledgerTransactions
             ->sortBy(fn ($row) => $row->occurrence_date?->timestamp ?? 0)
@@ -99,6 +100,7 @@ class BillController extends Controller
             'nextPaymentInsight' => $nextPaymentInsight,
             'detailCurrency' => (string) (get_settings('business.currency', '', $business) ?: ''),
             'billPaymentOverdue' => $billPaymentOverdue,
+            'billIsFullyPaid'   => $billIsFullyPaid,
             'billScheduleRows' => $billScheduleRows,
             'billLedgerRows' => $billLedgerRows,
         ]);

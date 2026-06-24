@@ -17,7 +17,6 @@ class PosExpenseBillAssignmentApiController extends Controller
     public function index(Request $request): JsonResponse
     {
         $business = $this->businessOrAbort($request);
-        $user     = $request->user();
 
         $branches = $this->safe(fn () => Branch::where('business_id', $business->id)
             ->orderBy('name')
@@ -36,12 +35,11 @@ class PosExpenseBillAssignmentApiController extends Controller
                 ->values();
         });
 
-        $properties = $this->safe(function () use ($business, $user) {
+        $properties = $this->safe(function () use ($business) {
             if (! Schema::hasTable('properties')) {
                 return collect();
             }
             return \Modules\Account\Models\Property::where('business_id', $business->id)
-                ->where('user_id', $user->id)
                 ->orderBy('property_name')
                 ->get(['id', 'property_name', 'property_type'])
                 ->map(fn ($p) => ['id' => $p->id, 'name' => $p->property_name . ' · ' . $p->property_type])
@@ -70,12 +68,11 @@ class PosExpenseBillAssignmentApiController extends Controller
                 ->values();
         });
 
-        $rentals = $this->safe(function () use ($business, $user) {
+        $rentals = $this->safe(function () use ($business) {
             if (! Schema::hasTable('rentals')) {
                 return collect();
             }
             return \Modules\Account\Models\Rental::where('business_id', $business->id)
-                ->where('user_id', $user->id)
                 ->orderBy('property_type')
                 ->get(['id', 'property_type', 'purpose'])
                 ->map(fn ($r) => ['id' => $r->id, 'name' => $r->property_type . ($r->purpose ? '  ·  ' . $r->purpose : '')])
