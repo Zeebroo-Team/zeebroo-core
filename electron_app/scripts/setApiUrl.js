@@ -21,19 +21,16 @@ if (!url) {
 const mainPath = path.resolve(__dirname, '..', 'main.js');
 const original = fs.readFileSync(mainPath, 'utf8');
 
-// Match the default value only — avoids touching anything else in the file
-const updated = original.replace(
-  /(api_base_url:\s*['"])http:\/\/localhost[^'"]*(['"]) /,
-  `$1${url}$2 `
-);
+// Simple string replace — the localhost URL is unique in main.js
+const DEFAULT = 'http://localhost:8000/api/v1/pos';
+const updated = original.replace(DEFAULT, url);
 
 if (updated === original) {
-  // Already replaced or pattern changed — check if the desired URL is already there
   if (original.includes(url)) {
     console.log(`  setApiUrl: already set to ${url}`);
     process.exit(0);
   }
-  console.error('  setApiUrl: ERROR — could not find api_base_url pattern in main.js');
+  console.error(`  setApiUrl: ERROR — default URL "${DEFAULT}" not found in main.js`);
   process.exit(1);
 }
 
