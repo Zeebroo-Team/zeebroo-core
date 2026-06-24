@@ -59,7 +59,7 @@ jobs:
           cache: npm
           cache-dependency-path: electron_app/package-lock.json
 
-      # Linux: install native deps electron-builder needs for .deb / AppImage
+      # Linux: native libs electron-builder needs for AppImage / .deb
       - name: Install Linux build deps
         if: runner.os == 'Linux'
         run: |
@@ -69,28 +69,52 @@ jobs:
       - name: Install Node dependencies
         run: npm ci
 
-      # ── macOS build (universal binary, optional code signing) ──
+      # ── macOS: import certificate into keychain only when secret exists ──
+      - name: Import macOS certificate
+        if: runner.os == 'macOS' && env.MAC_CERTIFICATE != ''
+        env:
+          MAC_CERTIFICATE: ${{ secrets.MAC_CERTIFICATE }}
+          MAC_CERTIFICATE_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
+        run: |
+          echo "$MAC_CERTIFICATE" | base64 --decode > /tmp/certificate.p12
+          security create-keychain -p "" build.keychain
+          security import /tmp/certificate.p12 -k build.keychain \
+            -P "$MAC_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security list-keychains -d user -s build.keychain login.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "" build.keychain
+          security set-keychain-settings -t 3600 -l build.keychain
+          rm /tmp/certificate.p12
+
+      # ── macOS build ──
       - name: Build (macOS)
         if: runner.os == 'macOS'
         run: npm run build -- ${{ matrix.platform_flag }}
         env:
-          # Code-signing — leave secrets empty to produce unsigned builds
-          CSC_LINK: ${{ secrets.MAC_CERTIFICATE }}
-          CSC_KEY_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
-          # Notarisation — leave secrets empty to skip
+          # Prevent electron-builder from trying keychain discovery when no cert
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+          # Notarisation (only active if secrets are set; empty strings are safe here)
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          # Disable auto-discovery so unsigned builds don't fail
-          CSC_IDENTITY_AUTO_DISCOVERY: ${{ secrets.MAC_CERTIFICATE != '' }}
 
-      # ── Windows build (optional code signing) ──
+      # ── Windows: import certificate only when secret exists ──
+      - name: Import Windows certificate
+        if: runner.os == 'Windows' && env.WIN_CERTIFICATE != ''
+        env:
+          WIN_CERTIFICATE: ${{ secrets.WIN_CERTIFICATE }}
+          WIN_CERTIFICATE_PASSWORD: ${{ secrets.WIN_CERTIFICATE_PASSWORD }}
+        shell: pwsh
+        run: |
+          $bytes = [Convert]::FromBase64String($env:WIN_CERTIFICATE)
+          [IO.File]::WriteAllBytes("$env:TEMP\certificate.p12", $bytes)
+          echo "WIN_CSC_LINK=$env:TEMP\certificate.p12" >> $env:GITHUB_ENV
+          echo "WIN_CSC_KEY_PASSWORD=$env:WIN_CERTIFICATE_PASSWORD" >> $env:GITHUB_ENV
+
+      # ── Windows build ──
       - name: Build (Windows)
         if: runner.os == 'Windows'
         run: npm run build -- ${{ matrix.platform_flag }}
-        env:
-          WIN_CSC_LINK: ${{ secrets.WIN_CERTIFICATE }}
-          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CERTIFICATE_PASSWORD }}
 
       # ── Linux build (no signing required) ──
       - name: Build (Linux)
