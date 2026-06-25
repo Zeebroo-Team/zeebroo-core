@@ -1,6 +1,6 @@
 {
   "name": "zeebroo-pos-desktop",
-  "version": "1.5.1",
+  "version": "1.5.2",
   "description": "Zeebroo POS Desktop — Electron ribbon interface",
   "author": {
     "name": "Zeebroo",
@@ -55,7 +55,9 @@
     },
     "dmg": {
       "title": "${productName} ${version}",
-      "artifactName": "${productName}-${version}-${arch}.${ext}"
+      "artifactName": "${productName}-${version}-${arch}.${ext}",
+      "background": null,
+      "window": { "width": 540, "height": 380 }
     },
     "win": {
       "target": [
