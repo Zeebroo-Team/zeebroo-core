@@ -221,6 +221,7 @@ jobs:
                 version:      $version,
                 release_date: $date,
                 channel:      $channel,
+                is_latest:    true,
                 notes:        ["See release notes on GitHub for full changelog"],
                 windows_url:  $win_url,
                 macos_url:    $mac_url,
