@@ -185,6 +185,7 @@ jobs:
 
       # ── Notify zeebroo.com website about the new release ──
       - name: Publish release to zeebroo.com
+        if: env.ZEEBROO_API_KEY != ''
         env:
           ZEEBROO_API_KEY: ${{ secrets.ZEEBROO_API_KEY }}
         run: |
