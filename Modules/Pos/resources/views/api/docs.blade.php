@@ -538,25 +538,58 @@ Authorization: (none)
             <nav class="docs-nav">
                 <p class="docs-nav__title">Jump to</p>
                 <a href="#tag/Auth" data-docs-nav><i class="fa fa-key"></i> Authentication</a>
+                <a href="#tag/Businesses" data-docs-nav><i class="fa fa-building"></i> Businesses</a>
                 <a href="#tag/Online-bootstrap" data-docs-nav><i class="fa fa-rocket"></i> Bootstrap</a>
-                <a href="#tag/Catalog" data-docs-nav><i class="fa fa-box"></i> Products</a>
+                <a href="#tag/Catalog" data-docs-nav><i class="fa fa-box"></i> Catalog</a>
                 <a href="#tag/Checkout" data-docs-nav><i class="fa fa-cart-shopping"></i> Checkout</a>
+                <a href="#tag/Products" data-docs-nav><i class="fa fa-boxes-stacked"></i> Products</a>
+                <a href="#tag/Categories" data-docs-nav><i class="fa fa-tags"></i> Categories</a>
+                <a href="#tag/Units" data-docs-nav><i class="fa fa-ruler"></i> Units</a>
+                <a href="#tag/Brands" data-docs-nav><i class="fa fa-trademark"></i> Brands</a>
+                <a href="#tag/Discounts" data-docs-nav><i class="fa fa-percent"></i> Discounts</a>
                 <a href="#tag/Sales" data-docs-nav><i class="fa fa-receipt"></i> Sales</a>
+                <a href="#tag/Sale-returns" data-docs-nav><i class="fa fa-rotate-left"></i> Sale Returns</a>
+                <a href="#tag/Quotations" data-docs-nav><i class="fa fa-file-lines"></i> Quotations</a>
+                <a href="#tag/Invoices" data-docs-nav><i class="fa fa-file-invoice-dollar"></i> Invoices</a>
+                <a href="#tag/Customers" data-docs-nav><i class="fa fa-user-group"></i> Customers</a>
+                <a href="#tag/Suppliers" data-docs-nav><i class="fa fa-truck"></i> Suppliers</a>
+                <a href="#tag/Purchase-orders" data-docs-nav><i class="fa fa-clipboard-list"></i> Purchase Orders</a>
+                <a href="#tag/GRNs" data-docs-nav><i class="fa fa-boxes-stacked"></i> GRNs</a>
+                <a href="#tag/Cheques" data-docs-nav><i class="fa fa-money-check"></i> Cheques</a>
+                <a href="#tag/Expense-bills" data-docs-nav><i class="fa fa-file-invoice"></i> Expense Bills</a>
+                <a href="#tag/Expense-modifications" data-docs-nav><i class="fa fa-hammer"></i> Modifications</a>
+                <a href="#tag/End-of-day" data-docs-nav><i class="fa fa-moon"></i> End of Day</a>
+                <a href="#tag/Finance-flow" data-docs-nav><i class="fa fa-chart-line"></i> Finance Flow</a>
+                <a href="#tag/Loans" data-docs-nav><i class="fa fa-hand-holding-dollar"></i> Loans</a>
+                <a href="#tag/Properties" data-docs-nav><i class="fa fa-house"></i> Properties</a>
+                <a href="#tag/Rentals" data-docs-nav><i class="fa fa-door-open"></i> Rentals</a>
+                <a href="#tag/Accounts-&-banks" data-docs-nav><i class="fa fa-landmark"></i> Accounts &amp; Banks</a>
+                <a href="#tag/HR-employees" data-docs-nav><i class="fa fa-id-badge"></i> HR Employees</a>
+                <a href="#tag/HR-departments" data-docs-nav><i class="fa fa-sitemap"></i> HR Departments</a>
+                <a href="#tag/HR-allowance-types" data-docs-nav><i class="fa fa-coins"></i> Allowance Types</a>
+                <a href="#tag/HR-payroll-rule-sets" data-docs-nav><i class="fa fa-sliders"></i> Payroll Rules</a>
+                <a href="#tag/HR-payroll-cycles" data-docs-nav><i class="fa fa-calendar-check"></i> Payroll Cycles</a>
+                <a href="#tag/Design-studio" data-docs-nav><i class="fa fa-pen-ruler"></i> Design Studio</a>
+                <a href="#tag/Stock-audits" data-docs-nav><i class="fa fa-clipboard-check"></i> Stock Audits</a>
+                <a href="#tag/File-manager" data-docs-nav><i class="fa fa-folder-open"></i> File Manager</a>
+                <a href="#tag/Settings" data-docs-nav><i class="fa fa-gear"></i> Settings</a>
             </nav>
         </aside>
 
         <main class="docs-main">
             <div class="docs-main__hero">
                 <div class="docs-hero-inner">
-                    <h2>Build on the same engine as Online POS</h2>
+                    <h2>Full Zeebroo POS REST API</h2>
                     <p>
-                        Catalog with multi-batch stock pricing, barcode lookup, checkout with cash/card/credit,
-                        quick product create, and sale history — all available as a typed REST API for tablets,
-                        kiosks, and custom integrations.
+                        115 endpoints across catalog, checkout, invoicing, quotations, purchasing,
+                        expenses, payroll, design studio, and more — all available as a typed REST API
+                        for tablets, kiosks, desktop clients, and custom integrations.
                     </p>
                     <div class="docs-hero-tags">
                         <span class="docs-hero-tag"><i class="fa fa-layer-group"></i> Stock layers</span>
                         <span class="docs-hero-tag"><i class="fa fa-barcode"></i> SKU scan</span>
+                        <span class="docs-hero-tag"><i class="fa fa-file-invoice-dollar"></i> Invoicing</span>
+                        <span class="docs-hero-tag"><i class="fa fa-people-group"></i> Payroll</span>
                         <span class="docs-hero-tag"><i class="fa fa-percent"></i> Discounts</span>
                         <span class="docs-hero-tag"><i class="fa fa-building"></i> Multi-business</span>
                     </div>

@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Response;
 use Illuminate\View\View;
+use Symfony\Component\Yaml\Yaml;
+
 class PosApiDocsController extends Controller
 {
     public function index(): View
@@ -38,21 +40,10 @@ class PosApiDocsController extends Controller
         ]);
     }
 
-    /**
-     * @return array<string, mixed>
-     */
-    /**
-     * @return array<string, mixed>
-     */
+    /** @return array<string, mixed> */
     private function openapiSpecArray(): array
     {
-        $jsonPath = module_path('Pos', 'docs/openapi.json');
-        $contents = file_get_contents($jsonPath);
-        if ($contents === false) {
-            return [];
-        }
-
-        $spec = json_decode($contents, true, 512, JSON_THROW_ON_ERROR);
+        $spec = Yaml::parseFile(module_path('Pos', 'docs/openapi.yaml'));
         $serverUrl = rtrim(url('/api/v1/pos'), '/');
         if (isset($spec['servers'][0]) && is_array($spec['servers'][0])) {
             $spec['servers'][0]['url'] = $serverUrl;

@@ -1,40 +1,320 @@
 openapi: 3.0.3
 info:
-  title: Socibiz POS Online API
+  title: Zeebroo POS API
+  version: 2.0.0
   description: |
-    REST API for the online POS terminal: catalog, cart checkout, quick product create, settings, and sales.
+    Full REST API for the Zeebroo POS platform — catalog, checkout, sales, invoicing,
+    quotations, purchasing, expenses, payroll, design studio, and more.
 
     ## Authentication
-    1. `POST /api/v1/pos/auth/token` with email and password to receive a Bearer token.
-    2. Send `Authorization: Bearer {access_token}` on all protected routes.
+    1. `POST /auth/token` with `email` + `password` → receive `access_token`
+    2. Send `Authorization: Bearer {access_token}` on every protected route.
 
     ## Business scope
-    Most endpoints require a business context. Send either:
-    - Header `X-Business-Id: {id}` (recommended for mobile apps), or
-    - Query `business_id={id}`
+    Most endpoints are scoped to a business. Send **one** of:
+    - Header `X-Business-Id: {id}` *(recommended)*
+    - Query param `?business_id={id}`
 
-    If omitted, the API uses the user's session-selected business (web) or latest business.
+    If omitted the API falls back to the authenticated user's most-recently-selected business.
 
-  version: 1.0.0
+    ## Branch scope
+    When branch-level POS separation is enabled, additionally send `X-Branch-Id: {id}`.
+
+    ## Response envelope
+    Successful responses follow `{ "data": … }`.  Lists add `{ "data": […], "meta": { pagination } }`.
+    Errors return `{ "message": "…", "errors": { "field": ["…"] } }` with an appropriate HTTP status.
+
 servers:
   - url: /api/v1/pos
-    description: POS API base path (prepend your app URL, e.g. https://example.com)
+    description: POS API (prepend your app URL, e.g. https://platform.zeebroo.com)
 
 tags:
   - name: Auth
-  - name: Docs
+    description: Token issuance, user registration, profile, and revocation.
+  - name: Businesses
+    description: Create and list businesses owned by or accessible to the current user.
   - name: Online bootstrap
+    description: Single call to load everything the POS screen needs on startup.
   - name: Catalog
+    description: Read-only product and category listings optimised for POS.
   - name: Checkout
+    description: Create a completed sale from a cart.
   - name: Products
-  - name: Settings
+    description: Full product CRUD (create, update, delete).
+  - name: Categories
+    description: Product category management.
+  - name: Units
+    description: Product unit of measure management.
+  - name: Brands
+    description: Product brand management.
+  - name: Discounts
+    description: Time-bounded product discounts.
   - name: Sales
+    description: Sale history, detail, void.
+  - name: Sale returns
+    description: Process refunds against a completed sale.
+  - name: Quotations
+    description: Full quotation lifecycle — draft, sent, accepted, rejected.
+  - name: Invoices
+    description: Full invoice lifecycle — draft, sent, paid, overdue, cancelled.
+  - name: Customers
+    description: Customer CRUD and recent purchase history.
+  - name: Suppliers
+    description: Supplier CRUD.
+  - name: Purchase orders
+    description: Create and manage supplier purchase orders.
+  - name: GRNs
+    description: Goods Receive Notes — receive stock against a purchase order.
+  - name: Cheques
+    description: Track and clear cheque payments attached to GRNs.
+  - name: Expense bills
+    description: Recurring and one-time expense bill management.
+  - name: Expense modifications
+    description: Renovation and property modification expense tracking.
+  - name: End of day
+    description: View unsettled sales and perform end-of-day settlement.
+  - name: Finance flow
+    description: Combined monthly outflow overview across bills, loans, and rentals.
+  - name: Loans
+    description: Business loan tracking and installment recording.
+  - name: Properties
+    description: Business property asset management.
+  - name: Rentals
+    description: Rental agreement and payment management.
+  - name: Accounts & banks
+    description: Bank accounts and global bank/type lookups.
+  - name: HR employees
+    description: Employee records management.
+  - name: HR departments
+    description: Department management.
+  - name: HR job titles
+    description: Job title lookup.
+  - name: HR allowance types
+    description: Payroll allowance type management.
+  - name: HR payroll rule sets
+    description: Configure payroll calculation rule sets and individual rules.
+  - name: HR payroll cycles
+    description: Run, compute, finalize, and pay payroll cycles.
+  - name: Design studio
+    description: Canvas-based design management (letterheads, company profiles, etc.).
+  - name: Stock audits
+    description: Stock count audits and adjustment finalization.
+  - name: File manager
+    description: Browse and upload files/images.
+  - name: Settings
+    description: POS configuration settings.
+  - name: Return reasons
+    description: Return reason options lookup.
+
+security:
+  - bearerAuth: []
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: Sanctum
+
+  schemas:
+    Meta:
+      type: object
+      properties:
+        current_page: { type: integer, example: 1 }
+        last_page:    { type: integer, example: 5 }
+        per_page:     { type: integer, example: 50 }
+        total:        { type: integer, example: 243 }
+
+    Error:
+      type: object
+      properties:
+        message: { type: string }
+        errors:
+          type: object
+          additionalProperties:
+            type: array
+            items: { type: string }
+
+    MoneyAmount:
+      type: number
+      format: float
+      example: 1250.00
+
+    ItemLine:
+      type: object
+      required: [quantity, unit_price]
+      properties:
+        item_type:       { type: string, enum: [product, service, custom], default: product }
+        product_id:      { type: integer, nullable: true }
+        service_item_id: { type: integer, nullable: true }
+        description:     { type: string, nullable: true }
+        quantity:        { type: number, format: float, example: 2 }
+        unit_price:      { $ref: '#/components/schemas/MoneyAmount' }
+
+    ItemLineResponse:
+      allOf:
+        - $ref: '#/components/schemas/ItemLine'
+        - type: object
+          properties:
+            id:           { type: integer }
+            total:        { $ref: '#/components/schemas/MoneyAmount' }
+            product_name: { type: string, nullable: true }
+
+    DocumentStatus:
+      type: string
+      enum: [draft, sent, accepted, rejected, paid, overdue, cancelled]
+
+    User:
+      type: object
+      properties:
+        id:    { type: integer }
+        name:  { type: string }
+        email: { type: string, format: email }
+
+    Business:
+      type: object
+      properties:
+        id:   { type: integer }
+        name: { type: string }
+
+    ProductCard:
+      type: object
+      properties:
+        id:          { type: integer }
+        name:        { type: string }
+        sku:         { type: string }
+        unit_price:  { $ref: '#/components/schemas/MoneyAmount' }
+        total_stock: { type: number }
+        is_active:   { type: boolean }
+        category:    { type: string, nullable: true }
+        brand:       { type: string, nullable: true }
+        images:      { type: array, items: { type: string } }
+        unit_name:   { type: string, nullable: true }
+
+    Customer:
+      type: object
+      properties:
+        id:          { type: integer }
+        name:        { type: string }
+        phone:       { type: string, nullable: true }
+        email:       { type: string, nullable: true }
+        address:     { type: string, nullable: true }
+        notes:       { type: string, nullable: true }
+        sales_count: { type: integer }
+
+    Supplier:
+      type: object
+      properties:
+        id:              { type: integer }
+        name:            { type: string }
+        contact_name:    { type: string, nullable: true }
+        email:           { type: string, nullable: true }
+        phone:           { type: string, nullable: true }
+        address:         { type: string, nullable: true }
+        notes:           { type: string, nullable: true }
+        is_active:       { type: boolean }
+        purchases_count: { type: integer }
+
+    QuotationListItem:
+      type: object
+      properties:
+        id:            { type: integer }
+        quote_number:  { type: string, example: QT-0001 }
+        status:        { $ref: '#/components/schemas/DocumentStatus' }
+        status_label:  { type: string }
+        status_color:  { type: string }
+        customer_name: { type: string, nullable: true }
+        reference:     { type: string, nullable: true }
+        quote_date:    { type: string, format: date }
+        expiry_date:   { type: string, format: date, nullable: true }
+        total:         { $ref: '#/components/schemas/MoneyAmount' }
+
+    InvoiceListItem:
+      type: object
+      properties:
+        id:              { type: integer }
+        invoice_number:  { type: string, example: INV-0001 }
+        status:          { $ref: '#/components/schemas/DocumentStatus' }
+        status_label:    { type: string }
+        status_color:    { type: string }
+        customer_name:   { type: string, nullable: true }
+        reference:       { type: string, nullable: true }
+        issue_date:      { type: string, format: date }
+        due_date:        { type: string, format: date, nullable: true }
+        is_overdue:      { type: boolean }
+        total:           { $ref: '#/components/schemas/MoneyAmount' }
+
+    SaleListItem:
+      type: object
+      properties:
+        id:             { type: integer }
+        sale_number:    { type: string }
+        status:         { type: string }
+        channel:        { type: string }
+        payment_method: { type: string }
+        total:          { $ref: '#/components/schemas/MoneyAmount' }
+        sold_at:        { type: string, format: date-time }
+
+    PurchaseOrderListItem:
+      type: object
+      properties:
+        id:                     { type: integer }
+        po_number:              { type: string, example: PO-0001 }
+        status:                 { type: string }
+        status_label:           { type: string }
+        supplier_id:            { type: integer }
+        supplier_name:          { type: string }
+        purchase_date:          { type: string, format: date }
+        expected_delivery_date: { type: string, format: date, nullable: true }
+        subtotal:               { $ref: '#/components/schemas/MoneyAmount' }
+        total:                  { $ref: '#/components/schemas/MoneyAmount' }
+        items_count:            { type: integer }
+        notes:                  { type: string, nullable: true }
+
+    GrnListItem:
+      type: object
+      properties:
+        id:                   { type: integer }
+        grn_number:           { type: string, example: GRN-0001 }
+        purchase_id:          { type: integer }
+        po_number:            { type: string }
+        supplier_name:        { type: string }
+        received_date:        { type: string, format: date }
+        total:                { $ref: '#/components/schemas/MoneyAmount' }
+        payment_method:       { type: string }
+        payment_status:       { type: string }
+        payment_status_label: { type: string }
+        amount_paid:          { $ref: '#/components/schemas/MoneyAmount' }
+        amount_outstanding:   { $ref: '#/components/schemas/MoneyAmount' }
+
+    Account:
+      type: object
+      properties:
+        id:              { type: integer }
+        account_name:    { type: string }
+        bank_name:       { type: string, nullable: true }
+        current_balance: { $ref: '#/components/schemas/MoneyAmount' }
+
+    Design:
+      type: object
+      properties:
+        id:         { type: integer }
+        title:      { type: string }
+        type:       { type: string, nullable: true, example: letterhead }
+        width:      { type: integer }
+        height:     { type: integer }
+        has_canvas: { type: boolean }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
 
 paths:
+
+  # ─────────────────────────── AUTH ───────────────────────────
+
   /auth/token:
     post:
       tags: [Auth]
-      summary: Create API access token
+      summary: Create access token
       security: []
       requestBody:
         required: true
@@ -44,34 +324,64 @@ paths:
               type: object
               required: [email, password]
               properties:
-                email: { type: string, format: email }
-                password: { type: string, format: password }
-                device_name: { type: string, example: pos-tablet-1 }
+                email:       { type: string, format: email }
+                password:    { type: string, format: password }
+                device_name: { type: string, default: pos-desktop }
       responses:
         '200':
-          description: Token issued
+          description: Token created
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AuthTokenResponse'
-        '422':
-          $ref: '#/components/responses/ValidationError'
+                type: object
+                properties:
+                  token_type:   { type: string, example: Bearer }
+                  access_token: { type: string }
+                  user:         { $ref: '#/components/schemas/User' }
+        '422': { description: Validation error }
 
-  /auth/revoke:
+  /auth/register:
     post:
       tags: [Auth]
-      summary: Revoke current token
+      summary: Register user and create first business
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, business_name, business_category, email, password, password_confirmation]
+              properties:
+                name:                  { type: string }
+                business_name:         { type: string }
+                business_category:     { type: string }
+                features:              { type: array, items: { type: string } }
+                email:                 { type: string, format: email }
+                password:              { type: string, format: password, minLength: 8 }
+                password_confirmation: { type: string, format: password }
+                device_name:           { type: string }
       responses:
-        '200':
-          description: Token revoked
+        '201':
+          description: Registered
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token_type:   { type: string }
+                  access_token: { type: string }
+                  user:         { $ref: '#/components/schemas/User' }
+        '422': { description: Validation error }
 
-  /businesses:
+  /auth/business-categories:
     get:
       tags: [Auth]
-      summary: List businesses for the authenticated user
+      summary: List business category options
+      security: []
       responses:
         '200':
-          description: Business list
+          description: Category options
           content:
             application/json:
               schema:
@@ -82,44 +392,93 @@ paths:
                     items:
                       type: object
                       properties:
-                        id: { type: integer }
-                        name: { type: string }
-        '401':
-          $ref: '#/components/responses/Unauthorized'
+                        value: { type: string }
+                        label: { type: string }
 
-  /docs/openapi.yaml:
+  /auth/me:
     get:
-      tags: [Docs]
-      summary: OpenAPI specification (YAML)
-      security: []
+      tags: [Auth]
+      summary: Get authenticated user profile
       responses:
         '200':
-          description: YAML document
+          description: Authenticated user
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/User' }
 
-  /docs:
-    get:
-      tags: [Docs]
-      summary: Swagger UI documentation page
-      security: []
+  /auth/revoke:
+    post:
+      tags: [Auth]
+      summary: Revoke current token
       responses:
         '200':
-          description: HTML page
+          description: Token revoked
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+
+  # ─────────────────────────── BUSINESSES ───────────────────────────
+
+  /businesses:
+    get:
+      tags: [Businesses]
+      summary: List accessible businesses
+      responses:
+        '200':
+          description: Business list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Business' }
+    post:
+      tags: [Businesses]
+      summary: Create a new business
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, category]
+              properties:
+                name:     { type: string }
+                category: { type: string }
+                features: { type: array, items: { type: string } }
+      responses:
+        '201':
+          description: Business created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Business' }
+
+  # ─────────────────────────── ONLINE BOOTSTRAP ───────────────────────────
 
   /online/bootstrap:
     get:
       tags: [Online bootstrap]
-      summary: Load full online POS session data
+      summary: Full POS bootstrap — settings, categories, products, discounts
       parameters:
-        - $ref: '#/components/parameters/BusinessIdHeader'
-        - $ref: '#/components/parameters/BusinessIdQuery'
-        - name: q
-          in: query
-          schema: { type: string }
-          description: Product search (name or SKU)
-        - name: category
-          in: query
-          schema: { type: integer }
-          description: Filter by category id
+        - { name: q,            in: query, schema: { type: string } }
+        - { name: category,     in: query, schema: { type: integer } }
+        - { name: page,         in: query, schema: { type: integer, default: 1 } }
+        - { name: per_page,     in: query, schema: { type: integer, default: 24 } }
+        - { name: branch,       in: query, schema: { type: integer } }
+        - { name: stock_status, in: query, schema: { type: string, enum: [all, in_stock, low_stock, out_of_stock] } }
+        - { name: brand_id,     in: query, schema: { type: integer } }
+        - { name: sort,         in: query, schema: { type: string, enum: [name, price_asc, price_desc, newest] } }
       responses:
         '200':
           description: Bootstrap payload
@@ -129,19 +488,50 @@ paths:
                 type: object
                 properties:
                   data:
-                    $ref: '#/components/schemas/OnlineBootstrap'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '422':
-          $ref: '#/components/responses/ValidationError'
+                    type: object
+                    properties:
+                      settings:     { type: object }
+                      categories:   { type: array, items: { type: object } }
+                      products:
+                        type: object
+                        properties:
+                          data: { type: array, items: { $ref: '#/components/schemas/ProductCard' } }
+                          meta: { $ref: '#/components/schemas/Meta' }
+                      discounts:     { type: array, items: { type: object } }
+                      selling_units: { type: array, items: { type: object } }
+
+  /online/branches:
+    get:
+      tags: [Online bootstrap]
+      summary: List branches available for POS
+      responses:
+        '200':
+          description: Branch list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      branch_pos_separate: { type: boolean }
+                      branches:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            id:   { type: integer }
+                            name: { type: string }
+
+  # ─────────────────────────── CATALOG ───────────────────────────
 
   /online/categories:
     get:
       tags: [Catalog]
       summary: List POS categories
       parameters:
-        - $ref: '#/components/parameters/BusinessIdHeader'
-        - $ref: '#/components/parameters/BusinessIdQuery'
+        - { name: branch, in: query, schema: { type: integer } }
       responses:
         '200':
           description: Category list
@@ -153,62 +543,160 @@ paths:
                   data:
                     type: array
                     items:
-                      $ref: '#/components/schemas/Category'
+                      type: object
+                      properties:
+                        id:            { type: integer }
+                        name:          { type: string }
+                        parent_id:     { type: integer, nullable: true }
+                        product_count: { type: integer }
+                        image_url:     { type: string, nullable: true }
 
   /online/products:
     get:
       tags: [Catalog]
-      summary: List sellable product cards
+      summary: Paginated product catalog for POS screen
       parameters:
-        - $ref: '#/components/parameters/BusinessIdHeader'
-        - $ref: '#/components/parameters/BusinessIdQuery'
-        - name: q
-          in: query
-          schema: { type: string }
-        - name: category
-          in: query
-          schema: { type: integer }
+        - { name: q,            in: query, schema: { type: string } }
+        - { name: category,     in: query, schema: { type: integer } }
+        - { name: page,         in: query, schema: { type: integer, default: 1 } }
+        - { name: per_page,     in: query, schema: { type: integer, default: 24 } }
+        - { name: branch,       in: query, schema: { type: integer } }
+        - { name: stock_status, in: query, schema: { type: string } }
+        - { name: brand_id,     in: query, schema: { type: integer } }
+        - { name: sort,         in: query, schema: { type: string } }
       responses:
         '200':
-          description: Product cards
+          description: Product list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/ProductCard' } }
+                  meta: { $ref: '#/components/schemas/Meta' }
+    post:
+      tags: [Products]
+      summary: Create a product
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:                  { type: string }
+                sku:                   { type: string }
+                unit_price:            { $ref: '#/components/schemas/MoneyAmount' }
+                stock_quantity:        { type: number }
+                product_unit_id:       { type: integer, nullable: true }
+                description:           { type: string, nullable: true }
+                is_active:             { type: boolean, default: true }
+                is_bundle:             { type: boolean, default: false }
+                product_category_ids:  { type: array, items: { type: integer } }
+                product_brand_ids:     { type: array, items: { type: integer } }
+                file_manager_file_ids: { type: array, items: { type: integer } }
+                bundle_items:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      product_id: { type: integer }
+                      quantity:   { type: number }
+      responses:
+        '201':
+          description: Product created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  data:    { $ref: '#/components/schemas/ProductCard' }
+
+  /online/products/{id}:
+    get:
+      tags: [Catalog]
+      summary: Full product detail
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: branch, in: query, schema: { type: integer } }
+      responses:
+        '200':
+          description: Product detail
           content:
             application/json:
               schema:
                 type: object
                 properties:
                   data:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/ProductCard'
-    post:
+                    allOf:
+                      - $ref: '#/components/schemas/ProductCard'
+                      - type: object
+                        properties:
+                          cost_price:      { $ref: '#/components/schemas/MoneyAmount' }
+                          description:     { type: string, nullable: true }
+                          is_bundle:       { type: boolean }
+                          category_ids:    { type: array, items: { type: integer } }
+                          brand_ids:       { type: array, items: { type: integer } }
+                          product_unit_id: { type: integer, nullable: true }
+                          selling_units:   { type: array, items: { type: object } }
+                          stock_layers:    { type: array, items: { type: object } }
+                          bundle_items:    { type: array, items: { type: object } }
+        '404': { description: Not found }
+    patch:
       tags: [Products]
-      summary: Quick-create product from POS
+      summary: Update a product
       parameters:
-        - $ref: '#/components/parameters/BusinessIdHeader'
-        - $ref: '#/components/parameters/BusinessIdQuery'
+        - { name: id, in: path, required: true, schema: { type: integer } }
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/QuickCreateProduct'
+              type: object
+              properties:
+                name:                  { type: string }
+                sku:                   { type: string }
+                unit_price:            { $ref: '#/components/schemas/MoneyAmount' }
+                description:           { type: string }
+                is_active:             { type: boolean }
+                is_bundle:             { type: boolean }
+                product_category_ids:  { type: array, items: { type: integer } }
+                product_brand_ids:     { type: array, items: { type: integer } }
+                file_manager_file_ids: { type: array, items: { type: integer } }
+                bundle_items:          { type: array, items: { type: object } }
       responses:
-        '201':
-          description: Product created
-        '422':
-          $ref: '#/components/responses/ValidationError'
+        '200':
+          description: Product updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  data:    { $ref: '#/components/schemas/ProductCard' }
+    delete:
+      tags: [Products]
+      summary: Delete a product
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
 
   /online/products/sku/{sku}:
     get:
       tags: [Catalog]
-      summary: Find product by SKU (barcode)
+      summary: Look up product by SKU (barcode scan)
       parameters:
-        - $ref: '#/components/parameters/BusinessIdHeader'
-        - $ref: '#/components/parameters/BusinessIdQuery'
-        - name: sku
-          in: path
-          required: true
-          schema: { type: string }
+        - { name: sku, in: path, required: true, schema: { type: string } }
       responses:
         '200':
           description: Product card
@@ -217,342 +705,2342 @@ paths:
               schema:
                 type: object
                 properties:
+                  data: { $ref: '#/components/schemas/ProductCard' }
+        '404': { description: SKU not found }
+
+  /online/products/{id}/sales-chart:
+    get:
+      tags: [Catalog]
+      summary: Product sales chart data
+      parameters:
+        - { name: id,     in: path,  required: true, schema: { type: integer } }
+        - { name: period, in: query, schema: { type: string, enum: [daily, weekly, monthly], default: monthly } }
+      responses:
+        '200':
+          description: Chart data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
                   data:
-                    $ref: '#/components/schemas/ProductCard'
-        '404':
-          $ref: '#/components/responses/NotFound'
+                    type: object
+                    properties:
+                      period:   { type: string }
+                      subtitle: { type: string }
+                      total:    { $ref: '#/components/schemas/MoneyAmount' }
+                      labels:   { type: array, items: { type: string } }
+                      series:   { type: array, items: { type: number } }
+
+  # ─────────────────────────── CHECKOUT ───────────────────────────
 
   /online/checkout:
     post:
       tags: [Checkout]
-      summary: Complete a sale
-      parameters:
-        - $ref: '#/components/parameters/BusinessIdHeader'
-        - $ref: '#/components/parameters/BusinessIdQuery'
+      summary: Create a sale from cart items
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CheckoutRequest'
+              type: object
+              required: [items, payment_method]
+              properties:
+                items:
+                  type: array
+                  items:
+                    type: object
+                    required: [product_id, quantity]
+                    properties:
+                      product_id:              { type: integer }
+                      quantity:                { type: number }
+                      product_stock_layer_id:  { type: integer, nullable: true }
+                      product_selling_unit_id: { type: integer, nullable: true }
+                payment_method:    { type: string, enum: [cash, card, credit] }
+                channel:           { type: string, enum: [retail, online], default: retail }
+                credit_account_id: { type: integer, nullable: true }
+                amount_paid:       { $ref: '#/components/schemas/MoneyAmount' }
+                amount_tendered:   { $ref: '#/components/schemas/MoneyAmount' }
+                discount_percent:  { type: number, minimum: 0, maximum: 100 }
+                notes:             { type: string, nullable: true }
+                branch_id:         { type: integer, nullable: true }
       responses:
         '201':
-          description: Sale completed
+          description: Sale created
           content:
             application/json:
               schema:
                 type: object
                 properties:
                   message: { type: string }
-                  data:
-                    $ref: '#/components/schemas/Sale'
-        '422':
-          $ref: '#/components/responses/ValidationError'
+                  data:    { $ref: '#/components/schemas/SaleListItem' }
+        '422': { description: Validation / stock error }
 
-  /online/settings:
-    get:
-      tags: [Settings]
-      summary: Get POS settings
-      parameters:
-        - $ref: '#/components/parameters/BusinessIdHeader'
-        - $ref: '#/components/parameters/BusinessIdQuery'
-      responses:
-        '200':
-          description: Settings
-    put:
-      tags: [Settings]
-      summary: Update POS settings
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PosSettings'
-      responses:
-        '200':
-          description: Settings saved
-    patch:
-      tags: [Settings]
-      summary: Update POS settings (partial)
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PosSettings'
+  # ─────────────────────────── CATEGORIES ───────────────────────────
 
-  /sales:
+  /categories:
     get:
-      tags: [Sales]
-      summary: List sales
+      tags: [Categories]
+      summary: List product categories
       parameters:
-        - $ref: '#/components/parameters/BusinessIdHeader'
-        - $ref: '#/components/parameters/BusinessIdQuery'
-        - name: q
-          in: query
-          schema: { type: string }
-        - name: channel
-          in: query
-          schema:
-            type: string
-            enum: [online, retail]
+        - { name: q,      in: query, schema: { type: string } }
+        - { name: status, in: query, schema: { type: string, enum: [active, inactive] } }
       responses:
         '200':
-          description: Sale list
-
-  /sales/{sale}:
-    get:
-      tags: [Sales]
-      summary: Get sale details
-      parameters:
-        - name: sale
-          in: path
-          required: true
-          schema: { type: integer }
-      responses:
-        '200':
-          description: Sale detail
+          description: Category list
           content:
             application/json:
               schema:
                 type: object
                 properties:
                   data:
-                    $ref: '#/components/schemas/Sale'
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:             { type: integer }
+                        name:           { type: string }
+                        description:    { type: string, nullable: true }
+                        parent_id:      { type: integer, nullable: true }
+                        parent_name:    { type: string, nullable: true }
+                        is_active:      { type: boolean }
+                        sort_order:     { type: integer }
+                        products_count: { type: integer }
+                        children_count: { type: integer }
+                  meta: { $ref: '#/components/schemas/Meta' }
+    post:
+      tags: [Categories]
+      summary: Create a category
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:        { type: string }
+                description: { type: string }
+                parent_id:   { type: integer, nullable: true }
+                is_active:   { type: boolean, default: true }
+      responses:
+        '201':
+          description: Category created
+
+  /categories/parent-options:
+    get:
+      tags: [Categories]
+      summary: Options list for parent category selector
+      parameters:
+        - { name: exclude, in: query, schema: { type: integer }, description: Exclude this category ID (when editing) }
+      responses:
+        '200':
+          description: Options
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:    { type: integer }
+                        name:  { type: string }
+                        label: { type: string }
+                        depth: { type: integer }
+
+  /categories/{category}:
+    patch:
+      tags: [Categories]
+      summary: Update a category
+      parameters:
+        - { name: category, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:        { type: string }
+                description: { type: string }
+                parent_id:   { type: integer, nullable: true }
+                is_active:   { type: boolean }
+      responses:
+        '200':
+          description: Updated
+    delete:
+      tags: [Categories]
+      summary: Delete a category
+      parameters:
+        - { name: category, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Deleted
+
+  # ─────────────────────────── UNITS ───────────────────────────
+
+  /units:
+    get:
+      tags: [Units]
+      summary: List product units
+      responses:
+        '200':
+          description: Unit list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:             { type: integer }
+                        name:           { type: string }
+                        abbreviation:   { type: string, nullable: true }
+                        display_label:  { type: string }
+                        is_active:      { type: boolean }
+                        products_count: { type: integer }
+    post:
+      tags: [Units]
+      summary: Create a unit
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:         { type: string }
+                abbreviation: { type: string }
+                is_active:    { type: boolean, default: true }
+      responses:
+        '201':
+          description: Unit created
+
+  /units/{productUnit}:
+    patch:
+      tags: [Units]
+      summary: Update a unit
+      parameters:
+        - { name: productUnit, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:         { type: string }
+                abbreviation: { type: string }
+                is_active:    { type: boolean }
+      responses:
+        '200':
+          description: Updated
+    delete:
+      tags: [Units]
+      summary: Delete a unit
+      parameters:
+        - { name: productUnit, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Deleted
+
+  # ─────────────────────────── BRANDS ───────────────────────────
+
+  /brands:
+    get:
+      tags: [Brands]
+      summary: List product brands
+      parameters:
+        - { name: q,      in: query, schema: { type: string } }
+        - { name: status, in: query, schema: { type: string, enum: [active, inactive] } }
+      responses:
+        '200':
+          description: Brand list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:             { type: integer }
+                        name:           { type: string }
+                        description:    { type: string, nullable: true }
+                        website:        { type: string, nullable: true }
+                        is_active:      { type: boolean }
+                        products_count: { type: integer }
+    post:
+      tags: [Brands]
+      summary: Create a brand
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:        { type: string }
+                description: { type: string }
+                website:     { type: string, format: uri }
+                is_active:   { type: boolean, default: true }
+      responses:
+        '201':
+          description: Brand created
+
+  /brands/{brand}:
+    patch:
+      tags: [Brands]
+      summary: Update a brand
+      parameters:
+        - { name: brand, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:        { type: string }
+                description: { type: string }
+                website:     { type: string, format: uri }
+                is_active:   { type: boolean }
+      responses:
+        '200':
+          description: Updated
+    delete:
+      tags: [Brands]
+      summary: Delete a brand
+      parameters:
+        - { name: brand, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Deleted
+
+  # ─────────────────────────── DISCOUNTS ───────────────────────────
+
+  /discounts:
+    get:
+      tags: [Discounts]
+      summary: List product discounts
+      parameters:
+        - { name: q,      in: query, schema: { type: string } }
+        - { name: status, in: query, schema: { type: string, enum: [active, inactive] } }
+      responses:
+        '200':
+          description: Discount list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:                  { type: integer }
+                        name:                { type: string }
+                        product_id:          { type: integer }
+                        product_name:        { type: string }
+                        discount_type:       { type: string, enum: [flat, percentage] }
+                        discount_value:      { type: number }
+                        starts_at:           { type: string, format: date-time, nullable: true }
+                        ends_at:             { type: string, format: date-time, nullable: true }
+                        is_active:           { type: boolean }
+                        is_currently_active: { type: boolean }
+                        original_price:      { $ref: '#/components/schemas/MoneyAmount' }
+                        discount_amount:     { $ref: '#/components/schemas/MoneyAmount' }
+                        final_price:         { $ref: '#/components/schemas/MoneyAmount' }
+    post:
+      tags: [Discounts]
+      summary: Create a discount
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, product_id, discount_type, discount_value]
+              properties:
+                name:                    { type: string }
+                product_id:              { type: integer }
+                product_selling_unit_id: { type: integer, nullable: true }
+                discount_type:           { type: string, enum: [flat, percentage] }
+                discount_value:          { type: number }
+                starts_at:               { type: string, format: date-time }
+                ends_at:                 { type: string, format: date-time }
+                is_active:               { type: boolean, default: true }
+      responses:
+        '201':
+          description: Discount created
+
+  /discounts/product-options:
+    get:
+      tags: [Discounts]
+      summary: Search products for discount form
+      parameters:
+        - { name: q, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: Product options
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:            { type: integer }
+                        name:          { type: string }
+                        selling_price: { $ref: '#/components/schemas/MoneyAmount' }
+                        selling_units: { type: array, items: { type: object } }
+
+  /discounts/{discount}:
+    patch:
+      tags: [Discounts]
+      summary: Update a discount
+      parameters:
+        - { name: discount, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:           { type: string }
+                discount_type:  { type: string, enum: [flat, percentage] }
+                discount_value: { type: number }
+                starts_at:      { type: string, format: date-time }
+                ends_at:        { type: string, format: date-time }
+                is_active:      { type: boolean }
+      responses:
+        '200':
+          description: Updated
+    delete:
+      tags: [Discounts]
+      summary: Delete a discount
+      parameters:
+        - { name: discount, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Deleted
+
+  # ─────────────────────────── SALES ───────────────────────────
+
+  /sales:
+    get:
+      tags: [Sales]
+      summary: List recent sales
+      parameters:
+        - { name: q,       in: query, schema: { type: string } }
+        - { name: channel, in: query, schema: { type: string } }
+        - { name: limit,   in: query, schema: { type: integer, default: 50 } }
+      responses:
+        '200':
+          description: Sale list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/SaleListItem' } }
+
+  /sales/history:
+    get:
+      tags: [Sales]
+      summary: Paginated sales history with summary and chart
+      parameters:
+        - { name: q,         in: query, schema: { type: string } }
+        - { name: status,    in: query, schema: { type: string } }
+        - { name: channel,   in: query, schema: { type: string } }
+        - { name: date_from, in: query, schema: { type: string, format: date } }
+        - { name: date_to,   in: query, schema: { type: string, format: date } }
+      responses:
+        '200':
+          description: Sale history
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:    { type: array, items: { $ref: '#/components/schemas/SaleListItem' } }
+                  meta:    { $ref: '#/components/schemas/Meta' }
+                  summary: { type: object }
+                  chart:   { type: object }
+
+  /sales/{sale}:
+    get:
+      tags: [Sales]
+      summary: Get sale detail
+      parameters:
+        - { name: sale, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Sale detail
 
   /sales/{sale}/void:
     post:
       tags: [Sales]
-      summary: Void a sale and restore stock
+      summary: Void a sale
       parameters:
-        - name: sale
-          in: path
-          required: true
-          schema: { type: integer }
+        - { name: sale, in: path, required: true, schema: { type: integer } }
       responses:
         '200':
           description: Sale voided
-        '422':
-          $ref: '#/components/responses/ValidationError'
 
-components:
-  securitySchemes:
-    bearerAuth:
-      type: http
-      scheme: bearer
-      bearerFormat: Sanctum
+  /sales/{sale}/return:
+    post:
+      tags: [Sale returns]
+      summary: Process a sale return / refund
+      parameters:
+        - { name: sale, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [items, refund_method]
+              properties:
+                items:
+                  type: array
+                  items:
+                    type: object
+                    required: [sale_item_id, quantity]
+                    properties:
+                      sale_item_id: { type: integer }
+                      quantity:     { type: number }
+                refund_method:     { type: string, enum: [cash, card, credit] }
+                credit_account_id: { type: integer, nullable: true }
+                notes:             { type: string }
+                refund_reason:     { type: string }
+      responses:
+        '201':
+          description: Return processed
 
-  parameters:
-    BusinessIdHeader:
-      name: X-Business-Id
-      in: header
-      schema: { type: integer }
-      description: Active business id
-    BusinessIdQuery:
-      name: business_id
-      in: query
-      schema: { type: integer }
-      description: Active business id (alternative to header)
+  /online/return-reasons:
+    get:
+      tags: [Return reasons]
+      summary: List return reason options
+      responses:
+        '200':
+          description: Reasons
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        key:   { type: string }
+                        label: { type: string }
 
-  responses:
-    Unauthorized:
-      description: Missing or invalid token
-    NotFound:
-      description: Resource not found
-    ValidationError:
-      description: Validation failed
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorResponse'
+  # ─────────────────────────── QUOTATIONS ───────────────────────────
 
-  schemas:
-    AuthTokenResponse:
-      type: object
-      properties:
-        token_type: { type: string, example: Bearer }
-        access_token: { type: string }
-        user:
-          type: object
-          properties:
-            id: { type: integer }
-            name: { type: string }
-            email: { type: string, format: email }
+  /quotations:
+    get:
+      tags: [Quotations]
+      summary: List quotations
+      parameters:
+        - { name: q,      in: query, schema: { type: string } }
+        - { name: status, in: query, schema: { type: string, enum: [draft, sent, accepted, rejected] } }
+      responses:
+        '200':
+          description: Quotation list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/QuotationListItem' } }
+    post:
+      tags: [Quotations]
+      summary: Create a quotation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [quote_date, items]
+              properties:
+                customer_id:     { type: integer, nullable: true }
+                reference:       { type: string }
+                quote_date:      { type: string, format: date }
+                expiry_date:     { type: string, format: date }
+                notes:           { type: string }
+                discount_amount: { $ref: '#/components/schemas/MoneyAmount' }
+                tax_amount:      { $ref: '#/components/schemas/MoneyAmount' }
+                items:
+                  type: array
+                  items: { $ref: '#/components/schemas/ItemLine' }
+      responses:
+        '201':
+          description: Quotation created
 
-    ErrorResponse:
-      type: object
-      properties:
-        message: { type: string }
-        errors:
-          type: object
-          additionalProperties:
-            type: array
-            items: { type: string }
+  /quotations/{quotation}:
+    get:
+      tags: [Quotations]
+      summary: Get quotation detail
+      parameters:
+        - { name: quotation, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Quotation detail
+    patch:
+      tags: [Quotations]
+      summary: Update a quotation
+      parameters:
+        - { name: quotation, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                customer_id:     { type: integer }
+                reference:       { type: string }
+                quote_date:      { type: string, format: date }
+                expiry_date:     { type: string, format: date }
+                notes:           { type: string }
+                discount_amount: { $ref: '#/components/schemas/MoneyAmount' }
+                tax_amount:      { $ref: '#/components/schemas/MoneyAmount' }
+                items:           { type: array, items: { $ref: '#/components/schemas/ItemLine' } }
+      responses:
+        '200':
+          description: Updated
+    delete:
+      tags: [Quotations]
+      summary: Delete a quotation
+      parameters:
+        - { name: quotation, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Deleted
 
-    Category:
-      type: object
-      properties:
-        id: { type: integer }
-        name: { type: string }
+  /quotations/{quotation}/mark-sent:
+    post:
+      tags: [Quotations]
+      summary: Mark quotation as sent
+      parameters:
+        - { name: quotation, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Status updated
 
-    StockLayer:
-      type: object
-      properties:
-        id: { type: integer }
-        label: { type: string }
-        quantity_remaining: { type: number }
-        unit_cost: { type: number }
-        unit_sell_price: { type: number }
-        received_at: { type: string, format: date, nullable: true }
+  /quotations/{quotation}/accept:
+    post:
+      tags: [Quotations]
+      summary: Mark quotation as accepted
+      parameters:
+        - { name: quotation, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Status updated
 
-    ProductCard:
-      type: object
-      properties:
-        id: { type: integer }
-        name: { type: string }
-        sku: { type: string, nullable: true }
-        unit: { type: string, nullable: true }
-        image_url: { type: string, nullable: true }
-        unit_sell_price: { type: number, nullable: true }
-        stock_quantity: { type: number }
-        has_layers: { type: boolean }
-        layer_count: { type: integer }
-        requires_layer_pick: { type: boolean }
-        has_multiple_prices: { type: boolean }
-        layers:
-          type: array
-          items:
-            $ref: '#/components/schemas/StockLayer'
-        category_ids:
-          type: array
-          items: { type: integer }
+  /quotations/{quotation}/reject:
+    post:
+      tags: [Quotations]
+      summary: Mark quotation as rejected
+      parameters:
+        - { name: quotation, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Status updated
 
-    QuickCreateProduct:
-      type: object
-      required: [name, unit_price]
-      properties:
-        name: { type: string }
-        sku: { type: string, nullable: true }
-        unit_price: { type: number, minimum: 0 }
-        stock_quantity: { type: number, minimum: 0 }
-        product_unit_id: { type: integer, nullable: true }
+  # ─────────────────────────── INVOICES ───────────────────────────
 
-    CartItem:
-      type: object
-      required: [product_id, quantity]
-      properties:
-        product_id: { type: integer }
-        quantity: { type: number, minimum: 0.001 }
-        product_stock_layer_id:
-          type: integer
-          nullable: true
-          description: Required when selling from a specific stock batch
+  /invoices:
+    get:
+      tags: [Invoices]
+      summary: List invoices
+      parameters:
+        - { name: q,           in: query, schema: { type: string } }
+        - { name: status,      in: query, schema: { type: string, enum: [draft, sent, paid, overdue, cancelled] } }
+        - { name: customer_id, in: query, schema: { type: integer } }
+      responses:
+        '200':
+          description: Invoice list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/InvoiceListItem' } }
+    post:
+      tags: [Invoices]
+      summary: Create an invoice
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [issue_date, items]
+              properties:
+                customer_id:     { type: integer, nullable: true }
+                reference:       { type: string }
+                issue_date:      { type: string, format: date }
+                due_date:        { type: string, format: date }
+                notes:           { type: string }
+                discount_amount: { $ref: '#/components/schemas/MoneyAmount' }
+                tax_amount:      { $ref: '#/components/schemas/MoneyAmount' }
+                items:           { type: array, items: { $ref: '#/components/schemas/ItemLine' } }
+      responses:
+        '201':
+          description: Invoice created
 
-    CheckoutRequest:
-      type: object
-      required: [items, payment_method]
-      properties:
-        items:
-          type: array
-          minItems: 1
-          items:
-            $ref: '#/components/schemas/CartItem'
-        payment_method:
-          type: string
-          enum: [cash, card, credit]
-        channel:
-          type: string
-          enum: [online, retail]
-          default: online
-        credit_account_id:
-          type: integer
-          description: Required for cash and card payments
-        amount_tendered:
-          type: number
-          description: Required for cash
-        amount_paid: { type: number }
-        discount_percent: { type: number, minimum: 0, maximum: 100 }
-        notes: { type: string, maxLength: 2000 }
+  /invoices/{invoice}:
+    get:
+      tags: [Invoices]
+      summary: Get invoice detail
+      parameters:
+        - { name: invoice, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Invoice detail
+    patch:
+      tags: [Invoices]
+      summary: Update an invoice
+      parameters:
+        - { name: invoice, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                customer_id:     { type: integer }
+                reference:       { type: string }
+                issue_date:      { type: string, format: date }
+                due_date:        { type: string, format: date }
+                notes:           { type: string }
+                discount_amount: { $ref: '#/components/schemas/MoneyAmount' }
+                tax_amount:      { $ref: '#/components/schemas/MoneyAmount' }
+                items:           { type: array, items: { $ref: '#/components/schemas/ItemLine' } }
+      responses:
+        '200':
+          description: Updated
+    delete:
+      tags: [Invoices]
+      summary: Delete an invoice
+      parameters:
+        - { name: invoice, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Deleted
 
-    PosSettings:
-      type: object
-      properties:
-        default_deposit_account_id: { type: integer, nullable: true }
-        discount_field_enabled: { type: boolean }
-        display_theme:
-          type: string
-          enum: [light, dark]
+  /invoices/{invoice}/mark-sent:
+    post:
+      tags: [Invoices]
+      summary: Mark invoice as sent
+      parameters:
+        - { name: invoice, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Status updated
 
-    OnlineBootstrap:
-      type: object
-      properties:
-        business:
-          type: object
-          properties:
-            id: { type: integer }
-            name: { type: string }
-        currency: { type: string }
-        channel: { type: string, example: online }
-        categories:
-          type: array
-          items:
-            $ref: '#/components/schemas/Category'
-        products:
-          type: array
-          items:
-            $ref: '#/components/schemas/ProductCard'
-        accounts:
-          type: array
-          items:
-            type: object
-        today:
-          type: object
-          properties:
-            count: { type: integer }
-            total: { type: number }
-            online_count: { type: integer }
-            online_total: { type: number }
-        settings:
-          $ref: '#/components/schemas/PosSettings'
-        product_units:
-          type: array
-          items:
-            type: object
+  /invoices/{invoice}/mark-paid:
+    post:
+      tags: [Invoices]
+      summary: Mark invoice as paid
+      parameters:
+        - { name: invoice, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Status updated
 
-    SaleItem:
-      type: object
-      properties:
-        id: { type: integer }
-        product_id: { type: integer }
-        product_stock_layer_id: { type: integer, nullable: true }
-        product_name: { type: string }
-        sku: { type: string, nullable: true }
-        quantity: { type: number }
-        unit_cost: { type: number, nullable: true }
-        unit_sell_price: { type: number }
-        line_total: { type: number }
+  /invoices/{invoice}/mark-overdue:
+    post:
+      tags: [Invoices]
+      summary: Mark invoice as overdue
+      parameters:
+        - { name: invoice, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Status updated
 
-    Sale:
-      type: object
-      properties:
-        id: { type: integer }
-        sale_number: { type: string }
-        status: { type: string }
-        payment_method: { type: string }
-        payment_method_label: { type: string }
-        channel: { type: string }
-        channel_label: { type: string }
-        subtotal: { type: number }
-        discount_percent: { type: number, nullable: true }
-        discount_amount: { type: number }
-        total: { type: number }
-        amount_paid: { type: number }
-        amount_tendered: { type: number, nullable: true }
-        change_amount: { type: number, nullable: true }
-        notes: { type: string, nullable: true }
-        sold_at: { type: string, format: date-time, nullable: true }
-        items:
-          type: array
-          items:
-            $ref: '#/components/schemas/SaleItem'
+  /invoices/{invoice}/cancel:
+    post:
+      tags: [Invoices]
+      summary: Cancel an invoice
+      parameters:
+        - { name: invoice, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Status updated
 
-security:
-  - bearerAuth: []
+  # ─────────────────────────── CUSTOMERS ───────────────────────────
+
+  /customers:
+    get:
+      tags: [Customers]
+      summary: List customers
+      parameters:
+        - { name: q, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: Customer list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/Customer' } }
+                  meta: { $ref: '#/components/schemas/Meta' }
+    post:
+      tags: [Customers]
+      summary: Create a customer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:    { type: string }
+                phone:   { type: string }
+                email:   { type: string, format: email }
+                address: { type: string }
+                notes:   { type: string }
+      responses:
+        '201':
+          description: Customer created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Customer' }
+
+  /customers/{customer}:
+    get:
+      tags: [Customers]
+      summary: Get customer detail with recent sales
+      parameters:
+        - { name: customer, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Customer detail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    allOf:
+                      - $ref: '#/components/schemas/Customer'
+                      - type: object
+                        properties:
+                          recent_sales: { type: array, items: { $ref: '#/components/schemas/SaleListItem' } }
+    patch:
+      tags: [Customers]
+      summary: Update a customer
+      parameters:
+        - { name: customer, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:    { type: string }
+                phone:   { type: string }
+                email:   { type: string, format: email }
+                address: { type: string }
+                notes:   { type: string }
+      responses:
+        '200':
+          description: Updated
+    delete:
+      tags: [Customers]
+      summary: Delete a customer
+      parameters:
+        - { name: customer, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Deleted
+
+  # ─────────────────────────── SUPPLIERS ───────────────────────────
+
+  /suppliers:
+    get:
+      tags: [Suppliers]
+      summary: List suppliers
+      parameters:
+        - { name: q,      in: query, schema: { type: string } }
+        - { name: active, in: query, schema: { type: boolean } }
+      responses:
+        '200':
+          description: Supplier list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/Supplier' } }
+                  meta: { $ref: '#/components/schemas/Meta' }
+    post:
+      tags: [Suppliers]
+      summary: Create a supplier
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:         { type: string }
+                contact_name: { type: string }
+                email:        { type: string, format: email }
+                phone:        { type: string }
+                address:      { type: string }
+                notes:        { type: string }
+      responses:
+        '201':
+          description: Supplier created
+
+  /suppliers/{supplier}:
+    get:
+      tags: [Suppliers]
+      summary: Get supplier detail
+      parameters:
+        - { name: supplier, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Supplier detail
+    patch:
+      tags: [Suppliers]
+      summary: Update a supplier
+      parameters:
+        - { name: supplier, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:         { type: string }
+                contact_name: { type: string }
+                email:        { type: string, format: email }
+                phone:        { type: string }
+                address:      { type: string }
+                notes:        { type: string }
+                is_active:    { type: boolean }
+      responses:
+        '200':
+          description: Updated
+    delete:
+      tags: [Suppliers]
+      summary: Deactivate supplier
+      parameters:
+        - { name: supplier, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Deactivated
+
+  # ─────────────────────────── PURCHASE ORDERS ───────────────────────────
+
+  /purchase-orders:
+    get:
+      tags: [Purchase orders]
+      summary: List purchase orders
+      parameters:
+        - { name: q,      in: query, schema: { type: string } }
+        - { name: status, in: query, schema: { type: string, enum: [draft, ordered, received, cancelled] } }
+      responses:
+        '200':
+          description: PO list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/PurchaseOrderListItem' } }
+    post:
+      tags: [Purchase orders]
+      summary: Create a purchase order
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [supplier_id, purchase_date, items]
+              properties:
+                supplier_id:            { type: integer }
+                reference:              { type: string }
+                purchase_date:          { type: string, format: date }
+                expected_delivery_date: { type: string, format: date }
+                status:                 { type: string, enum: [draft, ordered] }
+                notes:                  { type: string }
+                items:
+                  type: array
+                  items:
+                    type: object
+                    required: [product_id, quantity, unit_cost]
+                    properties:
+                      product_id: { type: integer }
+                      quantity:   { type: number }
+                      unit_cost:  { $ref: '#/components/schemas/MoneyAmount' }
+      responses:
+        '201':
+          description: PO created
+
+  /purchase-orders/{purchase}:
+    get:
+      tags: [Purchase orders]
+      summary: Get PO detail
+      parameters:
+        - { name: purchase, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: PO detail
+
+  /purchase-orders/{purchase}/place:
+    post:
+      tags: [Purchase orders]
+      summary: Mark PO as ordered
+      parameters:
+        - { name: purchase, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: PO placed
+
+  /purchase-orders/{purchase}/receive:
+    post:
+      tags: [Purchase orders]
+      summary: Mark PO as received
+      parameters:
+        - { name: purchase, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: PO received
+
+  /purchase-orders/{purchase}/cancel:
+    post:
+      tags: [Purchase orders]
+      summary: Cancel a purchase order
+      parameters:
+        - { name: purchase, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: PO cancelled
+
+  # ─────────────────────────── GRNs ───────────────────────────
+
+  /grns:
+    get:
+      tags: [GRNs]
+      summary: List goods receive notes
+      parameters:
+        - { name: q,       in: query, schema: { type: string } }
+        - { name: payment, in: query, schema: { type: string, enum: [all, paid, unpaid] } }
+        - { name: limit,   in: query, schema: { type: integer } }
+      responses:
+        '200':
+          description: GRN list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/GrnListItem' } }
+
+  /grns/{grn}:
+    get:
+      tags: [GRNs]
+      summary: Get GRN detail with items and payment history
+      parameters:
+        - { name: grn, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: GRN detail
+
+  /grns/{grn}/pay:
+    post:
+      tags: [GRNs]
+      summary: Record additional payment on a GRN
+      parameters:
+        - { name: grn, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [payment_method, deduct_account_id, payment_option]
+              properties:
+                payment_method:    { type: string, enum: [cash, credit, cheque] }
+                deduct_account_id: { type: integer }
+                payment_option:    { type: string, enum: [full, partial] }
+                pay_amount:        { $ref: '#/components/schemas/MoneyAmount' }
+                payment_reference: { type: string }
+                cheque_due_date:   { type: string, format: date }
+      responses:
+        '200':
+          description: Payment recorded
+
+  /purchase-orders/{purchase}/grn-form:
+    get:
+      tags: [GRNs]
+      summary: Get GRN creation form data for a purchase order
+      parameters:
+        - { name: purchase, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: GRN form data
+
+  /purchase-orders/{purchase}/grns:
+    post:
+      tags: [GRNs]
+      summary: Create a GRN against a purchase order
+      parameters:
+        - { name: purchase, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [received_date, payment_method]
+              properties:
+                received_date:     { type: string, format: date }
+                reference:         { type: string }
+                notes:             { type: string }
+                payment_method:    { type: string, enum: [cash, credit, cheque] }
+                payment_reference: { type: string }
+                cheque_due_date:   { type: string, format: date }
+                payment_option:    { type: string, enum: [full, partial] }
+                pay_amount:        { $ref: '#/components/schemas/MoneyAmount' }
+                deduct_account_id: { type: integer }
+                items:
+                  type: array
+                  items:
+                    type: object
+                    required: [purchase_item_id]
+                    properties:
+                      purchase_item_id:   { type: integer }
+                      quantity_received:  { type: number }
+                      selling_unit_price: { $ref: '#/components/schemas/MoneyAmount' }
+      responses:
+        '201':
+          description: GRN created
+
+  # ─────────────────────────── CHEQUES ───────────────────────────
+
+  /cheques:
+    get:
+      tags: [Cheques]
+      summary: List cheque payments
+      parameters:
+        - { name: filter, in: query, schema: { type: string, enum: [all, pending, cleared] } }
+      responses:
+        '200':
+          description: Cheque list with summary
+
+  /cheques/{cheque}/clear:
+    post:
+      tags: [Cheques]
+      summary: Clear a cheque
+      parameters:
+        - { name: cheque, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                deduct_account_id: { type: integer }
+      responses:
+        '200':
+          description: Cheque cleared
+
+  # ─────────────────────────── EXPENSE BILLS ───────────────────────────
+
+  /expenses/bills:
+    get:
+      tags: [Expense bills]
+      summary: List all expense bills
+      responses:
+        '200':
+          description: Bill list
+    post:
+      tags: [Expense bills]
+      summary: Create an expense bill
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, payment_mode, bill_category]
+              properties:
+                name:                   { type: string }
+                payment_mode:           { type: string, enum: [recurring, one_time] }
+                bill_category:          { type: string }
+                description:            { type: string }
+                assignment_type:        { type: string, enum: [none, branch, department, property, employee, modification, rental] }
+                branch_id:              { type: integer, nullable: true }
+                department_id:          { type: integer, nullable: true }
+                property_id:            { type: integer, nullable: true }
+                employee_id:            { type: integer, nullable: true }
+                modification_id:        { type: integer, nullable: true }
+                rental_id:              { type: integer, nullable: true }
+                deduct_account_id:      { type: integer, nullable: true }
+                amount_varies_by_usage: { type: boolean }
+                recurring_cost:         { $ref: '#/components/schemas/MoneyAmount' }
+                recurring_type:         { type: string, enum: [per_day, per_month, per_year] }
+                due_date:               { type: string, format: date }
+                remind_before_days:     { type: integer }
+                notes:                  { type: string }
+      responses:
+        '201':
+          description: Bill created
+
+  /expenses/bills/{bill}:
+    get:
+      tags: [Expense bills]
+      summary: Get bill detail with schedule and ledger
+      parameters:
+        - { name: bill, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Bill detail
+    delete:
+      tags: [Expense bills]
+      summary: Delete a bill
+      parameters:
+        - { name: bill, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Deleted
+
+  /expenses/bills/{bill}/pay:
+    post:
+      tags: [Expense bills]
+      summary: Record a bill payment
+      parameters:
+        - { name: bill, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [occurrence_date, payment_option]
+              properties:
+                occurrence_date:   { type: string, format: date }
+                payment_option:    { type: string, enum: [full, partial, split] }
+                deduct_account_id: { type: integer }
+                partial_amount:    { $ref: '#/components/schemas/MoneyAmount' }
+      responses:
+        '200':
+          description: Payment recorded
+
+  /expenses/bill-assignment-targets:
+    get:
+      tags: [Expense bills]
+      summary: Get assignment target options (branches, departments, properties, etc.)
+      responses:
+        '200':
+          description: Assignment targets
+
+  /expenses/rentals:
+    get:
+      tags: [Expense bills]
+      summary: List rentals for bill assignment
+      responses:
+        '200':
+          description: Rental list
+
+  # ─────────────────────────── EXPENSE MODIFICATIONS ───────────────────────────
+
+  /expenses/modifications:
+    get:
+      tags: [Expense modifications]
+      summary: List expense modifications
+      responses:
+        '200':
+          description: Modification list
+    post:
+      tags: [Expense modifications]
+      summary: Create an expense modification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, assignment_type, estimated_cost]
+              properties:
+                name:                 { type: string }
+                assignment_type:      { type: string, enum: [renovation, property, other] }
+                assignment_reference: { type: string }
+                property_work_type:   { type: string }
+                estimated_cost:       { $ref: '#/components/schemas/MoneyAmount' }
+                duration:             { type: string }
+                description:          { type: string }
+      responses:
+        '201':
+          description: Modification created
+
+  /expenses/modifications/{modification}:
+    get:
+      tags: [Expense modifications]
+      summary: Get modification detail with linked bills
+      parameters:
+        - { name: modification, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Modification detail
+    delete:
+      tags: [Expense modifications]
+      summary: Delete a modification
+      parameters:
+        - { name: modification, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Deleted
+
+  # ─────────────────────────── END OF DAY ───────────────────────────
+
+  /eod:
+    get:
+      tags: [End of day]
+      summary: EOD status — unsettled sales and recent history
+      responses:
+        '200':
+          description: EOD status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  currency:  { type: string }
+                  unsettled: { type: array, items: { $ref: '#/components/schemas/SaleListItem' } }
+                  summary:
+                    type: object
+                    properties:
+                      total_count:  { type: integer }
+                      total_amount: { $ref: '#/components/schemas/MoneyAmount' }
+                      by_method:    { type: object }
+                  history: { type: array, items: { type: object } }
+
+  /eod/settle:
+    post:
+      tags: [End of day]
+      summary: Settle all unsettled sales to bank accounts
+      responses:
+        '200':
+          description: Settlement complete
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  settled: { type: integer }
+                  errors:  { type: array, items: { type: string } }
+
+  # ─────────────────────────── FINANCE FLOW ───────────────────────────
+
+  /finance/flow:
+    get:
+      tags: [Finance flow]
+      summary: Combined monthly outflow overview across bills, loans, and rentals
+      responses:
+        '200':
+          description: Finance flow data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  business_name: { type: string }
+                  bills:         { type: array, items: { type: object } }
+                  loans:         { type: array, items: { type: object } }
+                  rentals:       { type: array, items: { type: object } }
+                  summary:
+                    type: object
+                    properties:
+                      total_monthly_fmt: { type: string }
+                      total_items:       { type: integer }
+
+  # ─────────────────────────── LOANS ───────────────────────────
+
+  /loans:
+    get:
+      tags: [Loans]
+      summary: List loans with aggregate totals
+      responses:
+        '200':
+          description: Loan list
+    post:
+      tags: [Loans]
+      summary: Create a loan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, bank_id, borrowed_amount, interest_rate_type, interest_rate, recurring_type]
+              properties:
+                name:               { type: string }
+                description:        { type: string }
+                bank_id:            { type: integer }
+                borrowed_amount:    { $ref: '#/components/schemas/MoneyAmount' }
+                interest_rate_type: { type: string, enum: [percentage, flat] }
+                interest_rate:      { type: number }
+                recurring_type:     { type: string, enum: [per_day, per_month, per_year] }
+                first_installment_due_date: { type: string, format: date }
+                loan_ending_date:   { type: string, format: date }
+                deduct_account_id:  { type: integer }
+                remind_before_days: { type: integer }
+      responses:
+        '201':
+          description: Loan created
+
+  /loans/{loan}:
+    get:
+      tags: [Loans]
+      summary: Get loan detail with installment schedule
+      parameters:
+        - { name: loan, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Loan detail
+    delete:
+      tags: [Loans]
+      summary: Delete a loan
+      parameters:
+        - { name: loan, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Deleted
+
+  /loans/{loan}/pay:
+    post:
+      tags: [Loans]
+      summary: Record a loan installment payment
+      parameters:
+        - { name: loan, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [due_date, recording_option]
+              properties:
+                due_date:         { type: string, format: date }
+                recording_option: { type: string, enum: [ledger, external] }
+                account_id:       { type: integer }
+      responses:
+        '200':
+          description: Payment recorded
+
+  # ─────────────────────────── PROPERTIES ───────────────────────────
+
+  /properties:
+    get:
+      tags: [Properties]
+      summary: List business properties
+      responses:
+        '200':
+          description: Property list
+    post:
+      tags: [Properties]
+      summary: Create a property
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [property_name, property_type, cost]
+              properties:
+                property_name: { type: string }
+                property_type: { type: string }
+                cost:          { $ref: '#/components/schemas/MoneyAmount' }
+                description:   { type: string }
+                has_expiry:    { type: boolean }
+                expire_date:   { type: string, format: date }
+      responses:
+        '201':
+          description: Property created
+
+  /properties/{property}:
+    delete:
+      tags: [Properties]
+      summary: Delete a property
+      parameters:
+        - { name: property, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Deleted
+
+  # ─────────────────────────── RENTALS ───────────────────────────
+
+  /rentals:
+    get:
+      tags: [Rentals]
+      summary: List rental agreements with overdue status
+      responses:
+        '200':
+          description: Rental list
+    post:
+      tags: [Rentals]
+      summary: Create a rental agreement
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [property_type, agreement_valid_until_year, recurring_cost, recurring_type, owner_name]
+              properties:
+                property_type:              { type: string }
+                purpose:                    { type: string }
+                key_money:                  { $ref: '#/components/schemas/MoneyAmount' }
+                agreement_valid_until_year: { type: integer }
+                deduct_account_id:          { type: integer }
+                recurring_cost:             { $ref: '#/components/schemas/MoneyAmount' }
+                recurring_type:             { type: string, enum: [per_day, per_month, per_year] }
+                notes:                      { type: string }
+                remind_before_days:         { type: integer }
+                due_date:                   { type: string, format: date }
+                owner_name:                 { type: string }
+                owner_email:                { type: string, format: email }
+                owner_phone:                { type: string }
+                owner_address:              { type: string }
+                owner_bank_details:         { type: string }
+      responses:
+        '201':
+          description: Rental created
+
+  /rentals/{rental}:
+    get:
+      tags: [Rentals]
+      summary: Get rental detail with schedule, bills, and landlord info
+      parameters:
+        - { name: rental, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Rental detail
+    delete:
+      tags: [Rentals]
+      summary: Delete a rental
+      parameters:
+        - { name: rental, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Deleted
+
+  /rentals/{rental}/pay:
+    post:
+      tags: [Rentals]
+      summary: Record a rent payment
+      parameters:
+        - { name: rental, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [due_date, account_id]
+              properties:
+                due_date:   { type: string, format: date }
+                account_id: { type: integer }
+      responses:
+        '200':
+          description: Payment recorded
+
+  # ─────────────────────────── ACCOUNTS & BANKS ───────────────────────────
+
+  /banks:
+    get:
+      tags: [Accounts & banks]
+      summary: List all banks (global lookup)
+      responses:
+        '200':
+          description: Bank list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:   { type: integer }
+                        name: { type: string }
+                        code: { type: string }
+
+  /bank-types:
+    get:
+      tags: [Accounts & banks]
+      summary: List bank/account type options
+      responses:
+        '200':
+          description: Bank type list
+
+  /accounts:
+    get:
+      tags: [Accounts & banks]
+      summary: List accounts for current business
+      responses:
+        '200':
+          description: Account list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/Account' } }
+    post:
+      tags: [Accounts & banks]
+      summary: Create an account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [account_name, category, bank_type_id, current_balance]
+              properties:
+                account_name:        { type: string }
+                category:            { type: string, enum: [operating, savings, petty_cash, credit_card, payroll, investment, loan] }
+                bank_type_id:        { type: integer }
+                bank_id:             { type: integer, nullable: true }
+                bank_name:           { type: string }
+                bank_account_number: { type: string }
+                branch:              { type: string }
+                current_balance:     { $ref: '#/components/schemas/MoneyAmount' }
+                notes:               { type: string }
+      responses:
+        '201':
+          description: Account created
+
+  # ─────────────────────────── HR EMPLOYEES ───────────────────────────
+
+  /hr/employees:
+    get:
+      tags: [HR employees]
+      summary: List employees with type breakdown
+      responses:
+        '200':
+          description: Employee list
+    post:
+      tags: [HR employees]
+      summary: Create an employee
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                full_name:           { type: string }
+                date_of_birth:       { type: string, format: date }
+                nic_passport_number: { type: string }
+                phone_number:        { type: string }
+                personal_email:      { type: string, format: email }
+                employee_id:         { type: string }
+                job_title_id:        { type: integer }
+                department_id:       { type: integer }
+                date_of_joining:     { type: string, format: date }
+                employment_type:     { type: string, enum: [full_time, part_time, contract] }
+                basic_salary:        { $ref: '#/components/schemas/MoneyAmount' }
+                bank_id:             { type: integer }
+                bank_account_number: { type: string }
+                epf_number:          { type: string }
+                etf_number:          { type: string }
+      responses:
+        '201':
+          description: Employee created
+
+  /hr/employees/{employee}:
+    get:
+      tags: [HR employees]
+      summary: Get employee detail
+      parameters:
+        - { name: employee, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Employee detail
+
+  # ─────────────────────────── HR DEPARTMENTS ───────────────────────────
+
+  /hr/departments:
+    get:
+      tags: [HR departments]
+      summary: List departments with employee count
+      responses:
+        '200':
+          description: Department list
+    post:
+      tags: [HR departments]
+      summary: Create a department
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+      responses:
+        '201':
+          description: Department created
+
+  /hr/departments/{department}:
+    delete:
+      tags: [HR departments]
+      summary: Delete a department (only if no employees)
+      parameters:
+        - { name: department, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Deleted
+
+  # ─────────────────────────── HR JOB TITLES ───────────────────────────
+
+  /hr/job-titles:
+    get:
+      tags: [HR job titles]
+      summary: List job titles
+      responses:
+        '200':
+          description: Job title list
+
+  # ─────────────────────────── HR ALLOWANCE TYPES ───────────────────────────
+
+  /hr/allowance-types:
+    get:
+      tags: [HR allowance types]
+      summary: List allowance types
+      responses:
+        '200':
+          description: Allowance type list
+    post:
+      tags: [HR allowance types]
+      summary: Create an allowance type
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+      responses:
+        '201':
+          description: Allowance type created
+
+  /hr/allowance-types/{allowanceType}:
+    delete:
+      tags: [HR allowance types]
+      summary: Delete an allowance type
+      parameters:
+        - { name: allowanceType, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Deleted
+
+  # ─────────────────────────── HR PAYROLL RULE SETS ───────────────────────────
+
+  /hr/payroll/rule-sets:
+    get:
+      tags: [HR payroll rule sets]
+      summary: List payroll rule sets
+      responses:
+        '200':
+          description: Rule set list
+    post:
+      tags: [HR payroll rule sets]
+      summary: Create a payroll rule set
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, currency, effective_from]
+              properties:
+                name:           { type: string }
+                currency:       { type: string, example: LKR }
+                effective_from: { type: string, format: date }
+                effective_to:   { type: string, format: date }
+                is_default:     { type: boolean }
+                notes:          { type: string }
+      responses:
+        '201':
+          description: Rule set created
+
+  /hr/payroll/rule-sets/{ruleSet}:
+    get:
+      tags: [HR payroll rule sets]
+      summary: Get rule set detail with rules
+      parameters:
+        - { name: ruleSet, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Rule set detail
+    patch:
+      tags: [HR payroll rule sets]
+      summary: Update a rule set
+      parameters:
+        - { name: ruleSet, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:         { type: string }
+                currency:     { type: string }
+                effective_to: { type: string, format: date }
+                is_default:   { type: boolean }
+                is_active:    { type: boolean }
+                notes:        { type: string }
+      responses:
+        '200':
+          description: Updated
+    delete:
+      tags: [HR payroll rule sets]
+      summary: Delete a rule set
+      parameters:
+        - { name: ruleSet, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Deleted
+
+  /hr/payroll/rule-sets/{ruleSet}/rules:
+    post:
+      tags: [HR payroll rule sets]
+      summary: Add a rule to a rule set
+      parameters:
+        - { name: ruleSet, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code, name, component_type, calculation_mode]
+              properties:
+                code:             { type: string }
+                name:             { type: string }
+                component_type:   { type: string, enum: [earning, deduction, statutory, overtime, informational, employer_tracking] }
+                calculation_mode: { type: string, enum: [fixed, percentage, slab, formula] }
+                sort_order:       { type: integer }
+                is_taxable:       { type: boolean }
+                is_statutory:     { type: boolean }
+                config_json:      { type: string, description: JSON string with calculation config }
+      responses:
+        '201':
+          description: Rule added
+
+  /hr/payroll/rule-sets/{ruleSet}/rules/{rule}:
+    patch:
+      tags: [HR payroll rule sets]
+      summary: Update a payroll rule
+      parameters:
+        - { name: ruleSet, in: path, required: true, schema: { type: integer } }
+        - { name: rule,    in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:        { type: string }
+                sort_order:  { type: integer }
+                is_taxable:  { type: boolean }
+                is_statutory: { type: boolean }
+                is_active:   { type: boolean }
+                config_json: { type: string }
+      responses:
+        '200':
+          description: Updated
+    delete:
+      tags: [HR payroll rule sets]
+      summary: Delete a payroll rule
+      parameters:
+        - { name: ruleSet, in: path, required: true, schema: { type: integer } }
+        - { name: rule,    in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Deleted
+
+  /hr/payroll/templates:
+    get:
+      tags: [HR payroll rule sets]
+      summary: List regional payroll templates
+      responses:
+        '200':
+          description: Template list
+
+  /hr/payroll/templates/{key}/install:
+    post:
+      tags: [HR payroll rule sets]
+      summary: Install a regional payroll template
+      parameters:
+        - { name: key, in: path, required: true, schema: { type: string } }
+      responses:
+        '201':
+          description: Template installed
+
+  # ─────────────────────────── HR PAYROLL CYCLES ───────────────────────────
+
+  /hr/payroll/cycles:
+    get:
+      tags: [HR payroll cycles]
+      summary: List payroll cycles
+      responses:
+        '200':
+          description: Cycle list
+    post:
+      tags: [HR payroll cycles]
+      summary: Create a payroll cycle
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rule_set_id, name, year, month, period_start, period_end]
+              properties:
+                rule_set_id:  { type: integer }
+                name:         { type: string }
+                year:         { type: integer }
+                month:        { type: integer, minimum: 1, maximum: 12 }
+                period_start: { type: string, format: date }
+                period_end:   { type: string, format: date }
+      responses:
+        '201':
+          description: Cycle created
+
+  /hr/payroll/cycles/{cycle}:
+    get:
+      tags: [HR payroll cycles]
+      summary: Get cycle detail with items and summary
+      parameters:
+        - { name: cycle, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Cycle detail
+    delete:
+      tags: [HR payroll cycles]
+      summary: Delete a payroll cycle
+      parameters:
+        - { name: cycle, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Deleted
+
+  /hr/payroll/cycles/{cycle}/compute:
+    post:
+      tags: [HR payroll cycles]
+      summary: Compute payroll for all employees in cycle
+      parameters:
+        - { name: cycle, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Payroll computed
+
+  /hr/payroll/cycles/{cycle}/finalize:
+    post:
+      tags: [HR payroll cycles]
+      summary: Finalize a payroll cycle
+      parameters:
+        - { name: cycle, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Cycle finalized
+
+  /hr/payroll/cycles/{cycle}/payment:
+    post:
+      tags: [HR payroll cycles]
+      summary: Record payroll payment (deduct from account)
+      parameters:
+        - { name: cycle, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [deduct_account_id]
+              properties:
+                deduct_account_id: { type: integer }
+      responses:
+        '200':
+          description: Payment recorded
+
+  /hr/payroll/cycles/{cycle}/salary-sheet:
+    get:
+      tags: [HR payroll cycles]
+      summary: Get formatted salary sheet for a cycle
+      parameters:
+        - { name: cycle, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Salary sheet
+
+  /hr/payroll/cycles/{cycle}/items/{item}/recompute:
+    post:
+      tags: [HR payroll cycles]
+      summary: Recompute a single employee payroll item
+      parameters:
+        - { name: cycle, in: path, required: true, schema: { type: integer } }
+        - { name: item,  in: path, required: true, schema: { type: integer } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                overtime_hours:         { type: number }
+                overtime_rate:          { $ref: '#/components/schemas/MoneyAmount' }
+                attendance_days:        { type: integer }
+                working_days:           { type: integer }
+                leave_without_pay_days: { type: integer }
+                salary_advance:         { $ref: '#/components/schemas/MoneyAmount' }
+                stamp_duty:             { $ref: '#/components/schemas/MoneyAmount' }
+      responses:
+        '200':
+          description: Item recomputed
+
+  # ─────────────────────────── DESIGN STUDIO ───────────────────────────
+
+  /design-studio/designs:
+    get:
+      tags: [Design studio]
+      summary: List designs
+      parameters:
+        - { name: type, in: query, schema: { type: string, example: letterhead } }
+      responses:
+        '200':
+          description: Design list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/Design' } }
+    post:
+      tags: [Design studio]
+      summary: Create a design canvas
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, width, height]
+              properties:
+                title:  { type: string }
+                type:   { type: string, example: letterhead }
+                width:  { type: integer, example: 794 }
+                height: { type: integer, example: 1123 }
+      responses:
+        '201':
+          description: Design created
+
+  /design-studio/designs/{design}:
+    get:
+      tags: [Design studio]
+      summary: Get design with canvas JSON
+      parameters:
+        - { name: design, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Design detail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    allOf:
+                      - $ref: '#/components/schemas/Design'
+                      - type: object
+                        properties:
+                          canvas_json: { type: object, nullable: true }
+    patch:
+      tags: [Design studio]
+      summary: Update a design (save canvas)
+      parameters:
+        - { name: design, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:       { type: string }
+                canvas_json: { type: object }
+      responses:
+        '200':
+          description: Design saved
+    delete:
+      tags: [Design studio]
+      summary: Delete a design
+      parameters:
+        - { name: design, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Deleted
+
+  # ─────────────────────────── STOCK AUDITS ───────────────────────────
+
+  /stock-audits:
+    get:
+      tags: [Stock audits]
+      summary: List stock audits
+      responses:
+        '200':
+          description: Stock audit list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { type: object } }
+                  meta: { $ref: '#/components/schemas/Meta' }
+    post:
+      tags: [Stock audits]
+      summary: Create a stock audit
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [audit_date]
+              properties:
+                audit_date: { type: string, format: date }
+                notes:      { type: string }
+      responses:
+        '201':
+          description: Audit created
+
+  /stock-audits/{stockAudit}:
+    get:
+      tags: [Stock audits]
+      summary: Get stock audit detail
+      parameters:
+        - { name: stockAudit, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Audit detail
+    delete:
+      tags: [Stock audits]
+      summary: Delete a stock audit
+      parameters:
+        - { name: stockAudit, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Deleted
+
+  /stock-audits/{stockAudit}/lines:
+    put:
+      tags: [Stock audits]
+      summary: Save counted quantities on audit lines
+      parameters:
+        - { name: stockAudit, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [lines]
+              properties:
+                lines:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      counted_qty: { type: number }
+                      notes:       { type: string }
+      responses:
+        '200':
+          description: Lines saved
+
+  /stock-audits/{stockAudit}/finalize:
+    post:
+      tags: [Stock audits]
+      summary: Finalize audit and apply stock adjustments
+      parameters:
+        - { name: stockAudit, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Audit finalized
+
+  # ─────────────────────────── FILE MANAGER ───────────────────────────
+
+  /online/file-manager:
+    get:
+      tags: [File manager]
+      summary: Browse files and folders
+      parameters:
+        - { name: folder,      in: query, schema: { type: integer }, description: Parent folder ID }
+        - { name: images_only, in: query, schema: { type: boolean } }
+      responses:
+        '200':
+          description: File browser response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  folders:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:   { type: integer }
+                        name: { type: string }
+                  files:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:       { type: integer }
+                        name:     { type: string }
+                        url:      { type: string }
+                        mime:     { type: string }
+                        size:     { type: integer }
+                        is_image: { type: boolean }
+                  breadcrumbs: { type: array, items: { type: object } }
+
+  /online/file-manager/upload:
+    post:
+      tags: [File manager]
+      summary: Upload files
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [files]
+              properties:
+                files:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+                folder_id: { type: integer }
+      responses:
+        '201':
+          description: Files uploaded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:       { type: integer }
+                        name:     { type: string }
+                        url:      { type: string }
+                        mime:     { type: string }
+                        is_image: { type: boolean }
+
+  # ─────────────────────────── SETTINGS ───────────────────────────
+
+  /online/settings:
+    get:
+      tags: [Settings]
+      summary: Get POS settings
+      parameters:
+        - { name: include, in: query, schema: { type: string, enum: [assignment_targets] } }
+      responses:
+        '200':
+          description: POS settings
+    put:
+      tags: [Settings]
+      summary: Update POS settings (full replace)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                default_deposit_account_id:  { type: integer, nullable: true }
+                discount_field_enabled:      { type: boolean }
+                checkout_modal_enabled:      { type: boolean }
+                display_theme:               { type: string, enum: [light, dark, inherit] }
+                receipt_header:              { type: string }
+                receipt_footer:              { type: string }
+                show_business_name:          { type: boolean }
+                show_business_address:       { type: boolean }
+                show_account_info:           { type: boolean }
+                payment_settlement_mode:     { type: string, enum: [immediate, end_of_day] }
+                featured_products_limit:     { type: integer }
+                featured_categories_limit:   { type: integer }
+                show_service_bound_products: { type: boolean }
+      responses:
+        '200':
+          description: Settings updated
+    patch:
+      tags: [Settings]
+      summary: Partial update POS settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                default_deposit_account_id: { type: integer, nullable: true }
+                discount_field_enabled:     { type: boolean }
+                checkout_modal_enabled:     { type: boolean }
+                display_theme:              { type: string, enum: [light, dark, inherit] }
+                receipt_header:             { type: string }
+                receipt_footer:             { type: string }
+                payment_settlement_mode:    { type: string, enum: [immediate, end_of_day] }
+      responses:
+        '200':
+          description: Settings updated
