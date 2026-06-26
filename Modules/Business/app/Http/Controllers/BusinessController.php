@@ -401,6 +401,13 @@ class BusinessController extends Controller
             'branch_address' => ['nullable', 'string', 'max:2000'],
             'branch_phone' => ['nullable', 'string', 'max:40'],
             'branch_email' => ['nullable', 'email', 'max:255'],
+            'data_storage_type' => ['required', Rule::in(['online', 'self_hosted'])],
+            'data_agreement_accepted' => ['required_if:data_storage_type,online', 'nullable', 'accepted'],
+            'vault_enabled' => ['nullable', Rule::in(['0', '1'])],
+            'vault_server_url' => ['nullable', 'url', 'max:500'],
+            'vault_api_token' => ['nullable', 'string', 'max:500'],
+            'vault_backup_frequency' => ['nullable', Rule::in(['hourly', 'daily', 'weekly'])],
+            'vault_encryption_key' => ['nullable', 'string', 'max:500'],
         ]);
 
         $slug = $validated['company_category_slug'];
@@ -446,6 +453,27 @@ class BusinessController extends Controller
 
             $this->branchService->create($business, $branchData);
         });
+
+        $storageType = $validated['data_storage_type'];
+        $business->setSetting('business.data_storage_type', $storageType);
+        if ($storageType === 'online') {
+            $business->setSetting('business.data_agreement_accepted', true);
+        } else {
+            $vaultOn = ($validated['vault_enabled'] ?? '0') === '1';
+            $business->setSetting('business.vault_enabled', $vaultOn);
+            if ($vaultOn) {
+                $business->setSetting('business.vault_config', [
+                    'server_url'       => $validated['vault_server_url'] ?? null,
+                    'backup_frequency' => $validated['vault_backup_frequency'] ?? 'daily',
+                ]);
+                if (! empty($validated['vault_api_token'])) {
+                    $business->setSetting('business.vault_api_token', $validated['vault_api_token']);
+                }
+                if (! empty($validated['vault_encryption_key'])) {
+                    $business->setSetting('business.vault_encryption_key', $validated['vault_encryption_key']);
+                }
+            }
+        }
 
         /** @var int|string $bizId */
         $bizId = $business->getKey();

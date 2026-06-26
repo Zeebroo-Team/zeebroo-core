@@ -701,6 +701,79 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
         .wiz-switch[aria-checked="true"] .wiz-switch-track{background:#22c55e;}
         .wiz-switch-knob{position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:50%;box-sizing:border-box;background:#fff;border:1px solid color-mix(in srgb,var(--border) 80%,transparent);transition:left .22s ease;box-shadow:0 1px 2px rgba(0,0,0,.2);}
         .wiz-switch[aria-checked="true"] .wiz-switch-knob{left:calc(100% - 3px - 24px);}
+        /* Step 5: Data Storage Cards */
+        .wiz-storage-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-bottom:20px;}
+        @media(max-width:560px){.wiz-storage-grid{grid-template-columns:1fr;}}
+        .wiz-storage-card{position:relative;border:2px solid var(--border);border-radius:18px;overflow:hidden;cursor:pointer;background:var(--card);display:flex;flex-direction:row;align-items:stretch;user-select:none;transition:border-color .22s,box-shadow .22s,transform .2s;}
+        .wiz-storage-card:hover{border-color:color-mix(in srgb,var(--primary) 50%,var(--border));box-shadow:0 8px 28px -6px color-mix(in srgb,var(--primary) 14%,transparent);transform:translateY(-2px);}
+        .wiz-storage-card--selected{border-color:var(--primary);border-width:2.5px;box-shadow:0 10px 36px -8px color-mix(in srgb,var(--primary) 28%,transparent);transform:translateY(-2px);}
+        .wiz-storage-card-body{padding:14px 14px 14px 16px;display:flex;flex-direction:column;flex:1;min-width:0;}
+        .wiz-storage-card-name{font-size:14px;font-weight:800;color:var(--text);letter-spacing:-.025em;line-height:1.2;margin-bottom:2px;}
+        .wiz-storage-card-sub{font-size:11px;color:var(--muted);font-weight:500;margin-bottom:9px;}
+        .wiz-storage-card-feats{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:5px;}
+        .wiz-storage-card-feats li{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--muted);font-weight:500;line-height:1.3;}
+        .wiz-storage-card-feats li .sc-dot{width:15px;height:15px;border-radius:50%;flex-shrink:0;display:grid;place-items:center;font-size:7px;background:color-mix(in srgb,var(--muted) 10%,transparent);color:var(--muted);transition:background .22s,color .22s;}
+        .wiz-storage-card--selected .wiz-storage-card-feats li .sc-dot{background:color-mix(in srgb,var(--primary) 14%,transparent);color:var(--primary);}
+        .wiz-storage-card--selected .wiz-storage-card-feats li{color:var(--text);}
+        .wiz-storage-card-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:999px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;background:color-mix(in srgb,#22c55e 12%,transparent);color:#16a34a;align-self:flex-start;margin-top:8px;}
+        .wiz-storage-card-img{width:110px;flex-shrink:0;background:color-mix(in srgb,var(--muted) 6%,var(--card));display:flex;align-items:center;justify-content:center;border-left:1px solid var(--border);transition:background .22s,border-color .22s;}
+        .wiz-storage-card-img img{width:80%;height:80%;object-fit:contain;transition:transform .32s cubic-bezier(.4,0,.2,1);}
+        .wiz-storage-card:hover .wiz-storage-card-img img{transform:scale(1.08);}
+        .wiz-storage-card--selected .wiz-storage-card-img{background:color-mix(in srgb,var(--primary) 8%,var(--card));border-left-color:color-mix(in srgb,var(--primary) 25%,var(--border));}
+        .wiz-storage-check{position:absolute;top:9px;right:9px;z-index:2;width:20px;height:20px;border-radius:50%;border:2px solid color-mix(in srgb,var(--border) 70%,transparent);background:color-mix(in srgb,var(--card) 85%,transparent);backdrop-filter:blur(6px);display:grid;place-items:center;font-size:8px;color:transparent;transition:background .2s,border-color .2s,color .2s,box-shadow .2s;}
+        .wiz-storage-card--selected .wiz-storage-check{background:var(--primary);border-color:var(--primary);color:#fff;box-shadow:0 3px 10px color-mix(in srgb,var(--primary) 40%,transparent);}
+        @media(max-width:560px){.wiz-storage-grid{grid-template-columns:1fr;}.wiz-storage-card-img{width:90px;}}
+        .wiz-agreement-panel{border:1.5px solid color-mix(in srgb,var(--primary) 35%,var(--border));border-radius:14px;background:color-mix(in srgb,var(--primary) 4%,var(--card));overflow:hidden;margin-top:4px;}
+        .wiz-agreement-head{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid color-mix(in srgb,var(--primary) 20%,var(--border));}
+        .wiz-agreement-head-icon{width:36px;height:36px;flex-shrink:0;border-radius:10px;display:grid;place-items:center;font-size:15px;color:var(--primary);background:color-mix(in srgb,var(--primary) 12%,transparent);}
+        .wiz-agreement-head-title{font-size:14px;font-weight:800;color:var(--text);margin:0 0 2px;}
+        .wiz-agreement-head-sub{font-size:11.5px;color:var(--muted);margin:0;}
+        .wiz-agreement-body{max-height:160px;overflow-y:auto;padding:14px 16px;font-size:12.5px;line-height:1.65;color:var(--muted);}
+        .wiz-agreement-body p{margin:0 0 10px;}
+        .wiz-agreement-body p:last-child{margin:0;}
+        .wiz-agreement-foot{padding:12px 16px;border-top:1px solid color-mix(in srgb,var(--primary) 15%,var(--border));}
+        .wiz-agreement-check-row{display:flex;align-items:flex-start;gap:10px;cursor:pointer;}
+        .wiz-agreement-check-row input[type="checkbox"]{margin-top:2px;width:16px;height:16px;flex-shrink:0;cursor:pointer;accent-color:var(--primary);}
+        .wiz-agreement-check-lbl{font-size:13px;font-weight:600;color:var(--text);line-height:1.4;}
+        .wiz-agreement-err{display:none;margin-top:8px;padding:8px 12px;border-radius:8px;font-size:12px;font-weight:600;color:#dc2626;background:color-mix(in srgb,#ef4444 10%,transparent);border:1px solid color-mix(in srgb,#ef4444 25%,transparent);}
+        .wiz-agreement-err.is-visible{display:block;}
+        .wiz-vault-panel{border:1.5px solid var(--border);border-radius:14px;overflow:hidden;margin-top:4px;}
+        .wiz-vault-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;border-bottom:1px solid var(--border);}
+        .wiz-vault-head-info{flex:1;min-width:0;}
+        .wiz-vault-head-title{font-size:14px;font-weight:800;color:var(--text);margin:0 0 2px;}
+        .wiz-vault-head-sub{font-size:11.5px;color:var(--muted);margin:0;}
+        .wiz-vault-config-body{padding:14px 16px;display:flex;flex-direction:column;gap:12px;}
+        .wiz-vault-field label{display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:5px;}
+        .wiz-vault-field input,.wiz-vault-field select{width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--card);color:var(--text);font-size:13px;font-family:inherit;outline:none;transition:border-color .2s,box-shadow .2s;box-sizing:border-box;}
+        .wiz-vault-field input:focus,.wiz-vault-field select:focus{border-color:var(--primary);box-shadow:0 0 0 3px color-mix(in srgb,var(--primary) 12%,transparent);}
+        .wiz-vault-field-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+        @media(max-width:540px){.wiz-vault-field-row{grid-template-columns:1fr;}}
+        .wiz-vault-token-wrap{position:relative;}
+        .wiz-vault-token-wrap input{padding-right:38px;}
+        .wiz-vault-token-eye{position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--muted);font-size:13px;padding:4px;}
+        .wiz-vault-token-eye:hover{color:var(--text);}
+        /* Storage Agreement Modal */
+        .wiz-storage-modal{position:fixed;inset:0;z-index:600;display:flex;align-items:center;justify-content:center;padding:max(12px,2vw);box-sizing:border-box;}
+        .wiz-storage-modal[hidden]{display:none;}
+        .wiz-storage-modal__backdrop{position:absolute;inset:0;background:rgba(15,23,42,.55);}
+        :is(html[data-theme="light"],html[data-theme="light_blue"]) .wiz-storage-modal__backdrop{background:rgba(17,24,39,.38);}
+        .wiz-storage-modal__box{position:relative;z-index:1;width:100%;max-width:520px;border-radius:16px;border:1px solid var(--border);background:var(--card);box-shadow:0 20px 60px rgba(0,0,0,.32);display:flex;flex-direction:column;max-height:min(88vh,620px);overflow:hidden;}
+        :is(html[data-theme="light"],html[data-theme="light_blue"]) .wiz-storage-modal__box{box-shadow:0 12px 36px rgba(0,0,0,.14);}
+        .wiz-storage-modal__head{display:flex;align-items:center;gap:12px;padding:18px 20px;border-bottom:1px solid var(--border);flex-shrink:0;}
+        .wiz-storage-modal__head-ico{width:40px;height:40px;flex-shrink:0;border-radius:12px;display:grid;place-items:center;font-size:18px;color:var(--primary);background:color-mix(in srgb,var(--primary) 12%,transparent);}
+        .wiz-storage-modal__title{font-size:16px;font-weight:800;color:var(--text);margin:0 0 2px;letter-spacing:-.02em;}
+        .wiz-storage-modal__subtitle{font-size:12px;color:var(--muted);margin:0;}
+        .wiz-storage-modal__close{width:32px;height:32px;border-radius:8px;border:1.5px solid var(--border);background:transparent;cursor:pointer;display:grid;place-items:center;font-size:13px;color:var(--muted);transition:background .15s,color .15s;flex-shrink:0;}
+        .wiz-storage-modal__close:hover{background:color-mix(in srgb,var(--muted) 12%,transparent);color:var(--text);}
+        .wiz-storage-modal__body{flex:1;overflow-y:auto;padding:18px 20px;font-size:13px;line-height:1.7;color:var(--muted);}
+        .wiz-storage-modal__body p{margin:0 0 12px;}
+        .wiz-storage-modal__body p:last-child{margin:0;}
+        .wiz-storage-modal__body strong{color:var(--text);}
+        .wiz-storage-modal__foot{padding:14px 20px;border-top:1px solid var(--border);flex-shrink:0;}
+        .wiz-storage-modal__actions{display:flex;align-items:center;justify-content:flex-end;gap:10px;padding:14px 20px;border-top:1px solid var(--border);flex-shrink:0;}
+        .wiz-storage-modal__actions .wiz-btn-primary{width:auto;flex:0 0 auto;margin-top:0;padding:10px 20px;font-size:14px;border-radius:10px;box-shadow:none;}
+        .wiz-storage-modal__actions .wiz-btn-back{margin-top:0;padding:10px 18px;font-size:14px;border-radius:10px;}
+        .wiz-storage-modal__actions .wiz-btn-primary[disabled]{opacity:.45;cursor:not-allowed;}
     </style>
 
     <div class="wiz-shell">
@@ -728,6 +801,11 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                 <div class="wiz-step-item">
                     <div class="wiz-step-dot" id="wizDot4">4</div>
                     <span class="wiz-step-lbl" id="wizLbl4">Location</span>
+                </div>
+                <div class="wiz-step-connector" id="wizStepLine4"></div>
+                <div class="wiz-step-item">
+                    <div class="wiz-step-dot" id="wizDot5">5</div>
+                    <span class="wiz-step-lbl" id="wizLbl5">Storage</span>
                 </div>
             </div>
 
@@ -1006,6 +1084,105 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                         <input type="hidden" name="branch_is_active" value="1">
                     </div>
 
+                    {{-- Step 5: Data Storage --}}
+                    <div id="wizardStep5" style="display:none;">
+                        <h2 class="wiz-card-title">Where should we store your data?</h2>
+                        <p class="wiz-card-sub">Choose how your business data is stored and protected.</p>
+
+                        <input type="hidden" name="data_storage_type" id="wizDataStorageType" value="online">
+                        <input type="hidden" name="data_agreement_accepted" id="wizDataAgreementAccepted" value="">
+                        <div class="wiz-storage-grid">
+                            {{-- Online Storage card --}}
+                            <div class="wiz-storage-card wiz-storage-card--selected" id="wizStorageOnlineCard" role="radio" aria-checked="true" tabindex="0" onclick="selectWizStorage('online')" onkeydown="if(event.key===' '||event.key==='Enter')selectWizStorage('online')">
+                                <div class="wiz-storage-check"><i class="fa fa-check" aria-hidden="true"></i></div>
+                                <div class="wiz-storage-card-body">
+                                    <div class="wiz-storage-card-name">Online Storage</div>
+                                    <div class="wiz-storage-card-sub">SociBiz Managed Cloud</div>
+                                    <ul class="wiz-storage-card-feats">
+                                        <li><span class="sc-dot"><i class="fa fa-check" aria-hidden="true"></i></span> Enterprise-grade security</li>
+                                        <li><span class="sc-dot"><i class="fa fa-check" aria-hidden="true"></i></span> Daily automated backups</li>
+                                        <li><span class="sc-dot"><i class="fa fa-check" aria-hidden="true"></i></span> 99.9% uptime reliability</li>
+                                        <li><span class="sc-dot"><i class="fa fa-check" aria-hidden="true"></i></span> End-to-end encryption</li>
+                                        <li><span class="sc-dot"><i class="fa fa-check" aria-hidden="true"></i></span> 24/7 expert support</li>
+                                    </ul>
+                                    <span class="wiz-storage-card-badge"><i class="fa fa-star" aria-hidden="true"></i> Recommended</span>
+                                </div>
+                                <div class="wiz-storage-card-img">
+                                    <img src="{{ asset('storage_hosting/online_storage.png') }}" alt="Online Storage illustration">
+                                </div>
+                            </div>
+                            {{-- Self-Hosted card --}}
+                            <div class="wiz-storage-card" id="wizStorageSelfCard" role="radio" aria-checked="false" tabindex="0" onclick="selectWizStorage('self_hosted')" onkeydown="if(event.key===' '||event.key==='Enter')selectWizStorage('self_hosted')">
+                                <div class="wiz-storage-check"><i class="fa fa-check" aria-hidden="true"></i></div>
+                                <div class="wiz-storage-card-body">
+                                    <div class="wiz-storage-card-name">Self-Hosted</div>
+                                    <div class="wiz-storage-card-sub">Your Own Server</div>
+                                    <ul class="wiz-storage-card-feats">
+                                        <li><span class="sc-dot"><i class="fa fa-check" aria-hidden="true"></i></span> Full control over your data</li>
+                                        <li><span class="sc-dot"><i class="fa fa-check" aria-hidden="true"></i></span> Stored on your infrastructure</li>
+                                        <li><span class="sc-dot"><i class="fa fa-check" aria-hidden="true"></i></span> Custom server configuration</li>
+                                        <li><span class="sc-dot"><i class="fa fa-check" aria-hidden="true"></i></span> Local or private cloud</li>
+                                    </ul>
+                                </div>
+                                <div class="wiz-storage-card-img">
+                                    <img src="{{ asset('storage_hosting/selft_hosted.png') }}" alt="Self-hosted storage illustration">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="wizStorageNoSelErr" class="wiz-agreement-err" style="margin-bottom:8px;">Please select a storage option before continuing.</div>
+                        @error('data_storage_type')<div class="wiz-agreement-err is-visible" style="margin-bottom:8px;">{{ $message }}</div>@enderror
+                        @error('data_agreement_accepted')<div class="wiz-agreement-err is-visible" style="margin-bottom:8px;">{{ $message }}</div>@enderror
+
+                        {{-- Self-hosted selected: Data Vault Config --}}
+                        <div id="wizVaultPanel" class="wiz-vault-panel" style="display:none;">
+                            <div class="wiz-vault-head">
+                                <div class="wiz-vault-head-info">
+                                    <p class="wiz-vault-head-title">Data Vault Configuration</p>
+                                    <p class="wiz-vault-head-sub">Connect your self-hosted storage server.</p>
+                                </div>
+                                <button type="button" class="wiz-switch" id="wizVaultSwitch" role="switch" aria-checked="{{ old('vault_enabled') ? 'true' : 'false' }}" aria-label="Enable Data Vault">
+                                    <span class="wiz-switch-track" aria-hidden="true"><span class="wiz-switch-knob"></span></span>
+                                </button>
+                            </div>
+                            <input type="hidden" name="vault_enabled" id="wizVaultEnabled" value="{{ old('vault_enabled', '0') }}">
+                            <div class="wiz-vault-config-body" id="wizVaultConfigBody" style="{{ old('vault_enabled') ? '' : 'display:none;' }}">
+                                <div class="wiz-vault-field">
+                                    <label for="wizVaultUrl">Server URL</label>
+                                    <input type="url" name="vault_server_url" id="wizVaultUrl" placeholder="https://vault.yourserver.com" value="{{ old('vault_server_url') }}">
+                                </div>
+                                <div class="wiz-vault-field-row">
+                                    <div class="wiz-vault-field">
+                                        <label for="wizVaultToken">API Token</label>
+                                        <div class="wiz-vault-token-wrap">
+                                            <input type="password" name="vault_api_token" id="wizVaultToken" placeholder="••••••••••••" autocomplete="off">
+                                            <button type="button" class="wiz-vault-token-eye" id="wizVaultTokenEye" aria-label="Toggle token visibility">
+                                                <i class="fa fa-eye" id="wizVaultTokenEyeIco" aria-hidden="true"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div class="wiz-vault-field">
+                                        <label for="wizVaultBackup">Backup Frequency</label>
+                                        <select name="vault_backup_frequency" id="wizVaultBackup">
+                                            <option value="hourly" {{ old('vault_backup_frequency') === 'hourly' ? 'selected' : '' }}>Hourly</option>
+                                            <option value="daily" {{ old('vault_backup_frequency', 'daily') === 'daily' ? 'selected' : '' }}>Daily</option>
+                                            <option value="weekly" {{ old('vault_backup_frequency') === 'weekly' ? 'selected' : '' }}>Weekly</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="wiz-vault-field">
+                                    <label for="wizVaultEncKey">Encryption Key <span style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--muted);">(optional)</span></label>
+                                    <div class="wiz-vault-token-wrap">
+                                        <input type="password" name="vault_encryption_key" id="wizVaultEncKey" placeholder="Leave blank to auto-generate" autocomplete="off">
+                                        <button type="button" class="wiz-vault-token-eye" aria-label="Toggle key visibility" onclick="(function(b){var i=document.getElementById('wizVaultEncKey');i.type=i.type==='password'?'text':'password';b.querySelector('i').className=i.type==='password'?'fa fa-eye':'fa fa-eye-slash';})(this)">
+                                            <i class="fa fa-eye" aria-hidden="true"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     {{-- Fixed bottom action bar — outside the animated step divs so position:fixed
                          anchors to the viewport (an ancestor with `transform` creates a new
                          containing block for fixed descendants, which broke this before). --}}
@@ -1035,7 +1212,15 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                             <button type="button" class="wiz-btn-back" data-wiz-back="3">
                                 <i class="fa fa-arrow-left" aria-hidden="true"></i> Back
                             </button>
-                            <button type="submit" class="wiz-btn-primary">
+                            <button type="button" class="wiz-btn-primary" data-wiz-next="5">
+                                Continue <i class="fa fa-arrow-right" aria-hidden="true"></i>
+                            </button>
+                        </div>
+                        <div class="wiz-actions-row-inner" data-wiz-actions="5" style="display:none;">
+                            <button type="button" class="wiz-btn-back" data-wiz-back="4">
+                                <i class="fa fa-arrow-left" aria-hidden="true"></i> Back
+                            </button>
+                            <button type="submit" class="wiz-btn-primary" id="wizFinishBtn">
                                 Finish setup <i class="fa fa-check" aria-hidden="true"></i>
                             </button>
                         </div>
@@ -1061,6 +1246,45 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
             </button>
         </div>
         <img src="{{ asset('bussiness_man.png') }}" alt="Guide character" class="wiz-guide-char" id="wizGuideChar">
+    </div>
+
+    {{-- Step 5: Data Storage Agreement Modal (outside form — avoids wiz-card stacking context) --}}
+    <div id="wizStorageAgreementModal" class="wiz-storage-modal" hidden aria-modal="true" role="dialog" aria-labelledby="wizStorageAgreementTitle">
+        <div class="wiz-storage-modal__backdrop" id="wizStorageAgreementBackdrop"></div>
+        <div class="wiz-storage-modal__box">
+            <div class="wiz-storage-modal__head">
+                <div class="wiz-storage-modal__head-ico"><i class="fa fa-file-contract" aria-hidden="true"></i></div>
+                <div style="flex:1;min-width:0;">
+                    <h3 class="wiz-storage-modal__title" id="wizStorageAgreementTitle">Data Storage Agreement</h3>
+                    <p class="wiz-storage-modal__subtitle" id="wizStorageAgreementSubtitle">SociBiz Online Storage — Terms &amp; Conditions</p>
+                </div>
+                <button type="button" class="wiz-storage-modal__close" id="wizStorageAgreementClose" aria-label="Close">
+                    <i class="fa fa-xmark" aria-hidden="true"></i>
+                </button>
+            </div>
+            <div class="wiz-storage-modal__body" id="wizStorageAgreementBody">
+                <p>By choosing SociBiz Online Storage, you agree that your business data — including transactions, employee records, customer information, and reports — will be stored securely on SociBiz servers.</p>
+                <p><strong>What we store:</strong> Business profiles, financial transactions, payroll data, customer records, product catalogues, sales history, and operational reports.</p>
+                <p><strong>How we protect it:</strong> All data is encrypted at rest (AES-256) and in transit (TLS 1.3). Daily automated backups are retained for 30 days. Access is restricted to your authenticated team members only.</p>
+                <p><strong>Your rights:</strong> You may request a full export or deletion of your data at any time. We will never sell or share your data with third parties without your explicit consent.</p>
+                <p><strong>Uptime commitment:</strong> We target 99.9% monthly uptime. Scheduled maintenance windows are announced at least 48 hours in advance.</p>
+            </div>
+            <div class="wiz-storage-modal__foot">
+                <label class="wiz-agreement-check-row">
+                    <input type="checkbox" id="wizStorageModalCheck">
+                    <span class="wiz-agreement-check-lbl">I have read and agree to the Data Storage Terms &amp; Conditions</span>
+                </label>
+                <div class="wiz-agreement-err" id="wizStorageModalErr">Please tick the box to agree before continuing.</div>
+            </div>
+            <div class="wiz-storage-modal__actions">
+                <button type="button" class="wiz-btn-back" id="wizStorageAgreementCancelBtn">
+                    <i class="fa fa-arrow-left" aria-hidden="true"></i> Cancel
+                </button>
+                <button type="button" class="wiz-btn-primary" id="wizStorageAgreementConfirmBtn" disabled>
+                    <i class="fa fa-check" aria-hidden="true"></i> Agree &amp; Select
+                </button>
+            </div>
+        </div>
     </div>
 
     {{-- Category details modal (outside form, inside wizard shell) --}}
@@ -1405,6 +1629,50 @@ $wizFeatMetaForJs = array_values(array_map(function ($f) {
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 
 <script>
+// Step 5 storage selection — global so onclick attributes can reach it
+var _wizStoragePendingType = 'online';
+
+var _wizStorageContent = {
+    online: {
+        title:    'Data Storage Agreement',
+        subtitle: 'SociBiz Online Storage — Terms & Conditions',
+        body:     '<p>By choosing SociBiz Online Storage, you agree that your business data — including transactions, employee records, customer information, and reports — will be stored securely on SociBiz servers.</p><p><strong>What we store:</strong> Business profiles, financial transactions, payroll data, customer records, product catalogues, sales history, and operational reports.</p><p><strong>How we protect it:</strong> All data is encrypted at rest (AES-256) and in transit (TLS 1.3). Daily automated backups are retained for 30 days. Access is restricted to your authenticated team members only.</p><p><strong>Your rights:</strong> You may request a full export or deletion of your data at any time. We will never sell or share your data with third parties without your explicit consent.</p><p><strong>Uptime commitment:</strong> We target 99.9% monthly uptime. Scheduled maintenance windows are announced at least 48 hours in advance.</p>',
+        label:    'I have read and agree to the Data Storage Terms &amp; Conditions',
+    },
+    self_hosted: {
+        title:    'Self-Hosted Data Agreement',
+        subtitle: 'SociBiz Self-Hosted — Data Responsibility Terms',
+        body:     '<p>By choosing Self-Hosted Storage, you take full responsibility for the security, integrity, availability, and backup of all business data stored on your own server or private infrastructure.</p><p><strong>Your responsibilities:</strong> You must ensure your server is properly secured with firewall rules, authentication controls, and access restrictions. Regular backups and a disaster recovery plan are entirely your obligation.</p><p><strong>Data Vault connection:</strong> Enabling the Data Vault connects your SociBiz workspace to your self-hosted server using the API token you provide. All data transmitted between SociBiz and your vault is encrypted in transit (TLS 1.3).</p><p><strong>Software maintenance:</strong> You are responsible for keeping your server software, OS, and dependencies up to date to prevent security vulnerabilities.</p><p><strong>Liability:</strong> SociBiz is not liable for any data loss, breach, or service unavailability arising from your self-hosted configuration. Support is limited to configuration guidance; SociBiz cannot access or manage your infrastructure directly.</p>',
+        label:    'I understand and accept responsibility for my self-hosted data',
+    },
+};
+
+function selectWizStorage(type) {
+    openWizStorageAgreementModal(type);
+}
+
+function openWizStorageAgreementModal(type) {
+    _wizStoragePendingType = type || 'online';
+    var content    = _wizStorageContent[_wizStoragePendingType] || _wizStorageContent.online;
+    var modal      = document.getElementById('wizStorageAgreementModal');
+    var titleEl    = document.getElementById('wizStorageAgreementTitle');
+    var subEl      = document.getElementById('wizStorageAgreementSubtitle');
+    var bodyEl     = document.getElementById('wizStorageAgreementBody');
+    var checkLbl   = modal ? modal.querySelector('.wiz-agreement-check-lbl') : null;
+    var check      = document.getElementById('wizStorageModalCheck');
+    var confirmBtn = document.getElementById('wizStorageAgreementConfirmBtn');
+    var errEl      = document.getElementById('wizStorageModalErr');
+    if (!modal) return;
+    if (titleEl)   titleEl.textContent  = content.title;
+    if (subEl)     subEl.textContent    = content.subtitle;
+    if (bodyEl)    bodyEl.innerHTML     = content.body;
+    if (checkLbl)  checkLbl.innerHTML   = content.label;
+    if (check)     check.checked        = false;
+    if (confirmBtn) confirmBtn.disabled = true;
+    if (errEl)     errEl.classList.remove('is-visible');
+    modal.hidden = false;
+    document.body.style.overflow = 'hidden';
+}
 (function () {
     const wizardForm = document.getElementById('businessWizardForm');
     if (!wizardForm) return;
@@ -1414,23 +1682,27 @@ $wizFeatMetaForJs = array_values(array_map(function ($f) {
         2: document.getElementById('wizardStep2'),
         3: document.getElementById('wizardStep3'),
         4: document.getElementById('wizardStep4'),
+        5: document.getElementById('wizardStep5'),
     };
     const dots = {
         1: document.getElementById('wizDot1'),
         2: document.getElementById('wizDot2'),
         3: document.getElementById('wizDot3'),
         4: document.getElementById('wizDot4'),
+        5: document.getElementById('wizDot5'),
     };
     const lbls = {
         1: document.getElementById('wizLbl1'),
         2: document.getElementById('wizLbl2'),
         3: document.getElementById('wizLbl3'),
         4: document.getElementById('wizLbl4'),
+        5: document.getElementById('wizLbl5'),
     };
     const lines = {
         1: document.getElementById('wizStepLine1'),
         2: document.getElementById('wizStepLine2'),
         3: document.getElementById('wizStepLine3'),
+        4: document.getElementById('wizStepLine4'),
     };
     const actionGroups = wizardForm.querySelectorAll('[data-wiz-actions]');
 
@@ -1472,10 +1744,11 @@ $wizFeatMetaForJs = array_values(array_map(function ($f) {
         });
     }
     const guideMessages = {
-        1: { step: 'Step 1 of 4', text: 'Hi there! What do you call your business? Use the name your customers already know.' },
-        2: { step: 'Step 2 of 4', text: 'Pick the category that best describes what you do — it helps me set up the right modules for you!' },
-        3: { step: 'Step 3 of 4', text: 'Toggle the features you need. Required ones stay on. You can change these any time later.' },
-        4: { step: 'Step 4 of 4', text: 'Almost done! Tell me where you operate — single location or multiple branches?' },
+        1: { step: 'Step 1 of 5', text: 'Hi there! What do you call your business? Use the name your customers already know.' },
+        2: { step: 'Step 2 of 5', text: 'Pick the category that best describes what you do — it helps me set up the right modules for you!' },
+        3: { step: 'Step 3 of 5', text: 'Toggle the features you need. Required ones stay on. You can change these any time later.' },
+        4: { step: 'Step 4 of 5', text: 'Almost done! Tell me where you operate — single location or multiple branches?' },
+        5: { step: 'Step 5 of 5', text: 'Last step! Choose how your data is stored — our secure cloud or your own server.' },
     };
     function updateGuide(num) {
         if (!wizGuideBubble || !wizGuideBubbleText) return;
@@ -1807,11 +2080,115 @@ $wizFeatMetaForJs = array_values(array_map(function ($f) {
         });
     }
 
-    @if($errors->has('branch_name') || $errors->has('multi_warehouse_branch'))
+    @if($errors->has('data_storage_type') || $errors->has('data_agreement_accepted') || $errors->has('vault_server_url') || $errors->has('vault_api_token'))
+        setWizStep(5, false);
+    @elseif($errors->has('branch_name') || $errors->has('multi_warehouse_branch'))
         setWizStep(4, false);
     @elseif($errors->has('company_category_slug'))
         setWizStep(2, false);
     @endif
+
+    // ── Step 5: vault switch ──────────────────────────────────────────
+    const wizVaultSwitch     = document.getElementById('wizVaultSwitch');
+    const wizVaultConfigBody = document.getElementById('wizVaultConfigBody');
+    const wizVaultEnabled    = document.getElementById('wizVaultEnabled');
+    if (wizVaultSwitch) {
+        wizVaultSwitch.addEventListener('click', function () {
+            const on = this.getAttribute('aria-checked') !== 'true';
+            this.setAttribute('aria-checked', on ? 'true' : 'false');
+            if (wizVaultEnabled)    wizVaultEnabled.value = on ? '1' : '0';
+            if (wizVaultConfigBody) wizVaultConfigBody.style.display = on ? '' : 'none';
+        });
+    }
+    const wizVaultTokenEye = document.getElementById('wizVaultTokenEye');
+    if (wizVaultTokenEye) {
+        wizVaultTokenEye.addEventListener('click', function () {
+            const inp = document.getElementById('wizVaultToken');
+            const ico = document.getElementById('wizVaultTokenEyeIco');
+            if (!inp) return;
+            inp.type = inp.type === 'password' ? 'text' : 'password';
+            if (ico) ico.className = inp.type === 'password' ? 'fa fa-eye' : 'fa fa-eye-slash';
+        });
+    }
+
+    // ── Step 5: storage agreement modal ──────────────────────────────
+    (function () {
+        var modal      = document.getElementById('wizStorageAgreementModal');
+        var backdrop   = document.getElementById('wizStorageAgreementBackdrop');
+        var closeBtn   = document.getElementById('wizStorageAgreementClose');
+        var cancelBtn  = document.getElementById('wizStorageAgreementCancelBtn');
+        var confirmBtn = document.getElementById('wizStorageAgreementConfirmBtn');
+        var modalCheck = document.getElementById('wizStorageModalCheck');
+        var modalErr   = document.getElementById('wizStorageModalErr');
+        if (!modal) return;
+
+        function closeAgreementModal() {
+            modal.hidden = true;
+            document.body.style.overflow = '';
+        }
+
+        function confirmAgreement() {
+            if (!modalCheck || !modalCheck.checked) {
+                if (modalErr) modalErr.classList.add('is-visible');
+                return;
+            }
+            var type       = _wizStoragePendingType;
+            var typeInput  = document.getElementById('wizDataStorageType');
+            var agreeInput = document.getElementById('wizDataAgreementAccepted');
+            var onlineCard = document.getElementById('wizStorageOnlineCard');
+            var selfCard   = document.getElementById('wizStorageSelfCard');
+            var vaultEl    = document.getElementById('wizVaultPanel');
+            var noSelErr   = document.getElementById('wizStorageNoSelErr');
+            if (typeInput)  typeInput.value = type;
+            if (agreeInput) agreeInput.value = '1';
+            var isSelf = type === 'self_hosted';
+            if (onlineCard) { onlineCard.classList.toggle('wiz-storage-card--selected', !isSelf); onlineCard.setAttribute('aria-checked', isSelf ? 'false' : 'true'); }
+            if (selfCard)   { selfCard.classList.toggle('wiz-storage-card--selected',   isSelf);  selfCard.setAttribute('aria-checked',  isSelf ? 'true'  : 'false'); }
+            if (vaultEl)    vaultEl.style.display = isSelf ? '' : 'none';
+            if (isSelf) {
+                var vSwitch  = document.getElementById('wizVaultSwitch');
+                var vBody    = document.getElementById('wizVaultConfigBody');
+                var vEnabled = document.getElementById('wizVaultEnabled');
+                if (vSwitch)  vSwitch.setAttribute('aria-checked', 'true');
+                if (vBody)    vBody.style.display = '';
+                if (vEnabled) vEnabled.value = '1';
+            }
+            if (noSelErr) noSelErr.classList.remove('is-visible');
+            closeAgreementModal();
+        }
+
+        modalCheck && modalCheck.addEventListener('change', function () {
+            if (confirmBtn) confirmBtn.disabled = !this.checked;
+            if (modalErr)   modalErr.classList.toggle('is-visible', !this.checked);
+        });
+        closeBtn   && closeBtn.addEventListener('click',   closeAgreementModal);
+        cancelBtn  && cancelBtn.addEventListener('click',  closeAgreementModal);
+        backdrop   && backdrop.addEventListener('click',   closeAgreementModal);
+        confirmBtn && confirmBtn.addEventListener('click', confirmAgreement);
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' && !modal.hidden) closeAgreementModal();
+        });
+    })();
+
+    // ── Step 5: form submit guard ─────────────────────────────────────
+    wizardForm.addEventListener('submit', function (e) {
+        const typeInput = document.getElementById('wizDataStorageType');
+        if (!typeInput || typeInput.value === '') {
+            e.preventDefault();
+            setWizStep(5, false);
+            const noSelErr = document.getElementById('wizStorageNoSelErr');
+            if (noSelErr) noSelErr.classList.add('is-visible');
+            return;
+        }
+        if (typeInput.value === 'online') {
+            const agreeInput = document.getElementById('wizDataAgreementAccepted');
+            if (!agreeInput || agreeInput.value !== '1') {
+                e.preventDefault();
+                setWizStep(5, false);
+                openWizStorageAgreementModal();
+            }
+        }
+    });
 
     // ── Feature detail modal ──────────────────────────────────────────
     (function () {
