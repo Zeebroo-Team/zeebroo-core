@@ -1,6 +1,9 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Modules\Restaurant\Http\Controllers\IngredientController;
+use Modules\Restaurant\Http\Controllers\IngredientGrnController;
+use Modules\Restaurant\Http\Controllers\IngredientPurchaseController;
 use Modules\Restaurant\Http\Controllers\MenuCategoryController;
 use Modules\Restaurant\Http\Controllers\MenuItemController;
 use Modules\Restaurant\Http\Controllers\OrderController;
@@ -44,6 +47,31 @@ Route::middleware(['web', 'auth'])->group(function (): void {
     Route::post('/restaurant/orders/{order}/complete',                          [OrderController::class, 'completeOrder'])    ->name('restaurant.orders.complete');
     Route::post('/restaurant/orders/{order}/clear',                             [OrderController::class, 'clearOrder'])       ->name('restaurant.orders.clear');
     Route::delete('/restaurant/orders/{order}',                                 [OrderController::class, 'destroy'])          ->name('restaurant.orders.destroy');
+
+    // Ingredients & stock
+    Route::get('/restaurant/ingredients',                                          [IngredientController::class, 'index'])        ->name('restaurant.ingredients.index');
+    Route::post('/restaurant/ingredients',                                         [IngredientController::class, 'store'])        ->name('restaurant.ingredients.store');
+    Route::put('/restaurant/ingredients/{ingredient}',                             [IngredientController::class, 'update'])       ->name('restaurant.ingredients.update');
+    Route::delete('/restaurant/ingredients/{ingredient}',                          [IngredientController::class, 'destroy'])      ->name('restaurant.ingredients.destroy');
+    Route::post('/restaurant/ingredients/{ingredient}/stock-in',                   [IngredientController::class, 'stockIn'])      ->name('restaurant.ingredients.stock-in');
+    Route::post('/restaurant/ingredients/{ingredient}/waste',                      [IngredientController::class, 'waste'])        ->name('restaurant.ingredients.waste');
+    Route::get('/restaurant/ingredients/{ingredient}/transactions',                [IngredientController::class, 'transactions']) ->name('restaurant.ingredients.transactions');
+
+    // Ingredient purchase orders
+    Route::get('/restaurant/ingredients/purchases',                                          [IngredientPurchaseController::class, 'index'])      ->name('restaurant.ingredients.purchases.index');
+    Route::post('/restaurant/ingredients/purchases',                                         [IngredientPurchaseController::class, 'store'])      ->name('restaurant.ingredients.purchases.store');
+    Route::get('/restaurant/ingredients/purchases/{ingredientPurchaseOrder}',                [IngredientPurchaseController::class, 'show'])       ->name('restaurant.ingredients.purchases.show');
+    Route::put('/restaurant/ingredients/purchases/{ingredientPurchaseOrder}',                [IngredientPurchaseController::class, 'update'])     ->name('restaurant.ingredients.purchases.update');
+    Route::post('/restaurant/ingredients/purchases/{ingredientPurchaseOrder}/place-order',   [IngredientPurchaseController::class, 'placeOrder']) ->name('restaurant.ingredients.purchases.place-order');
+    Route::post('/restaurant/ingredients/purchases/{ingredientPurchaseOrder}/cancel',        [IngredientPurchaseController::class, 'cancel'])     ->name('restaurant.ingredients.purchases.cancel');
+    Route::delete('/restaurant/ingredients/purchases/{ingredientPurchaseOrder}',             [IngredientPurchaseController::class, 'destroy'])    ->name('restaurant.ingredients.purchases.destroy');
+
+    // Ingredient GRNs
+    Route::post('/restaurant/ingredients/purchases/{ingredientPurchaseOrder}/grn',           [IngredientGrnController::class, 'store'])           ->name('restaurant.ingredients.grn.store');
+    Route::get('/restaurant/ingredients/grn/{ingredientGrn}',                               [IngredientGrnController::class, 'show'])            ->name('restaurant.ingredients.grn.show');
+
+    // Recipe (ingredients per menu item)
+    Route::post('/restaurant/menu/{menuItem}/recipe',                              [IngredientController::class, 'saveRecipe'])   ->name('restaurant.menu.items.recipe');
 
     // Reservations
     Route::get('/restaurant/reservations',                                      [ReservationController::class, 'index'])       ->name('restaurant.reservations.index');

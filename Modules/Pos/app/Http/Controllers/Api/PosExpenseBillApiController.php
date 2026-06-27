@@ -12,12 +12,16 @@ use Illuminate\Validation\ValidationException;
 use Modules\Account\Models\Bill;
 use Modules\Account\Services\BillService;
 use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesPosBusinessForApi;
+use Modules\Transaction\Services\BillManualPaymentSettlementService;
 
 class PosExpenseBillApiController extends Controller
 {
     use ResolvesPosBusinessForApi;
 
-    public function __construct(private readonly BillService $service) {}
+    public function __construct(
+        private readonly BillService $service,
+        private readonly BillManualPaymentSettlementService $settlementService,
+    ) {}
 
     public function store(Request $request): JsonResponse
     {
@@ -119,6 +123,210 @@ class PosExpenseBillApiController extends Controller
         $bill = $this->service->create($user, $business, $validated);
 
         return response()->json(['message' => 'Bill created successfully.', 'data' => $this->format($bill)], 201);
+    }
+
+    public function show(Request $request, Bill $bill): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+
+        if ((int) $bill->business_id !== (int) $business->id) {
+            return response()->json(['message' => 'Bill not found.'], 404);
+        }
+
+        $full = $this->service->billForUser($request->user(), $bill);
+        if (! $full) {
+            return response()->json(['message' => 'Bill not found.'], 404);
+        }
+
+        $schedule = $this->service->billBillingScheduleWithPaymentStatus($full);
+
+        $ledgerRows = $full->ledgerTransactions->sortByDesc('id')->map(fn ($tx) => [
+            'id'              => $tx->id,
+            'amount'          => (float) $tx->amount,
+            'occurrence_date' => $tx->occurrence_date?->format('Y-m-d'),
+            'account_name'    => $tx->deductAccount?->account_name ?? $tx->deductAccount?->name ?? null,
+            'bank_name'       => $tx->deductAccount?->bank?->name ?? null,
+            'created_at'      => $tx->created_at?->format('Y-m-d H:i'),
+            'meta'            => $tx->meta ?? [],
+        ])->values();
+
+        $scheduleData = $schedule->map(fn ($row) => [
+            'period'                       => $row['period'],
+            'due_ymd'                      => $row['due_ymd'],
+            'amount_formatted'             => $row['amount_formatted'],
+            'amount_varies'                => $full->amount_varies_by_usage,
+            'paid'                         => $row['paid'],
+            'partially_paid'               => $row['partially_paid'],
+            'paid_total'                   => $row['paid_total'],
+            'paid_total_formatted'         => $row['paid_total_formatted'],
+            'outstanding_formatted'        => $row['outstanding_formatted'],
+            'needs_period_charge_declaration' => $row['needs_period_charge_declaration'],
+            'past_due_unpaid'              => $row['past_due_unpaid'],
+            'status_label'                 => $row['status_label'],
+            'period_charge_declared'       => $row['period_charge_declared'],
+        ])->values();
+
+        $isOverdue   = $this->service->billHasOverduePayments($full);
+        $isFullyPaid = $this->service->billIsFullyPaid($full);
+
+        return response()->json([
+            'data' => array_merge($this->format($full), [
+                'is_overdue'    => $isOverdue,
+                'is_fully_paid' => $isFullyPaid,
+                'account' => $full->deductAccount ? [
+                    'id'           => $full->deductAccount->id,
+                    'account_name' => $full->deductAccount->account_name ?? $full->deductAccount->name,
+                    'bank_name'    => $full->deductAccount->bank?->name,
+                ] : null,
+                'assignment_name' => $full->employee?->full_name
+                    ?? $full->property?->property_name
+                    ?? $full->modification?->name
+                    ?? $full->department?->name
+                    ?? $full->rental?->property_type
+                    ?? $full->warehouse?->name
+                    ?? null,
+                'schedule'       => $scheduleData,
+                'ledger'         => $ledgerRows,
+            ]),
+        ]);
+    }
+
+    public function pay(Request $request, Bill $bill): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $user     = $request->user();
+
+        if ((int) $bill->business_id !== (int) $business->id) {
+            return response()->json(['message' => 'Bill not found.'], 404);
+        }
+
+        $billModel = $this->service->billForUser($user, $bill);
+        if (! $billModel) {
+            return response()->json(['message' => 'Bill not found.'], 404);
+        }
+
+        $accountExistsRule = Rule::exists('accounts', 'id')->where(fn ($q) => $q
+            ->where('user_id', $user->id)
+            ->where('business_id', $business->id));
+
+        $validated = $request->validate([
+            'occurrence_date'   => ['required', 'date'],
+            'payment_option'    => ['required', Rule::in(['full', 'partial', 'split'])],
+            'deduct_account_id' => [
+                Rule::requiredIf(fn () => in_array((string) $request->input('payment_option'), ['full', 'partial'], true)),
+                'nullable', 'integer', $accountExistsRule,
+            ],
+            'partial_amount'    => [
+                Rule::requiredIf(fn () => (string) $request->input('payment_option') === 'partial'),
+                'nullable', 'numeric', 'min:0.01',
+            ],
+            'split_rows'        => [
+                Rule::requiredIf(fn () => (string) $request->input('payment_option') === 'split'),
+                'nullable', 'array',
+            ],
+            'split_rows.*.deduct_account_id' => ['nullable', 'integer', $accountExistsRule],
+            'split_rows.*.amount'            => ['nullable', 'numeric', 'min:0.01'],
+            'period_charge_total'            => ['nullable', 'numeric', 'min:0.01'],
+        ]);
+
+        $billModel->loadMissing('ledgerTransactions');
+
+        try {
+            $day               = Carbon::parse((string) $validated['occurrence_date'])->startOfDay();
+            $occurrenceDateYmd = $day->toDateString();
+            $option            = (string) $validated['payment_option'];
+
+            if (! $billModel->allow_split_payment && $option === 'split') {
+                throw ValidationException::withMessages(['payment_option' => 'Split payments are not enabled for this bill.']);
+            }
+
+            $declarationRounded = isset($validated['period_charge_total']) && $validated['period_charge_total'] !== ''
+                ? round((float) $validated['period_charge_total'], 2) : null;
+
+            if ($this->service->billNeedsPeriodChargeDeclaration($billModel, $day)
+                && ($declarationRounded === null || $declarationRounded < 0.01)) {
+                throw ValidationException::withMessages(['period_charge_total' => 'Enter this period\'s invoice or metered charge total before recording payment.']);
+            }
+
+            if ($billModel->amount_varies_by_usage) {
+                $lockedCap = $this->service->billPeriodChargeDeclaredTotal($billModel, $day);
+                $cap = $lockedCap ?? $declarationRounded;
+                if ($cap === null || $cap <= 0.009) {
+                    throw ValidationException::withMessages(['period_charge_total' => 'Enter this period\'s invoice or metered charge total.']);
+                }
+                $paid       = $this->service->billAmountPaidTowardScheduledDate($billModel, $day);
+                $outstanding = max(0.0, round((float) $cap - $paid, 2));
+            } else {
+                $fromSchedule = $this->service->billScheduledPeriodOutstandingAmount($billModel, $day);
+                if ($fromSchedule === null) {
+                    throw ValidationException::withMessages(['occurrence_date' => 'This billing period has no payable amount.']);
+                }
+                $outstanding = round($fromSchedule, 2);
+            }
+
+            if ($outstanding <= 0.009) {
+                throw ValidationException::withMessages(['occurrence_date' => 'This billing date is already fully paid.']);
+            }
+
+            $lines = match ($option) {
+                'full'    => [['deduct_account_id' => (int) $validated['deduct_account_id'], 'amount' => $outstanding]],
+                'partial' => [['deduct_account_id' => (int) $validated['deduct_account_id'], 'amount' => round((float) $validated['partial_amount'], 2)]],
+                'split'   => collect($validated['split_rows'] ?? [])
+                    ->map(fn ($row) => ['deduct_account_id' => (int) ($row['deduct_account_id'] ?? 0), 'amount' => round((float) ($row['amount'] ?? 0), 2)])
+                    ->filter(fn ($l) => $l['deduct_account_id'] > 0 && $l['amount'] > 0)
+                    ->values()->all(),
+                default   => [],
+            };
+
+            if ($option === 'partial' && ($lines[0]['amount'] ?? 0) > round($outstanding + 0.005, 2)) {
+                throw ValidationException::withMessages(['partial_amount' => 'Amount cannot exceed the outstanding '.number_format($outstanding, 2).'.']);
+            }
+
+            if ($option === 'split') {
+                if (count($lines) < 2) {
+                    throw ValidationException::withMessages(['split_rows' => 'Split payment needs at least two lines.']);
+                }
+                $sum = round(array_sum(array_column($lines, 'amount')), 2);
+                if ($sum > round($outstanding + 0.005, 2)) {
+                    throw ValidationException::withMessages(['split_rows' => 'Split totals cannot exceed the outstanding '.number_format($outstanding, 2).'.']);
+                }
+                if (collect($lines)->pluck('deduct_account_id')->unique()->count() < 2) {
+                    throw ValidationException::withMessages(['split_rows' => 'Pick a different debit account on each split line.']);
+                }
+            }
+
+            $created = $this->settlementService->settlePaymentLines(
+                bill: $billModel, business: $business, user: $user,
+                occurrenceDateYmd: $occurrenceDateYmd, lines: $lines,
+                paymentUiOption: $option,
+                periodChargeDeclarationFromRequest: $billModel->amount_varies_by_usage ? $declarationRounded : null,
+            );
+
+            return response()->json([
+                'message' => $created->count() > 1
+                    ? sprintf('Bill payments recorded (%d portions). Accounts updated.', $created->count())
+                    : 'Bill payment recorded and account balance updated.',
+            ]);
+        } catch (ValidationException $e) {
+            return response()->json(['message' => 'Validation failed.', 'errors' => $e->errors()], 422);
+        }
+    }
+
+    public function destroy(Request $request, Bill $bill): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+
+        if ((int) $bill->business_id !== (int) $business->id) {
+            return response()->json(['message' => 'Bill not found.'], 404);
+        }
+
+        $deleted = $this->service->deleteForUser($request->user(), $bill);
+
+        if (! $deleted) {
+            return response()->json(['message' => 'Unable to delete this bill.'], 403);
+        }
+
+        return response()->json(['message' => 'Bill deleted successfully.']);
     }
 
     private function format(Bill $bill): array

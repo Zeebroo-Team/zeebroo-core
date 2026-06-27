@@ -102,14 +102,55 @@ class PosSettingsApiController extends Controller
         }
     }
 
+    public function features(Request $request): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $all      = ['account_management','bill_management','human_resources','point_of_sale','product_management','service_management','social_media_campaign','stock_management'];
+        $stored   = $business->getSetting('business.features') ?? [];
+        $enabled  = array_values(array_filter($all, fn ($k) => ! empty($stored[$k])));
+        if (! in_array('account_management', $enabled, true)) {
+            array_unshift($enabled, 'account_management');
+        }
+        return response()->json(['data' => $enabled]);
+    }
+
+    public function updateFeatures(Request $request): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $all      = ['account_management','bill_management','human_resources','point_of_sale','product_management','service_management','social_media_campaign','stock_management'];
+        $validated = $request->validate([
+            'features'   => ['required', 'array'],
+            'features.*' => ['boolean'],
+        ]);
+        $input   = $validated['features'];
+        $stored  = array_fill_keys($all, false);
+        foreach ($all as $k) {
+            $stored[$k] = (bool) ($input[$k] ?? false);
+        }
+        $stored['account_management'] = true;
+        $business->setSetting('business.features', $stored);
+        $enabled = array_values(array_filter($all, fn ($k) => $stored[$k]));
+        return response()->json(['data' => $enabled]);
+    }
+
     public function update(Request $request): JsonResponse
     {
         $business = $this->businessOrAbort($request);
 
         $validated = $request->validate([
-            'default_deposit_account_id' => ['nullable', 'integer', 'min:1'],
-            'discount_field_enabled' => ['nullable', 'boolean'],
-            'display_theme' => ['nullable', 'string', 'in:light,dark'],
+            'default_deposit_account_id'  => ['nullable', 'integer', 'min:1'],
+            'discount_field_enabled'      => ['nullable', 'boolean'],
+            'checkout_modal_enabled'      => ['nullable', 'boolean'],
+            'display_theme'               => ['nullable', 'string', 'in:light,dark,inherit'],
+            'receipt_header'              => ['nullable', 'string', 'max:200'],
+            'receipt_footer'              => ['nullable', 'string', 'max:200'],
+            'show_business_name'          => ['nullable', 'boolean'],
+            'show_business_address'       => ['nullable', 'boolean'],
+            'show_account_info'           => ['nullable', 'boolean'],
+            'payment_settlement_mode'     => ['nullable', 'string', 'in:immediate,end_of_day'],
+            'featured_products_limit'     => ['nullable', 'integer', 'min:0', 'max:200'],
+            'featured_categories_limit'   => ['nullable', 'integer', 'min:0', 'max:200'],
+            'show_service_bound_products' => ['nullable', 'boolean'],
         ]);
 
         $this->posSettings->saveForBusiness($business, $validated);

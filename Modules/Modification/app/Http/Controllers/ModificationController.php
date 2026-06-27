@@ -190,6 +190,20 @@ class ModificationController extends Controller
         ]);
     }
 
+    public function destroy(Request $request, Modification $modification): RedirectResponse
+    {
+        $business = Business::currentForNavbar($request->user());
+        abort_if($business === null, 403);
+        abort_unless(Business::canAccess($request->user(), $business), 403);
+        abort_unless((int) $modification->business_id === (int) $business->id, 404);
+
+        $modification->delete();
+
+        return redirect()
+            ->route('modification.index')
+            ->with('status', __('Modification deleted.'));
+    }
+
     public function store(Request $request): RedirectResponse
     {
         $business = Business::currentForNavbar($request->user());

@@ -543,7 +543,16 @@
                     <span><strong>Unpaid billing due</strong> At least one scheduled bill date on or before today has no ledger payment recorded for that date. Log the payment so your schedule stays accurate.</span>
                 </div>
             @endif
-            @if($nextPaymentInsight)
+            @if(!empty($billIsFullyPaid))
+                <div style="display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:var(--rs-radius);border:1px solid color-mix(in srgb,#22c55e 38%,var(--border));background:color-mix(in srgb,#22c55e 8%,transparent);" role="status">
+                    <i class="fa fa-circle-check" style="color:#4ade80;flex-shrink:0;" aria-hidden="true"></i>
+                    <span style="font-size:13px;font-weight:600;color:var(--text);">
+                        @if($bill->isOneTime()) All payments recorded — this one-time bill is fully settled.
+                        @else All scheduled payments have been recorded for this billing agreement.
+                        @endif
+                    </span>
+                </div>
+            @elseif($nextPaymentInsight)
                 <section @class([
                     'bill-show__countdown',
                     'bill-show__countdown--overdue' => ! empty($billPaymentOverdue),
@@ -608,23 +617,33 @@
                     </div>
                 </div>
                 <div class="bill-show__mini-stats">
-                    @if($bill->remind_before_days !== null && (int) $bill->remind_before_days > 0)
+                    @if(!empty($billIsFullyPaid))
                         <div class="bill-show__mini">
-                            <span class="bill-show__mini-ico" aria-hidden="true"><i class="fa fa-bell"></i></span>
+                            <span class="bill-show__mini-ico" aria-hidden="true" style="background:color-mix(in srgb,#22c55e 12%,transparent);color:#4ade80;"><i class="fa fa-circle-check"></i></span>
                             <div>
-                                <span class="bill-show__mini-txt">{{ (int) $bill->remind_before_days }} day{{ (int) $bill->remind_before_days === 1 ? '' : 's' }} ahead</span>
-                                <span class="bill-show__mini-sub">Reminder before period end</span>
+                                <span class="bill-show__mini-txt">Fully paid</span>
+                                <span class="bill-show__mini-sub">No pending payments</span>
                             </div>
                         </div>
-                    @endif
-                    @if($bill->remind_before_days === null || (int) $bill->remind_before_days <= 0)
-                        <div class="bill-show__mini">
-                            <span class="bill-show__mini-ico" aria-hidden="true"><i class="fa fa-circle-info"></i></span>
-                            <div>
-                                <span class="bill-show__mini-txt">Open <strong>Transaction details</strong> for billing schedule, ledger, and recording payments.</span>
-                                <span class="bill-show__mini-sub">Quick summary</span>
+                    @else
+                        @if($bill->remind_before_days !== null && (int) $bill->remind_before_days > 0)
+                            <div class="bill-show__mini">
+                                <span class="bill-show__mini-ico" aria-hidden="true"><i class="fa fa-bell"></i></span>
+                                <div>
+                                    <span class="bill-show__mini-txt">{{ (int) $bill->remind_before_days }} day{{ (int) $bill->remind_before_days === 1 ? '' : 's' }} ahead</span>
+                                    <span class="bill-show__mini-sub">Reminder before period end</span>
+                                </div>
                             </div>
-                        </div>
+                        @endif
+                        @if($bill->remind_before_days === null || (int) $bill->remind_before_days <= 0)
+                            <div class="bill-show__mini">
+                                <span class="bill-show__mini-ico" aria-hidden="true"><i class="fa fa-circle-info"></i></span>
+                                <div>
+                                    <span class="bill-show__mini-txt">Open <strong>Transaction details</strong> for billing schedule, ledger, and recording payments.</span>
+                                    <span class="bill-show__mini-sub">Quick summary</span>
+                                </div>
+                            </div>
+                        @endif
                     @endif
                 </div>
             </div>

@@ -23,16 +23,17 @@ class SaleService
         private readonly SaleStockConsumptionService $stockConsumption,
         private readonly SalePaymentSettlementService $payments,
         private readonly ProductDiscountService $discountService,
+        private readonly PosSettingsService $posSettings,
     ) {
     }
 
     /**
      * @return Collection<int, Sale>
      */
-    public function listForBusiness(Business $business, ?string $search = null): Collection
+    public function listForBusiness(Business $business, ?string $search = null, ?int $limit = null): Collection
     {
         $query = $business->sales()
-            ->with(['user', 'creditAccount', 'branch'])
+            ->with(['user', 'creditAccount', 'branch', 'customer'])
             ->withCount('items');
 
         $term = trim((string) $search);
@@ -44,15 +45,55 @@ class SaleService
             });
         }
 
-        return $query
-            ->orderByDesc('sold_at')
-            ->orderByDesc('id')
-            ->get();
+        $query->orderByDesc('sold_at')->orderByDesc('id');
+
+        if ($limit !== null) {
+            $query->limit($limit);
+        }
+
+        return $query->get();
     }
 
     public function businessHasSales(Business $business): bool
     {
         return $business->sales()->exists();
+    }
+
+    /**
+     * Daily revenue/count buckets for a chart, always based on completed sales.
+     *
+     * @param  array{channel?: string, date_from?: string, date_to?: string}  $filters
+     * @return list<array{date: string, count: int, total: float}>
+     */
+    public function dailyChartForBusiness(Business $business, array $filters = []): array
+    {
+        $query = $business->sales()->where('status', Sale::STATUS_COMPLETED);
+
+        if (filled($filters['date_from'] ?? null)) {
+            $query->whereDate('sold_at', '>=', $filters['date_from']);
+        }
+        if (filled($filters['date_to'] ?? null)) {
+            $query->whereDate('sold_at', '<=', $filters['date_to']);
+        }
+
+        $channel = $filters['channel'] ?? 'all';
+        if ($channel === Sale::CHANNEL_RETAIL) {
+            $query->where('channel', Sale::CHANNEL_RETAIL);
+        } elseif ($channel === Sale::CHANNEL_ONLINE) {
+            $query->where('channel', Sale::CHANNEL_ONLINE);
+        }
+
+        return $query
+            ->selectRaw('DATE(sold_at) as date, COUNT(*) as count, SUM(total) as total')
+            ->groupBy('date')
+            ->orderBy('date')
+            ->get()
+            ->map(fn ($r) => [
+                'date'  => (string) $r->date,
+                'count' => (int)    $r->count,
+                'total' => round((float) $r->total, 2),
+            ])
+            ->all();
     }
 
     /**
@@ -190,7 +231,12 @@ class SaleService
         }
 
         $paymentMethod = $this->normalizePaymentMethod($paymentMethod);
-        $channel = $this->normalizeChannel($channel);
+        $channel       = $this->normalizeChannel($channel);
+
+        // Auto-resolve deposit account from POS settings when none provided
+        if ($creditAccountId === null && in_array($paymentMethod, [Sale::PAYMENT_CASH, Sale::PAYMENT_CARD], true)) {
+            $creditAccountId = $this->posSettings->forBusiness($business)['default_deposit_account_id'];
+        }
 
         // Load active discounts for all products in the cart in one query
         $cartProductIds = array_map(fn ($l) => (int) $l['product']->id, $productLines);
@@ -476,16 +522,23 @@ class SaleService
 
             $layerId = $row['product_stock_layer_id'];
             if ($layerId !== null) {
-                $layerValid = ProductStockLayer::query()
+                $layer = ProductStockLayer::query()
                     ->whereKey($layerId)
                     ->where('product_id', $product->id)
                     ->where('business_id', $business->id)
-                    ->where('quantity_remaining', '>', 0)
-                    ->exists();
-                if (! $layerValid) {
+                    ->first(['id', 'quantity_remaining']);
+
+                if ($layer === null) {
+                    // Layer doesn't belong to this product/business — hard error
                     throw ValidationException::withMessages([
-                        'items' => 'One or more stock batches are invalid or out of stock for '.$product->name.'.',
+                        'items' => 'One or more stock batches are invalid for '.$product->name.'.',
                     ]);
+                }
+
+                if ((float) $layer->quantity_remaining <= 0) {
+                    // Layer is depleted — fall back to FIFO so a stale client layer ID
+                    // doesn't block checkout when other batches still have stock
+                    $layerId = null;
                 }
             }
 

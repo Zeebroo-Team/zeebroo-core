@@ -53,10 +53,13 @@ class MenuItemController extends Controller
         if ($business instanceof RedirectResponse) return $business;
         abort_unless((int) $menuItem->business_id === (int) $business->id, 404);
 
+        $activeTab = in_array($request->query('tab'), ['overview', 'ingredients']) ? $request->query('tab') : 'overview';
+
         return view('restaurant::menu.items.show', [
-            'business' => $business,
-            'item'     => $menuItem->load(['category', 'imageFile']),
-            'currency' => (string) (get_settings('business.currency', '', $business) ?: ''),
+            'business'  => $business,
+            'item'      => $menuItem->load(['categories', 'imageFile', 'ingredients']),
+            'currency'  => (string) (get_settings('business.currency', '', $business) ?: ''),
+            'activeTab' => $activeTab,
         ]);
     }
 
@@ -68,7 +71,7 @@ class MenuItemController extends Controller
 
         return view('restaurant::menu.items.edit', [
             'business'   => $business,
-            'item'       => $menuItem->load(['category', 'imageFile']),
+            'item'       => $menuItem->load(['categories', 'imageFile', 'ingredients']),
             'categories' => $this->menu->categoriesForBusiness($business),
             'currency'   => (string) (get_settings('business.currency', '', $business) ?: ''),
         ]);
@@ -80,7 +83,7 @@ class MenuItemController extends Controller
         if ($business instanceof RedirectResponse) return $business;
         abort_unless((int) $menuItem->business_id === (int) $business->id, 404);
 
-        $this->menu->updateItem($menuItem, $this->validated($request));
+        $this->menu->updateItem($menuItem, $this->validated($request), $business);
 
         return redirect()->route('restaurant.menu.items.show', $menuItem)->with('status', 'Menu item updated.');
     }
@@ -99,15 +102,18 @@ class MenuItemController extends Controller
     private function validated(Request $request): array
     {
         return $request->validate([
-            'menu_category_id'    => ['nullable', 'integer', 'exists:restaurant_menu_categories,id'],
-            'name'                => ['required', 'string', 'max:255'],
-            'description'         => ['nullable', 'string', 'max:3000'],
-            'price'               => ['required', 'numeric', 'min:0'],
-            'is_available'        => ['nullable', 'boolean'],
-            'prep_time_minutes'   => ['nullable', 'integer', 'min:1', 'max:9999'],
-            'dietary_tags'        => ['nullable', 'array'],
-            'dietary_tags.*'      => ['string', 'in:vegetarian,vegan,gluten_free,halal,spicy,nut_free,dairy_free'],
-            'file_manager_file_id'=> ['nullable', 'integer', 'exists:file_manager_files,id'],
+            'name'                  => ['required', 'string', 'max:255'],
+            'description'           => ['nullable', 'string', 'max:3000'],
+            'price'                 => ['required', 'numeric', 'min:0'],
+            'is_available'          => ['nullable', 'boolean'],
+            'prep_time_minutes'     => ['nullable', 'integer', 'min:1', 'max:9999'],
+            'dietary_tags'          => ['nullable', 'array'],
+            'dietary_tags.*'        => ['string', 'in:vegetarian,vegan,gluten_free,halal,spicy,nut_free,dairy_free'],
+            'file_manager_file_id'  => ['nullable', 'integer', 'exists:file_manager_files,id'],
+            'menu_category_ids'     => ['nullable', 'array'],
+            'menu_category_ids.*'   => ['integer', 'exists:restaurant_menu_categories,id'],
+            'new_category_names'    => ['nullable', 'array'],
+            'new_category_names.*'  => ['string', 'max:100'],
         ]);
     }
 }

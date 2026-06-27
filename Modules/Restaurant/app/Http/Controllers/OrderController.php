@@ -57,10 +57,18 @@ class OrderController extends Controller
         $business = $this->requireBusiness($request);
         if ($business instanceof RedirectResponse) return $business;
 
+        $products = \Modules\Product\Models\Product::where('business_id', $business->id)
+            ->where('is_active', true)
+            ->where('is_bundle', false)
+            ->with(['imageFile', 'categories'])
+            ->orderBy('name')
+            ->get();
+
         return view('restaurant::orders.create', [
             'business'   => $business,
             'tables'     => RestaurantTable::where('business_id', $business->id)->where('status', '!=', 'inactive')->orderBy('name')->get(),
             'categories' => $this->menu->categoriesForBusiness($business)->load(['menuItems', 'menuItems.imageFile']),
+            'products'   => $products,
             'accounts'   => Account::where('business_id', $business->id)->orderBy('account_name')->get(['id', 'account_name', 'category']),
             'currency'   => (string) (get_settings('business.currency', '', $business) ?: ''),
         ]);
@@ -79,6 +87,7 @@ class OrderController extends Controller
             'notes'          => ['nullable', 'string', 'max:1000'],
             'items'          => ['required', 'array', 'min:1'],
             'items.*.menu_item_id' => ['nullable', 'integer'],
+            'items.*.product_id'   => ['nullable', 'integer'],
             'items.*.name'         => ['required', 'string', 'max:255'],
             'items.*.quantity'     => ['required', 'integer', 'min:1'],
             'items.*.unit_price'   => ['required', 'numeric', 'min:0'],
@@ -203,7 +212,7 @@ class OrderController extends Controller
 
         $data = $request->validate([
             'payment_method'   => ['required', 'string', 'in:cash,card,transfer'],
-            'credit_account_id'=> ['required', 'integer', 'exists:accounts,id'],
+            'credit_account_id'=> ['nullable', 'integer', 'exists:accounts,id'],
             'amount_tendered'  => ['nullable', 'numeric', 'min:0'],
         ]);
 
@@ -269,7 +278,7 @@ class OrderController extends Controller
             }
 
             // Settle payment: updates account balance + creates LedgerTransaction
-            $this->payments->settle($sale, $business, $user, (int) $data['credit_account_id'], $orderTotal, $paymentMethod);
+            $this->payments->settle($sale, $business, $user, $data['credit_account_id'] ? (int) $data['credit_account_id'] : null, $orderTotal, $paymentMethod);
         });
 
         return response()->json(['success' => true]);

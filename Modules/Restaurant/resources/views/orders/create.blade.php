@@ -263,7 +263,9 @@
 @php
   $activeTables   = $tables->where('status', '!=', 'inactive');
   $tblStatusColor = ['available' => '#22c55e', 'occupied' => '#ef4444', 'reserved' => '#f59e0b'];
-  $totalItems     = $categories->sum(fn($c) => $c->menuItems->count());
+  $totalMenuItems = $categories->sum(fn($c) => $c->menuItems->count());
+  $totalItems     = $totalMenuItems + $products->count();
+  $productGroups  = $products->groupBy(fn($p) => $p->categories->first()?->name ?? 'Products');
 
   /* Build JS session data for each tab */
   $sessionsPhp = [];
@@ -316,7 +318,7 @@
   </div>
   <div class="rpos-search">
     <input type="search" id="menuSearch"
-           placeholder="Search menu items…"
+           placeholder="Search by name or SKU…"
            oninput="filterMenu(this.value)" autocomplete="off">
   </div>
 
@@ -424,10 +426,10 @@
 </div>{{-- /rpos-tabs-wrap --}}
 </div>{{-- /rpos-sticky --}}
 
-@if($categories->isEmpty() || $categories->every(fn($c) => $c->menuItems->isEmpty()))
+@if($totalItems === 0)
   <div style="text-align:center;padding:60px 20px;border-radius:14px;border:2px dashed var(--border);">
     <i class="fa fa-utensils" style="font-size:38px;color:var(--muted);opacity:.3;display:block;margin-bottom:14px;"></i>
-    <h3 style="margin:0 0 6px;font-size:15px;font-weight:700;">No menu items yet</h3>
+    <h3 style="margin:0 0 6px;font-size:15px;font-weight:700;">No menu items or products yet</h3>
     <p style="margin:0 0 14px;font-size:13px;color:var(--muted);">Add items to your menu first.</p>
     <a href="{{ route('restaurant.menu.items.index') }}" class="linkbtn"
        style="padding:8px 20px;font-size:13px;text-decoration:none;">
@@ -467,14 +469,37 @@
                 onclick="filterCat('all')">
           All <span class="rpos-cnt">{{ $totalItems }}</span>
         </button>
-        @foreach($categories as $cat)
-          @if($cat->menuItems->isNotEmpty())
-            <button type="button" class="rpos-cat-btn" id="cat_{{ $cat->id }}"
-                    onclick="filterCat({{ $cat->id }})">
-              {{ $cat->name }}<span class="rpos-cnt">{{ $cat->menuItems->count() }}</span>
-            </button>
+        @if($totalMenuItems > 0)
+          <button type="button" class="rpos-cat-btn" id="cat_menu"
+                  onclick="filterSource('menu')"
+                  style="border-color:color-mix(in srgb,var(--primary) 35%,var(--border));">
+            <i class="fa fa-utensils" style="font-size:9px;"></i> Menu<span class="rpos-cnt">{{ $totalMenuItems }}</span>
+          </button>
+          @foreach($categories as $cat)
+            @if($cat->menuItems->isNotEmpty())
+              <button type="button" class="rpos-cat-btn" id="cat_mc_{{ $cat->id }}"
+                      onclick="filterCat('mc_{{ $cat->id }}')">
+                {{ $cat->name }}<span class="rpos-cnt">{{ $cat->menuItems->count() }}</span>
+              </button>
+            @endif
+          @endforeach
+        @endif
+        @if($products->isNotEmpty())
+          @if($totalMenuItems > 0)
+            <span style="width:1px;background:var(--border);margin:0 2px;align-self:stretch;"></span>
           @endif
-        @endforeach
+          <button type="button" class="rpos-cat-btn" id="cat_products"
+                  onclick="filterSource('product')"
+                  style="border-color:color-mix(in srgb,#8b5cf6 35%,var(--border));color:#8b5cf6;">
+            <i class="fa fa-box" style="font-size:9px;"></i> Products<span class="rpos-cnt">{{ $products->count() }}</span>
+          </button>
+          @foreach($productGroups as $grpName => $grpProducts)
+            <button type="button" class="rpos-cat-btn" id="cat_pg_{{ \Illuminate\Support\Str::slug($grpName) }}"
+                    onclick="filterCat('pg_{{ \Illuminate\Support\Str::slug($grpName) }}')">
+              {{ $grpName }}<span class="rpos-cnt">{{ $grpProducts->count() }}</span>
+            </button>
+          @endforeach
+        @endif
       </div>
 
       <div id="noResults"
@@ -486,20 +511,22 @@
 
       {{-- Each category gets its own inner grid — isolates row heights between sections --}}
       <div id="menuGrid" style="overflow-y:auto;flex:1;min-height:0;display:flex;flex-direction:column;gap:16px;padding-right:3px;padding-bottom:8px;">
+
+        {{-- ── Menu item sections ── --}}
         @foreach($categories as $cat)
           @if($cat->menuItems->isNotEmpty())
-            <div class="cat-section" data-cat="{{ $cat->id }}">
+            <div class="cat-section" data-cat="mc_{{ $cat->id }}" data-source="menu">
               <p class="rpos-sec-head">{{ $cat->name }}</p>
               <div class="pos-products" style="overflow:visible;">
                 @foreach($cat->menuItems as $mi)
                   <button type="button"
                           class="pos-product cat-item{{ !$mi->is_available ? ' is-disabled' : '' }}"
-                          data-cat="{{ $cat->id }}"
+                          data-cat="mc_{{ $cat->id }}"
+                          data-source="menu"
                           data-name="{{ strtolower($mi->name) }}"
                           {{ !$mi->is_available ? 'disabled' : '' }}
-                          onclick="addMenuItem({{ $mi->id }},'{{ addslashes($mi->name) }}',{{ $mi->price }})">
+                          onclick="addItem({{ $mi->id }},'{{ addslashes($mi->name) }}',{{ $mi->price }},'mi')">
 
-                    {{-- Thumbnail --}}
                     <div class="pos-product__thumb">
                       @if($mi->imageFile)
                         <img src="{{ $mi->imageFile->publicUrl() }}" alt="{{ $mi->name }}"
@@ -517,7 +544,6 @@
                       @endif
                     </div>
 
-                    {{-- Body --}}
                     <div class="pos-product__body">
                       <div class="pos-product__name">{{ $mi->name }}</div>
                       @if($mi->dietary_tags)
@@ -537,6 +563,53 @@
             </div>
           @endif
         @endforeach
+
+        {{-- ── Product sections ── --}}
+        @foreach($productGroups as $grpName => $grpProducts)
+          @php $grpSlug = \Illuminate\Support\Str::slug($grpName); @endphp
+          <div class="cat-section" data-cat="pg_{{ $grpSlug }}" data-source="product">
+            <p class="rpos-sec-head" style="color:#8b5cf6;">
+              <i class="fa fa-box" style="font-size:9px;opacity:.7;"></i> {{ $grpName }}
+            </p>
+            <div class="pos-products" style="overflow:visible;">
+              @foreach($grpProducts as $prod)
+                <button type="button"
+                        class="pos-product cat-item"
+                        data-cat="pg_{{ $grpSlug }}"
+                        data-source="product"
+                        data-name="{{ strtolower($prod->name) }}"
+                        data-sku="{{ strtolower($prod->sku ?? '') }}"
+                        onclick="addItem({{ $prod->id }},'{{ addslashes($prod->name) }}',{{ $prod->unit_price ?? 0 }},'pr')">
+
+                  <div class="pos-product__thumb"
+                       style="background:linear-gradient(145deg,color-mix(in srgb,#8b5cf6 9%,var(--border)),color-mix(in srgb,#8b5cf6 3%,var(--bg)));">
+                    @if($prod->imageFile)
+                      <img src="{{ $prod->imageFile->publicUrl() }}" alt="{{ $prod->name }}"
+                           style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;">
+                    @else
+                      <i class="fa fa-box pos-product__thumb-icon" style="color:color-mix(in srgb,#8b5cf6 35%,var(--muted));"></i>
+                    @endif
+                  </div>
+
+                  <div class="pos-product__body">
+                    <div class="pos-product__name">{{ $prod->name }}</div>
+                    @if($prod->sku)
+                      <div class="pos-product__tags">{{ $prod->sku }}</div>
+                    @endif
+                    <div class="pos-product__footer">
+                      <span class="pos-product__price">{{ $currency }}{{ number_format((float)($prod->unit_price ?? 0),2) }}</span>
+                      <span class="pos-product__add" style="background:color-mix(in srgb,#8b5cf6 12%,transparent);color:#8b5cf6;">
+                        <i class="fa fa-plus"></i>
+                      </span>
+                    </div>
+                  </div>
+
+                </button>
+              @endforeach
+            </div>
+          </div>
+        @endforeach
+
       </div>
 
     </div>
@@ -1043,13 +1116,32 @@
   window.filterCat = function (catId) {
     currentCatId = catId;
     document.querySelectorAll('.rpos-cat-btn').forEach(function (b) { b.classList.remove('active'); });
-    document.getElementById('cat_' + catId).classList.add('active');
+    var activeBtn = document.getElementById('cat_' + catId);
+    if (activeBtn) activeBtn.classList.add('active');
 
     var isAll = catId === 'all';
     document.querySelectorAll('#menuGrid .cat-section').forEach(function (sec) {
-      var match = isAll || sec.getAttribute('data-cat') == catId;
+      var match = isAll || sec.getAttribute('data-cat') === catId;
       sec.style.display = match ? '' : 'none';
-      /* restore all items inside visible sections */
+      if (match) {
+        sec.querySelectorAll('.cat-item').forEach(function (el) { el.style.display = ''; });
+      }
+    });
+    var el = document.getElementById('menuSearch');
+    if (el) el.value = '';
+    document.getElementById('noResults').style.display = 'none';
+  };
+
+  /* Filter by source type: 'menu' or 'product' */
+  window.filterSource = function (source) {
+    currentCatId = source;
+    document.querySelectorAll('.rpos-cat-btn').forEach(function (b) { b.classList.remove('active'); });
+    var activeBtn = document.getElementById('cat_' + (source === 'menu' ? 'menu' : 'products'));
+    if (activeBtn) activeBtn.classList.add('active');
+
+    document.querySelectorAll('#menuGrid .cat-section').forEach(function (sec) {
+      var match = sec.getAttribute('data-source') === source;
+      sec.style.display = match ? '' : 'none';
       if (match) {
         sec.querySelectorAll('.cat-item').forEach(function (el) { el.style.display = ''; });
       }
@@ -1061,7 +1153,14 @@
 
   window.filterMenu = function (q) {
     var term = q.trim().toLowerCase();
-    if (!term) { filterCat(currentCatId); return; }
+    if (!term) {
+      if (currentCatId === 'menu' || currentCatId === 'product') {
+        filterSource(currentCatId);
+      } else {
+        filterCat(currentCatId);
+      }
+      return;
+    }
 
     document.querySelectorAll('.rpos-cat-btn').forEach(function (b) { b.classList.remove('active'); });
     document.getElementById('cat_all').classList.add('active');
@@ -1070,7 +1169,8 @@
     document.querySelectorAll('#menuGrid .cat-section').forEach(function (sec) {
       var hasMatch = false;
       sec.querySelectorAll('.cat-item').forEach(function (el) {
-        var match = el.dataset.name.indexOf(term) !== -1;
+        var match = el.dataset.name.indexOf(term) !== -1
+                 || (el.dataset.sku && el.dataset.sku.indexOf(term) !== -1);
         el.style.display = match ? '' : 'none';
         if (match) { hasMatch = true; any = true; }
       });
@@ -1095,23 +1195,23 @@
     try { _bellAudio.currentTime = 0; _bellAudio.play(); } catch(e) {}
   }
 
-  window.addMenuItem = function (id, name, price) {
+  /* type: 'mi' = menu item, 'pr' = product */
+  window.addItem = function (id, name, price, type) {
     if (!activeId) return;
+    var t    = type || 'mi';
     var cart = sessions[activeId].cart;
 
-    /* Find an existing NEW (not yet ordered) entry for this product */
+    /* Find an existing NEW (not yet ordered) entry of the same type + id */
     var newKey = Object.keys(cart).find(function (k) {
-      return cart[k].id == id && cart[k].status !== 'ordered';
+      return cart[k].id == id && cart[k].type === t && cart[k].status !== 'ordered';
     });
 
     if (newKey) {
-      /* Increment the existing new item */
       cart[newKey].qty++;
     } else {
-      /* Create a fresh entry — use unique key so it never merges with an ordered entry */
-      var baseKey = 'mi_' + id;
+      var baseKey = t + '_' + id;
       var key = cart[baseKey] ? baseKey + '_' + Date.now() : baseKey;
-      cart[key] = { id: id, name: name, price: parseFloat(price), qty: 1, notes: '', status: 'new' };
+      cart[key] = { id: id, name: name, price: parseFloat(price), qty: 1, notes: '', status: 'new', type: t };
     }
 
     beep();
@@ -1119,6 +1219,9 @@
     updateBadge(activeId);
     persistSessions();
   };
+
+  /* Backward-compat alias */
+  window.addMenuItem = function (id, name, price) { window.addItem(id, name, price, 'mi'); };
 
   window.changeQty = function (key, delta) {
     if (!activeId) return;
@@ -1187,14 +1290,33 @@
 
   function buildCartRow(key, item) {
     var isOrdered  = item.status === 'ordered';
-    var ks         = isOrdered ? (item.kitchenStatus || 'pending') : null;
-    var km         = ks ? (kitchenMeta[ks] || kitchenMeta.pending) : null;
-    var accentColor = km ? km.color : 'var(--primary)';
+    var isProduct  = item.type === 'pr';
 
-    /* Single next-status action button */
+    /* Products skip the kitchen chain — treat as already-served colour once ordered */
+    var ks = isOrdered
+      ? (isProduct ? item.kitchenStatus || 'served' : (item.kitchenStatus || 'pending'))
+      : null;
+    var km = (ks && !isProduct) ? (kitchenMeta[ks] || kitchenMeta.pending) : null;
+    var servedColor = '#06b6d4';
+    var accentColor = isOrdered && isProduct
+      ? (item.kitchenStatus === 'served' ? servedColor : '#8b5cf6')
+      : (km ? km.color : (isProduct ? '#8b5cf6' : 'var(--primary)'));
+
+    /* Action button */
     var actionHtml = '';
     if (isOrdered && item.dbId && item.orderId) {
-      if (km && km.next) {
+      if (isProduct) {
+        /* Products: single direct "Serve" button, or done state */
+        if (item.kitchenStatus === 'served') {
+          actionHtml = '<span class="pos-cart-row__done">' +
+            '<i class="fa fa-circle-check" style="font-size:10px;"></i> Served</span>';
+        } else {
+          actionHtml = '<button type="button" class="pos-cart-row__action" ' +
+            'style="background:' + servedColor + ';" ' +
+            'onclick="updateKitchenStatus(\'' + key + '\',' + item.orderId + ',' + item.dbId + ',\'served\')">' +
+            '<i class="fa fa-circle-check" style="font-size:9px;"></i> Serve</button>';
+        }
+      } else if (km && km.next) {
         var nm = kitchenMeta[km.next];
         actionHtml = '<button type="button" class="pos-cart-row__action" ' +
           'style="background:' + nm.color + ';" ' +
@@ -1207,11 +1329,20 @@
       }
     }
 
-    /* Badge label */
+    /* Badge */
     var badgeHtml = '';
-    if (isOrdered && km) {
+    if (isOrdered && isProduct) {
+      var prodBadgeColor = item.kitchenStatus === 'served' ? servedColor : '#8b5cf6';
+      var prodBadgeIcon  = item.kitchenStatus === 'served' ? 'fa-circle-check' : 'fa-box';
+      var prodBadgeLabel = item.kitchenStatus === 'served' ? 'Served' : 'Product';
+      badgeHtml = '<span class="pos-cart-row__badge" style="background:' + prodBadgeColor + ';">' +
+        '<i class="fa ' + prodBadgeIcon + '" style="font-size:7px;"></i> ' + prodBadgeLabel + '</span>';
+    } else if (isOrdered && km) {
       badgeHtml = '<span class="pos-cart-row__badge" style="background:' + km.color + ';">' +
         '<i class="fa ' + km.icon + '" style="font-size:7px;"></i> ' + km.label + '</span>';
+    } else if (isProduct) {
+      badgeHtml = '<span class="pos-cart-row__badge" style="background:#8b5cf6;">' +
+        '<i class="fa fa-box" style="font-size:7px;"></i> Product</span>';
     } else {
       badgeHtml = '<span class="pos-cart-row__badge" style="background:var(--primary);">' +
         '<i class="fa fa-circle-plus" style="font-size:7px;"></i> New</span>';
@@ -1219,9 +1350,9 @@
 
     var row = document.createElement('div');
     row.className = 'pos-cart-row';
-    if (km) {
-      row.style.background   = 'color-mix(in srgb,' + accentColor + ' 7%,var(--bg))';
-      row.style.borderColor  = 'color-mix(in srgb,' + accentColor + ' 30%,var(--border))';
+    if (isOrdered) {
+      row.style.background  = 'color-mix(in srgb,' + accentColor + ' 7%,var(--bg))';
+      row.style.borderColor = 'color-mix(in srgb,' + accentColor + ' 30%,var(--border))';
     }
     row.innerHTML =
       /* Accent strip */
@@ -1323,8 +1454,8 @@
     Object.keys(cart).forEach(function (key) {
       var item = cart[key];
       if (item.status === 'ordered') return;
-      var mid  = item.id || '';          /* always use the stored numeric id */
-      addH(form, 'items[' + idx + '][menu_item_id]', mid);
+      var isProduct = item.type === 'pr';
+      addH(form, 'items[' + idx + '][' + (isProduct ? 'product_id' : 'menu_item_id') + ']', item.id || '');
       addH(form, 'items[' + idx + '][name]',         item.name);
       addH(form, 'items[' + idx + '][quantity]',     item.qty);
       addH(form, 'items[' + idx + '][unit_price]',   item.price.toFixed(2));
@@ -1556,7 +1687,17 @@
           amount_tendered:   amountTendered,
         }),
       })
-      .then(function (r) { return r.json(); })
+      .then(function (r) {
+        return r.json().then(function (data) {
+          if (!r.ok || !data.success) {
+            var msg = (data.errors ? Object.values(data.errors).flat().join(' ') : null)
+                   || data.message
+                   || 'Payment failed. Please check your settings and try again.';
+            throw new Error(msg);
+          }
+          return data;
+        });
+      })
       .then(function () {
         if (++done === _pmOrderIds.length && !failed) {
           closePaymentModal();
@@ -1578,11 +1719,11 @@
           }
         }
       })
-      .catch(function () {
+      .catch(function (err) {
         failed = true;
         confirmBtn.disabled = false;
         confirmBtn.innerHTML = '<i class="fa fa-circle-check" style="font-size:16px;"></i> Confirm Payment';
-        showToast('Network error — please try again.', 'error');
+        showToast(err.message || 'Network error — please try again.', 'error');
       });
     });
   };

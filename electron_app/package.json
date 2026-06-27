@@ -1,0 +1,83 @@
+{
+  "name": "zeebroo-pos-desktop",
+  "version": "2.7.0",
+  "description": "Zeebroo POS Desktop — Electron ribbon interface",
+  "author": {
+    "name": "Zeebroo",
+    "email": "support@zeebroo.com"
+  },
+  "homepage": "https://zeebroo.com",
+  "main": "main.js",
+  "scripts": {
+    "start": "env -u ELECTRON_RUN_AS_NODE electron .",
+    "prebuild": "node scripts/setApiUrl.js",
+    "build": "electron-builder",
+    "build:mac": "electron-builder --mac",
+    "build:win": "electron-builder --win",
+    "build:linux": "electron-builder --linux"
+  },
+  "dependencies": {
+    "electron-store": "^8.1.0",
+    "playwright-core": "^1.61.0"
+  },
+  "devDependencies": {
+    "electron": "28.3.3",
+    "electron-builder": "^24.0.0"
+  },
+  "build": {
+    "appId": "com.zeebroo.pos-desktop",
+    "productName": "Zeebroo POS",
+    "copyright": "Copyright © 2025 Zeebroo",
+    "afterPack": "./scripts/afterPack.js",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build-assets"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**/*",
+      "node_modules/**/*",
+      "!node_modules/playwright-core/.local-browsers/**/*",
+      "!node_modules/playwright-core/bin/**/*",
+      "!**/*.map",
+      "!**/*.d.ts"
+    ],
+    "mac": {
+      "icon": "build-assets/icon.icns",
+      "category": "public.app-category.business",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build-assets/entitlements.mac.plist",
+      "entitlementsInherit": "build-assets/entitlements.mac.plist",
+      "artifactName": "${productName}-${version}-${arch}.${ext}",
+      "target": [
+        { "target": "zip", "arch": ["x64", "arm64"] }
+      ]
+    },
+    "win": {
+      "icon": "build-assets/icon.ico",
+      "target": [
+        { "target": "nsis", "arch": ["x64"] }
+      ],
+      "artifactName": "${productName}-Setup-${version}-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "linux": {
+      "icon": "build-assets/icon.png",
+      "category": "Office",
+      "maintainer": "Zeebroo <support@zeebroo.com>",
+      "target": [
+        { "target": "AppImage", "arch": ["x64"] },
+        { "target": "deb",      "arch": ["x64"] }
+      ],
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
+    },
+    "publish": null
+  }
+}

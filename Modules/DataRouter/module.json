@@ -1,0 +1,11 @@
+{
+    "name": "DataRouter",
+    "alias": "datarouter",
+    "description": "Per-business data sovereignty routing to self-hosted Data Vault.",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\DataRouter\\Providers\\DataRouterServiceProvider"
+    ],
+    "files": []
+}

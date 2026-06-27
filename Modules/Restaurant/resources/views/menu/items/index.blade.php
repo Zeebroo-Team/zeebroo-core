@@ -51,38 +51,42 @@
 .mn-pill--cat     { }
 .mn-pills-divider { width:1px;height:20px;background:var(--border);flex-shrink:0;margin:0 2px; }
 
-/* ── Card grid ── */
-.mn-grid { display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px; }
+/* ── List ── */
+.mn-list { background:var(--bg);border:1px solid var(--border);border-radius:14px;overflow:hidden; }
+.mn-row  { display:flex;align-items:center;gap:14px;padding:11px 16px;border-bottom:1px solid var(--border); }
+.mn-row:last-child { border-bottom:none; }
+.mn-row:hover { background:color-mix(in srgb,var(--primary) 3%,var(--bg)); }
 
-/* ── Item card ── */
-.mn-card { background:var(--bg);border:1px solid var(--border);border-radius:14px;overflow:hidden;
-            display:flex;flex-direction:column;transition:box-shadow .2s,transform .15s; }
-.mn-card:hover { box-shadow:0 6px 28px rgba(0,0,0,.10);transform:translateY(-2px); }
-.mn-card__accent { height:4px;width:100%;flex-shrink:0; }
-.mn-card__img    { width:100%;height:140px;object-fit:cover;display:block;border-bottom:1px solid var(--border);flex-shrink:0; }
-.mn-card__body   { padding:14px 16px;flex:1;display:flex;flex-direction:column;gap:8px; }
-.mn-card__top    { display:flex;align-items:flex-start;justify-content:space-between;gap:8px; }
-.mn-card__name   { font-size:14px;font-weight:900;line-height:1.3;flex:1;min-width:0;
-                    text-decoration:none;color:var(--text); }
-.mn-card__name:hover { color:var(--primary); }
-.mn-card__cat    { font-size:10px;font-weight:700;padding:3px 9px;border-radius:999px;white-space:nowrap;
-                    background:color-mix(in srgb,var(--primary) 10%,transparent);color:var(--primary);flex-shrink:0; }
-.mn-card__desc   { font-size:12px;color:var(--muted);line-height:1.5;
-                    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden; }
-.mn-card__price  { font-size:22px;font-weight:900;color:var(--primary);letter-spacing:-.5px;line-height:1; }
-.mn-card__tags   { display:flex;flex-wrap:wrap;gap:4px; }
-.mn-card__tag    { font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;
-                    display:inline-flex;align-items:center;gap:3px; }
-.mn-card__prep   { font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;
-                    background:color-mix(in srgb,var(--border) 40%,var(--bg));color:var(--muted);
-                    display:inline-flex;align-items:center;gap:3px; }
-.mn-card__foot   { display:flex;align-items:center;justify-content:space-between;
-                    padding:10px 16px;border-top:1px solid var(--border);background:color-mix(in srgb,var(--border) 15%,var(--bg)); }
-.mn-card__status { font-size:11px;font-weight:700;padding:3px 10px;border-radius:999px; }
-.mn-card__acts   { display:flex;gap:2px; }
-.mn-card__act    { width:30px;height:30px;border-radius:8px;border:1px solid var(--border);background:var(--bg);
-                    cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:12px;
-                    color:var(--muted);text-decoration:none;transition:all .15s; }
+/* thumbnail */
+.mn-row__thumb { width:44px;height:44px;border-radius:10px;flex-shrink:0;overflow:hidden;
+                  background:color-mix(in srgb,var(--border) 30%,var(--bg));
+                  display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:16px; }
+.mn-row__thumb img { width:100%;height:100%;object-fit:cover; }
+
+/* info */
+.mn-row__info { flex:1;min-width:0; }
+.mn-row__name { font-size:13px;font-weight:800;text-decoration:none;color:var(--text);
+                 white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block; }
+.mn-row__name:hover { color:var(--primary); }
+.mn-row__meta { display:flex;align-items:center;gap:6px;margin-top:2px;flex-wrap:wrap; }
+.mn-row__cat  { font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;
+                 background:color-mix(in srgb,var(--primary) 10%,transparent);color:var(--primary); }
+.mn-row__tag  { font-size:10px;font-weight:700;padding:2px 7px;border-radius:999px;
+                 display:inline-flex;align-items:center;gap:3px; }
+.mn-row__prep { font-size:10px;color:var(--muted);font-weight:600;
+                 display:inline-flex;align-items:center;gap:3px; }
+
+/* price */
+.mn-row__price { font-size:15px;font-weight:900;color:var(--primary);letter-spacing:-.3px;white-space:nowrap; }
+
+/* status */
+.mn-row__status { font-size:11px;font-weight:700;padding:3px 10px;border-radius:999px;white-space:nowrap; }
+
+/* actions */
+.mn-row__acts { display:flex;gap:4px;flex-shrink:0; }
+.mn-card__act { width:30px;height:30px;border-radius:8px;border:1px solid var(--border);background:var(--bg);
+                 cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:12px;
+                 color:var(--muted);text-decoration:none;transition:all .15s; }
 .mn-card__act:hover { border-color:var(--primary);color:var(--primary);background:color-mix(in srgb,var(--primary) 6%,var(--bg)); }
 .mn-card__act--del:hover { border-color:#ef4444;color:#ef4444;background:color-mix(in srgb,#ef4444 6%,var(--bg)); }
 
@@ -240,7 +244,7 @@
       @endif
     </div>
 
-    {{-- Card grid --}}
+    {{-- List --}}
     @if($items->isEmpty())
       <div class="mn-empty">
         <div class="mn-empty__icon"><i class="fa fa-magnifying-glass"></i></div>
@@ -248,70 +252,70 @@
         <p class="mn-empty__sub">Try adjusting your search or filters.</p>
       </div>
     @else
-      <div class="mn-grid">
+      <div class="mn-list">
         @foreach($items as $item)
           @php
             $available = $item->is_available;
-            $accentColor = $available ? '#22c55e' : '#9ca3af';
             $tags = (array) ($item->dietary_tags ?? []);
           @endphp
-          <div class="mn-card">
-            <div class="mn-card__accent" style="background:{{ $accentColor }};"></div>
-            @if($item->imageFile)
-              <img class="mn-card__img" src="{{ $item->imageFile->publicUrl() }}" alt="{{ $item->name }}">
-            @endif
-            <div class="mn-card__body">
-              <div class="mn-card__top">
-                <a href="{{ route('restaurant.menu.items.show', $item) }}" class="mn-card__name">
-                  {{ $item->name }}
-                </a>
-                @if($item->category)
-                  <span class="mn-card__cat">{{ $item->category->name }}</span>
-                @endif
-              </div>
-              @if($item->description)
-                <div class="mn-card__desc">{{ $item->description }}</div>
+          <div class="mn-row">
+
+            {{-- Thumbnail --}}
+            <div class="mn-row__thumb">
+              @if($item->imageFile)
+                <img src="{{ $item->imageFile->publicUrl() }}" alt="{{ $item->name }}">
+              @else
+                <i class="fa fa-utensils"></i>
               @endif
-              <div class="mn-card__price">{{ $currency }}{{ number_format((float)$item->price, 2) }}</div>
-              @if(!empty($tags) || $item->prep_time_minutes)
-                <div class="mn-card__tags">
-                  @foreach($tags as $tag)
-                    @if(isset($tagMeta[$tag]))
-                      @php $tm = $tagMeta[$tag]; @endphp
-                      <span class="mn-card__tag"
-                            style="background:color-mix(in srgb,{{ $tm['color'] }} 10%,transparent);color:{{ $tm['color'] }};">
-                        <i class="fa {{ $tm['icon'] }}" style="font-size:8px;"></i>{{ $tm['label'] }}
-                      </span>
-                    @endif
-                  @endforeach
-                  @if($item->prep_time_minutes)
-                    <span class="mn-card__prep">
-                      <i class="fa fa-clock" style="font-size:8px;"></i>{{ $item->prepLabel() }}
+            </div>
+
+            {{-- Name + meta --}}
+            <div class="mn-row__info">
+              <a href="{{ route('restaurant.menu.items.show', $item) }}" class="mn-row__name">{{ $item->name }}</a>
+              <div class="mn-row__meta">
+                @foreach($item->categories as $cat)
+                  <span class="mn-row__cat">{{ $cat->name }}</span>
+                @endforeach
+                @foreach($tags as $tag)
+                  @if(isset($tagMeta[$tag]))
+                    @php $tm = $tagMeta[$tag]; @endphp
+                    <span class="mn-row__tag"
+                          style="background:color-mix(in srgb,{{ $tm['color'] }} 10%,transparent);color:{{ $tm['color'] }};">
+                      <i class="fa {{ $tm['icon'] }}" style="font-size:8px;"></i>{{ $tm['label'] }}
                     </span>
                   @endif
-                </div>
-              @endif
-            </div>
-            <div class="mn-card__foot">
-              <span class="mn-card__status"
-                    style="background:{{ $available ? 'color-mix(in srgb,#22c55e 12%,transparent)' : 'color-mix(in srgb,#9ca3af 12%,transparent)' }};
-                           color:{{ $available ? '#16a34a' : '#6b7280' }};">
-                <i class="fa {{ $available ? 'fa-circle-check' : 'fa-circle-xmark' }}" style="font-size:9px;margin-right:3px;"></i>
-                {{ $available ? 'Available' : 'Unavailable' }}
-              </span>
-              <div class="mn-card__acts">
-                <a href="{{ route('restaurant.menu.items.edit', $item) }}" class="mn-card__act" title="Edit">
-                  <i class="fa fa-pen"></i>
-                </a>
-                <form method="POST" action="{{ route('restaurant.menu.items.destroy', $item) }}" style="display:contents;"
-                      onsubmit="return confirm('Delete {{ addslashes($item->name) }}?')">
-                  @csrf @method('DELETE')
-                  <button type="submit" class="mn-card__act mn-card__act--del" title="Delete">
-                    <i class="fa fa-trash"></i>
-                  </button>
-                </form>
+                @endforeach
+                @if($item->prep_time_minutes)
+                  <span class="mn-row__prep"><i class="fa fa-clock" style="font-size:9px;"></i>{{ $item->prepLabel() }}</span>
+                @endif
               </div>
             </div>
+
+            {{-- Price --}}
+            <span class="mn-row__price">{{ $currency }}{{ number_format((float)$item->price, 2) }}</span>
+
+            {{-- Status --}}
+            <span class="mn-row__status"
+                  style="background:{{ $available ? 'color-mix(in srgb,#22c55e 12%,transparent)' : 'color-mix(in srgb,#9ca3af 12%,transparent)' }};
+                         color:{{ $available ? '#16a34a' : '#6b7280' }};">
+              <i class="fa {{ $available ? 'fa-circle-check' : 'fa-circle-xmark' }}" style="font-size:9px;margin-right:3px;"></i>
+              {{ $available ? 'Available' : 'Unavailable' }}
+            </span>
+
+            {{-- Actions --}}
+            <div class="mn-row__acts">
+              <a href="{{ route('restaurant.menu.items.edit', $item) }}" class="mn-card__act" title="Edit">
+                <i class="fa fa-pen"></i>
+              </a>
+              <form method="POST" action="{{ route('restaurant.menu.items.destroy', $item) }}" style="display:contents;"
+                    onsubmit="return confirm('Delete {{ addslashes($item->name) }}?')">
+                @csrf @method('DELETE')
+                <button type="submit" class="mn-card__act mn-card__act--del" title="Delete">
+                  <i class="fa fa-trash"></i>
+                </button>
+              </form>
+            </div>
+
           </div>
         @endforeach
       </div>
@@ -340,14 +344,12 @@
             <label>Name <span style="color:#ef4444;">*</span></label>
             <input type="text" name="name" value="{{ old('name') }}" required maxlength="255" placeholder="e.g. Grilled Chicken">
           </div>
-          <div class="mn-field">
-            <label>Category</label>
-            <select name="menu_category_id">
-              <option value="">— None —</option>
-              @foreach($categories as $cat)
-                <option value="{{ $cat->id }}" {{ old('menu_category_id') == $cat->id ? 'selected' : '' }}>{{ $cat->name }}</option>
-              @endforeach
-            </select>
+          <div class="mn-field mn-field-full">
+            @include('restaurant::menu.items.partials.category-tags-field', [
+                'fieldIdPrefix' => 'create',
+                'item'          => null,
+                'categories'    => $categories,
+            ])
           </div>
           <div class="mn-field">
             <label>Price{{ $currency ? ' ('.$currency.')' : '' }} <span style="color:#ef4444;">*</span></label>

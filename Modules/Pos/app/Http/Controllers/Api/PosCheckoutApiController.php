@@ -5,11 +5,11 @@ namespace Modules\Pos\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesPosBusinessForApi;
 use Modules\Pos\Models\Sale;
 use Modules\Pos\Services\PosOnlineApiService;
+use Modules\Pos\Services\PosSettingsService;
 use Modules\Pos\Services\SaleService;
 
 class PosCheckoutApiController extends Controller
@@ -19,6 +19,7 @@ class PosCheckoutApiController extends Controller
     public function __construct(
         private readonly SaleService $sales,
         private readonly PosOnlineApiService $api,
+        private readonly PosSettingsService $posSettings,
     ) {
     }
 
@@ -34,20 +35,19 @@ class PosCheckoutApiController extends Controller
             'items.*.product_selling_unit_id' => ['nullable', 'integer', 'min:1'],
             'payment_method' => ['required', 'string', 'in:cash,card,credit'],
             'channel' => ['nullable', 'string', 'in:retail,online'],
-            'credit_account_id' => [
-                'nullable',
-                'integer',
-                'min:1',
-                Rule::requiredIf(in_array($request->input('payment_method'), ['cash', 'card'], true)),
-            ],
+            'credit_account_id' => ['nullable', 'integer', 'min:1'],
             'amount_paid' => ['nullable', 'numeric', 'min:0'],
-            'amount_tendered' => ['nullable', 'numeric', 'min:0', 'required_if:payment_method,cash'],
+            'amount_tendered' => ['nullable', 'numeric', 'min:0'],
             'discount_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'notes' => ['nullable', 'string', 'max:2000'],
             'branch_id' => ['nullable', 'integer', 'min:1'],
         ]);
 
         $channel = $validated['channel'] ?? Sale::CHANNEL_ONLINE;
+
+        $settings       = $this->posSettings->forBusiness($business);
+        $deferSettlement = ($settings['payment_settlement_mode'] ?? 'immediate') === 'end_of_day'
+            && in_array($validated['payment_method'], [Sale::PAYMENT_CASH, Sale::PAYMENT_CARD], true);
 
         try {
             $sale = $this->sales->checkout(
@@ -62,7 +62,7 @@ class PosCheckoutApiController extends Controller
                 isset($validated['discount_percent']) ? (float) $validated['discount_percent'] : null,
                 isset($validated['amount_tendered']) ? (float) $validated['amount_tendered'] : null,
                 null,
-                false,
+                $deferSettlement,
                 isset($validated['branch_id']) ? (int) $validated['branch_id'] : null,
             );
         } catch (ValidationException $e) {

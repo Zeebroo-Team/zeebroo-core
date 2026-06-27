@@ -5,12 +5,19 @@ namespace Modules\Restaurant\Services;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Str;
 use Modules\Business\Models\Business;
+use Modules\Pos\Services\SaleStockConsumptionService;
+use Modules\Product\Models\Product;
 use Modules\Restaurant\Models\Order;
 use Modules\Restaurant\Models\OrderItem;
 use Modules\Restaurant\Models\RestaurantTable;
+use Modules\Restaurant\Services\IngredientStockService;
 
 class OrderService
 {
+    public function __construct(
+        private readonly SaleStockConsumptionService $stockConsumption,
+    ) {}
+
     public function listForBusiness(Business $business, string $status = 'all', string $type = 'all'): LengthAwarePaginator
     {
         $query = Order::where('business_id', $business->id)->with(['table', 'items']);
@@ -54,15 +61,26 @@ class OrderService
 
     public function addItem(Order $order, array $itemData): void
     {
+        $productId = $itemData['product_id'] ?? null;
+        $qty = max(1, (int) ($itemData['quantity'] ?? 1));
+
         OrderItem::create([
             'order_id'     => $order->id,
             'menu_item_id' => $itemData['menu_item_id'] ?? null,
+            'product_id'   => $productId,
             'name'         => $itemData['name'],
-            'quantity'     => max(1, (int) ($itemData['quantity'] ?? 1)),
+            'quantity'     => $qty,
             'unit_price'   => $itemData['unit_price'],
             'notes'        => $itemData['notes'] ?? null,
-            'status'       => 'pending',
+            'status'       => $productId ? 'served' : 'pending',
         ]);
+
+        if ($productId) {
+            $product = Product::find($productId);
+            if ($product) {
+                $this->stockConsumption->consumeFifo($product, (float) $qty);
+            }
+        }
 
         $this->recalculate($order);
     }
@@ -79,6 +97,10 @@ class OrderService
             if ($order->table_id) {
                 RestaurantTable::where('id', $order->table_id)->update(['status' => 'available']);
             }
+        }
+
+        if ($newStatus === 'served') {
+            app(IngredientStockService::class)->deductForOrder($order);
         }
 
         return true;
@@ -100,15 +122,25 @@ class OrderService
                 continue;
             }
 
+            $productId = $line['product_id'] ?? null;
+            $qty = max(1, (int) ($line['quantity'] ?? 1));
             OrderItem::create([
                 'order_id'     => $order->id,
                 'menu_item_id' => $line['menu_item_id'] ?? null,
+                'product_id'   => $productId,
                 'name'         => $line['name'],
-                'quantity'     => max(1, (int) ($line['quantity'] ?? 1)),
+                'quantity'     => $qty,
                 'unit_price'   => (float) $line['unit_price'],
                 'notes'        => $line['notes'] ?? null,
-                'status'       => 'pending',
+                'status'       => $productId ? 'served' : 'pending',
             ]);
+
+            if ($productId) {
+                $product = Product::find($productId);
+                if ($product) {
+                    $this->stockConsumption->consumeFifo($product, (float) $qty);
+                }
+            }
         }
     }
 

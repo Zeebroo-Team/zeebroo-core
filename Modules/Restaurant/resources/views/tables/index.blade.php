@@ -3,8 +3,8 @@
 @section('content')
 <style>
 /* ── SVG table colours ──────────────────────── */
-.rt-tbl { fill: color-mix(in srgb, var(--bg) 80%, var(--border)); }
-.rt-chr { fill: color-mix(in srgb, var(--border) 180%, var(--bg)); }
+.rt-tbl { fill: color-mix(in srgb, #fff 88%, var(--border)); }
+.rt-chr { fill: #f59e0b; }
 .rt-lbl { fill: var(--text); }
 .rt-sub { fill: var(--muted); }
 
@@ -19,10 +19,10 @@
   position: relative;
   width: 1200px;
   min-height: 560px;
-  background-color: color-mix(in srgb, var(--bg) 60%, #b8a88a 40%);
+  background-color: #f4f5f7;
   background-image:
-    linear-gradient(rgba(0,0,0,.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0,0,0,.04) 1px, transparent 1px);
+    linear-gradient(rgba(0,0,0,.055) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,0,0,.055) 1px, transparent 1px);
   background-size: 48px 48px;
   padding: 20px;
   box-sizing: border-box;

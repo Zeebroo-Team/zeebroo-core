@@ -27,8 +27,9 @@ class PosSaleApiController extends Controller
 
         $search = (string) $request->query('q', '');
         $channel = $request->query('channel');
+        $limit = $request->query('limit') ? (int) $request->query('limit') : null;
 
-        $sales = $this->sales->listForBusiness($business, $search !== '' ? $search : null);
+        $sales = $this->sales->listForBusiness($business, $search !== '' ? $search : null, $limit);
 
         if (is_string($channel) && in_array($channel, [Sale::CHANNEL_ONLINE, Sale::CHANNEL_RETAIL], true)) {
             $sales = $sales->where('channel', $channel)->values();
@@ -68,6 +69,35 @@ class PosSaleApiController extends Controller
         return response()->json([
             'message' => 'Sale '.$sale->sale_number.' has been voided.',
             'data' => $this->api->formatSale($sale),
+        ]);
+    }
+
+    public function history(Request $request): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+
+        $filters = [
+            'q'         => (string) $request->query('q', ''),
+            'status'    => (string) $request->query('status', 'all'),
+            'channel'   => (string) $request->query('channel', 'all'),
+            'date_from' => (string) $request->query('date_from', ''),
+            'date_to'   => (string) $request->query('date_to', ''),
+        ];
+
+        $paginator = $this->sales->indexForBusiness($business, $filters);
+        $summary   = $this->sales->indexSummary($business, $filters);
+        $chart     = $this->sales->dailyChartForBusiness($business, $filters);
+
+        return response()->json([
+            'data'    => $this->api->formatSaleList($paginator->getCollection()),
+            'meta'    => [
+                'current_page' => $paginator->currentPage(),
+                'last_page'    => $paginator->lastPage(),
+                'total'        => $paginator->total(),
+                'per_page'     => $paginator->perPage(),
+            ],
+            'summary' => $summary,
+            'chart'   => $chart,
         ]);
     }
 }

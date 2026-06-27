@@ -83,6 +83,9 @@ class PosCatalogService
         ?int $branchId = null,
         bool $branchProductSeparate = false,
         bool $branchStockSeparate = false,
+        ?string $stockStatus = null,
+        ?int $brandId = null,
+        string $sort = 'name_asc',
     ): array {
         $page    = max(1, $page);
         $perPage = max(1, min(100, $perPage));
@@ -90,16 +93,39 @@ class PosCatalogService
         $query = $business->products()
             ->where('is_active', true)
             ->where('is_bundle', false)
-            ->with(['productUnit', 'imageFile', 'categories'])
-            ->orderBy('name');
+            ->with(['productUnit', 'imageFile', 'categories']);
+
+        // Sort
+        match ($sort) {
+            'name_desc'   => $query->orderByDesc('name'),
+            'price_asc'   => $query->orderBy('unit_sell_price')->orderBy('name'),
+            'price_desc'  => $query->orderByDesc('unit_sell_price')->orderBy('name'),
+            'stock_asc'   => $query->orderBy('stock_quantity')->orderBy('name'),
+            'stock_desc'  => $query->orderByDesc('stock_quantity')->orderBy('name'),
+            default       => $query->orderBy('name'),
+        };
 
         if ($branchProductSeparate && $branchId !== null) {
-            $query->where('branch_id', $branchId);
+            $query->where(function ($q) use ($branchId) {
+                $q->where('branch_id', $branchId)->orWhereNull('branch_id');
+            });
         }
 
         if ($categoryId !== null && $categoryId > 0) {
             $query->whereHas('categories', fn ($builder) => $builder->whereKey($categoryId));
         }
+
+        if ($brandId !== null && $brandId > 0) {
+            $query->whereHas('brands', fn ($builder) => $builder->whereKey($brandId));
+        }
+
+        // Stock status filter (uses the stock_quantity column directly)
+        match ($stockStatus) {
+            'in_stock'    => $query->where('stock_quantity', '>', 5),
+            'low_stock'   => $query->where('stock_quantity', '>', 0)->where('stock_quantity', '<=', 5),
+            'out_of_stock'=> $query->where('stock_quantity', '<=', 0),
+            default       => null,
+        };
 
         $term = trim((string) $search);
         if ($term !== '') {
@@ -115,7 +141,6 @@ class PosCatalogService
         $page     = min($page, $lastPage);
         $items    = $query->skip(($page - 1) * $perPage)->take($perPage)->get();
 
-        // Load active discounts for all products on this page in one query
         $productIds      = $items->pluck('id')->all();
         $activeDiscounts = $this->discountService->activeForProducts($business, $productIds);
 
