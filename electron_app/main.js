@@ -60,7 +60,6 @@ function createWindow() {
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
-    mainWindow.webContents.openDevTools({ mode: 'detach' });
   });
 
   mainWindow.webContents.on('console-message', (_e, level, msg) => {
