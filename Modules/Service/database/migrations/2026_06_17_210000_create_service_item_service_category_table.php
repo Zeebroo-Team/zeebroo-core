@@ -9,15 +9,17 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('service_item_service_category', function (Blueprint $table): void {
-            $table->id();
-            $table->foreignId('service_item_id')->constrained('service_items')->cascadeOnDelete();
-            $table->foreignId('service_category_id')->constrained('service_categories')->cascadeOnDelete();
-            $table->timestamps();
+        if (!Schema::hasTable('service_item_service_category')) {
+            Schema::create('service_item_service_category', function (Blueprint $table): void {
+                $table->id();
+                $table->foreignId('service_item_id')->constrained('service_items')->cascadeOnDelete();
+                $table->foreignId('service_category_id')->constrained('service_categories')->cascadeOnDelete();
+                $table->timestamps();
 
-            $table->unique(['service_item_id', 'service_category_id']);
-            $table->index('service_category_id');
-        });
+                $table->unique(['service_item_id', 'service_category_id']);
+                $table->index('service_category_id');
+            });
+        }
 
         // Migrate existing string category values into the pivot table.
         if (Schema::hasColumn('service_items', 'category')) {

@@ -8,13 +8,19 @@ return new class extends Migration
 {
     public function up(): void
     {
+        Schema::dropIfExists('restaurant_ingredient_purchase_order_items');
+
         Schema::create('restaurant_ingredient_purchase_order_items', function (Blueprint $table): void {
             $table->id();
-            $table->foreignId('purchase_order_id')
-                ->constrained('restaurant_ingredient_purchase_orders')
+            $table->unsignedBigInteger('purchase_order_id');
+            $table->foreign('purchase_order_id', 'ripo_items_po_id_fk')
+                ->references('id')
+                ->on('restaurant_ingredient_purchase_orders')
                 ->cascadeOnDelete();
-            $table->foreignId('ingredient_id')
-                ->constrained('restaurant_ingredients')
+            $table->unsignedBigInteger('ingredient_id');
+            $table->foreign('ingredient_id', 'ripo_items_ingredient_fk')
+                ->references('id')
+                ->on('restaurant_ingredients')
                 ->cascadeOnDelete();
             $table->decimal('quantity', 12, 3);
             $table->decimal('unit_cost', 12, 4)->default(0);
