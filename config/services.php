@@ -53,4 +53,8 @@ return [
         'oauth_prompt' => env('GOOGLE_OAUTH_PROMPT', 'select_account'),
     ],
 
+    'zeebroo' => [
+        'api_key' => env('ZEEBROO_API_KEY'),
+    ],
+
 ];
