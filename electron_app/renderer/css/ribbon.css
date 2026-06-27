@@ -2048,6 +2048,13 @@ body.dark .alert-error { background: #3b1515; color: #fca5a5; border-color: #6b2
   color: var(--text);
   letter-spacing: -.2px;
 }
+.ob-sidebar-logo {
+  max-width: 120px;
+  max-height: 48px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+}
 
 /* vertical step list */
 .ob-step-list {
