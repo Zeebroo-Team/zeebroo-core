@@ -68,6 +68,8 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
     Route::post('online/file-manager/upload', [PosFileManagerApiController::class, 'upload'])->name('online.file-manager.upload');
     Route::post('online/checkout', [PosCheckoutApiController::class, 'store'])->name('online.checkout');
 
+    Route::get('online/features', [PosSettingsApiController::class, 'features'])->name('online.features');
+    Route::put('online/features', [PosSettingsApiController::class, 'updateFeatures'])->name('online.features.update');
     Route::get('online/settings', [PosSettingsApiController::class, 'show'])->name('online.settings.show');
     Route::put('online/settings', [PosSettingsApiController::class, 'update'])->name('online.settings.update');
     Route::patch('online/settings', [PosSettingsApiController::class, 'update']);

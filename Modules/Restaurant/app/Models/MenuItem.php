@@ -4,6 +4,7 @@ namespace Modules\Restaurant\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Modules\Business\Models\Business;
 use Modules\FileManager\Models\FileManagerFile;
@@ -44,6 +45,16 @@ class MenuItem extends Model
         return $this->belongsTo(MenuCategory::class, 'menu_category_id');
     }
 
+    public function categories(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            MenuCategory::class,
+            'restaurant_menu_item_categories',
+            'menu_item_id',
+            'menu_category_id'
+        )->orderBy('restaurant_menu_item_categories.sort_order')->orderBy('name');
+    }
+
     public function imageFile(): BelongsTo
     {
         return $this->belongsTo(FileManagerFile::class, 'file_manager_file_id');
@@ -52,6 +63,13 @@ class MenuItem extends Model
     public function orderItems(): HasMany
     {
         return $this->hasMany(OrderItem::class, 'menu_item_id');
+    }
+
+    public function ingredients(): BelongsToMany
+    {
+        return $this->belongsToMany(Ingredient::class, 'restaurant_recipe_ingredients', 'menu_item_id', 'ingredient_id')
+            ->withPivot('quantity_required')
+            ->withTimestamps();
     }
 
     public function prepLabel(): string

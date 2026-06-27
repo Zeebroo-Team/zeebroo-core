@@ -101,6 +101,8 @@ const API = (() => {
     createAccount: (body)   => request('POST', '/accounts', body),
     settingsGet:    ()     => request('GET',   '/online/settings'),
     settingsUpdate: (data) => request('PATCH', '/online/settings', data),
+    features:       ()     => request('GET',   '/online/features'),
+    updateFeatures: (data) => request('PUT',   '/online/features', data),
     billTargets:  ()                  => request('GET',  '/expenses/bill-assignment-targets'),
     // Finance — flow overview
     financeFlow:    ()         => request('GET', '/finance/flow'),

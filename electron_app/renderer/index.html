@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; font-src 'self' https://cdnjs.cloudflare.com; script-src 'self'; img-src 'self' http: https: data: file:">
 <title>Zeebroo POS</title>
+<link rel="icon" type="image/x-icon"  href="favicons/favicon.ico">
+<link rel="icon" type="image/png" sizes="32x32" href="favicons/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="favicons/favicon-16x16.png">
+<link rel="apple-touch-icon" sizes="180x180"    href="favicons/apple-touch-icon.png">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 <link rel="stylesheet" href="css/ribbon.css">
 <link rel="stylesheet" href="css/reactflow.css">
@@ -6026,6 +6030,26 @@
     <div class="qt-add-modal-footer">
       <button class="qt-back-btn" id="qt-add-modal-cancel">Cancel</button>
       <button class="qt-save-btn" id="qt-add-modal-add" style="display:none"><i class="fa fa-plus"></i> Add to Quote</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Feature Management Modal ──────────────────────────────────────────── -->
+<div id="feat-mgmt-overlay" class="modal-overlay" style="display:none">
+  <div class="po-aim-shell" style="width:min(520px,94vw);max-height:88vh;display:flex;flex-direction:column;overflow:hidden">
+    <div class="po-aim-header">
+      <i class="fa fa-sliders" style="color:var(--accent)"></i>
+      <span>Feature Management</span>
+      <button class="psm-close" id="feat-mgmt-close"><i class="fa fa-xmark"></i></button>
+    </div>
+    <div style="padding:10px 20px 10px;font-size:12px;color:var(--text-muted);border-bottom:1px solid var(--border);flex-shrink:0">
+      Enable or disable features for this business. Changes apply immediately across the app.
+    </div>
+    <div id="feat-mgmt-list" style="flex:1;overflow-y:auto"></div>
+    <div id="feat-mgmt-alert" class="alert alert-error" style="display:none;margin:8px 16px 0"></div>
+    <div class="po-aim-footer">
+      <button class="po-btn-ghost" id="feat-mgmt-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+      <button class="po-btn-primary" id="feat-mgmt-save"><i class="fa fa-check"></i> Save Changes</button>
     </div>
   </div>
 </div>

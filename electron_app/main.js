@@ -3,6 +3,7 @@
 const path = require('path');
 const fs   = require('fs');
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { API_BASE_URL } = require('./config');
 
 let CONFIG_PATH;
 
@@ -17,7 +18,6 @@ function loadConfig() {
     if (fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, 'utf8'));
   } catch (_) {}
   return {
-    api_base_url: 'http://localhost:8000/api/v1/pos',
     device_name: 'pos-desktop-1',
     token: null,
     business_id: null,
@@ -108,7 +108,8 @@ ipcMain.on('window-narrow-auth', () => {
 });
 
 // ── Config ────────────────────────────────────────────────────────────────
-ipcMain.handle('config-get', () => config);
+// Always include the compiled-in API URL so the renderer can display/debug it
+ipcMain.handle('config-get', () => ({ ...config, api_base_url: API_BASE_URL }));
 ipcMain.handle('config-set', (_e, patch) => {
   config = { ...config, ...patch };
   saveConfig(config);
@@ -121,7 +122,7 @@ const http  = require('http');
 
 function apiRequest(method, path_, body, token, businessId, branchId) {
   return new Promise((resolve, reject) => {
-    const base = config.api_base_url.replace(/\/$/, '');
+    const base = API_BASE_URL.replace(/\/$/, '');
     const url  = new URL(base + path_);
     const isHttps = url.protocol === 'https:';
     const lib  = isHttps ? https : http;
@@ -182,7 +183,7 @@ function buildMultipart(boundary, files) {
 }
 ipcMain.handle('api-upload', async (_e, { path: apiPath, filePath }) => {
   try {
-    const base = config.api_base_url.replace(/\/$/, '');
+    const base = API_BASE_URL.replace(/\/$/, '');
     const url  = new URL(base + apiPath);
     const lib  = url.protocol === 'https:' ? https : http;
     const boundary = 'PosBoundary' + Date.now();

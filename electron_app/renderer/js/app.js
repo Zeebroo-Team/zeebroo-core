@@ -23,6 +23,8 @@ const state = {
   // Logged-in user identity
   _userName:  null,
   _userEmail: null,
+  // Feature flags loaded after login — null means "show everything"
+  features: null,
 };
 
 // ── DOM helpers ────────────────────────────────────────────────────────────
@@ -2179,6 +2181,101 @@ function showSignup() {
   });
 }
 
+// ── Business feature visibility ────────────────────────────────────────────
+function hasFeature(key) {
+  if (!state.features) return true;
+  return state.features.has(key);
+}
+
+function applyFeatureVisibility() {
+  // Helper: hide/show the ribbon-group that contains a given button
+  const grp = (sel, show) => {
+    const g = $(sel)?.closest('.ribbon-group');
+    if (g) g.style.display = show ? '' : 'none';
+  };
+
+  const pos   = hasFeature('point_of_sale');
+  const prod  = hasFeature('product_management');
+  const stock = hasFeature('stock_management');
+  const bill  = hasFeature('bill_management');
+  const hr    = hasFeature('human_resources');
+  const svc   = hasFeature('service_management');
+  const camp  = hasFeature('social_media_campaign');
+
+  // ── Ribbon tabs ──
+  const tabFeatures = {
+    pos:       pos || svc,
+    sales:     pos,
+    inventory: prod || stock,
+    finance:   bill,
+    hr:        hr,
+    design:    camp,
+  };
+  $$('.ribbon-tab[data-tab]').forEach(tab => {
+    const show = tabFeatures[tab.dataset.tab];
+    tab.style.display = (show === undefined || show) ? '' : 'none';
+  });
+
+  // ── Home ribbon groups (Home tab is always visible) ──
+  grp('#rb-home-pos',      pos || svc);             // Quick Actions
+  // Overview group — always visible (no anchor needed, no change)
+  grp('#rb-home-orders',   pos || prod || stock);   // Operations
+  grp('#rb-home-expenses', bill || hr);             // Finance shortcuts
+  // Tools group — always visible
+
+  // ── Inventory ribbon groups ──
+  grp('#rb-inv-products', prod);                    // Catalog
+  grp('#rb-inv-audit',    prod || stock);           // Stock (brands/discounts + audit)
+  grp('#rb-orders',       stock);                   // Purchasing (PO, GRN, cheques)
+  grp('#rb-inv-suppliers',prod || stock);           // Suppliers
+  grp('#rb-inv-barcodes', prod || stock);           // Print
+
+  // ── Finance sub-nav: hide bill items when disabled ──
+  const billFinViews = ['bills', 'loans', 'rentals', 'properties', 'modifications'];
+  billFinViews.forEach(v => {
+    const btn = $(`#panel-finance .fin-subnav-btn[data-fin="${v}"]`);
+    if (btn) btn.style.display = bill ? '' : 'none';
+  });
+  if (!bill) {
+    const activeFin = $('#panel-finance .fin-subnav-btn.active');
+    if (activeFin && billFinViews.includes(activeFin.dataset.fin)) switchFinView('flow');
+  }
+
+  // ── Finance ribbon groups ──
+  grp('#rb-create-bill', bill);   // Bills & Loans
+  grp('#rb-rentals',     bill);   // Assets & Liabilities
+
+  // ── Backstage sections ──
+  const newFeat = {
+    'POS & Sales':        [pos || svc],
+    'Inventory':          [prod || stock],
+    'Finance — Outgoing': [bill],
+    'Human Resources':    [hr],
+    'Design Studio':      [camp],
+  };
+  const openFeat = {
+    'POS & Sales':     [pos || svc],
+    'Inventory':       [prod || stock],
+    'Finance':         [bill],
+    'Human Resources': [hr],
+    'Design Studio':   [camp],
+  };
+  const newBody = $('#bs-new-body');
+  if (newBody) _buildSections(newBody, _bsNewSections.filter(s => newFeat[s.title]?.[0] !== false));
+  const openBody = $('#bs-open-body');
+  if (openBody) _buildSections(openBody, _bsOpenSections.filter(s => openFeat[s.title]?.[0] !== false));
+}
+
+async function loadFeatures() {
+  const res = await API.features();
+  if (res.status === 200) {
+    state.features = new Set(res.body?.data || []);
+  } else {
+    state.features = null;
+  }
+  applyFeatureVisibility();
+}
+
 function showApp() {
   window.electronAPI.expandWindow?.();
   $('#login-screen').style.display = 'none';
@@ -2197,6 +2294,8 @@ function showApp() {
   _checkBankOnboarding();
   // Load business + branch switchers
   _bizSwInit();
+  // Apply feature-based tab and backstage visibility
+  loadFeatures();
 }
 
 // ── Bank Account Setup Wizard ──────────────────────────────────────────────
@@ -2586,7 +2685,7 @@ $('#tpm-switch-branch').addEventListener('click', async () => {
 });
 $('#tpm-feature-mgmt').addEventListener('click', () => {
   closeProfileMenu();
-  toast('Feature Management coming soon', 'info');
+  openFeatureMgmtModal();
 });
 $('#tpm-user-mgmt').addEventListener('click', () => {
   closeProfileMenu();
@@ -2615,6 +2714,68 @@ $('#tpm-logout').addEventListener('click', async () => {
   showLogin();
   toast('Signed out', 'info');
 });
+
+// ── Feature Management Modal ───────────────────────────────────────────────
+const _featDefs = [
+  { key: 'account_management',   name: 'Account Management',    desc: 'Financial accounts & bank management',    icon: 'fa-building-columns',   color: '#4e8ef7', locked: true },
+  { key: 'point_of_sale',        name: 'Point of Sale',         desc: 'Cashier checkout interface & quick sales',icon: 'fa-cash-register',      color: '#4caf7d' },
+  { key: 'product_management',   name: 'Product Management',    desc: 'Product catalog, categories & brands',    icon: 'fa-boxes-stacked',      color: '#0ea5e9' },
+  { key: 'stock_management',     name: 'Stock Management',      desc: 'Stock audits & inventory adjustments',    icon: 'fa-clipboard-list',     color: '#64748b' },
+  { key: 'bill_management',      name: 'Bill Management',       desc: 'Bills, loans & expense tracking',         icon: 'fa-file-invoice-dollar',color: '#9c6ef7' },
+  { key: 'human_resources',      name: 'Human Resources',       desc: 'Employees, departments & payroll',        icon: 'fa-users',              color: '#f7a54e' },
+  { key: 'service_management',   name: 'Services',              desc: 'Service-bound products & job management', icon: 'fa-screwdriver-wrench', color: '#f0a030' },
+  { key: 'social_media_campaign',name: 'Social Media Campaign', desc: 'Design studio & marketing assets',        icon: 'fa-bullhorn',           color: '#e040fb' },
+];
+
+function openFeatureMgmtModal() {
+  const list = $('#feat-mgmt-list');
+  list.innerHTML = _featDefs.map(f => {
+    const isOn = !state.features || state.features.has(f.key);
+    const iconBg = f.color + '22';
+    return `<div class="feat-mgmt-row${f.locked ? ' feat-mgmt-row-locked' : ''}">
+      <div class="feat-mgmt-icon" style="background:${iconBg};color:${f.color}"><i class="fa ${f.icon}"></i></div>
+      <div class="feat-mgmt-info">
+        <div class="feat-mgmt-name">${f.name}${f.locked ? ' <span class="feat-mgmt-badge">Always On</span>' : ''}</div>
+        <div class="feat-mgmt-desc">${f.desc}</div>
+      </div>
+      <div class="feat-mgmt-toggle${isOn ? ' on' : ''}${f.locked ? ' locked' : ''}" data-fm-key="${f.key}"></div>
+    </div>`;
+  }).join('');
+  list.querySelectorAll('.feat-mgmt-toggle:not(.locked)').forEach(t => {
+    t.addEventListener('click', () => t.classList.toggle('on'));
+  });
+  $('#feat-mgmt-alert').style.display = 'none';
+  $('#feat-mgmt-overlay').style.display = 'flex';
+}
+
+function _featMgmtClose() { $('#feat-mgmt-overlay').style.display = 'none'; }
+
+async function _featMgmtSave() {
+  const btn = $('#feat-mgmt-save');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
+  const features = {};
+  _featDefs.forEach(f => {
+    features[f.key] = !!$(`[data-fm-key="${f.key}"]`)?.classList.contains('on');
+  });
+  features.account_management = true;
+  const res = await API.updateFeatures({ features });
+  if (res.status !== 200) {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fa fa-check"></i> Save Changes';
+    const al = $('#feat-mgmt-alert');
+    al.textContent = res.body?.message || 'Failed to save. Please try again.';
+    al.style.display = '';
+    return;
+  }
+  btn.innerHTML = '<i class="fa fa-rotate fa-spin"></i> Restarting…';
+  window.location.reload();
+}
+
+$('#feat-mgmt-close').addEventListener('click', _featMgmtClose);
+$('#feat-mgmt-cancel').addEventListener('click', _featMgmtClose);
+$('#feat-mgmt-save').addEventListener('click', _featMgmtSave);
+$('#feat-mgmt-overlay').addEventListener('click', e => { if (e.target === $('#feat-mgmt-overlay')) _featMgmtClose(); });
 
 function showShortcutsModal() {
   const shortcuts = [

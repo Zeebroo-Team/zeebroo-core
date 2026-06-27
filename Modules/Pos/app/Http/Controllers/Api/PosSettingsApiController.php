@@ -102,6 +102,37 @@ class PosSettingsApiController extends Controller
         }
     }
 
+    public function features(Request $request): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $all      = ['account_management','bill_management','human_resources','point_of_sale','product_management','service_management','social_media_campaign','stock_management'];
+        $stored   = $business->getSetting('business.features') ?? [];
+        $enabled  = array_values(array_filter($all, fn ($k) => ! empty($stored[$k])));
+        if (! in_array('account_management', $enabled, true)) {
+            array_unshift($enabled, 'account_management');
+        }
+        return response()->json(['data' => $enabled]);
+    }
+
+    public function updateFeatures(Request $request): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $all      = ['account_management','bill_management','human_resources','point_of_sale','product_management','service_management','social_media_campaign','stock_management'];
+        $validated = $request->validate([
+            'features'   => ['required', 'array'],
+            'features.*' => ['boolean'],
+        ]);
+        $input   = $validated['features'];
+        $stored  = array_fill_keys($all, false);
+        foreach ($all as $k) {
+            $stored[$k] = (bool) ($input[$k] ?? false);
+        }
+        $stored['account_management'] = true;
+        $business->setSetting('business.features', $stored);
+        $enabled = array_values(array_filter($all, fn ($k) => $stored[$k]));
+        return response()->json(['data' => $enabled]);
+    }
+
     public function update(Request $request): JsonResponse
     {
         $business = $this->businessOrAbort($request);

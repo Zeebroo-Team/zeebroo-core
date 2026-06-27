@@ -27,4 +27,14 @@ class MenuCategory extends Model
     {
         return $this->hasMany(MenuItem::class, 'menu_category_id');
     }
+
+    public function menuItemsMulti(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
+    {
+        return $this->belongsToMany(
+            MenuItem::class,
+            'restaurant_menu_item_categories',
+            'menu_category_id',
+            'menu_item_id'
+        );
+    }
 }
