@@ -1973,6 +1973,14 @@ body.dark .loan-lp-hint { color: #fcd34d; }
   font-size: 26px; font-weight: 800; color: #fff;
   margin: 0 auto 16px;
 }
+.login-brand-logo {
+  display: block;
+  max-width: 140px;
+  max-height: 56px;
+  width: auto; height: auto;
+  object-fit: contain;
+  margin: 0 auto 20px;
+}
 
 .login-card h2 { text-align: center; font-size: 21px; margin-bottom: 4px; font-weight: 700; }
 .login-card p  { text-align: center; color: var(--text-muted); font-size: 13px; margin-bottom: 26px; }
