@@ -2175,10 +2175,6 @@ function showSignup() {
   _obFeatureSet  = new Set(['point_of_sale', 'product_management', 'stock_management']);
   _obBuildFeatureList();
   _obSetStep(1);
-  API.businessCategories().then(res => {
-    const cats = res.body?.data || [];
-    _obBuildCatGrid(cats);
-  });
 }
 
 // ── Business feature visibility ────────────────────────────────────────────
@@ -2453,13 +2449,20 @@ $('#ob-next-btn').addEventListener('click', () => {
 $('#su-password').addEventListener('keydown', e => { if (e.key === 'Enter') $('#ob-next-btn').click(); });
 
 $('#ob-back-2-btn').addEventListener('click', () => _obSetStep(1));
-$('#ob-next-2-btn').addEventListener('click', () => {
+$('#ob-next-2-btn').addEventListener('click', async () => {
   const name  = $('#su-name').value.trim();
   const biz   = $('#su-biz').value.trim();
   const alert = $('#signup-alert');
   if (!name) { showAlert(alert, 'Please enter your name'); return; }
   if (!biz)  { showAlert(alert, 'Please enter a business name'); return; }
+
+  const grid = $('#ob-cat-grid');
+  if (grid) grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:30px;color:var(--text-muted)"><i class="fa fa-spinner fa-spin"></i> Loading…</div>';
   _obSetStep(3);
+
+  const res = await API.businessCategories();
+  const cats = res.body?.data || [];
+  _obBuildCatGrid(cats);
 });
 $('#su-biz').addEventListener('keydown', e => { if (e.key === 'Enter') $('#ob-next-2-btn').click(); });
 
