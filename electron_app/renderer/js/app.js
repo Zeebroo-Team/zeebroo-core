@@ -2757,11 +2757,20 @@ async function openUpdateModal() {
   const res     = await window.electronAPI.checkForUpdate();
   const release = res?.body?.data;
 
-  if (!release || res.status !== 200) {
+  if (!res || res.status === 0) {
     body.innerHTML = `<div style="text-align:center;padding:16px 0">
       <i class="fa fa-triangle-exclamation" style="font-size:28px;color:#f59e0b;margin-bottom:12px;display:block"></i>
       <div style="font-weight:600;margin-bottom:6px">Could not check for updates</div>
       <div style="font-size:13px;color:var(--text-muted)">Please check your internet connection and try again.</div>
+    </div>`;
+    return;
+  }
+
+  if (!release) {
+    body.innerHTML = `<div style="text-align:center;padding:16px 0">
+      <i class="fa fa-circle-check" style="font-size:36px;color:#22c55e;margin-bottom:12px;display:block"></i>
+      <div style="font-weight:700;font-size:16px;margin-bottom:6px">You're up to date!</div>
+      <div style="font-size:13px;color:var(--text-muted)">Zeebroo POS <strong>v${escHtml(current)}</strong> is the latest version.</div>
     </div>`;
     return;
   }

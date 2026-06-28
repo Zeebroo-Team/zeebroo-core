@@ -48,8 +48,12 @@ class AppReleaseApiController extends Controller
 
     public function latest(): JsonResponse
     {
-        $release = AppRelease::where('channel', 'stable')->where('is_latest', true)->first()
-            ?? AppRelease::where('channel', 'stable')->orderByDesc('id')->first();
+        try {
+            $release = AppRelease::where('channel', 'stable')->where('is_latest', true)->first()
+                ?? AppRelease::where('channel', 'stable')->orderByDesc('id')->first();
+        } catch (\Exception $e) {
+            $release = null;
+        }
 
         return response()->json(['data' => $release]);
     }
