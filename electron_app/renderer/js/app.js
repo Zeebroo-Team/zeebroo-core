@@ -2010,17 +2010,19 @@ async function init() {
 function showLogin() {
   window.electronAPI.narrowAuth?.();
   const body = $('#login-body');
-  if (body) { body.style.display = ''; body.style.padding = ''; }
+  if (body) { body.style.display = 'block'; body.style.padding = '0'; }
   $('#login-screen').style.display = 'flex';
   $('#app-shell').style.display = 'none';
-  $('#signin-card').style.display = '';
+  $('#signin-card').style.cssText = 'display:grid; width:100%; height:100%';
   $('#signup-card').style.cssText = 'display:none';
   $('#login-step-1').style.display = '';
   $('#login-step-2').style.display = 'none';
   $('#login-alert').style.display = 'none';
+  $('#login-btn').style.display = '';
+  $('#select-biz-btn').style.display = 'none';
   $('#login-email').value = '';
   $('#login-password').value = '';
-  $('#login-email').focus();
+  setTimeout(() => $('#login-email')?.focus(), 50);
 }
 
 let _obStep = 1;
@@ -2587,6 +2589,8 @@ async function showBusinessStep() {
 
   $('#login-step-1').style.display = 'none';
   $('#login-step-2').style.display = 'block';
+  $('#login-btn').style.display = 'none';
+  $('#select-biz-btn').style.display = '';
 
   sel.addEventListener('change', () => loadBranches(sel.value));
   await loadBranches(businesses[0]?.id);
