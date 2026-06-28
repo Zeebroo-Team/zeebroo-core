@@ -2,7 +2,7 @@
 
 const path = require('path');
 const fs   = require('fs');
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const { API_BASE_URL } = require('./config');
 
 let CONFIG_PATH;
@@ -108,7 +108,19 @@ ipcMain.on('window-narrow-auth', () => {
 
 // ── Config ────────────────────────────────────────────────────────────────
 // Always include the compiled-in API URL so the renderer can display/debug it
-ipcMain.handle('config-get', () => ({ ...config, api_base_url: API_BASE_URL }));
+ipcMain.handle('config-get', () => ({ ...config, api_base_url: API_BASE_URL, app_version: app.getVersion() }));
+ipcMain.handle('open-external', (_e, url) => shell.openExternal(url));
+ipcMain.handle('check-for-update', () => new Promise(resolve => {
+  const https = require('https');
+  https.get('https://zeebroo.com/api/releases/latest', { headers: { Accept: 'application/json' } }, res => {
+    let d = '';
+    res.on('data', c => { d += c; });
+    res.on('end', () => {
+      try { resolve({ status: res.statusCode, body: JSON.parse(d) }); }
+      catch (_) { resolve({ status: res.statusCode, body: null }); }
+    });
+  }).on('error', () => resolve({ status: 0, body: null }));
+}));
 ipcMain.handle('config-set', (_e, patch) => {
   config = { ...config, ...patch };
   saveConfig(config);

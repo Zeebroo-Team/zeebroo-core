@@ -2724,8 +2724,103 @@ $('#tpm-about').addEventListener('click', () => {
 });
 $('#tpm-check-updates').addEventListener('click', () => {
   closeProfileMenu();
-  toast('You are on the latest version', 'success');
+  openUpdateModal();
 });
+
+function _updateModalClose() {
+  $('#update-modal-overlay').style.display = 'none';
+}
+$('#update-modal-close').addEventListener('click', _updateModalClose);
+$('#update-modal-overlay').addEventListener('click', e => { if (e.target === $('#update-modal-overlay')) _updateModalClose(); });
+
+function _semverGt(a, b) {
+  const pa = String(a).split('.').map(Number);
+  const pb = String(b).split('.').map(Number);
+  for (let i = 0; i < 3; i++) {
+    if ((pa[i] || 0) > (pb[i] || 0)) return true;
+    if ((pa[i] || 0) < (pb[i] || 0)) return false;
+  }
+  return false;
+}
+
+async function openUpdateModal() {
+  const overlay = $('#update-modal-overlay');
+  const body    = $('#update-modal-body');
+  overlay.style.display = 'flex';
+
+  body.innerHTML = `<div style="text-align:center;padding:20px 0;color:var(--text-muted)">
+    <i class="fa fa-spinner fa-spin" style="font-size:28px;margin-bottom:14px;display:block"></i>
+    Checking for updates…
+  </div>`;
+
+  const current = state.config?.app_version || '0.0.0';
+  const res     = await window.electronAPI.checkForUpdate();
+  const release = res?.body?.data;
+
+  if (!release || res.status !== 200) {
+    body.innerHTML = `<div style="text-align:center;padding:16px 0">
+      <i class="fa fa-triangle-exclamation" style="font-size:28px;color:#f59e0b;margin-bottom:12px;display:block"></i>
+      <div style="font-weight:600;margin-bottom:6px">Could not check for updates</div>
+      <div style="font-size:13px;color:var(--text-muted)">Please check your internet connection and try again.</div>
+    </div>`;
+    return;
+  }
+
+  const latest    = release.version;
+  const hasUpdate = _semverGt(latest, current);
+  const platform  = window.electronAPI.platform;
+  const dlUrl     = platform === 'win32'  ? release.windows_url
+                  : platform === 'darwin' ? release.macos_url
+                  : release.linux_url;
+
+  const notes = Array.isArray(release.notes) && release.notes.length
+    ? `<ul style="margin:8px 0 0;padding-left:18px;font-size:13px;color:var(--text-muted)">
+        ${release.notes.map(n => `<li>${escHtml(n)}</li>`).join('')}
+       </ul>`
+    : '';
+
+  if (!hasUpdate) {
+    body.innerHTML = `<div style="text-align:center;padding:16px 0">
+      <i class="fa fa-circle-check" style="font-size:36px;color:#22c55e;margin-bottom:12px;display:block"></i>
+      <div style="font-weight:700;font-size:16px;margin-bottom:6px">You're up to date!</div>
+      <div style="font-size:13px;color:var(--text-muted)">Zeebroo POS <strong>v${escHtml(current)}</strong> is the latest version.</div>
+    </div>`;
+    return;
+  }
+
+  body.innerHTML = `
+    <div style="display:flex;align-items:center;gap:14px;margin-bottom:18px">
+      <div style="width:48px;height:48px;border-radius:12px;background:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+        <i class="fa fa-download" style="color:#fff;font-size:20px"></i>
+      </div>
+      <div>
+        <div style="font-weight:700;font-size:16px">Update Available</div>
+        <div style="font-size:13px;color:var(--text-muted);margin-top:2px">Version <strong>v${escHtml(latest)}</strong> is ready to download</div>
+      </div>
+    </div>
+    <div style="background:var(--surface2);border-radius:8px;padding:12px 14px;font-size:13px;margin-bottom:18px">
+      <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+        <span style="color:var(--text-muted)">Current version</span>
+        <span style="font-weight:600">v${escHtml(current)}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between">
+        <span style="color:var(--text-muted)">Latest version</span>
+        <span style="font-weight:600;color:#22c55e">v${escHtml(latest)}</span>
+      </div>
+      ${release.release_date ? `<div style="display:flex;justify-content:space-between;margin-top:4px"><span style="color:var(--text-muted)">Released</span><span>${escHtml(release.release_date)}</span></div>` : ''}
+    </div>
+    ${notes}
+    <div style="display:flex;gap:10px;margin-top:20px;justify-content:flex-end">
+      <button class="po-btn-ghost" onclick="$('#update-modal-overlay').style.display='none'">Later</button>
+      ${dlUrl ? `<button class="po-btn-primary" id="update-download-btn"><i class="fa fa-download"></i> Download v${escHtml(latest)}</button>` : '<span style="font-size:12px;color:var(--text-muted)">No download available for your platform.</span>'}
+    </div>`;
+
+  if (dlUrl) {
+    $('#update-download-btn')?.addEventListener('click', () => {
+      window.electronAPI.openExternal(dlUrl);
+    });
+  }
+}
 $('#tpm-logout').addEventListener('click', async () => {
   closeProfileMenu();
   await window.electronAPI.setConfig({ token: null, business_id: null, branch_id: null });
