@@ -35,64 +35,42 @@
   <div id="login-body">
 
     <!-- ── Sign In card ── -->
-    <div id="signin-card" style="display:none">
+    <div class="login-card" id="signin-card">
+      <img src="img/logo.png" alt="Zeebroo" class="login-brand-logo">
+      <p>Sign in to continue</p>
 
-      <!-- Left sidebar -->
-      <aside class="ob-sidebar">
-        <div class="ob-sidebar-brand">
-          <img src="img/logo.png" alt="Zeebroo" class="ob-sidebar-logo">
+      <!-- Step 1: credentials -->
+      <div id="login-step-1">
+        <div id="login-alert" class="alert alert-error" style="display:none"></div>
+        <div class="form-group">
+          <label for="login-email">Email</label>
+          <input type="email" id="login-email" placeholder="you@example.com" autocomplete="email">
         </div>
-        <p class="ob-sidebar-switch">Don't have an account?<br><a href="#" id="go-signup">Create one</a></p>
-      </aside>
-
-      <!-- Right content -->
-      <div class="ob-main">
-        <div class="ob-main-scroll">
-
-          <!-- Step 1: credentials -->
-          <div id="login-step-1">
-            <h1 class="ob-main-title">Welcome back</h1>
-            <p class="ob-main-subtitle">Sign in to your account to continue</p>
-            <div id="login-alert" class="alert alert-error" style="display:none; margin-bottom:20px"></div>
-            <div class="form-group ob-wide-field">
-              <label for="login-email">EMAIL</label>
-              <input type="email" id="login-email" placeholder="you@example.com" autocomplete="email">
-            </div>
-            <div class="form-group ob-wide-field">
-              <label for="login-password">PASSWORD</label>
-              <input type="password" id="login-password" placeholder="••••••••" autocomplete="current-password">
-            </div>
-          </div>
-
-          <!-- Step 2: business + branch -->
-          <div id="login-step-2" style="display:none">
-            <h1 class="ob-main-title">Select Business</h1>
-            <p class="ob-main-subtitle">Choose the business you want to continue with</p>
-            <div id="biz-alert" class="alert alert-error" style="display:none; margin-bottom:20px"></div>
-            <div class="form-group ob-wide-field">
-              <label for="sel-business">BUSINESS</label>
-              <select id="sel-business"><option value="">Loading…</option></select>
-            </div>
-            <div class="form-group ob-wide-field">
-              <label for="sel-branch">BRANCH <span style="color:var(--text-muted);font-weight:400">(optional)</span></label>
-              <select id="sel-branch"><option value="">— No branch —</option></select>
-            </div>
-          </div>
-
+        <div class="form-group">
+          <label for="login-password">Password</label>
+          <input type="password" id="login-password" placeholder="••••••••" autocomplete="current-password">
         </div>
-
-        <!-- Bottom action bar -->
-        <div class="ob-bottom-bar">
-          <div class="ob-bottom-left">
-            <span class="ob-secure-badge"><i class="fa fa-lock"></i> Your data is secure and private.</span>
-          </div>
-          <div class="ob-bottom-right">
-            <button class="ob-continue-btn" id="login-btn"><i class="fa fa-arrow-right-to-bracket"></i> Sign In</button>
-            <button class="ob-continue-btn" id="select-biz-btn" style="display:none"><i class="fa fa-building"></i> Continue</button>
-          </div>
-        </div>
+        <button class="btn-primary" id="login-btn">
+          <i class="fa fa-arrow-right-to-bracket"></i>&nbsp; Sign In
+        </button>
+        <p class="auth-switch-link">Don't have an account? <a href="#" id="go-signup">Create one</a></p>
       </div>
 
+      <!-- Step 2: business + branch -->
+      <div id="login-step-2" style="display:none">
+        <div id="biz-alert" class="alert alert-error" style="display:none"></div>
+        <div class="form-group">
+          <label for="sel-business">Business</label>
+          <select id="sel-business"><option value="">Loading…</option></select>
+        </div>
+        <div class="form-group">
+          <label for="sel-branch">Branch <span style="color:var(--text-muted);font-weight:400">(optional)</span></label>
+          <select id="sel-branch"><option value="">— No branch —</option></select>
+        </div>
+        <button class="btn-primary" id="select-biz-btn">
+          <i class="fa fa-building"></i>&nbsp; Continue
+        </button>
+      </div>
     </div>
 
     <!-- ── Sign Up card (4-step onboarding wizard) ── -->
