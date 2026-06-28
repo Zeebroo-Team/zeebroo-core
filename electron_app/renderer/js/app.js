@@ -2059,6 +2059,22 @@ const _obCatColors = {
   other:                  '#9ca3af',
 };
 
+const _obDefaultCats = [
+  { value: 'education',             label: 'Education' },
+  { value: 'software_industry',     label: 'Software Industry' },
+  { value: 'local_retail',          label: 'Local Retail' },
+  { value: 'food_beverage',         label: 'Food & Beverage' },
+  { value: 'healthcare',            label: 'Healthcare' },
+  { value: 'finance',               label: 'Finance' },
+  { value: 'creative_media',        label: 'Creative & Media' },
+  { value: 'ecommerce',             label: 'E-Commerce' },
+  { value: 'manufacturing',         label: 'Manufacturing' },
+  { value: 'real_estate',           label: 'Real Estate' },
+  { value: 'nonprofit',             label: 'Non-Profit' },
+  { value: 'professional_services', label: 'Professional Services' },
+  { value: 'other',                 label: 'Other' },
+];
+
 const _obStepSubs = {
   1: 'Your login credentials',
   2: 'About you & your business',
@@ -2456,13 +2472,13 @@ $('#ob-next-2-btn').addEventListener('click', async () => {
   if (!name) { showAlert(alert, 'Please enter your name'); return; }
   if (!biz)  { showAlert(alert, 'Please enter a business name'); return; }
 
-  const grid = $('#ob-cat-grid');
-  if (grid) grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:30px;color:var(--text-muted)"><i class="fa fa-spinner fa-spin"></i> Loading…</div>';
   _obSetStep(3);
+  _obBuildCatGrid(_obDefaultCats);
 
-  const res = await API.businessCategories();
-  const cats = res.body?.data || [];
-  _obBuildCatGrid(cats);
+  API.businessCategories().then(res => {
+    const cats = res.body?.data;
+    if (Array.isArray(cats) && cats.length) _obBuildCatGrid(cats);
+  });
 });
 $('#su-biz').addEventListener('keydown', e => { if (e.key === 'Enter') $('#ob-next-2-btn').click(); });
 
