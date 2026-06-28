@@ -92,9 +92,9 @@ ipcMain.on('window-expand', () => {
 
 ipcMain.on('window-wide-auth', () => {
   if (!mainWindow) return;
-  mainWindow.setResizable(true);
-  mainWindow.setMinimumSize(900, 580);
-  mainWindow.setSize(960, 620, true);
+  mainWindow.setMinimumSize(440, 720);
+  mainWindow.setSize(440, 720, true);
+  mainWindow.setResizable(false);
   mainWindow.center();
 });
 
