@@ -10,6 +10,12 @@ use Illuminate\Support\Facades\Schema;
 use Modules\Business\Models\Branch;
 use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesPosBusinessForApi;
 use Modules\Pos\Services\PosSettingsService;
+use Modules\Product\Models\Product;
+use Modules\Product\Models\ProductCategory;
+use Modules\Product\Models\ProductStockLayer;
+use Modules\Restaurant\Models\MenuItem;
+use Modules\Restaurant\Models\Order;
+use Modules\Restaurant\Models\RestaurantTable;
 
 class PosSettingsApiController extends Controller
 {
@@ -105,7 +111,7 @@ class PosSettingsApiController extends Controller
     public function features(Request $request): JsonResponse
     {
         $business = $this->businessOrAbort($request);
-        $all      = ['account_management','bill_management','human_resources','point_of_sale','product_management','service_management','social_media_campaign','stock_management'];
+        $all      = ['account_management','bill_management','human_resources','point_of_sale','product_management','restaurant','service_management','social_media_campaign','stock_management'];
         $stored   = $business->getSetting('business.features') ?? [];
         $enabled  = array_values(array_filter($all, fn ($k) => ! empty($stored[$k])));
         if (! in_array('account_management', $enabled, true)) {
@@ -117,7 +123,7 @@ class PosSettingsApiController extends Controller
     public function updateFeatures(Request $request): JsonResponse
     {
         $business = $this->businessOrAbort($request);
-        $all      = ['account_management','bill_management','human_resources','point_of_sale','product_management','service_management','social_media_campaign','stock_management'];
+        $all      = ['account_management','bill_management','human_resources','point_of_sale','product_management','restaurant','service_management','social_media_campaign','stock_management'];
         $validated = $request->validate([
             'features'   => ['required', 'array'],
             'features.*' => ['boolean'],
@@ -158,6 +164,23 @@ class PosSettingsApiController extends Controller
         return response()->json([
             'message' => 'POS settings saved.',
             'data' => $this->posSettings->forBusiness($business),
+        ]);
+    }
+
+    public function syncStatus(Request $request): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $bizId    = $business->id;
+
+        return response()->json([
+            'data' => [
+                'products'   => Product::where('business_id', $bizId)->max('updated_at'),
+                'categories' => ProductCategory::where('business_id', $bizId)->max('updated_at'),
+                'stock'      => ProductStockLayer::where('business_id', $bizId)->max('updated_at'),
+                'tables'     => RestaurantTable::where('business_id', $bizId)->max('updated_at'),
+                'menu_items' => MenuItem::where('business_id', $bizId)->max('updated_at'),
+                'rst_orders' => Order::where('business_id', $bizId)->max('updated_at'),
+            ],
         ]);
     }
 }

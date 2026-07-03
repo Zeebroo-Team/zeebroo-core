@@ -32,8 +32,9 @@ class PosOnlineBootstrapApiController extends Controller
             ? $request->query('stock_status') : null;
         $brandId     = $request->query('brand_id');
         $brandId     = is_numeric($brandId) ? (int) $brandId : null;
-        $sort        = in_array($request->query('sort'), ['name_asc', 'name_desc', 'price_asc', 'price_desc', 'stock_asc', 'stock_desc'], true)
+        $sort        = in_array($request->query('sort'), ['name_asc', 'name_desc', 'price_asc', 'price_desc', 'stock_asc', 'stock_desc', 'recent_sales'], true)
             ? $request->query('sort') : 'name_asc';
+        $recentSales = filter_var($request->query('recent_sales', false), FILTER_VALIDATE_BOOLEAN);
 
         return response()->json([
             'data' => $this->api->bootstrap(
@@ -47,6 +48,7 @@ class PosOnlineBootstrapApiController extends Controller
                 $stockStatus,
                 $brandId,
                 $sort,
+                $recentSales,
             ),
         ]);
     }

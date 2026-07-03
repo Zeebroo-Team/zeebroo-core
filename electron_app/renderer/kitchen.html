@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kitchen Display</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <link rel="stylesheet" href="css/kitchen.css">
+  <style>
+    body { display: flex; flex-direction: column; height: 100vh; }
+  </style>
+</head>
+<body>
+
+  <!-- ── Custom title bar ── -->
+  <div class="kds-titlebar">
+    <div class="kds-titlebar-brand">
+      <i class="fa fa-fire-burner"></i>
+      Kitchen Display
+    </div>
+
+    <div class="kds-filter-tabs">
+      <button class="kds-filter-tab active" data-status="open">
+        <i class="fa fa-layer-group"></i> All Active
+      </button>
+      <button class="kds-filter-tab" data-status="pending">
+        <i class="fa fa-clock"></i> Pending
+        <span class="kds-tab-cnt" id="cnt-pending" style="display:none"></span>
+      </button>
+      <button class="kds-filter-tab" data-status="preparing">
+        <i class="fa fa-fire"></i> Preparing
+        <span class="kds-tab-cnt" id="cnt-preparing" style="display:none"></span>
+      </button>
+      <button class="kds-filter-tab" data-status="ready">
+        <i class="fa fa-bell"></i> Ready
+        <span class="kds-tab-cnt" id="cnt-ready" style="display:none"></span>
+      </button>
+    </div>
+
+    <div class="kds-titlebar-right">
+      <span class="kds-live-pill"><i class="fa fa-circle"></i> Live</span>
+      <span class="kds-last-update" id="kds-last-update"></span>
+      <button class="kds-wbtn" id="btn-refresh" title="Refresh now">
+        <i class="fa fa-rotate-right"></i>
+      </button>
+      <button class="kds-wbtn" id="btn-fullscreen" title="Toggle fullscreen">
+        <i class="fa fa-expand" id="fs-icon"></i>
+      </button>
+      <button class="kds-wbtn" id="btn-minimize" title="Minimize">
+        <i class="fa fa-minus"></i>
+      </button>
+      <button class="kds-wbtn close" id="btn-close" title="Close">
+        <i class="fa fa-xmark"></i>
+      </button>
+    </div>
+  </div>
+
+  <!-- ── Order ticket grid ── -->
+  <div id="kds-grid">
+    <div class="kds-empty" id="kds-loading">
+      <i class="fa fa-spinner fa-spin"></i>
+      <p>Loading orders…</p>
+    </div>
+  </div>
+
+  <script src="js/kitchen.js"></script>
+</body>
+</html>

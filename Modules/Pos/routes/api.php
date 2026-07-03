@@ -70,6 +70,7 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
 
     Route::get('online/features', [PosSettingsApiController::class, 'features'])->name('online.features');
     Route::put('online/features', [PosSettingsApiController::class, 'updateFeatures'])->name('online.features.update');
+    Route::get('online/sync-status', [PosSettingsApiController::class, 'syncStatus'])->name('online.sync-status');
     Route::get('online/settings', [PosSettingsApiController::class, 'show'])->name('online.settings.show');
     Route::put('online/settings', [PosSettingsApiController::class, 'update'])->name('online.settings.update');
     Route::patch('online/settings', [PosSettingsApiController::class, 'update']);

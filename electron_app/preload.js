@@ -35,4 +35,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openQuotePrint:    (data) => ipcRenderer.invoke('open-quote-print', data),
   getQuotePrintData: ()     => ipcRenderer.invoke('get-quote-print-data'),
   onQuotePrintRefresh: (cb) => ipcRenderer.on('quote-print-refresh', (_e, data) => cb(data)),
+
+  // Kitchen Display window
+  openKds:          ()       => ipcRenderer.invoke('open-kds'),
+  kdsMinimize:      ()       => ipcRenderer.send('kds-minimize'),
+  kdsClose:         ()       => ipcRenderer.send('kds-close'),
+  kdsFullscreen:    (flag)   => ipcRenderer.send('kds-fullscreen', flag),
+  kdsIsFullScreen:  ()       => ipcRenderer.invoke('kds-is-fullscreen'),
 });

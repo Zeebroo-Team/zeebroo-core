@@ -26,8 +26,9 @@ const API = (() => {
     // POS catalog
     bootstrap:    (search, catId, pg, filters) => {
       const p = new URLSearchParams({ q: search, category: catId || '', page: pg });
-      if (filters?.stockStatus) p.set('stock_status', filters.stockStatus);
-      if (filters?.brandId)     p.set('brand_id',     filters.brandId);
+      if (filters?.stockStatus)  p.set('stock_status',  filters.stockStatus);
+      if (filters?.brandId)      p.set('brand_id',      filters.brandId);
+      if (filters?.recentSales)  p.set('recent_sales',  '1');
       if (filters?.sort && filters.sort !== 'name_asc') p.set('sort', filters.sort);
       return request('GET', `/online/bootstrap?${p.toString()}`);
     },
@@ -103,6 +104,7 @@ const API = (() => {
     settingsUpdate: (data) => request('PATCH', '/online/settings', data),
     features:       ()     => request('GET',   '/online/features'),
     updateFeatures: (data) => request('PUT',   '/online/features', data),
+    syncStatus:     ()     => request('GET',   '/online/sync-status'),
     billTargets:  ()                  => request('GET',  '/expenses/bill-assignment-targets'),
     // Finance — flow overview
     financeFlow:    ()         => request('GET', '/finance/flow'),
@@ -235,5 +237,67 @@ const API = (() => {
     placePO:      (id)                => request('POST', `/purchase-orders/${id}/place`),
     receivePO:    (id)                => request('POST', `/purchase-orders/${id}/receive`),
     cancelPO:     (id)                => request('POST', `/purchase-orders/${id}/cancel`),
+
+    // Restaurant Orders
+    rstBootstrap:      ()                 => request('GET',   '/restaurant/orders/bootstrap'),
+    rstItemStatuses:   (qs)              => request('GET',   `/restaurant/orders/item-statuses?${qs}`),
+    rstOrders:         (q, status, page)  => request('GET',   `/restaurant/orders?q=${encodeURIComponent(q||'')}&status=${status||'all'}&page=${page||1}`),
+    rstOrder:          (id)               => request('GET',   `/restaurant/orders/${id}`),
+    rstTableOrders:    (tableId)          => request('GET',   `/restaurant/orders?table_id=${tableId}&status=open`),
+    rstCreateOrder:    (body)             => request('POST',  '/restaurant/orders', body),
+    rstOrderStatus:    (id, status)       => request('PATCH', `/restaurant/orders/${id}/status`, { status }),
+    rstKdsOrders:      ()                 => request('GET',   '/restaurant/orders?status=open&per_page=100'),
+    rstAddItems:       (orderId, items)   => request('POST',  `/restaurant/orders/${orderId}/items`, { items }),
+    rstUpdateItemStatus:(orderId, itemId, status) => request('PATCH', `/restaurant/orders/${orderId}/items/${itemId}/status`, { status }),
+    rstDeleteItem:     (orderId, itemId)  => request('DELETE', `/restaurant/orders/${orderId}/items/${itemId}`),
+    rstCompleteOrder:  (orderId, paymentMethod, amountTendered) =>
+      request('POST', `/restaurant/orders/${orderId}/complete`, { payment_method: paymentMethod, amount_tendered: amountTendered }),
+    rstClearOrder:     (orderId)          => request('DELETE', `/restaurant/orders/${orderId}`),
+
+    // Restaurant Menu Items
+    rstMenuItems:       (q, status, catId, page) => {
+      const p = new URLSearchParams({ q: q||'', status: status||'all', page: page||1 });
+      if (catId) p.set('category', catId);
+      return request('GET', `/restaurant/menu-items?${p}`);
+    },
+    rstCreateMenuItem:  (body)      => request('POST',   '/restaurant/menu-items', body),
+    rstMenuItem:        (id)        => request('GET',    `/restaurant/menu-items/${id}`),
+    rstUpdateMenuItem:  (id, body)  => request('PUT',    `/restaurant/menu-items/${id}`, body),
+    rstDeleteMenuItem:  (id)        => request('DELETE', `/restaurant/menu-items/${id}`),
+    rstToggleMenuItem:          (id)        => request('PATCH', `/restaurant/menu-items/${id}/toggle`, {}),
+    rstMenuItemIngredients:     (id)        => request('GET',   `/restaurant/menu-items/${id}/ingredients`),
+    rstSyncMenuItemIngredients: (id, body)  => request('PUT',   `/restaurant/menu-items/${id}/ingredients`, body),
+
+    // Restaurant Menu Categories
+    rstMenuCats:          (q)         => request('GET',    `/restaurant/menu-categories?q=${encodeURIComponent(q||'')}`),
+    rstCreateMenuCat:     (body)      => request('POST',   '/restaurant/menu-categories', body),
+    rstUpdateMenuCat:     (id, body)  => request('PUT',    `/restaurant/menu-categories/${id}`, body),
+    rstDeleteMenuCat:     (id)        => request('DELETE', `/restaurant/menu-categories/${id}`),
+    rstReorderMenuCats:   (ids)       => request('POST',   '/restaurant/menu-categories/reorder', { ids }),
+
+    // Restaurant Ingredients
+    rstIngredients:             (q)         => request('GET',    `/restaurant/ingredients?q=${encodeURIComponent(q||'')}`),
+    rstCreateIngredient:        (body)      => request('POST',   '/restaurant/ingredients', body),
+    rstUpdateIngredient:        (id, body)  => request('PUT',    `/restaurant/ingredients/${id}`, body),
+    rstDeleteIngredient:        (id)        => request('DELETE', `/restaurant/ingredients/${id}`),
+    rstStockIn:                 (id, body)  => request('POST',   `/restaurant/ingredients/${id}/stock-in`, body),
+    rstIngredientTransactions:  (id)        => request('GET',    `/restaurant/ingredients/${id}/transactions`),
+
+    // Ingredient Purchase Orders
+    rstPoList:       (status, page) => request('GET',    `/restaurant/purchase-orders?status=${status||'all'}&page=${page||1}`),
+    rstPoShow:       (id)           => request('GET',    `/restaurant/purchase-orders/${id}`),
+    rstPoCreate:     (body)         => request('POST',   '/restaurant/purchase-orders', body),
+    rstPoUpdate:     (id, body)     => request('PUT',    `/restaurant/purchase-orders/${id}`, body),
+    rstPoPlace:      (id)           => request('POST',   `/restaurant/purchase-orders/${id}/place-order`, {}),
+    rstPoCancel:     (id)           => request('POST',   `/restaurant/purchase-orders/${id}/cancel`, {}),
+    rstPoDelete:     (id)           => request('DELETE', `/restaurant/purchase-orders/${id}`),
+    rstPoCreateGrn:  (id, body)     => request('POST',   `/restaurant/purchase-orders/${id}/grn`, body),
+
+    // Restaurant Tables
+    rstTables:              ()          => request('GET',    '/restaurant/tables'),
+    rstCreateTable:         (body)      => request('POST',   '/restaurant/tables', body),
+    rstUpdateTable:         (id, body)  => request('PUT',    `/restaurant/tables/${id}`, body),
+    rstDeleteTable:         (id)        => request('DELETE', `/restaurant/tables/${id}`),
+    rstSaveTablePositions:  (positions) => request('POST',   '/restaurant/tables/positions', { positions }),
   };
 })();

@@ -6,6 +6,7 @@ const state = {
   products: [],
   categories: [],
   activeCategory: 0,
+  filterRecentSales: false,
   searchQuery: '',
   currentPage: 1,
   sessionOpen: false,
@@ -89,17 +90,22 @@ function activateTab(tabName) {
   $$('.ribbon-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tabName));
   $$('.ribbon-page').forEach(p => p.classList.toggle('active', p.dataset.page === tabName));
 
-  const panelMap = { home: 'panel-home', pos: 'panel-pos', sales: 'panel-sales', inventory: 'panel-inventory', finance: 'panel-finance', hr: 'panel-hr', design: 'panel-design', view: 'panel-view' };
+  const panelMap = { home: 'panel-home', pos: 'panel-pos', sales: 'panel-sales', inventory: 'panel-inventory', finance: 'panel-finance', hr: 'panel-hr', design: 'panel-design', view: 'panel-view', restaurant: 'panel-restaurant', 'rst-pos': 'panel-rst-pos' };
   $$('.content-panel').forEach(p => p.classList.remove('active'));
   const target = $('#' + (panelMap[tabName] || 'panel-pos'));
   if (target) target.classList.add('active');
 
-  if (tabName === 'home')      loadHomeDashboard();
-  if (tabName === 'sales')     { _sal.all = []; _salSwitchView(_sal.view || 'transactions'); }
-  if (tabName === 'inventory') { if (typeof switchInvView === 'function') switchInvView('products'); else loadInventory(); }
-  if (tabName === 'finance')   { switchFinView('flow'); }
-  if (tabName === 'hr')        { switchHrView('employees'); }
-  if (tabName === 'design')    { _dsAllData = []; switchDesignView('all'); }
+  // Stop POS poll when leaving the POS tab
+  if (tabName !== 'rst-pos') _rstPosStopPoll();
+
+  if (tabName === 'home')       loadHomeDashboard();
+  if (tabName === 'sales')      { _sal.all = []; _salSwitchView(_sal.view || 'transactions'); }
+  if (tabName === 'inventory')  { if (typeof switchInvView === 'function') switchInvView('products'); else loadInventory(); }
+  if (tabName === 'finance')    { switchFinView('flow'); }
+  if (tabName === 'hr')         { switchHrView('employees'); }
+  if (tabName === 'design')     { _dsAllData = []; switchDesignView('all'); }
+  if (tabName === 'restaurant') { switchRstView('orders'); }
+  if (tabName === 'rst-pos')    { rstPosInit(); }
 }
 
 $$('.ribbon-tab').forEach(tab => {
@@ -134,7 +140,7 @@ function _bsAction(action) {
   switch (action) {
     // POS & Sales
     case 'openPos':          nav('pos'); break;
-    case 'createCustomer':   nav('pos'); setTimeout(() => $('#btn-add-customer')?.click(), 100); break;
+    case 'createCustomer':   C(); openCustomersModal(); setTimeout(() => $('#cm-new-btn')?.click(), 100); break;
     // Inventory — create
     case 'createProduct':    nav('inventory','products'); setTimeout(openAddProductModal, 80); break;
     case 'createCategory':   nav('inventory','categories'); setTimeout(() => $('#cat-add-btn')?.click(), 80); break;
@@ -1809,32 +1815,35 @@ let _invLineSeq = 0;
 function _invAddLine(desc = '', qty = 1, price = 0) {
   const id  = ++_invLineSeq;
   const row = document.createElement('div');
-  row.className      = 'qt-item-row';
+  row.className      = 'qt-line-row';
   row.dataset.lineId = id;
   row.innerHTML = `
-    <input type="text"   class="qt-item-desc"  placeholder="Description" value="${escHtml(desc)}">
-    <input type="number" class="qt-item-qty"   value="${qty}" min="0.001" step="any">
-    <input type="number" class="qt-item-price" value="${price.toFixed(2)}" min="0" step="any">
-    <span  class="qt-item-total-disp">0.00</span>
-    <button class="qt-item-del" title="Remove"><i class="fa fa-xmark"></i></button>`;
+    <div class="qt-line-desc">
+      <input type="text" class="qt-line-input" placeholder="Description" value="${escHtml(desc)}" data-role="desc">
+    </div>
+    <input type="number" class="qt-line-input qt-line-num"   value="${qty}" min="0.001" step="any" data-role="qty">
+    <input type="number" class="qt-line-input qt-line-price" value="${price.toFixed(2)}" min="0" step="any" data-role="price" placeholder="0.00">
+    <div class="qt-line-total" id="inv-lt-${id}">0.00</div>
+    <button class="qt-line-del" title="Remove"><i class="fa fa-xmark"></i></button>`;
   const recalc = () => {
-    const q = parseFloat(row.querySelector('.qt-item-qty').value)   || 0;
-    const p = parseFloat(row.querySelector('.qt-item-price').value) || 0;
-    row.querySelector('.qt-item-total-disp').textContent = (q * p).toFixed(2);
+    const q = parseFloat(row.querySelector('[data-role="qty"]').value)   || 0;
+    const p = parseFloat(row.querySelector('[data-role="price"]').value) || 0;
+    const el = $(`#inv-lt-${id}`);
+    if (el) el.textContent = (q * p).toFixed(2);
     _invRecalc();
   };
-  row.querySelector('.qt-item-qty').addEventListener('input', recalc);
-  row.querySelector('.qt-item-price').addEventListener('input', recalc);
-  row.querySelector('.qt-item-del').addEventListener('click', () => { row.remove(); _invRecalc(); });
+  row.querySelector('[data-role="qty"]').addEventListener('input', recalc);
+  row.querySelector('[data-role="price"]').addEventListener('input', recalc);
+  row.querySelector('.qt-line-del').addEventListener('click', () => { row.remove(); _invRecalc(); });
   $('#sinv-items-body').appendChild(row);
   recalc();
 }
 
 function _invRecalc() {
   let sub = 0;
-  $$('#sinv-items-body .qt-item-row').forEach(row => {
-    sub += (parseFloat(row.querySelector('.qt-item-qty').value)   || 0)
-         * (parseFloat(row.querySelector('.qt-item-price').value) || 0);
+  $$('#sinv-items-body .qt-line-row').forEach(row => {
+    sub += (parseFloat(row.querySelector('[data-role="qty"]').value)   || 0)
+         * (parseFloat(row.querySelector('[data-role="price"]').value) || 0);
   });
   const disc = parseFloat($('#sinv-f-discount').value) || 0;
   const tax  = parseFloat($('#sinv-f-tax').value)      || 0;
@@ -1921,10 +1930,10 @@ $('#sinv-f-tax').addEventListener('input', _invRecalc);
 $('#sinv-form-save').addEventListener('click', async () => {
   const btn   = $('#sinv-form-save');
   const lines = [];
-  $$('#sinv-items-body .qt-item-row').forEach(row => {
-    const qty   = parseFloat(row.querySelector('.qt-item-qty').value)   || 0;
-    const price = parseFloat(row.querySelector('.qt-item-price').value) || 0;
-    const desc  = row.querySelector('.qt-item-desc').value.trim();
+  $$('#sinv-items-body .qt-line-row').forEach(row => {
+    const qty   = parseFloat(row.querySelector('[data-role="qty"]').value)   || 0;
+    const price = parseFloat(row.querySelector('[data-role="price"]').value) || 0;
+    const desc  = (row.querySelector('[data-role="desc"]')?.value || '').trim();
     if (qty > 0 || price > 0 || desc) {
       lines.push({ item_type: 'custom', description: desc, quantity: qty, unit_price: price });
     }
@@ -2040,6 +2049,8 @@ const _obCatIcons = {
   real_estate:            'fa-building',
   nonprofit:              'fa-hand-holding-heart',
   professional_services:  'fa-briefcase',
+  restaurant:             'fa-utensils',
+  bar:                    'fa-wine-glass',
   other:                  'fa-ellipsis',
 };
 
@@ -2056,6 +2067,8 @@ const _obCatColors = {
   real_estate:            '#14b8a6',
   nonprofit:              '#22c55e',
   professional_services:  '#6366f1',
+  restaurant:             '#f97316',
+  bar:                    '#a855f7',
   other:                  '#9ca3af',
 };
 
@@ -2072,6 +2085,8 @@ const _obDefaultCats = [
   { value: 'real_estate',           label: 'Real Estate' },
   { value: 'nonprofit',             label: 'Non-Profit' },
   { value: 'professional_services', label: 'Professional Services' },
+  { value: 'restaurant',            label: 'Restaurant' },
+  { value: 'bar',                   label: 'Bar' },
   { value: 'other',                 label: 'Other' },
 ];
 
@@ -2090,6 +2105,7 @@ const _obFeatureDefs = [
   { key: 'human_resources',       img: 'img/features/human-resource-management.png', name: 'Human Resources',      desc: 'Employees, payroll & departments',     color: '#8b5cf6' },
   { key: 'service_management',    img: 'img/features/service-management.svg',         name: 'Services',             desc: 'Manage appointments & service jobs',   color: '#10b981' },
   { key: 'social_media_campaign', img: 'img/features/social-media-campaign.png',      name: 'Social Campaigns',     desc: 'Create and schedule ad creatives',     color: '#ec4899' },
+  { key: 'restaurant',            img: 'img/features/service.png',                     name: 'Restaurant',           desc: 'Restaurant POS, orders, menu & kitchen display', color: '#f97316' },
 ];
 
 function _obBuildCatGrid(cats) {
@@ -2102,11 +2118,16 @@ function _obBuildCatGrid(cats) {
       <span class="ob-cat-name">${escHtml(o.label)}</span>
     </div>`;
   }).join('');
+  const _RST_CATS = new Set(['restaurant', 'bar']);
   grid.querySelectorAll('.ob-cat-card').forEach(card => {
     card.addEventListener('click', () => {
       _obSelectedCat = card.dataset.cat;
       grid.querySelectorAll('.ob-cat-card').forEach(c => c.classList.remove('active'));
       card.classList.add('active');
+      if (_RST_CATS.has(_obSelectedCat)) {
+        _obFeatureSet.add('restaurant');
+        _obFeatureSet.delete('point_of_sale');
+      }
     });
   });
 }
@@ -2127,11 +2148,20 @@ function _obBuildFeatureList() {
       </div>
     </div>`;
   }).join('');
+  const _OB_MUTUAL_EXCL = { restaurant: 'point_of_sale', point_of_sale: 'restaurant' };
   list.querySelectorAll('.ob-feat-card').forEach(card => {
     card.addEventListener('click', () => {
       const key = card.dataset.fkey;
-      if (_obFeatureSet.has(key)) { _obFeatureSet.delete(key); card.classList.remove('active'); }
-      else                        { _obFeatureSet.add(key);    card.classList.add('active'); }
+      if (_obFeatureSet.has(key)) {
+        _obFeatureSet.delete(key); card.classList.remove('active');
+      } else {
+        _obFeatureSet.add(key); card.classList.add('active');
+        const rival = _OB_MUTUAL_EXCL[key];
+        if (rival && _obFeatureSet.has(rival)) {
+          _obFeatureSet.delete(rival);
+          list.querySelector(`.ob-feat-card[data-fkey="${rival}"]`)?.classList.remove('active');
+        }
+      }
     });
   });
 }
@@ -2213,15 +2243,18 @@ function applyFeatureVisibility() {
   const hr    = hasFeature('human_resources');
   const svc   = hasFeature('service_management');
   const camp  = hasFeature('social_media_campaign');
+  const rst   = hasFeature('restaurant');
 
   // ── Ribbon tabs ──
   const tabFeatures = {
-    pos:       pos || svc,
-    sales:     pos,
-    inventory: prod || stock,
-    finance:   bill,
-    hr:        hr,
-    design:    camp,
+    pos:        pos,
+    sales:      pos,
+    inventory:  prod || stock,
+    finance:    bill,
+    hr:         hr,
+    design:     camp,
+    restaurant: rst,
+    'rst-pos':  rst,
   };
   $$('.ribbon-tab[data-tab]').forEach(tab => {
     const show = tabFeatures[tab.dataset.tab];
@@ -2229,7 +2262,7 @@ function applyFeatureVisibility() {
   });
 
   // ── Home ribbon groups (Home tab is always visible) ──
-  grp('#rb-home-pos',      pos || svc);             // Quick Actions
+  grp('#rb-home-pos',      pos || svc || rst);       // Quick Actions
   // Overview group — always visible (no anchor needed, no change)
   grp('#rb-home-orders',   pos || prod || stock);   // Operations
   grp('#rb-home-expenses', bill || hr);             // Finance shortcuts
@@ -2288,6 +2321,89 @@ async function loadFeatures() {
   applyFeatureVisibility();
 }
 
+// ── Real-time sync polling ─────────────────────────────────────────────────
+const _sync = { ts: {}, timer: null };
+
+function _activeTab() {
+  return $$('.ribbon-tab.active')[0]?.dataset.tab || '';
+}
+
+async function _syncTick() {
+  const res = await API.syncStatus();
+  if (res.status !== 200) return;
+  const ts  = res.body?.data || {};
+  const old = _sync.ts;
+  _sync.ts  = ts;
+
+  const productsChanged  = ts.products   !== old.products  || ts.categories !== old.categories;
+  const stockChanged     = ts.stock      !== old.stock;
+  const tablesChanged    = ts.tables     !== old.tables;
+  const menuChanged      = ts.menu_items !== old.menu_items;
+  const rstOrdersChanged = ts.rst_orders !== old.rst_orders;
+
+  const tab = _activeTab();
+
+  // POS product grid — silent refresh (no spinner)
+  if (productsChanged) {
+    const r2 = await API.bootstrap(state.searchQuery || '', state.activeCategory || 0, state.activePage || 1, {});
+    if (r2.status === 200) {
+      const { products = [], categories = [], currency = '' } = r2.body?.data || r2.body || {};
+      state.products   = products;
+      state.categories = categories;
+      if (currency) state.currency = currency;
+      buildCategoryBar(categories, state.activeCategory || 0);
+      buildProductGrid(products);
+    }
+    if (tab === 'inventory') loadInventory();
+    if (tab === 'home') loadHomeKPIs();
+  }
+
+  if (stockChanged) {
+    if (tab === 'inventory') loadInventory();
+    if (tab === 'home') loadHomeKPIs();
+  }
+
+  if (tablesChanged && tab === 'restaurant') {
+    const rstView = $('#rst-tables-view');
+    if (rstView && rstView.style.display !== 'none') rstTablesLoad();
+  }
+
+  if (menuChanged) {
+    const r3 = await API.rstBootstrap();
+    if (r3.status === 200) {
+      const d = r3.body?.data || {};
+      _rst.menuCats        = d.categories || [];
+      _rst.tables          = d.tables     || [];
+      _rst.currency        = d.currency   || _rst.currency;
+      _rst.bootstrapLoaded = true;
+      if (tab === 'rst-pos') {
+        _rstPos.allItems = [];
+        _rst.menuCats.forEach(c => {
+          (c.items || []).forEach(item => _rstPos.allItems.push({ ...item, catName: c.name, catId: c.id }));
+        });
+        _rstPosBuildCats();
+        _rstPosRenderGrid(_rstPos.allItems);
+      }
+    }
+  }
+
+  if (rstOrdersChanged && tab === 'restaurant') {
+    const rstOrdersView = $('#rst-orders-view');
+    if (rstOrdersView && rstOrdersView.style.display !== 'none') {
+      rstLoadOrders(undefined, undefined, 1);
+    }
+  }
+}
+
+function _syncStart() {
+  _sync.ts    = {};
+  _sync.timer = setInterval(_syncTick, 30000);
+}
+
+function _syncStop() {
+  if (_sync.timer) { clearInterval(_sync.timer); _sync.timer = null; }
+}
+
 function showApp() {
   window.electronAPI.expandWindow?.();
   $('#login-screen').style.display = 'none';
@@ -2308,6 +2424,8 @@ function showApp() {
   _bizSwInit();
   // Apply feature-based tab and backstage visibility
   loadFeatures();
+  // Start real-time background sync
+  _syncStart();
 }
 
 // ── Bank Account Setup Wizard ──────────────────────────────────────────────
@@ -2486,6 +2604,7 @@ $('#ob-back-3-btn').addEventListener('click', () => _obSetStep(2));
 $('#ob-next-3-btn').addEventListener('click', () => {
   const alert = $('#signup-alert');
   if (!_obSelectedCat) { showAlert(alert, 'Please select your industry'); return; }
+  _obBuildFeatureList();
   _obSetStep(4);
 });
 
@@ -2832,6 +2951,7 @@ async function openUpdateModal() {
 }
 $('#tpm-logout').addEventListener('click', async () => {
   closeProfileMenu();
+  _syncStop();
   await window.electronAPI.setConfig({ token: null, business_id: null, branch_id: null });
   state.posTabs = []; state.activePosTabId = null; state._nextPosTabId = 1;
   showLogin();
@@ -2848,6 +2968,7 @@ const _featDefs = [
   { key: 'human_resources',      name: 'Human Resources',       desc: 'Employees, departments & payroll',        icon: 'fa-users',              color: '#f7a54e' },
   { key: 'service_management',   name: 'Services',              desc: 'Service-bound products & job management', icon: 'fa-screwdriver-wrench', color: '#f0a030' },
   { key: 'social_media_campaign',name: 'Social Media Campaign', desc: 'Design studio & marketing assets',        icon: 'fa-bullhorn',           color: '#e040fb' },
+  { key: 'restaurant',           name: 'Restaurant',            desc: 'Restaurant POS, orders, menu & kitchen', icon: 'fa-utensils',           color: '#f97316' },
 ];
 
 function openFeatureMgmtModal() {
@@ -2864,8 +2985,16 @@ function openFeatureMgmtModal() {
       <div class="feat-mgmt-toggle${isOn ? ' on' : ''}${f.locked ? ' locked' : ''}" data-fm-key="${f.key}"></div>
     </div>`;
   }).join('');
+  const MUTUAL_EXCL = { restaurant: 'point_of_sale', point_of_sale: 'restaurant' };
   list.querySelectorAll('.feat-mgmt-toggle:not(.locked)').forEach(t => {
-    t.addEventListener('click', () => t.classList.toggle('on'));
+    t.addEventListener('click', () => {
+      t.classList.toggle('on');
+      const rival = MUTUAL_EXCL[t.dataset.fmKey];
+      if (rival && t.classList.contains('on')) {
+        const rivalEl = list.querySelector(`.feat-mgmt-toggle[data-fm-key="${rival}"]`);
+        if (rivalEl) rivalEl.classList.remove('on');
+      }
+    });
   });
   $('#feat-mgmt-alert').style.display = 'none';
   $('#feat-mgmt-overlay').style.display = 'flex';
@@ -2952,6 +3081,7 @@ function showShortcutsModal() {
 
 // ── Sign out (ribbon View tab button) ─────────────────────────────────────
 $('#rb-logout').addEventListener('click', async () => {
+  _syncStop();
   await window.electronAPI.setConfig({ token: null, business_id: null, branch_id: null });
   state.posTabs = []; state.activePosTabId = null; state._nextPosTabId = 1;
   showLogin();
@@ -6766,15 +6896,28 @@ function _prodGenerateSku() {
 }
 
 // ── Image picker ──────────────────────────────────────────────────────────
-const _imgPicker = { _pendingFilePath: null, _folderId: null };
+const _imgPicker = { _pendingFilePath: null, _folderId: null, _onSelect: null };
 
+function openImgPicker(onSelect) {
+  _imgPicker._onSelect = onSelect || null;
+  _imgPickerOpen();
+}
 function _imgPickerOpen() {
   $('#img-picker-modal').style.display = 'flex';
   _imgPickerTabSwitch('upload');
 }
+function _imgPickerSelected(fileId, url) {
+  if (_imgPicker._onSelect) {
+    _imgPicker._onSelect(fileId, url);
+  } else {
+    _prodSetImage(fileId, url);
+  }
+  _imgPickerClose();
+}
 function _imgPickerClose() {
   $('#img-picker-modal').style.display = 'none';
   _imgPicker._pendingFilePath = null;
+  _imgPicker._onSelect = null;
   $('#img-upload-preview').style.display = 'none';
   $('#img-upload-drop').style.display = 'block';
 }
@@ -6805,13 +6948,12 @@ async function _imgPickerUploadAndUse() {
   const btn = $('#img-upload-confirm');
   btn.disabled = true;
   btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Uploading…';
-  const res = await window.electronAPI.apiUpload('/v1/pos/online/file-manager/upload', _imgPicker._pendingFilePath);
+  const res = await window.electronAPI.apiUpload('/online/file-manager/upload', _imgPicker._pendingFilePath);
   btn.disabled = false;
   btn.innerHTML = '<i class="fa fa-upload"></i> Upload &amp; Use';
   if (res.status === 201 && res.body?.data?.length) {
     const file = res.body.data[0];
-    _prodSetImage(file.id, file.url);
-    _imgPickerClose();
+    _imgPickerSelected(file.id, file.url);
   } else {
     const msg = res.body?.message || 'Upload failed';
     toast(msg, 'error');
@@ -6850,8 +6992,7 @@ async function _imgPickerLoadFm(folderId) {
   });
   $('#img-fm-grid').querySelectorAll('.img-fm-file').forEach(el => {
     el.addEventListener('click', () => {
-      _prodSetImage(parseInt(el.dataset.fileId), el.dataset.url);
-      _imgPickerClose();
+      _imgPickerSelected(parseInt(el.dataset.fileId), el.dataset.url);
     });
   });
 }
@@ -7367,7 +7508,7 @@ $('#prod-modal-save')?.addEventListener('click',    _prodSave);
 $('#prod-sku-gen')?.addEventListener('click', _prodGenerateSku);
 
 // Image
-$('#prod-img-choose')?.addEventListener('click', _imgPickerOpen);
+$('#prod-img-choose')?.addEventListener('click', () => openImgPicker(null));
 $('#prod-img-remove')?.addEventListener('click', () => _prodSetImage(null, null));
 $('#img-picker-close')?.addEventListener('click', _imgPickerClose);
 $('#img-upload-btn')?.addEventListener('click',    _imgPickerBrowseFile);
@@ -7753,39 +7894,55 @@ async function loadProducts(search = '', catId = 0, page = 1) {
   grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text-muted)"><i class="fa fa-spinner fa-spin" style="font-size:24px"></i></div>';
   setStatus('Loading products…');
 
-  const res = await API.bootstrap(search, catId, page);
+  const applyRecent  = state.filterRecentSales && !search;
+  const effectiveCat = search ? 0 : catId;
+  const res = await API.bootstrap(search, effectiveCat, page, {
+    sort: applyRecent ? 'recent_sales' : 'name_asc',
+    recentSales: applyRecent,
+  });
   if (res.status !== 200) {
     grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:40px;color:#e74c3c"><i class="fa fa-circle-exclamation"></i> Failed to load products</div>`;
     setStatus('Error loading products');
     return;
   }
 
-  const { products = [], categories = [], currency = '', settings = {}, business = {}, product_units = [] } = res.body?.data || res.body || {};
+  const { products = [], categories = [], currency = '', settings = {}, business = {}, product_units = [], products_meta = {} } = res.body?.data || res.body || {};
   state.products        = products;
   state.categories      = categories;
   state.receiptSettings = settings;
   state.productUnits    = product_units;
+  state.activePage      = products_meta.current_page || page;
   if (currency)       state.currency = currency;
   if (business?.name) state._bizName = state._bizName || business.name;
 
   buildCategoryBar(categories, catId);
   buildProductGrid(products);
-  setStatus(`Zeebroo POS · ${products.length} products`);
+  buildPosPagination(products_meta);
+  setStatus(`Zeebroo POS · ${products_meta.total || products.length} products`);
 }
 
 function buildCategoryBar(categories, active) {
-  const bar = $('#category-filter');
-  bar.innerHTML = `<div class="cat-chip ${active === 0 ? 'active' : ''}" data-cat="0">All</div>`;
+  const bar  = $('#category-filter');
+  const rs   = state.filterRecentSales;
+  bar.innerHTML =
+    `<div class="cat-chip ${!rs && active === 0 ? 'active' : ''}" data-cat="0">All</div>` +
+    `<div class="cat-chip cat-chip-recent ${rs ? 'active' : ''}" data-cat="recent"><i class="fa fa-clock-rotate-left"></i> Recent</div>`;
   categories.forEach(c => {
     const chip = document.createElement('div');
-    chip.className = `cat-chip ${c.id === active ? 'active' : ''}`;
+    chip.className = `cat-chip ${!rs && c.id === active ? 'active' : ''}`;
     chip.dataset.cat = c.id;
     chip.textContent = c.name;
     bar.appendChild(chip);
   });
   bar.querySelectorAll('.cat-chip').forEach(chip => {
     chip.addEventListener('click', () => {
-      state.activeCategory = Number(chip.dataset.cat);
+      if (chip.dataset.cat === 'recent') {
+        state.filterRecentSales = true;
+        state.activeCategory    = 0;
+      } else {
+        state.filterRecentSales = false;
+        state.activeCategory    = Number(chip.dataset.cat);
+      }
       _ssClose();
       loadProducts(state.searchQuery, state.activeCategory);
     });
@@ -7838,6 +7995,22 @@ function buildProductGrid(products) {
       else addToCart({ id: Number(card.dataset.id), name: card.dataset.name, price: parseFloat(card.dataset.price), stock: card.dataset.stock !== '' ? Number(card.dataset.stock) : null, layerId: null, layerLabel: null });
     });
   });
+}
+
+function buildPosPagination(meta) {
+  const pg      = $('#pos-pagination');
+  const current = meta?.current_page || 1;
+  const last    = meta?.last_page    || 1;
+  if (last <= 1) { pg.innerHTML = ''; return; }
+  const pages = [];
+  for (let i = Math.max(1, current - 2); i <= Math.min(last, current + 2); i++) pages.push(i);
+  pg.innerHTML =
+    (current > 1 ? `<button class="inv-pg-btn" data-p="${current - 1}"><i class="fa fa-chevron-left"></i></button>` : '') +
+    pages.map(p => `<button class="inv-pg-btn${p === current ? ' active' : ''}" data-p="${p}">${p}</button>`).join('') +
+    (current < last ? `<button class="inv-pg-btn" data-p="${current + 1}"><i class="fa fa-chevron-right"></i></button>` : '');
+  pg.querySelectorAll('.inv-pg-btn').forEach(btn =>
+    btn.addEventListener('click', () => loadProducts(state.searchQuery, state.activeCategory, Number(btn.dataset.p)))
+  );
 }
 
 // ── Search with auto-suggest ───────────────────────────────────────────────
@@ -9795,7 +9968,8 @@ function _coRefresh() {
   if ($('#co-saved'))    $('#co-saved').textContent    = saved > 0 ? saved.toFixed(2) + cur : '—';
   if ($('#co-total'))    $('#co-total').textContent    = total.toFixed(2);
   if ($('#co-currency')) $('#co-currency').textContent = state.currency || '';
-  if ($('#co-amount'))   $('#co-amount').textContent   = _coAmount || '0.00';
+  const amountEl = $('#co-amount');
+  if (amountEl && document.activeElement !== amountEl) amountEl.value = _coAmount || '';
   if ($('#co-amount-due')) $('#co-amount-due').textContent = total.toFixed(2) + cur;
   const changeEl = $('#co-change');
   if (changeEl) {
@@ -9843,7 +10017,9 @@ function openCheckout() {
   $('#checkout-alert').style.display = 'none';
 
   _coRefresh();
+  _coSyncCustomer();
   $('#checkout-modal').style.display = 'flex';
+  setTimeout(() => { const a = $('#co-amount'); if (a) { a.select(); a.focus(); } }, 60);
 }
 
 $('#checkout-cancel').addEventListener('click', () => { $('#checkout-modal').style.display = 'none'; });
@@ -9862,6 +10038,79 @@ $('#co-discount-pct').addEventListener('input', _coRefresh);
 // Numpad
 $$('.co-key').forEach(btn => {
   btn.addEventListener('click', () => _coNumpadKey(btn.dataset.key));
+});
+
+// Amount input — keyboard typing
+$('#co-amount')?.addEventListener('input', function () {
+  _coAmount = this.value;
+  _coRefresh();
+});
+
+// ── Checkout customer search ────────────────────────────────────────────────
+let _coCustTimer = null;
+
+function _coSyncCustomer() {
+  const tab  = activeTab();
+  const cust = tab?._customer ?? null;
+  const selEl   = $('#co-cust-selected');
+  const nameEl  = $('#co-cust-name-disp');
+  const inputEl = $('#co-cust-input');
+  const ddEl    = $('#co-cust-dd');
+  if (cust) {
+    if (nameEl)  nameEl.textContent = cust.name;
+    if (selEl)   selEl.style.display = 'flex';
+    if (inputEl) { inputEl.value = ''; inputEl.style.display = 'none'; }
+  } else {
+    if (selEl)   selEl.style.display = 'none';
+    if (inputEl) { inputEl.value = ''; inputEl.style.display = ''; }
+  }
+  if (ddEl) ddEl.style.display = 'none';
+}
+
+$('#co-cust-input')?.addEventListener('input', function () {
+  clearTimeout(_coCustTimer);
+  const q  = this.value.trim();
+  const dd = $('#co-cust-dd');
+  if (!dd) return;
+  if (q.length < 1) { dd.style.display = 'none'; return; }
+  _coCustTimer = setTimeout(async () => {
+    const res  = await API.customers(q);
+    const list = res.body?.data ?? [];
+    if (!list.length) {
+      dd.innerHTML = `<div class="co-cust-dd-row"><span class="co-cust-dd-name" style="color:var(--text-muted)">No customers found</span></div>`;
+      dd.style.display = '';
+      return;
+    }
+    dd.innerHTML = list.map(c => `
+      <div class="co-cust-dd-row" data-cid="${c.id}">
+        <div class="co-cust-dd-name">${escHtml(c.name)}</div>
+        ${c.phone ? `<div class="co-cust-dd-meta">${escHtml(c.phone)}</div>` : ''}
+      </div>`).join('');
+    dd.style.display = '';
+    dd.querySelectorAll('.co-cust-dd-row[data-cid]').forEach(row => {
+      row.addEventListener('mousedown', e => {
+        e.preventDefault();
+        const c = list.find(x => x.id === Number(row.dataset.cid));
+        if (!c) return;
+        const tab = activeTab();
+        if (tab) tab._customer = c;
+        renderCartCustomer();
+        _coSyncCustomer();
+      });
+    });
+  }, 250);
+});
+
+$('#co-cust-input')?.addEventListener('blur', () => {
+  setTimeout(() => { const dd = $('#co-cust-dd'); if (dd) dd.style.display = 'none'; }, 200);
+});
+
+$('#co-cust-clear')?.addEventListener('click', () => {
+  const tab = activeTab();
+  if (tab) tab._customer = null;
+  renderCartCustomer();
+  _coSyncCustomer();
+  setTimeout(() => $('#co-cust-input')?.focus(), 50);
 });
 
 $('#checkout-confirm').addEventListener('click', async () => {
@@ -9934,7 +10183,7 @@ $('#rb-barcode').addEventListener('click', () => {
   });
 });
 // ── Quick Add Product ──────────────────────────────────────────────────────
-function openAddProductModal() {
+async function openAddProductModal() {
   // Reset form
   $('#qap-name').value  = '';
   $('#qap-sku').value   = '';
@@ -9945,10 +10194,10 @@ function openAddProductModal() {
   // Currency prefix
   $('#qap-currency-prefix').textContent = state.currency || '';
 
-  // Populate unit dropdown
-  const unitSel = $('#qap-unit');
-  unitSel.innerHTML = '<option value="">— None —</option>' +
-    (state.productUnits || []).map(u => `<option value="${u.id}">${escHtml(u.name || u.label || String(u.id))}</option>`).join('');
+  // Reset unit combo
+  _qapUnit = { id: null, name: '', _new: false };
+  $('#qap-unit-input').value = '';
+  $('#qap-unit-dd').style.display = 'none';
 
   // Save button reset
   const btn = $('#qap-save');
@@ -9957,6 +10206,11 @@ function openAddProductModal() {
 
   $('#qap-modal').style.display = 'flex';
   setTimeout(() => $('#qap-name').focus(), 80);
+
+  // Fetch fresh units in background so dropdown is populated
+  API.units().then(res => {
+    if (res.status === 200) state.productUnits = res.body?.data || [];
+  });
 }
 
 async function submitAddProduct() {
@@ -9983,12 +10237,27 @@ async function submitAddProduct() {
   btn.disabled = true;
   btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Adding…';
 
+  // Create new unit on the fly if needed
+  let _unitId = _qapUnit.id || undefined;
+  if (_qapUnit._new && _qapUnit.name) {
+    const uRes = await API.createUnit({ name: _qapUnit.name });
+    if (uRes.status !== 201) {
+      alertEl.textContent = `Failed to create unit "${_qapUnit.name}"`;
+      alertEl.style.display = 'block';
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa fa-plus"></i> Add Product';
+      return;
+    }
+    _unitId = uRes.body?.data?.id;
+    state.productUnits = [...(state.productUnits || []), uRes.body.data];
+  }
+
   const body = {
     name,
-    unit_price:     price,
-    sku:            $('#qap-sku').value.trim() || undefined,
-    stock_quantity: parseFloat($('#qap-stock').value) || 0,
-    product_unit_id: $('#qap-unit').value ? parseInt($('#qap-unit').value) : undefined,
+    unit_price:      price,
+    sku:             $('#qap-sku').value.trim() || undefined,
+    stock_quantity:  parseFloat($('#qap-stock').value) || 0,
+    product_unit_id: _unitId,
   };
 
   const res = await API.createProduct(body);
@@ -10007,6 +10276,13 @@ async function submitAddProduct() {
   loadProducts(state.searchQuery, state.activeCategory);
 }
 
+$('#qap-sku-gen').addEventListener('click', () => {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  const rand  = (n) => Array.from({ length: n }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+  $('#qap-sku').value = `SKU-${rand(4)}-${rand(4)}`;
+  $('#qap-sku').focus();
+});
+
 $('#qap-close').addEventListener('click',  () => { $('#qap-modal').style.display = 'none'; });
 $('#qap-cancel').addEventListener('click', () => { $('#qap-modal').style.display = 'none'; });
 $('#qap-modal').addEventListener('click', (e) => {
@@ -10017,6 +10293,63 @@ $('#qap-modal').addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitAddProduct(); }
   if (e.key === 'Escape') $('#qap-modal').style.display = 'none';
 });
+
+// ── Unit combo for quick-add product dialog ────────────────────────────────
+let _qapUnit = { id: null, name: '', _new: false };
+
+function _qapUnitRenderDd() {
+  const input = $('#qap-unit-input');
+  const dd    = $('#qap-unit-dd');
+  const q     = input.value.trim();
+  const qLow  = q.toLowerCase();
+  const all   = state.productUnits || [];
+  const filtered = all.filter(u => !q || (u.name || '').toLowerCase().includes(qLow));
+  const hasExact = all.some(u => (u.name || '').toLowerCase() === qLow);
+
+  const rows = filtered.slice(0, 30).map(u => {
+    const n = escHtml(u.name || String(u.id));
+    return `<div class="tag-dd-item" data-id="${u.id}" data-name="${n}">${n}</div>`;
+  });
+  if (q && !hasExact) {
+    rows.push(`<div class="tag-dd-item tag-dd-create" data-new="1" data-name="${escHtml(q)}"><i class="fa fa-plus"></i> Create "${escHtml(q)}"</div>`);
+  }
+
+  dd.innerHTML = rows.length
+    ? rows.join('')
+    : `<div class="tag-dd-empty">${q ? 'No matches' : 'Type to search or create…'}</div>`;
+
+  dd.style.display = 'block';
+
+  dd.querySelectorAll('.tag-dd-item').forEach(opt => opt.addEventListener('mousedown', e => {
+    e.preventDefault();
+    const name = opt.dataset.name;
+    _qapUnit = opt.dataset.new
+      ? { id: null, name, _new: true }
+      : { id: parseInt(opt.dataset.id), name, _new: false };
+    input.value = name;
+    dd.style.display = 'none';
+  }));
+}
+
+(function _qapUnitWire() {
+  const input = $('#qap-unit-input');
+  const dd    = $('#qap-unit-dd');
+  if (!input) return;
+  input.addEventListener('focus', _qapUnitRenderDd);
+  input.addEventListener('input', _qapUnitRenderDd);
+  input.addEventListener('blur', () => setTimeout(() => {
+    dd.style.display = 'none';
+    const v = input.value.trim();
+    if (!v) { _qapUnit = { id: null, name: '', _new: false }; return; }
+    const m = (state.productUnits || []).find(u => (u.name || '').toLowerCase() === v.toLowerCase());
+    _qapUnit = m ? { id: m.id, name: m.name, _new: false } : { id: null, name: v, _new: true };
+    if (m) input.value = m.name;
+  }, 200));
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { dd.style.display = 'none'; input.blur(); }
+    if (e.key === 'Enter') { e.preventDefault(); const first = dd.querySelector('.tag-dd-item'); if (first) first.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); }
+  });
+})();
 
 $('#rb-add-product').addEventListener('click', () => { activateTab('pos'); openAddProductModal(); });
 $('#rb-customers').addEventListener('click', openCustomersModal);
@@ -10035,6 +10368,27 @@ $('#rb-inv-cheques')?.addEventListener('click',   () => { activateTab('inventory
 $('#rb-inv-suppliers')?.addEventListener('click', () => { activateTab('inventory'); switchInvView('suppliers'); });
 $('#rb-add-supplier')?.addEventListener('click',  () => { activateTab('inventory'); switchInvView('suppliers'); _supOpenModal(); });
 $('#rb-inv-barcodes')?.addEventListener('click',  () => { activateTab('inventory'); switchInvView('barcodes'); });
+// ── Restaurant ribbon buttons ──────────────────────────────────────────────
+// Restaurant ribbon
+$('#rb-rst-pos')?.addEventListener('click',              () => { activateTab('rst-pos'); });
+$('#rb-rst-new-order')?.addEventListener('click',        () => { activateTab('restaurant'); switchRstView('orders'); setTimeout(rstOpenCreateModal, 150); });
+$('#rb-rst-orders')?.addEventListener('click',           () => { activateTab('restaurant'); switchRstView('orders'); });
+$('#rb-rst-tables')?.addEventListener('click',           () => { activateTab('restaurant'); switchRstView('tables'); });
+$('#rb-rst-reservations')?.addEventListener('click',     () => { activateTab('restaurant'); switchRstView('reservations'); });
+$('#rb-rst-menu-items')?.addEventListener('click',       () => { activateTab('restaurant'); switchRstView('menu-items'); });
+$('#rb-rst-menu-categories')?.addEventListener('click',  () => { activateTab('restaurant'); switchRstView('menu-categories'); });
+$('#rb-rst-add-menu-item')?.addEventListener('click',    () => { activateTab('restaurant'); switchRstView('menu-items'); });
+$('#rb-rst-ingredients')?.addEventListener('click',      () => { activateTab('restaurant'); switchRstView('ingredients'); });
+$('#rb-rst-stock-in')?.addEventListener('click',         () => { activateTab('restaurant'); switchRstView('ingredients'); });
+$('#rb-rst-purchase-orders')?.addEventListener('click',  () => { activateTab('restaurant'); switchRstView('purchase-orders'); });
+$('#rb-rst-kitchen')?.addEventListener('click',          () => { window.electronAPI.openKds(); });
+
+// Restaurant POS ribbon page
+$('#rb-rst-pos-takeaway')?.addEventListener('click', () => { activateTab('rst-pos'); _rstPosSwitchTab('takeaway'); });
+$('#rb-rst-pos-tables')?.addEventListener('click',   () => { activateTab('rst-pos'); });
+$('#rb-rst-pos-go-rst')?.addEventListener('click',   () => { activateTab('restaurant'); });
+$('#rb-rst-pos-kds')?.addEventListener('click',      () => { window.electronAPI.openKds(); });
+
 $('#rb-create-bill').addEventListener('click', () => { activateTab('finance'); switchFinView('bills'); openBillCreateModal(); });
 $('#rb-bills-list').addEventListener('click', () => { activateTab('finance'); switchFinView('bills'); });
 $('#rb-loans').addEventListener('click',      () => { activateTab('finance'); switchFinView('loans'); });
@@ -13130,6 +13484,2895 @@ function switchHrView(view) {
 $$('#panel-hr .fin-subnav-btn[data-hr]').forEach(btn => {
   btn.addEventListener('click', () => switchHrView(btn.dataset.hr));
 });
+
+// ── Restaurant sub-view ────────────────────────────────────────────────────
+function switchRstView(view) {
+  $$('#panel-restaurant > .fin-subnav .fin-subnav-btn[data-rst]').forEach(b => b.classList.toggle('active', b.dataset.rst === view));
+  $('#rst-orders-view').style.display         = view === 'orders'           ? 'flex' : 'none';
+  $('#rst-tables-view').style.display         = view === 'tables'           ? 'flex' : 'none';
+  $('#rst-reservations-view').style.display   = view === 'reservations'     ? 'flex' : 'none';
+  $('#rst-menu-items-view').style.display     = view === 'menu-items'       ? 'flex' : 'none';
+  $('#rst-menu-cats-view').style.display      = view === 'menu-categories'  ? 'flex' : 'none';
+  $('#rst-ingredients-view').style.display    = view === 'ingredients'      ? 'flex' : 'none';
+  $('#rst-po-view').style.display             = view === 'purchase-orders'  ? 'flex' : 'none';
+  $('#rst-kitchen-view').style.display        = view === 'kitchen'          ? 'flex' : 'none';
+  if (view === 'orders')           rstLoadOrders('', 'all', 1);
+  if (view === 'tables')           rstTablesLoad();
+  if (view === 'ingredients')      rstIngrLoad('');
+  if (view === 'purchase-orders')  rstPoLoad();
+  if (view === 'menu-categories')  rstMcLoad('');
+  if (view === 'menu-items')       { _rstMiPopulateCatFilter(); rstMiLoad('', 'all', '', 1); }
+  _rstKdsStop();
+}
+
+$$('#panel-restaurant .fin-subnav-btn[data-rst]').forEach(btn => {
+  btn.addEventListener('click', () => switchRstView(btn.dataset.rst));
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Restaurant — Orders
+// ══════════════════════════════════════════════════════════════════════════════
+
+const _rst = {
+  status: 'all',
+  page: 1,
+  search: '',
+  searchTimer: null,
+  currency: '',
+  // bootstrap cache
+  tables: [],
+  menuCats: [],
+  bootstrapLoaded: false,
+  // create order state
+  lines: [],            // [{menuItemId, name, qty, price}]
+  activeCatId: null,
+};
+
+function _rstTimeAgo(iso) {
+  if (!iso) return '';
+  const diff = Math.floor((Date.now() - new Date(iso)) / 1000);
+  if (diff < 60) return `${diff}s ago`;
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return `${Math.floor(diff / 86400)}d ago`;
+}
+
+async function rstLoadOrders(search, status, page) {
+  _rst.search = search ?? _rst.search;
+  _rst.status = status ?? _rst.status;
+  _rst.page   = page   ?? _rst.page;
+
+  const area = $('#rst-orders-area');
+  if (!area) return;
+  area.innerHTML = '<div class="finance-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</div>';
+
+  const res = await API.rstOrders(_rst.search, _rst.status, _rst.page);
+  if (res.status !== 200) {
+    area.innerHTML = '<div class="finance-empty"><div class="finance-empty-icon"><i class="fa fa-triangle-exclamation"></i></div><p>Failed to load orders</p></div>';
+    return;
+  }
+
+  const { data: orders = [], meta = {}, status_counts = {}, currency = '' } = res.body;
+  _rst.currency = currency;
+
+  // Update status tab counts
+  const total = Object.values(status_counts).reduce((s, c) => s + c, 0);
+  $('#rst-cnt-all').textContent = total || '';
+  ['pending','preparing','ready','served','paid','cancelled'].forEach(s => {
+    const el = $(`#rst-cnt-${s}`);
+    if (el) el.textContent = status_counts[s] || '';
+  });
+
+  if (!orders.length) {
+    area.innerHTML = '<div class="finance-empty"><div class="finance-empty-icon"><i class="fa fa-list-check"></i></div><p>No orders found</p></div>';
+    $('#rst-orders-footer').textContent = '';
+    return;
+  }
+
+  area.innerHTML = '';
+  orders.forEach(order => {
+    const row = document.createElement('div');
+    row.className = 'rst-order-row';
+    const badgeColor = order.status_color || '#9ca3af';
+    const custLine = order.customer_name
+      ? `<div class="rst-order-cust"><i class="fa fa-user" style="font-size:10px;margin-right:3px"></i>${escHtml(order.customer_name)}${order.customer_phone ? ' · ' + escHtml(order.customer_phone) : ''}</div>`
+      : '';
+    const tableLine = order.table
+      ? `<div class="rst-order-table"><i class="fa fa-table-cells-large" style="font-size:10px;margin-right:3px"></i>${escHtml(order.table.name)}</div>`
+      : '';
+    row.innerHTML = `
+      <div class="rst-order-num">${escHtml(order.order_number)}</div>
+      <span class="rst-order-type-lbl">${escHtml(order.type_label)}</span>
+      <div class="rst-order-info">${custLine}${tableLine}</div>
+      <div class="rst-order-total">${_rst.currency} ${order.total.toFixed(2)}</div>
+      <span class="rst-status-badge" style="background:${badgeColor}">${escHtml(order.status)}</span>
+      <div class="rst-order-time">${_rstTimeAgo(order.created_at)}</div>`;
+    row.addEventListener('click', () => rstOpenDetail(order));
+    area.appendChild(row);
+  });
+
+  const foot = $('#rst-orders-footer');
+  if (foot) foot.textContent = `${meta.total || orders.length} order${meta.total !== 1 ? 's' : ''} · Page ${meta.current_page || 1} of ${meta.last_page || 1}`;
+}
+
+// ── Order Detail Modal ────────────────────────────────────────────────────────
+
+function rstOpenDetail(order) {
+  const cur = _rst.currency;
+  $('#rst-od-title').textContent = order.order_number;
+  $('#rst-od-currency').textContent = cur;
+  $('#rst-od-total').textContent = order.total.toFixed(2);
+  $('#rst-od-alert').style.display = 'none';
+
+  const meta = [order.type_label];
+  if (order.table) meta.push(order.table.name);
+  if (order.customer_name) meta.push(order.customer_name);
+  const badgeColor = order.status_color || '#9ca3af';
+  meta.push(`<span class="rst-status-badge" style="background:${badgeColor}">${escHtml(order.status)}</span>`);
+  $('#rst-od-meta').innerHTML = meta.map((m, i) => i === meta.length - 1 ? m : escHtml(m)).join(' · ');
+
+  const itemsEl = $('#rst-od-items');
+  itemsEl.innerHTML = order.items.map(i => `
+    <div class="rst-od-item-row">
+      <div class="rst-od-item-name">${escHtml(i.name)}</div>
+      <div class="rst-od-item-qty">× ${i.quantity}</div>
+      <div class="rst-od-item-price">${cur} ${i.line_total.toFixed(2)}</div>
+    </div>`).join('');
+
+  // Status transition buttons
+  const flow = {
+    pending:   [{ label:'Start Preparing', status:'preparing', color:'#3b82f6' }, { label:'Cancel', status:'cancelled', color:'#ef4444' }],
+    preparing: [{ label:'Mark Ready',      status:'ready',     color:'#8b5cf6' }, { label:'Cancel', status:'cancelled', color:'#ef4444' }],
+    ready:     [{ label:'Mark Served',     status:'served',    color:'#22c55e' }],
+    served:    [],
+    paid:      [],
+    cancelled: [],
+  };
+  const actions = flow[order.status] || [];
+  const actEl = $('#rst-od-actions');
+  actEl.innerHTML = actions.map(a =>
+    `<button class="rst-od-action-btn" data-status="${escHtml(a.status)}" style="background:${a.color};color:#fff">${escHtml(a.label)}</button>`
+  ).join('');
+  actEl.querySelectorAll('.rst-od-action-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      const res = await API.rstOrderStatus(order.id, btn.dataset.status);
+      btn.disabled = false;
+      if (res.status !== 200) {
+        $('#rst-od-alert').textContent = res.body?.error || 'Failed to update status';
+        $('#rst-od-alert').style.display = '';
+        return;
+      }
+      $('#rst-od-modal').style.display = 'none';
+      rstLoadOrders();
+    });
+  });
+
+  $('#rst-od-modal').style.display = 'flex';
+}
+
+$('#rst-od-close')?.addEventListener('click', () => { $('#rst-od-modal').style.display = 'none'; });
+$('#rst-od-modal')?.addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.style.display = 'none'; });
+
+// ── Create Order Modal ────────────────────────────────────────────────────────
+
+async function rstOpenCreateModal() {
+  _rst.lines = [];
+  _rstRenderLines();
+
+  // Reset form
+  $$('.rst-om-type').forEach(b => b.classList.toggle('active', b.dataset.type === 'dine_in'));
+  $('#rst-om-table-wrap').style.display = '';
+  $('#rst-om-cust-name').value = '';
+  $('#rst-om-cust-phone').value = '';
+  $('#rst-om-notes').value = '';
+  $('#rst-om-alert').style.display = 'none';
+  $('#rst-om-currency').textContent = _rst.currency;
+  $('#rst-om-total').textContent = '0.00';
+
+  $('#rst-order-modal').style.display = 'flex';
+
+  if (!_rst.bootstrapLoaded) {
+    $('#rst-om-menu-grid').innerHTML = '<div class="finance-loading"><i class="fa fa-spinner fa-spin"></i> Loading menu…</div>';
+    const res = await API.rstBootstrap();
+    if (res.status === 200) {
+      const d = res.body?.data || {};
+      _rst.tables   = d.tables   || [];
+      _rst.menuCats = d.categories || [];
+      if (d.currency) { _rst.currency = d.currency; $('#rst-om-currency').textContent = d.currency; }
+      _rst.bootstrapLoaded = true;
+    }
+  }
+
+  // Populate table selector
+  const sel = $('#rst-om-table');
+  sel.innerHTML = '<option value="">— No table —</option>';
+  _rst.tables.forEach(t => {
+    const opt = document.createElement('option');
+    opt.value = t.id;
+    opt.textContent = `${t.name}${t.capacity ? ' (cap ' + t.capacity + ')' : ''}${t.status === 'occupied' ? ' [Occupied]' : ''}`;
+    if (t.status === 'occupied') opt.style.color = '#ef4444';
+    sel.appendChild(opt);
+  });
+
+  // Build category tabs
+  const catTabs = $('#rst-om-cat-tabs');
+  catTabs.innerHTML = '';
+  _rst.menuCats.forEach((c, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'rst-om-cat-tab' + (i === 0 ? ' active' : '');
+    btn.textContent = c.name;
+    btn.addEventListener('click', () => {
+      $$('.rst-om-cat-tab').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      _rst.activeCatId = c.id;
+      _rstRenderMenuGrid(c.items);
+    });
+    catTabs.appendChild(btn);
+  });
+  _rst.activeCatId = _rst.menuCats[0]?.id ?? null;
+  _rstRenderMenuGrid(_rst.menuCats[0]?.items ?? []);
+}
+
+function _rstRenderMenuGrid(items) {
+  const grid = $('#rst-om-menu-grid');
+  if (!grid) return;
+  if (!items || !items.length) {
+    grid.innerHTML = '<div style="color:var(--text-muted);font-size:13px;padding:20px 0">No items in this category</div>';
+    return;
+  }
+  grid.innerHTML = '';
+  items.forEach(item => {
+    const card = document.createElement('div');
+    card.className = 'rst-om-menu-item';
+    card.innerHTML = `<div class="rst-om-menu-item-name">${escHtml(item.name)}</div><div class="rst-om-menu-item-price">${_rst.currency} ${item.price.toFixed(2)}</div>`;
+    card.addEventListener('click', () => _rstAddLine(item.id, item.name, item.price));
+    grid.appendChild(card);
+  });
+}
+
+function _rstAddLine(menuItemId, name, price) {
+  const existing = _rst.lines.find(l => l.menuItemId === menuItemId && l.price === price);
+  if (existing) {
+    existing.qty++;
+  } else {
+    _rst.lines.push({ menuItemId, name, price, qty: 1 });
+  }
+  _rstRenderLines();
+}
+
+function _rstRenderLines() {
+  const el = $('#rst-om-lines');
+  if (!el) return;
+  if (!_rst.lines.length) {
+    el.innerHTML = '<div style="color:var(--text-muted);font-size:12px;padding:12px 0;text-align:center">No items added yet — click items from the menu</div>';
+    $('#rst-om-item-count').textContent = '';
+    $('#rst-om-total').textContent = '0.00';
+    return;
+  }
+  el.innerHTML = '';
+  let total = 0;
+  _rst.lines.forEach((line, idx) => {
+    const lineTotal = line.price * line.qty;
+    total += lineTotal;
+    const row = document.createElement('div');
+    row.className = 'rst-om-line';
+    row.innerHTML = `
+      <div style="flex:1;min-width:0">
+        <div class="rst-om-line-name">${escHtml(line.name)}</div>
+        <div class="rst-om-line-sub">${_rst.currency} ${line.price.toFixed(2)} each · ${_rst.currency} ${lineTotal.toFixed(2)}</div>
+      </div>
+      <div class="rst-om-qty-wrap">
+        <button class="rst-om-qty-btn" data-action="minus" data-idx="${idx}">−</button>
+        <span class="rst-om-qty-val">${line.qty}</span>
+        <button class="rst-om-qty-btn" data-action="plus"  data-idx="${idx}">+</button>
+      </div>
+      <button class="rst-om-line-del" data-idx="${idx}"><i class="fa fa-xmark"></i></button>`;
+    el.appendChild(row);
+  });
+  el.querySelectorAll('.rst-om-qty-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = Number(btn.dataset.idx);
+      if (btn.dataset.action === 'plus') { _rst.lines[idx].qty++; }
+      else { _rst.lines[idx].qty--; if (_rst.lines[idx].qty <= 0) _rst.lines.splice(idx, 1); }
+      _rstRenderLines();
+    });
+  });
+  el.querySelectorAll('.rst-om-line-del').forEach(btn => {
+    btn.addEventListener('click', () => { _rst.lines.splice(Number(btn.dataset.idx), 1); _rstRenderLines(); });
+  });
+  $('#rst-om-item-count').textContent = `${_rst.lines.length} item${_rst.lines.length !== 1 ? 's' : ''}`;
+  $('#rst-om-total').textContent = total.toFixed(2);
+}
+
+$('#rst-om-close')?.addEventListener('click',  () => { $('#rst-order-modal').style.display = 'none'; });
+$('#rst-order-modal')?.addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.style.display = 'none'; });
+
+$$('.rst-om-type').forEach(btn => {
+  btn.addEventListener('click', () => {
+    $$('.rst-om-type').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    $('#rst-om-table-wrap').style.display = btn.dataset.type === 'dine_in' ? '' : 'none';
+  });
+});
+
+$('#rst-om-submit')?.addEventListener('click', async () => {
+  const btn = $('#rst-om-submit');
+  const alertEl = $('#rst-om-alert');
+  alertEl.style.display = 'none';
+
+  if (!_rst.lines.length) {
+    alertEl.textContent = 'Add at least one item to the order.';
+    alertEl.style.display = '';
+    return;
+  }
+
+  const orderType = $$('.rst-om-type.active')[0]?.dataset.type || 'dine_in';
+  const tableId   = parseInt($('#rst-om-table').value) || null;
+
+  const body = {
+    order_type:     orderType,
+    table_id:       tableId,
+    customer_name:  $('#rst-om-cust-name').value.trim() || null,
+    customer_phone: $('#rst-om-cust-phone').value.trim() || null,
+    notes:          $('#rst-om-notes').value.trim() || null,
+    items: _rst.lines.map(l => ({
+      menu_item_id: l.menuItemId || null,
+      name:         l.name,
+      quantity:     l.qty,
+      unit_price:   l.price,
+    })),
+  };
+
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Placing…';
+
+  const res = await API.rstCreateOrder(body);
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fa fa-check"></i> Place Order';
+
+  if (res.status !== 201) {
+    alertEl.textContent = res.body?.message || 'Failed to place order.';
+    alertEl.style.display = '';
+    return;
+  }
+
+  $('#rst-order-modal').style.display = 'none';
+  toast(`Order ${res.body?.data?.order_number || ''} placed`, 'success');
+  rstLoadOrders();
+});
+
+// ── Orders toolbar wiring ─────────────────────────────────────────────────────
+
+$('#rst-new-order-btn')?.addEventListener('click', rstOpenCreateModal);
+
+$('#rst-order-search')?.addEventListener('input', function () {
+  clearTimeout(_rst.searchTimer);
+  _rst.searchTimer = setTimeout(() => rstLoadOrders(this.value.trim(), 'all', 1), 300);
+});
+
+$$('.rst-status-tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    $$('.rst-status-tab').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    rstLoadOrders(_rst.search, btn.dataset.status, 1);
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Restaurant POS
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── State ─────────────────────────────────────────────────────────────────────
+const _rstPos = {
+  allItems:     [],
+  activeCatId:  0,
+  searchTimer:  null,
+  pollTimer:    null,       // interval for per-item kitchen-status polling
+  currency:     '',
+  activeTab:    'takeaway', // 'takeaway' | tableId (number)
+  carts:        {},         // tabKey → { cart:{key→item}, custName, custPhone }
+  activeOrders: {},         // tabKey → order object | null (undefined = not yet loaded)
+  loadingOrders: new Set(),
+};
+
+function _rstPosTabKey(tab) { return tab === 'takeaway' ? 'takeaway' : String(tab); }
+
+function _rstPosGetCart(tab) {
+  const k = _rstPosTabKey(tab ?? _rstPos.activeTab);
+  if (!_rstPos.carts[k]) _rstPos.carts[k] = { cart: {}, custName: '', custPhone: '' };
+  return _rstPos.carts[k];
+}
+
+// ── Bootstrap & init ──────────────────────────────────────────────────────────
+async function rstPosInit() {
+  if (!_rst.bootstrapLoaded) {
+    $('#rst-pos-grid').innerHTML = '<div class="finance-loading"><i class="fa fa-spinner fa-spin"></i> Loading menu…</div>';
+    const res = await API.rstBootstrap();
+    if (res.status === 200) {
+      const d = res.body?.data || {};
+      _rst.tables          = d.tables     || [];
+      _rst.menuCats        = d.categories || [];
+      _rst.currency        = d.currency   || '';
+      _rst.bootstrapLoaded = true;
+    }
+  }
+  _rstPos.currency = _rst.currency;
+  const currEl = $('#rst-pos-currency');
+  if (currEl) currEl.textContent = _rstPos.currency;
+
+  _rstPos.allItems = [];
+  _rst.menuCats.forEach(c => {
+    (c.items || []).forEach(item => _rstPos.allItems.push({ ...item, catName: c.name, catId: c.id }));
+  });
+
+  // Load active orders for occupied tables in the background
+  _rst.tables.filter(t => t.status === 'occupied').forEach(t => _rstPosLoadTableOrder(t.id));
+
+  _rstPos.activeCatId = 0;
+  _rstPosBuildCats();
+  _rstPosRenderGrid(_rstPos.allItems);
+  _rstPosRenderTabBar();
+  _rstPosSwitchTab(_rstPos.activeTab);
+
+  // Per-item kitchen-status poll every 5 s
+  clearInterval(_rstPos.pollTimer);
+  _rstPos.pollTimer = setInterval(_rstPosPollItems, 5000);
+  const liveDot = $('#rst-pos-live-dot');
+  if (liveDot) liveDot.style.display = '';
+}
+
+function _rstPosStopPoll() {
+  clearInterval(_rstPos.pollTimer);
+  _rstPos.pollTimer = null;
+  const liveDot = $('#rst-pos-live-dot');
+  if (liveDot) liveDot.style.display = 'none';
+}
+
+// ── Per-item kitchen-status polling ───────────────────────────────────────────
+async function _rstPosPollItems() {
+  // Build a map: tabKey → { orderId → [cartItems] }
+  // Scan ALL cart items that have been sent to kitchen — supports multiple
+  // orders per table (e.g. first order preparing, second order newly created).
+  const tabOrderMap = {};
+  Object.keys(_rstPos.carts).forEach(tabKey => {
+    const { cart } = _rstPos.carts[tabKey];
+    Object.values(cart).forEach(item => {
+      if (item.status !== 'ordered' || !item.orderId) return;
+      if (!tabOrderMap[tabKey]) tabOrderMap[tabKey] = {};
+      if (!tabOrderMap[tabKey][item.orderId]) tabOrderMap[tabKey][item.orderId] = [];
+      tabOrderMap[tabKey][item.orderId].push(item);
+    });
+  });
+
+  if (!Object.keys(tabOrderMap).length) return;
+
+  // Fetch all open orders; desktop KDS transitions whole orders, so we
+  // mirror order-level status → each cart item's kitchenStatus badge.
+  const res = await API.rstKdsOrders();
+  if (res.status !== 200) return;
+
+  const openOrders = res.body?.data || [];
+  const orderStatusMap = {};
+  openOrders.forEach(o => { orderStatusMap[o.id] = o.status; });
+
+  const STATUS_MAP = {
+    pending:   'pending',
+    preparing: 'preparing',
+    ready:     'ready',
+    served:    'served',
+    paid:      'served',
+  };
+
+  let dirty = false;
+  const activeKey = _rstPosTabKey(_rstPos.activeTab);
+  let toastedReady = false;
+
+  Object.entries(tabOrderMap).forEach(([tabKey, orderGroups]) => {
+    let tabChanged = false;
+
+    Object.entries(orderGroups).forEach(([orderId, items]) => {
+      const rawStatus = orderStatusMap[Number(orderId)];
+      const kitStatus = STATUS_MAP[rawStatus] || (rawStatus ? 'pending' : 'served');
+
+      // Keep activeOrders status in sync for _rstPosAddItem to read
+      const primary = _rstPos.activeOrders[tabKey];
+      if (primary?.id === Number(orderId) && rawStatus && primary.status !== rawStatus) {
+        primary.status = rawStatus;
+      }
+
+      items.forEach(item => {
+        if (item.kitchenStatus === kitStatus) return;
+        const goingReady = kitStatus === 'ready' && item.kitchenStatus !== 'ready';
+        item.kitchenStatus = kitStatus;
+        tabChanged = true;
+        if (goingReady && tabKey === activeKey && !toastedReady) {
+          toast('Order is ready!', 'success');
+          toastedReady = true;
+        }
+      });
+    });
+
+    if (tabChanged && tabKey === activeKey) dirty = true;
+  });
+
+  if (dirty) _rstPosRenderCart();
+}
+
+// ── Tab bar ───────────────────────────────────────────────────────────────────
+function _rstPosRenderTabBar() {
+  const scroll = $('#rst-tbl-tabs-scroll');
+  if (!scroll) return;
+  scroll.innerHTML = '';
+
+  scroll.appendChild(_rstPosTabEl('takeaway', 'takeaway', 'Takeaway', ''));
+
+  _rst.tables.forEach(t => {
+    const cartObj = (_rstPos.carts[String(t.id)]?.cart) || {};
+    const cnt = Object.values(cartObj).reduce((s, l) => s + l.qty, 0);
+    scroll.appendChild(_rstPosTabEl(t.id, t.status, t.name, cnt > 0 ? String(cnt) : ''));
+  });
+}
+
+function _rstPosTabEl(tabId, dotClass, label, badge) {
+  const el = document.createElement('div');
+  el.className = 'rst-tbl-tab' + (_rstPosTabKey(tabId) === _rstPosTabKey(_rstPos.activeTab) ? ' active' : '');
+  el.dataset.tab = tabId;
+  el.innerHTML =
+    `<span class="rst-tbl-dot ${dotClass}"></span>` +
+    escHtml(label) +
+    (badge ? ` <span class="rst-tbl-cnt">${escHtml(badge)}</span>` : '');
+  el.addEventListener('click', () => _rstPosSwitchTab(tabId));
+  return el;
+}
+
+// ── Switch table tab ──────────────────────────────────────────────────────────
+function _rstPosSwitchTab(tabId) {
+  const prevTab  = _rstPos.activeTab;
+  const prevCart = _rstPosGetCart(prevTab);
+  const custEl   = $('#rst-pos-cust');
+  const phoneEl  = $('#rst-pos-phone');
+  if (custEl)  prevCart.custName  = custEl.value;
+  if (phoneEl) prevCart.custPhone = phoneEl.value;
+
+  _rstPos.activeTab = tabId;
+
+  $$('#rst-tbl-tabs-scroll .rst-tbl-tab').forEach(el => {
+    el.classList.toggle('active', _rstPosTabKey(el.dataset.tab) === _rstPosTabKey(tabId));
+  });
+
+  const table   = _rst.tables.find(t => t.id === tabId);
+  const nameEl  = $('#rst-pos-hdr-name');
+  const badgeEl = $('#rst-pos-hdr-badge');
+  if (tabId === 'takeaway') {
+    if (nameEl)  nameEl.textContent  = 'Takeaway';
+    if (badgeEl) { badgeEl.className = 'rst-pos-hdr-badge takeaway'; badgeEl.textContent = 'Takeaway'; badgeEl.style.display = ''; }
+  } else if (table) {
+    if (nameEl)  nameEl.textContent  = table.name;
+    if (badgeEl) { badgeEl.className = `rst-pos-hdr-badge ${table.status}`; badgeEl.textContent = table.status.charAt(0).toUpperCase() + table.status.slice(1); badgeEl.style.display = ''; }
+    const tabKey = _rstPosTabKey(tabId);
+    if (_rstPos.activeOrders[tabKey] === undefined && !_rstPos.loadingOrders.has(tabId)) {
+      _rstPosLoadTableOrder(tabId);
+    }
+  }
+
+  const newCart = _rstPosGetCart(tabId);
+  if (custEl)  custEl.value  = newCart.custName;
+  if (phoneEl) phoneEl.value = newCart.custPhone;
+
+  _rstPosRenderCart();
+}
+
+// ── Load active orders for a table → populate cart ────────────────────────────
+async function _rstPosLoadTableOrder(tableId) {
+  if (_rstPos.loadingOrders.has(tableId)) return;
+  _rstPos.loadingOrders.add(tableId);
+  const res = await API.rstTableOrders(tableId);
+  _rstPos.loadingOrders.delete(tableId);
+
+  const tabKey = String(tableId);
+  if (res.status !== 200) { _rstPos.activeOrders[tabKey] = null; return; }
+
+  // API returns orders latest-first; track the most recent one as the primary
+  // so the next "Send to Kitchen" can add to it if it's still pending.
+  const orders = res.body?.data || [];
+  _rstPos.activeOrders[tabKey] = orders[0] || null;
+
+  if (orders.length) {
+    const { cart } = _rstPosGetCart(tabKey);
+    orders.forEach(order => {
+      (order.items || []).forEach(item => {
+        const already = Object.values(cart).some(c => c.dbId === item.id);
+        if (!already) {
+          cart[`db_${item.id}`] = {
+            id:            item.menu_item_id || 0,
+            name:          item.name,
+            qty:           item.quantity,
+            price:         item.unit_price,
+            notes:         item.notes || '',
+            status:        'ordered',
+            kitchenStatus: item.status || 'pending',
+            dbId:          item.id,
+            orderId:       order.id,
+          };
+        }
+      });
+    });
+  }
+
+  if (_rstPosTabKey(_rstPos.activeTab) === tabKey) {
+    _rstPosRenderCart();
+    _rstPosRenderTabBar();
+  }
+}
+
+// ── Add menu item to cart ─────────────────────────────────────────────────────
+function _rstPosAddItem(item) {
+  const { cart } = _rstPosGetCart();
+  const tabKey      = _rstPosTabKey(_rstPos.activeTab);
+  const orderStatus = _rstPos.activeOrders[tabKey]?.status || null;
+  // Kitchen is busy when order exists and has moved past pending
+  const kitchenBusy = orderStatus && orderStatus !== 'pending';
+
+  if (kitchenBusy) {
+    // Kitchen is preparing/ready/served — always add as a separate new line
+    // so the kitchen sees it as a distinct new addition on the ticket
+    cart[`mi_${item.id}_${Date.now()}`] = {
+      id: item.id, name: item.name, qty: 1, price: item.price,
+      notes: '', status: 'new', kitchenStatus: null, dbId: null, orderId: null,
+    };
+  } else {
+    // No active order, or order is still pending → merge with any existing new item
+    const existingKey = Object.keys(cart).find(k => cart[k].status === 'new' && cart[k].id === item.id);
+    if (existingKey) {
+      cart[existingKey].qty++;
+    } else {
+      cart[`mi_${item.id}`] = {
+        id: item.id, name: item.name, qty: 1, price: item.price,
+        notes: '', status: 'new', kitchenStatus: null, dbId: null, orderId: null,
+      };
+    }
+  }
+
+  _rstPosRenderCart();
+  _rstPosRenderTabBar();
+}
+
+// ── Cart render — two sections: Sent to Kitchen + New Items ───────────────────
+function _rstPosRenderCart() {
+  const itemsEl  = $('#rst-pos-items');
+  const footerEl = $('#rst-pos-footer');
+  const emptyEl  = $('#rst-pos-empty');
+  if (!itemsEl) return;
+
+  const { cart } = _rstPosGetCart();
+  const allEntries     = Object.entries(cart);
+  const orderedEntries = allEntries.filter(([, i]) => i.status === 'ordered');
+  const newEntries     = allEntries.filter(([, i]) => i.status === 'new');
+
+  itemsEl.querySelectorAll('.rst-poi-row, .rst-pos-sect-hdr').forEach(el => el.remove());
+
+  if (!allEntries.length) {
+    if (emptyEl) emptyEl.style.display = '';
+    if (footerEl) footerEl.style.display = 'none';
+    return;
+  }
+  if (emptyEl) emptyEl.style.display = 'none';
+  if (footerEl) footerEl.style.display = '';
+
+  let total = 0;
+
+  // ── Ordered items ────────────────────────────────────────────────────────────
+  if (orderedEntries.length) {
+    const hdr = document.createElement('div');
+    hdr.className = 'rst-pos-sect-hdr';
+    hdr.innerHTML = `<i class="fa fa-fire" style="color:var(--accent)"></i> Sent to Kitchen <span class="rst-pos-sect-cnt">${orderedEntries.length}</span>`;
+    itemsEl.appendChild(hdr);
+
+    const BADGE = {
+      pending:   ['fa-clock',        'Pending',   'pending'],
+      preparing: ['fa-fire',         'Preparing', 'preparing'],
+      ready:     ['fa-bell',         'Ready',     'ready'],
+      served:    ['fa-circle-check', 'Served',    'served'],
+    };
+
+    orderedEntries.forEach(([key, item]) => {
+      const lineTotal = item.price * item.qty;
+      total += lineTotal;
+      const [icon, label, cls] = BADGE[item.kitchenStatus] || BADGE.pending;
+      const row = document.createElement('div');
+      row.className = 'rst-poi-row';
+      row.dataset.key = key;
+      row.innerHTML = `
+        <div class="rst-poi-accent ordered"></div>
+        <div class="rst-poi-body">
+          <div class="rst-poi-row1">
+            <span class="rst-poi-name">${escHtml(item.name)}</span>
+            <span class="rst-poi-qty">×${item.qty}</span>
+            <span class="rst-poi-price">${_rstPos.currency} ${lineTotal.toFixed(2)}</span>
+          </div>
+          <div>
+            <span class="rst-poi-status-badge ${cls}"><i class="fa ${icon}"></i> ${label}</span>
+            ${item.notes ? `<span class="rst-poi-notes-txt">${escHtml(item.notes)}</span>` : ''}
+          </div>
+        </div>`;
+      itemsEl.appendChild(row);
+    });
+  }
+
+  // ── New items ────────────────────────────────────────────────────────────────
+  if (newEntries.length) {
+    const hdr = document.createElement('div');
+    hdr.className = 'rst-pos-sect-hdr';
+    hdr.innerHTML = `<i class="fa fa-plus-circle" style="color:var(--accent)"></i> New Items <span class="rst-pos-sect-cnt">${newEntries.length}</span>`;
+    itemsEl.appendChild(hdr);
+
+    newEntries.forEach(([key, item]) => {
+      const lineTotal = item.price * item.qty;
+      total += lineTotal;
+      const row = document.createElement('div');
+      row.className = 'rst-poi-row new';
+      row.dataset.key = key;
+      row.innerHTML = `
+        <div class="rst-poi-accent new"></div>
+        <div class="rst-poi-body">
+          <div class="rst-poi-row1">
+            <span class="rst-poi-name">${escHtml(item.name)}</span>
+            <div class="rst-poi-qty-ctrl">
+              <button class="rst-poi-qbtn minus" data-key="${escHtml(key)}">−</button>
+              <span class="rst-poi-qty">${item.qty}</span>
+              <button class="rst-poi-qbtn plus" data-key="${escHtml(key)}">+</button>
+            </div>
+            <span class="rst-poi-price">${_rstPos.currency} ${lineTotal.toFixed(2)}</span>
+          </div>
+          <div class="rst-poi-notes-row">
+            <input type="text" class="rst-poi-notes-input" data-key="${escHtml(key)}"
+                   placeholder="Notes…" value="${escHtml(item.notes)}">
+          </div>
+        </div>
+        <button class="rst-poi-del" data-key="${escHtml(key)}" title="Remove"><i class="fa fa-xmark"></i></button>`;
+      itemsEl.appendChild(row);
+    });
+
+    itemsEl.querySelectorAll('.rst-poi-qbtn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const k = btn.dataset.key;
+        const { cart: c } = _rstPosGetCart();
+        if (!c[k]) return;
+        btn.classList.contains('plus') ? c[k].qty++ : (--c[k].qty <= 0 && delete c[k]);
+        _rstPosRenderCart();
+        _rstPosRenderTabBar();
+      });
+    });
+
+    itemsEl.querySelectorAll('.rst-poi-del').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const { cart: c } = _rstPosGetCart();
+        delete c[btn.dataset.key];
+        _rstPosRenderCart();
+        _rstPosRenderTabBar();
+      });
+    });
+
+    itemsEl.querySelectorAll('.rst-poi-notes-input').forEach(inp => {
+      inp.addEventListener('input', () => {
+        const { cart: c } = _rstPosGetCart();
+        if (c[inp.dataset.key]) c[inp.dataset.key].notes = inp.value;
+      });
+    });
+  }
+
+  $('#rst-pos-total').textContent = total.toFixed(2);
+
+  // Show Send button only when new items exist
+  const submitBtn = $('#rst-pos-submit');
+  if (submitBtn) submitBtn.style.display = newEntries.length ? '' : 'none';
+
+  // Show Complete Order when all ordered items are ready/served and no new items are pending
+  const completeBtn = $('#rst-pos-complete-btn');
+  if (completeBtn) {
+    const canComplete = orderedEntries.length > 0
+      && orderedEntries.every(([, i]) => i.kitchenStatus === 'served')
+      && newEntries.length === 0;
+    completeBtn.style.display = canComplete ? '' : 'none';
+  }
+}
+
+// ── Category chips ────────────────────────────────────────────────────────────
+function _rstPosBuildCats() {
+  const el = $('#rst-pos-cats');
+  if (!el) return;
+  el.innerHTML = '';
+  const allBtn = document.createElement('div');
+  allBtn.className = 'cat-chip active';
+  allBtn.textContent = 'All';
+  allBtn.addEventListener('click', () => {
+    _rstPos.activeCatId = 0;
+    $$('#rst-pos-cats .cat-chip').forEach(b => b.classList.remove('active'));
+    allBtn.classList.add('active');
+    _rstPosApplyFilter();
+  });
+  el.appendChild(allBtn);
+  _rst.menuCats.forEach(c => {
+    const btn = document.createElement('div');
+    btn.className = 'cat-chip';
+    btn.textContent = c.name;
+    btn.dataset.catId = c.id;
+    btn.addEventListener('click', () => {
+      _rstPos.activeCatId = c.id;
+      $$('#rst-pos-cats .cat-chip').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      _rstPosApplyFilter();
+    });
+    el.appendChild(btn);
+  });
+}
+
+function _rstPosApplyFilter() {
+  const q = ($('#rst-pos-search')?.value || '').trim().toLowerCase();
+  let items = _rstPos.allItems;
+  if (_rstPos.activeCatId) items = items.filter(i => i.catId === _rstPos.activeCatId);
+  if (q) items = items.filter(i => i.name.toLowerCase().includes(q));
+  _rstPosRenderGrid(items);
+}
+
+// ── Menu item grid ─────────────────────────────────────────────────────────────
+function _rstPosRenderGrid(items) {
+  const grid = $('#rst-pos-grid');
+  if (!grid) return;
+  if (!items.length) {
+    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:50px;color:var(--text-muted);font-size:14px"><i class="fa fa-utensils" style="font-size:28px;display:block;margin-bottom:12px;opacity:.3"></i>No items found</div>';
+    return;
+  }
+  grid.innerHTML = '';
+  items.forEach(item => {
+    const card = document.createElement('div');
+    card.className = 'rst-pos-card';
+    const thumbHtml = item.image_url
+      ? `<div class="rst-pos-card-icon" style="padding:0;overflow:hidden"><img src="${escHtml(item.image_url)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:8px"></div>`
+      : `<div class="rst-pos-card-icon"><i class="fa fa-utensils"></i></div>`;
+    card.innerHTML = `${thumbHtml}
+      <div class="rst-pos-card-name">${escHtml(item.name)}</div>
+      <div class="rst-pos-card-cat">${escHtml(item.catName || '')}</div>
+      <div class="rst-pos-card-price">${_rstPos.currency} ${item.price.toFixed(2)}</div>`;
+    card.addEventListener('click', () => _rstPosAddItem(item));
+    grid.appendChild(card);
+  });
+}
+
+// ── Event listeners ───────────────────────────────────────────────────────────
+$('#rst-pos-search')?.addEventListener('input', function () {
+  clearTimeout(_rstPos.searchTimer);
+  _rstPos.searchTimer = setTimeout(() => _rstPosApplyFilter(), 200);
+});
+
+$('#rst-pos-cust')?.addEventListener('input', function () {
+  _rstPosGetCart().custName = this.value;
+});
+
+$('#rst-pos-phone')?.addEventListener('input', function () {
+  _rstPosGetCart().custPhone = this.value;
+});
+
+$('#rst-pos-clear-btn')?.addEventListener('click', () => {
+  const { cart } = _rstPosGetCart();
+  Object.keys(cart).forEach(k => { if (cart[k].status === 'new') delete cart[k]; });
+  _rstPosRenderCart();
+  _rstPosRenderTabBar();
+});
+
+// ── Send to Kitchen ────────────────────────────────────────────────────────────
+$('#rst-pos-submit')?.addEventListener('click', async () => {
+  const btn     = $('#rst-pos-submit');
+  const alertEl = $('#rst-pos-alert');
+  if (alertEl) alertEl.style.display = 'none';
+
+  const { cart, custName, custPhone } = _rstPosGetCart();
+  const newEntries = Object.entries(cart).filter(([, i]) => i.status === 'new');
+  if (!newEntries.length) {
+    if (alertEl) { alertEl.textContent = 'Add at least one item first.'; alertEl.style.display = ''; }
+    return;
+  }
+
+  btn.disabled = true;
+  btn.querySelector('i').className = 'fa fa-spinner fa-spin';
+
+  const tab      = _rstPos.activeTab;
+  const tabKey   = _rstPosTabKey(tab);
+  const tableId  = tab === 'takeaway' ? null : tab;
+  const existing = _rstPos.activeOrders[tabKey];
+
+  const itemsPayload = newEntries.map(([, i]) => ({
+    menu_item_id: i.id || null,
+    name:         i.name,
+    quantity:     i.qty,
+    unit_price:   i.price,
+    notes:        i.notes || null,
+  }));
+
+  // Only add to existing order while it's still pending.
+  // If the kitchen has already started preparing (or beyond), create a NEW order
+  // so the KDS shows a separate ticket for the additional items.
+  const existingStatus = existing?.status || null;
+  const canAddToExisting = existing && existingStatus === 'pending';
+
+  let res;
+  if (canAddToExisting) {
+    res = await API.rstAddItems(existing.id, itemsPayload);
+  } else {
+    res = await API.rstCreateOrder({
+      order_type:     tableId ? 'dine_in' : 'takeaway',
+      table_id:       tableId,
+      customer_name:  custName || null,
+      customer_phone: custPhone || null,
+      items:          itemsPayload,
+    });
+  }
+
+  btn.disabled = false;
+  btn.querySelector('i').className = 'fa fa-paper-plane';
+
+  const ok = canAddToExisting ? res.status === 200 : res.status === 201;
+  if (!ok) {
+    if (alertEl) { alertEl.textContent = res.body?.message || 'Failed to send to kitchen.'; alertEl.style.display = ''; }
+    return;
+  }
+
+  const orderId       = canAddToExisting ? existing.id : res.body?.data?.id;
+  const returnedItems = res.body?.data?.items || res.body?.items || [];
+
+  // Always track the LATEST order for this tab so the next "Send to Kitchen"
+  // can still add to it while it's pending, rather than creating yet another order.
+  if (!canAddToExisting && res.body?.data) _rstPos.activeOrders[tabKey] = res.body.data;
+
+  newEntries.forEach(([key, item], idx) => {
+    item.status        = 'ordered';
+    item.kitchenStatus = 'pending';
+    item.orderId       = orderId;
+    if (returnedItems[idx]) item.dbId = returnedItems[idx].id;
+  });
+
+  if (tableId) {
+    const t = _rst.tables.find(t => t.id === tableId);
+    if (t) t.status = 'occupied';
+  }
+
+  toast('Sent to kitchen!', 'success');
+  _rstPosRenderCart();
+  _rstPosRenderTabBar();
+});
+
+// ── Complete Order → open payment modal ───────────────────────────────────────
+$('#rst-pos-complete-btn')?.addEventListener('click', () => {
+  const { cart } = _rstPosGetCart();
+  const items    = Object.values(cart).filter(i => i.status === 'ordered');
+  if (!items.length) return;
+  const total    = items.reduce((s, i) => s + i.price * i.qty, 0);
+  // Collect every unique order ID in the cart (a table can have several orders
+  // when items were added after the kitchen moved to "preparing").
+  const orderIds = [...new Set(items.map(i => i.orderId).filter(Boolean))];
+  if (!orderIds.length) return;
+  _rstPosOpenPayment(orderIds, items, total);
+});
+
+// ── Payment Modal ─────────────────────────────────────────────────────────────
+const _rstPay = { orderIds: [], items: [], total: 0, method: 'cash', input: '' };
+
+function _rstPosOpenPayment(orderIds, items, total) {
+  Object.assign(_rstPay, { orderIds, items, total, method: 'cash', input: '' });
+
+  const overlay = $('#rst-pay-modal');
+  if (!overlay) return;
+
+  const summaryEl = $('#rst-pay-summary');
+  if (summaryEl) {
+    summaryEl.innerHTML =
+      items.map(i =>
+        `<div class="rst-pay-summary-item">
+           <span>${escHtml(i.name)} ×${i.qty}</span>
+           <span>${_rstPos.currency} ${(i.price * i.qty).toFixed(2)}</span>
+         </div>`
+      ).join('') +
+      `<div class="rst-pay-summary-total">
+         <span>Total</span>
+         <strong>${_rstPos.currency} ${total.toFixed(2)}</strong>
+       </div>`;
+  }
+
+  $$('#rst-pay-modal .rst-pay-method-btn').forEach(b => b.classList.toggle('active', b.dataset.method === 'cash'));
+  const cashSection = $('#rst-pay-cash-section');
+  if (cashSection) cashSection.style.display = '';
+
+  _rstPayBuildQuick(total);
+  _rstPay.input = '';
+  _rstPayUpdateDisplay();
+  overlay.style.display = '';
+}
+
+function _rstPayBuildQuick(total) {
+  const el = $('#rst-pay-quick');
+  if (!el) return;
+  const suggestions = [total];
+  [10, 50, 100, 500, 1000].forEach(mul => {
+    const r = Math.ceil(total / mul) * mul;
+    if (r !== total && r <= total * 3 && suggestions.length < 4) suggestions.push(r);
+  });
+  el.innerHTML = '';
+  suggestions.slice(0, 4).forEach(amt => {
+    const btn = document.createElement('button');
+    btn.className = 'rst-pay-quick-btn';
+    btn.textContent = amt === total ? `Exact (${total.toFixed(2)})` : amt.toFixed(2);
+    btn.addEventListener('click', () => {
+      _rstPay.input = String(amt);
+      _rstPayUpdateDisplay();
+    });
+    el.appendChild(btn);
+  });
+}
+
+function _rstPayUpdateDisplay() {
+  const disp = $('#rst-pay-amount-display');
+  const received = parseFloat(_rstPay.input) || 0;
+  if (disp) disp.textContent = received > 0 ? received.toFixed(2) : '0.00';
+
+  const change    = received - _rstPay.total;
+  const changeRow = $('#rst-pay-change-row');
+  const changeLbl = $('#rst-pay-change');
+  if (changeRow) changeRow.style.display = change > 0 ? '' : 'none';
+  if (changeLbl) changeLbl.textContent = `${_rstPos.currency} ${Math.max(0, change).toFixed(2)}`;
+}
+
+$('#rst-pay-numpad')?.addEventListener('click', e => {
+  const btn = e.target.closest('.rst-pay-num-btn');
+  if (!btn) return;
+  const val = btn.dataset.val;
+  if (val === 'back') {
+    _rstPay.input = _rstPay.input.slice(0, -1);
+  } else if (val === '.') {
+    if (!_rstPay.input.includes('.')) _rstPay.input += '.';
+  } else {
+    const [, dec] = _rstPay.input.split('.');
+    if (dec !== undefined && dec.length >= 2) return;
+    _rstPay.input += val;
+  }
+  _rstPayUpdateDisplay();
+});
+
+$$('.rst-pay-method-btn').forEach(btn => {
+  btn?.addEventListener('click', () => {
+    $$('.rst-pay-method-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    _rstPay.method = btn.dataset.method;
+    const cashSection = $('#rst-pay-cash-section');
+    if (cashSection) cashSection.style.display = _rstPay.method === 'cash' ? '' : 'none';
+  });
+});
+
+$('#rst-pay-close')?.addEventListener('click', () => {
+  const o = $('#rst-pay-modal'); if (o) o.style.display = 'none';
+});
+
+$('#rst-pay-confirm')?.addEventListener('click', async () => {
+  const confirmBtn = $('#rst-pay-confirm');
+  const { orderIds, total, method, input } = _rstPay;
+  if (!orderIds.length) return;
+
+  const amountTendered = method === 'cash' ? (parseFloat(input) || total) : total;
+  if (method === 'cash' && amountTendered < total) {
+    toast('Amount received is less than the total', 'error'); return;
+  }
+
+  confirmBtn.disabled = true;
+  confirmBtn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Processing…';
+
+  // Build per-order totals so each Sale is created with its own order amount.
+  const orderTotals = {};
+  _rstPay.items.forEach(i => {
+    if (!orderTotals[i.orderId]) orderTotals[i.orderId] = 0;
+    orderTotals[i.orderId] += i.price * i.qty;
+  });
+
+  for (const orderId of orderIds) {
+    const orderTotal = orderTotals[orderId] ?? total;
+    const res = await API.rstCompleteOrder(orderId, method, orderTotal);
+    if (res.status !== 200) {
+      confirmBtn.disabled = false;
+      confirmBtn.innerHTML = '<i class="fa fa-check"></i> Confirm Payment';
+      toast(res.body?.message || 'Payment failed', 'error');
+      return;
+    }
+  }
+
+  confirmBtn.disabled = false;
+  confirmBtn.innerHTML = '<i class="fa fa-check"></i> Confirm Payment';
+
+  const o = $('#rst-pay-modal'); if (o) o.style.display = 'none';
+
+  // Show receipt before clearing the cart (receipt reads custName from cart state)
+  _rstPosShowReceipt(_rstPay.items, total, method, amountTendered);
+
+  const tabKey = _rstPosTabKey(_rstPos.activeTab);
+  if (_rstPos.carts[tabKey]) {
+    _rstPos.carts[tabKey] = { cart: {}, custName: '', custPhone: '' };
+  }
+  _rstPos.activeOrders[tabKey] = null;
+
+  const tab = _rstPos.activeTab;
+  if (tab !== 'takeaway') {
+    const t = _rst.tables.find(t => t.id === tab);
+    if (t) t.status = 'available';
+    const badgeEl = $('#rst-pos-hdr-badge');
+    if (badgeEl) { badgeEl.className = 'rst-pos-hdr-badge available'; badgeEl.textContent = 'Available'; }
+  }
+
+  const custEl = $('#rst-pos-cust'), phoneEl = $('#rst-pos-phone');
+  if (custEl)  custEl.value  = '';
+  if (phoneEl) phoneEl.value = '';
+
+  _rstPosRenderCart();
+  _rstPosRenderTabBar();
+});
+
+// ── Receipt Modal ─────────────────────────────────────────────────────────────
+function _rstPosShowReceipt(items, total, method, amountTendered) {
+  const overlay = $('#rst-receipt-modal');
+  if (!overlay) return;
+  const change = method === 'cash' ? Math.max(0, amountTendered - total) : 0;
+  const now    = new Date().toLocaleString();
+
+  // Derive table/customer from cart state (works even with multiple orders)
+  const tab      = _rstPos.activeTab;
+  const table    = tab !== 'takeaway' ? _rst.tables.find(t => t.id === tab) : null;
+  const { custName } = _rstPosGetCart();
+
+  const bodyEl = $('#rst-receipt-body');
+  if (bodyEl) {
+    bodyEl.innerHTML = `
+      <div class="rst-receipt-biz-name"><i class="fa fa-utensils"></i> Restaurant</div>
+      <div style="text-align:center;color:var(--text-muted);font-size:11px;margin-bottom:8px">${escHtml(now)}</div>
+      <hr class="rst-receipt-divider">
+      ${table ? `<div class="rst-receipt-line"><span>Table</span><span>${escHtml(table.name || '')}</span></div>` : ''}
+      ${custName ? `<div class="rst-receipt-line"><span>Customer</span><span>${escHtml(custName)}</span></div>` : ''}
+      <hr class="rst-receipt-divider">
+      ${items.map(i =>
+        `<div class="rst-receipt-line">
+           <span>${escHtml(i.name)} ×${i.qty}</span>
+           <span>${_rstPos.currency} ${(i.price * i.qty).toFixed(2)}</span>
+         </div>`
+      ).join('')}
+      <div class="rst-receipt-line total"><span>TOTAL</span><span>${_rstPos.currency} ${total.toFixed(2)}</span></div>
+      <hr class="rst-receipt-divider">
+      <div class="rst-receipt-line"><span>Method</span><span>${escHtml(method.charAt(0).toUpperCase() + method.slice(1))}</span></div>
+      ${method === 'cash' ? `
+        <div class="rst-receipt-line"><span>Received</span><span>${_rstPos.currency} ${amountTendered.toFixed(2)}</span></div>
+        <div class="rst-receipt-line"><span>Change</span><span>${_rstPos.currency} ${change.toFixed(2)}</span></div>
+      ` : ''}
+      <hr class="rst-receipt-divider">
+      <div style="text-align:center;font-size:11px;color:var(--text-muted);margin-top:8px">Thank you!</div>`;
+  }
+  overlay.style.display = '';
+}
+
+$('#rst-receipt-close')?.addEventListener('click', () => {
+  const o = $('#rst-receipt-modal'); if (o) o.style.display = 'none';
+});
+$('#rst-receipt-done')?.addEventListener('click', () => {
+  const o = $('#rst-receipt-modal'); if (o) o.style.display = 'none';
+});
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Restaurant — Kitchen Display System (KDS)
+// ══════════════════════════════════════════════════════════════════════════════
+
+const _rstKds = {
+  orders:        [],
+  filterStatus:  'open',
+  refreshTimer:  null,
+  tickerTimer:   null,
+};
+
+function _rstKdsStop() {
+  clearInterval(_rstKds.refreshTimer);
+  clearInterval(_rstKds.tickerTimer);
+  _rstKds.refreshTimer = null;
+  _rstKds.tickerTimer  = null;
+}
+
+async function rstKdsInit() {
+  _rstKdsStop();
+  await _rstKdsFetch();
+  _rstKds.refreshTimer = setInterval(_rstKdsFetch, 30000);
+  _rstKds.tickerTimer  = setInterval(_rstKdsTickTimers, 15000);
+}
+
+async function _rstKdsFetch() {
+  const btn = $('#kds-refresh-btn');
+  if (btn) { btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i>'; btn.disabled = true; }
+
+  const res = await API.rstKdsOrders();
+
+  if (btn) { btn.innerHTML = '<i class="fa fa-rotate-right"></i>'; btn.disabled = false; }
+  if (res.status !== 200) return;
+
+  _rstKds.orders = res.body?.data || [];
+  _rstKdsUpdateCounts();
+  _rstKdsRender();
+
+  const lastEl = $('#kds-last-updated');
+  if (lastEl) lastEl.textContent = 'Updated ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function _rstKdsUpdateCounts() {
+  const counts = { pending: 0, preparing: 0, ready: 0 };
+  _rstKds.orders.forEach(o => { if (counts[o.status] !== undefined) counts[o.status]++; });
+  ['pending', 'preparing', 'ready'].forEach(s => {
+    const el = $(`#kds-cnt-${s}`);
+    if (!el) return;
+    el.textContent = counts[s] || '';
+    el.style.display = counts[s] ? '' : 'none';
+  });
+}
+
+function _rstKdsRender() {
+  const grid  = $('#kds-grid');
+  const empty = $('#kds-empty');
+  if (!grid) return;
+
+  // Remove existing tickets (keep #kds-empty)
+  grid.querySelectorAll('.kds-ticket').forEach(el => el.remove());
+
+  const status = _rstKds.filterStatus;
+  const orders = status === 'open'
+    ? _rstKds.orders
+    : _rstKds.orders.filter(o => o.status === status);
+
+  if (!orders.length) {
+    if (empty) empty.style.display = '';
+    return;
+  }
+  if (empty) empty.style.display = 'none';
+
+  orders.forEach(order => grid.appendChild(_rstKdsTicket(order)));
+}
+
+function _rstKdsTicket(order) {
+  const el    = document.createElement('div');
+  const mins  = _rstKdsAge(order.created_at);
+  const urgency = mins >= 15 ? 'urgency-urgent' : mins >= 8 ? 'urgency-warn' : '';
+  el.className  = `kds-ticket status-${order.status} ${urgency}`.trim();
+  el.dataset.orderId   = order.id;
+  el.dataset.createdAt = order.created_at || '';
+
+  const typeLabel = order.order_type === 'dine_in' ? 'Dine In'
+    : order.order_type === 'takeaway' ? 'Takeaway' : 'Delivery';
+
+  const metaHtml =
+    (order.table ? `<div class="kds-ticket-meta"><i class="fa fa-table-cells-large"></i> ${escHtml(order.table.name)}</div>` : '') +
+    (order.customer_name ? `<div class="kds-ticket-meta"><i class="fa fa-user"></i> ${escHtml(order.customer_name)}</div>` : '');
+
+  const itemsHtml = (order.items || []).map(i =>
+    `<div class="kds-item">
+      <span class="kds-item-qty">×${i.quantity}</span>
+      <span class="kds-item-name">${escHtml(i.name)}</span>
+    </div>${i.notes ? `<div class="kds-item-note">${escHtml(i.notes)}</div>` : ''}`
+  ).join('');
+
+  const timerCls = mins >= 15 ? 'urgent' : mins >= 8 ? 'warn' : 'ok';
+
+  let footerHtml = '';
+  if (order.status === 'pending') {
+    footerHtml = `<button class="kds-btn kds-btn-start" data-id="${order.id}" data-next="preparing"><i class="fa fa-fire"></i> Start Preparing</button>`;
+  } else if (order.status === 'preparing') {
+    footerHtml = `<button class="kds-btn kds-btn-ready" data-id="${order.id}" data-next="ready"><i class="fa fa-bell"></i> Mark Ready</button>`;
+  } else if (order.status === 'ready') {
+    footerHtml = `<button class="kds-btn kds-btn-served" data-id="${order.id}" data-next="served"><i class="fa fa-circle-check"></i> Served</button>`;
+  }
+
+  el.innerHTML = `
+    <div class="kds-ticket-hdr">
+      <span class="kds-ticket-num">${escHtml(order.order_number)}</span>
+      <span class="kds-type-badge ${order.order_type}">${escHtml(typeLabel)}</span>
+      <span class="kds-timer ${timerCls}" data-created="${escHtml(order.created_at || '')}">${mins}m</span>
+    </div>
+    ${metaHtml}
+    <div class="kds-items">${itemsHtml}</div>
+    <div class="kds-ticket-footer">${footerHtml}</div>`;
+
+  return el;
+}
+
+function _rstKdsAge(createdAt) {
+  if (!createdAt) return 0;
+  return Math.max(0, Math.floor((Date.now() - new Date(createdAt).getTime()) / 60000));
+}
+
+function _rstKdsTickTimers() {
+  $$('#kds-grid .kds-timer').forEach(el => {
+    const mins = _rstKdsAge(el.dataset.created);
+    el.textContent = `${mins}m`;
+    el.className = `kds-timer ${mins >= 15 ? 'urgent' : mins >= 8 ? 'warn' : 'ok'}`;
+    const ticket = el.closest('.kds-ticket');
+    if (ticket) {
+      ticket.classList.remove('urgency-warn', 'urgency-urgent');
+      if (mins >= 15)     ticket.classList.add('urgency-urgent');
+      else if (mins >= 8) ticket.classList.add('urgency-warn');
+    }
+  });
+}
+
+// Status transition via delegated click on grid
+$('#kds-grid')?.addEventListener('click', async e => {
+  const btn = e.target.closest('[data-next]');
+  if (!btn) return;
+  const orderId   = Number(btn.dataset.id);
+  const newStatus = btn.dataset.next;
+
+  btn.disabled = true;
+  const origHtml = btn.innerHTML;
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i>';
+
+  const res = await API.rstOrderStatus(orderId, newStatus);
+  if (res.status !== 200) {
+    btn.disabled = false;
+    btn.innerHTML = origHtml;
+    toast('Failed to update order status', 'error');
+    return;
+  }
+
+  // Update local state and re-render
+  const order = _rstKds.orders.find(o => o.id === orderId);
+  if (order) {
+    if (newStatus === 'served') {
+      _rstKds.orders = _rstKds.orders.filter(o => o.id !== orderId);
+    } else {
+      order.status = newStatus;
+    }
+  }
+  _rstKdsUpdateCounts();
+  _rstKdsRender();
+  toast(newStatus === 'served' ? 'Order served' : `Order ${newStatus}`, 'success');
+});
+
+// Filter tab clicks
+$$('.kds-filter-tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    $$('.kds-filter-tab').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    _rstKds.filterStatus = btn.dataset.kdsStatus;
+    _rstKdsRender();
+  });
+});
+
+$('#kds-refresh-btn')?.addEventListener('click', _rstKdsFetch);
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Restaurant — Tables floor plan
+// ══════════════════════════════════════════════════════════════════════════════
+
+const _rstTbl = {
+  tables: [],      // loaded from API
+  editMode: false, // drag-to-reposition mode
+  dragging: null,  // { card, id, ox, oy } while dragging
+};
+
+// Port of PHP $genTableSvg — generates inline SVG for a table card
+function _rstTblGenSvg(cap, status) {
+  const COLORS = { available: '#22c55e', occupied: '#ef4444', reserved: '#f59e0b', inactive: '#9ca3af' };
+  const sc = COLORS[status] || '#9ca3af';
+  const stroke = `stroke="${sc}" stroke-width="2.5" paint-order="stroke"`;
+
+  if (cap <= 4) {
+    // Round table
+    const cx = 55, cy = 55, tR = 28, cR = 44;
+    const cW = 18, cH = 11, n = Math.max(2, cap);
+    let chairs = '';
+    for (let i = 0; i < n; i++) {
+      const adeg = -90 + (360 / n) * i;
+      const arad = adeg * Math.PI / 180;
+      const chx = cx + cR * Math.cos(arad);
+      const chy = cy + cR * Math.sin(arad);
+      chairs += `<rect x="${(-cW/2).toFixed(1)}" y="${(-cH/2).toFixed(1)}" width="${cW}" height="${cH}" rx="4" class="rt-chr" transform="translate(${chx.toFixed(1)},${chy.toFixed(1)}) rotate(${(adeg+90).toFixed(1)})"/>`;
+    }
+    return `<svg viewBox="0 0 110 110" xmlns="http://www.w3.org/2000/svg" style="width:100px;height:100px;display:block;pointer-events:none">
+      ${chairs}
+      <circle cx="${cx}" cy="${cy}" r="${tR}" fill="${sc}" opacity=".13"/>
+      <circle cx="${cx}" cy="${cy}" r="${tR}" class="rt-tbl" ${stroke}/>
+    </svg>`;
+  }
+
+  // Rectangular table (5+ seats)
+  const topN = Math.ceil(cap / 2), botN = cap - topN;
+  const drawN = Math.min(Math.max(topN, botN), 6);
+  const cW = 20, cH = 12, cGap = 5;
+  const tw = drawN * (cW + cGap) - cGap + 24;
+  const th = 48;
+  const padX = 8, padY = cH + 7;
+  const vw = tw + padX * 2, vh = th + padY * 2;
+  const tx = padX, ty = padY;
+  const drawRow = (n, y) => {
+    const total = n * (cW + cGap) - cGap;
+    const sx = tx + (tw - total) / 2;
+    return Array.from({ length: n }, (_, i) =>
+      `<rect x="${(sx + i * (cW + cGap)).toFixed(1)}" y="${y.toFixed(1)}" width="${cW}" height="${cH}" rx="3" class="rt-chr"/>`
+    ).join('');
+  };
+  return `<svg viewBox="0 0 ${vw} ${vh}" xmlns="http://www.w3.org/2000/svg" style="width:${Math.min(vw, 140)}px;height:${vh}px;display:block;pointer-events:none">
+    ${drawRow(Math.min(topN,6), ty - cH - 3)}
+    ${drawRow(Math.min(botN,6), ty + th + 3)}
+    <rect x="${tx}" y="${ty}" width="${tw}" height="${th}" rx="9" fill="${sc}" opacity=".13"/>
+    <rect x="${tx}" y="${ty}" width="${tw}" height="${th}" rx="9" class="rt-tbl" ${stroke}/>
+  </svg>`;
+}
+
+function _rstTblStatusColor(s) {
+  return { available: '#22c55e', occupied: '#ef4444', reserved: '#f59e0b', inactive: '#9ca3af' }[s] || '#9ca3af';
+}
+
+function _rstTblRender() {
+  const floor = $('#rt-floor');
+  // Remove existing cards
+  floor.querySelectorAll('.rt-card').forEach(c => c.remove());
+
+  const tables = _rstTbl.tables;
+  const empty  = $('#rt-empty');
+  if (!tables.length) { empty.style.display = ''; return; }
+  empty.style.display = 'none';
+
+  // Auto-layout: grid positions for tables that have no position stored
+  let autoX = 24, autoY = 24;
+  const cardW = 140, cardH = 160, colsPerRow = 5;
+  let autoIdx = 0;
+
+  tables.forEach(t => {
+    const card = document.createElement('div');
+    card.className = 'rt-card';
+    card.dataset.id = t.id;
+
+    const sc = _rstTblStatusColor(t.status);
+    const svg = _rstTblGenSvg(t.capacity, t.status);
+    card.style.background   = sc + '18';
+    card.style.border       = `2px solid ${sc}55`;
+    card.style.borderTop    = `3px solid ${sc}`;
+    card.innerHTML = `
+      ${svg}
+      <div class="rt-card-name">${escHtml(t.name)}</div>
+      <div class="rt-card-cap" style="color:#d4a04a;font-weight:700">${t.capacity} seat${t.capacity !== 1 ? 's' : ''}</div>
+      <div class="rt-card-status" style="background:${sc}">${t.status}</div>
+    `;
+
+    // Position
+    const hasPos = t.pos_x != null && t.pos_y != null;
+    if (hasPos) {
+      card.style.left = t.pos_x + 'px';
+      card.style.top  = t.pos_y + 'px';
+    } else {
+      const col = autoIdx % colsPerRow;
+      const row = Math.floor(autoIdx / colsPerRow);
+      card.style.left = (24 + col * (cardW + 20)) + 'px';
+      card.style.top  = (24 + row * (cardH + 16)) + 'px';
+      autoIdx++;
+    }
+
+    // Click to edit (only when not in edit/drag mode)
+    card.addEventListener('click', () => {
+      if (_rstTbl.editMode) return;
+      const tbl = _rstTbl.tables.find(x => x.id === +card.dataset.id);
+      if (tbl) _rstTblOpenEdit(tbl);
+    });
+
+    // Drag-to-reposition (only in edit mode)
+    card.addEventListener('mousedown', e => {
+      if (!_rstTbl.editMode) return;
+      e.preventDefault();
+      const floorRect = floor.getBoundingClientRect();
+      const cardRect  = card.getBoundingClientRect();
+      const ox = e.clientX - cardRect.left;
+      const oy = e.clientY - cardRect.top;
+      _rstTbl.dragging = { card, id: +card.dataset.id, ox, oy };
+      card.classList.add('rt-dragging');
+
+      const onMove = ev => {
+        if (!_rstTbl.dragging) return;
+        const x = Math.max(0, ev.clientX - floorRect.left - ox);
+        const y = Math.max(0, ev.clientY - floorRect.top  - oy);
+        card.style.left = x + 'px';
+        card.style.top  = y + 'px';
+      };
+      const onUp = ev => {
+        if (!_rstTbl.dragging) return;
+        const { card: c, id } = _rstTbl.dragging;
+        c.classList.remove('rt-dragging');
+        // Save position in local state
+        const tbl = _rstTbl.tables.find(x => x.id === id);
+        if (tbl) {
+          tbl.pos_x = parseInt(c.style.left, 10);
+          tbl.pos_y = parseInt(c.style.top,  10);
+        }
+        _rstTbl.dragging = null;
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup',   onUp);
+      };
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup',   onUp);
+    });
+
+    floor.appendChild(card);
+  });
+
+  _rstTblUpdateStrip();
+}
+
+function _rstTblUpdateStrip() {
+  const counts = { available: 0, occupied: 0, reserved: 0, inactive: 0 };
+  _rstTbl.tables.forEach(t => { counts[t.status] = (counts[t.status] || 0) + 1; });
+  const labels = { available: 'Available', occupied: 'Occupied', reserved: 'Reserved', inactive: 'Inactive' };
+  const colors  = { available: '#22c55e', occupied: '#ef4444', reserved: '#f59e0b', inactive: '#9ca3af' };
+  $('#rt-strip').innerHTML = Object.entries(counts)
+    .filter(([, n]) => n > 0)
+    .map(([s, n]) => `<span class="rt-strip-item"><span class="rt-strip-dot" style="background:${colors[s]}"></span>${n} ${labels[s]}</span>`)
+    .join('');
+}
+
+async function rstTablesLoad() {
+  const res = await API.rstTables();
+  if (res.status !== 200) { toast('Failed to load tables', 'error'); return; }
+  _rstTbl.tables = res.body?.data || [];
+  _rstTblRender();
+}
+
+// Toggle edit mode
+$('#rt-edit-btn')?.addEventListener('click', () => {
+  _rstTbl.editMode = true;
+  $('#rt-floor').classList.add('rt-edit-mode');
+  $('#rt-edit-btn').style.display    = 'none';
+  $('#rt-cancel-btn').style.display  = '';
+  $('#rt-save-btn').style.display    = '';
+});
+
+$('#rt-cancel-btn')?.addEventListener('click', () => {
+  _rstTbl.editMode = false;
+  $('#rt-floor').classList.remove('rt-edit-mode');
+  $('#rt-edit-btn').style.display    = '';
+  $('#rt-cancel-btn').style.display  = 'none';
+  $('#rt-save-btn').style.display    = 'none';
+  // Reload to restore positions
+  rstTablesLoad();
+});
+
+$('#rt-save-btn')?.addEventListener('click', async () => {
+  const positions = _rstTbl.tables.map(t => ({ id: t.id, x: t.pos_x || 0, y: t.pos_y || 0 }));
+  const res = await API.rstSaveTablePositions(positions);
+  if (res.status !== 200) { toast('Failed to save layout', 'error'); return; }
+  _rstTbl.editMode = false;
+  $('#rt-floor').classList.remove('rt-edit-mode');
+  $('#rt-edit-btn').style.display    = '';
+  $('#rt-cancel-btn').style.display  = 'none';
+  $('#rt-save-btn').style.display    = 'none';
+  toast('Layout saved', 'success');
+});
+
+// ── Add Table Modal ──────────────────────────────────────────────────────────
+$('#rt-add-table-btn')?.addEventListener('click', () => {
+  $('#rt-add-name').value   = '';
+  $('#rt-add-cap').value    = '4';
+  $('#rt-add-notes').value  = '';
+  $('#rt-add-err').style.display = 'none';
+  $('#rt-add-modal').style.display = 'flex';
+  setTimeout(() => $('#rt-add-name')?.focus(), 60);
+});
+$('#rt-add-close')?.addEventListener('click',      () => { $('#rt-add-modal').style.display = 'none'; });
+$('#rt-add-cancel-btn')?.addEventListener('click', () => { $('#rt-add-modal').style.display = 'none'; });
+
+$('#rt-add-save-btn')?.addEventListener('click', async () => {
+  const name  = $('#rt-add-name').value.trim();
+  const cap   = parseInt($('#rt-add-cap').value, 10);
+  const notes = $('#rt-add-notes').value.trim();
+  const err   = $('#rt-add-err');
+  err.style.display = 'none';
+  if (!name)      { err.textContent = 'Table name is required.'; err.style.display = ''; return; }
+  if (!cap || cap < 1) { err.textContent = 'Capacity must be at least 1.'; err.style.display = ''; return; }
+
+  const btn = $('#rt-add-save-btn');
+  btn.disabled = true;
+  const res = await API.rstCreateTable({ name, capacity: cap, notes });
+  btn.disabled = false;
+
+  if (res.status !== 201) {
+    const msg = res.body?.errors ? Object.values(res.body.errors).flat()[0] : (res.body?.message || 'Failed to create table.');
+    err.textContent = msg; err.style.display = ''; return;
+  }
+
+  $('#rt-add-modal').style.display = 'none';
+  toast(`Table "${name}" added`, 'success');
+  await rstTablesLoad();
+});
+
+// ── Edit Table Modal ─────────────────────────────────────────────────────────
+function _rstTblOpenEdit(tbl) {
+  $('#rt-edit-id').value             = tbl.id;
+  $('#rt-edit-name').value           = tbl.name;
+  $('#rt-edit-cap').value            = tbl.capacity;
+  $('#rt-edit-status').value         = tbl.status;
+  $('#rt-edit-notes').value          = tbl.notes || '';
+  $('#rt-edit-err').style.display    = 'none';
+  $('#rt-edit-modal').style.display  = 'flex';
+}
+$('#rt-edit-close')?.addEventListener('click',      () => { $('#rt-edit-modal').style.display = 'none'; });
+$('#rt-edit-cancel-btn')?.addEventListener('click', () => { $('#rt-edit-modal').style.display = 'none'; });
+
+$('#rt-edit-save-btn')?.addEventListener('click', async () => {
+  const id     = +$('#rt-edit-id').value;
+  const name   = $('#rt-edit-name').value.trim();
+  const cap    = parseInt($('#rt-edit-cap').value, 10);
+  const status = $('#rt-edit-status').value;
+  const notes  = $('#rt-edit-notes').value.trim();
+  const err    = $('#rt-edit-err');
+  err.style.display = 'none';
+  if (!name)      { err.textContent = 'Table name is required.'; err.style.display = ''; return; }
+  if (!cap || cap < 1) { err.textContent = 'Capacity must be at least 1.'; err.style.display = ''; return; }
+
+  const btn = $('#rt-edit-save-btn');
+  btn.disabled = true;
+  const res = await API.rstUpdateTable(id, { name, capacity: cap, status, notes });
+  btn.disabled = false;
+
+  if (res.status !== 200) {
+    const msg = res.body?.errors ? Object.values(res.body.errors).flat()[0] : (res.body?.message || 'Failed to update table.');
+    err.textContent = msg; err.style.display = ''; return;
+  }
+
+  $('#rt-edit-modal').style.display = 'none';
+  toast('Table updated', 'success');
+  await rstTablesLoad();
+});
+
+$('#rt-edit-del-btn')?.addEventListener('click', async () => {
+  const id   = +$('#rt-edit-id').value;
+  const name = $('#rt-edit-name').value.trim();
+  if (!confirm(`Delete table "${name}"? This cannot be undone.`)) return;
+
+  const res = await API.rstDeleteTable(id);
+  if (res.status !== 200) { toast('Failed to delete table', 'error'); return; }
+
+  $('#rt-edit-modal').style.display = 'none';
+  toast(`Table "${name}" deleted`, 'success');
+  await rstTablesLoad();
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Restaurant — Menu Items
+// ══════════════════════════════════════════════════════════════════════════════
+
+const _rstMi = {
+  items: [], meta: {}, cats: [],
+  q: '', status: 'all', catId: '', page: 1,
+  searchTimer: null,
+};
+
+const DIETARY_LABELS = {
+  vegetarian: 'Vegetarian', vegan: 'Vegan', halal: 'Halal',
+  gluten_free: 'Gluten Free', spicy: 'Spicy', nut_free: 'Nut Free', dairy_free: 'Dairy Free',
+};
+
+async function rstMiLoad(q, status, catId, page) {
+  _rstMi.q      = q      ?? _rstMi.q;
+  _rstMi.status = status ?? _rstMi.status;
+  _rstMi.catId  = catId  ?? _rstMi.catId;
+  _rstMi.page   = page   ?? _rstMi.page;
+
+  const res = await API.rstMenuItems(_rstMi.q, _rstMi.status, _rstMi.catId || null, _rstMi.page);
+  if (res.status !== 200) { toast('Failed to load menu items', 'error'); return; }
+  _rstMi.items = res.body?.data || [];
+  _rstMi.meta  = res.body?.meta || {};
+  _rstMiRender();
+}
+
+async function _rstMiLoadCats() {
+  if (_rstMi.cats.length) return;
+  const res = await API.rstMenuCats('');
+  if (res.status === 200) _rstMi.cats = res.body?.data || [];
+}
+
+function _rstMiRender() {
+  const grid  = $('#rst-mi-grid');
+  const items = _rstMi.items;
+
+  if (!items.length) {
+    grid.innerHTML = `<div class="rst-mi-empty">
+      <i class="fa fa-utensils"></i>
+      <p>No menu items found.</p>
+    </div>`;
+    $('#rst-mi-footer').textContent = '';
+    $('#rst-mi-pagination').innerHTML = '';
+    return;
+  }
+
+  grid.innerHTML = items.map(item => {
+    const cats = (item.categories || []).map(c => `<span class="rst-mi-card-cat">${escHtml(c.name)}</span>`).join('');
+    const tags = (item.dietary_tags || []).map(t => `<span class="rst-mi-card-tag">${escHtml(DIETARY_LABELS[t] || t)}</span>`).join('');
+    const avail = item.is_available
+      ? `<span class="rst-mi-avail-badge rst-mi-avail-on">Available</span>`
+      : `<span class="rst-mi-avail-badge rst-mi-avail-off">Unavailable</span>`;
+    const prep = item.prep_label && item.prep_label !== '—' ? `<div style="font-size:10px;color:var(--text-muted);margin-top:2px"><i class="fa fa-clock" style="margin-right:3px"></i>${item.prep_label}</div>` : '';
+    const thumbHtml = item.image_url
+      ? `<img src="${escHtml(item.image_url)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">`
+      : `<i class="fa fa-utensils"></i>`;
+    return `<div class="rst-mi-card" data-id="${item.id}">
+      <div class="rst-mi-card-thumb">${thumbHtml}</div>
+      <div class="rst-mi-card-body">
+        <div class="rst-mi-card-name">${escHtml(item.name)}</div>
+        ${cats ? `<div class="rst-mi-card-cats">${cats}</div>` : ''}
+        ${prep}
+        ${tags ? `<div class="rst-mi-card-tags">${tags}</div>` : ''}
+      </div>
+      <div class="rst-mi-card-footer">
+        <span class="rst-mi-card-price">${item.price.toFixed(2)}</span>
+        <div style="display:flex;align-items:center;gap:6px">
+          ${avail}
+          <button class="rst-mi-toggle-btn" data-id="${item.id}" title="Toggle availability" onclick="event.stopPropagation()">
+            <i class="fa fa-${item.is_available ? 'eye-slash' : 'eye'}"></i>
+          </button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+
+  // Click to edit
+  grid.querySelectorAll('.rst-mi-card').forEach(card => {
+    card.addEventListener('click', () => {
+      const item = _rstMi.items.find(x => x.id === +card.dataset.id);
+      if (item) _rstMiOpenModal(item);
+    });
+  });
+
+  // Toggle availability buttons
+  grid.querySelectorAll('.rst-mi-toggle-btn').forEach(btn => {
+    btn.addEventListener('click', async e => {
+      e.stopPropagation();
+      const id  = +btn.dataset.id;
+      btn.disabled = true;
+      const res = await API.rstToggleMenuItem(id);
+      btn.disabled = false;
+      if (res.status === 200) {
+        const item = _rstMi.items.find(x => x.id === id);
+        if (item) item.is_available = res.body.data.is_available;
+        _rstMiRender();
+      }
+    });
+  });
+
+  // Footer + pagination
+  const meta = _rstMi.meta;
+  const avail = items.filter(i => i.is_available).length;
+  $('#rst-mi-footer').textContent = `${meta.total ?? items.length} item${(meta.total ?? items.length) !== 1 ? 's' : ''} · ${avail} available`;
+
+  _rstMiRenderPagination(meta.current_page || 1, meta.last_page || 1);
+}
+
+function _rstMiRenderPagination(cur, last) {
+  const pg = $('#rst-mi-pagination');
+  if (last <= 1) { pg.innerHTML = ''; return; }
+  let html = `<button class="rst-mi-page-btn" ${cur <= 1 ? 'disabled' : ''} data-page="${cur - 1}"><i class="fa fa-chevron-left"></i></button>`;
+  for (let p = 1; p <= last; p++) {
+    if (last <= 7 || p === 1 || p === last || Math.abs(p - cur) <= 1) {
+      html += `<button class="rst-mi-page-btn ${p === cur ? 'active' : ''}" data-page="${p}">${p}</button>`;
+    } else if (Math.abs(p - cur) === 2) {
+      html += `<span style="padding:4px 2px;color:var(--text-muted)">…</span>`;
+    }
+  }
+  html += `<button class="rst-mi-page-btn" ${cur >= last ? 'disabled' : ''} data-page="${cur + 1}"><i class="fa fa-chevron-right"></i></button>`;
+  pg.innerHTML = html;
+  pg.querySelectorAll('.rst-mi-page-btn:not(:disabled)').forEach(b => {
+    b.addEventListener('click', () => rstMiLoad(null, null, null, +b.dataset.page));
+  });
+}
+
+// ── Category filter select ───────────────────────────────────────────────────
+async function _rstMiPopulateCatFilter() {
+  await _rstMiLoadCats();
+  const sel = $('#rst-mi-cat-filter');
+  const cur = sel.value;
+  sel.innerHTML = `<option value="">All Categories</option>` +
+    _rstMi.cats.map(c => `<option value="${c.id}" ${String(c.id) === cur ? 'selected' : ''}>${escHtml(c.name)}</option>`).join('');
+}
+
+$('#rst-mi-cat-filter')?.addEventListener('change', function () {
+  _rstMi.catId = this.value;
+  _rstMi.page  = 1;
+  rstMiLoad(_rstMi.q, _rstMi.status, _rstMi.catId, 1);
+});
+
+// ── Status tabs ──────────────────────────────────────────────────────────────
+$$('.rst-mi-status-tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    $$('.rst-mi-status-tab').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    rstMiLoad(_rstMi.q, btn.dataset.status, null, 1);
+  });
+});
+
+// ── Search ───────────────────────────────────────────────────────────────────
+$('#rst-mi-search')?.addEventListener('input', function () {
+  clearTimeout(_rstMi.searchTimer);
+  _rstMi.searchTimer = setTimeout(() => rstMiLoad(this.value.trim(), null, null, 1), 320);
+});
+
+// ── Add / Edit modal ─────────────────────────────────────────────────────────
+// ── Right-column tab switching ───────────────────────────────────────────────
+$$('.rst-mi-right-tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    $$('.rst-mi-right-tab').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const tab = btn.dataset.tab;
+    $('#rst-mi-tab-cats').style.display    = tab === 'cats'    ? '' : 'none';
+    $('#rst-mi-tab-dietary').style.display = tab === 'dietary' ? '' : 'none';
+    $('#rst-mi-tab-ingr').style.display    = tab === 'ingr'    ? '' : 'none';
+  });
+});
+
+// ── Dietary tag toggles ──────────────────────────────────────────────────────
+$$('#rst-mi-tags-wrap .rst-mi-tag-btn').forEach(btn => {
+  btn.addEventListener('click', () => btn.classList.toggle('active'));
+});
+
+// ── Image helpers ─────────────────────────────────────────────────────────────
+function _rstMiSetImage(fileId, url) {
+  $('#rst-mi-file-id').value = fileId || '';
+  const thumb = $('#rst-mi-img-thumb');
+  if (url) {
+    thumb.innerHTML = `<img src="${escHtml(url)}" alt="">`;
+    $('#rst-mi-img-remove-btn').style.display = '';
+  } else {
+    thumb.innerHTML = '<i class="fa fa-image"></i>';
+    $('#rst-mi-img-remove-btn').style.display = 'none';
+  }
+}
+
+$('#rst-mi-img-pick-btn')?.addEventListener('click', () => {
+  openImgPicker((fileId, url) => _rstMiSetImage(fileId, url));
+});
+$('#rst-mi-img-remove-btn')?.addEventListener('click', () => _rstMiSetImage(null, null));
+
+// ── Ingredient search in modal ────────────────────────────────────────────────
+const _rstMiIngr = { rows: [], allIngr: [], searchTimer: null };
+
+async function _rstMiIngrEnsureList() {
+  if (_rstMiIngr.allIngr.length) return;
+  const res = await API.rstIngredients('');
+  if (res.status === 200) _rstMiIngr.allIngr = res.body?.data || [];
+}
+
+function _rstMiIngrRenderList() {
+  const list = $('#rst-mi-ingr-list');
+  if (!_rstMiIngr.rows.length) {
+    list.innerHTML = '<div style="color:var(--text-muted);font-size:12px;padding:12px;text-align:center">No ingredients added yet</div>';
+    return;
+  }
+  list.innerHTML = _rstMiIngr.rows.map((r, idx) =>
+    `<div class="rst-mi-ingr-row" data-idx="${idx}">
+      <span class="rst-mi-ingr-row-name">${escHtml(r.name)}</span>
+      <input type="number" class="rst-mi-ingr-qty-input" value="${r.qty}" min="0.001" step="any" data-idx="${idx}">
+      <span class="rst-mi-ingr-unit">${escHtml(r.unit)}</span>
+      <button class="rst-mi-ingr-rm" data-idx="${idx}" title="Remove"><i class="fa fa-xmark"></i></button>
+    </div>`
+  ).join('');
+
+  list.querySelectorAll('.rst-mi-ingr-qty-input').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const i = _rstMiIngr.rows[+inp.dataset.idx];
+      if (i) i.qty = parseFloat(inp.value) || 0;
+    });
+  });
+  list.querySelectorAll('.rst-mi-ingr-rm').forEach(btn => {
+    btn.addEventListener('click', () => {
+      _rstMiIngr.rows.splice(+btn.dataset.idx, 1);
+      _rstMiIngrRenderList();
+    });
+  });
+}
+
+$('#rst-mi-ingr-search')?.addEventListener('input', async function () {
+  const q = this.value.trim().toLowerCase();
+  const dd = $('#rst-mi-ingr-dd');
+  if (!q) { dd.style.display = 'none'; return; }
+  await _rstMiIngrEnsureList();
+  const matches = _rstMiIngr.allIngr
+    .filter(i => i.name.toLowerCase().includes(q) && !_rstMiIngr.rows.find(r => r.id === i.id))
+    .slice(0, 8);
+  if (!matches.length) { dd.style.display = 'none'; return; }
+  dd.style.display = '';
+  dd.innerHTML = matches.map(i =>
+    `<div class="rst-mi-ingr-dd-row" data-id="${i.id}" data-name="${escHtml(i.name)}" data-unit="${escHtml(i.unit)}">
+      <span>${escHtml(i.name)}</span>
+      <span class="rst-mi-ingr-dd-unit">${i.unit}</span>
+    </div>`
+  ).join('');
+  dd.querySelectorAll('.rst-mi-ingr-dd-row').forEach(row => {
+    row.addEventListener('mousedown', e => {
+      e.preventDefault();
+      _rstMiIngr.rows.push({ id: +row.dataset.id, name: row.dataset.name, unit: row.dataset.unit, qty: 1 });
+      _rstMiIngrRenderList();
+      $('#rst-mi-ingr-search').value = '';
+      dd.style.display = 'none';
+    });
+  });
+});
+$('#rst-mi-ingr-search')?.addEventListener('blur', () => {
+  setTimeout(() => { const dd = $('#rst-mi-ingr-dd'); if (dd) dd.style.display = 'none'; }, 150);
+});
+
+// ── Open Add / Edit modal ────────────────────────────────────────────────────
+async function _rstMiOpenModal(item = null) {
+  const isEdit = !!item;
+  $('#rst-mi-modal-title').textContent = isEdit ? 'Edit Menu Item' : 'Add Menu Item';
+  $('#rst-mi-id').value          = item?.id ?? '';
+  $('#rst-mi-name').value        = item?.name ?? '';
+  $('#rst-mi-desc').value        = item?.description ?? '';
+  $('#rst-mi-price').value       = item?.price != null ? item.price.toFixed(2) : '';
+  $('#rst-mi-prep').value        = item?.prep_time_minutes ?? '';
+  $('#rst-mi-available').checked = item ? item.is_available : true;
+  $('#rst-mi-err').style.display = 'none';
+  $('#rst-mi-del-btn').style.display = isEdit ? '' : 'none';
+
+  // Reset to categories tab
+  $$('.rst-mi-right-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === 'cats'));
+  $('#rst-mi-tab-cats').style.display    = '';
+  $('#rst-mi-tab-dietary').style.display = 'none';
+  $('#rst-mi-tab-ingr').style.display    = 'none';
+  $('#rst-mi-ingr-search').value = '';
+  $('#rst-mi-ingr-dd').style.display = 'none';
+
+  // Image
+  _rstMiSetImage(item?.file_manager_file_id || null, item?.image_url || null);
+
+  // Dietary tags
+  const activeTags = new Set(item?.dietary_tags ?? []);
+  $$('#rst-mi-tags-wrap .rst-mi-tag-btn').forEach(btn => {
+    btn.classList.toggle('active', activeTags.has(btn.dataset.tag));
+  });
+
+  // Categories
+  await _rstMiLoadCats();
+  const selectedCatIds = new Set((item?.categories ?? []).map(c => c.id));
+  const wrap = $('#rst-mi-cats-wrap');
+  wrap.innerHTML = _rstMi.cats.length
+    ? _rstMi.cats.map(c =>
+        `<label class="rst-mi-cat-check">
+          <input type="checkbox" value="${c.id}" ${selectedCatIds.has(c.id) ? 'checked' : ''}>
+          ${escHtml(c.name)}
+        </label>`).join('')
+    : `<div style="color:var(--text-muted);font-size:12px;padding:8px">No categories yet.</div>`;
+
+  // Ingredients — load async for edit, clear for add
+  _rstMiIngr.rows = [];
+  _rstMiIngrRenderList();
+  if (isEdit && item.id) {
+    const res = await API.rstMenuItemIngredients(item.id);
+    if (res.status === 200) {
+      _rstMiIngr.rows = (res.body?.data || []).map(r => ({
+        id: r.id, name: r.name, unit: r.unit, qty: r.quantity_required,
+      }));
+      _rstMiIngrRenderList();
+    }
+  }
+
+  $('#rst-mi-modal').style.display = 'flex';
+  setTimeout(() => $('#rst-mi-name')?.focus(), 60);
+}
+
+$('#rst-mi-add-btn')?.addEventListener('click',     () => _rstMiOpenModal(null));
+$('#rst-mi-modal-close')?.addEventListener('click', () => { $('#rst-mi-modal').style.display = 'none'; });
+$('#rst-mi-cancel-btn')?.addEventListener('click',  () => { $('#rst-mi-modal').style.display = 'none'; });
+
+$('#rst-mi-save-btn')?.addEventListener('click', async () => {
+  const id    = $('#rst-mi-id').value;
+  const name  = $('#rst-mi-name').value.trim();
+  const price = parseFloat($('#rst-mi-price').value);
+  const err   = $('#rst-mi-err');
+  err.style.display = 'none';
+  if (!name)               { err.textContent = 'Item name is required.'; err.style.display = ''; return; }
+  if (isNaN(price) || price < 0) { err.textContent = 'Valid price required.'; err.style.display = ''; return; }
+
+  const dietary_tags      = [...$$('#rst-mi-tags-wrap .rst-mi-tag-btn.active')].map(b => b.dataset.tag);
+  const menu_category_ids = [...$$('#rst-mi-cats-wrap input[type=checkbox]:checked')].map(i => +i.value);
+  const prepVal           = $('#rst-mi-prep').value;
+  const fileId            = $('#rst-mi-file-id').value;
+
+  const body = {
+    name,
+    description:          $('#rst-mi-desc').value.trim() || null,
+    price,
+    is_available:         $('#rst-mi-available').checked,
+    prep_time_minutes:    prepVal ? parseInt(prepVal, 10) : null,
+    dietary_tags,
+    menu_category_ids,
+    file_manager_file_id: fileId ? +fileId : null,
+  };
+
+  const btn = $('#rst-mi-save-btn');
+  btn.disabled = true;
+  const res = id
+    ? await API.rstUpdateMenuItem(+id, body)
+    : await API.rstCreateMenuItem(body);
+  btn.disabled = false;
+
+  if (res.status !== 200 && res.status !== 201) {
+    const msg = res.body?.errors ? Object.values(res.body.errors).flat()[0] : (res.body?.message || 'Failed.');
+    err.textContent = msg; err.style.display = ''; return;
+  }
+
+  // Sync ingredients
+  const savedId = res.body?.data?.id || (id ? +id : null);
+  if (savedId && _rstMiIngr.rows.length >= 0) {
+    const ingredients = _rstMiIngr.rows
+      .filter(r => r.qty > 0)
+      .map(r => ({ ingredient_id: r.id, quantity_required: r.qty }));
+    await API.rstSyncMenuItemIngredients(savedId, { ingredients });
+  }
+
+  $('#rst-mi-modal').style.display = 'none';
+  toast(id ? 'Item updated' : `"${name}" added`, 'success');
+  rstMiLoad(_rstMi.q, _rstMi.status, _rstMi.catId, _rstMi.page);
+});
+
+$('#rst-mi-del-btn')?.addEventListener('click', async () => {
+  const id   = +$('#rst-mi-id').value;
+  const name = $('#rst-mi-name').value.trim();
+  if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
+  const res = await API.rstDeleteMenuItem(id);
+  if (res.status !== 200 && res.status !== 204) { toast('Failed to delete', 'error'); return; }
+  $('#rst-mi-modal').style.display = 'none';
+  toast(`"${name}" deleted`, 'success');
+  rstMiLoad(_rstMi.q, _rstMi.status, _rstMi.catId, 1);
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Restaurant — Menu Categories
+// ══════════════════════════════════════════════════════════════════════════════
+
+const _rstMc = { items: [], searchTimer: null };
+
+async function rstMcLoad(q = '') {
+  const res = await API.rstMenuCats(q);
+  if (res.status !== 200) { toast('Failed to load categories', 'error'); return; }
+  _rstMc.items = res.body?.data || [];
+  _rstMcRender();
+}
+
+function _rstMcRender() {
+  const grid  = $('#rst-mc-grid');
+  const items = _rstMc.items;
+  if (!items.length) {
+    grid.innerHTML = `<div class="rst-mc-empty">
+      <i class="fa fa-tags"></i>
+      <p>No categories yet. Click <strong>Add Category</strong> to create one.</p>
+    </div>`;
+    $('#rst-mc-footer').textContent = '';
+    return;
+  }
+
+  grid.innerHTML = items.map(c => {
+    const activeBadge = c.is_active
+      ? `<span class="rst-mc-card-badge rst-mc-card-badge-active">Active</span>`
+      : `<span class="rst-mc-card-badge rst-mc-card-badge-inactive">Inactive</span>`;
+    const desc = c.description
+      ? `<div class="rst-mc-card-desc">${escHtml(c.description)}</div>` : '';
+    return `<div class="rst-mc-card" data-id="${c.id}">
+      <div class="rst-mc-card-top">
+        <div class="rst-mc-card-icon"><i class="fa fa-tag"></i></div>
+        ${activeBadge}
+      </div>
+      <div class="rst-mc-card-name">${escHtml(c.name)}</div>
+      ${desc}
+      <div class="rst-mc-card-meta"><i class="fa fa-utensils" style="margin-right:4px"></i>${c.item_count} item${c.item_count !== 1 ? 's' : ''}</div>
+      <div class="rst-mc-card-order"><i class="fa fa-sort"></i> Sort order: ${c.sort_order || '—'}</div>
+    </div>`;
+  }).join('');
+
+  grid.querySelectorAll('.rst-mc-card').forEach(card => {
+    card.addEventListener('click', () => {
+      const cat = _rstMc.items.find(x => x.id === +card.dataset.id);
+      if (cat) _rstMcOpenEdit(cat);
+    });
+  });
+
+  const active = items.filter(c => c.is_active).length;
+  $('#rst-mc-footer').textContent = `${items.length} categor${items.length !== 1 ? 'ies' : 'y'} · ${active} active`;
+}
+
+$('#rst-mc-search')?.addEventListener('input', function () {
+  clearTimeout(_rstMc.searchTimer);
+  _rstMc.searchTimer = setTimeout(() => rstMcLoad(this.value.trim()), 300);
+});
+
+// ── Add ──────────────────────────────────────────────────────────────────────
+$('#rst-mc-add-btn')?.addEventListener('click', () => {
+  $('#rst-mc-add-name').value   = '';
+  $('#rst-mc-add-desc').value   = '';
+  $('#rst-mc-add-active').checked = true;
+  $('#rst-mc-add-err').style.display = 'none';
+  $('#rst-mc-add-modal').style.display = 'flex';
+  setTimeout(() => $('#rst-mc-add-name')?.focus(), 60);
+});
+$('#rst-mc-add-close')?.addEventListener('click',  () => { $('#rst-mc-add-modal').style.display = 'none'; });
+$('#rst-mc-add-cancel')?.addEventListener('click', () => { $('#rst-mc-add-modal').style.display = 'none'; });
+
+$('#rst-mc-add-save')?.addEventListener('click', async () => {
+  const name     = $('#rst-mc-add-name').value.trim();
+  const desc     = $('#rst-mc-add-desc').value.trim();
+  const is_active = $('#rst-mc-add-active').checked;
+  const err = $('#rst-mc-add-err');
+  err.style.display = 'none';
+  if (!name) { err.textContent = 'Category name is required.'; err.style.display = ''; return; }
+
+  const btn = $('#rst-mc-add-save');
+  btn.disabled = true;
+  const res = await API.rstCreateMenuCat({ name, description: desc || null, is_active });
+  btn.disabled = false;
+
+  if (res.status !== 201) {
+    const msg = res.body?.errors ? Object.values(res.body.errors).flat()[0] : (res.body?.message || 'Failed.');
+    err.textContent = msg; err.style.display = ''; return;
+  }
+  $('#rst-mc-add-modal').style.display = 'none';
+  toast(`"${name}" added`, 'success');
+  rstMcLoad($('#rst-mc-search').value.trim());
+});
+
+// ── Edit ─────────────────────────────────────────────────────────────────────
+function _rstMcOpenEdit(cat) {
+  $('#rst-mc-edit-id').value       = cat.id;
+  $('#rst-mc-edit-name').value     = cat.name;
+  $('#rst-mc-edit-desc').value     = cat.description || '';
+  $('#rst-mc-edit-active').checked = cat.is_active;
+  $('#rst-mc-edit-err').style.display = 'none';
+  $('#rst-mc-edit-modal').style.display = 'flex';
+}
+$('#rst-mc-edit-close')?.addEventListener('click',  () => { $('#rst-mc-edit-modal').style.display = 'none'; });
+$('#rst-mc-edit-cancel')?.addEventListener('click', () => { $('#rst-mc-edit-modal').style.display = 'none'; });
+
+$('#rst-mc-edit-save')?.addEventListener('click', async () => {
+  const id       = +$('#rst-mc-edit-id').value;
+  const name     = $('#rst-mc-edit-name').value.trim();
+  const desc     = $('#rst-mc-edit-desc').value.trim();
+  const is_active = $('#rst-mc-edit-active').checked;
+  const err = $('#rst-mc-edit-err');
+  err.style.display = 'none';
+  if (!name) { err.textContent = 'Category name is required.'; err.style.display = ''; return; }
+
+  const btn = $('#rst-mc-edit-save');
+  btn.disabled = true;
+  const res = await API.rstUpdateMenuCat(id, { name, description: desc || null, is_active });
+  btn.disabled = false;
+
+  if (res.status !== 200) {
+    const msg = res.body?.errors ? Object.values(res.body.errors).flat()[0] : (res.body?.message || 'Failed.');
+    err.textContent = msg; err.style.display = ''; return;
+  }
+  $('#rst-mc-edit-modal').style.display = 'none';
+  toast('Category updated', 'success');
+  rstMcLoad($('#rst-mc-search').value.trim());
+});
+
+$('#rst-mc-edit-del')?.addEventListener('click', async () => {
+  const id   = +$('#rst-mc-edit-id').value;
+  const name = $('#rst-mc-edit-name').value.trim();
+  if (!confirm(`Delete category "${name}"? Menu items in this category will be unlinked.`)) return;
+  const res = await API.rstDeleteMenuCat(id);
+  if (res.status !== 200 && res.status !== 204) { toast('Failed to delete', 'error'); return; }
+  $('#rst-mc-edit-modal').style.display = 'none';
+  toast(`"${name}" deleted`, 'success');
+  rstMcLoad($('#rst-mc-search').value.trim());
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Restaurant — Ingredients
+// ══════════════════════════════════════════════════════════════════════════════
+
+const _rstIngr = { items: [], searchTimer: null };
+
+async function rstIngrLoad(q = '') {
+  const res = await API.rstIngredients(q);
+  if (res.status !== 200) { toast('Failed to load ingredients', 'error'); return; }
+  _rstIngr.items = res.body?.data || [];
+  _rstIngrRender();
+}
+
+function _rstIngrRender() {
+  const tbody = $('#rst-ingr-tbody');
+  const items = _rstIngr.items;
+  if (!items.length) {
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text-muted)">
+      <i class="fa fa-boxes-stacked" style="font-size:24px;display:block;margin-bottom:8px;opacity:.4"></i>No ingredients found
+    </td></tr>`;
+    $('#rst-ingr-footer').textContent = '';
+    return;
+  }
+  tbody.innerHTML = items.map(i => {
+    const qtyClass = i.is_low_stock ? 'rst-ingr-qty rst-ingr-qty-low' : 'rst-ingr-qty rst-ingr-qty-ok';
+    const badge = i.low_stock_threshold != null
+      ? (i.is_low_stock
+        ? `<span class="rst-ingr-badge rst-ingr-badge-low"><i class="fa fa-triangle-exclamation"></i> Low Stock</span>`
+        : `<span class="rst-ingr-badge rst-ingr-badge-ok"><i class="fa fa-check"></i> OK</span>`)
+      : `<span class="rst-ingr-badge rst-ingr-badge-na">—</span>`;
+    const threshold = i.low_stock_threshold != null ? `${i.low_stock_threshold} ${i.unit}` : '—';
+    const cost = i.cost_per_unit > 0 ? i.cost_per_unit.toFixed(2) : '—';
+    return `<tr data-id="${i.id}">
+      <td style="font-weight:600">${escHtml(i.name)}</td>
+      <td style="color:var(--text-muted)">${i.unit}</td>
+      <td style="text-align:right"><span class="${qtyClass}">${i.quantity} ${i.unit}</span></td>
+      <td style="text-align:right;color:var(--text-muted)">${threshold}</td>
+      <td style="text-align:right;color:var(--text-muted)">${cost}</td>
+      <td style="text-align:center">${badge}</td>
+      <td style="text-align:center">
+        <div style="display:flex;gap:5px;justify-content:center">
+          <button class="rst-ingr-action-btn green" data-action="stockin" data-id="${i.id}" title="Stock In"><i class="fa fa-plus"></i> Stock In</button>
+          <button class="rst-ingr-action-btn" data-action="history" data-id="${i.id}" title="History"><i class="fa fa-clock-rotate-left"></i></button>
+          <button class="rst-ingr-action-btn" data-action="edit" data-id="${i.id}" title="Edit"><i class="fa fa-pencil"></i></button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+
+  // Row action delegation
+  tbody.querySelectorAll('button[data-action]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const id  = +btn.dataset.id;
+      const ing = _rstIngr.items.find(x => x.id === id);
+      if (!ing) return;
+      const action = btn.dataset.action;
+      if (action === 'edit')    _rstIngrOpenEdit(ing);
+      if (action === 'stockin') _rstIngrOpenStockIn(ing);
+      if (action === 'history') _rstIngrOpenTxn(ing);
+    });
+  });
+
+  const low = items.filter(i => i.is_low_stock).length;
+  $('#rst-ingr-footer').textContent = `${items.length} ingredient${items.length !== 1 ? 's' : ''}${low ? ` · ${low} low stock` : ''}`;
+}
+
+// Search
+$('#rst-ingr-search')?.addEventListener('input', function () {
+  clearTimeout(_rstIngr.searchTimer);
+  _rstIngr.searchTimer = setTimeout(() => rstIngrLoad(this.value.trim()), 320);
+});
+
+// ── Add Ingredient ───────────────────────────────────────────────────────────
+$('#rst-ingr-add-btn')?.addEventListener('click', () => {
+  $('#rst-ingr-add-name').value      = '';
+  $('#rst-ingr-add-unit').value      = 'pcs';
+  $('#rst-ingr-add-qty').value       = '0';
+  $('#rst-ingr-add-threshold').value = '';
+  $('#rst-ingr-add-cost').value      = '';
+  $('#rst-ingr-add-err').style.display = 'none';
+  $('#rst-ingr-add-modal').style.display = 'flex';
+  setTimeout(() => $('#rst-ingr-add-name')?.focus(), 60);
+});
+$('#rst-ingr-add-close')?.addEventListener('click',  () => { $('#rst-ingr-add-modal').style.display = 'none'; });
+$('#rst-ingr-add-cancel')?.addEventListener('click', () => { $('#rst-ingr-add-modal').style.display = 'none'; });
+
+$('#rst-ingr-add-save')?.addEventListener('click', async () => {
+  const name      = $('#rst-ingr-add-name').value.trim();
+  const unit      = $('#rst-ingr-add-unit').value;
+  const quantity  = parseFloat($('#rst-ingr-add-qty').value) || 0;
+  const threshold = $('#rst-ingr-add-threshold').value !== '' ? parseFloat($('#rst-ingr-add-threshold').value) : null;
+  const cost      = $('#rst-ingr-add-cost').value !== '' ? parseFloat($('#rst-ingr-add-cost').value) : null;
+  const err = $('#rst-ingr-add-err');
+  err.style.display = 'none';
+  if (!name) { err.textContent = 'Name is required.'; err.style.display = ''; return; }
+
+  const btn = $('#rst-ingr-add-save');
+  btn.disabled = true;
+  const body = { name, unit, quantity };
+  if (threshold != null) body.low_stock_threshold = threshold;
+  if (cost != null) body.cost_per_unit = cost;
+  const res = await API.rstCreateIngredient(body);
+  btn.disabled = false;
+
+  if (res.status !== 201) {
+    const msg = res.body?.errors ? Object.values(res.body.errors).flat()[0] : (res.body?.message || 'Failed.');
+    err.textContent = msg; err.style.display = ''; return;
+  }
+  $('#rst-ingr-add-modal').style.display = 'none';
+  toast(`"${name}" added`, 'success');
+  rstIngrLoad($('#rst-ingr-search').value.trim());
+});
+
+// ── Edit Ingredient ──────────────────────────────────────────────────────────
+function _rstIngrOpenEdit(ing) {
+  $('#rst-ingr-edit-id').value        = ing.id;
+  $('#rst-ingr-edit-name').value      = ing.name;
+  $('#rst-ingr-edit-unit').value      = ing.unit;
+  $('#rst-ingr-edit-threshold').value = ing.low_stock_threshold ?? '';
+  $('#rst-ingr-edit-cost').value      = ing.cost_per_unit > 0 ? ing.cost_per_unit : '';
+  $('#rst-ingr-edit-err').style.display = 'none';
+  $('#rst-ingr-edit-modal').style.display = 'flex';
+}
+$('#rst-ingr-edit-close')?.addEventListener('click',  () => { $('#rst-ingr-edit-modal').style.display = 'none'; });
+$('#rst-ingr-edit-cancel')?.addEventListener('click', () => { $('#rst-ingr-edit-modal').style.display = 'none'; });
+
+$('#rst-ingr-edit-save')?.addEventListener('click', async () => {
+  const id        = +$('#rst-ingr-edit-id').value;
+  const name      = $('#rst-ingr-edit-name').value.trim();
+  const unit      = $('#rst-ingr-edit-unit').value;
+  const threshold = $('#rst-ingr-edit-threshold').value !== '' ? parseFloat($('#rst-ingr-edit-threshold').value) : null;
+  const cost      = $('#rst-ingr-edit-cost').value !== '' ? parseFloat($('#rst-ingr-edit-cost').value) : null;
+  const err = $('#rst-ingr-edit-err');
+  err.style.display = 'none';
+  if (!name) { err.textContent = 'Name is required.'; err.style.display = ''; return; }
+
+  const btn = $('#rst-ingr-edit-save');
+  btn.disabled = true;
+  const body = { name, unit, low_stock_threshold: threshold, cost_per_unit: cost };
+  const res = await API.rstUpdateIngredient(id, body);
+  btn.disabled = false;
+
+  if (res.status !== 200) {
+    const msg = res.body?.errors ? Object.values(res.body.errors).flat()[0] : (res.body?.message || 'Failed.');
+    err.textContent = msg; err.style.display = ''; return;
+  }
+  $('#rst-ingr-edit-modal').style.display = 'none';
+  toast('Ingredient updated', 'success');
+  rstIngrLoad($('#rst-ingr-search').value.trim());
+});
+
+$('#rst-ingr-edit-del')?.addEventListener('click', async () => {
+  const id   = +$('#rst-ingr-edit-id').value;
+  const name = $('#rst-ingr-edit-name').value.trim();
+  if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
+  const res = await API.rstDeleteIngredient(id);
+  if (res.status !== 200 && res.status !== 204) { toast('Failed to delete', 'error'); return; }
+  $('#rst-ingr-edit-modal').style.display = 'none';
+  toast(`"${name}" deleted`, 'success');
+  rstIngrLoad($('#rst-ingr-search').value.trim());
+});
+
+// ── Stock In ─────────────────────────────────────────────────────────────────
+function _rstIngrOpenStockIn(ing) {
+  $('#rst-ingr-stockin-id').value      = ing.id;
+  $('#rst-ingr-stockin-name').textContent = ing.name;
+  $('#rst-ingr-stockin-current').textContent = `${ing.quantity} ${ing.unit}`;
+  $('#rst-ingr-stockin-qty').value     = '';
+  $('#rst-ingr-stockin-notes').value   = '';
+  $('#rst-ingr-stockin-err').style.display = 'none';
+  $('#rst-ingr-stockin-modal').style.display = 'flex';
+  setTimeout(() => $('#rst-ingr-stockin-qty')?.focus(), 60);
+}
+$('#rst-ingr-stockin-close')?.addEventListener('click',  () => { $('#rst-ingr-stockin-modal').style.display = 'none'; });
+$('#rst-ingr-stockin-cancel')?.addEventListener('click', () => { $('#rst-ingr-stockin-modal').style.display = 'none'; });
+
+$('#rst-ingr-stockin-save')?.addEventListener('click', async () => {
+  const id  = +$('#rst-ingr-stockin-id').value;
+  const qty = parseFloat($('#rst-ingr-stockin-qty').value);
+  const notes = $('#rst-ingr-stockin-notes').value.trim();
+  const err = $('#rst-ingr-stockin-err');
+  err.style.display = 'none';
+  if (!qty || qty <= 0) { err.textContent = 'Enter a quantity greater than 0.'; err.style.display = ''; return; }
+
+  const btn = $('#rst-ingr-stockin-save');
+  btn.disabled = true;
+  const res = await API.rstStockIn(id, { quantity: qty, notes });
+  btn.disabled = false;
+
+  if (res.status !== 200) {
+    const msg = res.body?.message || 'Failed to add stock.';
+    err.textContent = msg; err.style.display = ''; return;
+  }
+  $('#rst-ingr-stockin-modal').style.display = 'none';
+  toast('Stock added', 'success');
+  rstIngrLoad($('#rst-ingr-search').value.trim());
+});
+
+// ── Transaction History ───────────────────────────────────────────────────────
+async function _rstIngrOpenTxn(ing) {
+  $('#rst-ingr-txn-subhdr').textContent = `${ing.name} · ${ing.quantity} ${ing.unit} in stock`;
+  $('#rst-ingr-txn-tbody').innerHTML = `<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text-muted)">Loading…</td></tr>`;
+  $('#rst-ingr-txn-modal').style.display = 'flex';
+
+  const res = await API.rstIngredientTransactions(ing.id);
+  if (res.status !== 200) {
+    $('#rst-ingr-txn-tbody').innerHTML = `<tr><td colspan="4" style="text-align:center;padding:24px;color:#dc2626">Failed to load.</td></tr>`;
+    return;
+  }
+  const rows = res.body?.data || [];
+  if (!rows.length) {
+    $('#rst-ingr-txn-tbody').innerHTML = `<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text-muted)">No transactions yet.</td></tr>`;
+    return;
+  }
+  $('#rst-ingr-txn-tbody').innerHTML = rows.map(t => {
+    const isIn = (t.quantity || t.qty || 0) > 0;
+    const qty = t.quantity || t.qty || 0;
+    const color = isIn ? '#16a34a' : '#dc2626';
+    const sign = isIn ? '+' : '';
+    const date = t.created_at ? new Date(t.created_at).toLocaleString() : '—';
+    const type = t.type || (isIn ? 'Stock In' : 'Usage');
+    return `<tr>
+      <td style="color:var(--text-muted);font-size:11px">${date}</td>
+      <td>${escHtml(type)}</td>
+      <td style="text-align:right;font-weight:700;color:${color}">${sign}${qty} ${ing.unit}</td>
+      <td style="color:var(--text-muted)">${escHtml(t.notes || '—')}</td>
+    </tr>`;
+  }).join('');
+}
+$('#rst-ingr-txn-close')?.addEventListener('click', () => { $('#rst-ingr-txn-modal').style.display = 'none'; });
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Restaurant — Ingredient Purchase Orders
+// ══════════════════════════════════════════════════════════════════════════════
+
+const _rstPo = {
+  list:          [],
+  status:        'all',
+  searchTimer:   null,
+  activePo:      null,   // currently shown PO detail
+  ingredients:   [],     // cached ingredient list for line-item selector
+  suppliers:     [],     // cached supplier list for dropdown
+  poLines:       [],     // lines being built in create/edit modal (array of {ingredientId, qty, unitCost})
+  currency:      '',
+};
+
+// ── Load list ─────────────────────────────────────────────────────────────────
+async function rstPoLoad(status, page) {
+  _rstPo.status   = status ?? _rstPo.status;
+  _rstPo.currency = _rst.currency || _rstPos.currency || '';
+
+  const tbody = $('#rst-po-tbody');
+  if (tbody) tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text-muted)"><i class="fa fa-spinner fa-spin"></i> Loading…</td></tr>`;
+
+  const res = await API.rstPoList(_rstPo.status, page || 1);
+  if (res.status !== 200) {
+    if (tbody) tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:24px;color:#dc2626">Failed to load</td></tr>`;
+    return;
+  }
+
+  _rstPo.list = res.body?.data || [];
+  _rstPoRenderList();
+
+  // Highlight active status tab
+  $$('#rst-po-status-tabs .po-filter-tab').forEach(b => b.classList.toggle('active', b.dataset.poStatus === _rstPo.status));
+}
+
+function _rstPoRenderList() {
+  const tbody  = $('#rst-po-tbody');
+  const footer = $('#rst-po-footer');
+  const cur    = _rstPo.currency;
+
+  if (!_rstPo.list.length) {
+    if (tbody)  tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--text-muted)">
+      <i class="fa fa-file-invoice" style="font-size:24px;display:block;margin-bottom:8px;opacity:.3"></i>No purchase orders found
+    </td></tr>`;
+    if (footer) footer.textContent = '0 records';
+    return;
+  }
+
+  if (tbody) {
+    tbody.innerHTML = _rstPo.list.map(po => {
+      const active = _rstPo.activePo?.id === po.id ? ' po-row-active' : '';
+      return `<tr class="po-row${active}" data-po-id="${po.id}">
+        <td><strong>${escHtml(po.po_number)}</strong></td>
+        <td style="color:var(--text-muted);font-size:11px">${po.purchase_date || '—'}</td>
+        <td>${po.supplier_name ? escHtml(po.supplier_name) : '<span style="color:var(--text-muted)">—</span>'}</td>
+        <td style="text-align:right">${cur} ${po.total.toFixed(2)}</td>
+        <td><span class="rst-po-status-badge" style="background:${po.status_color}20;color:${po.status_color};border-color:${po.status_color}40">${escHtml(po.status_label)}</span></td>
+      </tr>`;
+    }).join('');
+
+    tbody.querySelectorAll('.po-row[data-po-id]').forEach(row => {
+      row.addEventListener('click', () => _rstPoSelectPo(+row.dataset.poId));
+    });
+  }
+
+  if (footer) footer.textContent = `${_rstPo.list.length} record${_rstPo.list.length !== 1 ? 's' : ''}`;
+}
+
+// ── Detail panel ──────────────────────────────────────────────────────────────
+async function _rstPoSelectPo(id) {
+  _rstPo.activePo = { id };
+  _rstPoRenderList();
+
+  $('#rst-po-detail-empty').style.display = 'none';
+  const body = $('#rst-po-detail-body');
+  if (body) { body.style.display = 'flex'; }
+  $('#rst-po-dv-items').innerHTML = `<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text-muted)"><i class="fa fa-spinner fa-spin"></i></td></tr>`;
+  $('#rst-po-dv-actions').innerHTML = '';
+
+  const res = await API.rstPoShow(id);
+  if (res.status !== 200) { toast('Failed to load purchase order', 'error'); return; }
+
+  const po = res.body?.data;
+  _rstPo.activePo = po;
+  _rstPoRenderDetail(po);
+}
+
+function _rstPoRenderDetail(po) {
+  const cur = _rstPo.currency;
+  $('#rst-po-dv-number').textContent = po.po_number;
+
+  const meta = [po.purchase_date || '—'];
+  if (po.supplier) meta.push(po.supplier.name);
+  if (po.expected_delivery_date) meta.push('ETA: ' + po.expected_delivery_date);
+  $('#rst-po-dv-meta').textContent = meta.join(' · ');
+
+  // Info grid
+  const infoEl = $('#rst-po-dv-info');
+  if (infoEl) {
+    infoEl.innerHTML = `
+      <div><span style="color:var(--text-muted)">Status</span><br><strong>
+        <span style="color:${po.status_color}">${escHtml(po.status_label)}</span>
+      </strong></div>
+      <div><span style="color:var(--text-muted)">Total</span><br><strong>${cur} ${po.total.toFixed(2)}</strong></div>
+      ${po.supplier ? `<div><span style="color:var(--text-muted)">Supplier</span><br>${escHtml(po.supplier.name)}</div>` : ''}
+      ${po.expected_delivery_date ? `<div><span style="color:var(--text-muted)">Expected Delivery</span><br>${escHtml(po.expected_delivery_date)}</div>` : ''}
+    `;
+  }
+
+  // Items
+  const itemsTbody = $('#rst-po-dv-items');
+  if (itemsTbody) {
+    if (!po.items.length) {
+      itemsTbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:16px;color:var(--text-muted)">No items</td></tr>`;
+    } else {
+      itemsTbody.innerHTML = po.items.map(i => `<tr>
+        <td>${escHtml(i.ingredient_name)} <span style="color:var(--text-muted);font-size:11px">(${i.ingredient_unit})</span></td>
+        <td style="text-align:right">${i.quantity} ${i.ingredient_unit}</td>
+        <td style="text-align:right;color:${i.qty_received > 0 ? '#16a34a' : 'var(--text-muted)'}">${i.qty_received} ${i.ingredient_unit}</td>
+        <td style="text-align:right;color:${i.qty_remaining > 0 ? '#d97706' : '#6b7280'}">${i.qty_remaining} ${i.ingredient_unit}</td>
+        <td style="text-align:right">${cur} ${i.unit_cost.toFixed(4)}</td>
+        <td style="text-align:right;font-weight:600">${cur} ${i.line_total.toFixed(2)}</td>
+      </tr>`).join('');
+    }
+  }
+
+  const totalTfoot = $('#rst-po-dv-total');
+  if (totalTfoot) {
+    totalTfoot.innerHTML = `<tr style="font-weight:700;border-top:2px solid var(--border)">
+      <td colspan="5" style="text-align:right;padding-right:8px">Total</td>
+      <td style="text-align:right">${cur} ${po.total.toFixed(2)}</td>
+    </tr>`;
+  }
+
+  // GRNs
+  const grnsWrap = $('#rst-po-dv-grns-wrap');
+  const grnsTbody = $('#rst-po-dv-grns');
+  if (grnsWrap && grnsTbody) {
+    grnsWrap.style.display = po.grns.length ? '' : 'none';
+    grnsTbody.innerHTML = po.grns.map(g => `<tr>
+      <td><strong>${escHtml(g.grn_number)}</strong></td>
+      <td style="color:var(--text-muted)">${g.received_date || '—'}</td>
+      <td style="color:var(--text-muted)">${escHtml(g.payment_label)}</td>
+      <td style="text-align:right;font-weight:600">${cur} ${g.total.toFixed(2)}</td>
+    </tr>`).join('');
+  }
+
+  // Notes
+  const notesWrap = $('#rst-po-dv-notes-wrap');
+  if (notesWrap) {
+    notesWrap.style.display = po.notes ? '' : 'none';
+    const notesEl = $('#rst-po-dv-notes');
+    if (notesEl) notesEl.textContent = po.notes || '';
+  }
+
+  // Action buttons
+  const actEl = $('#rst-po-dv-actions');
+  if (actEl) {
+    const btns = [];
+    if (po.is_editable) {
+      btns.push(`<button class="rt-btn rt-btn-outline" style="font-size:12px" data-po-action="edit"><i class="fa fa-pencil"></i> Edit</button>`);
+    }
+    if (po.status === 'draft') {
+      btns.push(`<button class="rt-btn rt-btn-primary" style="font-size:12px" data-po-action="place"><i class="fa fa-paper-plane"></i> Place Order</button>`);
+    }
+    if (po.can_receive) {
+      btns.push(`<button class="rt-btn" style="font-size:12px;background:#0ea5e9;color:#fff" data-po-action="grn"><i class="fa fa-truck-ramp-box"></i> Receive Goods</button>`);
+    }
+    if (po.status === 'draft' || po.status === 'ordered') {
+      btns.push(`<button class="rt-btn" style="font-size:12px;background:#dc2626;color:#fff" data-po-action="cancel"><i class="fa fa-ban"></i> Cancel</button>`);
+    }
+    if (po.status === 'draft' || po.status === 'cancelled') {
+      btns.push(`<button class="rt-btn rt-btn-outline" style="font-size:12px;color:#dc2626;border-color:#dc2626" data-po-action="delete"><i class="fa fa-trash"></i></button>`);
+    }
+
+    actEl.innerHTML = btns.join('');
+    actEl.querySelectorAll('[data-po-action]').forEach(btn => {
+      btn.addEventListener('click', () => _rstPoAction(btn.dataset.poAction, po));
+    });
+  }
+}
+
+async function _rstPoAction(action, po) {
+  if (action === 'edit') {
+    _rstPoOpenModal(po);
+  } else if (action === 'place') {
+    if (!confirm(`Place order ${po.po_number}? This will move it to "Ordered" status.`)) return;
+    const res = await API.rstPoPlace(po.id);
+    if (res.status !== 200) { toast(Object.values(res.body?.errors || {})[0]?.[0] || 'Failed', 'error'); return; }
+    toast('Order placed', 'success');
+    _rstPo.activePo = res.body?.data;
+    _rstPoRenderDetail(res.body?.data);
+    rstPoLoad(_rstPo.status);
+  } else if (action === 'cancel') {
+    if (!confirm(`Cancel ${po.po_number}? This cannot be undone.`)) return;
+    const res = await API.rstPoCancel(po.id);
+    if (res.status !== 200) { toast(Object.values(res.body?.errors || {})[0]?.[0] || 'Failed', 'error'); return; }
+    toast('Purchase order cancelled', 'success');
+    _rstPo.activePo = res.body?.data;
+    _rstPoRenderDetail(res.body?.data);
+    rstPoLoad(_rstPo.status);
+  } else if (action === 'delete') {
+    if (!confirm(`Delete ${po.po_number}? This cannot be undone.`)) return;
+    const res = await API.rstPoDelete(po.id);
+    if (res.status !== 200) { toast(Object.values(res.body?.errors || {})[0]?.[0] || 'Failed', 'error'); return; }
+    toast('Deleted', 'success');
+    _rstPo.activePo = null;
+    $('#rst-po-detail-body').style.display = 'none';
+    $('#rst-po-detail-empty').style.display = '';
+    rstPoLoad(_rstPo.status);
+  } else if (action === 'grn') {
+    _rstPoOpenGrnModal(po);
+  }
+}
+
+// ── Create / Edit modal ───────────────────────────────────────────────────────
+async function _rstPoEnsureDropdowns() {
+  if (!_rstPo.ingredients.length) {
+    const r = await API.rstIngredients('');
+    _rstPo.ingredients = r.body?.data || [];
+  }
+  if (!_rstPo.suppliers.length) {
+    const r = await API.suppliers('', 1);
+    _rstPo.suppliers = r.body?.data || [];
+  }
+  // Populate supplier dropdown
+  const sel = $('#rst-po-supplier');
+  if (sel) {
+    const existing = sel.value;
+    sel.innerHTML = '<option value="">— No supplier —</option>' +
+      _rstPo.suppliers.map(s => `<option value="${s.id}">${escHtml(s.name)}</option>`).join('');
+    if (existing) sel.value = existing;
+  }
+}
+
+async function _rstPoOpenModal(po) {
+  await _rstPoEnsureDropdowns();
+
+  const isEdit = !!po;
+  $('#rst-po-modal-title').textContent = isEdit ? `Edit ${po.po_number}` : 'New Purchase Order';
+  $('#rst-po-modal-id').value   = po?.id ?? '';
+  $('#rst-po-supplier').value   = po?.supplier?.id ?? '';
+  $('#rst-po-status-sel').value = po?.status ?? 'draft';
+  $('#rst-po-date').value       = po?.purchase_date ?? new Date().toISOString().slice(0, 10);
+  $('#rst-po-delivery-date').value = po?.expected_delivery_date ?? '';
+  $('#rst-po-notes').value      = po?.notes ?? '';
+  $('#rst-po-modal-err').style.display = 'none';
+
+  // Build line items
+  _rstPo.poLines = (po?.items || []).map(i => ({
+    ingredientId: i.ingredient_id,
+    qty:          i.quantity,
+    unitCost:     i.unit_cost,
+  }));
+  if (!_rstPo.poLines.length) _rstPo.poLines = [{ ingredientId: '', qty: '', unitCost: '' }];
+
+  _rstPoRenderLines();
+  $('#rst-po-modal').style.display = 'flex';
+}
+
+function _rstPoRenderLines() {
+  const tbody = $('#rst-po-lines-tbody');
+  if (!tbody) return;
+
+  const ingredientOpts = '<option value="">— Select ingredient —</option>' +
+    _rstPo.ingredients.map(i => `<option value="${i.id}">${escHtml(i.name)} (${i.unit})</option>`).join('');
+
+  tbody.innerHTML = _rstPo.poLines.map((line, idx) => `
+    <tr data-line-idx="${idx}">
+      <td>
+        <select class="rt-form-input" style="font-size:11px;padding:3px 6px" data-line-field="ingredientId">
+          ${ingredientOpts}
+        </select>
+      </td>
+      <td style="width:90px;text-align:right">
+        <input type="number" class="rt-form-input" style="font-size:11px;padding:3px 6px;text-align:right;width:80px"
+               data-line-field="qty" placeholder="0" min="0.001" step="any" value="${line.qty !== '' ? line.qty : ''}">
+      </td>
+      <td style="width:100px;text-align:right">
+        <input type="number" class="rt-form-input" style="font-size:11px;padding:3px 6px;text-align:right;width:90px"
+               data-line-field="unitCost" placeholder="0.00" min="0" step="any" value="${line.unitCost !== '' ? line.unitCost : ''}">
+      </td>
+      <td style="text-align:right;font-size:11px;color:var(--text-muted)">
+        <span class="rst-po-line-total">
+          ${(parseFloat(line.qty) > 0 && parseFloat(line.unitCost) >= 0)
+            ? (_rstPo.currency + ' ' + (parseFloat(line.qty) * parseFloat(line.unitCost)).toFixed(2))
+            : '—'}
+        </span>
+      </td>
+      <td>
+        <button class="rst-poi-del" data-line-del="${idx}" title="Remove line" style="background:none;border:none;color:#dc2626;cursor:pointer;padding:2px 6px">
+          <i class="fa fa-xmark"></i>
+        </button>
+      </td>
+    </tr>
+  `).join('');
+
+  // Restore selected values
+  tbody.querySelectorAll('tr[data-line-idx]').forEach(row => {
+    const idx  = +row.dataset.lineIdx;
+    const line = _rstPo.poLines[idx];
+    const sel  = row.querySelector('[data-line-field="ingredientId"]');
+    if (sel && line.ingredientId) sel.value = line.ingredientId;
+  });
+
+  // Wire events
+  tbody.querySelectorAll('[data-line-field]').forEach(el => {
+    el.addEventListener('change', () => _rstPoSyncLine(el));
+    el.addEventListener('input',  () => _rstPoSyncLine(el));
+  });
+
+  tbody.querySelectorAll('[data-line-del]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      _rstPo.poLines.splice(+btn.dataset.lineDel, 1);
+      if (!_rstPo.poLines.length) _rstPo.poLines = [{ ingredientId: '', qty: '', unitCost: '' }];
+      _rstPoRenderLines();
+    });
+  });
+}
+
+function _rstPoSyncLine(el) {
+  const row  = el.closest('tr[data-line-idx]');
+  if (!row) return;
+  const idx   = +row.dataset.lineIdx;
+  const field = el.dataset.lineField;
+  _rstPo.poLines[idx][field] = el.value;
+
+  // Update line total display
+  const line     = _rstPo.poLines[idx];
+  const qty      = parseFloat(line.qty) || 0;
+  const cost     = parseFloat(line.unitCost) || 0;
+  const totalEl  = row.querySelector('.rst-po-line-total');
+  if (totalEl) totalEl.textContent = qty > 0 ? `${_rstPo.currency} ${(qty * cost).toFixed(2)}` : '—';
+}
+
+$('#rst-po-add-line')?.addEventListener('click', () => {
+  _rstPo.poLines.push({ ingredientId: '', qty: '', unitCost: '' });
+  _rstPoRenderLines();
+});
+
+$('#rst-po-modal-close')?.addEventListener('click',  () => { $('#rst-po-modal').style.display = 'none'; });
+$('#rst-po-modal-cancel')?.addEventListener('click', () => { $('#rst-po-modal').style.display = 'none'; });
+
+$('#rst-po-modal-save')?.addEventListener('click', async () => {
+  const id         = +$('#rst-po-modal-id').value || null;
+  const supplierId = $('#rst-po-supplier').value || null;
+  const status     = $('#rst-po-status-sel').value;
+  const date       = $('#rst-po-date').value;
+  const delivery   = $('#rst-po-delivery-date').value || null;
+  const notes      = $('#rst-po-notes').value.trim() || null;
+  const errEl      = $('#rst-po-modal-err');
+  errEl.style.display = 'none';
+
+  if (!date) { errEl.textContent = 'Purchase date is required.'; errEl.style.display = ''; return; }
+
+  const items = _rstPo.poLines
+    .filter(l => l.ingredientId && parseFloat(l.qty) > 0)
+    .map(l => ({ ingredient_id: +l.ingredientId, quantity: parseFloat(l.qty), unit_cost: parseFloat(l.unitCost) || 0 }));
+
+  if (!items.length) { errEl.textContent = 'Add at least one ingredient line.'; errEl.style.display = ''; return; }
+
+  const body = { supplier_id: supplierId ? +supplierId : null, purchase_date: date, expected_delivery_date: delivery, status, notes, items };
+
+  const saveBtn = $('#rst-po-modal-save');
+  saveBtn.disabled = true;
+  const res = id ? await API.rstPoUpdate(id, body) : await API.rstPoCreate(body);
+  saveBtn.disabled = false;
+
+  if (res.status !== 200 && res.status !== 201) {
+    const msg = res.body?.errors ? Object.values(res.body.errors).flat()[0] : (res.body?.message || 'Failed to save.');
+    errEl.textContent = msg; errEl.style.display = ''; return;
+  }
+
+  $('#rst-po-modal').style.display = 'none';
+  toast(id ? 'Purchase order updated' : 'Purchase order created', 'success');
+
+  const po = res.body?.data;
+  _rstPo.activePo = po;
+  _rstPoRenderDetail(po);
+  rstPoLoad(_rstPo.status);
+});
+
+// ── Receive Goods (GRN) modal ─────────────────────────────────────────────────
+function _rstPoOpenGrnModal(po) {
+  $('#rst-grn-modal-po').textContent = po.po_number;
+  $('#rst-grn-date').value           = new Date().toISOString().slice(0, 10);
+  $('#rst-grn-payment').value        = 'credit';
+  $('#rst-grn-ref').value            = '';
+  $('#rst-grn-notes').value          = '';
+  $('#rst-grn-modal-err').style.display = 'none';
+
+  // Only show lines with remaining qty
+  const cur = _rstPo.currency;
+  const receiveLines = po.items.filter(i => i.qty_remaining > 0);
+  const tbody = $('#rst-grn-lines-tbody');
+  if (tbody) {
+    if (!receiveLines.length) {
+      tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:16px;color:var(--text-muted)">All items fully received</td></tr>`;
+    } else {
+      tbody.innerHTML = receiveLines.map(i => `
+        <tr data-po-item-id="${i.id}">
+          <td>${escHtml(i.ingredient_name)} <span style="color:var(--text-muted);font-size:11px">(${i.ingredient_unit})</span></td>
+          <td style="text-align:right;color:var(--text-muted)">${i.quantity} ${i.ingredient_unit}</td>
+          <td style="text-align:right;color:#16a34a">${i.qty_received} ${i.ingredient_unit}</td>
+          <td style="text-align:right;color:#d97706">${i.qty_remaining} ${i.ingredient_unit}</td>
+          <td style="width:100px;text-align:right">
+            <input type="number" class="rt-form-input rst-grn-qty-input" style="font-size:11px;padding:3px 6px;text-align:right;width:90px"
+                   placeholder="0" min="0" max="${i.qty_remaining}" step="any" value="${i.qty_remaining}">
+          </td>
+        </tr>
+      `).join('');
+    }
+  }
+
+  $('#rst-grn-modal').dataset.poId = po.id;
+  $('#rst-grn-modal').style.display = 'flex';
+}
+
+$('#rst-grn-modal-close')?.addEventListener('click',  () => { $('#rst-grn-modal').style.display = 'none'; });
+$('#rst-grn-modal-cancel')?.addEventListener('click', () => { $('#rst-grn-modal').style.display = 'none'; });
+
+$('#rst-grn-modal-save')?.addEventListener('click', async () => {
+  const poId    = +$('#rst-grn-modal').dataset.poId;
+  const date    = $('#rst-grn-date').value;
+  const payment = $('#rst-grn-payment').value;
+  const ref     = $('#rst-grn-ref').value.trim() || null;
+  const notes   = $('#rst-grn-notes').value.trim() || null;
+  const errEl   = $('#rst-grn-modal-err');
+  errEl.style.display = 'none';
+
+  if (!date) { errEl.textContent = 'Received date is required.'; errEl.style.display = ''; return; }
+
+  const lines = [];
+  $$('#rst-grn-lines-tbody tr[data-po-item-id]').forEach(row => {
+    const qty = parseFloat(row.querySelector('.rst-grn-qty-input')?.value || 0);
+    if (qty > 0) {
+      lines.push({ purchase_order_item_id: +row.dataset.poItemId, quantity_received: qty });
+    }
+  });
+
+  if (!lines.length) { errEl.textContent = 'Enter at least one quantity to receive.'; errEl.style.display = ''; return; }
+
+  const saveBtn = $('#rst-grn-modal-save');
+  saveBtn.disabled = true;
+  const res = await API.rstPoCreateGrn(poId, { received_date: date, payment_method: payment, reference: ref, notes, lines });
+  saveBtn.disabled = false;
+
+  if (res.status !== 200 && res.status !== 201) {
+    const msg = res.body?.errors ? Object.values(res.body.errors).flat()[0] : (res.body?.message || 'Failed to receive goods.');
+    errEl.textContent = msg; errEl.style.display = ''; return;
+  }
+
+  $('#rst-grn-modal').style.display = 'none';
+  toast('Goods received successfully', 'success');
+
+  const po = res.body?.data;
+  _rstPo.activePo = po;
+  _rstPoRenderDetail(po);
+  rstPoLoad(_rstPo.status);
+});
+
+// ── Status filter tabs ────────────────────────────────────────────────────────
+$$('#rst-po-status-tabs .po-filter-tab').forEach(btn => {
+  btn?.addEventListener('click', () => rstPoLoad(btn.dataset.poStatus, 1));
+});
+
+// ── Search ────────────────────────────────────────────────────────────────────
+$('#rst-po-search')?.addEventListener('input', function () {
+  clearTimeout(_rstPo.searchTimer);
+  _rstPo.searchTimer = setTimeout(() => rstPoLoad(_rstPo.status, 1), 320);
+});
+
+// ── New PO button ─────────────────────────────────────────────────────────────
+$('#rst-po-new-btn')?.addEventListener('click', () => _rstPoOpenModal(null));
 
 $('#rb-employees').addEventListener('click',   () => { activateTab('hr'); switchHrView('employees'); });
 $('#rb-departments').addEventListener('click', () => { activateTab('hr'); switchHrView('departments'); });

@@ -33,6 +33,7 @@ function saveConfig(data) {
 let mainWindow;
 let editorWindow  = null;
 let editorDesign  = null;
+let kdsWindow     = null;
 let config;
 
 function createWindow() {
@@ -318,3 +319,45 @@ ipcMain.handle('open-quote-print', (_e, data) => {
 });
 
 ipcMain.handle('get-quote-print-data', () => printQuoteData);
+
+// ── Kitchen Display window ────────────────────────────────────────────────
+ipcMain.handle('open-kds', () => {
+  if (kdsWindow && !kdsWindow.isDestroyed()) { kdsWindow.focus(); return; }
+
+  const { screen } = require('electron');
+  const displays   = screen.getAllDisplays();
+  const secondary  = displays.find(d => d.id !== screen.getPrimaryDisplay().id);
+  const target     = secondary || screen.getPrimaryDisplay();
+  const { x, y, width, height } = target.workArea;
+
+  kdsWindow = new BrowserWindow({
+    x, y, width, height,
+    minWidth:  800,
+    minHeight: 500,
+    frame:     false,
+    backgroundColor: '#0f172a',
+    webPreferences: {
+      preload:          path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration:  false,
+      sandbox:          false,
+    },
+    show: false,
+  });
+
+  kdsWindow.loadFile(path.join(__dirname, 'renderer', 'kitchen.html'));
+  kdsWindow.once('ready-to-show', () => {
+    kdsWindow.show();
+    if (secondary) kdsWindow.setFullScreen(true);
+  });
+  kdsWindow.webContents.on('console-message', (_e, level, msg) => {
+    const prefix = ['VERBOSE','INFO','WARN','ERROR'][level] || level;
+    console.log(`[kds:${prefix}] ${msg}`);
+  });
+  kdsWindow.on('closed', () => { kdsWindow = null; });
+});
+
+ipcMain.on('kds-minimize',   e => { BrowserWindow.fromWebContents(e.sender)?.minimize(); });
+ipcMain.on('kds-close',      e => { BrowserWindow.fromWebContents(e.sender)?.close(); });
+ipcMain.on('kds-fullscreen', (e, flag) => { BrowserWindow.fromWebContents(e.sender)?.setFullScreen(flag); });
+ipcMain.handle('kds-is-fullscreen', e => BrowserWindow.fromWebContents(e.sender)?.isFullScreen() ?? false);

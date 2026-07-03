@@ -376,6 +376,8 @@
         <div class="ribbon-tab" data-tab="finance">Finance</div>
         <div class="ribbon-tab" data-tab="hr">HR</div>
         <div class="ribbon-tab" data-tab="design">Design</div>
+        <div class="ribbon-tab" data-tab="restaurant">Restaurant</div>
+        <div class="ribbon-tab" data-tab="rst-pos">Restaurant POS</div>
         <div class="ribbon-tab" data-tab="view">View</div>
       </div>
       <button id="ribbon-pin-btn" title="Collapse the Ribbon (Ctrl+F1)">
@@ -798,6 +800,116 @@
 
       </div><!-- /design page -->
 
+      <!-- ── Restaurant page ── -->
+      <div class="ribbon-page" data-page="restaurant">
+
+        <div class="ribbon-group">
+          <div class="ribbon-group-content">
+            <button class="ribbon-btn-lg primary" id="rb-rst-pos">
+              <i class="fa fa-cash-register"></i>Restaurant<br>POS
+            </button>
+          </div>
+          <div class="ribbon-group-label">POS</div>
+        </div>
+
+        <div class="ribbon-group">
+          <div class="ribbon-group-content">
+            <button class="ribbon-btn-lg" id="rb-rst-new-order">
+              <i class="fa fa-plus"></i>New<br>Order
+            </button>
+            <button class="ribbon-btn-lg" id="rb-rst-orders">
+              <i class="fa fa-list-check"></i>All<br>Orders
+            </button>
+          </div>
+          <div class="ribbon-group-label">Orders</div>
+        </div>
+
+        <div class="ribbon-group">
+          <div class="ribbon-group-content">
+            <button class="ribbon-btn-lg" id="rb-rst-tables">
+              <i class="fa fa-table-cells-large"></i>Tables
+            </button>
+            <button class="ribbon-btn-lg" id="rb-rst-reservations">
+              <i class="fa fa-calendar-check"></i>Reservations
+            </button>
+          </div>
+          <div class="ribbon-group-label">Floor</div>
+        </div>
+
+        <div class="ribbon-group">
+          <div class="ribbon-group-content">
+            <button class="ribbon-btn-lg" id="rb-rst-menu-items">
+              <i class="fa fa-utensils"></i>Menu<br>Items
+            </button>
+            <div class="ribbon-small-stack">
+              <button class="ribbon-btn-sm" id="rb-rst-menu-categories">
+                <i class="fa fa-tags"></i> Categories
+              </button>
+              <button class="ribbon-btn-sm" id="rb-rst-add-menu-item">
+                <i class="fa fa-plus"></i> Add Item
+              </button>
+            </div>
+          </div>
+          <div class="ribbon-group-label">Menu</div>
+        </div>
+
+        <div class="ribbon-group">
+          <div class="ribbon-group-content">
+            <button class="ribbon-btn-lg" id="rb-rst-ingredients">
+              <i class="fa fa-boxes-stacked"></i>Ingredients
+            </button>
+            <div class="ribbon-small-stack">
+              <button class="ribbon-btn-sm" id="rb-rst-stock-in">
+                <i class="fa fa-truck-ramp-box"></i> Stock In
+              </button>
+              <button class="ribbon-btn-sm" id="rb-rst-purchase-orders">
+                <i class="fa fa-file-invoice"></i> Purchase Orders
+              </button>
+            </div>
+          </div>
+          <div class="ribbon-group-label">Ingredients</div>
+        </div>
+
+        <div class="ribbon-group">
+          <div class="ribbon-group-content">
+            <button class="ribbon-btn-lg" id="rb-rst-kitchen">
+              <i class="fa fa-fire-burner"></i>Kitchen<br>Display
+            </button>
+          </div>
+          <div class="ribbon-group-label">KDS</div>
+        </div>
+
+      </div><!-- /restaurant page -->
+
+      <!-- ── Restaurant POS page ── -->
+      <div class="ribbon-page" data-page="rst-pos">
+
+        <div class="ribbon-group">
+          <div class="ribbon-group-content">
+            <button class="ribbon-btn-lg" id="rb-rst-pos-takeaway">
+              <i class="fa fa-bag-shopping"></i>Takeaway
+            </button>
+            <button class="ribbon-btn-lg" id="rb-rst-pos-tables">
+              <i class="fa fa-table-cells-large"></i>Tables
+            </button>
+          </div>
+          <div class="ribbon-group-label">Order</div>
+        </div>
+
+        <div class="ribbon-group">
+          <div class="ribbon-group-content">
+            <button class="ribbon-btn-lg" id="rb-rst-pos-go-rst">
+              <i class="fa fa-utensils"></i>Restaurant
+            </button>
+            <button class="ribbon-btn-lg" id="rb-rst-pos-kds">
+              <i class="fa fa-fire-burner"></i>Kitchen<br>Display
+            </button>
+          </div>
+          <div class="ribbon-group-label">Navigate</div>
+        </div>
+
+      </div><!-- /rst-pos page -->
+
       <!-- ── View page ── -->
       <div class="ribbon-page" data-page="view">
 
@@ -1028,6 +1140,7 @@
               Loading products…
             </div>
           </div>
+          <div id="pos-pagination"></div>
         </div>
         <div id="cart-area">
           <div id="cart-header">
@@ -1618,44 +1731,6 @@
         </div>
       </div>
 
-      <!-- ── Image Picker Modal ── -->
-      <div id="img-picker-modal" class="modal-overlay" style="display:none;z-index:1600">
-        <div class="img-picker-shell">
-          <div class="img-picker-header">
-            <i class="fa fa-image" style="color:var(--accent)"></i>
-            <span>Choose Image</span>
-            <button class="psm-close" id="img-picker-close"><i class="fa fa-xmark"></i></button>
-          </div>
-          <div class="img-picker-tabs">
-            <button class="img-tab-btn active" data-tab="upload"><i class="fa fa-upload"></i> Upload</button>
-            <button class="img-tab-btn" data-tab="fm"><i class="fa fa-folder-open"></i> File Manager</button>
-          </div>
-          <!-- Upload tab -->
-          <div id="img-tab-upload" class="img-picker-body">
-            <div class="img-upload-drop" id="img-upload-drop">
-              <i class="fa fa-cloud-arrow-up" style="font-size:32px;color:var(--text-muted)"></i>
-              <p style="margin:8px 0 0;color:var(--text-muted);font-size:13px">Click to select an image file</p>
-              <p style="margin:4px 0 0;font-size:11px;color:var(--text-muted)">JPG, PNG, WebP, GIF — max 20 MB</p>
-              <button type="button" id="img-upload-btn" class="po-btn-primary" style="margin-top:12px"><i class="fa fa-folder-open"></i> Browse Files</button>
-            </div>
-            <div id="img-upload-preview" style="display:none;text-align:center">
-              <img id="img-upload-preview-img" src="" alt="" style="max-width:100%;max-height:240px;border-radius:var(--radius-sm);border:1px solid var(--border)">
-              <p id="img-upload-preview-name" style="margin:6px 0 0;font-size:12px;color:var(--text-muted)"></p>
-              <div style="display:flex;gap:8px;justify-content:center;margin-top:10px">
-                <button type="button" id="img-upload-change" class="po-btn-ghost"><i class="fa fa-refresh"></i> Change</button>
-                <button type="button" id="img-upload-confirm" class="po-btn-primary"><i class="fa fa-upload"></i> Upload &amp; Use</button>
-              </div>
-            </div>
-          </div>
-          <!-- File Manager tab -->
-          <div id="img-tab-fm" class="img-picker-body" style="display:none">
-            <div id="img-fm-breadcrumb" class="img-fm-breadcrumb"></div>
-            <div id="img-fm-grid" class="img-fm-grid">
-              <div class="img-fm-loading"><i class="fa fa-spinner fa-spin"></i></div>
-            </div>
-          </div>
-        </div>
-      </div>
 
       <!-- ── Suppliers view ── -->
       <div id="inv-suppliers-view" style="display:none">
@@ -3468,6 +3543,400 @@
       </div>
     </div>
 
+    <!-- ── Restaurant Panel ───────────────────────────────────────────── -->
+    <div class="content-panel" id="panel-restaurant" style="flex-direction:column">
+
+      <!-- subnav -->
+      <div class="fin-subnav">
+        <button class="fin-subnav-btn active" data-rst="orders"><i class="fa fa-list-check"></i> Orders</button>
+        <button class="fin-subnav-btn"        data-rst="tables"><i class="fa fa-table-cells-large"></i> Tables</button>
+        <button class="fin-subnav-btn"        data-rst="reservations"><i class="fa fa-calendar-check"></i> Reservations</button>
+        <button class="fin-subnav-btn"        data-rst="menu-items"><i class="fa fa-utensils"></i> Menu Items</button>
+        <button class="fin-subnav-btn"        data-rst="menu-categories"><i class="fa fa-tags"></i> Categories</button>
+        <button class="fin-subnav-btn"        data-rst="ingredients"><i class="fa fa-boxes-stacked"></i> Ingredients</button>
+        <button class="fin-subnav-btn"        data-rst="kitchen"><i class="fa fa-fire-burner"></i> Kitchen Display</button>
+      </div>
+
+      <!-- ── Orders view ── -->
+      <div id="rst-orders-view" style="display:flex;flex-direction:column;flex:1;overflow:hidden">
+        <div class="finance-toolbar">
+          <div class="finance-search-wrap">
+            <i class="fa fa-magnifying-glass"></i>
+            <input type="text" id="rst-order-search" placeholder="Search orders…">
+          </div>
+          <button class="finance-create-btn" id="rst-new-order-btn">
+            <i class="fa fa-plus"></i> New Order
+          </button>
+        </div>
+        <div class="rst-status-tabs" id="rst-status-tabs">
+          <button class="rst-status-tab active" data-status="all">All <span class="rst-tab-cnt" id="rst-cnt-all"></span></button>
+          <button class="rst-status-tab" data-status="pending">Pending <span class="rst-tab-cnt" id="rst-cnt-pending"></span></button>
+          <button class="rst-status-tab" data-status="preparing">Preparing <span class="rst-tab-cnt" id="rst-cnt-preparing"></span></button>
+          <button class="rst-status-tab" data-status="ready">Ready <span class="rst-tab-cnt" id="rst-cnt-ready"></span></button>
+          <button class="rst-status-tab" data-status="served">Served <span class="rst-tab-cnt" id="rst-cnt-served"></span></button>
+          <button class="rst-status-tab" data-status="paid">Paid <span class="rst-tab-cnt" id="rst-cnt-paid"></span></button>
+          <button class="rst-status-tab" data-status="cancelled">Cancelled <span class="rst-tab-cnt" id="rst-cnt-cancelled"></span></button>
+        </div>
+        <div class="finance-cards-wrap">
+          <div class="finance-cards-area" id="rst-orders-area">
+            <div class="placeholder-panel">
+              <i class="fa fa-list-check"></i>
+              <p>No orders yet</p>
+            </div>
+          </div>
+        </div>
+        <div class="finance-footer"><span id="rst-orders-footer"></span></div>
+      </div>
+
+      <!-- ── Tables (Floor) view ── -->
+      <div id="rst-tables-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+        <!-- Toolbar -->
+        <div class="rt-toolbar">
+          <div class="rt-legend">
+            <span class="rt-leg-dot" style="background:#22c55e"></span><span>Available</span>
+            <span class="rt-leg-dot" style="background:#ef4444"></span><span>Occupied</span>
+            <span class="rt-leg-dot" style="background:#f59e0b"></span><span>Reserved</span>
+            <span class="rt-leg-dot" style="background:#9ca3af"></span><span>Inactive</span>
+          </div>
+          <div class="rt-toolbar-right">
+            <button class="rt-btn rt-btn-outline" id="rt-edit-btn"><i class="fa fa-pencil"></i> Edit Layout</button>
+            <button class="rt-btn rt-btn-danger"  id="rt-cancel-btn" style="display:none"><i class="fa fa-xmark"></i> Cancel</button>
+            <button class="rt-btn rt-btn-success" id="rt-save-btn"   style="display:none"><i class="fa fa-floppy-disk"></i> Save Layout</button>
+            <button class="rt-btn rt-btn-primary" id="rt-add-table-btn"><i class="fa fa-plus"></i> Add Table</button>
+          </div>
+        </div>
+        <!-- Floor plan canvas -->
+        <div class="rt-floor-wrap" id="rt-floor-wrap">
+          <div class="rt-floor" id="rt-floor">
+            <div class="rt-empty" id="rt-empty" style="display:none">
+              <i class="fa fa-table-cells-large"></i>
+              <p>No tables yet. Click <strong>Add Table</strong> to create one.</p>
+            </div>
+          </div>
+        </div>
+        <!-- Summary strip -->
+        <div class="rt-strip" id="rt-strip"></div>
+      </div>
+
+      <!-- ── Reservations view ── -->
+      <div id="rst-reservations-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+        <div class="finance-toolbar">
+          <div class="finance-search-wrap">
+            <i class="fa fa-magnifying-glass"></i>
+            <input type="text" id="rst-reservation-search" placeholder="Search reservations…">
+          </div>
+          <button class="finance-create-btn" id="rst-add-reservation-btn">
+            <i class="fa fa-plus"></i> Add Reservation
+          </button>
+        </div>
+        <div class="finance-cards-wrap">
+          <div class="finance-cards-area" id="rst-reservations-area">
+            <div class="placeholder-panel">
+              <i class="fa fa-calendar-check"></i>
+              <p>No reservations yet</p>
+            </div>
+          </div>
+        </div>
+        <div class="finance-footer"><span id="rst-reservations-footer"></span></div>
+      </div>
+
+      <!-- ── Menu Items view ── -->
+      <div id="rst-menu-items-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+        <!-- Toolbar -->
+        <div class="finance-toolbar" style="gap:8px;flex-wrap:wrap">
+          <div class="finance-search-wrap" style="flex:1;min-width:160px">
+            <i class="fa fa-magnifying-glass"></i>
+            <input type="text" id="rst-mi-search" placeholder="Search menu items…">
+          </div>
+          <select id="rst-mi-cat-filter" class="rst-mi-filter-select">
+            <option value="">All Categories</option>
+          </select>
+          <div class="rst-mi-status-tabs">
+            <button class="rst-mi-status-tab active" data-status="all">All</button>
+            <button class="rst-mi-status-tab" data-status="available">Available</button>
+            <button class="rst-mi-status-tab" data-status="unavailable">Unavailable</button>
+          </div>
+          <button class="finance-create-btn" id="rst-mi-add-btn">
+            <i class="fa fa-plus"></i> Add Item
+          </button>
+        </div>
+        <!-- Card grid -->
+        <div style="flex:1;overflow-y:auto;padding:16px">
+          <div id="rst-mi-grid" class="rst-mi-grid"></div>
+        </div>
+        <!-- Pagination + footer -->
+        <div class="finance-footer" style="display:flex;justify-content:space-between;align-items:center">
+          <span id="rst-mi-footer"></span>
+          <div id="rst-mi-pagination" style="display:flex;gap:6px"></div>
+        </div>
+      </div>
+
+      <!-- ── Menu Categories view ── -->
+      <div id="rst-menu-cats-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+        <div class="finance-toolbar">
+          <div class="finance-search-wrap">
+            <i class="fa fa-magnifying-glass"></i>
+            <input type="text" id="rst-mc-search" placeholder="Search categories…">
+          </div>
+          <button class="finance-create-btn" id="rst-mc-add-btn">
+            <i class="fa fa-plus"></i> Add Category
+          </button>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:16px">
+          <div id="rst-mc-grid" class="rst-mc-grid"></div>
+        </div>
+        <div class="finance-footer"><span id="rst-mc-footer"></span></div>
+      </div>
+
+      <!-- ── Ingredients view ── -->
+      <div id="rst-ingredients-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+        <div class="finance-toolbar">
+          <div class="finance-search-wrap">
+            <i class="fa fa-magnifying-glass"></i>
+            <input type="text" id="rst-ingr-search" placeholder="Search ingredients…">
+          </div>
+          <button class="finance-create-btn" id="rst-ingr-add-btn">
+            <i class="fa fa-plus"></i> Add Ingredient
+          </button>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:16px">
+          <table class="po-table" id="rst-ingr-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Unit</th>
+                <th style="text-align:right">Qty in Stock</th>
+                <th style="text-align:right">Low Stock Alert</th>
+                <th style="text-align:right">Cost / Unit</th>
+                <th style="text-align:center">Status</th>
+                <th style="text-align:center">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="rst-ingr-tbody">
+              <tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text-muted)">
+                <i class="fa fa-boxes-stacked" style="font-size:24px;display:block;margin-bottom:8px;opacity:.4"></i>No ingredients yet
+              </td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="finance-footer"><span id="rst-ingr-footer"></span></div>
+      </div>
+
+      <!-- ── Ingredient Purchase Orders view ── -->
+      <div id="rst-po-view" style="display:none;flex-direction:row;flex:1;overflow:hidden">
+
+        <!-- Left: list -->
+        <div class="rst-po-list-pane">
+          <div class="finance-toolbar" style="border-bottom:1px solid var(--border);padding:8px 12px;gap:8px">
+            <div class="finance-search-wrap" style="flex:1">
+              <i class="fa fa-magnifying-glass"></i>
+              <input type="text" id="rst-po-search" placeholder="Search purchase orders…">
+            </div>
+            <button class="finance-create-btn" id="rst-po-new-btn">
+              <i class="fa fa-plus"></i> New PO
+            </button>
+          </div>
+          <div class="po-filter-tabs" id="rst-po-status-tabs" style="padding:6px 12px;display:flex;gap:4px;flex-wrap:wrap;border-bottom:1px solid var(--border)">
+            <button class="po-filter-tab active" data-po-status="all">All</button>
+            <button class="po-filter-tab" data-po-status="draft">Draft</button>
+            <button class="po-filter-tab" data-po-status="ordered">Ordered</button>
+            <button class="po-filter-tab" data-po-status="partially_received">Partial</button>
+            <button class="po-filter-tab" data-po-status="received">Received</button>
+            <button class="po-filter-tab" data-po-status="cancelled">Cancelled</button>
+          </div>
+          <div style="flex:1;overflow-y:auto">
+            <table class="po-table" style="font-size:12px">
+              <thead>
+                <tr>
+                  <th>PO #</th>
+                  <th>Date</th>
+                  <th>Supplier</th>
+                  <th style="text-align:right">Total</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="rst-po-tbody">
+                <tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text-muted)">Loading…</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="finance-footer"><span id="rst-po-footer"></span></div>
+        </div>
+
+        <!-- Right: detail -->
+        <div class="rst-po-detail-pane">
+          <div id="rst-po-detail-empty" style="display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;color:var(--text-muted);gap:12px">
+            <i class="fa fa-file-invoice" style="font-size:40px;opacity:.25"></i>
+            <span>Select a purchase order to view details</span>
+          </div>
+          <div id="rst-po-detail-body" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+            <!-- Header -->
+            <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+              <div>
+                <div style="font-size:17px;font-weight:700" id="rst-po-dv-number"></div>
+                <div style="font-size:12px;color:var(--text-muted);margin-top:2px" id="rst-po-dv-meta"></div>
+              </div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap" id="rst-po-dv-actions"></div>
+            </div>
+            <!-- Scroll body -->
+            <div style="flex:1;overflow-y:auto;padding:16px 20px">
+              <!-- Info -->
+              <div id="rst-po-dv-info" style="display:grid;grid-template-columns:1fr 1fr;gap:8px 16px;margin-bottom:16px;font-size:12px"></div>
+              <!-- Items -->
+              <div style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-muted);margin-bottom:6px;letter-spacing:.04em">Items</div>
+              <table class="po-table" style="font-size:12px;margin-bottom:20px">
+                <thead>
+                  <tr>
+                    <th>Ingredient</th>
+                    <th style="text-align:right">Ordered</th>
+                    <th style="text-align:right">Received</th>
+                    <th style="text-align:right">Remaining</th>
+                    <th style="text-align:right">Unit Cost</th>
+                    <th style="text-align:right">Line Total</th>
+                  </tr>
+                </thead>
+                <tbody id="rst-po-dv-items"></tbody>
+                <tfoot id="rst-po-dv-total"></tfoot>
+              </table>
+              <!-- GRNs -->
+              <div id="rst-po-dv-grns-wrap" style="display:none">
+                <div style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-muted);margin-bottom:6px;letter-spacing:.04em">Goods Received Notes</div>
+                <table class="po-table" style="font-size:12px">
+                  <thead>
+                    <tr><th>GRN #</th><th>Received Date</th><th>Payment</th><th style="text-align:right">Amount</th></tr>
+                  </thead>
+                  <tbody id="rst-po-dv-grns"></tbody>
+                </table>
+              </div>
+              <!-- Notes -->
+              <div id="rst-po-dv-notes-wrap" style="display:none;margin-top:16px;font-size:12px;color:var(--text-muted)">
+                <strong>Notes:</strong> <span id="rst-po-dv-notes"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Kitchen Display view ── -->
+      <div id="rst-kitchen-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+
+        <!-- toolbar -->
+        <div class="kds-toolbar">
+          <div class="kds-filter-tabs">
+            <button class="kds-filter-tab active" data-kds-status="open">
+              <i class="fa fa-layer-group"></i> All Active
+            </button>
+            <button class="kds-filter-tab" data-kds-status="pending">
+              <i class="fa fa-clock"></i> Pending
+              <span class="kds-tab-cnt" id="kds-cnt-pending"></span>
+            </button>
+            <button class="kds-filter-tab" data-kds-status="preparing">
+              <i class="fa fa-fire"></i> Preparing
+              <span class="kds-tab-cnt" id="kds-cnt-preparing"></span>
+            </button>
+            <button class="kds-filter-tab" data-kds-status="ready">
+              <i class="fa fa-bell"></i> Ready
+              <span class="kds-tab-cnt" id="kds-cnt-ready"></span>
+            </button>
+          </div>
+          <div class="kds-toolbar-right">
+            <span class="kds-live-dot"><i class="fa fa-circle"></i> Live</span>
+            <span id="kds-last-updated" class="kds-last-updated"></span>
+            <button id="kds-refresh-btn" class="kds-icon-btn" title="Refresh now">
+              <i class="fa fa-rotate-right"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- order ticket grid -->
+        <div id="kds-grid" class="kds-grid">
+          <div class="kds-empty" id="kds-empty" style="display:none">
+            <i class="fa fa-check-circle"></i>
+            <p>All clear — no active orders</p>
+          </div>
+        </div>
+
+      </div>
+
+    </div><!-- /panel-restaurant -->
+
+    <!-- ── Restaurant POS Panel ─────────────────────────────────────────── -->
+    <div class="content-panel" id="panel-rst-pos" style="flex-direction:column;padding:0">
+
+      <!-- POS view fills the whole panel -->
+      <div id="rst-pos-view" style="display:flex;flex:1;flex-direction:column;overflow:hidden">
+
+        <!-- ── Table tabs bar ── -->
+        <div class="rst-tbl-tabs-bar">
+          <div id="rst-tbl-tabs-scroll" class="rst-tbl-tabs-scroll"></div>
+        </div>
+
+        <!-- ── Split body: left menu + right order panel ── -->
+        <div class="rst-pos-body">
+
+          <!-- Left: menu browser -->
+          <div id="rst-pos-left">
+            <div id="rst-pos-search-bar">
+              <i class="fa fa-magnifying-glass"></i>
+              <input type="text" id="rst-pos-search" placeholder="Search menu items…" autocomplete="off">
+            </div>
+            <div id="rst-pos-cats"></div>
+            <div id="rst-pos-grid"></div>
+          </div>
+
+          <!-- Right: order panel -->
+          <div id="rst-pos-cart">
+
+            <!-- Header -->
+            <div id="rst-pos-cart-hdr">
+              <div class="rst-pos-hdr-left">
+                <i class="fa fa-utensils" style="color:var(--accent);font-size:15px;flex-shrink:0"></i>
+                <span id="rst-pos-hdr-name">Select a table</span>
+                <span id="rst-pos-hdr-badge" class="rst-pos-hdr-badge" style="display:none"></span>
+              </div>
+              <span class="rst-pos-live-dot" title="Live — updating every 5 s" style="display:none" id="rst-pos-live-dot"></span>
+              <button id="rst-pos-clear-btn" class="cart-hdr-btn" title="Clear new items"><i class="fa fa-trash"></i></button>
+            </div>
+
+            <!-- Customer / phone -->
+            <div class="rst-pos-field-row">
+              <label class="rst-pos-field-lbl"><i class="fa fa-user"></i> Customer</label>
+              <input type="text" id="rst-pos-cust" class="rst-pos-input" placeholder="Name (optional)">
+            </div>
+            <div class="rst-pos-field-row">
+              <label class="rst-pos-field-lbl"><i class="fa fa-phone"></i> Phone</label>
+              <input type="text" id="rst-pos-phone" class="rst-pos-input" placeholder="(optional)">
+            </div>
+
+            <!-- Scrollable cart area -->
+            <div id="rst-pos-panel">
+              <div id="rst-pos-items">
+                <div id="rst-pos-empty">
+                  <i class="fa fa-utensils"></i>
+                  <span>Tap items on the left to add</span>
+                </div>
+              </div>
+            </div><!-- /#rst-pos-panel -->
+
+            <!-- Footer -->
+            <div id="rst-pos-footer" style="display:none">
+              <div class="rst-pos-totals">
+                <div class="rst-pos-total-row">
+                  <span>Total</span>
+                  <strong><span id="rst-pos-currency"></span>&nbsp;<span id="rst-pos-total">0.00</span></strong>
+                </div>
+              </div>
+              <div id="rst-pos-alert" class="co-alert" style="display:none;margin-bottom:8px"></div>
+              <button id="rst-pos-submit"><i class="fa fa-paper-plane"></i> Send to Kitchen</button>
+              <button id="rst-pos-complete-btn" style="display:none"><i class="fa fa-cash-register"></i> Complete Order</button>
+            </div>
+
+          </div><!-- /#rst-pos-cart -->
+        </div><!-- /.rst-pos-body -->
+      </div><!-- /#rst-pos-view -->
+
+    </div><!-- /panel-rst-pos -->
+
   </div><!-- /content -->
 
   <!-- Status bar -->
@@ -4897,7 +5366,19 @@
           <span class="co-total-cur" id="co-currency"></span>
         </div>
 
-        <div class="co-numpad-hint"><i class="fa fa-keyboard"></i> Use the numpad to enter amounts</div>
+        <!-- Customer search -->
+        <div class="co-cust-section">
+          <div class="co-section-label" style="margin-bottom:6px">Customer</div>
+          <div class="co-cust-wrap" id="co-cust-wrap">
+            <div class="co-cust-selected" id="co-cust-selected" style="display:none">
+              <i class="fa fa-user"></i>
+              <span id="co-cust-name-disp"></span>
+              <button id="co-cust-clear" class="co-cust-clear-btn" title="Remove customer"><i class="fa fa-xmark"></i></button>
+            </div>
+            <input type="text" id="co-cust-input" class="co-cust-input" placeholder="Search customer…" autocomplete="off">
+            <div id="co-cust-dd" class="co-cust-dd"></div>
+          </div>
+        </div>
       </div>
 
       <!-- Right: Payment -->
@@ -4920,7 +5401,7 @@
         <!-- Amount given -->
         <div>
           <div class="co-section-label" style="margin-bottom:6px">Amount Customer Gave</div>
-          <div id="co-amount" class="co-amount-input focused">0.00</div>
+          <input type="number" id="co-amount" class="co-amount-input" placeholder="0.00" min="0" step="0.01">
           <div style="margin-top:8px;display:flex;flex-direction:column;gap:4px">
             <div class="co-due-row">
               <span>Amount due</span>
@@ -5638,7 +6119,10 @@
       <div class="qap-row">
         <div class="qap-field">
           <label class="qap-label" for="qap-sku">SKU / Barcode</label>
-          <input type="text" id="qap-sku" class="qap-input" placeholder="Optional">
+          <div class="qap-sku-wrap">
+            <input type="text" id="qap-sku" class="qap-input" placeholder="Optional" autocomplete="off">
+            <button type="button" id="qap-sku-gen" class="qap-sku-gen-btn" title="Generate SKU"><i class="fa fa-wand-magic-sparkles"></i></button>
+          </div>
         </div>
         <div class="qap-field">
           <label class="qap-label" for="qap-price">Selling Price <span class="qap-req">*</span></label>
@@ -5655,10 +6139,11 @@
           <input type="number" id="qap-stock" class="qap-input" placeholder="0" min="0" step="1">
         </div>
         <div class="qap-field">
-          <label class="qap-label" for="qap-unit">Unit</label>
-          <select id="qap-unit" class="qap-input">
-            <option value="">— None —</option>
-          </select>
+          <label class="qap-label" for="qap-unit-input">Unit</label>
+          <div class="qap-combo-wrap">
+            <input type="text" id="qap-unit-input" class="qap-input" placeholder="Select or type a unit…" autocomplete="off" style="width:100%;box-sizing:border-box">
+            <div id="qap-unit-dd" class="qap-combo-dd" style="display:none"></div>
+          </div>
         </div>
       </div>
     </div>
@@ -6062,6 +6547,705 @@
     </div>
     <div class="po-aim-body" id="update-modal-body" style="padding:28px 24px 24px">
       <!-- filled by JS -->
+    </div>
+  </div>
+</div>
+
+<!-- ── Restaurant: Create Order Modal ───────────────────────────────────── -->
+<div id="rst-order-modal" class="modal-overlay" style="display:none">
+  <div class="rst-om-inner">
+    <div class="rst-om-hdr">
+      <div class="rst-om-hdr-icon"><i class="fa fa-utensils"></i></div>
+      <div class="rst-om-hdr-text">
+        <h2>New Order</h2>
+        <p>Build the order and select items</p>
+      </div>
+      <button class="co-close" id="rst-om-close"><i class="fa fa-xmark"></i></button>
+    </div>
+    <div class="rst-om-body">
+
+      <!-- Left panel: order details + item list -->
+      <div class="rst-om-left">
+        <div class="co-section-label">Order Type</div>
+        <div class="rst-om-type-row">
+          <button class="rst-om-type active" data-type="dine_in"><i class="fa fa-table-cells-large"></i> Dine In</button>
+          <button class="rst-om-type" data-type="takeaway"><i class="fa fa-bag-shopping"></i> Takeaway</button>
+          <button class="rst-om-type" data-type="delivery"><i class="fa fa-motorcycle"></i> Delivery</button>
+        </div>
+
+        <div id="rst-om-table-wrap">
+          <div class="co-section-label" style="margin-top:12px;margin-bottom:4px">Table</div>
+          <select id="rst-om-table" class="rst-om-select"><option value="">— No table —</option></select>
+        </div>
+
+        <div class="co-section-label" style="margin-top:12px;margin-bottom:4px">Customer (optional)</div>
+        <div style="display:flex;gap:7px">
+          <input type="text" id="rst-om-cust-name"  class="rst-om-input" placeholder="Name">
+          <input type="text" id="rst-om-cust-phone" class="rst-om-input" placeholder="Phone">
+        </div>
+
+        <div class="co-section-label" style="margin-top:12px;margin-bottom:4px">Notes</div>
+        <textarea id="rst-om-notes" class="rst-om-textarea" placeholder="Special instructions…"></textarea>
+
+        <div class="rst-om-items-label">
+          <span class="co-section-label" style="margin:0">Order Items</span>
+          <span class="rst-om-item-count" id="rst-om-item-count"></span>
+        </div>
+        <div id="rst-om-lines"></div>
+
+        <div class="rst-om-totals-row">
+          <span>Total</span>
+          <strong><span id="rst-om-currency"></span> <span id="rst-om-total">0.00</span></strong>
+        </div>
+        <div id="rst-om-alert" class="co-alert" style="display:none;margin-top:8px"></div>
+        <button id="rst-om-submit" class="co-complete-btn" style="margin-top:10px">
+          <i class="fa fa-check"></i> Place Order
+        </button>
+      </div>
+
+      <!-- Right panel: menu browser -->
+      <div class="rst-om-right">
+        <div class="co-section-label">Menu</div>
+        <div class="rst-om-cat-tabs" id="rst-om-cat-tabs"></div>
+        <div class="rst-om-menu-grid" id="rst-om-menu-grid">
+          <div class="finance-loading"><i class="fa fa-spinner fa-spin"></i> Loading menu…</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ── Restaurant: Order Detail Modal ───────────────────────────────────── -->
+<div id="rst-od-modal" class="modal-overlay" style="display:none">
+  <div class="rst-od-inner">
+    <div class="rst-od-hdr">
+      <div>
+        <h2 id="rst-od-title">Order</h2>
+        <div id="rst-od-meta" class="rst-od-meta"></div>
+      </div>
+      <button class="co-close" id="rst-od-close"><i class="fa fa-xmark"></i></button>
+    </div>
+    <div class="rst-od-body">
+      <div class="rst-od-items" id="rst-od-items"></div>
+      <div class="rst-od-totals">
+        <div class="rst-od-total-row">
+          <span>Total</span>
+          <strong><span id="rst-od-currency"></span> <span id="rst-od-total"></span></strong>
+        </div>
+      </div>
+      <div class="rst-od-actions" id="rst-od-actions"></div>
+      <div id="rst-od-alert" class="co-alert" style="display:none;margin-top:8px"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Menu Item: Add / Edit Modal ── -->
+<div id="rst-mi-modal" class="modal-overlay" style="display:none">
+  <div class="rst-mi-modal-inner">
+    <div class="rst-mi-modal-hdr">
+      <div class="rst-mi-modal-hdr-icon"><i class="fa fa-utensils"></i></div>
+      <span id="rst-mi-modal-title">Add Menu Item</span>
+      <button class="co-close" id="rst-mi-modal-close"><i class="fa fa-xmark"></i></button>
+    </div>
+    <div class="rst-mi-modal-body">
+      <!-- Left column -->
+      <div class="rst-mi-modal-left">
+        <input type="hidden" id="rst-mi-id">
+
+        <!-- Image upload -->
+        <div class="rst-mi-img-row">
+          <div class="rst-mi-img-thumb" id="rst-mi-img-thumb">
+            <i class="fa fa-image"></i>
+          </div>
+          <div class="rst-mi-img-actions">
+            <div class="rst-mi-img-actions-label">Item Photo</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button type="button" class="rst-ingr-action-btn" id="rst-mi-img-pick-btn"><i class="fa fa-upload"></i> Choose Image</button>
+              <button type="button" class="rst-ingr-action-btn" id="rst-mi-img-remove-btn" style="display:none"><i class="fa fa-xmark"></i> Remove</button>
+            </div>
+            <span class="rst-mi-img-hint">JPG, PNG, WebP &mdash; max 20 MB</span>
+          </div>
+        </div>
+        <input type="hidden" id="rst-mi-file-id">
+
+        <div class="rst-mi-form-section">
+          <div class="rt-form-row">
+            <label class="rt-form-lbl">Item Name</label>
+            <input type="text" class="rt-form-input" id="rst-mi-name" placeholder="e.g. Margherita Pizza">
+          </div>
+          <div class="rt-form-row">
+            <label class="rt-form-lbl">Description <span style="font-weight:400;text-transform:none;letter-spacing:0">(optional)</span></label>
+            <textarea class="rt-form-input" id="rst-mi-desc" rows="4" placeholder="Ingredients, allergens, serving notes…"></textarea>
+          </div>
+          <div style="display:flex;gap:12px">
+            <div class="rt-form-row" style="flex:1">
+              <label class="rt-form-lbl">Price</label>
+              <input type="number" class="rt-form-input" id="rst-mi-price" placeholder="0.00" min="0" step="0.01">
+            </div>
+            <div class="rt-form-row" style="flex:1">
+              <label class="rt-form-lbl">Prep Time (mins)</label>
+              <input type="number" class="rt-form-input" id="rst-mi-prep" placeholder="e.g. 15" min="1" max="9999">
+            </div>
+          </div>
+          <div class="rst-mi-avail-row">
+            <input type="checkbox" id="rst-mi-available" checked style="width:16px;height:16px;accent-color:var(--accent);flex-shrink:0">
+            <label for="rst-mi-available" style="font-size:13px;cursor:pointer">Available for ordering</label>
+          </div>
+        </div>
+
+        <div id="rst-mi-err" class="co-alert" style="display:none"></div>
+      </div>
+
+      <!-- Right column with tabs -->
+      <div class="rst-mi-modal-right">
+        <div class="rst-mi-right-tabs">
+          <button class="rst-mi-right-tab active" data-tab="cats"><i class="fa fa-tags"></i> Categories</button>
+          <button class="rst-mi-right-tab" data-tab="dietary"><i class="fa fa-leaf"></i> Dietary</button>
+          <button class="rst-mi-right-tab" data-tab="ingr"><i class="fa fa-boxes-stacked"></i> Ingredients</button>
+        </div>
+
+        <!-- Categories tab -->
+        <div class="rst-mi-right-panel" id="rst-mi-tab-cats">
+          <div class="rst-mi-panel-label"><i class="fa fa-tags"></i> Assign Categories</div>
+          <div id="rst-mi-cats-wrap" class="rst-mi-cats-wrap">
+            <div style="color:var(--text-muted);font-size:12px;padding:8px">Loading…</div>
+          </div>
+        </div>
+
+        <!-- Dietary tab -->
+        <div class="rst-mi-right-panel" id="rst-mi-tab-dietary" style="display:none">
+          <div class="rst-mi-panel-label"><i class="fa fa-leaf"></i> Dietary Flags</div>
+          <div class="rst-mi-tags-wrap" id="rst-mi-tags-wrap">
+            <button type="button" class="rst-mi-tag-btn" data-tag="vegetarian"><i class="fa fa-leaf"></i> Vegetarian</button>
+            <button type="button" class="rst-mi-tag-btn" data-tag="vegan"><i class="fa fa-seedling"></i> Vegan</button>
+            <button type="button" class="rst-mi-tag-btn" data-tag="halal"><i class="fa fa-star-and-crescent"></i> Halal</button>
+            <button type="button" class="rst-mi-tag-btn" data-tag="gluten_free"><i class="fa fa-wheat-awn-circle-exclamation"></i> Gluten Free</button>
+            <button type="button" class="rst-mi-tag-btn" data-tag="spicy"><i class="fa fa-pepper-hot"></i> Spicy</button>
+            <button type="button" class="rst-mi-tag-btn" data-tag="nut_free"><i class="fa fa-ban"></i> Nut Free</button>
+            <button type="button" class="rst-mi-tag-btn" data-tag="dairy_free"><i class="fa fa-droplet-slash"></i> Dairy Free</button>
+          </div>
+        </div>
+
+        <!-- Ingredients tab -->
+        <div class="rst-mi-right-panel" id="rst-mi-tab-ingr" style="display:none">
+          <div class="rst-mi-panel-label"><i class="fa fa-boxes-stacked"></i> Recipe Ingredients</div>
+          <div class="rst-mi-ingr-search-row">
+            <div class="finance-search-wrap" style="flex:1">
+              <i class="fa fa-magnifying-glass"></i>
+              <input type="text" id="rst-mi-ingr-search" placeholder="Search ingredient…">
+            </div>
+          </div>
+          <div id="rst-mi-ingr-dd" class="rst-mi-ingr-dd" style="display:none"></div>
+          <div id="rst-mi-ingr-list" class="rst-mi-ingr-list">
+            <div style="color:var(--text-muted);font-size:12px;padding:12px;text-align:center">No ingredients added yet</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="rst-mi-modal-footer">
+      <button class="rt-btn rt-btn-danger" id="rst-mi-del-btn" style="display:none"><i class="fa fa-trash"></i> Delete</button>
+      <div style="flex:1"></div>
+      <button class="rt-btn rt-btn-outline" id="rst-mi-cancel-btn">Cancel</button>
+      <button class="rt-btn rt-btn-primary" id="rst-mi-save-btn"><i class="fa fa-floppy-disk"></i> Save Item</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Menu Category: Add Modal ── -->
+<div id="rst-mc-add-modal" class="modal-overlay" style="display:none">
+  <div class="rt-modal-inner">
+    <div class="rt-modal-hdr">
+      <span>Add Category</span>
+      <button class="co-close" id="rst-mc-add-close"><i class="fa fa-xmark"></i></button>
+    </div>
+    <div class="rt-modal-body">
+      <div class="rt-form-row">
+        <label class="rt-form-lbl">Category Name</label>
+        <input type="text" class="rt-form-input" id="rst-mc-add-name" placeholder="e.g. Starters, Main Course, Desserts">
+      </div>
+      <div class="rt-form-row">
+        <label class="rt-form-lbl">Description (optional)</label>
+        <textarea class="rt-form-input" id="rst-mc-add-desc" rows="2" placeholder="Brief description…"></textarea>
+      </div>
+      <div class="rt-form-row" style="flex-direction:row;align-items:center;gap:10px">
+        <input type="checkbox" id="rst-mc-add-active" checked style="width:16px;height:16px;accent-color:var(--accent)">
+        <label for="rst-mc-add-active" style="font-size:13px;cursor:pointer">Active (visible in menus)</label>
+      </div>
+      <div id="rst-mc-add-err" class="co-alert" style="display:none;margin-top:4px"></div>
+    </div>
+    <div class="rt-modal-footer">
+      <div style="flex:1"></div>
+      <button class="rt-btn rt-btn-outline" id="rst-mc-add-cancel">Cancel</button>
+      <button class="rt-btn rt-btn-primary" id="rst-mc-add-save"><i class="fa fa-floppy-disk"></i> Add</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Menu Category: Edit Modal ── -->
+<div id="rst-mc-edit-modal" class="modal-overlay" style="display:none">
+  <div class="rt-modal-inner">
+    <div class="rt-modal-hdr">
+      <span>Edit Category</span>
+      <button class="co-close" id="rst-mc-edit-close"><i class="fa fa-xmark"></i></button>
+    </div>
+    <div class="rt-modal-body">
+      <input type="hidden" id="rst-mc-edit-id">
+      <div class="rt-form-row">
+        <label class="rt-form-lbl">Category Name</label>
+        <input type="text" class="rt-form-input" id="rst-mc-edit-name">
+      </div>
+      <div class="rt-form-row">
+        <label class="rt-form-lbl">Description (optional)</label>
+        <textarea class="rt-form-input" id="rst-mc-edit-desc" rows="2"></textarea>
+      </div>
+      <div class="rt-form-row" style="flex-direction:row;align-items:center;gap:10px">
+        <input type="checkbox" id="rst-mc-edit-active" style="width:16px;height:16px;accent-color:var(--accent)">
+        <label for="rst-mc-edit-active" style="font-size:13px;cursor:pointer">Active (visible in menus)</label>
+      </div>
+      <div id="rst-mc-edit-err" class="co-alert" style="display:none;margin-top:4px"></div>
+    </div>
+    <div class="rt-modal-footer">
+      <button class="rt-btn rt-btn-danger" id="rst-mc-edit-del"><i class="fa fa-trash"></i> Delete</button>
+      <div style="flex:1"></div>
+      <button class="rt-btn rt-btn-outline" id="rst-mc-edit-cancel">Cancel</button>
+      <button class="rt-btn rt-btn-primary" id="rst-mc-edit-save"><i class="fa fa-floppy-disk"></i> Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Ingredient: Add Modal ── -->
+<div id="rst-ingr-add-modal" class="modal-overlay" style="display:none">
+  <div class="rt-modal-inner">
+    <div class="rt-modal-hdr">
+      <span>Add Ingredient</span>
+      <button class="co-close" id="rst-ingr-add-close"><i class="fa fa-xmark"></i></button>
+    </div>
+    <div class="rt-modal-body">
+      <div class="rt-form-row">
+        <label class="rt-form-lbl">Name</label>
+        <input type="text" class="rt-form-input" id="rst-ingr-add-name" placeholder="e.g. Tomato, Olive Oil">
+      </div>
+      <div class="rt-form-row">
+        <label class="rt-form-lbl">Unit</label>
+        <select class="rt-form-input" id="rst-ingr-add-unit">
+          <option value="g">Grams (g)</option>
+          <option value="kg">Kilograms (kg)</option>
+          <option value="ml">Millilitres (ml)</option>
+          <option value="l">Litres (l)</option>
+          <option value="pcs" selected>Pieces (pcs)</option>
+          <option value="tbsp">Tablespoon (tbsp)</option>
+          <option value="tsp">Teaspoon (tsp)</option>
+          <option value="cup">Cup</option>
+        </select>
+      </div>
+      <div class="rt-form-row">
+        <label class="rt-form-lbl">Initial Quantity</label>
+        <input type="number" class="rt-form-input" id="rst-ingr-add-qty" placeholder="0" min="0" step="any">
+      </div>
+      <div class="rt-form-row">
+        <label class="rt-form-lbl">Low Stock Alert (optional)</label>
+        <input type="number" class="rt-form-input" id="rst-ingr-add-threshold" placeholder="e.g. 5" min="0" step="any">
+      </div>
+      <div class="rt-form-row">
+        <label class="rt-form-lbl">Cost per Unit (optional)</label>
+        <input type="number" class="rt-form-input" id="rst-ingr-add-cost" placeholder="0.00" min="0" step="any">
+      </div>
+      <div id="rst-ingr-add-err" class="co-alert" style="display:none;margin-top:4px"></div>
+    </div>
+    <div class="rt-modal-footer">
+      <div style="flex:1"></div>
+      <button class="rt-btn rt-btn-outline" id="rst-ingr-add-cancel">Cancel</button>
+      <button class="rt-btn rt-btn-primary" id="rst-ingr-add-save"><i class="fa fa-floppy-disk"></i> Add</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Ingredient: Edit Modal ── -->
+<div id="rst-ingr-edit-modal" class="modal-overlay" style="display:none">
+  <div class="rt-modal-inner">
+    <div class="rt-modal-hdr">
+      <span>Edit Ingredient</span>
+      <button class="co-close" id="rst-ingr-edit-close"><i class="fa fa-xmark"></i></button>
+    </div>
+    <div class="rt-modal-body">
+      <input type="hidden" id="rst-ingr-edit-id">
+      <div class="rt-form-row">
+        <label class="rt-form-lbl">Name</label>
+        <input type="text" class="rt-form-input" id="rst-ingr-edit-name">
+      </div>
+      <div class="rt-form-row">
+        <label class="rt-form-lbl">Unit</label>
+        <select class="rt-form-input" id="rst-ingr-edit-unit">
+          <option value="g">Grams (g)</option>
+          <option value="kg">Kilograms (kg)</option>
+          <option value="ml">Millilitres (ml)</option>
+          <option value="l">Litres (l)</option>
+          <option value="pcs">Pieces (pcs)</option>
+          <option value="tbsp">Tablespoon (tbsp)</option>
+          <option value="tsp">Teaspoon (tsp)</option>
+          <option value="cup">Cup</option>
+        </select>
+      </div>
+      <div class="rt-form-row">
+        <label class="rt-form-lbl">Low Stock Alert (optional)</label>
+        <input type="number" class="rt-form-input" id="rst-ingr-edit-threshold" min="0" step="any">
+      </div>
+      <div class="rt-form-row">
+        <label class="rt-form-lbl">Cost per Unit (optional)</label>
+        <input type="number" class="rt-form-input" id="rst-ingr-edit-cost" min="0" step="any">
+      </div>
+      <div id="rst-ingr-edit-err" class="co-alert" style="display:none;margin-top:4px"></div>
+    </div>
+    <div class="rt-modal-footer">
+      <button class="rt-btn rt-btn-danger" id="rst-ingr-edit-del"><i class="fa fa-trash"></i> Delete</button>
+      <div style="flex:1"></div>
+      <button class="rt-btn rt-btn-outline" id="rst-ingr-edit-cancel">Cancel</button>
+      <button class="rt-btn rt-btn-primary" id="rst-ingr-edit-save"><i class="fa fa-floppy-disk"></i> Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Ingredient: Stock In Modal ── -->
+<div id="rst-ingr-stockin-modal" class="modal-overlay" style="display:none">
+  <div class="rt-modal-inner" style="width:340px">
+    <div class="rt-modal-hdr">
+      <span>Stock In — <span id="rst-ingr-stockin-name"></span></span>
+      <button class="co-close" id="rst-ingr-stockin-close"><i class="fa fa-xmark"></i></button>
+    </div>
+    <div class="rt-modal-body">
+      <input type="hidden" id="rst-ingr-stockin-id">
+      <div class="rst-ingr-stock-current">
+        Current stock: <strong><span id="rst-ingr-stockin-current"></span></strong>
+      </div>
+      <div class="rt-form-row">
+        <label class="rt-form-lbl">Quantity to Add</label>
+        <input type="number" class="rt-form-input" id="rst-ingr-stockin-qty" placeholder="0" min="0.001" step="any">
+      </div>
+      <div class="rt-form-row">
+        <label class="rt-form-lbl">Notes (optional)</label>
+        <textarea class="rt-form-input" id="rst-ingr-stockin-notes" rows="2" placeholder="Delivery reference, supplier, etc."></textarea>
+      </div>
+      <div id="rst-ingr-stockin-err" class="co-alert" style="display:none;margin-top:4px"></div>
+    </div>
+    <div class="rt-modal-footer">
+      <div style="flex:1"></div>
+      <button class="rt-btn rt-btn-outline" id="rst-ingr-stockin-cancel">Cancel</button>
+      <button class="rt-btn rt-btn-success" id="rst-ingr-stockin-save"><i class="fa fa-plus"></i> Add Stock</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Ingredient: Transaction History Modal ── -->
+<div id="rst-ingr-txn-modal" class="modal-overlay" style="display:none">
+  <div class="rst-ingr-txn-inner">
+    <div class="rt-modal-hdr">
+      <div>
+        <div style="font-size:15px;font-weight:700">Transaction History</div>
+        <div style="font-size:12px;color:var(--text-muted);font-weight:400;margin-top:2px" id="rst-ingr-txn-subhdr"></div>
+      </div>
+      <button class="co-close" id="rst-ingr-txn-close"><i class="fa fa-xmark"></i></button>
+    </div>
+    <div style="overflow-y:auto;max-height:420px;padding:8px 18px 16px">
+      <table class="po-table" id="rst-ingr-txn-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Type</th>
+            <th style="text-align:right">Qty</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody id="rst-ingr-txn-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ══ Ingredient Purchase Order Modals ══════════════════════════════════════ -->
+
+<!-- Create / Edit PO Modal -->
+<div id="rst-po-modal" class="modal-overlay" style="display:none">
+  <div class="rst-po-modal-inner">
+    <div class="rt-modal-hdr">
+      <span id="rst-po-modal-title">New Purchase Order</span>
+      <button class="co-close" id="rst-po-modal-close"><i class="fa fa-xmark"></i></button>
+    </div>
+    <div style="overflow-y:auto;padding:16px 20px;flex:1">
+      <input type="hidden" id="rst-po-modal-id">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+        <div>
+          <label class="rt-form-lbl">Supplier</label>
+          <select class="rt-form-input" id="rst-po-supplier">
+            <option value="">— No supplier —</option>
+          </select>
+        </div>
+        <div>
+          <label class="rt-form-lbl">Status</label>
+          <select class="rt-form-input" id="rst-po-status-sel">
+            <option value="draft">Draft</option>
+            <option value="ordered">Ordered</option>
+          </select>
+        </div>
+        <div>
+          <label class="rt-form-lbl">Purchase Date <span style="color:#dc2626">*</span></label>
+          <input type="date" class="rt-form-input" id="rst-po-date">
+        </div>
+        <div>
+          <label class="rt-form-lbl">Expected Delivery</label>
+          <input type="date" class="rt-form-input" id="rst-po-delivery-date">
+        </div>
+        <div style="grid-column:1/-1">
+          <label class="rt-form-lbl">Notes</label>
+          <textarea class="rt-form-input" id="rst-po-notes" rows="2" placeholder="Optional notes…"></textarea>
+        </div>
+      </div>
+
+      <!-- Line items -->
+      <div style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-muted);margin-bottom:6px;letter-spacing:.04em">Items</div>
+      <table class="po-table" style="font-size:12px;margin-bottom:8px">
+        <thead>
+          <tr>
+            <th>Ingredient</th>
+            <th style="text-align:right">Qty</th>
+            <th style="text-align:right">Unit Cost</th>
+            <th style="text-align:right">Line Total</th>
+            <th style="width:32px"></th>
+          </tr>
+        </thead>
+        <tbody id="rst-po-lines-tbody"></tbody>
+      </table>
+      <button class="rt-btn rt-btn-outline" id="rst-po-add-line" style="font-size:12px;padding:4px 10px">
+        <i class="fa fa-plus"></i> Add Line
+      </button>
+      <div id="rst-po-modal-err" class="co-alert" style="display:none;margin-top:10px"></div>
+    </div>
+    <div style="padding:12px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px">
+      <button class="rt-btn rt-btn-outline" id="rst-po-modal-cancel">Cancel</button>
+      <button class="rt-btn rt-btn-primary" id="rst-po-modal-save"><i class="fa fa-floppy-disk"></i> Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Receive Goods (GRN) Modal -->
+<div id="rst-grn-modal" class="modal-overlay" style="display:none">
+  <div class="rst-po-modal-inner">
+    <div class="rt-modal-hdr">
+      <div>
+        <div style="font-size:15px;font-weight:700">Receive Goods</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:2px" id="rst-grn-modal-po"></div>
+      </div>
+      <button class="co-close" id="rst-grn-modal-close"><i class="fa fa-xmark"></i></button>
+    </div>
+    <div style="overflow-y:auto;padding:16px 20px;flex:1">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+        <div>
+          <label class="rt-form-lbl">Received Date <span style="color:#dc2626">*</span></label>
+          <input type="date" class="rt-form-input" id="rst-grn-date">
+        </div>
+        <div>
+          <label class="rt-form-lbl">Payment Method</label>
+          <select class="rt-form-input" id="rst-grn-payment">
+            <option value="credit">Credit / On Account</option>
+            <option value="cash">Cash</option>
+            <option value="cheque">Cheque</option>
+          </select>
+        </div>
+        <div>
+          <label class="rt-form-lbl">Reference</label>
+          <input type="text" class="rt-form-input" id="rst-grn-ref" placeholder="Invoice / delivery note #">
+        </div>
+        <div>
+          <label class="rt-form-lbl">Notes</label>
+          <input type="text" class="rt-form-input" id="rst-grn-notes" placeholder="Optional notes">
+        </div>
+      </div>
+      <div style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-muted);margin-bottom:6px;letter-spacing:.04em">Quantities to Receive</div>
+      <table class="po-table" style="font-size:12px">
+        <thead>
+          <tr>
+            <th>Ingredient</th>
+            <th style="text-align:right">Ordered</th>
+            <th style="text-align:right">Already Received</th>
+            <th style="text-align:right">Remaining</th>
+            <th style="text-align:right">Receive Now</th>
+          </tr>
+        </thead>
+        <tbody id="rst-grn-lines-tbody"></tbody>
+      </table>
+      <div id="rst-grn-modal-err" class="co-alert" style="display:none;margin-top:10px"></div>
+    </div>
+    <div style="padding:12px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px">
+      <button class="rt-btn rt-btn-outline" id="rst-grn-modal-cancel">Cancel</button>
+      <button class="rt-btn rt-btn-primary" id="rst-grn-modal-save"><i class="fa fa-truck-ramp-box"></i> Receive</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Add Table Modal ── -->
+<div id="rt-add-modal" class="modal-overlay" style="display:none">
+  <div class="rt-modal-inner">
+    <div class="rt-modal-hdr">
+      <span>Add Table</span>
+      <button class="co-close" id="rt-add-close"><i class="fa fa-xmark"></i></button>
+    </div>
+    <div class="rt-modal-body">
+      <div class="rt-form-row">
+        <label class="rt-form-lbl">Table Name / Number</label>
+        <input type="text" class="rt-form-input" id="rt-add-name" placeholder="e.g. Table 1, VIP Room">
+      </div>
+      <div class="rt-form-row">
+        <label class="rt-form-lbl">Seating Capacity</label>
+        <input type="number" class="rt-form-input" id="rt-add-cap" placeholder="4" min="1" max="100">
+      </div>
+      <div class="rt-form-row">
+        <label class="rt-form-lbl">Notes (optional)</label>
+        <textarea class="rt-form-input" id="rt-add-notes" rows="2" placeholder="Window seat, outdoor, etc."></textarea>
+      </div>
+      <div id="rt-add-err" class="co-alert" style="display:none;margin-top:8px"></div>
+    </div>
+    <div class="rt-modal-footer">
+      <div style="flex:1"></div>
+      <button class="rt-btn rt-btn-outline" id="rt-add-cancel-btn">Cancel</button>
+      <button class="rt-btn rt-btn-primary" id="rt-add-save-btn"><i class="fa fa-floppy-disk"></i> Add Table</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Edit Table Modal ── -->
+<div id="rt-edit-modal" class="modal-overlay" style="display:none">
+  <div class="rt-modal-inner">
+    <div class="rt-modal-hdr">
+      <span>Edit Table</span>
+      <button class="co-close" id="rt-edit-close"><i class="fa fa-xmark"></i></button>
+    </div>
+    <div class="rt-modal-body">
+      <input type="hidden" id="rt-edit-id">
+      <div class="rt-form-row">
+        <label class="rt-form-lbl">Table Name / Number</label>
+        <input type="text" class="rt-form-input" id="rt-edit-name">
+      </div>
+      <div class="rt-form-row">
+        <label class="rt-form-lbl">Seating Capacity</label>
+        <input type="number" class="rt-form-input" id="rt-edit-cap" min="1" max="100">
+      </div>
+      <div class="rt-form-row">
+        <label class="rt-form-lbl">Status</label>
+        <select class="rt-form-input" id="rt-edit-status">
+          <option value="available">Available</option>
+          <option value="occupied">Occupied</option>
+          <option value="reserved">Reserved</option>
+          <option value="inactive">Inactive</option>
+        </select>
+      </div>
+      <div class="rt-form-row">
+        <label class="rt-form-lbl">Notes (optional)</label>
+        <textarea class="rt-form-input" id="rt-edit-notes" rows="2"></textarea>
+      </div>
+      <div id="rt-edit-err" class="co-alert" style="display:none;margin-top:8px"></div>
+    </div>
+    <div class="rt-modal-footer">
+      <button class="rt-btn rt-btn-danger" id="rt-edit-del-btn"><i class="fa fa-trash"></i> Delete</button>
+      <div style="flex:1"></div>
+      <button class="rt-btn rt-btn-outline" id="rt-edit-cancel-btn">Cancel</button>
+      <button class="rt-btn rt-btn-primary" id="rt-edit-save-btn"><i class="fa fa-floppy-disk"></i> Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Image Picker Modal (global — must be at body level, not inside any modal) ── -->
+<div id="img-picker-modal" class="modal-overlay" style="display:none;z-index:1600">
+  <div class="img-picker-shell">
+    <div class="img-picker-header">
+      <i class="fa fa-image" style="color:var(--accent)"></i>
+      <span>Choose Image</span>
+      <button class="psm-close" id="img-picker-close"><i class="fa fa-xmark"></i></button>
+    </div>
+    <div class="img-picker-tabs">
+      <button class="img-tab-btn active" data-tab="upload"><i class="fa fa-upload"></i> Upload</button>
+      <button class="img-tab-btn" data-tab="fm"><i class="fa fa-folder-open"></i> File Manager</button>
+    </div>
+    <!-- Upload tab -->
+    <div id="img-tab-upload" class="img-picker-body">
+      <div class="img-upload-drop" id="img-upload-drop">
+        <i class="fa fa-cloud-arrow-up" style="font-size:32px;color:var(--text-muted)"></i>
+        <p style="margin:8px 0 0;color:var(--text-muted);font-size:13px">Click to select an image file</p>
+        <p style="margin:4px 0 0;font-size:11px;color:var(--text-muted)">JPG, PNG, WebP, GIF — max 20 MB</p>
+        <button type="button" id="img-upload-btn" class="po-btn-primary" style="margin-top:12px"><i class="fa fa-folder-open"></i> Browse Files</button>
+      </div>
+      <div id="img-upload-preview" style="display:none;text-align:center">
+        <img id="img-upload-preview-img" src="" alt="" style="max-width:100%;max-height:240px;border-radius:var(--radius-sm);border:1px solid var(--border)">
+        <p id="img-upload-preview-name" style="margin:6px 0 0;font-size:12px;color:var(--text-muted)"></p>
+        <div style="display:flex;gap:8px;justify-content:center;margin-top:10px">
+          <button type="button" id="img-upload-change" class="po-btn-ghost"><i class="fa fa-refresh"></i> Change</button>
+          <button type="button" id="img-upload-confirm" class="po-btn-primary"><i class="fa fa-upload"></i> Upload &amp; Use</button>
+        </div>
+      </div>
+    </div>
+    <!-- File Manager tab -->
+    <div id="img-tab-fm" class="img-picker-body" style="display:none">
+      <div id="img-fm-breadcrumb" class="img-fm-breadcrumb"></div>
+      <div id="img-fm-grid" class="img-fm-grid">
+        <div class="img-fm-loading"><i class="fa fa-spinner fa-spin"></i></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Restaurant POS — Payment Modal ── -->
+<div id="rst-pay-modal" class="rst-pay-overlay" style="display:none">
+  <div class="rst-pay-box">
+    <div class="rst-pay-hdr">
+      <span class="rst-pay-hdr-title"><i class="fa fa-cash-register"></i> Complete Payment</span>
+      <button id="rst-pay-close" class="modal-close-btn"><i class="fa fa-xmark"></i></button>
+    </div>
+    <div class="rst-pay-body">
+      <div id="rst-pay-summary" class="rst-pay-summary"></div>
+      <div class="rst-pay-methods">
+        <button class="rst-pay-method-btn active" data-method="cash"><i class="fa fa-money-bill"></i> Cash</button>
+        <button class="rst-pay-method-btn" data-method="card"><i class="fa fa-credit-card"></i> Card</button>
+        <button class="rst-pay-method-btn" data-method="transfer"><i class="fa fa-building-columns"></i> Transfer</button>
+      </div>
+      <div id="rst-pay-cash-section">
+        <div class="rst-pay-recv-lbl">Amount received</div>
+        <div class="rst-pay-amount-disp" id="rst-pay-amount-display">0.00</div>
+        <div id="rst-pay-quick" class="rst-pay-quick"></div>
+        <div class="rst-pay-numpad" id="rst-pay-numpad">
+          <button class="rst-pay-num-btn" data-val="7">7</button>
+          <button class="rst-pay-num-btn" data-val="8">8</button>
+          <button class="rst-pay-num-btn" data-val="9">9</button>
+          <button class="rst-pay-num-btn" data-val="4">4</button>
+          <button class="rst-pay-num-btn" data-val="5">5</button>
+          <button class="rst-pay-num-btn" data-val="6">6</button>
+          <button class="rst-pay-num-btn" data-val="1">1</button>
+          <button class="rst-pay-num-btn" data-val="2">2</button>
+          <button class="rst-pay-num-btn" data-val="3">3</button>
+          <button class="rst-pay-num-btn" data-val=".">.</button>
+          <button class="rst-pay-num-btn" data-val="0">0</button>
+          <button class="rst-pay-num-btn backspace" data-val="back"><i class="fa fa-delete-left"></i></button>
+        </div>
+        <div id="rst-pay-change-row" class="rst-pay-change-row" style="display:none">
+          <span>Change</span>
+          <strong id="rst-pay-change">0.00</strong>
+        </div>
+      </div>
+      <button id="rst-pay-confirm" class="rst-pay-confirm-btn">
+        <i class="fa fa-check"></i> Confirm Payment
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Restaurant POS — Receipt Modal ── -->
+<div id="rst-receipt-modal" class="rst-receipt-overlay" style="display:none">
+  <div class="rst-receipt-box">
+    <div class="rst-receipt-hdr">
+      <span style="font-size:14px;font-weight:700;color:var(--text)"><i class="fa fa-receipt"></i> Receipt</span>
+      <button id="rst-receipt-close" class="modal-close-btn"><i class="fa fa-xmark"></i></button>
+    </div>
+    <div id="rst-receipt-body" class="rst-receipt-body"></div>
+    <div class="rst-receipt-footer-btns">
+      <button id="rst-receipt-done" class="rst-receipt-done-btn"><i class="fa fa-check"></i> Done</button>
     </div>
   </div>
 </div>
