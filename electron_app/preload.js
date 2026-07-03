@@ -21,9 +21,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setConfig: (patch)  => ipcRenderer.invoke('config-set', patch),
 
   // API
-  apiRequest:    (method, path, body) => ipcRenderer.invoke('api-request', { method, path, body }),
-  apiUpload:     (apiPath, filePath)  => ipcRenderer.invoke('api-upload', { path: apiPath, filePath }),
-  showOpenDialog:(options)            => ipcRenderer.invoke('show-open-dialog', options),
+  apiRequest:      (method, path, body) => ipcRenderer.invoke('api-request', { method, path, body }),
+  apiUpload:       (apiPath, filePath)  => ipcRenderer.invoke('api-upload', { path: apiPath, filePath }),
+  showOpenDialog:  (options)            => ipcRenderer.invoke('show-open-dialog', options),
+  checkForUpdate:  ()                   => ipcRenderer.invoke('check-for-update'),
+  openExternal:    (url)                => ipcRenderer.invoke('open-external', url),
 
   // Design Studio editor window
   openEditor:      (design) => ipcRenderer.invoke('open-editor', design),
@@ -33,4 +35,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openQuotePrint:    (data) => ipcRenderer.invoke('open-quote-print', data),
   getQuotePrintData: ()     => ipcRenderer.invoke('get-quote-print-data'),
   onQuotePrintRefresh: (cb) => ipcRenderer.on('quote-print-refresh', (_e, data) => cb(data)),
+
+  // Kitchen Display window
+  openKds:          ()       => ipcRenderer.invoke('open-kds'),
+  kdsMinimize:      ()       => ipcRenderer.send('kds-minimize'),
+  kdsClose:         ()       => ipcRenderer.send('kds-close'),
+  kdsFullscreen:    (flag)   => ipcRenderer.send('kds-fullscreen', flag),
+  kdsIsFullScreen:  ()       => ipcRenderer.invoke('kds-is-fullscreen'),
 });

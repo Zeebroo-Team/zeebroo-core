@@ -86,6 +86,7 @@ class PosCatalogService
         ?string $stockStatus = null,
         ?int $brandId = null,
         string $sort = 'name_asc',
+        bool $recentSales = false,
     ): array {
         $page    = max(1, $page);
         $perPage = max(1, min(100, $perPage));
@@ -96,14 +97,25 @@ class PosCatalogService
             ->with(['productUnit', 'imageFile', 'categories']);
 
         // Sort
-        match ($sort) {
-            'name_desc'   => $query->orderByDesc('name'),
-            'price_asc'   => $query->orderBy('unit_sell_price')->orderBy('name'),
-            'price_desc'  => $query->orderByDesc('unit_sell_price')->orderBy('name'),
-            'stock_asc'   => $query->orderBy('stock_quantity')->orderBy('name'),
-            'stock_desc'  => $query->orderByDesc('stock_quantity')->orderBy('name'),
-            default       => $query->orderBy('name'),
-        };
+        if ($sort === 'recent_sales') {
+            $query->selectRaw('products.*, (
+                SELECT MAX(ps.sold_at)
+                FROM pos_sale_items psi
+                INNER JOIN pos_sales ps ON ps.id = psi.pos_sale_id
+                WHERE psi.product_id = products.id
+                  AND ps.business_id = ?
+            ) as last_sold_at', [$business->id])
+                ->orderByRaw('(last_sold_at IS NULL), last_sold_at DESC, products.name ASC');
+        } else {
+            match ($sort) {
+                'name_desc'  => $query->orderByDesc('name'),
+                'price_asc'  => $query->orderBy('unit_sell_price')->orderBy('name'),
+                'price_desc' => $query->orderByDesc('unit_sell_price')->orderBy('name'),
+                'stock_asc'  => $query->orderBy('stock_quantity')->orderBy('name'),
+                'stock_desc' => $query->orderByDesc('stock_quantity')->orderBy('name'),
+                default      => $query->orderBy('name'),
+            };
+        }
 
         if ($branchProductSeparate && $branchId !== null) {
             $query->where(function ($q) use ($branchId) {
@@ -117,6 +129,18 @@ class PosCatalogService
 
         if ($brandId !== null && $brandId > 0) {
             $query->whereHas('brands', fn ($builder) => $builder->whereKey($brandId));
+        }
+
+        // Recent sales filter — only products that have been sold at least once
+        if ($recentSales) {
+            $businessId = $business->id;
+            $query->whereExists(fn ($q) => $q
+                ->selectRaw('1')
+                ->from('pos_sale_items as psi')
+                ->join('pos_sales as ps', 'ps.id', '=', 'psi.pos_sale_id')
+                ->whereColumn('psi.product_id', 'products.id')
+                ->where('ps.business_id', $businessId)
+            );
         }
 
         // Stock status filter (uses the stock_quantity column directly)

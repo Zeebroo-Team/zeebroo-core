@@ -2,7 +2,7 @@
 
 const path = require('path');
 const fs   = require('fs');
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const { API_BASE_URL } = require('./config');
 
 let CONFIG_PATH;
@@ -33,6 +33,7 @@ function saveConfig(data) {
 let mainWindow;
 let editorWindow  = null;
 let editorDesign  = null;
+let kdsWindow     = null;
 let config;
 
 function createWindow() {
@@ -60,7 +61,6 @@ function createWindow() {
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
-    mainWindow.webContents.openDevTools({ mode: 'detach' });
   });
 
   mainWindow.webContents.on('console-message', (_e, level, msg) => {
@@ -109,7 +109,19 @@ ipcMain.on('window-narrow-auth', () => {
 
 // ── Config ────────────────────────────────────────────────────────────────
 // Always include the compiled-in API URL so the renderer can display/debug it
-ipcMain.handle('config-get', () => ({ ...config, api_base_url: API_BASE_URL }));
+ipcMain.handle('config-get', () => ({ ...config, api_base_url: API_BASE_URL, app_version: app.getVersion() }));
+ipcMain.handle('open-external', (_e, url) => shell.openExternal(url));
+ipcMain.handle('check-for-update', () => new Promise(resolve => {
+  const https = require('https');
+  https.get('https://zeebroo.com/api/releases/latest', { headers: { Accept: 'application/json' } }, res => {
+    let d = '';
+    res.on('data', c => { d += c; });
+    res.on('end', () => {
+      try { resolve({ status: res.statusCode, body: JSON.parse(d) }); }
+      catch (_) { resolve({ status: res.statusCode, body: null }); }
+    });
+  }).on('error', () => resolve({ status: 0, body: null }));
+}));
 ipcMain.handle('config-set', (_e, patch) => {
   config = { ...config, ...patch };
   saveConfig(config);
@@ -307,3 +319,45 @@ ipcMain.handle('open-quote-print', (_e, data) => {
 });
 
 ipcMain.handle('get-quote-print-data', () => printQuoteData);
+
+// ── Kitchen Display window ────────────────────────────────────────────────
+ipcMain.handle('open-kds', () => {
+  if (kdsWindow && !kdsWindow.isDestroyed()) { kdsWindow.focus(); return; }
+
+  const { screen } = require('electron');
+  const displays   = screen.getAllDisplays();
+  const secondary  = displays.find(d => d.id !== screen.getPrimaryDisplay().id);
+  const target     = secondary || screen.getPrimaryDisplay();
+  const { x, y, width, height } = target.workArea;
+
+  kdsWindow = new BrowserWindow({
+    x, y, width, height,
+    minWidth:  800,
+    minHeight: 500,
+    frame:     false,
+    backgroundColor: '#0f172a',
+    webPreferences: {
+      preload:          path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration:  false,
+      sandbox:          false,
+    },
+    show: false,
+  });
+
+  kdsWindow.loadFile(path.join(__dirname, 'renderer', 'kitchen.html'));
+  kdsWindow.once('ready-to-show', () => {
+    kdsWindow.show();
+    if (secondary) kdsWindow.setFullScreen(true);
+  });
+  kdsWindow.webContents.on('console-message', (_e, level, msg) => {
+    const prefix = ['VERBOSE','INFO','WARN','ERROR'][level] || level;
+    console.log(`[kds:${prefix}] ${msg}`);
+  });
+  kdsWindow.on('closed', () => { kdsWindow = null; });
+});
+
+ipcMain.on('kds-minimize',   e => { BrowserWindow.fromWebContents(e.sender)?.minimize(); });
+ipcMain.on('kds-close',      e => { BrowserWindow.fromWebContents(e.sender)?.close(); });
+ipcMain.on('kds-fullscreen', (e, flag) => { BrowserWindow.fromWebContents(e.sender)?.setFullScreen(flag); });
+ipcMain.handle('kds-is-fullscreen', e => BrowserWindow.fromWebContents(e.sender)?.isFullScreen() ?? false);

@@ -35,6 +35,7 @@ class PosOnlineApiService
         ?string $stockStatus = null,
         ?int $brandId = null,
         string $sort = 'name_asc',
+        bool $recentSales = false,
     ): array {
         $currency = (string) (get_settings('business.currency', '', $business) ?: '');
         $catalogOptions = $this->catalogOptions->optionsForBusiness($business);
@@ -57,6 +58,7 @@ class PosOnlineApiService
             $stockStatus,
             $brandId,
             $sort,
+            $recentSales,
         );
 
         $branches = $business->branches()->get()
