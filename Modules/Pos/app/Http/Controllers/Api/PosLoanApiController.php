@@ -84,7 +84,7 @@ class PosLoanApiController extends Controller
             'recurring_type'             => ['required', Rule::in([Loan::RECURRING_PER_DAY, Loan::RECURRING_PER_MONTH, Loan::RECURRING_PER_YEAR])],
             'first_installment_due_date' => ['nullable', 'date'],
             'loan_ending_date'           => ['nullable', 'date'],
-            'deduct_account_id'          => ['nullable', 'integer', Rule::exists('accounts', 'id')->where(fn ($q) => $q->where('user_id', $user->id)->where('business_id', $business->id))],
+            'deduct_account_id'          => ['nullable', 'integer', Rule::exists('accounts', 'id')->where(fn ($q) => $q->where('business_id', $business->id))],
             'remind_before_days'         => ['nullable', 'integer', 'min:0', 'max:365'],
         ]);
 

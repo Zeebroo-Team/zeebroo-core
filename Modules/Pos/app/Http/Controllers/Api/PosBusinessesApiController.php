@@ -7,6 +7,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Modules\Business\Models\Business;
 use Modules\Business\Models\BusinessCategory;
+use Modules\Business\Models\BusinessMember;
 use Modules\HRManagement\Models\Employee;
 
 class PosBusinessesApiController extends Controller
@@ -18,17 +19,28 @@ class PosBusinessesApiController extends Controller
             return response()->json(['message' => 'Unauthenticated.'], 401);
         }
 
-        // Businesses owned by this user + businesses where they are an employee
+        // Businesses owned by this user
         $ownedIds = Business::query()
             ->where('user_id', $user->id)
             ->pluck('id');
 
+        // Businesses where they are an HR employee
         $employeeBusinessIds = Employee::query()
             ->where('user_id', $user->id)
             ->whereNotNull('user_id')
             ->pluck('business_id');
 
-        $allIds = $ownedIds->merge($employeeBusinessIds)->unique()->values();
+        // Businesses where they are a business member (POS team)
+        $memberBusinessIds = BusinessMember::query()
+            ->where('user_id', $user->id)
+            ->where('status', 'active')
+            ->pluck('business_id');
+
+        $allIds = $ownedIds
+            ->merge($employeeBusinessIds)
+            ->merge($memberBusinessIds)
+            ->unique()
+            ->values();
 
         $businesses = Business::query()
             ->whereIn('id', $allIds)

@@ -39,6 +39,8 @@ use Modules\Pos\Http\Controllers\Api\PosTodaySummaryApiController;
 use Modules\Pos\Http\Controllers\Api\PosExpensesOverviewApiController;
 use Modules\Pos\Http\Controllers\Api\PosProfitReportApiController;
 use Modules\Pos\Http\Controllers\Api\PosPayrollOverviewApiController;
+use Modules\Pos\Http\Controllers\Api\PosUserManagementApiController;
+use Modules\Pos\Http\Controllers\Api\PosRoleManagementApiController;
 
 Route::prefix('v1/pos')->group(function (): void {
     Route::post('auth/token',             [PosAuthApiController::class, 'token'])->name('auth.token');
@@ -256,4 +258,17 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
     Route::put('stock-audits/{stockAudit}/lines', [PosStockAuditApiController::class, 'saveLines'])->name('stock-audits.save-lines');
     Route::post('stock-audits/{stockAudit}/finalize', [PosStockAuditApiController::class, 'finalize'])->name('stock-audits.finalize');
     Route::delete('stock-audits/{stockAudit}', [PosStockAuditApiController::class, 'destroy'])->name('stock-audits.destroy');
+
+    // User Management
+    Route::get   ('me',             [PosUserManagementApiController::class, 'me'])     ->name('users.me');
+    Route::get   ('users',          [PosUserManagementApiController::class, 'index'])  ->name('users.index');
+    Route::post  ('users',          [PosUserManagementApiController::class, 'store'])  ->name('users.store');
+    Route::put   ('users/{member}', [PosUserManagementApiController::class, 'update']) ->name('users.update');
+    Route::delete('users/{member}', [PosUserManagementApiController::class, 'destroy'])->name('users.destroy');
+
+    // Role Management
+    Route::get   ('roles',        [PosRoleManagementApiController::class, 'index'])  ->name('roles.index');
+    Route::post  ('roles',        [PosRoleManagementApiController::class, 'store'])  ->name('roles.store');
+    Route::put   ('roles/{role}', [PosRoleManagementApiController::class, 'update']) ->name('roles.update');
+    Route::delete('roles/{role}', [PosRoleManagementApiController::class, 'destroy'])->name('roles.destroy');
 });

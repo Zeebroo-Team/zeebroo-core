@@ -75,7 +75,7 @@ class PosRentalApiController extends Controller
             'purpose'                    => ['nullable', 'string', 'max:2000'],
             'key_money'                  => ['nullable', 'numeric', 'min:0'],
             'agreement_valid_until_year' => ['required', 'integer', 'min:2000', 'max:2100'],
-            'deduct_account_id'          => ['nullable', 'integer', Rule::exists('accounts', 'id')->where(fn ($q) => $q->where('user_id', $user->id)->where('business_id', $business->id))],
+            'deduct_account_id'          => ['nullable', 'integer', Rule::exists('accounts', 'id')->where(fn ($q) => $q->where('business_id', $business->id))],
             'recurring_cost'             => ['required', 'numeric', 'min:0'],
             'recurring_type'             => ['required', Rule::in([Rental::RECURRING_PER_DAY, Rental::RECURRING_PER_MONTH, Rental::RECURRING_PER_YEAR])],
             'notes'                      => ['nullable', 'string', 'max:5000'],

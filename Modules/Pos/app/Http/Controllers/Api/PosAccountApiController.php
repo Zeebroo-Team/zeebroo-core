@@ -18,7 +18,6 @@ class PosAccountApiController extends Controller
         $business = $this->businessOrAbort($request);
 
         $accounts = Account::where('business_id', $business->id)
-            ->where('user_id', $request->user()->id)
             ->orderBy('account_name')
             ->get(['id', 'account_name', 'bank_name', 'current_balance']);
 

@@ -26,6 +26,10 @@ const state = {
   _userEmail: null,
   // Feature flags loaded after login — null means "show everything"
   features: null,
+  // Member-level permissions — null means full access (owner/admin), array means restricted
+  memberPermissions: null,
+  memberRole:        null,
+  memberIsOwner:     true,
   // POS mode: 'products' | 'services'
   posMode: 'products',
   services: [],
@@ -99,7 +103,7 @@ function activateTab(tabName) {
   $$('.ribbon-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tabName));
   $$('.ribbon-page').forEach(p => p.classList.toggle('active', p.dataset.page === tabName));
 
-  const panelMap = { home: 'panel-home', pos: 'panel-pos', sales: 'panel-sales', inventory: 'panel-inventory', finance: 'panel-finance', hr: 'panel-hr', services: 'panel-services', design: 'panel-design', view: 'panel-view', restaurant: 'panel-restaurant', 'rst-pos': 'panel-rst-pos' };
+  const panelMap = { home: 'panel-home', pos: 'panel-pos', sales: 'panel-sales', inventory: 'panel-inventory', finance: 'panel-finance', hr: 'panel-hr', services: 'panel-services', design: 'panel-design', restaurant: 'panel-restaurant', 'rst-pos': 'panel-rst-pos' };
   $$('.content-panel').forEach(p => p.classList.remove('active'));
   const target = $('#' + (panelMap[tabName] || 'panel-pos'));
   if (target) target.classList.add('active');
@@ -2299,84 +2303,161 @@ function applyFeatureVisibility() {
     if (g) g.style.display = show ? '' : 'none';
   };
 
-  const pos   = hasFeature('point_of_sale');
-  const prod  = hasFeature('product_management');
-  const stock = hasFeature('stock_management');
-  const bill  = hasFeature('bill_management');
-  const hr    = hasFeature('human_resources');
-  const svc   = hasFeature('service_management');
-  const camp  = hasFeature('social_media_campaign');
-  const rst   = hasFeature('restaurant');
+  // Business feature flags intersected with member-level sub-permissions
+  // hasMemberPerm returns true when memberPermissions is null (owner/admin = full access)
+  const mp = k => hasMemberPerm(k);
+  const bf = k => hasFeature(k);
+
+  // ── POS & Sales ──
+  const pos_session    = bf('point_of_sale') && mp('pos_session');
+  const pos_checkout   = bf('point_of_sale') && mp('pos_checkout');
+  const pos_returns    = bf('point_of_sale') && mp('pos_returns');
+  const pos_customers  = bf('point_of_sale') && mp('pos_customers');
+  const pos_eod        = bf('point_of_sale') && mp('pos_eod');
+  const pos_quotations = bf('point_of_sale') && mp('pos_quotations');
+  const pos_any        = pos_session || pos_checkout || pos_returns || pos_customers || pos_eod || pos_quotations;
+
+  // ── Inventory ──
+  const inv_products   = (bf('product_management'))                          && mp('inv_products');
+  const inv_audit      = (bf('product_management') || bf('stock_management'))&& mp('inv_audit');
+  const inv_discounts  = (bf('product_management'))                          && mp('inv_discounts');
+  const inv_purchasing = (bf('stock_management'))                            && mp('inv_purchasing');
+  const inv_suppliers  = (bf('product_management') || bf('stock_management'))&& mp('inv_suppliers');
+  const inv_barcodes   = (bf('product_management') || bf('stock_management'))&& mp('inv_barcodes');
+  const inv_any        = inv_products || inv_audit || inv_discounts || inv_purchasing || inv_suppliers || inv_barcodes;
+
+  // ── Finance ──
+  const fin_bills      = bf('bill_management') && mp('fin_bills');
+  const fin_assets     = bf('bill_management') && mp('fin_assets');
+  const fin_reports    = bf('bill_management') && mp('fin_reports');
+  const fin_any        = fin_bills || fin_assets || fin_reports;
+
+  // ── HR ──
+  const hr_employees   = bf('human_resources') && mp('hr_employees');
+  const hr_departments = bf('human_resources') && mp('hr_departments');
+  const hr_payroll     = bf('human_resources') && mp('hr_payroll');
+  const hr_any         = hr_employees || hr_departments || hr_payroll;
+
+  // ── Services ──
+  const svc_requests   = bf('service_management') && mp('svc_requests');
+  const svc_catalog    = bf('service_management') && mp('svc_catalog');
+  const svc_categories = bf('service_management') && mp('svc_categories');
+  const svc_any        = svc_requests || svc_catalog || svc_categories;
+
+  // ── Design ──
+  const design_all = bf('social_media_campaign') && mp('design_all');
+
+  // ── Restaurant ──
+  const rst_pos         = bf('restaurant') && mp('rst_pos');
+  const rst_orders      = bf('restaurant') && mp('rst_orders');
+  const rst_floor       = bf('restaurant') && mp('rst_floor');
+  const rst_menu        = bf('restaurant') && mp('rst_menu');
+  const rst_ingredients = bf('restaurant') && mp('rst_ingredients');
+  const rst_kitchen     = bf('restaurant') && mp('rst_kitchen');
+  const rst_any         = rst_pos || rst_orders || rst_floor || rst_menu || rst_ingredients || rst_kitchen;
 
   // ── Ribbon tabs ──
   const tabFeatures = {
-    pos:        pos,
-    sales:      pos,
-    inventory:  prod || stock,
-    finance:    bill,
-    hr:         hr,
-    design:     camp,
-    restaurant: rst,
-    'rst-pos':  rst,
-    services:   svc,
+    pos:        pos_any,
+    sales:      pos_any,
+    inventory:  inv_any,
+    finance:    fin_any,
+    hr:         hr_any,
+    design:     design_all,
+    restaurant: rst_any,
+    'rst-pos':  rst_pos,
+    services:   svc_any,
+    users:      state.memberIsOwner || state.memberRole === 'admin' || state.memberPermissions === null,
   };
   $$('.ribbon-tab[data-tab]').forEach(tab => {
     const show = tabFeatures[tab.dataset.tab];
     tab.style.display = (show === undefined || show) ? '' : 'none';
   });
 
+  // ── POS ribbon groups ──
+  grp('#rb-new-session',    pos_session);                   // Session
+  grp('#rb-checkout',       pos_checkout);                  // Sales (checkout, return, clear cart)
+  grp('#rb-search',         pos_checkout);                  // Find (search, barcode, add product)
+  grp('#rb-customers',      pos_customers);                 // Customers
+  grp('#rb-pos-settings',   pos_checkout || pos_session);   // Configure
+
+  // ── Sales page ribbon groups ──
+  grp('#rb-sal-refresh',    pos_checkout);                  // Transactions
+  grp('#rb-sal-return',     pos_returns);                   // Returns
+  grp('#rb-eod-open',       pos_eod);                       // Settlement
+  grp('#rb-qt-new',         pos_quotations);                // Quotations
+
   // ── Services ribbon groups ──
-  grp('#rb-svc-requests',   svc);
-  grp('#rb-svc-catalog',    svc);
-  grp('#rb-svc-categories', svc);
-  grp('#rb-svc-refresh',    svc);
+  grp('#rb-svc-requests',   svc_requests);
+  grp('#rb-svc-catalog',    svc_catalog);
+  grp('#rb-svc-new-item',   svc_catalog);
+  grp('#rb-svc-categories', svc_categories);
+  grp('#rb-svc-refresh',    svc_any);
 
   // ── POS mode: services button ──
   const svcModeBtn = $('.pos-mode-btn[data-mode="services"]');
-  if (svcModeBtn) svcModeBtn.style.display = svc ? '' : 'none';
+  if (svcModeBtn) svcModeBtn.style.display = svc_any ? '' : 'none';
 
-  // ── If currently on services tab when disabled, go home ──
-  if (!svc && _activeTab() === 'services') activateTab('home');
+  // ── If currently on a hidden tab, go home ──
+  if (!svc_any && _activeTab() === 'services') activateTab('home');
 
-  // ── Home ribbon groups (Home tab is always visible) ──
-  grp('#rb-home-pos',      pos || svc || rst);       // Quick Actions
-  // Overview group — always visible (no anchor needed, no change)
-  grp('#rb-home-orders',   pos || prod || stock);   // Operations
-  grp('#rb-home-expenses', bill || hr);             // Finance shortcuts
-  // Tools group — always visible
+  // ── Home ribbon groups ──
+  grp('#rb-home-pos',      pos_any || svc_any || rst_any);
+  grp('#rb-home-orders',   pos_any || inv_any);
+  grp('#rb-home-expenses', fin_any || hr_any);
 
   // ── Inventory ribbon groups ──
-  grp('#rb-inv-products', prod);                    // Catalog
-  grp('#rb-inv-audit',    prod || stock);           // Stock (brands/discounts + audit)
-  grp('#rb-orders',       stock);                   // Purchasing (PO, GRN, cheques)
-  grp('#rb-inv-suppliers',prod || stock);           // Suppliers
-  grp('#rb-inv-barcodes', prod || stock);           // Print
+  grp('#rb-inv-products', inv_products);
+  grp('#rb-inv-audit',    inv_audit || inv_discounts);
+  grp('#rb-orders',       inv_purchasing);
+  grp('#rb-inv-suppliers',inv_suppliers);
+  grp('#rb-inv-barcodes', inv_barcodes);
 
-  // ── Finance sub-nav: hide bill items when disabled ──
+  // ── Finance sub-nav visibility ──
   const billFinViews = ['bills', 'loans', 'rentals', 'properties', 'modifications'];
   billFinViews.forEach(v => {
     const btn = $(`#panel-finance .fin-subnav-btn[data-fin="${v}"]`);
-    if (btn) btn.style.display = bill ? '' : 'none';
+    if (btn) btn.style.display = fin_any ? '' : 'none';
   });
-  if (!bill) {
+  if (!fin_any) {
     const activeFin = $('#panel-finance .fin-subnav-btn.active');
     if (activeFin && billFinViews.includes(activeFin.dataset.fin)) switchFinView('flow');
   }
 
   // ── Finance ribbon groups ──
-  grp('#rb-create-bill', bill);   // Bills & Loans
-  grp('#rb-rentals',     bill);   // Assets & Liabilities
+  grp('#rb-create-bill', fin_bills);
+  grp('#rb-rentals',     fin_assets);
+
+  // ── HR ribbon groups ──
+  grp('#rb-employees',   hr_employees || hr_departments);
+  grp('#rb-hr-payroll',  hr_payroll);
+
+  // ── Restaurant ribbon groups ──
+  grp('#rb-rst-pos',          rst_pos);
+  grp('#rb-rst-new-order',    rst_orders);
+  grp('#rb-rst-orders',       rst_orders);
+  grp('#rb-rst-tables',       rst_floor);
+  grp('#rb-rst-reservations', rst_floor);
+  grp('#rb-rst-menu-items',   rst_menu);
+  grp('#rb-rst-ingredients',  rst_ingredients);
+  grp('#rb-rst-kitchen',      rst_kitchen);
 
   // ── Backstage sections ──
+  const pos  = pos_any;
+  const prod = inv_products || inv_audit || inv_discounts;
+  const stock= inv_purchasing || inv_suppliers || inv_barcodes;
+  const bill = fin_any;
+  const hr   = hr_any;
+  const camp = design_all;
   const newFeat = {
-    'POS & Sales':        [pos || svc],
+    'POS & Sales':        [pos || svc_any],
     'Inventory':          [prod || stock],
     'Finance — Outgoing': [bill],
     'Human Resources':    [hr],
     'Design Studio':      [camp],
   };
   const openFeat = {
-    'POS & Sales':     [pos || svc],
+    'POS & Sales':     [pos || svc_any],
     'Inventory':       [prod || stock],
     'Finance':         [bill],
     'Human Resources': [hr],
@@ -2389,13 +2470,33 @@ function applyFeatureVisibility() {
 }
 
 async function loadFeatures() {
-  const res = await API.features();
-  if (res.status === 200) {
-    state.features = new Set(res.body?.data || []);
+  const [featRes, meRes] = await Promise.all([API.features(), API.memberMe()]);
+
+  if (featRes.status === 200) {
+    state.features = new Set(featRes.body?.data || []);
   } else {
     state.features = null;
   }
+
+  if (meRes.status === 200) {
+    // null permissions = full access (owner or admin role)
+    state.memberPermissions = meRes.body?.data?.permissions ?? null;
+    state.memberRole        = meRes.body?.data?.role ?? null;
+    state.memberIsOwner     = meRes.body?.data?.is_owner ?? false;
+  } else {
+    // If /me fails (e.g. owner using a different auth path), grant full access
+    state.memberPermissions = null;
+    state.memberRole        = null;
+    state.memberIsOwner     = true;
+  }
+
   applyFeatureVisibility();
+}
+
+/** Returns true if the current member has a given permission (or has full access). */
+function hasMemberPerm(key) {
+  if (state.memberPermissions === null || state.memberPermissions === undefined) return true;
+  return state.memberPermissions.includes(key);
 }
 
 // ── Real-time sync polling ─────────────────────────────────────────────────
@@ -2881,7 +2982,7 @@ document.addEventListener('click', (e) => {
 // Menu item actions
 $('#tpm-settings').addEventListener('click', () => {
   closeProfileMenu();
-  toast('Settings panel coming soon', 'info');
+  openPosSettings();
 });
 $('#tpm-my-profile').addEventListener('click', () => {
   closeProfileMenu();
@@ -3157,13 +3258,6 @@ function showShortcutsModal() {
 }
 
 // ── Sign out (ribbon View tab button) ─────────────────────────────────────
-$('#rb-logout').addEventListener('click', async () => {
-  _syncStop();
-  await window.electronAPI.setConfig({ token: null, business_id: null, branch_id: null });
-  state.posTabs = []; state.activePosTabId = null; state._nextPosTabId = 1;
-  showLogin();
-  toast('Signed out', 'info');
-});
 
 // ── Fullscreen ─────────────────────────────────────────────────────────────
 $('#rb-fullscreen').addEventListener('click', () => {
@@ -10112,19 +10206,28 @@ function renderPosAccounts() {
     return;
   }
 
+  const canSeeBalance = state.memberIsOwner;
   list.innerHTML = accounts.map(a => {
     const balance = parseFloat(a.current_balance || 0).toFixed(2);
+    const balHtml = canSeeBalance ? balance + cur : '<span class="acct-balance-blur">••••••</span>';
     return `<div class="pos-acct-row">
       <div class="pos-acct-info">
         <div class="pos-acct-name">${escHtml(a.account_name || '')}</div>
         ${a.bank_name ? `<div class="pos-acct-bank">${escHtml(a.bank_name)}</div>` : ''}
       </div>
-      <div class="pos-acct-balance">${balance}${cur}</div>
+      <div class="pos-acct-balance">${balHtml}</div>
     </div>`;
   }).join('');
 
   const total = accounts.reduce((s, a) => s + parseFloat(a.current_balance || 0), 0);
-  $('#pos-account-total').textContent = total.toFixed(2) + cur;
+  const totalEl = $('#pos-account-total');
+  if (canSeeBalance) {
+    totalEl.textContent = total.toFixed(2) + cur;
+    totalEl.classList.remove('acct-balance-blur');
+  } else {
+    totalEl.textContent = '••••••';
+    totalEl.classList.add('acct-balance-blur');
+  }
 }
 
 // ── Business / Branch switcher ────────────────────────────────────────────
@@ -10193,14 +10296,26 @@ async function _bizSwSwitchBiz(bizId) {
   $('#status-branch').innerHTML = `<i class="fa fa-building"></i> ${biz.name}`;
   _bizSwRenderBizList();
   await _bizSwLoadBranches();
+  await loadFeatures();   // re-fetch business features + member permissions for new business
   _bizSwRefreshAll();
 }
 
 function _bizSwRefreshAll() {
   // Clear all module-level caches
-  _posAccountsCache = null;
-  invState.loaded   = false;
-  _dsAllData        = [];
+  _posAccountsCache  = null;
+  invState.loaded    = false;
+  _dsAllData         = [];
+
+  // Clear account caches used by GRN, cheques, finance
+  _grn.accounts      = [];
+  _grn.list          = [];
+  _chq.accounts      = [];
+  _chq.list          = [];
+  _financeAllBills   = [];
+
+  // Clear sales caches
+  _sal.all           = [];
+  _sal.filtered      = [];
 
   // Reset POS carts — they belong to the old business
   state.posTabs          = [];
@@ -10541,7 +10656,7 @@ _posAcctBtn.addEventListener('click', () => _bizSwClose());
 async function openPosSettings() {
   const modal = $('#pos-settings-modal');
   modal.style.display = 'flex';
-  psmShowTab('general');
+  psmShowTab('business');
 
   const [sRes, aRes] = await Promise.all([API.settingsGet(), API.accounts()]);
 
@@ -10554,6 +10669,29 @@ async function openPosSettings() {
   const sel = $('#psm-default-account');
   sel.innerHTML = '<option value="">— None —</option>' +
     accounts.map(a => `<option value="${a.id}">${escHtml(a.account_name)}${a.bank_name ? ' · ' + escHtml(a.bank_name) : ''}</option>`).join('');
+
+  // Business profile
+  $('#psm-biz-name').value  = s.business_name ?? '';
+  $('#psm-currency').value  = s.currency ?? '';
+  $('#psm-timezone').value  = s.timezone ?? '';
+
+  // Branches
+  const multiWh = !!s.multi_warehouse_branch;
+  $('#psm-multi-warehouse').checked = multiWh;
+  $('#psm-branch-rows').style.display = multiWh ? 'flex' : 'none';
+  $('#psm-branch-product').checked = !!s.branch_product_separate;
+  $('#psm-branch-stock').checked   = !!s.branch_stock_separate;
+  $('#psm-branch-pos').checked     = !!s.branch_pos_separate;
+
+  // Tax
+  const taxEnabled = !!s.tax_enabled;
+  $('#psm-tax-enabled').checked = taxEnabled;
+  $('#psm-tax-rate-row').style.display = taxEnabled ? 'block' : 'none';
+  $('#psm-tax-rate').value = s.tax_rate ?? 0;
+
+  // Invoice
+  $('#psm-invoice-prefix').value = s.invoice_prefix ?? 'INV';
+  $('#psm-invoice-next').value   = s.invoice_next_number ?? 1;
 
   // General
   $('#psm-theme').value              = s.display_theme ?? 'inherit';
@@ -10577,10 +10715,24 @@ async function openPosSettings() {
 
 function psmShowTab(tab) {
   $$('.psm-nav-item').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
-  $$('.psm-panel').forEach(p => { p.style.display = p.id === 'psm-tab-' + tab ? 'block' : 'none'; });
+  $$('.psm-panel').forEach(p => {
+    const isActive = p.id === 'psm-tab-' + tab;
+    p.style.display = isActive ? (p.classList.contains('psm-panel--roles') ? 'flex' : 'block') : 'none';
+  });
 }
 
-$$('.psm-nav-item').forEach(btn => btn.addEventListener('click', () => psmShowTab(btn.dataset.tab)));
+$$('.psm-nav-item').forEach(btn => btn.addEventListener('click', () => {
+  psmShowTab(btn.dataset.tab);
+  if (btn.dataset.tab === 'roles' && window.loadRolesForSettings) window.loadRolesForSettings();
+  if (btn.dataset.tab === 'users' && window.loadUsersForSettings) window.loadUsersForSettings();
+}));
+
+$('#psm-multi-warehouse').addEventListener('change', (e) => {
+  $('#psm-branch-rows').style.display = e.target.checked ? 'flex' : 'none';
+});
+$('#psm-tax-enabled').addEventListener('change', (e) => {
+  $('#psm-tax-rate-row').style.display = e.target.checked ? 'block' : 'none';
+});
 
 $('#psm-close').addEventListener('click',  () => { $('#pos-settings-modal').style.display = 'none'; });
 $('#psm-cancel').addEventListener('click', () => { $('#pos-settings-modal').style.display = 'none'; });
@@ -10590,12 +10742,18 @@ $('#pos-settings-modal').addEventListener('click', (e) => {
 
 $('#rb-pos-settings').addEventListener('click', openPosSettings);
 
+$('#psm-add-user-btn')?.addEventListener('click', () => window.openAddModal && window.openAddModal());
+$('#psm-add-role-btn')?.addEventListener('click', () => window.openCreateRoleModal && window.openCreateRoleModal());
+
 $('#psm-save').addEventListener('click', async () => {
   const btn = $('#psm-save');
   btn.disabled = true;
   btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
 
   const payload = {
+    business_name:               $('#psm-biz-name').value.trim(),
+    currency:                    $('#psm-currency').value.trim(),
+    timezone:                    $('#psm-timezone').value.trim(),
     display_theme:               $('#psm-theme').value,
     discount_field_enabled:      $('#psm-discount-field').checked,
     checkout_modal_enabled:      $('#psm-checkout-modal').checked,
@@ -10609,6 +10767,14 @@ $('#psm-save').addEventListener('click', async () => {
     show_business_address:       $('#psm-show-biz-address').checked,
     receipt_header:              $('#psm-receipt-header').value,
     receipt_footer:              $('#psm-receipt-footer').value,
+    multi_warehouse_branch:      $('#psm-multi-warehouse').checked,
+    branch_product_separate:     $('#psm-branch-product').checked,
+    branch_stock_separate:       $('#psm-branch-stock').checked,
+    branch_pos_separate:         $('#psm-branch-pos').checked,
+    tax_enabled:                 $('#psm-tax-enabled').checked,
+    tax_rate:                    parseFloat($('#psm-tax-rate').value) || 0,
+    invoice_prefix:              $('#psm-invoice-prefix').value.trim(),
+    invoice_next_number:         parseInt($('#psm-invoice-next').value) || 1,
   };
 
   const res = await API.settingsUpdate(payload);
@@ -12839,7 +13005,7 @@ function buildRentalCard(r) {
     if (r.account_number)    parts.push(`<span class="lm-muted">${escHtml(r.account_number)}</span>`);
     if (r.account_bank_name) parts.push(`<span class="lm-muted">${escHtml(r.account_bank_name)}</span>`);
     if (r.account_type_name) parts.push(`<span class="lm-muted">${escHtml(r.account_type_name)}</span>`);
-    if (r.account_balance != null) parts.push(`<span class="lm-balance">Bal. ${escHtml(r.account_balance)}</span>`);
+    if (r.account_balance != null) parts.push(state.memberIsOwner ? `<span class="lm-balance">Bal. ${escHtml(r.account_balance)}</span>` : '<span class="lm-balance acct-balance-blur">Bal. ••••••</span>');
     debitHtml = `<span class="lm-info-val lm-acct-val">${parts.join(' · ')}</span>`;
   }
 
@@ -12995,7 +13161,7 @@ function openRentalDetailPage(r) {
     if (r.account_bank_name) acctRows.push(['Bank',         escHtml(r.account_bank_name)]);
     if (r.account_type_name) acctRows.push(['Type',         escHtml(r.account_type_name)]);
     if (r.account_balance != null)
-      acctRows.push(['Balance', `<strong>${escHtml(r.account_balance)}</strong>`]);
+      acctRows.push(['Balance', state.memberIsOwner ? `<strong>${escHtml(r.account_balance)}</strong>` : '<strong class="acct-balance-blur">••••••</strong>']);
     acctSection = `
       <div class="inv-section" style="margin-top:14px">
         <div class="inv-section-title"><i class="fa fa-building-columns"></i> Debit account</div>
@@ -13703,7 +13869,7 @@ function buildLoanCard(l) {
     if (l.account_number) parts.push(`<span class="lm-muted">${escHtml(l.account_number)}</span>`);
     if (l.account_bank_name) parts.push(`<span class="lm-muted">${escHtml(l.account_bank_name)}</span>`);
     if (l.account_type_name) parts.push(`<span class="lm-muted">${escHtml(l.account_type_name)}</span>`);
-    if (l.account_balance != null) parts.push(`<span class="lm-balance">Bal. ${escHtml(l.account_balance)}</span>`);
+    if (l.account_balance != null) parts.push(state.memberIsOwner ? `<span class="lm-balance">Bal. ${escHtml(l.account_balance)}</span>` : '<span class="lm-balance acct-balance-blur">Bal. ••••••</span>');
     debitHtml = `<span class="lm-info-val lm-acct-val">${parts.join(' · ')}</span>`;
   }
 
@@ -13887,7 +14053,7 @@ function openLoanDetailPage(l) {
     if (l.account_bank_name) acctRows.push(['Bank',        escHtml(l.account_bank_name)]);
     if (l.account_type_name) acctRows.push(['Type',        escHtml(l.account_type_name)]);
     if (l.account_balance != null)
-      acctRows.push(['Balance', `<strong>${escHtml(l.account_balance)}</strong>`]);
+      acctRows.push(['Balance', state.memberIsOwner ? `<strong>${escHtml(l.account_balance)}</strong>` : '<strong class="acct-balance-blur">••••••</strong>']);
     acctSection = `
       <div class="inv-section" style="margin-top:14px">
         <div class="inv-section-title"><i class="fa fa-building-columns"></i> Debit account</div>
@@ -20799,6 +20965,903 @@ async function submitDsCreate() {
     showDsError(msg);
   }
 }
+
+// ── User Management ────────────────────────────────────────────────────────
+(function () {
+  let _umUsers = [];         // all users (owner + members)
+  let _umSelected = null;    // currently selected user object
+  let _umEditTarget = null;  // user being edited in modal
+
+  let _umRoles = [];         // business roles from API
+  let _umRoleSelected = null;// currently selected role object
+  let _umRoleEditTarget = null;
+  const ROLE_COLORS = { owner: 'owner', admin: 'admin', manager: 'manager', staff: 'staff' };
+
+  const PRESET_COLORS = ['#3b82f6','#6366f1','#8b5cf6','#0ea5e9','#f59e0b','#f97316','#22c55e','#ef4444','#64748b','#ec4899'];
+
+  // Permission groups — mirrors BusinessMember::availablePermissions() structure
+  // Populated from the API response; defaults here are fallback only
+  let PERM_GROUPS = [];
+
+  function _buildPermGroupsFromApi(apiGroups) {
+    PERM_GROUPS = apiGroups || [];
+  }
+
+  // Flat lookup: key → { label, groupColor, groupIcon }
+  function _permFlat() {
+    const out = {};
+    PERM_GROUPS.forEach(g => g.items.forEach(it => {
+      out[it.key] = { label: it.label, color: g.color, icon: g.icon };
+    }));
+    return out;
+  }
+
+  function _allPermKeys() {
+    const keys = [];
+    PERM_GROUPS.forEach(g => g.items.forEach(it => keys.push(it.key)));
+    return keys;
+  }
+
+  function _initials(name) {
+    return (name || '?').split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase();
+  }
+
+  function _roleBadgeHtml(role) {
+    const cls = `um-role-badge um-role-${role}`;
+    return `<span class="${cls}">${role}</span>`;
+  }
+
+  function _statusBadgeHtml(status) {
+    return `<span class="um-status-badge um-status-${status}">${status}</span>`;
+  }
+
+  // ── Load + render list ──────────────────────────────────────────────────
+
+  async function loadUsersView() {
+    _umSelected = null;
+
+    const res = await API.usersList();
+    if (res.status !== 200) return;
+
+    _umUsers = res.body.data || [];
+    if (res.body.permissions) _buildPermGroupsFromApi(res.body.permissions);
+
+    const count = _umUsers.length;
+    const badge = $('#psm-users-count');
+    if (badge) badge.textContent = `${count} user${count !== 1 ? 's' : ''}`;
+
+    renderUserList('psm-users-list');
+  }
+
+  function renderUserList(listId) {
+    listId = listId || 'um-list';
+    const detailId = listId === 'psm-users-list' ? 'psm-users-detail' : 'um-detail';
+    const list = $(`#${listId}`);
+    if (!list) return;
+    if (_umUsers.length === 0) {
+      list.innerHTML = '<div class="um-loading">No users found.</div>';
+      return;
+    }
+
+    list.innerHTML = _umUsers.map(u => {
+      const isActive = _umSelected && _umSelected.user_id === u.user_id;
+      return `
+        <div class="um-user-card${isActive ? ' active' : ''}" data-uid="${u.user_id}" data-mid="${u.id}">
+          <div class="um-avatar ${ROLE_COLORS[u.role] || 'staff'}">${_initials(u.name)}</div>
+          <div class="um-card-info">
+            <div class="um-card-name">${u.name}</div>
+            <div class="um-card-email">${u.email}</div>
+            <div class="um-card-badges">
+              ${_roleBadgeHtml(u.role)}
+              ${!u.is_owner ? _statusBadgeHtml(u.status) : ''}
+            </div>
+          </div>
+        </div>`;
+    }).join('');
+
+    list.querySelectorAll('.um-user-card').forEach(card => {
+      card.addEventListener('click', () => {
+        const uid = parseInt(card.dataset.uid);
+        const user = _umUsers.find(u => u.user_id === uid);
+        if (user) selectUser(user, card, detailId);
+      });
+    });
+  }
+
+  function selectUser(user, cardEl, detailId) {
+    detailId = detailId || 'um-detail';
+    _umSelected = user;
+    const listId = detailId === 'psm-users-detail' ? 'psm-users-list' : 'um-list';
+    $(`#${listId}`)?.querySelectorAll('.um-user-card').forEach(c => c.classList.remove('active'));
+    if (cardEl) cardEl.classList.add('active');
+    renderUserDetail(user, detailId);
+  }
+
+  // ── Detail panel ────────────────────────────────────────────────────────
+
+  function renderUserDetail(user, detailId) {
+    detailId = detailId || 'um-detail';
+    const detail = $(`#${detailId}`);
+    if (!detail) return;
+
+    const joined = user.joined_at ? new Date(user.joined_at).toLocaleDateString() : '—';
+    const isOwner = user.is_owner;
+
+    // Find the role object to detect full-access (null permissions)
+    const roleObj    = _umRoles.find(r => r.slug === user.role);
+    const fullAccess = isOwner || (roleObj ? roleObj.permissions === null : user.role === 'admin');
+    const activeSet  = new Set(user.permissions || []);
+    const totalPerms = _allPermKeys().length;
+    const grantedN   = fullAccess ? totalPerms : activeSet.size;
+
+    const permHtml = PERM_GROUPS.length === 0 ? '' : `
+      <div class="um-detail-section">
+        <div class="um-detail-section-title">Feature Permissions
+          ${fullAccess ? '<span class="um-full-access-badge"><i class="fa fa-infinity"></i> Full Access</span>' : `<span style="font-size:10px;font-weight:600;color:var(--text-muted);margin-left:6px">${grantedN}/${totalPerms} features</span>`}
+        </div>
+        ${PERM_GROUPS.map(g => {
+          const grantedItems = g.items.filter(it => fullAccess || activeSet.has(it.key));
+          const noneGranted  = grantedItems.length === 0;
+          const allGranted   = grantedItems.length === g.items.length;
+          const itemsHtml = g.items.map(it => {
+            const has = fullAccess || activeSet.has(it.key);
+            return `<div class="um-perm-subrow${has ? ' granted' : ''}">
+              <i class="fa ${has ? 'fa-circle-check' : 'fa-circle'}" style="color:${has ? g.color : 'var(--border)'}"></i>
+              <div class="um-perm-subrow-text">
+                <span class="um-perm-subrow-label">${it.label}</span>
+                ${it.desc ? `<span class="um-perm-subrow-desc">${it.desc}</span>` : ''}
+              </div>
+            </div>`;
+          }).join('');
+          return `<div class="um-perm-group-card${noneGranted ? ' none' : ''}">
+            <div class="um-perm-group-header">
+              <div class="um-perm-group-icon" style="background:${noneGranted ? 'var(--surface3)' : g.color}"><i class="fa ${g.icon}"></i></div>
+              <div class="um-perm-group-label">${g.label}</div>
+              <div class="um-perm-group-badge">
+                ${fullAccess ? '<span class="um-perm-badge full"><i class="fa fa-infinity"></i> Full</span>'
+                  : noneGranted ? '<span class="um-perm-badge none">No access</span>'
+                  : allGranted  ? '<span class="um-perm-badge full">All</span>'
+                  : `<span class="um-perm-badge partial">${grantedItems.length}/${g.items.length}</span>`}
+              </div>
+            </div>
+            <div class="um-perm-subitems">${itemsHtml}</div>
+          </div>`;
+        }).join('')}
+      </div>`;
+
+    detail.innerHTML = `
+      <div class="um-detail-header">
+        <div class="um-detail-avatar ${ROLE_COLORS[user.role] || 'staff'}">${_initials(user.name)}</div>
+        <div class="um-detail-meta">
+          <div class="um-detail-name">${user.name}</div>
+          <div class="um-detail-email">${user.email}</div>
+          <div class="um-detail-joined"><i class="fa fa-calendar-days"></i> Joined ${joined}</div>
+        </div>
+        <div>${_roleBadgeHtml(user.role)}</div>
+      </div>
+
+      <div class="um-detail-section">
+        <div class="um-detail-section-title">Role</div>
+        <div style="font-size:13px;color:var(--text)">${user.role === 'owner' ? 'Business Owner — full access, cannot be changed.' : user.role.charAt(0).toUpperCase() + user.role.slice(1)}</div>
+      </div>
+
+      ${permHtml}
+
+      ${isOwner ? '' : `
+        <div class="um-detail-actions">
+          <button class="btn-primary" id="um-open-edit"><i class="fa fa-pen"></i> Edit Role &amp; Permissions</button>
+          <button class="um-remove-btn" id="um-open-remove"><i class="fa fa-user-minus"></i> Remove</button>
+        </div>`}
+    `;
+
+    if (!isOwner) {
+      detail.querySelector('#um-open-edit')?.addEventListener('click', () => openEditModal(user));
+      detail.querySelector('#um-open-remove')?.addEventListener('click', () => removeUser(user));
+    }
+  }
+
+  // ── Add User Modal ──────────────────────────────────────────────────────
+
+  async function openAddModal() {
+    const modal = $('#um-add-modal');
+    if (!modal) return;
+    $('#um-add-email').value = '';
+    $('#um-add-error').style.display = 'none';
+
+    // Populate role select from business roles (load if not yet fetched)
+    if (_umRoles.length === 0) {
+      const res = await API.rolesList();
+      if (res.status === 200) {
+        _umRoles = res.body.data || [];
+        if (res.body.permissions) _buildPermGroupsFromApi(res.body.permissions);
+      }
+    }
+    const roleSelect = $('#um-add-role');
+    roleSelect.innerHTML = _umRoles
+      .filter(r => r.slug !== 'owner')
+      .map(r => `<option value="${r.slug}">${r.name}</option>`)
+      .join('') || '<option value="staff">Staff</option>';
+    roleSelect.value = 'staff';
+
+    // Pre-fill permissions from selected role
+    const selectedRole = _umRoles.find(r => r.slug === roleSelect.value);
+    _renderPermGrid('um-add-perm-grid', selectedRole?.permissions || [], roleSelect.value, selectedRole);
+
+    roleSelect.onchange = () => {
+      const r = _umRoles.find(x => x.slug === roleSelect.value);
+      _renderPermGrid('um-add-perm-grid', r?.permissions || [], roleSelect.value, r);
+    };
+
+    modal.style.display = 'flex';
+    setTimeout(() => $('#um-add-email')?.focus(), 80);
+  }
+
+  function closeAddModal() { const m = $('#um-add-modal'); if (m) m.style.display = 'none'; }
+
+  async function submitAddUser() {
+    const email = $('#um-add-email')?.value?.trim();
+    const role  = $('#um-add-role')?.value;
+    const perms = _collectPerms('um-add-perm-grid');
+    const errEl = $('#um-add-error');
+
+    if (!email) { _showModalErr(errEl, 'Please enter an email address.'); return; }
+    errEl.style.display = 'none';
+    const btn = $('#um-add-save');
+    btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Adding…';
+
+    const res = await API.usersAdd({ email, role, permissions: perms });
+    btn.disabled = false; btn.innerHTML = '<i class="fa fa-check"></i> Add User';
+
+    if (res.status === 201) {
+      closeAddModal();
+      await loadUsersView();
+      const newUser = _umUsers.find(u => u.email === email);
+      if (newUser) {
+        const inSettings = $('#pos-settings-modal')?.style.display !== 'none';
+        const listId   = inSettings ? 'psm-users-list' : 'um-list';
+        const detailId = inSettings ? 'psm-users-detail' : 'um-detail';
+        const card = $(`#${listId} [data-uid="${newUser.user_id}"]`);
+        selectUser(newUser, card, detailId);
+      }
+    } else {
+      _showModalErr(errEl, res.body?.message || 'Failed to add user.');
+    }
+  }
+
+  // ── Edit User Modal ─────────────────────────────────────────────────────
+
+  function openEditModal(user) {
+    _umEditTarget = user;
+    const modal = $('#um-edit-modal');
+    if (!modal) return;
+
+    const info = $('#um-edit-user-info');
+    if (info) {
+      info.innerHTML = `
+        <div class="um-avatar ${ROLE_COLORS[user.role] || 'staff'}" style="width:32px;height:32px;font-size:11px">${_initials(user.name)}</div>
+        <div><div class="um-edit-info-name">${user.name}</div><div class="um-edit-info-email">${user.email}</div></div>`;
+    }
+
+    const roleSelect = $('#um-edit-role');
+    roleSelect.innerHTML = _umRoles
+      .filter(r => r.slug !== 'owner')
+      .map(r => `<option value="${r.slug}">${r.name}</option>`)
+      .join('') || '<option value="staff">Staff</option>';
+    roleSelect.value = user.role;
+    $('#um-edit-error').style.display = 'none';
+
+    const currentRoleObj = _umRoles.find(r => r.slug === user.role);
+    _renderPermGrid('um-edit-perm-grid', user.permissions || [], user.role, currentRoleObj);
+
+    roleSelect.onchange = () => {
+      const r = _umRoles.find(x => x.slug === roleSelect.value);
+      _renderPermGrid('um-edit-perm-grid', r?.permissions || [], roleSelect.value, r);
+    };
+
+    modal.style.display = 'flex';
+  }
+
+  function closeEditModal() { const m = $('#um-edit-modal'); if (m) m.style.display = 'none'; }
+
+  async function submitEditUser() {
+    if (!_umEditTarget) return;
+    const role  = $('#um-edit-role')?.value;
+    const perms = _collectPerms('um-edit-perm-grid');
+    const errEl = $('#um-edit-error');
+    errEl.style.display = 'none';
+
+    const btn = $('#um-edit-save');
+    btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
+
+    const res = await API.usersUpdate(_umEditTarget.id, { role, permissions: perms });
+    btn.disabled = false; btn.innerHTML = '<i class="fa fa-check"></i> Save Changes';
+
+    if (res.status === 200) {
+      closeEditModal();
+      await loadUsersView();
+      const updated = _umUsers.find(u => u.id === _umEditTarget.id);
+      if (updated) {
+        const inSettings = $('#pos-settings-modal')?.style.display !== 'none';
+        const listId   = inSettings ? 'psm-users-list' : 'um-list';
+        const detailId = inSettings ? 'psm-users-detail' : 'um-detail';
+        const card = $(`#${listId} [data-uid="${updated.user_id}"]`);
+        selectUser(updated, card, detailId);
+      }
+    } else {
+      _showModalErr(errEl, res.body?.message || 'Failed to save changes.');
+    }
+  }
+
+  // ── Remove ──────────────────────────────────────────────────────────────
+
+  async function removeUser(user) {
+    if (!confirm(`Remove ${user.name} (${user.email}) from this business? They will lose access immediately.`)) return;
+
+    const res = await API.usersRemove(user.id);
+    if (res.status === 200) {
+      await loadUsersView();
+      // Clear detail in the active context
+      const inSettings = $('#pos-settings-modal')?.style.display !== 'none';
+      const detailId = inSettings ? 'psm-users-detail' : 'um-detail';
+      const detail = $(`#${detailId}`);
+      if (detail) detail.innerHTML = '<div class="um-detail-empty"><i class="fa fa-user-shield"></i><p>Select a user to view their role and permissions</p></div>';
+    } else {
+      alert(res.body?.message || 'Failed to remove user.');
+    }
+  }
+
+  // ── Helpers ─────────────────────────────────────────────────────────────
+
+  // _renderPermGrid: tab-based permission groups in modals
+  function _renderPermGrid(containerId, activePerms, roleSlug, roleObj) {
+    const grid = $(`#${containerId}`);
+    if (!grid) return;
+    if (PERM_GROUPS.length === 0) { grid.innerHTML = ''; return; }
+    const fullAccess = roleObj ? roleObj.permissions === null : roleSlug === 'admin';
+    const activeSet  = new Set(activePerms || []);
+    grid.classList.remove('um-perm-grid--groups');
+    grid.classList.add('um-perm-grid--tabs');
+
+    // Build tab bar
+    const tabsHtml = PERM_GROUPS.map((g, i) => {
+      const grantedN = g.items.filter(it => fullAccess || activeSet.has(it.key)).length;
+      const dot = grantedN > 0
+        ? `<span class="um-ptab-dot" style="background:${g.color}"></span>`
+        : `<span class="um-ptab-dot" style="background:var(--border)"></span>`;
+      return `<button class="um-ptab${i === 0 ? ' active' : ''}" data-tab="${g.key}" style="--tab-color:${g.color}">
+        <i class="fa ${g.icon}"></i>
+        <span>${g.label}</span>
+        ${dot}
+      </button>`;
+    }).join('');
+
+    // Build panels (all groups, one visible at a time)
+    const panelsHtml = PERM_GROUPS.map((g, i) => {
+      const allOn  = g.items.every(it => fullAccess || activeSet.has(it.key));
+      const someOn = g.items.some(it =>  fullAccess || activeSet.has(it.key));
+      const itemsHtml = g.items.map(it => {
+        const on = fullAccess || activeSet.has(it.key);
+        return `
+          <div class="um-perm-toggle${on ? ' on' : ''}${fullAccess ? ' locked' : ''}" data-perm="${it.key}" data-group="${g.key}" data-color="${g.color}">
+            <div class="um-perm-toggle-dot" style="background:${on ? g.color : 'var(--border)'}"></div>
+            <div class="um-perm-toggle-text">
+              <span class="um-perm-toggle-label">${it.label}</span>
+              ${it.desc ? `<span class="um-perm-toggle-desc">${it.desc}</span>` : ''}
+            </div>
+            <div class="um-perm-toggle-switch${on ? ' on' : ''}${fullAccess ? ' locked' : ''}">
+              <div class="um-perm-toggle-thumb"></div>
+            </div>
+            <input type="checkbox" ${on ? 'checked' : ''} ${fullAccess ? 'disabled' : ''} style="display:none">
+          </div>`;
+      }).join('');
+
+      const selectAllHtml = fullAccess ? '' : `
+        <button class="um-perm-select-all${allOn ? ' active' : ''}" data-group="${g.key}">
+          ${allOn ? '<i class="fa fa-square-check"></i> All' : someOn ? '<i class="fa fa-square-minus"></i> Some' : '<i class="fa fa-square"></i> None'}
+        </button>`;
+
+      return `
+        <div class="um-ptab-panel${i === 0 ? ' active' : ''}" data-panel="${g.key}">
+          <div class="um-ptab-panel-header" style="border-left:3px solid ${g.color}">
+            <div class="um-perm-section-icon" style="background:${g.color}"><i class="fa ${g.icon}"></i></div>
+            <span class="um-perm-section-title">${g.label}</span>
+            ${selectAllHtml}
+          </div>
+          <div class="um-perm-section-items">${itemsHtml}</div>
+        </div>`;
+    }).join('');
+
+    grid.innerHTML = `
+      <div class="um-ptab-bar">${tabsHtml}</div>
+      <div class="um-ptab-content">${panelsHtml}</div>`;
+
+    // Tab switching
+    grid.querySelectorAll('.um-ptab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        grid.querySelectorAll('.um-ptab').forEach(t => t.classList.remove('active'));
+        grid.querySelectorAll('.um-ptab-panel').forEach(p => p.classList.remove('active'));
+        tab.classList.add('active');
+        grid.querySelector(`.um-ptab-panel[data-panel="${tab.dataset.tab}"]`)?.classList.add('active');
+      });
+    });
+
+    if (!fullAccess) {
+      // Toggle all in a group
+      grid.querySelectorAll('.um-perm-select-all').forEach(btn => {
+        btn.addEventListener('click', e => {
+          e.stopPropagation();
+          const gKey  = btn.dataset.group;
+          const panel = grid.querySelector(`.um-ptab-panel[data-panel="${gKey}"]`);
+          const items = panel.querySelectorAll('.um-perm-toggle:not(.locked)');
+          const allNowOn = Array.from(items).every(i => i.classList.contains('on'));
+          const setTo = !allNowOn;
+          const gDef  = PERM_GROUPS.find(g => g.key === gKey);
+          items.forEach(item => {
+            const cb  = item.querySelector('input[type=checkbox]');
+            const sw  = item.querySelector('.um-perm-toggle-switch');
+            const dot = item.querySelector('.um-perm-toggle-dot');
+            cb.checked = setTo;
+            item.classList.toggle('on', setTo);
+            sw.classList.toggle('on', setTo);
+            if (dot) dot.style.background = setTo ? (gDef?.color || '#64748b') : 'var(--border)';
+          });
+          btn.classList.toggle('active', setTo);
+          btn.innerHTML = setTo
+            ? '<i class="fa fa-square-check"></i> All'
+            : '<i class="fa fa-square"></i> None';
+          _updateTabDot(grid, gKey, setTo || false, gDef?.color);
+        });
+      });
+
+      // Toggle individual item
+      grid.querySelectorAll('.um-perm-toggle:not(.locked)').forEach(item => {
+        item.addEventListener('click', () => {
+          const cb    = item.querySelector('input[type=checkbox]');
+          const sw    = item.querySelector('.um-perm-toggle-switch');
+          const dot   = item.querySelector('.um-perm-toggle-dot');
+          const color = item.dataset.color;
+          cb.checked = !cb.checked;
+          item.classList.toggle('on', cb.checked);
+          sw.classList.toggle('on',  cb.checked);
+          if (dot) dot.style.background = cb.checked ? color : 'var(--border)';
+
+          const gKey  = item.dataset.group;
+          const panel = grid.querySelector(`.um-ptab-panel[data-panel="${gKey}"]`);
+          const allBtn = panel?.querySelector('.um-perm-select-all');
+          if (allBtn) {
+            const sItems = panel.querySelectorAll('.um-perm-toggle:not(.locked)');
+            const allOn  = Array.from(sItems).every(i => i.classList.contains('on'));
+            const someOn = Array.from(sItems).some(i =>  i.classList.contains('on'));
+            allBtn.classList.toggle('active', allOn);
+            allBtn.innerHTML = allOn
+              ? '<i class="fa fa-square-check"></i> All'
+              : someOn ? '<i class="fa fa-square-minus"></i> Some' : '<i class="fa fa-square"></i> None';
+            const gDef = PERM_GROUPS.find(g => g.key === gKey);
+            _updateTabDot(grid, gKey, someOn || allOn, gDef?.color);
+          }
+        });
+      });
+    }
+  }
+
+  function _updateTabDot(grid, gKey, hasAny, color) {
+    const tab = grid.querySelector(`.um-ptab[data-tab="${gKey}"] .um-ptab-dot`);
+    if (tab) tab.style.background = hasAny ? (color || 'var(--accent)') : 'var(--border)';
+  }
+
+  function _collectPerms(containerId) {
+    const grid = $(`#${containerId}`);
+    if (!grid) return [];
+    return Array.from(grid.querySelectorAll('.um-perm-toggle.on:not(.locked)'))
+      .map(item => item.dataset.perm || item.closest('[data-perm]')?.dataset.perm)
+      .filter(Boolean);
+  }
+
+  function _showModalErr(el, msg) {
+    if (!el) return;
+    el.textContent = msg;
+    el.style.display = 'block';
+  }
+
+  // ── Roles view ───────────────────────────────────────────────────────────
+
+  async function loadRolesView() {
+    _umRoleSelected = null;
+
+    const [rolesRes, usersRes] = await Promise.all([API.rolesList(), API.usersList()]);
+
+    if (rolesRes.status !== 200) return;
+
+    _umRoles = rolesRes.body.data || [];
+    if (rolesRes.body.permissions) _buildPermGroupsFromApi(rolesRes.body.permissions);
+    if (usersRes.status === 200) _umUsers = usersRes.body.data || [];
+
+    const badge = $('#psm-role-count');
+    if (badge) badge.textContent = `${_umRoles.length} role${_umRoles.length !== 1 ? 's' : ''}`;
+
+    renderRoleList('psm-role-list');
+  }
+
+  function renderRoleList(listId) {
+    listId = listId || 'um-role-list';
+    const detailId = listId === 'psm-role-list' ? 'psm-role-detail' : 'um-role-detail';
+    const list = $(`#${listId}`);
+    if (!list) return;
+    if (_umRoles.length === 0) { list.innerHTML = '<div class="um-loading">No roles found.</div>'; return; }
+
+    const totalPerms = _allPermKeys().length || 26;
+    list.innerHTML = _umRoles.map(r => {
+      const isActive   = _umRoleSelected && _umRoleSelected.id === r.id;
+      const fullAccess = r.permissions === null;
+      const grantedN   = fullAccess ? totalPerms : (r.permissions || []).length;
+      const permLabel  = fullAccess ? 'Full access' : `${grantedN} of ${totalPerms} modules`;
+      const barPct     = Math.round((grantedN / totalPerms) * 100);
+      return `
+        <div class="um-role-card${isActive ? ' active' : ''}" data-role-id="${r.id}">
+          <div class="um-role-color-bar" style="background:${r.color}"></div>
+          <div class="um-role-card-inner">
+            <div class="um-role-card-top">
+              <span class="um-role-card-name">${r.name}</span>
+              ${r.is_system ? '<span class="um-system-badge">system</span>' : ''}
+              <span class="um-role-member-count" style="margin-left:auto">${r.member_count} ${r.member_count===1?'member':'members'}</span>
+            </div>
+            <div class="um-role-card-desc">${r.description || permLabel}</div>
+            <div class="um-role-perm-bar">
+              <div class="um-role-perm-bar-fill" style="width:${barPct}%;background:${r.color}"></div>
+            </div>
+            <div class="um-role-perm-label">${permLabel}</div>
+          </div>
+        </div>`;
+    }).join('');
+
+    list.querySelectorAll('.um-role-card').forEach(card => {
+      card.addEventListener('click', () => {
+        const id   = parseInt(card.dataset.roleId);
+        const role = _umRoles.find(r => r.id === id);
+        if (role) selectRole(role, card, detailId);
+      });
+    });
+  }
+
+  function selectRole(role, cardEl, detailId) {
+    detailId = detailId || 'um-role-detail';
+    _umRoleSelected = role;
+    const listId = detailId === 'psm-role-detail' ? 'psm-role-list' : 'um-role-list';
+    $(`#${listId}`)?.querySelectorAll('.um-role-card').forEach(c => c.classList.remove('active'));
+    if (cardEl) cardEl.classList.add('active');
+    renderRoleDetail(role, detailId);
+  }
+
+  function renderRoleDetail(role, detailId) {
+    detailId = detailId || 'um-role-detail';
+    const detail = $(`#${detailId}`);
+    if (!detail) return;
+
+    const fullAccess = role.permissions === null;
+    const activeSet  = new Set(role.permissions || []);
+    const totalPerms = _allPermKeys().length;
+    const grantedN   = fullAccess ? totalPerms : (role.permissions || []).length;
+
+    // Grouped permission cards
+    const permCardsHtml = PERM_GROUPS.map(g => {
+      const grantedItems = g.items.filter(it => fullAccess || activeSet.has(it.key));
+      const allGranted   = grantedItems.length === g.items.length;
+      const noneGranted  = grantedItems.length === 0;
+
+      const itemsHtml = g.items.map(it => {
+        const has = fullAccess || activeSet.has(it.key);
+        return `
+          <div class="um-perm-subrow${has ? ' granted' : ''}">
+            <i class="fa ${has ? 'fa-circle-check' : 'fa-circle'}" style="color:${has ? g.color : 'var(--border)'}"></i>
+            <div class="um-perm-subrow-text">
+              <span class="um-perm-subrow-label">${it.label}</span>
+              ${it.desc ? `<span class="um-perm-subrow-desc">${it.desc}</span>` : ''}
+            </div>
+          </div>`;
+      }).join('');
+
+      return `
+        <div class="um-perm-group-card${noneGranted ? ' none' : ''}">
+          <div class="um-perm-group-header">
+            <div class="um-perm-group-icon" style="background:${noneGranted ? 'var(--surface3)' : g.color}">
+              <i class="fa ${g.icon}"></i>
+            </div>
+            <div class="um-perm-group-label">${g.label}</div>
+            <div class="um-perm-group-badge">
+              ${fullAccess
+                ? '<span class="um-perm-badge full"><i class="fa fa-infinity"></i> Full</span>'
+                : noneGranted
+                  ? '<span class="um-perm-badge none">No access</span>'
+                  : allGranted
+                    ? '<span class="um-perm-badge full">All</span>'
+                    : `<span class="um-perm-badge partial">${grantedItems.length}/${g.items.length}</span>`}
+            </div>
+          </div>
+          <div class="um-perm-subitems">${itemsHtml}</div>
+        </div>`;
+    }).join('');
+
+    // Members using this role (from _umUsers)
+    const members = _umUsers.filter(u => u.role === role.slug && !u.is_owner);
+    const membersHtml = members.length === 0
+      ? '<div class="um-role-no-members"><i class="fa fa-user-slash"></i> No members assigned to this role.</div>'
+      : members.map(u => `
+          <div class="um-role-member-row">
+            <div class="um-role-member-avatar" style="background:${role.color}">${_initials(u.name)}</div>
+            <div class="um-role-member-info">
+              <div class="um-role-member-name">${u.name}</div>
+              <div class="um-role-member-email">${u.email}</div>
+            </div>
+          </div>`).join('');
+
+    detail.innerHTML = `
+      <div class="um-role-detail-header">
+        <div class="um-role-detail-circle" style="background:${role.color}">
+          <i class="fa fa-shield-halved"></i>
+        </div>
+        <div class="um-role-detail-meta">
+          <div class="um-role-detail-name">
+            ${role.name}
+            ${role.is_system ? '<span class="um-system-badge">system</span>' : ''}
+          </div>
+          <div class="um-role-detail-desc">${role.description || (fullAccess ? 'Full access to all features' : `${grantedN} of ${totalPerms} features enabled`)}</div>
+          <div class="um-role-detail-stat"><i class="fa fa-users"></i> ${role.member_count} ${role.member_count===1?'member':'members'}</div>
+        </div>
+        <button class="um-role-edit-btn" id="um-rd-edit">
+          <i class="fa fa-pen"></i> Edit Role
+        </button>
+      </div>
+
+      <div class="um-detail-section">
+        <div class="um-detail-section-title">
+          Module Access
+          ${fullAccess ? '<span class="um-full-access-badge"><i class="fa fa-infinity"></i> Full Access</span>' : ''}
+        </div>
+        <div class="um-perm-cards">${permCardsHtml}</div>
+      </div>
+
+      <div class="um-detail-section">
+        <div class="um-detail-section-title">Members with this role (${members.length})</div>
+        <div class="um-role-members-list">${membersHtml}</div>
+      </div>`;
+
+    detail.querySelector('#um-rd-edit')?.addEventListener('click', () => openEditRoleModal(role));
+  }
+
+  // ── Role Modals ─────────────────────────────────────────────────────────
+
+  function _renderColorPicker(containerId, selectedColor) {
+    const wrap = $(`#${containerId}`);
+    if (!wrap) return;
+    wrap.innerHTML = PRESET_COLORS.map(c => `
+      <div class="um-color-swatch${c === selectedColor ? ' selected' : ''}" data-color="${c}"
+           style="background:${c}" title="${c}"></div>`).join('');
+    wrap.querySelectorAll('.um-color-swatch').forEach(sw => {
+      sw.addEventListener('click', () => {
+        wrap.querySelectorAll('.um-color-swatch').forEach(s => s.classList.remove('selected'));
+        sw.classList.add('selected');
+      });
+    });
+  }
+
+  function _getSelectedColor(containerId) {
+    return $(`#${containerId} .um-color-swatch.selected`)?.dataset?.color || '#64748b';
+  }
+
+  // Create Role
+  function openCreateRoleModal() {
+    const modal = $('#um-role-create-modal');
+    if (!modal) return;
+    $('#um-rc-name').value = '';
+    $('#um-rc-desc').value = '';
+    $('#um-rc-error').style.display = 'none';
+    _renderColorPicker('um-rc-colors', '#64748b');
+    _renderPermGrid('um-rc-perm-grid', [], 'staff', { permissions: [] });
+    modal.style.display = 'flex';
+    setTimeout(() => $('#um-rc-name')?.focus(), 80);
+  }
+
+  function closeCreateRoleModal() { const m = $('#um-role-create-modal'); if (m) m.style.display = 'none'; }
+
+  async function submitCreateRole() {
+    const name  = $('#um-rc-name')?.value?.trim();
+    const desc  = $('#um-rc-desc')?.value?.trim();
+    const color = _getSelectedColor('um-rc-colors');
+    const perms = _collectPerms('um-rc-perm-grid');
+    const errEl = $('#um-rc-error');
+    if (!name) { _showModalErr(errEl, 'Role name is required.'); return; }
+    errEl.style.display = 'none';
+
+    const btn = $('#um-rc-save');
+    btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Creating…';
+
+    const res = await API.rolesCreate({ name, description: desc, color, permissions: perms });
+    btn.disabled = false; btn.innerHTML = '<i class="fa fa-check"></i> Create Role';
+
+    if (res.status === 201) {
+      closeCreateRoleModal();
+      await loadRolesView();
+      const newRole = _umRoles.find(r => r.id === res.body.data?.id);
+      if (newRole) {
+        const inSettings = $('#pos-settings-modal')?.style.display !== 'none';
+        const listId   = inSettings ? 'psm-role-list' : 'um-role-list';
+        const detailId = inSettings ? 'psm-role-detail' : 'um-role-detail';
+        const card = $(`#${listId} [data-role-id="${newRole.id}"]`);
+        selectRole(newRole, card, detailId);
+      }
+    } else {
+      _showModalErr(errEl, res.body?.message || 'Failed to create role.');
+    }
+  }
+
+  // Edit Role
+  function openEditRoleModal(role) {
+    _umRoleEditTarget = role;
+    const modal = $('#um-role-edit-modal');
+    if (!modal) return;
+
+    // Name field: disabled for system roles
+    const nameWrap = $('#um-re-name-wrap');
+    $('#um-re-name').value    = role.name;
+    $('#um-re-name').disabled = role.is_system;
+    if (nameWrap) nameWrap.style.opacity = role.is_system ? '.5' : '1';
+
+    $('#um-re-desc').value = role.description || '';
+    $('#um-re-error').style.display = 'none';
+
+    _renderColorPicker('um-re-colors', role.color);
+
+    // Admin-note + perm grid
+    const adminNote = $('#um-re-admin-note');
+    if (adminNote) adminNote.style.display = role.permissions === null ? 'block' : 'none';
+    _renderPermGrid('um-re-perm-grid', role.permissions || [], role.slug, role);
+
+    // Delete button only for custom roles
+    const delBtn = $('#um-re-delete');
+    if (delBtn) delBtn.style.display = role.is_system ? 'none' : 'inline-flex';
+
+    modal.style.display = 'flex';
+  }
+
+  function closeEditRoleModal() { const m = $('#um-role-edit-modal'); if (m) m.style.display = 'none'; }
+
+  async function submitEditRole() {
+    if (!_umRoleEditTarget) return;
+    const name  = $('#um-re-name')?.value?.trim();
+    const desc  = $('#um-re-desc')?.value?.trim();
+    const color = _getSelectedColor('um-re-colors');
+    const perms = _umRoleEditTarget.permissions === null ? null : _collectPerms('um-re-perm-grid');
+    const errEl = $('#um-re-error');
+
+    if (!_umRoleEditTarget.is_system && !name) { _showModalErr(errEl, 'Role name is required.'); return; }
+    errEl.style.display = 'none';
+
+    const payload = { color, description: desc, permissions: perms };
+    if (!_umRoleEditTarget.is_system) payload.name = name;
+
+    const btn = $('#um-re-save');
+    btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
+
+    const res = await API.rolesUpdate(_umRoleEditTarget.id, payload);
+    btn.disabled = false; btn.innerHTML = '<i class="fa fa-check"></i> Save Changes';
+
+    if (res.status === 200) {
+      closeEditRoleModal();
+      await loadRolesView();
+      const updated = _umRoles.find(r => r.id === _umRoleEditTarget.id);
+      if (updated) {
+        const inSettings = $('#pos-settings-modal')?.style.display !== 'none';
+        const listId   = inSettings ? 'psm-role-list' : 'um-role-list';
+        const detailId = inSettings ? 'psm-role-detail' : 'um-role-detail';
+        const card = $(`#${listId} [data-role-id="${updated.id}"]`);
+        selectRole(updated, card, detailId);
+      }
+    } else {
+      _showModalErr(errEl, res.body?.message || 'Failed to save role.');
+    }
+  }
+
+  async function deleteRole(role) {
+    if (!confirm(`Delete the "${role.name}" role? Members using it will be moved to Staff.`)) return;
+    const res = await API.rolesDelete(role.id);
+    if (res.status === 200) {
+      closeEditRoleModal();
+      await loadRolesView();
+      // Clear detail in the active context
+      const inSettings = $('#pos-settings-modal')?.style.display !== 'none';
+      const detailId = inSettings ? 'psm-role-detail' : 'um-role-detail';
+      const detail = $(`#${detailId}`);
+      if (detail) detail.innerHTML = '<div class="um-detail-empty"><i class="fa fa-shield-halved"></i><p>Select a role to view and edit its permissions</p></div>';
+    } else {
+      alert(res.body?.message || 'Failed to delete role.');
+    }
+  }
+
+  // ── Event listeners ─────────────────────────────────────────────────────
+
+  // Add user modal
+  $('#um-add-save')?.addEventListener('click',   submitAddUser);
+  $('#um-add-cancel')?.addEventListener('click', closeAddModal);
+  $('#um-add-close')?.addEventListener('click',  closeAddModal);
+  $('#um-add-modal')?.addEventListener('click',  e => { if (e.target === e.currentTarget) closeAddModal(); });
+
+  // Edit user modal
+  $('#um-edit-save')?.addEventListener('click',   submitEditUser);
+  $('#um-edit-cancel')?.addEventListener('click', closeEditModal);
+  $('#um-edit-close')?.addEventListener('click',  closeEditModal);
+  $('#um-edit-modal')?.addEventListener('click',  e => { if (e.target === e.currentTarget) closeEditModal(); });
+
+  // Create role modal
+  $('#um-rc-save')?.addEventListener('click',   submitCreateRole);
+  $('#um-rc-cancel')?.addEventListener('click', closeCreateRoleModal);
+  $('#um-rc-close')?.addEventListener('click',  closeCreateRoleModal);
+  $('#um-role-create-modal')?.addEventListener('click', e => { if (e.target === e.currentTarget) closeCreateRoleModal(); });
+
+  // Edit role modal
+  $('#um-re-save')?.addEventListener('click',   submitEditRole);
+  $('#um-re-cancel')?.addEventListener('click', closeEditRoleModal);
+  $('#um-re-close')?.addEventListener('click',  closeEditRoleModal);
+  $('#um-re-delete')?.addEventListener('click', () => { if (_umRoleEditTarget) deleteRole(_umRoleEditTarget); });
+  $('#um-role-edit-modal')?.addEventListener('click', e => { if (e.target === e.currentTarget) closeEditRoleModal(); });
+
+  // Expose loaders so activateTab can call them
+  window.loadUsersView = loadUsersView;
+
+  // Expose for Settings modal Users tab
+  window.loadUsersForSettings = async function() {
+    const list   = $('#psm-users-list');
+    const detail = $('#psm-users-detail');
+    if (!list) return;
+    list.innerHTML = '<div class="um-loading"><i class="fa fa-spinner fa-spin"></i> Loading users…</div>';
+    if (detail) detail.innerHTML = '<div class="um-detail-empty"><i class="fa fa-user-shield"></i><p>Select a user to view their role and permissions</p></div>';
+    _umSelected = null;
+
+    const [usersRes, rolesRes] = await Promise.all([API.usersList(), API.rolesList()]);
+    if (usersRes.status !== 200) {
+      list.innerHTML = `<div class="um-loading" style="color:#dc2626"><i class="fa fa-triangle-exclamation"></i> ${usersRes.body?.message || 'Failed to load users.'}</div>`;
+      return;
+    }
+    _umUsers = usersRes.body.data || [];
+    if (usersRes.body.permissions) _buildPermGroupsFromApi(usersRes.body.permissions);
+    if (rolesRes.status === 200) {
+      _umRoles = rolesRes.body.data || [];
+      if (rolesRes.body.permissions) _buildPermGroupsFromApi(rolesRes.body.permissions);
+    }
+
+    const count = _umUsers.length;
+    const badge = $('#psm-users-count');
+    if (badge) badge.textContent = `${count} user${count !== 1 ? 's' : ''}`;
+
+    renderUserList('psm-users-list');
+  };
+
+  window.openAddModal = openAddModal;
+
+  // Expose for Settings modal Roles tab
+  window.loadRolesForSettings = async function() {
+    const list   = $('#psm-role-list');
+    const detail = $('#psm-role-detail');
+    if (!list) return;
+    list.innerHTML = '<div class="um-loading"><i class="fa fa-spinner fa-spin"></i> Loading roles…</div>';
+    if (detail) detail.innerHTML = '<div class="um-detail-empty"><i class="fa fa-shield-halved"></i><p>Select a role to view its permissions</p></div>';
+
+    const [rolesRes, usersRes] = await Promise.all([API.rolesList(), API.usersList()]);
+    if (rolesRes.status !== 200) {
+      list.innerHTML = `<div class="um-loading" style="color:#dc2626"><i class="fa fa-triangle-exclamation"></i> ${rolesRes.body?.message || 'Failed to load roles.'}</div>`;
+      return;
+    }
+    _umRoles = rolesRes.body.data || [];
+    if (rolesRes.body.permissions) _buildPermGroupsFromApi(rolesRes.body.permissions);
+    if (usersRes.status === 200) _umUsers = usersRes.body.data || [];
+
+    const badge = $('#psm-role-count');
+    if (badge) badge.textContent = `${_umRoles.length} role${_umRoles.length !== 1 ? 's' : ''}`;
+
+    renderRoleList('psm-role-list');
+  };
+
+  window.openCreateRoleModal = openCreateRoleModal;
+}());
 
 // ── Boot ───────────────────────────────────────────────────────────────────
 init();

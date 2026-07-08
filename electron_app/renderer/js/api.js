@@ -306,6 +306,19 @@ const API = (() => {
     rstDeleteTable:         (id)        => request('DELETE', `/restaurant/tables/${id}`),
     rstSaveTablePositions:  (positions) => request('POST',   '/restaurant/tables/positions', { positions }),
 
+    // User Management
+    memberMe:    ()                  => request('GET',    '/me'),
+    usersList:   ()                  => request('GET',    '/users'),
+    usersAdd:    (body)              => request('POST',   '/users', body),
+    usersUpdate: (memberId, body)    => request('PUT',    `/users/${memberId}`, body),
+    usersRemove: (memberId)          => request('DELETE', `/users/${memberId}`),
+
+    // Role Management
+    rolesList:   ()               => request('GET',    '/roles'),
+    rolesCreate: (body)           => request('POST',   '/roles', body),
+    rolesUpdate: (id, body)       => request('PUT',    `/roles/${id}`, body),
+    rolesDelete: (id)             => request('DELETE', `/roles/${id}`),
+
     // Service POS
     servicePosCatalog:  (q, catId) => request('GET',  `/service/pos/catalog?q=${encodeURIComponent(q || '')}&category=${catId || ''}`),
     servicePosCheckout: (body)     => request('POST', '/service/pos/checkout', body),

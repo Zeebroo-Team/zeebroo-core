@@ -35,6 +35,14 @@ class PosSettingsService
 
     public const KEY_SHOW_SERVICE_BOUND_PRODUCTS = 'pos.show_service_bound_products';
 
+    public const KEY_TAX_ENABLED = 'tax.enabled';
+
+    public const KEY_TAX_RATE = 'tax.rate';
+
+    public const KEY_INVOICE_PREFIX = 'invoice.prefix';
+
+    public const KEY_INVOICE_NEXT_NUMBER = 'invoice.next_number';
+
     /**
      * @return array{
      *     default_deposit_account_id: ?int,
@@ -63,6 +71,11 @@ class PosSettingsService
         }
 
         return [
+            // Business profile
+            'business_name'    => (string) $business->name,
+            'currency'         => (string) ($business->getSetting('business.currency', '') ?: ''),
+            'timezone'         => (string) ($business->getSetting('business.timezone', '') ?: ''),
+            // POS
             'default_deposit_account_id' => $accountId,
             'discount_field_enabled' => (bool) $business->getSetting(self::KEY_DISCOUNT_FIELD_ENABLED, false),
             'checkout_modal_enabled' => (bool) $business->getSetting(self::KEY_CHECKOUT_MODAL_ENABLED, false),
@@ -76,6 +89,17 @@ class PosSettingsService
             'featured_products_limit' => max(0, (int) $business->getSetting(self::KEY_FEATURED_PRODUCTS_LIMIT, 0)),
             'featured_categories_limit' => max(0, (int) $business->getSetting(self::KEY_FEATURED_CATEGORIES_LIMIT, 0)),
             'show_service_bound_products' => (bool) $business->getSetting(self::KEY_SHOW_SERVICE_BOUND_PRODUCTS, true),
+            // Branch / warehouse
+            'multi_warehouse_branch'   => (bool) $business->getSetting('business.multi_warehouse_branch', false),
+            'branch_product_separate'  => (bool) $business->getSetting('business.branch_product_separate', false),
+            'branch_stock_separate'    => (bool) $business->getSetting('business.branch_stock_separate', false),
+            'branch_pos_separate'      => (bool) $business->getSetting('business.branch_pos_separate', false),
+            // Tax
+            'tax_enabled'   => (bool) $business->getSetting(self::KEY_TAX_ENABLED, false),
+            'tax_rate'      => round((float) $business->getSetting(self::KEY_TAX_RATE, 0), 4),
+            // Invoice
+            'invoice_prefix'      => (string) ($business->getSetting(self::KEY_INVOICE_PREFIX, 'INV') ?: 'INV'),
+            'invoice_next_number' => max(1, (int) $business->getSetting(self::KEY_INVOICE_NEXT_NUMBER, 1)),
         ];
     }
 
@@ -145,5 +169,50 @@ class PosSettingsService
             self::KEY_SHOW_SERVICE_BOUND_PRODUCTS,
             filter_var($data['show_service_bound_products'] ?? true, FILTER_VALIDATE_BOOLEAN),
         );
+
+        // Branch / warehouse
+        if (array_key_exists('multi_warehouse_branch', $data)) {
+            $business->setSetting('business.multi_warehouse_branch', filter_var($data['multi_warehouse_branch'], FILTER_VALIDATE_BOOLEAN));
+        }
+        if (array_key_exists('branch_product_separate', $data)) {
+            $business->setSetting('business.branch_product_separate', filter_var($data['branch_product_separate'], FILTER_VALIDATE_BOOLEAN));
+        }
+        if (array_key_exists('branch_stock_separate', $data)) {
+            $business->setSetting('business.branch_stock_separate', filter_var($data['branch_stock_separate'], FILTER_VALIDATE_BOOLEAN));
+        }
+        if (array_key_exists('branch_pos_separate', $data)) {
+            $business->setSetting('business.branch_pos_separate', filter_var($data['branch_pos_separate'], FILTER_VALIDATE_BOOLEAN));
+        }
+
+        // Tax
+        if (array_key_exists('tax_enabled', $data)) {
+            $business->setSetting(self::KEY_TAX_ENABLED, filter_var($data['tax_enabled'], FILTER_VALIDATE_BOOLEAN));
+        }
+        if (array_key_exists('tax_rate', $data)) {
+            $rate = max(0, min(100, round((float) ($data['tax_rate'] ?? 0), 4)));
+            $business->setSetting(self::KEY_TAX_RATE, $rate);
+        }
+
+        // Invoice
+        if (array_key_exists('invoice_prefix', $data)) {
+            $prefix = strtoupper(trim((string) ($data['invoice_prefix'] ?? 'INV')));
+            $business->setSetting(self::KEY_INVOICE_PREFIX, $prefix !== '' ? $prefix : 'INV');
+        }
+        if (array_key_exists('invoice_next_number', $data)) {
+            $next = max(1, (int) ($data['invoice_next_number'] ?? 1));
+            $business->setSetting(self::KEY_INVOICE_NEXT_NUMBER, $next);
+        }
+
+        // Business profile
+        if (isset($data['business_name']) && trim($data['business_name']) !== '') {
+            $business->name = trim($data['business_name']);
+            $business->save();
+        }
+        if (array_key_exists('currency', $data)) {
+            $business->setSetting('business.currency', strtoupper(trim((string) ($data['currency'] ?? ''))));
+        }
+        if (array_key_exists('timezone', $data)) {
+            $business->setSetting('business.timezone', trim((string) ($data['timezone'] ?? '')));
+        }
     }
 }

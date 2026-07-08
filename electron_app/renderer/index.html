@@ -347,6 +347,13 @@
 
           <div class="tpm-divider"></div>
 
+          <label class="tpm-item" style="cursor:pointer;display:flex;align-items:center;gap:8px;">
+            <i class="fa fa-moon"></i> Dark Mode
+            <input type="checkbox" id="toggle-dark" style="margin-left:auto;width:16px;height:16px;accent-color:var(--accent);">
+          </label>
+
+          <div class="tpm-divider"></div>
+
           <button class="tpm-item tpm-item-danger" id="tpm-logout">
             <i class="fa fa-right-from-bracket"></i> Sign Out
           </button>
@@ -379,7 +386,6 @@
         <div class="ribbon-tab" data-tab="design">Design</div>
         <div class="ribbon-tab" data-tab="restaurant">Restaurant</div>
         <div class="ribbon-tab" data-tab="rst-pos">Restaurant POS</div>
-        <div class="ribbon-tab" data-tab="view">View</div>
       </div>
       <button id="ribbon-pin-btn" title="Collapse the Ribbon (Ctrl+F1)">
         <i class="fa fa-chevron-up" id="ribbon-pin-icon"></i>
@@ -959,30 +965,7 @@
 
       </div><!-- /rst-pos page -->
 
-      <!-- ── View page ── -->
-      <div class="ribbon-page" data-page="view">
 
-        <div class="ribbon-group">
-          <div class="ribbon-group-content">
-            <div class="ribbon-small-stack" style="justify-content:flex-start;padding-top:6px;">
-              <label class="ribbon-switch">
-                <input type="checkbox" id="toggle-dark"> Dark Mode
-              </label>
-            </div>
-          </div>
-          <div class="ribbon-group-label">Appearance</div>
-        </div>
-
-        <div class="ribbon-group">
-          <div class="ribbon-group-content">
-            <button class="ribbon-btn-lg" id="rb-logout">
-              <i class="fa fa-right-from-bracket"></i>Sign<br>Out
-            </button>
-          </div>
-          <div class="ribbon-group-label">Account</div>
-        </div>
-
-      </div><!-- /view page -->
 
     </div><!-- /ribbon-body -->
   </div><!-- /ribbon -->
@@ -3984,12 +3967,6 @@
       </div>
     </div>
 
-    <div class="content-panel" id="panel-view">
-      <div class="placeholder-panel">
-        <i class="fa fa-sliders"></i>
-        <p>View Settings</p>
-      </div>
-    </div>
 
     <!-- ── Restaurant Panel ───────────────────────────────────────────── -->
     <div class="content-panel" id="panel-restaurant" style="flex-direction:column">
@@ -4385,7 +4362,146 @@
 
     </div><!-- /panel-rst-pos -->
 
+    <!-- ── Users Panel ────────────────────────────────────────────────── -->
+
   </div><!-- /content -->
+
+  <!-- ── Add User Modal ── -->
+  <div class="modal-overlay" id="um-add-modal" style="display:none">
+    <div class="po-aim-shell" style="width:70vw;max-height:90vh;overflow-y:auto">
+      <div class="po-aim-header">
+        <i class="fa fa-user-plus" style="color:var(--accent)"></i>
+        <span>Add User</span>
+        <button class="psm-close" id="um-add-close"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div class="po-aim-body">
+        <div class="po-field">
+          <label class="po-field-label">Email Address <span class="po-required">*</span></label>
+          <input type="email" id="um-add-email" class="po-field-input" placeholder="user@example.com" autocomplete="off">
+          <div style="font-size:11px;color:var(--text-muted);margin-top:3px">The person must already have a Zeebroo account.</div>
+        </div>
+        <div class="po-field">
+          <label class="po-field-label">Role <span class="po-required">*</span></label>
+          <select id="um-add-role" class="po-field-input">
+            <option value="staff">Staff — limited access</option>
+            <option value="manager">Manager — custom permissions</option>
+            <option value="admin">Admin — full access</option>
+          </select>
+        </div>
+        <div class="po-field" id="um-add-perms-wrap">
+          <label class="po-field-label">Module Permissions</label>
+          <div class="um-perm-grid" id="um-add-perm-grid"></div>
+        </div>
+        <div id="um-add-error" class="um-error-msg" style="display:none"></div>
+      </div>
+      <div class="po-aim-footer">
+        <button class="po-btn-ghost" id="um-add-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+        <button class="po-btn-primary" id="um-add-save"><i class="fa fa-check"></i> Add User</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Edit User Modal ── -->
+  <div class="modal-overlay" id="um-edit-modal" style="display:none">
+    <div class="po-aim-shell" style="width:min(500px,96vw);max-height:88vh;overflow-y:auto">
+      <div class="po-aim-header">
+        <i class="fa fa-user-pen" style="color:var(--accent)"></i>
+        <span>Edit User</span>
+        <button class="psm-close" id="um-edit-close"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div class="po-aim-body">
+        <div class="um-edit-user-info" id="um-edit-user-info"></div>
+        <div class="po-field">
+          <label class="po-field-label">Role <span class="po-required">*</span></label>
+          <select id="um-edit-role" class="po-field-input">
+            <option value="staff">Staff — limited access</option>
+            <option value="manager">Manager — custom permissions</option>
+            <option value="admin">Admin — full access</option>
+          </select>
+        </div>
+        <div class="po-field" id="um-edit-perms-wrap">
+          <label class="po-field-label">Module Permissions</label>
+          <div class="um-perm-grid" id="um-edit-perm-grid"></div>
+        </div>
+        <div id="um-edit-error" class="um-error-msg" style="display:none"></div>
+      </div>
+      <div class="po-aim-footer">
+        <button class="po-btn-ghost" id="um-edit-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+        <button class="po-btn-primary" id="um-edit-save"><i class="fa fa-check"></i> Save Changes</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── New Role Modal ── -->
+  <div class="modal-overlay" id="um-role-create-modal" style="display:none">
+    <div class="po-aim-shell" style="width:75vw;max-height:88vh;overflow-y:auto">
+      <div class="po-aim-header">
+        <i class="fa fa-shield-halved" style="color:var(--accent)"></i>
+        <span>Create Role</span>
+        <button class="psm-close" id="um-rc-close"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div class="po-aim-body">
+        <div class="po-field">
+          <label class="po-field-label">Role Name <span class="po-required">*</span></label>
+          <input type="text" id="um-rc-name" class="po-field-input" placeholder="e.g. Cashier, Supervisor…" maxlength="80">
+        </div>
+        <div class="po-field">
+          <label class="po-field-label">Description</label>
+          <input type="text" id="um-rc-desc" class="po-field-input" placeholder="Brief description of this role…" maxlength="255">
+        </div>
+        <div class="po-field">
+          <label class="po-field-label">Color</label>
+          <div class="um-color-picker" id="um-rc-colors"></div>
+        </div>
+        <div class="po-field">
+          <label class="po-field-label">Module Permissions</label>
+          <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">Select which modules members with this role can access.</div>
+          <div class="um-perm-grid" id="um-rc-perm-grid"></div>
+        </div>
+        <div id="um-rc-error" class="um-error-msg" style="display:none"></div>
+      </div>
+      <div class="po-aim-footer">
+        <button class="po-btn-ghost" id="um-rc-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+        <button class="po-btn-primary" id="um-rc-save"><i class="fa fa-check"></i> Create Role</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Edit Role Modal ── -->
+  <div class="modal-overlay" id="um-role-edit-modal" style="display:none">
+    <div class="po-aim-shell" style="width:75vw;max-height:88vh;overflow-y:auto">
+      <div class="po-aim-header">
+        <i class="fa fa-pen-to-square" style="color:var(--accent)"></i>
+        <span>Edit Role</span>
+        <button class="psm-close" id="um-re-close"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div class="po-aim-body">
+        <div class="po-field" id="um-re-name-wrap">
+          <label class="po-field-label">Role Name <span class="po-required">*</span></label>
+          <input type="text" id="um-re-name" class="po-field-input" placeholder="Role name…" maxlength="80">
+        </div>
+        <div class="po-field">
+          <label class="po-field-label">Description</label>
+          <input type="text" id="um-re-desc" class="po-field-input" placeholder="Brief description…" maxlength="255">
+        </div>
+        <div class="po-field">
+          <label class="po-field-label">Color</label>
+          <div class="um-color-picker" id="um-re-colors"></div>
+        </div>
+        <div class="po-field">
+          <label class="po-field-label">Module Permissions</label>
+          <div id="um-re-admin-note" style="display:none;font-size:11px;color:var(--text-muted);margin-bottom:6px"><i class="fa fa-info-circle"></i> Admin role always has full access to all modules.</div>
+          <div class="um-perm-grid" id="um-re-perm-grid"></div>
+        </div>
+        <div id="um-re-error" class="um-error-msg" style="display:none"></div>
+      </div>
+      <div class="po-aim-footer" id="um-re-footer">
+        <button class="um-remove-btn" id="um-re-delete" style="margin-right:auto"><i class="fa fa-trash"></i> Delete Role</button>
+        <button class="po-btn-ghost" id="um-re-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+        <button class="po-btn-primary" id="um-re-save"><i class="fa fa-check"></i> Save Changes</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Status bar -->
   <div id="statusbar">
@@ -6231,8 +6347,8 @@
     <div class="psm-header">
       <div class="psm-header-icon"><i class="fa fa-gear"></i></div>
       <div class="psm-header-text">
-        <h2>POS Settings</h2>
-        <p>Configure your point of sale</p>
+        <h2>Settings</h2>
+        <p>Manage your business and POS settings</p>
       </div>
       <button class="psm-close" id="psm-close" title="Close"><i class="fa fa-xmark"></i></button>
     </div>
@@ -6243,7 +6359,10 @@
       <!-- Sidebar navigation -->
       <nav class="psm-nav">
         <div class="psm-nav-label">Settings</div>
-        <button class="psm-nav-item active" data-tab="general">
+        <button class="psm-nav-item active" data-tab="business">
+          <i class="fa fa-building"></i><span>Business</span>
+        </button>
+        <button class="psm-nav-item" data-tab="general">
           <i class="fa fa-sliders"></i><span>General</span>
         </button>
         <button class="psm-nav-item" data-tab="accounts">
@@ -6252,13 +6371,81 @@
         <button class="psm-nav-item" data-tab="receipt">
           <i class="fa fa-receipt"></i><span>Receipt</span>
         </button>
+        <button class="psm-nav-item" data-tab="tax">
+          <i class="fa fa-percent"></i><span>Tax</span>
+        </button>
+        <button class="psm-nav-item" data-tab="invoice">
+          <i class="fa fa-file-invoice"></i><span>Invoice</span>
+        </button>
+        <button class="psm-nav-item" data-tab="users">
+          <i class="fa fa-users"></i><span>Users</span>
+        </button>
+        <button class="psm-nav-item" data-tab="roles">
+          <i class="fa fa-shield-halved"></i><span>Roles</span>
+        </button>
       </nav>
 
       <!-- Content panels -->
       <div class="psm-content">
 
+        <!-- Business panel -->
+        <div class="psm-panel" id="psm-tab-business">
+          <div class="psm-section">
+            <div class="psm-section-label"><i class="fa fa-building"></i> Business Profile</div>
+            <div class="psm-field-row">
+              <label class="psm-field-label" for="psm-biz-name">Business Name</label>
+              <input type="text" id="psm-biz-name" class="psm-input" placeholder="Your business name">
+            </div>
+            <div class="psm-field-2col">
+              <div>
+                <label class="psm-field-label" for="psm-currency">Currency</label>
+                <input type="text" id="psm-currency" class="psm-input" placeholder="e.g. USD, EUR, LKR" maxlength="10">
+                <span class="psm-hint">3-letter currency code</span>
+              </div>
+              <div>
+                <label class="psm-field-label" for="psm-timezone">Timezone</label>
+                <input type="text" id="psm-timezone" class="psm-input" placeholder="e.g. Asia/Colombo">
+                <span class="psm-hint">IANA timezone identifier</span>
+              </div>
+            </div>
+          </div>
+          <div class="psm-section">
+            <div class="psm-section-label"><i class="fa fa-code-branch"></i> Branches &amp; Warehouses</div>
+            <div class="psm-toggle-row">
+              <div class="psm-toggle-info">
+                <span class="psm-toggle-name">Multi warehouse / branches</span>
+                <span class="psm-toggle-desc">Enable when your business runs multiple warehouses or branches</span>
+              </div>
+              <label class="psm-switch"><input type="checkbox" id="psm-multi-warehouse"><span class="psm-switch-track"></span></label>
+            </div>
+            <div class="psm-toggle-row" id="psm-branch-rows" style="display:none;flex-direction:column;gap:0">
+              <div class="psm-toggle-row" style="border-top:none">
+                <div class="psm-toggle-info">
+                  <span class="psm-toggle-name">Manage products per branch</span>
+                  <span class="psm-toggle-desc">Products are managed independently per branch</span>
+                </div>
+                <label class="psm-switch"><input type="checkbox" id="psm-branch-product"><span class="psm-switch-track"></span></label>
+              </div>
+              <div class="psm-toggle-row" style="border-top:none">
+                <div class="psm-toggle-info">
+                  <span class="psm-toggle-name">Manage stock per branch</span>
+                  <span class="psm-toggle-desc">Stock levels are tracked independently per branch</span>
+                </div>
+                <label class="psm-switch"><input type="checkbox" id="psm-branch-stock"><span class="psm-switch-track"></span></label>
+              </div>
+              <div class="psm-toggle-row" style="border-top:none">
+                <div class="psm-toggle-info">
+                  <span class="psm-toggle-name">Manage POS per branch</span>
+                  <span class="psm-toggle-desc">POS sessions and sales are tracked independently per branch</span>
+                </div>
+                <label class="psm-switch"><input type="checkbox" id="psm-branch-pos"><span class="psm-switch-track"></span></label>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- General panel -->
-        <div class="psm-panel" id="psm-tab-general">
+        <div class="psm-panel" id="psm-tab-general" style="display:none">
           <div class="psm-section">
             <div class="psm-section-label"><i class="fa fa-palette"></i> Appearance</div>
             <div class="psm-field-row">
@@ -6372,6 +6559,94 @@
             <div class="psm-field-row">
               <label class="psm-field-label" for="psm-receipt-footer">Footer text</label>
               <textarea id="psm-receipt-footer" class="psm-textarea" rows="3" placeholder="e.g. Thank you for your purchase!"></textarea>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tax panel -->
+        <div class="psm-panel" id="psm-tab-tax" style="display:none">
+          <div class="psm-section">
+            <div class="psm-section-label"><i class="fa fa-percent"></i> Tax Settings</div>
+            <div class="psm-toggle-row">
+              <div class="psm-toggle-info">
+                <span class="psm-toggle-name">Enable tax</span>
+                <span class="psm-toggle-desc">Apply tax calculations on sales transactions</span>
+              </div>
+              <label class="psm-switch"><input type="checkbox" id="psm-tax-enabled"><span class="psm-switch-track"></span></label>
+            </div>
+            <div class="psm-field-row" id="psm-tax-rate-row" style="display:none">
+              <label class="psm-field-label" for="psm-tax-rate">Tax Rate (%)</label>
+              <input type="number" id="psm-tax-rate" class="psm-input" min="0" max="100" step="0.01" placeholder="e.g. 15">
+              <span class="psm-hint">Percentage applied to taxable sales</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Invoice panel -->
+        <div class="psm-panel" id="psm-tab-invoice" style="display:none">
+          <div class="psm-section">
+            <div class="psm-section-label"><i class="fa fa-file-invoice"></i> Invoice Numbering</div>
+            <div class="psm-field-2col">
+              <div>
+                <label class="psm-field-label" for="psm-invoice-prefix">Invoice Prefix</label>
+                <input type="text" id="psm-invoice-prefix" class="psm-input" placeholder="INV" maxlength="20">
+                <span class="psm-hint">e.g. INV, SALE, POS</span>
+              </div>
+              <div>
+                <label class="psm-field-label" for="psm-invoice-next">Next Number</label>
+                <input type="number" id="psm-invoice-next" class="psm-input" min="1" placeholder="1">
+                <span class="psm-hint">Next invoice will use this sequence</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Users panel -->
+        <div class="psm-panel psm-panel--roles" id="psm-tab-users" style="display:none">
+          <div class="psm-roles-toolbar">
+            <div class="psm-roles-toolbar-left">
+              <i class="fa fa-users" style="color:var(--accent)"></i>
+              <span class="psm-roles-title">User Management</span>
+              <span class="um-count-badge" id="psm-users-count"></span>
+            </div>
+            <button class="um-add-btn" id="psm-add-user-btn">
+              <i class="fa fa-user-plus"></i> Add User
+            </button>
+          </div>
+          <div class="psm-roles-body">
+            <div class="um-list-col" id="psm-users-list">
+              <div class="um-loading"><i class="fa fa-spinner fa-spin"></i> Loading users…</div>
+            </div>
+            <div class="um-detail-col" id="psm-users-detail">
+              <div class="um-detail-empty">
+                <i class="fa fa-user-shield"></i>
+                <p>Select a user to view their role and permissions</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Roles & Permissions panel -->
+        <div class="psm-panel psm-panel--roles" id="psm-tab-roles" style="display:none">
+          <div class="psm-roles-toolbar">
+            <div class="psm-roles-toolbar-left">
+              <i class="fa fa-shield-halved" style="color:var(--accent)"></i>
+              <span class="psm-roles-title">Roles &amp; Permissions</span>
+              <span class="um-count-badge" id="psm-role-count"></span>
+            </div>
+            <button class="um-add-btn" id="psm-add-role-btn">
+              <i class="fa fa-plus"></i> New Role
+            </button>
+          </div>
+          <div class="psm-roles-body">
+            <div class="um-list-col" id="psm-role-list">
+              <div class="um-loading"><i class="fa fa-spinner fa-spin"></i> Loading roles…</div>
+            </div>
+            <div class="um-detail-col" id="psm-role-detail">
+              <div class="um-detail-empty">
+                <i class="fa fa-shield-halved"></i>
+                <p>Select a role to view and edit its permissions</p>
+              </div>
             </div>
           </div>
         </div>

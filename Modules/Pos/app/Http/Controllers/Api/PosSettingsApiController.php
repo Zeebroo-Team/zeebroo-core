@@ -144,6 +144,9 @@ class PosSettingsApiController extends Controller
         $business = $this->businessOrAbort($request);
 
         $validated = $request->validate([
+            'business_name'               => ['nullable', 'string', 'max:255'],
+            'currency'                    => ['nullable', 'string', 'max:10'],
+            'timezone'                    => ['nullable', 'string', 'max:80'],
             'default_deposit_account_id'  => ['nullable', 'integer', 'min:1'],
             'discount_field_enabled'      => ['nullable', 'boolean'],
             'checkout_modal_enabled'      => ['nullable', 'boolean'],
@@ -157,6 +160,17 @@ class PosSettingsApiController extends Controller
             'featured_products_limit'     => ['nullable', 'integer', 'min:0', 'max:200'],
             'featured_categories_limit'   => ['nullable', 'integer', 'min:0', 'max:200'],
             'show_service_bound_products' => ['nullable', 'boolean'],
+            // Branch
+            'multi_warehouse_branch'  => ['nullable', 'boolean'],
+            'branch_product_separate' => ['nullable', 'boolean'],
+            'branch_stock_separate'   => ['nullable', 'boolean'],
+            'branch_pos_separate'     => ['nullable', 'boolean'],
+            // Tax
+            'tax_enabled' => ['nullable', 'boolean'],
+            'tax_rate'    => ['nullable', 'numeric', 'min:0', 'max:100'],
+            // Invoice
+            'invoice_prefix'      => ['nullable', 'string', 'max:20'],
+            'invoice_next_number' => ['nullable', 'integer', 'min:1'],
         ]);
 
         $this->posSettings->saveForBusiness($business, $validated);

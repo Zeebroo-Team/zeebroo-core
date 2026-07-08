@@ -71,7 +71,7 @@ class PosExpenseBillApiController extends Controller
                 Rule::exists('rentals', 'id')->where(fn ($q) => $q->where('business_id', $business->id)->where('user_id', $user->id)),
             ],
             'assignment_type'            => ['nullable', Rule::in(['none', 'branch', 'department', 'property', 'employee', 'modification', 'rental'])],
-            'deduct_account_id'          => ['nullable', 'integer', Rule::exists('accounts', 'id')->where(fn ($q) => $q->where('user_id', $user->id)->where('business_id', $business->id))],
+            'deduct_account_id'          => ['nullable', 'integer', Rule::exists('accounts', 'id')->where(fn ($q) => $q->where('business_id', $business->id))],
             'amount_varies_by_usage'     => ['sometimes', 'boolean'],
             'allow_split_payment'        => ['sometimes', 'boolean'],
             'recurring_cost'             => [Rule::requiredIf(fn () => ! $request->boolean('amount_varies_by_usage')), 'nullable', 'numeric', 'min:0'],
