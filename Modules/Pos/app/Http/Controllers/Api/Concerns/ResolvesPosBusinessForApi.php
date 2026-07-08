@@ -6,6 +6,7 @@ use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Modules\Business\Models\Business;
+use Modules\Business\Models\BusinessMember;
 use Modules\HRManagement\Models\Employee;
 
 trait ResolvesPosBusinessForApi
@@ -28,10 +29,16 @@ trait ResolvesPosBusinessForApi
                 ->whereNotNull('user_id')
                 ->pluck('business_id');
 
+            $memberBusinessIds = BusinessMember::query()
+                ->where('user_id', $user->id)
+                ->where('status', 'active')
+                ->pluck('business_id');
+
             $business = Business::query()
-                ->where(function ($q) use ($user, $employeeBusinessIds) {
+                ->where(function ($q) use ($user, $employeeBusinessIds, $memberBusinessIds) {
                     $q->where('user_id', $user->id)
-                      ->orWhereIn('id', $employeeBusinessIds);
+                      ->orWhereIn('id', $employeeBusinessIds)
+                      ->orWhereIn('id', $memberBusinessIds);
                 })
                 ->whereKey((int) $rawId)
                 ->first();

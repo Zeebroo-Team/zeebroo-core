@@ -53,7 +53,6 @@ class SalePaymentSettlementService
             $account = Account::query()
                 ->with('bankType')
                 ->whereKey($creditAccountId)
-                ->where('user_id', $user->id)
                 ->where('business_id', $business->id)
                 ->lockForUpdate()
                 ->first();

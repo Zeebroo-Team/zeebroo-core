@@ -1,0 +1,3180 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zeebroo POS — Complete User Guide</title>
+<style>
+/* ── Tokens ── */
+:root {
+  --bg:           #FFFFFF;
+  --bg-subtle:    #F4F4F4;
+  --sidebar-bg:   #FFFFFF;
+  --sidebar-hover:#F4F4F4;
+  --text:         #111111;
+  --text-muted:   #555555;
+  --text-faint:   #999999;
+  --border:       #E6E6E6;
+  --border-strong:#CCCCCC;
+  --accent:       #D4A017;
+  --accent-bright:#F5C518;
+  --accent-light: #FEFCE8;
+
+  --step-bg:      #F4F4F4;
+  --tip-bg:       #FEFCE8;
+  --tip-border:   #E8D040;
+  --warn-bg:      #FEFCE8;
+  --warn-border:  #E8D040;
+  --note-bg:      #F4F4F4;
+  --note-border:  #AAAAAA;
+
+  --sidebar-text:        #555555;
+  --sidebar-text-active: #111111;
+  --sidebar-section:     #999999;
+  --sidebar-scrollbar:   #CCCCCC;
+
+  --shadow: 0 1px 3px rgba(0,0,0,.07), 0 1px 2px rgba(0,0,0,.04);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg:           #111111;
+    --bg-subtle:    #1A1A1A;
+    --sidebar-bg:   #0A0A0A;
+    --sidebar-hover:#181818;
+    --text:         #F0F0F0;
+    --text-muted:   #AAAAAA;
+    --text-faint:   #666666;
+    --border:       #272727;
+    --border-strong:#383838;
+    --accent:       #F5C518;
+    --accent-bright:#F5C518;
+    --accent-light: #1C1800;
+    --step-bg:      #1A1A1A;
+    --tip-bg:       #1C1800;
+    --tip-border:   #705900;
+    --warn-bg:      #1A1100;
+    --warn-border:  #805500;
+    --note-bg:      #1A1A1A;
+    --note-border:  #444444;
+    --sidebar-text:        #666666;
+    --sidebar-text-active: #111111;
+    --sidebar-section:     #555555;
+    --sidebar-scrollbar:   #333333;
+    --shadow: 0 1px 3px rgba(0,0,0,.4);
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg:           #111111;
+  --bg-subtle:    #1A1A1A;
+  --sidebar-bg:   #0A0A0A;
+  --sidebar-hover:#181818;
+  --text:         #F0F0F0;
+  --text-muted:   #AAAAAA;
+  --text-faint:   #666666;
+  --border:       #272727;
+  --border-strong:#383838;
+  --accent:       #F5C518;
+  --accent-bright:#F5C518;
+  --accent-light: #1C1800;
+  --step-bg:      #1A1A1A;
+  --tip-bg:       #1C1800;
+  --tip-border:   #705900;
+  --warn-bg:      #1A1100;
+  --warn-border:  #805500;
+  --note-bg:      #1A1A1A;
+  --note-border:  #444444;
+  --sidebar-text:        #666666;
+  --sidebar-text-active: #111111;
+  --sidebar-section:     #555555;
+  --shadow: 0 1px 3px rgba(0,0,0,.4);
+}
+
+:root[data-theme="light"] {
+  --bg:           #FFFFFF;
+  --bg-subtle:    #F4F4F4;
+  --sidebar-bg:   #FFFFFF;
+  --sidebar-hover:#F4F4F4;
+  --text:         #111111;
+  --text-muted:   #555555;
+  --text-faint:   #999999;
+  --border:       #E6E6E6;
+  --border-strong:#CCCCCC;
+  --accent:       #D4A017;
+  --accent-bright:#F5C518;
+  --accent-light: #FEFCE8;
+  --step-bg:      #F4F4F4;
+  --tip-bg:       #FEFCE8;
+  --tip-border:   #E8D040;
+  --warn-bg:      #FEFCE8;
+  --warn-border:  #E8D040;
+  --note-bg:      #F4F4F4;
+  --note-border:  #AAAAAA;
+  --sidebar-text:        #555555;
+  --sidebar-text-active: #111111;
+  --sidebar-section:     #999999;
+  --sidebar-scrollbar:   #CCCCCC;
+  --shadow: 0 1px 3px rgba(0,0,0,.07);
+}
+
+/* ── Reset ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 15px; scroll-behavior: smooth; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.65;
+  display: flex;
+  min-height: 100vh;
+}
+
+/* ── Sidebar ── */
+#sidebar {
+  width: 258px;
+  min-width: 258px;
+  background: var(--sidebar-bg);
+  position: fixed;
+  top: 0; left: 0; bottom: 0;
+  overflow-y: auto;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border);
+}
+
+#sidebar::-webkit-scrollbar { width: 4px; }
+#sidebar::-webkit-scrollbar-track { background: transparent; }
+#sidebar::-webkit-scrollbar-thumb { background: var(--sidebar-scrollbar); border-radius: 2px; }
+
+.sb-brand {
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.sb-logo {
+  display: block;
+  width: 100%;
+  max-width: 160px;
+  height: auto;
+  margin-bottom: 6px;
+}
+.sb-brand-sub {
+  font-size: 11px;
+  color: var(--text-faint);
+  margin-top: 0;
+  font-family: ui-monospace, 'Cascadia Code', monospace;
+  letter-spacing: .04em;
+}
+
+.sb-nav { padding: 8px 0 24px; flex: 1; }
+
+/* ── Tree group ── */
+.tree-group { margin: 1px 0; }
+
+.tree-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 14px 8px 12px;
+  background: none;
+  border: none;
+  border-left: 3px solid transparent;
+  cursor: pointer;
+  color: var(--text);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  text-align: left;
+  transition: background .12s, border-color .12s;
+  font-family: inherit;
+}
+.tree-header:hover { background: var(--sidebar-hover); }
+.tree-group.open > .tree-header { border-left-color: var(--accent-bright); }
+
+.tree-chevron {
+  width: 10px; height: 10px;
+  flex-shrink: 0;
+  color: var(--text-faint);
+  transition: transform .22s ease;
+  margin-left: auto;
+}
+.tree-group.open > .tree-header .tree-chevron { transform: rotate(90deg); }
+
+.tree-icon {
+  width: 15px; height: 15px;
+  flex-shrink: 0;
+  color: var(--accent);
+  opacity: .85;
+}
+.tree-group.open > .tree-header .tree-icon { opacity: 1; }
+
+.tree-label { flex: 1; }
+
+/* ── Tree children ── */
+.tree-children {
+  overflow: hidden;
+  max-height: 0;
+  transition: max-height .28s cubic-bezier(.4,0,.2,1);
+  position: relative;
+}
+.tree-children::before {
+  content: '';
+  position: absolute;
+  left: 25px;
+  top: 6px; bottom: 6px;
+  width: 1px;
+  background: var(--border);
+}
+.tree-group.open .tree-children { max-height: 400px; }
+
+/* ── Leaf links ── */
+.sb-link {
+  display: flex;
+  align-items: center;
+  padding: 6px 14px 6px 40px;
+  color: var(--sidebar-text);
+  text-decoration: none;
+  font-size: 12.5px;
+  transition: background .12s, color .12s;
+  cursor: pointer;
+  border-left: 3px solid transparent;
+  position: relative;
+}
+.sb-link::before {
+  content: '';
+  position: absolute;
+  left: 25px;
+  top: 50%;
+  width: 10px;
+  height: 1px;
+  background: var(--border);
+  transform: translateY(-50%);
+}
+.sb-link:hover {
+  background: var(--sidebar-hover);
+  color: var(--text);
+  text-decoration: none;
+}
+.sb-link:hover::before { background: var(--border-strong); }
+.sb-link.active {
+  color: #111111;
+  font-weight: 600;
+  border-left-color: var(--accent-bright);
+  background: var(--accent-light);
+}
+.sb-link.active::before { background: var(--accent-bright); }
+
+.sb-link-num { display: none; }
+.sb-dot { display: none; }
+
+/* ── Sub-topic (3rd level) ── */
+.sb-chapter-group { position: relative; }
+
+.sb-subtopics {
+  overflow: hidden;
+  max-height: 0;
+  position: relative;
+  transition: max-height .22s cubic-bezier(.4,0,.2,1);
+}
+.sb-subtopics::before {
+  content: '';
+  position: absolute;
+  left: 38px;
+  top: 4px; bottom: 4px;
+  width: 1px;
+  background: var(--border);
+}
+.sb-chapter-group.sub-open .sb-subtopics { max-height: 800px; }
+
+.sb-sub {
+  display: flex;
+  align-items: center;
+  padding: 4px 14px 4px 54px;
+  color: var(--text-faint);
+  text-decoration: none;
+  font-size: 11.5px;
+  line-height: 1.35;
+  transition: background .12s, color .12s;
+  position: relative;
+  border-left: 3px solid transparent;
+}
+.sb-sub::before {
+  content: '';
+  position: absolute;
+  left: 38px;
+  top: 50%;
+  width: 11px;
+  height: 1px;
+  background: var(--border);
+  transform: translateY(-50%);
+}
+.sb-sub:hover { background: var(--sidebar-hover); color: var(--text-muted); text-decoration: none; }
+.sb-sub:hover::before { background: var(--border-strong); }
+.sb-sub.active {
+  color: var(--accent);
+  font-weight: 600;
+  background: var(--accent-light);
+  border-left-color: var(--accent-bright);
+}
+.sb-sub.active::before { background: var(--accent-bright); }
+
+/* ── Main content ── */
+#main {
+  margin-left: 258px;
+  flex: 1;
+  min-width: 0;
+}
+
+/* ── Top bar ── */
+#topbar {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 40px;
+  height: 48px;
+}
+
+.tb-title {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-family: ui-monospace, monospace;
+  letter-spacing: .03em;
+}
+
+.tb-actions { display: flex; gap: 8px; align-items: center; }
+
+.theme-toggle {
+  background: none; border: 1px solid var(--border);
+  color: var(--text-muted);
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: border-color .15s, color .15s;
+  font-family: inherit;
+}
+.theme-toggle:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ── Topbar search ── */
+.tb-search {
+  position: relative;
+  flex: 0 1 300px;
+  margin: 0 16px;
+}
+.tb-search-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.tb-search-icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-faint);
+  pointer-events: none;
+  display: flex;
+}
+.tb-search-input {
+  width: 100%;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 6px 12px 6px 32px;
+  font-size: 13px;
+  color: var(--text);
+  outline: none;
+  font-family: inherit;
+  transition: border-color .15s, background .15s, box-shadow .15s;
+  box-sizing: border-box;
+}
+.tb-search-input::placeholder { color: var(--text-faint); }
+.tb-search-input:focus {
+  border-color: var(--accent);
+  background: var(--bg);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent);
+}
+.tb-search-clear {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: var(--text-faint);
+  display: none;
+  line-height: 1;
+}
+.tb-search-clear:hover { color: var(--text); }
+.tb-search-drop {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.12), 0 2px 6px rgba(0,0,0,.06);
+  max-height: 340px;
+  overflow-y: auto;
+  z-index: 200;
+  display: none;
+}
+.tb-search-drop.open { display: block; }
+.tb-search-drop::-webkit-scrollbar { width: 4px; }
+.tb-search-drop::-webkit-scrollbar-track { background: transparent; }
+.tb-search-drop::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 2px; }
+.tb-sr {
+  display: flex;
+  flex-direction: column;
+  padding: 9px 14px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border);
+  text-decoration: none;
+  color: var(--text);
+  gap: 2px;
+}
+.tb-sr:last-child { border-bottom: none; }
+.tb-sr:hover, .tb-sr.focused { background: var(--sidebar-hover); }
+.tb-sr-title { font-size: 13px; font-weight: 500; line-height: 1.3; }
+.tb-sr-ctx { font-size: 11px; color: var(--text-faint); }
+.tb-sr-hl { background: var(--accent-light); color: var(--accent); border-radius: 2px; padding: 0 1px; font-weight: 600; }
+.tb-sr-none { padding: 14px; text-align: center; font-size: 13px; color: var(--text-faint); }
+.tb-sr-kbd {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 6px 10px 5px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-subtle);
+  border-radius: 0 0 10px 10px;
+}
+.tb-sr-kbd kbd {
+  font-size: 10px;
+  color: var(--text-faint);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-family: ui-monospace, monospace;
+}
+
+.version-badge {
+  background: var(--accent);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 3px;
+  font-family: ui-monospace, monospace;
+  letter-spacing: .04em;
+}
+
+/* ── Content area ── */
+#content {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 0 40px 80px;
+}
+
+/* ── Hero ── */
+.hero {
+  padding: 52px 0 40px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 56px;
+}
+
+.hero-eyebrow {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-family: ui-monospace, monospace;
+  margin-bottom: 12px;
+}
+
+.hero h1 {
+  font-size: 34px;
+  font-weight: 800;
+  letter-spacing: -.03em;
+  color: var(--text);
+  line-height: 1.15;
+  text-wrap: balance;
+  margin-bottom: 14px;
+}
+
+.hero p {
+  font-size: 15.5px;
+  color: var(--text-muted);
+  max-width: 560px;
+  line-height: 1.7;
+}
+
+.hero-meta {
+  margin-top: 20px;
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.hero-meta-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+.hero-meta-item strong { color: var(--text-muted); font-weight: 500; }
+
+/* ── TOC ── */
+.toc {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 20px 24px;
+  margin-bottom: 56px;
+}
+
+.toc-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin-bottom: 14px;
+}
+
+.toc-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 20px;
+}
+
+.toc-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+  text-decoration: none;
+  color: var(--text-muted);
+  font-size: 13px;
+  border-bottom: 1px solid transparent;
+  transition: color .12s;
+}
+.toc-item:hover { color: var(--accent); }
+
+.toc-num {
+  font-family: ui-monospace, monospace;
+  font-size: 10px;
+  color: var(--text-faint);
+  min-width: 26px;
+}
+
+/* ── Chapter ── */
+.chapter {
+  margin-bottom: 64px;
+  scroll-margin-top: 64px;
+}
+
+.chapter-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding-bottom: 20px;
+  border-bottom: 2px solid var(--border);
+  margin-bottom: 32px;
+}
+
+.chapter-num {
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  color: var(--text-faint);
+  padding-top: 4px;
+  white-space: nowrap;
+}
+
+.chapter-meta { flex: 1; }
+
+.chapter-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.chapter h2 {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -.025em;
+  color: var(--text);
+  text-wrap: balance;
+  line-height: 1.25;
+}
+
+.chapter-desc {
+  font-size: 13.5px;
+  color: var(--text-muted);
+  margin-top: 5px;
+  line-height: 1.6;
+}
+
+/* ── Section ── */
+.section {
+  margin-bottom: 36px;
+  scroll-margin-top: 64px;
+}
+
+.section h3 {
+  font-size: 15.5px;
+  font-weight: 700;
+  letter-spacing: -.015em;
+  color: var(--text);
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.section h3::before {
+  content: '';
+  display: block;
+  width: 3px;
+  height: 16px;
+  border-radius: 2px;
+  background: currentColor;
+  opacity: .25;
+}
+
+.section p {
+  font-size: 14px;
+  color: var(--text-muted);
+  margin-bottom: 14px;
+  line-height: 1.7;
+}
+
+.section p:last-child { margin-bottom: 0; }
+
+/* ── Steps ── */
+.steps {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 16px 0;
+  position: relative;
+}
+
+.steps::before {
+  content: '';
+  position: absolute;
+  left: 14px;
+  top: 28px;
+  bottom: 28px;
+  width: 1px;
+  background: var(--border);
+}
+
+.step {
+  display: flex;
+  gap: 14px;
+  padding: 12px 0;
+  position: relative;
+}
+
+.step-num {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: ui-monospace, monospace;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  z-index: 1;
+  box-shadow: 0 0 0 3px var(--bg);
+}
+
+.step-body { flex: 1; padding-top: 4px; }
+
+.step-body strong {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 3px;
+}
+
+.step-body p {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0;
+  line-height: 1.6;
+}
+
+/* ── UI label (button/menu references) ── */
+kbd, .ui {
+  display: inline-block;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-strong);
+  border-bottom-width: 2px;
+  color: var(--text);
+  font-family: ui-monospace, 'Cascadia Code', monospace;
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  white-space: nowrap;
+  vertical-align: baseline;
+}
+
+.tab-label {
+  display: inline-block;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 3px;
+  font-family: ui-monospace, monospace;
+  vertical-align: middle;
+}
+
+.field-label {
+  display: inline-block;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: 12px;
+  white-space: nowrap;
+  font-style: italic;
+}
+
+/* ── Callouts ── */
+.callout {
+  border-radius: 5px;
+  padding: 13px 16px;
+  margin: 16px 0;
+  font-size: 13.5px;
+  line-height: 1.6;
+  display: flex;
+  gap: 10px;
+}
+
+.callout-icon { flex-shrink: 0; margin-top: 1px; font-size: 14px; display: flex; align-items: center; }
+.callout-icon svg { width: 16px; height: 16px; }
+.chapter-icon svg { width: 20px; height: 20px; }
+.feature-card-icon svg { width: 22px; height: 22px; }
+.hero-meta-item svg { width: 15px; height: 15px; vertical-align: -2px; margin-right: 4px; }
+
+.callout-body { flex: 1; }
+.callout-body strong { display: block; font-size: 12px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; margin-bottom: 3px; }
+
+.callout.tip { background: var(--tip-bg); border-left: 3px solid var(--accent); color: var(--text); }
+.callout.tip .callout-icon { color: var(--accent); }
+.callout.tip strong { color: var(--accent); }
+
+.callout.warn { background: var(--warn-bg); border-left: 3px solid var(--accent); color: var(--text); }
+.callout.warn .callout-icon { color: var(--accent); }
+.callout.warn strong { color: var(--accent); }
+
+.callout.note { background: var(--note-bg); border-left: 3px solid var(--border-strong); color: var(--text); }
+.callout.note .callout-icon { color: var(--text-muted); }
+.callout.note strong { color: var(--text-muted); }
+
+/* ── Feature grid ── */
+.feature-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 16px 0;
+}
+
+.feature-card {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 14px 16px;
+}
+
+.feature-card-icon { font-size: 18px; margin-bottom: 7px; }
+
+.feature-card-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 3px;
+}
+
+.feature-card-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+/* ── Table ── */
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin: 16px 0;
+}
+
+.data-table th {
+  text-align: left;
+  padding: 8px 12px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  border-bottom: 2px solid var(--border);
+  background: var(--bg-subtle);
+}
+
+.data-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-muted);
+  vertical-align: top;
+}
+
+.data-table td:first-child { color: var(--text); font-weight: 500; }
+
+.data-table tr:last-child td { border-bottom: none; }
+
+/* ── Shortcut table ── */
+.shortcut-table {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  margin: 14px 0;
+}
+.shortcut-group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  background: var(--bg-subtle);
+  border-bottom: 1px solid var(--border);
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--text-muted);
+}
+.shortcut-group-header + .shortcut-group-header { border-top: 1px solid var(--border); }
+.shortcut-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.shortcut-row:last-child { border-bottom: none; }
+.shortcut-label { color: var(--text-muted); flex: 1; }
+.shortcut-keys { display: flex; gap: 4px; flex-shrink: 0; }
+
+/* ── Divider ── */
+.divider {
+  height: 1px;
+  background: var(--border);
+  margin: 32px 0;
+}
+
+/* ── Screenshots ── */
+.screenshot-figure {
+  margin: 20px 0 28px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 4px 24px rgba(0,0,0,.10), 0 1px 4px rgba(0,0,0,.06);
+}
+.screenshot-figure img {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+}
+.screenshot-caption {
+  background: var(--bg-subtle);
+  border-top: 1px solid var(--border);
+  padding: 8px 14px;
+  font-size: 12px;
+  color: var(--text-faint);
+  font-style: italic;
+  letter-spacing: .01em;
+}
+@media (prefers-color-scheme: dark) {
+  .screenshot-figure { box-shadow: 0 4px 24px rgba(0,0,0,.4), 0 1px 4px rgba(0,0,0,.2); }
+}
+:root[data-theme="dark"] .screenshot-figure { box-shadow: 0 4px 24px rgba(0,0,0,.4), 0 1px 4px rgba(0,0,0,.2); }
+
+/* ── Wizard steps (text + screenshot per step) ── */
+.wizard-steps { display: flex; flex-direction: column; gap: 20px; margin: 22px 0; }
+.wizard-step {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--bg);
+  box-shadow: 0 2px 8px rgba(0,0,0,.05), 0 1px 3px rgba(0,0,0,.04);
+}
+.wizard-step-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 18px;
+  background: var(--bg-subtle);
+  border-bottom: 1px solid var(--border);
+}
+.wizard-step-badge {
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  background: var(--accent-bright);
+  color: #111;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  font-family: ui-monospace, monospace;
+}
+.wizard-step-title { font-size: 13.5px; font-weight: 700; color: var(--text); }
+.wizard-step-body {
+  padding: 12px 18px 14px;
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.65;
+}
+.wizard-step-shot { border-top: 1px solid var(--border); }
+.wizard-step-shot img { display: block; width: 100%; height: auto; }
+.wizard-step-code {
+  margin-top: 10px;
+  padding: 10px 14px;
+  background: var(--step-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-family: ui-monospace, 'Cascadia Code', monospace;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.8;
+}
+
+/* ── Onboarding step gallery ── */
+.onboard-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+  margin: 22px 0;
+}
+.onboard-step {
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  box-shadow: 0 2px 10px rgba(0,0,0,.06), 0 1px 3px rgba(0,0,0,.04);
+  background: var(--bg);
+  transition: box-shadow .15s, transform .15s;
+}
+.onboard-step:hover {
+  box-shadow: 0 6px 20px rgba(0,0,0,.10), 0 2px 6px rgba(0,0,0,.06);
+  transform: translateY(-2px);
+}
+.onboard-step img { display: block; width: 100%; height: auto; }
+.onboard-step-cap {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 10px;
+  background: var(--bg-subtle);
+  border-top: 1px solid var(--border);
+}
+.onboard-step-num {
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: var(--accent-bright);
+  color: #111;
+  font-size: 10px;
+  font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  font-family: ui-monospace, monospace;
+}
+.onboard-step-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+/* ── Chapter color coding — yellow/gray/black only ── */
+.chapter-icon {
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+
+/* Primary chapters get yellow icon */
+.ch-pos .chapter-icon,
+.ch-start .chapter-icon,
+.ch-home .chapter-icon,
+.ch-rst .chapter-icon,
+.ch-rst-pos .chapter-icon {
+  background: var(--accent-bright);
+  color: #111111;
+  border-color: transparent;
+}
+
+/* All chapter h2 headings: near-black */
+.chapter h2 { color: var(--text); }
+
+/* ── Dark mode: yellow icons keep their pop, gray icons soften ── */
+@media (prefers-color-scheme: dark) {
+  .chapter-icon { background: #222222; color: #888888; border-color: #333333; }
+  .ch-pos .chapter-icon,
+  .ch-start .chapter-icon,
+  .ch-home .chapter-icon,
+  .ch-rst .chapter-icon,
+  .ch-rst-pos .chapter-icon { background: var(--accent-bright); color: #111111; border-color: transparent; }
+}
+:root[data-theme="dark"] .chapter-icon { background: #222222; color: #888888; border-color: #333333; }
+:root[data-theme="dark"] .ch-pos .chapter-icon,
+:root[data-theme="dark"] .ch-start .chapter-icon,
+:root[data-theme="dark"] .ch-home .chapter-icon,
+:root[data-theme="dark"] .ch-rst .chapter-icon,
+:root[data-theme="dark"] .ch-rst-pos .chapter-icon { background: var(--accent-bright); color: #111111; border-color: transparent; }
+
+/* ── Progress bar ── */
+#progress-bar {
+  position: fixed;
+  top: 0; left: 0;
+  height: 2px;
+  background: var(--accent);
+  z-index: 200;
+  transition: width .15s;
+  width: 0%;
+}
+
+/* ── Responsive ── */
+@media (max-width: 860px) {
+  #sidebar { transform: translateX(-258px); transition: transform .2s; }
+  #sidebar.open { transform: none; }
+  #main { margin-left: 0; }
+  .feature-grid { grid-template-columns: 1fr; }
+  .toc-grid { grid-template-columns: 1fr; }
+}
+
+/* ── Print ── */
+@media print {
+  #sidebar, #topbar, #progress-bar { display: none; }
+  #main { margin-left: 0; }
+
+  /* Never split an atomic block across a page boundary — push it whole
+     to the next page instead of cutting it mid-image / mid-card. */
+  .screenshot-figure,
+  .wizard-step,
+  .onboard-step,
+  .feature-card,
+  .callout,
+  .step,
+  .toc,
+  .shortcut-table,
+  .data-table,
+  .data-table tr,
+  .hero-meta,
+  .chapter-header {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* Never leave a heading stranded alone at the bottom of a page. */
+  .chapter-header,
+  .section h3,
+  h1, h2, h3, h4 {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  /* Start each new chapter (but not the first) on a fresh page. */
+  .chapter + .chapter { break-before: page; page-break-before: always; }
+
+  p, li { orphans: 3; widows: 3; }
+
+  /* Rounded corners + overflow:hidden can leave a faint clip-mask
+     hairline artifact when Chromium rasterizes the PDF — not needed
+     in print anyway. */
+  .wizard-step,
+  .screenshot-figure,
+  .onboard-step,
+  .feature-card {
+    border-radius: 0;
+    box-shadow: none;
+  }
+}
+
+/* misc */
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+#sidebar a:hover, #sidebar a { text-decoration: none; }
+ul, ol { padding-left: 20px; }
+li { margin-bottom: 5px; font-size: 13.5px; color: var(--text-muted); line-height: 1.6; }
+li strong { color: var(--text); }
+</style>
+</head>
+<body>
+
+<div id="progress-bar"></div>
+
+<!-- ── Sidebar ── -->
+<nav id="sidebar">
+  <div class="sb-brand">
+    <img class="sb-logo" src="logo.png" alt="Zeebroo POS" onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+    <div class="sb-brand-name" style="display:none;font-size:15px;font-weight:700;color:var(--text);">Zeebroo POS</div>
+    <div class="sb-brand-sub">COMPLETE USER GUIDE · v3.0</div>
+  </div>
+  <div class="sb-nav">
+
+    <!-- ── Getting Started ── -->
+    <div class="tree-group open">
+      <button class="tree-header" onclick="treeToggle(this)">
+        <svg class="tree-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.5"/><path d="M8 5v3l2 2"/></svg>
+        <span class="tree-label">Getting Started</span>
+        <svg class="tree-chevron" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2l4 3-4 3"/></svg>
+      </button>
+      <div class="tree-children">
+        <div class="sb-chapter-group sub-open">
+          <a class="sb-link" href="#ch1" onclick="subToggle(this)">Registration &amp; Setup</a>
+          <div class="sb-subtopics">
+            <a class="sb-sub" href="#s1-1">Creating Your Account</a>
+            <a class="sb-sub" href="#s1-2">Available Features</a>
+            <a class="sb-sub" href="#s1-3">Signing In</a>
+            <a class="sb-sub" href="#s1-4">Switching Businesses</a>
+          </div>
+        </div>
+        <div class="sb-chapter-group sub-open">
+          <a class="sb-link" href="#ch2" onclick="subToggle(this)">Home Dashboard</a>
+          <div class="sb-subtopics">
+            <a class="sb-sub" href="#s2-1">Ribbon Interface</a>
+            <a class="sb-sub" href="#s2-2">Dashboard KPIs</a>
+            <a class="sb-sub" href="#s2-3">Sales Analytics Chart</a>
+            <a class="sb-sub" href="#s2-4">Quick Actions</a>
+            <a class="sb-sub" href="#s2-5">Activity Feed</a>
+            <a class="sb-sub" href="#s2-6">Keyboard Shortcuts</a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Daily Operations ── -->
+    <div class="tree-group open">
+      <button class="tree-header" onclick="treeToggle(this)">
+        <svg class="tree-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M9.5 1.5L6 9h3.5L6.5 14.5l7-8.5H10L13 1.5H9.5z"/></svg>
+        <span class="tree-label">Daily Operations</span>
+        <svg class="tree-chevron" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2l4 3-4 3"/></svg>
+      </button>
+      <div class="tree-children">
+        <div class="sb-chapter-group sub-open">
+          <a class="sb-link" href="#ch3" onclick="subToggle(this)">Point of Sale</a>
+          <div class="sb-subtopics">
+            <a class="sb-sub" href="#s3-1">POS Layout</a>
+            <a class="sb-sub" href="#s3-2">Starting a Sale</a>
+            <a class="sb-sub" href="#s3-3">Multiple Sessions</a>
+            <a class="sb-sub" href="#s3-4">Parking an Order</a>
+            <a class="sb-sub" href="#s3-5">Customers</a>
+            <a class="sb-sub" href="#s3-6">Quotations</a>
+            <a class="sb-sub" href="#s3-7">Keyboard Shortcuts</a>
+          </div>
+        </div>
+        <div class="sb-chapter-group sub-open">
+          <a class="sb-link" href="#ch4" onclick="subToggle(this)">Sales &amp; Returns</a>
+          <div class="sb-subtopics">
+            <a class="sb-sub" href="#s4-1">Transaction History</a>
+            <a class="sb-sub" href="#s4-2">Analytics</a>
+            <a class="sb-sub" href="#s4-3">Processing a Return</a>
+            <a class="sb-sub" href="#s4-4">End-of-Day Settlement</a>
+            <a class="sb-sub" href="#s4-5">Sales Invoices</a>
+          </div>
+        </div>
+        <div class="sb-chapter-group sub-open">
+          <a class="sb-link" href="#ch5" onclick="subToggle(this)">Inventory &amp; Products</a>
+          <div class="sb-subtopics">
+            <a class="sb-sub" href="#s5-1">Adding a Product</a>
+            <a class="sb-sub" href="#s5-2">Categories &amp; Brands</a>
+            <a class="sb-sub" href="#s5-3">Stock Management</a>
+            <a class="sb-sub" href="#s5-4">Suppliers</a>
+            <a class="sb-sub" href="#s5-5">Purchase Orders</a>
+            <a class="sb-sub" href="#s5-6">Barcode Printing</a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Business ── -->
+    <div class="tree-group open">
+      <button class="tree-header" onclick="treeToggle(this)">
+        <svg class="tree-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="12" height="8" rx="1.5"/><path d="M5 6V4.5A2.5 2.5 0 0111 4.5V6"/></svg>
+        <span class="tree-label">Business</span>
+        <svg class="tree-chevron" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2l4 3-4 3"/></svg>
+      </button>
+      <div class="tree-children">
+        <div class="sb-chapter-group sub-open">
+          <a class="sb-link" href="#ch6" onclick="subToggle(this)">Finance &amp; Accounts</a>
+          <div class="sb-subtopics">
+            <a class="sb-sub" href="#s6-1">Cash Flow</a>
+            <a class="sb-sub" href="#s6-2">Bank Accounts</a>
+            <a class="sb-sub" href="#s6-3">Bill Management</a>
+            <a class="sb-sub" href="#s6-4">Loans</a>
+            <a class="sb-sub" href="#s6-5">Rentals &amp; Properties</a>
+            <a class="sb-sub" href="#s6-6">Finance Reports</a>
+          </div>
+        </div>
+        <div class="sb-chapter-group sub-open">
+          <a class="sb-link" href="#ch7" onclick="subToggle(this)">Human Resources</a>
+          <div class="sb-subtopics">
+            <a class="sb-sub" href="#s7-1">Adding Employees</a>
+            <a class="sb-sub" href="#s7-2">Departments</a>
+            <a class="sb-sub" href="#s7-3">Salary &amp; Payroll</a>
+            <a class="sb-sub" href="#s7-4">Attendance</a>
+          </div>
+        </div>
+        <div class="sb-chapter-group sub-open">
+          <a class="sb-link" href="#ch8" onclick="subToggle(this)">Design Studio</a>
+          <div class="sb-subtopics">
+            <a class="sb-sub" href="#s8-1">Creating a Campaign</a>
+            <a class="sb-sub" href="#s8-2">Design Types</a>
+            <a class="sb-sub" href="#s8-3">Letterhead Tutorial</a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Restaurant ── -->
+    <div class="tree-group open">
+      <button class="tree-header" onclick="treeToggle(this)">
+        <svg class="tree-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 1v5a3 3 0 006 0V1"/><line x1="8" y1="6" x2="8" y2="15"/><line x1="2" y1="1" x2="2" y2="15"/></svg>
+        <span class="tree-label">Restaurant</span>
+        <svg class="tree-chevron" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2l4 3-4 3"/></svg>
+      </button>
+      <div class="tree-children">
+        <div class="sb-chapter-group sub-open">
+          <a class="sb-link" href="#ch9" onclick="subToggle(this)">Restaurant Management</a>
+          <div class="sb-subtopics">
+            <a class="sb-sub" href="#s9-1">Setting Up Tables</a>
+            <a class="sb-sub" href="#s9-2">Building Your Menu</a>
+            <a class="sb-sub" href="#s9-3">Managing Orders</a>
+            <a class="sb-sub" href="#s9-4">Kitchen Display (KDS)</a>
+            <a class="sb-sub" href="#s9-5">Ingredient Management</a>
+            <a class="sb-sub" href="#s9-6">Ingredient Purchase Orders</a>
+          </div>
+        </div>
+        <div class="sb-chapter-group sub-open">
+          <a class="sb-link" href="#ch10" onclick="subToggle(this)">Restaurant POS</a>
+          <div class="sb-subtopics">
+            <a class="sb-sub" href="#s10-1">POS Interface</a>
+            <a class="sb-sub" href="#s10-2">Table Order</a>
+            <a class="sb-sub" href="#s10-3">Takeaway Order</a>
+            <a class="sb-sub" href="#s10-4">Multiple Active Orders</a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Configuration ── -->
+    <div class="tree-group open">
+      <button class="tree-header" onclick="treeToggle(this)">
+        <svg class="tree-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="2.5"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.22 3.22l1.42 1.42M11.36 11.36l1.42 1.42M3.22 12.78l1.42-1.42M11.36 4.64l1.42-1.42"/></svg>
+        <span class="tree-label">Configuration</span>
+        <svg class="tree-chevron" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2l4 3-4 3"/></svg>
+      </button>
+      <div class="tree-children">
+        <div class="sb-chapter-group sub-open">
+          <a class="sb-link" href="#ch11" onclick="subToggle(this)">Feature Management</a>
+          <div class="sb-subtopics">
+            <a class="sb-sub" href="#s11-1">Opening Feature Management</a>
+            <a class="sb-sub" href="#s11-2">Enabling Features</a>
+            <a class="sb-sub" href="#s11-3">Industry Defaults</a>
+          </div>
+        </div>
+        <div class="sb-chapter-group sub-open">
+          <a class="sb-link" href="#ch12" onclick="subToggle(this)">Settings &amp; Preferences</a>
+          <div class="sb-subtopics">
+            <a class="sb-sub" href="#s12-1">POS Settings</a>
+            <a class="sb-sub" href="#s12-2">General Settings</a>
+            <a class="sb-sub" href="#s12-3">Accounts Settings</a>
+            <a class="sb-sub" href="#s12-4">Receipt Customisation</a>
+            <a class="sb-sub" href="#s12-5">Dark Mode</a>
+            <a class="sb-sub" href="#s12-6">Check for Updates</a>
+            <a class="sb-sub" href="#s12-7">Signing Out</a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</nav>
+
+<!-- ── Main ── -->
+<div id="main">
+  <div id="topbar">
+    <span class="tb-title">ZEEBROO POS DESKTOP · USER GUIDE</span>
+    <div class="tb-search" id="tb-search">
+      <div class="tb-search-wrap">
+        <span class="tb-search-icon">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        </span>
+        <input class="tb-search-input" id="tb-search-input" type="search" placeholder="Search guide…" autocomplete="off" spellcheck="false" aria-label="Search guide">
+        <button class="tb-search-clear" id="tb-search-clear" aria-label="Clear search" tabindex="-1">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="tb-search-drop" id="tb-search-drop" role="listbox"></div>
+    </div>
+    <div class="tb-actions">
+      <a href="whats-new.html" style="font-size:11px;font-weight:600;background:#22c55e;color:#fff;padding:4px 10px;border-radius:4px;text-decoration:none;letter-spacing:.02em;">What's New in v3.1.0</a>
+      <span class="version-badge">v3.0.0</span>
+      <button class="theme-toggle" onclick="toggleTheme()">Toggle Theme</button>
+    </div>
+  </div>
+
+  <div id="content">
+
+    <!-- Hero -->
+    <div class="hero">
+      <div class="hero-eyebrow">Complete Guide</div>
+      <h1>Zeebroo POS Desktop<br>User Guide</h1>
+      <p>Everything you need to set up, operate, and grow your business — from your first login to daily restaurant orders, payroll, and beyond.</p>
+      <div class="hero-meta">
+        <div class="hero-meta-item"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg> <strong>12 Chapters</strong></div>
+        <div class="hero-meta-item"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg> <strong>Desktop App</strong></div>
+        <div class="hero-meta-item"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg> <strong>v3.0.0</strong></div>
+      </div>
+    </div>
+
+    <!-- TOC -->
+    <div class="toc">
+      <div class="toc-title">Table of Contents</div>
+      <div class="toc-grid">
+        <a class="toc-item" href="#ch1"><span class="toc-num">01</span> Registration &amp; Setup</a>
+        <a class="toc-item" href="#ch2"><span class="toc-num">02</span> Home Dashboard</a>
+        <a class="toc-item" href="#ch3"><span class="toc-num">03</span> Point of Sale</a>
+        <a class="toc-item" href="#ch4"><span class="toc-num">04</span> Sales &amp; Returns</a>
+        <a class="toc-item" href="#ch5"><span class="toc-num">05</span> Inventory &amp; Products</a>
+        <a class="toc-item" href="#ch6"><span class="toc-num">06</span> Finance &amp; Accounts</a>
+        <a class="toc-item" href="#ch7"><span class="toc-num">07</span> Human Resources</a>
+        <a class="toc-item" href="#ch8"><span class="toc-num">08</span> Design Studio</a>
+        <a class="toc-item" href="#ch9"><span class="toc-num">09</span> Restaurant Management</a>
+        <a class="toc-item" href="#ch10"><span class="toc-num">10</span> Restaurant POS</a>
+        <a class="toc-item" href="#ch11"><span class="toc-num">11</span> Feature Management</a>
+        <a class="toc-item" href="#ch12"><span class="toc-num">12</span> Settings &amp; Preferences</a>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════════ -->
+    <!-- CHAPTER 1 -->
+    <!-- ════════════════════════════════════════ -->
+    <div class="chapter ch-start" id="ch1">
+      <div class="chapter-header">
+        <div class="chapter-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09Z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2Z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/></svg></div>
+        <div class="chapter-meta">
+          <div class="chapter-num">CHAPTER 01</div>
+          <h2>Registration &amp; Setup</h2>
+          <div class="chapter-desc">Create your account, set up your business profile, choose your industry, and select the features your business needs.</div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h3 id="s1-1">Creating Your Account</h3>
+        <p>When you launch Zeebroo POS for the first time, you'll see the login screen. Click <span class="ui">Create account</span> to begin the 4-step registration wizard.</p>
+
+        <div class="wizard-steps">
+          <div class="wizard-step">
+            <div class="wizard-step-header">
+              <span class="wizard-step-badge">1</span>
+              <span class="wizard-step-title">Account Credentials</span>
+            </div>
+            <div class="wizard-step-body">
+              Enter your <span class="field-label">Email address</span> and create a secure <span class="field-label">Password</span>. These will be your login credentials for every device running Zeebroo POS. Click <span class="ui">Next</span>.
+            </div>
+            <div class="wizard-step-shot">
+              <img src="screenshots/register_onboard/setup_your_account.png" alt="Account credentials screen" loading="lazy">
+            </div>
+          </div>
+
+          <div class="wizard-step">
+            <div class="wizard-step-header">
+              <span class="wizard-step-badge">2</span>
+              <span class="wizard-step-title">Profile Information</span>
+            </div>
+            <div class="wizard-step-body">
+              Enter your <span class="field-label">Full name</span> and your <span class="field-label">Business name</span>. Your business name will appear on receipts, reports, and throughout the app. Click <span class="ui">Next</span>.
+            </div>
+            <div class="wizard-step-shot">
+              <img src="screenshots/register_onboard/tell_us_about_you.png" alt="Profile information screen" loading="lazy">
+            </div>
+          </div>
+
+          <div class="wizard-step">
+            <div class="wizard-step-header">
+              <span class="wizard-step-badge">3</span>
+              <span class="wizard-step-title">Choose Your Industry</span>
+            </div>
+            <div class="wizard-step-body">
+              Select the category that best describes your business — <strong>Local Retail</strong>, <strong>Food &amp; Beverage</strong>, <strong>Restaurant</strong>, <strong>Bar</strong>, <strong>Healthcare</strong>, and more. Selecting <strong>Restaurant</strong> or <strong>Bar</strong> automatically enables the Restaurant feature. Click <span class="ui">Next</span>.
+            </div>
+            <div class="wizard-step-shot">
+              <img src="screenshots/register_onboard/what_your_industry.png" alt="Industry selection screen" loading="lazy">
+            </div>
+          </div>
+
+          <div class="wizard-step">
+            <div class="wizard-step-header">
+              <span class="wizard-step-badge">4</span>
+              <span class="wizard-step-title">Select Features</span>
+            </div>
+            <div class="wizard-step-body">
+              Toggle the features your business needs. Each feature unlocks a dedicated tab in the ribbon. Restaurant and Point of Sale are mutually exclusive — choose the one that fits your setup. Click <span class="ui">Create Account</span> to finish.
+            </div>
+            <div class="wizard-step-shot">
+              <img src="screenshots/register_onboard/what_do_you_need.png" alt="Feature selection screen" loading="lazy">
+            </div>
+          </div>
+        </div>
+
+        <div class="callout tip">
+          <div class="callout-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.1 1.5 3.5.8.8 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg></div>
+          <div class="callout-body">
+            <strong>Tip</strong>
+            You can always change your enabled features later from <span class="ui">Home → Tools → Feature Management</span>. Changes take effect after the app restarts.
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h3 id="s1-2">Available Features</h3>
+        <p>Select only what your business uses — each enabled feature adds a tab to the ribbon interface.</p>
+        <div class="feature-grid">
+          <div class="feature-card">
+            <div class="feature-card-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 3h20v4H2z"/><path d="M4 7v13a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V7"/><path d="M10 12h4"/></svg></div>
+            <div class="feature-card-name">Point of Sale</div>
+            <div class="feature-card-desc">Cashier checkout, product search, cart management, receipts, and customer accounts.</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-card-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></div>
+            <div class="feature-card-name">Product Management</div>
+            <div class="feature-card-desc">Product catalog, variants, categories, brands, discounts, and barcode printing.</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-card-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/></svg></div>
+            <div class="feature-card-name">Stock Management</div>
+            <div class="feature-card-desc">Track inventory levels, run stock audits, manage purchase orders and GRNs.</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-card-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+            <div class="feature-card-name">Bill Management</div>
+            <div class="feature-card-desc">Supplier bills, loans, rentals, properties, and expense tracking.</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-card-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+            <div class="feature-card-name">Human Resources</div>
+            <div class="feature-card-desc">Employee records, departments, salary, payroll, and attendance.</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-card-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="3" y1="2" x2="3" y2="22"/><path d="M7 2v11"/><path d="M11 2v6.5a3.5 3.5 0 0 1-7 0V2"/><path d="M21 15V2v0a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/></svg></div>
+            <div class="feature-card-name">Restaurant</div>
+            <div class="feature-card-desc">Table management, menu items, orders, KDS, ingredients, and restaurant POS. Cannot be combined with Point of Sale.</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-card-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></div>
+            <div class="feature-card-name">Services</div>
+            <div class="feature-card-desc">Service-bound products and job management for service businesses.</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-card-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg></div>
+            <div class="feature-card-name">Social Campaigns</div>
+            <div class="feature-card-desc">Design studio for creating branded social media content and ad creatives.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h3 id="s1-3">Signing In to an Existing Account</h3>
+        <figure class="screenshot-figure">
+          <img src="screenshots/01-login.png" alt="Zeebroo POS login screen" loading="lazy">
+          <figcaption class="screenshot-caption">The Zeebroo POS login screen — enter your registered email and password to continue.</figcaption>
+        </figure>
+        <div class="steps">
+          <div class="step">
+            <div class="step-num">1</div>
+            <div class="step-body">
+              <strong>Enter your email and password</strong>
+              <p>On the login screen, type your registered email and password.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">2</div>
+            <div class="step-body">
+              <strong>Click Sign In</strong>
+              <p>The app will authenticate with the server and load your business data. The main interface opens automatically.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">3</div>
+            <div class="step-body">
+              <strong>Set up a bank account (first time only)</strong>
+              <p>If you haven't added a bank account yet, the Bank Account Setup Wizard will open. Add at least one account so payments can be settled correctly.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="wizard-steps">
+          <div class="wizard-step">
+            <div class="wizard-step-header">
+              <span class="wizard-step-badge">1</span>
+              <span class="wizard-step-title">Add Bank Account</span>
+            </div>
+            <div class="wizard-step-body">
+              Choose your bank from the list or enter a custom name. Select the account type (Current, Savings, Cash, etc.) and assign a currency.
+            </div>
+            <div class="wizard-step-shot">
+              <img src="screenshots/register_onboard/setup_bank_ account_1st_step.png" alt="Bank setup step 1" loading="lazy">
+            </div>
+          </div>
+
+          <div class="wizard-step">
+            <div class="wizard-step-header">
+              <span class="wizard-step-badge">2</span>
+              <span class="wizard-step-title">Account Details</span>
+            </div>
+            <div class="wizard-step-body">
+              Enter the <span class="field-label">Account number</span> and any additional reference details. These are used for reconciliation and reporting only.
+            </div>
+            <div class="wizard-step-shot">
+              <img src="screenshots/register_onboard/setup_bank_ account_2nd_step.png" alt="Bank setup step 2" loading="lazy">
+            </div>
+          </div>
+
+          <div class="wizard-step">
+            <div class="wizard-step-header">
+              <span class="wizard-step-badge">3</span>
+              <span class="wizard-step-title">Opening Balance</span>
+            </div>
+            <div class="wizard-step-body">
+              Enter the current balance of this account. This sets the starting point for all financial tracking. Click <span class="ui">Save</span> to complete the setup.
+            </div>
+            <div class="wizard-step-shot">
+              <img src="screenshots/register_onboard/opening_balance_3rd_step.png" alt="Opening balance step 3" loading="lazy">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h3 id="s1-4">Switching Businesses or Branches</h3>
+        <p>If your account is linked to multiple businesses or branches, click your profile name in the top-right corner to open the account panel. Use <span class="ui">Switch Business</span> or <span class="ui">Switch Branch</span> to change context. All data refreshes automatically.</p>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════════ -->
+    <!-- CHAPTER 2 -->
+    <!-- ════════════════════════════════════════ -->
+    <div class="chapter ch-home" id="ch2">
+      <div class="chapter-header">
+        <div class="chapter-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></div>
+        <div class="chapter-meta">
+          <div class="chapter-num">CHAPTER 02</div>
+          <h2>Home Dashboard</h2>
+          <div class="chapter-desc">Your command centre — daily KPIs, sales trends, quick actions, and real-time activity feed.</div>
+        </div>
+      </div>
+
+      <figure class="screenshot-figure">
+        <img src="screenshots/02-home.png" alt="Zeebroo POS Home Dashboard" loading="lazy">
+        <figcaption class="screenshot-caption">Home Dashboard — Business Flow view showing real-time cash flow, upcoming bills, and quick actions.</figcaption>
+      </figure>
+
+      <div class="section">
+        <h3 id="s2-1">The Ribbon Interface</h3>
+        <p>Zeebroo POS uses a Microsoft Office–style ribbon at the top of the screen. It's organised into <strong>tabs</strong> (Home, POS, Sales, Inventory, etc.) and <strong>groups</strong> within each tab. Click a tab to switch context — the ribbon buttons and the main panel both update together.</p>
+        <div class="callout tip">
+          <div class="callout-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.1 1.5 3.5.8.8 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg></div>
+          <div class="callout-body">
+            <strong>Tip</strong>
+            Only the tabs for your enabled features are visible. If you don't see the Restaurant or HR tab, go to <span class="ui">Home → Tools → Feature Management</span> and enable the relevant feature.
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h3 id="s2-2">Dashboard KPIs</h3>
+        <p>The Home dashboard shows live key performance indicators at the top:</p>
+        <ul>
+          <li><strong>Today's Sales</strong> — total revenue for today</li>
+          <li><strong>Transactions</strong> — number of completed sales today</li>
+          <li><strong>Products</strong> — total products in your catalog</li>
+          <li><strong>Customers</strong> — total registered customers</li>
+          <li><strong>Cash Flow</strong> — net cash movement (income minus expenses)</li>
+          <li><strong>Expenses</strong> — outgoing costs for the current period</li>
+        </ul>
+        <p>KPIs refresh every time you open the Home tab or click <span class="ui">Refresh</span> in the Overview group.</p>
+      </div>
+
+      <div class="section">
+        <h3 id="s2-3">Sales Analytics Chart</h3>
+        <p>Below the KPIs is a bar chart showing daily sales over the past 14 days. Hover over any bar to see the exact amount for that day. Use this to spot weekly patterns and peak trading days.</p>
+      </div>
+
+      <div class="section">
+        <h3 id="s2-4">Quick Actions</h3>
+        <p>The ribbon's <strong>Quick Actions</strong> group gives one-click access to the most common tasks:</p>
+        <table class="data-table">
+          <tr><th>Button</th><th>What it does</th></tr>
+          <tr><td><kbd>New Sale</kbd></td><td>Opens the POS tab ready to start a sale</td></tr>
+          <tr><td><kbd>New Product</kbd></td><td>Opens the Add Product form in Inventory</td></tr>
+          <tr><td><kbd>New Bill</kbd></td><td>Opens the Create Bill form in Finance</td></tr>
+          <tr><td><kbd>New Employee</kbd></td><td>Opens the Add Employee form in HR</td></tr>
+        </table>
+      </div>
+
+      <div class="section">
+        <h3 id="s2-5">Real-time Activity Feed</h3>
+        <p>The right panel of the Home dashboard shows a live feed of recent events — new sales, stock adjustments, new customers, and system actions — updated automatically every 30 seconds alongside the background sync engine.</p>
+      </div>
+
+      <div class="section">
+        <h3 id="s2-6">Keyboard Shortcuts</h3>
+        <p>All shortcuts work on Windows and macOS. On macOS substitute <kbd>Ctrl</kbd> with <kbd>⌘ Cmd</kbd> where shown.</p>
+        <div class="shortcut-table">
+          <div class="shortcut-group-header">Navigation</div>
+          <div class="shortcut-row"><span class="shortcut-label">Open POS tab</span><div class="shortcut-keys"><kbd>F2</kbd></div></div>
+          <div class="shortcut-row"><span class="shortcut-label">Toggle full screen</span><div class="shortcut-keys"><kbd>F11</kbd></div></div>
+          <div class="shortcut-row"><span class="shortcut-label">Close modal / cancel</span><div class="shortcut-keys"><kbd>Esc</kbd></div></div>
+          <div class="shortcut-row"><span class="shortcut-label">Move to next field</span><div class="shortcut-keys"><kbd>Tab</kbd></div></div>
+          <div class="shortcut-group-header">POS — Products</div>
+          <div class="shortcut-row"><span class="shortcut-label">Focus product search bar</span><div class="shortcut-keys"><kbd>F2</kbd></div></div>
+          <div class="shortcut-row"><span class="shortcut-label">Activate barcode scan mode</span><div class="shortcut-keys"><kbd>F3</kbd></div></div>
+          <div class="shortcut-row"><span class="shortcut-label">Add top search result to cart</span><div class="shortcut-keys"><kbd>Enter</kbd></div></div>
+          <div class="shortcut-row"><span class="shortcut-label">Refresh product list</span><div class="shortcut-keys"><kbd>F5</kbd></div></div>
+          <div class="shortcut-group-header">POS — Cart</div>
+          <div class="shortcut-row"><span class="shortcut-label">Increase selected item quantity</span><div class="shortcut-keys"><kbd>+</kbd></div></div>
+          <div class="shortcut-row"><span class="shortcut-label">Decrease selected item quantity</span><div class="shortcut-keys"><kbd>−</kbd></div></div>
+          <div class="shortcut-row"><span class="shortcut-label">Remove selected cart item</span><div class="shortcut-keys"><kbd>Del</kbd></div></div>
+          <div class="shortcut-row"><span class="shortcut-label">Undo last cart action</span><div class="shortcut-keys"><kbd>Ctrl</kbd><kbd>Z</kbd></div></div>
+          <div class="shortcut-row"><span class="shortcut-label">Apply / edit discount</span><div class="shortcut-keys"><kbd>F8</kbd></div></div>
+          <div class="shortcut-row"><span class="shortcut-label">Attach customer to sale</span><div class="shortcut-keys"><kbd>F9</kbd></div></div>
+          <div class="shortcut-group-header">POS — Sessions &amp; Checkout</div>
+          <div class="shortcut-row"><span class="shortcut-label">New POS tab / session</span><div class="shortcut-keys"><kbd>F7</kbd></div></div>
+          <div class="shortcut-row"><span class="shortcut-label">Switch to next tab</span><div class="shortcut-keys"><kbd>Ctrl</kbd><kbd>Tab</kbd></div></div>
+          <div class="shortcut-row"><span class="shortcut-label">Open parked orders</span><div class="shortcut-keys"><kbd>F6</kbd></div></div>
+          <div class="shortcut-row"><span class="shortcut-label">Open checkout / payment screen</span><div class="shortcut-keys"><kbd>F10</kbd></div></div>
+          <div class="shortcut-row"><span class="shortcut-label">Confirm sale (on payment screen)</span><div class="shortcut-keys"><kbd>Enter</kbd></div></div>
+          <div class="shortcut-row"><span class="shortcut-label">Print receipt</span><div class="shortcut-keys"><kbd>Ctrl</kbd><kbd>P</kbd></div></div>
+          <div class="shortcut-row"><span class="shortcut-label">Reprint last receipt</span><div class="shortcut-keys"><kbd>F12</kbd></div></div>
+          <div class="shortcut-group-header">App-wide Quick Actions</div>
+          <div class="shortcut-row"><span class="shortcut-label">Add new product</span><div class="shortcut-keys"><kbd>F4</kbd></div></div>
+          <div class="shortcut-row"><span class="shortcut-label">Zoom in</span><div class="shortcut-keys"><kbd>Ctrl</kbd><kbd>+</kbd></div></div>
+          <div class="shortcut-row"><span class="shortcut-label">Zoom out</span><div class="shortcut-keys"><kbd>Ctrl</kbd><kbd>−</kbd></div></div>
+          <div class="shortcut-row"><span class="shortcut-label">Reset zoom</span><div class="shortcut-keys"><kbd>Ctrl</kbd><kbd>0</kbd></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════════ -->
+    <!-- CHAPTER 3 -->
+    <!-- ════════════════════════════════════════ -->
+    <div class="chapter ch-pos" id="ch3">
+      <div class="chapter-header">
+        <div class="chapter-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 3h20v4H2z"/><path d="M4 7v13a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V7"/><path d="M10 12h4"/></svg></div>
+        <div class="chapter-meta">
+          <div class="chapter-num">CHAPTER 03</div>
+          <h2>Point of Sale</h2>
+          <div class="chapter-desc">Process sales quickly, manage your cart, handle multiple sessions, and check out customers with cash, card, or bank transfer.</div>
+        </div>
+      </div>
+
+      <figure class="screenshot-figure">
+        <img src="screenshots/03-pos.png" alt="Zeebroo POS Point of Sale screen" loading="lazy">
+        <figcaption class="screenshot-caption">Point of Sale — product grid with category filters, search, and cart panel ready for checkout.</figcaption>
+      </figure>
+
+      <div class="section">
+        <h3 id="s3-1">The POS Layout</h3>
+        <p>The POS screen has three zones:</p>
+        <ul>
+          <li><strong>Left — Product grid:</strong> All your products displayed as cards, filterable by category</li>
+          <li><strong>Right — Cart:</strong> Items added to the current sale, with totals and payment controls</li>
+          <li><strong>Top — Search &amp; category bar:</strong> Filter products by name, SKU, or barcode, and jump between categories</li>
+        </ul>
+      </div>
+
+      <div class="section">
+        <h3 id="s3-2">Starting a Sale</h3>
+        <div class="steps">
+          <div class="step">
+            <div class="step-num">1</div>
+            <div class="step-body">
+              <strong>Open the POS tab</strong>
+              <p>Click the <span class="tab-label">POS</span> ribbon tab, or press <kbd>F2</kbd> from anywhere in the app.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">2</div>
+            <div class="step-body">
+              <strong>Find a product</strong>
+              <p>Click a product card directly, or type in the search bar to filter by name, SKU, or scan a barcode with <kbd>F3</kbd>. Click the <strong>Recent</strong> chip to show your most frequently sold items first.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">3</div>
+            <div class="step-body">
+              <strong>Add to cart</strong>
+              <p>Click any product card to add one unit. Click it again to increase quantity, or edit the quantity number directly in the cart. Remove a line by clicking the ✕ icon.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">4</div>
+            <div class="step-body">
+              <strong>Apply a discount (optional)</strong>
+              <p>If the Discount field is enabled in Settings, a discount box appears in the cart footer. Enter a percentage or fixed amount. This applies to the whole sale.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">5</div>
+            <div class="step-body">
+              <strong>Process payment</strong>
+              <p>Click <span class="ui">Checkout</span>. Select the payment method — <strong>Cash</strong>, <strong>Card</strong>, or <strong>Bank Transfer</strong>. For cash, enter the amount tendered and the change is calculated automatically. Click <span class="ui">Confirm Sale</span>.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">6</div>
+            <div class="step-body">
+              <strong>Print or share receipt</strong>
+              <p>After confirming, the receipt preview opens. Print directly or close to return to the POS.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h3 id="s3-3">Multiple POS Sessions (Tabs)</h3>
+        <p>You can run several parallel sales at once — useful for holding an order while serving another customer. Each session is called a <strong>tab</strong>.</p>
+        <ul>
+          <li>Click <span class="ui">+ New Tab</span> in the POS session bar to open an additional register</li>
+          <li>Click any tab to switch between active sessions</li>
+          <li>Each tab holds an independent cart — switching tabs does not affect the other session's items</li>
+        </ul>
+      </div>
+
+      <div class="section">
+        <h3 id="s3-4">Parking an Order</h3>
+        <p>If a customer needs to come back, click <span class="ui">Park Order</span> (in the POS ribbon group) to save the current cart without completing the sale. The parked order count badge appears in the ribbon. Click <span class="ui">Parked Orders</span> to retrieve and continue any parked sale.</p>
+      </div>
+
+      <div class="section">
+        <h3 id="s3-5">Customers</h3>
+        <p>Attach a customer to a sale for purchase history tracking and account management.</p>
+        <div class="steps">
+          <div class="step">
+            <div class="step-num">1</div>
+            <div class="step-body">
+              <strong>Search or create a customer</strong>
+              <p>Click <span class="ui">Customer</span> in the cart header. Type a name or phone number to search existing customers, or click <span class="ui">New Customer</span> to add one on the spot.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">2</div>
+            <div class="step-body">
+              <strong>Link to the sale</strong>
+              <p>Select the customer from the dropdown. Their name appears in the cart and the sale is recorded in their purchase history.</p>
+            </div>
+          </div>
+        </div>
+        <p>Access the full customer list from the ribbon's <strong>Customers</strong> group to view purchase history, outstanding credits, and account balances.</p>
+      </div>
+
+      <div class="section">
+        <h3 id="s3-6">Quotations</h3>
+        <p>Create a quotation (price estimate) without completing a sale:</p>
+        <div class="steps">
+          <div class="step">
+            <div class="step-num">1</div>
+            <div class="step-body">
+              <strong>Build the cart as normal</strong>
+              <p>Add the products and quantities the customer is interested in.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">2</div>
+            <div class="step-body">
+              <strong>Click Quotation in the ribbon</strong>
+              <p>Under the <strong>Quotations</strong> ribbon group, click <span class="ui">New Quotation</span>. The current cart items are saved as a quotation with a quote number.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">3</div>
+            <div class="step-body">
+              <strong>Print or convert</strong>
+              <p>Open the quotation from the Sales tab to print it or convert it to a completed sale.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h3 id="s3-7">POS Keyboard Shortcuts</h3>
+        <p>Master these shortcuts to speed up every transaction. On macOS, replace <kbd>Ctrl</kbd> with <kbd>⌘ Cmd</kbd>.</p>
+
+        <div class="shortcut-table">
+          <div class="shortcut-group-header">Opening &amp; Navigation</div>
+          <div class="shortcut-row"><span class="shortcut-label">Open POS / focus product search</span><div class="shortcut-keys"><kbd>F2</kbd></div></div>
+          <div class="shortcut-row"><span class="shortcut-label">Toggle full screen mode</span><div class="shortcut-keys"><kbd>F11</kbd></div></div>
+          <div class="shortcut-row"><span class="shortcut-label">Close modal / cancel action</span><div class="shortcut-keys"><kbd>Esc</kbd></div></div>
+          <div class="shortcut-row"><span class="shortcut-label">Move between input fields</span><div class="shortcut-keys"><kbd>Tab</kbd></div></div>
+
+          <div class="shortcut-group-header">Finding Products</div>
+          <div class="shortcut-row"><span class="shortcut-label">Focus the product search bar</span><div class="shortcut-keys"><kbd>F2</kbd></div></div>
+          <div class="shortcut-row"><span class="shortcut-label">Start typing anywhere to search</span><div class="shortcut-keys"><kbd>Any key</kbd></div></div>
+          <div class="shortcut-row"><span class="shortcut-label">Activate barcode scan mode</span><div class="shortcut-keys"><kbd>F3</kbd></div></div>
+          <div class="shortcut-row"><span class="shortcut-label">Add top search result to cart</span><div class="shortcut-keys"><kbd>Enter</kbd></div></div>
+          <div class="shortcut-row"><span class="shortcut-label">Navigate search results</span><div class="shortcut-keys"><kbd>↑</kbd><kbd>↓</kbd></div></div>
+          <div class="shortcut-row"><span class="shortcut-label">Refresh product grid</span><div class="shortcut-keys"><kbd>F5</kbd></div></div>
+          <div class="shortcut-row"><span class="shortcut-label">Add new product (quick form)</span><div class="shortcut-keys"><kbd>F4</kbd></div></div>
+
+          <div class="shortcut-group-header">Managing the Cart</div>
+          <div class="shortcut-row"><span class="shortcut-label">Add 1 unit of selected product</span><div class="shortcut-keys"><kbd>Enter</kbd></div></div>
+          <div class="shortcut-row"><span class="shortcut-label">Increase selected item quantity</span><div class="shortcut-keys"><kbd>+</kbd></div></div>
+          <div class="shortcut-row"><span class="shortcut-label">Decrease selected item quantity</span><div class="shortcut-keys"><kbd>−</kbd></div></div>
+          <div class="shortcut-row"><span class="shortcut-label">Remove selected line from cart</span><div class="shortcut-keys"><kbd>Del</kbd></div></div>
+          <div class="shortcut-row"><span class="shortcut-label">Clear entire cart</span><div class="shortcut-keys"><kbd>Ctrl</kbd><kbd>Del</kbd></div></div>
+          <div class="shortcut-row"><span class="shortcut-label">Undo last cart change</span><div class="shortcut-keys"><kbd>Ctrl</kbd><kbd>Z</kbd></div></div>
+          <div class="shortcut-row"><span class="shortcut-label">Apply / edit sale discount</span><div class="shortcut-keys"><kbd>F8</kbd></div></div>
+          <div class="shortcut-row"><span class="shortcut-label">Search &amp; attach customer</span><div class="shortcut-keys"><kbd>F9</kbd></div></div>
+
+          <div class="shortcut-group-header">Sessions &amp; Tabs</div>
+          <div class="shortcut-row"><span class="shortcut-label">Open a new POS session tab</span><div class="shortcut-keys"><kbd>F7</kbd></div></div>
+          <div class="shortcut-row"><span class="shortcut-label">Switch to next session tab</span><div class="shortcut-keys"><kbd>Ctrl</kbd><kbd>Tab</kbd></div></div>
+          <div class="shortcut-row"><span class="shortcut-label">Switch to previous session tab</span><div class="shortcut-keys"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>Tab</kbd></div></div>
+          <div class="shortcut-row"><span class="shortcut-label">Park the current order</span><div class="shortcut-keys"><kbd>Ctrl</kbd><kbd>K</kbd></div></div>
+          <div class="shortcut-row"><span class="shortcut-label">Open parked orders list</span><div class="shortcut-keys"><kbd>F6</kbd></div></div>
+
+          <div class="shortcut-group-header">Checkout &amp; Payment</div>
+          <div class="shortcut-row"><span class="shortcut-label">Open checkout / payment screen</span><div class="shortcut-keys"><kbd>F10</kbd></div></div>
+          <div class="shortcut-row"><span class="shortcut-label">Select Cash payment method</span><div class="shortcut-keys"><kbd>F10</kbd> then <kbd>1</kbd></div></div>
+          <div class="shortcut-row"><span class="shortcut-label">Select Card payment method</span><div class="shortcut-keys"><kbd>F10</kbd> then <kbd>2</kbd></div></div>
+          <div class="shortcut-row"><span class="shortcut-label">Select Bank Transfer method</span><div class="shortcut-keys"><kbd>F10</kbd> then <kbd>3</kbd></div></div>
+          <div class="shortcut-row"><span class="shortcut-label">Confirm / complete the sale</span><div class="shortcut-keys"><kbd>Enter</kbd></div></div>
+          <div class="shortcut-row"><span class="shortcut-label">Print receipt after sale</span><div class="shortcut-keys"><kbd>Ctrl</kbd><kbd>P</kbd></div></div>
+          <div class="shortcut-row"><span class="shortcut-label">Reprint last receipt</span><div class="shortcut-keys"><kbd>F12</kbd></div></div>
+        </div>
+
+        <div class="callout tip">
+          <div class="callout-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.1 1.5 3.5.8.8 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg></div>
+          <div class="callout-body">
+            <strong>Cashier tip</strong>
+            The fastest checkout flow is: scan items with a barcode scanner (<kbd>F3</kbd>), check the cart total, press <kbd>F10</kbd> to open payment, type the cash amount tendered, press <kbd>Enter</kbd> to confirm, then <kbd>Ctrl+P</kbd> to print — never touching the mouse.
+          </div>
+        </div>
+      </div>
+
+      <div class="callout warn">
+        <div class="callout-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg></div>
+        <div class="callout-body">
+          <strong>Important</strong>
+          The POS and Restaurant POS features are mutually exclusive. If your business uses the Restaurant module, use the <span class="tab-label">RESTAURANT POS</span> tab instead — see Chapter 10.
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════════ -->
+    <!-- CHAPTER 4 -->
+    <!-- ════════════════════════════════════════ -->
+    <div class="chapter ch-sales" id="ch4">
+      <div class="chapter-header">
+        <div class="chapter-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6"  y1="20" x2="6"  y2="14"/><line x1="2"  y1="20" x2="22" y2="20"/></svg></div>
+        <div class="chapter-meta">
+          <div class="chapter-num">CHAPTER 04</div>
+          <h2>Sales &amp; Returns</h2>
+          <div class="chapter-desc">View your transaction history, handle customer returns, run end-of-day settlement, and manage sales invoices.</div>
+        </div>
+      </div>
+
+      <figure class="screenshot-figure">
+        <img src="screenshots/05-sales.png" alt="Sales & Returns tab" loading="lazy">
+        <figcaption class="screenshot-caption">Sales tab — transaction history, analytics, and return processing.</figcaption>
+      </figure>
+
+      <div class="section">
+        <h3 id="s4-1">Transaction History</h3>
+        <p>Click the <span class="tab-label">SALES</span> ribbon tab, then click <span class="ui">Transactions</span> in the ribbon to see all completed sales. Use the search bar to find a sale by number, customer name, or amount.</p>
+        <p>Click any transaction row to open its full detail — items sold, payment method, amounts, and receipt reprint options.</p>
+      </div>
+
+      <div class="section">
+        <h3 id="s4-2">Sales History &amp; Analytics</h3>
+        <p>Click <span class="ui">Sales History</span> in the Transactions group to open the analytics view. Here you can:</p>
+        <ul>
+          <li>Filter by date range to see any period's performance</li>
+          <li>See top-selling products in the period</li>
+          <li>View a daily bar chart of revenue</li>
+          <li>See total sales, total transactions, and average order value</li>
+        </ul>
+        <figure class="screenshot-figure">
+          <img src="screenshots/sales_analytics_chart.png" alt="Sales analytics chart">
+          <figcaption class="screenshot-caption">Sales analytics — daily revenue bar chart with period totals, transaction count, and top products.</figcaption>
+        </figure>
+      </div>
+
+      <div class="section">
+        <h3 id="s4-3">Processing a Return</h3>
+        <div class="steps">
+          <div class="step">
+            <div class="step-num">1</div>
+            <div class="step-body">
+              <strong>Open the Returns group</strong>
+              <p>In the <span class="tab-label">SALES</span> ribbon, click <span class="ui">New Return</span>.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">2</div>
+            <div class="step-body">
+              <strong>Find the original sale</strong>
+              <p>Search by sale number or customer. Select the sale you're returning items from.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">3</div>
+            <div class="step-body">
+              <strong>Select items and quantities</strong>
+              <p>Check the items being returned and enter the quantity. The refund amount calculates automatically.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">4</div>
+            <div class="step-body">
+              <strong>Select a return reason and confirm</strong>
+              <p>Choose a reason from the list (Defective, Wrong item, Customer changed mind, etc.) and click <span class="ui">Process Return</span>. Stock is automatically restocked.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h3 id="s4-4">End-of-Day Settlement</h3>
+        <p>At the end of each trading day, run a settlement to reconcile cash and clear the session. This is found in the <strong>Settlement</strong> ribbon group.</p>
+        <div class="steps">
+          <div class="step">
+            <div class="step-num">1</div>
+            <div class="step-body">
+              <strong>Click End-of-Day</strong>
+              <p>The system tallies all transactions since the last settlement — cash sales, card payments, and bank transfers separately.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">2</div>
+            <div class="step-body">
+              <strong>Count your cash drawer</strong>
+              <p>Enter the physical cash amount in the drawer. The system shows the expected amount and any variance.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">3</div>
+            <div class="step-body">
+              <strong>Confirm and print</strong>
+              <p>Click <span class="ui">Confirm Settlement</span>. A settlement report is generated and the session resets for the next day.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h3 id="s4-5">Sales Invoices</h3>
+        <p>Create and send formal invoices to business customers from <span class="ui">Transactions → Invoices</span>. Each invoice can include payment terms, due dates, and line-item descriptions. Invoices can be printed or exported as PDF.</p>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════════ -->
+    <!-- CHAPTER 5 -->
+    <!-- ════════════════════════════════════════ -->
+    <div class="chapter ch-inv" id="ch5">
+      <div class="chapter-header">
+        <div class="chapter-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></div>
+        <div class="chapter-meta">
+          <div class="chapter-num">CHAPTER 05</div>
+          <h2>Inventory &amp; Products</h2>
+          <div class="chapter-desc">Build your product catalog, track stock, manage suppliers and purchase orders, and print barcodes.</div>
+        </div>
+      </div>
+
+      <figure class="screenshot-figure">
+        <img src="screenshots/04-inventory.png" alt="Inventory & Products tab" loading="lazy">
+        <figcaption class="screenshot-caption">Inventory tab — product catalog with stock levels, categories, and management tools.</figcaption>
+      </figure>
+
+      <div class="section">
+        <h3 id="s5-1">Adding a Product</h3>
+        <div class="steps">
+          <div class="step">
+            <div class="step-num">1</div>
+            <div class="step-body">
+              <strong>Open Inventory</strong>
+              <p>Click the <span class="tab-label">INVENTORY</span> tab, then click <span class="ui">New Product</span> in the Catalog ribbon group.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">2</div>
+            <div class="step-body">
+              <strong>Fill in the Overview tab</strong>
+              <p>Enter the <span class="field-label">Product name</span>, <span class="field-label">Category</span>, <span class="field-label">Brand</span>, <span class="field-label">SKU</span>, and <span class="field-label">Barcode</span>. Mark it active to make it visible in the POS.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">3</div>
+            <div class="step-body">
+              <strong>Set pricing</strong>
+              <p>Go to the <strong>Pricing</strong> tab. Enter the <span class="field-label">Cost price</span> and <span class="field-label">Selling price</span>. You can optionally add tiered selling units (e.g. sell individually and by the dozen at different prices).</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">4</div>
+            <div class="step-body">
+              <strong>Set initial stock</strong>
+              <p>Go to the <strong>Stock</strong> tab. Enter the <span class="field-label">Opening stock quantity</span> and <span class="field-label">Low stock alert level</span>. The app will warn you when stock falls below this threshold.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">5</div>
+            <div class="step-body">
+              <strong>Add images</strong>
+              <p>Go to the <strong>Images</strong> tab. Click <span class="ui">Choose Image</span> to open the image picker — you can upload from your computer, choose from the File Manager, or generate an AI image.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">6</div>
+            <div class="step-body">
+              <strong>Add variants (optional)</strong>
+              <p>Go to the <strong>Variants</strong> tab to create size/colour/style variations of the same product, each with its own SKU and price.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">7</div>
+            <div class="step-body">
+              <strong>Save</strong>
+              <p>Click <span class="ui">Save Product</span>. The product immediately appears in the POS grid.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h3 id="s5-2">Categories &amp; Brands</h3>
+        <p>Organise your catalog with categories and brands. In the Inventory ribbon's <strong>Catalog</strong> group:</p>
+        <ul>
+          <li>Click <span class="ui">Categories</span> to add, rename, or reorder product categories</li>
+          <li>Click <span class="ui">Brands</span> to manage your product brands — useful for filtering in both POS and inventory views</li>
+          <li>Click <span class="ui">Discounts</span> to create reusable discount rules that can be applied at checkout</li>
+        </ul>
+      </div>
+
+      <div class="section">
+        <h3 id="s5-3">Stock Management</h3>
+        <p>Track your inventory levels and make adjustments from the <strong>Stock</strong> ribbon group.</p>
+        <table class="data-table">
+          <tr><th>Action</th><th>When to use</th></tr>
+          <tr><td>Stock Audit</td><td>Count physical stock and correct discrepancies. Creates a permanent audit record.</td></tr>
+          <tr><td>Stock Adjustment</td><td>Add or remove stock manually — for wastage, loss, or corrections.</td></tr>
+          <tr><td>Stock Transfer</td><td>Move stock between branches of the same business.</td></tr>
+        </table>
+        <div class="callout tip">
+          <div class="callout-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.1 1.5 3.5.8.8 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg></div>
+          <div class="callout-body">
+            <strong>Tip</strong>
+            Every sale automatically deducts from stock. Every purchase order receipt automatically adds to stock. Manual adjustments create an audit trail with timestamps and user attribution.
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h3 id="s5-4">Suppliers</h3>
+        <p>Maintain a supplier directory in the <strong>Suppliers</strong> ribbon group. For each supplier, store their name, contact details, address, and default payment terms. Suppliers are then linked to purchase orders.</p>
+      </div>
+
+      <div class="section">
+        <h3 id="s5-5">Purchase Orders</h3>
+        <p>Manage your purchasing workflow from <span class="ui">Inventory → Purchasing → Purchase Orders</span>.</p>
+        <div class="steps">
+          <div class="step">
+            <div class="step-num">1</div>
+            <div class="step-body">
+              <strong>Create a Draft PO</strong>
+              <p>Click <span class="ui">New PO</span>. Select a supplier, set the order date and expected delivery date, then add line items — each with product, quantity, and unit cost.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">2</div>
+            <div class="step-body">
+              <strong>Place the order</strong>
+              <p>Once the PO is ready, click <span class="ui">Place Order</span>. The status changes to <strong>Ordered</strong>. The PO is now locked from further editing.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">3</div>
+            <div class="step-body">
+              <strong>Receive goods (GRN)</strong>
+              <p>When goods arrive, open the PO and click <span class="ui">Receive Goods</span>. Enter the quantities actually received. A Goods Receipt Note (GRN) is created and stock levels are updated immediately.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h3 id="s5-6">Barcode Printing</h3>
+        <p>Select one or more products in the inventory list, then click <span class="ui">Print Barcodes</span> in the <strong>Print</strong> ribbon group. Choose your label sheet size, set the quantity per product, and print directly to any connected label printer.</p>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════════ -->
+    <!-- CHAPTER 6 -->
+    <!-- ════════════════════════════════════════ -->
+    <div class="chapter ch-fin" id="ch6">
+      <div class="chapter-header">
+        <div class="chapter-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg></div>
+        <div class="chapter-meta">
+          <div class="chapter-num">CHAPTER 06</div>
+          <h2>Finance &amp; Accounts</h2>
+          <div class="chapter-desc">Monitor cash flow, manage bills and expenses, track loans, handle rental income, and maintain your financial accounts.</div>
+        </div>
+      </div>
+
+      <figure class="screenshot-figure">
+        <img src="screenshots/06-finance.png" alt="Finance & Accounts tab" loading="lazy">
+        <figcaption class="screenshot-caption">Finance tab — cash flow overview, accounts, bills, and expense management.</figcaption>
+      </figure>
+
+      <div class="section">
+        <h3 id="s6-1">Financial Overview — Cash Flow</h3>
+        <p>Click the <span class="tab-label">FINANCE</span> tab to open the finance panel. The default view is <strong>Cash Flow</strong>, showing:</p>
+        <ul>
+          <li>Monthly income vs. expenses chart</li>
+          <li>Running account balances</li>
+          <li>Recent income and expense transactions</li>
+          <li>Net cash position for the current period</li>
+        </ul>
+        <p>Use the date range selector to zoom into any period or compare months.</p>
+      </div>
+
+      <div class="section">
+        <h3 id="s6-2">Bank Accounts</h3>
+        <p>All payments flow through accounts. Go to the Finance panel and click <span class="ui">Accounts</span> in the sub-navigation. Here you can:</p>
+        <ul>
+          <li>Add bank accounts, cash tills, and mobile money wallets</li>
+          <li>View the full transaction ledger for each account</li>
+          <li>Transfer money between accounts</li>
+          <li>Reconcile account balances with your bank statement</li>
+        </ul>
+        <div class="callout note">
+          <div class="callout-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div>
+          <div class="callout-body">
+            <strong>Note</strong>
+            You must add at least one bank account before you can process sales. The Bank Account Setup Wizard runs automatically on first login.
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h3 id="s6-3">Bill Management</h3>
+        <p>Record supplier invoices and bills you need to pay. In the Finance ribbon, click <span class="ui">New Bill</span>.</p>
+        <div class="steps">
+          <div class="step">
+            <div class="step-num">1</div>
+            <div class="step-body">
+              <strong>Enter bill details</strong>
+              <p>Select the supplier, enter the invoice number, date, and due date. Add line items for each expense category.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">2</div>
+            <div class="step-body">
+              <strong>Record payment</strong>
+              <p>When you pay the bill, open it and click <span class="ui">Record Payment</span>. Select the account the payment was made from and the amount paid.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">3</div>
+            <div class="step-body">
+              <strong>Track partial payments</strong>
+              <p>You can make multiple partial payments against one bill. The outstanding balance updates after each payment until the bill is fully settled.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h3 id="s6-4">Loans</h3>
+        <p>Track business loans — both money borrowed and money lent. From the Finance panel sub-navigation, click <strong>Loans</strong>. Record the principal amount, interest rate, and repayment schedule. The system tracks each repayment and shows the remaining balance.</p>
+      </div>
+
+      <div class="section">
+        <h3 id="s6-5">Rentals &amp; Properties</h3>
+        <p>If your business manages rental properties or pays rent, the <strong>Rentals</strong> and <strong>Properties</strong> views let you track lease terms, monthly payments, and property-related expenses. Each property links to a billing schedule that reminds you of upcoming payments.</p>
+      </div>
+
+      <div class="section">
+        <h3 id="s6-6">Finance Reports</h3>
+        <p>Access standard financial reports from the <strong>Reports</strong> ribbon group:</p>
+        <ul>
+          <li><strong>Profit &amp; Loss</strong> — income vs. expenses for any period</li>
+          <li><strong>Account Statement</strong> — full ledger for a specific account</li>
+          <li><strong>Expense Summary</strong> — breakdown of spending by category</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════════ -->
+    <!-- CHAPTER 7 -->
+    <!-- ════════════════════════════════════════ -->
+    <div class="chapter ch-hr" id="ch7">
+      <div class="chapter-header">
+        <div class="chapter-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+        <div class="chapter-meta">
+          <div class="chapter-num">CHAPTER 07</div>
+          <h2>Human Resources</h2>
+          <div class="chapter-desc">Manage your team — employee records, departments, salary structures, payroll runs, and attendance tracking.</div>
+        </div>
+      </div>
+
+      <figure class="screenshot-figure">
+        <img src="screenshots/07-hr.png" alt="Human Resources tab" loading="lazy">
+        <figcaption class="screenshot-caption">HR tab — employee management, departments, payroll cycles, and salary sheets.</figcaption>
+      </figure>
+
+      <div class="callout tip">
+        <div class="callout-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.1 1.5 3.5.8.8 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg></div>
+        <div class="callout-body">
+          <strong>Requirement</strong>
+          The <span class="tab-label">HR</span> tab only appears when the <strong>Human Resources</strong> feature is enabled. Go to Home → Feature Management if you don't see it.
+        </div>
+      </div>
+
+      <div class="section">
+        <h3 id="s7-1">Adding Employees</h3>
+        <div class="steps">
+          <div class="step">
+            <div class="step-num">1</div>
+            <div class="step-body">
+              <strong>Click New Employee</strong>
+              <p>In the <span class="tab-label">HR</span> ribbon, click <span class="ui">New Employee</span> in the People group.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">2</div>
+            <div class="step-body">
+              <strong>Overview tab — Basic information</strong>
+              <p>Enter the employee's name, job title, email, phone, and start date. Assign them to a department and set their employment type (Full-time, Part-time, or Contract).</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">3</div>
+            <div class="step-body">
+              <strong>Personal tab — Identity details</strong>
+              <p>Add the national ID number, date of birth, address, and emergency contact information.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">4</div>
+            <div class="step-body">
+              <strong>Save the record</strong>
+              <p>Click <span class="ui">Save Employee</span>. The employee now appears in your team roster and can be included in payroll runs.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h3 id="s7-2">Departments</h3>
+        <p>Click <span class="ui">Departments</span> in the HR ribbon to create and manage departments. Each department can have:</p>
+        <ul>
+          <li>A department head employee</li>
+          <li>A list of assigned employees</li>
+          <li>A salary sheet tab showing all members' compensation</li>
+        </ul>
+      </div>
+
+      <div class="section">
+        <h3 id="s7-3">Salary &amp; Payroll</h3>
+        <p>From the <strong>Compensation</strong> ribbon group, manage salaries and run payroll:</p>
+        <div class="steps">
+          <div class="step">
+            <div class="step-num">1</div>
+            <div class="step-body">
+              <strong>Set salary for each employee</strong>
+              <p>Open an employee record and go to the salary section. Enter their base salary and any allowances.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">2</div>
+            <div class="step-body">
+              <strong>Run payroll</strong>
+              <p>Click <span class="ui">Payroll Run</span>. Select the pay period (monthly, bi-weekly), choose the employees to include, and confirm the amounts. The payroll is recorded as an expense against the business account you select.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">3</div>
+            <div class="step-body">
+              <strong>Print payslips</strong>
+              <p>After confirming, generate and print individual payslips for each employee from the payroll run summary screen.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h3 id="s7-4">Attendance</h3>
+        <p>Track attendance directly in the app. Open an employee record and use the attendance log to record daily check-in and check-out times, late arrivals, absences, and leave. Attendance data feeds into payroll calculations automatically when configured.</p>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════════ -->
+    <!-- CHAPTER 8 -->
+    <!-- ════════════════════════════════════════ -->
+    <div class="chapter ch-design" id="ch8">
+      <div class="chapter-header">
+        <div class="chapter-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="13.5" cy="6.5" r=".5"/><circle cx="17.5" cy="10.5" r=".5"/><circle cx="8.5" cy="7.5" r=".5"/><circle cx="6.5" cy="12.5" r=".5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg></div>
+        <div class="chapter-meta">
+          <div class="chapter-num">CHAPTER 08</div>
+          <h2>Design Studio</h2>
+          <div class="chapter-desc">Create branded social media content, marketing banners, and promotional graphics directly inside the app.</div>
+        </div>
+      </div>
+
+      <div class="callout tip">
+        <div class="callout-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.1 1.5 3.5.8.8 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg></div>
+        <div class="callout-body">
+          <strong>Requirement</strong>
+          The <span class="tab-label">DESIGN</span> tab only appears when the <strong>Social Campaigns</strong> feature is enabled.
+        </div>
+      </div>
+
+      <div class="section">
+        <h3 id="s8-1">Creating a Campaign</h3>
+        <div class="steps">
+          <div class="step">
+            <div class="step-num">1</div>
+            <div class="step-body">
+              <strong>Open the Design tab</strong>
+              <p>Click <span class="tab-label">DESIGN</span> in the ribbon.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">2</div>
+            <div class="step-body">
+              <strong>Click New Design</strong>
+              <p>Select a design type — <strong>Social Post</strong>, <strong>Story</strong>, <strong>Banner</strong>, or <strong>Flyer</strong>. Each type has preset dimensions for common platforms.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">3</div>
+            <div class="step-body">
+              <strong>Customise your design</strong>
+              <p>Edit the text, swap the background image, adjust colours to match your brand, and add your logo from the File Manager.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">4</div>
+            <div class="step-body">
+              <strong>Save and export</strong>
+              <p>Click <span class="ui">Save</span> to store the design in your library, or <span class="ui">Export</span> to download it as an image for sharing on social media.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h3 id="s8-2">Design Types</h3>
+        <table class="data-table">
+          <tr><th>Type</th><th>Best used for</th><th>Typical dimensions</th></tr>
+          <tr><td>Social Post</td><td>Facebook, Instagram feed posts</td><td>1080 × 1080 px</td></tr>
+          <tr><td>Story</td><td>Instagram &amp; Facebook Stories</td><td>1080 × 1920 px</td></tr>
+          <tr><td>Banner</td><td>Website headers, Facebook cover</td><td>1200 × 628 px</td></tr>
+          <tr><td>Flyer</td><td>Promotions, events, announcements</td><td>A4 / Letter</td></tr>
+        </table>
+      </div>
+
+      <!-- ── Letterhead Tutorial ── -->
+      <div class="section">
+        <h3 id="s8-3">How to Create a Letterhead</h3>
+        <p>A professional letterhead gives your printed quotes, invoices, and formal letters a polished, branded look. Follow the steps below to design yours in the Design Studio.</p>
+
+        <div class="callout tip">
+          <div class="callout-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.1 1.5 3.5.8.8 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg></div>
+          <div class="callout-body">
+            <strong>Before you start</strong>
+            Have your company logo image ready in the File Manager. Go to <span class="ui">File Manager</span> and upload the logo PNG/JPG first so it's available during design.
+          </div>
+        </div>
+
+        <div class="wizard-steps">
+
+          <div class="wizard-step">
+            <div class="wizard-step-header">
+              <span class="wizard-step-badge">1</span>
+              <span class="wizard-step-title">Open Design Studio</span>
+            </div>
+            <div class="wizard-step-body">
+              Click the <span class="tab-label">DESIGN</span> tab in the ribbon. If you don't see it, go to <span class="ui">Home → Tools → Feature Management</span> and enable <strong>Social Campaigns</strong>, then restart the app.
+            </div>
+          </div>
+
+          <div class="wizard-step">
+            <div class="wizard-step-header">
+              <span class="wizard-step-badge">2</span>
+              <span class="wizard-step-title">Create a New Flyer (A4)</span>
+            </div>
+            <div class="wizard-step-body">
+              Click <span class="ui">New Design</span> in the ribbon. Select <strong>Flyer</strong> as the design type — this uses A4 dimensions (595 × 842 pt) which is the standard for letterhead. Give your design the name <strong>Company Letterhead</strong> and click <span class="ui">Create</span>.
+            </div>
+          </div>
+
+          <div class="wizard-step">
+            <div class="wizard-step-header">
+              <span class="wizard-step-badge">3</span>
+              <span class="wizard-step-title">Add Your Company Logo</span>
+            </div>
+            <div class="wizard-step-body">
+              Click <span class="ui">Add Image</span> in the toolbar, then choose <strong>File Manager</strong> to pick your uploaded logo. Drag it to the top-left corner of the canvas. Resize by dragging the corner handles — aim for about 80–120 px height. Keep it proportional by holding <kbd>Shift</kbd> while resizing.
+            </div>
+          </div>
+
+          <div class="wizard-step">
+            <div class="wizard-step-header">
+              <span class="wizard-step-badge">4</span>
+              <span class="wizard-step-title">Add Your Business Name</span>
+            </div>
+            <div class="wizard-step-body">
+              Click <span class="ui">Add Text</span>. A text box appears — type your <strong>business name</strong>. In the text toolbar, set the font size to <strong>22–26 pt</strong>, weight to <strong>Bold</strong>, and colour to your brand's primary colour. Position it to the right of or below the logo.
+            </div>
+          </div>
+
+          <div class="wizard-step">
+            <div class="wizard-step-header">
+              <span class="wizard-step-badge">5</span>
+              <span class="wizard-step-title">Add Contact Details</span>
+            </div>
+            <div class="wizard-step-body">
+              Click <span class="ui">Add Text</span> again. Type your contact block on separate lines:
+              <div class="wizard-step-code">
+                123 Business Street, City, Country<br>
+                Phone: +1 555 000 0000<br>
+                Email: hello@yourbusiness.com<br>
+                Website: www.yourbusiness.com
+              </div>
+              Set font size to <strong>9–10 pt</strong>, colour to a mid-grey. Align it to match the business name block.
+            </div>
+          </div>
+
+          <div class="wizard-step">
+            <div class="wizard-step-header">
+              <span class="wizard-step-badge">6</span>
+              <span class="wizard-step-title">Draw a Dividing Line</span>
+            </div>
+            <div class="wizard-step-body">
+              Click <span class="ui">Add Shape → Line</span>. Draw a horizontal line spanning the full width of the page just below the header block. Set line thickness to <strong>1–2 pt</strong>. Use your brand colour or a neutral dark grey. This cleanly separates the header from the letter body.
+            </div>
+          </div>
+
+          <div class="wizard-step">
+            <div class="wizard-step-header">
+              <span class="wizard-step-badge">7</span>
+              <span class="wizard-step-title">Add a Footer (Optional)</span>
+            </div>
+            <div class="wizard-step-body">
+              Scroll to the bottom of the canvas. Add a thin line near the very bottom, then add a small text block below it with your <strong>registration number</strong>, <strong>VAT/Tax ID</strong>, or a tagline. Use 8 pt font, centred or left-aligned. This gives official letters a complete, professional finish.
+            </div>
+          </div>
+
+          <div class="wizard-step">
+            <div class="wizard-step-header">
+              <span class="wizard-step-badge">8</span>
+              <span class="wizard-step-title">Save to Your Library</span>
+            </div>
+            <div class="wizard-step-body">
+              Click <span class="ui">Save</span> in the toolbar. The letterhead is stored in your Designs library under the name you gave it. You can reopen and edit it any time — useful when your address or contact details change.
+            </div>
+          </div>
+
+          <div class="wizard-step">
+            <div class="wizard-step-header">
+              <span class="wizard-step-badge">9</span>
+              <span class="wizard-step-title">Export as PDF or Image</span>
+            </div>
+            <div class="wizard-step-body">
+              Click <span class="ui">Export</span>. Choose <strong>PDF</strong> for print-quality output you can attach to emails or send to a printer. Choose <strong>PNG</strong> if you need a high-resolution image to overlay on documents in another app. The file is saved to your Downloads folder.
+            </div>
+          </div>
+
+        </div>
+
+        <div class="callout tip">
+          <div class="callout-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.1 1.5 3.5.8.8 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg></div>
+          <div class="callout-body">
+            <strong>Design tips for a great letterhead</strong>
+            <ul style="margin-top:6px; padding-left:18px;">
+              <li>Keep the header height under 25% of the page — leave enough space for letter content.</li>
+              <li>Use no more than 2 fonts: one for the company name, one for contact details.</li>
+              <li>Stick to 2–3 brand colours maximum. Too many colours look unprofessional.</li>
+              <li>Ensure the logo has a transparent or white background so it blends cleanly.</li>
+              <li>Print a test copy before finalising — colours on screen often differ from print.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="callout note">
+          <div class="callout-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg></div>
+          <div class="callout-body">
+            <strong>Using your letterhead with invoices</strong>
+            Once exported as a PDF, your letterhead can be used as a background layer in any PDF editor. Alternatively, upload the exported PNG to the <span class="ui">File Manager</span> and use it as a background image in other Design Studio templates.
+          </div>
+        </div>
+
+        <h3 style="margin-top:28px">Letterhead Layout Reference</h3>
+        <p>A standard business letterhead follows this structure from top to bottom:</p>
+        <table class="data-table">
+          <tr><th>Zone</th><th>Content</th><th>Suggested height</th></tr>
+          <tr><td><strong>Logo area</strong></td><td>Company logo, optionally business name beside it</td><td>80–120 px</td></tr>
+          <tr><td><strong>Contact strip</strong></td><td>Address, phone, email, website</td><td>40–60 px</td></tr>
+          <tr><td><strong>Divider line</strong></td><td>1–2 pt horizontal rule</td><td>4 px</td></tr>
+          <tr><td><strong>Body area</strong></td><td>Left blank for letter text (date, recipient, body)</td><td>~600 px</td></tr>
+          <tr><td><strong>Footer line</strong></td><td>Registration no., VAT, tagline</td><td>30–40 px</td></tr>
+        </table>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════════ -->
+    <!-- CHAPTER 9 -->
+    <!-- ════════════════════════════════════════ -->
+    <div class="chapter ch-rst" id="ch9">
+      <div class="chapter-header">
+        <div class="chapter-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="3" y1="2" x2="3" y2="22"/><path d="M7 2v11"/><path d="M11 2v6.5a3.5 3.5 0 0 1-7 0V2"/><path d="M21 15V2v0a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/></svg></div>
+        <div class="chapter-meta">
+          <div class="chapter-num">CHAPTER 09</div>
+          <h2>Restaurant Management</h2>
+          <div class="chapter-desc">Set up tables and floor plans, build your menu, manage dine-in orders, run the Kitchen Display System, and control ingredients.</div>
+        </div>
+      </div>
+
+      <figure class="screenshot-figure">
+        <img src="screenshots/08-restaurant.png" alt="Restaurant Management tab" loading="lazy">
+        <figcaption class="screenshot-caption">Restaurant tab — order list with table numbers, order status, and amount. Use the sub-navigation to switch to Tables, Menu Items, Categories, Ingredients, or Kitchen Display.</figcaption>
+      </figure>
+
+      <div class="callout tip">
+        <div class="callout-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.1 1.5 3.5.8.8 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg></div>
+        <div class="callout-body">
+          <strong>Requirement</strong>
+          The <span class="tab-label">RESTAURANT</span> and <span class="tab-label">RESTAURANT POS</span> tabs only appear when the <strong>Restaurant</strong> feature is enabled. This feature cannot be combined with Point of Sale.
+        </div>
+      </div>
+
+      <div class="section">
+        <h3 id="s9-1">Setting Up Tables</h3>
+        <p>Before taking orders you need to create your tables. Click the <span class="tab-label">RESTAURANT</span> tab, then <span class="ui">Tables</span> in the ribbon's Floor group.</p>
+        <div class="steps">
+          <div class="step">
+            <div class="step-num">1</div>
+            <div class="step-body">
+              <strong>Click New Table</strong>
+              <p>Enter the table <span class="field-label">Name</span> (e.g. "Table 1", "Window Booth") and its <span class="field-label">Capacity</span> (number of seats). Click <span class="ui">Save</span>.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">2</div>
+            <div class="step-body">
+              <strong>Arrange the floor plan</strong>
+              <p>In the Floor Plan view, drag tables to match your physical layout. The visual map helps staff navigate quickly.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">3</div>
+            <div class="step-body">
+              <strong>Table statuses</strong>
+              <p>Tables show as <strong>Available</strong> (green), <strong>Occupied</strong> (amber), or <strong>Reserved</strong> (blue). Status updates automatically when orders are created or completed.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h3 id="s9-2">Building Your Menu</h3>
+        <p>Menu management lives in the <strong>Menu</strong> ribbon group.</p>
+
+        <div class="steps">
+          <div class="step">
+            <div class="step-num">1</div>
+            <div class="step-body">
+              <strong>Create Menu Categories first</strong>
+              <p>Click <span class="ui">Menu Categories</span> and create categories like Starters, Mains, Desserts, and Drinks. Drag to reorder them — this order appears in the Restaurant POS grid.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">2</div>
+            <div class="step-body">
+              <strong>Add Menu Items</strong>
+              <p>Click <span class="ui">Menu Items</span> → <span class="ui">New Item</span>. Enter the name, category, price, and optional image. Use the <strong>Dietary</strong> tab to mark items as Vegetarian, Vegan, Gluten-Free, etc.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">3</div>
+            <div class="step-body">
+              <strong>Link ingredients</strong>
+              <p>Go to the <strong>Ingredients</strong> tab of each menu item and assign the ingredients used and the quantity per serving. This powers automatic stock deduction when dishes are ordered.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">4</div>
+            <div class="step-body">
+              <strong>Toggle availability</strong>
+              <p>Use the toggle on each menu item to mark it as available or unavailable. Unavailable items are hidden from the Restaurant POS grid in real time.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h3 id="s9-3">Managing Orders</h3>
+        <p>The <strong>Orders</strong> view shows all current and historical orders with their statuses. Filter by status — <strong>Pending</strong>, <strong>Preparing</strong>, <strong>Ready</strong>, <strong>Served</strong>, or <strong>Paid</strong>.</p>
+        <p>Click any order to open its detail panel, where you can update item statuses individually, add notes, or cancel the order.</p>
+
+        <table class="data-table">
+          <tr><th>Status</th><th>Meaning</th></tr>
+          <tr><td>Pending</td><td>Order placed, not yet started in the kitchen</td></tr>
+          <tr><td>Preparing</td><td>Kitchen has started cooking</td></tr>
+          <tr><td>Ready</td><td>Food is ready at the pass — waiting to be served</td></tr>
+          <tr><td>Served</td><td>All items delivered to the table</td></tr>
+          <tr><td>Paid</td><td>Bill settled — table marked available</td></tr>
+        </table>
+      </div>
+
+      <div class="section">
+        <h3 id="s9-4">Kitchen Display System (KDS)</h3>
+        <p>The KDS is a live ticket board designed to run on a screen in the kitchen. Open it by clicking <span class="ui">Kitchen Display</span> in the <strong>KDS</strong> ribbon group.</p>
+        <ul>
+          <li>Each order appears as a card with all its items listed</li>
+          <li>Kitchen staff click items to mark them as <strong>Preparing</strong>, then <strong>Ready</strong></li>
+          <li>Cards disappear from the KDS once the order is paid</li>
+          <li>When new items are added to a preparing order, they appear as a <strong>new separate card</strong> so kitchen staff can see exactly what's new</li>
+        </ul>
+        <div class="callout tip">
+          <div class="callout-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.1 1.5 3.5.8.8 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg></div>
+          <div class="callout-body">
+            <strong>Tip</strong>
+            Run the KDS on a dedicated screen or tablet in the kitchen by opening a second window. The display polls for updates every 5 seconds.
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h3 id="s9-5">Ingredient Management</h3>
+        <p>Track raw ingredient stock from <span class="ui">Restaurant → Ingredients</span>. Each ingredient has a unit of measurement (kg, L, pcs), a current stock level, and a low-stock threshold.</p>
+        <p>When a menu item is ordered, its ingredient quantities are deducted automatically if you've linked them in the menu item's Ingredients tab.</p>
+      </div>
+
+      <div class="section">
+        <h3 id="s9-6">Ingredient Purchase Orders</h3>
+        <p>Order raw ingredients from your suppliers using the Purchase Order system under <span class="ui">Restaurant → Purchase Orders</span>. The workflow mirrors the inventory PO system:</p>
+        <ol>
+          <li>Create a Draft PO with supplier and line items (ingredients + quantities)</li>
+          <li>Place the order — status changes to <strong>Ordered</strong></li>
+          <li>When goods arrive, receive them via a GRN — ingredient stock levels update immediately</li>
+        </ol>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════════ -->
+    <!-- CHAPTER 10 -->
+    <!-- ════════════════════════════════════════ -->
+    <div class="chapter ch-rst-pos" id="ch10">
+      <div class="chapter-header">
+        <div class="chapter-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="5 7 5 3 19 3 19 7"/><rect width="18" height="11" x="3" y="7" rx="1"/><line x1="9" y1="12" x2="15" y2="12"/></svg></div>
+        <div class="chapter-meta">
+          <div class="chapter-num">CHAPTER 10</div>
+          <h2>Restaurant POS</h2>
+          <div class="chapter-desc">Take dine-in table orders and takeaway orders, track kitchen status in real time, and process payment when all dishes are served.</div>
+        </div>
+      </div>
+
+      <figure class="screenshot-figure">
+        <img src="screenshots/09-rst-pos.png" alt="Restaurant POS tab" loading="lazy">
+        <figcaption class="screenshot-caption">Restaurant POS — menu grid on the left, active order cart on the right. Select items to add to the order, then process payment when done.</figcaption>
+      </figure>
+
+      <div class="section">
+        <h3 id="s10-1">The Restaurant POS Interface</h3>
+        <p>Click the <span class="tab-label">RESTAURANT POS</span> tab to open the order-taking screen. It has two modes, switchable from the ribbon:</p>
+        <ul>
+          <li><strong>Takeaway mode</strong> — orders without a table. Enter the customer's name and phone number.</li>
+          <li><strong>Table mode</strong> — select a table from the floor plan to attach the order to that table.</li>
+        </ul>
+        <p>The left side shows the <strong>menu grid</strong> (items grouped by category). The right side shows the <strong>cart / current order</strong>. Tabs across the top let you manage multiple active orders simultaneously.</p>
+      </div>
+
+      <div class="section">
+        <h3 id="s10-2">Taking a Table Order</h3>
+        <div class="steps">
+          <div class="step">
+            <div class="step-num">1</div>
+            <div class="step-body">
+              <strong>Select a table</strong>
+              <p>Click <span class="ui">Tables</span> in the Restaurant POS ribbon. The floor plan opens — click an available table (shown in green). A new tab opens for that table.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">2</div>
+            <div class="step-body">
+              <strong>Add items from the menu grid</strong>
+              <p>Click menu item cards to add them to the order. Click a card multiple times to increase the quantity. All items are tracked with their kitchen status.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">3</div>
+            <div class="step-body">
+              <strong>Send to kitchen</strong>
+              <p>Click <span class="ui">Send Order</span>. The order is created in the system and immediately appears on the KDS in the kitchen. The table status changes to <strong>Occupied</strong>.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">4</div>
+            <div class="step-body">
+              <strong>Track kitchen status</strong>
+              <p>The cart shows each item's kitchen status — <strong>Pending → Preparing → Ready → Served</strong>. Statuses update in real time as kitchen staff mark items on the KDS. The live indicator in the top bar pulses to show the poll is active.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">5</div>
+            <div class="step-body">
+              <strong>Add more items during service</strong>
+              <p>If the order is still <strong>Pending</strong>, new items are added to the same kitchen ticket. If the kitchen has already started <strong>Preparing</strong>, new items create a <em>new separate kitchen card</em> automatically — so nothing gets missed.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">6</div>
+            <div class="step-body">
+              <strong>Complete and process payment</strong>
+              <p>The <span class="ui">Complete Order</span> button becomes active only when <em>all</em> ordered items have been marked as <strong>Served</strong> on the KDS. Click it to open the payment screen.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">7</div>
+            <div class="step-body">
+              <strong>Select payment method and confirm</strong>
+              <p>Choose <strong>Cash</strong>, <strong>Card</strong>, or <strong>Bank Transfer</strong>. For cash, enter the tendered amount. Click <span class="ui">Confirm Payment</span>. A receipt is printed, the order is marked Paid, and the table returns to Available.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h3 id="s10-3">Taking a Takeaway Order</h3>
+        <div class="steps">
+          <div class="step">
+            <div class="step-num">1</div>
+            <div class="step-body">
+              <strong>Click Takeaway in the ribbon</strong>
+              <p>A new tab opens with the customer name/phone fields.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">2</div>
+            <div class="step-body">
+              <strong>Enter customer details and add items</strong>
+              <p>Fill in the customer's name and phone (optional but useful for pickup notifications). Add menu items from the grid.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">3</div>
+            <div class="step-body">
+              <strong>Send to kitchen and complete</strong>
+              <p>Same flow as a table order — send, track on KDS, complete when all items are served/ready for collection.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h3 id="s10-4">Multiple Active Orders</h3>
+        <p>Each tab at the top of the Restaurant POS represents an active order (a table or a takeaway). You can have as many tabs open as you need. Switching between tabs never loses your data — each tab's cart, order ID, and kitchen statuses are tracked independently.</p>
+        <div class="callout warn">
+          <div class="callout-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg></div>
+          <div class="callout-body">
+            <strong>Important</strong>
+            Once the kitchen has started preparing an order (status: Preparing), you cannot increase the quantity of existing items. Add new quantities as separate items — they'll appear on a new KDS card.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════════ -->
+    <!-- CHAPTER 11 -->
+    <!-- ════════════════════════════════════════ -->
+    <div class="chapter ch-feat" id="ch11">
+      <div class="chapter-header">
+        <div class="chapter-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20a8 8 0 1 0 0-16 8 8 0 0 0 0 16Z"/><path d="M12 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg></div>
+        <div class="chapter-meta">
+          <div class="chapter-num">CHAPTER 11</div>
+          <h2>Feature Management</h2>
+          <div class="chapter-desc">Enable or disable features at any time. Changes take effect immediately after the app reloads.</div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h3 id="s11-1">Opening Feature Management</h3>
+        <p>Click the <span class="tab-label">HOME</span> tab → <strong>Tools</strong> group → <span class="ui">Feature Management</span>. A modal opens showing all available features with toggle switches.</p>
+        <figure class="screenshot-figure">
+          <img src="screenshots/10-feature-mgmt.png" alt="Feature Management modal" loading="lazy">
+          <figcaption class="screenshot-caption">Feature Management modal — toggle each feature on or off. Enabling Restaurant automatically disables Point of Sale, and vice versa.</figcaption>
+        </figure>
+      </div>
+
+      <div class="section">
+        <h3 id="s11-2">Enabling and Disabling Features</h3>
+        <div class="steps">
+          <div class="step">
+            <div class="step-num">1</div>
+            <div class="step-body">
+              <strong>Click a toggle to change its state</strong>
+              <p>Blue (on) means the feature is enabled. Grey (off) means it's disabled. The toggle updates instantly in the modal.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">2</div>
+            <div class="step-body">
+              <strong>Note mutual exclusivity</strong>
+              <p>Enabling <strong>Restaurant</strong> automatically disables <strong>Point of Sale</strong>, and vice versa. You cannot run both simultaneously.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">3</div>
+            <div class="step-body">
+              <strong>Click Save Changes</strong>
+              <p>The app saves your preferences to the server and reloads. Ribbon tabs for disabled features disappear; tabs for newly enabled features appear.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="callout note">
+          <div class="callout-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div>
+          <div class="callout-body">
+            <strong>Note</strong>
+            Your data is never deleted when you disable a feature. Re-enabling it restores full access to all previously entered records.
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h3 id="s11-3">Industry-Specific Defaults</h3>
+        <p>When you choose <strong>Restaurant</strong> or <strong>Bar</strong> as your industry during registration, the Restaurant feature is automatically enabled and Point of Sale is disabled. You can change this at any time through Feature Management.</p>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════════ -->
+    <!-- CHAPTER 12 -->
+    <!-- ════════════════════════════════════════ -->
+    <div class="chapter ch-settings" id="ch12">
+      <div class="chapter-header">
+        <div class="chapter-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></div>
+        <div class="chapter-meta">
+          <div class="chapter-num">CHAPTER 12</div>
+          <h2>Settings &amp; Preferences</h2>
+          <div class="chapter-desc">Customise the app's behaviour, configure your receipt, adjust the display theme, and manage your subscription.</div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h3 id="s12-1">Opening POS Settings</h3>
+        <p>From the <span class="tab-label">POS</span> ribbon tab → <strong>Configure</strong> group → click <span class="ui">POS Settings</span>. The settings panel has three tabs: <strong>General</strong>, <strong>Accounts</strong>, and <strong>Receipt</strong>.</p>
+      </div>
+
+      <div class="section">
+        <h3 id="s12-2">General Settings</h3>
+        <table class="data-table">
+          <tr><th>Setting</th><th>What it controls</th></tr>
+          <tr><td>Display Theme</td><td>Light, Dark, or follow the OS setting. Dark mode reduces eye strain in dim environments.</td></tr>
+          <tr><td>Featured Products Limit</td><td>How many products appear in the POS grid before pagination kicks in.</td></tr>
+          <tr><td>Featured Categories Limit</td><td>Number of categories shown in the quick-filter bar at the top of the POS grid.</td></tr>
+          <tr><td>Discount Field</td><td>Show or hide the discount field in the checkout cart.</td></tr>
+          <tr><td>Checkout Modal</td><td>Show a confirmation modal before finalising a sale.</td></tr>
+          <tr><td>Show Service Products</td><td>Include service-bound products in the POS grid for service businesses.</td></tr>
+        </table>
+      </div>
+
+      <div class="section">
+        <h3 id="s12-3">Accounts Settings</h3>
+        <p>Configure which bank account receives payments by default:</p>
+        <ul>
+          <li><strong>Default Deposit Account</strong> — the account where all POS cash receipts are credited</li>
+          <li><strong>Payment Settlement Mode</strong> — <em>Immediate</em> settles each sale to the account right away; <em>End of Day</em> batches all sales and settles during the EOD process</li>
+        </ul>
+      </div>
+
+      <div class="section">
+        <h3 id="s12-4">Receipt Customisation</h3>
+        <p>Control what appears on printed and digital receipts:</p>
+        <table class="data-table">
+          <tr><th>Setting</th><th>Effect</th></tr>
+          <tr><td>Header Text</td><td>Custom text printed above the itemised list (e.g. "Thank you for shopping with us!")</td></tr>
+          <tr><td>Footer Text</td><td>Custom text printed at the bottom (e.g. exchange policy, website URL)</td></tr>
+          <tr><td>Show Business Name</td><td>Print the business name at the top of the receipt</td></tr>
+          <tr><td>Show Business Address</td><td>Print the address below the business name</td></tr>
+          <tr><td>Show Account Info</td><td>Print bank account details for customers who pay by transfer</td></tr>
+        </table>
+      </div>
+
+      <div class="section">
+        <h3 id="s12-5">Toggling Dark Mode</h3>
+        <p>You can also toggle dark mode quickly from the <span class="tab-label">VIEW</span> ribbon tab → <strong>Appearance</strong> group → <span class="ui">Dark Mode</span>. No restart required — the interface switches immediately.</p>
+      </div>
+
+      <div class="section">
+        <h3 id="s12-6">Checking for Updates</h3>
+        <p>Click your profile name (top-right) → <span class="ui">Check for Updates</span>. The app contacts the Zeebroo server and compares the installed version against the latest release. If an update is available, a download link is shown for your platform (Windows, macOS, or Linux).</p>
+      </div>
+
+      <div class="section">
+        <h3 id="s12-7">Signing Out</h3>
+        <p>Click your profile name (top-right) → <span class="ui">Sign Out</span>, or click <span class="ui">Sign Out</span> in the <span class="tab-label">VIEW</span> ribbon's Account group. Your local session clears and the login screen reappears. Your data on the server is never affected by signing out.</p>
+        <div class="callout warn">
+          <div class="callout-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg></div>
+          <div class="callout-body">
+            <strong>Important</strong>
+            If you switch branches or businesses, any unsaved POS cart data will be lost. Ensure all active sales are completed or parked before switching.
+          </div>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="callout note">
+        <div class="callout-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div>
+        <div class="callout-body">
+          <strong>Real-time Sync</strong>
+          Zeebroo POS automatically checks for changes to products, stock, tables, and menu items every 30 seconds. When another device or user updates data, your screen refreshes silently — no manual refresh needed.
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /content -->
+</div><!-- /main -->
+
+<script>
+// ── Tree group toggle ──
+function treeToggle(btn) {
+  btn.closest('.tree-group').classList.toggle('open');
+}
+
+// ── Chapter sub-topic toggle (click chapter link to expand subs) ──
+function subToggle(link) {
+  const group = link.closest('.sb-chapter-group');
+  if (group) group.classList.toggle('sub-open');
+}
+
+// ── Active tracking for both chapters and sub-topics ──
+const chapters = document.querySelectorAll('.chapter');
+const sections = document.querySelectorAll('h3[id]');
+const chLinks  = document.querySelectorAll('.sb-link');
+const subLinks = document.querySelectorAll('.sb-sub');
+
+function setActive(id) {
+  // Chapter links
+  chLinks.forEach(l => {
+    const active = l.getAttribute('href') === '#' + id;
+    l.classList.toggle('active', active);
+    if (active) {
+      l.closest('.tree-group')?.classList.add('open');
+    }
+  });
+  // Sub links
+  subLinks.forEach(l => {
+    const active = l.getAttribute('href') === '#' + id;
+    l.classList.toggle('active', active);
+    if (active) {
+      l.closest('.tree-group')?.classList.add('open');
+      l.closest('.sb-chapter-group')?.classList.add('sub-open');
+    }
+  });
+}
+
+const obs = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) setActive(e.target.id);
+  });
+}, { rootMargin: '-10% 0px -75% 0px', threshold: 0 });
+
+chapters.forEach(s => obs.observe(s));
+sections.forEach(s => obs.observe(s));
+
+// ── Reading progress bar ──
+const bar = document.getElementById('progress-bar');
+window.addEventListener('scroll', () => {
+  const h = document.documentElement.scrollHeight - window.innerHeight;
+  bar.style.width = (h > 0 ? (window.scrollY / h) * 100 : 0) + '%';
+}, { passive: true });
+
+// ── Theme toggle ──
+function toggleTheme() {
+  const root = document.documentElement;
+  const cur  = root.getAttribute('data-theme');
+  const next = cur === 'dark' ? 'light' : 'dark';
+  root.setAttribute('data-theme', next);
+  try { localStorage.setItem('zeebroo-guide-theme', next); } catch(_) {}
+}
+
+// Restore saved theme
+try {
+  const saved = localStorage.getItem('zeebroo-guide-theme');
+  if (saved) document.documentElement.setAttribute('data-theme', saved);
+} catch(_) {}
+
+// ── Search ──
+(function() {
+  const input  = document.getElementById('tb-search-input');
+  const drop   = document.getElementById('tb-search-drop');
+  const clear  = document.getElementById('tb-search-clear');
+  let focusIdx = -1;
+
+  // Build index: collect all chapter h2s and section h3s
+  const index = [];
+  document.querySelectorAll('.chapter').forEach(ch => {
+    const h2 = ch.querySelector('h2');
+    if (!h2) return;
+    const chTitle = h2.textContent.trim();
+    const chId    = ch.id;
+    index.push({ id: chId, title: chTitle, ctx: 'Chapter', type: 'chapter' });
+    ch.querySelectorAll('h3[id]').forEach(h3 => {
+      index.push({ id: h3.id, title: h3.textContent.trim(), ctx: chTitle, type: 'section' });
+    });
+  });
+
+  function highlight(text, q) {
+    if (!q) return text;
+    const re = new RegExp('(' + q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'gi');
+    return text.replace(re, '<mark class="tb-sr-hl">$1</mark>');
+  }
+
+  function render(q) {
+    const qt = q.trim().toLowerCase();
+    if (!qt) { drop.classList.remove('open'); drop.innerHTML = ''; return; }
+
+    const matches = index.filter(e =>
+      e.title.toLowerCase().includes(qt) || e.ctx.toLowerCase().includes(qt)
+    ).slice(0, 10);
+
+    if (!matches.length) {
+      drop.innerHTML = '<div class="tb-sr-none">No results for "' + q.replace(/</g,'&lt;') + '"</div>';
+      drop.classList.add('open');
+      focusIdx = -1;
+      return;
+    }
+
+    drop.innerHTML = matches.map((m, i) =>
+      `<div class="tb-sr" role="option" data-id="${m.id}" data-idx="${i}">
+        <span class="tb-sr-title">${highlight(m.title, qt)}</span>
+        <span class="tb-sr-ctx">${highlight(m.ctx, qt)}</span>
+       </div>`
+    ).join('') +
+    `<div class="tb-sr-kbd">
+       <kbd>↑↓ navigate</kbd><kbd>↵ jump</kbd><kbd>Esc close</kbd>
+     </div>`;
+    drop.classList.add('open');
+    focusIdx = -1;
+  }
+
+  function jump(id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    input.value = '';
+    clear.style.display = 'none';
+    drop.classList.remove('open');
+    drop.innerHTML = '';
+    input.blur();
+  }
+
+  function setFocus(idx) {
+    const items = drop.querySelectorAll('.tb-sr[data-idx]');
+    items.forEach(r => r.classList.remove('focused'));
+    if (idx >= 0 && idx < items.length) {
+      focusIdx = idx;
+      items[idx].classList.add('focused');
+      items[idx].scrollIntoView({ block: 'nearest' });
+    } else {
+      focusIdx = -1;
+    }
+  }
+
+  input.addEventListener('input', () => {
+    const q = input.value;
+    clear.style.display = q ? 'block' : 'none';
+    render(q);
+  });
+
+  input.addEventListener('keydown', e => {
+    const items = drop.querySelectorAll('.tb-sr[data-idx]');
+    if (e.key === 'ArrowDown') {
+      e.preventDefault(); setFocus(Math.min(focusIdx + 1, items.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault(); setFocus(Math.max(focusIdx - 1, 0));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (focusIdx >= 0 && items[focusIdx]) jump(items[focusIdx].dataset.id);
+      else if (items.length > 0) jump(items[0].dataset.id);
+    } else if (e.key === 'Escape') {
+      input.value = ''; clear.style.display = 'none';
+      drop.classList.remove('open'); drop.innerHTML = ''; input.blur();
+    }
+  });
+
+  drop.addEventListener('mousedown', e => {
+    const row = e.target.closest('.tb-sr[data-id]');
+    if (row) { e.preventDefault(); jump(row.dataset.id); }
+  });
+
+  clear.addEventListener('mousedown', e => {
+    e.preventDefault();
+    input.value = ''; clear.style.display = 'none';
+    drop.classList.remove('open'); drop.innerHTML = '';
+    input.focus();
+  });
+
+  document.addEventListener('mousedown', e => {
+    if (!document.getElementById('tb-search').contains(e.target)) {
+      drop.classList.remove('open');
+    }
+  });
+
+  input.addEventListener('focus', () => {
+    if (input.value.trim()) render(input.value);
+  });
+})();
+</script>
+</body>
+</html>

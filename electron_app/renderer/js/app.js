@@ -26,6 +26,15 @@ const state = {
   _userEmail: null,
   // Feature flags loaded after login — null means "show everything"
   features: null,
+  // Member-level permissions — null means full access (owner/admin), array means restricted
+  memberPermissions: null,
+  memberRole:        null,
+  memberIsOwner:     true,
+  // POS mode: 'products' | 'services'
+  posMode: 'products',
+  services: [],
+  serviceSearchQuery: '',
+  serviceActiveCategory: 0,
 };
 
 // ── DOM helpers ────────────────────────────────────────────────────────────
@@ -77,6 +86,10 @@ setInterval(updateClock, 30000);
 function applyDarkMode(dark) {
   document.body.classList.toggle('dark', dark);
   $('#toggle-dark').checked = dark;
+  // Redraw today-summary charts if visible (they rely on computed dark state)
+  if ($('#home-view-today')?.style.display !== 'none' && document.getElementById('tds-chart-rev')) {
+    loadTodaySummary();
+  }
 }
 
 $('#toggle-dark').addEventListener('change', async (e) => {
@@ -90,7 +103,7 @@ function activateTab(tabName) {
   $$('.ribbon-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tabName));
   $$('.ribbon-page').forEach(p => p.classList.toggle('active', p.dataset.page === tabName));
 
-  const panelMap = { home: 'panel-home', pos: 'panel-pos', sales: 'panel-sales', inventory: 'panel-inventory', finance: 'panel-finance', hr: 'panel-hr', design: 'panel-design', view: 'panel-view', restaurant: 'panel-restaurant', 'rst-pos': 'panel-rst-pos' };
+  const panelMap = { home: 'panel-home', pos: 'panel-pos', sales: 'panel-sales', inventory: 'panel-inventory', finance: 'panel-finance', hr: 'panel-hr', services: 'panel-services', design: 'panel-design', restaurant: 'panel-restaurant', 'rst-pos': 'panel-rst-pos' };
   $$('.content-panel').forEach(p => p.classList.remove('active'));
   const target = $('#' + (panelMap[tabName] || 'panel-pos'));
   if (target) target.classList.add('active');
@@ -103,6 +116,7 @@ function activateTab(tabName) {
   if (tabName === 'inventory')  { if (typeof switchInvView === 'function') switchInvView('products'); else loadInventory(); }
   if (tabName === 'finance')    { switchFinView('flow'); }
   if (tabName === 'hr')         { switchHrView('employees'); }
+  if (tabName === 'services')   { switchSvcView('requests'); }
   if (tabName === 'design')     { _dsAllData = []; switchDesignView('all'); }
   if (tabName === 'restaurant') { switchRstView('orders'); }
   if (tabName === 'rst-pos')    { rstPosInit(); }
@@ -1314,7 +1328,7 @@ function _qtAddLine(desc = '', qty = 1, price = 0) {
     <button class="qt-line-del" data-lid="${id}"><i class="fa fa-xmark"></i></button>`;
   $('#qt-items-body').appendChild(row);
 
-  // Product search on desc input
+  // Product + service search on desc input
   const descInp = row.querySelector('.qt-line-desc-input');
   const sug     = row.querySelector('.qt-product-suggest');
   let sugTimer;
@@ -1323,12 +1337,21 @@ function _qtAddLine(desc = '', qty = 1, price = 0) {
     const q = descInp.value.trim();
     if (q.length < 2) { sug.style.display = 'none'; sug.innerHTML = ''; return; }
     sugTimer = setTimeout(async () => {
-      const r = await API.productSearch(q, 8);
-      const items = r.body?.data || [];
-      if (!items.length) { sug.style.display = 'none'; return; }
-      sug.innerHTML = items.map(p => `<div class="qt-suggest-item" data-pid="${p.id}" data-name="${escHtml(p.name)}" data-price="${p.unit_sell_price ?? 0}">
-        ${escHtml(p.name)}<span class="qt-suggest-sku">${p.sku ? escHtml(p.sku) : ''}</span>
-      </div>`).join('');
+      const [prodRes, svcRes] = await Promise.all([
+        API.productSearch(q, 6),
+        API.serviceMgmtCatalog(q),
+      ]);
+      const products = prodRes.body?.data || [];
+      const services = svcRes.body?.data  || [];
+      if (!products.length && !services.length) { sug.style.display = 'none'; return; }
+      sug.innerHTML = [
+        ...products.map(p => `<div class="qt-suggest-item" data-name="${escHtml(p.name)}" data-price="${p.unit_sell_price ?? 0}">
+          <i class="fa fa-box" style="opacity:.45;margin-right:5px;font-size:11px"></i>${escHtml(p.name)}<span class="qt-suggest-sku">${p.sku ? escHtml(p.sku) : ''}</span>
+        </div>`),
+        ...services.map(s => `<div class="qt-suggest-item" data-name="${escHtml(s.name)}" data-price="${s.price ?? 0}">
+          <i class="fa fa-screwdriver-wrench" style="color:#10b981;margin-right:5px;font-size:11px"></i>${escHtml(s.name)}${s.duration_label ? `<span class="qt-suggest-sku">${escHtml(s.duration_label)}</span>` : ''}
+        </div>`),
+      ].join('');
       sug.style.display = '';
       sug.querySelectorAll('.qt-suggest-item').forEach(el => {
         el.addEventListener('click', () => {
@@ -1374,7 +1397,7 @@ const _qtMod = { product: null, timer: null };
 function _qtOpenAddModal() {
   _qtMod.product = null;
   $('#qt-add-modal-q').value = '';
-  $('#qt-add-modal-list').innerHTML = '<div class="qt-add-modal-empty"><i class="fa fa-magnifying-glass"></i><p>Type to search products</p></div>';
+  $('#qt-add-modal-list').innerHTML = '<div class="qt-add-modal-empty"><i class="fa fa-magnifying-glass"></i><p>Type to search products or services</p></div>';
   $('#qt-add-modal-bottom').style.display = 'none';
   $('#qt-add-modal-add').style.display = 'none';
   $('#qt-add-modal-qty').value = '1';
@@ -1393,32 +1416,64 @@ function _qtCloseAddModal() {
 async function _qtModalSearch(q) {
   const list = $('#qt-add-modal-list');
   if (!q) {
-    list.innerHTML = '<div class="qt-add-modal-empty"><i class="fa fa-magnifying-glass"></i><p>Type to search products</p></div>';
+    list.innerHTML = '<div class="qt-add-modal-empty"><i class="fa fa-magnifying-glass"></i><p>Type to search products or services</p></div>';
     return;
   }
   list.innerHTML = '<div class="qt-add-modal-empty"><i class="fa fa-spinner fa-spin"></i><p>Searching…</p></div>';
-  const res = await API.productSearch(q, 20);
-  const items = res.body?.data || [];
-  if (!items.length) {
-    list.innerHTML = '<div class="qt-add-modal-empty"><i class="fa fa-box-open"></i><p>No products found</p></div>';
+
+  const [prodRes, svcRes] = await Promise.all([
+    API.productSearch(q, 12),
+    API.serviceMgmtCatalog(q),
+  ]);
+  const products = prodRes.body?.data || [];
+  const services = svcRes.body?.data  || [];
+
+  if (!products.length && !services.length) {
+    list.innerHTML = '<div class="qt-add-modal-empty"><i class="fa fa-box-open"></i><p>No products or services found</p></div>';
     return;
   }
-  list.innerHTML = items.map(p => {
-    const stock   = parseFloat(p.total_stock ?? p.quantity_on_hand ?? 0);
-    const inStock = stock > 0;
-    const price   = parseFloat(p.unit_sell_price ?? 0);
-    return `<div class="qt-add-modal-product" data-name="${escHtml(p.name)}" data-price="${price}">
-      <div class="qt-prod-ico"><i class="fa fa-box"></i></div>
-      <div class="qt-prod-nfo">
-        <div class="qt-prod-nm">${escHtml(p.name)}</div>
-        <div class="qt-prod-sub">
-          ${p.sku ? `<span>${escHtml(p.sku)}</span>` : ''}
-          <span class="qt-prod-stk ${inStock ? 'in' : 'out'}">${inStock ? stock + ' in stock' : 'Out of stock'}</span>
+
+  const showLabels = products.length > 0 && services.length > 0;
+  let html = '';
+
+  if (products.length) {
+    if (showLabels) html += `<div class="qt-add-modal-section-label"><i class="fa fa-box"></i> Products</div>`;
+    html += products.map(p => {
+      const stock   = parseFloat(p.total_stock ?? p.quantity_on_hand ?? 0);
+      const inStock = stock > 0;
+      const price   = parseFloat(p.unit_sell_price ?? 0);
+      return `<div class="qt-add-modal-product" data-name="${escHtml(p.name)}" data-price="${price}">
+        <div class="qt-prod-ico"><i class="fa fa-box"></i></div>
+        <div class="qt-prod-nfo">
+          <div class="qt-prod-nm">${escHtml(p.name)}</div>
+          <div class="qt-prod-sub">
+            ${p.sku ? `<span>${escHtml(p.sku)}</span>` : ''}
+            <span class="qt-prod-stk ${inStock ? 'in' : 'out'}">${inStock ? stock + ' in stock' : 'Out of stock'}</span>
+          </div>
         </div>
-      </div>
-      <div class="qt-prod-prc">${price.toFixed(2)}</div>
-    </div>`;
-  }).join('');
+        <div class="qt-prod-prc">${price.toFixed(2)}</div>
+      </div>`;
+    }).join('');
+  }
+
+  if (services.length) {
+    if (showLabels) html += `<div class="qt-add-modal-section-label"><i class="fa fa-screwdriver-wrench"></i> Services</div>`;
+    html += services.map(s => {
+      const price = parseFloat(s.price ?? 0);
+      return `<div class="qt-add-modal-product" data-name="${escHtml(s.name)}" data-price="${price}">
+        <div class="qt-prod-ico" style="background:rgba(16,185,129,.12);color:#10b981"><i class="fa fa-screwdriver-wrench"></i></div>
+        <div class="qt-prod-nfo">
+          <div class="qt-prod-nm">${escHtml(s.name)}</div>
+          <div class="qt-prod-sub">
+            ${s.duration_label ? `<span>${escHtml(s.duration_label)}</span>` : ''}
+          </div>
+        </div>
+        <div class="qt-prod-prc">${price.toFixed(2)}</div>
+      </div>`;
+    }).join('');
+  }
+
+  list.innerHTML = html;
   list.querySelectorAll('.qt-add-modal-product').forEach(el => {
     el.addEventListener('click', () => {
       list.querySelectorAll('.qt-add-modal-product').forEach(e => e.classList.remove('sel'));
@@ -1894,7 +1949,7 @@ async function _invOpenForm(existing) {
 // ── Invoice Add Product Modal (shares qt-add-overlay) ────────────────────
 function _invOpenAddModal() {
   $('#qt-add-modal-q').value = '';
-  $('#qt-add-modal-list').innerHTML = '<div class="qt-add-modal-empty"><i class="fa fa-magnifying-glass"></i><p>Type to search products</p></div>';
+  $('#qt-add-modal-list').innerHTML = '<div class="qt-add-modal-empty"><i class="fa fa-magnifying-glass"></i><p>Type to search products or services</p></div>';
   $('#qt-add-modal-bottom').style.display = 'none';
   $('#qt-add-modal-add').style.display    = 'none';
   $('#qt-add-modal-qty').value   = '1';
@@ -2108,6 +2163,11 @@ const _obFeatureDefs = [
   { key: 'restaurant',            img: 'img/features/service.png',                     name: 'Restaurant',           desc: 'Restaurant POS, orders, menu & kitchen display', color: '#f97316' },
 ];
 
+// Industries that switch to restaurant POS mode
+const _RST_CATS = new Set(['restaurant', 'bar']);
+// Industries where service_management is pre-selected
+const _SVC_CATS = new Set(['healthcare', 'professional_services', 'creative_media', 'education']);
+
 function _obBuildCatGrid(cats) {
   const grid = $('#ob-cat-grid');
   grid.innerHTML = cats.map(o => {
@@ -2118,7 +2178,6 @@ function _obBuildCatGrid(cats) {
       <span class="ob-cat-name">${escHtml(o.label)}</span>
     </div>`;
   }).join('');
-  const _RST_CATS = new Set(['restaurant', 'bar']);
   grid.querySelectorAll('.ob-cat-card').forEach(card => {
     card.addEventListener('click', () => {
       _obSelectedCat = card.dataset.cat;
@@ -2127,6 +2186,14 @@ function _obBuildCatGrid(cats) {
       if (_RST_CATS.has(_obSelectedCat)) {
         _obFeatureSet.add('restaurant');
         _obFeatureSet.delete('point_of_sale');
+      } else {
+        _obFeatureSet.delete('restaurant');
+        _obFeatureSet.add('point_of_sale');
+      }
+      if (_SVC_CATS.has(_obSelectedCat)) {
+        _obFeatureSet.add('service_management');
+      } else {
+        _obFeatureSet.delete('service_management');
       }
     });
   });
@@ -2236,70 +2303,161 @@ function applyFeatureVisibility() {
     if (g) g.style.display = show ? '' : 'none';
   };
 
-  const pos   = hasFeature('point_of_sale');
-  const prod  = hasFeature('product_management');
-  const stock = hasFeature('stock_management');
-  const bill  = hasFeature('bill_management');
-  const hr    = hasFeature('human_resources');
-  const svc   = hasFeature('service_management');
-  const camp  = hasFeature('social_media_campaign');
-  const rst   = hasFeature('restaurant');
+  // Business feature flags intersected with member-level sub-permissions
+  // hasMemberPerm returns true when memberPermissions is null (owner/admin = full access)
+  const mp = k => hasMemberPerm(k);
+  const bf = k => hasFeature(k);
+
+  // ── POS & Sales ──
+  const pos_session    = bf('point_of_sale') && mp('pos_session');
+  const pos_checkout   = bf('point_of_sale') && mp('pos_checkout');
+  const pos_returns    = bf('point_of_sale') && mp('pos_returns');
+  const pos_customers  = bf('point_of_sale') && mp('pos_customers');
+  const pos_eod        = bf('point_of_sale') && mp('pos_eod');
+  const pos_quotations = bf('point_of_sale') && mp('pos_quotations');
+  const pos_any        = pos_session || pos_checkout || pos_returns || pos_customers || pos_eod || pos_quotations;
+
+  // ── Inventory ──
+  const inv_products   = (bf('product_management'))                          && mp('inv_products');
+  const inv_audit      = (bf('product_management') || bf('stock_management'))&& mp('inv_audit');
+  const inv_discounts  = (bf('product_management'))                          && mp('inv_discounts');
+  const inv_purchasing = (bf('stock_management'))                            && mp('inv_purchasing');
+  const inv_suppliers  = (bf('product_management') || bf('stock_management'))&& mp('inv_suppliers');
+  const inv_barcodes   = (bf('product_management') || bf('stock_management'))&& mp('inv_barcodes');
+  const inv_any        = inv_products || inv_audit || inv_discounts || inv_purchasing || inv_suppliers || inv_barcodes;
+
+  // ── Finance ──
+  const fin_bills      = bf('bill_management') && mp('fin_bills');
+  const fin_assets     = bf('bill_management') && mp('fin_assets');
+  const fin_reports    = bf('bill_management') && mp('fin_reports');
+  const fin_any        = fin_bills || fin_assets || fin_reports;
+
+  // ── HR ──
+  const hr_employees   = bf('human_resources') && mp('hr_employees');
+  const hr_departments = bf('human_resources') && mp('hr_departments');
+  const hr_payroll     = bf('human_resources') && mp('hr_payroll');
+  const hr_any         = hr_employees || hr_departments || hr_payroll;
+
+  // ── Services ──
+  const svc_requests   = bf('service_management') && mp('svc_requests');
+  const svc_catalog    = bf('service_management') && mp('svc_catalog');
+  const svc_categories = bf('service_management') && mp('svc_categories');
+  const svc_any        = svc_requests || svc_catalog || svc_categories;
+
+  // ── Design ──
+  const design_all = bf('social_media_campaign') && mp('design_all');
+
+  // ── Restaurant ──
+  const rst_pos         = bf('restaurant') && mp('rst_pos');
+  const rst_orders      = bf('restaurant') && mp('rst_orders');
+  const rst_floor       = bf('restaurant') && mp('rst_floor');
+  const rst_menu        = bf('restaurant') && mp('rst_menu');
+  const rst_ingredients = bf('restaurant') && mp('rst_ingredients');
+  const rst_kitchen     = bf('restaurant') && mp('rst_kitchen');
+  const rst_any         = rst_pos || rst_orders || rst_floor || rst_menu || rst_ingredients || rst_kitchen;
 
   // ── Ribbon tabs ──
   const tabFeatures = {
-    pos:        pos,
-    sales:      pos,
-    inventory:  prod || stock,
-    finance:    bill,
-    hr:         hr,
-    design:     camp,
-    restaurant: rst,
-    'rst-pos':  rst,
+    pos:        pos_any,
+    sales:      pos_any,
+    inventory:  inv_any,
+    finance:    fin_any,
+    hr:         hr_any,
+    design:     design_all,
+    restaurant: rst_any,
+    'rst-pos':  rst_pos,
+    services:   svc_any,
+    users:      state.memberIsOwner || state.memberRole === 'admin' || state.memberPermissions === null,
   };
   $$('.ribbon-tab[data-tab]').forEach(tab => {
     const show = tabFeatures[tab.dataset.tab];
     tab.style.display = (show === undefined || show) ? '' : 'none';
   });
 
-  // ── Home ribbon groups (Home tab is always visible) ──
-  grp('#rb-home-pos',      pos || svc || rst);       // Quick Actions
-  // Overview group — always visible (no anchor needed, no change)
-  grp('#rb-home-orders',   pos || prod || stock);   // Operations
-  grp('#rb-home-expenses', bill || hr);             // Finance shortcuts
-  // Tools group — always visible
+  // ── POS ribbon groups ──
+  grp('#rb-new-session',    pos_session);                   // Session
+  grp('#rb-checkout',       pos_checkout);                  // Sales (checkout, return, clear cart)
+  grp('#rb-search',         pos_checkout);                  // Find (search, barcode, add product)
+  grp('#rb-customers',      pos_customers);                 // Customers
+  grp('#rb-pos-settings',   pos_checkout || pos_session);   // Configure
+
+  // ── Sales page ribbon groups ──
+  grp('#rb-sal-refresh',    pos_checkout);                  // Transactions
+  grp('#rb-sal-return',     pos_returns);                   // Returns
+  grp('#rb-eod-open',       pos_eod);                       // Settlement
+  grp('#rb-qt-new',         pos_quotations);                // Quotations
+
+  // ── Services ribbon groups ──
+  grp('#rb-svc-requests',   svc_requests);
+  grp('#rb-svc-catalog',    svc_catalog);
+  grp('#rb-svc-new-item',   svc_catalog);
+  grp('#rb-svc-categories', svc_categories);
+  grp('#rb-svc-refresh',    svc_any);
+
+  // ── POS mode: services button ──
+  const svcModeBtn = $('.pos-mode-btn[data-mode="services"]');
+  if (svcModeBtn) svcModeBtn.style.display = svc_any ? '' : 'none';
+
+  // ── If currently on a hidden tab, go home ──
+  if (!svc_any && _activeTab() === 'services') activateTab('home');
+
+  // ── Home ribbon groups ──
+  grp('#rb-home-pos',      pos_any || svc_any || rst_any);
+  grp('#rb-home-orders',   pos_any || inv_any);
+  grp('#rb-home-expenses', fin_any || hr_any);
 
   // ── Inventory ribbon groups ──
-  grp('#rb-inv-products', prod);                    // Catalog
-  grp('#rb-inv-audit',    prod || stock);           // Stock (brands/discounts + audit)
-  grp('#rb-orders',       stock);                   // Purchasing (PO, GRN, cheques)
-  grp('#rb-inv-suppliers',prod || stock);           // Suppliers
-  grp('#rb-inv-barcodes', prod || stock);           // Print
+  grp('#rb-inv-products', inv_products);
+  grp('#rb-inv-audit',    inv_audit || inv_discounts);
+  grp('#rb-orders',       inv_purchasing);
+  grp('#rb-inv-suppliers',inv_suppliers);
+  grp('#rb-inv-barcodes', inv_barcodes);
 
-  // ── Finance sub-nav: hide bill items when disabled ──
+  // ── Finance sub-nav visibility ──
   const billFinViews = ['bills', 'loans', 'rentals', 'properties', 'modifications'];
   billFinViews.forEach(v => {
     const btn = $(`#panel-finance .fin-subnav-btn[data-fin="${v}"]`);
-    if (btn) btn.style.display = bill ? '' : 'none';
+    if (btn) btn.style.display = fin_any ? '' : 'none';
   });
-  if (!bill) {
+  if (!fin_any) {
     const activeFin = $('#panel-finance .fin-subnav-btn.active');
     if (activeFin && billFinViews.includes(activeFin.dataset.fin)) switchFinView('flow');
   }
 
   // ── Finance ribbon groups ──
-  grp('#rb-create-bill', bill);   // Bills & Loans
-  grp('#rb-rentals',     bill);   // Assets & Liabilities
+  grp('#rb-create-bill', fin_bills);
+  grp('#rb-rentals',     fin_assets);
+
+  // ── HR ribbon groups ──
+  grp('#rb-employees',   hr_employees || hr_departments);
+  grp('#rb-hr-payroll',  hr_payroll);
+
+  // ── Restaurant ribbon groups ──
+  grp('#rb-rst-pos',          rst_pos);
+  grp('#rb-rst-new-order',    rst_orders);
+  grp('#rb-rst-orders',       rst_orders);
+  grp('#rb-rst-tables',       rst_floor);
+  grp('#rb-rst-reservations', rst_floor);
+  grp('#rb-rst-menu-items',   rst_menu);
+  grp('#rb-rst-ingredients',  rst_ingredients);
+  grp('#rb-rst-kitchen',      rst_kitchen);
 
   // ── Backstage sections ──
+  const pos  = pos_any;
+  const prod = inv_products || inv_audit || inv_discounts;
+  const stock= inv_purchasing || inv_suppliers || inv_barcodes;
+  const bill = fin_any;
+  const hr   = hr_any;
+  const camp = design_all;
   const newFeat = {
-    'POS & Sales':        [pos || svc],
+    'POS & Sales':        [pos || svc_any],
     'Inventory':          [prod || stock],
     'Finance — Outgoing': [bill],
     'Human Resources':    [hr],
     'Design Studio':      [camp],
   };
   const openFeat = {
-    'POS & Sales':     [pos || svc],
+    'POS & Sales':     [pos || svc_any],
     'Inventory':       [prod || stock],
     'Finance':         [bill],
     'Human Resources': [hr],
@@ -2312,13 +2470,33 @@ function applyFeatureVisibility() {
 }
 
 async function loadFeatures() {
-  const res = await API.features();
-  if (res.status === 200) {
-    state.features = new Set(res.body?.data || []);
+  const [featRes, meRes] = await Promise.all([API.features(), API.memberMe()]);
+
+  if (featRes.status === 200) {
+    state.features = new Set(featRes.body?.data || []);
   } else {
     state.features = null;
   }
+
+  if (meRes.status === 200) {
+    // null permissions = full access (owner or admin role)
+    state.memberPermissions = meRes.body?.data?.permissions ?? null;
+    state.memberRole        = meRes.body?.data?.role ?? null;
+    state.memberIsOwner     = meRes.body?.data?.is_owner ?? false;
+  } else {
+    // If /me fails (e.g. owner using a different auth path), grant full access
+    state.memberPermissions = null;
+    state.memberRole        = null;
+    state.memberIsOwner     = true;
+  }
+
   applyFeatureVisibility();
+}
+
+/** Returns true if the current member has a given permission (or has full access). */
+function hasMemberPerm(key) {
+  if (state.memberPermissions === null || state.memberPermissions === undefined) return true;
+  return state.memberPermissions.includes(key);
 }
 
 // ── Real-time sync polling ─────────────────────────────────────────────────
@@ -2804,7 +2982,7 @@ document.addEventListener('click', (e) => {
 // Menu item actions
 $('#tpm-settings').addEventListener('click', () => {
   closeProfileMenu();
-  toast('Settings panel coming soon', 'info');
+  openPosSettings();
 });
 $('#tpm-my-profile').addEventListener('click', () => {
   closeProfileMenu();
@@ -3080,13 +3258,6 @@ function showShortcutsModal() {
 }
 
 // ── Sign out (ribbon View tab button) ─────────────────────────────────────
-$('#rb-logout').addEventListener('click', async () => {
-  _syncStop();
-  await window.electronAPI.setConfig({ token: null, business_id: null, branch_id: null });
-  state.posTabs = []; state.activePosTabId = null; state._nextPosTabId = 1;
-  showLogin();
-  toast('Signed out', 'info');
-});
 
 // ── Fullscreen ─────────────────────────────────────────────────────────────
 $('#rb-fullscreen').addEventListener('click', () => {
@@ -3156,8 +3327,12 @@ function switchHomeView(view) {
   $$('.home-tab-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.homeView === view));
   const target = $(`#home-view-${view}`);
   if (target) target.style.display = 'flex';
+  if (view === 'today')     loadTodaySummary();
   if (view === 'activity')  _homeActivityLoad();
   if (view === 'analytics') requestAnimationFrame(_homeAnalyticsLoad);
+  if (view === 'expenses')  loadExpensesView();
+  if (view === 'profit')    loadProfitReport();
+  if (view === 'payroll')   loadPayrollView();
 }
 
 $$('.home-tab-btn').forEach(btn => {
@@ -3209,6 +3384,1028 @@ async function _homeRightPanelBills() {
     </div>`;
   }).join('');
 }
+
+// ── Today Summary helpers ──────────────────────────────────────────────────
+function _tdsDrawChart(canvasId, values, color, label) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const ctx    = canvas.getContext('2d');
+  const W      = canvas.offsetWidth  || 400;
+  const H      = canvas.offsetHeight || 140;
+  canvas.width  = W * (window.devicePixelRatio || 1);
+  canvas.height = H * (window.devicePixelRatio || 1);
+  ctx.scale(window.devicePixelRatio || 1, window.devicePixelRatio || 1);
+
+  const pad   = { top: 16, right: 16, bottom: 32, left: 52 };
+  const cw    = W - pad.left - pad.right;
+  const ch    = H - pad.top  - pad.bottom;
+  const n     = values.length;
+  const max   = Math.max(...values, 0.01);
+  const isDark = document.body.classList.contains('dark');
+  const gridColor = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)';
+  const textColor = isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.45)';
+  const areaColor = color.replace('#', '');
+  const r = parseInt(areaColor.substring(0,2), 16);
+  const g = parseInt(areaColor.substring(2,4), 16);
+  const b = parseInt(areaColor.substring(4,6), 16);
+
+  ctx.clearRect(0, 0, W, H);
+
+  // Grid lines (4 horizontal)
+  ctx.strokeStyle = gridColor;
+  ctx.lineWidth   = 1;
+  for (let i = 0; i <= 4; i++) {
+    const y = pad.top + ch - (ch * i / 4);
+    ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(pad.left + cw, y); ctx.stroke();
+    const val = (max * i / 4);
+    ctx.fillStyle  = textColor;
+    ctx.font       = '10px system-ui, sans-serif';
+    ctx.textAlign  = 'right';
+    ctx.textBaseline = 'middle';
+    const lbl = val >= 1000 ? (val / 1000).toFixed(1) + 'k' : val >= 1 ? val.toFixed(0) : val.toFixed(2);
+    ctx.fillText(lbl, pad.left - 6, y);
+  }
+
+  if (n < 2) {
+    // Single point or no data
+    const px = pad.left + cw / 2;
+    const py = pad.top + ch - (n === 1 ? (values[0] / max) * ch : 0);
+    ctx.beginPath(); ctx.arc(px, py, 4, 0, Math.PI * 2);
+    ctx.fillStyle = color; ctx.fill();
+    return;
+  }
+
+  const pts = values.map((v, i) => ({
+    x: pad.left + (i / (n - 1)) * cw,
+    y: pad.top  + ch - (v / max) * ch,
+  }));
+
+  // Area fill
+  const grad = ctx.createLinearGradient(0, pad.top, 0, pad.top + ch);
+  grad.addColorStop(0, `rgba(${r},${g},${b},0.22)`);
+  grad.addColorStop(1, `rgba(${r},${g},${b},0.0)`);
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pad.top + ch);
+  pts.forEach(p => ctx.lineTo(p.x, p.y));
+  ctx.lineTo(pts[pts.length - 1].x, pad.top + ch);
+  ctx.closePath();
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // Line
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pts[0].y);
+  for (let i = 1; i < pts.length; i++) {
+    const cp1x = (pts[i - 1].x + pts[i].x) / 2;
+    ctx.bezierCurveTo(cp1x, pts[i-1].y, cp1x, pts[i].y, pts[i].x, pts[i].y);
+  }
+  ctx.strokeStyle = color;
+  ctx.lineWidth   = 2.5;
+  ctx.lineJoin    = 'round';
+  ctx.stroke();
+
+  // Dots on non-zero points
+  pts.forEach(p => {
+    ctx.beginPath(); ctx.arc(p.x, p.y, 3.5, 0, Math.PI * 2);
+    ctx.fillStyle = color; ctx.fill();
+    ctx.strokeStyle = isDark ? '#1e2128' : '#ffffff';
+    ctx.lineWidth = 1.5; ctx.stroke();
+  });
+
+  // X-axis hour labels (show ~6 labels evenly)
+  ctx.fillStyle    = textColor;
+  ctx.font         = '10px system-ui, sans-serif';
+  ctx.textAlign    = 'center';
+  ctx.textBaseline = 'top';
+  const step   = Math.max(1, Math.floor(n / 6));
+  const startH = new Date().getHours() - (n - 1);
+  for (let i = 0; i < n; i += step) {
+    const hr      = startH + i;
+    const label12 = hr === 0 ? '12a' : hr < 12 ? hr + 'a' : hr === 12 ? '12p' : (hr - 12) + 'p';
+    ctx.fillText(label12, pts[i].x, pad.top + ch + 8);
+  }
+  // Always label last
+  const lastH = new Date().getHours();
+  const lastLabel = lastH === 0 ? '12a' : lastH < 12 ? lastH + 'a' : lastH === 12 ? '12p' : (lastH - 12) + 'p';
+  ctx.fillText(lastLabel, pts[n-1].x, pad.top + ch + 8);
+}
+
+// ── Today Summary ──────────────────────────────────────────────────────────
+async function loadTodaySummary() {
+  const body = $('#tds-body');
+  const cur  = state.currency ? ' ' + state.currency : '';
+  if (!body) return;
+
+  const dateStr = new Date().toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  const dateEl = $('#tds-date');
+  if (dateEl) dateEl.textContent = dateStr;
+
+  body.innerHTML = '<div class="inv-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</div>';
+
+  const res = await API.todaySummary();
+  if (res.status !== 200) {
+    body.innerHTML = '<div class="inv-loading" style="color:#ef4444"><i class="fa fa-triangle-exclamation"></i> Failed to load summary</div>';
+    return;
+  }
+
+  const d             = res.body.data;
+  const sales         = d.sales;
+  const svcReq        = d.service_requests;
+  const svcHasFeature = hasFeature('service_management');
+
+  // ── KPI row ──
+  let kpiHtml = `
+    <div class="tds-kpi-row">
+      <div class="tds-kpi-card">
+        <div class="tds-kpi-icon" style="background:rgba(59,130,246,.12);color:#3b82f6"><i class="fa fa-cart-shopping"></i></div>
+        <div class="tds-kpi-body">
+          <div class="tds-kpi-val">${sales.count}</div>
+          <div class="tds-kpi-lbl">Sales Today</div>
+        </div>
+      </div>
+      <div class="tds-kpi-card">
+        <div class="tds-kpi-icon" style="background:rgba(34,197,94,.12);color:#22c55e"><i class="fa fa-dollar-sign"></i></div>
+        <div class="tds-kpi-body">
+          <div class="tds-kpi-val">${sales.revenue.toFixed(2)}${cur}</div>
+          <div class="tds-kpi-lbl">Revenue</div>
+        </div>
+      </div>
+      <div class="tds-kpi-card">
+        <div class="tds-kpi-icon" style="background:rgba(245,158,11,.12);color:#f59e0b"><i class="fa fa-boxes-stacked"></i></div>
+        <div class="tds-kpi-body">
+          <div class="tds-kpi-val">${sales.items_sold}</div>
+          <div class="tds-kpi-lbl">Items Sold</div>
+        </div>
+      </div>`;
+  if (svcHasFeature) {
+    kpiHtml += `
+      <div class="tds-kpi-card">
+        <div class="tds-kpi-icon" style="background:rgba(16,185,129,.12);color:#10b981"><i class="fa fa-screwdriver-wrench"></i></div>
+        <div class="tds-kpi-body">
+          <div class="tds-kpi-val">${svcReq.pending + svcReq.in_progress}</div>
+          <div class="tds-kpi-lbl">Active Requests</div>
+        </div>
+      </div>`;
+  }
+  kpiHtml += `</div>`;
+
+  // ── Hourly line charts ──
+  const hourly = sales.hourly || Array(24).fill({ count: 0, revenue: 0 });
+  const nowHour = new Date().getHours();
+  // Only show hours up to current hour (trim trailing zero-hours after now)
+  const activeHours = hourly.slice(0, nowHour + 1);
+
+  let svcColHtml = '';
+  if (svcHasFeature) {
+    const statusColors = { pending: '#f59e0b', in_progress: '#3b82f6', completed: '#22c55e', cancelled: '#9ca3af' };
+    const statusLabels = { pending: 'Pending', in_progress: 'In Progress', completed: 'Done', cancelled: 'Cancelled' };
+    svcColHtml = `<div class="tds-section-title"><i class="fa fa-screwdriver-wrench"></i> Service Requests
+      <span class="tds-req-badges">
+        ${svcReq.pending     ? `<span class="tds-req-badge" style="background:rgba(245,158,11,.15);color:#f59e0b">${svcReq.pending} pending</span>` : ''}
+        ${svcReq.in_progress ? `<span class="tds-req-badge" style="background:rgba(59,130,246,.15);color:#3b82f6">${svcReq.in_progress} in progress</span>` : ''}
+        ${svcReq.completed   ? `<span class="tds-req-badge" style="background:rgba(34,197,94,.15);color:#22c55e">${svcReq.completed} done today</span>` : ''}
+      </span>
+    </div>`;
+    if (!svcReq.list.length) {
+      svcColHtml += '<div class="tds-empty-hint">No active service requests</div>';
+    } else {
+      svcReq.list.forEach(r => {
+        const col   = statusColors[r.status] || '#9ca3af';
+        const lbl   = statusLabels[r.status] || r.status;
+        const timeStr = r.scheduled_at
+          ? new Date(r.scheduled_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          : '';
+        svcColHtml += `
+          <div class="tds-req-row">
+            <div class="tds-req-dot" style="background:${col}"></div>
+            <div class="tds-req-info">
+              <div class="tds-req-title">${escHtml(r.title)}</div>
+              <div class="tds-req-meta">${escHtml(r.request_number)}${r.customer_name ? ' · ' + escHtml(r.customer_name) : ''}${timeStr ? ' · ' + timeStr : ''}</div>
+            </div>
+            <span class="tds-req-status" style="color:${col}">${lbl}</span>
+          </div>`;
+      });
+    }
+  }
+
+  // ── Top items row ──
+  const renderTopList = (items, icon, color, emptyMsg) => {
+    if (!items.length) return `<div class="tds-empty-hint">${emptyMsg}</div>`;
+    return items.map((it, i) => `
+      <div class="tds-top-row">
+        <div class="tds-top-rank">${i + 1}</div>
+        <div class="tds-top-icon" style="color:${color}"><i class="fa ${icon}"></i></div>
+        <div class="tds-top-name">${escHtml(it.name)}</div>
+        <div class="tds-top-qty">${it.qty % 1 === 0 ? it.qty : it.qty.toFixed(2)} units</div>
+        <div class="tds-top-rev">${it.revenue.toFixed(2)}${cur}</div>
+      </div>`).join('');
+  };
+
+  // ── Recent sales ──
+  const renderRecent = () => {
+    if (!d.recent_sales.length) return '<div class="tds-empty-hint">No sales recorded today</div>';
+    const pmIcon = { cash: 'fa-money-bill-wave', card: 'fa-credit-card', credit: 'fa-hand-holding-dollar' };
+    return d.recent_sales.map(s => {
+      const time = s.sold_at ? new Date(s.sold_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+      return `
+        <div class="tds-sale-row">
+          <div class="tds-sale-icon"><i class="fa ${pmIcon[s.payment_method] || 'fa-receipt'}"></i></div>
+          <div class="tds-sale-info">
+            <div class="tds-sale-num">${escHtml(s.sale_number || '#' + s.id)}</div>
+            <div class="tds-sale-meta">${time} · ${s.items_count} item${s.items_count !== 1 ? 's' : ''}</div>
+          </div>
+          <div class="tds-sale-total">${s.total.toFixed(2)}${cur}</div>
+        </div>`;
+    }).join('');
+  };
+
+  body.innerHTML = `
+    ${kpiHtml}
+    <div class="tds-chart-section">
+      <div class="tds-chart-wrap">
+        <div class="tds-section-title"><i class="fa fa-chart-line"></i> Revenue Today</div>
+        <canvas id="tds-chart-rev" class="tds-chart-canvas"></canvas>
+      </div>
+      <div class="tds-chart-wrap">
+        <div class="tds-section-title"><i class="fa fa-chart-bar"></i> Sales Count Today</div>
+        <canvas id="tds-chart-cnt" class="tds-chart-canvas"></canvas>
+      </div>
+    </div>
+    ${svcHasFeature ? `<div class="tds-mid-row"><div class="tds-col tds-col-svc-full">${svcColHtml}</div></div>` : ''}
+    <div class="tds-mid-row">
+      <div class="tds-col">
+        <div class="tds-section-title"><i class="fa fa-box"></i> Top Products Today</div>
+        ${renderTopList(d.top_products, 'fa-box', '#3b82f6', 'No product sales today')}
+      </div>
+      ${svcHasFeature ? `<div class="tds-col">
+        <div class="tds-section-title"><i class="fa fa-screwdriver-wrench"></i> Top Services Today</div>
+        ${renderTopList(d.top_services, 'fa-screwdriver-wrench', '#10b981', 'No service sales today')}
+      </div>` : ''}
+    </div>
+    <div class="tds-recent-section">
+      <div class="tds-section-title"><i class="fa fa-receipt"></i> Recent Transactions</div>
+      ${renderRecent()}
+    </div>`;
+
+  // ── Draw line charts after DOM inserted ──
+  requestAnimationFrame(() => {
+    _tdsDrawChart('tds-chart-rev', activeHours.map(h => h.revenue), '#22c55e', 'Revenue');
+    _tdsDrawChart('tds-chart-cnt', activeHours.map(h => h.count),   '#3b82f6', 'Sales');
+  });
+}
+
+$('#tds-refresh')?.addEventListener('click', loadTodaySummary);
+
+// ── Expenses chart helpers ─────────────────────────────────────────────────
+
+function _expDrawSpider(canvasId, labels, values, colors) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas || labels.length < 3) return;
+  const dpr  = window.devicePixelRatio || 1;
+  const size = canvas.offsetWidth || 220;
+  canvas.width  = size * dpr;
+  canvas.height = size * dpr;
+  const ctx  = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  const cx  = size / 2;
+  const cy  = size / 2;
+  const r   = size * 0.36;
+  const n   = labels.length;
+  const max = Math.max(...values, 0.01);
+  const isDark    = document.body.classList.contains('dark');
+  const gridClr   = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)';
+  const axisClr   = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.12)';
+  const labelClr  = isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.55)';
+  const ringLblClr = isDark ? 'rgba(255,255,255,0.28)' : 'rgba(0,0,0,0.28)';
+
+  const pt = (i, t) => {
+    const a = (i / n) * Math.PI * 2 - Math.PI / 2;
+    return { x: cx + Math.cos(a) * r * t, y: cy + Math.sin(a) * r * t };
+  };
+
+  ctx.clearRect(0, 0, size, size);
+
+  // Grid rings
+  const rings = 4;
+  for (let lv = 1; lv <= rings; lv++) {
+    const t = lv / rings;
+    ctx.beginPath();
+    for (let i = 0; i < n; i++) {
+      const p = pt(i, t);
+      i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y);
+    }
+    ctx.closePath();
+    ctx.strokeStyle = lv === rings ? axisClr : gridClr;
+    ctx.lineWidth   = lv === rings ? 1.5 : 1;
+    ctx.stroke();
+  }
+
+  // Axis spokes
+  for (let i = 0; i < n; i++) {
+    const p = pt(i, 1);
+    ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(p.x, p.y);
+    ctx.strokeStyle = axisClr; ctx.lineWidth = 1; ctx.stroke();
+  }
+
+  // Data polygon – filled
+  const dataPts = values.map((v, i) => pt(i, Math.min(v / max, 1)));
+  ctx.beginPath();
+  dataPts.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+  ctx.closePath();
+  ctx.fillStyle   = 'rgba(239,68,68,0.13)';
+  ctx.fill();
+  ctx.strokeStyle = '#ef4444';
+  ctx.lineWidth   = 2;
+  ctx.lineJoin    = 'round';
+  ctx.stroke();
+
+  // Dots coloured per category
+  dataPts.forEach((p, i) => {
+    ctx.beginPath(); ctx.arc(p.x, p.y, 4.5, 0, Math.PI * 2);
+    ctx.fillStyle = colors[i] || '#ef4444'; ctx.fill();
+    ctx.strokeStyle = isDark ? '#1a1d23' : '#ffffff';
+    ctx.lineWidth = 1.5; ctx.stroke();
+  });
+
+  // Axis labels
+  ctx.font         = 'bold 9px system-ui,sans-serif';
+  ctx.fillStyle    = labelClr;
+  for (let i = 0; i < n; i++) {
+    const p = pt(i, 1.28);
+    ctx.textAlign    = p.x < cx - 3 ? 'right' : p.x > cx + 3 ? 'left' : 'center';
+    ctx.textBaseline = p.y < cy - 3 ? 'bottom' : p.y > cy + 3 ? 'top' : 'middle';
+    ctx.fillText(labels[i].replace(/_/g, ' '), p.x, p.y);
+  }
+
+  // Ring value hints (25%, 50%, 75%, 100%)
+  ctx.font      = '8px system-ui,sans-serif';
+  ctx.fillStyle = ringLblClr;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const hintPt = pt(0, 0);  // top
+  for (let lv = 1; lv <= rings; lv++) {
+    const p   = pt(0, lv / rings);
+    const val = ((max * lv) / rings);
+    const lbl = val >= 1000 ? (val / 1000).toFixed(1) + 'k' : val.toFixed(0);
+    ctx.fillText(lbl, p.x + 4, p.y - 5);
+  }
+}
+
+function _expDrawMultiLine(canvasId, months, series) {
+  // series: [{ label, color, values: number[] }]
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const dpr = window.devicePixelRatio || 1;
+  const W   = canvas.offsetWidth  || 500;
+  const H   = canvas.offsetHeight || 180;
+  canvas.width  = W * dpr;
+  canvas.height = H * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  const pad  = { top: 18, right: 16, bottom: 36, left: 54 };
+  const cw   = W - pad.left - pad.right;
+  const ch   = H - pad.top  - pad.bottom;
+  const n    = months.length;
+  if (n < 2) return;
+
+  const allVals = series.flatMap(s => s.values);
+  const max     = Math.max(...allVals, 0.01);
+  const isDark  = document.body.classList.contains('dark');
+  const gridClr = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
+  const txtClr  = isDark ? 'rgba(255,255,255,0.42)' : 'rgba(0,0,0,0.42)';
+
+  ctx.clearRect(0, 0, W, H);
+
+  // Horizontal grid + Y labels
+  const gridLines = 4;
+  for (let i = 0; i <= gridLines; i++) {
+    const y   = pad.top + ch - (ch * i / gridLines);
+    const val = (max * i) / gridLines;
+    const lbl = val >= 1000 ? (val / 1000).toFixed(1) + 'k' : val >= 1 ? val.toFixed(0) : val.toFixed(2);
+    ctx.strokeStyle   = gridClr; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(pad.left + cw, y); ctx.stroke();
+    ctx.fillStyle     = txtClr;
+    ctx.font          = '9px system-ui,sans-serif';
+    ctx.textAlign     = 'right';
+    ctx.textBaseline  = 'middle';
+    ctx.fillText(lbl, pad.left - 5, y);
+  }
+
+  // Draw each series
+  series.forEach(s => {
+    const pts = s.values.map((v, i) => ({
+      x: pad.left + (i / (n - 1)) * cw,
+      y: pad.top  + ch - (v / max) * ch,
+    }));
+
+    // Area under curve
+    const hexColor = s.color.replace('#', '');
+    const rr = parseInt(hexColor.substring(0, 2), 16);
+    const gg = parseInt(hexColor.substring(2, 4), 16);
+    const bb = parseInt(hexColor.substring(4, 6), 16);
+    const grad = ctx.createLinearGradient(0, pad.top, 0, pad.top + ch);
+    grad.addColorStop(0,   `rgba(${rr},${gg},${bb},0.16)`);
+    grad.addColorStop(1,   `rgba(${rr},${gg},${bb},0.0)`);
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pad.top + ch);
+    pts.forEach(p => ctx.lineTo(p.x, p.y));
+    ctx.lineTo(pts[n - 1].x, pad.top + ch);
+    ctx.closePath();
+    ctx.fillStyle = grad; ctx.fill();
+
+    // Line
+    ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) {
+      const cpx = (pts[i - 1].x + pts[i].x) / 2;
+      ctx.bezierCurveTo(cpx, pts[i-1].y, cpx, pts[i].y, pts[i].x, pts[i].y);
+    }
+    ctx.strokeStyle = s.color; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.stroke();
+
+    // Dots
+    pts.forEach(p => {
+      ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+      ctx.fillStyle   = s.color; ctx.fill();
+      ctx.strokeStyle = isDark ? '#1a1d23' : '#ffffff';
+      ctx.lineWidth   = 1.5; ctx.stroke();
+    });
+  });
+
+  // X-axis month labels — show ~6 evenly spaced
+  ctx.fillStyle    = txtClr;
+  ctx.font         = '9px system-ui,sans-serif';
+  ctx.textAlign    = 'center';
+  ctx.textBaseline = 'top';
+  const step = Math.max(1, Math.round((n - 1) / 5));
+  for (let i = 0; i < n; i += step) {
+    const x = pad.left + (i / (n - 1)) * cw;
+    ctx.fillText(months[i], x, pad.top + ch + 6);
+  }
+  // Always draw last label
+  const lastX = pad.left + cw;
+  ctx.fillText(months[n - 1], lastX, pad.top + ch + 6);
+}
+
+// ── Expenses View ──────────────────────────────────────────────────────────
+async function loadExpensesView() {
+  const body = $('#exp-body');
+  const cur  = state.currency ? ' ' + state.currency : '';
+  if (!body) return;
+  body.innerHTML = '<div class="inv-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</div>';
+
+  let res;
+  try {
+    res = await API.expensesOverview();
+  } catch (err) {
+    body.innerHTML = `<div class="inv-loading" style="color:#ef4444"><i class="fa fa-triangle-exclamation"></i> Request failed: ${escHtml(String(err))}</div>`;
+    return;
+  }
+
+  if (!res || res.status !== 200) {
+    body.innerHTML = `<div class="inv-loading" style="color:#ef4444"><i class="fa fa-triangle-exclamation"></i> Failed to load expenses (${res?.status ?? 'no response'})</div>`;
+    return;
+  }
+
+  const d   = res.body?.data;
+  if (!d || !d.summary) {
+    body.innerHTML = '<div class="inv-loading" style="color:#ef4444"><i class="fa fa-triangle-exclamation"></i> Unexpected response format</div>';
+    return;
+  }
+  const sum = d.summary;
+
+  // ── KPI row ──
+  const overdueColor = sum.overdue_count > 0 ? '#ef4444' : '#9ca3af';
+  const kpiHtml = `
+    <div class="exp-kpi-row">
+      <div class="exp-kpi-card">
+        <div class="exp-kpi-icon" style="background:rgba(239,68,68,.12);color:#ef4444"><i class="fa fa-file-invoice-dollar"></i></div>
+        <div class="exp-kpi-body">
+          <div class="exp-kpi-val">${sum.total_monthly.toFixed(2)}${cur}</div>
+          <div class="exp-kpi-lbl">Monthly Total</div>
+        </div>
+      </div>
+      <div class="exp-kpi-card">
+        <div class="exp-kpi-icon" style="background:rgba(59,130,246,.12);color:#3b82f6"><i class="fa fa-receipt"></i></div>
+        <div class="exp-kpi-body">
+          <div class="exp-kpi-val">${sum.bills_count}</div>
+          <div class="exp-kpi-lbl">Active Bills</div>
+        </div>
+      </div>
+      <div class="exp-kpi-card">
+        <div class="exp-kpi-icon" style="background:rgba(245,158,11,.12);color:${overdueColor}"><i class="fa fa-triangle-exclamation"></i></div>
+        <div class="exp-kpi-body">
+          <div class="exp-kpi-val" style="color:${overdueColor}">${sum.overdue_count}</div>
+          <div class="exp-kpi-lbl">Overdue</div>
+        </div>
+      </div>
+      <div class="exp-kpi-card">
+        <div class="exp-kpi-icon" style="background:rgba(139,92,246,.12);color:#8b5cf6"><i class="fa fa-building"></i></div>
+        <div class="exp-kpi-body">
+          <div class="exp-kpi-val">${sum.rentals_monthly.toFixed(2)}${cur}</div>
+          <div class="exp-kpi-lbl">Rentals / Mo</div>
+        </div>
+      </div>
+      <div class="exp-kpi-card">
+        <div class="exp-kpi-icon" style="background:rgba(16,185,129,.12);color:#10b981"><i class="fa fa-screwdriver-wrench"></i></div>
+        <div class="exp-kpi-body">
+          <div class="exp-kpi-val">${sum.mods_total.toFixed(2)}${cur}</div>
+          <div class="exp-kpi-lbl">Modifications</div>
+        </div>
+      </div>
+    </div>`;
+
+  try {
+  const catIcons  = { water:'fa-droplet', electricity:'fa-bolt', telephone:'fa-phone', internet:'fa-wifi', gas:'fa-fire-flame-curved', waste:'fa-trash-can', other:'fa-tag' };
+  const catColors = { water:'#3b82f6', electricity:'#f59e0b', telephone:'#10b981', internet:'#6366f1', gas:'#f97316', waste:'#9ca3af', other:'#8b5cf6' };
+
+  // ── Spider chart ──
+  const spiderLabels = d.category_breakdown.map(bc => bc.category);
+  const spiderValues = d.category_breakdown.map(bc => bc.total);
+  const spiderColors = d.category_breakdown.map(bc => catColors[bc.category] || '#8b5cf6');
+
+  // ── Monthly trend multi-line ──
+  const trend   = d.monthly_trend || { months: [], bills: [], rentals: [] };
+  const totals  = trend.bills.map((b, i) => +(b + (trend.rentals[i] || 0)).toFixed(2));
+  const trendSeries = [
+    { label: 'Bills',   color: '#ef4444', values: trend.bills   },
+    { label: 'Rentals', color: '#8b5cf6', values: trend.rentals },
+    { label: 'Total',   color: '#f59e0b', values: totals        },
+  ];
+
+  // ── Bills list ──
+  let billsHtml = '';
+  if (d.bills.length) {
+    billsHtml = `
+      <div class="exp-section-card">
+        <div class="tds-section-title"><i class="fa fa-file-invoice"></i> Bills</div>
+        ${d.bills.map(b => {
+          const col   = b.overdue ? '#ef4444' : b.fully_paid ? '#22c55e' : '#3b82f6';
+          const icon  = catIcons[b.category]  || 'fa-tag';
+          const cCol  = catColors[b.category] || '#8b5cf6';
+          const badge = b.overdue
+            ? '<span class="exp-badge exp-badge-overdue">Overdue</span>'
+            : b.fully_paid
+            ? '<span class="exp-badge exp-badge-paid">Paid</span>'
+            : b.amount_varies
+            ? '<span class="exp-badge exp-badge-varies">Varies</span>'
+            : '';
+          const modeLabel = b.payment_mode === 'one_time' ? 'One-time' : (b.recurring_type || 'Recurring');
+          return `
+            <div class="exp-bill-row">
+              <div class="exp-bill-cat-icon" style="background:${cCol}22;color:${cCol}"><i class="fa ${icon}"></i></div>
+              <div class="exp-bill-info">
+                <div class="exp-bill-name">${escHtml(b.name)}</div>
+                <div class="exp-bill-meta">${escHtml(b.category_label)} · ${escHtml(modeLabel)}${b.due_date_fmt ? ' · Due ' + escHtml(b.due_date_fmt) : ''}</div>
+              </div>
+              ${badge}
+              <div class="exp-bill-amount" style="color:${col}">${b.amount_varies ? '—' : b.amount.toFixed(2) + cur}</div>
+            </div>`;
+        }).join('')}
+      </div>`;
+  } else {
+    billsHtml = `<div class="exp-section-card"><div class="tds-section-title"><i class="fa fa-file-invoice"></i> Bills</div><div class="tds-empty-hint">No bills set up</div></div>`;
+  }
+
+  // ── Rentals list ──
+  let rentalsHtml = '';
+  if (d.rentals.length) {
+    rentalsHtml = `
+      <div class="exp-section-card">
+        <div class="tds-section-title"><i class="fa fa-building"></i> Rentals</div>
+        ${d.rentals.map(r => `
+          <div class="exp-simple-row">
+            <div class="exp-simple-icon" style="color:#8b5cf6"><i class="fa fa-door-open"></i></div>
+            <div class="exp-simple-name">${escHtml(r.name)}</div>
+            <div class="exp-simple-amount">${r.amount.toFixed(2)}${cur}</div>
+          </div>`).join('')}
+      </div>`;
+  }
+
+  // ── Modifications list ──
+  let modsHtml = '';
+  if (d.modifications.length) {
+    modsHtml = `
+      <div class="exp-section-card">
+        <div class="tds-section-title"><i class="fa fa-screwdriver-wrench"></i> Modifications</div>
+        ${d.modifications.map(m => `
+          <div class="exp-simple-row">
+            <div class="exp-simple-icon" style="color:#10b981"><i class="fa fa-wrench"></i></div>
+            <div class="exp-simple-name">${escHtml(m.name)}</div>
+            <div class="exp-simple-amount">${m.amount.toFixed(2)}${cur}</div>
+          </div>`).join('')}
+      </div>`;
+  }
+
+  // ── Recent payments ──
+  let paymentsHtml = '';
+  if (d.recent_payments.length) {
+    paymentsHtml = `
+      <div class="exp-section-card">
+        <div class="tds-section-title"><i class="fa fa-clock-rotate-left"></i> Recent Payments</div>
+        ${d.recent_payments.map(p => `
+          <div class="exp-pay-row">
+            <div class="exp-pay-icon"><i class="fa fa-circle-check"></i></div>
+            <div class="exp-pay-info">
+              <div class="exp-pay-title">${escHtml(p.source_title)}</div>
+              <div class="exp-pay-meta">${escHtml(p.source_label)} · ${escHtml(p.date_fmt)}</div>
+            </div>
+            <div class="exp-pay-amount">${p.amount.toFixed(2)}${cur}</div>
+          </div>`).join('')}
+      </div>`;
+  }
+
+  // ── Legend HTML for multi-line chart ──
+  const legendHtml = trendSeries.map(s =>
+    `<div class="exp-legend-item"><div class="exp-legend-dot" style="background:${s.color}"></div>${escHtml(s.label)}</div>`
+  ).join('');
+
+  // ── Layout ──
+  body.innerHTML = `
+    ${kpiHtml}
+    <div class="exp-chart-card">
+      <div class="exp-chart-tab-bar">
+        <button class="exp-chart-tab active" data-chart="spider"><i class="fa fa-chart-area"></i> Category Distribution</button>
+        <button class="exp-chart-tab" data-chart="trend"><i class="fa fa-chart-line"></i> 12-Month Trend</button>
+      </div>
+      <div id="exp-chart-panel-spider" class="exp-chart-panel">
+        ${spiderLabels.length >= 3
+          ? `<canvas id="exp-spider-canvas" class="exp-spider-canvas"></canvas>`
+          : `<div class="tds-empty-hint" style="padding:40px 0">At least 3 bill categories needed for radar chart</div>`}
+      </div>
+      <div id="exp-chart-panel-trend" class="exp-chart-panel" style="display:none">
+        <canvas id="exp-trend-canvas" class="exp-trend-canvas"></canvas>
+        <div class="exp-legend">${legendHtml}</div>
+      </div>
+    </div>
+    <div class="exp-two-col">
+      <div class="exp-col-main">
+        ${billsHtml}
+      </div>
+      <div class="exp-col-side">
+        ${rentalsHtml}
+        ${modsHtml}
+        ${paymentsHtml}
+      </div>
+    </div>`;
+
+  // ── Chart tab switching + initial draw ──
+  requestAnimationFrame(() => {
+    if (spiderLabels.length >= 3) {
+      _expDrawSpider('exp-spider-canvas', spiderLabels, spiderValues, spiderColors);
+    }
+
+    document.querySelectorAll('.exp-chart-tab').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const chart = btn.dataset.chart;
+        document.querySelectorAll('.exp-chart-tab').forEach(b => b.classList.toggle('active', b === btn));
+        document.querySelectorAll('.exp-chart-panel').forEach(p => {
+          p.style.display = p.id === `exp-chart-panel-${chart}` ? '' : 'none';
+        });
+        // Redraw after making panel visible — canvas size is only correct when displayed
+        requestAnimationFrame(() => {
+          if (chart === 'spider' && spiderLabels.length >= 3) {
+            _expDrawSpider('exp-spider-canvas', spiderLabels, spiderValues, spiderColors);
+          }
+          if (chart === 'trend') {
+            _expDrawMultiLine('exp-trend-canvas', trend.months, trendSeries);
+          }
+        });
+      });
+    });
+  });
+  } catch (renderErr) {
+    body.innerHTML = `<div class="inv-loading" style="color:#ef4444"><i class="fa fa-triangle-exclamation"></i> Render error: ${escHtml(String(renderErr))}</div>`;
+  }
+}
+
+$('#exp-refresh')?.addEventListener('click', loadExpensesView);
+
+// ── Profit Report ──────────────────────────────────────────────────────────
+async function loadProfitReport() {
+  const body   = $('#prf-body');
+  const cur    = state.currency ? ' ' + state.currency : '';
+  if (!body) return;
+  body.innerHTML = '<div class="inv-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</div>';
+
+  const period = parseInt($('#prf-period-select')?.value || '30', 10);
+
+  let res;
+  try {
+    res = await API.profitReport(period);
+  } catch (err) {
+    body.innerHTML = `<div class="inv-loading" style="color:#ef4444"><i class="fa fa-triangle-exclamation"></i> Request failed: ${escHtml(String(err))}</div>`;
+    return;
+  }
+  if (!res || res.status !== 200) {
+    body.innerHTML = `<div class="inv-loading" style="color:#ef4444"><i class="fa fa-triangle-exclamation"></i> Failed (${res?.status ?? 'no response'})</div>`;
+    return;
+  }
+  const d = res.body?.data;
+  if (!d || !d.summary) {
+    body.innerHTML = '<div class="inv-loading" style="color:#ef4444"><i class="fa fa-triangle-exclamation"></i> Unexpected response</div>';
+    return;
+  }
+
+  try {
+    const sum  = d.summary;
+    const trend = d.trend || { labels: [], revenue: [], gross_profit: [], expenses: [] };
+    const tops  = d.top_products || [];
+
+    const gpColor  = sum.gross_profit >= 0 ? '#22c55e' : '#ef4444';
+    const npColor  = sum.net_profit   >= 0 ? '#22c55e' : '#ef4444';
+    const marginBg = sum.gross_margin >= 50 ? 'rgba(34,197,94,.12)' : sum.gross_margin >= 20 ? 'rgba(234,179,8,.12)' : 'rgba(239,68,68,.12)';
+    const marginFg = sum.gross_margin >= 50 ? '#22c55e' : sum.gross_margin >= 20 ? '#eab308' : '#ef4444';
+
+    const kpiHtml = `
+      <div class="exp-kpi-row">
+        <div class="exp-kpi-card">
+          <div class="exp-kpi-icon" style="background:rgba(59,130,246,.12);color:#3b82f6"><i class="fa fa-circle-dollar-to-slot"></i></div>
+          <div class="exp-kpi-body">
+            <div class="exp-kpi-val">${sum.revenue.toFixed(2)}${cur}</div>
+            <div class="exp-kpi-lbl">Revenue</div>
+          </div>
+        </div>
+        <div class="exp-kpi-card">
+          <div class="exp-kpi-icon" style="background:rgba(249,115,22,.12);color:#f97316"><i class="fa fa-box"></i></div>
+          <div class="exp-kpi-body">
+            <div class="exp-kpi-val">${sum.cogs.toFixed(2)}${cur}</div>
+            <div class="exp-kpi-lbl">COGS</div>
+          </div>
+        </div>
+        <div class="exp-kpi-card">
+          <div class="exp-kpi-icon" style="background:${marginBg};color:${marginFg}"><i class="fa fa-percent"></i></div>
+          <div class="exp-kpi-body">
+            <div class="exp-kpi-val" style="color:${marginFg}">${sum.gross_margin}%</div>
+            <div class="exp-kpi-lbl">Gross Margin</div>
+          </div>
+        </div>
+        <div class="exp-kpi-card">
+          <div class="exp-kpi-icon" style="background:rgba(34,197,94,.12);color:#22c55e"><i class="fa fa-arrow-trend-up"></i></div>
+          <div class="exp-kpi-body">
+            <div class="exp-kpi-val" style="color:${gpColor}">${sum.gross_profit.toFixed(2)}${cur}</div>
+            <div class="exp-kpi-lbl">Gross Profit</div>
+          </div>
+        </div>
+        <div class="exp-kpi-card">
+          <div class="exp-kpi-icon" style="background:rgba(239,68,68,.12);color:#ef4444"><i class="fa fa-file-invoice-dollar"></i></div>
+          <div class="exp-kpi-body">
+            <div class="exp-kpi-val">${sum.expenses.toFixed(2)}${cur}</div>
+            <div class="exp-kpi-lbl">Expenses Paid</div>
+          </div>
+        </div>
+        <div class="exp-kpi-card">
+          <div class="exp-kpi-icon" style="background:rgba(99,102,241,.12);color:#6366f1"><i class="fa fa-sack-dollar"></i></div>
+          <div class="exp-kpi-body">
+            <div class="exp-kpi-val" style="color:${npColor}">${sum.net_profit.toFixed(2)}${cur}</div>
+            <div class="exp-kpi-lbl">Net Profit</div>
+          </div>
+        </div>
+      </div>`;
+
+    const trendSeries = [
+      { label: 'Revenue',      color: '#3b82f6', values: trend.revenue      },
+      { label: 'Gross Profit', color: '#22c55e', values: trend.gross_profit  },
+      { label: 'Expenses',     color: '#ef4444', values: trend.expenses      },
+    ];
+    const legendHtml = trendSeries.map(s =>
+      `<div class="exp-legend-item"><div class="exp-legend-dot" style="background:${s.color}"></div>${s.label}</div>`
+    ).join('');
+
+    const topProductsHtml = tops.length === 0
+      ? '<div style="padding:14px;color:var(--text-muted);font-size:12px;text-align:center">No sales data for this period</div>'
+      : tops.map((p, i) => {
+          const barW  = tops[0].gp > 0 ? Math.max(4, Math.round((Math.max(p.gp, 0) / tops[0].gp) * 100)) : 0;
+          const mColor = p.margin >= 50 ? '#22c55e' : p.margin >= 20 ? '#eab308' : '#ef4444';
+          return `<div class="prf-product-row">
+            <div class="prf-product-rank">${i + 1}</div>
+            <div class="prf-product-info">
+              <div class="prf-product-name">${escHtml(p.name || '—')}</div>
+              <div class="prf-product-bar-wrap"><div class="prf-product-bar" style="width:${barW}%"></div></div>
+            </div>
+            <div class="prf-product-stats">
+              <div class="prf-product-gp" style="color:${mColor}">${p.gp.toFixed(2)}${cur}</div>
+              <div class="prf-product-margin" style="color:${mColor}">${p.margin}%</div>
+            </div>
+          </div>`;
+        }).join('');
+
+    body.innerHTML = `
+      ${kpiHtml}
+      <div style="display:grid;grid-template-columns:1fr 300px;gap:10px;margin-top:10px">
+        <div class="exp-chart-card">
+          <div class="exp-chart-tab-bar">
+            <button class="exp-chart-tab active" data-prf-chart="trend"><i class="fa fa-chart-line"></i> Profit Trend</button>
+          </div>
+          <div id="prf-chart-panel-trend" class="exp-chart-panel">
+            <canvas id="prf-trend-canvas" class="exp-trend-canvas" style="height:220px"></canvas>
+            <div class="exp-legend">${legendHtml}</div>
+          </div>
+        </div>
+        <div class="exp-section-card">
+          <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:10px">
+            <i class="fa fa-trophy" style="color:#eab308;margin-right:5px"></i>Top Products by Profit
+          </div>
+          <div id="prf-top-products">${topProductsHtml}</div>
+        </div>
+      </div>`;
+
+    requestAnimationFrame(() => {
+      if (trend.labels.length >= 2) {
+        _expDrawMultiLine('prf-trend-canvas', trend.labels, trendSeries);
+      }
+    });
+
+  } catch (renderErr) {
+    body.innerHTML = `<div class="inv-loading" style="color:#ef4444"><i class="fa fa-triangle-exclamation"></i> Render error: ${escHtml(String(renderErr))}</div>`;
+  }
+}
+
+$('#prf-refresh')?.addEventListener('click', loadProfitReport);
+$('#prf-period-select')?.addEventListener('change', loadProfitReport);
+
+// ── Payroll Overview ───────────────────────────────────────────────────────
+async function loadPayrollView() {
+  const body = $('#prl-body');
+  const cur  = state.currency ? ' ' + state.currency : '';
+  if (!body) return;
+  body.innerHTML = '<div class="inv-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</div>';
+
+  let res;
+  try {
+    res = await API.payrollOverview();
+  } catch (err) {
+    body.innerHTML = `<div class="inv-loading" style="color:#ef4444"><i class="fa fa-triangle-exclamation"></i> Request failed: ${escHtml(String(err))}</div>`;
+    return;
+  }
+  if (!res || res.status !== 200) {
+    body.innerHTML = `<div class="inv-loading" style="color:#ef4444"><i class="fa fa-triangle-exclamation"></i> Failed (${res?.status ?? 'no response'})</div>`;
+    return;
+  }
+  const d = res.body?.data;
+  if (!d || !d.summary) {
+    body.innerHTML = '<div class="inv-loading" style="color:#ef4444"><i class="fa fa-triangle-exclamation"></i> Unexpected response</div>';
+    return;
+  }
+
+  try {
+    const sum    = d.summary;
+    const trend  = d.trend  || { labels: [], gross: [], net: [] };
+    const cycles = d.recent_cycles || [];
+    const earners= d.top_earners   || [];
+    const depts  = d.dept_breakdown|| [];
+
+    const cycleLabel = sum.last_cycle_label ? `(${sum.last_cycle_label})` : '';
+    const pendingColor = sum.pending_cycles > 0 ? '#eab308' : '#9ca3af';
+
+    const kpiHtml = `
+      <div class="exp-kpi-row">
+        <div class="exp-kpi-card">
+          <div class="exp-kpi-icon" style="background:rgba(59,130,246,.12);color:#3b82f6"><i class="fa fa-users"></i></div>
+          <div class="exp-kpi-body">
+            <div class="exp-kpi-val">${sum.emp_total}</div>
+            <div class="exp-kpi-lbl">Employees</div>
+          </div>
+        </div>
+        <div class="exp-kpi-card">
+          <div class="exp-kpi-icon" style="background:rgba(34,197,94,.12);color:#22c55e"><i class="fa fa-money-check-dollar"></i></div>
+          <div class="exp-kpi-body">
+            <div class="exp-kpi-val">${sum.last_cycle_net.toFixed(2)}${cur}</div>
+            <div class="exp-kpi-lbl">Net Pay ${cycleLabel}</div>
+          </div>
+        </div>
+        <div class="exp-kpi-card">
+          <div class="exp-kpi-icon" style="background:rgba(99,102,241,.12);color:#6366f1"><i class="fa fa-circle-dollar-to-slot"></i></div>
+          <div class="exp-kpi-body">
+            <div class="exp-kpi-val">${sum.last_cycle_gross.toFixed(2)}${cur}</div>
+            <div class="exp-kpi-lbl">Gross Earnings</div>
+          </div>
+        </div>
+        <div class="exp-kpi-card">
+          <div class="exp-kpi-icon" style="background:rgba(239,68,68,.12);color:#ef4444"><i class="fa fa-minus-circle"></i></div>
+          <div class="exp-kpi-body">
+            <div class="exp-kpi-val">${sum.last_cycle_deductions.toFixed(2)}${cur}</div>
+            <div class="exp-kpi-lbl">Deductions</div>
+          </div>
+        </div>
+        <div class="exp-kpi-card">
+          <div class="exp-kpi-icon" style="background:rgba(234,179,8,.12);color:${pendingColor}"><i class="fa fa-clock"></i></div>
+          <div class="exp-kpi-body">
+            <div class="exp-kpi-val" style="color:${pendingColor}">${sum.pending_cycles}</div>
+            <div class="exp-kpi-lbl">Pending Cycles</div>
+          </div>
+        </div>
+        <div class="exp-kpi-card">
+          <div class="exp-kpi-icon" style="background:rgba(168,85,247,.12);color:#a855f7"><i class="fa fa-sitemap"></i></div>
+          <div class="exp-kpi-body">
+            <div class="exp-kpi-val">${sum.dept_count}</div>
+            <div class="exp-kpi-lbl">Departments</div>
+          </div>
+        </div>
+      </div>`;
+
+    const trendSeries = [
+      { label: 'Gross Earnings', color: '#6366f1', values: trend.gross },
+      { label: 'Net Pay',        color: '#22c55e', values: trend.net   },
+    ];
+    const legendHtml = trendSeries.map(s =>
+      `<div class="exp-legend-item"><div class="exp-legend-dot" style="background:${s.color}"></div>${s.label}</div>`
+    ).join('');
+
+    const statusBadge = (status) => {
+      if (status === 'finalized') return '<span class="exp-badge exp-badge-paid">Finalized</span>';
+      if (status === 'computed')  return '<span class="exp-badge" style="background:rgba(59,130,246,.15);color:#3b82f6">Computed</span>';
+      return '<span class="exp-badge" style="background:rgba(156,163,175,.15);color:#9ca3af">Draft</span>';
+    };
+
+    const cyclesHtml = cycles.length === 0
+      ? '<div style="padding:14px;color:var(--text-muted);font-size:12px;text-align:center">No payroll cycles yet</div>'
+      : cycles.map(c => `
+          <div class="prl-cycle-row">
+            <div class="prl-cycle-info">
+              <div class="prl-cycle-name">${escHtml(c.name)}</div>
+              <div class="prl-cycle-meta">${c.emp_count} employees${c.period_start ? ' · ' + c.period_start : ''}</div>
+            </div>
+            <div class="prl-cycle-amounts">
+              <div class="prl-cycle-net">${c.net.toFixed(2)}${cur}</div>
+              <div class="prl-cycle-gross">Gross ${c.gross.toFixed(2)}${cur}</div>
+            </div>
+            ${statusBadge(c.status)}
+          </div>`).join('');
+
+    const rightHtml = earners.length > 0
+      ? `<div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:10px">
+           <i class="fa fa-trophy" style="color:#eab308;margin-right:5px"></i>Top Earners ${cycleLabel}
+         </div>
+         ${earners.map((e, i) => {
+           const barW = earners[0].net > 0 ? Math.max(4, Math.round((e.net / earners[0].net) * 100)) : 0;
+           return `<div class="prf-product-row">
+             <div class="prf-product-rank">${i + 1}</div>
+             <div class="prf-product-info">
+               <div class="prf-product-name">${escHtml(e.name)}</div>
+               <div class="prf-product-bar-wrap"><div class="prf-product-bar" style="width:${barW}%;background:#22c55e"></div></div>
+             </div>
+             <div class="prf-product-stats">
+               <div class="prf-product-gp" style="color:#22c55e">${e.net.toFixed(2)}${cur}</div>
+               <div class="prf-product-margin" style="color:var(--text-muted)">-${e.deductions.toFixed(2)}${cur}</div>
+             </div>
+           </div>`;
+         }).join('')}`
+      : depts.length > 0
+      ? `<div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:10px">
+           <i class="fa fa-sitemap" style="color:#a855f7;margin-right:5px"></i>Departments
+         </div>
+         ${depts.map((dep, i) => {
+           const barW = depts[0].emp_count > 0 ? Math.max(4, Math.round((dep.emp_count / depts[0].emp_count) * 100)) : 0;
+           return `<div class="prf-product-row">
+             <div class="prf-product-rank">${i + 1}</div>
+             <div class="prf-product-info">
+               <div class="prf-product-name">${escHtml(dep.name)}</div>
+               <div class="prf-product-bar-wrap"><div class="prf-product-bar" style="width:${barW}%;background:#a855f7"></div></div>
+             </div>
+             <div class="prf-product-stats">
+               <div class="prf-product-gp" style="color:#6366f1">${dep.emp_count}</div>
+               <div class="prf-product-margin" style="color:var(--text-muted)">emp</div>
+             </div>
+           </div>`;
+         }).join('')}`
+      : '<div style="padding:14px;color:var(--text-muted);font-size:12px;text-align:center">No data yet</div>';
+
+    body.innerHTML = `
+      ${kpiHtml}
+      <div style="display:grid;grid-template-columns:1fr 300px;gap:10px;margin-top:10px">
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div class="exp-chart-card">
+            <div class="exp-chart-tab-bar">
+              <button class="exp-chart-tab active" style="cursor:default"><i class="fa fa-chart-line"></i> 12-Month Payroll Trend</button>
+            </div>
+            <div class="exp-chart-panel">
+              <canvas id="prl-trend-canvas" class="exp-trend-canvas" style="height:200px"></canvas>
+              <div class="exp-legend">${legendHtml}</div>
+            </div>
+          </div>
+          <div class="exp-section-card">
+            <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:10px">
+              <i class="fa fa-money-check-dollar" style="color:#4caf7d;margin-right:5px"></i>Recent Payroll Cycles
+            </div>
+            <div>${cyclesHtml}</div>
+          </div>
+        </div>
+        <div class="exp-section-card">${rightHtml}</div>
+      </div>`;
+
+    requestAnimationFrame(() => {
+      if (trend.labels.length >= 2) {
+        _expDrawMultiLine('prl-trend-canvas', trend.labels, trendSeries);
+      }
+    });
+
+  } catch (renderErr) {
+    body.innerHTML = `<div class="inv-loading" style="color:#ef4444"><i class="fa fa-triangle-exclamation"></i> Render error: ${escHtml(String(renderErr))}</div>`;
+  }
+}
+
+$('#prl-refresh')?.addEventListener('click', loadPayrollView);
 
 // ── Home activity feed ─────────────────────────────────────────────────────
 async function _homeActivityLoad() {
@@ -3459,15 +4656,15 @@ $('#hrp-barcodes')?.addEventListener('click',    () => { activateTab('inventory'
 // Ribbon Home buttons
 $('#rb-home-pos').addEventListener('click',           () => activateTab('pos'));
 $('#rb-home-new-sale').addEventListener('click',      () => { activateTab('pos'); });
-$('#rb-home-daily-summary').addEventListener('click', () => { activateTab('home'); loadHomeDashboard(); });
+$('#rb-home-daily-summary').addEventListener('click', () => { activateTab('home'); switchHomeView('today'); });
 $('#rb-home-dashboard').addEventListener('click',     () => activateTab('home'));
 $('#rb-home-analytics').addEventListener('click',     () => { activateTab('home'); switchHomeView('analytics'); });
 $('#rb-home-orders').addEventListener('click',        () => activateTab('inventory'));
 $('#rb-home-customers').addEventListener('click',     () => toast('Customers coming soon', 'info'));
 $('#rb-home-suppliers').addEventListener('click', () => { activateTab('inventory'); switchInvView('suppliers'); });
-$('#rb-home-expenses').addEventListener('click',      () => activateTab('finance'));
-$('#rb-home-profit').addEventListener('click',        () => toast('Profit Report coming soon', 'info'));
-$('#rb-home-payroll').addEventListener('click',       () => toast('Payroll coming soon', 'info'));
+$('#rb-home-expenses').addEventListener('click',      () => { activateTab('home'); switchHomeView('expenses'); });
+$('#rb-home-profit').addEventListener('click',        () => { activateTab('home'); switchHomeView('profit'); });
+$('#rb-home-payroll').addEventListener('click',       () => { activateTab('home'); switchHomeView('payroll'); });
 $('#rb-home-settings').addEventListener('click',      () => toast('Settings coming soon', 'info'));
 $('#rb-home-help').addEventListener('click',          () => showShortcutsModal());
 
@@ -8208,6 +9405,145 @@ $('#product-search').addEventListener('keydown', (e) => {
 $('#btn-refresh-products').addEventListener('click', () => loadProducts(state.searchQuery, state.activeCategory));
 $('#rb-refresh').addEventListener('click', () => loadProducts(state.searchQuery, state.activeCategory));
 
+// ── POS Mode Switcher ──────────────────────────────────────────────────────
+function switchPosMode(mode) {
+  if (state.posMode === mode) return;
+  state.posMode = mode;
+  $$('.pos-mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+
+  const productEls = [
+    $('#product-search-bar'), $('#category-filter'),
+    $('#product-grid'), $('#pos-pagination'),
+  ];
+  const svcSection = $('#pos-service-section');
+
+  if (mode === 'products') {
+    productEls.forEach(el => el && (el.style.display = ''));
+    if (svcSection) svcSection.style.display = 'none';
+    loadProducts(state.searchQuery, state.activeCategory);
+  } else {
+    productEls.forEach(el => el && (el.style.display = 'none'));
+    if (svcSection) { svcSection.style.display = 'flex'; svcSection.style.flexDirection = 'column'; }
+    loadServices(state.serviceSearchQuery, state.serviceActiveCategory);
+  }
+}
+
+$$('.pos-mode-btn').forEach(btn => {
+  btn.addEventListener('click', () => switchPosMode(btn.dataset.mode));
+});
+
+// ── Services ──────────────────────────────────────────────────────────────
+async function loadServices(search = '', catId = 0) {
+  const grid = $('#service-grid');
+  if (!grid) return;
+  grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text-muted)"><i class="fa fa-spinner fa-spin" style="font-size:24px"></i></div>';
+  setStatus('Loading services…');
+
+  const res = await API.servicePosCatalog(search, catId);
+  if (res.status !== 200) {
+    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:#e74c3c"><i class="fa fa-circle-exclamation"></i> Failed to load services</div>';
+    setStatus('Error loading services');
+    return;
+  }
+
+  const { services = [], categories = [] } = res.body?.data || {};
+  state.services = services;
+  buildServiceCategoryBar(categories, catId);
+  buildServiceGrid(services);
+  setStatus(`Services · ${services.length} available`);
+}
+
+function buildServiceCategoryBar(categories, active) {
+  const bar = $('#service-category-filter');
+  if (!bar) return;
+  bar.innerHTML = `<div class="cat-chip ${active === 0 ? 'active' : ''}" data-cat="0">All</div>`;
+  categories.forEach(c => {
+    const chip = document.createElement('div');
+    chip.className = `cat-chip ${c.id === active ? 'active' : ''}`;
+    chip.dataset.cat = c.id;
+    chip.textContent = c.name;
+    bar.appendChild(chip);
+  });
+  bar.querySelectorAll('.cat-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      state.serviceActiveCategory = Number(chip.dataset.cat);
+      loadServices(state.serviceSearchQuery, state.serviceActiveCategory);
+    });
+  });
+}
+
+function buildServiceGrid(services) {
+  const grid = $('#service-grid');
+  if (!grid) return;
+  if (!services.length) {
+    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:60px;color:var(--text-muted)"><i class="fa fa-screwdriver-wrench" style="font-size:32px;display:block;margin-bottom:10px;opacity:.3"></i>No services found</div>';
+    return;
+  }
+  const cur      = state.currency ? ' ' + state.currency : '';
+  const featured = services.filter(s => s.is_featured);
+  const rest     = services.filter(s => !s.is_featured);
+
+  const cardHtml = s =>
+    `<div class="svc-card${s.is_featured ? ' svc-card--featured' : ''}" data-id="${s.id}">
+      ${s.is_featured ? '<div class="svc-featured-badge"><i class="fa fa-star"></i></div>' : ''}
+      <div class="svc-icon"><i class="fa fa-screwdriver-wrench"></i></div>
+      <div class="svc-name">${escHtml(s.name)}</div>
+      ${s.duration_label && s.duration_label !== '—' ? `<div class="svc-dur"><i class="fa fa-clock"></i> ${escHtml(s.duration_label)}</div>` : ''}
+      <div class="svc-price">${s.price > 0 ? parseFloat(s.price).toFixed(2) + cur : 'Free'}</div>
+    </div>`;
+
+  let html = '';
+  if (featured.length) {
+    html += `<div class="svc-section-label" style="grid-column:1/-1"><i class="fa fa-star"></i> Featured</div>`;
+    html += featured.map(cardHtml).join('');
+  }
+  if (rest.length) {
+    if (featured.length) html += `<div class="svc-section-label" style="grid-column:1/-1"><i class="fa fa-list"></i> All Services</div>`;
+    html += rest.map(cardHtml).join('');
+  }
+  grid.innerHTML = html;
+
+  grid.querySelectorAll('.svc-card').forEach(card => {
+    const s = services.find(x => x.id === Number(card.dataset.id));
+    if (s) card.addEventListener('click', () => addServiceToCart(s));
+  });
+}
+
+function addServiceToCart(service) {
+  _beep.currentTime = 0; _beep.play().catch(() => {});
+  const tab = activeTab();
+  if (!tab) return;
+  const key = `svc:${service.id}`;
+  const existing = tab.cart.find(i => i._key === key);
+  if (existing) {
+    existing.qty += 1;
+  } else {
+    tab.cart.push({
+      id: service.id, name: service.name,
+      price: parseFloat(service.price) || 0,
+      qty: 1, _key: key,
+      _basePrice: parseFloat(service.price) || 0,
+      _discountPct: null, _note: null,
+      _type: 'service',
+      layerId: null, layerLabel: null, stock: null,
+    });
+  }
+  renderCart(); renderPosTabBar();
+  requestAnimationFrame(() => {
+    const input = $(`#cart-items .ci-qty-input[data-key="${CSS.escape(key)}"]`);
+    if (input) { input.focus(); input.select(); }
+  });
+}
+
+// Service search input
+let _svcSearchTimer = null;
+$('#service-search')?.addEventListener('input', e => {
+  clearTimeout(_svcSearchTimer);
+  state.serviceSearchQuery = e.target.value;
+  _svcSearchTimer = setTimeout(() => loadServices(state.serviceSearchQuery, state.serviceActiveCategory), 400);
+});
+$('#btn-refresh-services')?.addEventListener('click', () => loadServices(state.serviceSearchQuery, state.serviceActiveCategory));
+
 // ── Product grid keyboard navigation ───────────────────────────────────────
 let _pgSelIdx = -1;
 
@@ -8870,19 +10206,28 @@ function renderPosAccounts() {
     return;
   }
 
+  const canSeeBalance = state.memberIsOwner;
   list.innerHTML = accounts.map(a => {
     const balance = parseFloat(a.current_balance || 0).toFixed(2);
+    const balHtml = canSeeBalance ? balance + cur : '<span class="acct-balance-blur">••••••</span>';
     return `<div class="pos-acct-row">
       <div class="pos-acct-info">
         <div class="pos-acct-name">${escHtml(a.account_name || '')}</div>
         ${a.bank_name ? `<div class="pos-acct-bank">${escHtml(a.bank_name)}</div>` : ''}
       </div>
-      <div class="pos-acct-balance">${balance}${cur}</div>
+      <div class="pos-acct-balance">${balHtml}</div>
     </div>`;
   }).join('');
 
   const total = accounts.reduce((s, a) => s + parseFloat(a.current_balance || 0), 0);
-  $('#pos-account-total').textContent = total.toFixed(2) + cur;
+  const totalEl = $('#pos-account-total');
+  if (canSeeBalance) {
+    totalEl.textContent = total.toFixed(2) + cur;
+    totalEl.classList.remove('acct-balance-blur');
+  } else {
+    totalEl.textContent = '••••••';
+    totalEl.classList.add('acct-balance-blur');
+  }
 }
 
 // ── Business / Branch switcher ────────────────────────────────────────────
@@ -8951,14 +10296,26 @@ async function _bizSwSwitchBiz(bizId) {
   $('#status-branch').innerHTML = `<i class="fa fa-building"></i> ${biz.name}`;
   _bizSwRenderBizList();
   await _bizSwLoadBranches();
+  await loadFeatures();   // re-fetch business features + member permissions for new business
   _bizSwRefreshAll();
 }
 
 function _bizSwRefreshAll() {
   // Clear all module-level caches
-  _posAccountsCache = null;
-  invState.loaded   = false;
-  _dsAllData        = [];
+  _posAccountsCache  = null;
+  invState.loaded    = false;
+  _dsAllData         = [];
+
+  // Clear account caches used by GRN, cheques, finance
+  _grn.accounts      = [];
+  _grn.list          = [];
+  _chq.accounts      = [];
+  _chq.list          = [];
+  _financeAllBills   = [];
+
+  // Clear sales caches
+  _sal.all           = [];
+  _sal.filtered      = [];
 
   // Reset POS carts — they belong to the old business
   state.posTabs          = [];
@@ -9144,6 +10501,20 @@ function _bbwzBuildCatGrid() {
       _bbwz.selectedCat = item.dataset.cat;
       grid.querySelectorAll('.bbwz-cat-item').forEach(c => c.classList.remove('active'));
       item.classList.add('active');
+      // Auto-suggest features based on industry selection
+      if (_RST_CATS.has(_bbwz.selectedCat)) {
+        _bbwz.selectedFeatures.add('restaurant');
+        _bbwz.selectedFeatures.delete('point_of_sale');
+      } else {
+        _bbwz.selectedFeatures.delete('restaurant');
+        _bbwz.selectedFeatures.add('point_of_sale');
+      }
+      if (_SVC_CATS.has(_bbwz.selectedCat)) {
+        _bbwz.selectedFeatures.add('service_management');
+      } else {
+        _bbwz.selectedFeatures.delete('service_management');
+      }
+      _bbwzBuildFeatList();
     });
   });
 }
@@ -9285,7 +10656,7 @@ _posAcctBtn.addEventListener('click', () => _bizSwClose());
 async function openPosSettings() {
   const modal = $('#pos-settings-modal');
   modal.style.display = 'flex';
-  psmShowTab('general');
+  psmShowTab('business');
 
   const [sRes, aRes] = await Promise.all([API.settingsGet(), API.accounts()]);
 
@@ -9298,6 +10669,29 @@ async function openPosSettings() {
   const sel = $('#psm-default-account');
   sel.innerHTML = '<option value="">— None —</option>' +
     accounts.map(a => `<option value="${a.id}">${escHtml(a.account_name)}${a.bank_name ? ' · ' + escHtml(a.bank_name) : ''}</option>`).join('');
+
+  // Business profile
+  $('#psm-biz-name').value  = s.business_name ?? '';
+  $('#psm-currency').value  = s.currency ?? '';
+  $('#psm-timezone').value  = s.timezone ?? '';
+
+  // Branches
+  const multiWh = !!s.multi_warehouse_branch;
+  $('#psm-multi-warehouse').checked = multiWh;
+  $('#psm-branch-rows').style.display = multiWh ? 'flex' : 'none';
+  $('#psm-branch-product').checked = !!s.branch_product_separate;
+  $('#psm-branch-stock').checked   = !!s.branch_stock_separate;
+  $('#psm-branch-pos').checked     = !!s.branch_pos_separate;
+
+  // Tax
+  const taxEnabled = !!s.tax_enabled;
+  $('#psm-tax-enabled').checked = taxEnabled;
+  $('#psm-tax-rate-row').style.display = taxEnabled ? 'block' : 'none';
+  $('#psm-tax-rate').value = s.tax_rate ?? 0;
+
+  // Invoice
+  $('#psm-invoice-prefix').value = s.invoice_prefix ?? 'INV';
+  $('#psm-invoice-next').value   = s.invoice_next_number ?? 1;
 
   // General
   $('#psm-theme').value              = s.display_theme ?? 'inherit';
@@ -9321,10 +10715,24 @@ async function openPosSettings() {
 
 function psmShowTab(tab) {
   $$('.psm-nav-item').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
-  $$('.psm-panel').forEach(p => { p.style.display = p.id === 'psm-tab-' + tab ? 'block' : 'none'; });
+  $$('.psm-panel').forEach(p => {
+    const isActive = p.id === 'psm-tab-' + tab;
+    p.style.display = isActive ? (p.classList.contains('psm-panel--roles') ? 'flex' : 'block') : 'none';
+  });
 }
 
-$$('.psm-nav-item').forEach(btn => btn.addEventListener('click', () => psmShowTab(btn.dataset.tab)));
+$$('.psm-nav-item').forEach(btn => btn.addEventListener('click', () => {
+  psmShowTab(btn.dataset.tab);
+  if (btn.dataset.tab === 'roles' && window.loadRolesForSettings) window.loadRolesForSettings();
+  if (btn.dataset.tab === 'users' && window.loadUsersForSettings) window.loadUsersForSettings();
+}));
+
+$('#psm-multi-warehouse').addEventListener('change', (e) => {
+  $('#psm-branch-rows').style.display = e.target.checked ? 'flex' : 'none';
+});
+$('#psm-tax-enabled').addEventListener('change', (e) => {
+  $('#psm-tax-rate-row').style.display = e.target.checked ? 'block' : 'none';
+});
 
 $('#psm-close').addEventListener('click',  () => { $('#pos-settings-modal').style.display = 'none'; });
 $('#psm-cancel').addEventListener('click', () => { $('#pos-settings-modal').style.display = 'none'; });
@@ -9334,12 +10742,18 @@ $('#pos-settings-modal').addEventListener('click', (e) => {
 
 $('#rb-pos-settings').addEventListener('click', openPosSettings);
 
+$('#psm-add-user-btn')?.addEventListener('click', () => window.openAddModal && window.openAddModal());
+$('#psm-add-role-btn')?.addEventListener('click', () => window.openCreateRoleModal && window.openCreateRoleModal());
+
 $('#psm-save').addEventListener('click', async () => {
   const btn = $('#psm-save');
   btn.disabled = true;
   btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
 
   const payload = {
+    business_name:               $('#psm-biz-name').value.trim(),
+    currency:                    $('#psm-currency').value.trim(),
+    timezone:                    $('#psm-timezone').value.trim(),
     display_theme:               $('#psm-theme').value,
     discount_field_enabled:      $('#psm-discount-field').checked,
     checkout_modal_enabled:      $('#psm-checkout-modal').checked,
@@ -9353,6 +10767,14 @@ $('#psm-save').addEventListener('click', async () => {
     show_business_address:       $('#psm-show-biz-address').checked,
     receipt_header:              $('#psm-receipt-header').value,
     receipt_footer:              $('#psm-receipt-footer').value,
+    multi_warehouse_branch:      $('#psm-multi-warehouse').checked,
+    branch_product_separate:     $('#psm-branch-product').checked,
+    branch_stock_separate:       $('#psm-branch-stock').checked,
+    branch_pos_separate:         $('#psm-branch-pos').checked,
+    tax_enabled:                 $('#psm-tax-enabled').checked,
+    tax_rate:                    parseFloat($('#psm-tax-rate').value) || 0,
+    invoice_prefix:              $('#psm-invoice-prefix').value.trim(),
+    invoice_next_number:         parseInt($('#psm-invoice-next').value) || 1,
   };
 
   const res = await API.settingsUpdate(payload);
@@ -9861,8 +11283,10 @@ function renderCart() {
       ? `<span class="ci-badge ci-badge--discount"><i class="fa fa-tag"></i> ${item._discountPct}%</span>` : '';
     const noteBadge = item._note
       ? `<span class="ci-badge ci-badge--note"><i class="fa fa-pen-to-square"></i> ${escHtml(item._note)}</span>` : '';
-    const extras = (discountBadge || noteBadge)
-      ? `<div class="ci-badges">${discountBadge}${noteBadge}</div>` : '';
+    const typeBadge = item._type === 'service'
+      ? `<span class="ci-badge ci-badge--service"><i class="fa fa-screwdriver-wrench"></i> Service</span>` : '';
+    const extras = (discountBadge || noteBadge || typeBadge)
+      ? `<div class="ci-badges">${typeBadge}${discountBadge}${noteBadge}</div>` : '';
     return `
     <div class="cart-item" data-key="${escHtml(item._key)}">
       <div class="ci-name">
@@ -10016,6 +11440,21 @@ function openCheckout() {
   if (notesEl) notesEl.value = '';
   $('#checkout-alert').style.display = 'none';
 
+  // Show scheduled_at when cart contains any services
+  const cartHasServices  = tab.cart.some(i => i._type === 'service');
+  const cartHasProducts  = tab.cart.some(i => i._type !== 'service');
+  const schedWrap = $('#co-scheduled-at-wrap');
+  if (schedWrap) schedWrap.style.display = cartHasServices ? '' : 'none';
+  const schedInput = $('#co-scheduled-at');
+  if (schedInput) schedInput.value = '';
+
+  // Update modal subtitle
+  const coSub = $('#checkout-modal .co-header-text p');
+  if (coSub) coSub.textContent = cartHasServices && cartHasProducts
+    ? 'Products will be sold + service requests created'
+    : cartHasServices ? 'Review services and schedule appointment'
+    : 'Review your order and choose payment';
+
   _coRefresh();
   _coSyncCustomer();
   $('#checkout-modal').style.display = 'flex';
@@ -10132,18 +11571,36 @@ $('#checkout-confirm').addEventListener('click', async () => {
   btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Processing…';
   alertEl.style.display = 'none';
 
-  const discountPct = Math.min(100, Math.max(0, parseFloat($('#co-discount-pct')?.value) || 0));
+  const productItems = cart.filter(i => i._type !== 'service');
+  const serviceItems = cart.filter(i => i._type === 'service');
+  const discountPct  = Math.min(100, Math.max(0, parseFloat($('#co-discount-pct')?.value) || 0));
+  const scheduledAt  = $('#co-scheduled-at')?.value || null;
+
+  // Single unified checkout — products and services in one Sale record
   const body = {
-    payment_method: method,
-    amount_paid:     method === 'credit' ? total : amount,
-    amount_tendered: method === 'cash'   ? amount : undefined,
-    notes,
+    payment_method:   method,
+    amount_paid:      method === 'credit' ? total : amount,
+    amount_tendered:  method === 'cash'   ? amount : undefined,
+    notes:            notes || undefined,
     discount_percent: discountPct > 0 ? discountPct : undefined,
-    pos_customer_id: tab?._customer?.id ?? undefined,
-    items: cart.map(i => ({ product_id: i.id, quantity: i.qty, product_stock_layer_id: i.layerId ?? undefined })),
+    pos_customer_id:  tab?._customer?.id ?? undefined,
+    scheduled_at:     scheduledAt || undefined,
+    items: [
+      ...productItems.map(i => ({
+        product_id:             i.id,
+        quantity:               i.qty,
+        product_stock_layer_id: i.layerId ?? undefined,
+      })),
+      ...serviceItems.map(i => ({
+        item_type:       'service',
+        service_item_id: i.id,
+        quantity:        i.qty,
+      })),
+    ],
   };
 
   const res = await API.checkout(body);
+
   btn.disabled = false;
   btn.innerHTML = '<i class="fa fa-check"></i> Complete sale';
 
@@ -10154,10 +11611,11 @@ $('#checkout-confirm').addEventListener('click', async () => {
 
   $('#checkout-modal').style.display = 'none';
   if (tab) { tab.cart = []; tab._customer = null; }
-  renderCart();
-  renderPosTabBar();
-  renderCartCustomer();
-  loadProducts(state.searchQuery, state.activeCategory);
+  renderCart(); renderPosTabBar(); renderCartCustomer();
+
+  // Reload catalogs
+  if (productItems.length) loadProducts(state.searchQuery, state.activeCategory);
+  if (serviceItems.length && state.posMode === 'services') loadServices(state.serviceSearchQuery, state.serviceActiveCategory);
 
   const sale = res.body?.data;
   if (sale) showReceiptModal(sale);
@@ -11547,7 +13005,7 @@ function buildRentalCard(r) {
     if (r.account_number)    parts.push(`<span class="lm-muted">${escHtml(r.account_number)}</span>`);
     if (r.account_bank_name) parts.push(`<span class="lm-muted">${escHtml(r.account_bank_name)}</span>`);
     if (r.account_type_name) parts.push(`<span class="lm-muted">${escHtml(r.account_type_name)}</span>`);
-    if (r.account_balance != null) parts.push(`<span class="lm-balance">Bal. ${escHtml(r.account_balance)}</span>`);
+    if (r.account_balance != null) parts.push(state.memberIsOwner ? `<span class="lm-balance">Bal. ${escHtml(r.account_balance)}</span>` : '<span class="lm-balance acct-balance-blur">Bal. ••••••</span>');
     debitHtml = `<span class="lm-info-val lm-acct-val">${parts.join(' · ')}</span>`;
   }
 
@@ -11703,7 +13161,7 @@ function openRentalDetailPage(r) {
     if (r.account_bank_name) acctRows.push(['Bank',         escHtml(r.account_bank_name)]);
     if (r.account_type_name) acctRows.push(['Type',         escHtml(r.account_type_name)]);
     if (r.account_balance != null)
-      acctRows.push(['Balance', `<strong>${escHtml(r.account_balance)}</strong>`]);
+      acctRows.push(['Balance', state.memberIsOwner ? `<strong>${escHtml(r.account_balance)}</strong>` : '<strong class="acct-balance-blur">••••••</strong>']);
     acctSection = `
       <div class="inv-section" style="margin-top:14px">
         <div class="inv-section-title"><i class="fa fa-building-columns"></i> Debit account</div>
@@ -12411,7 +13869,7 @@ function buildLoanCard(l) {
     if (l.account_number) parts.push(`<span class="lm-muted">${escHtml(l.account_number)}</span>`);
     if (l.account_bank_name) parts.push(`<span class="lm-muted">${escHtml(l.account_bank_name)}</span>`);
     if (l.account_type_name) parts.push(`<span class="lm-muted">${escHtml(l.account_type_name)}</span>`);
-    if (l.account_balance != null) parts.push(`<span class="lm-balance">Bal. ${escHtml(l.account_balance)}</span>`);
+    if (l.account_balance != null) parts.push(state.memberIsOwner ? `<span class="lm-balance">Bal. ${escHtml(l.account_balance)}</span>` : '<span class="lm-balance acct-balance-blur">Bal. ••••••</span>');
     debitHtml = `<span class="lm-info-val lm-acct-val">${parts.join(' · ')}</span>`;
   }
 
@@ -12595,7 +14053,7 @@ function openLoanDetailPage(l) {
     if (l.account_bank_name) acctRows.push(['Bank',        escHtml(l.account_bank_name)]);
     if (l.account_type_name) acctRows.push(['Type',        escHtml(l.account_type_name)]);
     if (l.account_balance != null)
-      acctRows.push(['Balance', `<strong>${escHtml(l.account_balance)}</strong>`]);
+      acctRows.push(['Balance', state.memberIsOwner ? `<strong>${escHtml(l.account_balance)}</strong>` : '<strong class="acct-balance-blur">••••••</strong>']);
     acctSection = `
       <div class="inv-section" style="margin-top:14px">
         <div class="inv-section-title"><i class="fa fa-building-columns"></i> Debit account</div>
@@ -18236,6 +19694,919 @@ async function submitAtCreate() {
   }
 }
 
+// ── Services Panel ─────────────────────────────────────────────────────────
+let _svcView       = 'requests';
+let _svcReqSearch  = '';
+let _svcReqStatus  = '';   // active chip filter (client-side)
+let _svcCatSearch  = '';
+let _svcAllRequests = [];  // full unfiltered list for stat counts
+
+function switchSvcView(view) {
+  _svcView = view;
+  $$('[data-svc]').forEach(b => b.classList.toggle('active', b.dataset.svc === view));
+  $('#svc-requests-view').style.display   = view === 'requests'   ? 'flex' : 'none';
+  $('#svc-catalog-view').style.display    = view === 'catalog'    ? 'flex' : 'none';
+  $('#svc-item-detail').style.display     = 'none';
+  $('#svc-categories-view').style.display = view === 'categories' ? 'flex' : 'none';
+
+  if (view === 'requests')   loadSvcRequests();
+  if (view === 'catalog')    loadSvcCatalog();
+  if (view === 'categories') loadSvcCategories();
+}
+
+// ── Requests ────────────────────────────────────────────────────────────────
+async function loadSvcRequests() {
+  const tbody = $('#svc-req-tbody');
+  tbody.innerHTML = `<tr><td colspan="7" class="svc-tbl-placeholder"><i class="fa fa-spinner fa-spin"></i> Loading…</td></tr>`;
+
+  // Always fetch ALL statuses so summary tiles are always accurate
+  const res = await API.serviceRequests(_svcReqSearch, '');
+  if (res.status !== 200) {
+    tbody.innerHTML = `<tr><td colspan="7" class="svc-tbl-placeholder" style="color:#e74c3c"><i class="fa fa-circle-exclamation"></i> Failed to load requests</td></tr>`;
+    return;
+  }
+
+  _svcAllRequests = res.body?.data || [];
+  _svcRenderRequestRows();
+}
+
+function _svcRenderRequestRows() {
+  const tbody = $('#svc-req-tbody');
+  const cur   = state.currency ? ' ' + state.currency : '';
+
+  const rows = _svcReqStatus
+    ? _svcAllRequests.filter(r => r.status === _svcReqStatus)
+    : _svcAllRequests;
+
+  if (!rows.length) {
+    const msg = _svcReqStatus ? `No ${_svcReqStatus.replace('_', ' ')} requests` : 'No requests found';
+    tbody.innerHTML = `<tr><td colspan="7" class="svc-tbl-placeholder">
+      <i class="fa fa-clipboard-list svc-tbl-empty-icon"></i>${msg}</td></tr>`;
+    return;
+  }
+
+  const actionMap = {
+    pending:     [['in_progress','svc-action-progress','<i class="fa fa-rotate"></i> Start'],['cancelled','svc-action-cancel','<i class="fa fa-ban"></i> Cancel']],
+    in_progress: [['completed','svc-action-complete','<i class="fa fa-circle-check"></i> Complete'],['cancelled','svc-action-cancel','<i class="fa fa-ban"></i> Cancel']],
+    completed:   [],
+    cancelled:   [],
+  };
+
+  tbody.innerHTML = rows.map(r => {
+    const sched = r.scheduled_at
+      ? new Date(r.scheduled_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })
+      : '<span style="color:var(--text-light)">—</span>';
+    const price = r.total_price != null
+      ? `<strong>${r.total_price.toFixed(2)}</strong>${cur}`
+      : '<span style="color:var(--text-light)">—</span>';
+    const badge = `<span class="svc-status-badge" style="background:${r.status_color}18;color:${r.status_color};border:1px solid ${r.status_color}35">${escHtml(r.status_label)}</span>`;
+    const svcSub = r.service_item ? `<div class="svc-req-sub"><i class="fa fa-screwdriver-wrench" style="margin-right:3px;opacity:.6"></i>${escHtml(r.service_item.name)}</div>` : '';
+    const btns = (actionMap[r.status] || [])
+      .map(([s, cls, lbl]) => `<button class="svc-action-btn ${cls}" onclick="setSvcRequestStatus(${r.id},'${s}')">${lbl}</button>`)
+      .join('');
+
+    return `<tr class="inv-row">
+      <td><span class="svc-req-num">${escHtml(r.request_number || '—')}</span></td>
+      <td><div class="svc-req-title">${escHtml(r.title || '—')}</div>${svcSub}</td>
+      <td>${r.customer ? `<div style="font-weight:500">${escHtml(r.customer.name)}</div>` : '<span style="color:var(--text-light)">Walk-in</span>'}</td>
+      <td>${badge}</td>
+      <td style="font-size:12px;white-space:nowrap">${sched}</td>
+      <td style="text-align:right;font-size:13px">${price}</td>
+      <td style="text-align:center"><div style="display:flex;gap:5px;justify-content:center">${btns || '<span style="color:var(--text-light);font-size:12px">—</span>'}</div></td>
+    </tr>`;
+  }).join('');
+}
+
+async function setSvcRequestStatus(id, status) {
+  const res = await API.updateServiceRequestStatus(id, status);
+  if (res.status === 200) {
+    // Update local cache so re-render is instant
+    const r = _svcAllRequests.find(x => x.id === id);
+    if (r) Object.assign(r, res.body?.data || {});
+    _svcRenderRequestRows();
+    toast('Status updated', 'success');
+  } else {
+    toast(res.body?.message || 'Failed to update status', 'error');
+  }
+}
+
+function _svcSetChip(status) {
+  _svcReqStatus = status;
+  $$('.svc-chip').forEach(c => c.classList.toggle('active', c.dataset.status === status));
+  _svcRenderRequestRows();
+}
+
+// ── Catalog ─────────────────────────────────────────────────────────────────
+const _SVC_ITM_PALETTE = ['#4e8ef7','#8b5cf6','#ec4899','#f59e0b','#10b981','#ef4444','#06b6d4','#6366f1','#f97316','#14b8a6','#a855f7','#84cc16'];
+
+function _svcItmColor(name) {
+  let h = 0;
+  for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) % _SVC_ITM_PALETTE.length;
+  return _SVC_ITM_PALETTE[Math.abs(h)];
+}
+
+async function loadSvcCatalog() {
+  const tbody = $('#svc-itm-tbody');
+  tbody.innerHTML = `<tr><td colspan="7" class="svc-tbl-placeholder"><i class="fa fa-spinner fa-spin"></i> Loading…</td></tr>`;
+  const res = await API.serviceMgmtCatalog(_svcCatSearch);
+  if (res.status !== 200) {
+    tbody.innerHTML = `<tr><td colspan="7" class="svc-tbl-placeholder" style="color:#e74c3c"><i class="fa fa-circle-exclamation"></i> Failed to load services</td></tr>`;
+    return;
+  }
+  const items = res.body?.data || [];
+  const cur   = state.currency ? ' ' + state.currency : '';
+
+  if (!items.length) {
+    tbody.innerHTML = `<tr><td colspan="7" class="svc-tbl-placeholder"><i class="fa fa-screwdriver-wrench svc-tbl-empty-icon"></i>No services found</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = items.map(i => {
+    const color   = _svcItmColor(i.name);
+    const initial = i.name.trim().charAt(0).toUpperCase();
+    const cats    = (i.categories || []).map(c => `<span class="svc-itm-dur">${escHtml(c)}</span>`).join('') || '<span style="color:var(--text-light)">—</span>';
+    const dur     = i.duration_label && i.duration_label !== '—'
+      ? escHtml(i.duration_label)
+      : '<span style="color:var(--text-light)">—</span>';
+    const badge   = i.is_active
+      ? `<span class="svc-cat-badge svc-cat-badge--active"><i class="fa fa-circle" style="font-size:6px"></i> Active</span>`
+      : `<span class="svc-cat-badge svc-cat-badge--inactive"><i class="fa fa-circle" style="font-size:6px"></i> Inactive</span>`;
+    const desc    = i.description
+      ? `<span style="color:var(--text-muted);font-size:12px">${escHtml(i.description)}</span>`
+      : '<span style="color:var(--text-light)">—</span>';
+
+    const featuredStar = i.is_featured
+      ? `<span title="Featured" style="color:#f59e0b;margin-left:5px"><i class="fa fa-star" style="font-size:11px"></i></span>`
+      : '';
+    return `<tr class="inv-row svc-itm-row" data-id="${i.id}" style="cursor:pointer">
+      <td><div class="svc-list-avatar" style="--itm-c:${color}">${escHtml(initial)}</div></td>
+      <td><div style="font-weight:500;font-size:13px;display:flex;align-items:center">${escHtml(i.name)}${featuredStar}</div></td>
+      <td class="svc-list-desc">${desc}</td>
+      <td><div style="display:flex;flex-wrap:wrap;gap:4px">${cats}</div></td>
+      <td style="font-size:12px;color:var(--text-muted)">${dur}</td>
+      <td style="text-align:right;font-weight:600;font-size:13px">${parseFloat(i.price).toFixed(2)}<span style="font-size:11px;font-weight:400;color:var(--text-muted);margin-left:2px">${cur}</span></td>
+      <td style="text-align:center">${badge}</td>
+    </tr>`;
+  }).join('');
+
+  // Row click → detail
+  tbody.querySelectorAll('.svc-itm-row').forEach(row => {
+    row.addEventListener('click', () => _svcOpenItemDetail(Number(row.dataset.id)));
+  });
+}
+
+// ── Service Item Detail ───────────────────────────────────────────────────────
+let _svcDetailActiveTab  = 'overview';
+let _svcDetailCurrentId  = null;
+
+function _svcOpenItemDetail(id) {
+  _svcDetailCurrentId = id;
+  $('#svc-catalog-view').style.display = 'none';
+  const detail = $('#svc-item-detail');
+  detail.style.display = 'flex';
+
+  // Reset to overview tab
+  _svcDetailActiveTab = 'overview';
+  $$('.svc-detail-tab').forEach(t => t.classList.toggle('active', t.dataset.detailTab === 'overview'));
+  $('#svc-dtab-overview').style.display  = '';
+  $('#svc-dtab-employees').style.display = 'none';
+  $('#svc-dtab-products').style.display  = 'none';
+
+  // Loading state
+  $('#svc-detail-avatar').textContent = '…';
+  $('#svc-detail-avatar').style.cssText = '';
+  $('#svc-detail-name').textContent = 'Loading…';
+  $('#svc-detail-badge').innerHTML  = '';
+  $('#svc-detail-meta').innerHTML   = '';
+  $('#svc-detail-desc').textContent = '';
+  $('#svc-detail-kv').innerHTML     = '';
+  $('#svc-detail-cats').innerHTML   = '';
+  $('#svc-detail-emp-list').innerHTML  = `<div class="svc-tbl-placeholder"><i class="fa fa-spinner fa-spin"></i> Loading…</div>`;
+  $('#svc-detail-prod-list').innerHTML = `<div class="svc-tbl-placeholder"><i class="fa fa-spinner fa-spin"></i> Loading…</div>`;
+
+  API.serviceItemDetail(id).then(res => {
+    if (res.status !== 200) {
+      $('#svc-detail-name').textContent = 'Failed to load';
+      return;
+    }
+    const d   = res.body.data;
+    const cur = state.currency ? ' ' + state.currency : '';
+    const color   = _svcItmColor(d.name);
+    const initial = d.name.trim().charAt(0).toUpperCase();
+
+    // Header
+    const avatarEl = $('#svc-detail-avatar');
+    avatarEl.textContent = initial;
+    avatarEl.style.cssText = `--itm-c:${color}`;
+    $('#svc-detail-name').textContent = d.name;
+    $('#svc-detail-badge').innerHTML  = d.is_active
+      ? `<span class="svc-cat-badge svc-cat-badge--active"><i class="fa fa-circle" style="font-size:6px"></i> Active</span>`
+      : `<span class="svc-cat-badge svc-cat-badge--inactive"><i class="fa fa-circle" style="font-size:6px"></i> Inactive</span>`;
+    $('#svc-detail-meta').innerHTML = `
+      <span class="svc-detail-meta-pill"><i class="fa fa-tag"></i> ${parseFloat(d.price).toFixed(2)}${cur}</span>
+      ${d.duration_label && d.duration_label !== '—' ? `<span class="svc-detail-meta-pill"><i class="fa fa-clock"></i> ${escHtml(d.duration_label)}</span>` : ''}
+    `;
+
+    // Overview tab
+    $('#svc-detail-desc').textContent = d.description || 'No description provided.';
+    $('#svc-detail-kv').innerHTML = `
+      <div class="svc-detail-kv-item"><span class="svc-detail-kv-key">Price</span><span class="svc-detail-kv-val">${parseFloat(d.price).toFixed(2)}${cur}</span></div>
+      <div class="svc-detail-kv-item"><span class="svc-detail-kv-key">Duration</span><span class="svc-detail-kv-val">${escHtml(d.duration_label || '—')}</span></div>
+      <div class="svc-detail-kv-item"><span class="svc-detail-kv-key">Status</span><span class="svc-detail-kv-val">${d.is_active ? 'Active' : 'Inactive'}</span></div>
+      <div class="svc-detail-kv-item"><span class="svc-detail-kv-key">Featured</span><span class="svc-detail-kv-val" style="${d.is_featured ? 'color:#f59e0b' : ''}">${d.is_featured ? '<i class="fa fa-star"></i> Yes' : 'No'}</span></div>
+      <div class="svc-detail-kv-item"><span class="svc-detail-kv-key">Employees</span><span class="svc-detail-kv-val">${d.employees.length}</span></div>
+      <div class="svc-detail-kv-item"><span class="svc-detail-kv-key">Products</span><span class="svc-detail-kv-val">${d.products.length}</span></div>
+    `;
+    $('#svc-detail-cats').innerHTML = d.categories.length
+      ? d.categories.map(c => `<span class="svc-form-cat-chip selected" style="cursor:default;pointer-events:none"><i class="fa fa-check"></i>${escHtml(c.name)}</span>`).join('')
+      : '<span style="color:var(--text-muted);font-size:13px">No categories assigned</span>';
+
+    // Employees tab
+    _svcDetailEmployees = d.employees || [];
+    _svcRenderDetailEmployees();
+
+    // Products tab
+    _svcDetailProducts = d.products || [];
+    _svcRenderDetailProducts();
+  });
+}
+
+// ── Detail tab state ──────────────────────────────────────────────────────────
+let _svcDetailEmployees = [];
+let _svcDetailProducts  = [];
+
+// ── Employee tab render + actions ─────────────────────────────────────────────
+function _svcRenderDetailEmployees() {
+  const el = $('#svc-detail-emp-list');
+  if (!el) return;
+  if (!_svcDetailEmployees.length) {
+    el.innerHTML = `<div class="svc-tab-empty"><i class="fa fa-users svc-tbl-empty-icon"></i>No employees assigned</div>`;
+    return;
+  }
+  el.innerHTML = _svcDetailEmployees.map(e => {
+    const initials = (e.name || '?').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+    return `<div class="svc-assign-row" data-emp-id="${e.id}">
+      <div class="svc-assign-avatar svc-assign-avatar--emp">${escHtml(initials)}</div>
+      <div class="svc-assign-info">
+        <div class="svc-assign-name">${escHtml(e.name)}</div>
+        <div class="svc-assign-sub">${escHtml(e.job_title || 'No job title')}</div>
+      </div>
+      <button class="svc-assign-remove" data-emp-id="${e.id}" title="Remove"><i class="fa fa-xmark"></i></button>
+    </div>`;
+  }).join('');
+
+  el.querySelectorAll('.svc-assign-remove').forEach(btn => {
+    btn.addEventListener('click', () => _svcRemoveEmployee(Number(btn.dataset.empId)));
+  });
+}
+
+async function _svcRemoveEmployee(empId) {
+  _svcDetailEmployees = _svcDetailEmployees.filter(e => e.id !== empId);
+  _svcRenderDetailEmployees();
+  const res = await API.syncServiceEmployees(_svcDetailCurrentId, {
+    employee_ids: _svcDetailEmployees.map(e => e.id),
+  });
+  if (res.status !== 200) {
+    toast('Failed to remove employee', 'error');
+    _svcOpenItemDetail(_svcDetailCurrentId); // reload
+  } else {
+    toast('Employee removed', 'success');
+  }
+}
+
+// Employee search
+let _svcEmpSearchTimer = null;
+$('#svc-emp-search-q')?.addEventListener('input', () => {
+  clearTimeout(_svcEmpSearchTimer);
+  const q = $('#svc-emp-search-q').value.trim();
+  const resultsEl = $('#svc-emp-search-results');
+  if (!q) { resultsEl.style.display = 'none'; return; }
+  _svcEmpSearchTimer = setTimeout(async () => {
+    const res = await API.employees();
+    const all = (res.body?.data || []);
+    const filtered = all.filter(e =>
+      (e.name || '').toLowerCase().includes(q.toLowerCase()) &&
+      !_svcDetailEmployees.some(ex => ex.id === e.id)
+    );
+    if (!filtered.length) { resultsEl.style.display = 'none'; return; }
+    resultsEl.innerHTML = filtered.map(e =>
+      `<div class="svc-tab-result-item" data-emp-id="${e.id}" data-emp-name="${escHtml(e.name)}" data-emp-title="${escHtml(e.job_title || '')}">
+        <i class="fa fa-user" style="opacity:.5;margin-right:6px"></i>${escHtml(e.name)}
+        ${e.job_title ? `<span style="color:var(--text-muted);font-size:11px;margin-left:4px">· ${escHtml(e.job_title)}</span>` : ''}
+      </div>`
+    ).join('');
+    resultsEl.style.display = 'block';
+    resultsEl.querySelectorAll('.svc-tab-result-item').forEach(row => {
+      row.addEventListener('mousedown', e => {
+        e.preventDefault();
+        _svcAddEmployee({ id: Number(row.dataset.empId), name: row.dataset.empName, job_title: row.dataset.empTitle });
+        $('#svc-emp-search-q').value = '';
+        resultsEl.style.display = 'none';
+      });
+    });
+  }, 200);
+});
+$('#svc-emp-search-q')?.addEventListener('blur', () => {
+  setTimeout(() => { const r = $('#svc-emp-search-results'); if (r) r.style.display = 'none'; }, 150);
+});
+
+async function _svcAddEmployee(emp) {
+  if (_svcDetailEmployees.some(e => e.id === emp.id)) return;
+  _svcDetailEmployees.push(emp);
+  _svcRenderDetailEmployees();
+  const res = await API.syncServiceEmployees(_svcDetailCurrentId, {
+    employee_ids: _svcDetailEmployees.map(e => e.id),
+  });
+  if (res.status !== 200) {
+    toast('Failed to add employee', 'error');
+    _svcOpenItemDetail(_svcDetailCurrentId);
+  } else {
+    toast('Employee added', 'success');
+  }
+}
+
+// ── Product tab render + actions ──────────────────────────────────────────────
+function _svcRenderDetailProducts() {
+  const el = $('#svc-detail-prod-list');
+  if (!el) return;
+  if (!_svcDetailProducts.length) {
+    el.innerHTML = `<div class="svc-tab-empty"><i class="fa fa-boxes-stacked svc-tbl-empty-icon"></i>No products assigned</div>`;
+    return;
+  }
+  el.innerHTML = _svcDetailProducts.map(p => {
+    const initial = (p.name || '?').trim().charAt(0).toUpperCase();
+    return `<div class="svc-assign-row" data-prod-id="${p.id}">
+      <div class="svc-assign-avatar svc-assign-avatar--prod">${escHtml(initial)}</div>
+      <div class="svc-assign-info">
+        <div class="svc-assign-name">${escHtml(p.name)}</div>
+        ${p.unit ? `<div class="svc-assign-sub">Unit: ${escHtml(p.unit)}</div>` : ''}
+      </div>
+      <div class="svc-assign-qty-wrap">
+        <label class="svc-assign-qty-lbl">Qty</label>
+        <input type="number" class="svc-assign-qty-input" data-prod-id="${p.id}" value="${parseFloat(p.qty)}" min="0.001" step="0.001">
+      </div>
+      <button class="svc-assign-remove" data-prod-id="${p.id}" title="Remove"><i class="fa fa-xmark"></i></button>
+    </div>`;
+  }).join('');
+
+  el.querySelectorAll('.svc-assign-qty-input').forEach(inp => {
+    inp.addEventListener('change', () => {
+      const id  = Number(inp.dataset.prodId);
+      const qty = parseFloat(inp.value) || 1;
+      const p   = _svcDetailProducts.find(x => x.id === id);
+      if (p) { p.qty = qty; _svcSyncProducts(); }
+    });
+  });
+  el.querySelectorAll('.svc-assign-remove').forEach(btn => {
+    btn.addEventListener('click', () => _svcRemoveProduct(Number(btn.dataset.prodId)));
+  });
+}
+
+async function _svcSyncProducts() {
+  const res = await API.syncServiceProducts(_svcDetailCurrentId, {
+    product_lines: _svcDetailProducts.map(p => ({ product_id: p.id, qty: p.qty })),
+  });
+  if (res.status !== 200) toast('Failed to save products', 'error');
+}
+
+async function _svcRemoveProduct(prodId) {
+  _svcDetailProducts = _svcDetailProducts.filter(p => p.id !== prodId);
+  _svcRenderDetailProducts();
+  const res = await API.syncServiceProducts(_svcDetailCurrentId, {
+    product_lines: _svcDetailProducts.map(p => ({ product_id: p.id, qty: p.qty })),
+  });
+  if (res.status !== 200) {
+    toast('Failed to remove product', 'error');
+    _svcOpenItemDetail(_svcDetailCurrentId);
+  } else {
+    toast('Product removed', 'success');
+  }
+}
+
+// Product search
+let _svcProdDetailSearchTimer = null;
+$('#svc-prod-search-q')?.addEventListener('input', () => {
+  clearTimeout(_svcProdDetailSearchTimer);
+  const q = $('#svc-prod-search-q').value.trim();
+  const resultsEl = $('#svc-prod-search-results');
+  if (!q) { resultsEl.style.display = 'none'; return; }
+  _svcProdDetailSearchTimer = setTimeout(async () => {
+    const res = await API.productSearch(q, 8);
+    const items = (res.body?.data || []).filter(p => !_svcDetailProducts.some(ex => ex.id === p.id));
+    if (!items.length) { resultsEl.style.display = 'none'; return; }
+    resultsEl.innerHTML = items.map(p =>
+      `<div class="svc-tab-result-item" data-prod-id="${p.id}" data-prod-name="${escHtml(p.name)}">
+        <i class="fa fa-box" style="opacity:.5;margin-right:6px"></i>${escHtml(p.name)}
+      </div>`
+    ).join('');
+    resultsEl.style.display = 'block';
+    resultsEl.querySelectorAll('.svc-tab-result-item').forEach(row => {
+      row.addEventListener('mousedown', e => {
+        e.preventDefault();
+        _svcAddProduct({ id: Number(row.dataset.prodId), name: row.dataset.prodName, qty: 1, unit: null });
+        $('#svc-prod-search-q').value = '';
+        resultsEl.style.display = 'none';
+      });
+    });
+  }, 200);
+});
+$('#svc-prod-search-q')?.addEventListener('blur', () => {
+  setTimeout(() => { const r = $('#svc-prod-search-results'); if (r) r.style.display = 'none'; }, 150);
+});
+
+async function _svcAddProduct(prod) {
+  if (_svcDetailProducts.some(p => p.id === prod.id)) return;
+  _svcDetailProducts.push(prod);
+  _svcRenderDetailProducts();
+  const res = await API.syncServiceProducts(_svcDetailCurrentId, {
+    product_lines: _svcDetailProducts.map(p => ({ product_id: p.id, qty: p.qty })),
+  });
+  if (res.status !== 200) {
+    toast('Failed to add product', 'error');
+    _svcOpenItemDetail(_svcDetailCurrentId);
+  } else {
+    toast('Product added', 'success');
+  }
+}
+
+$('#svc-detail-back')?.addEventListener('click', () => {
+  $('#svc-item-detail').style.display = 'none';
+  $('#svc-catalog-view').style.display = 'flex';
+});
+
+$('#svc-detail-edit-btn')?.addEventListener('click', () => {
+  if (_svcDetailCurrentId) openEditServiceModal(_svcDetailCurrentId);
+});
+
+$('#svc-detail-delete-btn')?.addEventListener('click', () => {
+  if (_svcDetailCurrentId) {
+    const name = $('#svc-detail-name')?.textContent || 'this service';
+    _svcDeleteItem(_svcDetailCurrentId, name);
+  }
+});
+
+$$('.svc-detail-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    _svcDetailActiveTab = tab.dataset.detailTab;
+    $$('.svc-detail-tab').forEach(t => t.classList.toggle('active', t === tab));
+    $('#svc-dtab-overview').style.display  = _svcDetailActiveTab === 'overview'   ? '' : 'none';
+    $('#svc-dtab-employees').style.display = _svcDetailActiveTab === 'employees'  ? '' : 'none';
+    $('#svc-dtab-products').style.display  = _svcDetailActiveTab === 'products'   ? '' : 'none';
+  });
+});
+
+// ── New / Edit Service Modal ──────────────────────────────────────────────────
+let _svcFormCatIds   = new Set();
+let _svcFormEmpIds   = new Set();
+let _svcFormActive   = true;
+let _svcFormFeatured = false;
+let _svcAvailCats    = [];
+let _svcAvailEmps    = [];
+let _svcProdLines    = []; // [{product_id, name, qty}]
+let _svcEditingId    = null; // null = create mode, number = edit mode
+
+function _svcResetModal() {
+  _svcFormCatIds   = new Set();
+  _svcFormEmpIds   = new Set();
+  _svcFormActive   = true;
+  _svcFormFeatured = false;
+  _svcProdLines    = [];
+  $('#svc-form-name').value     = '';
+  $('#svc-form-desc').value     = '';
+  $('#svc-form-price').value    = '';
+  $('#svc-form-duration').value = '';
+  $('#svc-form-prod-q').value   = '';
+  $('#svc-form-prod-results').style.display = 'none';
+  $('#svc-form-prod-lines').innerHTML = '';
+  $('#svc-form-alert').style.display  = 'none';
+  $('#svc-form-currency').textContent = state.currency || '';
+  $('#svc-toggle-ui')?.classList.add('on');
+  $('#svc-featured-toggle-ui')?.classList.remove('on');
+}
+
+function openNewServiceModal() {
+  _svcEditingId = null;
+  _svcResetModal();
+  $('#svc-new-modal-title-text').textContent = 'New Service';
+  $('#svc-form-submit').innerHTML = '<i class="fa fa-plus"></i> Create Service';
+  _svcLoadFormCategories();
+  _svcLoadFormEmployees();
+  $('#svc-new-modal').style.display = 'flex';
+  setTimeout(() => $('#svc-form-name')?.focus(), 60);
+}
+
+async function openEditServiceModal(id) {
+  _svcEditingId = id;
+  _svcResetModal();
+  $('#svc-new-modal-title-text').textContent = 'Edit Service';
+  $('#svc-form-submit').innerHTML = '<i class="fa fa-spinner fa-spin"></i> Loading…';
+  $('#svc-form-submit').disabled  = true;
+  $('#svc-new-modal').style.display = 'flex';
+
+  const [detailRes] = await Promise.all([
+    API.serviceItemDetail(id),
+    _svcLoadFormCategories(),
+    _svcLoadFormEmployees(),
+  ]);
+
+  $('#svc-form-submit').innerHTML = '<i class="fa fa-floppy-disk"></i> Save Changes';
+  $('#svc-form-submit').disabled  = false;
+
+  if (detailRes.status !== 200) {
+    $('#svc-form-alert').textContent = 'Failed to load service data.';
+    $('#svc-form-alert').style.display = 'block';
+    return;
+  }
+
+  const d = detailRes.body.data;
+  $('#svc-form-name').value     = d.name || '';
+  $('#svc-form-desc').value     = d.description || '';
+  $('#svc-form-price').value    = d.price != null ? d.price : '';
+  $('#svc-form-duration').value = d.duration_minutes || '';
+  _svcFormActive   = d.is_active;
+  _svcFormFeatured = d.is_featured;
+  $('#svc-toggle-ui')?.classList.toggle('on', d.is_active);
+  $('#svc-featured-toggle-ui')?.classList.toggle('on', d.is_featured);
+
+  // Pre-select categories
+  _svcFormCatIds = new Set((d.categories || []).map(c => c.id));
+  $('#svc-form-cat-list').querySelectorAll('[data-cat-id]').forEach(chip => {
+    if (_svcFormCatIds.has(Number(chip.dataset.catId))) chip.classList.add('selected');
+  });
+
+  // Pre-select employees
+  _svcFormEmpIds = new Set((d.employees || []).map(e => e.id));
+  $('#svc-form-emp-list').querySelectorAll('[data-emp-id]').forEach(chip => {
+    if (_svcFormEmpIds.has(Number(chip.dataset.empId))) chip.classList.add('selected');
+  });
+
+  // Pre-fill product lines
+  _svcProdLines = (d.products || []).map(p => ({ product_id: p.id, name: p.name, qty: p.qty }));
+  _svcRenderProdLines();
+}
+
+function closeNewServiceModal() {
+  $('#svc-new-modal').style.display = 'none';
+  _svcEditingId = null;
+}
+
+async function _svcLoadFormCategories() {
+  const list = $('#svc-form-cat-list');
+  list.innerHTML = `<span style="color:var(--text-muted);font-size:12px"><i class="fa fa-spinner fa-spin"></i> Loading…</span>`;
+  const res = await API.serviceMgmtCategories();
+  _svcAvailCats = (res.body?.data || []).filter(c => c.is_active);
+  if (!_svcAvailCats.length) {
+    list.innerHTML = `<span style="color:var(--text-muted);font-size:12px">No categories available</span>`;
+    return;
+  }
+  list.innerHTML = _svcAvailCats.map(c =>
+    `<div class="svc-form-cat-chip" data-cat-id="${c.id}"><i class="fa fa-check"></i>${escHtml(c.name)}</div>`
+  ).join('');
+  list.querySelectorAll('.svc-form-cat-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      const id = Number(chip.dataset.catId);
+      if (_svcFormCatIds.has(id)) { _svcFormCatIds.delete(id); chip.classList.remove('selected'); }
+      else                         { _svcFormCatIds.add(id);    chip.classList.add('selected'); }
+    });
+  });
+}
+
+async function _svcLoadFormEmployees() {
+  const list = $('#svc-form-emp-list');
+  list.innerHTML = `<span style="color:var(--text-muted);font-size:12px"><i class="fa fa-spinner fa-spin"></i> Loading…</span>`;
+  const res = await API.employees();
+  _svcAvailEmps = (res.body?.data || []);
+  if (!_svcAvailEmps.length) {
+    list.innerHTML = `<span style="color:var(--text-muted);font-size:12px">No employees found</span>`;
+    return;
+  }
+  list.innerHTML = _svcAvailEmps.map(e =>
+    `<div class="svc-form-cat-chip" data-emp-id="${e.id}"><i class="fa fa-check"></i>${escHtml(e.name || e.full_name || '')}</div>`
+  ).join('');
+  list.querySelectorAll('[data-emp-id]').forEach(chip => {
+    chip.addEventListener('click', () => {
+      const id = Number(chip.dataset.empId);
+      if (_svcFormEmpIds.has(id)) { _svcFormEmpIds.delete(id); chip.classList.remove('selected'); }
+      else                         { _svcFormEmpIds.add(id);    chip.classList.add('selected'); }
+    });
+  });
+}
+
+// ── Product lines for service ─────────────────────────────────────────────
+let _svcProdSearchTimer = null;
+
+$('#svc-form-prod-q')?.addEventListener('input', () => {
+  clearTimeout(_svcProdSearchTimer);
+  const q = $('#svc-form-prod-q').value.trim();
+  const resultsEl = $('#svc-form-prod-results');
+  if (!q) { resultsEl.style.display = 'none'; return; }
+  _svcProdSearchTimer = setTimeout(async () => {
+    const res   = await API.productSearch(q, 8);
+    const items = (res.body?.data || []).filter(p => !_svcProdLines.some(l => l.product_id === p.id));
+    if (!items.length) { resultsEl.style.display = 'none'; return; }
+    resultsEl.innerHTML = items.map(p =>
+      `<div class="svc-prod-result-item" data-prod-id="${p.id}" data-prod-name="${escHtml(p.name)}">${escHtml(p.name)}</div>`
+    ).join('');
+    resultsEl.style.display = 'block';
+    resultsEl.querySelectorAll('.svc-prod-result-item').forEach(row => {
+      row.addEventListener('mousedown', e => {
+        e.preventDefault();
+        _svcAddProdLine(Number(row.dataset.prodId), row.dataset.prodName);
+        $('#svc-form-prod-q').value = '';
+        resultsEl.style.display = 'none';
+      });
+    });
+  }, 250);
+});
+
+$('#svc-form-prod-q')?.addEventListener('blur', () => {
+  setTimeout(() => { const r = $('#svc-form-prod-results'); if (r) r.style.display = 'none'; }, 150);
+});
+
+function _svcAddProdLine(productId, name) {
+  if (_svcProdLines.some(l => l.product_id === productId)) return;
+  _svcProdLines.push({ product_id: productId, name, qty: 1 });
+  _svcRenderProdLines();
+}
+
+function _svcRenderProdLines() {
+  const el = $('#svc-form-prod-lines');
+  if (!_svcProdLines.length) { el.innerHTML = ''; return; }
+  el.innerHTML = _svcProdLines.map((l, i) =>
+    `<div class="svc-prod-line" data-idx="${i}">
+      <span class="svc-prod-line-name">${escHtml(l.name)}</span>
+      <input type="number" class="svc-form-input svc-prod-line-qty" data-idx="${i}" value="${l.qty}" min="0.001" step="0.001">
+      <button type="button" class="svc-prod-line-remove" data-idx="${i}" title="Remove"><i class="fa fa-xmark"></i></button>
+    </div>`
+  ).join('');
+  el.querySelectorAll('.svc-prod-line-qty').forEach(inp => {
+    inp.addEventListener('change', () => {
+      const idx = Number(inp.dataset.idx);
+      _svcProdLines[idx].qty = parseFloat(inp.value) || 1;
+    });
+  });
+  el.querySelectorAll('.svc-prod-line-remove').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = Number(btn.dataset.idx);
+      _svcProdLines.splice(idx, 1);
+      _svcRenderProdLines();
+    });
+  });
+}
+
+$('#svc-toggle-ui')?.addEventListener('click', () => {
+  _svcFormActive = !_svcFormActive;
+  $('#svc-toggle-ui').classList.toggle('on', _svcFormActive);
+});
+
+$('#svc-featured-toggle-ui')?.addEventListener('click', () => {
+  _svcFormFeatured = !_svcFormFeatured;
+  $('#svc-featured-toggle-ui').classList.toggle('on', _svcFormFeatured);
+});
+
+$('#svc-new-modal-close')?.addEventListener('click', closeNewServiceModal);
+$('#svc-new-modal-cancel')?.addEventListener('click', closeNewServiceModal);
+$('#svc-new-modal')?.addEventListener('click', e => { if (e.target === e.currentTarget) closeNewServiceModal(); });
+
+$('#svc-form-submit')?.addEventListener('click', async () => {
+  const btn     = $('#svc-form-submit');
+  const alertEl = $('#svc-form-alert');
+  const name    = $('#svc-form-name').value.trim();
+  const price   = $('#svc-form-price').value.trim();
+  const isEdit  = _svcEditingId !== null;
+
+  alertEl.style.display = 'none';
+  if (!name)  { alertEl.textContent = 'Service name is required.';  alertEl.style.display = 'block'; return; }
+  if (!price) { alertEl.textContent = 'Price is required.';         alertEl.style.display = 'block'; return; }
+
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
+
+  const body = {
+    name,
+    description:          $('#svc-form-desc').value.trim() || null,
+    price:                parseFloat(price),
+    duration_minutes:     parseInt($('#svc-form-duration').value) || null,
+    is_active:            _svcFormActive,
+    is_featured:          _svcFormFeatured,
+    service_category_ids: [..._svcFormCatIds],
+    employee_ids:         [..._svcFormEmpIds],
+    product_lines:        _svcProdLines.map(l => ({ product_id: l.product_id, qty: l.qty })),
+  };
+
+  const res = isEdit
+    ? await API.updateServiceItem(_svcEditingId, body)
+    : await API.createServiceItem(body);
+
+  btn.disabled = false;
+  btn.innerHTML = isEdit
+    ? '<i class="fa fa-floppy-disk"></i> Save Changes'
+    : '<i class="fa fa-plus"></i> Create Service';
+
+  const ok = isEdit ? res.status === 200 : res.status === 201;
+  if (ok) {
+    closeNewServiceModal();
+    toast(isEdit ? 'Service updated' : 'Service created', 'success');
+    loadSvcCatalog();
+    if (isEdit) _svcOpenItemDetail(_svcEditingId);
+  } else {
+    const msg = Object.values(res.body?.errors || {}).flat()[0] || res.body?.message || 'Failed to save service.';
+    alertEl.textContent = msg;
+    alertEl.style.display = 'block';
+  }
+});
+
+$('#btn-new-service')?.addEventListener('click', openNewServiceModal);
+$('#rb-svc-new-item')?.addEventListener('click', () => { activateTab('services'); switchSvcView('catalog'); openNewServiceModal(); });
+
+// ── Categories ───────────────────────────────────────────────────────────────
+const _SVC_CAT_PALETTE = ['#6366f1','#ec4899','#f59e0b','#10b981','#3b82f6','#8b5cf6','#ef4444','#06b6d4','#84cc16','#f97316','#14b8a6','#a855f7'];
+
+function _svcCatColor(name) {
+  let h = 0;
+  for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) % _SVC_CAT_PALETTE.length;
+  return _SVC_CAT_PALETTE[Math.abs(h)];
+}
+
+async function loadSvcCategories() {
+  const grid = $('#svc-cat-grid');
+  grid.innerHTML = `<div class="svc-tbl-placeholder"><i class="fa fa-spinner fa-spin"></i> Loading…</div>`;
+
+  const res = await API.serviceMgmtCategories();
+  if (res.status !== 200) {
+    grid.innerHTML = `<div class="svc-tbl-placeholder" style="color:#e74c3c"><i class="fa fa-circle-exclamation"></i> Failed to load categories</div>`;
+    return;
+  }
+
+  const cats = res.body?.data || [];
+
+  if (!cats.length) {
+    grid.innerHTML = `<div class="svc-tbl-placeholder"><i class="fa fa-tags svc-tbl-empty-icon"></i>No categories yet</div>`;
+    return;
+  }
+
+  grid.innerHTML = cats.map(c => {
+    const color   = _svcCatColor(c.name);
+    const initial = c.name.trim().charAt(0).toUpperCase();
+    const count   = c.service_items_count || 0;
+    const badge   = c.is_active
+      ? `<span class="svc-cat-badge svc-cat-badge--active"><i class="fa fa-circle" style="font-size:6px"></i> Active</span>`
+      : `<span class="svc-cat-badge svc-cat-badge--inactive"><i class="fa fa-circle" style="font-size:6px"></i> Inactive</span>`;
+    const inactiveClass = c.is_active ? '' : ' svc-cat-card--inactive';
+    return `<div class="svc-cat-card${inactiveClass}" style="--cat-c:${color}" data-cat-id="${c.id}" data-cat-name="${escHtml(c.name)}">
+      <div class="svc-cat-card-bar"></div>
+      <div class="svc-cat-card-inner">
+        <div class="svc-cat-card-header">
+          <div class="svc-cat-avatar">${escHtml(initial)}</div>
+          <div class="svc-cat-name">${escHtml(c.name)}</div>
+          <button class="svc-delete-btn svc-cat-delete-btn" data-cat-id="${c.id}" data-cat-name="${escHtml(c.name)}" title="Delete"><i class="fa fa-trash"></i></button>
+        </div>
+        <div class="svc-cat-card-footer">
+          <div class="svc-cat-count">
+            <i class="fa fa-screwdriver-wrench"></i>
+            <span class="svc-cat-count-num">${count}</span>
+            <span>${count === 1 ? 'service' : 'services'}</span>
+          </div>
+          ${badge}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+
+  // Wire delete buttons
+  grid.querySelectorAll('.svc-cat-delete-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      _svcDeleteCategory(Number(btn.dataset.catId), btn.dataset.catName);
+    });
+  });
+}
+
+// ── Delete helpers ────────────────────────────────────────────────────────────
+async function _svcDeleteItem(id, name) {
+  if (!confirm(`Delete "${name}"?\n\nThis cannot be undone.`)) return;
+  const btn = $('#svc-detail-delete-btn');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i>'; }
+  const res = await API.deleteServiceItem(id);
+  if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa fa-trash"></i>'; }
+  if (res.status === 200) {
+    toast('Service deleted', 'success');
+    $('#svc-item-detail').style.display = 'none';
+    $('#svc-catalog-view').style.display = 'flex';
+    loadSvcCatalog();
+  } else {
+    toast(res.body?.message || 'Failed to delete service', 'error');
+  }
+}
+
+async function _svcDeleteCategory(id, name) {
+  if (!confirm(`Delete category "${name}"?\n\nThis cannot be undone.`)) return;
+  const res = await API.deleteServiceCategory(id);
+  if (res.status === 200) {
+    toast('Category deleted', 'success');
+    loadSvcCategories();
+  } else {
+    toast(res.body?.message || 'Failed to delete category', 'error');
+  }
+}
+
+// ── New Category Modal ────────────────────────────────────────────────────────
+let _svcCatFormActive = true;
+
+function openNewCategoryModal() {
+  _svcCatFormActive = true;
+  $('#svc-cat-form-name').value = '';
+  $('#svc-cat-form-desc').value = '';
+  $('#svc-cat-form-alert').style.display = 'none';
+  $('#svc-cat-toggle-ui')?.classList.add('on');
+  $('#svc-new-cat-modal').style.display = 'flex';
+  setTimeout(() => $('#svc-cat-form-name')?.focus(), 60);
+}
+
+function closeNewCategoryModal() {
+  $('#svc-new-cat-modal').style.display = 'none';
+}
+
+$('#svc-cat-toggle-ui')?.addEventListener('click', () => {
+  _svcCatFormActive = !_svcCatFormActive;
+  $('#svc-cat-toggle-ui').classList.toggle('on', _svcCatFormActive);
+});
+
+$('#svc-new-cat-modal-close')?.addEventListener('click',  closeNewCategoryModal);
+$('#svc-new-cat-modal-cancel')?.addEventListener('click', closeNewCategoryModal);
+$('#svc-new-cat-modal')?.addEventListener('click', e => { if (e.target === e.currentTarget) closeNewCategoryModal(); });
+
+$('#btn-new-category')?.addEventListener('click', openNewCategoryModal);
+
+$('#svc-cat-form-submit')?.addEventListener('click', async () => {
+  const btn     = $('#svc-cat-form-submit');
+  const alertEl = $('#svc-cat-form-alert');
+  const name    = $('#svc-cat-form-name').value.trim();
+
+  alertEl.style.display = 'none';
+  if (!name) { alertEl.textContent = 'Category name is required.'; alertEl.style.display = 'block'; return; }
+
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
+
+  const res = await API.createServiceCategory({
+    name,
+    description: $('#svc-cat-form-desc').value.trim() || null,
+    is_active:   _svcCatFormActive,
+  });
+
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fa fa-plus"></i> Create Category';
+
+  if (res.status === 201) {
+    closeNewCategoryModal();
+    toast('Category created', 'success');
+    loadSvcCategories();
+  } else {
+    const msg = Object.values(res.body?.errors || {}).flat()[0] || res.body?.message || 'Failed to create category.';
+    alertEl.textContent = msg;
+    alertEl.style.display = 'block';
+  }
+});
+
+// ── Wiring ───────────────────────────────────────────────────────────────────
+// Subnav
+$$('[data-svc]').forEach(btn => btn.addEventListener('click', () => switchSvcView(btn.dataset.svc)));
+
+// Status chip bar
+$$('.svc-chip').forEach(chip =>
+  chip.addEventListener('click', () => _svcSetChip(chip.dataset.status))
+);
+
+// Search
+$('#svc-req-search')?.addEventListener('input', function () {
+  _svcReqSearch = this.value;
+  loadSvcRequests();
+});
+$('#svc-cat-search')?.addEventListener('input', function () {
+  _svcCatSearch = this.value;
+  loadSvcCatalog();
+});
+$('#svc-cat-q')?.addEventListener('input', function () {
+  const q = this.value.toLowerCase();
+  $$('#svc-cat-grid .svc-cat-card').forEach(card => {
+    const name = card.querySelector('.svc-cat-name')?.textContent?.toLowerCase() || '';
+    card.style.display = name.includes(q) ? '' : 'none';
+  });
+});
+
+// Ribbon buttons
+$('#rb-svc-requests')?.addEventListener('click',    () => { activateTab('services'); switchSvcView('requests'); });
+$('#rb-svc-req-all')?.addEventListener('click',     () => { activateTab('services'); _svcSetChip(''); switchSvcView('requests'); });
+$('#rb-svc-req-pending')?.addEventListener('click', () => { activateTab('services'); _svcSetChip('pending'); switchSvcView('requests'); });
+$('#rb-svc-catalog')?.addEventListener('click',     () => { activateTab('services'); switchSvcView('catalog'); });
+$('#rb-svc-categories')?.addEventListener('click',  () => { activateTab('services'); switchSvcView('categories'); });
+$('#rb-svc-refresh')?.addEventListener('click', () => {
+  if (_svcView === 'requests')        loadSvcRequests();
+  else if (_svcView === 'catalog')    loadSvcCatalog();
+  else if (_svcView === 'categories') loadSvcCategories();
+});
+
 // ── Design Studio ──────────────────────────────────────────────────────────
 
 const DS_TYPES = {
@@ -18594,6 +20965,903 @@ async function submitDsCreate() {
     showDsError(msg);
   }
 }
+
+// ── User Management ────────────────────────────────────────────────────────
+(function () {
+  let _umUsers = [];         // all users (owner + members)
+  let _umSelected = null;    // currently selected user object
+  let _umEditTarget = null;  // user being edited in modal
+
+  let _umRoles = [];         // business roles from API
+  let _umRoleSelected = null;// currently selected role object
+  let _umRoleEditTarget = null;
+  const ROLE_COLORS = { owner: 'owner', admin: 'admin', manager: 'manager', staff: 'staff' };
+
+  const PRESET_COLORS = ['#3b82f6','#6366f1','#8b5cf6','#0ea5e9','#f59e0b','#f97316','#22c55e','#ef4444','#64748b','#ec4899'];
+
+  // Permission groups — mirrors BusinessMember::availablePermissions() structure
+  // Populated from the API response; defaults here are fallback only
+  let PERM_GROUPS = [];
+
+  function _buildPermGroupsFromApi(apiGroups) {
+    PERM_GROUPS = apiGroups || [];
+  }
+
+  // Flat lookup: key → { label, groupColor, groupIcon }
+  function _permFlat() {
+    const out = {};
+    PERM_GROUPS.forEach(g => g.items.forEach(it => {
+      out[it.key] = { label: it.label, color: g.color, icon: g.icon };
+    }));
+    return out;
+  }
+
+  function _allPermKeys() {
+    const keys = [];
+    PERM_GROUPS.forEach(g => g.items.forEach(it => keys.push(it.key)));
+    return keys;
+  }
+
+  function _initials(name) {
+    return (name || '?').split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase();
+  }
+
+  function _roleBadgeHtml(role) {
+    const cls = `um-role-badge um-role-${role}`;
+    return `<span class="${cls}">${role}</span>`;
+  }
+
+  function _statusBadgeHtml(status) {
+    return `<span class="um-status-badge um-status-${status}">${status}</span>`;
+  }
+
+  // ── Load + render list ──────────────────────────────────────────────────
+
+  async function loadUsersView() {
+    _umSelected = null;
+
+    const res = await API.usersList();
+    if (res.status !== 200) return;
+
+    _umUsers = res.body.data || [];
+    if (res.body.permissions) _buildPermGroupsFromApi(res.body.permissions);
+
+    const count = _umUsers.length;
+    const badge = $('#psm-users-count');
+    if (badge) badge.textContent = `${count} user${count !== 1 ? 's' : ''}`;
+
+    renderUserList('psm-users-list');
+  }
+
+  function renderUserList(listId) {
+    listId = listId || 'um-list';
+    const detailId = listId === 'psm-users-list' ? 'psm-users-detail' : 'um-detail';
+    const list = $(`#${listId}`);
+    if (!list) return;
+    if (_umUsers.length === 0) {
+      list.innerHTML = '<div class="um-loading">No users found.</div>';
+      return;
+    }
+
+    list.innerHTML = _umUsers.map(u => {
+      const isActive = _umSelected && _umSelected.user_id === u.user_id;
+      return `
+        <div class="um-user-card${isActive ? ' active' : ''}" data-uid="${u.user_id}" data-mid="${u.id}">
+          <div class="um-avatar ${ROLE_COLORS[u.role] || 'staff'}">${_initials(u.name)}</div>
+          <div class="um-card-info">
+            <div class="um-card-name">${u.name}</div>
+            <div class="um-card-email">${u.email}</div>
+            <div class="um-card-badges">
+              ${_roleBadgeHtml(u.role)}
+              ${!u.is_owner ? _statusBadgeHtml(u.status) : ''}
+            </div>
+          </div>
+        </div>`;
+    }).join('');
+
+    list.querySelectorAll('.um-user-card').forEach(card => {
+      card.addEventListener('click', () => {
+        const uid = parseInt(card.dataset.uid);
+        const user = _umUsers.find(u => u.user_id === uid);
+        if (user) selectUser(user, card, detailId);
+      });
+    });
+  }
+
+  function selectUser(user, cardEl, detailId) {
+    detailId = detailId || 'um-detail';
+    _umSelected = user;
+    const listId = detailId === 'psm-users-detail' ? 'psm-users-list' : 'um-list';
+    $(`#${listId}`)?.querySelectorAll('.um-user-card').forEach(c => c.classList.remove('active'));
+    if (cardEl) cardEl.classList.add('active');
+    renderUserDetail(user, detailId);
+  }
+
+  // ── Detail panel ────────────────────────────────────────────────────────
+
+  function renderUserDetail(user, detailId) {
+    detailId = detailId || 'um-detail';
+    const detail = $(`#${detailId}`);
+    if (!detail) return;
+
+    const joined = user.joined_at ? new Date(user.joined_at).toLocaleDateString() : '—';
+    const isOwner = user.is_owner;
+
+    // Find the role object to detect full-access (null permissions)
+    const roleObj    = _umRoles.find(r => r.slug === user.role);
+    const fullAccess = isOwner || (roleObj ? roleObj.permissions === null : user.role === 'admin');
+    const activeSet  = new Set(user.permissions || []);
+    const totalPerms = _allPermKeys().length;
+    const grantedN   = fullAccess ? totalPerms : activeSet.size;
+
+    const permHtml = PERM_GROUPS.length === 0 ? '' : `
+      <div class="um-detail-section">
+        <div class="um-detail-section-title">Feature Permissions
+          ${fullAccess ? '<span class="um-full-access-badge"><i class="fa fa-infinity"></i> Full Access</span>' : `<span style="font-size:10px;font-weight:600;color:var(--text-muted);margin-left:6px">${grantedN}/${totalPerms} features</span>`}
+        </div>
+        ${PERM_GROUPS.map(g => {
+          const grantedItems = g.items.filter(it => fullAccess || activeSet.has(it.key));
+          const noneGranted  = grantedItems.length === 0;
+          const allGranted   = grantedItems.length === g.items.length;
+          const itemsHtml = g.items.map(it => {
+            const has = fullAccess || activeSet.has(it.key);
+            return `<div class="um-perm-subrow${has ? ' granted' : ''}">
+              <i class="fa ${has ? 'fa-circle-check' : 'fa-circle'}" style="color:${has ? g.color : 'var(--border)'}"></i>
+              <div class="um-perm-subrow-text">
+                <span class="um-perm-subrow-label">${it.label}</span>
+                ${it.desc ? `<span class="um-perm-subrow-desc">${it.desc}</span>` : ''}
+              </div>
+            </div>`;
+          }).join('');
+          return `<div class="um-perm-group-card${noneGranted ? ' none' : ''}">
+            <div class="um-perm-group-header">
+              <div class="um-perm-group-icon" style="background:${noneGranted ? 'var(--surface3)' : g.color}"><i class="fa ${g.icon}"></i></div>
+              <div class="um-perm-group-label">${g.label}</div>
+              <div class="um-perm-group-badge">
+                ${fullAccess ? '<span class="um-perm-badge full"><i class="fa fa-infinity"></i> Full</span>'
+                  : noneGranted ? '<span class="um-perm-badge none">No access</span>'
+                  : allGranted  ? '<span class="um-perm-badge full">All</span>'
+                  : `<span class="um-perm-badge partial">${grantedItems.length}/${g.items.length}</span>`}
+              </div>
+            </div>
+            <div class="um-perm-subitems">${itemsHtml}</div>
+          </div>`;
+        }).join('')}
+      </div>`;
+
+    detail.innerHTML = `
+      <div class="um-detail-header">
+        <div class="um-detail-avatar ${ROLE_COLORS[user.role] || 'staff'}">${_initials(user.name)}</div>
+        <div class="um-detail-meta">
+          <div class="um-detail-name">${user.name}</div>
+          <div class="um-detail-email">${user.email}</div>
+          <div class="um-detail-joined"><i class="fa fa-calendar-days"></i> Joined ${joined}</div>
+        </div>
+        <div>${_roleBadgeHtml(user.role)}</div>
+      </div>
+
+      <div class="um-detail-section">
+        <div class="um-detail-section-title">Role</div>
+        <div style="font-size:13px;color:var(--text)">${user.role === 'owner' ? 'Business Owner — full access, cannot be changed.' : user.role.charAt(0).toUpperCase() + user.role.slice(1)}</div>
+      </div>
+
+      ${permHtml}
+
+      ${isOwner ? '' : `
+        <div class="um-detail-actions">
+          <button class="btn-primary" id="um-open-edit"><i class="fa fa-pen"></i> Edit Role &amp; Permissions</button>
+          <button class="um-remove-btn" id="um-open-remove"><i class="fa fa-user-minus"></i> Remove</button>
+        </div>`}
+    `;
+
+    if (!isOwner) {
+      detail.querySelector('#um-open-edit')?.addEventListener('click', () => openEditModal(user));
+      detail.querySelector('#um-open-remove')?.addEventListener('click', () => removeUser(user));
+    }
+  }
+
+  // ── Add User Modal ──────────────────────────────────────────────────────
+
+  async function openAddModal() {
+    const modal = $('#um-add-modal');
+    if (!modal) return;
+    $('#um-add-email').value = '';
+    $('#um-add-error').style.display = 'none';
+
+    // Populate role select from business roles (load if not yet fetched)
+    if (_umRoles.length === 0) {
+      const res = await API.rolesList();
+      if (res.status === 200) {
+        _umRoles = res.body.data || [];
+        if (res.body.permissions) _buildPermGroupsFromApi(res.body.permissions);
+      }
+    }
+    const roleSelect = $('#um-add-role');
+    roleSelect.innerHTML = _umRoles
+      .filter(r => r.slug !== 'owner')
+      .map(r => `<option value="${r.slug}">${r.name}</option>`)
+      .join('') || '<option value="staff">Staff</option>';
+    roleSelect.value = 'staff';
+
+    // Pre-fill permissions from selected role
+    const selectedRole = _umRoles.find(r => r.slug === roleSelect.value);
+    _renderPermGrid('um-add-perm-grid', selectedRole?.permissions || [], roleSelect.value, selectedRole);
+
+    roleSelect.onchange = () => {
+      const r = _umRoles.find(x => x.slug === roleSelect.value);
+      _renderPermGrid('um-add-perm-grid', r?.permissions || [], roleSelect.value, r);
+    };
+
+    modal.style.display = 'flex';
+    setTimeout(() => $('#um-add-email')?.focus(), 80);
+  }
+
+  function closeAddModal() { const m = $('#um-add-modal'); if (m) m.style.display = 'none'; }
+
+  async function submitAddUser() {
+    const email = $('#um-add-email')?.value?.trim();
+    const role  = $('#um-add-role')?.value;
+    const perms = _collectPerms('um-add-perm-grid');
+    const errEl = $('#um-add-error');
+
+    if (!email) { _showModalErr(errEl, 'Please enter an email address.'); return; }
+    errEl.style.display = 'none';
+    const btn = $('#um-add-save');
+    btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Adding…';
+
+    const res = await API.usersAdd({ email, role, permissions: perms });
+    btn.disabled = false; btn.innerHTML = '<i class="fa fa-check"></i> Add User';
+
+    if (res.status === 201) {
+      closeAddModal();
+      await loadUsersView();
+      const newUser = _umUsers.find(u => u.email === email);
+      if (newUser) {
+        const inSettings = $('#pos-settings-modal')?.style.display !== 'none';
+        const listId   = inSettings ? 'psm-users-list' : 'um-list';
+        const detailId = inSettings ? 'psm-users-detail' : 'um-detail';
+        const card = $(`#${listId} [data-uid="${newUser.user_id}"]`);
+        selectUser(newUser, card, detailId);
+      }
+    } else {
+      _showModalErr(errEl, res.body?.message || 'Failed to add user.');
+    }
+  }
+
+  // ── Edit User Modal ─────────────────────────────────────────────────────
+
+  function openEditModal(user) {
+    _umEditTarget = user;
+    const modal = $('#um-edit-modal');
+    if (!modal) return;
+
+    const info = $('#um-edit-user-info');
+    if (info) {
+      info.innerHTML = `
+        <div class="um-avatar ${ROLE_COLORS[user.role] || 'staff'}" style="width:32px;height:32px;font-size:11px">${_initials(user.name)}</div>
+        <div><div class="um-edit-info-name">${user.name}</div><div class="um-edit-info-email">${user.email}</div></div>`;
+    }
+
+    const roleSelect = $('#um-edit-role');
+    roleSelect.innerHTML = _umRoles
+      .filter(r => r.slug !== 'owner')
+      .map(r => `<option value="${r.slug}">${r.name}</option>`)
+      .join('') || '<option value="staff">Staff</option>';
+    roleSelect.value = user.role;
+    $('#um-edit-error').style.display = 'none';
+
+    const currentRoleObj = _umRoles.find(r => r.slug === user.role);
+    _renderPermGrid('um-edit-perm-grid', user.permissions || [], user.role, currentRoleObj);
+
+    roleSelect.onchange = () => {
+      const r = _umRoles.find(x => x.slug === roleSelect.value);
+      _renderPermGrid('um-edit-perm-grid', r?.permissions || [], roleSelect.value, r);
+    };
+
+    modal.style.display = 'flex';
+  }
+
+  function closeEditModal() { const m = $('#um-edit-modal'); if (m) m.style.display = 'none'; }
+
+  async function submitEditUser() {
+    if (!_umEditTarget) return;
+    const role  = $('#um-edit-role')?.value;
+    const perms = _collectPerms('um-edit-perm-grid');
+    const errEl = $('#um-edit-error');
+    errEl.style.display = 'none';
+
+    const btn = $('#um-edit-save');
+    btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
+
+    const res = await API.usersUpdate(_umEditTarget.id, { role, permissions: perms });
+    btn.disabled = false; btn.innerHTML = '<i class="fa fa-check"></i> Save Changes';
+
+    if (res.status === 200) {
+      closeEditModal();
+      await loadUsersView();
+      const updated = _umUsers.find(u => u.id === _umEditTarget.id);
+      if (updated) {
+        const inSettings = $('#pos-settings-modal')?.style.display !== 'none';
+        const listId   = inSettings ? 'psm-users-list' : 'um-list';
+        const detailId = inSettings ? 'psm-users-detail' : 'um-detail';
+        const card = $(`#${listId} [data-uid="${updated.user_id}"]`);
+        selectUser(updated, card, detailId);
+      }
+    } else {
+      _showModalErr(errEl, res.body?.message || 'Failed to save changes.');
+    }
+  }
+
+  // ── Remove ──────────────────────────────────────────────────────────────
+
+  async function removeUser(user) {
+    if (!confirm(`Remove ${user.name} (${user.email}) from this business? They will lose access immediately.`)) return;
+
+    const res = await API.usersRemove(user.id);
+    if (res.status === 200) {
+      await loadUsersView();
+      // Clear detail in the active context
+      const inSettings = $('#pos-settings-modal')?.style.display !== 'none';
+      const detailId = inSettings ? 'psm-users-detail' : 'um-detail';
+      const detail = $(`#${detailId}`);
+      if (detail) detail.innerHTML = '<div class="um-detail-empty"><i class="fa fa-user-shield"></i><p>Select a user to view their role and permissions</p></div>';
+    } else {
+      alert(res.body?.message || 'Failed to remove user.');
+    }
+  }
+
+  // ── Helpers ─────────────────────────────────────────────────────────────
+
+  // _renderPermGrid: tab-based permission groups in modals
+  function _renderPermGrid(containerId, activePerms, roleSlug, roleObj) {
+    const grid = $(`#${containerId}`);
+    if (!grid) return;
+    if (PERM_GROUPS.length === 0) { grid.innerHTML = ''; return; }
+    const fullAccess = roleObj ? roleObj.permissions === null : roleSlug === 'admin';
+    const activeSet  = new Set(activePerms || []);
+    grid.classList.remove('um-perm-grid--groups');
+    grid.classList.add('um-perm-grid--tabs');
+
+    // Build tab bar
+    const tabsHtml = PERM_GROUPS.map((g, i) => {
+      const grantedN = g.items.filter(it => fullAccess || activeSet.has(it.key)).length;
+      const dot = grantedN > 0
+        ? `<span class="um-ptab-dot" style="background:${g.color}"></span>`
+        : `<span class="um-ptab-dot" style="background:var(--border)"></span>`;
+      return `<button class="um-ptab${i === 0 ? ' active' : ''}" data-tab="${g.key}" style="--tab-color:${g.color}">
+        <i class="fa ${g.icon}"></i>
+        <span>${g.label}</span>
+        ${dot}
+      </button>`;
+    }).join('');
+
+    // Build panels (all groups, one visible at a time)
+    const panelsHtml = PERM_GROUPS.map((g, i) => {
+      const allOn  = g.items.every(it => fullAccess || activeSet.has(it.key));
+      const someOn = g.items.some(it =>  fullAccess || activeSet.has(it.key));
+      const itemsHtml = g.items.map(it => {
+        const on = fullAccess || activeSet.has(it.key);
+        return `
+          <div class="um-perm-toggle${on ? ' on' : ''}${fullAccess ? ' locked' : ''}" data-perm="${it.key}" data-group="${g.key}" data-color="${g.color}">
+            <div class="um-perm-toggle-dot" style="background:${on ? g.color : 'var(--border)'}"></div>
+            <div class="um-perm-toggle-text">
+              <span class="um-perm-toggle-label">${it.label}</span>
+              ${it.desc ? `<span class="um-perm-toggle-desc">${it.desc}</span>` : ''}
+            </div>
+            <div class="um-perm-toggle-switch${on ? ' on' : ''}${fullAccess ? ' locked' : ''}">
+              <div class="um-perm-toggle-thumb"></div>
+            </div>
+            <input type="checkbox" ${on ? 'checked' : ''} ${fullAccess ? 'disabled' : ''} style="display:none">
+          </div>`;
+      }).join('');
+
+      const selectAllHtml = fullAccess ? '' : `
+        <button class="um-perm-select-all${allOn ? ' active' : ''}" data-group="${g.key}">
+          ${allOn ? '<i class="fa fa-square-check"></i> All' : someOn ? '<i class="fa fa-square-minus"></i> Some' : '<i class="fa fa-square"></i> None'}
+        </button>`;
+
+      return `
+        <div class="um-ptab-panel${i === 0 ? ' active' : ''}" data-panel="${g.key}">
+          <div class="um-ptab-panel-header" style="border-left:3px solid ${g.color}">
+            <div class="um-perm-section-icon" style="background:${g.color}"><i class="fa ${g.icon}"></i></div>
+            <span class="um-perm-section-title">${g.label}</span>
+            ${selectAllHtml}
+          </div>
+          <div class="um-perm-section-items">${itemsHtml}</div>
+        </div>`;
+    }).join('');
+
+    grid.innerHTML = `
+      <div class="um-ptab-bar">${tabsHtml}</div>
+      <div class="um-ptab-content">${panelsHtml}</div>`;
+
+    // Tab switching
+    grid.querySelectorAll('.um-ptab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        grid.querySelectorAll('.um-ptab').forEach(t => t.classList.remove('active'));
+        grid.querySelectorAll('.um-ptab-panel').forEach(p => p.classList.remove('active'));
+        tab.classList.add('active');
+        grid.querySelector(`.um-ptab-panel[data-panel="${tab.dataset.tab}"]`)?.classList.add('active');
+      });
+    });
+
+    if (!fullAccess) {
+      // Toggle all in a group
+      grid.querySelectorAll('.um-perm-select-all').forEach(btn => {
+        btn.addEventListener('click', e => {
+          e.stopPropagation();
+          const gKey  = btn.dataset.group;
+          const panel = grid.querySelector(`.um-ptab-panel[data-panel="${gKey}"]`);
+          const items = panel.querySelectorAll('.um-perm-toggle:not(.locked)');
+          const allNowOn = Array.from(items).every(i => i.classList.contains('on'));
+          const setTo = !allNowOn;
+          const gDef  = PERM_GROUPS.find(g => g.key === gKey);
+          items.forEach(item => {
+            const cb  = item.querySelector('input[type=checkbox]');
+            const sw  = item.querySelector('.um-perm-toggle-switch');
+            const dot = item.querySelector('.um-perm-toggle-dot');
+            cb.checked = setTo;
+            item.classList.toggle('on', setTo);
+            sw.classList.toggle('on', setTo);
+            if (dot) dot.style.background = setTo ? (gDef?.color || '#64748b') : 'var(--border)';
+          });
+          btn.classList.toggle('active', setTo);
+          btn.innerHTML = setTo
+            ? '<i class="fa fa-square-check"></i> All'
+            : '<i class="fa fa-square"></i> None';
+          _updateTabDot(grid, gKey, setTo || false, gDef?.color);
+        });
+      });
+
+      // Toggle individual item
+      grid.querySelectorAll('.um-perm-toggle:not(.locked)').forEach(item => {
+        item.addEventListener('click', () => {
+          const cb    = item.querySelector('input[type=checkbox]');
+          const sw    = item.querySelector('.um-perm-toggle-switch');
+          const dot   = item.querySelector('.um-perm-toggle-dot');
+          const color = item.dataset.color;
+          cb.checked = !cb.checked;
+          item.classList.toggle('on', cb.checked);
+          sw.classList.toggle('on',  cb.checked);
+          if (dot) dot.style.background = cb.checked ? color : 'var(--border)';
+
+          const gKey  = item.dataset.group;
+          const panel = grid.querySelector(`.um-ptab-panel[data-panel="${gKey}"]`);
+          const allBtn = panel?.querySelector('.um-perm-select-all');
+          if (allBtn) {
+            const sItems = panel.querySelectorAll('.um-perm-toggle:not(.locked)');
+            const allOn  = Array.from(sItems).every(i => i.classList.contains('on'));
+            const someOn = Array.from(sItems).some(i =>  i.classList.contains('on'));
+            allBtn.classList.toggle('active', allOn);
+            allBtn.innerHTML = allOn
+              ? '<i class="fa fa-square-check"></i> All'
+              : someOn ? '<i class="fa fa-square-minus"></i> Some' : '<i class="fa fa-square"></i> None';
+            const gDef = PERM_GROUPS.find(g => g.key === gKey);
+            _updateTabDot(grid, gKey, someOn || allOn, gDef?.color);
+          }
+        });
+      });
+    }
+  }
+
+  function _updateTabDot(grid, gKey, hasAny, color) {
+    const tab = grid.querySelector(`.um-ptab[data-tab="${gKey}"] .um-ptab-dot`);
+    if (tab) tab.style.background = hasAny ? (color || 'var(--accent)') : 'var(--border)';
+  }
+
+  function _collectPerms(containerId) {
+    const grid = $(`#${containerId}`);
+    if (!grid) return [];
+    return Array.from(grid.querySelectorAll('.um-perm-toggle.on:not(.locked)'))
+      .map(item => item.dataset.perm || item.closest('[data-perm]')?.dataset.perm)
+      .filter(Boolean);
+  }
+
+  function _showModalErr(el, msg) {
+    if (!el) return;
+    el.textContent = msg;
+    el.style.display = 'block';
+  }
+
+  // ── Roles view ───────────────────────────────────────────────────────────
+
+  async function loadRolesView() {
+    _umRoleSelected = null;
+
+    const [rolesRes, usersRes] = await Promise.all([API.rolesList(), API.usersList()]);
+
+    if (rolesRes.status !== 200) return;
+
+    _umRoles = rolesRes.body.data || [];
+    if (rolesRes.body.permissions) _buildPermGroupsFromApi(rolesRes.body.permissions);
+    if (usersRes.status === 200) _umUsers = usersRes.body.data || [];
+
+    const badge = $('#psm-role-count');
+    if (badge) badge.textContent = `${_umRoles.length} role${_umRoles.length !== 1 ? 's' : ''}`;
+
+    renderRoleList('psm-role-list');
+  }
+
+  function renderRoleList(listId) {
+    listId = listId || 'um-role-list';
+    const detailId = listId === 'psm-role-list' ? 'psm-role-detail' : 'um-role-detail';
+    const list = $(`#${listId}`);
+    if (!list) return;
+    if (_umRoles.length === 0) { list.innerHTML = '<div class="um-loading">No roles found.</div>'; return; }
+
+    const totalPerms = _allPermKeys().length || 26;
+    list.innerHTML = _umRoles.map(r => {
+      const isActive   = _umRoleSelected && _umRoleSelected.id === r.id;
+      const fullAccess = r.permissions === null;
+      const grantedN   = fullAccess ? totalPerms : (r.permissions || []).length;
+      const permLabel  = fullAccess ? 'Full access' : `${grantedN} of ${totalPerms} modules`;
+      const barPct     = Math.round((grantedN / totalPerms) * 100);
+      return `
+        <div class="um-role-card${isActive ? ' active' : ''}" data-role-id="${r.id}">
+          <div class="um-role-color-bar" style="background:${r.color}"></div>
+          <div class="um-role-card-inner">
+            <div class="um-role-card-top">
+              <span class="um-role-card-name">${r.name}</span>
+              ${r.is_system ? '<span class="um-system-badge">system</span>' : ''}
+              <span class="um-role-member-count" style="margin-left:auto">${r.member_count} ${r.member_count===1?'member':'members'}</span>
+            </div>
+            <div class="um-role-card-desc">${r.description || permLabel}</div>
+            <div class="um-role-perm-bar">
+              <div class="um-role-perm-bar-fill" style="width:${barPct}%;background:${r.color}"></div>
+            </div>
+            <div class="um-role-perm-label">${permLabel}</div>
+          </div>
+        </div>`;
+    }).join('');
+
+    list.querySelectorAll('.um-role-card').forEach(card => {
+      card.addEventListener('click', () => {
+        const id   = parseInt(card.dataset.roleId);
+        const role = _umRoles.find(r => r.id === id);
+        if (role) selectRole(role, card, detailId);
+      });
+    });
+  }
+
+  function selectRole(role, cardEl, detailId) {
+    detailId = detailId || 'um-role-detail';
+    _umRoleSelected = role;
+    const listId = detailId === 'psm-role-detail' ? 'psm-role-list' : 'um-role-list';
+    $(`#${listId}`)?.querySelectorAll('.um-role-card').forEach(c => c.classList.remove('active'));
+    if (cardEl) cardEl.classList.add('active');
+    renderRoleDetail(role, detailId);
+  }
+
+  function renderRoleDetail(role, detailId) {
+    detailId = detailId || 'um-role-detail';
+    const detail = $(`#${detailId}`);
+    if (!detail) return;
+
+    const fullAccess = role.permissions === null;
+    const activeSet  = new Set(role.permissions || []);
+    const totalPerms = _allPermKeys().length;
+    const grantedN   = fullAccess ? totalPerms : (role.permissions || []).length;
+
+    // Grouped permission cards
+    const permCardsHtml = PERM_GROUPS.map(g => {
+      const grantedItems = g.items.filter(it => fullAccess || activeSet.has(it.key));
+      const allGranted   = grantedItems.length === g.items.length;
+      const noneGranted  = grantedItems.length === 0;
+
+      const itemsHtml = g.items.map(it => {
+        const has = fullAccess || activeSet.has(it.key);
+        return `
+          <div class="um-perm-subrow${has ? ' granted' : ''}">
+            <i class="fa ${has ? 'fa-circle-check' : 'fa-circle'}" style="color:${has ? g.color : 'var(--border)'}"></i>
+            <div class="um-perm-subrow-text">
+              <span class="um-perm-subrow-label">${it.label}</span>
+              ${it.desc ? `<span class="um-perm-subrow-desc">${it.desc}</span>` : ''}
+            </div>
+          </div>`;
+      }).join('');
+
+      return `
+        <div class="um-perm-group-card${noneGranted ? ' none' : ''}">
+          <div class="um-perm-group-header">
+            <div class="um-perm-group-icon" style="background:${noneGranted ? 'var(--surface3)' : g.color}">
+              <i class="fa ${g.icon}"></i>
+            </div>
+            <div class="um-perm-group-label">${g.label}</div>
+            <div class="um-perm-group-badge">
+              ${fullAccess
+                ? '<span class="um-perm-badge full"><i class="fa fa-infinity"></i> Full</span>'
+                : noneGranted
+                  ? '<span class="um-perm-badge none">No access</span>'
+                  : allGranted
+                    ? '<span class="um-perm-badge full">All</span>'
+                    : `<span class="um-perm-badge partial">${grantedItems.length}/${g.items.length}</span>`}
+            </div>
+          </div>
+          <div class="um-perm-subitems">${itemsHtml}</div>
+        </div>`;
+    }).join('');
+
+    // Members using this role (from _umUsers)
+    const members = _umUsers.filter(u => u.role === role.slug && !u.is_owner);
+    const membersHtml = members.length === 0
+      ? '<div class="um-role-no-members"><i class="fa fa-user-slash"></i> No members assigned to this role.</div>'
+      : members.map(u => `
+          <div class="um-role-member-row">
+            <div class="um-role-member-avatar" style="background:${role.color}">${_initials(u.name)}</div>
+            <div class="um-role-member-info">
+              <div class="um-role-member-name">${u.name}</div>
+              <div class="um-role-member-email">${u.email}</div>
+            </div>
+          </div>`).join('');
+
+    detail.innerHTML = `
+      <div class="um-role-detail-header">
+        <div class="um-role-detail-circle" style="background:${role.color}">
+          <i class="fa fa-shield-halved"></i>
+        </div>
+        <div class="um-role-detail-meta">
+          <div class="um-role-detail-name">
+            ${role.name}
+            ${role.is_system ? '<span class="um-system-badge">system</span>' : ''}
+          </div>
+          <div class="um-role-detail-desc">${role.description || (fullAccess ? 'Full access to all features' : `${grantedN} of ${totalPerms} features enabled`)}</div>
+          <div class="um-role-detail-stat"><i class="fa fa-users"></i> ${role.member_count} ${role.member_count===1?'member':'members'}</div>
+        </div>
+        <button class="um-role-edit-btn" id="um-rd-edit">
+          <i class="fa fa-pen"></i> Edit Role
+        </button>
+      </div>
+
+      <div class="um-detail-section">
+        <div class="um-detail-section-title">
+          Module Access
+          ${fullAccess ? '<span class="um-full-access-badge"><i class="fa fa-infinity"></i> Full Access</span>' : ''}
+        </div>
+        <div class="um-perm-cards">${permCardsHtml}</div>
+      </div>
+
+      <div class="um-detail-section">
+        <div class="um-detail-section-title">Members with this role (${members.length})</div>
+        <div class="um-role-members-list">${membersHtml}</div>
+      </div>`;
+
+    detail.querySelector('#um-rd-edit')?.addEventListener('click', () => openEditRoleModal(role));
+  }
+
+  // ── Role Modals ─────────────────────────────────────────────────────────
+
+  function _renderColorPicker(containerId, selectedColor) {
+    const wrap = $(`#${containerId}`);
+    if (!wrap) return;
+    wrap.innerHTML = PRESET_COLORS.map(c => `
+      <div class="um-color-swatch${c === selectedColor ? ' selected' : ''}" data-color="${c}"
+           style="background:${c}" title="${c}"></div>`).join('');
+    wrap.querySelectorAll('.um-color-swatch').forEach(sw => {
+      sw.addEventListener('click', () => {
+        wrap.querySelectorAll('.um-color-swatch').forEach(s => s.classList.remove('selected'));
+        sw.classList.add('selected');
+      });
+    });
+  }
+
+  function _getSelectedColor(containerId) {
+    return $(`#${containerId} .um-color-swatch.selected`)?.dataset?.color || '#64748b';
+  }
+
+  // Create Role
+  function openCreateRoleModal() {
+    const modal = $('#um-role-create-modal');
+    if (!modal) return;
+    $('#um-rc-name').value = '';
+    $('#um-rc-desc').value = '';
+    $('#um-rc-error').style.display = 'none';
+    _renderColorPicker('um-rc-colors', '#64748b');
+    _renderPermGrid('um-rc-perm-grid', [], 'staff', { permissions: [] });
+    modal.style.display = 'flex';
+    setTimeout(() => $('#um-rc-name')?.focus(), 80);
+  }
+
+  function closeCreateRoleModal() { const m = $('#um-role-create-modal'); if (m) m.style.display = 'none'; }
+
+  async function submitCreateRole() {
+    const name  = $('#um-rc-name')?.value?.trim();
+    const desc  = $('#um-rc-desc')?.value?.trim();
+    const color = _getSelectedColor('um-rc-colors');
+    const perms = _collectPerms('um-rc-perm-grid');
+    const errEl = $('#um-rc-error');
+    if (!name) { _showModalErr(errEl, 'Role name is required.'); return; }
+    errEl.style.display = 'none';
+
+    const btn = $('#um-rc-save');
+    btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Creating…';
+
+    const res = await API.rolesCreate({ name, description: desc, color, permissions: perms });
+    btn.disabled = false; btn.innerHTML = '<i class="fa fa-check"></i> Create Role';
+
+    if (res.status === 201) {
+      closeCreateRoleModal();
+      await loadRolesView();
+      const newRole = _umRoles.find(r => r.id === res.body.data?.id);
+      if (newRole) {
+        const inSettings = $('#pos-settings-modal')?.style.display !== 'none';
+        const listId   = inSettings ? 'psm-role-list' : 'um-role-list';
+        const detailId = inSettings ? 'psm-role-detail' : 'um-role-detail';
+        const card = $(`#${listId} [data-role-id="${newRole.id}"]`);
+        selectRole(newRole, card, detailId);
+      }
+    } else {
+      _showModalErr(errEl, res.body?.message || 'Failed to create role.');
+    }
+  }
+
+  // Edit Role
+  function openEditRoleModal(role) {
+    _umRoleEditTarget = role;
+    const modal = $('#um-role-edit-modal');
+    if (!modal) return;
+
+    // Name field: disabled for system roles
+    const nameWrap = $('#um-re-name-wrap');
+    $('#um-re-name').value    = role.name;
+    $('#um-re-name').disabled = role.is_system;
+    if (nameWrap) nameWrap.style.opacity = role.is_system ? '.5' : '1';
+
+    $('#um-re-desc').value = role.description || '';
+    $('#um-re-error').style.display = 'none';
+
+    _renderColorPicker('um-re-colors', role.color);
+
+    // Admin-note + perm grid
+    const adminNote = $('#um-re-admin-note');
+    if (adminNote) adminNote.style.display = role.permissions === null ? 'block' : 'none';
+    _renderPermGrid('um-re-perm-grid', role.permissions || [], role.slug, role);
+
+    // Delete button only for custom roles
+    const delBtn = $('#um-re-delete');
+    if (delBtn) delBtn.style.display = role.is_system ? 'none' : 'inline-flex';
+
+    modal.style.display = 'flex';
+  }
+
+  function closeEditRoleModal() { const m = $('#um-role-edit-modal'); if (m) m.style.display = 'none'; }
+
+  async function submitEditRole() {
+    if (!_umRoleEditTarget) return;
+    const name  = $('#um-re-name')?.value?.trim();
+    const desc  = $('#um-re-desc')?.value?.trim();
+    const color = _getSelectedColor('um-re-colors');
+    const perms = _umRoleEditTarget.permissions === null ? null : _collectPerms('um-re-perm-grid');
+    const errEl = $('#um-re-error');
+
+    if (!_umRoleEditTarget.is_system && !name) { _showModalErr(errEl, 'Role name is required.'); return; }
+    errEl.style.display = 'none';
+
+    const payload = { color, description: desc, permissions: perms };
+    if (!_umRoleEditTarget.is_system) payload.name = name;
+
+    const btn = $('#um-re-save');
+    btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
+
+    const res = await API.rolesUpdate(_umRoleEditTarget.id, payload);
+    btn.disabled = false; btn.innerHTML = '<i class="fa fa-check"></i> Save Changes';
+
+    if (res.status === 200) {
+      closeEditRoleModal();
+      await loadRolesView();
+      const updated = _umRoles.find(r => r.id === _umRoleEditTarget.id);
+      if (updated) {
+        const inSettings = $('#pos-settings-modal')?.style.display !== 'none';
+        const listId   = inSettings ? 'psm-role-list' : 'um-role-list';
+        const detailId = inSettings ? 'psm-role-detail' : 'um-role-detail';
+        const card = $(`#${listId} [data-role-id="${updated.id}"]`);
+        selectRole(updated, card, detailId);
+      }
+    } else {
+      _showModalErr(errEl, res.body?.message || 'Failed to save role.');
+    }
+  }
+
+  async function deleteRole(role) {
+    if (!confirm(`Delete the "${role.name}" role? Members using it will be moved to Staff.`)) return;
+    const res = await API.rolesDelete(role.id);
+    if (res.status === 200) {
+      closeEditRoleModal();
+      await loadRolesView();
+      // Clear detail in the active context
+      const inSettings = $('#pos-settings-modal')?.style.display !== 'none';
+      const detailId = inSettings ? 'psm-role-detail' : 'um-role-detail';
+      const detail = $(`#${detailId}`);
+      if (detail) detail.innerHTML = '<div class="um-detail-empty"><i class="fa fa-shield-halved"></i><p>Select a role to view and edit its permissions</p></div>';
+    } else {
+      alert(res.body?.message || 'Failed to delete role.');
+    }
+  }
+
+  // ── Event listeners ─────────────────────────────────────────────────────
+
+  // Add user modal
+  $('#um-add-save')?.addEventListener('click',   submitAddUser);
+  $('#um-add-cancel')?.addEventListener('click', closeAddModal);
+  $('#um-add-close')?.addEventListener('click',  closeAddModal);
+  $('#um-add-modal')?.addEventListener('click',  e => { if (e.target === e.currentTarget) closeAddModal(); });
+
+  // Edit user modal
+  $('#um-edit-save')?.addEventListener('click',   submitEditUser);
+  $('#um-edit-cancel')?.addEventListener('click', closeEditModal);
+  $('#um-edit-close')?.addEventListener('click',  closeEditModal);
+  $('#um-edit-modal')?.addEventListener('click',  e => { if (e.target === e.currentTarget) closeEditModal(); });
+
+  // Create role modal
+  $('#um-rc-save')?.addEventListener('click',   submitCreateRole);
+  $('#um-rc-cancel')?.addEventListener('click', closeCreateRoleModal);
+  $('#um-rc-close')?.addEventListener('click',  closeCreateRoleModal);
+  $('#um-role-create-modal')?.addEventListener('click', e => { if (e.target === e.currentTarget) closeCreateRoleModal(); });
+
+  // Edit role modal
+  $('#um-re-save')?.addEventListener('click',   submitEditRole);
+  $('#um-re-cancel')?.addEventListener('click', closeEditRoleModal);
+  $('#um-re-close')?.addEventListener('click',  closeEditRoleModal);
+  $('#um-re-delete')?.addEventListener('click', () => { if (_umRoleEditTarget) deleteRole(_umRoleEditTarget); });
+  $('#um-role-edit-modal')?.addEventListener('click', e => { if (e.target === e.currentTarget) closeEditRoleModal(); });
+
+  // Expose loaders so activateTab can call them
+  window.loadUsersView = loadUsersView;
+
+  // Expose for Settings modal Users tab
+  window.loadUsersForSettings = async function() {
+    const list   = $('#psm-users-list');
+    const detail = $('#psm-users-detail');
+    if (!list) return;
+    list.innerHTML = '<div class="um-loading"><i class="fa fa-spinner fa-spin"></i> Loading users…</div>';
+    if (detail) detail.innerHTML = '<div class="um-detail-empty"><i class="fa fa-user-shield"></i><p>Select a user to view their role and permissions</p></div>';
+    _umSelected = null;
+
+    const [usersRes, rolesRes] = await Promise.all([API.usersList(), API.rolesList()]);
+    if (usersRes.status !== 200) {
+      list.innerHTML = `<div class="um-loading" style="color:#dc2626"><i class="fa fa-triangle-exclamation"></i> ${usersRes.body?.message || 'Failed to load users.'}</div>`;
+      return;
+    }
+    _umUsers = usersRes.body.data || [];
+    if (usersRes.body.permissions) _buildPermGroupsFromApi(usersRes.body.permissions);
+    if (rolesRes.status === 200) {
+      _umRoles = rolesRes.body.data || [];
+      if (rolesRes.body.permissions) _buildPermGroupsFromApi(rolesRes.body.permissions);
+    }
+
+    const count = _umUsers.length;
+    const badge = $('#psm-users-count');
+    if (badge) badge.textContent = `${count} user${count !== 1 ? 's' : ''}`;
+
+    renderUserList('psm-users-list');
+  };
+
+  window.openAddModal = openAddModal;
+
+  // Expose for Settings modal Roles tab
+  window.loadRolesForSettings = async function() {
+    const list   = $('#psm-role-list');
+    const detail = $('#psm-role-detail');
+    if (!list) return;
+    list.innerHTML = '<div class="um-loading"><i class="fa fa-spinner fa-spin"></i> Loading roles…</div>';
+    if (detail) detail.innerHTML = '<div class="um-detail-empty"><i class="fa fa-shield-halved"></i><p>Select a role to view its permissions</p></div>';
+
+    const [rolesRes, usersRes] = await Promise.all([API.rolesList(), API.usersList()]);
+    if (rolesRes.status !== 200) {
+      list.innerHTML = `<div class="um-loading" style="color:#dc2626"><i class="fa fa-triangle-exclamation"></i> ${rolesRes.body?.message || 'Failed to load roles.'}</div>`;
+      return;
+    }
+    _umRoles = rolesRes.body.data || [];
+    if (rolesRes.body.permissions) _buildPermGroupsFromApi(rolesRes.body.permissions);
+    if (usersRes.status === 200) _umUsers = usersRes.body.data || [];
+
+    const badge = $('#psm-role-count');
+    if (badge) badge.textContent = `${_umRoles.length} role${_umRoles.length !== 1 ? 's' : ''}`;
+
+    renderRoleList('psm-role-list');
+  };
+
+  window.openCreateRoleModal = openCreateRoleModal;
+}());
 
 // ── Boot ───────────────────────────────────────────────────────────────────
 init();

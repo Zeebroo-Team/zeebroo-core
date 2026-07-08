@@ -1,0 +1,1249 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>What's New in v3.1.0 — Zeebroo POS</title>
+<style>
+/* ── Tokens (matches index.html) ── */
+:root {
+  --bg:           #FFFFFF;
+  --bg-subtle:    #F4F4F4;
+  --sidebar-bg:   #FFFFFF;
+  --sidebar-hover:#F4F4F4;
+  --text:         #111111;
+  --text-muted:   #555555;
+  --text-faint:   #999999;
+  --border:       #E6E6E6;
+  --border-strong:#CCCCCC;
+  --accent:       #D4A017;
+  --accent-bright:#F5C518;
+  --accent-light: #FEFCE8;
+  --step-bg:      #F4F4F4;
+  --tip-bg:       #FEFCE8;
+  --tip-border:   #E8D040;
+  --note-bg:      #F4F4F4;
+  --note-border:  #AAAAAA;
+  --sidebar-text:        #555555;
+  --sidebar-text-active: #111111;
+  --sidebar-section:     #999999;
+  --sidebar-scrollbar:   #CCCCCC;
+  --shadow: 0 1px 3px rgba(0,0,0,.07), 0 1px 2px rgba(0,0,0,.04);
+
+  /* feature accent colours */
+  --c-today:   #3b82f6;
+  --c-exp:     #ef4444;
+  --c-profit:  #22c55e;
+  --c-payroll: #6366f1;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg:           #111111; --bg-subtle:    #1A1A1A; --sidebar-bg:   #0A0A0A;
+    --sidebar-hover:#181818; --text:         #F0F0F0; --text-muted:   #AAAAAA;
+    --text-faint:   #666666; --border:       #272727; --border-strong:#383838;
+    --accent:       #F5C518; --accent-bright:#F5C518; --accent-light: #1C1800;
+    --step-bg:      #1A1A1A; --tip-bg:       #1C1800; --tip-border:   #705900;
+    --note-bg:      #1A1A1A; --note-border:  #444444;
+    --sidebar-text:        #666666; --sidebar-text-active:#F0F0F0;
+    --sidebar-section:     #555555; --sidebar-scrollbar:  #333333;
+    --shadow: 0 1px 3px rgba(0,0,0,.4);
+  }
+}
+:root[data-theme="dark"] {
+  --bg:#111111; --bg-subtle:#1A1A1A; --sidebar-bg:#0A0A0A;
+  --sidebar-hover:#181818; --text:#F0F0F0; --text-muted:#AAAAAA;
+  --text-faint:#666666; --border:#272727; --border-strong:#383838;
+  --accent:#F5C518; --accent-bright:#F5C518; --accent-light:#1C1800;
+  --step-bg:#1A1A1A; --tip-bg:#1C1800; --tip-border:#705900;
+  --note-bg:#1A1A1A; --note-border:#444444;
+  --sidebar-text:#666666; --sidebar-text-active:#F0F0F0;
+  --sidebar-section:#555555; --sidebar-scrollbar:#333333;
+  --shadow:0 1px 3px rgba(0,0,0,.4);
+}
+:root[data-theme="light"] {
+  --bg:#FFFFFF; --bg-subtle:#F4F4F4; --sidebar-bg:#FFFFFF;
+  --sidebar-hover:#F4F4F4; --text:#111111; --text-muted:#555555;
+  --text-faint:#999999; --border:#E6E6E6; --border-strong:#CCCCCC;
+  --accent:#D4A017; --accent-bright:#F5C518; --accent-light:#FEFCE8;
+  --step-bg:#F4F4F4; --tip-bg:#FEFCE8; --tip-border:#E8D040;
+  --note-bg:#F4F4F4; --note-border:#AAAAAA;
+  --sidebar-text:#555555; --sidebar-text-active:#111111;
+  --sidebar-section:#999999; --sidebar-scrollbar:#CCCCCC;
+  --shadow:0 1px 3px rgba(0,0,0,.07);
+}
+
+/* ── Reset ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 15px; scroll-behavior: smooth; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.65; display: flex; min-height: 100vh; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+#sidebar a, #sidebar a:hover { text-decoration: none; }
+ul, ol { padding-left: 20px; }
+li { margin-bottom: 5px; font-size: 13.5px; color: var(--text-muted); line-height: 1.6; }
+li strong { color: var(--text); }
+
+/* ── Sidebar ── */
+#sidebar { width:258px; min-width:258px; background:var(--sidebar-bg); position:fixed; top:0; left:0; bottom:0; overflow-y:auto; z-index:100; display:flex; flex-direction:column; border-right:1px solid var(--border); }
+#sidebar::-webkit-scrollbar { width:4px; }
+#sidebar::-webkit-scrollbar-track { background:transparent; }
+#sidebar::-webkit-scrollbar-thumb { background:var(--sidebar-scrollbar); border-radius:2px; }
+
+.sb-brand { padding:18px 20px 14px; border-bottom:1px solid var(--border); }
+.sb-logo { display:block; width:100%; max-width:160px; height:auto; margin-bottom:6px; }
+.sb-brand-sub { font-size:11px; color:var(--text-faint); font-family:ui-monospace,'Cascadia Code',monospace; letter-spacing:.04em; }
+
+.sb-nav { padding:8px 0 24px; flex:1; }
+
+.tree-group { margin:1px 0; }
+.tree-header { width:100%; display:flex; align-items:center; gap:7px; padding:8px 14px 8px 12px; background:none; border:none; border-left:3px solid transparent; cursor:pointer; color:var(--text); font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; text-align:left; transition:background .12s,border-color .12s; font-family:inherit; }
+.tree-header:hover { background:var(--sidebar-hover); }
+.tree-group.open > .tree-header { border-left-color:var(--accent-bright); }
+.tree-chevron { width:10px; height:10px; flex-shrink:0; color:var(--text-faint); transition:transform .22s ease; margin-left:auto; }
+.tree-group.open > .tree-header .tree-chevron { transform:rotate(90deg); }
+.tree-icon { width:15px; height:15px; flex-shrink:0; color:var(--accent); opacity:.85; }
+.tree-group.open > .tree-header .tree-icon { opacity:1; }
+.tree-label { flex:1; }
+
+.tree-children { overflow:hidden; max-height:0; transition:max-height .28s cubic-bezier(.4,0,.2,1); position:relative; }
+.tree-children::before { content:''; position:absolute; left:25px; top:6px; bottom:6px; width:1px; background:var(--border); }
+.tree-group.open .tree-children { max-height:600px; }
+
+.sb-chapter-group { position:relative; }
+.sb-subtopics { overflow:hidden; max-height:0; position:relative; transition:max-height .22s cubic-bezier(.4,0,.2,1); }
+.sb-subtopics::before { content:''; position:absolute; left:38px; top:4px; bottom:4px; width:1px; background:var(--border); }
+.sb-chapter-group.sub-open .sb-subtopics { max-height:600px; }
+
+.sb-link { display:flex; align-items:center; padding:6px 14px 6px 40px; color:var(--sidebar-text); text-decoration:none; font-size:12.5px; transition:background .12s,color .12s; cursor:pointer; border-left:3px solid transparent; position:relative; }
+.sb-link::before { content:''; position:absolute; left:25px; top:50%; width:10px; height:1px; background:var(--border); transform:translateY(-50%); }
+.sb-link:hover { background:var(--sidebar-hover); color:var(--text); }
+.sb-link:hover::before { background:var(--border-strong); }
+.sb-link.active { color:#111111; font-weight:600; border-left-color:var(--accent-bright); background:var(--accent-light); }
+.sb-link.active::before { background:var(--accent-bright); }
+
+.sb-sub { display:flex; align-items:center; padding:4px 14px 4px 54px; color:var(--text-faint); text-decoration:none; font-size:11.5px; line-height:1.35; transition:background .12s,color .12s; position:relative; border-left:3px solid transparent; }
+.sb-sub::before { content:''; position:absolute; left:38px; top:50%; width:11px; height:1px; background:var(--border); transform:translateY(-50%); }
+.sb-sub:hover { background:var(--sidebar-hover); color:var(--text-muted); }
+.sb-sub.active { color:var(--accent); font-weight:600; background:var(--accent-light); border-left-color:var(--accent-bright); }
+
+/* ── Main ── */
+#main { margin-left:258px; flex:1; min-width:0; }
+
+/* ── Topbar ── */
+#topbar { position:sticky; top:0; z-index:50; background:var(--bg); border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; padding:0 40px; height:48px; }
+.tb-title { font-size:12px; color:var(--text-muted); font-family:ui-monospace,monospace; letter-spacing:.03em; }
+.tb-actions { display:flex; gap:8px; align-items:center; }
+.theme-toggle { background:none; border:1px solid var(--border); color:var(--text-muted); padding:4px 10px; border-radius:4px; font-size:11px; cursor:pointer; transition:border-color .15s,color .15s; font-family:inherit; }
+.theme-toggle:hover { border-color:var(--accent); color:var(--accent); }
+.version-badge { background:var(--accent); color:#fff; font-size:10px; font-weight:600; padding:3px 8px; border-radius:3px; font-family:ui-monospace,monospace; letter-spacing:.04em; }
+.new-badge { background:#22c55e; color:#fff; font-size:10px; font-weight:700; padding:3px 8px; border-radius:3px; font-family:ui-monospace,monospace; letter-spacing:.04em; }
+
+/* ── Content ── */
+#content { max-width:760px; margin:0 auto; padding:0 40px 80px; }
+
+/* ── Hero ── */
+.hero { padding:52px 0 40px; border-bottom:1px solid var(--border); margin-bottom:56px; }
+.hero-eyebrow { font-size:11px; font-weight:600; letter-spacing:.1em; text-transform:uppercase; color:var(--accent); font-family:ui-monospace,monospace; margin-bottom:12px; }
+.hero h1 { font-size:34px; font-weight:800; letter-spacing:-.03em; color:var(--text); line-height:1.15; text-wrap:balance; margin-bottom:14px; }
+.hero p { font-size:15.5px; color:var(--text-muted); max-width:560px; line-height:1.7; }
+.hero-meta { margin-top:20px; display:flex; gap:20px; flex-wrap:wrap; }
+.hero-meta-item { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text-faint); }
+.hero-meta-item strong { color:var(--text-muted); font-weight:500; }
+
+/* ── New feature overview grid ── */
+.new-feat-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:56px; }
+.new-feat-card { border-radius:10px; border:1px solid var(--border); padding:18px 18px 16px; background:var(--bg); position:relative; overflow:hidden; }
+.new-feat-card::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; }
+.new-feat-card.fc-today::before  { background:var(--c-today); }
+.new-feat-card.fc-exp::before    { background:var(--c-exp); }
+.new-feat-card.fc-profit::before { background:var(--c-profit); }
+.new-feat-card.fc-payroll::before{ background:var(--c-payroll); }
+.new-feat-icon { width:36px; height:36px; border-radius:9px; display:flex; align-items:center; justify-content:center; font-size:16px; margin-bottom:12px; }
+.fc-today  .new-feat-icon { background:rgba(59,130,246,.12);  color:var(--c-today); }
+.fc-exp    .new-feat-icon { background:rgba(239,68,68,.12);   color:var(--c-exp); }
+.fc-profit .new-feat-icon { background:rgba(34,197,94,.12);   color:var(--c-profit); }
+.fc-payroll.new-feat-icon, .fc-payroll .new-feat-icon { background:rgba(99,102,241,.12); color:var(--c-payroll); }
+.new-feat-label { display:inline-flex; align-items:center; gap:5px; font-size:9.5px; font-weight:700; letter-spacing:.07em; text-transform:uppercase; padding:2px 8px; border-radius:10px; margin-bottom:8px; }
+.fc-today  .new-feat-label { background:rgba(59,130,246,.12);  color:var(--c-today); }
+.fc-exp    .new-feat-label { background:rgba(239,68,68,.12);   color:var(--c-exp); }
+.fc-profit .new-feat-label { background:rgba(34,197,94,.12);   color:var(--c-profit); }
+.fc-payroll.new-feat-label,.fc-payroll .new-feat-label { background:rgba(99,102,241,.12); color:var(--c-payroll); }
+.new-feat-title { font-size:14px; font-weight:700; color:var(--text); margin-bottom:5px; }
+.new-feat-desc  { font-size:12.5px; color:var(--text-muted); line-height:1.55; }
+
+/* ── Chapter ── */
+.chapter { margin-bottom:64px; scroll-margin-top:64px; }
+.chapter-header { display:flex; align-items:flex-start; gap:16px; padding-bottom:20px; border-bottom:2px solid var(--border); margin-bottom:32px; }
+.chapter-num { font-family:ui-monospace,monospace; font-size:11px; font-weight:700; letter-spacing:.06em; color:var(--text-faint); padding-top:4px; white-space:nowrap; }
+.chapter-meta { flex:1; }
+.chapter-icon { width:38px; height:38px; border-radius:9px; display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0; margin-top:2px; border:1px solid transparent; }
+.chapter-icon svg { width:20px; height:20px; }
+.chapter h2 { font-size:22px; font-weight:800; letter-spacing:-.025em; color:var(--text); text-wrap:balance; line-height:1.25; }
+.chapter-desc { font-size:13.5px; color:var(--text-muted); margin-top:5px; line-height:1.6; }
+
+.ch-today  .chapter-icon { background:rgba(59,130,246,.12);  color:var(--c-today);  border-color:rgba(59,130,246,.2); }
+.ch-exp    .chapter-icon { background:rgba(239,68,68,.12);   color:var(--c-exp);    border-color:rgba(239,68,68,.2); }
+.ch-profit .chapter-icon { background:rgba(34,197,94,.12);   color:var(--c-profit); border-color:rgba(34,197,94,.2); }
+.ch-payroll.chapter-icon, .ch-payroll .chapter-icon { background:rgba(99,102,241,.12); color:var(--c-payroll); border-color:rgba(99,102,241,.2); }
+
+/* ── Section ── */
+.section { margin-bottom:36px; scroll-margin-top:64px; }
+.section h3 { font-size:15.5px; font-weight:700; letter-spacing:-.015em; color:var(--text); margin-bottom:14px; display:flex; align-items:center; gap:8px; }
+.section h3::before { content:''; display:block; width:3px; height:16px; border-radius:2px; background:currentColor; opacity:.25; }
+.section p { font-size:14px; color:var(--text-muted); margin-bottom:14px; line-height:1.7; }
+.section p:last-child { margin-bottom:0; }
+
+/* ── Steps ── */
+.steps { display:flex; flex-direction:column; gap:0; margin:16px 0; position:relative; }
+.steps::before { content:''; position:absolute; left:14px; top:28px; bottom:28px; width:1px; background:var(--border); }
+.step { display:flex; gap:14px; padding:12px 0; position:relative; }
+.step-num { width:28px; height:28px; border-radius:50%; background:var(--accent); color:#fff; font-size:11px; font-weight:700; font-family:ui-monospace,monospace; display:flex; align-items:center; justify-content:center; flex-shrink:0; z-index:1; box-shadow:0 0 0 3px var(--bg); }
+.step-body { flex:1; padding-top:4px; }
+.step-body strong { display:block; font-size:13.5px; font-weight:600; color:var(--text); margin-bottom:3px; }
+.step-body p { font-size:13px; color:var(--text-muted); margin:0; line-height:1.6; }
+
+/* ── UI labels ── */
+kbd, .ui { display:inline-block; background:var(--bg-subtle); border:1px solid var(--border-strong); border-bottom-width:2px; color:var(--text); font-family:ui-monospace,'Cascadia Code',monospace; font-size:11px; padding:1px 6px; border-radius:3px; white-space:nowrap; vertical-align:baseline; }
+.tab-label { display:inline-block; background:var(--accent); color:#fff; font-size:10px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; padding:2px 7px; border-radius:3px; font-family:ui-monospace,monospace; vertical-align:middle; }
+.field-label { display:inline-block; background:var(--bg-subtle); border:1px solid var(--border); color:var(--text-muted); font-size:11px; padding:1px 7px; border-radius:12px; white-space:nowrap; font-style:italic; }
+
+/* ── Callouts ── */
+.callout { border-radius:5px; padding:13px 16px; margin:16px 0; font-size:13.5px; line-height:1.6; display:flex; gap:10px; color:var(--text); }
+.callout-icon { flex-shrink:0; margin-top:1px; font-size:14px; display:flex; align-items:center; }
+.callout-icon svg { width:16px; height:16px; }
+.callout-body { flex:1; }
+.callout-body strong { display:block; font-size:12px; font-weight:700; letter-spacing:.03em; text-transform:uppercase; margin-bottom:3px; }
+.callout.tip  { background:var(--tip-bg);  border-left:3px solid var(--accent); }
+.callout.tip .callout-icon, .callout.tip strong { color:var(--accent); }
+.callout.note { background:var(--note-bg); border-left:3px solid var(--border-strong); }
+.callout.note .callout-icon, .callout.note strong { color:var(--text-muted); }
+
+/* ── KPI mock ── */
+.kpi-mock { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin:20px 0; }
+.kpi-mock-card { background:var(--bg-subtle); border:1px solid var(--border); border-radius:8px; padding:10px 12px; display:flex; align-items:center; gap:10px; }
+.kpi-mock-dot { width:30px; height:30px; border-radius:7px; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:12px; }
+.kpi-mock-val { font-size:13px; font-weight:800; color:var(--text); font-variant-numeric:tabular-nums; line-height:1.1; }
+.kpi-mock-lbl { font-size:9px; color:var(--text-muted); font-weight:600; text-transform:uppercase; letter-spacing:.04em; margin-top:2px; }
+
+/* ── Chart mock ── */
+.chart-mock { background:var(--bg-subtle); border:1px solid var(--border); border-radius:10px; padding:16px; margin:20px 0; }
+.chart-mock-title { font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:.05em; margin-bottom:12px; }
+.chart-mock-bars { display:flex; align-items:flex-end; gap:4px; height:80px; }
+.chart-mock-bar  { flex:1; border-radius:3px 3px 0 0; opacity:.85; transition:opacity .15s; }
+.chart-mock-bar:hover { opacity:1; }
+.chart-mock-line-wrap { position:relative; height:80px; margin-bottom:8px; }
+.chart-mock-svg { width:100%; height:80px; }
+.chart-mock-labels { display:flex; justify-content:space-between; }
+.chart-mock-label  { font-size:9px; color:var(--text-faint); font-variant-numeric:tabular-nums; }
+.chart-mock-legend { display:flex; gap:14px; flex-wrap:wrap; margin-top:10px; }
+.chart-mock-legend-item { display:flex; align-items:center; gap:5px; font-size:10px; font-weight:700; color:var(--text-muted); }
+.chart-mock-legend-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+
+/* ── List mock ── */
+.list-mock { border:1px solid var(--border); border-radius:10px; overflow:hidden; margin:20px 0; }
+.list-mock-header { padding:9px 14px; background:var(--bg-subtle); border-bottom:1px solid var(--border); font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--text-muted); }
+.list-mock-row { display:flex; align-items:center; gap:10px; padding:9px 14px; border-bottom:1px solid var(--border); }
+.list-mock-row:last-child { border-bottom:none; }
+.list-mock-icon { width:28px; height:28px; border-radius:7px; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:11px; }
+.list-mock-info { flex:1; min-width:0; }
+.list-mock-name  { font-size:12px; font-weight:600; color:var(--text); }
+.list-mock-meta  { font-size:10px; color:var(--text-muted); margin-top:1px; }
+.list-mock-amt   { font-size:12px; font-weight:700; color:var(--text); font-variant-numeric:tabular-nums; flex-shrink:0; }
+.badge { font-size:9px; font-weight:700; padding:2px 7px; border-radius:99px; flex-shrink:0; text-transform:uppercase; letter-spacing:.04em; }
+.badge-green  { background:rgba(34,197,94,.15);  color:#16a34a; }
+.badge-red    { background:rgba(239,68,68,.15);  color:#dc2626; }
+.badge-yellow { background:rgba(234,179,8,.15);  color:#ca8a04; }
+.badge-blue   { background:rgba(59,130,246,.15); color:#2563eb; }
+.badge-gray   { background:rgba(156,163,175,.15);color:#6b7280; }
+
+/* ── Progress bar ── */
+#progress-bar { position:fixed; top:0; left:0; height:2px; background:var(--accent); z-index:200; transition:width .15s; width:0%; }
+
+/* ── Tab nav mock ── */
+.tab-nav-mock { display:flex; gap:2px; background:var(--bg-subtle); border:1px solid var(--border); border-radius:8px 8px 0 0; padding:6px 10px 0; border-bottom:none; overflow:hidden; }
+.tab-nav-mock-btn { padding:5px 12px 7px; font-size:11px; font-weight:600; color:var(--text-muted); border-radius:5px 5px 0 0; border:none; background:none; cursor:default; border-bottom:2px solid transparent; }
+.tab-nav-mock-btn.active { color:var(--text); border-bottom-color:var(--accent-bright); background:var(--bg); }
+.tab-nav-mock + .list-mock { border-radius:0 0 10px 10px; border-top:none; }
+
+/* ── Data table ── */
+.data-table { width:100%; border-collapse:collapse; font-size:13px; margin:16px 0; }
+.data-table th { text-align:left; padding:8px 12px; font-size:10.5px; font-weight:700; letter-spacing:.07em; text-transform:uppercase; color:var(--text-faint); border-bottom:2px solid var(--border); background:var(--bg-subtle); }
+.data-table td { padding:10px 12px; border-bottom:1px solid var(--border); color:var(--text-muted); vertical-align:top; }
+.data-table td:first-child { color:var(--text); font-weight:500; }
+.data-table tr:last-child td { border-bottom:none; }
+
+/* ── Divider ── */
+.divider { height:1px; background:var(--border); margin:32px 0; }
+
+/* ── Access path ── */
+.access-path { display:inline-flex; align-items:center; gap:4px; background:var(--bg-subtle); border:1px solid var(--border); border-radius:6px; padding:6px 12px; font-size:12px; color:var(--text-muted); font-family:ui-monospace,monospace; margin:14px 0 20px; flex-wrap:wrap; }
+.access-path span { color:var(--text-faint); }
+
+/* ── Responsive ── */
+@media (max-width:860px) {
+  #sidebar { transform:translateX(-258px); transition:transform .2s; }
+  #sidebar.open { transform:none; }
+  #main { margin-left:0; }
+  .new-feat-grid { grid-template-columns:1fr; }
+  .kpi-mock { grid-template-columns:1fr 1fr; }
+}
+@media print {
+  #sidebar, #topbar, #progress-bar { display:none; }
+  #main { margin-left:0; }
+}
+</style>
+</head>
+<body>
+
+<div id="progress-bar"></div>
+
+<!-- ── Sidebar ── -->
+<nav id="sidebar">
+  <div class="sb-brand">
+    <img class="sb-logo" src="logo.png" alt="Zeebroo POS" onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+    <div style="display:none;font-size:15px;font-weight:700;color:var(--text)">Zeebroo POS</div>
+    <div class="sb-brand-sub">WHAT'S NEW · v3.1.0</div>
+  </div>
+  <div class="sb-nav">
+
+    <div class="tree-group open">
+      <button class="tree-header" onclick="treeToggle(this)">
+        <svg class="tree-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1v14M1 8h14"/><circle cx="8" cy="8" r="6.5"/></svg>
+        <span class="tree-label">New in v3.1.0</span>
+        <svg class="tree-chevron" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2l4 3-4 3"/></svg>
+      </button>
+      <div class="tree-children">
+        <div class="sb-chapter-group sub-open">
+          <a class="sb-link" href="#overview" onclick="subToggle(this)">Overview</a>
+          <div class="sb-subtopics">
+            <a class="sb-sub" href="#overview">4 New Home Views</a>
+            <a class="sb-sub" href="#how-to-navigate">How to Navigate</a>
+          </div>
+        </div>
+        <div class="sb-chapter-group sub-open">
+          <a class="sb-link" href="#ch-today" onclick="subToggle(this)">Today Tab</a>
+          <div class="sb-subtopics">
+            <a class="sb-sub" href="#today-charts">Hourly Charts</a>
+            <a class="sb-sub" href="#today-reading">Reading the Data</a>
+          </div>
+        </div>
+        <div class="sb-chapter-group sub-open">
+          <a class="sb-link" href="#ch-expenses" onclick="subToggle(this)">Expenses Tab</a>
+          <div class="sb-subtopics">
+            <a class="sb-sub" href="#exp-kpis">Summary Cards</a>
+            <a class="sb-sub" href="#exp-charts">Charts</a>
+            <a class="sb-sub" href="#exp-lists">Bills &amp; Rentals</a>
+            <a class="sb-sub" href="#exp-payments">Recent Payments</a>
+          </div>
+        </div>
+        <div class="sb-chapter-group sub-open">
+          <a class="sb-link" href="#ch-profit" onclick="subToggle(this)">Profit Report Tab</a>
+          <div class="sb-subtopics">
+            <a class="sb-sub" href="#profit-period">Period Selector</a>
+            <a class="sb-sub" href="#profit-kpis">KPI Cards</a>
+            <a class="sb-sub" href="#profit-chart">Trend Chart</a>
+            <a class="sb-sub" href="#profit-products">Top Products</a>
+            <a class="sb-sub" href="#profit-cogs">How COGS Works</a>
+          </div>
+        </div>
+        <div class="sb-chapter-group sub-open">
+          <a class="sb-link" href="#ch-payroll" onclick="subToggle(this)">Payroll Tab</a>
+          <div class="sb-subtopics">
+            <a class="sb-sub" href="#payroll-kpis">KPI Cards</a>
+            <a class="sb-sub" href="#payroll-trend">Trend Chart</a>
+            <a class="sb-sub" href="#payroll-cycles">Recent Cycles</a>
+            <a class="sb-sub" href="#payroll-earners">Top Earners</a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tree-group open">
+      <button class="tree-header" onclick="treeToggle(this)">
+        <svg class="tree-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.5"/><path d="M8 5v3l2 2"/></svg>
+        <span class="tree-label">Reference</span>
+        <svg class="tree-chevron" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2l4 3-4 3"/></svg>
+      </button>
+      <div class="tree-children">
+        <div class="sb-chapter-group sub-open">
+          <a class="sb-link" href="#ch-ribbon" onclick="subToggle(this)">Ribbon Shortcuts</a>
+          <div class="sb-subtopics">
+            <a class="sb-sub" href="#ribbon-home">Home Group</a>
+          </div>
+        </div>
+        <a class="sb-link" style="padding-left:14px" href="index.html">← Full User Guide</a>
+      </div>
+    </div>
+
+  </div>
+</nav>
+
+<!-- ── Main ── -->
+<div id="main">
+  <div id="topbar">
+    <span class="tb-title">ZEEBROO POS · WHAT'S NEW</span>
+    <div class="tb-actions">
+      <a href="index.html" style="font-size:11px;color:var(--text-muted);text-decoration:none;border:1px solid var(--border);padding:4px 10px;border-radius:4px;">Full Guide</a>
+      <span class="new-badge">NEW</span>
+      <span class="version-badge">v3.1.0</span>
+      <button class="theme-toggle" onclick="toggleTheme()">Toggle Theme</button>
+    </div>
+  </div>
+
+  <div id="content">
+
+    <!-- ── Hero ── -->
+    <div class="hero">
+      <div class="hero-eyebrow">Release Notes · v3.1.0</div>
+      <h1>Four New Views on<br>Your Home Dashboard</h1>
+      <p>Version 3.1.0 adds four analytics panels to the Home tab — giving you real-time sales charts, an expense tracker, a profit calculator, and a payroll summary all in one place.</p>
+      <div class="hero-meta">
+        <div class="hero-meta-item">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
+          <strong>4 new Home tabs</strong>
+        </div>
+        <div class="hero-meta-item">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          <strong>Live charts</strong>
+        </div>
+        <div class="hero-meta-item">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+          <strong>Real-time data</strong>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Feature overview grid ── -->
+    <div id="overview">
+      <div class="new-feat-grid">
+        <div class="new-feat-card fc-today">
+          <div class="new-feat-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+          </div>
+          <div class="new-feat-label">Today Tab · Updated</div>
+          <div class="new-feat-title">Hourly Revenue &amp; Sales Charts</div>
+          <div class="new-feat-desc">Two live line charts plot your revenue and transaction count hour-by-hour from midnight to now.</div>
+        </div>
+        <div class="new-feat-card fc-exp">
+          <div class="new-feat-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+          </div>
+          <div class="new-feat-label">New Tab</div>
+          <div class="new-feat-title">Expenses Overview</div>
+          <div class="new-feat-desc">All bills, rentals, modifications, and payments in one view — with a spider chart and 12-month trend.</div>
+        </div>
+        <div class="new-feat-card fc-profit">
+          <div class="new-feat-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          </div>
+          <div class="new-feat-label">New Tab</div>
+          <div class="new-feat-title">Profit Report</div>
+          <div class="new-feat-desc">Revenue, COGS, gross profit, net profit, and margin — for any period from 7 days to 12 months.</div>
+        </div>
+        <div class="new-feat-card fc-payroll">
+          <div class="new-feat-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          </div>
+          <div class="new-feat-label">New Tab</div>
+          <div class="new-feat-title">Payroll Dashboard</div>
+          <div class="new-feat-desc">Employee headcount, net/gross pay from the latest cycle, 12-month trend, and top earners at a glance.</div>
+        </div>
+      </div>
+
+      <!-- How to navigate -->
+      <div class="section" id="how-to-navigate">
+        <h3>How to Navigate the New Tabs</h3>
+        <p>All four views live inside the <strong>Home</strong> tab. A horizontal sub-navigation bar at the top of the Home panel lets you switch between them.</p>
+
+        <div class="tab-nav-mock">
+          <div class="tab-nav-mock-btn active">Business Flow</div>
+          <div class="tab-nav-mock-btn">Today</div>
+          <div class="tab-nav-mock-btn">Activity</div>
+          <div class="tab-nav-mock-btn">Analytics</div>
+          <div class="tab-nav-mock-btn" style="color:var(--c-exp)">Expenses</div>
+          <div class="tab-nav-mock-btn" style="color:var(--c-profit)">Profit</div>
+          <div class="tab-nav-mock-btn" style="color:var(--c-payroll)">Payroll</div>
+        </div>
+
+        <p style="margin-top:16px">You can also jump directly to any view from the ribbon: click <span class="ui">Home</span> in the top ribbon bar, then use the shortcut buttons in the <em>Home</em> group — <span class="ui">Expenses</span>, <span class="ui">Profit</span>, or <span class="ui">Payroll</span> will open the correct tab instantly.</p>
+
+        <div class="callout tip">
+          <div class="callout-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.1 1.5 3.5.8.8 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg></div>
+          <div class="callout-body"><strong>Tip</strong> Each tab has a <span class="ui">Refresh</span> button in its toolbar. Data is fetched fresh on every tab switch, so you always see up-to-date figures without restarting the app.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════════ -->
+    <!-- CHAPTER 1 — TODAY TAB                   -->
+    <!-- ════════════════════════════════════════ -->
+    <div class="chapter ch-today" id="ch-today">
+      <div class="chapter-header">
+        <div class="chapter-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+        </div>
+        <div class="chapter-meta">
+          <div class="chapter-num">UPDATED · HOME → TODAY</div>
+          <h2>Today Tab — Hourly Charts</h2>
+          <div class="chapter-desc">The Today tab now shows two live line charts — hourly revenue and hourly transaction count — replacing the old payment methods breakdown.</div>
+        </div>
+      </div>
+
+      <div class="section" id="today-charts">
+        <h3>Hourly Revenue &amp; Sales Charts</h3>
+        <p>Two charts are drawn side-by-side beneath the KPI cards. Each chart covers the hours from midnight (12 AM) up to and including the current hour. Dashes are not drawn for future hours.</p>
+
+        <!-- Line chart mock -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:20px 0">
+          <div class="chart-mock">
+            <div class="chart-mock-title" style="color:#22c55e">Revenue (hourly)</div>
+            <svg class="chart-mock-svg" viewBox="0 0 300 80" preserveAspectRatio="none">
+              <defs>
+                <linearGradient id="g1" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#22c55e" stop-opacity=".3"/>
+                  <stop offset="100%" stop-color="#22c55e" stop-opacity="0"/>
+                </linearGradient>
+              </defs>
+              <path d="M0,75 C30,70 50,60 80,45 C110,30 130,20 160,15 C190,10 220,20 250,12 C270,8 290,10 300,8 L300,80 L0,80 Z" fill="url(#g1)"/>
+              <path d="M0,75 C30,70 50,60 80,45 C110,30 130,20 160,15 C190,10 220,20 250,12 C270,8 290,10 300,8" fill="none" stroke="#22c55e" stroke-width="2" stroke-linecap="round"/>
+              <circle cx="300" cy="8" r="3" fill="#22c55e"/>
+            </svg>
+            <div class="chart-mock-labels">
+              <span class="chart-mock-label">12 AM</span>
+              <span class="chart-mock-label">6 AM</span>
+              <span class="chart-mock-label">12 PM</span>
+              <span class="chart-mock-label">Now</span>
+            </div>
+          </div>
+          <div class="chart-mock">
+            <div class="chart-mock-title" style="color:#3b82f6">Sales Count (hourly)</div>
+            <svg class="chart-mock-svg" viewBox="0 0 300 80" preserveAspectRatio="none">
+              <defs>
+                <linearGradient id="g2" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#3b82f6" stop-opacity=".25"/>
+                  <stop offset="100%" stop-color="#3b82f6" stop-opacity="0"/>
+                </linearGradient>
+              </defs>
+              <path d="M0,78 C20,76 40,70 70,55 C100,40 120,30 150,25 C180,20 210,28 240,18 C265,10 285,14 300,10 L300,80 L0,80 Z" fill="url(#g2)"/>
+              <path d="M0,78 C20,76 40,70 70,55 C100,40 120,30 150,25 C180,20 210,28 240,18 C265,10 285,14 300,10" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round"/>
+              <circle cx="300" cy="10" r="3" fill="#3b82f6"/>
+            </svg>
+            <div class="chart-mock-labels">
+              <span class="chart-mock-label">12 AM</span>
+              <span class="chart-mock-label">6 AM</span>
+              <span class="chart-mock-label">12 PM</span>
+              <span class="chart-mock-label">Now</span>
+            </div>
+          </div>
+        </div>
+
+        <table class="data-table">
+          <thead><tr><th>Chart</th><th>What it shows</th><th>Color</th></tr></thead>
+          <tbody>
+            <tr><td>Revenue</td><td>Total sales revenue (sum of completed sale totals) for each hour</td><td><span style="color:#22c55e;font-weight:700">Green</span></td></tr>
+            <tr><td>Sales Count</td><td>Number of completed transactions for each hour</td><td><span style="color:#3b82f6;font-weight:700">Blue</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="section" id="today-reading">
+        <h3>Reading the Charts</h3>
+        <p>The X-axis shows hours in 12-hour format (12 AM, 1 AM … 11 PM). The Y-axis auto-scales to the highest value in the visible range. Grid lines and axis labels appear automatically.</p>
+
+        <div class="steps">
+          <div class="step">
+            <div class="step-num">1</div>
+            <div class="step-body">
+              <strong>Early in the day</strong>
+              <p>If you open the Today tab at 7 AM, only 7 data points (midnight through 6 AM) are drawn. Hours with no sales show as zero, which is normal.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">2</div>
+            <div class="step-body">
+              <strong>Peak hours</strong>
+              <p>The curve climbs during busy periods. The dot at the rightmost point marks the current hour — the most recent data point.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">3</div>
+            <div class="step-body">
+              <strong>Refreshing</strong>
+              <p>Click <span class="ui">Refresh</span> in the Today toolbar, or switch to another tab and back, to pull the latest hour's data from the server.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="callout note">
+          <div class="callout-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></div>
+          <div class="callout-body"><strong>Note</strong> Charts use your screen's pixel density (devicePixelRatio) for crisp rendering on high-DPI displays. They also redraw automatically when you switch between light and dark mode.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════════ -->
+    <!-- CHAPTER 2 — EXPENSES TAB                -->
+    <!-- ════════════════════════════════════════ -->
+    <div class="chapter ch-exp" id="ch-expenses">
+      <div class="chapter-header">
+        <div class="chapter-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        </div>
+        <div class="chapter-meta">
+          <div class="chapter-num">NEW TAB · HOME → EXPENSES</div>
+          <h2>Expenses Overview</h2>
+          <div class="chapter-desc">A unified view of all outgoing expense obligations — bills, rentals, modifications, and payment history — with category charts and a 12-month payment trend.</div>
+        </div>
+      </div>
+
+      <div class="access-path">
+        <span>Navigate to</span>
+        <kbd>Home</kbd> <span>→</span> <kbd>Expenses</kbd>
+        <span>or</span>
+        Ribbon <span>→</span> <kbd>Home</kbd> group <span>→</span> <kbd>Expenses</kbd> button
+      </div>
+
+      <div class="section" id="exp-kpis">
+        <h3>Summary Cards</h3>
+        <p>Six compact KPI cards at the top summarise the current state of your expense obligations. All amounts are calculated from live data.</p>
+
+        <div class="kpi-mock">
+          <div class="kpi-mock-card">
+            <div class="kpi-mock-dot" style="background:rgba(239,68,68,.12);color:#ef4444">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+            </div>
+            <div><div class="kpi-mock-val">4,280.00</div><div class="kpi-mock-lbl">Monthly Total</div></div>
+          </div>
+          <div class="kpi-mock-card">
+            <div class="kpi-mock-dot" style="background:rgba(59,130,246,.12);color:#3b82f6">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+            </div>
+            <div><div class="kpi-mock-val">7</div><div class="kpi-mock-lbl">Active Bills</div></div>
+          </div>
+          <div class="kpi-mock-card">
+            <div class="kpi-mock-dot" style="background:rgba(239,68,68,.12);color:#ef4444">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            </div>
+            <div><div class="kpi-mock-val" style="color:#ef4444">2</div><div class="kpi-mock-lbl">Overdue</div></div>
+          </div>
+          <div class="kpi-mock-card">
+            <div class="kpi-mock-dot" style="background:rgba(234,179,8,.12);color:#eab308">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+            </div>
+            <div><div class="kpi-mock-val">1,500.00</div><div class="kpi-mock-lbl">Rentals / Mo</div></div>
+          </div>
+          <div class="kpi-mock-card">
+            <div class="kpi-mock-dot" style="background:rgba(99,102,241,.12);color:#6366f1">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+            </div>
+            <div><div class="kpi-mock-val">850.00</div><div class="kpi-mock-lbl">Modifications</div></div>
+          </div>
+          <div class="kpi-mock-card">
+            <div class="kpi-mock-dot" style="background:rgba(239,68,68,.15);color:#ef4444;font-size:15px;font-weight:800">!</div>
+            <div><div class="kpi-mock-val">5,780.00</div><div class="kpi-mock-lbl">Total / Mo</div></div>
+          </div>
+        </div>
+
+        <table class="data-table">
+          <thead><tr><th>Card</th><th>What it measures</th></tr></thead>
+          <tbody>
+            <tr><td>Monthly Total</td><td>Sum of all active (not fully paid) bill recurring costs + all rental costs per month</td></tr>
+            <tr><td>Active Bills</td><td>Total number of bills on record for this business</td></tr>
+            <tr><td>Overdue</td><td>Bills with an unpaid balance where the due date has already passed — shown in red when &gt; 0</td></tr>
+            <tr><td>Rentals / Mo</td><td>Sum of recurring costs across all active rental records</td></tr>
+            <tr><td>Modifications</td><td>Sum of estimated costs for all modification records</td></tr>
+            <tr><td>Monthly Total</td><td>Bills Monthly + Rentals Monthly combined</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="section" id="exp-charts">
+        <h3>Charts — Category Distribution &amp; 12-Month Trend</h3>
+        <p>A tabbed chart card sits below the KPI row. Two tabs switch between a radar chart and a trend chart.</p>
+
+        <div class="tab-nav-mock" style="margin-top:16px">
+          <div class="tab-nav-mock-btn active">Category Distribution</div>
+          <div class="tab-nav-mock-btn">12-Month Trend</div>
+        </div>
+        <div style="background:var(--bg-subtle);border:1px solid var(--border);border-top:none;border-radius:0 0 10px 10px;padding:16px;">
+          <div style="display:flex;gap:24px;align-items:center">
+            <div style="position:relative;width:180px;height:180px;flex-shrink:0">
+              <svg viewBox="-100 -100 200 200" style="width:180px;height:180px">
+                <g opacity=".15">
+                  <polygon points="0,-60 51.96,-30 51.96,30 0,60 -51.96,30 -51.96,-30" fill="none" stroke="var(--border-strong)" stroke-width="1"/>
+                  <polygon points="0,-40 34.64,-20 34.64,20 0,40 -34.64,20 -34.64,-20" fill="none" stroke="var(--border-strong)" stroke-width="1"/>
+                  <polygon points="0,-20 17.32,-10 17.32,10 0,20 -17.32,10 -17.32,-10" fill="none" stroke="var(--border-strong)" stroke-width="1"/>
+                </g>
+                <line x1="0" y1="-65" x2="0" y2="65" stroke="var(--border)" stroke-width="1" opacity=".4"/>
+                <line x1="-56.3" y1="-32.5" x2="56.3" y2="32.5" stroke="var(--border)" stroke-width="1" opacity=".4"/>
+                <line x1="-56.3" y1="32.5" x2="56.3" y2="-32.5" stroke="var(--border)" stroke-width="1" opacity=".4"/>
+                <polygon points="0,-50 40,-15 30,40 -30,40 -40,-15" fill="rgba(239,68,68,0.15)" stroke="#ef4444" stroke-width="1.5"/>
+                <circle cx="0" cy="-50" r="4" fill="#ef4444"/>
+                <circle cx="40" cy="-15" r="4" fill="#eab308"/>
+                <circle cx="30" cy="40" r="4" fill="#8b5cf6"/>
+                <circle cx="-30" cy="40" r="4" fill="#3b82f6"/>
+                <circle cx="-40" cy="-15" r="4" fill="#22c55e"/>
+                <text x="0" y="-70" text-anchor="middle" font-size="9" fill="var(--text-muted)">Utilities</text>
+                <text x="66" y="-18" text-anchor="start" font-size="9" fill="var(--text-muted)">Rent</text>
+                <text x="35" y="55" text-anchor="middle" font-size="9" fill="var(--text-muted)">Insurance</text>
+                <text x="-35" y="55" text-anchor="middle" font-size="9" fill="var(--text-muted)">Software</text>
+                <text x="-66" y="-18" text-anchor="end" font-size="9" fill="var(--text-muted)">Staff</text>
+              </svg>
+            </div>
+            <div style="flex:1">
+              <p style="font-size:13px;margin-bottom:10px">The <strong>Category Distribution</strong> radar chart shows the relative share of each bill category. The shape of the polygon reveals which expense category dominates your spending.</p>
+              <p style="font-size:13px">Categories are pulled from your bills' assigned category field. The chart only renders when you have <strong>3 or more distinct categories</strong>.</p>
+            </div>
+          </div>
+        </div>
+
+        <p style="margin-top:20px">Switching to the <strong>12-Month Trend</strong> tab shows three lines over the past 12 calendar months:</p>
+
+        <div class="chart-mock" style="margin-top:12px">
+          <div class="chart-mock-title">12-Month Payment Trend</div>
+          <svg class="chart-mock-svg" viewBox="0 0 500 80" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="ga" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#ef4444" stop-opacity=".15"/><stop offset="100%" stop-color="#ef4444" stop-opacity="0"/></linearGradient>
+              <linearGradient id="gb" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#8b5cf6" stop-opacity=".15"/><stop offset="100%" stop-color="#8b5cf6" stop-opacity="0"/></linearGradient>
+            </defs>
+            <!-- Bills line -->
+            <path d="M0,60 C40,55 80,40 120,35 C160,30 200,45 240,30 C280,15 320,20 360,18 C400,16 450,22 500,15 L500,80 L0,80 Z" fill="url(#ga)"/>
+            <path d="M0,60 C40,55 80,40 120,35 C160,30 200,45 240,30 C280,15 320,20 360,18 C400,16 450,22 500,15" fill="none" stroke="#ef4444" stroke-width="1.5"/>
+            <!-- Rentals line -->
+            <path d="M0,65 C40,63 80,62 120,60 C160,58 200,62 240,59 C280,56 320,58 360,55 C400,52 450,54 500,50" fill="none" stroke="#8b5cf6" stroke-width="1.5" stroke-dasharray="4 2"/>
+            <!-- Total line -->
+            <path d="M0,45 C40,40 80,30 120,25 C160,20 200,32 240,20 C280,8 320,12 360,10 C400,8 450,14 500,8" fill="none" stroke="#f59e0b" stroke-width="1.5"/>
+          </svg>
+          <div class="chart-mock-labels">
+            <span class="chart-mock-label">Aug '24</span>
+            <span class="chart-mock-label">Nov '24</span>
+            <span class="chart-mock-label">Feb '25</span>
+            <span class="chart-mock-label">Jul '25</span>
+          </div>
+          <div class="chart-mock-legend">
+            <div class="chart-mock-legend-item"><div class="chart-mock-legend-dot" style="background:#ef4444"></div>Bills Paid</div>
+            <div class="chart-mock-legend-item"><div class="chart-mock-legend-dot" style="background:#8b5cf6"></div>Rentals Paid</div>
+            <div class="chart-mock-legend-item"><div class="chart-mock-legend-dot" style="background:#f59e0b"></div>Total</div>
+          </div>
+        </div>
+        <p>This chart shows <em>actual payments made</em> (ledger transactions), not the recurring amounts owed — so months with no payments logged show as zero.</p>
+      </div>
+
+      <div class="section" id="exp-lists">
+        <h3>Bills, Rentals &amp; Modifications</h3>
+        <p>Below the chart card the view splits into two columns: bills on the left (wider), and rentals + modifications on the right.</p>
+
+        <div class="list-mock">
+          <div class="list-mock-header">Bills</div>
+          <div class="list-mock-row">
+            <div class="list-mock-icon" style="background:rgba(239,68,68,.12);color:#ef4444">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+            </div>
+            <div class="list-mock-info">
+              <div class="list-mock-name">Electricity</div>
+              <div class="list-mock-meta">Utilities · Due Aug 5</div>
+            </div>
+            <div class="list-mock-amt">320.00</div>
+            <span class="badge badge-red">Overdue</span>
+          </div>
+          <div class="list-mock-row">
+            <div class="list-mock-icon" style="background:rgba(34,197,94,.12);color:#22c55e">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+            </div>
+            <div class="list-mock-info">
+              <div class="list-mock-name">Business Insurance</div>
+              <div class="list-mock-meta">Insurance · Due Sep 1</div>
+            </div>
+            <div class="list-mock-amt">850.00</div>
+            <span class="badge badge-green">Paid</span>
+          </div>
+          <div class="list-mock-row">
+            <div class="list-mock-icon" style="background:rgba(99,102,241,.12);color:#6366f1">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+            </div>
+            <div class="list-mock-info">
+              <div class="list-mock-name">SaaS Subscription</div>
+              <div class="list-mock-meta">Software · Varies by usage</div>
+            </div>
+            <div class="list-mock-amt">—</div>
+            <span class="badge badge-blue">Varies</span>
+          </div>
+        </div>
+
+        <p>Each bill row shows its <strong>category icon</strong>, name, due date, amount, and a status badge:</p>
+        <ul>
+          <li><span class="badge badge-red">Overdue</span> — unpaid and past its due date</li>
+          <li><span class="badge badge-green">Paid</span> — fully settled for this period</li>
+          <li><span class="badge badge-blue">Varies</span> — amount varies by usage, so no fixed total is shown</li>
+        </ul>
+      </div>
+
+      <div class="section" id="exp-payments">
+        <h3>Recent Payments</h3>
+        <p>The right column also shows the 15 most recent expense payments logged in your ledger — across all bills and rentals. Each entry shows the source name, date, and amount paid.</p>
+
+        <div class="callout tip">
+          <div class="callout-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.1 1.5 3.5.8.8 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg></div>
+          <div class="callout-body"><strong>Tip</strong> Payments are logged when you record a bill or rental payment from the Finance tab. They appear here automatically — no extra steps needed.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════════ -->
+    <!-- CHAPTER 3 — PROFIT REPORT               -->
+    <!-- ════════════════════════════════════════ -->
+    <div class="chapter ch-profit" id="ch-profit">
+      <div class="chapter-header">
+        <div class="chapter-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+        </div>
+        <div class="chapter-meta">
+          <div class="chapter-num">NEW TAB · HOME → PROFIT</div>
+          <h2>Profit Report</h2>
+          <div class="chapter-desc">Revenue minus cost of goods sold gives you gross profit. Subtract expense payments and you get net profit — all computed live for any date range you choose.</div>
+        </div>
+      </div>
+
+      <div class="access-path">
+        <span>Navigate to</span>
+        <kbd>Home</kbd> <span>→</span> <kbd>Profit</kbd>
+        <span>or</span>
+        Ribbon <span>→</span> <kbd>Home</kbd> group <span>→</span> <kbd>Profit</kbd> button
+      </div>
+
+      <div class="section" id="profit-period">
+        <h3>Period Selector</h3>
+        <p>A dropdown in the Profit toolbar lets you choose how far back the report looks. All KPI cards, the trend chart, and the top products list update when you change the period.</p>
+
+        <table class="data-table">
+          <thead><tr><th>Option</th><th>Date range</th><th>Chart grouping</th></tr></thead>
+          <tbody>
+            <tr><td>Last 7 Days</td><td>Past 7 calendar days</td><td>One point per day</td></tr>
+            <tr><td>Last 30 Days</td><td>Past 30 calendar days</td><td>One point per week (~4 points)</td></tr>
+            <tr><td>Last 90 Days</td><td>Past 90 calendar days</td><td>One point per week (~13 points)</td></tr>
+            <tr><td>Last 12 Months</td><td>Past 12 calendar months</td><td>One point per month</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="section" id="profit-kpis">
+        <h3>KPI Cards</h3>
+
+        <div class="kpi-mock">
+          <div class="kpi-mock-card">
+            <div class="kpi-mock-dot" style="background:rgba(59,130,246,.12);color:#3b82f6">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+            </div>
+            <div><div class="kpi-mock-val">84,200</div><div class="kpi-mock-lbl">Revenue</div></div>
+          </div>
+          <div class="kpi-mock-card">
+            <div class="kpi-mock-dot" style="background:rgba(249,115,22,.12);color:#f97316">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/></svg>
+            </div>
+            <div><div class="kpi-mock-val">51,360</div><div class="kpi-mock-lbl">COGS</div></div>
+          </div>
+          <div class="kpi-mock-card">
+            <div class="kpi-mock-dot" style="background:rgba(34,197,94,.12);color:#22c55e">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+            </div>
+            <div><div class="kpi-mock-val" style="color:#22c55e">39%</div><div class="kpi-mock-lbl">Gross Margin</div></div>
+          </div>
+          <div class="kpi-mock-card">
+            <div class="kpi-mock-dot" style="background:rgba(34,197,94,.12);color:#22c55e">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+            </div>
+            <div><div class="kpi-mock-val" style="color:#22c55e">32,840</div><div class="kpi-mock-lbl">Gross Profit</div></div>
+          </div>
+          <div class="kpi-mock-card">
+            <div class="kpi-mock-dot" style="background:rgba(239,68,68,.12);color:#ef4444">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            </div>
+            <div><div class="kpi-mock-val">5,780</div><div class="kpi-mock-lbl">Expenses Paid</div></div>
+          </div>
+          <div class="kpi-mock-card">
+            <div class="kpi-mock-dot" style="background:rgba(99,102,241,.12);color:#6366f1">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M20 12V8H6a2 2 0 0 1-2-2c0-1.1.9-2 2-2h12v4"/><path d="M4 6v12c0 1.1.9 2 2 2h14v-4"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg>
+            </div>
+            <div><div class="kpi-mock-val" style="color:#6366f1">27,060</div><div class="kpi-mock-lbl">Net Profit</div></div>
+          </div>
+        </div>
+
+        <table class="data-table">
+          <thead><tr><th>Card</th><th>Formula</th><th>Color signal</th></tr></thead>
+          <tbody>
+            <tr><td>Revenue</td><td>Sum of completed sale totals in period</td><td>Blue</td></tr>
+            <tr><td>COGS</td><td>Sum of (unit cost × quantity) for all items sold</td><td>Orange</td></tr>
+            <tr><td>Gross Margin %</td><td>(Gross Profit ÷ Revenue) × 100</td><td>Green ≥ 50% · Yellow ≥ 20% · Red &lt; 20%</td></tr>
+            <tr><td>Gross Profit</td><td>Revenue − COGS</td><td>Green if positive, red if negative</td></tr>
+            <tr><td>Expenses Paid</td><td>Ledger transactions (bills + rentals) paid in period</td><td>Red</td></tr>
+            <tr><td>Net Profit</td><td>Gross Profit − Expenses Paid</td><td>Indigo if positive, red if negative</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="section" id="profit-chart">
+        <h3>Profit Trend Chart</h3>
+        <p>A multi-line chart below the KPI cards traces Revenue, Gross Profit, and Expenses across the selected period. The gap between Revenue and Gross Profit is your COGS; the gap between Gross Profit and the Expenses line shows operating overhead.</p>
+
+        <div class="chart-mock" style="margin-top:16px">
+          <div class="chart-mock-title">Profit Trend</div>
+          <svg class="chart-mock-svg" viewBox="0 0 500 80" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="gr1" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#3b82f6" stop-opacity=".12"/><stop offset="100%" stop-color="#3b82f6" stop-opacity="0"/></linearGradient>
+              <linearGradient id="gr2" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#22c55e" stop-opacity=".12"/><stop offset="100%" stop-color="#22c55e" stop-opacity="0"/></linearGradient>
+            </defs>
+            <path d="M0,30 C60,25 120,20 180,15 C240,10 300,18 360,12 C420,6 460,10 500,8 L500,80 L0,80 Z" fill="url(#gr1)"/>
+            <path d="M0,30 C60,25 120,20 180,15 C240,10 300,18 360,12 C420,6 460,10 500,8" fill="none" stroke="#3b82f6" stroke-width="1.8"/>
+            <path d="M0,55 C60,48 120,40 180,38 C240,36 300,44 360,38 C420,32 460,35 500,30" fill="url(#gr2)"/>
+            <path d="M0,55 C60,48 120,40 180,38 C240,36 300,44 360,38 C420,32 460,35 500,30" fill="none" stroke="#22c55e" stroke-width="1.8"/>
+            <path d="M0,72 C60,70 120,68 180,70 C240,72 300,68 360,71 C420,74 460,70 500,72" fill="none" stroke="#ef4444" stroke-width="1.4" stroke-dasharray="4 2"/>
+          </svg>
+          <div class="chart-mock-labels">
+            <span class="chart-mock-label">Week 1</span>
+            <span class="chart-mock-label">Week 2</span>
+            <span class="chart-mock-label">Week 3</span>
+            <span class="chart-mock-label">Week 4</span>
+          </div>
+          <div class="chart-mock-legend">
+            <div class="chart-mock-legend-item"><div class="chart-mock-legend-dot" style="background:#3b82f6"></div>Revenue</div>
+            <div class="chart-mock-legend-item"><div class="chart-mock-legend-dot" style="background:#22c55e"></div>Gross Profit</div>
+            <div class="chart-mock-legend-item"><div class="chart-mock-legend-dot" style="background:#ef4444"></div>Expenses</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section" id="profit-products">
+        <h3>Top Products by Gross Profit</h3>
+        <p>The right panel ranks up to 10 products by their gross profit (revenue minus cost) for the selected period. A proportional bar gives a quick visual sense of the gap between top and bottom performers.</p>
+
+        <div class="list-mock">
+          <div class="list-mock-header">Top Products</div>
+          <div class="list-mock-row">
+            <div style="width:18px;text-align:center;font-size:10px;font-weight:800;color:var(--text-faint);flex-shrink:0">1</div>
+            <div class="list-mock-info">
+              <div class="list-mock-name">Wireless Earbuds Pro</div>
+              <div style="height:3px;background:var(--border);border-radius:2px;margin-top:4px;overflow:hidden"><div style="width:100%;height:100%;background:var(--accent);border-radius:2px"></div></div>
+            </div>
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:1px;flex-shrink:0">
+              <div style="font-size:11px;font-weight:700;color:#22c55e;font-variant-numeric:tabular-nums">4,320.00</div>
+              <div style="font-size:9px;font-weight:600;color:#22c55e">42%</div>
+            </div>
+          </div>
+          <div class="list-mock-row">
+            <div style="width:18px;text-align:center;font-size:10px;font-weight:800;color:var(--text-faint);flex-shrink:0">2</div>
+            <div class="list-mock-info">
+              <div class="list-mock-name">Phone Case Premium</div>
+              <div style="height:3px;background:var(--border);border-radius:2px;margin-top:4px;overflow:hidden"><div style="width:65%;height:100%;background:var(--accent);border-radius:2px"></div></div>
+            </div>
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:1px;flex-shrink:0">
+              <div style="font-size:11px;font-weight:700;color:#22c55e;font-variant-numeric:tabular-nums">2,808.00</div>
+              <div style="font-size:9px;font-weight:600;color:#22c55e">55%</div>
+            </div>
+          </div>
+          <div class="list-mock-row">
+            <div style="width:18px;text-align:center;font-size:10px;font-weight:800;color:var(--text-faint);flex-shrink:0">3</div>
+            <div class="list-mock-info">
+              <div class="list-mock-name">USB-C Hub</div>
+              <div style="height:3px;background:var(--border);border-radius:2px;margin-top:4px;overflow:hidden"><div style="width:40%;height:100%;background:var(--accent);border-radius:2px"></div></div>
+            </div>
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:1px;flex-shrink:0">
+              <div style="font-size:11px;font-weight:700;color:#eab308;font-variant-numeric:tabular-nums">1,730.00</div>
+              <div style="font-size:9px;font-weight:600;color:#eab308">28%</div>
+            </div>
+          </div>
+        </div>
+
+        <p style="margin-top:12px">Margin % colour codes: <span style="color:#22c55e;font-weight:600">Green ≥ 50%</span> · <span style="color:#eab308;font-weight:600">Yellow ≥ 20%</span> · <span style="color:#ef4444;font-weight:600">Red &lt; 20%</span></p>
+      </div>
+
+      <div class="section" id="profit-cogs">
+        <h3>How COGS Is Calculated</h3>
+        <p>Cost of Goods Sold (COGS) is recorded <em>at the moment of checkout</em>, not retrospectively. When a cashier completes a sale, the system looks up the stock layer cost for each item and stores it in the sale record. This means:</p>
+        <ul>
+          <li>Changing a product's cost after a sale has no effect on past COGS figures.</li>
+          <li>Products added to stock via Goods Receive Notes carry their GRN unit cost into the calculation.</li>
+          <li>If stock layer cost is not available (e.g. service items with no stock), that item contributes zero to COGS and its full selling price becomes gross profit.</li>
+        </ul>
+
+        <div class="callout note">
+          <div class="callout-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></div>
+          <div class="callout-body"><strong>Note</strong> Returns are tracked separately and excluded from the revenue and COGS totals shown in the Profit Report. The <em>Returns</em> amount is calculated but not currently displayed as a standalone KPI card.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════════ -->
+    <!-- CHAPTER 4 — PAYROLL TAB                 -->
+    <!-- ════════════════════════════════════════ -->
+    <div class="chapter ch-payroll" id="ch-payroll">
+      <div class="chapter-header">
+        <div class="chapter-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        </div>
+        <div class="chapter-meta">
+          <div class="chapter-num">NEW TAB · HOME → PAYROLL</div>
+          <h2>Payroll Dashboard</h2>
+          <div class="chapter-desc">A high-level payroll summary pulled from your HR module — showing workforce headcount, the latest cycle's pay totals, a 12-month trend, and your top earners.</div>
+        </div>
+      </div>
+
+      <div class="access-path">
+        <span>Navigate to</span>
+        <kbd>Home</kbd> <span>→</span> <kbd>Payroll</kbd>
+        <span>or</span>
+        Ribbon <span>→</span> <kbd>Home</kbd> group <span>→</span> <kbd>Payroll</kbd> button
+      </div>
+
+      <div class="callout note">
+        <div class="callout-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></div>
+        <div class="callout-body"><strong>Requires Human Resources feature</strong> This tab shows data from your HR module. If you haven't added employees or run a payroll cycle yet, the KPI cards will show zeros and the chart will be empty.</div>
+      </div>
+
+      <div class="section" id="payroll-kpis">
+        <h3>KPI Cards</h3>
+
+        <div class="kpi-mock">
+          <div class="kpi-mock-card">
+            <div class="kpi-mock-dot" style="background:rgba(59,130,246,.12);color:#3b82f6">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            </div>
+            <div><div class="kpi-mock-val">14</div><div class="kpi-mock-lbl">Employees</div></div>
+          </div>
+          <div class="kpi-mock-card">
+            <div class="kpi-mock-dot" style="background:rgba(34,197,94,.12);color:#22c55e">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+            </div>
+            <div><div class="kpi-mock-val">68,400</div><div class="kpi-mock-lbl">Net Pay</div></div>
+          </div>
+          <div class="kpi-mock-card">
+            <div class="kpi-mock-dot" style="background:rgba(99,102,241,.12);color:#6366f1">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+            </div>
+            <div><div class="kpi-mock-val">81,200</div><div class="kpi-mock-lbl">Gross</div></div>
+          </div>
+          <div class="kpi-mock-card">
+            <div class="kpi-mock-dot" style="background:rgba(239,68,68,.12);color:#ef4444">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+            </div>
+            <div><div class="kpi-mock-val">12,800</div><div class="kpi-mock-lbl">Deductions</div></div>
+          </div>
+          <div class="kpi-mock-card">
+            <div class="kpi-mock-dot" style="background:rgba(234,179,8,.12);color:#eab308">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            </div>
+            <div><div class="kpi-mock-val">0</div><div class="kpi-mock-lbl">Pending</div></div>
+          </div>
+          <div class="kpi-mock-card">
+            <div class="kpi-mock-dot" style="background:rgba(168,85,247,.12);color:#a855f7">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+            </div>
+            <div><div class="kpi-mock-val">4</div><div class="kpi-mock-lbl">Departments</div></div>
+          </div>
+        </div>
+
+        <table class="data-table">
+          <thead><tr><th>Card</th><th>Source</th><th>Note</th></tr></thead>
+          <tbody>
+            <tr><td>Employees</td><td>HR employee records</td><td>All employees in the business, regardless of employment type</td></tr>
+            <tr><td>Net Pay</td><td>Last <em>finalized</em> payroll cycle</td><td>Sum of hr_payroll_items.net_pay for that cycle</td></tr>
+            <tr><td>Gross Earnings</td><td>Last finalized cycle</td><td>Sum of hr_payroll_items.gross_earnings</td></tr>
+            <tr><td>Deductions</td><td>Last finalized cycle</td><td>Sum of hr_payroll_items.total_deductions</td></tr>
+            <tr><td>Pending Cycles</td><td>HR payroll cycles</td><td>Count of cycles in Draft or Computed status; shown in yellow if &gt; 0</td></tr>
+            <tr><td>Departments</td><td>HR department records</td><td>Total number of departments in the business</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="section" id="payroll-trend">
+        <h3>12-Month Payroll Trend</h3>
+        <p>The trend chart shows Gross Earnings vs Net Pay across the last 12 calendar months. Only <strong>finalized</strong> payroll cycles contribute data — computed or draft cycles are excluded.</p>
+
+        <div class="chart-mock" style="margin-top:16px">
+          <div class="chart-mock-title">Payroll Trend · Gross vs Net</div>
+          <svg class="chart-mock-svg" viewBox="0 0 500 80" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="gp1" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#6366f1" stop-opacity=".15"/><stop offset="100%" stop-color="#6366f1" stop-opacity="0"/></linearGradient>
+              <linearGradient id="gp2" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#22c55e" stop-opacity=".12"/><stop offset="100%" stop-color="#22c55e" stop-opacity="0"/></linearGradient>
+            </defs>
+            <path d="M0,50 L83,48 L166,30 L249,28 L332,26 L415,24 L500,22 L500,80 L0,80 Z" fill="url(#gp1)"/>
+            <path d="M0,50 L83,48 L166,30 L249,28 L332,26 L415,24 L500,22" fill="none" stroke="#6366f1" stroke-width="1.8"/>
+            <path d="M0,62 L83,60 L166,45 L249,43 L332,42 L415,40 L500,38" fill="url(#gp2)"/>
+            <path d="M0,62 L83,60 L166,45 L249,43 L332,42 L415,40 L500,38" fill="none" stroke="#22c55e" stroke-width="1.8"/>
+            <!-- Gap callout -->
+            <line x1="500" y1="22" x2="500" y2="38" stroke="#9ca3af" stroke-width="1" stroke-dasharray="2 2"/>
+            <text x="490" y="30" text-anchor="end" font-size="8" fill="var(--text-faint)">Deductions</text>
+          </svg>
+          <div class="chart-mock-labels">
+            <span class="chart-mock-label">Aug '24</span>
+            <span class="chart-mock-label">Nov '24</span>
+            <span class="chart-mock-label">Feb '25</span>
+            <span class="chart-mock-label">Jul '25</span>
+          </div>
+          <div class="chart-mock-legend">
+            <div class="chart-mock-legend-item"><div class="chart-mock-legend-dot" style="background:#6366f1"></div>Gross Earnings</div>
+            <div class="chart-mock-legend-item"><div class="chart-mock-legend-dot" style="background:#22c55e"></div>Net Pay</div>
+          </div>
+        </div>
+
+        <p>The vertical gap between the two lines represents total deductions (EPF, ETF, tax, etc.) for each period. A widening gap over time means deductions are growing relative to gross pay.</p>
+      </div>
+
+      <div class="section" id="payroll-cycles">
+        <h3>Recent Payroll Cycles</h3>
+        <p>Below the trend chart a list shows the 8 most recent payroll cycles, newest first. Each row displays the cycle name, employee count, gross and net totals, and the cycle's current status.</p>
+
+        <div class="list-mock">
+          <div class="list-mock-header">Recent Cycles</div>
+          <div class="list-mock-row">
+            <div class="list-mock-info">
+              <div class="list-mock-name">July 2025</div>
+              <div class="list-mock-meta">14 employees · Jul 1 – Jul 31</div>
+            </div>
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:1px;margin-right:8px">
+              <div style="font-size:12px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--text)">68,400.00</div>
+              <div style="font-size:10px;color:var(--text-muted);font-variant-numeric:tabular-nums">Gross 81,200.00</div>
+            </div>
+            <span class="badge badge-green">Finalized</span>
+          </div>
+          <div class="list-mock-row">
+            <div class="list-mock-info">
+              <div class="list-mock-name">June 2025</div>
+              <div class="list-mock-meta">14 employees · Jun 1 – Jun 30</div>
+            </div>
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:1px;margin-right:8px">
+              <div style="font-size:12px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--text)">67,800.00</div>
+              <div style="font-size:10px;color:var(--text-muted);font-variant-numeric:tabular-nums">Gross 80,600.00</div>
+            </div>
+            <span class="badge badge-green">Finalized</span>
+          </div>
+          <div class="list-mock-row">
+            <div class="list-mock-info">
+              <div class="list-mock-name">August 2025</div>
+              <div class="list-mock-meta">0 employees · pending</div>
+            </div>
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:1px;margin-right:8px">
+              <div style="font-size:12px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--text)">—</div>
+            </div>
+            <span class="badge badge-yellow">Computed</span>
+          </div>
+        </div>
+
+        <p style="margin-top:10px">Status badges:</p>
+        <ul>
+          <li><span class="badge badge-gray">Draft</span> — cycle created but payroll not yet computed</li>
+          <li><span class="badge badge-blue">Computed</span> — payroll has been calculated; not yet locked</li>
+          <li><span class="badge badge-green">Finalized</span> — payroll is locked and ready for payment</li>
+        </ul>
+
+        <div class="callout tip">
+          <div class="callout-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.1 1.5 3.5.8.8 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg></div>
+          <div class="callout-body"><strong>Tip</strong> To create or finalize a payroll cycle, go to the full <span class="ui">HR</span> tab and select <span class="ui">Payroll</span> from the sub-navigation. The Home Payroll tab is a read-only summary view.</div>
+        </div>
+      </div>
+
+      <div class="section" id="payroll-earners">
+        <h3>Top Earners &amp; Department View</h3>
+        <p>The right-hand panel changes based on what data is available:</p>
+        <ul>
+          <li>If a finalized cycle exists, the panel shows the <strong>Top 8 Earners</strong> from that cycle — ranked by net pay, with a bar indicating relative earnings and deduction amounts shown below.</li>
+          <li>If no finalized cycle exists yet, the panel falls back to a <strong>Department headcount view</strong> — listing each department with its employee count and a proportional bar.</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════════ -->
+    <!-- RIBBON SHORTCUTS                         -->
+    <!-- ════════════════════════════════════════ -->
+    <div class="chapter" id="ch-ribbon">
+      <div class="chapter-header">
+        <div class="chapter-icon" style="background:var(--bg-subtle);color:var(--text-muted);border:1px solid var(--border)">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="M6 4v16M14 4v16M2 9h6M16 9h6M2 15h6M16 15h6"/></svg>
+        </div>
+        <div class="chapter-meta">
+          <div class="chapter-num">REFERENCE</div>
+          <h2>Ribbon Shortcuts</h2>
+          <div class="chapter-desc">Quick-access buttons in the Home ribbon group now navigate directly to the new tabs.</div>
+        </div>
+      </div>
+
+      <div class="section" id="ribbon-home">
+        <h3>Home Group — Updated Buttons</h3>
+        <p>In the top ribbon bar, click <span class="ui">Home</span> to expand the Home group. The following buttons have been updated or added in v3.1.0:</p>
+
+        <table class="data-table">
+          <thead><tr><th>Ribbon Button</th><th>Action in v3.1.0</th><th>Previously</th></tr></thead>
+          <tbody>
+            <tr><td>Daily Summary</td><td>Opens Home → Today tab (hourly charts)</td><td>Opened Today tab</td></tr>
+            <tr><td>Analytics</td><td>Opens Home → Analytics tab</td><td>Same</td></tr>
+            <tr><td>Expenses</td><td>Opens Home → <strong>Expenses tab</strong></td><td>Opened Finance tab</td></tr>
+            <tr><td>Profit</td><td>Opens Home → <strong>Profit Report tab</strong></td><td>Showed "coming soon" toast</td></tr>
+            <tr><td>Payroll</td><td>Opens Home → <strong>Payroll tab</strong></td><td>Showed "coming soon" toast</td></tr>
+          </tbody>
+        </table>
+
+        <div class="callout tip">
+          <div class="callout-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.1 1.5 3.5.8.8 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg></div>
+          <div class="callout-body"><strong>Tip</strong> All ribbon buttons navigate directly to the correct tab without requiring an intermediate click in the Home sub-navigation. They also switch to the Home tab automatically if you are currently on a different tab.</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="text-align:center;padding:32px 0 0;border-top:1px solid var(--border)">
+      <p style="font-size:13px;color:var(--text-faint);margin-bottom:12px">Want the full feature reference?</p>
+      <a href="index.html" style="display:inline-flex;align-items:center;gap:7px;background:var(--accent-bright);color:#111;font-weight:700;font-size:13px;padding:9px 20px;border-radius:6px;text-decoration:none">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+        Open Full User Guide
+      </a>
+    </div>
+
+  </div>
+</div>
+
+<script>
+/* ── Theme ── */
+function toggleTheme(){
+  const root = document.documentElement;
+  const cur  = root.getAttribute('data-theme');
+  const dark = window.matchMedia('(prefers-color-scheme:dark)').matches;
+  if (!cur || cur === '') {
+    root.setAttribute('data-theme', dark ? 'light' : 'dark');
+  } else {
+    root.setAttribute('data-theme', cur === 'dark' ? 'light' : 'dark');
+  }
+}
+
+/* ── Tree toggle ── */
+function treeToggle(btn){
+  const grp = btn.closest('.tree-group');
+  if (grp) grp.classList.toggle('open');
+}
+
+/* ── Sub-topic toggle ── */
+function subToggle(link){
+  const grp = link.closest('.sb-chapter-group');
+  if (grp) grp.classList.toggle('sub-open');
+}
+
+/* ── Active link on scroll ── */
+function onScroll(){
+  const sections = document.querySelectorAll('[id]');
+  const scrollY  = window.scrollY + 80;
+  let active = null;
+  sections.forEach(s => {
+    if (s.offsetTop <= scrollY) active = s.id;
+  });
+  document.querySelectorAll('.sb-link,.sb-sub').forEach(a => {
+    const href = a.getAttribute('href');
+    a.classList.toggle('active', href && href === '#' + active);
+  });
+
+  /* progress bar */
+  const doc = document.documentElement;
+  const total = doc.scrollHeight - doc.clientHeight;
+  document.getElementById('progress-bar').style.width = total > 0 ? (window.scrollY / total * 100) + '%' : '0%';
+}
+window.addEventListener('scroll', onScroll, { passive:true });
+onScroll();
+</script>
+</body>
+</html>

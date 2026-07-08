@@ -14,6 +14,7 @@ use Modules\Product\Models\Product;
 use Modules\Product\Models\ProductStockLayer;
 use Modules\Product\Services\ProductDiscountService;
 use Modules\Service\Models\ServiceItem;
+use Modules\Service\Services\ServiceRequestService;
 
 class SaleService
 {
@@ -24,6 +25,7 @@ class SaleService
         private readonly SalePaymentSettlementService $payments,
         private readonly ProductDiscountService $discountService,
         private readonly PosSettingsService $posSettings,
+        private readonly ServiceRequestService $serviceRequests,
     ) {
     }
 
@@ -213,6 +215,7 @@ class SaleService
         ?int $customerId = null,
         bool $deferSettlement = false,
         ?int $branchId = null,
+        ?string $scheduledAt = null,
     ): Sale {
         $rawProductItems = array_values(array_filter(
             $items,
@@ -242,7 +245,7 @@ class SaleService
         $cartProductIds = array_map(fn ($l) => (int) $l['product']->id, $productLines);
         $activeDiscounts = $this->discountService->activeForProducts($business, $cartProductIds);
 
-        return DB::transaction(function () use ($business, $user, $productLines, $serviceLines, $paymentMethod, $creditAccountId, $amountPaid, $notes, $channel, $discountPercent, $amountTendered, $customerId, $deferSettlement, $branchId, $activeDiscounts) {
+        return DB::transaction(function () use ($business, $user, $productLines, $serviceLines, $paymentMethod, $creditAccountId, $amountPaid, $notes, $channel, $discountPercent, $amountTendered, $customerId, $deferSettlement, $branchId, $activeDiscounts, $scheduledAt) {
             $sale = $business->sales()->create([
                 'branch_id' => $branchId,
                 'user_id' => $user->id,
@@ -336,6 +339,19 @@ class SaleService
                     'line_total'      => $lineTotal,
                     'sort_order'      => $sortOrder++,
                 ]);
+
+                // One ServiceRequest per unit so each appointment is tracked individually
+                $units = max(1, (int) round($qty));
+                for ($u = 0; $u < $units; $u++) {
+                    $this->serviceRequests->create($business, [
+                        'service_item_id' => $service->id,
+                        'customer_id'     => $customerId,
+                        'title'           => $service->name,
+                        'notes'           => $notes,
+                        'scheduled_at'    => $scheduledAt,
+                        'total_price'     => $price,
+                    ]);
+                }
 
                 // Deduct bound products from stock (FIFO) scaled by service quantity
                 $service->loadMissing('products');
