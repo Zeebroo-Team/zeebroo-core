@@ -21,8 +21,8 @@
     "playwright-core": "^1.61.0"
   },
   "devDependencies": {
-    "electron": "34.5.8",
-    "electron-builder": "^24.0.0"
+    "electron": "40.10.6",
+    "electron-builder": "^26.15.3"
   },
   "build": {
     "appId": "com.zeebroo.pos-desktop",
