@@ -11439,3 +11439,204 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
 /* Remove old flat perm-cards/perm-card styles */
 .um-perm-cards { display:block; }
 .um-perm-card  { display:none; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Guide Assistant — floating draggable character
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+#guide-char-wrap {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: 96px;
+  z-index: 9400;
+  user-select: none;
+  -webkit-user-select: none;
+  display: none; /* shown by guide.js after login */
+}
+
+/* ── Character image ── */
+#guide-char-img-wrap {
+  position: relative;
+  width: 96px;
+  cursor: grab;
+}
+#guide-char-img-wrap:active { cursor: grabbing; }
+
+#guide-char-img {
+  width: 96px;
+  height: auto;
+  display: block;
+  filter: drop-shadow(0 8px 18px rgba(0,0,0,0.28));
+  animation: guide-float 3.8s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes guide-float {
+  0%,  100% { transform: translateY(0px) rotate(0deg);   }
+  30%        { transform: translateY(-7px) rotate(-1deg); }
+  70%        { transform: translateY(-4px) rotate(0.5deg); }
+}
+
+/* dismiss × button — reveals on hover */
+#guide-char-dismiss {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #e74c3c;
+  color: #fff;
+  border: 2px solid #fff;
+  font-size: 10px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  z-index: 1;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s;
+}
+#guide-char-img-wrap:hover #guide-char-dismiss {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* ── Speech bubble ── */
+#guide-bubble {
+  position: absolute;
+  bottom: calc(100% + 16px);
+  right: -8px;
+  width: 236px;
+  background: #fff;
+  border-radius: 14px;
+  padding: 13px 14px 10px;
+  box-shadow: 0 6px 28px rgba(0,0,0,0.14), 0 1px 4px rgba(0,0,0,0.07);
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text, #1a1a2e);
+  display: none;
+  cursor: default;
+  transform-origin: bottom right;
+}
+#guide-bubble.guide-bubble-visible {
+  animation: guide-bubble-pop 0.32s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+@keyframes guide-bubble-pop {
+  from { opacity: 0; transform: scale(0.82) translateY(10px); }
+  to   { opacity: 1; transform: scale(1)    translateY(0);    }
+}
+
+/* bubble tail */
+#guide-bubble::after {
+  content: '';
+  position: absolute;
+  bottom: -9px;
+  right: 24px;
+  border: 9px solid transparent;
+  border-top-color: #fff;
+  border-bottom: none;
+}
+
+/* label row */
+#guide-bubble-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #4263eb;
+  margin-bottom: 6px;
+}
+#guide-bubble-label i { font-size: 9px; }
+
+/* tip text */
+#guide-bubble-text {
+  color: var(--text, #333);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+/* action row */
+#guide-bubble-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid #f0f0f0;
+  gap: 6px;
+}
+#guide-close-bubble {
+  background: none;
+  border: none;
+  color: #aaa;
+  cursor: pointer;
+  font-size: 11px;
+  padding: 3px 7px;
+  border-radius: 5px;
+  transition: background 0.12s, color 0.12s;
+}
+#guide-close-bubble:hover { background: #f4f4f4; color: #555; }
+
+#guide-next-tip {
+  background: #4263eb;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 5px 11px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  transition: background 0.12s;
+}
+#guide-next-tip:hover { background: #3451c7; }
+
+/* ── Reopen button (shown when dismissed) ── */
+#guide-reopen-btn {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #4263eb;
+  color: #fff;
+  border: none;
+  font-size: 19px;
+  cursor: pointer;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 9400;
+  box-shadow: 0 4px 18px rgba(66,99,235,0.42);
+  transition: transform 0.14s, box-shadow 0.14s;
+}
+#guide-reopen-btn:hover {
+  transform: scale(1.1);
+  box-shadow: 0 6px 22px rgba(66,99,235,0.55);
+}
+
+/* ── Dark theme overrides ── */
+@media (prefers-color-scheme: dark) {
+  #guide-bubble {
+    background: #1e2135;
+    box-shadow: 0 6px 28px rgba(0,0,0,0.45), 0 1px 4px rgba(0,0,0,0.2);
+  }
+  #guide-bubble::after { border-top-color: #1e2135; }
+  #guide-bubble-actions { border-top-color: #2d3257; }
+  #guide-bubble-text { color: #c8cce8; }
+  #guide-bubble-label { color: #748ffc; }
+  #guide-close-bubble { color: #555; }
+  #guide-close-bubble:hover { background: #2d3257; color: #aaa; }
+  #guide-char-dismiss { border-color: #1a1a2e; }
+}

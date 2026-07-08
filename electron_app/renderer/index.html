@@ -7979,9 +7979,32 @@
   </div>
 </div>
 
+<!-- ── Guide Assistant Character ─────────────────────────────────────── -->
+<div id="guide-char-wrap">
+  <div id="guide-bubble">
+    <div id="guide-bubble-label">
+      <i class="fa fa-circle-info"></i>
+      <span>Guide — </span><span id="guide-bubble-label-tab">Home</span>
+    </div>
+    <div id="guide-bubble-text"></div>
+    <div id="guide-bubble-actions">
+      <button id="guide-close-bubble"><i class="fa fa-xmark"></i> Dismiss</button>
+      <button id="guide-next-tip"><i class="fa fa-lightbulb"></i> Next tip</button>
+    </div>
+  </div>
+  <div id="guide-char-img-wrap">
+    <img id="guide-char-img" src="img/bussiness_man.png" alt="Guide assistant" draggable="false">
+    <button id="guide-char-dismiss" title="Hide guide"><i class="fa fa-xmark"></i></button>
+  </div>
+</div>
+<button id="guide-reopen-btn" title="Show guide assistant">
+  <i class="fa fa-user-tie"></i>
+</button>
+
 <script src="js/d3.min.js"></script>
 <script src="js/jsbarcode.min.js"></script>
 <script src="js/api.js"></script>
 <script src="js/app.js"></script>
+<script src="js/guide.js"></script>
 </body>
 </html>
