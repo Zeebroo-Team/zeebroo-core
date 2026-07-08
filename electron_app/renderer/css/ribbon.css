@@ -395,6 +395,28 @@ body.win-inactive .tl-max   { background: #d0d0d0; }
 }
 
 /* Ribbon collapse pin button — far right of tab row */
+/* Guide toggle button — sits in the tab row to the left of the pin button */
+#guide-toggle-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--text-light);
+  padding: 0 13px;
+  font-size: 11px;
+  font-weight: 500;
+  -webkit-app-region: no-drag;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  transition: color .12s, background .12s;
+  border-radius: 0;
+  white-space: nowrap;
+}
+#guide-toggle-btn:hover         { color: var(--text); background: var(--surface2); }
+#guide-toggle-btn.guide-visible { color: var(--accent); }
+#guide-toggle-btn.guide-visible i { color: var(--accent); }
+
 #ribbon-pin-btn {
   background: transparent;
   border: none;
@@ -11601,30 +11623,7 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
 }
 #guide-next-tip:hover { background: #3451c7; }
 
-/* ── Reopen button (shown when dismissed) ── */
-#guide-reopen-btn {
-  position: fixed;
-  bottom: 24px;
-  right: 24px;
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  background: #4263eb;
-  color: #fff;
-  border: none;
-  font-size: 19px;
-  cursor: pointer;
-  display: none;
-  align-items: center;
-  justify-content: center;
-  z-index: 9400;
-  box-shadow: 0 4px 18px rgba(66,99,235,0.42);
-  transition: transform 0.14s, box-shadow 0.14s;
-}
-#guide-reopen-btn:hover {
-  transform: scale(1.1);
-  box-shadow: 0 6px 22px rgba(66,99,235,0.55);
-}
+
 
 /* ── Dark theme overrides ── */
 @media (prefers-color-scheme: dark) {

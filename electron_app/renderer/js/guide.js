@@ -335,10 +335,7 @@
     hideBubble();
 
     // Ensure character is visible
-    const wrap = document.getElementById('guide-char-wrap');
-    if (wrap) { wrap.style.display = 'block'; _dismissed = false; }
-    const reopenBtn = document.getElementById('guide-reopen-btn');
-    if (reopenBtn) reopenBtn.style.display = 'none';
+    _setGuideVisible(true);
 
     _showTourStep(0);
   }
@@ -375,6 +372,21 @@
   /* ════════════════════════════════════════════════════════════════════════
      INIT
      ════════════════════════════════════════════════════════════════════════ */
+  function _setGuideVisible(visible) {
+    const wrap      = document.getElementById('guide-char-wrap');
+    const toggleBtn = document.getElementById('guide-toggle-btn');
+    if (!wrap) return;
+    if (visible) {
+      wrap.style.display = 'block';
+      _dismissed = false;
+      toggleBtn?.classList.add('guide-visible');
+    } else {
+      wrap.style.display = 'none';
+      _dismissed = true;
+      toggleBtn?.classList.remove('guide-visible');
+    }
+  }
+
   function initGuide() {
     if (_initialized) return;
     _initialized = true;
@@ -383,7 +395,7 @@
     const imgWrap    = document.getElementById('guide-char-img-wrap');
     const bubble     = document.getElementById('guide-bubble');
     const dismissBtn = document.getElementById('guide-char-dismiss');
-    const reopenBtn  = document.getElementById('guide-reopen-btn');
+    const toggleBtn  = document.getElementById('guide-toggle-btn');
     const nextTipBtn = document.getElementById('guide-next-tip');
     const closeBtn   = document.getElementById('guide-close-bubble');
     const tourBtn    = document.getElementById('guide-start-tour');
@@ -392,7 +404,7 @@
 
     if (!wrap || !imgWrap) return;
 
-    wrap.style.display = 'block';
+    _setGuideVisible(true);
 
     /* ── Character bubble ── */
     imgWrap.addEventListener('click', (e) => {
@@ -426,21 +438,24 @@
     tourNext?.addEventListener('click', () => _advanceTour());
     tourSkip?.addEventListener('click', () => _endTour());
 
-    /* ── Dismiss / reopen ── */
+    /* ── Dismiss × on character (hover button) ── */
     dismissBtn?.addEventListener('click', (e) => {
       e.stopPropagation();
       if (_tourActive) _endTour();
-      _dismissed = true;
       hideBubble();
-      wrap.style.display = 'none';
-      if (reopenBtn) reopenBtn.style.display = 'flex';
+      _setGuideVisible(false);
     });
 
-    reopenBtn?.addEventListener('click', () => {
-      _dismissed = false;
-      wrap.style.display = 'block';
-      reopenBtn.style.display = 'none';
-      showBubble(_nextTip(_activeTab()));
+    /* ── Ribbon toggle button ── */
+    toggleBtn?.addEventListener('click', () => {
+      if (_dismissed) {
+        _setGuideVisible(true);
+        showBubble(_nextTip(_activeTab()));
+      } else {
+        if (_tourActive) _endTour();
+        hideBubble();
+        _setGuideVisible(false);
+      }
     });
 
     /* ── Draggable ── */
