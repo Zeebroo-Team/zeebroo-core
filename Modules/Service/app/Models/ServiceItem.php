@@ -21,12 +21,14 @@ class ServiceItem extends Model
         'price',
         'duration_minutes',
         'is_active',
+        'is_featured',
     ];
 
     protected $casts = [
         'price'            => 'decimal:2',
         'duration_minutes' => 'integer',
         'is_active'        => 'boolean',
+        'is_featured'      => 'boolean',
     ];
 
     public function business(): BelongsTo

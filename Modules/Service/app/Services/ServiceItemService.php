@@ -49,6 +49,7 @@ class ServiceItemService
             'price'            => isset($data['price']) && $data['price'] !== '' ? (float) $data['price'] : null,
             'duration_minutes' => isset($data['duration_minutes']) && $data['duration_minutes'] !== '' ? (int) $data['duration_minutes'] : null,
             'is_active'        => (bool) ($data['is_active'] ?? true),
+            'is_featured'      => (bool) ($data['is_featured'] ?? false),
         ]);
 
         $item->categories()->sync($categoryIds);
@@ -70,6 +71,7 @@ class ServiceItemService
             'price'            => isset($data['price']) && $data['price'] !== '' ? (float) $data['price'] : null,
             'duration_minutes' => isset($data['duration_minutes']) && $data['duration_minutes'] !== '' ? (int) $data['duration_minutes'] : null,
             'is_active'        => (bool) ($data['is_active'] ?? true),
+            'is_featured'      => (bool) ($data['is_featured'] ?? $item->is_featured),
         ]);
 
         if ($categoryIds !== null)  $item->categories()->sync($categoryIds);

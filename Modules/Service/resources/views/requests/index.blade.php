@@ -22,7 +22,7 @@
 
     @if(!$hasRequests)
         {{-- ── Inline create when no requests ── --}}
-        <div style="max-width:600px;margin:0 auto;padding:24px 0;">
+        <div style="padding:24px 0;">
             <h3 style="margin:0 0 4px;font-size:16px;font-weight:800;">Log your first service request</h3>
             <p class="muted" style="margin:0 0 20px;font-size:13px;">Track customer service jobs, repairs, bookings, and work orders.</p>
             @include('service::requests.partials.request-form')
@@ -54,7 +54,7 @@
         </div>
 
         {{-- ── Table ── --}}
-        <div class="pcat-table-wrap">
+        <div class="pcat-table-wrap" style="margin-left:-14px;margin-right:-14px;border-left:none;border-right:none;border-radius:0;">
             <table class="pcat-table">
                 <thead>
                     <tr>

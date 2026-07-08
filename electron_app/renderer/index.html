@@ -375,6 +375,7 @@
         <div class="ribbon-tab" data-tab="inventory">Inventory</div>
         <div class="ribbon-tab" data-tab="finance">Finance</div>
         <div class="ribbon-tab" data-tab="hr">HR</div>
+        <div class="ribbon-tab" data-tab="services">Services</div>
         <div class="ribbon-tab" data-tab="design">Design</div>
         <div class="ribbon-tab" data-tab="restaurant">Restaurant</div>
         <div class="ribbon-tab" data-tab="rst-pos">Restaurant POS</div>
@@ -761,6 +762,54 @@
 
       </div><!-- /hr page -->
 
+      <!-- ── Services page ── -->
+      <div class="ribbon-page" data-page="services">
+
+        <div class="ribbon-group">
+          <div class="ribbon-group-content">
+            <button class="ribbon-btn-lg" id="rb-svc-requests">
+              <i class="fa fa-clipboard-list"></i>Requests
+            </button>
+            <div class="ribbon-small-stack">
+              <button class="ribbon-btn-sm" id="rb-svc-req-all"><i class="fa fa-list"></i> All</button>
+              <button class="ribbon-btn-sm" id="rb-svc-req-pending"><i class="fa fa-clock"></i> Pending</button>
+            </div>
+          </div>
+          <div class="ribbon-group-label">Service Requests</div>
+        </div>
+
+        <div class="ribbon-group">
+          <div class="ribbon-group-content">
+            <button class="ribbon-btn-lg" id="rb-svc-catalog">
+              <i class="fa fa-screwdriver-wrench"></i>Catalog
+            </button>
+            <button class="ribbon-btn-lg primary" id="rb-svc-new-item">
+              <i class="fa fa-plus"></i>New Service
+            </button>
+          </div>
+          <div class="ribbon-group-label">Services</div>
+        </div>
+
+        <div class="ribbon-group">
+          <div class="ribbon-group-content">
+            <button class="ribbon-btn-lg" id="rb-svc-categories">
+              <i class="fa fa-tags"></i>Categories
+            </button>
+          </div>
+          <div class="ribbon-group-label">Organise</div>
+        </div>
+
+        <div class="ribbon-group">
+          <div class="ribbon-group-content">
+            <button class="ribbon-btn-lg" id="rb-svc-refresh">
+              <i class="fa fa-rotate"></i>Refresh
+            </button>
+          </div>
+          <div class="ribbon-group-label">Actions</div>
+        </div>
+
+      </div><!-- /services page -->
+
       <!-- ── Design page ── -->
       <div class="ribbon-page" data-page="design">
 
@@ -981,8 +1030,12 @@
       <!-- Subnav tabs -->
       <div class="home-subnav">
         <button class="home-tab-btn active" data-home-view="flow"><i class="fa fa-diagram-project"></i> Business Flow</button>
+        <button class="home-tab-btn" data-home-view="today"><i class="fa fa-sun"></i> Today</button>
         <button class="home-tab-btn" data-home-view="activity"><i class="fa fa-clock-rotate-left"></i> Recent Activity</button>
         <button class="home-tab-btn" data-home-view="analytics"><i class="fa fa-chart-line"></i> Analytics</button>
+        <button class="home-tab-btn" data-home-view="expenses"><i class="fa fa-file-invoice-dollar"></i> Expenses</button>
+        <button class="home-tab-btn" data-home-view="profit"><i class="fa fa-sack-dollar"></i> Profit</button>
+        <button class="home-tab-btn" data-home-view="payroll"><i class="fa fa-user-tie"></i> Payroll</button>
       </div>
 
       <!-- Body: main view + right panel -->
@@ -994,6 +1047,18 @@
           <div id="home-view-flow" class="home-view" style="display:flex">
             <div id="home-chart"></div>
           </div>
+          <!-- Today Summary view -->
+          <div id="home-view-today" class="home-view" style="display:none;flex-direction:column">
+            <div class="tds-toolbar">
+              <span class="tds-title"><i class="fa fa-sun"></i> Today's Summary</span>
+              <span class="tds-date" id="tds-date"></span>
+              <button class="home-act-refresh" id="tds-refresh"><i class="fa fa-arrows-rotate"></i> Refresh</button>
+            </div>
+            <div id="tds-body">
+              <div class="inv-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</div>
+            </div>
+          </div>
+
           <!-- Activity view -->
           <div id="home-view-activity" class="home-view" style="display:none;flex-direction:column">
             <div class="home-act-toolbar">
@@ -1075,6 +1140,44 @@
               </div>
             </div>
           </div>
+          <!-- Expenses view -->
+          <div id="home-view-expenses" class="home-view" style="display:none;flex-direction:column">
+            <div class="tds-toolbar">
+              <span class="tds-title"><i class="fa fa-file-invoice-dollar"></i> Expenses</span>
+              <button class="home-act-refresh" id="exp-refresh"><i class="fa fa-arrows-rotate"></i> Refresh</button>
+            </div>
+            <div id="exp-body">
+              <div class="inv-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</div>
+            </div>
+          </div>
+          <!-- Profit Report view -->
+          <div id="home-view-profit" class="home-view" style="display:none;flex-direction:column">
+            <div class="tds-toolbar">
+              <span class="tds-title"><i class="fa fa-sack-dollar"></i> Profit Report</span>
+              <div style="display:flex;gap:6px;align-items:center">
+                <select id="prf-period-select" class="prf-period-select">
+                  <option value="7">Last 7 Days</option>
+                  <option value="30" selected>Last 30 Days</option>
+                  <option value="90">Last 90 Days</option>
+                  <option value="365">Last 12 Months</option>
+                </select>
+                <button class="home-act-refresh" id="prf-refresh"><i class="fa fa-arrows-rotate"></i> Refresh</button>
+              </div>
+            </div>
+            <div id="prf-body">
+              <div class="inv-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</div>
+            </div>
+          </div>
+          <!-- Payroll view -->
+          <div id="home-view-payroll" class="home-view" style="display:none;flex-direction:column">
+            <div class="tds-toolbar">
+              <span class="tds-title"><i class="fa fa-user-tie"></i> Payroll</span>
+              <button class="home-act-refresh" id="prl-refresh"><i class="fa fa-arrows-rotate"></i> Refresh</button>
+            </div>
+            <div id="prl-body">
+              <div class="inv-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</div>
+            </div>
+          </div>
         </div>
 
         <!-- Right panel -->
@@ -1123,6 +1226,11 @@
       </div>
       <div id="pos-body">
         <div id="product-grid-area">
+          <!-- POS mode switcher: Products | Services -->
+          <div id="pos-mode-bar">
+            <button class="pos-mode-btn active" data-mode="products"><i class="fa fa-box"></i> Products</button>
+            <button class="pos-mode-btn" data-mode="services"><i class="fa fa-screwdriver-wrench"></i> Services</button>
+          </div>
           <div id="product-search-bar">
             <i class="fa fa-magnifying-glass" style="color:var(--text-muted)"></i>
             <div id="search-suggest-wrap">
@@ -1141,6 +1249,23 @@
             </div>
           </div>
           <div id="pos-pagination"></div>
+          <!-- Service section (hidden until mode=services) -->
+          <div id="pos-service-section" style="display:none">
+            <div id="service-search-bar">
+              <i class="fa fa-magnifying-glass" style="color:var(--text-muted)"></i>
+              <input type="text" id="service-search" placeholder="Search services…" autocomplete="off">
+              <button class="sb-icon-btn" id="btn-refresh-services" title="Refresh"><i class="fa fa-arrows-rotate"></i></button>
+            </div>
+            <div id="service-category-filter">
+              <div class="cat-chip active" data-cat="0">All</div>
+            </div>
+            <div id="service-grid">
+              <div style="grid-column:1/-1;text-align:center;padding:60px;color:var(--text-muted)">
+                <i class="fa fa-screwdriver-wrench" style="font-size:28px;display:block;margin-bottom:10px;opacity:.3"></i>
+                Switch to Services mode to browse
+              </div>
+            </div>
+          </div>
         </div>
         <div id="cart-area">
           <div id="cart-header">
@@ -3385,6 +3510,329 @@
 
     </div><!-- /panel-hr -->
 
+    <!-- ── Services Panel ──────────────────────────────────────── -->
+    <div class="content-panel" id="panel-services" style="flex-direction:column">
+
+      <!-- Subnav -->
+      <div class="fin-subnav">
+        <button class="fin-subnav-btn active" data-svc="requests"><i class="fa fa-clipboard-list"></i> Requests</button>
+        <button class="fin-subnav-btn"         data-svc="catalog"><i class="fa fa-screwdriver-wrench"></i> Catalog</button>
+        <button class="fin-subnav-btn"         data-svc="categories"><i class="fa fa-tags"></i> Categories</button>
+      </div>
+
+      <!-- ── Requests view ── -->
+      <div id="svc-requests-view" style="display:flex;flex-direction:column;flex:1;overflow:hidden">
+
+        <!-- Toolbar -->
+        <div class="finance-toolbar">
+          <div class="finance-search-wrap">
+            <i class="fa fa-magnifying-glass"></i>
+            <input type="text" id="svc-req-search" placeholder="Search by request #, title or customer…" autocomplete="off">
+          </div>
+          <div class="svc-chip-bar" id="svc-chip-bar">
+            <button class="svc-chip active" data-status="">All</button>
+            <button class="svc-chip" data-status="pending">Pending</button>
+            <button class="svc-chip" data-status="in_progress">In Progress</button>
+            <button class="svc-chip" data-status="completed">Completed</button>
+            <button class="svc-chip" data-status="cancelled">Cancelled</button>
+          </div>
+        </div>
+
+        <!-- Table -->
+        <div class="inv-table-wrap">
+          <table class="inv-table">
+            <thead>
+              <tr>
+                <th style="width:120px">Request #</th>
+                <th>Service / Title</th>
+                <th style="width:160px">Customer</th>
+                <th style="width:126px">Status</th>
+                <th style="width:140px">Scheduled</th>
+                <th style="text-align:right;width:110px">Amount</th>
+                <th style="text-align:center;width:200px">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="svc-req-tbody">
+              <tr><td colspan="7" class="svc-tbl-placeholder"><i class="fa fa-spinner fa-spin"></i> Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+      </div>
+
+      <!-- ── Catalog view ── -->
+      <div id="svc-catalog-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+
+        <!-- Toolbar -->
+        <div class="finance-toolbar">
+          <div class="finance-search-wrap">
+            <i class="fa fa-magnifying-glass"></i>
+            <input type="text" id="svc-cat-search" placeholder="Search services…" autocomplete="off">
+          </div>
+          <button class="finance-create-btn" id="btn-new-service">
+            <i class="fa fa-plus"></i> New Service
+          </button>
+        </div>
+
+        <!-- List table -->
+        <div class="inv-table-wrap">
+          <table class="inv-table">
+            <thead>
+              <tr>
+                <th style="width:40px"></th>
+                <th>Service Name</th>
+                <th style="width:220px">Description</th>
+                <th style="width:130px">Categories</th>
+                <th style="width:90px">Duration</th>
+                <th style="text-align:right;width:110px">Price</th>
+                <th style="text-align:center;width:90px">Status</th>
+              </tr>
+            </thead>
+            <tbody id="svc-itm-tbody">
+              <tr><td colspan="7" class="svc-tbl-placeholder"><i class="fa fa-spinner fa-spin"></i> Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+      </div>
+
+      <!-- ── Service Item Detail ── -->
+      <div id="svc-item-detail" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+
+        <!-- Header bar -->
+        <div class="svc-detail-header">
+          <button class="svc-detail-back" id="svc-detail-back"><i class="fa fa-arrow-left"></i> Back</button>
+          <div class="svc-detail-title-wrap">
+            <div class="svc-detail-avatar" id="svc-detail-avatar"></div>
+            <div>
+              <div class="svc-detail-name" id="svc-detail-name"></div>
+              <div id="svc-detail-badge"></div>
+            </div>
+          </div>
+          <div class="svc-detail-meta" id="svc-detail-meta"></div>
+          <button class="finance-create-btn" id="svc-detail-edit-btn" style="flex-shrink:0">
+            <i class="fa fa-pen"></i> Edit
+          </button>
+          <button class="svc-delete-btn" id="svc-detail-delete-btn" title="Delete service">
+            <i class="fa fa-trash"></i>
+          </button>
+        </div>
+
+        <!-- Tabs -->
+        <div class="svc-detail-tabs">
+          <button class="svc-detail-tab active" data-detail-tab="overview"><i class="fa fa-circle-info"></i> Overview</button>
+          <button class="svc-detail-tab" data-detail-tab="employees"><i class="fa fa-users"></i> Employees</button>
+          <button class="svc-detail-tab" data-detail-tab="products"><i class="fa fa-boxes-stacked"></i> Products</button>
+        </div>
+
+        <!-- Tab panels -->
+        <div style="flex:1;overflow-y:auto;padding:22px 24px">
+
+          <div id="svc-dtab-overview">
+            <div class="svc-detail-section">
+              <div class="svc-detail-section-title">Description</div>
+              <div id="svc-detail-desc" class="svc-detail-desc-text"></div>
+            </div>
+            <div class="svc-detail-section">
+              <div class="svc-detail-section-title">Details</div>
+              <div class="svc-detail-kv-grid" id="svc-detail-kv"></div>
+            </div>
+            <div class="svc-detail-section">
+              <div class="svc-detail-section-title">Categories</div>
+              <div class="svc-detail-chips" id="svc-detail-cats"></div>
+            </div>
+          </div>
+
+          <!-- ── Employees Tab ── -->
+          <div id="svc-dtab-employees" style="display:none">
+            <!-- Add employee row -->
+            <div class="svc-tab-toolbar">
+              <div class="svc-tab-search-wrap">
+                <i class="fa fa-magnifying-glass"></i>
+                <input type="text" id="svc-emp-search-q" placeholder="Search employees to add…" autocomplete="off">
+                <div class="svc-tab-search-results" id="svc-emp-search-results" style="display:none"></div>
+              </div>
+            </div>
+            <!-- Employee list -->
+            <div id="svc-detail-emp-list">
+              <div class="svc-tbl-placeholder"><i class="fa fa-spinner fa-spin"></i> Loading…</div>
+            </div>
+          </div>
+
+          <!-- ── Products Tab ── -->
+          <div id="svc-dtab-products" style="display:none">
+            <!-- Add product row -->
+            <div class="svc-tab-toolbar">
+              <div class="svc-tab-search-wrap">
+                <i class="fa fa-magnifying-glass"></i>
+                <input type="text" id="svc-prod-search-q" placeholder="Search products to add…" autocomplete="off">
+                <div class="svc-tab-search-results" id="svc-prod-search-results" style="display:none"></div>
+              </div>
+            </div>
+            <!-- Product list -->
+            <div id="svc-detail-prod-list">
+              <div class="svc-tbl-placeholder"><i class="fa fa-spinner fa-spin"></i> Loading…</div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ── New Service Modal ── -->
+      <div class="modal-overlay" id="svc-new-modal" style="display:none">
+        <div class="svc-new-modal-box">
+          <div class="svc-new-modal-header">
+            <div class="svc-new-modal-title"><i class="fa fa-screwdriver-wrench"></i> <span id="svc-new-modal-title-text">New Service</span></div>
+            <button class="svc-new-modal-close" id="svc-new-modal-close"><i class="fa fa-xmark"></i></button>
+          </div>
+          <div class="svc-new-modal-body">
+            <div class="svc-form-alert" id="svc-form-alert" style="display:none"></div>
+
+            <div class="svc-form-group">
+              <label class="svc-form-label">Service Name <span class="svc-form-req">*</span></label>
+              <input type="text" id="svc-form-name" class="svc-form-input" placeholder="e.g. Deep Cleaning, Hair Cut…" autocomplete="off">
+            </div>
+
+            <div class="svc-form-group">
+              <label class="svc-form-label">Description</label>
+              <textarea id="svc-form-desc" class="svc-form-input svc-form-textarea" rows="3" placeholder="Short description of the service…"></textarea>
+            </div>
+
+            <div class="svc-form-row">
+              <div class="svc-form-group" style="flex:1">
+                <label class="svc-form-label">Price <span class="svc-form-req">*</span></label>
+                <div class="svc-form-prefix-wrap">
+                  <span class="svc-form-prefix" id="svc-form-currency">—</span>
+                  <input type="number" id="svc-form-price" class="svc-form-input svc-form-input--prefix" placeholder="0.00" min="0" step="0.01">
+                </div>
+              </div>
+              <div class="svc-form-group" style="flex:1">
+                <label class="svc-form-label">Duration (minutes)</label>
+                <input type="number" id="svc-form-duration" class="svc-form-input" placeholder="e.g. 60" min="0" step="1">
+              </div>
+            </div>
+
+            <div class="svc-form-group">
+              <label class="svc-form-label">Categories</label>
+              <div class="svc-form-cat-list" id="svc-form-cat-list">
+                <span style="color:var(--text-muted);font-size:12px"><i class="fa fa-spinner fa-spin"></i> Loading categories…</span>
+              </div>
+            </div>
+
+            <div class="svc-form-group">
+              <label class="svc-form-label">Assign Employees</label>
+              <div class="svc-form-cat-list" id="svc-form-emp-list">
+                <span style="color:var(--text-muted);font-size:12px"><i class="fa fa-spinner fa-spin"></i> Loading…</span>
+              </div>
+            </div>
+
+            <div class="svc-form-group">
+              <label class="svc-form-label">Assign Products</label>
+              <div class="svc-form-prod-search-wrap">
+                <input type="text" id="svc-form-prod-q" class="svc-form-input" placeholder="Search product to add…" autocomplete="off">
+                <div class="svc-form-prod-results" id="svc-form-prod-results" style="display:none"></div>
+              </div>
+              <div id="svc-form-prod-lines"></div>
+            </div>
+
+            <div class="svc-form-group">
+              <label class="svc-form-toggle-row">
+                <span class="svc-form-label" style="margin-bottom:0">Active</span>
+                <div class="svc-toggle-wrap">
+                  <input type="checkbox" id="svc-form-active" checked style="display:none">
+                  <div class="svc-toggle" id="svc-toggle-ui"><div class="svc-toggle-knob"></div></div>
+                </div>
+              </label>
+            </div>
+
+            <div class="svc-form-group">
+              <label class="svc-form-toggle-row">
+                <div>
+                  <span class="svc-form-label" style="margin-bottom:0">Featured</span>
+                  <div style="font-size:11px;color:var(--text-muted);margin-top:2px">Show at the top of the POS service grid</div>
+                </div>
+                <div class="svc-toggle-wrap">
+                  <input type="checkbox" id="svc-form-featured" style="display:none">
+                  <div class="svc-toggle" id="svc-featured-toggle-ui"><div class="svc-toggle-knob"></div></div>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <div class="svc-new-modal-footer">
+            <button class="svc-form-btn svc-form-btn--ghost" id="svc-new-modal-cancel">Cancel</button>
+            <button class="svc-form-btn svc-form-btn--primary" id="svc-form-submit">
+              <i class="fa fa-plus"></i> Create Service
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Categories view ── -->
+      <div id="svc-categories-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+
+        <!-- Toolbar -->
+        <div class="finance-toolbar">
+          <div class="finance-search-wrap">
+            <i class="fa fa-magnifying-glass"></i>
+            <input type="text" id="svc-cat-q" placeholder="Search categories…" autocomplete="off">
+          </div>
+          <button class="finance-create-btn" id="btn-new-category">
+            <i class="fa fa-plus"></i> New Category
+          </button>
+        </div>
+
+        <!-- Card grid -->
+        <div style="flex:1;overflow-y:auto;padding:20px 22px">
+          <div class="svc-cat-grid" id="svc-cat-grid">
+            <div class="svc-tbl-placeholder"><i class="fa fa-spinner fa-spin"></i> Loading…</div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ── New Category Modal ── -->
+      <div class="modal-overlay" id="svc-new-cat-modal" style="display:none">
+        <div class="svc-new-modal-box" style="width:420px">
+          <div class="svc-new-modal-header">
+            <div class="svc-new-modal-title"><i class="fa fa-tags"></i> New Category</div>
+            <button class="svc-new-modal-close" id="svc-new-cat-modal-close"><i class="fa fa-xmark"></i></button>
+          </div>
+          <div class="svc-new-modal-body">
+            <div class="svc-form-alert" id="svc-cat-form-alert" style="display:none"></div>
+
+            <div class="svc-form-group">
+              <label class="svc-form-label">Category Name <span class="svc-form-req">*</span></label>
+              <input type="text" id="svc-cat-form-name" class="svc-form-input" placeholder="e.g. Hair Care, Massage…" autocomplete="off">
+            </div>
+
+            <div class="svc-form-group">
+              <label class="svc-form-label">Description</label>
+              <textarea id="svc-cat-form-desc" class="svc-form-input svc-form-textarea" rows="2" placeholder="Short description…"></textarea>
+            </div>
+
+            <div class="svc-form-group">
+              <label class="svc-form-toggle-row">
+                <span class="svc-form-label" style="margin-bottom:0">Active</span>
+                <div class="svc-toggle-wrap">
+                  <input type="checkbox" id="svc-cat-form-active" checked style="display:none">
+                  <div class="svc-toggle on" id="svc-cat-toggle-ui"><div class="svc-toggle-knob"></div></div>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <div class="svc-new-modal-footer">
+            <button class="svc-form-btn svc-form-btn--ghost" id="svc-new-cat-modal-cancel">Cancel</button>
+            <button class="svc-form-btn svc-form-btn--primary" id="svc-cat-form-submit">
+              <i class="fa fa-plus"></i> Create Category
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /panel-services -->
+
     <!-- ── Design Studio Panel ──────────────────────────────────── -->
     <div class="content-panel" id="panel-design" style="flex-direction:column">
 
@@ -5378,6 +5826,12 @@
             <input type="text" id="co-cust-input" class="co-cust-input" placeholder="Search customer…" autocomplete="off">
             <div id="co-cust-dd" class="co-cust-dd"></div>
           </div>
+        </div>
+
+        <!-- Scheduled date/time (services only) -->
+        <div id="co-scheduled-at-wrap" style="display:none">
+          <div class="co-section-label" style="margin-bottom:6px"><i class="fa fa-calendar"></i> Schedule</div>
+          <input type="datetime-local" id="co-scheduled-at" class="co-cust-input" style="width:100%;box-sizing:border-box;">
         </div>
       </div>
 

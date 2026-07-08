@@ -35,6 +35,10 @@ use Modules\Pos\Http\Controllers\Api\PosProductUnitApiController;
 use Modules\Pos\Http\Controllers\Api\PosProductDiscountApiController;
 use Modules\Pos\Http\Controllers\Api\PosProductBrandApiController;
 use Modules\Pos\Http\Controllers\Api\PosFileManagerApiController;
+use Modules\Pos\Http\Controllers\Api\PosTodaySummaryApiController;
+use Modules\Pos\Http\Controllers\Api\PosExpensesOverviewApiController;
+use Modules\Pos\Http\Controllers\Api\PosProfitReportApiController;
+use Modules\Pos\Http\Controllers\Api\PosPayrollOverviewApiController;
 
 Route::prefix('v1/pos')->group(function (): void {
     Route::post('auth/token',             [PosAuthApiController::class, 'token'])->name('auth.token');
@@ -96,8 +100,12 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
     Route::post  ('quotations/{quotation}/reject',     [PosQuotationApiController::class, 'markRejected'] )->name('quotations.reject');
     Route::delete('quotations/{quotation}',            [PosQuotationApiController::class, 'destroy']      )->name('quotations.destroy');
 
-    Route::get ('eod',         [PosEndOfDayApiController::class, 'status'])->name('eod.status');
-    Route::post('eod/settle',  [PosEndOfDayApiController::class, 'settle'])->name('eod.settle');
+    Route::get ('eod',            [PosEndOfDayApiController::class,    'status'])->name('eod.status');
+    Route::post('eod/settle',     [PosEndOfDayApiController::class,    'settle'])->name('eod.settle');
+    Route::get ('today-summary',      [PosTodaySummaryApiController::class, 'show'])->name('today-summary');
+    Route::get ('expenses/overview',  [PosExpensesOverviewApiController::class, 'show'])->name('expenses.overview');
+    Route::get ('profit-report',      [PosProfitReportApiController::class,     'show'])->name('profit-report');
+    Route::get ('payroll-overview',   [PosPayrollOverviewApiController::class,  'show'])->name('payroll-overview');
 
     Route::get('sales',         [PosSaleApiController::class, 'index']  )->name('sales.index');
     Route::get('sales/history', [PosSaleApiController::class, 'history'])->name('sales.history');
@@ -228,6 +236,19 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
     Route::get('design-studio/designs/{design}',     [\Modules\Pos\Http\Controllers\Api\PosDesignStudioApiController::class, 'show'])->name('design-studio.designs.show');
     Route::patch('design-studio/designs/{design}',   [\Modules\Pos\Http\Controllers\Api\PosDesignStudioApiController::class, 'update'])->name('design-studio.designs.update');
     Route::delete('design-studio/designs/{design}',  [\Modules\Pos\Http\Controllers\Api\PosDesignStudioApiController::class, 'destroy'])->name('design-studio.designs.destroy');
+
+    Route::get ('service/requests',                        [\Modules\Pos\Http\Controllers\Api\PosServiceApiController::class, 'requests'])->name('service.requests.index');
+    Route::patch('service/requests/{serviceRequest}/status', [\Modules\Pos\Http\Controllers\Api\PosServiceApiController::class, 'updateRequestStatus'])->name('service.requests.status');
+    Route::get ('service/catalog',                         [\Modules\Pos\Http\Controllers\Api\PosServiceApiController::class, 'catalog'])->name('service.catalog.index');
+    Route::post('service/catalog',                         [\Modules\Pos\Http\Controllers\Api\PosServiceApiController::class, 'store'])->name('service.catalog.store');
+    Route::get   ('service/catalog/{serviceItem}',          [\Modules\Pos\Http\Controllers\Api\PosServiceApiController::class, 'show'])->name('service.catalog.show');
+    Route::patch ('service/catalog/{serviceItem}',          [\Modules\Pos\Http\Controllers\Api\PosServiceApiController::class, 'update'])->name('service.catalog.update');
+    Route::delete('service/catalog/{serviceItem}',          [\Modules\Pos\Http\Controllers\Api\PosServiceApiController::class, 'destroy'])->name('service.catalog.destroy');
+    Route::put   ('service/catalog/{serviceItem}/employees',[\Modules\Pos\Http\Controllers\Api\PosServiceApiController::class, 'syncEmployees'])->name('service.catalog.employees.sync');
+    Route::put   ('service/catalog/{serviceItem}/products', [\Modules\Pos\Http\Controllers\Api\PosServiceApiController::class, 'syncProducts'])->name('service.catalog.products.sync');
+    Route::get ('service/categories',                       [\Modules\Pos\Http\Controllers\Api\PosServiceApiController::class, 'categories'])->name('service.categories.index');
+    Route::post('service/categories',                       [\Modules\Pos\Http\Controllers\Api\PosServiceApiController::class, 'storeCategory'])->name('service.categories.store');
+    Route::delete('service/categories/{serviceCategory}',   [\Modules\Pos\Http\Controllers\Api\PosServiceApiController::class, 'destroyCategory'])->name('service.categories.destroy');
 
     Route::get('stock-audits', [PosStockAuditApiController::class, 'index'])->name('stock-audits.index');
     Route::post('stock-audits', [PosStockAuditApiController::class, 'store'])->name('stock-audits.store');

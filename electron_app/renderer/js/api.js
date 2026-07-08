@@ -66,6 +66,9 @@ const API = (() => {
     eodStatus:  () => request('GET',  '/eod'),
     eodSettle:  () => request('POST', '/eod/settle'),
 
+    // Today Summary
+    todaySummary: () => request('GET', '/today-summary'),
+
     // Sales
     sales:        (q, limit)          => request('GET',  `/sales?q=${encodeURIComponent(q)}${limit ? '&limit='+limit : ''}`),
     sale:         (id)                => request('GET',  `/sales/${id}`),
@@ -83,7 +86,10 @@ const API = (() => {
     processReturn:(id, body)          => request('POST', `/sales/${id}/return`, body),
     returnReasons:()                  => request('GET',  '/online/return-reasons'),
 
-    // Finance — expenses / bills
+    // Finance — expenses / bills / profit
+    expensesOverview: ()              => request('GET',    '/expenses/overview'),
+    profitReport:     (period)        => request('GET',    `/profit-report?period=${period}`),
+    payrollOverview:  ()              => request('GET',    '/payroll-overview'),
     createBill:   (body)              => request('POST',   '/expenses/bills', body),
     bills:        ()                  => request('GET',    '/expenses/bills'),
     bill:         (id)                => request('GET',    `/expenses/bills/${id}`),
@@ -299,5 +305,23 @@ const API = (() => {
     rstUpdateTable:         (id, body)  => request('PUT',    `/restaurant/tables/${id}`, body),
     rstDeleteTable:         (id)        => request('DELETE', `/restaurant/tables/${id}`),
     rstSaveTablePositions:  (positions) => request('POST',   '/restaurant/tables/positions', { positions }),
+
+    // Service POS
+    servicePosCatalog:  (q, catId) => request('GET',  `/service/pos/catalog?q=${encodeURIComponent(q || '')}&category=${catId || ''}`),
+    servicePosCheckout: (body)     => request('POST', '/service/pos/checkout', body),
+
+    // Service management (Services tab)
+    serviceRequests:           (q, status) => request('GET',   `/service/requests?q=${encodeURIComponent(q || '')}&status=${encodeURIComponent(status || '')}`),
+    updateServiceRequestStatus:(id, status) => request('PATCH', `/service/requests/${id}/status`, { status }),
+    serviceMgmtCatalog:        (q)         => request('GET',   `/service/catalog?q=${encodeURIComponent(q || '')}`),
+    createServiceItem:         (body)      => request('POST',  '/service/catalog', body),
+    serviceItemDetail:         (id)        => request('GET',   `/service/catalog/${id}`),
+    updateServiceItem:         (id, body)  => request('PATCH',  `/service/catalog/${id}`, body),
+    deleteServiceItem:         (id)        => request('DELETE', `/service/catalog/${id}`),
+    syncServiceEmployees:      (id, body)  => request('PUT',    `/service/catalog/${id}/employees`, body),
+    syncServiceProducts:       (id, body)  => request('PUT',    `/service/catalog/${id}/products`,  body),
+    deleteServiceCategory:     (id)        => request('DELETE', `/service/categories/${id}`),
+    serviceMgmtCategories:     ()          => request('GET',   '/service/categories'),
+    createServiceCategory:     (body)      => request('POST',  '/service/categories', body),
   };
 })();
