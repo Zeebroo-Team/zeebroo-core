@@ -485,23 +485,26 @@
 
   /* ════════════════════════════════════════════════════════════════════════
      WAIT FOR LOGIN
+     Watch #app-shell becoming display:flex — fired by showApp() on login.
+     This is a positive trigger so the guide never appears on the login or
+     sign-up screens.
      ════════════════════════════════════════════════════════════════════════ */
   function watchForLogin() {
-    const loginScreen = document.getElementById('login-screen');
-    if (!loginScreen) { setTimeout(watchForLogin, 150); return; }
+    const appShell = document.getElementById('app-shell');
+    if (!appShell) { setTimeout(watchForLogin, 150); return; }
 
-    if (loginScreen.style.display === 'none') {
+    if (appShell.style.display === 'flex') {
       initGuide();
       return;
     }
 
     const obs = new MutationObserver(() => {
-      if (loginScreen.style.display === 'none') {
+      if (appShell.style.display === 'flex') {
         obs.disconnect();
         initGuide();
       }
     });
-    obs.observe(loginScreen, { attributes: true, attributeFilter: ['style'] });
+    obs.observe(appShell, { attributes: true, attributeFilter: ['style'] });
   }
 
   if (document.readyState === 'loading') {
