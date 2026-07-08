@@ -186,7 +186,7 @@
 
     if (!wrap || !imgWrap) return;
 
-    wrap.style.display = '';
+    wrap.style.display = 'block';
 
     // Toggle bubble on character click
     imgWrap.addEventListener('click', (e) => {
@@ -216,13 +216,13 @@
       _dismissed = true;
       hideBubble();
       wrap.style.display = 'none';
-      if (reopenBtn) { reopenBtn.style.display = 'flex'; reopenBtn.style.alignItems = 'center'; reopenBtn.style.justifyContent = 'center'; }
+      if (reopenBtn) reopenBtn.style.display = 'flex';
     });
 
     // Reopen
     reopenBtn?.addEventListener('click', () => {
       _dismissed = false;
-      wrap.style.display = '';
+      wrap.style.display = 'block';
       reopenBtn.style.display = 'none';
       showBubble(_nextTip(_activeTab()));
     });
