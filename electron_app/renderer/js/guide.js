@@ -438,23 +438,43 @@
     _busy = true;
     if (sendBtn) { sendBtn.disabled = true; sendBtn.innerHTML = '<i class="fa fa-spinner fa-spin"></i>'; }
 
-    // Check for walkthrough match (steps will run after the AI reply)
-    const match = _matchWalkthrough(message);
-
     _closeBubble();
     await _sleep(200);
 
-    // Always call Gemini for the reply
-    let reply = 'Sorry, I could not get a response right now. Please try again.';
+    // Call Gemini — reply + optional walkthrough ID are both in the response
+    let reply      = 'Sorry, I could not get a response right now. Please try again.';
+    let match      = null;
+
     try {
       const res = await API.guideChat(message);
-      if (res.status === 200 && res.body?.reply) reply = res.body.reply;
+      if (res.status === 200 && res.body?.reply) {
+        reply = res.body.reply;
+
+        // Gemini may identify which walkthrough to run
+        const wtId = res.body.walkthrough;
+        if (wtId) {
+          const wt = (window.GUIDE_CONFIG?.walkthroughs || []).find(w => w.id === wtId);
+          if (wt) {
+            const vars = {};
+            if (res.body.productName) vars.productName = res.body.productName;
+            if (res.body.fieldName) {
+              vars.fieldName  = res.body.fieldName;
+              const fi        = _resolveField(res.body.fieldName);
+              vars.fieldLabel = fi ? fi.label : res.body.fieldName;
+            }
+            match = { wt, vars };
+          }
+        }
+      }
     } catch (e) { /* use fallback */ }
+
+    // If Gemini didn't identify a walkthrough, fall back to local pattern matching
+    if (!match) match = _matchWalkthrough(message);
 
     _reopenWithReply(reply);
     _busy = false;
 
-    // If a walkthrough matched, start it after the user has read the reply
+    // Run the walkthrough steps after the user has read the reply
     if (match) {
       await _sleep(2000);
       _closeBubble();

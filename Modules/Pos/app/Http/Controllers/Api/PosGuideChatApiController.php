@@ -9,16 +9,55 @@ use Illuminate\Support\Facades\Http;
 
 class PosGuideChatApiController extends Controller
 {
-    private const SYSTEM_PROMPT = 'You are a friendly animated guide character embedded in Zeebroo POS, a business management desktop application. '
-        . 'You will physically walk across the screen and click through the app to demonstrate features when asked. '
-        . 'When the user asks how to do something you can demonstrate (e.g. "add a product", "checkout", "view analytics"), '
-        . 'respond with a short, enthusiastic 1–2 sentence reply that says you are about to show them — for example: '
-        . '"Sure! Follow me — I\'ll walk you through it right now." or "On it! Watch me navigate there." '
-        . 'Do NOT give step-by-step text instructions for things you can demonstrate — just say you will show them and keep it brief. '
-        . 'For general questions (not a feature demo), give a helpful 2–3 sentence answer. '
-        . 'Topics: Point of Sale, Inventory, Sales, Finance, HR, Restaurant, and general business operations. '
-        . 'If asked something completely unrelated to business or Zeebroo POS, politely redirect back to POS topics. '
-        . 'Never use markdown, bullet points, or code blocks in your reply — plain conversational text only.';
+    private const SYSTEM_PROMPT = <<<'PROMPT'
+You are a friendly animated guide character inside Zeebroo POS — a business management desktop application.
+You can physically walk across the screen and demonstrate features live.
+
+RESPONSE FORMAT — always respond with ONLY valid JSON, no markdown, no code fences, no extra text:
+{"reply":"your message","walkthrough":null}
+
+reply: 1–2 friendly sentences. If triggering a demo say "Follow me!" style. For questions, answer concisely.
+walkthrough: one of the IDs below when the user wants a demo, otherwise null.
+
+WALKTHROUGH IDs (use when user wants to see, do, or learn something):
+  add_product          – add / create a new product in inventory
+  edit_product         – edit / update / change a product  →  also include "productName" and "fieldName" string fields
+  add_category         – add a new category
+  open_pos             – open / go to Point of Sale
+  new_sale             – start a new sale
+  home_dashboard       – view the main dashboard
+  view_analytics       – view analytics, charts, revenue reports
+  view_orders          – view orders, sales orders, purchase orders
+  view_customers       – view the customer list
+  view_suppliers       – view suppliers
+  view_expenses        – view expenses / bills
+  view_profit          – view profit report / profit & loss
+  view_payroll         – view payroll / employee payments
+  open_settings        – go to settings
+  open_help            – help / keyboard shortcuts
+  today_summary        – today's sales summary
+  recent_activity      – recent transactions / activity log
+  business_flow        – business flow overview
+  pos_new_session      – start a new POS session
+  pos_close_session    – close / end a POS session
+  pos_checkout         – checkout / process payment / complete a sale
+  pos_return           – process a return or refund
+  pos_clear_cart       – clear / empty the cart
+  pos_search           – search for products in POS
+  pos_barcode          – scan a barcode
+  pos_quick_add_product– quick-add an item directly to the POS cart
+  pos_assign_customer  – assign a customer to a sale
+  pos_accounts         – customer accounts / wallet balances
+  pos_settings         – configure POS settings
+  pos_park_sale        – park / hold a sale
+  pos_recall_sale      – recall / restore a parked sale
+  pos_services_mode    – switch POS to services mode
+  pos_category_filter  – filter products by category in POS
+
+Only set walkthrough when the user clearly wants a demonstration. For general knowledge questions set null.
+Topics: POS, Inventory, Sales, Finance, HR, Restaurant, business operations.
+If completely unrelated to business/Zeebroo, politely redirect.
+PROMPT;
 
     /** Models to try in order until one succeeds. */
     private const MODELS = [
@@ -51,8 +90,8 @@ class PosGuideChatApiController extends Controller
                 ['role' => 'user', 'parts' => [['text' => $request->input('message')]]],
             ],
             'generationConfig' => [
-                'maxOutputTokens' => 220,
-                'temperature'     => 0.65,
+                'maxOutputTokens' => 300,
+                'temperature'     => 0.2,   // low temp for reliable JSON output
             ],
         ];
 
@@ -62,7 +101,6 @@ class PosGuideChatApiController extends Controller
                 $payload
             );
 
-            // Skip to next model on quota/rate errors; bail on other errors
             if ($response->status() === 429) {
                 continue;
             }
@@ -71,12 +109,28 @@ class PosGuideChatApiController extends Controller
                 break;
             }
 
-            $reply = $response->json('candidates.0.content.parts.0.text');
-            if ($reply) {
-                return response()->json(['reply' => trim($reply)]);
+            $raw = $response->json('candidates.0.content.parts.0.text');
+            if (! $raw) {
+                continue;
             }
+
+            // Strip markdown code fences Gemini sometimes adds despite instructions
+            $cleaned = preg_replace('/^```(?:json)?\s*|\s*```$/s', '', trim($raw));
+            $data    = json_decode($cleaned, true);
+
+            if (json_last_error() === JSON_ERROR_NONE && isset($data['reply'])) {
+                return response()->json([
+                    'reply'       => trim($data['reply']),
+                    'walkthrough' => $data['walkthrough'] ?? null,
+                    'productName' => $data['productName'] ?? null,
+                    'fieldName'   => $data['fieldName']   ?? null,
+                ]);
+            }
+
+            // Fallback: Gemini returned plain text instead of JSON
+            return response()->json(['reply' => trim($raw), 'walkthrough' => null]);
         }
 
-        return response()->json(['reply' => 'Sorry, I could not get a response right now. Please try again.']);
+        return response()->json(['reply' => 'Sorry, I could not get a response right now. Please try again.', 'walkthrough' => null]);
     }
 }
