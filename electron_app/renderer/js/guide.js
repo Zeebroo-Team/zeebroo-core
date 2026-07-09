@@ -434,39 +434,36 @@
     const message = input?.value.trim();
     if (!message) { input?.focus(); return; }
 
-    // Check if any walkthrough matches
-    const match = _matchWalkthrough(message);
-    if (match) {
-      const { wt, vars } = match;
-      const replyText = _t(wt.reply, vars);
-      _busy = true;
-      _closeBubble();
-      await _sleep(240);
-      _reopenWithReply(replyText);
-      await _sleep(1800);
-      _closeBubble();
-      await _sleep(300);
-      await _runSteps(wt.steps, vars);
-      await _returnHome();
-      _busy = false;
-      return;
-    }
-
-    // Fall through to AI chat
     const sendBtn = document.getElementById('guide-chat-send');
     _busy = true;
     if (sendBtn) { sendBtn.disabled = true; sendBtn.innerHTML = '<i class="fa fa-spinner fa-spin"></i>'; }
 
+    // Check for walkthrough match (steps will run after the AI reply)
+    const match = _matchWalkthrough(message);
+
     _closeBubble();
-    setTimeout(async () => {
-      let reply = 'Sorry, I could not get a response right now. Please try again.';
-      try {
-        const res = await API.guideChat(message);
-        if (res.status === 200 && res.body?.reply) reply = res.body.reply;
-      } catch (e) { /* use default */ }
-      _reopenWithReply(reply);
+    await _sleep(200);
+
+    // Always call Gemini for the reply
+    let reply = 'Sorry, I could not get a response right now. Please try again.';
+    try {
+      const res = await API.guideChat(message);
+      if (res.status === 200 && res.body?.reply) reply = res.body.reply;
+    } catch (e) { /* use fallback */ }
+
+    _reopenWithReply(reply);
+    _busy = false;
+
+    // If a walkthrough matched, start it after the user has read the reply
+    if (match) {
+      await _sleep(2000);
+      _closeBubble();
+      await _sleep(300);
+      _busy = true;
+      await _runSteps(match.wt.steps, match.vars);
+      await _returnHome();
       _busy = false;
-    }, 240);
+    }
   }
 
   /* ════════════════════════════════════════════════════════════════════════
