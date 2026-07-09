@@ -11577,29 +11577,33 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
   pointer-events: auto;
 }
 
-/* ── Speech bubble ── */
+/* ── Chat bubble ── */
 #guide-bubble {
   position: absolute;
   bottom: calc(100% + 16px);
   right: -8px;
-  width: 236px;
+  width: 256px;
   background: #fff;
   border-radius: 14px;
-  padding: 13px 14px 10px;
+  padding: 12px 13px 11px;
   box-shadow: 0 6px 28px rgba(0,0,0,0.14), 0 1px 4px rgba(0,0,0,0.07);
-  font-size: 12.5px;
-  line-height: 1.55;
-  color: var(--text, #1a1a2e);
-  display: none;
   cursor: default;
   transform-origin: bottom right;
+  transition: opacity 0.22s ease, transform 0.22s ease;
 }
-#guide-bubble.guide-bubble-visible {
-  animation: guide-bubble-pop 0.32s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+#guide-bubble.guide-pop-in {
+  animation: guide-bubble-pop 0.3s cubic-bezier(0.34,1.56,0.64,1) forwards;
+}
+#guide-bubble.guide-pop-out {
+  animation: guide-bubble-popout 0.18s ease forwards;
 }
 @keyframes guide-bubble-pop {
   from { opacity: 0; transform: scale(0.82) translateY(10px); }
   to   { opacity: 1; transform: scale(1)    translateY(0);    }
+}
+@keyframes guide-bubble-popout {
+  from { opacity: 1; transform: scale(1)    translateY(0);    }
+  to   { opacity: 0; transform: scale(0.86) translateY(6px);  }
 }
 
 /* bubble tail */
@@ -11613,255 +11617,87 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
   border-bottom: none;
 }
 
-/* label row */
-#guide-bubble-label {
+/* ── Chat input state ── */
+#guide-chat-input-wrap {
   display: flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-  color: #4263eb;
-  margin-bottom: 6px;
-}
-#guide-bubble-label i { font-size: 9px; }
-
-/* tip text */
-#guide-bubble-text {
-  color: var(--text, #333);
-  font-size: 12.5px;
-  line-height: 1.55;
-}
-
-/* action row */
-#guide-bubble-actions {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 10px;
-  padding-top: 8px;
-  border-top: 1px solid #f0f0f0;
-  gap: 6px;
-}
-#guide-close-bubble {
-  background: none;
-  border: none;
-  color: #aaa;
-  cursor: pointer;
-  font-size: 11px;
-  padding: 3px 7px;
-  border-radius: 5px;
-  transition: background 0.12s, color 0.12s;
-}
-#guide-close-bubble:hover { background: #f4f4f4; color: #555; }
-
-#guide-next-tip {
-  background: #4263eb;
-  color: #fff;
-  border: none;
-  border-radius: 6px;
-  font-size: 11.5px;
-  font-weight: 600;
-  padding: 5px 11px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  transition: background 0.12s;
-}
-#guide-next-tip:hover { background: #3451c7; }
-
-
-
-/* ── Dark theme overrides ── */
-@media (prefers-color-scheme: dark) {
-  #guide-bubble {
-    background: #1e2135;
-    box-shadow: 0 6px 28px rgba(0,0,0,0.45), 0 1px 4px rgba(0,0,0,0.2);
-  }
-  #guide-bubble::after { border-top-color: #1e2135; }
-  #guide-bubble-actions { border-top-color: #2d3257; }
-  #guide-bubble-text { color: #c8cce8; }
-  #guide-bubble-label { color: #748ffc; }
-  #guide-close-bubble { color: #555; }
-  #guide-close-bubble:hover { background: #2d3257; color: #aaa; }
-  #guide-char-dismiss { border-color: #1a1a2e; }
-}
-
-/* ═══════════════════════════════════════════════════════════════════════════
-   Guide Tour — spotlight overlay + bubble
-   ═══════════════════════════════════════════════════════════════════════════ */
-
-/* Spotlight: transparent box with a massive box-shadow that darkens everything
-   outside its bounds — no extra overlay div needed, no z-index issues */
-#guide-tour-spotlight {
-  position: fixed;
-  z-index: 9100;
-  border-radius: 8px;
-  pointer-events: none;
-  display: none;
-  transition: top 0.38s cubic-bezier(0.4,0,0.2,1),
-              left 0.38s cubic-bezier(0.4,0,0.2,1),
-              width 0.38s cubic-bezier(0.4,0,0.2,1),
-              height 0.38s cubic-bezier(0.4,0,0.2,1);
-  box-shadow:
-    0 0 0 3px #4263eb,
-    0 0 0 6px rgba(66,99,235,0.25),
-    0 0 28px 4px rgba(66,99,235,0.45),
-    0 0 0 9999px rgba(0,0,0,0.72);
-  animation: guide-spotlight-pulse 2.2s ease-in-out infinite;
-}
-@keyframes guide-spotlight-pulse {
-  0%,100% { box-shadow: 0 0 0 3px #4263eb, 0 0 0 6px rgba(66,99,235,0.25), 0 0 28px 4px rgba(66,99,235,0.45), 0 0 0 9999px rgba(0,0,0,0.72); }
-  50%      { box-shadow: 0 0 0 3px #748ffc, 0 0 0 9px rgba(66,99,235,0.18), 0 0 40px 6px rgba(66,99,235,0.35), 0 0 0 9999px rgba(0,0,0,0.72); }
-}
-
-/* Tour bubble */
-#guide-tour-bubble {
-  position: fixed;
-  z-index: 9200;
-  width: 310px;
-  background: #fff;
-  border-radius: 16px;
-  padding: 0;
-  box-shadow: 0 12px 40px rgba(0,0,0,0.22), 0 2px 6px rgba(0,0,0,0.1);
-  display: none;
-  overflow: hidden;
-  animation: guide-tour-bubble-in 0.35s cubic-bezier(0.34,1.56,0.64,1) forwards;
-}
-@keyframes guide-tour-bubble-in {
-  from { opacity: 0; transform: scale(0.88) translateY(-6px); }
-  to   { opacity: 1; transform: scale(1)    translateY(0);    }
-}
-
-/* upward arrow */
-#guide-tour-arrow {
-  position: absolute;
-  top: -10px;
-  left: 40px;
-  width: 0; height: 0;
-  border-left: 11px solid transparent;
-  border-right: 11px solid transparent;
-  border-bottom: 11px solid #4263eb;
-  pointer-events: none;
-}
-
-/* header strip */
-#guide-tour-header {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 13px 16px 11px;
-  background: #4263eb;
-  color: #fff;
-}
-#guide-tour-icon {
-  width: 28px; height: 28px;
-  background: rgba(255,255,255,0.18);
-  border-radius: 7px;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 13px;
-  flex-shrink: 0;
-}
-#guide-tour-title {
-  flex: 1;
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: 0.01em;
-}
-#guide-tour-counter {
-  font-size: 11px;
-  font-weight: 600;
-  background: rgba(255,255,255,0.2);
-  border-radius: 20px;
-  padding: 2px 9px;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-/* body text */
-#guide-tour-text {
-  padding: 14px 16px 12px;
-  font-size: 13px;
-  line-height: 1.6;
-  color: #2d3257;
-}
-
-/* action row */
-#guide-tour-actions {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 14px 13px;
-  border-top: 1px solid #f0f2ff;
-  gap: 8px;
-}
-#guide-tour-skip {
-  background: none;
-  border: none;
-  color: #999;
-  font-size: 12px;
-  cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 6px;
-  transition: background 0.12s, color 0.12s;
-}
-#guide-tour-skip:hover { background: #f4f4f4; color: #555; }
-
-#guide-tour-next {
-  background: #4263eb;
-  color: #fff;
-  border: none;
-  border-radius: 8px;
-  font-size: 13px;
-  font-weight: 600;
-  padding: 7px 18px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 7px;
+}
+#guide-chat-input {
+  width: 100%;
+  box-sizing: border-box;
+  font-size: 12.5px;
+  line-height: 1.5;
+  border: 1px solid #d0d5e8;
+  border-radius: 8px;
+  padding: 7px 9px;
+  resize: none;
+  color: #1a1a2e;
+  background: #f8f9ff;
+  outline: none;
+  font-family: inherit;
+  transition: border-color 0.14s;
+}
+#guide-chat-input:focus { border-color: #4263eb; background: #fff; }
+#guide-chat-input::placeholder { color: #aab0cc; }
+
+#guide-chat-send {
+  align-self: flex-end;
+  background: #4263eb;
+  color: #fff;
+  border: none;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 5px;
   transition: background 0.12s, transform 0.1s;
 }
-#guide-tour-next:hover  { background: #3451c7; }
-#guide-tour-next:active { transform: scale(0.97); }
+#guide-chat-send:hover   { background: #3451c7; }
+#guide-chat-send:active  { transform: scale(0.96); }
+#guide-chat-send:disabled { background: #a0aec0; cursor: not-allowed; }
 
-/* Character excited bounce during tour */
-#guide-char-img.guide-touring {
-  animation: guide-excited 0.9s ease-in-out infinite !important;
+/* ── Chat reply state ── */
+#guide-chat-reply-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
 }
-@keyframes guide-excited {
-  0%,100% { transform: translateY(0)    rotate(0deg);    }
-  20%      { transform: translateY(-9px) rotate(-2deg);  }
-  50%      { transform: translateY(-5px) rotate(1.5deg); }
-  75%      { transform: translateY(-11px) rotate(-1deg); }
+#guide-chat-reply-text {
+  font-size: 12.5px;
+  line-height: 1.58;
+  color: #2d3257;
+  white-space: pre-wrap;
 }
-
-/* Guide bubble "Tour" button */
-#guide-start-tour {
-  background: rgba(66,99,235,0.1);
+#guide-chat-again {
+  align-self: flex-end;
+  background: rgba(66,99,235,0.09);
   border: 1px solid rgba(66,99,235,0.25);
   color: #4263eb;
-  border-radius: 6px;
+  border-radius: 7px;
   font-size: 11.5px;
   font-weight: 600;
-  padding: 4px 9px;
+  padding: 4px 10px;
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
   transition: background 0.12s;
 }
-#guide-start-tour:hover { background: rgba(66,99,235,0.18); }
+#guide-chat-again:hover { background: rgba(66,99,235,0.17); }
 
-/* Dark theme */
+/* ── Dark theme ── */
 @media (prefers-color-scheme: dark) {
-  #guide-tour-bubble    { background: #1e2135; box-shadow: 0 12px 40px rgba(0,0,0,0.5); }
-  #guide-tour-arrow     { border-bottom-color: #4263eb; }
-  #guide-tour-text      { color: #c8cce8; }
-  #guide-tour-actions   { border-top-color: #2d3257; }
-  #guide-tour-skip      { color: #666; }
-  #guide-tour-skip:hover{ background: #2d3257; color: #aaa; }
-  #guide-start-tour     { background: rgba(66,99,235,0.15); border-color: rgba(66,99,235,0.35); color: #748ffc; }
-  #guide-start-tour:hover { background: rgba(66,99,235,0.25); }
+  #guide-bubble           { background: #1e2135; box-shadow: 0 6px 28px rgba(0,0,0,0.45); }
+  #guide-bubble::after    { border-top-color: #1e2135; }
+  #guide-char-dismiss     { border-color: #1a1a2e; }
+  #guide-chat-input       { background: #14162a; border-color: #2d3257; color: #c8cce8; }
+  #guide-chat-input:focus { border-color: #748ffc; background: #1a1c35; }
+  #guide-chat-input::placeholder { color: #4a5178; }
+  #guide-chat-reply-text  { color: #c8cce8; }
+  #guide-chat-again       { background: rgba(66,99,235,0.15); border-color: rgba(116,143,252,0.35); color: #748ffc; }
+  #guide-chat-again:hover { background: rgba(66,99,235,0.25); }
 }

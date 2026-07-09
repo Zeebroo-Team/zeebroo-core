@@ -336,5 +336,7 @@ const API = (() => {
     deleteServiceCategory:     (id)        => request('DELETE', `/service/categories/${id}`),
     serviceMgmtCategories:     ()          => request('GET',   '/service/categories'),
     createServiceCategory:     (body)      => request('POST',  '/service/categories', body),
+
+    guideChat: (message) => request('POST', '/guide/chat', { message }),
   };
 })();

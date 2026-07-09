@@ -271,4 +271,7 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
     Route::post  ('roles',        [PosRoleManagementApiController::class, 'store'])  ->name('roles.store');
     Route::put   ('roles/{role}', [PosRoleManagementApiController::class, 'update']) ->name('roles.update');
     Route::delete('roles/{role}', [PosRoleManagementApiController::class, 'destroy'])->name('roles.destroy');
+
+    // Guide AI Chat
+    Route::post('guide/chat', [\Modules\Pos\Http\Controllers\Api\PosGuideChatApiController::class, 'chat'])->name('guide.chat');
 });
