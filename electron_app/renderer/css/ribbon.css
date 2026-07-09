@@ -11606,16 +11606,44 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
   to   { opacity: 0; transform: scale(0.86) translateY(6px);  }
 }
 
-/* bubble tail */
+/* bubble tail — default: bubble is above character, tail points down */
 #guide-bubble::after {
   content: '';
   position: absolute;
   bottom: -9px;
+  top: auto;
   right: 24px;
+  left: auto;
   border: 9px solid transparent;
   border-top-color: #fff;
   border-bottom: none;
 }
+
+/* bubble flipped below character — tail points up */
+#guide-bubble.guide-bubble-below {
+  bottom: auto;
+  top: calc(100% + 14px);
+  transform-origin: top right;
+}
+#guide-bubble.guide-bubble-below::after {
+  bottom: auto;
+  top: -9px;
+  border-top: none;
+  border-bottom: 9px solid #fff;
+  border-top-color: transparent;
+}
+
+/* horizontal overflow guard — keep bubble inside viewport */
+#guide-bubble.guide-bubble-left {
+  right: auto;
+  left: 0;
+}
+
+@media (prefers-color-scheme: dark) {
+  #guide-bubble.guide-bubble-below::after { border-bottom-color: #1e2135; }
+}
+:root[data-theme="dark"]  #guide-bubble.guide-bubble-below::after { border-bottom-color: #1e2135; }
+:root[data-theme="light"] #guide-bubble.guide-bubble-below::after { border-bottom-color: #fff; }
 
 /* ── Chat input state ── */
 #guide-chat-input-wrap {

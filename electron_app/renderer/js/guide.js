@@ -320,6 +320,45 @@
   }
 
   /* ════════════════════════════════════════════════════════════════════════
+     BUBBLE POSITIONING — keeps bubble inside the viewport at all times
+     ════════════════════════════════════════════════════════════════════════ */
+  function _positionBubble() {
+    const wrap   = document.getElementById('guide-char-wrap');
+    const bubble = document.getElementById('guide-bubble');
+    if (!wrap || !bubble) return;
+
+    const BUBBLE_W = 260;   // bubble width
+    const BUBBLE_H = 150;   // approx rendered height
+    const GAP      = 14;    // gap between character and bubble
+    const MARGIN   = 8;     // min distance from viewport edge
+    const CHAR_H   = bubble.closest('#guide-char-wrap')
+                       ? wrap.getBoundingClientRect().height
+                       : 100;
+
+    const wRect = wrap.getBoundingClientRect();
+    const winW  = window.innerWidth;
+    const winH  = window.innerHeight;
+
+    /* ── Vertical: flip below if not enough space above ── */
+    const spaceAbove = wRect.top - GAP;
+    if (spaceAbove < BUBBLE_H + MARGIN) {
+      bubble.classList.add('guide-bubble-below');
+    } else {
+      bubble.classList.remove('guide-bubble-below');
+    }
+
+    /* ── Horizontal: shift left if bubble overflows right edge ── */
+    // Default placement: right: -8px → bubble right edge is wRect.right + 8
+    // bubble left edge is wRect.right + 8 - BUBBLE_W
+    const bubbleLeftDefault = wRect.right + 8 - BUBBLE_W;
+    if (bubbleLeftDefault < MARGIN) {
+      bubble.classList.add('guide-bubble-left');
+    } else {
+      bubble.classList.remove('guide-bubble-left');
+    }
+  }
+
+  /* ════════════════════════════════════════════════════════════════════════
      BUBBLE OPEN / CLOSE
      ════════════════════════════════════════════════════════════════════════ */
   function _openBubble(resetToInput) {
@@ -327,6 +366,7 @@
     if (!bubble) return;
     _bubbleOpen = true;
     bubble.style.display = 'block';
+    _positionBubble();
     bubble.classList.remove('guide-pop-out');
     void bubble.offsetWidth;
     bubble.classList.add('guide-pop-in');
@@ -355,6 +395,7 @@
     if (!bubble) return;
     _bubbleOpen = true;
     bubble.style.display = 'block';
+    _positionBubble();
     bubble.classList.remove('guide-pop-out');
     void bubble.offsetWidth;
     bubble.classList.add('guide-pop-in');
