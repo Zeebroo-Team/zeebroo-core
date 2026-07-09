@@ -115,6 +115,30 @@
   }
 
   /* ════════════════════════════════════════════════════════════════════════
+     CLOSE ALL OPEN MODALS / DIALOGS
+     ════════════════════════════════════════════════════════════════════════ */
+  function _closeAllModals() {
+    // Every standard modal-overlay
+    document.querySelectorAll('.modal-overlay').forEach(m => {
+      if (getComputedStyle(m).display !== 'none') m.style.display = 'none';
+    });
+    // Non-overlay modals that need individual handling
+    [
+      '#checkout-modal',
+      '#bc-preview-modal',
+      '#pos-layer-picker',
+      '#search-suggest',
+    ].forEach(sel => {
+      const el = _qs(sel);
+      if (el && getComputedStyle(el).display !== 'none') el.style.display = 'none';
+    });
+    // Remove any pulse highlights left over from a previous walkthrough
+    document.querySelectorAll('.guide-target-pulse').forEach(el => {
+      el.classList.remove('guide-target-pulse');
+    });
+  }
+
+  /* ════════════════════════════════════════════════════════════════════════
      CHARACTER MOVEMENT
      ════════════════════════════════════════════════════════════════════════ */
   function _walkTo(el) {
@@ -478,7 +502,9 @@
     if (match) {
       await _sleep(2000);
       _closeBubble();
-      await _sleep(300);
+      await _sleep(200);
+      _closeAllModals();   // clear any open dialogs before the character starts moving
+      await _sleep(150);
       _busy = true;
       await _runSteps(match.wt.steps, match.vars);
       await _returnHome();
