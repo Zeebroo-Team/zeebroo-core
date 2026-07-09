@@ -20,6 +20,13 @@ class PosGuideChatApiController extends Controller
         . 'If asked something completely unrelated to business or Zeebroo POS, politely redirect back to POS topics. '
         . 'Never use markdown, bullet points, or code blocks in your reply — plain conversational text only.';
 
+    /** Models to try in order until one succeeds. */
+    private const MODELS = [
+        'gemini-2.5-flash',
+        'gemini-2.0-flash',
+        'gemini-1.5-flash',
+    ];
+
     public function chat(Request $request): JsonResponse
     {
         $request->validate(['message' => 'required|string|max:500']);
@@ -30,29 +37,46 @@ class PosGuideChatApiController extends Controller
             return response()->json(['reply' => 'The AI assistant is not configured. Please contact your administrator.']);
         }
 
-        $response = Http::timeout(20)->post(
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={$apiKey}",
-            [
-                'systemInstruction' => [
-                    'parts' => [['text' => self::SYSTEM_PROMPT]],
-                ],
-                'contents' => [
-                    ['role' => 'user', 'parts' => [['text' => $request->input('message')]]],
-                ],
-                'generationConfig' => [
-                    'maxOutputTokens' => 220,
-                    'temperature'     => 0.65,
-                ],
-            ]
-        );
+        // Prefer the model set in .env, then fall back through the list
+        $envModel = config('services.gemini.model');
+        $models   = $envModel
+            ? array_unique(array_merge([$envModel], self::MODELS))
+            : self::MODELS;
 
-        if (! $response->successful()) {
-            return response()->json(['reply' => 'Sorry, I could not get a response right now. Please try again.']);
+        $payload = [
+            'systemInstruction' => [
+                'parts' => [['text' => self::SYSTEM_PROMPT]],
+            ],
+            'contents' => [
+                ['role' => 'user', 'parts' => [['text' => $request->input('message')]]],
+            ],
+            'generationConfig' => [
+                'maxOutputTokens' => 220,
+                'temperature'     => 0.65,
+            ],
+        ];
+
+        foreach ($models as $model) {
+            $response = Http::timeout(20)->post(
+                "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key={$apiKey}",
+                $payload
+            );
+
+            // Skip to next model on quota/rate errors; bail on other errors
+            if ($response->status() === 429) {
+                continue;
+            }
+
+            if (! $response->successful()) {
+                break;
+            }
+
+            $reply = $response->json('candidates.0.content.parts.0.text');
+            if ($reply) {
+                return response()->json(['reply' => trim($reply)]);
+            }
         }
 
-        $reply = $response->json('candidates.0.content.parts.0.text')
-            ?? 'Sorry, I did not understand the response. Please try again.';
-
-        return response()->json(['reply' => trim($reply)]);
+        return response()->json(['reply' => 'Sorry, I could not get a response right now. Please try again.']);
     }
 }
