@@ -374,6 +374,256 @@ window.GUIDE_CONFIG = {
         { "type": "walk_to",    "selector": "#home-view-flow" },
         { "type": "bubble",     "text": "Business Flow gives you a visual overview of your business pipeline — from inventory to sales, finance, and HR all in one place.", "wait": 4000 }
       ]
+    },
+
+    /* ═══════════════════════════════════════════════════════════════════
+       POS RIBBON — Session Group
+       ═══════════════════════════════════════════════════════════════════ */
+
+    /* ── New Session ─────────────────────────────────────────────────── */
+    {
+      "id": "pos_new_session",
+      "intent_patterns": ["new session", "start session", "open session", "create session", "new pos session"],
+      "reply": "Let me show you how to start a new POS session!",
+      "steps": [
+        { "type": "walk_click",   "selector": "[data-tab='pos']",    "wait": 500 },
+        { "type": "walk_to",      "selector": "#rb-new-session" },
+        { "type": "highlight",    "selector": "#rb-new-session" },
+        { "type": "bubble",       "text": "Click New Session to open a fresh POS session. Each session gets its own tab in the session bar — useful for managing multiple tills or cashiers.", "wait": 4500 },
+        { "type": "unhighlight",  "selector": "#rb-new-session" },
+        { "type": "walk_to",      "selector": "#pos-tab-add" },
+        { "type": "highlight",    "selector": "#pos-tab-add" },
+        { "type": "bubble",       "text": "You can also click the + button here to add a new session tab directly.", "wait": 3500 },
+        { "type": "unhighlight",  "selector": "#pos-tab-add" }
+      ]
+    },
+
+    /* ── Close Session ───────────────────────────────────────────────── */
+    {
+      "id": "pos_close_session",
+      "intent_patterns": ["close session", "end session", "finish session", "close pos session"],
+      "reply": "Here's how to close the current POS session.",
+      "steps": [
+        { "type": "walk_click", "selector": "[data-tab='pos']",      "wait": 500 },
+        { "type": "walk_to",    "selector": "#rb-close-session" },
+        { "type": "highlight",  "selector": "#rb-close-session" },
+        { "type": "bubble",     "text": "Click Close Session to end the current POS session. You'll see a session summary with total sales and cash totals before it closes.", "wait": 4500 },
+        { "type": "unhighlight","selector": "#rb-close-session" }
+      ]
+    },
+
+    /* ═══════════════════════════════════════════════════════════════════
+       POS RIBBON — Sales Group
+       ═══════════════════════════════════════════════════════════════════ */
+
+    /* ── Checkout ────────────────────────────────────────────────────── */
+    {
+      "id": "pos_checkout",
+      "intent_patterns": ["checkout", "process payment", "pay now", "complete sale", "process sale"],
+      "reply": "Let me show you the Checkout flow!",
+      "steps": [
+        { "type": "walk_click",  "selector": "[data-tab='pos']",     "wait": 500 },
+        { "type": "walk_to",     "selector": "#rb-checkout" },
+        { "type": "highlight",   "selector": "#rb-checkout" },
+        { "type": "bubble",      "text": "Click Checkout (or press F12) once you've added items to the cart. This opens the payment screen where you can choose cash, card, or other payment methods.", "wait": 4500 },
+        { "type": "unhighlight", "selector": "#rb-checkout" },
+        { "type": "walk_to",     "selector": "#cart-area" },
+        { "type": "highlight",   "selector": "#checkout-btn" },
+        { "type": "bubble",      "text": "The Checkout button is also at the bottom of the cart area — add products first, then hit Checkout to process payment.", "wait": 4000 },
+        { "type": "unhighlight", "selector": "#checkout-btn" }
+      ]
+    },
+
+    /* ── Return / Refund ─────────────────────────────────────────────── */
+    {
+      "id": "pos_return",
+      "intent_patterns": ["return", "refund", "process return", "make refund", "pos refund", "pos return"],
+      "reply": "Let me show you how to process a return or refund!",
+      "steps": [
+        { "type": "walk_click",  "selector": "[data-tab='pos']",     "wait": 500 },
+        { "type": "walk_to",     "selector": "#rb-return" },
+        { "type": "highlight",   "selector": "#rb-return" },
+        { "type": "bubble",      "text": "Click Return / Refund (or press F9) to process a return. You'll be able to search for the original sale and select which items to refund.", "wait": 4500 },
+        { "type": "unhighlight", "selector": "#rb-return" }
+      ]
+    },
+
+    /* ── Clear Cart ──────────────────────────────────────────────────── */
+    {
+      "id": "pos_clear_cart",
+      "intent_patterns": ["clear cart", "empty cart", "remove all items", "reset cart", "clear all"],
+      "reply": "Here's the Clear Cart button!",
+      "steps": [
+        { "type": "walk_click",  "selector": "[data-tab='pos']",     "wait": 500 },
+        { "type": "walk_to",     "selector": "#rb-clear-cart" },
+        { "type": "highlight",   "selector": "#rb-clear-cart" },
+        { "type": "bubble",      "text": "Click Clear Cart (or press F8) to remove all items from the current cart and start fresh. You'll be asked to confirm before anything is deleted.", "wait": 4500 },
+        { "type": "unhighlight", "selector": "#rb-clear-cart" }
+      ]
+    },
+
+    /* ═══════════════════════════════════════════════════════════════════
+       POS RIBBON — Find Group
+       ═══════════════════════════════════════════════════════════════════ */
+
+    /* ── Search Products ─────────────────────────────────────────────── */
+    {
+      "id": "pos_search",
+      "intent_patterns": ["search products", "find product", "search pos", "look up product", "pos search"],
+      "reply": "Let me show you how to search for products in POS!",
+      "steps": [
+        { "type": "walk_click",  "selector": "[data-tab='pos']",     "wait": 500 },
+        { "type": "walk_to",     "selector": "#rb-search" },
+        { "type": "highlight",   "selector": "#rb-search" },
+        { "type": "bubble",      "text": "Click Search Products (or press F2) to focus the product search bar. Type a name, SKU, or barcode to instantly filter the product grid.", "wait": 4500 },
+        { "type": "unhighlight", "selector": "#rb-search" },
+        { "type": "walk_to",     "selector": "#product-search" },
+        { "type": "highlight",   "selector": "#product-search" },
+        { "type": "bubble",      "text": "This is the search bar — type here to filter products in real-time. Press Enter or click a product card to add it to the cart.", "wait": 4000 },
+        { "type": "unhighlight", "selector": "#product-search" }
+      ]
+    },
+
+    /* ── Scan Barcode ────────────────────────────────────────────────── */
+    {
+      "id": "pos_barcode",
+      "intent_patterns": ["scan barcode", "barcode scanner", "scan item", "barcode scan", "use barcode"],
+      "reply": "Here's how to use the barcode scanner in POS!",
+      "steps": [
+        { "type": "walk_click",  "selector": "[data-tab='pos']",     "wait": 500 },
+        { "type": "walk_to",     "selector": "#rb-barcode" },
+        { "type": "highlight",   "selector": "#rb-barcode" },
+        { "type": "bubble",      "text": "Click Scan Barcode (or press F3) to activate the barcode input mode. Then scan or type a barcode — the matching product is added to the cart instantly.", "wait": 4500 },
+        { "type": "unhighlight", "selector": "#rb-barcode" }
+      ]
+    },
+
+    /* ── Quick Add Product (POS) ─────────────────────────────────────── */
+    {
+      "id": "pos_quick_add_product",
+      "intent_patterns": ["quick add product", "add item pos", "pos add product", "add product pos", "add item to cart"],
+      "reply": "Let me show you the quick Add Product button in POS!",
+      "steps": [
+        { "type": "walk_click",  "selector": "[data-tab='pos']",     "wait": 500 },
+        { "type": "walk_to",     "selector": "#rb-add-product" },
+        { "type": "highlight",   "selector": "#rb-add-product" },
+        { "type": "bubble",      "text": "Click Add Product (or press F4) to open a quick-entry form — fill in a name and price to create a one-off item and add it straight to the cart without adding it to inventory.", "wait": 4500 },
+        { "type": "unhighlight", "selector": "#rb-add-product" }
+      ]
+    },
+
+    /* ═══════════════════════════════════════════════════════════════════
+       POS RIBBON — Customers Group
+       ═══════════════════════════════════════════════════════════════════ */
+
+    /* ── Assign Customer to Sale ─────────────────────────────────────── */
+    {
+      "id": "pos_assign_customer",
+      "intent_patterns": ["assign customer", "customer to sale", "add customer to cart", "pos customer", "select customer pos"],
+      "reply": "Let me show you how to assign a customer to a sale!",
+      "steps": [
+        { "type": "walk_click",  "selector": "[data-tab='pos']",     "wait": 500 },
+        { "type": "walk_to",     "selector": "#rb-customers" },
+        { "type": "highlight",   "selector": "#rb-customers" },
+        { "type": "bubble",      "text": "Click Customers to open the customer panel. Select a customer to attach them to this sale — their loyalty points, credit balance, and purchase history will be linked.", "wait": 4500 },
+        { "type": "unhighlight", "selector": "#rb-customers" },
+        { "type": "walk_to",     "selector": "#btn-customer" },
+        { "type": "highlight",   "selector": "#btn-customer" },
+        { "type": "bubble",      "text": "You can also press F10 or click the person icon in the cart header to assign a customer directly.", "wait": 3500 },
+        { "type": "unhighlight", "selector": "#btn-customer" }
+      ]
+    },
+
+    /* ── Accounts ────────────────────────────────────────────────────── */
+    {
+      "id": "pos_accounts",
+      "intent_patterns": ["pos accounts", "wallet accounts", "account balance", "customer accounts"],
+      "reply": "Here's the Accounts button in POS.",
+      "steps": [
+        { "type": "walk_click",  "selector": "[data-tab='pos']",     "wait": 500 },
+        { "type": "walk_to",     "selector": "#rb-accounts" },
+        { "type": "highlight",   "selector": "#rb-accounts" },
+        { "type": "bubble",      "text": "The Accounts button gives quick access to customer wallet and credit account balances — useful when a customer wants to pay using store credit.", "wait": 4000 },
+        { "type": "unhighlight", "selector": "#rb-accounts" }
+      ]
+    },
+
+    /* ═══════════════════════════════════════════════════════════════════
+       POS RIBBON — Configure Group
+       ═══════════════════════════════════════════════════════════════════ */
+
+    /* ── POS Settings ────────────────────────────────────────────────── */
+    {
+      "id": "pos_settings",
+      "intent_patterns": ["pos settings", "configure pos", "open pos settings", "pos configuration", "set up pos"],
+      "reply": "Opening POS Settings!",
+      "steps": [
+        { "type": "walk_click",  "selector": "[data-tab='pos']",     "wait": 500 },
+        { "type": "walk_to",     "selector": "#rb-pos-settings" },
+        { "type": "highlight",   "selector": "#rb-pos-settings" },
+        { "type": "bubble",      "text": "Click POS Settings to configure receipt printer, cash drawer, tax rates, tip options, and other point-of-sale preferences.", "wait": 4000 },
+        { "type": "unhighlight", "selector": "#rb-pos-settings" }
+      ]
+    },
+
+    /* ═══════════════════════════════════════════════════════════════════
+       POS INLINE FEATURES (cart header & product area)
+       ═══════════════════════════════════════════════════════════════════ */
+
+    /* ── Park / Hold Sale ────────────────────────────────────────────── */
+    {
+      "id": "pos_park_sale",
+      "intent_patterns": ["park sale", "hold sale", "pause sale", "hold cart", "put on hold"],
+      "reply": "Let me show you how to park (hold) a sale!",
+      "steps": [
+        { "type": "walk_click",  "selector": "[data-tab='pos']",     "wait": 500 },
+        { "type": "walk_to",     "selector": "#btn-park" },
+        { "type": "highlight",   "selector": "#btn-park" },
+        { "type": "bubble",      "text": "Click the Park button (or press F6) to hold the current cart without losing it. Useful when a customer needs to step away — you can serve another customer and recall this sale later.", "wait": 5000 },
+        { "type": "unhighlight", "selector": "#btn-park" }
+      ]
+    },
+
+    /* ── Recall Held Sale ────────────────────────────────────────────── */
+    {
+      "id": "pos_recall_sale",
+      "intent_patterns": ["recall sale", "unhold sale", "retrieve held sale", "recall cart", "recall parked"],
+      "reply": "Here's how to recall a parked sale!",
+      "steps": [
+        { "type": "walk_click",  "selector": "[data-tab='pos']",     "wait": 500 },
+        { "type": "walk_to",     "selector": "#btn-recall" },
+        { "type": "highlight",   "selector": "#btn-recall" },
+        { "type": "bubble",      "text": "Click the Recall button (or press F7) to bring back a previously parked sale. If there are multiple held sales, you can choose which one to restore.", "wait": 4500 },
+        { "type": "unhighlight", "selector": "#btn-recall" }
+      ]
+    },
+
+    /* ── Switch to Services Mode ─────────────────────────────────────── */
+    {
+      "id": "pos_services_mode",
+      "intent_patterns": ["switch to services", "services mode", "service tab", "view services", "sell service"],
+      "reply": "Let me switch POS to Services mode!",
+      "steps": [
+        { "type": "walk_click",   "selector": "[data-tab='pos']",               "wait": 500 },
+        { "type": "walk_to",      "selector": ".pos-mode-btn[data-mode='services']" },
+        { "type": "highlight",    "selector": ".pos-mode-btn[data-mode='services']" },
+        { "type": "bubble",       "text": "Click Services in the mode switcher to browse and add service items (labour, subscriptions, etc.) to the cart instead of physical products.", "wait": 4000 },
+        { "type": "unhighlight",  "selector": ".pos-mode-btn[data-mode='services']" }
+      ]
+    },
+
+    /* ── Category Filter ─────────────────────────────────────────────── */
+    {
+      "id": "pos_category_filter",
+      "intent_patterns": ["filter by category", "category filter", "filter products", "product category", "browse category"],
+      "reply": "Let me show you the category filter in POS!",
+      "steps": [
+        { "type": "walk_click",  "selector": "[data-tab='pos']",     "wait": 500 },
+        { "type": "walk_to",     "selector": "#category-filter" },
+        { "type": "highlight",   "selector": "#category-filter" },
+        { "type": "bubble",      "text": "Use the category chips here to filter the product grid by category. Click 'All' to see everything, or tap a specific category chip to narrow the view.", "wait": 4500 },
+        { "type": "unhighlight", "selector": "#category-filter" }
+      ]
     }
 
   ]
