@@ -473,8 +473,8 @@
     try {
       const res = await API.guideChat(message);
       if (res.status === 200 && res.body?.reply) {
-        reply        = res.body.reply;
-        geminiWorked = true;
+        reply        = String(res.body.reply).trim();
+        geminiWorked = reply.length > 0;
 
         // Gemini may identify which walkthrough to run
         const wtId = res.body.walkthrough;

@@ -87,7 +87,7 @@ PROMPT;
         $apiKey = config('services.gemini.key');
 
         if (!$apiKey) {
-            return response()->json(['reply' => 'The AI assistant is not configured. Please contact your administrator.']);
+            return response()->json(['reply' => null, 'walkthrough' => null], 503);
         }
 
         // Prefer the model set in .env, then fall back through the list
@@ -145,6 +145,6 @@ PROMPT;
             return response()->json(['reply' => trim($raw), 'walkthrough' => null]);
         }
 
-        return response()->json(['reply' => 'Sorry, I could not get a response right now. Please try again.', 'walkthrough' => null]);
+        return response()->json(['reply' => null, 'walkthrough' => null], 503);
     }
 }
