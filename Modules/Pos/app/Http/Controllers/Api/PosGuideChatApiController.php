@@ -53,6 +53,20 @@ WALKTHROUGH IDs (use when user wants to see, do, or learn something):
   pos_recall_sale      – recall / restore a parked sale
   pos_services_mode    – switch POS to services mode
   pos_category_filter  – filter products by category in POS
+  inv_products         – view the product list in inventory
+  inv_refresh          – refresh the inventory product list
+  inv_clear_filters    – clear inventory product filters
+  inv_categories       – manage product categories in inventory
+  inv_units            – manage units of measure in inventory
+  inv_stock_audit      – do a stock audit / inventory count
+  inv_brands           – manage product brands in inventory
+  inv_discounts        – manage discounts in inventory
+  inv_purchase_orders  – view / create purchase orders
+  inv_goods_receive    – view goods receive notes / GRN
+  inv_cheques          – view / manage supplier cheques
+  inv_add_supplier     – add a new supplier
+  inv_view_suppliers   – view the supplier list in inventory
+  inv_barcodes         – print barcode label sheets
 
 Only set walkthrough when the user clearly wants a demonstration. For general knowledge questions set null.
 Topics: POS, Inventory, Sales, Finance, HR, Restaurant, business operations.

@@ -624,6 +624,252 @@ window.GUIDE_CONFIG = {
         { "type": "bubble",      "text": "Use the category chips here to filter the product grid by category. Click 'All' to see everything, or tap a specific category chip to narrow the view.", "wait": 4500 },
         { "type": "unhighlight", "selector": "#category-filter" }
       ]
+    },
+
+    /* ═══════════════════════════════════════════════════════════════════
+       INVENTORY RIBBON — Catalog Group
+       ═══════════════════════════════════════════════════════════════════ */
+
+    /* ── View Products ───────────────────────────────────────────────── */
+    {
+      "id": "inv_products",
+      "intent_patterns": ["view products", "inventory products", "product list", "go to products", "show products"],
+      "reply": "Let me take you to the Products view!",
+      "steps": [
+        { "type": "walk_click",   "selector": "[data-tab='inventory']",                    "wait": 500 },
+        { "type": "walk_click",   "selector": "#rb-inv-products",                          "wait": 600 },
+        { "type": "wait_visible", "selector": "#inv-list-view" },
+        { "type": "walk_to",      "selector": "#inv-new-product-btn" },
+        { "type": "highlight",    "selector": "#inv-new-product-btn" },
+        { "type": "bubble",       "text": "This is your Products list. Search by name, filter by category or brand, or click New Product to add one.", "wait": 4000 },
+        { "type": "unhighlight",  "selector": "#inv-new-product-btn" }
+      ]
+    },
+
+    /* ── Refresh Products ────────────────────────────────────────────── */
+    {
+      "id": "inv_refresh",
+      "intent_patterns": ["refresh inventory", "refresh products", "reload products", "reload inventory"],
+      "reply": "Here's the Refresh button for the product list!",
+      "steps": [
+        { "type": "walk_click",   "selector": "[data-tab='inventory']",                    "wait": 500 },
+        { "type": "walk_click",   "selector": ".inv-subnav-btn[data-inv-view='products']", "wait": 600 },
+        { "type": "walk_to",      "selector": "#rb-refresh" },
+        { "type": "highlight",    "selector": "#rb-refresh" },
+        { "type": "bubble",       "text": "Click Refresh to reload the product list from the server and pick up any recent changes.", "wait": 3500 },
+        { "type": "unhighlight",  "selector": "#rb-refresh" }
+      ]
+    },
+
+    /* ── Clear Filters ───────────────────────────────────────────────── */
+    {
+      "id": "inv_clear_filters",
+      "intent_patterns": ["clear filters", "reset filters", "remove filters", "clear product filters"],
+      "reply": "Let me show you how to clear all product filters!",
+      "steps": [
+        { "type": "walk_click",   "selector": "[data-tab='inventory']",                    "wait": 500 },
+        { "type": "walk_click",   "selector": ".inv-subnav-btn[data-inv-view='products']", "wait": 600 },
+        { "type": "walk_to",      "selector": "#rb-clear-filters" },
+        { "type": "highlight",    "selector": "#rb-clear-filters" },
+        { "type": "bubble",       "text": "Click Clear Filters to remove any active stock, brand, or sort filters and show all products again.", "wait": 3500 },
+        { "type": "unhighlight",  "selector": "#rb-clear-filters" }
+      ]
+    },
+
+    /* ── Categories ──────────────────────────────────────────────────── */
+    {
+      "id": "inv_categories",
+      "intent_patterns": ["inventory categories", "view categories", "manage categories", "product categories", "go to categories"],
+      "reply": "Opening the Categories view!",
+      "steps": [
+        { "type": "walk_click",   "selector": "[data-tab='inventory']",                      "wait": 500 },
+        { "type": "walk_click",   "selector": "#rb-inv-categories",                          "wait": 600 },
+        { "type": "wait_visible", "selector": "#inv-categories-view" },
+        { "type": "walk_to",      "selector": "#cat-add-btn" },
+        { "type": "highlight",    "selector": "#cat-add-btn" },
+        { "type": "bubble",       "text": "This is the Categories view. Click New Category to add one, or click any existing category to edit it.", "wait": 4000 },
+        { "type": "unhighlight",  "selector": "#cat-add-btn" }
+      ]
+    },
+
+    /* ── Units ───────────────────────────────────────────────────────── */
+    {
+      "id": "inv_units",
+      "intent_patterns": ["units of measure", "view units", "manage units", "product units", "go to units"],
+      "reply": "Opening the Units of Measure view!",
+      "steps": [
+        { "type": "walk_click",   "selector": "[data-tab='inventory']",                      "wait": 500 },
+        { "type": "walk_click",   "selector": "#rb-inv-units",                               "wait": 600 },
+        { "type": "wait_visible", "selector": "#inv-units-view" },
+        { "type": "walk_to",      "selector": "#unit-add-btn" },
+        { "type": "highlight",    "selector": "#unit-add-btn" },
+        { "type": "bubble",       "text": "Units of measure (kg, pcs, litre, etc.) are managed here. Click New Unit to add a custom unit for your products.", "wait": 4000 },
+        { "type": "unhighlight",  "selector": "#unit-add-btn" }
+      ]
+    },
+
+    /* ═══════════════════════════════════════════════════════════════════
+       INVENTORY RIBBON — Stock Group
+       ═══════════════════════════════════════════════════════════════════ */
+
+    /* ── Stock Audit ─────────────────────────────────────────────────── */
+    {
+      "id": "inv_stock_audit",
+      "intent_patterns": ["stock audit", "inventory audit", "count stock", "audit inventory", "stock count"],
+      "reply": "Let me take you to the Stock Audit view!",
+      "steps": [
+        { "type": "walk_click",   "selector": "[data-tab='inventory']",                      "wait": 500 },
+        { "type": "walk_click",   "selector": "#rb-inv-audit",                               "wait": 600 },
+        { "type": "wait_visible", "selector": "#inv-audit-view" },
+        { "type": "walk_to",      "selector": "#audit-new-btn" },
+        { "type": "highlight",    "selector": "#audit-new-btn" },
+        { "type": "bubble",       "text": "Stock Audit lets you count your physical stock and reconcile it against your system records. Click New Audit to start a count session.", "wait": 4500 },
+        { "type": "unhighlight",  "selector": "#audit-new-btn" }
+      ]
+    },
+
+    /* ── Brands ──────────────────────────────────────────────────────── */
+    {
+      "id": "inv_brands",
+      "intent_patterns": ["view brands", "manage brands", "product brands", "go to brands", "inventory brands"],
+      "reply": "Opening the Brands view!",
+      "steps": [
+        { "type": "walk_click",   "selector": "[data-tab='inventory']",                      "wait": 500 },
+        { "type": "walk_click",   "selector": "#rb-inv-brands",                              "wait": 600 },
+        { "type": "wait_visible", "selector": "#inv-brands-view" },
+        { "type": "walk_to",      "selector": "#brand-add-btn" },
+        { "type": "highlight",    "selector": "#brand-add-btn" },
+        { "type": "bubble",       "text": "Brands are managed here — they help you organise and filter products by manufacturer. Click New Brand to add one.", "wait": 4000 },
+        { "type": "unhighlight",  "selector": "#brand-add-btn" }
+      ]
+    },
+
+    /* ── Discounts ───────────────────────────────────────────────────── */
+    {
+      "id": "inv_discounts",
+      "intent_patterns": ["view discounts", "manage discounts", "product discounts", "go to discounts", "inventory discounts"],
+      "reply": "Opening the Discounts view!",
+      "steps": [
+        { "type": "walk_click",   "selector": "[data-tab='inventory']",                      "wait": 500 },
+        { "type": "walk_click",   "selector": "#rb-inv-discounts",                           "wait": 600 },
+        { "type": "wait_visible", "selector": "#inv-discounts-view" },
+        { "type": "walk_to",      "selector": "#disc-add-btn" },
+        { "type": "highlight",    "selector": "#disc-add-btn" },
+        { "type": "bubble",       "text": "Discounts can be flat amounts or percentages and applied to products or categories at POS. Click New Discount to create one.", "wait": 4500 },
+        { "type": "unhighlight",  "selector": "#disc-add-btn" }
+      ]
+    },
+
+    /* ═══════════════════════════════════════════════════════════════════
+       INVENTORY RIBBON — Purchasing Group
+       ═══════════════════════════════════════════════════════════════════ */
+
+    /* ── Purchase Orders ─────────────────────────────────────────────── */
+    {
+      "id": "inv_purchase_orders",
+      "intent_patterns": ["purchase orders", "view purchase orders", "create purchase order", "new purchase order", "po list", "go to purchase orders"],
+      "reply": "Taking you to Purchase Orders!",
+      "steps": [
+        { "type": "walk_click",   "selector": "[data-tab='inventory']",                      "wait": 500 },
+        { "type": "walk_click",   "selector": "#rb-orders",                                  "wait": 600 },
+        { "type": "wait_visible", "selector": "#inv-po-view" },
+        { "type": "walk_to",      "selector": "#po-add-btn" },
+        { "type": "highlight",    "selector": "#po-add-btn" },
+        { "type": "bubble",       "text": "Purchase Orders let you formally order stock from a supplier. Click New PO to create an order — once received, you log it as a Goods Receipt.", "wait": 4500 },
+        { "type": "unhighlight",  "selector": "#po-add-btn" }
+      ]
+    },
+
+    /* ── Goods Receive ───────────────────────────────────────────────── */
+    {
+      "id": "inv_goods_receive",
+      "intent_patterns": ["goods receive", "goods receipt", "receive stock", "grn", "receive goods", "stock receipt"],
+      "reply": "Opening the Goods Receive view!",
+      "steps": [
+        { "type": "walk_click",   "selector": "[data-tab='inventory']",                      "wait": 500 },
+        { "type": "walk_click",   "selector": "#rb-inv-grn",                                 "wait": 600 },
+        { "type": "wait_visible", "selector": "#inv-grn-view" },
+        { "type": "walk_to",      "selector": "#grn-search" },
+        { "type": "highlight",    "selector": "#grn-search" },
+        { "type": "bubble",       "text": "Goods Receive Notes (GRNs) record when stock arrives from a supplier. Search by GRN number, PO number, or supplier name here.", "wait": 4500 },
+        { "type": "unhighlight",  "selector": "#grn-search" }
+      ]
+    },
+
+    /* ── Cheques ─────────────────────────────────────────────────────── */
+    {
+      "id": "inv_cheques",
+      "intent_patterns": ["cheques", "view cheques", "manage cheques", "cheque tracker", "go to cheques"],
+      "reply": "Opening the Cheques tracker!",
+      "steps": [
+        { "type": "walk_click",   "selector": "[data-tab='inventory']",                      "wait": 500 },
+        { "type": "walk_click",   "selector": "#rb-inv-cheques",                             "wait": 600 },
+        { "type": "wait_visible", "selector": "#inv-cheques-view" },
+        { "type": "walk_to",      "selector": "#chq-summary" },
+        { "type": "highlight",    "selector": "#chq-summary" },
+        { "type": "bubble",       "text": "The Cheques view tracks all post-dated and pending cheques from suppliers. The summary shows total value, pending, overdue, and cleared counts.", "wait": 4500 },
+        { "type": "unhighlight",  "selector": "#chq-summary" }
+      ]
+    },
+
+    /* ═══════════════════════════════════════════════════════════════════
+       INVENTORY RIBBON — Suppliers Group
+       ═══════════════════════════════════════════════════════════════════ */
+
+    /* ── Add New Supplier ────────────────────────────────────────────── */
+    {
+      "id": "inv_add_supplier",
+      "intent_patterns": ["add supplier", "new supplier", "create supplier", "add new supplier"],
+      "reply": "Let me walk you through adding a new supplier!",
+      "steps": [
+        { "type": "walk_click",   "selector": "[data-tab='inventory']",                      "wait": 500 },
+        { "type": "walk_click",   "selector": "#rb-inv-suppliers",                           "wait": 600 },
+        { "type": "wait_visible", "selector": "#inv-suppliers-view" },
+        { "type": "walk_click",   "selector": "#sup-add-btn",                                "wait": 400 },
+        { "type": "wait_visible", "selector": "#sup-modal" },
+        { "type": "walk_to",      "selector": "#sup-modal" },
+        { "type": "bubble",       "text": "Fill in the supplier's name, contact details, and payment terms, then click Save to add them to your supplier list.", "wait": 4500 }
+      ]
+    },
+
+    /* ── View Suppliers ──────────────────────────────────────────────── */
+    {
+      "id": "inv_view_suppliers",
+      "intent_patterns": ["inventory suppliers", "manage suppliers", "supplier list inventory"],
+      "reply": "Opening the Suppliers view!",
+      "steps": [
+        { "type": "walk_click",   "selector": "[data-tab='inventory']",                      "wait": 500 },
+        { "type": "walk_click",   "selector": "#rb-inv-suppliers",                           "wait": 600 },
+        { "type": "wait_visible", "selector": "#inv-suppliers-view" },
+        { "type": "walk_to",      "selector": "#sup-add-btn" },
+        { "type": "highlight",    "selector": "#sup-add-btn" },
+        { "type": "bubble",       "text": "This is the Suppliers view. Click a supplier to see their details, purchase history, and outstanding payments. Click New Supplier to add one.", "wait": 4500 },
+        { "type": "unhighlight",  "selector": "#sup-add-btn" }
+      ]
+    },
+
+    /* ═══════════════════════════════════════════════════════════════════
+       INVENTORY RIBBON — Print Group
+       ═══════════════════════════════════════════════════════════════════ */
+
+    /* ── Barcode Sheets ──────────────────────────────────────────────── */
+    {
+      "id": "inv_barcodes",
+      "intent_patterns": ["barcode sheets", "print barcodes", "barcode labels", "print labels", "generate barcodes"],
+      "reply": "Opening the Barcode Sheets view!",
+      "steps": [
+        { "type": "walk_click",   "selector": "[data-tab='inventory']",                      "wait": 500 },
+        { "type": "walk_click",   "selector": "#rb-inv-barcodes",                            "wait": 600 },
+        { "type": "wait_visible", "selector": "#inv-barcodes-view" },
+        { "type": "walk_to",      "selector": "#bc-search" },
+        { "type": "highlight",    "selector": "#bc-search" },
+        { "type": "bubble",       "text": "Search or browse products here, tick the ones you want, then choose label size and columns and click Print Barcodes to generate a printable sheet.", "wait": 5000 },
+        { "type": "unhighlight",  "selector": "#bc-search" },
+        { "type": "walk_to",      "selector": "#bc-print-btn" },
+        { "type": "highlight",    "selector": "#bc-print-btn" },
+        { "type": "bubble",       "text": "Once products are selected, Print Barcodes becomes active — click it to preview and print your label sheet.", "wait": 3500 },
+        { "type": "unhighlight",  "selector": "#bc-print-btn" }
+      ]
     }
 
   ]
