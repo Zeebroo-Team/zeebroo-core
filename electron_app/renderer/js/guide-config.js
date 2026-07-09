@@ -131,20 +131,250 @@ window.GUIDE_CONFIG = {
         { "type": "bubble",       "text": "Click Save Category when you're done!", "wait": 3000 },
         { "type": "unhighlight",  "selector": "#cat-modal-save" }
       ]
-    }
+    },
 
-    /* ── Add more walkthroughs below ─────────────────────────────────── */
-    /*
+    /* ═══════════════════════════════════════════════════════════════════
+       HOME RIBBON — Quick Actions
+       ═══════════════════════════════════════════════════════════════════ */
+
+    /* ── Open POS ────────────────────────────────────────────────────── */
     {
-      "id": "example",
-      "intent_patterns": ["your trigger phrase"],
-      "reply": "Let me show you!",
+      "id": "open_pos",
+      "intent_patterns": ["open pos", "go to pos", "start selling", "launch pos", "point of sale"],
+      "reply": "Sure! Let me take you to the Point of Sale right now.",
       "steps": [
-        { "type": "walk_click", "selector": "#some-button", "wait": 500 },
-        { "type": "bubble", "text": "Click here to proceed.", "wait": 3000 }
+        { "type": "walk_click", "selector": "[data-tab='home']",  "wait": 400 },
+        { "type": "walk_click", "selector": "#rb-home-pos",       "wait": 600 },
+        { "type": "walk_to",    "selector": "[data-tab='pos']" },
+        { "type": "highlight",  "selector": "[data-tab='pos']" },
+        { "type": "bubble",     "text": "You're in Point of Sale! Search or scan products to start ringing up a sale.", "wait": 3500 },
+        { "type": "unhighlight","selector": "[data-tab='pos']" }
+      ]
+    },
+
+    /* ── New Sale ─────────────────────────────────────────────────────── */
+    {
+      "id": "new_sale",
+      "intent_patterns": ["new sale", "create sale", "start sale", "start new sale", "make a sale"],
+      "reply": "Let me open the POS for a new sale!",
+      "steps": [
+        { "type": "walk_click", "selector": "[data-tab='home']",   "wait": 400 },
+        { "type": "walk_click", "selector": "#rb-home-new-sale",   "wait": 600 },
+        { "type": "walk_to",    "selector": "[data-tab='pos']" },
+        { "type": "highlight",  "selector": "[data-tab='pos']" },
+        { "type": "bubble",     "text": "POS is open! Search for products by name or scan a barcode to add them to the cart.", "wait": 3500 },
+        { "type": "unhighlight","selector": "[data-tab='pos']" }
+      ]
+    },
+
+    /* ═══════════════════════════════════════════════════════════════════
+       HOME RIBBON — Overview
+       ═══════════════════════════════════════════════════════════════════ */
+
+    /* ── Dashboard ───────────────────────────────────────────────────── */
+    {
+      "id": "home_dashboard",
+      "intent_patterns": ["go to dashboard", "home dashboard", "show dashboard", "view dashboard", "open dashboard"],
+      "reply": "Taking you to the Home Dashboard!",
+      "steps": [
+        { "type": "walk_click",   "selector": "[data-tab='home']",       "wait": 400 },
+        { "type": "walk_click",   "selector": "#rb-home-dashboard",      "wait": 500 },
+        { "type": "walk_to",      "selector": "#home-view-flow" },
+        { "type": "bubble",       "text": "This is your business dashboard — live KPIs, recent activity, bills, and a full business flow overview.", "wait": 3500 }
+      ]
+    },
+
+    /* ── Analytics ───────────────────────────────────────────────────── */
+    {
+      "id": "view_analytics",
+      "intent_patterns": ["view analytics", "show analytics", "analytics report", "analytics overview", "revenue analytics", "open analytics"],
+      "reply": "Let me take you to the Analytics view!",
+      "steps": [
+        { "type": "walk_click",   "selector": "[data-tab='home']",       "wait": 400 },
+        { "type": "walk_click",   "selector": "#rb-home-analytics",      "wait": 500 },
+        { "type": "wait_visible", "selector": "#home-view-analytics" },
+        { "type": "walk_to",      "selector": "#han-period-btns" },
+        { "type": "highlight",    "selector": "#han-period-btns" },
+        { "type": "bubble",       "text": "Analytics is open! Use the 7D / 30D / 90D buttons to change the date range. Below you'll see KPI cards, a revenue trend chart, and upcoming expenses.", "wait": 4000 },
+        { "type": "unhighlight",  "selector": "#han-period-btns" }
+      ]
+    },
+
+    /* ═══════════════════════════════════════════════════════════════════
+       HOME RIBBON — Operations
+       ═══════════════════════════════════════════════════════════════════ */
+
+    /* ── Orders ──────────────────────────────────────────────────────── */
+    {
+      "id": "view_orders",
+      "intent_patterns": ["view orders", "show orders", "orders summary", "open orders", "sales and purchase orders"],
+      "reply": "Opening the Orders summary view!",
+      "steps": [
+        { "type": "walk_click",   "selector": "[data-tab='home']",       "wait": 400 },
+        { "type": "walk_click",   "selector": "#rb-home-orders",         "wait": 500 },
+        { "type": "wait_visible", "selector": "#home-view-orders" },
+        { "type": "walk_to",      "selector": "#hov-sales-count" },
+        { "type": "highlight",    "selector": "#hov-sales-count" },
+        { "type": "bubble",       "text": "Here's your Orders view — KPI strip shows total sales, revenue, and purchase order counts. Use the date and status filters to narrow down records.", "wait": 4000 },
+        { "type": "unhighlight",  "selector": "#hov-sales-count" }
+      ]
+    },
+
+    /* ── Customers ───────────────────────────────────────────────────── */
+    {
+      "id": "view_customers",
+      "intent_patterns": ["view customers", "show customers", "customer list", "open customers", "customers"],
+      "reply": "Opening the Customers panel!",
+      "steps": [
+        { "type": "walk_click", "selector": "[data-tab='home']",         "wait": 400 },
+        { "type": "walk_click", "selector": "#rb-home-customers",        "wait": 600 }
+      ]
+    },
+
+    /* ── Suppliers ───────────────────────────────────────────────────── */
+    {
+      "id": "view_suppliers",
+      "intent_patterns": ["view suppliers", "show suppliers", "supplier list", "open suppliers", "go to suppliers"],
+      "reply": "Taking you to the Suppliers view in Inventory!",
+      "steps": [
+        { "type": "walk_click",   "selector": "[data-tab='home']",                       "wait": 400 },
+        { "type": "walk_click",   "selector": "#rb-home-suppliers",                      "wait": 600 },
+        { "type": "walk_to",      "selector": ".inv-subnav-btn[data-inv-view='suppliers']" },
+        { "type": "highlight",    "selector": ".inv-subnav-btn[data-inv-view='suppliers']" },
+        { "type": "bubble",       "text": "You're in the Suppliers view. Add, edit, and manage all your suppliers and their contact details here.", "wait": 3500 },
+        { "type": "unhighlight",  "selector": ".inv-subnav-btn[data-inv-view='suppliers']" }
+      ]
+    },
+
+    /* ═══════════════════════════════════════════════════════════════════
+       HOME RIBBON — Finance
+       ═══════════════════════════════════════════════════════════════════ */
+
+    /* ── Expenses ────────────────────────────────────────────────────── */
+    {
+      "id": "view_expenses",
+      "intent_patterns": ["view expenses", "show expenses", "expense report", "open expenses", "expense view"],
+      "reply": "Opening the Expenses view!",
+      "steps": [
+        { "type": "walk_click",   "selector": "[data-tab='home']",       "wait": 400 },
+        { "type": "walk_click",   "selector": "#rb-home-expenses",       "wait": 500 },
+        { "type": "wait_visible", "selector": "#home-view-expenses" },
+        { "type": "walk_to",      "selector": "#exp-refresh" },
+        { "type": "highlight",    "selector": "#exp-refresh" },
+        { "type": "bubble",       "text": "This is the Expenses view — bills, rentals, loans, and recurring payments are all summarised here. Hit Refresh to reload the latest data.", "wait": 4000 },
+        { "type": "unhighlight",  "selector": "#exp-refresh" }
+      ]
+    },
+
+    /* ── Profit Report ───────────────────────────────────────────────── */
+    {
+      "id": "view_profit",
+      "intent_patterns": ["profit report", "view profit", "show profit", "profit summary", "profit and loss", "open profit report"],
+      "reply": "Opening the Profit Report!",
+      "steps": [
+        { "type": "walk_click",   "selector": "[data-tab='home']",       "wait": 400 },
+        { "type": "walk_click",   "selector": "#rb-home-profit",         "wait": 500 },
+        { "type": "wait_visible", "selector": "#home-view-profit" },
+        { "type": "walk_to",      "selector": "#prf-period-select" },
+        { "type": "highlight",    "selector": "#prf-period-select" },
+        { "type": "bubble",       "text": "This is the Profit Report. Use the period selector to choose Last 7 / 30 / 90 Days or Last 12 Months and see your revenue vs expenses breakdown.", "wait": 4000 },
+        { "type": "unhighlight",  "selector": "#prf-period-select" }
+      ]
+    },
+
+    /* ── Payroll ─────────────────────────────────────────────────────── */
+    {
+      "id": "view_payroll",
+      "intent_patterns": ["view payroll", "payroll report", "show payroll", "open payroll", "payroll summary"],
+      "reply": "Opening the Payroll summary!",
+      "steps": [
+        { "type": "walk_click",   "selector": "[data-tab='home']",       "wait": 400 },
+        { "type": "walk_click",   "selector": "#rb-home-payroll",        "wait": 500 },
+        { "type": "wait_visible", "selector": "#home-view-payroll" },
+        { "type": "walk_to",      "selector": "#prl-refresh" },
+        { "type": "highlight",    "selector": "#prl-refresh" },
+        { "type": "bubble",       "text": "This is the Payroll view — a summary of your payroll cycles and employee payment status. Hit Refresh to reload.", "wait": 3500 },
+        { "type": "unhighlight",  "selector": "#prl-refresh" }
+      ]
+    },
+
+    /* ═══════════════════════════════════════════════════════════════════
+       HOME RIBBON — Tools
+       ═══════════════════════════════════════════════════════════════════ */
+
+    /* ── Settings ────────────────────────────────────────────────────── */
+    {
+      "id": "open_settings",
+      "intent_patterns": ["go to settings", "open settings", "settings", "show settings"],
+      "reply": "Here's the Settings button — click it to access configuration options.",
+      "steps": [
+        { "type": "walk_click",  "selector": "[data-tab='home']",        "wait": 400 },
+        { "type": "walk_to",     "selector": "#rb-home-settings" },
+        { "type": "highlight",   "selector": "#rb-home-settings" },
+        { "type": "bubble",      "text": "This is the Settings button. Click it to configure your business, taxes, receipt templates, and more.", "wait": 3500 },
+        { "type": "unhighlight", "selector": "#rb-home-settings" }
+      ]
+    },
+
+    /* ── Help / Shortcuts ─────────────────────────────────────────────── */
+    {
+      "id": "open_help",
+      "intent_patterns": ["help", "keyboard shortcuts", "show shortcuts", "open help", "shortcuts"],
+      "reply": "Opening the help and keyboard shortcuts panel!",
+      "steps": [
+        { "type": "walk_click", "selector": "[data-tab='home']",         "wait": 400 },
+        { "type": "walk_click", "selector": "#rb-home-help",             "wait": 400 }
+      ]
+    },
+
+    /* ═══════════════════════════════════════════════════════════════════
+       HOME PANEL TAB BUTTONS (inside the home content area)
+       ═══════════════════════════════════════════════════════════════════ */
+
+    /* ── Today's Summary ─────────────────────────────────────────────── */
+    {
+      "id": "today_summary",
+      "intent_patterns": ["today's summary", "daily summary", "today summary", "view today", "show today"],
+      "reply": "Opening Today's Summary!",
+      "steps": [
+        { "type": "walk_click",   "selector": "[data-tab='home']",                        "wait": 400 },
+        { "type": "walk_click",   "selector": "#rb-home-daily-summary",                   "wait": 500 },
+        { "type": "wait_visible", "selector": "#home-view-today" },
+        { "type": "walk_to",      "selector": "#tds-refresh" },
+        { "type": "highlight",    "selector": "#tds-refresh" },
+        { "type": "bubble",       "text": "Today's Summary shows all sales, revenue, and key metrics for today. Hit Refresh to get the latest figures.", "wait": 3500 },
+        { "type": "unhighlight",  "selector": "#tds-refresh" }
+      ]
+    },
+
+    /* ── Recent Activity ─────────────────────────────────────────────── */
+    {
+      "id": "recent_activity",
+      "intent_patterns": ["recent activity", "view activity", "transaction history", "recent transactions", "activity log"],
+      "reply": "Let me show you the Recent Activity view!",
+      "steps": [
+        { "type": "walk_click",   "selector": "[data-tab='home']",                           "wait": 400 },
+        { "type": "walk_click",   "selector": ".home-tab-btn[data-home-view='activity']",    "wait": 500 },
+        { "type": "wait_visible", "selector": "#home-view-activity" },
+        { "type": "walk_to",      "selector": "#home-act-refresh" },
+        { "type": "highlight",    "selector": "#home-act-refresh" },
+        { "type": "bubble",       "text": "Recent Activity shows your latest transactions in chronological order. Hit Refresh to reload.", "wait": 3500 },
+        { "type": "unhighlight",  "selector": "#home-act-refresh" }
+      ]
+    },
+
+    /* ── Business Flow ───────────────────────────────────────────────── */
+    {
+      "id": "business_flow",
+      "intent_patterns": ["business flow", "view flow", "show flow", "flow overview", "flow diagram"],
+      "reply": "Opening the Business Flow overview!",
+      "steps": [
+        { "type": "walk_click", "selector": "[data-tab='home']",                          "wait": 400 },
+        { "type": "walk_click", "selector": ".home-tab-btn[data-home-view='flow']",       "wait": 500 },
+        { "type": "walk_to",    "selector": "#home-view-flow" },
+        { "type": "bubble",     "text": "Business Flow gives you a visual overview of your business pipeline — from inventory to sales, finance, and HR all in one place.", "wait": 4000 }
       ]
     }
-    */
 
   ]
 };
