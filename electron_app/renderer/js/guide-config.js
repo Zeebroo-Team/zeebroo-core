@@ -110,6 +110,27 @@ window.GUIDE_CONFIG = {
         { "type": "bubble",          "text": "Click Save Product to save your changes.", "wait": 3000 },
         { "type": "unhighlight",     "selector": "#prod-modal-save" }
       ]
+    },
+
+    /* ── Add New Category ────────────────────────────────────────────── */
+    {
+      "id": "add_category",
+      "intent_patterns": ["add new category", "new category", "create category", "add category"],
+      "reply": "Sure! Follow me — I'll walk you through adding a new category right now.",
+      "steps": [
+        { "type": "walk_click",   "selector": "[data-tab='inventory']",                      "wait": 750 },
+        { "type": "walk_click",   "selector": ".inv-subnav-btn[data-inv-view='categories']", "wait": 800 },
+        { "type": "walk_click",   "selector": "#cat-add-btn",                                "wait": 450 },
+        { "type": "wait_visible", "selector": "#cat-modal" },
+        { "type": "walk_to",      "selector": "#cat-f-name" },
+        { "type": "highlight",    "selector": "#cat-f-name" },
+        { "type": "bubble",       "text": "Enter the category name here. You can also set a parent category and description below.", "wait": 3500 },
+        { "type": "unhighlight",  "selector": "#cat-f-name" },
+        { "type": "walk_to",      "selector": "#cat-modal-save" },
+        { "type": "highlight",    "selector": "#cat-modal-save" },
+        { "type": "bubble",       "text": "Click Save Category when you're done!", "wait": 3000 },
+        { "type": "unhighlight",  "selector": "#cat-modal-save" }
+      ]
     }
 
     /* ── Add more walkthroughs below ─────────────────────────────────── */
