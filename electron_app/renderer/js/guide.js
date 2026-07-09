@@ -466,13 +466,15 @@
     await _sleep(200);
 
     // Call Gemini — reply + optional walkthrough ID are both in the response
-    let reply      = 'Sorry, I could not get a response right now. Please try again.';
-    let match      = null;
+    let reply        = null;
+    let match        = null;
+    let geminiWorked = false;
 
     try {
       const res = await API.guideChat(message);
       if (res.status === 200 && res.body?.reply) {
-        reply = res.body.reply;
+        reply        = res.body.reply;
+        geminiWorked = true;
 
         // Gemini may identify which walkthrough to run
         const wtId = res.body.walkthrough;
@@ -494,6 +496,16 @@
 
     // If Gemini didn't identify a walkthrough, fall back to local pattern matching
     if (!match) match = _matchWalkthrough(message);
+
+    // Determine the reply text:
+    //  - Gemini worked → use its reply
+    //  - Gemini failed but local match found → use the config's hardcoded reply
+    //  - Gemini failed and no match → show a friendly error
+    if (!geminiWorked) {
+      reply = match
+        ? _t(match.wt.reply || 'Sure! Follow me — I\'ll show you!', match.vars)
+        : 'I\'m having trouble connecting right now. Please try again in a moment.';
+    }
 
     _reopenWithReply(reply);
     _busy = false;

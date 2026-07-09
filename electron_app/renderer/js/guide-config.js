@@ -67,7 +67,10 @@ window.GUIDE_CONFIG = {
     /* ── Add New Product ─────────────────────────────────────────────── */
     {
       "id": "add_product",
-      "intent_patterns": ["add new product", "new product", "create product", "add product"],
+      "intent_patterns": ["add new product", "new product", "create product", "add product",
+                          "need to add product", "want to add product", "how to add product",
+                          "help me add product", "i want to add", "how do i add product",
+                          "create new product", "i need to add"],
       "reply": "Sure! Follow me — I'll walk you through adding a new product right now.",
       "steps": [
         { "type": "walk_click",   "selector": "[data-tab='inventory']",                      "wait": 750 },
@@ -115,7 +118,9 @@ window.GUIDE_CONFIG = {
     /* ── Add New Category ────────────────────────────────────────────── */
     {
       "id": "add_category",
-      "intent_patterns": ["add new category", "new category", "create category", "add category"],
+      "intent_patterns": ["add new category", "new category", "create category", "add category",
+                          "need to add category", "want to add category", "how to add category",
+                          "help me add category", "how do i add category"],
       "reply": "Sure! Follow me — I'll walk you through adding a new category right now.",
       "steps": [
         { "type": "walk_click",   "selector": "[data-tab='inventory']",                      "wait": 750 },
@@ -140,7 +145,12 @@ window.GUIDE_CONFIG = {
     /* ── Open POS ────────────────────────────────────────────────────── */
     {
       "id": "open_pos",
-      "intent_patterns": ["open pos", "go to pos", "start selling", "launch pos", "point of sale"],
+      "intent_patterns": ["open pos", "go to pos", "start selling", "launch pos", "point of sale",
+                          "how to open pos",
+                          "i want to go to pos",
+                          "how do i open pos",
+                          "need to go to pos",
+                          "want to sell something"],
       "reply": "Sure! Let me take you to the Point of Sale right now.",
       "steps": [
         { "type": "walk_click", "selector": "[data-tab='home']",  "wait": 400 },
@@ -155,7 +165,12 @@ window.GUIDE_CONFIG = {
     /* ── New Sale ─────────────────────────────────────────────────────── */
     {
       "id": "new_sale",
-      "intent_patterns": ["new sale", "create sale", "start sale", "start new sale", "make a sale"],
+      "intent_patterns": ["new sale", "create sale", "start sale", "start new sale", "make a sale",
+                          "how to start a sale",
+                          "i want to make a sale",
+                          "how do i start a sale",
+                          "need to make a sale",
+                          "want to create a sale"],
       "reply": "Let me open the POS for a new sale!",
       "steps": [
         { "type": "walk_click", "selector": "[data-tab='home']",   "wait": 400 },
@@ -174,7 +189,11 @@ window.GUIDE_CONFIG = {
     /* ── Dashboard ───────────────────────────────────────────────────── */
     {
       "id": "home_dashboard",
-      "intent_patterns": ["go to dashboard", "home dashboard", "show dashboard", "view dashboard", "open dashboard"],
+      "intent_patterns": ["go to dashboard", "home dashboard", "show dashboard", "view dashboard", "open dashboard",
+                          "how to go to dashboard",
+                          "i want to view dashboard",
+                          "how do i go to dashboard",
+                          "need to see dashboard"],
       "reply": "Taking you to the Home Dashboard!",
       "steps": [
         { "type": "walk_click",   "selector": "[data-tab='home']",       "wait": 400 },
@@ -187,7 +206,12 @@ window.GUIDE_CONFIG = {
     /* ── Analytics ───────────────────────────────────────────────────── */
     {
       "id": "view_analytics",
-      "intent_patterns": ["view analytics", "show analytics", "analytics report", "analytics overview", "revenue analytics", "open analytics"],
+      "intent_patterns": ["view analytics", "show analytics", "analytics report", "analytics overview", "revenue analytics", "open analytics",
+                          "how to view analytics",
+                          "i want to see analytics",
+                          "how do i view analytics",
+                          "need to see revenue report",
+                          "want to view reports"],
       "reply": "Let me take you to the Analytics view!",
       "steps": [
         { "type": "walk_click",   "selector": "[data-tab='home']",       "wait": 400 },
@@ -207,7 +231,11 @@ window.GUIDE_CONFIG = {
     /* ── Orders ──────────────────────────────────────────────────────── */
     {
       "id": "view_orders",
-      "intent_patterns": ["view orders", "show orders", "orders summary", "open orders", "sales and purchase orders"],
+      "intent_patterns": ["view orders", "show orders", "orders summary", "open orders", "sales and purchase orders",
+                          "how to view orders",
+                          "i want to see orders",
+                          "how do i view orders",
+                          "need to see sales orders"],
       "reply": "Opening the Orders summary view!",
       "steps": [
         { "type": "walk_click",   "selector": "[data-tab='home']",       "wait": 400 },
@@ -223,7 +251,11 @@ window.GUIDE_CONFIG = {
     /* ── Customers ───────────────────────────────────────────────────── */
     {
       "id": "view_customers",
-      "intent_patterns": ["view customers", "show customers", "customer list", "open customers", "customers"],
+      "intent_patterns": ["view customers", "show customers", "customer list", "open customers", "customers",
+                          "how to view customers",
+                          "i want to see customers",
+                          "how do i open customers",
+                          "need customer list"],
       "reply": "Opening the Customers panel!",
       "steps": [
         { "type": "walk_click", "selector": "[data-tab='home']",         "wait": 400 },
@@ -234,7 +266,10 @@ window.GUIDE_CONFIG = {
     /* ── Suppliers ───────────────────────────────────────────────────── */
     {
       "id": "view_suppliers",
-      "intent_patterns": ["view suppliers", "show suppliers", "supplier list", "open suppliers", "go to suppliers"],
+      "intent_patterns": ["view suppliers", "show suppliers", "supplier list", "open suppliers", "go to suppliers",
+                          "how to view suppliers",
+                          "i want to see suppliers",
+                          "how do i view suppliers"],
       "reply": "Taking you to the Suppliers view in Inventory!",
       "steps": [
         { "type": "walk_click",   "selector": "[data-tab='home']",                       "wait": 400 },
@@ -253,7 +288,11 @@ window.GUIDE_CONFIG = {
     /* ── Expenses ────────────────────────────────────────────────────── */
     {
       "id": "view_expenses",
-      "intent_patterns": ["view expenses", "show expenses", "expense report", "open expenses", "expense view"],
+      "intent_patterns": ["view expenses", "show expenses", "expense report", "open expenses", "expense view",
+                          "how to view expenses",
+                          "i want to see expenses",
+                          "how do i view expenses",
+                          "need to check expenses"],
       "reply": "Opening the Expenses view!",
       "steps": [
         { "type": "walk_click",   "selector": "[data-tab='home']",       "wait": 400 },
@@ -269,7 +308,11 @@ window.GUIDE_CONFIG = {
     /* ── Profit Report ───────────────────────────────────────────────── */
     {
       "id": "view_profit",
-      "intent_patterns": ["profit report", "view profit", "show profit", "profit summary", "profit and loss", "open profit report"],
+      "intent_patterns": ["profit report", "view profit", "show profit", "profit summary", "profit and loss", "open profit report",
+                          "how to view profit",
+                          "i want to see profit",
+                          "how do i view profit report",
+                          "need to see profit"],
       "reply": "Opening the Profit Report!",
       "steps": [
         { "type": "walk_click",   "selector": "[data-tab='home']",       "wait": 400 },
@@ -285,7 +328,11 @@ window.GUIDE_CONFIG = {
     /* ── Payroll ─────────────────────────────────────────────────────── */
     {
       "id": "view_payroll",
-      "intent_patterns": ["view payroll", "payroll report", "show payroll", "open payroll", "payroll summary"],
+      "intent_patterns": ["view payroll", "payroll report", "show payroll", "open payroll", "payroll summary",
+                          "how to view payroll",
+                          "i want to see payroll",
+                          "how do i view payroll",
+                          "need to check payroll"],
       "reply": "Opening the Payroll summary!",
       "steps": [
         { "type": "walk_click",   "selector": "[data-tab='home']",       "wait": 400 },
@@ -305,7 +352,11 @@ window.GUIDE_CONFIG = {
     /* ── Settings ────────────────────────────────────────────────────── */
     {
       "id": "open_settings",
-      "intent_patterns": ["go to settings", "open settings", "settings", "show settings"],
+      "intent_patterns": ["go to settings", "open settings", "settings", "show settings",
+                          "how to open settings",
+                          "i want to configure settings",
+                          "how do i access settings",
+                          "need to change settings"],
       "reply": "Here's the Settings button — click it to access configuration options.",
       "steps": [
         { "type": "walk_click",  "selector": "[data-tab='home']",        "wait": 400 },
@@ -319,7 +370,12 @@ window.GUIDE_CONFIG = {
     /* ── Help / Shortcuts ─────────────────────────────────────────────── */
     {
       "id": "open_help",
-      "intent_patterns": ["help", "keyboard shortcuts", "show shortcuts", "open help", "shortcuts"],
+      "intent_patterns": ["help", "keyboard shortcuts", "show shortcuts", "open help", "shortcuts",
+                          "how to get help",
+                          "i need help",
+                          "show me shortcuts",
+                          "how do i get help",
+                          "where is help"],
       "reply": "Opening the help and keyboard shortcuts panel!",
       "steps": [
         { "type": "walk_click", "selector": "[data-tab='home']",         "wait": 400 },
@@ -334,7 +390,11 @@ window.GUIDE_CONFIG = {
     /* ── Today's Summary ─────────────────────────────────────────────── */
     {
       "id": "today_summary",
-      "intent_patterns": ["today's summary", "daily summary", "today summary", "view today", "show today"],
+      "intent_patterns": ["today's summary", "daily summary", "today summary", "view today", "show today",
+                          "how to view today's summary",
+                          "i want to see today",
+                          "how do i see today summary",
+                          "need to see daily summary"],
       "reply": "Opening Today's Summary!",
       "steps": [
         { "type": "walk_click",   "selector": "[data-tab='home']",                        "wait": 400 },
@@ -350,7 +410,11 @@ window.GUIDE_CONFIG = {
     /* ── Recent Activity ─────────────────────────────────────────────── */
     {
       "id": "recent_activity",
-      "intent_patterns": ["recent activity", "view activity", "transaction history", "recent transactions", "activity log"],
+      "intent_patterns": ["recent activity", "view activity", "transaction history", "recent transactions", "activity log",
+                          "how to view activity",
+                          "i want to see recent activity",
+                          "how do i view transactions",
+                          "need to see transaction history"],
       "reply": "Let me show you the Recent Activity view!",
       "steps": [
         { "type": "walk_click",   "selector": "[data-tab='home']",                           "wait": 400 },
@@ -366,7 +430,10 @@ window.GUIDE_CONFIG = {
     /* ── Business Flow ───────────────────────────────────────────────── */
     {
       "id": "business_flow",
-      "intent_patterns": ["business flow", "view flow", "show flow", "flow overview", "flow diagram"],
+      "intent_patterns": ["business flow", "view flow", "show flow", "flow overview", "flow diagram",
+                          "how to view business flow",
+                          "i want to see business flow",
+                          "how do i go to flow"],
       "reply": "Opening the Business Flow overview!",
       "steps": [
         { "type": "walk_click", "selector": "[data-tab='home']",                          "wait": 400 },
@@ -383,7 +450,11 @@ window.GUIDE_CONFIG = {
     /* ── New Session ─────────────────────────────────────────────────── */
     {
       "id": "pos_new_session",
-      "intent_patterns": ["new session", "start session", "open session", "create session", "new pos session"],
+      "intent_patterns": ["new session", "start session", "open session", "create session", "new pos session",
+                          "how to start session",
+                          "i want to start new session",
+                          "how do i create session",
+                          "need a new session"],
       "reply": "Let me show you how to start a new POS session!",
       "steps": [
         { "type": "walk_click",   "selector": "[data-tab='pos']",    "wait": 500 },
@@ -401,7 +472,11 @@ window.GUIDE_CONFIG = {
     /* ── Close Session ───────────────────────────────────────────────── */
     {
       "id": "pos_close_session",
-      "intent_patterns": ["close session", "end session", "finish session", "close pos session"],
+      "intent_patterns": ["close session", "end session", "finish session", "close pos session",
+                          "how to close session",
+                          "i want to end session",
+                          "how do i end session",
+                          "need to close session"],
       "reply": "Here's how to close the current POS session.",
       "steps": [
         { "type": "walk_click", "selector": "[data-tab='pos']",      "wait": 500 },
@@ -419,7 +494,14 @@ window.GUIDE_CONFIG = {
     /* ── Checkout ────────────────────────────────────────────────────── */
     {
       "id": "pos_checkout",
-      "intent_patterns": ["checkout", "process payment", "pay now", "complete sale", "process sale"],
+      "intent_patterns": ["checkout", "process payment", "pay now", "complete sale", "process sale",
+                          "how to checkout",
+                          "i want to checkout",
+                          "how do i checkout",
+                          "need to process payment",
+                          "want to process sale",
+                          "i need to checkout",
+                          "how to process payment"],
       "reply": "Let me show you the Checkout flow!",
       "steps": [
         { "type": "walk_click",  "selector": "[data-tab='pos']",     "wait": 500 },
@@ -437,7 +519,13 @@ window.GUIDE_CONFIG = {
     /* ── Return / Refund ─────────────────────────────────────────────── */
     {
       "id": "pos_return",
-      "intent_patterns": ["return", "refund", "process return", "make refund", "pos refund", "pos return"],
+      "intent_patterns": ["return", "refund", "process return", "make refund", "pos refund", "pos return",
+                          "how to process return",
+                          "i want to refund",
+                          "how do i refund",
+                          "need to process refund",
+                          "want to make a return",
+                          "how to make refund"],
       "reply": "Let me show you how to process a return or refund!",
       "steps": [
         { "type": "walk_click",  "selector": "[data-tab='pos']",     "wait": 500 },
@@ -451,7 +539,11 @@ window.GUIDE_CONFIG = {
     /* ── Clear Cart ──────────────────────────────────────────────────── */
     {
       "id": "pos_clear_cart",
-      "intent_patterns": ["clear cart", "empty cart", "remove all items", "reset cart", "clear all"],
+      "intent_patterns": ["clear cart", "empty cart", "remove all items", "reset cart", "clear all",
+                          "how to clear the cart",
+                          "i want to clear cart",
+                          "how do i clear cart",
+                          "need to empty cart"],
       "reply": "Here's the Clear Cart button!",
       "steps": [
         { "type": "walk_click",  "selector": "[data-tab='pos']",     "wait": 500 },
@@ -469,7 +561,12 @@ window.GUIDE_CONFIG = {
     /* ── Search Products ─────────────────────────────────────────────── */
     {
       "id": "pos_search",
-      "intent_patterns": ["search products", "find product", "search pos", "look up product", "pos search"],
+      "intent_patterns": ["search products", "find product", "search pos", "look up product", "pos search",
+                          "how to search products",
+                          "i want to search",
+                          "how do i search",
+                          "need to find a product",
+                          "want to look up product"],
       "reply": "Let me show you how to search for products in POS!",
       "steps": [
         { "type": "walk_click",  "selector": "[data-tab='pos']",     "wait": 500 },
@@ -487,7 +584,11 @@ window.GUIDE_CONFIG = {
     /* ── Scan Barcode ────────────────────────────────────────────────── */
     {
       "id": "pos_barcode",
-      "intent_patterns": ["scan barcode", "barcode scanner", "scan item", "barcode scan", "use barcode"],
+      "intent_patterns": ["scan barcode", "barcode scanner", "scan item", "barcode scan", "use barcode",
+                          "how to scan barcode",
+                          "i want to scan",
+                          "how do i scan barcode",
+                          "need to scan an item"],
       "reply": "Here's how to use the barcode scanner in POS!",
       "steps": [
         { "type": "walk_click",  "selector": "[data-tab='pos']",     "wait": 500 },
@@ -501,7 +602,10 @@ window.GUIDE_CONFIG = {
     /* ── Quick Add Product (POS) ─────────────────────────────────────── */
     {
       "id": "pos_quick_add_product",
-      "intent_patterns": ["quick add product", "add item pos", "pos add product", "add product pos", "add item to cart"],
+      "intent_patterns": ["quick add product", "add item pos", "pos add product", "add product pos", "add item to cart",
+                          "how to add item to pos",
+                          "i want to add item",
+                          "need to add item to cart"],
       "reply": "Let me show you the quick Add Product button in POS!",
       "steps": [
         { "type": "walk_click",  "selector": "[data-tab='pos']",     "wait": 500 },
@@ -519,7 +623,11 @@ window.GUIDE_CONFIG = {
     /* ── Assign Customer to Sale ─────────────────────────────────────── */
     {
       "id": "pos_assign_customer",
-      "intent_patterns": ["assign customer", "customer to sale", "add customer to cart", "pos customer", "select customer pos"],
+      "intent_patterns": ["assign customer", "customer to sale", "add customer to cart", "pos customer", "select customer pos",
+                          "how to add customer to sale",
+                          "i want to assign customer",
+                          "how do i assign customer",
+                          "need to add customer"],
       "reply": "Let me show you how to assign a customer to a sale!",
       "steps": [
         { "type": "walk_click",  "selector": "[data-tab='pos']",     "wait": 500 },
@@ -537,7 +645,10 @@ window.GUIDE_CONFIG = {
     /* ── Accounts ────────────────────────────────────────────────────── */
     {
       "id": "pos_accounts",
-      "intent_patterns": ["pos accounts", "wallet accounts", "account balance", "customer accounts"],
+      "intent_patterns": ["pos accounts", "wallet accounts", "account balance", "customer accounts",
+                          "how to view accounts",
+                          "i want to check account balance",
+                          "how do i view customer accounts"],
       "reply": "Here's the Accounts button in POS.",
       "steps": [
         { "type": "walk_click",  "selector": "[data-tab='pos']",     "wait": 500 },
@@ -555,7 +666,11 @@ window.GUIDE_CONFIG = {
     /* ── POS Settings ────────────────────────────────────────────────── */
     {
       "id": "pos_settings",
-      "intent_patterns": ["pos settings", "configure pos", "open pos settings", "pos configuration", "set up pos"],
+      "intent_patterns": ["pos settings", "configure pos", "open pos settings", "pos configuration", "set up pos",
+                          "how to configure pos",
+                          "i want to configure pos",
+                          "how do i open pos settings",
+                          "need to change pos settings"],
       "reply": "Opening POS Settings!",
       "steps": [
         { "type": "walk_click",  "selector": "[data-tab='pos']",     "wait": 500 },
@@ -573,7 +688,12 @@ window.GUIDE_CONFIG = {
     /* ── Park / Hold Sale ────────────────────────────────────────────── */
     {
       "id": "pos_park_sale",
-      "intent_patterns": ["park sale", "hold sale", "pause sale", "hold cart", "put on hold"],
+      "intent_patterns": ["park sale", "hold sale", "pause sale", "hold cart", "put on hold",
+                          "how to hold a sale",
+                          "i want to park sale",
+                          "how do i park sale",
+                          "need to hold cart",
+                          "want to pause sale"],
       "reply": "Let me show you how to park (hold) a sale!",
       "steps": [
         { "type": "walk_click",  "selector": "[data-tab='pos']",     "wait": 500 },
@@ -587,7 +707,11 @@ window.GUIDE_CONFIG = {
     /* ── Recall Held Sale ────────────────────────────────────────────── */
     {
       "id": "pos_recall_sale",
-      "intent_patterns": ["recall sale", "unhold sale", "retrieve held sale", "recall cart", "recall parked"],
+      "intent_patterns": ["recall sale", "unhold sale", "retrieve held sale", "recall cart", "recall parked",
+                          "how to recall sale",
+                          "i want to recall",
+                          "how do i recall sale",
+                          "need to retrieve held sale"],
       "reply": "Here's how to recall a parked sale!",
       "steps": [
         { "type": "walk_click",  "selector": "[data-tab='pos']",     "wait": 500 },
@@ -601,7 +725,11 @@ window.GUIDE_CONFIG = {
     /* ── Switch to Services Mode ─────────────────────────────────────── */
     {
       "id": "pos_services_mode",
-      "intent_patterns": ["switch to services", "services mode", "service tab", "view services", "sell service"],
+      "intent_patterns": ["switch to services", "services mode", "service tab", "view services", "sell service",
+                          "how to switch to services",
+                          "i want to sell services",
+                          "how do i sell a service",
+                          "need to add service"],
       "reply": "Let me switch POS to Services mode!",
       "steps": [
         { "type": "walk_click",   "selector": "[data-tab='pos']",               "wait": 500 },
@@ -615,7 +743,11 @@ window.GUIDE_CONFIG = {
     /* ── Category Filter ─────────────────────────────────────────────── */
     {
       "id": "pos_category_filter",
-      "intent_patterns": ["filter by category", "category filter", "filter products", "product category", "browse category"],
+      "intent_patterns": ["filter by category", "category filter", "filter products", "product category", "browse category",
+                          "how to filter by category",
+                          "i want to filter products",
+                          "how do i filter",
+                          "need to filter inventory"],
       "reply": "Let me show you the category filter in POS!",
       "steps": [
         { "type": "walk_click",  "selector": "[data-tab='pos']",     "wait": 500 },
@@ -633,7 +765,11 @@ window.GUIDE_CONFIG = {
     /* ── View Products ───────────────────────────────────────────────── */
     {
       "id": "inv_products",
-      "intent_patterns": ["view products", "inventory products", "product list", "go to products", "show products"],
+      "intent_patterns": ["view products", "inventory products", "product list", "go to products", "show products",
+                          "how to view products",
+                          "i want to see product list",
+                          "how do i go to products",
+                          "need to see products"],
       "reply": "Let me take you to the Products view!",
       "steps": [
         { "type": "walk_click",   "selector": "[data-tab='inventory']",                    "wait": 500 },
@@ -649,7 +785,10 @@ window.GUIDE_CONFIG = {
     /* ── Refresh Products ────────────────────────────────────────────── */
     {
       "id": "inv_refresh",
-      "intent_patterns": ["refresh inventory", "refresh products", "reload products", "reload inventory"],
+      "intent_patterns": ["refresh inventory", "refresh products", "reload products", "reload inventory",
+                          "how to refresh products",
+                          "i want to reload products",
+                          "how do i refresh inventory"],
       "reply": "Here's the Refresh button for the product list!",
       "steps": [
         { "type": "walk_click",   "selector": "[data-tab='inventory']",                    "wait": 500 },
@@ -664,7 +803,11 @@ window.GUIDE_CONFIG = {
     /* ── Clear Filters ───────────────────────────────────────────────── */
     {
       "id": "inv_clear_filters",
-      "intent_patterns": ["clear filters", "reset filters", "remove filters", "clear product filters"],
+      "intent_patterns": ["clear filters", "reset filters", "remove filters", "clear product filters",
+                          "how to clear filters",
+                          "i want to reset filters",
+                          "how do i remove filters",
+                          "need to clear product filters"],
       "reply": "Let me show you how to clear all product filters!",
       "steps": [
         { "type": "walk_click",   "selector": "[data-tab='inventory']",                    "wait": 500 },
@@ -679,7 +822,11 @@ window.GUIDE_CONFIG = {
     /* ── Categories ──────────────────────────────────────────────────── */
     {
       "id": "inv_categories",
-      "intent_patterns": ["inventory categories", "view categories", "manage categories", "product categories", "go to categories"],
+      "intent_patterns": ["inventory categories", "view categories", "manage categories", "product categories", "go to categories",
+                          "how to add category",
+                          "i want to manage categories",
+                          "how do i view categories",
+                          "need to go to categories"],
       "reply": "Opening the Categories view!",
       "steps": [
         { "type": "walk_click",   "selector": "[data-tab='inventory']",                      "wait": 500 },
@@ -695,7 +842,11 @@ window.GUIDE_CONFIG = {
     /* ── Units ───────────────────────────────────────────────────────── */
     {
       "id": "inv_units",
-      "intent_patterns": ["units of measure", "view units", "manage units", "product units", "go to units"],
+      "intent_patterns": ["units of measure", "view units", "manage units", "product units", "go to units",
+                          "how to add unit",
+                          "i want to add unit of measure",
+                          "how do i manage units",
+                          "need to add unit"],
       "reply": "Opening the Units of Measure view!",
       "steps": [
         { "type": "walk_click",   "selector": "[data-tab='inventory']",                      "wait": 500 },
@@ -715,7 +866,12 @@ window.GUIDE_CONFIG = {
     /* ── Stock Audit ─────────────────────────────────────────────────── */
     {
       "id": "inv_stock_audit",
-      "intent_patterns": ["stock audit", "inventory audit", "count stock", "audit inventory", "stock count"],
+      "intent_patterns": ["stock audit", "inventory audit", "count stock", "audit inventory", "stock count",
+                          "how to do stock audit",
+                          "i want to count stock",
+                          "how do i audit stock",
+                          "need to do stock count",
+                          "want to do inventory count"],
       "reply": "Let me take you to the Stock Audit view!",
       "steps": [
         { "type": "walk_click",   "selector": "[data-tab='inventory']",                      "wait": 500 },
@@ -731,7 +887,12 @@ window.GUIDE_CONFIG = {
     /* ── Brands ──────────────────────────────────────────────────────── */
     {
       "id": "inv_brands",
-      "intent_patterns": ["view brands", "manage brands", "product brands", "go to brands", "inventory brands"],
+      "intent_patterns": ["view brands", "manage brands", "product brands", "go to brands", "inventory brands",
+                          "how to add brand",
+                          "i want to add brand",
+                          "how do i add a brand",
+                          "need to create brand",
+                          "want to manage brands"],
       "reply": "Opening the Brands view!",
       "steps": [
         { "type": "walk_click",   "selector": "[data-tab='inventory']",                      "wait": 500 },
@@ -747,7 +908,12 @@ window.GUIDE_CONFIG = {
     /* ── Discounts ───────────────────────────────────────────────────── */
     {
       "id": "inv_discounts",
-      "intent_patterns": ["view discounts", "manage discounts", "product discounts", "go to discounts", "inventory discounts"],
+      "intent_patterns": ["view discounts", "manage discounts", "product discounts", "go to discounts", "inventory discounts",
+                          "how to add discount",
+                          "i want to add discount",
+                          "how do i create discount",
+                          "need to create discount",
+                          "want to add a promotion"],
       "reply": "Opening the Discounts view!",
       "steps": [
         { "type": "walk_click",   "selector": "[data-tab='inventory']",                      "wait": 500 },
@@ -767,7 +933,12 @@ window.GUIDE_CONFIG = {
     /* ── Purchase Orders ─────────────────────────────────────────────── */
     {
       "id": "inv_purchase_orders",
-      "intent_patterns": ["purchase orders", "view purchase orders", "create purchase order", "new purchase order", "po list", "go to purchase orders"],
+      "intent_patterns": ["purchase orders", "view purchase orders", "create purchase order", "new purchase order", "po list", "go to purchase orders",
+                          "how to create purchase order",
+                          "i want to make a purchase order",
+                          "how do i create a po",
+                          "need to order stock",
+                          "want to create po"],
       "reply": "Taking you to Purchase Orders!",
       "steps": [
         { "type": "walk_click",   "selector": "[data-tab='inventory']",                      "wait": 500 },
@@ -783,7 +954,12 @@ window.GUIDE_CONFIG = {
     /* ── Goods Receive ───────────────────────────────────────────────── */
     {
       "id": "inv_goods_receive",
-      "intent_patterns": ["goods receive", "goods receipt", "receive stock", "grn", "receive goods", "stock receipt"],
+      "intent_patterns": ["goods receive", "goods receipt", "receive stock", "grn", "receive goods", "stock receipt",
+                          "how to receive goods",
+                          "i want to record delivery",
+                          "how do i do grn",
+                          "need to receive stock",
+                          "want to log delivery"],
       "reply": "Opening the Goods Receive view!",
       "steps": [
         { "type": "walk_click",   "selector": "[data-tab='inventory']",                      "wait": 500 },
@@ -799,7 +975,11 @@ window.GUIDE_CONFIG = {
     /* ── Cheques ─────────────────────────────────────────────────────── */
     {
       "id": "inv_cheques",
-      "intent_patterns": ["cheques", "view cheques", "manage cheques", "cheque tracker", "go to cheques"],
+      "intent_patterns": ["cheques", "view cheques", "manage cheques", "cheque tracker", "go to cheques",
+                          "how to view cheques",
+                          "i want to manage cheques",
+                          "how do i view cheques",
+                          "need to check cheques"],
       "reply": "Opening the Cheques tracker!",
       "steps": [
         { "type": "walk_click",   "selector": "[data-tab='inventory']",                      "wait": 500 },
@@ -819,7 +999,12 @@ window.GUIDE_CONFIG = {
     /* ── Add New Supplier ────────────────────────────────────────────── */
     {
       "id": "inv_add_supplier",
-      "intent_patterns": ["add supplier", "new supplier", "create supplier", "add new supplier"],
+      "intent_patterns": ["add supplier", "new supplier", "create supplier", "add new supplier",
+                          "how to add supplier",
+                          "i need to add a supplier",
+                          "how do i add supplier",
+                          "want to create supplier",
+                          "need to add new supplier"],
       "reply": "Let me walk you through adding a new supplier!",
       "steps": [
         { "type": "walk_click",   "selector": "[data-tab='inventory']",                      "wait": 500 },
@@ -835,7 +1020,11 @@ window.GUIDE_CONFIG = {
     /* ── View Suppliers ──────────────────────────────────────────────── */
     {
       "id": "inv_view_suppliers",
-      "intent_patterns": ["inventory suppliers", "manage suppliers", "supplier list inventory"],
+      "intent_patterns": ["inventory suppliers", "manage suppliers", "supplier list inventory",
+                          "how to view suppliers inventory",
+                          "i want to manage suppliers",
+                          "how do i go to suppliers",
+                          "need supplier list"],
       "reply": "Opening the Suppliers view!",
       "steps": [
         { "type": "walk_click",   "selector": "[data-tab='inventory']",                      "wait": 500 },
@@ -855,7 +1044,12 @@ window.GUIDE_CONFIG = {
     /* ── Barcode Sheets ──────────────────────────────────────────────── */
     {
       "id": "inv_barcodes",
-      "intent_patterns": ["barcode sheets", "print barcodes", "barcode labels", "print labels", "generate barcodes"],
+      "intent_patterns": ["barcode sheets", "print barcodes", "barcode labels", "print labels", "generate barcodes",
+                          "how to print barcodes",
+                          "i want to print labels",
+                          "how do i print barcode labels",
+                          "need to generate barcodes",
+                          "want to print product labels"],
       "reply": "Opening the Barcode Sheets view!",
       "steps": [
         { "type": "walk_click",   "selector": "[data-tab='inventory']",                      "wait": 500 },
