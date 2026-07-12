@@ -3333,11 +3333,93 @@ function switchHomeView(view) {
   if (view === 'expenses')  loadExpensesView();
   if (view === 'profit')    loadProfitReport();
   if (view === 'payroll')   loadPayrollView();
+  if (view === 'orders')    loadOrdersView();
 }
 
 $$('.home-tab-btn').forEach(btn => {
   btn.addEventListener('click', () => switchHomeView(btn.dataset.homeView));
 });
+
+// ── Home Orders View ───────────────────────────────────────────────────────
+async function loadOrdersView() {
+  const salesTbody = $('#hov-sales-tbody');
+  const poTbody    = $('#hov-po-tbody');
+  if (!salesTbody || !poTbody) return;
+
+  salesTbody.innerHTML = '<tr><td colspan="5" class="hov-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</td></tr>';
+  poTbody.innerHTML    = '<tr><td colspan="5" class="hov-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</td></tr>';
+
+  const fromEl   = $('#hov-sales-from');
+  const toEl     = $('#hov-sales-to');
+  const poStatus = $('#hov-po-status');
+  const fromQ    = fromEl?.value  ? `&from=${fromEl.value}`      : '';
+  const toQ      = toEl?.value    ? `&to=${toEl.value}`          : '';
+  const stQ      = poStatus?.value && poStatus.value !== 'all' ? poStatus.value : '';
+
+  const [salesRes, poRes] = await Promise.all([
+    API.sales('', 200),
+    API.purchaseOrders('', stQ),
+  ]);
+
+  // Sales
+  let sales = salesRes.status === 200 ? (salesRes.body?.data || []) : [];
+  if (fromEl?.value) sales = sales.filter(s => (s.sold_at || s.created_at || '').slice(0,10) >= fromEl.value);
+  if (toEl?.value)   sales = sales.filter(s => (s.sold_at || s.created_at || '').slice(0,10) <= toEl.value);
+
+  const salesCount = sales.length;
+  const salesRev   = sales.reduce((sum, s) => sum + parseFloat(s.total || 0), 0);
+  if ($('#hov-sales-count')) $('#hov-sales-count').textContent = salesCount;
+  if ($('#hov-sales-rev'))   $('#hov-sales-rev').textContent   = salesRev.toFixed(2);
+
+  if (!sales.length) {
+    salesTbody.innerHTML = '<tr><td colspan="5" class="hov-empty">No sales found</td></tr>';
+  } else {
+    salesTbody.innerHTML = sales.slice(0, 100).map(s => {
+      const date  = (s.sold_at || s.created_at || '').slice(0, 10);
+      const items = s.items_count ?? '—';
+      const pay   = s.payment_method || '—';
+      const total = parseFloat(s.total || 0).toFixed(2);
+      return `<tr>
+        <td>#${s.id}</td>
+        <td>${date}</td>
+        <td>${items}</td>
+        <td>${pay}</td>
+        <td class="hov-td-r hov-amt">${total}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  // Purchase Orders
+  let pos = poRes.status === 200 ? (poRes.body?.data || poRes.body || []) : [];
+  if (!Array.isArray(pos)) pos = [];
+
+  const poCount   = pos.length;
+  const poPending = pos.filter(p => ['draft','ordered','partially_received'].includes(p.status)).length;
+  if ($('#hov-po-count'))   $('#hov-po-count').textContent   = poCount;
+  if ($('#hov-po-pending')) $('#hov-po-pending').textContent = poPending;
+
+  if (!pos.length) {
+    poTbody.innerHTML = '<tr><td colspan="5" class="hov-empty">No purchase orders found</td></tr>';
+  } else {
+    poTbody.innerHTML = pos.slice(0, 100).map(p => {
+      const date     = (p.ordered_at || p.created_at || '').slice(0, 10);
+      const supplier = p.supplier?.name || p.supplier_name || '—';
+      const status   = p.status || 'draft';
+      const total    = parseFloat(p.total || 0).toFixed(2);
+      return `<tr>
+        <td>#${p.id}</td>
+        <td>${supplier}</td>
+        <td>${date}</td>
+        <td><span class="po-status-badge ${status}">${status.replace('_', ' ')}</span></td>
+        <td class="hov-td-r hov-amt">${total}</td>
+      </tr>`;
+    }).join('');
+  }
+}
+
+$('#hov-sales-filter')?.addEventListener('click', loadOrdersView);
+$('#hov-po-filter')?.addEventListener('click', loadOrdersView);
+$('#hov-refresh')?.addEventListener('click', loadOrdersView);
 
 // ── Home right-panel ───────────────────────────────────────────────────────
 async function _homeRightPanelLoad() {
@@ -4659,7 +4741,7 @@ $('#rb-home-new-sale').addEventListener('click',      () => { activateTab('pos')
 $('#rb-home-daily-summary').addEventListener('click', () => { activateTab('home'); switchHomeView('today'); });
 $('#rb-home-dashboard').addEventListener('click',     () => activateTab('home'));
 $('#rb-home-analytics').addEventListener('click',     () => { activateTab('home'); switchHomeView('analytics'); });
-$('#rb-home-orders').addEventListener('click',        () => activateTab('inventory'));
+$('#rb-home-orders').addEventListener('click',        () => { activateTab('home'); switchHomeView('orders'); });
 $('#rb-home-customers').addEventListener('click',     () => toast('Customers coming soon', 'info'));
 $('#rb-home-suppliers').addEventListener('click', () => { activateTab('inventory'); switchInvView('suppliers'); });
 $('#rb-home-expenses').addEventListener('click',      () => { activateTab('home'); switchHomeView('expenses'); });

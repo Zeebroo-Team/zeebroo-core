@@ -6,8 +6,6 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
@@ -31,6 +29,7 @@ use Modules\HRManagement\Services\EmployeeProfilePhotoService;
 use Modules\HRManagement\Services\EmployeeService;
 use Modules\HRManagement\Services\HrPayrollSettingsService;
 use Modules\HRManagement\Services\JobTitleService;
+use Modules\Mail\Services\BusinessMailerService;
 
 class HrEmployeeController extends Controller
 {
@@ -44,6 +43,7 @@ class HrEmployeeController extends Controller
         private readonly EmployeeProfilePhotoService $employeeProfilePhoto,
         private readonly EmployeeDocumentService $employeeDocumentService,
         private readonly EmployeePortalProvisioningService $employeePortalProvisioning,
+        private readonly BusinessMailerService $businessMailer,
     ) {}
 
     public function index(Request $request): RedirectResponse|View
@@ -192,19 +192,13 @@ class HrEmployeeController extends Controller
         }
 
         if (($portalProvision['scenario'] ?? '') !== 'noop') {
-            try {
-                Mail::to(Str::lower(trim($employee->personal_email)))->send(new EmployeePortalWelcomeMail(
-                    $employee,
-                    $business,
-                    route('hr.portal.login', [], true),
-                    $portalProvision,
-                ));
-            } catch (\Throwable $e) {
-                Log::error('Employee HR portal welcome email failed.', [
-                    'exception' => $e,
-                    'employee_id' => $employee->id,
-                ]);
+            $result = $this->businessMailer->send(
+                $business,
+                new EmployeePortalWelcomeMail($employee, $business, route('hr.portal.login', [], true), $portalProvision),
+                Str::lower(trim($employee->personal_email)),
+            );
 
+            if (!$result['success']) {
                 return redirect()->route('hr.employees.index')->with(
                     'warning',
                     __('Employee created, but the welcome email could not be sent. Share the HR portal link and access details manually.')

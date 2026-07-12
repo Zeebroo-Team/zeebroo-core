@@ -1,0 +1,11 @@
+{
+    "name": "Mail",
+    "alias": "mail",
+    "description": "Per-business outbound email configuration (Resend or custom SMTP) used by every module that sends mail.",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\Mail\\Providers\\MailServiceProvider"
+    ],
+    "files": []
+}

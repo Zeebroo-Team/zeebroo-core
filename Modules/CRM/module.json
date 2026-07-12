@@ -1,0 +1,11 @@
+{
+    "name": "CRM",
+    "alias": "crm",
+    "description": "Leads pipeline, contact activities, and follow-up tasks.",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\CRM\\Providers\\CRMServiceProvider"
+    ],
+    "files": []
+}

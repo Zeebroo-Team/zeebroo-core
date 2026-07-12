@@ -198,6 +198,21 @@ class FileManagerService
         return $this->createFolder($business, null, 'Products');
     }
 
+    public function crmFolder(Business $business): FileManagerFolder
+    {
+        $existing = FileManagerFolder::query()
+            ->where('business_id', $business->id)
+            ->whereNull('parent_id')
+            ->where('name', 'CRM')
+            ->first();
+
+        if ($existing instanceof FileManagerFolder) {
+            return $existing;
+        }
+
+        return $this->createFolder($business, null, 'CRM');
+    }
+
     /**
      * @return Collection<int, FileManagerFile>
      */

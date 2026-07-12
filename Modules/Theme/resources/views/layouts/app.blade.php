@@ -429,6 +429,12 @@
             || $showSidebarQuotationsLink || $showSidebarInvoicesLink || ($navBusiness && $posFeatureOn);
         $showSidebarPosHubLink = $navBusiness && Route::has('pos.index') && $showSidebarPosSection;
 
+        $showSidebarCrmLink = $navBusiness && Route::has('crm.projects.index');
+        $showSidebarMailLink = $navBusiness && Route::has('mail.inbox.index');
+        $sidebarMailUnreadCount = $showSidebarMailLink
+            ? \Modules\Mail\Models\MailMessage::where('business_id', $navBusiness->id)->where('direction', 'inbound')->where('is_read', false)->count()
+            : 0;
+
         $showSidebarFilesLink = $navBusiness && (
             $navBusiness->fileManagerFiles()->exists() || $navBusiness->fileManagerFolders()->exists()
         );
@@ -504,6 +510,7 @@
             $showSidebarPosReturnsLink = false;
             $showSidebarPosSection = false;
             $showSidebarQuotationsLink = false;
+            $showSidebarCrmLink = false;
             $showSidebarFilesLink = false;
             $showSidebarPropertiesLink = false;
             $showSidebarModificationsLink = false;
@@ -703,6 +710,49 @@
                 </div>
             @endif
 
+            @if($showSidebarCrmLink)
+                <div class="menu-group-title">
+                    <i class="fa fa-handshake"></i><span>CRM</span>
+                </div>
+                <div class="submenu" aria-label="CRM">
+                    <a href="{{ route('crm.projects.index') }}" @class(['active' => request()->routeIs('crm.projects.*') || request()->routeIs('crm.leads.*')])>
+                        <i class="fa fa-diagram-project"></i><span>Projects</span>
+                    </a>
+                    <a href="{{ route('crm.contacts.index') }}" @class(['active' => request()->routeIs('crm.contacts.*')])>
+                        <i class="fa fa-address-book"></i><span>Contacts</span>
+                    </a>
+                    <a href="{{ route('crm.tasks.index') }}" @class(['active' => request()->routeIs('crm.tasks.*')])>
+                        <i class="fa fa-list-check"></i><span>Tasks</span>
+                    </a>
+                </div>
+            @endif
+
+            @if($showSidebarMailLink)
+                <div class="menu-group-title">
+                    <i class="fa fa-envelope"></i><span>Mail</span>
+                    @if($sidebarMailUnreadCount)
+                        <span class="pcat-badge pcat-badge--on" style="margin-left:6px;">{{ $sidebarMailUnreadCount }}</span>
+                    @endif
+                </div>
+                <div class="submenu" aria-label="Mail">
+                    <a href="{{ route('mail.inbox.index', ['box' => 'inbox']) }}" @class(['active' => request()->routeIs('mail.inbox.index') && request()->query('box', 'inbox') !== 'sent'])>
+                        <i class="fa fa-inbox"></i><span>Inbox</span>
+                    </a>
+                    <a href="{{ route('mail.inbox.index', ['box' => 'sent']) }}" @class(['active' => request()->routeIs('mail.inbox.index') && request()->query('box') === 'sent'])>
+                        <i class="fa fa-paper-plane"></i><span>Sent</span>
+                    </a>
+                    <a href="{{ route('mail.templates.index') }}" @class(['active' => request()->routeIs('mail.templates.*')])>
+                        <i class="fa fa-file-lines"></i><span>Mail Templates</span>
+                    </a>
+                    <a href="{{ route('mail.filters.index') }}" @class(['active' => request()->routeIs('mail.filters.*')])>
+                        <i class="fa fa-filter"></i><span>Filters</span>
+                    </a>
+                    <a href="{{ route('mail.scheduled.index') }}" @class(['active' => request()->routeIs('mail.scheduled.*')])>
+                        <i class="fa fa-clock"></i><span>Schedules</span>
+                    </a>
+                </div>
+            @endif
+
             @if($showSidebarFilesLink && Route::has('filemanager.index'))
                 <a href="{{ route('filemanager.index') }}" class="{{ request()->routeIs('filemanager.*') ? 'active' : '' }}"><i class="fa fa-folder-open"></i><span>Files</span></a>
             @endif
@@ -815,6 +865,9 @@
                 <div class="submenu">
                     <a href="{{ route('settings.business') }}" class="{{ request()->routeIs('settings.business') ? 'active' : '' }}"><i class="fa fa-briefcase"></i><span>Business Settings</span></a>
                     <a href="{{ route('settings.user') }}" class="{{ request()->routeIs('settings.user') ? 'active' : '' }}"><i class="fa fa-user-gear"></i><span>User Settings</span></a>
+                    @if(Route::has('mail.settings.edit'))
+                        <a href="{{ route('mail.settings.edit') }}" class="{{ request()->routeIs('mail.settings.*') ? 'active' : '' }}"><i class="fa fa-envelope"></i><span>Mail Settings</span></a>
+                    @endif
                     @if(Route::has('app-connection.index'))
                         <a href="{{ route('app-connection.index') }}" class="{{ request()->routeIs('app-connection.*') ? 'active' : '' }}"><i class="fa fa-plug"></i><span>App connections</span></a>
                     @endif

@@ -387,6 +387,9 @@
         <div class="ribbon-tab" data-tab="restaurant">Restaurant</div>
         <div class="ribbon-tab" data-tab="rst-pos">Restaurant POS</div>
       </div>
+      <button id="guide-toggle-btn" title="Show / hide guide assistant">
+        <i class="fa fa-user-tie"></i> Guide
+      </button>
       <button id="ribbon-pin-btn" title="Collapse the Ribbon (Ctrl+F1)">
         <i class="fa fa-chevron-up" id="ribbon-pin-icon"></i>
       </button>
@@ -1019,6 +1022,7 @@
         <button class="home-tab-btn" data-home-view="expenses"><i class="fa fa-file-invoice-dollar"></i> Expenses</button>
         <button class="home-tab-btn" data-home-view="profit"><i class="fa fa-sack-dollar"></i> Profit</button>
         <button class="home-tab-btn" data-home-view="payroll"><i class="fa fa-user-tie"></i> Payroll</button>
+        <button class="home-tab-btn" data-home-view="orders"><i class="fa fa-receipt"></i> Orders</button>
       </div>
 
       <!-- Body: main view + right panel -->
@@ -1161,6 +1165,81 @@
               <div class="inv-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</div>
             </div>
           </div>
+
+          <!-- Orders view -->
+          <div id="home-view-orders" class="home-view" style="display:none;flex-direction:column">
+            <div class="tds-toolbar">
+              <span class="tds-title"><i class="fa fa-receipt"></i> Orders</span>
+              <div class="hov-kpis">
+                <div class="hov-kpi"><span id="hov-sales-count">—</span><span>Sales</span></div>
+                <div class="hov-kpi hov-kpi-green"><span id="hov-sales-rev">—</span><span>Revenue</span></div>
+                <div class="hov-kpi hov-kpi-purple"><span id="hov-po-count">—</span><span>Purchase Orders</span></div>
+                <div class="hov-kpi hov-kpi-amber"><span id="hov-po-pending">—</span><span>Pending POs</span></div>
+              </div>
+              <button class="home-act-refresh" id="hov-refresh"><i class="fa fa-arrows-rotate"></i> Refresh</button>
+            </div>
+
+            <div class="hov-body">
+
+              <!-- Sales Orders -->
+              <div class="hov-section">
+                <div class="hov-section-hdr">
+                  <span><i class="fa fa-cart-shopping"></i> Sales Orders</span>
+                  <div class="hov-section-filters">
+                    <input type="date" id="hov-sales-from" class="hov-date-input">
+                    <span style="color:var(--text-muted);font-size:11px">to</span>
+                    <input type="date" id="hov-sales-to"   class="hov-date-input">
+                    <button class="hov-filter-btn" id="hov-sales-filter"><i class="fa fa-filter"></i></button>
+                  </div>
+                </div>
+                <div class="hov-table-wrap">
+                  <table class="hov-table">
+                    <thead>
+                      <tr>
+                        <th>Sale #</th><th>Date</th><th>Items</th>
+                        <th>Payment</th><th class="hov-th-r">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody id="hov-sales-tbody">
+                      <tr><td colspan="5" class="hov-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <!-- Purchase Orders -->
+              <div class="hov-section">
+                <div class="hov-section-hdr">
+                  <span><i class="fa fa-truck"></i> Purchase Orders</span>
+                  <div class="hov-section-filters">
+                    <select id="hov-po-status" class="hov-select">
+                      <option value="">All statuses</option>
+                      <option value="draft">Draft</option>
+                      <option value="ordered">Ordered</option>
+                      <option value="partially_received">Part. received</option>
+                      <option value="received">Received</option>
+                      <option value="cancelled">Cancelled</option>
+                    </select>
+                    <button class="hov-filter-btn" id="hov-po-filter"><i class="fa fa-filter"></i></button>
+                  </div>
+                </div>
+                <div class="hov-table-wrap">
+                  <table class="hov-table">
+                    <thead>
+                      <tr>
+                        <th>PO #</th><th>Supplier</th><th>Date</th>
+                        <th>Status</th><th class="hov-th-r">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody id="hov-po-tbody">
+                      <tr><td colspan="5" class="hov-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+            </div><!-- /hov-body -->
+          </div><!-- /home-view-orders -->
         </div>
 
         <!-- Right panel -->
@@ -7979,9 +8058,31 @@
   </div>
 </div>
 
+<!-- ── Guide Assistant Character ─────────────────────────────────────── -->
+<div id="guide-char-wrap" style="display:none">
+  <div id="guide-bubble" style="display:none">
+    <!-- Input state -->
+    <div id="guide-chat-input-wrap">
+      <textarea id="guide-chat-input" placeholder="Ask me anything…" rows="2"></textarea>
+      <button id="guide-chat-send"><i class="fa fa-paper-plane"></i> Ask</button>
+    </div>
+    <!-- Reply state (hidden until response received) -->
+    <div id="guide-chat-reply-wrap" style="display:none">
+      <div id="guide-chat-reply-text"></div>
+      <button id="guide-chat-again"><i class="fa fa-comment"></i> Chat</button>
+    </div>
+  </div>
+  <div id="guide-char-img-wrap">
+    <img id="guide-char-img" src="img/animtors.gif" alt="Guide assistant" draggable="false">
+    <button id="guide-char-dismiss" title="Hide guide"><i class="fa fa-xmark"></i></button>
+  </div>
+</div>
+
 <script src="js/d3.min.js"></script>
 <script src="js/jsbarcode.min.js"></script>
 <script src="js/api.js"></script>
 <script src="js/app.js"></script>
+<script src="js/guide-config.js"></script>
+<script src="js/guide.js"></script>
 </body>
 </html>
