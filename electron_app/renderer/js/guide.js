@@ -351,7 +351,7 @@
     const bubble = document.getElementById('guide-bubble');
     if (!wrap || !bubble) return;
 
-    const BUBBLE_W = 260;   // bubble width
+    const BUBBLE_W = 280;   // bubble width
     const BUBBLE_H = 150;   // approx rendered height
     const GAP      = 14;    // gap between character and bubble
     const MARGIN   = 8;     // min distance from viewport edge
@@ -413,8 +413,8 @@
     if (_bubbleOpen) { _closeBubble(); } else { _openBubble(); }
   }
 
-  function _reopenWithReply(text) {
-    _showReplyState(text);
+  function _reopenWithReply(text, isHtml) {
+    _showReplyState(text, isHtml);
     const bubble = document.getElementById('guide-bubble');
     if (!bubble) return;
     _bubbleOpen = true;
@@ -440,13 +440,21 @@
     _busy = false;
   }
 
-  function _showReplyState(text) {
+  function _showReplyState(text, isHtml) {
     const iw = document.getElementById('guide-chat-input-wrap');
     const rw = document.getElementById('guide-chat-reply-wrap');
     const rt = document.getElementById('guide-chat-reply-text');
     if (iw) iw.style.display = 'none';
     if (rw) rw.style.display = 'flex';
-    if (rt) rt.textContent = text;
+    if (rt) {
+      if (isHtml) {
+        rt.innerHTML = text;
+        rt.classList.add('guide-reply-rich');
+      } else {
+        rt.textContent = text;
+        rt.classList.remove('guide-reply-rich');
+      }
+    }
   }
 
   /* ════════════════════════════════════════════════════════════════════════
@@ -465,16 +473,25 @@
     _closeBubble();
     await _sleep(200);
 
-    // Call Gemini — reply + optional walkthrough ID are both in the response
+    // Call Gemini — reply + optional walkthrough ID or dataQuery are both in the response
     let reply        = null;
     let match        = null;
     let geminiWorked = false;
+    let isHtml       = false;
 
     try {
       const res = await API.guideChat(message);
       if (res.status === 200 && res.body?.reply) {
         reply        = String(res.body.reply).trim();
         geminiWorked = reply.length > 0;
+        isHtml       = !!res.body.isHtml;
+
+        // Data query reply — show immediately, no walkthrough
+        if (isHtml) {
+          _reopenWithReply(reply, true);
+          _busy = false;
+          return;
+        }
 
         // Gemini may identify which walkthrough to run
         const wtId = res.body.walkthrough;
