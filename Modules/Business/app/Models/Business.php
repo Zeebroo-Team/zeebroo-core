@@ -211,6 +211,16 @@ class Business extends Model
         return $this->hasMany(\Modules\Sales\Models\Quotation::class);
     }
 
+    public function crmLeads(): HasMany
+    {
+        return $this->hasMany(\Modules\CRM\Models\Lead::class);
+    }
+
+    public function crmProjects(): HasMany
+    {
+        return $this->hasMany(\Modules\CRM\Models\Project::class);
+    }
+
     public function fileManagerFolders(): HasMany
     {
         return $this->hasMany(FileManagerFolder::class)->orderBy('name');

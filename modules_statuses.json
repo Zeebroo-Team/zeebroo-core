@@ -17,5 +17,7 @@
     "Sales": true,
     "Documentation": true,
     "Service": true,
-    "Restaurant": true
+    "Restaurant": true,
+    "CRM": true,
+    "Mail": true
 }

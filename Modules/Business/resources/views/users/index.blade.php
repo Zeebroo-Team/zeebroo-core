@@ -70,6 +70,8 @@
 .bum-field-err{margin:5px 0 0;font-size:12px;font-weight:600;color:#ef4444;}
 /* Permissions grid */
 .bum-perms-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:8px;}
+.bum-perm-group-title{grid-column:1/-1;display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin:10px 0 2px;}
+.bum-perm-group-title:first-child{margin-top:0;}
 .bum-perm-check{display:flex;align-items:center;gap:8px;padding:8px 11px;border-radius:10px;border:1px solid var(--border);cursor:pointer;transition:.15s ease;font-size:13px;font-weight:500;}
 .bum-perm-check:hover{border-color:color-mix(in srgb,var(--primary) 45%,var(--border));background:color-mix(in srgb,var(--primary) 5%,transparent);}
 .bum-perm-check input[type=checkbox]{accent-color:var(--primary);width:14px;height:14px;flex-shrink:0;}
@@ -78,6 +80,12 @@
 .bum-cancel-btn{padding:9px 18px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;}
 .bum-cancel-btn:hover{border-color:var(--primary);}
 </style>
+
+@php
+    // $permissions is grouped (each group has 'items' => [['key','label',...], ...]) —
+    // flatten it here for the flat key->label lookup the member-row pills need.
+    $permissionLabels = collect($permissions)->flatMap(fn ($group) => collect($group['items'] ?? [])->pluck('label', 'key'))->all();
+@endphp
 
 <div class="bum-wrap">
     @if(session('status'))
@@ -155,7 +163,7 @@
                             @elseif(!empty($member->permissions))
                                 <div class="bum-perms">
                                     @foreach($member->permissions as $perm)
-                                        <span class="bum-perm-pill">{{ $permissions[$perm] ?? $perm }}</span>
+                                        <span class="bum-perm-pill">{{ $permissionLabels[$perm] ?? $perm }}</span>
                                     @endforeach
                                 </div>
                             @else
@@ -239,11 +247,16 @@
                     <label>Module permissions</label>
                     <p class="bum-perms-note" id="bumAdminNote" style="display:none;"><i class="fa fa-circle-info"></i> Admins have access to all modules automatically.</p>
                     <div class="bum-perms-grid" id="bumPermsGrid">
-                        @foreach($permissions as $key => $label)
-                            <label class="bum-perm-check">
-                                <input type="checkbox" name="permissions[]" value="{{ $key }}" checked>
-                                {{ $label }}
-                            </label>
+                        @foreach($permissions as $group)
+                            <div class="bum-perm-group-title">
+                                <i class="fa {{ $group['icon'] ?? 'fa-shapes' }}"></i> {{ $group['label'] }}
+                            </div>
+                            @foreach(($group['items'] ?? []) as $item)
+                                <label class="bum-perm-check">
+                                    <input type="checkbox" name="permissions[]" value="{{ $item['key'] }}" checked>
+                                    {{ $item['label'] }}
+                                </label>
+                            @endforeach
                         @endforeach
                     </div>
                 </div>
