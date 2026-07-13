@@ -5,6 +5,7 @@ namespace Modules\Mail\Http\Controllers;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Illuminate\View\View;
 use Modules\Business\Models\Business;
 use Modules\Mail\Http\Controllers\Concerns\ResolvesMailBusiness;
@@ -13,6 +14,7 @@ use Modules\Mail\Models\MailMessage;
 use Modules\Mail\Services\BusinessMailerService;
 use Modules\Mail\Services\MailTemplateService;
 use Modules\Mail\Services\ScheduledMailService;
+use Modules\Pos\Models\Customer;
 
 class InboxController extends Controller
 {
@@ -74,16 +76,24 @@ class InboxController extends Controller
             ->limit(10)
             ->get();
 
+        // Grouped within the current page only — messages are already ordered
+        // desc by occurred_at, so groupBy() naturally orders groups by their
+        // most recent message, matching the flat list's ordering.
+        $groupedMessages = $messages->getCollection()->groupBy(
+            fn (MailMessage $m) => Str::lower($box === 'sent' ? ($m->to_address ?: '') : ($m->from_address ?: ''))
+        );
+
         return view('mail::inbox.index', [
-            'business'     => $business,
-            'messages'     => $messages,
-            'box'          => $box,
-            'search'       => $search,
-            'status'       => $status,
-            'contact'      => $contact,
-            'contacts'     => $contacts,
-            'statusCounts' => $statusCounts,
-            'unreadCount'  => MailMessage::where('business_id', $business->id)
+            'business'        => $business,
+            'messages'        => $messages,
+            'groupedMessages' => $groupedMessages,
+            'box'             => $box,
+            'search'          => $search,
+            'status'          => $status,
+            'contact'         => $contact,
+            'contacts'        => $contacts,
+            'statusCounts'    => $statusCounts,
+            'unreadCount'     => MailMessage::where('business_id', $business->id)
                 ->where('direction', MailMessage::DIRECTION_INBOUND)
                 ->where('is_read', false)
                 ->count(),
@@ -101,10 +111,72 @@ class InboxController extends Controller
             $message->update(['is_read' => true]);
         }
 
+        $counterpartEmail = $message->direction === MailMessage::DIRECTION_INBOUND
+            ? $message->from_address
+            : $message->to_address;
+
+        $customer = null;
+        $timeline = collect([$message]);
+
+        if (filled($counterpartEmail)) {
+            $customer = Customer::where('business_id', $business->id)
+                ->whereRaw('LOWER(email) = ?', [Str::lower($counterpartEmail)])
+                ->first();
+
+            $relatedMessages = MailMessage::where('business_id', $business->id)
+                ->where('id', '!=', $message->id)
+                ->where(function ($query) use ($counterpartEmail) {
+                    $query->whereRaw('LOWER(from_address) = ?', [Str::lower($counterpartEmail)])
+                        ->orWhereRaw('LOWER(to_address) = ?', [Str::lower($counterpartEmail)]);
+                })
+                ->orderByDesc('occurred_at')
+                ->limit(19)
+                ->get();
+
+            $timeline = $relatedMessages->push($message)->sortBy('occurred_at')->values();
+        }
+
         return view('mail::inbox.show', [
-            'business' => $business,
-            'message'  => $message,
+            'business'         => $business,
+            'message'          => $message,
+            'customer'         => $customer,
+            'timeline'         => $timeline,
+            'counterpartEmail' => $counterpartEmail,
         ]);
+    }
+
+    public function convertToCustomer(Request $request, MailMessage $message): RedirectResponse
+    {
+        $business = $this->requireMessage($request, $message);
+        if ($business instanceof RedirectResponse) {
+            return $business;
+        }
+
+        $email = $message->direction === MailMessage::DIRECTION_INBOUND
+            ? $message->from_address
+            : $message->to_address;
+
+        abort_if(blank($email), 422);
+
+        $existing = Customer::where('business_id', $business->id)
+            ->whereRaw('LOWER(email) = ?', [Str::lower($email)])
+            ->first();
+
+        if ($existing) {
+            return redirect()->route('mail.inbox.show', $message)
+                ->with('status', $existing->name . ' is already a customer.');
+        }
+
+        $name = $message->from_name ?: Str::title(str_replace(['.', '_', '+'], ' ', Str::before($email, '@')));
+
+        $customer = Customer::create([
+            'business_id' => $business->id,
+            'name'        => $name,
+            'email'       => $email,
+        ]);
+
+        return redirect()->route('mail.inbox.show', $message)
+            ->with('status', $customer->name . ' added as a customer.');
     }
 
     public function compose(Request $request): View|RedirectResponse
@@ -134,11 +206,19 @@ class InboxController extends Controller
         }
 
         $data = $request->validate([
-            'to'         => ['required', 'email', 'max:190'],
-            'subject'    => ['required', 'string', 'max:200'],
-            'body'       => ['required', 'string', 'max:10000'],
-            'send_at'    => ['nullable', 'date', 'after:now'],
+            'to'               => ['required', 'email', 'max:190'],
+            'subject'          => ['required', 'string', 'max:200'],
+            'body'             => ['required', 'string', 'max:10000'],
+            'send_at'          => ['nullable', 'date', 'after:now'],
+            'reply_to_message' => ['nullable', 'integer'],
         ]);
+
+        $replyToMessage = filled($data['reply_to_message'] ?? null)
+            ? MailMessage::where('business_id', $business->id)->find($data['reply_to_message'])
+            : null;
+        $redirectRoute = $replyToMessage
+            ? route('mail.inbox.show', $replyToMessage)
+            : route('mail.inbox.index', ['box' => 'sent']);
 
         if (filled($data['send_at'] ?? null)) {
             $this->scheduledMails->schedule($business, [
@@ -169,7 +249,7 @@ class InboxController extends Controller
             ]);
         }
 
-        return redirect()->route('mail.inbox.index', ['box' => 'sent'])->with(
+        return redirect($redirectRoute)->with(
             $result['success'] ? 'status' : 'error',
             $result['success'] ? 'Message sent to ' . $data['to'] . '.' : $result['error']
         );

@@ -40,13 +40,15 @@ class MailServiceProvider extends ModuleServiceProvider
     ];
 
     /**
-     * Poll every connected business mailbox every 5 minutes, and check for due
+     * Poll every connected business mailbox every minute, and check for due
      * scheduled sends every minute. Requires the server's own cron to run
-     * `php artisan schedule:run` every minute.
+     * `php artisan schedule:run` every minute (or `php artisan schedule:work`
+     * in local dev), plus a running queue worker to process the dispatched
+     * SyncMailboxJob/SendScheduledMailJob jobs.
      */
     protected function configureSchedules(Schedule $schedule): void
     {
-        $schedule->command(SyncMailboxes::class)->everyFiveMinutes()->withoutOverlapping();
+        $schedule->command(SyncMailboxes::class)->everyMinute()->withoutOverlapping();
         $schedule->command(SendScheduledMails::class)->everyMinute()->withoutOverlapping();
     }
 }
