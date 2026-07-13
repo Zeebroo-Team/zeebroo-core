@@ -38,4 +38,5 @@ Route::middleware(['web', 'auth', 'verified'])->group(function () {
 
     Route::get('/mail', [InboxController::class, 'index'])->name('mail.inbox.index');
     Route::get('/mail/{message}', [InboxController::class, 'show'])->name('mail.inbox.show');
+    Route::post('/mail/{message}/convert-to-customer', [InboxController::class, 'convertToCustomer'])->name('mail.inbox.convertToCustomer');
 });

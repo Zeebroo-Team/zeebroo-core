@@ -8,10 +8,10 @@
 .mi-row:last-child{border-bottom:none;}
 .mi-row:hover{background:color-mix(in srgb,var(--card) 80%,var(--border) 20%);}
 .mi-row--unread{background:color-mix(in srgb,var(--primary) 5%,transparent);font-weight:700;}
-.mi-row__from{width:180px;flex-shrink:0;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.mi-row__subject{flex:1;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.mi-row__snippet{color:var(--muted);font-weight:400;margin-left:6px;}
-.mi-row__date{width:110px;flex-shrink:0;text-align:right;font-size:11.5px;color:var(--muted);font-weight:400;}
+.mi-row__name{flex:1;min-width:0;font-size:13.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.mi-row__meta{display:flex;align-items:center;gap:8px;flex-shrink:0;}
+.mi-badge-new{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;padding:2px 8px;border-radius:999px;background:color-mix(in srgb,var(--primary) 18%,transparent);color:var(--primary);}
+.mi-row__count{font-size:12px;font-weight:600;color:var(--muted);background:color-mix(in srgb,var(--muted) 15%,transparent);padding:2px 9px;border-radius:999px;}
 
 .mi-layout{display:flex;align-items:flex-start;gap:18px;}
 .mi-main{flex:1;min-width:0;}
@@ -30,7 +30,7 @@
 }
 </style>
 
-<div class="pcat-page-card card" style="max-width:1080px;padding:14px;">
+<div class="pcat-page-card card" style="padding:14px;">
     @if(session('status'))
         <div class="pcat-banner pcat-banner--ok" style="font-weight:600;">{{ session('status') }}</div>
     @endif
@@ -81,14 +81,20 @@
                 </p>
             @else
                 <div class="mi-list">
-                    @foreach($messages as $m)
-                        <a href="{{ route('mail.inbox.show', $m) }}" class="mi-row {{ !$m->is_read ? 'mi-row--unread' : '' }}">
-                            <span class="mi-row__from">{{ $box === 'sent' ? $m->to_address : ($m->from_name ?: $m->from_address) }}</span>
-                            <span class="mi-row__subject">
-                                {{ $m->subject ?: '(no subject)' }}
-                                <span class="mi-row__snippet">{{ $m->snippet() }}</span>
+                    @foreach($groupedMessages as $address => $group)
+                        @php
+                            $latest = $group->first();
+                            $hasUnread = $box === 'inbox' && $group->contains(fn ($m) => !$m->is_read);
+                            $displayName = $box === 'sent' ? ($address ?: '(unknown recipient)') : ($latest->from_name ?: ($address ?: '(unknown sender)'));
+                        @endphp
+                        <a href="{{ route('mail.inbox.show', $latest) }}" class="mi-row {{ $hasUnread ? 'mi-row--unread' : '' }}">
+                            <span class="mi-row__name">{{ $displayName }}</span>
+                            <span class="mi-row__meta">
+                                @if($hasUnread)
+                                    <span class="mi-badge-new">New</span>
+                                @endif
+                                <span class="mi-row__count">{{ $group->count() }}</span>
                             </span>
-                            <span class="mi-row__date">{{ $m->occurred_at?->diffForHumans() }}</span>
                         </a>
                     @endforeach
                 </div>
