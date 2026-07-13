@@ -39,4 +39,7 @@ Route::middleware(['web', 'auth', 'verified'])->group(function () {
     Route::get('/mail', [InboxController::class, 'index'])->name('mail.inbox.index');
     Route::get('/mail/{message}', [InboxController::class, 'show'])->name('mail.inbox.show');
     Route::post('/mail/{message}/convert-to-customer', [InboxController::class, 'convertToCustomer'])->name('mail.inbox.convertToCustomer');
+    Route::post('/mail/{message}/ai-summary', [InboxController::class, 'aiSummary'])->name('mail.inbox.aiSummary');
+    Route::post('/mail/{message}/ai-suggest-reply', [InboxController::class, 'aiSuggestReply'])->name('mail.inbox.aiSuggestReply');
+    Route::post('/mail/{message}/assign', [InboxController::class, 'assignConversation'])->name('mail.inbox.assign');
 });
