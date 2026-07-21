@@ -28,6 +28,7 @@ class BusinessController extends Controller
         'account_management',
         'bill_management',
         'human_resources',
+        'mail',
         'point_of_sale',
         'product_management',
         'service_management',

@@ -114,9 +114,13 @@ class PosCatalogApiController extends Controller
 
         return response()->json([
             'data' => array_merge($card, [
-                'description'  => $product->description,
-                'is_active'    => $product->is_active,
-                'is_bundle'    => $product->is_bundle,
+                'description'        => $product->description,
+                'is_active'          => $product->is_active,
+                'is_bundle'          => $product->is_bundle,
+                'has_warranty'       => (bool) $product->has_warranty,
+                'track_expiry'       => (bool) $product->track_expiry,
+                'courier_delivery'   => (bool) $product->courier_delivery,
+                'loyalty_redeemable' => (bool) $product->loyalty_redeemable,
                 'unit_price'   => (float) $product->unit_price,
                 'cost_price'   => $product->stockLayers->isNotEmpty()
                     ? (float) $product->stockLayers->first()->unit_cost

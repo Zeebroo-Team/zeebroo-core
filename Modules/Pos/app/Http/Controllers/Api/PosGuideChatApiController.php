@@ -127,6 +127,14 @@ WALKTHROUGH IDs (use when user wants to see, do, or learn something):
   svc_categories       – view / manage service categories
   svc_add_category     – add / create a new service category
   svc_refresh          – refresh / reload services data
+  mail_inbox           – open / view the mail inbox
+  mail_compose         – compose / write / send a new email
+  mail_sent            – view sent emails / outbox
+  mail_templates       – view / manage mail templates
+  mail_new_template    – add / create a new mail template
+  mail_filters         – view mail filters / inbox rules
+  mail_scheduled       – view scheduled / pending emails
+  mail_schedule_send   – schedule an email to send later
 
 Only set walkthrough when the user clearly wants a demonstration.
 Only set dataQuery when the user is asking for live numbers, lists, or status of their business data.

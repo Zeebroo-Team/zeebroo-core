@@ -13,6 +13,7 @@ const state = {
   isFullscreen: false,
   currency: '',
   receiptSettings: {},
+  _cashDrawerOpenedDate: null,
   productUnits: [],
   // POS multi-session tabs
   posTabs: [],
@@ -35,6 +36,10 @@ const state = {
   services: [],
   serviceSearchQuery: '',
   serviceActiveCategory: 0,
+  // Selected POS counter (null = no counter)
+  posCounterId: null,
+  // Register lock: timestamp (ms) when lock expires, null = unlocked
+  registerLockedUntil: null,
 };
 
 // ── DOM helpers ────────────────────────────────────────────────────────────
@@ -103,7 +108,7 @@ function activateTab(tabName) {
   $$('.ribbon-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tabName));
   $$('.ribbon-page').forEach(p => p.classList.toggle('active', p.dataset.page === tabName));
 
-  const panelMap = { home: 'panel-home', pos: 'panel-pos', sales: 'panel-sales', inventory: 'panel-inventory', finance: 'panel-finance', hr: 'panel-hr', services: 'panel-services', design: 'panel-design', restaurant: 'panel-restaurant', 'rst-pos': 'panel-rst-pos' };
+  const panelMap = { home: 'panel-home', pos: 'panel-pos', sales: 'panel-sales', inventory: 'panel-inventory', finance: 'panel-finance', hr: 'panel-hr', services: 'panel-services', design: 'panel-design', restaurant: 'panel-restaurant', 'rst-pos': 'panel-rst-pos', mail: 'panel-mail', crm: 'panel-crm' };
   $$('.content-panel').forEach(p => p.classList.remove('active'));
   const target = $('#' + (panelMap[tabName] || 'panel-pos'));
   if (target) target.classList.add('active');
@@ -112,6 +117,7 @@ function activateTab(tabName) {
   if (tabName !== 'rst-pos') _rstPosStopPoll();
 
   if (tabName === 'home')       loadHomeDashboard();
+  if (tabName === 'pos')        { _checkCashDrawerOpening(); _loadPosRibbonStats(); }
   if (tabName === 'sales')      { _sal.all = []; _salSwitchView(_sal.view || 'transactions'); }
   if (tabName === 'inventory')  { if (typeof switchInvView === 'function') switchInvView('products'); else loadInventory(); }
   if (tabName === 'finance')    { switchFinView('flow'); }
@@ -120,6 +126,8 @@ function activateTab(tabName) {
   if (tabName === 'design')     { _dsAllData = []; switchDesignView('all'); }
   if (tabName === 'restaurant') { switchRstView('orders'); }
   if (tabName === 'rst-pos')    { rstPosInit(); }
+  if (tabName === 'mail')       { switchMailView('inbox'); }
+  if (tabName === 'crm')        { switchCrmView('pipeline'); }
 }
 
 $$('.ribbon-tab').forEach(tab => {
@@ -582,12 +590,22 @@ async function _salSelectSale(id) {
     ? new Date(sale.sold_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })
     : '—';
 
-  const itemsRows = (sale.items || []).map(i => `<tr>
-    <td>${escHtml(i.product_name || '—')}</td>
+  const itemsRows = (sale.items || []).map(i => {
+    const wtyBadge = i.warranty_type
+      ? (() => {
+          if (i.warranty_type === 'lifetime') return '<br><span class="warranty-badge"><i class="fa fa-shield-halved"></i> Lifetime warranty</span>';
+          const label = i.warranty_days ? `${i.warranty_days}d warranty` : 'Warranty';
+          const exp   = i.warranty_expires_at ? ` &mdash; expires ${i.warranty_expires_at}` : '';
+          return `<br><span class="warranty-badge"><i class="fa fa-shield-halved"></i> ${escHtml(label)}${exp}</span>`;
+        })()
+      : '';
+    return `<tr>
+    <td>${escHtml(i.product_name || '—')}${wtyBadge}</td>
     <td class="td-r">${parseFloat(i.quantity) % 1 === 0 ? parseInt(i.quantity) : parseFloat(i.quantity).toFixed(2)}</td>
     <td class="td-r">${parseFloat(i.unit_sell_price || 0).toFixed(2)}${cur}</td>
     <td class="td-r"><strong>${parseFloat(i.line_total || 0).toFixed(2)}${cur}</strong></td>
-  </tr>`).join('');
+  </tr>`;
+  }).join('');
 
   const discount = parseFloat(sale.discount_amount || 0);
   const change   = parseFloat(sale.change_amount || 0);
@@ -941,75 +959,167 @@ async function _eodLoad() {
   footer.style.display = 'none';
   body.innerHTML = '<div class="eod-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</div>';
 
-  const res = await API.eodStatus();
-  if (res.status !== 200) {
+  const dontSettle = !!state.receiptSettings?.dont_settle_to_account;
+
+  const [eodRes, sumRes, drawerRes] = await Promise.all([
+    API.eodStatus(),
+    API.todaySummary(),
+    dontSettle ? API.cashDrawer() : Promise.resolve(null),
+  ]);
+
+  if (eodRes.status !== 200) {
     body.innerHTML = '<div class="eod-loading"><i class="fa fa-circle-exclamation" style="color:#ef4444"></i> Failed to load EOD status.</div>';
     return;
   }
 
-  const d        = res.body;
-  const currency = d.currency ? ' ' + d.currency : '';
-  const summary  = d.summary  || {};
+  const d         = eodRes.body;
+  const currency  = d.currency ? ' ' + d.currency : '';
+  const fmt       = v => (v ?? 0).toFixed(2) + currency;
+  const eodSum    = d.summary   || {};
   const unsettled = d.unsettled || [];
   const history   = d.history   || [];
-  const byMethod  = summary.by_method || {};
+  const byMethod  = eodSum.by_method || {};
+
+  const sales     = sumRes.status === 200 ? (sumRes.body?.data?.sales || {}) : {};
+  const dr        = drawerRes?.status === 200 ? (drawerRes.body?.data || null) : null;
+  const today     = new Date().toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
   let html = '';
 
-  // Summary cards
-  html += `<div class="eod-summary-bar">
-    <div class="eod-stat eod-stat--highlight">
-      <p class="eod-stat__label">Unsettled Sales</p>
-      <p class="eod-stat__value">${summary.total_count ?? 0}</p>
+  // ── Date heading ─────────────────────────────────────────────────────────
+  html += `<div class="eod-date-heading">${today}</div>`;
+
+  // ── Today's full summary ──────────────────────────────────────────────────
+  html += `<p class="eod-section-lbl"><i class="fa fa-chart-bar"></i> Today's Sales Summary</p>`;
+  html += `<div class="eod-summary-bar eod-summary-bar--6">
+    <div class="eod-stat">
+      <p class="eod-stat__label">Sales</p>
+      <p class="eod-stat__value">${sales.count ?? 0}</p>
     </div>
-    <div class="eod-stat eod-stat--highlight">
-      <p class="eod-stat__label">Cash Pending</p>
-      <p class="eod-stat__value">${(byMethod.cash?.total ?? 0).toFixed(2)}${currency}</p>
+    <div class="eod-stat eod-stat--blue">
+      <p class="eod-stat__label">Total Revenue</p>
+      <p class="eod-stat__value">${fmt(sales.revenue)}</p>
     </div>
-    <div class="eod-stat eod-stat--highlight">
-      <p class="eod-stat__label">Card Pending</p>
-      <p class="eod-stat__value">${(byMethod.card?.total ?? 0).toFixed(2)}${currency}</p>
+    <div class="eod-stat eod-stat--green">
+      <p class="eod-stat__label">Gross Profit</p>
+      <p class="eod-stat__value">${fmt(sales.gross_profit)}</p>
+    </div>
+    <div class="eod-stat">
+      <p class="eod-stat__label">Cash Sales</p>
+      <p class="eod-stat__value">${fmt(sales.by_method?.cash?.total)}</p>
+      <p class="eod-stat__sub">${sales.by_method?.cash?.count ?? 0} sales</p>
+    </div>
+    <div class="eod-stat">
+      <p class="eod-stat__label">Card Sales</p>
+      <p class="eod-stat__value">${fmt(sales.by_method?.card?.total)}</p>
+      <p class="eod-stat__sub">${sales.by_method?.card?.count ?? 0} sales</p>
+    </div>
+    <div class="eod-stat">
+      <p class="eod-stat__label">Items Sold</p>
+      <p class="eod-stat__value">${sales.items_sold ?? 0}</p>
     </div>
   </div>`;
 
-  if (unsettled.length === 0) {
-    html += `<div class="eod-all-ok"><i class="fa fa-circle-check"></i> All sales are settled. Nothing pending for today.</div>`;
-  } else {
-    html += `<p class="eod-section-lbl"><i class="fa fa-clock"></i> Pending settlement (${unsettled.length})</p>`;
-    html += `<div class="eod-tbl-wrap"><table class="eod-tbl">
-      <thead><tr>
-        <th>Sale #</th><th>Time</th><th>Payment</th><th>Account</th><th style="text-align:right">Total</th>
-      </tr></thead>
-      <tbody>
-      ${unsettled.map(s => {
-        const t = s.sold_at ? new Date(s.sold_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—';
-        const badge = s.payment_method === 'card' ? 'eod-badge-card' : 'eod-badge-cash';
-        const label = s.payment_method === 'card' ? 'Card' : 'Cash';
-        return `<tr>
-          <td style="font-weight:700">${escHtml(s.sale_number || String(s.id))}</td>
-          <td style="color:var(--text-muted)">${t}</td>
-          <td><span class="${badge}">${label}</span></td>
-          <td style="color:var(--text-muted);font-size:11px">${escHtml(s.account_label || '—')}</td>
-          <td style="text-align:right;font-weight:700">${s.total.toFixed(2)}${currency}</td>
-        </tr>`;
-      }).join('')}
-      </tbody>
-      <tfoot><tr>
-        <td colspan="4" style="text-align:right;font-size:11px;font-weight:700;color:var(--text-muted);padding:8px 10px">Total</td>
-        <td style="text-align:right;font-size:15px;font-weight:800;padding:8px 10px">${(summary.total_amount ?? 0).toFixed(2)}${currency}</td>
-      </tr></tfoot>
-    </table></div>`;
+  // ── Cash drawer ───────────────────────────────────────────────────────────
+  if (dontSettle && dr) {
+    html += `<p class="eod-section-lbl" style="margin-top:4px"><i class="fa fa-cash-register"></i> Cash Drawer</p>`;
+    html += `<div class="eod-summary-bar eod-summary-bar--4">
+      <div class="eod-stat">
+        <p class="eod-stat__label">Opening Float</p>
+        <p class="eod-stat__value">${dr.opening_float !== null ? fmt(dr.opening_float) : '—'}</p>
+      </div>
+      <div class="eod-stat">
+        <p class="eod-stat__label">Cash Sales</p>
+        <p class="eod-stat__value">${fmt(dr.cash_sales)}</p>
+      </div>
+      <div class="eod-stat eod-stat--warn">
+        <p class="eod-stat__label">Withdrawals</p>
+        <p class="eod-stat__value">${fmt(dr.total_withdrawals)}</p>
+      </div>
+      <div class="eod-stat eod-stat--highlight">
+        <p class="eod-stat__label">Cash Balance</p>
+        <p class="eod-stat__value">${dr.balance !== null ? fmt(dr.balance) : '—'}</p>
+      </div>
+    </div>`;
 
-    footer.style.display = '';
-    $('#eod-footer-info').textContent = `${summary.total_count} sale${summary.total_count !== 1 ? 's' : ''} · ${(summary.total_amount ?? 0).toFixed(2)}${currency} total`;
-    const btn = $('#eod-settle-btn');
-    btn.disabled = false;
-    btn.innerHTML = '<i class="fa fa-check-circle"></i> Settle All to Bank';
+    if (dr.withdrawals?.length) {
+      html += `<div class="eod-tbl-wrap"><table class="eod-tbl">
+        <thead><tr><th>Time</th><th>Note</th><th style="text-align:right">Withdrawn</th></tr></thead>
+        <tbody>
+        ${dr.withdrawals.map(w => {
+          const t = w.time ? new Date(w.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—';
+          return `<tr>
+            <td style="color:var(--text-muted)">${t}</td>
+            <td>${escHtml(w.note || '—')}</td>
+            <td style="text-align:right;font-weight:700">${w.amount.toFixed(2)}${currency}</td>
+          </tr>`;
+        }).join('')}
+        </tbody>
+      </table></div>`;
+    }
+
+    html += `<div style="text-align:right;margin-bottom:18px">
+      <button class="psm-btn-cancel" id="eod-withdraw-btn" style="font-size:12px;padding:6px 14px">
+        <i class="fa fa-arrow-up-from-bracket"></i> Withdraw Cash
+      </button>
+    </div>`;
   }
 
-  // History
+  // ── Settlement section ────────────────────────────────────────────────────
+  if (!dontSettle) {
+    if (unsettled.length === 0) {
+      html += `<div class="eod-all-ok"><i class="fa fa-circle-check"></i> All sales settled — nothing pending for today.</div>`;
+    } else {
+      html += `<p class="eod-section-lbl"><i class="fa fa-clock"></i> Pending settlement (${unsettled.length})</p>`;
+      html += `<div class="eod-summary-bar" style="margin-bottom:12px">
+        <div class="eod-stat eod-stat--highlight">
+          <p class="eod-stat__label">Unsettled Sales</p>
+          <p class="eod-stat__value">${eodSum.total_count ?? 0}</p>
+        </div>
+        <div class="eod-stat eod-stat--highlight">
+          <p class="eod-stat__label">Cash Pending</p>
+          <p class="eod-stat__value">${fmt(byMethod.cash?.total)}</p>
+        </div>
+        <div class="eod-stat eod-stat--highlight">
+          <p class="eod-stat__label">Card Pending</p>
+          <p class="eod-stat__value">${fmt(byMethod.card?.total)}</p>
+        </div>
+      </div>`;
+      html += `<div class="eod-tbl-wrap"><table class="eod-tbl">
+        <thead><tr>
+          <th>Sale #</th><th>Time</th><th>Payment</th><th>Account</th><th style="text-align:right">Total</th>
+        </tr></thead>
+        <tbody>
+        ${unsettled.map(s => {
+          const t = s.sold_at ? new Date(s.sold_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—';
+          const badge = s.payment_method === 'card' ? 'eod-badge-card' : 'eod-badge-cash';
+          const label = s.payment_method === 'card' ? 'Card' : 'Cash';
+          return `<tr>
+            <td style="font-weight:700">${escHtml(s.sale_number || String(s.id))}</td>
+            <td style="color:var(--text-muted)">${t}</td>
+            <td><span class="${badge}">${label}</span></td>
+            <td style="color:var(--text-muted);font-size:11px">${escHtml(s.account_label || '—')}</td>
+            <td style="text-align:right;font-weight:700">${s.total.toFixed(2)}${currency}</td>
+          </tr>`;
+        }).join('')}
+        </tbody>
+        <tfoot><tr>
+          <td colspan="4" style="text-align:right;font-size:11px;font-weight:700;color:var(--text-muted);padding:8px 10px">Total</td>
+          <td style="text-align:right;font-size:15px;font-weight:800;padding:8px 10px">${fmt(eodSum.total_amount)}</td>
+        </tr></tfoot>
+      </table></div>`;
+
+      footer.style.display = '';
+      $('#eod-footer-info').textContent = `${eodSum.total_count} sale${eodSum.total_count !== 1 ? 's' : ''} · ${fmt(eodSum.total_amount)} unsettled`;
+      const btn = $('#eod-settle-btn');
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa fa-check-circle"></i> Settle All to Bank';
+    }
+  }
+
+  // ── Settlement history ────────────────────────────────────────────────────
   if (history.length) {
-    html += `<p class="eod-section-lbl" style="margin-top:10px"><i class="fa fa-history"></i> Recent settlements</p>`;
+    html += `<p class="eod-section-lbl" style="margin-top:4px"><i class="fa fa-clock-rotate-left"></i> Recent settlements</p>`;
     html += `<div class="eod-tbl-wrap"><div>`;
     html += history.map(r => {
       const dt = new Date(r.date + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
@@ -1023,6 +1133,9 @@ async function _eodLoad() {
   }
 
   body.innerHTML = html;
+
+  const wBtn = body.querySelector('#eod-withdraw-btn');
+  if (wBtn) wBtn.addEventListener('click', () => _openCashWithdrawModal(dr?.balance ?? null));
 }
 
 $('#eod-settle-btn').addEventListener('click', async () => {
@@ -1049,6 +1162,159 @@ $('#eod-close-btn').addEventListener('click', _eodClose);
 $('#eod-overlay').addEventListener('click', e => { if (e.target === $('#eod-overlay')) _eodClose(); });
 $('#rb-eod-open')?.addEventListener('click', _eodOpen);
 // ── End of Day Settlement ─────────────────────────────────────────────────
+
+// ── Cash Drawer ───────────────────────────────────────────────────────────
+async function _checkCashDrawerOpening() {
+  const s = state.receiptSettings || {};
+  if (!s.dont_settle_to_account) return;
+
+  const today = new Date().toISOString().slice(0, 10);
+  if (state._cashDrawerOpenedDate === today) return;
+
+  const res = await API.cashDrawer();
+  if (res.status !== 200) return;
+
+  const d = res.body?.data || {};
+  if (d.is_opened) {
+    state._cashDrawerOpenedDate = today;
+    return;
+  }
+
+  // Show opening modal
+  $('#cash-opening-amount').value = '';
+  $('#cash-opening-overlay').style.display = 'flex';
+  setTimeout(() => $('#cash-opening-amount').focus(), 80);
+}
+
+$('#cash-opening-confirm').addEventListener('click', async () => {
+  const amount = parseFloat($('#cash-opening-amount').value) || 0;
+  const btn = $('#cash-opening-confirm');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i>';
+
+  const res = await API.cashDrawerOpen(amount);
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fa fa-check"></i> Confirm';
+
+  if (res.status === 200) {
+    state._cashDrawerOpenedDate = new Date().toISOString().slice(0, 10);
+    $('#cash-opening-overlay').style.display = 'none';
+    toast(`Opening cash: ${amount.toFixed(2)} recorded.`, 'success');
+  } else {
+    toast(res.body?.message || 'Failed to record opening cash.', 'error');
+  }
+});
+
+$('#cash-opening-skip').addEventListener('click', () => {
+  state._cashDrawerOpenedDate = new Date().toISOString().slice(0, 10);
+  $('#cash-opening-overlay').style.display = 'none';
+});
+
+$('#cash-withdraw-close').addEventListener('click',  () => { $('#cash-withdraw-overlay').style.display = 'none'; });
+$('#cash-withdraw-cancel').addEventListener('click', () => { $('#cash-withdraw-overlay').style.display = 'none'; });
+$('#cash-withdraw-fill-max').addEventListener('click', () => {
+  const max = parseFloat($('#cash-withdraw-amount').max);
+  if (max > 0) { $('#cash-withdraw-amount').value = max.toFixed(2); }
+});
+
+function _openCashWithdrawModal(balance = null) {
+  const cur = state.currency ? ' ' + state.currency : '';
+  const amtInput = $('#cash-withdraw-amount');
+  amtInput.value = '';
+  amtInput.placeholder = balance !== null ? `Max: ${balance.toFixed(2)}${cur}` : '0.00';
+  amtInput.max = balance !== null ? balance : '';
+
+  const balEl = $('#cash-withdraw-balance-hint');
+  if (balEl) {
+    balEl.textContent = balance !== null ? `Available balance: ${balance.toFixed(2)}${cur}` : '';
+    balEl.style.display = balance !== null ? 'block' : 'none';
+  }
+
+  $('#cash-withdraw-note').value = '';
+  $('#cash-withdraw-overlay').style.display = 'flex';
+  setTimeout(() => amtInput.focus(), 80);
+}
+
+$('#cash-withdraw-confirm').addEventListener('click', async () => {
+  const amount = parseFloat($('#cash-withdraw-amount').value);
+  if (!amount || amount <= 0) { toast('Enter a valid amount.', 'error'); return; }
+  const note = $('#cash-withdraw-note').value.trim() || null;
+
+  const btn = $('#cash-withdraw-confirm');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i>';
+
+  const res = await API.cashDrawerWithdraw(amount, note);
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fa fa-arrow-up-from-bracket"></i> Withdraw';
+
+  if (res.status === 200) {
+    const newBalance = res.body?.data?.balance ?? null;
+    $('#cash-withdraw-overlay').style.display = 'none';
+    const cur = state.currency ? ' ' + state.currency : '';
+    const balMsg = newBalance !== null ? ` — balance: ${newBalance.toFixed(2)}${cur}` : '';
+    toast(`Withdrawal of ${amount.toFixed(2)}${cur} recorded${balMsg}.`, 'success');
+    if (_eod.open) _eodLoad();
+    _loadPosRibbonStats();
+  } else {
+    toast(res.body?.message || 'Failed to record withdrawal.', 'error');
+  }
+});
+async function _loadPosRibbonStats() {
+  const el = $('#pos-ribbon-stats');
+  if (!el) return;
+  el.innerHTML = '<div class="prs-spin"><i class="fa fa-spinner fa-spin"></i></div>';
+
+  const cur = state.currency ? ' ' + state.currency : '';
+  const fmt = v => (v ?? 0).toFixed(2) + cur;
+
+  const [sumRes, drawerRes] = await Promise.all([
+    API.todaySummary(),
+    state.receiptSettings?.dont_settle_to_account ? API.cashDrawer() : Promise.resolve(null),
+  ]);
+
+  if (sumRes.status !== 200) {
+    el.innerHTML = '<div class="prs-spin" style="color:#ef4444"><i class="fa fa-triangle-exclamation"></i></div>';
+    return;
+  }
+
+  const sales  = sumRes.body?.data?.sales || {};
+  const profit = sales.gross_profit ?? 0;
+  const drawer = drawerRes?.body?.data || null;
+
+  let cashStat = '';
+  if (drawer) {
+    const bal = drawer.balance;
+    cashStat = `<div class="prs-stat">
+      <span class="prs-lbl"><i class="fa fa-cash-register"></i> Cash Balance</span>
+      <span class="prs-val prs-cash">${bal !== null ? fmt(bal) : '—'}</span>
+    </div>`;
+  } else {
+    const cashTotal = sales.by_method?.cash?.total ?? 0;
+    cashStat = `<div class="prs-stat">
+      <span class="prs-lbl"><i class="fa fa-money-bill-wave"></i> Cash Sales</span>
+      <span class="prs-val prs-cash">${fmt(cashTotal)}</span>
+    </div>`;
+  }
+
+  el.innerHTML = `<div class="prs-grid">
+    <div class="prs-stat">
+      <span class="prs-lbl"><i class="fa fa-cart-shopping"></i> Sales Today</span>
+      <span class="prs-val">${sales.count ?? 0}</span>
+      <span class="prs-sub">${fmt(sales.revenue)}</span>
+    </div>
+    <div class="prs-stat">
+      <span class="prs-lbl"><i class="fa fa-chart-line"></i> Gross Profit</span>
+      <span class="prs-val prs-profit">${fmt(profit)}</span>
+    </div>
+    ${cashStat}
+    <div class="prs-stat">
+      <span class="prs-lbl"><i class="fa fa-box-open"></i> Items Sold</span>
+      <span class="prs-val">${sales.items_sold ?? 0}</span>
+    </div>
+  </div>`;
+}
+// ── End Cash Drawer ───────────────────────────────────────────────────────
 
 // ── End Sales Panel ────────────────────────────────────────────────────────
 
@@ -2160,7 +2426,9 @@ const _obFeatureDefs = [
   { key: 'human_resources',       img: 'img/features/human-resource-management.png', name: 'Human Resources',      desc: 'Employees, payroll & departments',     color: '#8b5cf6' },
   { key: 'service_management',    img: 'img/features/service-management.svg',         name: 'Services',             desc: 'Manage appointments & service jobs',   color: '#10b981' },
   { key: 'social_media_campaign', img: 'img/features/social-media-campaign.png',      name: 'Social Campaigns',     desc: 'Create and schedule ad creatives',     color: '#ec4899' },
-  { key: 'restaurant',            img: 'img/features/service.png',                     name: 'Restaurant',           desc: 'Restaurant POS, orders, menu & kitchen display', color: '#f97316' },
+  { key: 'restaurant',            img: 'img/features/service.png',                    name: 'Restaurant',           desc: 'Restaurant POS, orders, menu & kitchen display', color: '#f97316' },
+  { key: 'mail',                  img: 'img/features/mail.png',                       name: 'Mail',                 desc: 'Business inbox, templates & scheduled sending', color: '#06b6d4' },
+  { key: 'crm',                   img: 'img/features/social-media-campaign.png',       name: 'CRM',                  desc: 'Leads pipeline, contacts & follow-up tasks',    color: '#7c3aed' },
 ];
 
 // Industries that switch to restaurant POS mode
@@ -2356,6 +2624,12 @@ function applyFeatureVisibility() {
   const rst_kitchen     = bf('restaurant') && mp('rst_kitchen');
   const rst_any         = rst_pos || rst_orders || rst_floor || rst_menu || rst_ingredients || rst_kitchen;
 
+  // ── Mail ──
+  const mail_any = bf('mail');
+
+  // ── CRM ──
+  const crm_any = bf('crm');
+
   // ── Ribbon tabs ──
   const tabFeatures = {
     pos:        pos_any,
@@ -2367,6 +2641,8 @@ function applyFeatureVisibility() {
     restaurant: rst_any,
     'rst-pos':  rst_pos,
     services:   svc_any,
+    mail:       mail_any,
+    crm:        crm_any,
     users:      state.memberIsOwner || state.memberRole === 'admin' || state.memberPermissions === null,
   };
   $$('.ribbon-tab[data-tab]').forEach(tab => {
@@ -2380,6 +2656,7 @@ function applyFeatureVisibility() {
   grp('#rb-search',         pos_checkout);                  // Find (search, barcode, add product)
   grp('#rb-customers',      pos_customers);                 // Customers
   grp('#rb-pos-settings',   pos_checkout || pos_session);   // Configure
+  grp('#rb-receipt-editor', pos_checkout || pos_session);   // Receipt editor
 
   // ── Sales page ribbon groups ──
   grp('#rb-sal-refresh',    pos_checkout);                  // Transactions
@@ -2399,7 +2676,9 @@ function applyFeatureVisibility() {
   if (svcModeBtn) svcModeBtn.style.display = svc_any ? '' : 'none';
 
   // ── If currently on a hidden tab, go home ──
-  if (!svc_any && _activeTab() === 'services') activateTab('home');
+  if (!svc_any  && _activeTab() === 'services') activateTab('home');
+  if (!mail_any && _activeTab() === 'mail')     activateTab('home');
+  if (!crm_any  && _activeTab() === 'crm')      activateTab('home');
 
   // ── Home ribbon groups ──
   grp('#rb-home-pos',      pos_any || svc_any || rst_any);
@@ -2602,6 +2881,10 @@ function showApp() {
   _bizSwInit();
   // Apply feature-based tab and backstage visibility
   loadFeatures();
+  // Load POS counters for ribbon dropdown
+  loadCounters();
+  // Restore register lock if active
+  checkRegisterLock();
   // Start real-time background sync
   _syncStart();
 }
@@ -3147,6 +3430,8 @@ const _featDefs = [
   { key: 'service_management',   name: 'Services',              desc: 'Service-bound products & job management', icon: 'fa-screwdriver-wrench', color: '#f0a030' },
   { key: 'social_media_campaign',name: 'Social Media Campaign', desc: 'Design studio & marketing assets',        icon: 'fa-bullhorn',           color: '#e040fb' },
   { key: 'restaurant',           name: 'Restaurant',            desc: 'Restaurant POS, orders, menu & kitchen', icon: 'fa-utensils',           color: '#f97316' },
+  { key: 'mail',                 name: 'Mail',                  desc: 'Business inbox, templates & scheduled sending', icon: 'fa-envelope',   color: '#06b6d4' },
+  { key: 'crm',                  name: 'CRM',                   desc: 'Leads pipeline, contacts & follow-up tasks',    icon: 'fa-bullseye',   color: '#7c3aed' },
 ];
 
 function openFeatureMgmtModal() {
@@ -8535,15 +8820,20 @@ async function _prodOpenModal(editId) {
   $('#prod-stock-label').textContent   = isEdit ? 'Stock Quantity' : 'Opening Stock';
 
   // Reset fields
-  $('#prod-f-name').value        = '';
-  $('#prod-f-sku').value         = '';
-  $('#prod-f-price').value       = '';
-  $('#prod-f-stock').value       = '';
+  $('#prod-f-name').value              = '';
+  $('#prod-f-sku').value               = '';
+  $('#prod-f-price').value             = '';
+  $('#prod-f-wholesale-price').value   = '';
+  $('#prod-f-stock').value             = '';
   $('#prod-f-description').value = '';
   $('#prod-f-active').checked    = true;
   $('#prod-f-unit').value        = '';
   $('#prod-f-bundle').checked    = false;
   $('#prod-bundle-section').style.display = 'none';
+  $('#prod-f-warranty').checked  = false;
+  $('#prod-f-expiry').checked    = false;
+  $('#prod-f-courier').checked   = false;
+  $('#prod-f-loyalty').checked   = false;
 
   // Reset image
   _prod.imageFileId = null;
@@ -8567,13 +8857,18 @@ async function _prodOpenModal(editId) {
 
   if (isEdit && _prodActiveData) {
     const p = _prodActiveData;
-    $('#prod-f-name').value        = p.name        || '';
-    $('#prod-f-sku').value         = p.sku         || '';
-    $('#prod-f-price').value       = p.unit_price  ?? p.price ?? '';
-    $('#prod-f-stock').value       = p.stock_quantity ?? p.total_stock ?? '';
+    $('#prod-f-name').value              = p.name        || '';
+    $('#prod-f-sku').value               = p.sku         || '';
+    $('#prod-f-price').value             = p.unit_price  ?? p.price ?? '';
+    $('#prod-f-wholesale-price').value   = p.wholesale_price != null ? p.wholesale_price : '';
+    $('#prod-f-stock').value             = p.stock_quantity ?? p.total_stock ?? '';
     $('#prod-f-description').value = p.description || '';
     $('#prod-f-active').checked    = p.is_active !== false;
     if (p.product_unit_id) $('#prod-f-unit').value = p.product_unit_id;
+    $('#prod-f-warranty').checked  = !!p.has_warranty;
+    $('#prod-f-expiry').checked    = !!p.track_expiry;
+    $('#prod-f-courier').checked   = !!p.courier_delivery;
+    $('#prod-f-loyalty').checked   = !!p.loyalty_redeemable;
 
     // Image
     if (p.file_manager_file_id) {
@@ -8724,6 +9019,7 @@ async function _prodSave() {
     name,
     sku:                   $('#prod-f-sku').value.trim()         || null,
     unit_price:            price,
+    wholesale_price:       parseFloat($('#prod-f-wholesale-price').value) || null,
     stock_quantity:        parseFloat($('#prod-f-stock').value)  || 0,
     description:           $('#prod-f-description').value.trim() || null,
     product_unit_id:       parseInt($('#prod-f-unit').value)     || null,
@@ -8732,6 +9028,10 @@ async function _prodSave() {
     is_active:             $('#prod-f-active').checked,
     is_bundle:             isBundle,
     bundle_items:          bundleItems,
+    has_warranty:          $('#prod-f-warranty').checked,
+    track_expiry:          $('#prod-f-expiry').checked,
+    courier_delivery:      $('#prod-f-courier').checked,
+    loyalty_redeemable:    $('#prod-f-loyalty').checked,
   };
   if (_prod.imageFileId) body.file_manager_file_ids = [_prod.imageFileId];
 
@@ -8785,6 +9085,254 @@ $('#prod-modal-save')?.addEventListener('click',    _prodSave);
 
 // SKU generate
 $('#prod-sku-gen')?.addEventListener('click', _prodGenerateSku);
+
+// ── CSV Product Import ─────────────────────────────────────────────────────
+const _CSV_SAMPLE = [
+  'name,sku,price,wholesale_price,stock,category,brand,description',
+  'Apple iPhone 15,IPH15-128,999.99,850.00,50,Electronics,Apple,Apple flagship smartphone',
+  'Samsung Galaxy S24,SAM-S24-256,849.99,720.00,30,Electronics,Samsung,Samsung flagship phone',
+  'Wireless Headphones,WH-BT-001,149.99,,100,Electronics,,Bluetooth over-ear headphones',
+  'Coffee Beans 500g,CB-ARABICA-500,12.50,10.00,200,Food & Beverages,Lavazza,Premium arabica coffee beans',
+  'Office Chair,CHAIR-ERG-01,299.00,,15,Furniture,,Ergonomic adjustable office chair',
+].join('\n');
+
+// Column name aliases → canonical key
+const _CSV_COL_MAP = {
+  'name': 'name', 'product': 'name', 'product name': 'name', 'item': 'name', 'item name': 'name',
+  'sku': 'sku', 'code': 'sku', 'barcode': 'sku', 'product code': 'sku',
+  'price': 'unit_price', 'unit_price': 'unit_price', 'sell_price': 'unit_price',
+  'selling_price': 'unit_price', 'unit price': 'unit_price', 'sell price': 'unit_price',
+  'cost': 'unit_price',
+  'stock': 'stock_quantity', 'stock_quantity': 'stock_quantity', 'quantity': 'stock_quantity',
+  'qty': 'stock_quantity', 'opening stock': 'stock_quantity', 'opening_stock': 'stock_quantity',
+  'wholesale_price': 'wholesale_price', 'wholesale price': 'wholesale_price', 'trade price': 'wholesale_price',
+  'category': 'category', 'categories': 'category', 'product category': 'category',
+  'brand': 'brand', 'brand name': 'brand',
+  'description': 'description', 'desc': 'description', 'notes': 'description',
+};
+
+let _csvParsedRows = [];
+let _csvValidRows  = [];
+
+function _csvParseFile(text) {
+  const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').filter(l => l.trim());
+  if (lines.length < 2) return { headers: [], rows: [], error: 'File must have a header row and at least one data row.' };
+
+  const headers = _csvParseLine(lines[0]).map(h => h.trim().toLowerCase());
+  const colMap  = {};
+  headers.forEach((h, i) => { if (_CSV_COL_MAP[h]) colMap[_CSV_COL_MAP[h]] = i; });
+
+  if (colMap['name'] === undefined) {
+    return { headers, rows: [], error: 'Missing required column: "name" (or "product", "item").' };
+  }
+  if (colMap['unit_price'] === undefined) {
+    return { headers, rows: [], error: 'Missing required column: "price" (or "unit_price", "sell_price").' };
+  }
+
+  const rows = [];
+  for (let i = 1; i < lines.length; i++) {
+    const cells = _csvParseLine(lines[i]);
+    const row   = {};
+    Object.entries(colMap).forEach(([key, ci]) => { row[key] = (cells[ci] || '').trim(); });
+    row._rowNum = i + 1;
+
+    // Validate
+    row._errors = [];
+    if (!row.name) row._errors.push('Name is required');
+    const p = parseFloat(row.unit_price);
+    if (isNaN(p) || p < 0) row._errors.push('Invalid price');
+    else row.unit_price = p;
+    if (row.stock_quantity !== undefined && row.stock_quantity !== '') {
+      const s = parseFloat(row.stock_quantity);
+      row.stock_quantity = isNaN(s) ? 0 : Math.max(0, s);
+    } else { row.stock_quantity = 0; }
+    if (row.wholesale_price !== undefined && row.wholesale_price !== '') {
+      const wp = parseFloat(row.wholesale_price);
+      row.wholesale_price = isNaN(wp) ? null : Math.max(0, wp);
+    } else { row.wholesale_price = null; }
+
+    rows.push(row);
+  }
+  return { headers: Object.keys(colMap), rows };
+}
+
+function _csvParseLine(line) {
+  const cells = [];
+  let cur = '', inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (inQ && line[i + 1] === '"') { cur += '"'; i++; }
+      else inQ = !inQ;
+    } else if (ch === ',' && !inQ) { cells.push(cur); cur = ''; }
+    else cur += ch;
+  }
+  cells.push(cur);
+  return cells;
+}
+
+function _csvSetStep(n) {
+  [1, 2, 3].forEach(i => {
+    const body = $(`#csv-step-${i}`);
+    const ind  = $(`#csv-step-ind-${i}`);
+    if (body) body.style.display = i === n ? 'flex' : 'none';
+    if (ind)  {
+      ind.classList.toggle('active', i === n);
+      ind.classList.toggle('done',   i < n);
+    }
+  });
+}
+
+function _csvShowPreview(rows) {
+  const valid = rows.filter(r => !r._errors.length);
+  const bad   = rows.filter(r => r._errors.length);
+  _csvValidRows = valid;
+
+  // Summary badges
+  const sumEl = $('#csv-preview-summary');
+  sumEl.innerHTML = `
+    <b>${rows.length} row${rows.length !== 1 ? 's' : ''} found</b>
+    <span class="csv-preview-badge ok"><i class="fa fa-circle-check"></i> ${valid.length} valid</span>
+    ${bad.length ? `<span class="csv-preview-badge error"><i class="fa fa-triangle-exclamation"></i> ${bad.length} with errors</span>` : ''}
+    ${rows.length > 100 ? `<span class="csv-preview-badge warn"><i class="fa fa-eye"></i> Showing first 100 rows</span>` : ''}`;
+
+  // Table
+  const display = rows.slice(0, 100);
+  $('#csv-preview-thead').innerHTML = `<tr>
+    <th>#</th><th>Name</th><th>SKU</th><th>Price</th><th>Wholesale</th><th>Stock</th>
+    <th>Category</th><th>Brand</th><th>Status</th>
+  </tr>`;
+  $('#csv-preview-tbody').innerHTML = display.map(r => {
+    const isErr = r._errors.length > 0;
+    const status = isErr
+      ? `<span class="csv-row-error-msg"><i class="fa fa-triangle-exclamation"></i> ${escHtml(r._errors.join('; '))}</span>`
+      : `<span style="color:#10b981;font-size:11px"><i class="fa fa-circle-check"></i> OK</span>`;
+    return `<tr class="${isErr ? 'csv-row-error' : ''}">
+      <td style="color:var(--text-muted)">${r._rowNum}</td>
+      <td><strong>${escHtml(r.name || '—')}</strong></td>
+      <td style="color:var(--text-muted)">${escHtml(r.sku || '—')}</td>
+      <td>${r.unit_price !== undefined && !isNaN(r.unit_price) ? parseFloat(r.unit_price).toFixed(2) : '—'}</td>
+      <td style="color:#d97706">${r.wholesale_price != null ? parseFloat(r.wholesale_price).toFixed(2) : '—'}</td>
+      <td>${r.stock_quantity || 0}</td>
+      <td>${escHtml(r.category || '—')}</td>
+      <td>${escHtml(r.brand || '—')}</td>
+      <td>${status}</td>
+    </tr>`;
+  }).join('');
+
+  $('#csv-import-count').textContent = valid.length;
+  $('#csv-import-btn').disabled = valid.length === 0;
+  _csvSetStep(2);
+}
+
+function _csvReset() {
+  _csvParsedRows = [];
+  _csvValidRows  = [];
+  $('#csv-file-input').value = '';
+  _csvSetStep(1);
+}
+
+function _csvOpenModal() {
+  _csvReset();
+  $('#csv-import-modal').style.display = 'flex';
+}
+
+function _csvCloseModal() {
+  $('#csv-import-modal').style.display = 'none';
+  _csvReset();
+}
+
+function _csvDownloadSample() {
+  const blob = new Blob([_CSV_SAMPLE], { type: 'text/csv' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = 'products-sample.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function _csvHandleFile(file) {
+  if (!file || !file.name.match(/\.csv$/i)) { toast('Please select a .csv file', 'error'); return; }
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const { rows, error } = _csvParseFile(e.target.result);
+    if (error) { toast(error, 'error'); return; }
+    if (rows.length > 500) { toast(`CSV has ${rows.length} rows. Only the first 500 will be imported.`, 'error'); }
+    _csvParsedRows = rows.slice(0, 500);
+    _csvShowPreview(_csvParsedRows);
+  };
+  reader.readAsText(file);
+}
+
+// Drag & drop
+const _csvDz = $('#csv-dropzone');
+if (_csvDz) {
+  _csvDz.addEventListener('dragover',  e => { e.preventDefault(); _csvDz.classList.add('drag-over'); });
+  _csvDz.addEventListener('dragleave', () => _csvDz.classList.remove('drag-over'));
+  _csvDz.addEventListener('drop', e => {
+    e.preventDefault(); _csvDz.classList.remove('drag-over');
+    _csvHandleFile(e.dataTransfer.files[0]);
+  });
+}
+$('#csv-file-input')?.addEventListener('change', e => _csvHandleFile(e.target.files[0]));
+$('#csv-download-sample')?.addEventListener('click', _csvDownloadSample);
+$('#csv-import-close')?.addEventListener('click',  _csvCloseModal);
+$('#csv-import-modal')?.addEventListener('click',  e => { if (e.target === e.currentTarget) _csvCloseModal(); });
+$('#csv-back-btn')?.addEventListener('click',      _csvReset);
+$('#csv-done-btn')?.addEventListener('click',      _csvCloseModal);
+$('#csv-import-more-btn')?.addEventListener('click', _csvReset);
+$('#inv-import-csv-btn')?.addEventListener('click', _csvOpenModal);
+
+$('#csv-import-btn')?.addEventListener('click', async () => {
+  if (!_csvValidRows.length) return;
+  const btn = $('#csv-import-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Importing…';
+
+  const payload = _csvValidRows.map(r => ({
+    name:            r.name,
+    sku:             r.sku || undefined,
+    unit_price:      parseFloat(r.unit_price),
+    wholesale_price: r.wholesale_price != null ? r.wholesale_price : undefined,
+    stock_quantity:  parseFloat(r.stock_quantity) || 0,
+    category:        r.category || undefined,
+    brand:           r.brand    || undefined,
+    description:     r.description || undefined,
+  }));
+
+  const res = await API.importProducts(payload);
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fa fa-file-import"></i> Import Products';
+
+  if (res.status !== 200) { toast(res.body?.message || 'Import failed', 'error'); return; }
+
+  const { imported, skipped, errors } = res.body;
+  const resSum = $('#csv-result-summary');
+  resSum.innerHTML = `
+    <div class="csv-result-stat">
+      <div class="csv-result-stat-num green">${imported}</div>
+      <div class="csv-result-stat-label"><i class="fa fa-circle-check"></i> Products imported</div>
+    </div>
+    <div class="csv-result-stat">
+      <div class="csv-result-stat-num ${skipped > 0 ? 'red' : ''}">${skipped}</div>
+      <div class="csv-result-stat-label"><i class="fa fa-triangle-exclamation"></i> Rows skipped</div>
+    </div>`;
+
+  const errWrap = $('#csv-result-errors');
+  if (errors && errors.length) {
+    errWrap.style.display = '';
+    $('#csv-result-errors-list').innerHTML = errors.map(e =>
+      `<div class="csv-result-error-row"><b>Row ${e.row}${e.name ? ' — ' + escHtml(e.name) : ''}:</b><span>${escHtml(e.message)}</span></div>`
+    ).join('');
+  } else {
+    errWrap.style.display = 'none';
+  }
+
+  _csvSetStep(3);
+  if (imported > 0) { invState.loaded = false; loadInventory(); }
+});
+// ── End CSV Product Import ─────────────────────────────────────────────────
 
 // Image
 $('#prod-img-choose')?.addEventListener('click', () => openImgPicker(null));
@@ -8877,6 +9425,10 @@ function renderProductDetail(p) {
     else badges.push(`<span class="inv-badge inv-badge-blue">In stock</span>`);
   }
   if (p.has_variants || p.variants?.length) badges.push(`<span class="inv-badge inv-badge-purple">Has variants</span>`);
+  if (p.has_warranty)       badges.push(`<span class="inv-badge inv-badge-blue"><i class="fa fa-shield-halved"></i> Warranty</span>`);
+  if (p.track_expiry)       badges.push(`<span class="inv-badge inv-badge-amber"><i class="fa fa-calendar-xmark"></i> Expiry</span>`);
+  if (p.courier_delivery)   badges.push(`<span class="inv-badge inv-badge-purple"><i class="fa fa-truck"></i> Courier</span>`);
+  if (p.loyalty_redeemable) badges.push(`<span class="inv-badge inv-badge-green"><i class="fa fa-star"></i> Loyalty</span>`);
   $('#inv-hero-badges').innerHTML = badges.join('');
 
   // ── Overview tab ──
@@ -8954,20 +9506,22 @@ function renderProductDetail(p) {
   });
 
   // ── Pricing tab ──
-  const price     = parseFloat(p.price || 0).toFixed(2);
-  const costPrice = p.cost_price != null ? parseFloat(p.cost_price).toFixed(2) : null;
-  const compareAt  = p.compare_at_price != null ? parseFloat(p.compare_at_price).toFixed(2) : null;
-  const taxRate   = p.tax_rate ?? p.tax?.rate;
-  const discount  = p.discount || p.discount_value;
-  const margin    = costPrice ? (((p.price - p.cost_price) / p.price) * 100).toFixed(1) + '%' : null;
+  const price          = parseFloat(p.price || 0).toFixed(2);
+  const wholesalePrice = p.wholesale_price != null ? parseFloat(p.wholesale_price).toFixed(2) : null;
+  const costPrice      = p.cost_price != null ? parseFloat(p.cost_price).toFixed(2) : null;
+  const compareAt      = p.compare_at_price != null ? parseFloat(p.compare_at_price).toFixed(2) : null;
+  const taxRate        = p.tax_rate ?? p.tax?.rate;
+  const discount       = p.discount || p.discount_value;
+  const margin         = costPrice ? (((p.price - p.cost_price) / p.price) * 100).toFixed(1) + '%' : null;
 
   const priceRows = [
-    ['Selling Price',   `<strong style="font-size:18px;color:var(--accent)">${price}</strong>`],
-    ['Cost Price',      costPrice  ? costPrice  : null],
-    ['Compare-at Price',compareAt  ? `<s style="color:var(--text-muted)">${compareAt}</s>` : null],
-    ['Tax Rate',        taxRate    != null ? `${taxRate}%` : null],
-    ['Discount',        discount   ? String(discount) : null],
-    ['Gross Margin',    margin],
+    ['Selling Price',    `<strong style="font-size:18px;color:var(--accent)">${price}</strong>`],
+    ['Wholesale Price',  wholesalePrice ? `<span style="color:#d97706;font-weight:600"><i class="fa fa-tags"></i> ${wholesalePrice}</span>` : null],
+    ['Cost Price',       costPrice  ? costPrice  : null],
+    ['Compare-at Price', compareAt  ? `<s style="color:var(--text-muted)">${compareAt}</s>` : null],
+    ['Tax Rate',         taxRate    != null ? `${taxRate}%` : null],
+    ['Discount',         discount   ? String(discount) : null],
+    ['Gross Margin',     margin],
   ].filter(([, v]) => v != null);
 
   $('#inv-pane-pricing').innerHTML = `
@@ -9259,7 +9813,7 @@ function buildProductGrid(products) {
     if (p.sku) metaParts.push(escHtml(p.sku));
     if (p.stock_quantity != null) metaParts.push(`${p.stock_quantity} in stock`);
 
-    return `<div class="product-card${outOfStock ? ' is-out' : ''}" data-id="${p.id}" data-name="${escHtml(p.name)}" data-price="${effectivePrice}" data-stock="${p.stock_quantity ?? ''}">
+    return `<div class="product-card${outOfStock ? ' is-out' : ''}" data-id="${p.id}" data-name="${escHtml(p.name)}" data-sku="${escHtml(p.sku ?? '')}" data-price="${effectivePrice}" data-stock="${p.stock_quantity ?? ''}">
       ${p.image_url ? `<img src="${p.image_url}" alt="${escHtml(p.name)}" loading="lazy">` : `<div class="p-icon"><i class="fa fa-box"></i></div>`}
       <div class="p-name">${escHtml(p.name)}</div>
       ${metaParts.length ? `<div class="p-meta">${metaParts.join(' · ')}</div>` : ''}
@@ -9275,6 +9829,53 @@ function buildProductGrid(products) {
     });
   });
 }
+
+// ── Product card context menu ────────────────────────────────────────────────
+(function () {
+  const menu    = $('#prod-ctx-menu');
+  const copyName = $('#prod-ctx-copy-name');
+  const copySku  = $('#prod-ctx-copy-sku');
+  if (!menu) return;
+
+  let _ctxCard = null;
+
+  function showMenu(x, y, card) {
+    _ctxCard = card;
+    const hasSku = !!card.dataset.sku;
+    copySku.classList.toggle('disabled', !hasSku);
+    // Position — keep menu on screen
+    menu.style.display = 'block';
+    const mw = menu.offsetWidth, mh = menu.offsetHeight;
+    const vw = window.innerWidth,  vh = window.innerHeight;
+    menu.style.left = (x + mw > vw ? vw - mw - 6 : x) + 'px';
+    menu.style.top  = (y + mh > vh ? vh - mh - 6 : y) + 'px';
+  }
+
+  function hideMenu() { menu.style.display = 'none'; _ctxCard = null; }
+
+  document.addEventListener('contextmenu', e => {
+    const card = e.target.closest('.product-card');
+    if (!card || !card.closest('#product-grid')) { hideMenu(); return; }
+    e.preventDefault();
+    showMenu(e.clientX, e.clientY, card);
+  });
+
+  document.addEventListener('click',     () => hideMenu());
+  document.addEventListener('keydown',   e => { if (e.key === 'Escape') hideMenu(); });
+  document.addEventListener('scroll',    () => hideMenu(), true);
+
+  copyName.addEventListener('click', () => {
+    if (!_ctxCard) return;
+    navigator.clipboard.writeText(_ctxCard.dataset.name || '').then(() => toast('Product name copied', 'success'));
+    hideMenu();
+  });
+
+  copySku.addEventListener('click', () => {
+    if (!_ctxCard || !_ctxCard.dataset.sku) return;
+    navigator.clipboard.writeText(_ctxCard.dataset.sku).then(() => toast('SKU copied', 'success'));
+    hideMenu();
+  });
+})();
 
 function buildPosPagination(meta) {
   const pg      = $('#pos-pagination');
@@ -9910,20 +10511,45 @@ $('#park-modal-close')?.addEventListener('click', () => { $('#park-modal').style
 // ── Customer selection (F10) ─────────────────────────────────────────────────
 let _custSearchTimer = null;
 
+function _applyCustomerPricing() {
+  const tab = activeTab();
+  if (!tab) return;
+  const isWholesale = tab._customer?.customer_type === 'wholesale';
+  let changed = false;
+  tab.cart.forEach(item => {
+    if (item._type === 'service') return; // services don't have wholesale price
+    const target = (isWholesale && item._wholesalePrice != null)
+      ? item._wholesalePrice
+      : item._retailPrice;
+    if (target != null && Math.abs(item.price - target) > 0.001) {
+      item.price      = target;
+      item._basePrice = target;
+      changed = true;
+    }
+  });
+  if (changed) renderCart();
+}
+
 function renderCartCustomer() {
   const tab = activeTab();
   const bar = $('#cart-customer-bar');
   if (!bar) return;
   if (tab?._customer) {
+    const isWholesale = tab._customer.customer_type === 'wholesale';
+    const typeBadge   = isWholesale
+      ? `<span class="cart-cust-wholesale"><i class="fa fa-boxes-stacked"></i> Wholesale</span>` : '';
     bar.innerHTML = `<i class="fa fa-user" style="color:var(--accent)"></i>
       <span class="cart-cust-name">${escHtml(tab._customer.name)}</span>
+      ${typeBadge}
       ${tab._customer.phone ? `<span class="cart-cust-phone">${escHtml(tab._customer.phone)}</span>` : ''}
       <button class="cart-cust-clear" id="cart-cust-clear" title="Remove customer"><i class="fa fa-xmark"></i></button>`;
     bar.style.display = 'flex';
     $('#cart-cust-clear')?.addEventListener('click', () => {
       if (tab) tab._customer = null;
       renderCartCustomer();
+      _applyCustomerPricing();
     });
+    _applyCustomerPricing();
   } else {
     bar.style.display = 'none';
     bar.innerHTML = '';
@@ -9950,11 +10576,14 @@ async function _searchCustomers(q) {
     $('#cust-create-link')?.addEventListener('click', e => { e.preventDefault(); _showCustomerCreateForm(q); });
     return;
   }
-  el.innerHTML = list.map(c => `
-    <div class="cust-row" data-id="${c.id}">
-      <div class="cust-row-name">${escHtml(c.name)}</div>
+  el.innerHTML = list.map(c => {
+    const wsBadge = c.customer_type === 'wholesale'
+      ? `<span class="cart-cust-wholesale" style="margin-left:auto"><i class="fa fa-boxes-stacked"></i> Wholesale</span>` : '';
+    return `<div class="cust-row" data-id="${c.id}">
+      <div class="cust-row-name" style="display:flex;align-items:center;gap:6px">${escHtml(c.name)}${wsBadge}</div>
       ${c.phone ? `<div class="cust-row-meta">${escHtml(c.phone)}</div>` : ''}
-    </div>`).join('');
+    </div>`;
+  }).join('');
   el.querySelectorAll('.cust-row').forEach(row => {
     row.addEventListener('click', () => {
       const c = list.find(x => x.id === Number(row.dataset.id));
@@ -9999,10 +10628,11 @@ $('#cust-search-input')?.addEventListener('keydown', e => {
 $('#cust-new-cancel')?.addEventListener('click', () => { $('#cust-new-form').style.display = 'none'; });
 
 $('#cust-new-save')?.addEventListener('click', async () => {
-  const name  = $('#cust-new-name')?.value.trim();
-  const phone = $('#cust-new-phone')?.value.trim();
+  const name          = $('#cust-new-name')?.value.trim();
+  const phone         = $('#cust-new-phone')?.value.trim();
+  const customer_type = $('input[name="cust-new-type"]:checked')?.value || 'retail';
   if (!name) { toast('Name is required', 'error'); return; }
-  const res = await API.createCustomer({ name, phone: phone || null });
+  const res = await API.createCustomer({ name, phone: phone || null, customer_type });
   if (res.status !== 201) { toast('Failed to create customer', 'error'); return; }
   const c = res.body?.data;
   if (!c) return;
@@ -10060,10 +10690,12 @@ function _cmRenderList() {
   list.innerHTML = _cm.list.map(c => {
     const initial = (c.name || '?')[0].toUpperCase();
     const sub     = c.phone || c.email || '';
+    const wsBadge = c.customer_type === 'wholesale'
+      ? `<span class="cart-cust-wholesale" style="font-size:9.5px"><i class="fa fa-boxes-stacked"></i> WS</span>` : '';
     return `<div class="cm-item${c.id === _cm.selectedId ? ' active' : ''}" data-id="${c.id}">
       <div class="cm-item-avatar">${escHtml(initial)}</div>
       <div class="cm-item-body">
-        <div class="cm-item-name">${escHtml(c.name)}</div>
+        <div class="cm-item-name" style="display:flex;align-items:center;gap:6px">${escHtml(c.name)}${wsBadge}</div>
         ${sub ? `<div class="cm-item-sub">${escHtml(sub)}</div>` : ''}
       </div>
     </div>`;
@@ -10105,7 +10737,12 @@ async function _cmSelectCustomer(id) {
   $('#cm-dv-name').textContent   = c.name;
   $('#cm-dv-sales-badge').textContent = `${c.sales_count ?? 0} sale${(c.sales_count ?? 0) !== 1 ? 's' : ''}`;
 
+  const isWholesaleCust = c.customer_type === 'wholesale';
+  const typeVal = isWholesaleCust
+    ? '<span class="cart-cust-wholesale"><i class="fa fa-boxes-stacked"></i> Wholesale</span>'
+    : '<span style="color:var(--text-muted)">Retail</span>';
   const fields = [
+    { label: 'Type',    val: typeVal, raw: true },
     { label: 'Phone',   val: c.phone },
     { label: 'Email',   val: c.email },
     { label: 'Address', val: c.address },
@@ -10114,7 +10751,7 @@ async function _cmSelectCustomer(id) {
   $('#cm-dv-fields').innerHTML = fields.map(f => `
     <div class="cm-dv-field">
       <div class="cm-dv-field-label">${f.label}</div>
-      <div class="cm-dv-field-val${f.val ? '' : ' empty'}">${f.val ? escHtml(f.val) : '—'}</div>
+      <div class="cm-dv-field-val${f.val ? '' : ' empty'}">${f.val ? (f.raw ? f.val : escHtml(f.val)) : '—'}</div>
     </div>`).join('');
 
   const history = $('#cm-dv-history');
@@ -10149,16 +10786,20 @@ function _cmShowForm(show, customer = null) {
     $('#cm-f-email').value   = customer?.email   ?? '';
     $('#cm-f-address').value = customer?.address ?? '';
     $('#cm-f-notes').value   = customer?.notes   ?? '';
+    const custType = customer?.customer_type ?? 'retail';
+    const typeRadio = $(`input[name="cm-customer-type"][value="${custType}"]`);
+    if (typeRadio) typeRadio.checked = true;
     requestAnimationFrame(() => $('#cm-f-name').focus());
   }
 }
 
 async function _cmSave() {
-  const name    = $('#cm-f-name').value.trim();
-  const phone   = $('#cm-f-phone').value.trim() || null;
-  const email   = $('#cm-f-email').value.trim() || null;
-  const address = $('#cm-f-address').value.trim() || null;
-  const notes   = $('#cm-f-notes').value.trim() || null;
+  const name          = $('#cm-f-name').value.trim();
+  const phone         = $('#cm-f-phone').value.trim() || null;
+  const email         = $('#cm-f-email').value.trim() || null;
+  const address       = $('#cm-f-address').value.trim() || null;
+  const notes         = $('#cm-f-notes').value.trim() || null;
+  const customer_type = $('input[name="cm-customer-type"]:checked')?.value || 'retail';
 
   if (!name) { toast('Name is required', 'error'); $('#cm-f-name').focus(); return; }
 
@@ -10167,9 +10808,9 @@ async function _cmSave() {
 
   let res;
   if (_cm.editingId) {
-    res = await API.updateCustomer(_cm.editingId, { name, phone, email, address, notes });
+    res = await API.updateCustomer(_cm.editingId, { name, phone, email, address, notes, customer_type });
   } else {
-    res = await API.createCustomer({ name, phone, email, address, notes });
+    res = await API.createCustomer({ name, phone, email, address, notes, customer_type });
   }
 
   btn.disabled = false; btn.innerHTML = '<i class="fa fa-check"></i> Save';
@@ -10497,6 +11138,8 @@ async function _bizSwSwitchBranch(branchId) {
     : `<i class="fa fa-building"></i> ${state._bizName || ''}`;
   _bizSwRenderBranchList();
   _bizSwRefreshAll();
+  // Reload counters filtered for new branch
+  loadCounters();
 }
 
 function _bizSwClose() {
@@ -10740,12 +11383,16 @@ async function openPosSettings() {
   modal.style.display = 'flex';
   psmShowTab('business');
 
-  const [sRes, aRes] = await Promise.all([API.settingsGet(), API.accounts()]);
+  const [sRes, aRes, bRes] = await Promise.all([API.settingsGet(), API.accounts(), API.branches()]);
 
   if (sRes.status !== 200) { toast('Failed to load POS settings', 'error'); return; }
 
   const s        = sRes.body?.data ?? {};
   const accounts = aRes.body?.data ?? [];
+  const branches = bRes.status === 200 ? (bRes.body?.data ?? []) : [];
+
+  // Pre-load counters with the fresh branches list (for the Counters tab)
+  _psmBranches = branches;
 
   // accounts dropdown
   const sel = $('#psm-default-account');
@@ -10780,12 +11427,16 @@ async function openPosSettings() {
   $('#psm-discount-field').checked   = !!s.discount_field_enabled;
   $('#psm-checkout-modal').checked   = !!s.checkout_modal_enabled;
   $('#psm-service-products').checked = !!s.show_service_bound_products;
+  $('#psm-stock-mode').value         = s.stock_selection_mode ?? 'fifo';
+  $('#psm-choose-price').checked     = !!s.choose_price;
   $('#psm-featured-products').value  = s.featured_products_limit ?? 0;
   $('#psm-featured-categories').value = s.featured_categories_limit ?? 0;
 
   // Accounts
   sel.value = s.default_deposit_account_id ?? '';
   $('#psm-settlement-mode').value    = s.payment_settlement_mode ?? 'immediate';
+  $('#psm-dont-settle').checked      = !!s.dont_settle_to_account;
+  $('#psm-settlement-mode').disabled = !!s.dont_settle_to_account;
   $('#psm-show-account-info').checked = !!s.show_account_info;
 
   // Receipt
@@ -10805,8 +11456,10 @@ function psmShowTab(tab) {
 
 $$('.psm-nav-item').forEach(btn => btn.addEventListener('click', () => {
   psmShowTab(btn.dataset.tab);
-  if (btn.dataset.tab === 'roles' && window.loadRolesForSettings) window.loadRolesForSettings();
-  if (btn.dataset.tab === 'users' && window.loadUsersForSettings) window.loadUsersForSettings();
+  if (btn.dataset.tab === 'roles'     && window.loadRolesForSettings) window.loadRolesForSettings();
+  if (btn.dataset.tab === 'users'     && window.loadUsersForSettings) window.loadUsersForSettings();
+  if (btn.dataset.tab === 'mail')     loadMailSettings();
+  if (btn.dataset.tab === 'counters') loadPsmCounters();
 }));
 
 $('#psm-multi-warehouse').addEventListener('change', (e) => {
@@ -10814,6 +11467,9 @@ $('#psm-multi-warehouse').addEventListener('change', (e) => {
 });
 $('#psm-tax-enabled').addEventListener('change', (e) => {
   $('#psm-tax-rate-row').style.display = e.target.checked ? 'block' : 'none';
+});
+$('#psm-dont-settle').addEventListener('change', (e) => {
+  $('#psm-settlement-mode').disabled = e.target.checked;
 });
 
 $('#psm-close').addEventListener('click',  () => { $('#pos-settings-modal').style.display = 'none'; });
@@ -10823,9 +11479,131 @@ $('#pos-settings-modal').addEventListener('click', (e) => {
 });
 
 $('#rb-pos-settings').addEventListener('click', openPosSettings);
+$('#rb-receipt-editor').addEventListener('click', () => { showReceiptEditor(); });
 
 $('#psm-add-user-btn')?.addEventListener('click', () => window.openAddModal && window.openAddModal());
 $('#psm-add-role-btn')?.addEventListener('click', () => window.openCreateRoleModal && window.openCreateRoleModal());
+
+// ── Settings — Mail tab ────────────────────────────────────────────────────
+function _psmMailProviderToggle(provider) {
+  $('#psm-mail-smtp-section').style.display   = provider === 'smtp'   ? 'block' : 'none';
+  $('#psm-mail-resend-section').style.display = provider === 'resend' ? 'block' : 'none';
+}
+
+$('#psm-mail-provider')?.addEventListener('change', function () {
+  _psmMailProviderToggle(this.value);
+});
+
+async function loadMailSettings() {
+  const res = await API.mailSettingsGet();
+  if (res.status !== 200) return;
+  const s = res.body?.data ?? {};
+
+  $('#psm-mail-from-name').value          = s.from_name    ?? '';
+  $('#psm-mail-from-address').value       = s.from_address ?? '';
+  $('#psm-mail-provider').value           = s.provider     ?? 'platform';
+  $('#psm-mail-smtp-host').value          = s.smtp_host    ?? '';
+  $('#psm-mail-smtp-port').value          = s.smtp_port    ?? 587;
+  $('#psm-mail-smtp-encryption').value    = s.smtp_encryption ?? 'tls';
+  $('#psm-mail-smtp-username').value      = s.smtp_username ?? '';
+  $('#psm-mail-smtp-password').value      = '';
+  $('#psm-mail-resend-key').value         = '';
+  $('#psm-mail-letterhead').checked       = !!s.letterhead_enabled;
+
+  // Secret hints
+  $('#psm-mail-smtp-password-hint').style.display = s.has_smtp_password  ? 'block' : 'none';
+  $('#psm-mail-resend-key-hint').style.display    = s.has_resend_api_key ? 'block' : 'none';
+
+  _psmMailProviderToggle(s.provider ?? 'platform');
+}
+
+$('#psm-mail-save')?.addEventListener('click', async () => {
+  const btn = $('#psm-mail-save');
+  const msg = $('#psm-mail-save-msg');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
+  msg.style.display = 'none';
+
+  const payload = {
+    provider:           $('#psm-mail-provider').value,
+    from_address:       $('#psm-mail-from-address').value.trim(),
+    from_name:          $('#psm-mail-from-name').value.trim(),
+    letterhead_enabled: $('#psm-mail-letterhead').checked,
+    smtp_host:          $('#psm-mail-smtp-host').value.trim(),
+    smtp_port:          parseInt($('#psm-mail-smtp-port').value) || 587,
+    smtp_username:      $('#psm-mail-smtp-username').value.trim(),
+    smtp_encryption:    $('#psm-mail-smtp-encryption').value,
+  };
+
+  const smtpPass   = $('#psm-mail-smtp-password').value;
+  const resendKey  = $('#psm-mail-resend-key').value;
+  if (smtpPass)  payload.smtp_password = smtpPass;
+  if (resendKey) payload.resend_api_key = resendKey;
+
+  const res = await API.mailSettingsSave(payload);
+
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fa fa-floppy-disk"></i> Save mail settings';
+
+  if (res.status !== 200) {
+    msg.textContent = res.body?.message ?? 'Save failed.';
+    msg.style.color = 'var(--danger, #e74c3c)';
+    msg.style.display = 'inline';
+    return;
+  }
+
+  msg.textContent = 'Saved!';
+  msg.style.color = 'var(--success, #22c55e)';
+  msg.style.display = 'inline';
+  setTimeout(() => { msg.style.display = 'none'; }, 2500);
+
+  // refresh hints (password/key now saved)
+  await loadMailSettings();
+});
+
+$('#psm-mail-test-btn')?.addEventListener('click', async () => {
+  const to  = $('#psm-mail-test-to').value.trim();
+  const msg = $('#psm-mail-test-msg');
+  msg.style.display = 'none';
+
+  if (!to) {
+    msg.textContent   = 'Enter a recipient email address.';
+    msg.style.color   = 'var(--danger, #e74c3c)';
+    msg.style.display = 'inline';
+    return;
+  }
+
+  const btn  = $('#psm-mail-test-btn');
+  btn.disabled    = true;
+  btn.innerHTML   = '<i class="fa fa-spinner fa-spin"></i> Sending…';
+
+  const res = await API.mailTestSend(to);
+
+  btn.disabled  = false;
+  btn.innerHTML = '<i class="fa fa-paper-plane"></i> Send Test';
+
+  msg.textContent   = res.body?.message ?? (res.status === 200 ? 'Sent!' : 'Failed.');
+  msg.style.color   = res.status === 200 ? 'var(--success, #22c55e)' : 'var(--danger, #e74c3c)';
+  msg.style.display = 'inline';
+});
+
+$('#psm-mail-verify-btn')?.addEventListener('click', async () => {
+  const btn = $('#psm-mail-verify-btn');
+  const msg = $('#psm-mail-verify-msg');
+  msg.style.display = 'none';
+
+  btn.disabled  = true;
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Checking…';
+
+  const res = await API.mailVerifyCreds();
+
+  btn.disabled  = false;
+  btn.innerHTML = '<i class="fa fa-shield-halved"></i> Verify Credentials';
+
+  msg.textContent   = res.body?.message ?? (res.status === 200 ? 'OK' : 'Failed.');
+  msg.style.color   = res.status === 200 ? 'var(--success, #22c55e)' : 'var(--danger, #e74c3c)';
+  msg.style.display = 'inline';
+});
 
 $('#psm-save').addEventListener('click', async () => {
   const btn = $('#psm-save');
@@ -10840,10 +11618,13 @@ $('#psm-save').addEventListener('click', async () => {
     discount_field_enabled:      $('#psm-discount-field').checked,
     checkout_modal_enabled:      $('#psm-checkout-modal').checked,
     show_service_bound_products: $('#psm-service-products').checked,
+    stock_selection_mode:        $('#psm-stock-mode').value,
+    choose_price:                $('#psm-choose-price').checked,
     featured_products_limit:     parseInt($('#psm-featured-products').value) || 0,
     featured_categories_limit:   parseInt($('#psm-featured-categories').value) || 0,
     default_deposit_account_id:  $('#psm-default-account').value || null,
     payment_settlement_mode:     $('#psm-settlement-mode').value,
+    dont_settle_to_account:      $('#psm-dont-settle').checked,
     show_account_info:           $('#psm-show-account-info').checked,
     show_business_name:          $('#psm-show-biz-name').checked,
     show_business_address:       $('#psm-show-biz-address').checked,
@@ -10868,90 +11649,388 @@ $('#psm-save').addEventListener('click', async () => {
     return;
   }
 
+  // Sync relevant settings into state so in-session logic stays current
+  const saved = res.body?.data || {};
+  const syncKeys = ['dont_settle_to_account', 'stock_selection_mode', 'choose_price'];
+  syncKeys.forEach(k => {
+    if (saved[k] !== undefined) state.receiptSettings = { ...state.receiptSettings, [k]: saved[k] };
+  });
+
   $('#pos-settings-modal').style.display = 'none';
   toast('POS settings saved', 'success');
 });
 // ── End POS Settings Modal ─────────────────────────────────────────────────
 
+// ── POS Counters ───────────────────────────────────────────────────────────
+// Counters are loaded alongside settings; the ribbon dropdown shows when
+// at least one counter exists for this business/branch.
+
+let _counters = [];   // full list as returned by the API
+let _psmBranches = []; // cached for the counter-add branch dropdown
+
+async function loadCounters() {
+  const branchId = state.config?.branch_id ?? null;
+  const res = await API.counters(branchId);
+  if (res.status !== 200) return;
+  _counters = res.body?.data ?? [];
+  _renderCounterRibbon();
+}
+
+function _renderCounterRibbon() {
+  const wrap = $('#rb-counter-wrap');
+  const sel  = $('#rb-counter-select');
+  if (!wrap || !sel) return;
+
+  if (_counters.length === 0) {
+    wrap.style.display = 'none';
+    state.posCounterId = null;
+    return;
+  }
+
+  wrap.style.display = 'flex';
+  const cur = state.posCounterId ?? '';
+  sel.innerHTML = '<option value="">— None —</option>' +
+    _counters
+      .filter(c => c.is_active)
+      .map(c => `<option value="${c.id}" ${c.id == cur ? 'selected' : ''}>${escHtml(c.name)}</option>`)
+      .join('');
+
+  // keep state in sync in case current counter was removed
+  if (!_counters.find(c => c.id == state.posCounterId)) {
+    state.posCounterId = null;
+    sel.value = '';
+  }
+}
+
+$('#rb-counter-select')?.addEventListener('change', function () {
+  state.posCounterId = this.value ? parseInt(this.value) : null;
+});
+
+// --- PSM Counters tab ---
+
+async function loadPsmCounters(branches) {
+  _psmBranches = branches || _psmBranches;
+
+  // populate branch dropdown in the add form
+  const bSel = $('#psm-counter-branch-input');
+  if (bSel) {
+    bSel.innerHTML = '<option value="">All branches</option>' +
+      _psmBranches.map(b => `<option value="${b.id}">${escHtml(b.name)}</option>`).join('');
+  }
+
+  // load and render existing counters
+  const res = await API.counters();
+  if (res.status !== 200) return;
+  _counters = res.body?.data ?? [];
+  _renderPsmCounterList();
+  _renderCounterRibbon();
+}
+
+function _renderPsmCounterList() {
+  const el = $('#psm-counters-list');
+  if (!el) return;
+
+  if (_counters.length === 0) {
+    el.innerHTML = '<div class="psm-hint">No counters defined yet.</div>';
+    return;
+  }
+
+  el.innerHTML = _counters.map(c => {
+    const branchName = c.branch_id
+      ? (_psmBranches.find(b => b.id === c.branch_id)?.name ?? `Branch #${c.branch_id}`)
+      : 'All branches';
+    return `
+      <div class="psm-counter-item" data-counter-id="${c.id}">
+        <span class="psm-counter-item-name">${escHtml(c.name)}</span>
+        <span class="psm-counter-item-branch"><i class="fa fa-code-branch"></i> ${escHtml(branchName)}</span>
+        <button class="psm-counter-item-toggle ${c.is_active ? 'active' : ''}"
+          data-counter-id="${c.id}" data-active="${c.is_active ? '1' : '0'}">
+          ${c.is_active ? '<i class="fa fa-eye"></i> Active' : '<i class="fa fa-eye-slash"></i> Hidden'}
+        </button>
+        <button class="psm-counter-item-del" data-counter-id="${c.id}">
+          <i class="fa fa-trash"></i>
+        </button>
+      </div>`;
+  }).join('');
+
+  // wire toggle buttons
+  el.querySelectorAll('.psm-counter-item-toggle').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id     = parseInt(btn.dataset.counterId);
+      const active = btn.dataset.active !== '1';
+      await API.counterUpdate(id, { is_active: active });
+      await loadPsmCounters();
+    });
+  });
+
+  // wire delete buttons
+  el.querySelectorAll('.psm-counter-item-del').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = parseInt(btn.dataset.counterId);
+      if (!confirm('Delete this counter?')) return;
+      await API.counterDelete(id);
+      await loadPsmCounters();
+    });
+  });
+}
+
+$('#psm-counter-add-btn')?.addEventListener('click', async () => {
+  const name     = $('#psm-counter-name-input')?.value.trim();
+  const branchId = $('#psm-counter-branch-input')?.value;
+  if (!name) { toast('Enter a counter name', 'error'); return; }
+
+  const payload = { name };
+  if (branchId) payload.branch_id = parseInt(branchId);
+
+  const res = await API.counterCreate(payload);
+  if (res.status !== 201) { toast(res.body?.message ?? 'Failed to add counter', 'error'); return; }
+
+  if ($('#psm-counter-name-input')) $('#psm-counter-name-input').value = '';
+  if ($('#psm-counter-branch-input')) $('#psm-counter-branch-input').value = '';
+  await loadPsmCounters();
+  toast('Counter added', 'success');
+});
+
+// ── End POS Counters ───────────────────────────────────────────────────────
+
 // ── Receipt Print ──────────────────────────────────────────────────────────
-function buildReceiptHTML(sale) {
+// Receipt label translations
+const _RCPT_LABELS = {
+  en: {
+    receiptNo: 'Receipt #', date: 'Date', customer: 'Customer', cashier: 'Cashier',
+    item: 'Item', qty: 'Qty', price: 'Price', lineTotal: 'Total',
+    subtotal: 'Subtotal', discount: 'Discount', grandTotal: 'TOTAL',
+    paid: 'Paid', change: 'Change',
+  },
+  si: {
+    receiptNo: 'රිසිට් #', date: 'දිනය', customer: 'ගනුදෙනුකරු', cashier: 'කාෂියර්',
+    item: 'භාණ්ඩය', qty: 'ප්‍රමාණය', price: 'මිල', lineTotal: 'එකතුව',
+    subtotal: 'උප එකතුව', discount: 'වට්ටම', grandTotal: 'මුළු එකතුව',
+    paid: 'ගෙවූ', change: 'ශේෂය',
+  },
+  ta: {
+    receiptNo: 'ரசீது #', date: 'தேதி', customer: 'வாடிக்கையாளர்', cashier: 'காசாளர்',
+    item: 'பொருள்', qty: 'அளவு', price: 'விலை', lineTotal: 'மொத்தம்',
+    subtotal: 'கூட்டுத்தொகை', discount: 'தள்ளுபடி', grandTotal: 'மொத்தம்',
+    paid: 'செலுத்தியது', change: 'மீதி',
+  },
+};
+
+// Sample receipt used in the layout editor preview
+const _RCPT_SAMPLE = {
+  sale_number: 'INV-0001',
+  sold_at: new Date().toISOString(),
+  customer: { name: 'Walk-in Customer' },
+  cashier: { name: 'Cashier' },
+  notes: '',
+  items: [
+    { product_name: 'Product One',   quantity: 2, unit_sell_price: 25.00, line_total: 50.00 },
+    { product_name: 'Product Two',   quantity: 1, unit_sell_price: 75.00, line_total: 75.00 },
+    { product_name: 'Product Three', quantity: 3, unit_sell_price: 10.00, line_total: 30.00 },
+  ],
+  subtotal: 155.00, discount_amount: 5.00, discount_percent: 3,
+  total: 150.00, amount_paid: 160.00,
+  payment_method: 'cash', payment_method_label: 'Cash', change_amount: 10.00,
+};
+
+function buildReceiptHTML(sale, overrides = {}) {
   const s   = state.receiptSettings || {};
   const cur = state.currency ? ' ' + state.currency : '';
-  const bizName = s.show_business_name !== false ? (state._bizName || '') : '';
+
+  const lang     = 'receipt_language' in overrides ? overrides.receipt_language : (s.receipt_language || 'en');
+  const lbl      = _RCPT_LABELS[lang] || _RCPT_LABELS.en;
+
+  const showBizName  = 'show_business_name'    in overrides ? overrides.show_business_name    : s.show_business_name  !== false;
+  const showAddr     = 'show_business_address'  in overrides ? overrides.show_business_address : !!s.show_business_address;
+  const showCashier  = 'show_cashier'           in overrides ? overrides.show_cashier           : true;
+  const showAcct     = 'show_account_info'      in overrides ? overrides.show_account_info      : s.show_account_info  !== false;
+  const bizName      = showBizName ? (state._bizName || 'Your Business') : '';
+  const addrText     = 'receipt_address_line'   in overrides ? overrides.receipt_address_line   : (s.receipt_address_line || '');
+  const headerText   = 'receipt_header'         in overrides ? overrides.receipt_header         : (s.receipt_header  || '');
+  const footerText   = 'receipt_footer'         in overrides ? overrides.receipt_footer         : (s.receipt_footer  || 'Thank you for your purchase!');
+  const customerName = 'customer_name'          in overrides ? overrides.customer_name          : (sale.customer?.name || '');
+  const noteText     = 'note'                   in overrides ? overrides.note                   : (sale.notes || '');
 
   const dateStr = sale.sold_at
     ? new Date(sale.sold_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })
     : new Date().toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
 
-  const itemsHTML = (sale.items || []).map(i => `
+  const itemsHTML = (sale.items || []).map(i => {
+    let wtyLine = '';
+    if (i.warranty_type === 'lifetime') {
+      wtyLine = `<div class="rcpt-warranty-line"><i class="fa fa-shield-halved"></i> Lifetime warranty</div>`;
+    } else if (i.warranty_type === 'days') {
+      const exp = i.warranty_expires_at ? ` &mdash; exp. ${i.warranty_expires_at}` : '';
+      wtyLine = `<div class="rcpt-warranty-line"><i class="fa fa-shield-halved"></i> ${i.warranty_days ? i.warranty_days + 'd' : ''} warranty${exp}</div>`;
+    }
+    return `
     <div class="rcpt-item">
       <span class="ri-name">${escHtml(i.product_name)}</span>
       <span class="ri-qty">${i.quantity % 1 === 0 ? parseInt(i.quantity) : parseFloat(i.quantity).toFixed(2)}</span>
-      <span class="ri-price">${i.unit_sell_price.toFixed(2)}</span>
-      <span class="ri-total">${i.line_total.toFixed(2)}</span>
-    </div>`).join('');
+      <span class="ri-price">${parseFloat(i.unit_sell_price).toFixed(2)}</span>
+      <span class="ri-total">${parseFloat(i.line_total).toFixed(2)}</span>
+    </div>${wtyLine}`;
+  }).join('');
 
   const discount = parseFloat(sale.discount_amount || 0);
   const change   = parseFloat(sale.change_amount || 0);
 
-  let totalsHTML = `
-    <div class="rcpt-total-row"><span>Subtotal</span><span>${parseFloat(sale.subtotal).toFixed(2)}${cur}</span></div>`;
+  let totalsHTML = `<div class="rcpt-total-row"><span>${lbl.subtotal}</span><span>${parseFloat(sale.subtotal).toFixed(2)}${cur}</span></div>`;
   if (discount > 0) {
-    totalsHTML += `<div class="rcpt-total-row"><span>Discount${sale.discount_percent ? ' (' + sale.discount_percent + '%)' : ''}</span><span>-${discount.toFixed(2)}${cur}</span></div>`;
+    totalsHTML += `<div class="rcpt-total-row"><span>${lbl.discount}${sale.discount_percent ? ' (' + sale.discount_percent + '%)' : ''}</span><span>-${discount.toFixed(2)}${cur}</span></div>`;
   }
   totalsHTML += `
     <hr class="rcpt-divider-solid">
-    <div class="rcpt-total-row grand"><span>TOTAL</span><span>${parseFloat(sale.total).toFixed(2)}${cur}</span></div>
-    <div class="rcpt-total-row"><span>Paid (${escHtml(sale.payment_method_label || sale.payment_method || '')})</span><span>${parseFloat(sale.amount_paid || sale.total).toFixed(2)}${cur}</span></div>`;
-  if (change > 0.005) {
-    totalsHTML += `<div class="rcpt-total-row change"><span>Change</span><span>${change.toFixed(2)}${cur}</span></div>`;
+    <div class="rcpt-total-row grand"><span>${lbl.grandTotal}</span><span>${parseFloat(sale.total).toFixed(2)}${cur}</span></div>`;
+  if (showAcct) {
+    totalsHTML += `<div class="rcpt-total-row"><span>${lbl.paid} (${escHtml(sale.payment_method_label || sale.payment_method || '')})</span><span>${parseFloat(sale.amount_paid || sale.total).toFixed(2)}${cur}</span></div>`;
+    if (change > 0.005) {
+      totalsHTML += `<div class="rcpt-total-row change"><span>${lbl.change}</span><span>${change.toFixed(2)}${cur}</span></div>`;
+    }
   }
 
-  const header = s.receipt_header ? `<div class="rcpt-biz-sub">${escHtml(s.receipt_header)}</div>` : '';
-  const footer = s.receipt_footer || 'Thank you for your purchase!';
+  const addrLines = showAddr && addrText
+    ? addrText.split('\n').map(l => `<div class="rcpt-biz-sub">${escHtml(l)}</div>`).join('')
+    : '';
 
-  return `
-    ${bizName ? `<div class="rcpt-biz-name">${escHtml(bizName)}</div>` : ''}
-    ${header}
+  // caller must set data-lang="${lang}" on the container element
+  return {
+    lang,
+    html: `
+    ${bizName    ? `<div class="rcpt-biz-name">${escHtml(bizName)}</div>` : ''}
+    ${addrLines}
+    ${headerText ? `<div class="rcpt-biz-sub">${escHtml(headerText)}</div>` : ''}
     <hr class="rcpt-divider">
-    <div class="rcpt-meta"><span>Receipt #</span><span>${escHtml(sale.sale_number || '')}</span></div>
-    <div class="rcpt-meta"><span>Date</span><span>${dateStr}</span></div>
-    ${sale.cashier?.name ? `<div class="rcpt-meta"><span>Cashier</span><span>${escHtml(sale.cashier.name)}</span></div>` : ''}
+    <div class="rcpt-meta"><span>${lbl.receiptNo}</span><span>${escHtml(sale.sale_number || '')}</span></div>
+    <div class="rcpt-meta"><span>${lbl.date}</span><span>${dateStr}</span></div>
+    ${customerName ? `<div class="rcpt-meta"><span>${lbl.customer}</span><span>${escHtml(customerName)}</span></div>` : ''}
+    ${showCashier && sale.cashier?.name ? `<div class="rcpt-meta"><span>${lbl.cashier}</span><span>${escHtml(sale.cashier.name)}</span></div>` : ''}
     <hr class="rcpt-divider">
     <div class="rcpt-items-header">
-      <span class="ih-name">Item</span>
-      <span class="ih-qty">Qty</span>
-      <span class="ih-price">Price</span>
-      <span class="ih-total">Total</span>
+      <span class="ih-name">${lbl.item}</span><span class="ih-qty">${lbl.qty}</span>
+      <span class="ih-price">${lbl.price}</span><span class="ih-total">${lbl.lineTotal}</span>
     </div>
     ${itemsHTML}
     <hr class="rcpt-divider">
     <div class="rcpt-totals">${totalsHTML}</div>
-    <div class="rcpt-thank">${escHtml(footer)}</div>
+    ${noteText ? `<div class="rcpt-note">${escHtml(noteText)}</div>` : ''}
+    <div class="rcpt-thank">${escHtml(footerText)}</div>
     <hr class="rcpt-divider">
     <div class="rcpt-footer">
-      <span class="rcpt-payment-badge">${escHtml(sale.payment_method_label || sale.payment_method || 'Paid')}</span>
-    </div>`;
+      <span class="rcpt-payment-badge">${escHtml(sale.payment_method_label || sale.payment_method || lbl.paid)}</span>
+    </div>`,
+  };
 }
 
+function _applyReceipt(containerEl, printableEl, result) {
+  containerEl.dataset.lang    = result.lang;
+  containerEl.innerHTML       = result.html;
+  printableEl.innerHTML       = `<div class="rcpt-paper" data-lang="${result.lang}">${result.html}</div>`;
+}
+
+// ── Receipt preview (simple, shown after checkout) ─────────────────────────
+let _receiptSale = null;
+
 function showReceiptModal(sale) {
-  const html = buildReceiptHTML(sale);
-  $('#rcpt-paper').innerHTML         = html;
-  $('#receipt-printable').innerHTML  = `<div class="rcpt-paper">${html}</div>`;
-  $('#receipt-modal').style.display  = 'flex';
+  _receiptSale = sale;
+  _applyReceipt($('#rcpt-paper'), $('#receipt-printable'), buildReceiptHTML(sale));
+  $('#receipt-modal').style.display = 'flex';
 }
 
 $('#rcpt-close').addEventListener('click', () => { $('#receipt-modal').style.display = 'none'; });
 $('#receipt-modal').addEventListener('click', (e) => {
   if (e.target === e.currentTarget) e.currentTarget.style.display = 'none';
 });
-
 $('#rcpt-print').addEventListener('click', () => {
   $('#receipt-printable').style.display = 'block';
   window.print();
   setTimeout(() => { $('#receipt-printable').style.display = 'none'; }, 500);
 });
-// ── End Receipt Print ──────────────────────────────────────────────────────
+
+// ── Receipt layout editor (template designer) ──────────────────────────────
+function _rcptEdOverrides() {
+  return {
+    receipt_language:      ($('input[name="rcpt-lang"]:checked') || {}).value || 'en',
+    show_business_name:    $('#rcpt-ed-show-biz').checked,
+    show_business_address: $('#rcpt-ed-show-addr').checked,
+    receipt_address_line:  $('#rcpt-ed-address').value,
+    receipt_header:        $('#rcpt-ed-header').value,
+    receipt_footer:        $('#rcpt-ed-footer').value,
+    show_cashier:          $('#rcpt-ed-show-cashier').checked,
+    show_account_info:     $('#rcpt-ed-show-acct').checked,
+  };
+}
+
+function _syncEditorPreview() {
+  const result = buildReceiptHTML(_RCPT_SAMPLE, _rcptEdOverrides());
+  $('#rcpt-ed-paper').dataset.lang = result.lang;
+  $('#rcpt-ed-paper').innerHTML    = result.html;
+}
+
+function showReceiptEditor() {
+  const s = state.receiptSettings || {};
+  const lang = s.receipt_language || 'en';
+  const radio = $(`#rcpt-lang-${lang}`);
+  if (radio) radio.checked = true;
+  $('#rcpt-ed-show-biz').checked     = s.show_business_name  !== false;
+  $('#rcpt-ed-show-addr').checked    = !!s.show_business_address;
+  $('#rcpt-ed-address').value        = s.receipt_address_line || '';
+  $('#rcpt-ed-header').value         = s.receipt_header        || '';
+  $('#rcpt-ed-footer').value         = s.receipt_footer        || 'Thank you for your purchase!';
+  $('#rcpt-ed-show-cashier').checked = true;
+  $('#rcpt-ed-show-acct').checked    = s.show_account_info !== false;
+  _syncEditorPreview();
+  $('#receipt-editor-modal').style.display = 'flex';
+}
+
+$('#rcpt-ed-close').addEventListener('click', () => { $('#receipt-editor-modal').style.display = 'none'; });
+$('#receipt-editor-modal').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) e.currentTarget.style.display = 'none';
+});
+
+['rcpt-ed-address', 'rcpt-ed-header', 'rcpt-ed-footer'].forEach(id => {
+  $('#' + id).addEventListener('input', _syncEditorPreview);
+});
+['rcpt-ed-show-biz', 'rcpt-ed-show-addr', 'rcpt-ed-show-cashier', 'rcpt-ed-show-acct',
+ 'rcpt-lang-en', 'rcpt-lang-si', 'rcpt-lang-ta'].forEach(id => {
+  $('#' + id).addEventListener('change', _syncEditorPreview);
+});
+
+$('#rcpt-ed-save').addEventListener('click', async () => {
+  const btn = $('#rcpt-ed-save');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
+
+  const ov = _rcptEdOverrides();
+  const res = await API.settingsUpdate({
+    receipt_language:      ov.receipt_language,
+    show_business_name:    ov.show_business_name,
+    show_business_address: ov.show_business_address,
+    receipt_address_line:  ov.receipt_address_line,
+    receipt_header:        ov.receipt_header,
+    receipt_footer:        ov.receipt_footer,
+    show_account_info:     ov.show_account_info,
+  });
+
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fa fa-floppy-disk"></i> Save layout';
+
+  if (res.status !== 200) {
+    toast('Failed to save: ' + (res.body?.message ?? 'unknown error'), 'error');
+    return;
+  }
+
+  // Sync into in-session state
+  const saved = res.body?.data || {};
+  ['receipt_language','show_business_name','show_business_address','receipt_address_line',
+   'receipt_header','receipt_footer','show_account_info'].forEach(k => {
+    if (saved[k] !== undefined) state.receiptSettings = { ...state.receiptSettings, [k]: saved[k] };
+  });
+
+  toast('Receipt layout saved', 'success');
+  $('#receipt-editor-modal').style.display = 'none';
+});
+// ── End Receipt ────────────────────────────────────────────────────────────
 $('#rb-clear-filters').addEventListener('click', () => {
   state.searchQuery = '';
   state.activeCategory = 0;
@@ -11155,6 +12234,116 @@ function renderPosTabBar() {
 
 $('#pos-tab-add').addEventListener('click', () => addPosTab());
 
+// ── Price override prompt ──────────────────────────────────────────────────
+let _askPriceResolve = null;
+
+function _askPrice(productName, defaultPrice) {
+  return new Promise(resolve => {
+    _askPriceResolve = resolve;
+    const overlay = $('#pos-price-overlay');
+    $('#pos-price-product-name').textContent = productName;
+    const inp = $('#pos-price-input');
+    inp.value = defaultPrice.toFixed(2);
+    overlay.style.display = 'flex';
+    requestAnimationFrame(() => { inp.focus(); inp.select(); });
+  });
+}
+
+$('#pos-price-confirm').addEventListener('click', () => {
+  const val = parseFloat($('#pos-price-input').value);
+  if (isNaN(val) || val < 0) { toast('Enter a valid price.', 'error'); return; }
+  $('#pos-price-overlay').style.display = 'none';
+  if (_askPriceResolve) { const r = _askPriceResolve; _askPriceResolve = null; r(val); }
+});
+$('#pos-price-cancel').addEventListener('click', () => {
+  $('#pos-price-overlay').style.display = 'none';
+  if (_askPriceResolve) { const r = _askPriceResolve; _askPriceResolve = null; r(null); }
+});
+$('#pos-price-overlay').addEventListener('click', e => {
+  if (e.target === e.currentTarget) {
+    $('#pos-price-overlay').style.display = 'none';
+    if (_askPriceResolve) { const r = _askPriceResolve; _askPriceResolve = null; r(null); }
+  }
+});
+$('#pos-price-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter')  $('#pos-price-confirm').click();
+  if (e.key === 'Escape') $('#pos-price-cancel').click();
+});
+// ── End Price override prompt ──────────────────────────────────────────────
+
+// ── Warranty prompt ────────────────────────────────────────────────────────
+let _askWarrantyResolve = null;
+
+function _askWarranty(productName) {
+  return new Promise(resolve => {
+    _askWarrantyResolve = resolve;
+    $('#pos-warranty-product-name').textContent = productName;
+    // Reset to lifetime default
+    $('#wt-lifetime').checked = true;
+    $('#wt-days').checked = false;
+    $('#warranty-days-row').style.display = 'none';
+    $('#pos-warranty-days').value = '';
+    $('#warranty-expiry-preview').textContent = '';
+    $('#pos-warranty-overlay').style.display = 'flex';
+  });
+}
+
+function _wtyUpdateExpiry() {
+  const days = parseInt($('#pos-warranty-days').value);
+  const preview = $('#warranty-expiry-preview');
+  if (!days || days < 1) { preview.textContent = ''; return; }
+  const exp = new Date();
+  exp.setDate(exp.getDate() + days);
+  preview.textContent = 'Expires: ' + exp.toLocaleDateString([], { dateStyle: 'medium' });
+}
+
+function _wtyResolve(result) {
+  $('#pos-warranty-overlay').style.display = 'none';
+  if (_askWarrantyResolve) { const r = _askWarrantyResolve; _askWarrantyResolve = null; r(result); }
+}
+
+$$('input[name="warranty-type"]').forEach(radio => {
+  radio.addEventListener('change', () => {
+    const isDays = $('#wt-days').checked;
+    $('#warranty-days-row').style.display = isDays ? '' : 'none';
+    if (isDays) requestAnimationFrame(() => $('#pos-warranty-days').focus());
+  });
+});
+
+$$('.wty-shortcut').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const days = parseInt(btn.dataset.days);
+    $('#wt-days').checked = true;
+    $('#wt-lifetime').checked = false;
+    $('#warranty-days-row').style.display = '';
+    $('#pos-warranty-days').value = days;
+    _wtyUpdateExpiry();
+  });
+});
+
+$('#pos-warranty-days').addEventListener('input', _wtyUpdateExpiry);
+$('#pos-warranty-days').addEventListener('keydown', e => {
+  if (e.key === 'Enter') $('#pos-warranty-confirm').click();
+  if (e.key === 'Escape') _wtyResolve(null);
+});
+
+$('#pos-warranty-confirm').addEventListener('click', () => {
+  const type = $('input[name="warranty-type"]:checked')?.value || 'lifetime';
+  if (type === 'days') {
+    const days = parseInt($('#pos-warranty-days').value);
+    if (!days || days < 1) { toast('Enter a valid number of days.', 'error'); return; }
+    _wtyResolve({ type: 'days', days });
+  } else {
+    _wtyResolve({ type: 'lifetime', days: null });
+  }
+});
+
+$('#pos-warranty-cancel').addEventListener('click', () => _wtyResolve(null));
+$('#pos-warranty-overlay').addEventListener('click', e => {
+  if (e.target === e.currentTarget) _wtyResolve(null);
+});
+// ── End Warranty prompt ────────────────────────────────────────────────────
+
 // ── Stock layer picker ─────────────────────────────────────────────────────
 let _layerPickerResolve = null;
 
@@ -11275,42 +12464,89 @@ function posPickStockLayer(product, layers) {
 }
 
 async function handleProductClick(p) {
-  const layers = p.layers || [];
+  const layers  = p.layers || [];
   const inStock = layers.filter(l => parseFloat(l.quantity_remaining) > 0);
+  const stockMode = state.receiptSettings?.stock_selection_mode ?? 'fifo';
 
-  if (layers.length > 1 && posLayersDifferInPrice(layers)) {
-    // Show picker — filter to in-stock layers only; if none, show all (server enforces stock)
+  let cartItem;
+
+  const _wholesalePrice = p.wholesale_price != null ? parseFloat(p.wholesale_price) : null;
+  const _tab = activeTab();
+  const _isWholesale = _tab?._customer?.customer_type === 'wholesale';
+
+  if (stockMode === 'choose' && layers.length > 1) {
+    // Manual batch picker
     const pickable = inStock.length > 0 ? inStock : layers;
     const layer = await posPickStockLayer(p, pickable);
     if (!layer) return;
-    addToCart({
+    const retailP = parseFloat(layer.unit_sell_price);
+    cartItem = {
       id: p.id, layerId: layer.id, layerLabel: layer.label || `Batch #${layer.id}`,
-      name: p.name, price: parseFloat(layer.unit_sell_price),
+      name: p.name, price: (_isWholesale && _wholesalePrice != null) ? _wholesalePrice : retailP,
       stock: parseFloat(layer.quantity_remaining),
-    });
+      _retailPrice: retailP, _wholesalePrice,
+    };
+  } else if (stockMode === 'last_price' && layers.length > 1) {
+    // Use the most recently added in-stock batch (highest id = latest price update)
+    const pool  = inStock.length > 0 ? inStock : layers;
+    const layer = pool.reduce((best, l) => ((l.id > best.id) ? l : best), pool[0]);
+    const retailP = parseFloat(layer.unit_sell_price);
+    cartItem = {
+      id: p.id, layerId: layer.id, layerLabel: layer.label || `Batch #${layer.id}`,
+      name: p.name, price: (_isWholesale && _wholesalePrice != null) ? _wholesalePrice : retailP,
+      stock: parseFloat(layer.quantity_remaining),
+      _retailPrice: retailP, _wholesalePrice,
+    };
   } else if (inStock.length > 0) {
-    // Pick first in-stock layer automatically
+    // FIFO: first available in-stock layer
     const layer = inStock[0];
-    addToCart({
+    const retailP = parseFloat(layer.unit_sell_price);
+    cartItem = {
       id: p.id, layerId: layer.id, layerLabel: layer.label || `Batch #${layer.id}`,
-      name: p.name, price: parseFloat(layer.unit_sell_price),
+      name: p.name, price: (_isWholesale && _wholesalePrice != null) ? _wholesalePrice : retailP,
       stock: parseFloat(layer.quantity_remaining),
-    });
+      _retailPrice: retailP, _wholesalePrice,
+    };
   } else if (layers.length >= 1) {
-    // All layers depleted — send no layerId so server uses FIFO (or surfaces a real stock error)
     const layer = layers[0];
-    addToCart({
+    const retailP = parseFloat(layer.unit_sell_price);
+    cartItem = {
       id: p.id, layerId: null, layerLabel: null,
-      name: p.name, price: parseFloat(layer.unit_sell_price),
+      name: p.name, price: (_isWholesale && _wholesalePrice != null) ? _wholesalePrice : retailP,
       stock: 0,
-    });
+      _retailPrice: retailP, _wholesalePrice,
+    };
   } else {
-    addToCart({
+    const retailP = parseFloat(p.discounted_sell_price ?? p.unit_sell_price ?? 0);
+    cartItem = {
       id: p.id, layerId: null, layerLabel: null,
-      name: p.name, price: parseFloat(p.discounted_sell_price ?? p.unit_sell_price ?? 0),
+      name: p.name, price: (_isWholesale && _wholesalePrice != null) ? _wholesalePrice : retailP,
       stock: p.stock_quantity != null ? parseFloat(p.stock_quantity) : null,
-    });
+      _retailPrice: retailP, _wholesalePrice,
+    };
   }
+
+  // choose_price: ask for the unit price before adding
+  if (state.receiptSettings?.choose_price) {
+    const overridden = await _askPrice(cartItem.name, cartItem.price);
+    if (overridden === null) return; // cancelled
+    cartItem.price = overridden;
+  }
+
+  // warranty: ask only when adding a new item (not incrementing existing)
+  if (p.has_warranty) {
+    const tab = activeTab();
+    const key = cartItem.layerId != null ? `${cartItem.id}:${cartItem.layerId}` : `${cartItem.id}`;
+    const alreadyInCart = tab?.cart.some(i => i._key === key);
+    if (!alreadyInCart) {
+      const wty = await _askWarranty(cartItem.name);
+      if (wty === null) return; // cancelled
+      cartItem.warrantyType = wty.type;
+      cartItem.warrantyDays = wty.days;
+    }
+  }
+
+  addToCart(cartItem);
 }
 
 // ── Cart ───────────────────────────────────────────────────────────────────
@@ -11326,7 +12562,7 @@ function addToCart(product) {
   if (existing) {
     existing.qty += 1;
   } else {
-    tab.cart.push({ ...product, qty: 1, _key: key, _basePrice: product.price, _discountPct: null, _note: null });
+    tab.cart.push({ ...product, qty: 1, _key: key, _basePrice: product.price, _discountPct: null, _note: null, _retailPrice: product._retailPrice ?? product.price, _wholesalePrice: product._wholesalePrice ?? null });
   }
   renderCart();
   renderPosTabBar();
@@ -11367,8 +12603,10 @@ function renderCart() {
       ? `<span class="ci-badge ci-badge--note"><i class="fa fa-pen-to-square"></i> ${escHtml(item._note)}</span>` : '';
     const typeBadge = item._type === 'service'
       ? `<span class="ci-badge ci-badge--service"><i class="fa fa-screwdriver-wrench"></i> Service</span>` : '';
-    const extras = (discountBadge || noteBadge || typeBadge)
-      ? `<div class="ci-badges">${typeBadge}${discountBadge}${noteBadge}</div>` : '';
+    const warrantyBadge = item.warrantyType
+      ? `<span class="warranty-badge"><i class="fa fa-shield-halved"></i> ${item.warrantyType === 'lifetime' ? 'Lifetime warranty' : `${item.warrantyDays}d warranty`}</span>` : '';
+    const extras = (discountBadge || noteBadge || typeBadge || warrantyBadge)
+      ? `<div class="ci-badges">${typeBadge}${discountBadge}${noteBadge}${warrantyBadge}</div>` : '';
     return `
     <div class="cart-item" data-key="${escHtml(item._key)}">
       <div class="ci-name">
@@ -11635,6 +12873,11 @@ $('#co-cust-clear')?.addEventListener('click', () => {
 });
 
 $('#checkout-confirm').addEventListener('click', async () => {
+  if (state.registerLockedUntil && Date.now() < state.registerLockedUntil) {
+    toast('Cash register is locked. Unlock the register to process sales.', 'error');
+    return;
+  }
+
   const method = _coGetMethod();
   const amount = parseFloat(_coAmount) || 0;
   const notes  = $('#co-notes')?.value || '';
@@ -11667,11 +12910,14 @@ $('#checkout-confirm').addEventListener('click', async () => {
     discount_percent: discountPct > 0 ? discountPct : undefined,
     pos_customer_id:  tab?._customer?.id ?? undefined,
     scheduled_at:     scheduledAt || undefined,
+    pos_counter_id:   state.posCounterId ?? undefined,
     items: [
       ...productItems.map(i => ({
         product_id:             i.id,
         quantity:               i.qty,
         product_stock_layer_id: i.layerId ?? undefined,
+        warranty_type:          i.warrantyType ?? undefined,
+        warranty_days:          i.warrantyDays ?? undefined,
       })),
       ...serviceItems.map(i => ({
         item_type:       'service',
@@ -11701,7 +12947,177 @@ $('#checkout-confirm').addEventListener('click', async () => {
 
   const sale = res.body?.data;
   if (sale) showReceiptModal(sale);
+
+  // Refresh ribbon stats after each sale
+  _loadPosRibbonStats();
 });
+
+// ── Register Lock ──────────────────────────────────────────────────────────
+let _regLockCountdown = null;
+let _regLockPwResolve = null;
+
+function _regLockKey() {
+  return `pos_register_lock_${state.config?.businessId || 'default'}`;
+}
+
+function lockRegister(untilTs) {
+  localStorage.setItem(_regLockKey(), JSON.stringify({ lockedUntil: untilTs }));
+  state.registerLockedUntil = untilTs;
+  _showLockScreen(new Date(untilTs));
+}
+
+function unlockRegister() {
+  localStorage.removeItem(_regLockKey());
+  state.registerLockedUntil = null;
+  if (_regLockCountdown) { clearInterval(_regLockCountdown); _regLockCountdown = null; }
+  $('#reg-lock-screen').style.display = 'none';
+}
+
+function checkRegisterLock() {
+  const raw = localStorage.getItem(_regLockKey());
+  if (!raw) return;
+  try {
+    const { lockedUntil } = JSON.parse(raw);
+    if (lockedUntil && Date.now() < lockedUntil) {
+      state.registerLockedUntil = lockedUntil;
+      _showLockScreen(new Date(lockedUntil));
+    } else {
+      localStorage.removeItem(_regLockKey());
+    }
+  } catch (_) { localStorage.removeItem(_regLockKey()); }
+}
+
+function _showLockScreen(untilDate) {
+  const timeStr = untilDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  $('#reg-lock-at-time').textContent = timeStr;
+  $('#reg-lock-screen').style.display = 'flex';
+
+  if (_regLockCountdown) clearInterval(_regLockCountdown);
+  function _tick() {
+    const remaining = state.registerLockedUntil - Date.now();
+    if (remaining <= 0) { unlockRegister(); return; }
+    const h = Math.floor(remaining / 3600000);
+    const m = Math.floor((remaining % 3600000) / 60000);
+    const s = Math.floor((remaining % 60000) / 1000);
+    const pad = (n) => String(n).padStart(2, '0');
+    $('#reg-lock-countdown').textContent = h > 0
+      ? `${pad(h)}:${pad(m)}:${pad(s)}`
+      : `${pad(m)}:${pad(s)}`;
+  }
+  _tick();
+  _regLockCountdown = setInterval(_tick, 1000);
+}
+
+function _askRegLockPw(actionLabel) {
+  return new Promise(resolve => {
+    _regLockPwResolve = resolve;
+    $('#reg-pw-action-label').textContent = actionLabel;
+    $('#reg-lock-pw-input').value = '';
+    $('#reg-lock-pw-alert').style.display = 'none';
+    $('#reg-lock-pw-modal').style.display = 'flex';
+    requestAnimationFrame(() => $('#reg-lock-pw-input').focus());
+  });
+}
+
+async function _submitRegLockPw() {
+  const pw = $('#reg-lock-pw-input').value;
+  if (!pw) {
+    $('#reg-lock-pw-alert').textContent = 'Please enter your password.';
+    $('#reg-lock-pw-alert').style.display = '';
+    return;
+  }
+  const btn = $('#reg-lock-pw-confirm');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i>';
+  const res = await API.verifyPassword(pw);
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fa fa-check"></i> Confirm';
+  if (res.status === 200) {
+    $('#reg-lock-pw-modal').style.display = 'none';
+    if (_regLockPwResolve) { const r = _regLockPwResolve; _regLockPwResolve = null; r(true); }
+  } else {
+    $('#reg-lock-pw-alert').textContent = res.body?.message || 'Incorrect password.';
+    $('#reg-lock-pw-alert').style.display = '';
+  }
+}
+
+function _cancelRegLockPw() {
+  $('#reg-lock-pw-modal').style.display = 'none';
+  if (_regLockPwResolve) { const r = _regLockPwResolve; _regLockPwResolve = null; r(null); }
+}
+
+function _calcLockUntil(val, customTime) {
+  const now = Date.now();
+  if (val === 'day') {
+    const midnight = new Date(); midnight.setHours(24, 0, 0, 0); return midnight.getTime();
+  }
+  if (val === '1h') return now + 3600000;
+  if (val === '6h') return now + 6 * 3600000;
+  if (val === 'custom' && customTime) {
+    const [hh, mm] = customTime.split(':').map(Number);
+    const target = new Date(); target.setHours(hh, mm, 0, 0);
+    if (target.getTime() <= now) target.setDate(target.getDate() + 1);
+    return target.getTime();
+  }
+  return now + 3600000;
+}
+
+$('#reg-lock-pw-confirm').addEventListener('click', _submitRegLockPw);
+$('#reg-lock-pw-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') _submitRegLockPw();
+  if (e.key === 'Escape') _cancelRegLockPw();
+});
+$('#reg-lock-pw-cancel').addEventListener('click', _cancelRegLockPw);
+$('#reg-lock-pw-modal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) _cancelRegLockPw();
+});
+
+$$('input[name="reg-lock-dur"]').forEach(r => {
+  r.addEventListener('change', () => {
+    $('#reg-lock-custom-row').style.display = r.value === 'custom' ? '' : 'none';
+  });
+});
+
+$('#reg-lock-cancel').addEventListener('click', () => {
+  $('#reg-lock-modal').style.display = 'none';
+});
+$('#reg-lock-modal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) $('#reg-lock-modal').style.display = 'none';
+});
+
+$('#reg-lock-confirm').addEventListener('click', async () => {
+  const val = $('input[name="reg-lock-dur"]:checked')?.value || 'day';
+  const customTime = $('#reg-lock-custom-time').value;
+  if (val === 'custom' && !customTime) { toast('Pick a custom unlock time first.', 'error'); return; }
+  $('#reg-lock-modal').style.display = 'none';
+  const verified = await _askRegLockPw('lock');
+  if (!verified) return;
+  const untilTs = _calcLockUntil(val, customTime);
+  lockRegister(untilTs);
+  toast('Cash register locked', 'success');
+});
+
+$('#reg-lock-unlock-btn').addEventListener('click', async () => {
+  const verified = await _askRegLockPw('unlock');
+  if (!verified) return;
+  unlockRegister();
+  toast('Register unlocked', 'success');
+});
+
+$('#rb-lock-register').addEventListener('click', () => {
+  if (state.registerLockedUntil && Date.now() < state.registerLockedUntil) {
+    toast('Register is already locked.', 'error');
+    return;
+  }
+  const now = Date.now();
+  const fmt = (ts) => new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  $('#rld-1h-until').textContent = 'Until ' + fmt(now + 3600000);
+  $('#rld-6h-until').textContent = 'Until ' + fmt(now + 6 * 3600000);
+  $('#rld-day').checked = true;
+  $('#reg-lock-custom-row').style.display = 'none';
+  $('#reg-lock-modal').style.display = 'flex';
+});
+// ── End Register Lock ──────────────────────────────────────────────────────
 
 // ── Ribbon action wiring ───────────────────────────────────────────────────
 $('#rb-new-session').addEventListener('click', () => {
@@ -21943,6 +23359,1979 @@ async function submitDsCreate() {
   };
 
   window.openCreateRoleModal = openCreateRoleModal;
+}());
+
+// ── Mail ───────────────────────────────────────────────────────────────────
+(function () {
+  let _mailView             = 'inbox';
+  let _mailInboxSearch      = '';
+  let _mailInboxStatus      = '';
+  let _mailSentSearch       = '';
+  let _mailTmplSearch       = '';
+  let _mailTmplId           = null;
+  let _mailConvContact      = null;   // active conversation counterpart email
+  let _mailConvBox          = 'inbox'; // 'inbox' | 'sent'
+  let _mailConvReplySubject = '';      // pre-filled Re: subject
+
+  function _esc2(str) {
+    return String(str ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function _threadAvatar(name) { return (name || '?').trim()[0].toUpperCase(); }
+
+  async function switchMailView(view) {
+    _mailView = view;
+    $$('[data-mail]').forEach(b => b.classList.toggle('active', b.dataset.mail === view));
+    $('#mail-inbox-view').style.display     = view === 'inbox'     ? 'flex' : 'none';
+    $('#mail-sent-view').style.display      = view === 'sent'      ? 'flex' : 'none';
+    $('#mail-conv-view').style.display      = view === 'conv'      ? 'flex' : 'none';
+    $('#mail-compose-view').style.display   = view === 'compose'   ? 'flex' : 'none';
+    $('#mail-templates-view').style.display = view === 'templates' ? 'flex' : 'none';
+    $('#mail-filters-view').style.display   = view === 'filters'   ? 'flex' : 'none';
+    $('#mail-scheduled-view').style.display = view === 'scheduled' ? 'flex' : 'none';
+
+    if (view === 'inbox')     await loadMailInbox();
+    if (view === 'sent')      await loadMailSent();
+    if (view === 'templates') await Promise.all([loadMailTemplates(), loadMailTemplatesForCompose()]);
+    if (view === 'filters')   await loadMailFilters();
+    if (view === 'scheduled') await loadMailScheduled();
+    // 'conv' is loaded via mailOpenConversation(), not here
+  }
+
+  // ── Inbox: grouped thread list ────────────────────────────────────────────
+  async function loadMailInbox() {
+    const list = $('#mail-inbox-list');
+    list.innerHTML = '<div style="padding:28px;text-align:center;color:var(--text-muted)"><i class="fa fa-spinner fa-spin"></i> Loading…</div>';
+    const res = await API.mailThreads('inbox', _mailInboxSearch, _mailInboxStatus);
+    if (res.status !== 200) {
+      list.innerHTML = '<div style="padding:28px;text-align:center;color:var(--danger,#e74c3c)"><i class="fa fa-circle-exclamation"></i> Failed to load inbox</div>';
+      return;
+    }
+    const threads = res.body?.data || [];
+    if (!threads.length) {
+      list.innerHTML = `<div style="padding:28px;text-align:center;color:var(--text-muted)"><i class="fa fa-inbox"></i> ${_mailInboxSearch || _mailInboxStatus ? 'No messages match this filter' : 'Inbox is empty'}</div>`;
+      return;
+    }
+    list.innerHTML = threads.map(t => `
+      <div class="mail-thread-item${t.has_unread ? ' mail-thread-item--unread' : ''}" data-contact="${_esc2(t.contact_email)}" style="cursor:pointer">
+        <div class="mail-thread-avatar">${_threadAvatar(t.contact_name)}</div>
+        <div class="mail-thread-body">
+          <div class="mail-thread-row1">
+            <span class="mail-thread-name">${_esc2(t.contact_name)}</span>
+            ${t.has_unread ? '<span class="mail-thread-badge">New</span>' : ''}
+            <span class="mail-thread-count">${t.message_count}</span>
+            <span class="mail-thread-time">${_esc2(t.latest_label || '')}</span>
+          </div>
+          <div class="mail-thread-preview">${_esc2(t.latest_subject || '')}${t.preview ? ' — ' + _esc2(t.preview) : ''}</div>
+        </div>
+      </div>
+    `).join('');
+    list.querySelectorAll('.mail-thread-item').forEach(el => {
+      el.addEventListener('click', () => mailOpenConversation(el.dataset.contact, 'inbox'));
+    });
+  }
+
+  // Inbox search + status chips
+  let _mailSearchTimer = null;
+  $('#mail-inbox-search')?.addEventListener('input', e => {
+    _mailInboxSearch = e.target.value;
+    clearTimeout(_mailSearchTimer);
+    _mailSearchTimer = setTimeout(loadMailInbox, 350);
+  });
+  $$('[data-inbox-status]').forEach(chip => {
+    chip.addEventListener('click', () => {
+      $$('[data-inbox-status]').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      _mailInboxStatus = chip.dataset.inboxStatus;
+      loadMailInbox();
+    });
+  });
+
+  // ── Sent: grouped thread list ─────────────────────────────────────────────
+  async function loadMailSent() {
+    const list = $('#mail-sent-list');
+    list.innerHTML = '<div style="padding:28px;text-align:center;color:var(--text-muted)"><i class="fa fa-spinner fa-spin"></i> Loading…</div>';
+    const res = await API.mailThreads('sent', _mailSentSearch, '');
+    if (res.status !== 200) {
+      list.innerHTML = '<div style="padding:28px;text-align:center;color:var(--danger,#e74c3c)"><i class="fa fa-circle-exclamation"></i> Failed to load sent mail</div>';
+      return;
+    }
+    const threads = res.body?.data || [];
+    if (!threads.length) {
+      list.innerHTML = `<div style="padding:28px;text-align:center;color:var(--text-muted)"><i class="fa fa-paper-plane"></i> ${_mailSentSearch ? 'No messages match' : 'No sent emails'}</div>`;
+      return;
+    }
+    list.innerHTML = threads.map(t => `
+      <div class="mail-thread-item" data-contact="${_esc2(t.contact_email)}" style="cursor:pointer">
+        <div class="mail-thread-avatar">${_threadAvatar(t.contact_name)}</div>
+        <div class="mail-thread-body">
+          <div class="mail-thread-row1">
+            <span class="mail-thread-name">${_esc2(t.contact_name)}</span>
+            <span class="mail-thread-count">${t.message_count}</span>
+            <span class="mail-thread-time">${_esc2(t.latest_label || '')}</span>
+          </div>
+          <div class="mail-thread-preview">${_esc2(t.latest_subject || '')}${t.preview ? ' — ' + _esc2(t.preview) : ''}</div>
+        </div>
+      </div>
+    `).join('');
+    list.querySelectorAll('.mail-thread-item').forEach(el => {
+      el.addEventListener('click', () => mailOpenConversation(el.dataset.contact, 'sent'));
+    });
+  }
+
+  let _mailSentSearchTimer = null;
+  $('#mail-sent-search')?.addEventListener('input', e => {
+    _mailSentSearch = e.target.value;
+    clearTimeout(_mailSentSearchTimer);
+    _mailSentSearchTimer = setTimeout(loadMailSent, 350);
+  });
+
+  // ── Conversation view ─────────────────────────────────────────────────────
+  async function mailOpenConversation(contact, box) {
+    _mailConvContact = contact;
+    _mailConvBox     = box;
+    _mailView        = 'conv';
+
+    $$('[data-mail]').forEach(b => b.classList.remove('active'));
+    $('#mail-inbox-view').style.display     = 'none';
+    $('#mail-sent-view').style.display      = 'none';
+    $('#mail-conv-view').style.display      = 'flex';
+    $('#mail-compose-view').style.display   = 'none';
+    $('#mail-templates-view').style.display = 'none';
+    $('#mail-filters-view').style.display   = 'none';
+    $('#mail-scheduled-view').style.display = 'none';
+
+    $('#mail-conv-bubbles').innerHTML     = '<div style="padding:40px;text-align:center;color:var(--text-muted)"><i class="fa fa-spinner fa-spin"></i> Loading conversation…</div>';
+    $('#mail-conv-sidebar').innerHTML     = '';
+    $('#mail-conv-title').textContent     = contact;
+    $('#mail-conv-subtitle').textContent  = '';
+    $('#mail-conv-reply-body').value      = '';
+    $('#mail-conv-schedule-toggle').checked           = false;
+    $('#mail-conv-schedule-row').style.display        = 'none';
+    $('#mail-conv-send-label').textContent            = 'Send';
+    $('#mail-conv-reply-alert').style.display         = 'none';
+
+    await loadMailConversation();
+  }
+
+  async function loadMailConversation() {
+    if (!_mailConvContact) return;
+    const res = await API.mailThread(_mailConvContact, _mailConvBox);
+    if (res.status !== 200) {
+      $('#mail-conv-bubbles').innerHTML = '<div style="padding:40px;text-align:center;color:var(--danger,#e74c3c)"><i class="fa fa-circle-exclamation"></i> Failed to load conversation</div>';
+      return;
+    }
+    const data = res.body?.data;
+    if (!data) return;
+
+    _mailConvReplySubject = data.reply_subject || '';
+
+    $('#mail-conv-title').textContent    = data.contact_name || data.contact_email || '—';
+    $('#mail-conv-subtitle').textContent = (data.contact_name && data.contact_name !== data.contact_email) ? data.contact_email : '';
+
+    // Render chat bubbles
+    const bubbles = $('#mail-conv-bubbles');
+    const msgs = data.messages || [];
+    if (!msgs.length) {
+      bubbles.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-muted)"><i class="fa fa-inbox"></i> No messages yet</div>';
+    } else {
+      bubbles.innerHTML = msgs.map(m => {
+        const isOut   = m.direction === 'outbound';
+        const sender  = isOut ? 'You' : (m.from_name || m.from_address || '—');
+        let bodyHtml  = '';
+        if (m.body_html) {
+          bodyHtml = `<div class="chat-bubble__body">${m.body_html}</div>`;
+        } else if (m.body_text) {
+          bodyHtml = `<div class="chat-bubble__body" style="white-space:pre-wrap">${_esc2(m.body_text)}</div>`;
+        }
+        return `<div class="chat-msg chat-msg--${isOut ? 'out' : 'in'}">
+          <div class="chat-bubble">
+            <div class="chat-bubble__meta">
+              <span class="chat-bubble__from">${_esc2(sender)}</span>
+              <span class="chat-bubble__date">${_esc2(m.date_label || '')}</span>
+            </div>
+            ${m.subject ? `<div class="chat-bubble__subject">${_esc2(m.subject)}</div>` : ''}
+            ${bodyHtml}
+          </div>
+        </div>`;
+      }).join('');
+      requestAnimationFrame(() => {
+        const thread = $('#mail-conv-thread');
+        if (thread) thread.scrollTop = thread.scrollHeight;
+      });
+    }
+
+    // Sidebar: customer or contact info
+    const sidebar = $('#mail-conv-sidebar');
+    if (data.customer) {
+      const c = data.customer;
+      sidebar.innerHTML = `
+        <div class="mail-conv-sidebar__section">
+          <div class="mail-conv-sidebar__title"><i class="fa fa-user"></i> Customer</div>
+          <div style="font-size:13.5px;font-weight:700">${_esc2(c.name)}</div>
+          <div style="font-size:12px;color:var(--text-muted);margin-top:3px">${_esc2(c.email || '')}</div>
+          ${c.phone ? `<div style="font-size:12px;color:var(--text-muted);margin-top:2px"><i class="fa fa-phone" style="font-size:10px"></i> ${_esc2(c.phone)}</div>` : ''}
+        </div>`;
+    } else {
+      sidebar.innerHTML = `
+        <div class="mail-conv-sidebar__section">
+          <div class="mail-conv-sidebar__title"><i class="fa fa-user"></i> Contact</div>
+          <div style="font-size:12px;color:var(--text-muted)">${_esc2(data.contact_email || '')}</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:6px">Not linked to a customer.</div>
+        </div>`;
+    }
+  }
+
+  $('#mail-conv-back')?.addEventListener('click', () => {
+    switchMailView(_mailConvBox || 'inbox');
+  });
+
+  $('#mail-conv-new-btn')?.addEventListener('click', () => {
+    switchMailView('compose');
+    if (_mailConvContact) $('#mail-compose-to').value = _mailConvContact;
+    if (_mailConvReplySubject) $('#mail-compose-subject').value = _mailConvReplySubject;
+    $('#mail-compose-to').focus();
+  });
+
+  // Reply: schedule toggle
+  $('#mail-conv-schedule-toggle')?.addEventListener('change', function () {
+    const on = this.checked;
+    $('#mail-conv-schedule-row').style.display = on ? 'block' : 'none';
+    $('#mail-conv-send-label').textContent      = on ? 'Schedule' : 'Send';
+  });
+
+  // Reply: send/schedule
+  $('#mail-conv-send-btn')?.addEventListener('click', async () => {
+    const body  = $('#mail-conv-reply-body').value.trim();
+    const alert = $('#mail-conv-reply-alert');
+    alert.style.display = 'none';
+    if (!body) {
+      alert.textContent = 'Please type a message before sending.';
+      alert.style.display = 'block';
+      return;
+    }
+    const isScheduled = $('#mail-conv-schedule-toggle').checked;
+    const scheduledAt = isScheduled ? $('#mail-conv-schedule-at').value : null;
+    if (isScheduled && !scheduledAt) {
+      alert.textContent = 'Pick a date/time to send later.';
+      alert.style.display = 'block';
+      return;
+    }
+    const btn = $('#mail-conv-send-btn');
+    btn.disabled = true;
+    const origLabel = $('#mail-conv-send-label').textContent;
+    $('#mail-conv-send-label').textContent = isScheduled ? 'Scheduling…' : 'Sending…';
+
+    const payload = { to: _mailConvContact, subject: _mailConvReplySubject || '(no subject)', body };
+    if (scheduledAt) payload.scheduled_at = scheduledAt;
+
+    const res = await API.mailSend(payload);
+    btn.disabled = false;
+    $('#mail-conv-send-label').textContent = origLabel;
+
+    if (res.status !== 200) {
+      alert.textContent = res.body?.message || 'Failed to send. Check mail settings.';
+      alert.style.display = 'block';
+      return;
+    }
+    $('#mail-conv-reply-body').value           = '';
+    $('#mail-conv-schedule-toggle').checked    = false;
+    $('#mail-conv-schedule-at').value          = '';
+    $('#mail-conv-schedule-row').style.display = 'none';
+    $('#mail-conv-send-label').textContent     = 'Send';
+
+    if (isScheduled) {
+      toast(res.body?.message || 'Email scheduled.', 'success');
+    } else {
+      await loadMailConversation();
+    }
+  });
+
+  // ── Compose ───────────────────────────────────────────────────────────────
+  async function loadMailTemplatesForCompose() {
+    const sel = $('#mail-compose-tmpl');
+    if (!sel) return;
+    const res = await API.mailTemplates('');
+    if (res.status !== 200) return;
+    const tmpls = res.body?.data || [];
+    sel.innerHTML = '<option value="">— no template —</option>' +
+      tmpls.map(t => `<option value="${t.id}" data-subject="${_esc2(t.subject)}" data-body="${_esc2(t.body)}">${_esc2(t.name)}</option>`).join('');
+  }
+
+  $('#mail-compose-tmpl')?.addEventListener('change', function () {
+    const opt = this.selectedOptions[0];
+    if (!opt || !opt.value) return;
+    const subj = opt.dataset.subject || '';
+    const body = opt.dataset.body || '';
+    if (subj) $('#mail-compose-subject').value = subj;
+    if (body) $('#mail-compose-body').value = body;
+  });
+
+  async function mailComposeSend(scheduledAt) {
+    const to      = $('#mail-compose-to').value.trim();
+    const subject = $('#mail-compose-subject').value.trim();
+    const body    = $('#mail-compose-body').value.trim();
+    const alertEl = $('#mail-compose-alert');
+
+    alertEl.style.display = 'none';
+
+    if (!to || !subject || !body) {
+      alertEl.textContent = 'To, Subject, and Message are all required.';
+      alertEl.style.display = 'block';
+      return;
+    }
+
+    const payload = { to, subject, body };
+    if (scheduledAt) payload.scheduled_at = scheduledAt;
+
+    const btn = scheduledAt ? $('#mail-schedule-confirm') : $('#mail-compose-send');
+    const orig = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Sending…';
+
+    const res = await API.mailSend(payload);
+
+    btn.disabled = false;
+    btn.innerHTML = orig;
+
+    if (res.status !== 200) {
+      alertEl.textContent = res.body?.message || 'Failed to send. Check mail settings.';
+      alertEl.style.display = 'block';
+      if (scheduledAt) $('#mail-schedule-modal').style.display = 'none';
+      return;
+    }
+
+    if (scheduledAt) {
+      $('#mail-schedule-modal').style.display = 'none';
+    }
+
+    // Clear form and navigate to sent/scheduled
+    $('#mail-compose-to').value      = '';
+    $('#mail-compose-subject').value = '';
+    $('#mail-compose-body').value    = '';
+    $('#mail-compose-tmpl').value    = '';
+    alertEl.style.display            = 'none';
+
+    switchMailView(scheduledAt ? 'scheduled' : 'sent');
+  }
+
+  $('#mail-compose-send')?.addEventListener('click', () => mailComposeSend(null));
+
+  $('#mail-compose-schedule')?.addEventListener('click', () => {
+    // Set min datetime to now
+    const now = new Date();
+    now.setMinutes(now.getMinutes() + 5);
+    const local = now.toISOString().slice(0, 16);
+    $('#mail-schedule-at').min = local;
+    $('#mail-schedule-at').value = local;
+    $('#mail-schedule-modal').style.display = 'flex';
+  });
+
+  $('#mail-schedule-confirm')?.addEventListener('click', () => {
+    const at = $('#mail-schedule-at').value;
+    if (!at) return;
+    mailComposeSend(at);
+  });
+
+  $('#mail-schedule-cancel')?.addEventListener('click',       () => { $('#mail-schedule-modal').style.display = 'none'; });
+  $('#mail-schedule-modal-close')?.addEventListener('click',  () => { $('#mail-schedule-modal').style.display = 'none'; });
+
+  $('#mail-compose-clear')?.addEventListener('click', () => {
+    $('#mail-compose-to').value      = '';
+    $('#mail-compose-subject').value = '';
+    $('#mail-compose-body').value    = '';
+    $('#mail-compose-tmpl').value    = '';
+    $('#mail-compose-alert').style.display = 'none';
+  });
+
+  // ── Templates ─────────────────────────────────────────────────────────────
+  async function loadMailTemplates() {
+    const grid = $('#mail-tmpl-grid');
+    grid.innerHTML = '<div class="svc-tbl-placeholder"><i class="fa fa-spinner fa-spin"></i> Loading…</div>';
+    const res = await API.mailTemplates(_mailTmplSearch);
+    if (res.status !== 200) {
+      grid.innerHTML = '<div class="svc-tbl-placeholder" style="color:var(--danger,#e74c3c)"><i class="fa fa-circle-exclamation"></i> Failed to load templates</div>';
+      return;
+    }
+    const tmpls = res.body?.data || [];
+    if (!tmpls.length) {
+      grid.innerHTML = '<div class="svc-tbl-placeholder"><i class="fa fa-file-lines"></i> No templates yet. Create one to use in compose.</div>';
+      return;
+    }
+    grid.innerHTML = tmpls.map(t => `
+      <div class="svc-cat-card" style="min-width:200px;max-width:300px">
+        <div class="svc-cat-card-header">
+          <div class="svc-cat-card-name">${_esc2(t.name)}</div>
+          <button class="svc-cat-delete-btn mail-tmpl-delete" data-id="${t.id}" title="Delete template"><i class="fa fa-trash"></i></button>
+        </div>
+        ${t.subject ? `<div class="svc-cat-card-count" style="font-size:11px">${_esc2(t.subject)}</div>` : ''}
+        <div class="svc-cat-card-desc" style="font-size:11px;margin-top:6px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_esc2(t.body || '')}</div>
+      </div>
+    `).join('');
+
+    grid.querySelectorAll('.mail-tmpl-delete').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        if (!confirm('Delete this template?')) return;
+        const res2 = await API.mailDeleteTemplate(+btn.dataset.id);
+        if (res2.status === 200) loadMailTemplates();
+      });
+    });
+  }
+
+  let _mailTmplSearchTimer = null;
+  $('#mail-tmpl-search')?.addEventListener('input', e => {
+    _mailTmplSearch = e.target.value;
+    clearTimeout(_mailTmplSearchTimer);
+    _mailTmplSearchTimer = setTimeout(loadMailTemplates, 350);
+  });
+
+  $('#btn-new-mail-template')?.addEventListener('click', () => {
+    _mailTmplId = null;
+    $('#mail-tmpl-modal-title').textContent = 'New Template';
+    $('#mail-tmpl-name').value    = '';
+    $('#mail-tmpl-subject').value = '';
+    $('#mail-tmpl-body').value    = '';
+    $('#mail-tmpl-alert').style.display = 'none';
+    $('#mail-tmpl-modal').style.display = 'flex';
+  });
+
+  $('#mail-tmpl-modal-close')?.addEventListener('click',  () => { $('#mail-tmpl-modal').style.display = 'none'; });
+  $('#mail-tmpl-modal-cancel')?.addEventListener('click', () => { $('#mail-tmpl-modal').style.display = 'none'; });
+
+  $('#mail-tmpl-submit')?.addEventListener('click', async () => {
+    const name    = $('#mail-tmpl-name').value.trim();
+    const subject = $('#mail-tmpl-subject').value.trim();
+    const body    = $('#mail-tmpl-body').value.trim();
+    const alertEl = $('#mail-tmpl-alert');
+
+    alertEl.style.display = 'none';
+    if (!name || !body) {
+      alertEl.textContent = 'Name and body are required.';
+      alertEl.style.display = 'block';
+      return;
+    }
+
+    const btn = $('#mail-tmpl-submit');
+    btn.disabled = true;
+    const res = await API.mailCreateTemplate({ name, subject, body });
+    btn.disabled = false;
+
+    if (res.status === 201 || res.status === 200) {
+      $('#mail-tmpl-modal').style.display = 'none';
+      loadMailTemplates();
+      loadMailTemplatesForCompose();
+    } else {
+      alertEl.textContent = res.body?.message || 'Failed to save template.';
+      alertEl.style.display = 'block';
+    }
+  });
+
+  // ── Filters ───────────────────────────────────────────────────────────────
+  async function loadMailFilters() {
+    const tbody = $('#mail-filters-tbody');
+    tbody.innerHTML = `<tr><td colspan="5" class="svc-tbl-placeholder"><i class="fa fa-spinner fa-spin"></i> Loading…</td></tr>`;
+    const res = await API.mailFilters();
+    if (res.status !== 200) {
+      tbody.innerHTML = `<tr><td colspan="5" class="svc-tbl-placeholder" style="color:var(--danger,#e74c3c)"><i class="fa fa-circle-exclamation"></i> Failed to load filters</td></tr>`;
+      return;
+    }
+    const filters = res.body?.data || [];
+    if (!filters.length) {
+      tbody.innerHTML = `<tr><td colspan="5" class="svc-tbl-placeholder"><i class="fa fa-filter"></i> No filters configured. Manage filters in the web portal under Settings → Mail.</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = filters.map(f => `
+      <tr>
+        <td>${_esc2(f.field_label)}</td>
+        <td>${_esc2(f.value)}</td>
+        <td>${_esc2(f.action_label)}</td>
+        <td style="text-align:center">
+          ${f.is_active
+            ? '<span style="color:var(--accent,#4f6df5);font-size:12px"><i class="fa fa-circle-check"></i> Active</span>'
+            : '<span style="color:var(--text-muted);font-size:12px"><i class="fa fa-circle-xmark"></i> Off</span>'}
+        </td>
+        <td style="text-align:center;color:var(--text-muted);font-size:12px">${f.sort_order}</td>
+      </tr>
+    `).join('');
+  }
+
+  // ── Scheduled ─────────────────────────────────────────────────────────────
+  async function loadMailScheduled() {
+    const tbody = $('#mail-scheduled-tbody');
+    tbody.innerHTML = `<tr><td colspan="4" class="svc-tbl-placeholder"><i class="fa fa-spinner fa-spin"></i> Loading…</td></tr>`;
+    const res = await API.mailScheduled();
+    if (res.status !== 200) {
+      tbody.innerHTML = `<tr><td colspan="4" class="svc-tbl-placeholder" style="color:var(--danger,#e74c3c)"><i class="fa fa-circle-exclamation"></i> Failed to load scheduled mail</td></tr>`;
+      return;
+    }
+    const items = res.body?.data || [];
+    if (!items.length) {
+      tbody.innerHTML = `<tr><td colspan="4" class="svc-tbl-placeholder"><i class="fa fa-clock"></i> No emails scheduled</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = items.map(s => `
+      <tr>
+        <td>${_esc2(s.to_address || '—')}</td>
+        <td>${_esc2(s.subject || '(no subject)')}</td>
+        <td style="font-size:12px;color:var(--text-muted)">${_esc2(s.scheduled_label || '')}</td>
+        <td style="text-align:center">
+          <button class="svc-act-btn mail-cancel-sched" data-id="${s.id}" title="Cancel" style="color:var(--danger,#e74c3c)"><i class="fa fa-xmark"></i></button>
+        </td>
+      </tr>
+    `).join('');
+
+    tbody.querySelectorAll('.mail-cancel-sched').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Cancel this scheduled email?')) return;
+        const res2 = await API.mailCancelScheduled(+btn.dataset.id);
+        if (res2.status === 200) loadMailScheduled();
+      });
+    });
+  }
+
+  // ── Ribbon button events ──────────────────────────────────────────────────
+  $('#rb-mail-inbox')?.addEventListener('click',     () => { activateTab('mail'); switchMailView('inbox'); });
+  $('#rb-mail-compose')?.addEventListener('click',   () => { activateTab('mail'); switchMailView('compose'); });
+  $('#rb-mail-sent')?.addEventListener('click',      () => { activateTab('mail'); switchMailView('sent'); });
+  $('#rb-mail-templates')?.addEventListener('click', () => { activateTab('mail'); switchMailView('templates'); });
+  $('#rb-mail-filters')?.addEventListener('click',   () => { activateTab('mail'); switchMailView('filters'); });
+  $('#rb-mail-scheduled')?.addEventListener('click', () => { activateTab('mail'); switchMailView('scheduled'); });
+
+  $('#rb-mail-refresh')?.addEventListener('click', async () => {
+    activateTab('mail');
+    const btn  = $('#rb-mail-refresh');
+    const icon = btn.querySelector('i');
+    icon.className = 'fa fa-spinner fa-spin';
+    btn.disabled   = true;
+    if (_mailView === 'conv') await loadMailConversation();
+    else                      await switchMailView(_mailView || 'inbox');
+    icon.className = 'fa fa-rotate';
+    btn.disabled   = false;
+  });
+
+  $('#rb-mail-sync')?.addEventListener('click', async () => {
+    activateTab('mail');
+    const btn  = $('#rb-mail-sync');
+    const icon = btn.querySelector('i');
+    icon.className = 'fa fa-spinner fa-spin';
+    btn.disabled   = true;
+    const res = await API.mailSync();
+    btn.disabled   = false;
+    icon.className = 'fa fa-cloud-arrow-down';
+    if (res.status !== 200) {
+      toast(res.body?.message || 'Sync failed. Check mailbox settings.', 'error');
+      return;
+    }
+    toast(res.body?.message || 'Sync queued — new messages will appear shortly.', 'success');
+    setTimeout(() => { if (_mailView === 'inbox') loadMailInbox(); }, 3000);
+  });
+
+  // Subnav clicks
+  $$('[data-mail]').forEach(btn => btn.addEventListener('click', () => switchMailView(btn.dataset.mail)));
+
+  window.switchMailView = switchMailView;
+}());
+
+// ── CRM ────────────────────────────────────────────────────────────────────
+(function () {
+  let _crmView        = 'pipeline';
+  let _crmProjects    = [];
+  let _crmProjectId   = null;
+  let _crmPipeline    = null;  // { project, columns, stages }
+  let _crmTaskFilter  = 'open';
+  let _crmContactQ    = '';
+
+  // ── View switch ──────────────────────────────────────────────────────────
+  function switchCrmView(view) {
+    _crmView = view;
+    $('#crm-pipeline-view').style.display = view === 'pipeline' ? 'flex' : 'none';
+    $('#crm-contacts-view').style.display = view === 'contacts' ? 'flex' : 'none';
+    $('#crm-tasks-view').style.display    = view === 'tasks'    ? 'flex' : 'none';
+    $('#crm-forms-view').style.display    = view === 'forms'    ? 'flex' : 'none';
+    $('#crm-builder-view').style.display  = view === 'builder'  ? 'flex' : 'none';
+    $$('[data-crmsub]').forEach(b => b.classList.toggle('active', b.dataset.crmsub === view));
+    if (view === 'pipeline') loadCrmPipeline();
+    if (view === 'contacts') loadCrmContacts();
+    if (view === 'tasks')    loadCrmTasks();
+    if (view === 'forms')    loadCrmForms();
+  }
+
+  // ── Projects ─────────────────────────────────────────────────────────────
+  async function loadCrmProjects() {
+    const res = await API.crmProjects();
+    if (res.status !== 200) return [];
+    _crmProjects = res.body?.data || [];
+    return _crmProjects;
+  }
+
+  function _rebuildProjectSelect() {
+    const sel = $('#crm-project-select');
+    if (!sel) return;
+    sel.innerHTML = _crmProjects.map(p =>
+      `<option value="${p.id}"${p.id === _crmProjectId ? ' selected' : ''}>${escHtml(p.name)}</option>`
+    ).join('');
+    if (!_crmProjectId && _crmProjects.length > 0) {
+      _crmProjectId = _crmProjects[0].id;
+    }
+  }
+
+  // ── Pipeline / Kanban ────────────────────────────────────────────────────
+  async function loadCrmPipeline() {
+    const board = $('#crm-pipeline-board');
+    const noProj = $('#crm-pipeline-no-projects');
+    if (!board) return;
+
+    const projects = await loadCrmProjects();
+    if (projects.length === 0) {
+      board.style.display = 'none';
+      noProj.style.display = 'flex';
+      $('#crm-project-select').parentElement.style.display = 'none';
+      return;
+    }
+    board.style.display = 'flex';
+    noProj.style.display = 'none';
+    $('#crm-project-select').parentElement.style.display = '';
+
+    _rebuildProjectSelect();
+    if (!_crmProjectId) _crmProjectId = projects[0].id;
+
+    board.innerHTML = '<span style="color:var(--text-muted);padding:20px;font-size:12px">Loading…</span>';
+
+    const res = await API.crmPipeline(_crmProjectId);
+    if (res.status !== 200) {
+      board.innerHTML = `<span style="color:var(--text-muted);padding:20px;font-size:12px">${escHtml(res.body?.message || 'Failed to load pipeline.')}</span>`;
+      return;
+    }
+    _crmPipeline = res.body.data;
+    _renderBoard();
+  }
+
+  let _dragLeadId  = null;
+  let _dragFromStage = null;
+
+  function _renderBoard() {
+    const board = $('#crm-pipeline-board');
+    if (!board || !_crmPipeline) return;
+    board.innerHTML = _crmPipeline.columns.map(col => {
+      const cards = col.leads.map(lead => `
+        <div class="crm-card" draggable="true" data-lead-id="${lead.id}" data-stage-id="${col.id}">
+          <div class="crm-card-name">${escHtml(lead.name)}</div>
+          ${lead.company ? `<div class="crm-card-company"><i class="fa fa-building" style="margin-right:3px;opacity:.6"></i>${escHtml(lead.company)}</div>` : ''}
+          <div class="crm-card-footer">
+            <span class="crm-card-value">${lead.estimated_value ? formatCurrency(lead.estimated_value) : ''}</span>
+            <div class="crm-card-actions">
+              <button class="crm-card-btn crm-card-edit" data-lead-id="${lead.id}" title="Edit"><i class="fa fa-pen"></i></button>
+              <button class="crm-card-btn crm-card-del" data-lead-id="${lead.id}" title="Delete"><i class="fa fa-trash"></i></button>
+            </div>
+          </div>
+        </div>`).join('');
+
+      const valueLine = col.value_total > 0
+        ? `<span style="font-size:10px;color:var(--text-muted);padding:2px 12px 6px;display:block">${formatCurrency(col.value_total)}</span>`
+        : '';
+
+      return `<div class="crm-col" data-stage-id="${col.id}">
+        <div class="crm-col-head">
+          <span class="crm-col-swatch" style="background:${escHtml(col.color)}"></span>
+          <span class="crm-col-name">${escHtml(col.name)}</span>
+          <span class="crm-col-count">${col.leads_count}</span>
+          ${!col.is_won && !col.is_lost
+            ? `<button class="crm-card-btn" data-add-stage="${col.id}" title="Add lead to this stage" style="opacity:1;margin-left:2px"><i class="fa fa-plus"></i></button>`
+            : ''}
+        </div>
+        ${valueLine}
+        <div class="crm-col-body" data-drop-stage="${col.id}">
+          ${cards || `<p class="crm-col-empty">No leads</p>`}
+        </div>
+      </div>`;
+    }).join('');
+
+    // ── Drag-and-drop ────────────────────────────────────────────────────
+    board.querySelectorAll('.crm-card').forEach(card => {
+      card.addEventListener('dragstart', e => {
+        _dragLeadId    = parseInt(card.dataset.leadId);
+        _dragFromStage = parseInt(card.dataset.stageId);
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', _dragLeadId);
+        // Defer so the ghost renders before opacity collapses
+        requestAnimationFrame(() => card.classList.add('crm-card--dragging'));
+      });
+      card.addEventListener('dragend', () => {
+        card.classList.remove('crm-card--dragging');
+        board.querySelectorAll('.crm-col-body--dragover').forEach(el => el.classList.remove('crm-col-body--dragover'));
+      });
+    });
+
+    board.querySelectorAll('[data-drop-stage]').forEach(col => {
+      col.addEventListener('dragover', e => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        col.classList.add('crm-col-body--dragover');
+      });
+      col.addEventListener('dragleave', e => {
+        // Only remove highlight when leaving the column body itself, not child elements
+        if (!col.contains(e.relatedTarget)) col.classList.remove('crm-col-body--dragover');
+      });
+      col.addEventListener('drop', async e => {
+        e.preventDefault();
+        col.classList.remove('crm-col-body--dragover');
+        const toStage = parseInt(col.dataset.dropStage);
+        if (!_dragLeadId || toStage === _dragFromStage) return;
+        const res = await API.crmMoveLead(_dragLeadId, toStage);
+        if (res.status === 200) {
+          loadCrmPipeline();
+        } else {
+          toast(res.body?.message || 'Failed to move lead.', 'error');
+        }
+        _dragLeadId    = null;
+        _dragFromStage = null;
+      });
+    });
+
+    // ── Add lead in column ────────────────────────────────────────────────
+    board.querySelectorAll('[data-add-stage]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        _openNewLeadModal(parseInt(btn.dataset.addStage));
+      });
+    });
+
+    // ── Edit card ─────────────────────────────────────────────────────────
+    board.querySelectorAll('.crm-card-edit').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const lead = _findLead(parseInt(btn.dataset.leadId));
+        if (lead) _openEditLeadModal(lead);
+      });
+    });
+
+    // ── Delete card ───────────────────────────────────────────────────────
+    board.querySelectorAll('.crm-card-del').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        if (!confirm('Delete this lead?')) return;
+        const res = await API.crmDeleteLead(parseInt(btn.dataset.leadId));
+        if (res.status === 200) { toast('Lead deleted.', 'success'); loadCrmPipeline(); }
+        else toast(res.body?.message || 'Failed to delete.', 'error');
+      });
+    });
+
+    // ── Click card (edit) ─────────────────────────────────────────────────
+    board.querySelectorAll('.crm-card').forEach(card => {
+      card.addEventListener('click', () => {
+        const lead = _findLead(parseInt(card.dataset.leadId));
+        if (lead) _openEditLeadModal(lead);
+      });
+    });
+  }
+
+  function _findLead(id) {
+    if (!_crmPipeline) return null;
+    for (const col of _crmPipeline.columns) {
+      const lead = col.leads.find(l => l.id === id);
+      if (lead) return { ...lead, stage_id: col.id };
+    }
+    return null;
+  }
+
+  // ── New Lead Modal ────────────────────────────────────────────────────────
+  function _openNewLeadModal(preStageId = null) {
+    if (!_crmPipeline) return;
+    _populateStageSelect('#crm-lead-stage', preStageId);
+    $('#crm-lead-name').value = '';
+    $('#crm-lead-company').value = '';
+    $('#crm-lead-email').value = '';
+    $('#crm-lead-phone').value = '';
+    $('#crm-lead-value').value = '';
+    $('#crm-lead-notes').value = '';
+    $('#crm-lead-alert').style.display = 'none';
+    $('#crm-lead-modal').style.display = 'flex';
+    $('#crm-lead-name').focus();
+  }
+
+  function _populateStageSelect(selector, selectedId = null) {
+    const sel = $(selector);
+    if (!sel || !_crmPipeline) return;
+    const openStages = _crmPipeline.stages.filter(s => !s.is_won && !s.is_lost);
+    sel.innerHTML = openStages.map(s =>
+      `<option value="${s.id}"${s.id === selectedId ? ' selected' : ''}>${escHtml(s.name)}</option>`
+    ).join('');
+  }
+
+  $('#crm-lead-modal-close')?.addEventListener('click',  () => { $('#crm-lead-modal').style.display = 'none'; });
+  $('#crm-lead-modal-cancel')?.addEventListener('click', () => { $('#crm-lead-modal').style.display = 'none'; });
+  $('#crm-lead-modal')?.addEventListener('click', e => { if (e.target === $('#crm-lead-modal')) $('#crm-lead-modal').style.display = 'none'; });
+
+  $('#crm-lead-modal-save')?.addEventListener('click', async () => {
+    const name = $('#crm-lead-name').value.trim();
+    if (!name) { $('#crm-lead-alert').textContent = 'Name is required.'; $('#crm-lead-alert').style.display = ''; return; }
+    const btn = $('#crm-lead-modal-save');
+    btn.disabled = true;
+    const res = await API.crmCreateLead(_crmProjectId, {
+      name,
+      company:             $('#crm-lead-company').value.trim() || null,
+      email:               $('#crm-lead-email').value.trim() || null,
+      phone:               $('#crm-lead-phone').value.trim() || null,
+      stage_id:            $('#crm-lead-stage').value || null,
+      estimated_value:     $('#crm-lead-value').value || null,
+      notes:               $('#crm-lead-notes').value.trim() || null,
+    });
+    btn.disabled = false;
+    if (res.status === 201) {
+      $('#crm-lead-modal').style.display = 'none';
+      toast('Lead created.', 'success');
+      loadCrmPipeline();
+    } else {
+      $('#crm-lead-alert').textContent = res.body?.message || 'Failed to create lead.';
+      $('#crm-lead-alert').style.display = '';
+    }
+  });
+
+  // ── Edit Lead Modal ───────────────────────────────────────────────────────
+  function _openEditLeadModal(lead) {
+    _populateStageSelect('#crm-lead-edit-stage', lead.stage_id);
+    $('#crm-lead-edit-id').value      = lead.id;
+    $('#crm-lead-edit-name').value    = lead.name || '';
+    $('#crm-lead-edit-company').value = lead.company || '';
+    $('#crm-lead-edit-email').value   = lead.email || '';
+    $('#crm-lead-edit-phone').value   = lead.phone || '';
+    $('#crm-lead-edit-value').value   = lead.estimated_value || '';
+    $('#crm-lead-edit-notes').value   = lead.notes || '';
+    $('#crm-lead-edit-alert').style.display = 'none';
+    $('#crm-lead-edit-modal').style.display = 'flex';
+    $('#crm-lead-edit-name').focus();
+  }
+
+  $('#crm-lead-edit-close')?.addEventListener('click',  () => { $('#crm-lead-edit-modal').style.display = 'none'; });
+  $('#crm-lead-edit-cancel')?.addEventListener('click', () => { $('#crm-lead-edit-modal').style.display = 'none'; });
+  $('#crm-lead-edit-modal')?.addEventListener('click', e => { if (e.target === $('#crm-lead-edit-modal')) $('#crm-lead-edit-modal').style.display = 'none'; });
+
+  $('#crm-lead-edit-save')?.addEventListener('click', async () => {
+    const id   = parseInt($('#crm-lead-edit-id').value);
+    const name = $('#crm-lead-edit-name').value.trim();
+    if (!name) { $('#crm-lead-edit-alert').textContent = 'Name is required.'; $('#crm-lead-edit-alert').style.display = ''; return; }
+    const btn = $('#crm-lead-edit-save');
+    btn.disabled = true;
+    const res = await API.crmUpdateLead(id, {
+      name,
+      company:         $('#crm-lead-edit-company').value.trim() || null,
+      email:           $('#crm-lead-edit-email').value.trim() || null,
+      phone:           $('#crm-lead-edit-phone').value.trim() || null,
+      stage_id:        $('#crm-lead-edit-stage').value || null,
+      estimated_value: $('#crm-lead-edit-value').value || null,
+      notes:           $('#crm-lead-edit-notes').value.trim() || null,
+    });
+    btn.disabled = false;
+    if (res.status === 200) {
+      $('#crm-lead-edit-modal').style.display = 'none';
+      toast('Lead updated.', 'success');
+      loadCrmPipeline();
+    } else {
+      $('#crm-lead-edit-alert').textContent = res.body?.message || 'Failed to update lead.';
+      $('#crm-lead-edit-alert').style.display = '';
+    }
+  });
+
+  // ── Project Modal ─────────────────────────────────────────────────────────
+  function _openProjectModal() {
+    $('#crm-project-name').value = '';
+    $('#crm-project-desc').value = '';
+    $('#crm-project-alert').style.display = 'none';
+    $('#crm-project-modal').style.display = 'flex';
+    $('#crm-project-name').focus();
+  }
+
+  $('#crm-project-modal-close')?.addEventListener('click',  () => { $('#crm-project-modal').style.display = 'none'; });
+  $('#crm-project-modal-cancel')?.addEventListener('click', () => { $('#crm-project-modal').style.display = 'none'; });
+  $('#crm-project-modal')?.addEventListener('click', e => { if (e.target === $('#crm-project-modal')) $('#crm-project-modal').style.display = 'none'; });
+
+  $('#crm-project-modal-save')?.addEventListener('click', async () => {
+    const name = $('#crm-project-name').value.trim();
+    if (!name) { $('#crm-project-alert').textContent = 'Name is required.'; $('#crm-project-alert').style.display = ''; return; }
+    const btn = $('#crm-project-modal-save');
+    btn.disabled = true;
+    const res = await API.crmCreateProject({ name, description: $('#crm-project-desc').value.trim() || null });
+    btn.disabled = false;
+    if (res.status === 201) {
+      $('#crm-project-modal').style.display = 'none';
+      toast('Project created.', 'success');
+      _crmProjectId = res.body.data.id;
+      loadCrmPipeline();
+    } else {
+      $('#crm-project-alert').textContent = res.body?.message || 'Failed to create project.';
+      $('#crm-project-alert').style.display = '';
+    }
+  });
+
+  // ── Contacts ──────────────────────────────────────────────────────────────
+  async function loadCrmContacts() {
+    const tbody = $('#crm-contacts-body');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:20px">Loading…</td></tr>';
+    const res = await API.crmContacts(_crmContactQ);
+    if (res.status !== 200) {
+      tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:20px">${escHtml(res.body?.message || 'Failed to load contacts.')}</td></tr>`;
+      return;
+    }
+    const contacts = res.body?.data || [];
+    if (contacts.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:24px">No contacts yet. Add customers from the POS tab.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = contacts.map(c => `
+      <tr>
+        <td><strong>${escHtml(c.name)}</strong></td>
+        <td>${escHtml(c.phone || '—')}</td>
+        <td>${escHtml(c.email || '—')}</td>
+        <td>${c.open_tasks > 0 ? `<span class="crm-badge-open">${c.open_tasks}</span>` : '<span style="color:var(--text-muted)">—</span>'}</td>
+        <td style="color:var(--text-muted);font-size:11px">${c.last_activity ? new Date(c.last_activity).toLocaleDateString(undefined, {day:'numeric',month:'short',year:'numeric'}) : '—'}</td>
+      </tr>`).join('');
+  }
+
+  let _crmContactSearchTimer = null;
+  $('#crm-contacts-search')?.addEventListener('input', e => {
+    clearTimeout(_crmContactSearchTimer);
+    _crmContactSearchTimer = setTimeout(() => {
+      _crmContactQ = e.target.value.trim();
+      loadCrmContacts();
+    }, 320);
+  });
+
+  // ── Tasks ─────────────────────────────────────────────────────────────────
+  async function loadCrmTasks() {
+    const tbody = $('#crm-tasks-body');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:20px">Loading…</td></tr>';
+    const res = await API.crmTasks(_crmTaskFilter);
+    if (res.status !== 200) {
+      tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:20px">${escHtml(res.body?.message || 'Failed to load tasks.')}</td></tr>`;
+      return;
+    }
+    const tasks = res.body?.data || [];
+    if (tasks.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:24px">No tasks here.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = tasks.map(t => {
+      const statusClass = t.status === 'completed' ? 'crm-status-done' : (t.is_overdue ? 'crm-status-overdue' : '');
+      const statusLabel = t.status === 'completed' ? 'Completed' : (t.is_overdue ? 'Overdue' : 'Pending');
+      const dueLabel    = t.due_at ? new Date(t.due_at).toLocaleDateString(undefined, {day:'numeric',month:'short'}) : '—';
+      return `<tr>
+        <td><input type="checkbox" class="crm-task-check" data-task-id="${t.id}" ${t.status === 'completed' ? 'checked' : ''}></td>
+        <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(t.title)}">${escHtml(t.title)}</td>
+        <td style="color:var(--text-muted);font-size:11px">${escHtml(t.subject_label || '—')}</td>
+        <td style="color:var(--text-muted);font-size:11px;white-space:nowrap">${dueLabel}</td>
+        <td><span class="${statusClass}">${statusLabel}</span></td>
+        <td><button class="crm-card-btn crm-task-del-btn" data-task-id="${t.id}" title="Delete task" style="opacity:.7"><i class="fa fa-trash"></i></button></td>
+      </tr>`;
+    }).join('');
+
+    // Checkbox toggle
+    tbody.querySelectorAll('.crm-task-check').forEach(chk => {
+      chk.addEventListener('change', async () => {
+        const id  = parseInt(chk.dataset.taskId);
+        const res = chk.checked ? await API.crmCompleteTask(id) : await API.crmReopenTask(id);
+        if (res.status === 200) loadCrmTasks();
+        else { chk.checked = !chk.checked; toast(res.body?.message || 'Failed.', 'error'); }
+      });
+    });
+
+    // Delete
+    tbody.querySelectorAll('.crm-task-del-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Delete this task?')) return;
+        const res = await API.crmDeleteTask(parseInt(btn.dataset.taskId));
+        if (res.status === 200) { toast('Task deleted.', 'success'); loadCrmTasks(); }
+        else toast(res.body?.message || 'Failed.', 'error');
+      });
+    });
+  }
+
+  $$('[data-crmfilter]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      $$('[data-crmfilter]').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      _crmTaskFilter = btn.dataset.crmfilter;
+      loadCrmTasks();
+    });
+  });
+
+  // ── Task Modal ────────────────────────────────────────────────────────────
+  function _openTaskModal() {
+    $('#crm-task-title').value = '';
+    $('#crm-task-due').value   = '';
+    $('#crm-task-notes').value = '';
+    $('#crm-task-alert').style.display = 'none';
+    $('#crm-task-modal').style.display = 'flex';
+    $('#crm-task-title').focus();
+  }
+
+  $('#crm-task-modal-close')?.addEventListener('click',  () => { $('#crm-task-modal').style.display = 'none'; });
+  $('#crm-task-modal-cancel')?.addEventListener('click', () => { $('#crm-task-modal').style.display = 'none'; });
+  $('#crm-task-modal')?.addEventListener('click', e => { if (e.target === $('#crm-task-modal')) $('#crm-task-modal').style.display = 'none'; });
+
+  $('#crm-task-modal-save')?.addEventListener('click', async () => {
+    const title = $('#crm-task-title').value.trim();
+    if (!title) { $('#crm-task-alert').textContent = 'Title is required.'; $('#crm-task-alert').style.display = ''; return; }
+    const btn = $('#crm-task-modal-save');
+    btn.disabled = true;
+    const res = await API.crmCreateTask({
+      title,
+      due_at:      $('#crm-task-due').value || null,
+      description: $('#crm-task-notes').value.trim() || null,
+    });
+    btn.disabled = false;
+    if (res.status === 201) {
+      $('#crm-task-modal').style.display = 'none';
+      toast('Task created.', 'success');
+      loadCrmTasks();
+    } else {
+      $('#crm-task-alert').textContent = res.body?.message || 'Failed to create task.';
+      $('#crm-task-alert').style.display = '';
+    }
+  });
+
+  // ── Project selector change ───────────────────────────────────────────────
+  $('#crm-project-select')?.addEventListener('change', e => {
+    _crmProjectId = parseInt(e.target.value);
+    loadCrmPipeline();
+  });
+
+  // ── Ribbon buttons ────────────────────────────────────────────────────────
+  $('#rb-crm-pipeline')?.addEventListener('click',  () => { activateTab('crm'); switchCrmView('pipeline'); });
+  $('#rb-crm-contacts')?.addEventListener('click',  () => { activateTab('crm'); switchCrmView('contacts'); });
+  $('#rb-crm-tasks')?.addEventListener('click',     () => { activateTab('crm'); switchCrmView('tasks'); });
+  $('#rb-crm-new-lead')?.addEventListener('click',  () => { activateTab('crm'); switchCrmView('pipeline'); setTimeout(() => _openNewLeadModal(), 100); });
+  $('#rb-crm-new-task')?.addEventListener('click',  () => { activateTab('crm'); switchCrmView('tasks');    setTimeout(() => _openTaskModal(), 100); });
+  $('#rb-crm-projects')?.addEventListener('click',  () => { activateTab('crm'); switchCrmView('pipeline'); _openProjectModal(); });
+  $('#rb-crm-refresh')?.addEventListener('click',   () => {
+    if (_crmView === 'pipeline') loadCrmPipeline();
+    else if (_crmView === 'contacts') loadCrmContacts();
+    else if (_crmView === 'tasks')    loadCrmTasks();
+  });
+
+  // ── Subnav ────────────────────────────────────────────────────────────────
+  $$('[data-crmsub]').forEach(btn => btn.addEventListener('click', () => switchCrmView(btn.dataset.crmsub)));
+
+  // ── New project shortcut buttons ──────────────────────────────────────────
+  $('#crm-new-project-btn')?.addEventListener('click',          () => _openProjectModal());
+  $('#crm-pipeline-first-project-btn')?.addEventListener('click', () => _openProjectModal());
+
+  // ── New task from tasks view ──────────────────────────────────────────────
+  $('#crm-tasks-new-btn')?.addEventListener('click', () => _openTaskModal());
+
+  // ── Stage Management ──────────────────────────────────────────────────────
+
+  let _stageDragId   = null;
+  let _stageDragIdx  = null;
+  let _stageListData = [];
+
+  async function openStagesModal() {
+    if (!_crmProjectId) {
+      toast('Select a project first.', 'error');
+      return;
+    }
+    $('#crm-stages-modal-title').textContent = `Manage Stages`;
+    $('#crm-stages-alert').style.display = 'none';
+    $('#crm-stage-new-name').value  = '';
+    $('#crm-stage-new-color').value = '#64748b';
+    $('#crm-stage-new-won').checked  = false;
+    $('#crm-stage-new-lost').checked = false;
+    $('#crm-stages-modal').style.display = 'flex';
+    await _loadStagesList();
+  }
+
+  async function _loadStagesList() {
+    const list = $('#crm-stages-list');
+    list.innerHTML = '<span style="font-size:12px;color:var(--text-muted)">Loading…</span>';
+    const res = await API.crmStages(_crmProjectId);
+    if (res.status !== 200) { list.innerHTML = '<span style="font-size:12px;color:var(--text-muted)">Failed to load.</span>'; return; }
+    _stageListData = res.body?.data || [];
+    _renderStagesList();
+  }
+
+  function _renderStagesList() {
+    const list = $('#crm-stages-list');
+    if (_stageListData.length === 0) {
+      list.innerHTML = '<p style="font-size:12px;color:var(--text-muted);text-align:center;padding:10px 0">No stages yet.</p>';
+      return;
+    }
+    list.innerHTML = _stageListData.map((s, idx) => {
+      const wonTag  = s.is_won  ? '<span class="crm-stage-tag crm-stage-tag--won">Won</span>'  : '';
+      const lostTag = s.is_lost ? '<span class="crm-stage-tag crm-stage-tag--lost">Lost</span>' : '';
+      const countBadge = s.leads_count > 0 ? `<span class="crm-stage-badge">${s.leads_count} lead${s.leads_count > 1 ? 's' : ''}</span>` : '';
+      return `<div class="crm-stage-row" draggable="true" data-stage-idx="${idx}" data-stage-id="${s.id}">
+        <span class="crm-stage-handle"><i class="fa fa-grip-vertical"></i></span>
+        <span class="crm-stage-swatch" style="background:${escHtml(s.color || '#64748b')}"></span>
+        <span class="crm-stage-name">${escHtml(s.name)}</span>
+        ${wonTag}${lostTag}${countBadge}
+        <button class="crm-card-btn" data-auto-stage="${s.id}" data-auto-stage-name="${escHtml(s.name)}" title="Automations" style="flex-shrink:0;color:#7c3aed"><i class="fa fa-bolt"></i></button>
+        <button class="crm-card-btn" data-edit-stage="${s.id}" title="Edit stage" style="flex-shrink:0"><i class="fa fa-pen"></i></button>
+        <button class="crm-card-btn" data-del-stage="${s.id}" title="Delete stage" style="flex-shrink:0;color:#ef4444"><i class="fa fa-trash"></i></button>
+      </div>`;
+    }).join('');
+
+    // Drag to reorder
+    list.querySelectorAll('.crm-stage-row').forEach(row => {
+      row.addEventListener('dragstart', e => {
+        _stageDragIdx = parseInt(row.dataset.stageIdx);
+        _stageDragId  = parseInt(row.dataset.stageId);
+        e.dataTransfer.effectAllowed = 'move';
+        requestAnimationFrame(() => row.classList.add('crm-stage-dragging'));
+      });
+      row.addEventListener('dragend', () => {
+        row.classList.remove('crm-stage-dragging');
+        list.querySelectorAll('.crm-stage-row--dragover').forEach(el => el.classList.remove('crm-stage-row--dragover'));
+      });
+      row.addEventListener('dragover', e => { e.preventDefault(); row.classList.add('crm-stage-row--dragover'); });
+      row.addEventListener('dragleave', e => { if (!row.contains(e.relatedTarget)) row.classList.remove('crm-stage-row--dragover'); });
+      row.addEventListener('drop', async e => {
+        e.preventDefault();
+        row.classList.remove('crm-stage-row--dragover');
+        const toIdx = parseInt(row.dataset.stageIdx);
+        if (_stageDragIdx === null || toIdx === _stageDragIdx) return;
+        // Reorder locally
+        const moved = _stageListData.splice(_stageDragIdx, 1)[0];
+        _stageListData.splice(toIdx, 0, moved);
+        _renderStagesList();
+        // Persist
+        await API.crmReorderStages(_crmProjectId, _stageListData.map(s => s.id));
+        loadCrmPipeline();
+      });
+    });
+
+    // Edit
+    list.querySelectorAll('[data-edit-stage]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const s = _stageListData.find(s => s.id === parseInt(btn.dataset.editStage));
+        if (!s) return;
+        $('#crm-stage-edit-id').value    = s.id;
+        $('#crm-stage-edit-name').value  = s.name;
+        $('#crm-stage-edit-color').value = s.color || '#64748b';
+        $('#crm-stage-edit-won').checked  = s.is_won;
+        $('#crm-stage-edit-lost').checked = s.is_lost;
+        $('#crm-stage-edit-alert').style.display = 'none';
+        $('#crm-stage-edit-modal').style.display = 'flex';
+        $('#crm-stage-edit-name').focus();
+      });
+    });
+
+    // Automations
+    list.querySelectorAll('[data-auto-stage]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        openAutoModal(parseInt(btn.dataset.autoStage), btn.dataset.autoStageName || 'Stage');
+      });
+    });
+
+    // Delete
+    list.querySelectorAll('[data-del-stage]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Delete this stage? Stages with leads cannot be deleted.')) return;
+        const stageId = parseInt(btn.dataset.delStage);
+        const res = await API.crmDeleteStage(_crmProjectId, stageId);
+        if (res.status === 200) {
+          toast('Stage deleted.', 'success');
+          await _loadStagesList();
+          loadCrmPipeline();
+        } else {
+          toast(res.body?.message || 'Failed to delete stage.', 'error');
+        }
+      });
+    });
+  }
+
+  // Stage management modal close/open
+  $('#crm-stages-modal-close')?.addEventListener('click',  () => { $('#crm-stages-modal').style.display = 'none'; });
+  $('#crm-stages-modal-cancel')?.addEventListener('click', () => { $('#crm-stages-modal').style.display = 'none'; });
+  $('#crm-stages-modal')?.addEventListener('click', e => { if (e.target === $('#crm-stages-modal')) $('#crm-stages-modal').style.display = 'none'; });
+
+  // Add stage
+  $('#crm-stage-add-btn')?.addEventListener('click', async () => {
+    const name = $('#crm-stage-new-name').value.trim();
+    if (!name) { toast('Stage name is required.', 'error'); return; }
+    const btn = $('#crm-stage-add-btn');
+    btn.disabled = true;
+    const res = await API.crmCreateStage(_crmProjectId, {
+      name,
+      color:   $('#crm-stage-new-color').value || '#64748b',
+      is_won:  $('#crm-stage-new-won').checked,
+      is_lost: $('#crm-stage-new-lost').checked,
+    });
+    btn.disabled = false;
+    if (res.status === 201) {
+      $('#crm-stage-new-name').value  = '';
+      $('#crm-stage-new-color').value = '#64748b';
+      $('#crm-stage-new-won').checked  = false;
+      $('#crm-stage-new-lost').checked = false;
+      toast('Stage added.', 'success');
+      await _loadStagesList();
+      loadCrmPipeline();
+    } else {
+      toast(res.body?.message || 'Failed to add stage.', 'error');
+    }
+  });
+
+  // Also allow Enter key in name field
+  $('#crm-stage-new-name')?.addEventListener('keydown', e => { if (e.key === 'Enter') $('#crm-stage-add-btn')?.click(); });
+
+  // Edit stage modal
+  $('#crm-stage-edit-close')?.addEventListener('click',  () => { $('#crm-stage-edit-modal').style.display = 'none'; });
+  $('#crm-stage-edit-cancel')?.addEventListener('click', () => { $('#crm-stage-edit-modal').style.display = 'none'; });
+  $('#crm-stage-edit-modal')?.addEventListener('click', e => { if (e.target === $('#crm-stage-edit-modal')) $('#crm-stage-edit-modal').style.display = 'none'; });
+
+  $('#crm-stage-edit-save')?.addEventListener('click', async () => {
+    const stageId = parseInt($('#crm-stage-edit-id').value);
+    const name    = $('#crm-stage-edit-name').value.trim();
+    if (!name) { $('#crm-stage-edit-alert').textContent = 'Name is required.'; $('#crm-stage-edit-alert').style.display = ''; return; }
+    const btn = $('#crm-stage-edit-save');
+    btn.disabled = true;
+    const res = await API.crmUpdateStage(_crmProjectId, stageId, {
+      name,
+      color:   $('#crm-stage-edit-color').value || '#64748b',
+      is_won:  $('#crm-stage-edit-won').checked,
+      is_lost: $('#crm-stage-edit-lost').checked,
+    });
+    btn.disabled = false;
+    if (res.status === 200) {
+      $('#crm-stage-edit-modal').style.display = 'none';
+      toast('Stage updated.', 'success');
+      await _loadStagesList();
+      loadCrmPipeline();
+    } else {
+      $('#crm-stage-edit-alert').textContent = res.body?.message || 'Failed to update stage.';
+      $('#crm-stage-edit-alert').style.display = '';
+    }
+  });
+
+  // Ribbon button
+  $('#rb-crm-stages')?.addEventListener('click', () => {
+    activateTab('crm');
+    switchCrmView('pipeline');
+    setTimeout(() => openStagesModal(), 100);
+  });
+
+  // ── Stage Automations ─────────────────────────────────────────────────────
+
+  let _autoStageId   = null;
+  let _autoStageName = '';
+  let _autoEditId    = null;     // null = create mode, number = edit mode
+
+  async function openAutoModal(stageId, stageName) {
+    _autoStageId   = stageId;
+    _autoStageName = stageName;
+    _autoEditId    = null;
+    $('#crm-auto-modal-title').textContent = `Automations — ${stageName}`;
+    _autoResetForm();
+    $('#crm-auto-modal').style.display = 'flex';
+    await _loadAutoList();
+  }
+
+  function _autoResetForm() {
+    _autoEditId = null;
+    $('#crm-auto-edit-id').value        = '';
+    $('#crm-auto-recipient').value      = 'lead';
+    $('#crm-auto-custom-email').value   = '';
+    $('#crm-auto-subject').value        = '';
+    $('#crm-auto-body').value           = '';
+    $('#crm-auto-active').checked       = true;
+    $('#crm-auto-form-alert').style.display = 'none';
+    $('#crm-auto-form-heading').textContent = 'Add Automation';
+    $('#crm-auto-save-label').textContent   = 'Add Automation';
+    $('#crm-auto-cancel-edit').style.display = 'none';
+    _autoToggleCustomEmail();
+  }
+
+  function _autoToggleCustomEmail() {
+    const isCustom = $('#crm-auto-recipient').value === 'custom';
+    $('#crm-auto-custom-email-wrap').style.display = isCustom ? '' : 'none';
+  }
+
+  $('#crm-auto-recipient')?.addEventListener('change', _autoToggleCustomEmail);
+
+  async function _loadAutoList() {
+    const list = $('#crm-auto-list');
+    list.innerHTML = '<span style="font-size:12px;color:var(--text-muted)">Loading…</span>';
+    const res = await API.crmAutomations(_crmProjectId, _autoStageId);
+    if (res.status !== 200) { list.innerHTML = '<span style="font-size:12px;color:var(--text-muted)">Failed to load.</span>'; return; }
+    const autos = res.body?.data || [];
+    if (autos.length === 0) {
+      list.innerHTML = '<p style="font-size:12px;color:var(--text-muted);margin:0">No automations yet — add one below.</p>';
+      return;
+    }
+    list.innerHTML = autos.map(a => `
+      <div class="crm-auto-card${a.is_active ? '' : ' crm-auto-card--inactive'}" data-auto-id="${a.id}">
+        <span class="crm-auto-indicator crm-auto-indicator--${a.is_active ? 'on' : 'off'}" title="${a.is_active ? 'Active' : 'Inactive'}"></span>
+        <div class="crm-auto-info">
+          <div class="crm-auto-subject">${escHtml(a.subject)}</div>
+          <div class="crm-auto-meta"><i class="fa fa-paper-plane" style="margin-right:3px;opacity:.7"></i>${escHtml(a.recipient_label)}</div>
+        </div>
+        <div class="crm-auto-actions">
+          <button class="crm-card-btn crm-auto-edit-btn" data-auto-id="${a.id}" title="Edit"><i class="fa fa-pen"></i></button>
+          <button class="crm-card-btn crm-auto-del-btn" data-auto-id="${a.id}" title="Delete" style="color:#ef4444"><i class="fa fa-trash"></i></button>
+        </div>
+      </div>`).join('');
+
+    list.querySelectorAll('.crm-auto-edit-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const a = autos.find(x => x.id === parseInt(btn.dataset.autoId));
+        if (!a) return;
+        _autoEditId = a.id;
+        $('#crm-auto-edit-id').value      = a.id;
+        $('#crm-auto-recipient').value    = a.recipient_type;
+        $('#crm-auto-custom-email').value = a.recipient_email || '';
+        $('#crm-auto-subject').value      = a.subject;
+        $('#crm-auto-body').value         = a.body;
+        $('#crm-auto-active').checked     = a.is_active;
+        $('#crm-auto-form-heading').textContent = 'Edit Automation';
+        $('#crm-auto-save-label').textContent   = 'Save Changes';
+        $('#crm-auto-cancel-edit').style.display = '';
+        $('#crm-auto-form-alert').style.display = 'none';
+        _autoToggleCustomEmail();
+        $('#crm-auto-subject').focus();
+        // Scroll form into view
+        $('#crm-auto-form-heading')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    });
+
+    list.querySelectorAll('.crm-auto-del-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Delete this automation?')) return;
+        const res = await API.crmDeleteAutomation(_crmProjectId, _autoStageId, parseInt(btn.dataset.autoId));
+        if (res.status === 200) { toast('Automation deleted.', 'success'); _autoResetForm(); await _loadAutoList(); }
+        else toast(res.body?.message || 'Failed to delete.', 'error');
+      });
+    });
+  }
+
+  $('#crm-auto-save-btn')?.addEventListener('click', async () => {
+    const subject = $('#crm-auto-subject').value.trim();
+    const body    = $('#crm-auto-body').value.trim();
+    if (!subject) { _autoShowAlert('Subject is required.'); return; }
+    if (!body)    { _autoShowAlert('Message body is required.'); return; }
+
+    const payload = {
+      recipient_type:  $('#crm-auto-recipient').value,
+      recipient_email: $('#crm-auto-recipient').value === 'custom' ? $('#crm-auto-custom-email').value.trim() : null,
+      subject,
+      body,
+      is_active: $('#crm-auto-active').checked,
+    };
+
+    const btn = $('#crm-auto-save-btn');
+    btn.disabled = true;
+    const res = _autoEditId
+      ? await API.crmUpdateAutomation(_crmProjectId, _autoStageId, _autoEditId, payload)
+      : await API.crmCreateAutomation(_crmProjectId, _autoStageId, payload);
+    btn.disabled = false;
+
+    if (res.status === 200 || res.status === 201) {
+      toast(_autoEditId ? 'Automation updated.' : 'Automation added.', 'success');
+      _autoResetForm();
+      await _loadAutoList();
+    } else {
+      const msg = res.body?.errors
+        ? Object.values(res.body.errors).flat().join(' ')
+        : (res.body?.message || 'Failed to save automation.');
+      _autoShowAlert(msg);
+    }
+  });
+
+  function _autoShowAlert(msg) {
+    const el = $('#crm-auto-form-alert');
+    el.textContent = msg;
+    el.style.display = '';
+  }
+
+  $('#crm-auto-cancel-edit')?.addEventListener('click', () => _autoResetForm());
+  $('#crm-auto-modal-close')?.addEventListener('click',  () => { $('#crm-auto-modal').style.display = 'none'; });
+  $('#crm-auto-modal-cancel')?.addEventListener('click', () => { $('#crm-auto-modal').style.display = 'none'; });
+  $('#crm-auto-modal')?.addEventListener('click', e => { if (e.target === $('#crm-auto-modal')) $('#crm-auto-modal').style.display = 'none'; });
+
+  // ── Forms ─────────────────────────────────────────────────────────────────
+
+  let _crmForms           = [];
+  let _crmFormTemplates   = [];
+  let _crmBuilderFormId   = null;
+  let _crmBuilderData     = null;   // { id, name, is_published, public_url, blocks, style, submit_button_text, success_message }
+  let _crmSelectedBlockIdx = null;
+  let _crmFormsProjectId  = null;
+  let _crmCfProjectId     = null;   // project id for custom field modal
+
+  async function loadCrmForms() {
+    // Sync project dropdown with pipeline project
+    await _syncFormsProjectSelect();
+
+    _crmFormsProjectId = Number($('#crm-forms-project-select')?.value) || null;
+    if (!_crmFormsProjectId) {
+      _showFormsEmpty();
+      return;
+    }
+
+    const res = await API.crmForms(_crmFormsProjectId);
+    if (res.status !== 200) return;
+    _crmForms = res.body?.data || [];
+    _renderFormsList();
+  }
+
+  async function _syncFormsProjectSelect() {
+    const projects = await loadCrmProjects();
+    const sel = $('#crm-forms-project-select');
+    if (!sel) return;
+    sel.innerHTML = projects.map(p =>
+      `<option value="${p.id}"${p.id === _crmProjectId ? ' selected' : ''}>${escHtml(p.name)}</option>`
+    ).join('');
+    if (!_crmFormsProjectId && projects.length > 0) {
+      _crmFormsProjectId = projects[0].id;
+    }
+    if (_crmProjectId) sel.value = _crmProjectId;
+  }
+
+  function _renderFormsList() {
+    const list  = $('#crm-forms-list');
+    const empty = $('#crm-forms-empty');
+    if (!list) return;
+
+    if (_crmForms.length === 0) {
+      list.innerHTML = '';
+      list.style.display = 'none';
+      empty.style.display = 'flex';
+      return;
+    }
+    empty.style.display = 'none';
+    list.style.display  = 'flex';
+
+    list.innerHTML = _crmForms.map(f => `
+      <div class="crm-form-card" data-form-id="${f.id}">
+        <div class="crm-form-icon"><i class="fa fa-wpforms"></i></div>
+        <div class="crm-form-info">
+          <div class="crm-form-name">${escHtml(f.name)}</div>
+          <div class="crm-form-meta">${f.blocks_count} block${f.blocks_count !== 1 ? 's' : ''}</div>
+        </div>
+        <span class="crm-form-pill ${f.is_published ? 'crm-form-pill--pub' : 'crm-form-pill--unp'}">${f.is_published ? 'Published' : 'Draft'}</span>
+        <div class="crm-form-actions">
+          <button class="crm-card-btn" data-form-edit="${f.id}" title="Edit form"><i class="fa fa-pen"></i></button>
+          <button class="crm-card-btn" data-form-url="${escHtml(f.public_url)}" title="Copy public URL"><i class="fa fa-link"></i></button>
+          <button class="crm-card-btn" data-form-del="${f.id}" title="Delete form" style="color:#ef4444"><i class="fa fa-trash"></i></button>
+        </div>
+      </div>
+    `).join('');
+
+    list.querySelectorAll('[data-form-edit]').forEach(btn => {
+      btn.addEventListener('click', () => openFormBuilder(parseInt(btn.dataset.formEdit)));
+    });
+    list.querySelectorAll('[data-form-url]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        navigator.clipboard?.writeText(btn.dataset.formUrl);
+        toast('URL copied.', 'success');
+      });
+    });
+    list.querySelectorAll('[data-form-del]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const formId = parseInt(btn.dataset.formDel);
+        if (!confirm('Delete this form? This cannot be undone.')) return;
+        const res = await API.crmDeleteForm(_crmFormsProjectId, formId);
+        if (res.status === 200) {
+          toast('Form deleted.', 'success');
+          loadCrmForms();
+        } else {
+          toast(res.body?.message || 'Failed to delete form.', 'error');
+        }
+      });
+    });
+  }
+
+  function _showFormsEmpty() {
+    const list  = $('#crm-forms-list');
+    const empty = $('#crm-forms-empty');
+    if (list)  { list.innerHTML  = ''; list.style.display  = 'none'; }
+    if (empty)   empty.style.display = 'flex';
+  }
+
+  // ── New Form Modal ────────────────────────────────────────────────────────
+
+  async function _openNewFormModal() {
+    // load templates if not loaded yet
+    if (_crmFormTemplates.length === 0) {
+      const res = await API.crmFormTemplates();
+      _crmFormTemplates = res.body?.data || [];
+    }
+    _selectedTemplate = 'blank';
+    _renderTemplatePicker();
+    $('#crm-form-name-input').value = '';
+    $('#crm-form-modal-alert').style.display = 'none';
+    $('#crm-form-modal').style.display = 'flex';
+  }
+
+  let _selectedTemplate = 'blank';
+
+  function _renderTemplatePicker() {
+    const grid = $('#crm-form-tpl-grid');
+    if (!grid) return;
+    grid.innerHTML = _crmFormTemplates.map(t => `
+      <div class="crm-tpl-card${_selectedTemplate === t.key ? ' crm-tpl--selected' : ''}" data-tplkey="${t.key}">
+        <div class="crm-tpl-icon"><i class="fa ${escHtml(t.icon)}"></i></div>
+        <div class="crm-tpl-name">${escHtml(t.label)}</div>
+        <div class="crm-tpl-desc">${escHtml(t.description)}</div>
+      </div>
+    `).join('');
+    grid.querySelectorAll('[data-tplkey]').forEach(card => {
+      card.addEventListener('click', () => {
+        _selectedTemplate = card.dataset.tplkey;
+        _renderTemplatePicker();
+      });
+    });
+  }
+
+
+  $('#crm-form-modal-close')?.addEventListener('click',  () => { $('#crm-form-modal').style.display = 'none'; });
+  $('#crm-form-modal-cancel')?.addEventListener('click', () => { $('#crm-form-modal').style.display = 'none'; });
+  $('#crm-form-modal')?.addEventListener('click', e => { if (e.target === $('#crm-form-modal')) $('#crm-form-modal').style.display = 'none'; });
+
+  $('#crm-form-modal-create')?.addEventListener('click', async () => {
+    const name = $('#crm-form-name-input').value.trim();
+    if (!name) {
+      $('#crm-form-modal-alert').textContent = 'Please enter a form name.';
+      $('#crm-form-modal-alert').style.display = '';
+      return;
+    }
+    const btn = $('#crm-form-modal-create');
+    btn.disabled = true;
+    const res = await API.crmCreateForm(_crmFormsProjectId, { name, template: _selectedTemplate });
+    btn.disabled = false;
+    if (res.status === 201) {
+      $('#crm-form-modal').style.display = 'none';
+      toast('Form created.', 'success');
+      openFormBuilder(res.body.data.id);
+    } else {
+      const msg = res.body?.errors
+        ? Object.values(res.body.errors).flat().join(' ')
+        : (res.body?.message || 'Failed to create form.');
+      $('#crm-form-modal-alert').textContent = msg;
+      $('#crm-form-modal-alert').style.display = '';
+    }
+  });
+
+  $('#crm-forms-new-btn')?.addEventListener('click', () => { _openNewFormModal(); });
+  $('#crm-forms-project-select')?.addEventListener('change', () => {
+    _crmFormsProjectId = Number($('#crm-forms-project-select').value);
+    _crmProjectId = _crmFormsProjectId;
+    loadCrmForms();
+  });
+
+  // ── Form Builder ──────────────────────────────────────────────────────────
+
+  async function openFormBuilder(formId) {
+    _crmBuilderFormId = formId;
+    _crmSelectedBlockIdx = null;
+
+    const res = await API.crmGetForm(_crmFormsProjectId, formId);
+    if (res.status !== 200) { toast('Failed to load form.', 'error'); return; }
+
+    _crmBuilderData = res.body.data;
+    _crmBuilderData.blocks = _crmBuilderData.blocks || [];
+
+    // Store custom fields for field picker
+    _crmBuilderCustomFields = _crmBuilderData.custom_fields || [];
+
+    _renderBuilderUI();
+    switchCrmView('builder');
+  }
+
+  window.openFormBuilder = openFormBuilder;
+
+  let _crmBuilderCustomFields = [];
+
+  function _renderBuilderUI() {
+    const d = _crmBuilderData;
+    $('#crm-builder-form-name').textContent = d.name;
+    _updatePubPill(d.is_published);
+    $('#crm-builder-submit-text').value  = d.submit_button_text || 'Submit';
+    $('#crm-builder-success-msg').value  = d.success_message    || 'Thanks for your submission.';
+    _renderBuilderBlocks();
+    _showBlockProps(null);
+  }
+
+  function _updatePubPill(isPublished) {
+    const pill = $('#crm-builder-pub-pill');
+    if (!pill) return;
+    pill.textContent = isPublished ? 'Published' : 'Draft';
+    pill.className   = 'crm-form-pill ' + (isPublished ? 'crm-form-pill--pub' : 'crm-form-pill--unp');
+    const btn = $('#crm-builder-toggle-pub-btn');
+    if (btn) btn.innerHTML = isPublished
+      ? '<i class="fa fa-eye-slash"></i> Unpublish'
+      : '<i class="fa fa-earth-americas"></i> Publish';
+  }
+
+  function _renderBuilderBlocks() {
+    const container = $('#crm-builder-blocks');
+    const empty     = $('#crm-builder-blocks-empty');
+    if (!container) return;
+
+    const blocks = _crmBuilderData.blocks;
+    if (blocks.length === 0) {
+      // Keep just the empty placeholder
+      container.innerHTML = '';
+      container.appendChild(empty || _makeBlocksEmpty());
+      if (empty) empty.style.display = 'flex';
+      return;
+    }
+    if (empty) empty.style.display = 'none';
+
+    // Clear and rebuild
+    container.innerHTML = '';
+
+    blocks.forEach((block, idx) => {
+      const row = document.createElement('div');
+      row.className = 'crm-block-row' + (idx === _crmSelectedBlockIdx ? ' crm-block--selected' : '');
+      row.dataset.blockIdx = idx;
+      row.draggable = true;
+      row.innerHTML = `
+        <span class="crm-block-drag" title="Drag to reorder"><i class="fa fa-grip-vertical"></i></span>
+        <div class="crm-block-preview">
+          <div class="crm-block-type">${_blockTypeLabel(block)}</div>
+          <div class="crm-block-snippet">${_blockSnippet(block)}</div>
+        </div>
+        <button class="crm-block-del" title="Remove block"><i class="fa fa-xmark"></i></button>
+      `;
+
+      row.addEventListener('click', e => {
+        if (e.target.closest('.crm-block-del')) {
+          _removeBlock(idx);
+          return;
+        }
+        _crmSelectedBlockIdx = idx;
+        $$('.crm-block-row').forEach(r => r.classList.remove('crm-block--selected'));
+        row.classList.add('crm-block--selected');
+        _showBlockProps(idx);
+      });
+
+      // Drag-to-reorder
+      row.addEventListener('dragstart', e => {
+        row.classList.add('crm-block--dragging');
+        e.dataTransfer.setData('block-idx', idx);
+        e.dataTransfer.effectAllowed = 'move';
+      });
+      row.addEventListener('dragend', () => row.classList.remove('crm-block--dragging'));
+      row.addEventListener('dragover', e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; });
+      row.addEventListener('drop', e => {
+        e.preventDefault();
+        const fromIdx = parseInt(e.dataTransfer.getData('block-idx'), 10);
+        const toIdx   = idx;
+        if (fromIdx === toIdx) return;
+        const moved = _crmBuilderData.blocks.splice(fromIdx, 1)[0];
+        _crmBuilderData.blocks.splice(toIdx, 0, moved);
+        _crmSelectedBlockIdx = toIdx;
+        _renderBuilderBlocks();
+        _showBlockProps(toIdx);
+      });
+
+      container.appendChild(row);
+    });
+  }
+
+  function _makeBlocksEmpty() {
+    const div = document.createElement('div');
+    div.className = 'crm-builder-empty';
+    div.id = 'crm-builder-blocks-empty';
+    div.innerHTML = '<i class="fa fa-layer-group" style="font-size:28px"></i><span>Add blocks from the left panel</span>';
+    return div;
+  }
+
+  function _blockTypeLabel(block) {
+    const map = { heading: 'Heading', text: 'Text', field: 'Field', divider: 'Divider' };
+    return map[block.type] || block.type;
+  }
+
+  function _blockSnippet(block) {
+    if (block.type === 'heading') return escHtml(block.text || 'Heading');
+    if (block.type === 'text')    return escHtml(block.text || 'Text block');
+    if (block.type === 'divider') return '————';
+    if (block.type === 'field') {
+      const fieldLabel = block.label || block.field || 'Field';
+      const req = block.required ? ' *' : '';
+      return escHtml(fieldLabel + req);
+    }
+    return escHtml(JSON.stringify(block));
+  }
+
+  function _removeBlock(idx) {
+    _crmBuilderData.blocks.splice(idx, 1);
+    if (_crmSelectedBlockIdx === idx) {
+      _crmSelectedBlockIdx = null;
+      _showBlockProps(null);
+    } else if (_crmSelectedBlockIdx > idx) {
+      _crmSelectedBlockIdx--;
+    }
+    _renderBuilderBlocks();
+  }
+
+  function _showBlockProps(idx) {
+    const placeholder = $('#crm-builder-props-placeholder');
+    const content     = $('#crm-builder-props-content');
+    if (!content) return;
+
+    if (idx === null || idx === undefined) {
+      placeholder.style.display = '';
+      content.style.display     = 'none';
+      content.innerHTML = '';
+      return;
+    }
+
+    const block = _crmBuilderData.blocks[idx];
+    if (!block) return;
+
+    placeholder.style.display = 'none';
+    content.style.display     = '';
+    content.innerHTML          = _buildPropsHtml(block, idx);
+    _bindPropsHandlers(block, idx);
+  }
+
+  function _buildPropsHtml(block, idx) {
+    if (block.type === 'heading') {
+      return `
+        <div class="crm-prop-row">
+          <label class="crm-prop-label">Text</label>
+          <textarea class="crm-prop-input" id="prop-text" rows="2" maxlength="200">${escHtml(block.text || '')}</textarea>
+        </div>
+        <div class="crm-prop-row">
+          <label class="crm-prop-label">Size</label>
+          <select class="crm-prop-input" id="prop-size">
+            <option value="sm"${block.size === 'sm' ? ' selected' : ''}>Small</option>
+            <option value="md"${(!block.size || block.size === 'md') ? ' selected' : ''}>Medium</option>
+            <option value="lg"${block.size === 'lg' ? ' selected' : ''}>Large</option>
+          </select>
+        </div>`;
+    }
+    if (block.type === 'text') {
+      return `
+        <div class="crm-prop-row">
+          <label class="crm-prop-label">Text</label>
+          <textarea class="crm-prop-input" id="prop-text" rows="4" maxlength="1000">${escHtml(block.text || '')}</textarea>
+        </div>`;
+    }
+    if (block.type === 'divider') {
+      return `<p style="font-size:11px;color:var(--text-muted)">Divider has no properties.</p>`;
+    }
+    if (block.type === 'field') {
+      const fieldOpts = [
+        { val: 'name',    label: 'Name' },
+        { val: 'email',   label: 'Email' },
+        { val: 'phone',   label: 'Phone' },
+        { val: 'company', label: 'Company' },
+        ..._crmBuilderCustomFields.map(cf => ({ val: `custom:${cf.id}`, label: `${cf.name} (custom)` })),
+      ];
+      return `
+        <div class="crm-prop-row">
+          <label class="crm-prop-label">Maps to</label>
+          <select class="crm-prop-input" id="prop-field">
+            ${fieldOpts.map(o => `<option value="${o.val}"${block.field === o.val ? ' selected' : ''}>${escHtml(o.label)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="crm-prop-row">
+          <label class="crm-prop-label">Label</label>
+          <input type="text" class="crm-prop-input" id="prop-label" value="${escHtml(block.label || '')}" maxlength="100">
+        </div>
+        <div class="crm-prop-row">
+          <label class="crm-prop-label">Placeholder</label>
+          <input type="text" class="crm-prop-input" id="prop-placeholder" value="${escHtml(block.placeholder || '')}" maxlength="200">
+        </div>
+        <div class="crm-prop-row">
+          <label class="crm-prop-label">Help text</label>
+          <input type="text" class="crm-prop-input" id="prop-help_text" value="${escHtml(block.help_text || '')}" maxlength="300">
+        </div>
+        <div class="crm-prop-row">
+          <label class="crm-prop-check"><input type="checkbox" id="prop-required"${block.required ? ' checked' : ''}> Required</label>
+        </div>`;
+    }
+    return '';
+  }
+
+  function _bindPropsHandlers(block, idx) {
+    // Update block data on input/change, re-render block row on blur/change for instant snippet update
+    const bind = (id, prop, isCheck, reRender) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      // Live update data
+      el.addEventListener('input', () => {
+        _crmBuilderData.blocks[idx][prop] = isCheck ? el.checked : el.value;
+      });
+      el.addEventListener('change', () => {
+        _crmBuilderData.blocks[idx][prop] = isCheck ? el.checked : el.value;
+        if (reRender) {
+          _crmSelectedBlockIdx = idx;
+          _renderBuilderBlocks();
+          const rows = $$('.crm-block-row');
+          if (rows[idx]) rows[idx].classList.add('crm-block--selected');
+        }
+      });
+      if (!isCheck && el.tagName !== 'SELECT') {
+        // Re-render snippet when text input/textarea loses focus
+        el.addEventListener('blur', () => {
+          _crmSelectedBlockIdx = idx;
+          _renderBuilderBlocks();
+          const rows = $$('.crm-block-row');
+          if (rows[idx]) rows[idx].classList.add('crm-block--selected');
+          // Re-open props for same block so panel stays populated
+          _showBlockProps(idx);
+        });
+      }
+    };
+    bind('prop-text',       'text');
+    bind('prop-size',       'size',        false, true);
+    bind('prop-field',      'field',       false, true);
+    bind('prop-label',      'label');
+    bind('prop-placeholder','placeholder');
+    bind('prop-help_text',  'help_text');
+    bind('prop-required',   'required',    true,  true);
+  }
+
+  // Add block buttons
+  $$('[data-addblock]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const type = btn.dataset.addblock;
+      let block;
+      if (type === 'heading')      block = { type: 'heading', text: 'Heading', size: 'lg' };
+      else if (type === 'text')    block = { type: 'text', text: 'Your text here.' };
+      else if (type === 'field')   block = { type: 'field', field: 'name', label: 'Name', placeholder: '', help_text: '', required: false };
+      else if (type === 'divider') block = { type: 'divider' };
+      else if (type === 'custom_field') { _openAddCustomFieldOrPick(); return; }
+      else return;
+
+      if (!_crmBuilderData) return;
+      _crmBuilderData.blocks.push(block);
+      _crmSelectedBlockIdx = _crmBuilderData.blocks.length - 1;
+      _renderBuilderBlocks();
+      _showBlockProps(_crmSelectedBlockIdx);
+    });
+  });
+
+  function _openAddCustomFieldOrPick() {
+    // If there are already custom fields, we add a field block targeting one of them
+    if (_crmBuilderCustomFields.length > 0) {
+      // Add field block with first custom field
+      const cf = _crmBuilderCustomFields[0];
+      const block = { type: 'field', field: `custom:${cf.id}`, label: cf.name, placeholder: '', help_text: '', required: false };
+      _crmBuilderData.blocks.push(block);
+      _crmSelectedBlockIdx = _crmBuilderData.blocks.length - 1;
+      _renderBuilderBlocks();
+      _showBlockProps(_crmSelectedBlockIdx);
+    } else {
+      // Open create custom field modal
+      _crmCfProjectId = _crmFormsProjectId;
+      _openCfModal();
+    }
+  }
+
+  // Builder Save
+  $('#crm-builder-save-btn')?.addEventListener('click', async () => {
+    if (!_crmBuilderData || !_crmBuilderFormId) return;
+    const btn = $('#crm-builder-save-btn');
+    btn.disabled = true;
+    const payload = {
+      name:               _crmBuilderData.name,
+      blocks:             _crmBuilderData.blocks,
+      submit_button_text: $('#crm-builder-submit-text').value,
+      success_message:    $('#crm-builder-success-msg').value,
+    };
+    const res = await API.crmUpdateForm(_crmFormsProjectId, _crmBuilderFormId, payload);
+    btn.disabled = false;
+    if (res.status === 200) {
+      _crmBuilderData = Object.assign(_crmBuilderData, res.body.data);
+      toast('Form saved.', 'success');
+      const alert = $('#crm-builder-alert');
+      if (alert) alert.style.display = 'none';
+    } else {
+      const msg = res.body?.message || 'Failed to save form.';
+      const alert = $('#crm-builder-alert');
+      if (alert) { alert.textContent = msg; alert.style.display = ''; }
+    }
+  });
+
+  // Builder publish/unpublish toggle
+  $('#crm-builder-toggle-pub-btn')?.addEventListener('click', async () => {
+    if (!_crmBuilderData) return;
+    const isPublished = _crmBuilderData.is_published;
+    const res = isPublished
+      ? await API.crmUnpublishForm(_crmFormsProjectId, _crmBuilderFormId)
+      : await API.crmPublishForm(_crmFormsProjectId, _crmBuilderFormId);
+    if (res.status === 200) {
+      _crmBuilderData.is_published = !isPublished;
+      _updatePubPill(_crmBuilderData.is_published);
+      toast(isPublished ? 'Form unpublished.' : 'Form published.', 'success');
+    }
+  });
+
+  // Copy URL button
+  $('#crm-builder-copy-url-btn')?.addEventListener('click', () => {
+    if (_crmBuilderData?.public_url) {
+      navigator.clipboard?.writeText(_crmBuilderData.public_url);
+      toast('URL copied.', 'success');
+    }
+  });
+
+  // Back to forms list
+  $('#crm-builder-back-btn')?.addEventListener('click', () => {
+    switchCrmView('forms');
+  });
+
+  // ── Custom Field Modal ────────────────────────────────────────────────────
+
+  function _openCfModal() {
+    $('#crm-cf-name').value = '';
+    $('#crm-cf-type').value = 'text';
+    $('#crm-cf-alert').style.display = 'none';
+    $('#crm-cf-modal').style.display = 'flex';
+  }
+
+  $('#crm-cf-modal-close')?.addEventListener('click',  () => { $('#crm-cf-modal').style.display = 'none'; });
+  $('#crm-cf-cancel')?.addEventListener('click',       () => { $('#crm-cf-modal').style.display = 'none'; });
+  $('#crm-cf-modal')?.addEventListener('click', e => { if (e.target === $('#crm-cf-modal')) $('#crm-cf-modal').style.display = 'none'; });
+
+  $('#crm-cf-save')?.addEventListener('click', async () => {
+    const name = $('#crm-cf-name').value.trim();
+    const type = $('#crm-cf-type').value;
+    if (!name) {
+      $('#crm-cf-alert').textContent = 'Enter a field name.';
+      $('#crm-cf-alert').style.display = '';
+      return;
+    }
+    const btn = $('#crm-cf-save');
+    btn.disabled = true;
+    const projectId = _crmCfProjectId || _crmFormsProjectId;
+    const res = await API.crmCreateCustomField(projectId, { name, type });
+    btn.disabled = false;
+    if (res.status === 201) {
+      const cf = res.body.data;
+      _crmBuilderCustomFields.push(cf);
+      $('#crm-cf-modal').style.display = 'none';
+      toast(`Custom field "${cf.name}" created.`, 'success');
+      // Add the field block pointing to the new custom field
+      if (_crmBuilderData) {
+        const block = { type: 'field', field: `custom:${cf.id}`, label: cf.name, placeholder: '', help_text: '', required: false };
+        _crmBuilderData.blocks.push(block);
+        _crmSelectedBlockIdx = _crmBuilderData.blocks.length - 1;
+        _renderBuilderBlocks();
+        _showBlockProps(_crmSelectedBlockIdx);
+      }
+    } else {
+      const msg = res.body?.errors
+        ? Object.values(res.body.errors).flat().join(' ')
+        : (res.body?.message || 'Failed to create field.');
+      $('#crm-cf-alert').textContent = msg;
+      $('#crm-cf-alert').style.display = '';
+    }
+  });
+
+  // Ribbon buttons for forms
+  $('#rb-crm-forms')?.addEventListener('click',    () => { activateTab('crm'); switchCrmView('forms'); });
+  $('#rb-crm-new-form')?.addEventListener('click', () => {
+    activateTab('crm');
+    switchCrmView('forms');
+    setTimeout(() => _openNewFormModal(), 80);
+  });
+
+  window.switchCrmView = switchCrmView;
 }());
 
 // ── Boot ───────────────────────────────────────────────────────────────────

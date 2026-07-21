@@ -38,6 +38,7 @@ const API = (() => {
     productBySku: (sku)               => request('GET',  `/online/products/sku/${encodeURIComponent(sku)}`),
     checkout:     (body)              => request('POST', '/online/checkout', body),
     createProduct: (body)              => request('POST',   '/online/products', body),
+    importProducts:(rows)             => request('POST',   '/online/products/import', { rows }),
     updateProduct: (id, body)          => request('PATCH',  `/online/products/${id}`, body),
     deleteProduct: (id)                => request('DELETE', `/online/products/${id}`),
 
@@ -338,5 +339,77 @@ const API = (() => {
     createServiceCategory:     (body)      => request('POST',  '/service/categories', body),
 
     guideChat: (message) => request('POST', '/guide/chat', { message }),
+
+    // CRM
+    crmProjects:     ()                   => request('GET',    '/crm/projects'),
+    crmCreateProject:(body)               => request('POST',   '/crm/projects', body),
+    crmPipeline:     (projectId)          => request('GET',    `/crm/projects/${projectId}/pipeline`),
+    crmStages:       (projectId)          => request('GET',    `/crm/projects/${projectId}/stages`),
+    crmCreateStage:  (projectId, body)    => request('POST',   `/crm/projects/${projectId}/stages`, body),
+    crmUpdateStage:  (projectId, stageId, body) => request('PUT', `/crm/projects/${projectId}/stages/${stageId}`, body),
+    crmDeleteStage:  (projectId, stageId) => request('DELETE', `/crm/projects/${projectId}/stages/${stageId}`),
+    crmReorderStages:    (projectId, ids)              => request('POST',   `/crm/projects/${projectId}/stages/reorder`, { ids }),
+    crmAutomations:      (projectId, stageId)          => request('GET',    `/crm/projects/${projectId}/stages/${stageId}/automations`),
+    crmCreateAutomation: (projectId, stageId, body)    => request('POST',   `/crm/projects/${projectId}/stages/${stageId}/automations`, body),
+    crmUpdateAutomation: (projectId, stageId, autoId, body) => request('PUT', `/crm/projects/${projectId}/stages/${stageId}/automations/${autoId}`, body),
+    crmDeleteAutomation: (projectId, stageId, autoId)  => request('DELETE', `/crm/projects/${projectId}/stages/${stageId}/automations/${autoId}`),
+    crmCreateLead:   (projectId, body)    => request('POST',   `/crm/projects/${projectId}/leads`, body),
+    crmUpdateLead:   (leadId, body)       => request('PUT',    `/crm/leads/${leadId}`, body),
+    crmMoveLead:     (leadId, stageId)    => request('POST',   `/crm/leads/${leadId}/move-stage`, { stage_id: stageId }),
+    crmDeleteLead:   (leadId)             => request('DELETE', `/crm/leads/${leadId}`),
+    crmContacts:     (q)                  => request('GET',    `/crm/contacts?q=${encodeURIComponent(q||'')}`),
+    crmTasks:        (filter)             => request('GET',    `/crm/tasks?filter=${filter||'open'}`),
+    crmCreateTask:   (body)               => request('POST',   '/crm/tasks', body),
+    crmCompleteTask: (taskId)             => request('POST',   `/crm/tasks/${taskId}/complete`),
+    crmReopenTask:   (taskId)             => request('POST',   `/crm/tasks/${taskId}/reopen`),
+    crmDeleteTask:   (taskId)             => request('DELETE', `/crm/tasks/${taskId}`),
+    // CRM Forms
+    crmForms:             (projectId)                 => request('GET',    `/crm/projects/${projectId}/forms`),
+    crmCreateForm:        (projectId, body)           => request('POST',   `/crm/projects/${projectId}/forms`, body),
+    crmGetForm:           (projectId, formId)         => request('GET',    `/crm/projects/${projectId}/forms/${formId}`),
+    crmUpdateForm:        (projectId, formId, body)   => request('PUT',    `/crm/projects/${projectId}/forms/${formId}`, body),
+    crmPublishForm:       (projectId, formId)         => request('POST',   `/crm/projects/${projectId}/forms/${formId}/publish`),
+    crmUnpublishForm:     (projectId, formId)         => request('POST',   `/crm/projects/${projectId}/forms/${formId}/unpublish`),
+    crmDeleteForm:        (projectId, formId)         => request('DELETE', `/crm/projects/${projectId}/forms/${formId}`),
+    crmFormTemplates:     ()                          => request('GET',    '/crm/form-templates'),
+    // CRM Custom Fields
+    crmCustomFields:      (projectId)                 => request('GET',    `/crm/projects/${projectId}/custom-fields`),
+    crmCreateCustomField: (projectId, body)           => request('POST',   `/crm/projects/${projectId}/custom-fields`, body),
+
+    // Cash Drawer
+    cashDrawer:         ()               => request('GET',  '/cash-drawer'),
+    cashDrawerOpen:     (amount)         => request('POST', '/cash-drawer/open',     { opening_float: amount }),
+    cashDrawerWithdraw: (amount, note)   => request('POST', '/cash-drawer/withdraw', { amount, note }),
+
+    // Mail
+    mailSync:           ()               => request('POST', '/mail/sync'),
+    mailThreads:        (box, q, status) => request('GET', `/mail/threads?box=${box||'inbox'}&q=${encodeURIComponent(q||'')}&status=${status||''}`),
+    mailThread:         (contact, box)   => request('GET', `/mail/thread?contact=${encodeURIComponent(contact)}&box=${box||'inbox'}`),
+    mailMessages:       (box, q, status) => request('GET', `/mail/messages?box=${box||'inbox'}&q=${encodeURIComponent(q||'')}&status=${status||''}`),
+    mailMessage:        (id)             => request('GET', `/mail/messages/${id}`),
+    mailMarkRead:       (id)             => request('POST', `/mail/messages/${id}/read`),
+    mailSend:           (body)           => request('POST', '/mail/send', body),
+    mailTemplates:      (q)              => request('GET', `/mail/templates?q=${encodeURIComponent(q||'')}`),
+    mailCreateTemplate: (body)           => request('POST', '/mail/templates', body),
+    mailDeleteTemplate: (id)             => request('DELETE', `/mail/templates/${id}`),
+    mailScheduled:      ()               => request('GET', '/mail/scheduled'),
+    mailCancelScheduled:(id)             => request('DELETE', `/mail/scheduled/${id}`),
+    mailFilters:        ()               => request('GET', '/mail/filters'),
+    mailSettingsGet:    ()               => request('GET', '/mail/settings'),
+    mailSettingsSave:   (body)           => request('PATCH', '/mail/settings', body),
+    mailTestSend:       (to)             => request('POST', '/mail/test', { to }),
+    mailVerifyCreds:    ()               => request('POST', '/mail/verify-credentials'),
+
+    // Register lock
+    verifyPassword: (password) => request('POST', '/verify-password', { password }),
+
+    // POS Counters
+    counters:       (branchId)  => request('GET', `/counters${branchId ? `?branch_id=${branchId}` : ''}`),
+    counterCreate:  (body)      => request('POST',   '/counters',           body),
+    counterUpdate:  (id, body)  => request('PATCH',  `/counters/${id}`,     body),
+    counterDelete:  (id)        => request('DELETE',  `/counters/${id}`),
+
+    // Raw passthrough for ad-hoc requests
+    _raw: (method, path, body = null) => request(method, path, body),
   };
 })();

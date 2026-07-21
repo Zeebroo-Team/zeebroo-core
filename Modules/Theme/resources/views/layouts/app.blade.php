@@ -353,7 +353,7 @@
         $businessFeatures = $navBusiness
             ? (function () use ($navBusiness) {
                 $saved = (array) ($navBusiness->getSetting('business.features', []) ?: []);
-                $defaults = ['account_management' => true, 'bill_management' => true, 'human_resources' => true, 'point_of_sale' => true, 'product_management' => true, 'service_management' => true, 'social_media_campaign' => true, 'stock_management' => true];
+                $defaults = ['account_management' => true, 'bill_management' => true, 'human_resources' => true, 'mail' => true, 'point_of_sale' => true, 'product_management' => true, 'service_management' => true, 'social_media_campaign' => true, 'stock_management' => true];
                 return !empty($saved) ? array_merge($defaults, array_map('boolval', $saved)) : $defaults;
             })()
             : [];
@@ -430,7 +430,8 @@
         $showSidebarPosHubLink = $navBusiness && Route::has('pos.index') && $showSidebarPosSection;
 
         $showSidebarCrmLink = $navBusiness && Route::has('crm.projects.index');
-        $showSidebarMailLink = $navBusiness && Route::has('mail.inbox.index');
+        $mailFeatureOn = $navBusiness && $featureOn('mail');
+        $showSidebarMailLink = $navBusiness && Route::has('mail.inbox.index') && $mailFeatureOn;
         $sidebarMailUnreadCount = $showSidebarMailLink
             ? \Modules\Mail\Models\MailMessage::where('business_id', $navBusiness->id)->where('direction', 'inbound')->where('is_read', false)->count()
             : 0;
@@ -511,6 +512,7 @@
             $showSidebarPosSection = false;
             $showSidebarQuotationsLink = false;
             $showSidebarCrmLink = false;
+            $showSidebarMailLink = false;
             $showSidebarFilesLink = false;
             $showSidebarPropertiesLink = false;
             $showSidebarModificationsLink = false;
@@ -1367,6 +1369,7 @@ html[data-theme="light"] .bfm-dep-hint,html[data-theme="light_blue"] .bfm-dep-hi
                         ['key' => 'account_management',   'label' => 'Account Management',   'img' => 'features/account-management.png'],
                         ['key' => 'bill_management',      'label' => 'Bill Management',       'img' => 'features/bill-management.png'],
                         ['key' => 'human_resources',      'label' => 'Human Resources',       'img' => 'features/human-resource-management.png'],
+                        ['key' => 'mail',                 'label' => 'Mail',                   'img' => 'features/mail.png'],
                         ['key' => 'point_of_sale',        'label' => 'Point of Sale',         'img' => 'features/point-of-sale.png'],
                         ['key' => 'product_management',   'label' => 'Product Management',    'img' => 'features/product-management.svg'],
                         ['key' => 'service_management',   'label' => 'Service Management',    'img' => 'features/service.png'],

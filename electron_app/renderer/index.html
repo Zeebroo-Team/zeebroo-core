@@ -12,6 +12,146 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 <link rel="stylesheet" href="css/ribbon.css">
 <link rel="stylesheet" href="css/reactflow.css">
+<style>
+/* ── Mail: thread list ─────────────────────────────────────────────── */
+.mail-thread-list{display:flex;flex-direction:column;gap:0;border:1px solid var(--border,#e5e7eb);border-radius:10px;overflow:hidden}
+.mail-thread-item{display:flex;align-items:center;gap:11px;padding:11px 14px;cursor:pointer;border-bottom:1px solid var(--border,#e5e7eb);transition:background .1s;text-decoration:none;color:inherit}
+.mail-thread-item:last-child{border-bottom:none}
+.mail-thread-item:hover{background:color-mix(in srgb,var(--sidebar-hover,#f3f4f6) 100%,transparent)}
+.mail-thread-item--unread{background:color-mix(in srgb,var(--accent,#4f6df5) 5%,transparent)}
+.mail-thread-avatar{width:36px;height:36px;border-radius:50%;background:color-mix(in srgb,var(--accent,#4f6df5) 18%,transparent);color:var(--accent,#4f6df5);font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;text-transform:uppercase}
+.mail-thread-body{flex:1;min-width:0}
+.mail-thread-row1{display:flex;align-items:center;gap:6px}
+.mail-thread-name{font-size:13.5px;font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mail-thread-item--unread .mail-thread-name{font-weight:700}
+.mail-thread-badge{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;padding:2px 7px;border-radius:999px;background:color-mix(in srgb,var(--accent,#4f6df5) 18%,transparent);color:var(--accent,#4f6df5);flex-shrink:0}
+.mail-thread-count{font-size:11px;font-weight:600;color:var(--text-muted,#6b7280);background:color-mix(in srgb,var(--text-muted,#6b7280) 14%,transparent);padding:2px 8px;border-radius:999px;flex-shrink:0}
+.mail-thread-time{font-size:11px;color:var(--text-muted,#6b7280);flex-shrink:0;white-space:nowrap}
+.mail-thread-preview{font-size:12px;color:var(--text-muted,#6b7280);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px}
+/* ── Mail: conversation / chat bubbles ─────────────────────────────── */
+.mail-chat-thread{display:flex;flex-direction:column;gap:12px;padding:18px 20px}
+.chat-msg{display:flex}
+.chat-msg--in{justify-content:flex-start}
+.chat-msg--out{justify-content:flex-end}
+.chat-bubble{max-width:78%;border-radius:18px;padding:10px 14px;box-shadow:0 1px 3px rgba(0,0,0,.07)}
+.chat-msg--in  .chat-bubble{background:color-mix(in srgb,var(--sidebar-hover,#f3f4f6) 100%,transparent);border:1px solid var(--border,#e5e7eb);border-bottom-left-radius:4px}
+.chat-msg--out .chat-bubble{background:color-mix(in srgb,var(--accent,#4f6df5) 14%,var(--card,#fff) 86%);border:1px solid color-mix(in srgb,var(--accent,#4f6df5) 30%,transparent);border-bottom-right-radius:4px}
+.chat-bubble__meta{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:4px}
+.chat-bubble__from{font-size:11.5px;font-weight:700;color:var(--text,#111)}
+.chat-bubble__date{font-size:11px;color:var(--text-muted,#6b7280);flex-shrink:0}
+.chat-bubble__subject{font-size:11.5px;color:var(--text-muted,#6b7280);font-style:italic;margin-bottom:4px}
+.chat-bubble__body{font-size:13.5px;line-height:1.55;color:var(--text,#111);word-break:break-word;overflow-x:auto}
+.chat-bubble__body img{max-width:100%;height:auto}
+/* ── Mail: reply bar ────────────────────────────────────────────────── */
+.mail-reply-bar{border-top:1px solid var(--border,#e5e7eb);padding:12px 16px;background:var(--card,#fff);flex-shrink:0}
+.mail-reply-bar textarea{width:100%;box-sizing:border-box;padding:9px 11px;border-radius:9px;border:1px solid var(--border,#e5e7eb);font-size:13px;background:var(--card,#fff);color:var(--text,#111);resize:none;font-family:inherit;line-height:1.45}
+.mail-reply-bar textarea:focus{outline:none;border-color:var(--accent,#4f6df5)}
+.mail-reply-actions{display:flex;gap:8px;margin-top:8px;align-items:center;flex-wrap:wrap}
+.mail-reply-schedule-row{margin-top:8px}
+/* ── Mail: conversation sidebar ─────────────────────────────────────── */
+.mail-conv-sidebar{width:210px;flex-shrink:0;border-left:1px solid var(--border,#e5e7eb);overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:12px}
+.mail-conv-sidebar__section{border:1px solid var(--border,#e5e7eb);border-radius:10px;padding:12px}
+.mail-conv-sidebar__title{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted,#6b7280);margin-bottom:8px}
+/* ── CRM Kanban ── */
+.crm-board{display:flex;gap:10px;padding:10px;overflow-x:auto;flex:1;align-items:flex-start}
+.crm-col{flex:0 0 230px;border:1px solid var(--border,#e5e7eb);border-radius:10px;background:var(--card,#fff);display:flex;flex-direction:column;max-height:calc(100vh - 220px)}
+.crm-col-head{padding:9px 12px;border-bottom:1px solid var(--border,#e5e7eb);display:flex;align-items:center;gap:7px}
+.crm-col-swatch{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.crm-col-name{font-size:12px;font-weight:700;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.crm-col-count{font-size:11px;font-weight:700;color:var(--text-muted,#6b7280);background:color-mix(in srgb,currentColor 14%,transparent);border-radius:999px;padding:1px 7px;flex-shrink:0}
+.crm-col-body{flex:1;overflow-y:auto;padding:8px;display:flex;flex-direction:column;gap:7px;min-height:48px}
+.crm-card{border:1px solid var(--border,#e5e7eb);border-radius:8px;padding:8px 10px;background:var(--bg,#f9fafb);cursor:pointer;transition:box-shadow .12s}
+.crm-card:hover{box-shadow:0 2px 8px rgba(0,0,0,.08)}
+.crm-card-name{font-size:12px;font-weight:700;color:var(--text,#111827);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.crm-card-company{font-size:11px;color:var(--text-muted,#6b7280);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px}
+.crm-card-footer{display:flex;justify-content:space-between;align-items:center;margin-top:6px;gap:4px}
+.crm-card-value{font-size:11px;font-weight:600;color:var(--text-muted,#6b7280)}
+.crm-card-actions{display:flex;gap:3px;opacity:0;transition:opacity .12s}
+.crm-card:hover .crm-card-actions{opacity:1}
+.crm-card--dragging{opacity:.35;box-shadow:none}
+.crm-col-body--dragover{background:color-mix(in srgb,var(--accent,#4e8ef7) 10%,transparent);border-radius:7px;outline:2px dashed var(--accent,#4e8ef7)}
+.crm-card-btn{background:none;border:none;cursor:pointer;padding:3px 5px;border-radius:5px;font-size:11px;color:var(--text-muted,#6b7280)}
+.crm-card-btn:hover{background:var(--border,#e5e7eb);color:var(--text,#111827)}
+.crm-col-empty{font-size:11px;color:var(--text-muted,#6b7280);text-align:center;padding:12px 6px;margin:0}
+/* CRM contacts / tasks tables */
+.crm-table{width:100%;border-collapse:collapse;font-size:12px}
+.crm-table th{text-align:left;padding:7px 10px;font-size:11px;font-weight:700;color:var(--text-muted,#6b7280);border-bottom:2px solid var(--border,#e5e7eb);white-space:nowrap}
+.crm-table td{padding:8px 10px;border-bottom:1px solid var(--border,#e5e7eb);vertical-align:middle}
+.crm-table tr:last-child td{border-bottom:none}
+.crm-badge-open{display:inline-flex;align-items:center;justify-content:center;background:#ede9fe;color:#7c3aed;border-radius:999px;font-size:10px;font-weight:700;min-width:18px;height:18px;padding:0 5px}
+.crm-status-done{color:#10b981;font-weight:600}
+.crm-status-overdue{color:#ef4444;font-weight:600}
+.crm-task-check{width:16px;height:16px;cursor:pointer;accent-color:var(--accent,#4e8ef7)}
+/* CRM Stage management */
+.crm-stage-row{display:flex;align-items:center;gap:8px;padding:7px 4px;border-bottom:1px solid var(--border,#e5e7eb);cursor:grab}
+.crm-stage-row:last-child{border-bottom:none}
+.crm-stage-row.crm-stage-dragging{opacity:.35;cursor:grabbing}
+.crm-stage-row--dragover{background:color-mix(in srgb,var(--accent,#4e8ef7) 8%,transparent);border-radius:6px}
+.crm-stage-handle{color:var(--text-muted,#6b7280);font-size:12px;flex-shrink:0;cursor:grab;padding:0 2px}
+.crm-stage-swatch{width:14px;height:14px;border-radius:50%;flex-shrink:0;border:1px solid rgba(0,0,0,.12)}
+.crm-stage-name{font-size:12px;font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.crm-stage-badge{font-size:10px;background:var(--border,#e5e7eb);color:var(--text-muted,#6b7280);border-radius:999px;padding:1px 6px;flex-shrink:0}
+.crm-stage-tag{font-size:10px;font-weight:700;border-radius:999px;padding:1px 7px;flex-shrink:0}
+.crm-stage-tag--won{background:#d1fae5;color:#065f46}
+.crm-stage-tag--lost{background:#fee2e2;color:#991b1b}
+/* CRM Automations */
+.crm-auto-card{border:1px solid var(--border,#e5e7eb);border-radius:9px;padding:10px 12px;display:flex;align-items:flex-start;gap:10px}
+.crm-auto-card--inactive{opacity:.55}
+.crm-auto-indicator{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:4px}
+.crm-auto-indicator--on{background:#10b981}
+.crm-auto-indicator--off{background:#d1d5db}
+.crm-auto-info{flex:1;min-width:0}
+.crm-auto-subject{font-size:12px;font-weight:700;color:var(--text,#111827);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.crm-auto-meta{font-size:11px;color:var(--text-muted,#6b7280);margin-top:2px}
+.crm-auto-actions{display:flex;gap:4px;flex-shrink:0}
+.crm-merge-help{font-size:11px;color:var(--text-muted,#6b7280);background:color-mix(in srgb,var(--border,#e5e7eb) 40%,transparent);border:1px solid var(--border,#e5e7eb);border-radius:7px;padding:7px 10px;line-height:1.7}
+.crm-merge-help code{background:var(--card,#fff);border:1px solid var(--border,#e5e7eb);border-radius:4px;padding:1px 4px;font-size:10px;font-family:monospace}
+/* CRM Forms list */
+.crm-form-card{border:1px solid var(--border,#e5e7eb);border-radius:10px;background:var(--card,#fff);padding:12px 14px;display:flex;align-items:center;gap:12px}
+.crm-form-icon{width:36px;height:36px;border-radius:8px;background:color-mix(in srgb,#7c3aed 14%,transparent);display:flex;align-items:center;justify-content:center;color:#7c3aed;font-size:16px;flex-shrink:0}
+.crm-form-info{flex:1;min-width:0}
+.crm-form-name{font-size:12px;font-weight:700;color:var(--text,#111827);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.crm-form-meta{font-size:11px;color:var(--text-muted,#6b7280);margin-top:2px}
+.crm-form-pill{display:inline-flex;align-items:center;font-size:10px;font-weight:700;border-radius:999px;padding:1px 7px;flex-shrink:0}
+.crm-form-pill--pub{background:#d1fae5;color:#065f46}
+.crm-form-pill--unp{background:var(--border,#e5e7eb);color:var(--text-muted,#6b7280)}
+.crm-form-actions{display:flex;gap:4px;flex-shrink:0}
+/* CRM Builder */
+.crm-builder{display:flex;flex-direction:column;flex:1;overflow:hidden}
+.crm-builder-bar{display:flex;align-items:center;gap:8px;padding:7px 10px;border-bottom:1px solid var(--border,#e5e7eb);flex-shrink:0;background:var(--card,#fff)}
+.crm-builder-title{font-size:13px;font-weight:700;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.crm-builder-body{display:flex;flex:1;overflow:hidden}
+.crm-builder-left{width:180px;flex-shrink:0;border-right:1px solid var(--border,#e5e7eb);padding:10px 8px;display:flex;flex-direction:column;gap:6px;overflow-y:auto;background:var(--bg,#f9fafb)}
+.crm-builder-left-head{font-size:10px;font-weight:700;color:var(--text-muted,#6b7280);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px}
+.crm-builder-add-btn{display:flex;align-items:center;gap:7px;padding:6px 8px;border:1px solid var(--border,#e5e7eb);border-radius:7px;background:var(--card,#fff);cursor:pointer;font-size:12px;color:var(--text,#111827);width:100%;text-align:left}
+.crm-builder-add-btn:hover{background:color-mix(in srgb,var(--accent,#4e8ef7) 8%,var(--card,#fff))}
+.crm-builder-center{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px}
+.crm-builder-right{width:220px;flex-shrink:0;border-left:1px solid var(--border,#e5e7eb);padding:10px 10px;overflow-y:auto;background:var(--bg,#f9fafb)}
+.crm-builder-right-head{font-size:10px;font-weight:700;color:var(--text-muted,#6b7280);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px}
+.crm-block-row{border:1px solid var(--border,#e5e7eb);border-radius:8px;background:var(--card,#fff);padding:8px 10px;cursor:pointer;display:flex;align-items:flex-start;gap:8px;transition:box-shadow .1s}
+.crm-block-row:hover{box-shadow:0 1px 6px rgba(0,0,0,.07)}
+.crm-block-row.crm-block--selected{border-color:var(--accent,#4e8ef7);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent,#4e8ef7) 18%,transparent)}
+.crm-block-row.crm-block--dragging{opacity:.3}
+.crm-block-drag{color:var(--text-muted,#6b7280);font-size:11px;flex-shrink:0;cursor:grab;padding-top:2px}
+.crm-block-preview{flex:1;min-width:0}
+.crm-block-type{font-size:10px;font-weight:700;color:var(--text-muted,#6b7280);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px}
+.crm-block-snippet{font-size:12px;color:var(--text,#111827);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.crm-block-del{background:none;border:none;cursor:pointer;padding:3px 5px;border-radius:5px;color:var(--text-muted,#6b7280);font-size:11px;flex-shrink:0}
+.crm-block-del:hover{background:#fee2e2;color:#991b1b}
+.crm-prop-row{margin-bottom:8px}
+.crm-prop-label{font-size:11px;font-weight:600;color:var(--text-muted,#6b7280);display:block;margin-bottom:3px}
+.crm-prop-input{width:100%;box-sizing:border-box;border:1px solid var(--border,#e5e7eb);border-radius:6px;padding:5px 8px;font-size:12px;background:var(--card,#fff);color:var(--text,#111827)}
+.crm-prop-input:focus{outline:none;border-color:var(--accent,#4e8ef7)}
+.crm-prop-check{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text,#111827)}
+.crm-builder-empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:var(--text-muted,#6b7280);font-size:13px}
+/* Form template picker */
+.crm-tpl-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.crm-tpl-card{border:2px solid var(--border,#e5e7eb);border-radius:9px;padding:10px 12px;cursor:pointer;transition:border-color .12s}
+.crm-tpl-card:hover,.crm-tpl-card.crm-tpl--selected{border-color:var(--accent,#4e8ef7);background:color-mix(in srgb,var(--accent,#4e8ef7) 5%,var(--card,#fff))}
+.crm-tpl-icon{font-size:20px;color:var(--accent,#4e8ef7);margin-bottom:4px}
+.crm-tpl-name{font-size:12px;font-weight:700;color:var(--text,#111827)}
+.crm-tpl-desc{font-size:11px;color:var(--text-muted,#6b7280);margin-top:2px}
+</style>
 <script src="js/react.min.js"></script>
 <script src="js/react-dom.min.js"></script>
 <script src="js/reactflow.umd.js"></script>
@@ -386,6 +526,8 @@
         <div class="ribbon-tab" data-tab="design">Design</div>
         <div class="ribbon-tab" data-tab="restaurant">Restaurant</div>
         <div class="ribbon-tab" data-tab="rst-pos">Restaurant POS</div>
+        <div class="ribbon-tab" data-tab="mail">Mail</div>
+        <div class="ribbon-tab" data-tab="crm">CRM</div>
       </div>
       <button id="guide-toggle-btn" title="Show / hide guide assistant">
         <i class="fa fa-user-tie"></i> Guide
@@ -495,6 +637,15 @@
             <button class="ribbon-btn-lg" id="rb-close-session">
               <i class="fa fa-circle-stop"></i>Close<br>Session
             </button>
+            <button class="ribbon-btn-lg" id="rb-lock-register" title="Close Cash Register">
+              <i class="fa fa-lock"></i>Close<br>Register
+            </button>
+            <div class="ribbon-counter-wrap" id="rb-counter-wrap" style="display:none">
+              <label class="ribbon-counter-label"><i class="fa fa-cash-register"></i> Counter</label>
+              <select id="rb-counter-select" class="ribbon-counter-select">
+                <option value="">— None —</option>
+              </select>
+            </div>
           </div>
           <div class="ribbon-group-label">Session</div>
         </div>
@@ -548,14 +699,22 @@
           <div class="ribbon-group-label">Customers</div>
         </div>
 
-        <!-- POS Settings group -->
+        <!-- Configure group -->
         <div class="ribbon-group">
           <div class="ribbon-group-content">
             <button class="ribbon-btn-lg" id="rb-pos-settings">
               <i class="fa fa-gear"></i>POS<br>Settings
             </button>
+            <button class="ribbon-btn-lg" id="rb-receipt-editor">
+              <i class="fa fa-pen-to-square"></i>Receipt<br>Editor
+            </button>
           </div>
           <div class="ribbon-group-label">Configure</div>
+        </div>
+
+        <!-- Today's stats — right side -->
+        <div id="pos-ribbon-stats" class="pos-ribbon-stats">
+          <div class="prs-spin"><i class="fa fa-spinner fa-spin"></i></div>
         </div>
 
       </div><!-- /pos page -->
@@ -968,6 +1127,135 @@
 
       </div><!-- /rst-pos page -->
 
+      <!-- ── Mail page ── -->
+      <div class="ribbon-page" data-page="mail">
+
+        <div class="ribbon-group">
+          <div class="ribbon-group-content">
+            <button class="ribbon-btn-lg" id="rb-mail-inbox">
+              <i class="fa fa-inbox"></i>Inbox
+            </button>
+            <button class="ribbon-btn-lg primary" id="rb-mail-compose">
+              <i class="fa fa-pen-to-square"></i>Compose
+            </button>
+          </div>
+          <div class="ribbon-group-label">Messages</div>
+        </div>
+
+        <div class="ribbon-group">
+          <div class="ribbon-group-content">
+            <button class="ribbon-btn-lg" id="rb-mail-sent">
+              <i class="fa fa-paper-plane"></i>Sent
+            </button>
+          </div>
+          <div class="ribbon-group-label">Sent</div>
+        </div>
+
+        <div class="ribbon-group">
+          <div class="ribbon-group-content">
+            <button class="ribbon-btn-lg" id="rb-mail-templates">
+              <i class="fa fa-file-lines"></i>Templates
+            </button>
+            <button class="ribbon-btn-lg" id="rb-mail-filters">
+              <i class="fa fa-filter"></i>Filters
+            </button>
+          </div>
+          <div class="ribbon-group-label">Manage</div>
+        </div>
+
+        <div class="ribbon-group">
+          <div class="ribbon-group-content">
+            <button class="ribbon-btn-lg" id="rb-mail-scheduled">
+              <i class="fa fa-clock"></i>Scheduled
+            </button>
+          </div>
+          <div class="ribbon-group-label">Scheduled</div>
+        </div>
+
+        <div class="ribbon-group">
+          <div class="ribbon-group-content">
+            <button class="ribbon-btn-lg" id="rb-mail-refresh">
+              <i class="fa fa-rotate"></i>Refresh
+            </button>
+            <button class="ribbon-btn-lg" id="rb-mail-sync">
+              <i class="fa fa-cloud-arrow-down"></i>Sync<br>Mailbox
+            </button>
+          </div>
+          <div class="ribbon-group-label">Actions</div>
+        </div>
+
+      </div><!-- /mail page -->
+
+      <!-- ── CRM page ── -->
+      <div class="ribbon-page" data-page="crm">
+
+        <div class="ribbon-group">
+          <div class="ribbon-group-content">
+            <button class="ribbon-btn-lg" id="rb-crm-pipeline">
+              <i class="fa fa-table-columns"></i>Pipeline
+            </button>
+            <button class="ribbon-btn-lg primary" id="rb-crm-new-lead">
+              <i class="fa fa-plus"></i>New Lead
+            </button>
+          </div>
+          <div class="ribbon-group-label">Pipeline</div>
+        </div>
+
+        <div class="ribbon-group">
+          <div class="ribbon-group-content">
+            <button class="ribbon-btn-lg" id="rb-crm-contacts">
+              <i class="fa fa-address-book"></i>Contacts
+            </button>
+          </div>
+          <div class="ribbon-group-label">Contacts</div>
+        </div>
+
+        <div class="ribbon-group">
+          <div class="ribbon-group-content">
+            <button class="ribbon-btn-lg" id="rb-crm-tasks">
+              <i class="fa fa-list-check"></i>Tasks
+            </button>
+            <button class="ribbon-btn-lg primary" id="rb-crm-new-task">
+              <i class="fa fa-plus"></i>New Task
+            </button>
+          </div>
+          <div class="ribbon-group-label">Tasks</div>
+        </div>
+
+        <div class="ribbon-group">
+          <div class="ribbon-group-content">
+            <button class="ribbon-btn-lg" id="rb-crm-forms">
+              <i class="fa fa-wpforms"></i>Forms
+            </button>
+            <button class="ribbon-btn-lg primary" id="rb-crm-new-form">
+              <i class="fa fa-plus"></i>New Form
+            </button>
+          </div>
+          <div class="ribbon-group-label">Forms</div>
+        </div>
+
+        <div class="ribbon-group">
+          <div class="ribbon-group-content">
+            <button class="ribbon-btn-lg" id="rb-crm-projects">
+              <i class="fa fa-folder-open"></i>Projects
+            </button>
+            <button class="ribbon-btn-lg" id="rb-crm-stages">
+              <i class="fa fa-layer-group"></i>Stages
+            </button>
+          </div>
+          <div class="ribbon-group-label">Manage</div>
+        </div>
+
+        <div class="ribbon-group">
+          <div class="ribbon-group-content">
+            <button class="ribbon-btn-lg" id="rb-crm-refresh">
+              <i class="fa fa-rotate"></i>Refresh
+            </button>
+          </div>
+          <div class="ribbon-group-label">Actions</div>
+        </div>
+
+      </div><!-- /crm page -->
 
 
     </div><!-- /ribbon-body -->
@@ -1695,6 +1983,7 @@
           </div>
           <div id="inv-cat-filter" class="inv-cat-filter"></div>
           <button class="inv-refresh-btn" id="inv-refresh" title="Refresh"><i class="fa fa-arrows-rotate"></i></button>
+          <button class="inv-import-btn" id="inv-import-csv-btn" title="Import products from CSV"><i class="fa fa-file-arrow-up"></i> Import CSV</button>
           <button class="po-add-btn cat-add-btn" id="inv-new-product-btn"><i class="fa fa-plus"></i> New Product</button>
         </div>
         <div class="inv-filter-bar" id="inv-filter-bar">
@@ -1827,11 +2116,15 @@
                 </div>
               </div>
             </div>
-            <!-- Price + Stock -->
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <!-- Price + Wholesale + Stock -->
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
               <div class="po-field">
                 <label class="po-field-label">Selling Price <span class="po-required">*</span></label>
                 <input type="number" id="prod-f-price" class="po-field-input" min="0" step="0.01" placeholder="0.00">
+              </div>
+              <div class="po-field">
+                <label class="po-field-label" title="Price offered to wholesale / bulk customers"><i class="fa fa-tags" style="color:var(--accent);margin-right:4px"></i>Wholesale Price</label>
+                <input type="number" id="prod-f-wholesale-price" class="po-field-input" min="0" step="0.01" placeholder="optional">
               </div>
               <div class="po-field" id="prod-stock-field">
                 <label class="po-field-label" id="prod-stock-label">Opening Stock</label>
@@ -1904,6 +2197,25 @@
               <div class="prod-bundle-footer">
                 <span id="prod-bundle-count" class="prod-bundle-count-label">0 items in bundle</span>
               </div>
+            </div>
+            <!-- Product feature flags -->
+            <div class="prod-flags-row">
+              <label class="prod-flag-item">
+                <input type="checkbox" id="prod-f-warranty" class="prod-flag-cb">
+                <span class="prod-flag-label"><i class="fa fa-shield-halved"></i> Warranty</span>
+              </label>
+              <label class="prod-flag-item">
+                <input type="checkbox" id="prod-f-expiry" class="prod-flag-cb">
+                <span class="prod-flag-label"><i class="fa fa-calendar-xmark"></i> Expiration</span>
+              </label>
+              <label class="prod-flag-item">
+                <input type="checkbox" id="prod-f-courier" class="prod-flag-cb">
+                <span class="prod-flag-label"><i class="fa fa-truck"></i> Courier Delivery</span>
+              </label>
+              <label class="prod-flag-item">
+                <input type="checkbox" id="prod-f-loyalty" class="prod-flag-cb">
+                <span class="prod-flag-label"><i class="fa fa-star"></i> Loyalty Redeemable</span>
+              </label>
             </div>
             <!-- Description -->
             <div class="po-field">
@@ -4441,9 +4753,779 @@
 
     </div><!-- /panel-rst-pos -->
 
+    <!-- ── Mail Panel ────────────────────────────────────────────────── -->
+    <div class="content-panel" id="panel-mail" style="flex-direction:column">
+
+      <!-- Subnav -->
+      <div class="fin-subnav">
+        <button class="fin-subnav-btn active" data-mail="inbox"><i class="fa fa-inbox"></i> Inbox</button>
+        <button class="fin-subnav-btn"         data-mail="compose"><i class="fa fa-pen-to-square"></i> Compose</button>
+        <button class="fin-subnav-btn"         data-mail="sent"><i class="fa fa-paper-plane"></i> Sent</button>
+        <button class="fin-subnav-btn"         data-mail="templates"><i class="fa fa-file-lines"></i> Templates</button>
+        <button class="fin-subnav-btn"         data-mail="filters"><i class="fa fa-filter"></i> Filters</button>
+        <button class="fin-subnav-btn"         data-mail="scheduled"><i class="fa fa-clock"></i> Scheduled</button>
+      </div>
+
+      <!-- ── Inbox view: thread list ── -->
+      <div id="mail-inbox-view" style="display:flex;flex-direction:column;flex:1;overflow:hidden">
+        <div class="finance-toolbar">
+          <div class="finance-search-wrap">
+            <i class="fa fa-magnifying-glass"></i>
+            <input type="text" id="mail-inbox-search" placeholder="Search inbox…" autocomplete="off">
+          </div>
+          <div class="svc-chip-bar" id="mail-inbox-chips">
+            <button class="svc-chip active" data-inbox-status="">All</button>
+            <button class="svc-chip" data-inbox-status="unread">Unread</button>
+            <button class="svc-chip" data-inbox-status="read">Read</button>
+          </div>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:10px 14px">
+          <div class="mail-thread-list" id="mail-inbox-list">
+            <div style="padding:28px;text-align:center;color:var(--text-muted)"><i class="fa fa-spinner fa-spin"></i> Loading…</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Compose view ── -->
+      <div id="mail-compose-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+        <div style="flex:1;overflow-y:auto;padding:22px 28px">
+          <div class="svc-form-alert" id="mail-compose-alert" style="display:none"></div>
+          <div class="svc-form-group">
+            <label class="svc-form-label">To <span class="svc-form-req">*</span></label>
+            <input type="email" id="mail-compose-to" class="svc-form-input" placeholder="recipient@example.com" autocomplete="off">
+          </div>
+          <div class="svc-form-group">
+            <label class="svc-form-label">Subject <span class="svc-form-req">*</span></label>
+            <input type="text" id="mail-compose-subject" class="svc-form-input" placeholder="Email subject…" autocomplete="off">
+          </div>
+          <div class="svc-form-group" style="margin-bottom:6px">
+            <label class="svc-form-label">Template</label>
+            <select id="mail-compose-tmpl" class="svc-form-input" style="appearance:auto">
+              <option value="">— no template —</option>
+            </select>
+          </div>
+          <div class="svc-form-group">
+            <label class="svc-form-label">Message <span class="svc-form-req">*</span></label>
+            <textarea id="mail-compose-body" class="svc-form-input svc-form-textarea" rows="12" placeholder="Write your message…"></textarea>
+          </div>
+          <div style="display:flex;gap:10px;margin-top:4px">
+            <button class="svc-form-btn svc-form-btn--primary" id="mail-compose-send"><i class="fa fa-paper-plane"></i> Send Now</button>
+            <button class="svc-form-btn svc-form-btn--ghost" id="mail-compose-schedule"><i class="fa fa-clock"></i> Schedule</button>
+            <button class="svc-form-btn svc-form-btn--ghost" id="mail-compose-clear" style="margin-left:auto"><i class="fa fa-xmark"></i> Clear</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Sent view: thread list ── -->
+      <div id="mail-sent-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+        <div class="finance-toolbar">
+          <div class="finance-search-wrap">
+            <i class="fa fa-magnifying-glass"></i>
+            <input type="text" id="mail-sent-search" placeholder="Search sent mail…" autocomplete="off">
+          </div>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:10px 14px">
+          <div class="mail-thread-list" id="mail-sent-list">
+            <div style="padding:28px;text-align:center;color:var(--text-muted)"><i class="fa fa-spinner fa-spin"></i> Loading…</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Conversation view (shared by inbox + sent) ── -->
+      <div id="mail-conv-view" style="display:none;flex:1;overflow:hidden;flex-direction:row">
+
+        <!-- Chat column -->
+        <div style="flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden">
+          <div class="svc-detail-header">
+            <button class="svc-detail-back" id="mail-conv-back"><i class="fa fa-arrow-left"></i> Back</button>
+            <div style="flex:1;min-width:0;overflow:hidden">
+              <div id="mail-conv-title" style="font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></div>
+              <div id="mail-conv-subtitle" style="font-size:11.5px;color:var(--text-muted);margin-top:1px"></div>
+            </div>
+            <button class="finance-create-btn" id="mail-conv-new-btn" style="flex-shrink:0">
+              <i class="fa fa-pen"></i> New Email
+            </button>
+          </div>
+
+          <!-- Bubble thread -->
+          <div id="mail-conv-thread" style="flex:1;overflow-y:auto">
+            <div class="mail-chat-thread" id="mail-conv-bubbles"></div>
+          </div>
+
+          <!-- Reply bar -->
+          <div class="mail-reply-bar">
+            <textarea id="mail-conv-reply-body" rows="3" placeholder="Type a reply…"></textarea>
+            <div class="mail-reply-actions">
+              <button class="svc-form-btn svc-form-btn--primary" id="mail-conv-send-btn">
+                <i class="fa fa-paper-plane"></i> <span id="mail-conv-send-label">Send</span>
+              </button>
+              <label style="margin-left:auto;font-size:12.5px;display:flex;align-items:center;gap:5px;cursor:pointer">
+                <input type="checkbox" id="mail-conv-schedule-toggle"> Send later
+              </label>
+            </div>
+            <div class="mail-reply-schedule-row" id="mail-conv-schedule-row" style="display:none">
+              <input type="datetime-local" id="mail-conv-schedule-at" class="svc-form-input" style="max-width:220px">
+            </div>
+            <div class="svc-form-alert" id="mail-conv-reply-alert" style="display:none;margin-top:8px"></div>
+          </div>
+        </div>
+
+        <!-- Sidebar -->
+        <div class="mail-conv-sidebar" id="mail-conv-sidebar">
+          <!-- populated dynamically -->
+        </div>
+      </div>
+
+      <!-- ── Templates view ── -->
+      <div id="mail-templates-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+        <div class="finance-toolbar">
+          <div class="finance-search-wrap">
+            <i class="fa fa-magnifying-glass"></i>
+            <input type="text" id="mail-tmpl-search" placeholder="Search templates…" autocomplete="off">
+          </div>
+          <button class="finance-create-btn" id="btn-new-mail-template"><i class="fa fa-plus"></i> New Template</button>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:20px 22px">
+          <div class="svc-cat-grid" id="mail-tmpl-grid">
+            <div class="svc-tbl-placeholder"><i class="fa fa-spinner fa-spin"></i> Loading…</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Filters view ── -->
+      <div id="mail-filters-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+        <div class="finance-toolbar">
+          <div style="font-size:13px;color:var(--text-muted)"><i class="fa fa-circle-info"></i> Filters run automatically on incoming emails to mark as read or delete them.</div>
+        </div>
+        <div class="inv-table-wrap">
+          <table class="inv-table">
+            <thead>
+              <tr>
+                <th>Filter Field</th>
+                <th>Contains</th>
+                <th style="width:160px">Action</th>
+                <th style="width:80px;text-align:center">Active</th>
+                <th style="width:70px;text-align:center">Order</th>
+              </tr>
+            </thead>
+            <tbody id="mail-filters-tbody">
+              <tr><td colspan="5" class="svc-tbl-placeholder"><i class="fa fa-spinner fa-spin"></i> Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ── Scheduled view ── -->
+      <div id="mail-scheduled-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+        <div class="finance-toolbar">
+          <div style="font-size:13px;color:var(--text-muted)"><i class="fa fa-clock"></i> Emails waiting to be sent at their scheduled time.</div>
+        </div>
+        <div class="inv-table-wrap">
+          <table class="inv-table">
+            <thead>
+              <tr>
+                <th style="width:220px">To</th>
+                <th>Subject</th>
+                <th style="width:160px">Scheduled At</th>
+                <th style="width:90px;text-align:center">Cancel</th>
+              </tr>
+            </thead>
+            <tbody id="mail-scheduled-tbody">
+              <tr><td colspan="4" class="svc-tbl-placeholder"><i class="fa fa-spinner fa-spin"></i> Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ── New / Edit Template Modal ── -->
+      <div class="modal-overlay" id="mail-tmpl-modal" style="display:none">
+        <div class="svc-new-modal-box" style="width:560px">
+          <div class="svc-new-modal-header">
+            <div class="svc-new-modal-title"><i class="fa fa-file-lines"></i> <span id="mail-tmpl-modal-title">New Template</span></div>
+            <button class="svc-new-modal-close" id="mail-tmpl-modal-close"><i class="fa fa-xmark"></i></button>
+          </div>
+          <div class="svc-new-modal-body">
+            <div class="svc-form-alert" id="mail-tmpl-alert" style="display:none"></div>
+            <div class="svc-form-group">
+              <label class="svc-form-label">Template Name <span class="svc-form-req">*</span></label>
+              <input type="text" id="mail-tmpl-name" class="svc-form-input" placeholder="e.g. Welcome Email" autocomplete="off">
+            </div>
+            <div class="svc-form-group">
+              <label class="svc-form-label">Default Subject</label>
+              <input type="text" id="mail-tmpl-subject" class="svc-form-input" placeholder="e.g. Welcome to our store!" autocomplete="off">
+            </div>
+            <div class="svc-form-group">
+              <label class="svc-form-label">Body <span class="svc-form-req">*</span></label>
+              <textarea id="mail-tmpl-body" class="svc-form-input svc-form-textarea" rows="7" placeholder="Template content…"></textarea>
+            </div>
+          </div>
+          <div class="svc-new-modal-footer">
+            <button class="svc-form-btn svc-form-btn--ghost" id="mail-tmpl-modal-cancel">Cancel</button>
+            <button class="svc-form-btn svc-form-btn--primary" id="mail-tmpl-submit"><i class="fa fa-floppy-disk"></i> Save Template</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Schedule Modal ── -->
+      <div class="modal-overlay" id="mail-schedule-modal" style="display:none">
+        <div class="svc-new-modal-box" style="width:380px">
+          <div class="svc-new-modal-header">
+            <div class="svc-new-modal-title"><i class="fa fa-clock"></i> Schedule Send</div>
+            <button class="svc-new-modal-close" id="mail-schedule-modal-close"><i class="fa fa-xmark"></i></button>
+          </div>
+          <div class="svc-new-modal-body">
+            <div class="svc-form-group">
+              <label class="svc-form-label">Send At <span class="svc-form-req">*</span></label>
+              <input type="datetime-local" id="mail-schedule-at" class="svc-form-input">
+            </div>
+          </div>
+          <div class="svc-new-modal-footer">
+            <button class="svc-form-btn svc-form-btn--ghost" id="mail-schedule-cancel">Cancel</button>
+            <button class="svc-form-btn svc-form-btn--primary" id="mail-schedule-confirm"><i class="fa fa-clock"></i> Schedule</button>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /panel-mail -->
+
+    <!-- ── CRM Panel ──────────────────────────────────────────────────── -->
+    <div class="content-panel" id="panel-crm" style="flex-direction:column">
+
+      <!-- Subnav -->
+      <div class="fin-subnav">
+        <button class="fin-subnav-btn active" data-crmsub="pipeline"><i class="fa fa-table-columns"></i> Pipeline</button>
+        <button class="fin-subnav-btn"         data-crmsub="contacts"><i class="fa fa-address-book"></i> Contacts</button>
+        <button class="fin-subnav-btn"         data-crmsub="tasks"><i class="fa fa-list-check"></i> Tasks</button>
+        <button class="fin-subnav-btn"         data-crmsub="forms"><i class="fa fa-wpforms"></i> Forms</button>
+      </div>
+
+      <!-- ── Pipeline view ── -->
+      <div id="crm-pipeline-view" style="display:flex;flex-direction:column;flex:1;overflow:hidden">
+        <!-- Toolbar -->
+        <div class="finance-toolbar" style="gap:8px;flex-shrink:0">
+          <label style="font-size:12px;font-weight:600;color:var(--text-muted);white-space:nowrap"><i class="fa fa-folder-open" style="margin-right:4px"></i>Project:</label>
+          <select id="crm-project-select" class="svc-form-input" style="max-width:220px;appearance:auto;padding:5px 8px;font-size:12px"></select>
+          <button class="svc-form-btn" id="crm-new-project-btn" style="padding:5px 12px;font-size:12px;flex-shrink:0"><i class="fa fa-folder-plus"></i> New Project</button>
+          <div id="crm-pipeline-alert" class="svc-form-alert" style="display:none;margin-left:auto"></div>
+        </div>
+        <!-- Board -->
+        <div id="crm-pipeline-board" class="crm-board"></div>
+        <div id="crm-pipeline-no-projects" style="display:none;flex:1;align-items:center;justify-content:center;flex-direction:column;gap:10px">
+          <i class="fa fa-folder-open" style="font-size:36px;color:var(--text-muted)"></i>
+          <p style="color:var(--text-muted);font-size:13px;margin:0">Create a project to start tracking leads.</p>
+          <button class="svc-form-btn svc-form-btn--primary" id="crm-pipeline-first-project-btn"><i class="fa fa-plus"></i> Create First Project</button>
+        </div>
+      </div>
+
+      <!-- ── Contacts view ── -->
+      <div id="crm-contacts-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+        <div class="finance-toolbar">
+          <div class="finance-search-wrap">
+            <i class="fa fa-magnifying-glass"></i>
+            <input type="text" id="crm-contacts-search" placeholder="Search contacts…" autocomplete="off">
+          </div>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:0 10px 10px">
+          <table class="crm-table" id="crm-contacts-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Phone</th>
+                <th>Email</th>
+                <th>Open Tasks</th>
+                <th>Last Activity</th>
+              </tr>
+            </thead>
+            <tbody id="crm-contacts-body">
+              <tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:24px">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ── Tasks view ── -->
+      <div id="crm-tasks-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+        <div class="finance-toolbar" style="gap:8px">
+          <div class="svc-chip-bar" id="crm-task-filter-chips">
+            <button class="svc-chip active" data-crmfilter="open">Open</button>
+            <button class="svc-chip" data-crmfilter="overdue">Overdue</button>
+            <button class="svc-chip" data-crmfilter="completed">Completed</button>
+          </div>
+          <button class="svc-form-btn svc-form-btn--primary" id="crm-tasks-new-btn" style="margin-left:auto;padding:5px 12px;font-size:12px;flex-shrink:0"><i class="fa fa-plus"></i> New Task</button>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:0 10px 10px">
+          <table class="crm-table" id="crm-tasks-table">
+            <thead>
+              <tr>
+                <th style="width:24px"></th>
+                <th>Task</th>
+                <th>Related to</th>
+                <th>Due</th>
+                <th>Status</th>
+                <th style="width:40px"></th>
+              </tr>
+            </thead>
+            <tbody id="crm-tasks-body">
+              <tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:24px">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ── Forms list view ── -->
+      <div id="crm-forms-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+        <div class="finance-toolbar" style="gap:8px">
+          <label style="font-size:12px;font-weight:600;color:var(--text-muted);white-space:nowrap"><i class="fa fa-folder-open" style="margin-right:4px"></i>Project:</label>
+          <select id="crm-forms-project-select" class="svc-form-input" style="max-width:220px;appearance:auto;padding:5px 8px;font-size:12px"></select>
+          <button class="svc-form-btn svc-form-btn--primary" id="crm-forms-new-btn" style="padding:5px 12px;font-size:12px;flex-shrink:0"><i class="fa fa-plus"></i> New Form</button>
+          <div id="crm-forms-alert" class="svc-form-alert" style="display:none;margin-left:auto"></div>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:10px">
+          <div id="crm-forms-list" style="display:flex;flex-direction:column;gap:8px">
+            <p style="text-align:center;color:var(--text-muted);font-size:12px;padding:24px 0">Loading…</p>
+          </div>
+          <div id="crm-forms-empty" style="display:none;flex-direction:column;align-items:center;gap:10px;padding:36px 0;text-align:center">
+            <i class="fa fa-wpforms" style="font-size:34px;color:var(--text-muted)"></i>
+            <p style="color:var(--text-muted);font-size:13px;margin:0">No forms yet — create one to start capturing leads from the web.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Form builder view ── -->
+      <div id="crm-builder-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+        <!-- Toolbar bar -->
+        <div class="crm-builder-bar">
+          <button class="svc-form-btn" id="crm-builder-back-btn" style="flex-shrink:0;padding:4px 10px;font-size:12px"><i class="fa fa-arrow-left"></i> Forms</button>
+          <span class="crm-builder-title" id="crm-builder-form-name">Form</span>
+          <span id="crm-builder-pub-pill" class="crm-form-pill crm-form-pill--unp" style="flex-shrink:0">Draft</span>
+          <button class="svc-form-btn svc-form-btn--primary" id="crm-builder-save-btn" style="padding:4px 12px;font-size:12px;flex-shrink:0"><i class="fa fa-floppy-disk"></i> Save</button>
+          <button class="svc-form-btn" id="crm-builder-toggle-pub-btn" style="padding:4px 10px;font-size:12px;flex-shrink:0"><i class="fa fa-earth-americas"></i> Publish</button>
+          <button class="svc-form-btn" id="crm-builder-copy-url-btn" style="padding:4px 10px;font-size:12px;flex-shrink:0" title="Copy public URL"><i class="fa fa-link"></i></button>
+          <div id="crm-builder-alert" class="svc-form-alert" style="display:none;max-width:240px"></div>
+        </div>
+        <!-- Three-column builder -->
+        <div class="crm-builder-body">
+          <!-- Left: add blocks palette -->
+          <div class="crm-builder-left">
+            <p class="crm-builder-left-head">Add block</p>
+            <button class="crm-builder-add-btn" data-addblock="heading"><i class="fa fa-heading" style="width:14px;text-align:center;color:var(--accent)"></i> Heading</button>
+            <button class="crm-builder-add-btn" data-addblock="text"><i class="fa fa-align-left" style="width:14px;text-align:center;color:var(--accent)"></i> Text</button>
+            <button class="crm-builder-add-btn" data-addblock="field"><i class="fa fa-input-text" style="width:14px;text-align:center;color:var(--accent)"></i> Field</button>
+            <button class="crm-builder-add-btn" data-addblock="divider"><i class="fa fa-minus" style="width:14px;text-align:center;color:var(--accent)"></i> Divider</button>
+            <div style="margin-top:8px;border-top:1px solid var(--border);padding-top:8px">
+              <p class="crm-builder-left-head">Custom field</p>
+              <button class="crm-builder-add-btn" data-addblock="custom_field"><i class="fa fa-sliders" style="width:14px;text-align:center;color:#7c3aed"></i> Custom field</button>
+            </div>
+          </div>
+          <!-- Center: block list -->
+          <div class="crm-builder-center" id="crm-builder-blocks">
+            <div class="crm-builder-empty" id="crm-builder-blocks-empty">
+              <i class="fa fa-layer-group" style="font-size:28px"></i>
+              <span>Add blocks from the left panel</span>
+            </div>
+          </div>
+          <!-- Right: properties panel -->
+          <div class="crm-builder-right" id="crm-builder-props">
+            <p class="crm-builder-right-head">Properties</p>
+            <p id="crm-builder-props-placeholder" style="font-size:11px;color:var(--text-muted)">Select a block to edit its properties.</p>
+            <div id="crm-builder-props-content" style="display:none"></div>
+            <!-- Form settings always visible at bottom -->
+            <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border)">
+              <p class="crm-builder-right-head">Form settings</p>
+              <div class="crm-prop-row">
+                <label class="crm-prop-label">Submit button text</label>
+                <input type="text" id="crm-builder-submit-text" class="crm-prop-input" maxlength="60" placeholder="Submit">
+              </div>
+              <div class="crm-prop-row">
+                <label class="crm-prop-label">Success message</label>
+                <input type="text" id="crm-builder-success-msg" class="crm-prop-input" maxlength="500" placeholder="Thanks for your submission.">
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /panel-crm -->
+
     <!-- ── Users Panel ────────────────────────────────────────────────── -->
 
   </div><!-- /content -->
+
+  <!-- ── CRM: New Lead Modal ── -->
+  <div class="modal-overlay" id="crm-lead-modal" style="display:none">
+    <div class="po-aim-shell" style="width:500px">
+      <div class="po-aim-header">
+        <i class="fa fa-bullseye" style="color:#7c3aed"></i>
+        <span id="crm-lead-modal-title">New Lead</span>
+        <button class="psm-close" id="crm-lead-modal-close"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div class="po-aim-body" style="display:flex;flex-direction:column;gap:12px">
+        <div id="crm-lead-alert" class="svc-form-alert" style="display:none"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div class="po-field">
+            <label class="po-field-label">Name <span class="po-required">*</span></label>
+            <input type="text" id="crm-lead-name" class="po-field-input" placeholder="Lead / person name" maxlength="255">
+          </div>
+          <div class="po-field">
+            <label class="po-field-label">Company</label>
+            <input type="text" id="crm-lead-company" class="po-field-input" placeholder="Company name" maxlength="255">
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div class="po-field">
+            <label class="po-field-label">Email</label>
+            <input type="email" id="crm-lead-email" class="po-field-input" placeholder="email@example.com" maxlength="255">
+          </div>
+          <div class="po-field">
+            <label class="po-field-label">Phone</label>
+            <input type="text" id="crm-lead-phone" class="po-field-input" placeholder="+1 555 000 0000" maxlength="50">
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div class="po-field">
+            <label class="po-field-label">Stage</label>
+            <select id="crm-lead-stage" class="po-field-input" style="appearance:auto"></select>
+          </div>
+          <div class="po-field">
+            <label class="po-field-label">Est. Value</label>
+            <input type="number" id="crm-lead-value" class="po-field-input" min="0" step="0.01" placeholder="0.00">
+          </div>
+        </div>
+        <div class="po-field">
+          <label class="po-field-label">Notes</label>
+          <textarea id="crm-lead-notes" class="po-field-input" rows="3" placeholder="Any notes…" style="resize:vertical"></textarea>
+        </div>
+      </div>
+      <div class="po-aim-footer">
+        <button class="po-btn-ghost" id="crm-lead-modal-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+        <button class="po-btn-primary" id="crm-lead-modal-save"><i class="fa fa-check"></i> Save Lead</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── CRM: Edit Lead Modal ── -->
+  <div class="modal-overlay" id="crm-lead-edit-modal" style="display:none">
+    <div class="po-aim-shell" style="width:500px">
+      <div class="po-aim-header">
+        <i class="fa fa-pen-to-square" style="color:#7c3aed"></i>
+        <span>Edit Lead</span>
+        <button class="psm-close" id="crm-lead-edit-close"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div class="po-aim-body" style="display:flex;flex-direction:column;gap:12px">
+        <div id="crm-lead-edit-alert" class="svc-form-alert" style="display:none"></div>
+        <input type="hidden" id="crm-lead-edit-id">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div class="po-field">
+            <label class="po-field-label">Name <span class="po-required">*</span></label>
+            <input type="text" id="crm-lead-edit-name" class="po-field-input" maxlength="255">
+          </div>
+          <div class="po-field">
+            <label class="po-field-label">Company</label>
+            <input type="text" id="crm-lead-edit-company" class="po-field-input" maxlength="255">
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div class="po-field">
+            <label class="po-field-label">Email</label>
+            <input type="email" id="crm-lead-edit-email" class="po-field-input" maxlength="255">
+          </div>
+          <div class="po-field">
+            <label class="po-field-label">Phone</label>
+            <input type="text" id="crm-lead-edit-phone" class="po-field-input" maxlength="50">
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div class="po-field">
+            <label class="po-field-label">Stage</label>
+            <select id="crm-lead-edit-stage" class="po-field-input" style="appearance:auto"></select>
+          </div>
+          <div class="po-field">
+            <label class="po-field-label">Est. Value</label>
+            <input type="number" id="crm-lead-edit-value" class="po-field-input" min="0" step="0.01">
+          </div>
+        </div>
+        <div class="po-field">
+          <label class="po-field-label">Notes</label>
+          <textarea id="crm-lead-edit-notes" class="po-field-input" rows="3" style="resize:vertical"></textarea>
+        </div>
+      </div>
+      <div class="po-aim-footer">
+        <button class="po-btn-ghost" id="crm-lead-edit-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+        <button class="po-btn-primary" id="crm-lead-edit-save"><i class="fa fa-check"></i> Save Changes</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── CRM: New Project Modal ── -->
+  <div class="modal-overlay" id="crm-project-modal" style="display:none">
+    <div class="po-aim-shell" style="width:420px">
+      <div class="po-aim-header">
+        <i class="fa fa-folder-plus" style="color:#7c3aed"></i>
+        <span>New Project</span>
+        <button class="psm-close" id="crm-project-modal-close"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div class="po-aim-body" style="display:flex;flex-direction:column;gap:12px">
+        <div id="crm-project-alert" class="svc-form-alert" style="display:none"></div>
+        <div class="po-field">
+          <label class="po-field-label">Project Name <span class="po-required">*</span></label>
+          <input type="text" id="crm-project-name" class="po-field-input" placeholder="e.g. Q3 Sales Pipeline" maxlength="255">
+        </div>
+        <div class="po-field">
+          <label class="po-field-label">Description</label>
+          <textarea id="crm-project-desc" class="po-field-input" rows="3" placeholder="Optional description…" style="resize:vertical"></textarea>
+        </div>
+      </div>
+      <div class="po-aim-footer">
+        <button class="po-btn-ghost" id="crm-project-modal-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+        <button class="po-btn-primary" id="crm-project-modal-save"><i class="fa fa-check"></i> Create Project</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── CRM: New Task Modal ── -->
+  <div class="modal-overlay" id="crm-task-modal" style="display:none">
+    <div class="po-aim-shell" style="width:420px">
+      <div class="po-aim-header">
+        <i class="fa fa-list-check" style="color:#7c3aed"></i>
+        <span>New Task</span>
+        <button class="psm-close" id="crm-task-modal-close"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div class="po-aim-body" style="display:flex;flex-direction:column;gap:12px">
+        <div id="crm-task-alert" class="svc-form-alert" style="display:none"></div>
+        <div class="po-field">
+          <label class="po-field-label">Title <span class="po-required">*</span></label>
+          <input type="text" id="crm-task-title" class="po-field-input" placeholder="Follow-up call, Send proposal…" maxlength="255">
+        </div>
+        <div class="po-field">
+          <label class="po-field-label">Due Date</label>
+          <input type="date" id="crm-task-due" class="po-field-input">
+        </div>
+        <div class="po-field">
+          <label class="po-field-label">Notes</label>
+          <textarea id="crm-task-notes" class="po-field-input" rows="3" placeholder="Optional description…" style="resize:vertical"></textarea>
+        </div>
+      </div>
+      <div class="po-aim-footer">
+        <button class="po-btn-ghost" id="crm-task-modal-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+        <button class="po-btn-primary" id="crm-task-modal-save"><i class="fa fa-check"></i> Create Task</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── CRM: Stage Management Modal ── -->
+  <div class="modal-overlay" id="crm-stages-modal" style="display:none">
+    <div class="po-aim-shell" style="width:520px;max-height:85vh;display:flex;flex-direction:column">
+      <div class="po-aim-header">
+        <i class="fa fa-layer-group" style="color:#7c3aed"></i>
+        <span id="crm-stages-modal-title">Manage Stages</span>
+        <button class="psm-close" id="crm-stages-modal-close"><i class="fa fa-xmark"></i></button>
+      </div>
+
+      <div class="po-aim-body" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:14px">
+        <div id="crm-stages-alert" class="svc-form-alert" style="display:none"></div>
+
+        <!-- Existing stages list -->
+        <div>
+          <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">
+            Current Stages — drag to reorder
+          </div>
+          <div id="crm-stages-list" style="border:1px solid var(--border);border-radius:8px;padding:4px 8px;min-height:40px">
+            <span style="font-size:12px;color:var(--text-muted)">Loading…</span>
+          </div>
+        </div>
+
+        <!-- Add new stage form -->
+        <div style="border-top:1px solid var(--border);padding-top:14px">
+          <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Add Stage</div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <input type="text" id="crm-stage-new-name" class="po-field-input" placeholder="Stage name" maxlength="60" style="flex:1;min-width:130px">
+            <input type="color" id="crm-stage-new-color" value="#64748b" title="Stage colour" style="width:36px;height:34px;padding:2px 3px;border:1px solid var(--border);border-radius:7px;cursor:pointer;background:none">
+            <label style="display:flex;align-items:center;gap:4px;font-size:12px;white-space:nowrap">
+              <input type="checkbox" id="crm-stage-new-won"> Won
+            </label>
+            <label style="display:flex;align-items:center;gap:4px;font-size:12px;white-space:nowrap">
+              <input type="checkbox" id="crm-stage-new-lost"> Lost
+            </label>
+            <button class="po-btn-primary" id="crm-stage-add-btn" style="padding:6px 14px;white-space:nowrap"><i class="fa fa-plus"></i> Add</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="po-aim-footer">
+        <button class="po-btn-ghost" id="crm-stages-modal-cancel"><i class="fa fa-xmark"></i> Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── CRM: Stage Automations Modal ── -->
+  <div class="modal-overlay" id="crm-auto-modal" style="display:none;z-index:1200">
+    <div class="po-aim-shell" style="width:580px;max-height:88vh;display:flex;flex-direction:column">
+      <div class="po-aim-header">
+        <i class="fa fa-bolt" style="color:#7c3aed"></i>
+        <span id="crm-auto-modal-title">Stage Automations</span>
+        <button class="psm-close" id="crm-auto-modal-close"><i class="fa fa-xmark"></i></button>
+      </div>
+
+      <div class="po-aim-body" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:14px">
+        <p style="font-size:12px;color:var(--text-muted);margin:0">
+          Send an email automatically whenever a lead enters this stage.
+        </p>
+
+        <!-- Existing automations list -->
+        <div id="crm-auto-list" style="display:flex;flex-direction:column;gap:8px">
+          <span style="font-size:12px;color:var(--text-muted)">Loading…</span>
+        </div>
+
+        <!-- Add / Edit form -->
+        <div style="border-top:1px solid var(--border);padding-top:14px">
+          <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px" id="crm-auto-form-heading">Add Automation</div>
+          <div id="crm-auto-form-alert" class="svc-form-alert" style="display:none;margin-bottom:8px"></div>
+          <input type="hidden" id="crm-auto-edit-id">
+
+          <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-bottom:10px">
+            <div class="po-field" style="flex:1;min-width:160px">
+              <label class="po-field-label">Send to <span class="po-required">*</span></label>
+              <select id="crm-auto-recipient" class="po-field-input" style="appearance:auto">
+                <option value="lead">Lead's email</option>
+                <option value="assigned_user">Assigned team member</option>
+                <option value="custom">Custom email address</option>
+              </select>
+            </div>
+            <div class="po-field" id="crm-auto-custom-email-wrap" style="flex:1;min-width:160px;display:none">
+              <label class="po-field-label">Custom email</label>
+              <input type="email" id="crm-auto-custom-email" class="po-field-input" placeholder="someone@example.com" maxlength="190">
+            </div>
+            <label style="display:flex;align-items:center;gap:5px;font-size:12px;white-space:nowrap;padding-bottom:2px">
+              <input type="checkbox" id="crm-auto-active" checked> Active
+            </label>
+          </div>
+
+          <div class="po-field" style="margin-bottom:8px">
+            <label class="po-field-label">Subject <span class="po-required">*</span></label>
+            <input type="text" id="crm-auto-subject" class="po-field-input" placeholder="e.g. Great news — let's talk next steps" maxlength="200">
+          </div>
+
+          <div class="po-field" style="margin-bottom:10px">
+            <label class="po-field-label">Message body <span class="po-required">*</span></label>
+            <textarea id="crm-auto-body" class="po-field-input" rows="5" placeholder="Hi {{lead.name}}, ..." style="resize:vertical"></textarea>
+          </div>
+
+          <div class="crm-merge-help" style="margin-bottom:10px">
+            Merge fields: <code>{{lead.name}}</code> <code>{{lead.company}}</code> <code>{{lead.email}}</code>
+            <code>{{lead.phone}}</code> <code>{{lead.estimated_value}}</code> <code>{{lead.stage_name}}</code>
+            <code>{{assigned_to.name}}</code> <code>{{project.name}}</code>
+          </div>
+
+          <div style="display:flex;gap:8px">
+            <button class="po-btn-primary" id="crm-auto-save-btn"><i class="fa fa-check"></i> <span id="crm-auto-save-label">Add Automation</span></button>
+            <button class="po-btn-ghost" id="crm-auto-cancel-edit" style="display:none"><i class="fa fa-xmark"></i> Cancel edit</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="po-aim-footer">
+        <button class="po-btn-ghost" id="crm-auto-modal-cancel"><i class="fa fa-xmark"></i> Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── CRM: Edit Stage Modal ── -->
+  <div class="modal-overlay" id="crm-stage-edit-modal" style="display:none">
+    <div class="po-aim-shell" style="width:400px">
+      <div class="po-aim-header">
+        <i class="fa fa-pen" style="color:#7c3aed"></i>
+        <span>Edit Stage</span>
+        <button class="psm-close" id="crm-stage-edit-close"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div class="po-aim-body" style="display:flex;flex-direction:column;gap:12px">
+        <div id="crm-stage-edit-alert" class="svc-form-alert" style="display:none"></div>
+        <input type="hidden" id="crm-stage-edit-id">
+        <div style="display:flex;gap:8px;align-items:center">
+          <div class="po-field" style="flex:1">
+            <label class="po-field-label">Name <span class="po-required">*</span></label>
+            <input type="text" id="crm-stage-edit-name" class="po-field-input" maxlength="60">
+          </div>
+          <div class="po-field" style="flex-shrink:0">
+            <label class="po-field-label">Colour</label>
+            <input type="color" id="crm-stage-edit-color" style="width:48px;height:34px;padding:2px 3px;border:1px solid var(--border);border-radius:7px;cursor:pointer;background:none">
+          </div>
+        </div>
+        <div style="display:flex;gap:16px">
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px">
+            <input type="checkbox" id="crm-stage-edit-won"> Mark as Won stage
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px">
+            <input type="checkbox" id="crm-stage-edit-lost"> Mark as Lost stage
+          </label>
+        </div>
+      </div>
+      <div class="po-aim-footer">
+        <button class="po-btn-ghost" id="crm-stage-edit-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+        <button class="po-btn-primary" id="crm-stage-edit-save"><i class="fa fa-check"></i> Save Stage</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── CRM: New Form Modal ── -->
+  <div class="modal-overlay" id="crm-form-modal" style="display:none">
+    <div class="po-aim-shell" style="width:540px">
+      <div class="po-aim-header">
+        <i class="fa fa-wpforms" style="color:#7c3aed"></i>
+        <span>New Form</span>
+        <button class="psm-close" id="crm-form-modal-close"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div class="po-aim-body" style="display:flex;flex-direction:column;gap:12px">
+        <div id="crm-form-modal-alert" class="svc-form-alert" style="display:none"></div>
+        <div class="po-field">
+          <label class="po-field-label">Form name <span class="po-required">*</span></label>
+          <input type="text" id="crm-form-name-input" class="po-field-input" placeholder="e.g. Contact Us" maxlength="255">
+        </div>
+        <div>
+          <label class="po-field-label" style="display:block;margin-bottom:8px">Start from a template</label>
+          <div class="crm-tpl-grid" id="crm-form-tpl-grid">
+            <!-- populated by JS -->
+          </div>
+        </div>
+      </div>
+      <div class="po-aim-footer">
+        <button class="po-btn-ghost" id="crm-form-modal-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+        <button class="po-btn-primary" id="crm-form-modal-create"><i class="fa fa-plus"></i> Create Form</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── CRM: Add Custom Field Modal ── -->
+  <div class="modal-overlay" id="crm-cf-modal" style="display:none">
+    <div class="po-aim-shell" style="width:400px">
+      <div class="po-aim-header">
+        <i class="fa fa-sliders" style="color:#7c3aed"></i>
+        <span>Add Custom Field</span>
+        <button class="psm-close" id="crm-cf-modal-close"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div class="po-aim-body" style="display:flex;flex-direction:column;gap:12px">
+        <div id="crm-cf-alert" class="svc-form-alert" style="display:none"></div>
+        <div class="po-field">
+          <label class="po-field-label">Field name <span class="po-required">*</span></label>
+          <input type="text" id="crm-cf-name" class="po-field-input" placeholder="e.g. Budget" maxlength="80">
+        </div>
+        <div class="po-field">
+          <label class="po-field-label">Field type</label>
+          <select id="crm-cf-type" class="po-field-input" style="appearance:auto">
+            <option value="text">Text</option>
+            <option value="textarea">Long text</option>
+            <option value="number">Number</option>
+            <option value="date">Date</option>
+            <option value="select">Dropdown</option>
+            <option value="checkbox">Yes / No</option>
+          </select>
+        </div>
+      </div>
+      <div class="po-aim-footer">
+        <button class="po-btn-ghost" id="crm-cf-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+        <button class="po-btn-primary" id="crm-cf-save"><i class="fa fa-check"></i> Add Field</button>
+      </div>
+    </div>
+  </div>
 
   <!-- ── Add User Modal ── -->
   <div class="modal-overlay" id="um-add-modal" style="display:none">
@@ -4592,7 +5674,89 @@
     </div>
   </div>
 
+<!-- ── Register lock screen ──────────────────────────────────────────── -->
+<div id="reg-lock-screen" style="display:none">
+  <div class="reg-lock-body">
+    <div class="reg-lock-icon"><i class="fa fa-lock"></i></div>
+    <h2 class="reg-lock-title">Cash Register Closed</h2>
+    <p class="reg-lock-subtitle">Reopens at <strong id="reg-lock-at-time">—</strong></p>
+    <div class="reg-lock-countdown" id="reg-lock-countdown">—</div>
+    <button class="reg-lock-unlock-btn" id="reg-lock-unlock-btn">
+      <i class="fa fa-unlock"></i> Unlock Register
+    </button>
+  </div>
+</div>
+
 </div><!-- /app-shell -->
+
+<!-- ── Register lock duration modal ──────────────────────────────────── -->
+<div id="reg-lock-modal" class="bwz-overlay" style="display:none" role="dialog" aria-modal="true">
+  <div class="eod-modal" style="width:390px">
+    <div class="eod-modal-header">
+      <span><i class="fa fa-lock"></i> Close Cash Register</span>
+    </div>
+    <div class="eod-modal-body">
+      <p style="font-size:12.5px;color:var(--text-muted);margin:0 0 14px">Choose how long to close the register. All POS activity will be disabled.</p>
+      <div class="reg-lock-opts">
+        <label class="reg-lock-opt">
+          <input type="radio" name="reg-lock-dur" id="rld-day" value="day" checked>
+          <span class="reg-lock-opt-label">
+            <i class="fa fa-moon"></i>
+            <span><strong>Whole Day</strong><small>Reopens at 12:00 AM (midnight)</small></span>
+          </span>
+        </label>
+        <label class="reg-lock-opt">
+          <input type="radio" name="reg-lock-dur" id="rld-1h" value="1h">
+          <span class="reg-lock-opt-label">
+            <i class="fa fa-clock"></i>
+            <span><strong>1 Hour</strong><small id="rld-1h-until">Until —</small></span>
+          </span>
+        </label>
+        <label class="reg-lock-opt">
+          <input type="radio" name="reg-lock-dur" id="rld-6h" value="6h">
+          <span class="reg-lock-opt-label">
+            <i class="fa fa-hourglass-half"></i>
+            <span><strong>6 Hours</strong><small id="rld-6h-until">Until —</small></span>
+          </span>
+        </label>
+        <label class="reg-lock-opt">
+          <input type="radio" name="reg-lock-dur" id="rld-custom" value="custom">
+          <span class="reg-lock-opt-label">
+            <i class="fa fa-sliders"></i>
+            <span><strong>Custom Time</strong><small>Pick exact unlock time</small></span>
+          </span>
+        </label>
+      </div>
+      <div id="reg-lock-custom-row" style="display:none;margin-top:12px">
+        <label class="psm-field-label" for="reg-lock-custom-time">Reopen at</label>
+        <input type="time" id="reg-lock-custom-time" class="psm-input" style="width:130px;margin-top:4px">
+        <p style="font-size:11px;color:var(--text-muted);margin:4px 0 0">If the time has already passed today, it will lock until that time tomorrow.</p>
+      </div>
+    </div>
+    <div class="eod-modal-footer">
+      <button class="psm-btn-cancel" id="reg-lock-cancel">Cancel</button>
+      <button class="eod-settle-btn" id="reg-lock-confirm"><i class="fa fa-lock"></i> Lock Register</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Register lock password modal ──────────────────────────────────── -->
+<div id="reg-lock-pw-modal" class="bwz-overlay" style="display:none" role="dialog" aria-modal="true">
+  <div class="eod-modal" style="width:320px">
+    <div class="eod-modal-header">
+      <span><i class="fa fa-key"></i> Confirm Password</span>
+    </div>
+    <div class="eod-modal-body">
+      <p style="font-size:12.5px;color:var(--text-muted);margin:0 0 12px">Enter your password to <span id="reg-pw-action-label">lock</span> the register.</p>
+      <input type="password" id="reg-lock-pw-input" class="psm-input" placeholder="Your password" autocomplete="current-password">
+      <div id="reg-lock-pw-alert" class="psm-error-msg" style="display:none;margin-top:8px"></div>
+    </div>
+    <div class="eod-modal-footer">
+      <button class="psm-btn-cancel" id="reg-lock-pw-cancel">Cancel</button>
+      <button class="eod-settle-btn" id="reg-lock-pw-confirm"><i class="fa fa-check"></i> Confirm</button>
+    </div>
+  </div>
+</div>
 
 <!-- ── Backstage overlay ─────────────────────────────────────────────── -->
 <div id="backstage">
@@ -6417,6 +7581,133 @@
   </div>
 </div>
 
+<!-- ── CSV Product Import modal ──────────────────────────────────────── -->
+<div id="csv-import-modal" class="bwz-overlay" style="display:none" role="dialog" aria-modal="true">
+  <div class="csv-import-card">
+    <!-- Header -->
+    <div class="csv-import-header">
+      <div class="csv-import-title"><i class="fa fa-file-arrow-up"></i> Import Products from CSV</div>
+      <button class="csv-import-close" id="csv-import-close"><i class="fa fa-xmark"></i></button>
+    </div>
+
+    <!-- Step indicator -->
+    <div class="csv-step-track">
+      <div class="csv-step active" id="csv-step-ind-1"><span class="csv-step-num">1</span><span class="csv-step-label">Upload</span></div>
+      <div class="csv-step-line"></div>
+      <div class="csv-step" id="csv-step-ind-2"><span class="csv-step-num">2</span><span class="csv-step-label">Preview</span></div>
+      <div class="csv-step-line"></div>
+      <div class="csv-step" id="csv-step-ind-3"><span class="csv-step-num">3</span><span class="csv-step-label">Result</span></div>
+    </div>
+
+    <!-- Step 1: Upload -->
+    <div class="csv-import-body" id="csv-step-1">
+      <div class="csv-dropzone" id="csv-dropzone">
+        <i class="fa fa-cloud-arrow-up csv-dropzone-icon"></i>
+        <p class="csv-dropzone-text">Drag &amp; drop your CSV file here</p>
+        <p class="csv-dropzone-sub">or click to browse</p>
+        <input type="file" id="csv-file-input" accept=".csv,text/csv" style="position:absolute;inset:0;opacity:0;cursor:pointer">
+      </div>
+      <div class="csv-upload-info">
+        <div class="csv-info-item"><i class="fa fa-circle-check"></i> First row must be column headers</div>
+        <div class="csv-info-item"><i class="fa fa-circle-check"></i> Required columns: <strong>name</strong>, <strong>price</strong></div>
+        <div class="csv-info-item"><i class="fa fa-circle-check"></i> Optional: sku, stock, category, brand, description</div>
+        <div class="csv-info-item"><i class="fa fa-circle-check"></i> Max 500 rows per import</div>
+      </div>
+      <div class="csv-import-footer">
+        <button class="csv-sample-btn" id="csv-download-sample"><i class="fa fa-download"></i> Download Sample CSV</button>
+      </div>
+    </div>
+
+    <!-- Step 2: Preview -->
+    <div class="csv-import-body" id="csv-step-2" style="display:none">
+      <div class="csv-preview-summary" id="csv-preview-summary"></div>
+      <div class="csv-preview-wrap">
+        <table class="csv-preview-tbl" id="csv-preview-tbl">
+          <thead id="csv-preview-thead"></thead>
+          <tbody id="csv-preview-tbody"></tbody>
+        </table>
+      </div>
+      <div class="csv-import-footer">
+        <button class="psm-btn-cancel" id="csv-back-btn"><i class="fa fa-arrow-left"></i> Back</button>
+        <button class="eod-settle-btn" id="csv-import-btn"><i class="fa fa-file-import"></i> Import <span id="csv-import-count"></span> Products</button>
+      </div>
+    </div>
+
+    <!-- Step 3: Result -->
+    <div class="csv-import-body" id="csv-step-3" style="display:none">
+      <div class="csv-result-summary" id="csv-result-summary"></div>
+      <div class="csv-result-errors" id="csv-result-errors" style="display:none">
+        <div class="csv-result-errors-title"><i class="fa fa-triangle-exclamation"></i> Rows with errors</div>
+        <div class="csv-result-errors-list" id="csv-result-errors-list"></div>
+      </div>
+      <div class="csv-import-footer">
+        <button class="psm-btn-cancel" id="csv-done-btn">Done</button>
+        <button class="eod-settle-btn" id="csv-import-more-btn"><i class="fa fa-plus"></i> Import More</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Warranty prompt modal ─────────────────────────────────────────── -->
+<div id="pos-warranty-overlay" class="bwz-overlay" style="display:none" role="dialog" aria-modal="true">
+  <div class="eod-modal" style="width:370px">
+    <div class="eod-modal-header">
+      <span><i class="fa fa-shield-halved"></i> Warranty</span>
+    </div>
+    <div class="eod-modal-body">
+      <p id="pos-warranty-product-name" style="font-size:13px;font-weight:700;color:var(--text);margin:0 0 14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></p>
+      <div class="warranty-opts">
+        <label class="warranty-opt">
+          <input type="radio" name="warranty-type" id="wt-lifetime" value="lifetime" checked>
+          <span class="warranty-opt-label"><i class="fa fa-infinity"></i> Lifetime warranty</span>
+        </label>
+        <label class="warranty-opt">
+          <input type="radio" name="warranty-type" id="wt-days" value="days">
+          <span class="warranty-opt-label"><i class="fa fa-calendar-days"></i> Fixed duration</span>
+        </label>
+      </div>
+      <div id="warranty-days-row" style="display:none;margin-top:12px">
+        <label class="psm-field-label" for="pos-warranty-days">Warranty period (days)</label>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
+          <input type="number" id="pos-warranty-days" class="psm-input" min="1" max="36500" placeholder="365" style="max-width:120px">
+          <span style="font-size:12px;color:var(--text-muted)" id="warranty-expiry-preview"></span>
+        </div>
+        <div class="warranty-shortcut-btns">
+          <button type="button" class="wty-shortcut" data-days="30">30d</button>
+          <button type="button" class="wty-shortcut" data-days="90">90d</button>
+          <button type="button" class="wty-shortcut" data-days="180">6mo</button>
+          <button type="button" class="wty-shortcut" data-days="365">1yr</button>
+          <button type="button" class="wty-shortcut" data-days="730">2yr</button>
+        </div>
+      </div>
+    </div>
+    <div class="eod-modal-footer">
+      <button class="psm-btn-cancel" id="pos-warranty-cancel">Cancel</button>
+      <button class="eod-settle-btn" id="pos-warranty-confirm"><i class="fa fa-check"></i> Add to Cart</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Price override modal ──────────────────────────────────────────── -->
+<div id="pos-price-overlay" class="bwz-overlay" style="display:none" role="dialog" aria-modal="true">
+  <div class="eod-modal" style="width:340px">
+    <div class="eod-modal-header">
+      <span><i class="fa fa-tag"></i> Set Price</span>
+    </div>
+    <div class="eod-modal-body">
+      <p id="pos-price-product-name" style="font-size:13px;font-weight:700;color:var(--text);margin:0 0 14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></p>
+      <div class="psm-field-row" style="margin:0">
+        <label class="psm-field-label" for="pos-price-input">Unit price</label>
+        <input type="number" id="pos-price-input" class="psm-input" min="0" step="0.01" placeholder="0.00" style="max-width:180px">
+      </div>
+    </div>
+    <div class="eod-modal-footer">
+      <button class="psm-btn-cancel" id="pos-price-cancel">Cancel</button>
+      <button class="eod-settle-btn" id="pos-price-confirm"><i class="fa fa-check"></i> Add to Cart</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── Toast container ───────────────────────────────────────────────── -->
 <!-- ── POS Settings Modal ─────────────────────────────────────────────── -->
 <div id="pos-settings-modal" class="modal-overlay" style="display:none">
@@ -6461,6 +7752,12 @@
         </button>
         <button class="psm-nav-item" data-tab="roles">
           <i class="fa fa-shield-halved"></i><span>Roles</span>
+        </button>
+        <button class="psm-nav-item" data-tab="mail">
+          <i class="fa fa-envelope"></i><span>Mail</span>
+        </button>
+        <button class="psm-nav-item" data-tab="counters">
+          <i class="fa fa-cash-register"></i><span>Counters</span>
         </button>
       </nav>
 
@@ -6565,6 +7862,22 @@
               </div>
               <label class="psm-switch"><input type="checkbox" id="psm-checkout-modal"><span class="psm-switch-track"></span></label>
             </div>
+            <div class="psm-field-row">
+              <label class="psm-field-label" for="psm-stock-mode">Stock batch selection</label>
+              <select id="psm-stock-mode" class="psm-select">
+                <option value="fifo">Automatic — First In, First Out (FIFO)</option>
+                <option value="choose">Choose batch manually at checkout</option>
+                <option value="last_price">Use latest batch (last price update)</option>
+              </select>
+              <span class="psm-hint">How the system picks which stock batch to deduct when a product has multiple batches</span>
+            </div>
+            <div class="psm-toggle-row">
+              <div class="psm-toggle-info">
+                <span class="psm-toggle-name">Set price modal (price override)</span>
+                <span class="psm-toggle-desc">When enabled, ask for a custom unit price before each product is added to the cart</span>
+              </div>
+              <label class="psm-switch"><input type="checkbox" id="psm-choose-price"><span class="psm-switch-track"></span></label>
+            </div>
           </div>
 
           <div class="psm-section">
@@ -6594,6 +7907,13 @@
                 <option value="immediate">Immediate — settle per sale</option>
                 <option value="end_of_day">End of day — batch settlement</option>
               </select>
+            </div>
+            <div class="psm-toggle-row">
+              <div class="psm-toggle-info">
+                <span class="psm-toggle-name">Don't settle payments to account</span>
+                <span class="psm-toggle-desc">Track cash in-hand instead of depositing to a bank account. Requires entering opening float when opening POS each day.</span>
+              </div>
+              <label class="psm-switch"><input type="checkbox" id="psm-dont-settle"><span class="psm-switch-track"></span></label>
             </div>
           </div>
 
@@ -6730,6 +8050,167 @@
           </div>
         </div>
 
+        <!-- Mail settings panel -->
+        <div class="psm-panel" id="psm-tab-mail" style="display:none">
+
+          <div class="psm-section">
+            <div class="psm-section-label"><i class="fa fa-user-pen"></i> Sender Identity</div>
+            <div class="psm-field-row">
+              <label class="psm-field-label" for="psm-mail-from-name">From Name</label>
+              <input type="text" id="psm-mail-from-name" class="psm-input" placeholder="Your Business Name">
+            </div>
+            <div class="psm-field-row">
+              <label class="psm-field-label" for="psm-mail-from-address">From Email</label>
+              <input type="email" id="psm-mail-from-address" class="psm-input" placeholder="hello@yourbusiness.com">
+            </div>
+          </div>
+
+          <div class="psm-section">
+            <div class="psm-section-label"><i class="fa fa-server"></i> Mail Provider</div>
+            <div class="psm-field-row">
+              <label class="psm-field-label" for="psm-mail-provider">Provider</label>
+              <select id="psm-mail-provider" class="psm-select">
+                <option value="platform">Platform (default)</option>
+                <option value="smtp">Custom SMTP</option>
+                <option value="resend">Resend</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- SMTP fields -->
+          <div id="psm-mail-smtp-section" class="psm-section" style="display:none">
+            <div class="psm-section-label"><i class="fa fa-plug"></i> SMTP Configuration</div>
+            <div class="psm-field-row">
+              <label class="psm-field-label" for="psm-mail-smtp-host">SMTP Host</label>
+              <input type="text" id="psm-mail-smtp-host" class="psm-input" placeholder="smtp.example.com">
+            </div>
+            <div class="psm-field-row">
+              <label class="psm-field-label" for="psm-mail-smtp-port">Port</label>
+              <input type="number" id="psm-mail-smtp-port" class="psm-input" min="1" max="65535" placeholder="587" style="width:100px">
+            </div>
+            <div class="psm-field-row">
+              <label class="psm-field-label" for="psm-mail-smtp-encryption">Encryption</label>
+              <select id="psm-mail-smtp-encryption" class="psm-select">
+                <option value="tls">TLS</option>
+                <option value="ssl">SSL</option>
+                <option value="none">None</option>
+              </select>
+            </div>
+            <div class="psm-field-row">
+              <label class="psm-field-label" for="psm-mail-smtp-username">Username</label>
+              <input type="text" id="psm-mail-smtp-username" class="psm-input" placeholder="SMTP username" autocomplete="off">
+            </div>
+            <div class="psm-field-row">
+              <label class="psm-field-label" for="psm-mail-smtp-password">Password</label>
+              <input type="password" id="psm-mail-smtp-password" class="psm-input" placeholder="Leave blank to keep existing" autocomplete="new-password">
+            </div>
+            <div id="psm-mail-smtp-password-hint" style="font-size:11px;color:var(--text-muted);margin-top:-6px;margin-bottom:10px;padding-left:160px;display:none">
+              <i class="fa fa-lock"></i> Password is saved — leave blank to keep it.
+            </div>
+          </div>
+
+          <!-- Resend fields -->
+          <div id="psm-mail-resend-section" class="psm-section" style="display:none">
+            <div class="psm-section-label"><i class="fa fa-key"></i> Resend Configuration</div>
+            <div class="psm-field-row">
+              <label class="psm-field-label" for="psm-mail-resend-key">API Key</label>
+              <input type="password" id="psm-mail-resend-key" class="psm-input" placeholder="Leave blank to keep existing" autocomplete="new-password">
+            </div>
+            <div id="psm-mail-resend-key-hint" style="font-size:11px;color:var(--text-muted);margin-top:-6px;margin-bottom:10px;padding-left:160px;display:none">
+              <i class="fa fa-lock"></i> API key is saved — leave blank to keep it.
+            </div>
+          </div>
+
+          <div class="psm-section">
+            <div class="psm-section-label"><i class="fa fa-file-lines"></i> Options</div>
+            <div class="psm-toggle-row">
+              <label class="psm-field-label">Letterhead in emails</label>
+              <label class="psm-switch"><input type="checkbox" id="psm-mail-letterhead"><span class="psm-switch-track"></span></label>
+            </div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:-4px;padding-left:4px">Attach your business letterhead to every outgoing email.</div>
+          </div>
+
+          <div class="psm-section">
+            <div class="psm-section-label"><i class="fa fa-paper-plane"></i> Send Test Email</div>
+            <div class="psm-field-row">
+              <label class="psm-field-label" for="psm-mail-test-to">Recipient</label>
+              <input type="email" id="psm-mail-test-to" class="psm-input" placeholder="you@example.com">
+            </div>
+            <div class="psm-field-row">
+              <span class="psm-field-label"></span>
+              <div style="display:flex;align-items:center;gap:10px">
+                <button class="psm-btn-save" id="psm-mail-test-btn" style="margin:0;padding:8px 20px;background:var(--accent)">
+                  <i class="fa fa-paper-plane"></i> Send Test
+                </button>
+                <span id="psm-mail-test-msg" style="font-size:12px;display:none"></span>
+              </div>
+            </div>
+          </div>
+
+          <div class="psm-section">
+            <div class="psm-section-label"><i class="fa fa-circle-check"></i> Verify Credentials</div>
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;padding:0 4px">
+              Checks that the SMTP server is reachable and your username/password are accepted — no email is sent.
+              For Resend, validates the API key.
+            </div>
+            <div class="psm-field-row">
+              <span class="psm-field-label"></span>
+              <div style="display:flex;align-items:center;gap:10px">
+                <button class="psm-btn-save" id="psm-mail-verify-btn" style="margin:0;padding:8px 20px;background:#16a34a">
+                  <i class="fa fa-shield-halved"></i> Verify Credentials
+                </button>
+                <span id="psm-mail-verify-msg" style="font-size:12px;display:none"></span>
+              </div>
+            </div>
+          </div>
+
+          <div class="psm-section">
+            <div class="psm-section-label"></div>
+            <div class="psm-field-row" style="padding-top:4px">
+              <span class="psm-field-label"></span>
+              <div style="display:flex;align-items:center;gap:10px">
+                <button class="psm-btn-save" id="psm-mail-save" style="margin:0;padding:8px 20px">
+                  <i class="fa fa-floppy-disk"></i> Save mail settings
+                </button>
+                <span id="psm-mail-save-msg" style="font-size:12px;display:none"></span>
+              </div>
+            </div>
+          </div>
+
+        </div><!-- /psm-tab-mail -->
+
+        <!-- Counters panel -->
+        <div class="psm-panel" id="psm-tab-counters" style="display:none">
+          <div class="psm-section">
+            <div class="psm-section-label"><i class="fa fa-cash-register"></i> POS Counters</div>
+            <p class="psm-hint" style="margin-bottom:12px">Define counters (tills / checkout lanes). If multi-branch is enabled, assign a counter to a specific branch so it only appears when that branch is selected.</p>
+
+            <!-- Add counter form -->
+            <div class="psm-field-2col" style="margin-bottom:10px">
+              <div>
+                <label class="psm-field-label" for="psm-counter-name-input">Counter name</label>
+                <input type="text" id="psm-counter-name-input" class="psm-input" placeholder="e.g. Counter 1, Till A">
+              </div>
+              <div>
+                <label class="psm-field-label" for="psm-counter-branch-input">Branch (optional)</label>
+                <select id="psm-counter-branch-input" class="psm-select">
+                  <option value="">All branches</option>
+                </select>
+              </div>
+            </div>
+            <button class="psm-btn-save" id="psm-counter-add-btn" style="width:auto;padding:6px 16px">
+              <i class="fa fa-plus"></i> Add Counter
+            </button>
+          </div>
+
+          <div class="psm-section">
+            <div class="psm-section-label"><i class="fa fa-list"></i> Existing Counters</div>
+            <div id="psm-counters-list">
+              <div class="psm-hint">No counters defined yet.</div>
+            </div>
+          </div>
+        </div><!-- /psm-tab-counters -->
+
       </div><!-- /psm-content -->
     </div><!-- /psm-layout -->
 
@@ -6807,6 +8288,11 @@
             <input type="text" id="cm-f-address" class="cm-input" placeholder="Street, City">
             <label class="cm-label">Notes</label>
             <textarea id="cm-f-notes" class="cm-input cm-textarea" placeholder="Any notes about this customer…" rows="3"></textarea>
+            <label class="cm-label" style="margin-top:4px">Customer Type</label>
+            <div class="cm-type-toggle" id="cm-f-type-wrap">
+              <label class="cm-type-opt"><input type="radio" name="cm-customer-type" value="retail" checked> <i class="fa fa-user"></i> Retail</label>
+              <label class="cm-type-opt"><input type="radio" name="cm-customer-type" value="wholesale"> <i class="fa fa-boxes-stacked"></i> Wholesale</label>
+            </div>
           </div>
           <div class="cm-form-actions">
             <button class="psm-btn-cancel" id="cm-form-cancel"><i class="fa fa-xmark"></i> Cancel</button>
@@ -6852,7 +8338,11 @@
     <button class="cust-new-btn" id="cust-show-create"><i class="fa fa-user-plus"></i> New Customer</button>
     <div id="cust-new-form" style="display:none" class="cust-new-form">
       <input type="text" id="cust-new-name"  class="ci-popup-input" placeholder="Full name *" style="margin-bottom:8px">
-      <input type="text" id="cust-new-phone" class="ci-popup-input" placeholder="Phone (optional)">
+      <input type="text" id="cust-new-phone" class="ci-popup-input" placeholder="Phone (optional)" style="margin-bottom:8px">
+      <div class="cm-type-toggle" style="margin-bottom:8px">
+        <label class="cm-type-opt"><input type="radio" name="cust-new-type" value="retail" checked> <i class="fa fa-user"></i> Retail</label>
+        <label class="cm-type-opt"><input type="radio" name="cust-new-type" value="wholesale"> <i class="fa fa-boxes-stacked"></i> Wholesale</label>
+      </div>
       <div class="cust-new-actions">
         <button class="psm-btn-cancel" id="cust-new-cancel"><i class="fa fa-xmark"></i> Cancel</button>
         <button class="qap-btn-save"   id="cust-new-save"><i class="fa fa-check"></i> Save</button>
@@ -7058,6 +8548,7 @@
   </div>
 </div>
 
+<!-- ── Receipt preview modal (shown after checkout) ──────────────────── -->
 <div id="receipt-modal" class="modal-overlay" style="display:none">
   <div class="rcpt-shell">
     <div class="rcpt-toolbar">
@@ -7068,8 +8559,80 @@
       </div>
     </div>
     <div class="rcpt-preview-wrap">
-      <div class="rcpt-paper" id="rcpt-paper">
-        <!-- filled by JS -->
+      <div class="rcpt-paper" id="rcpt-paper"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Receipt layout editor (template designer, not sale-specific) ───── -->
+<div id="receipt-editor-modal" class="modal-overlay" style="display:none">
+  <div class="rcpt-editor-shell">
+    <div class="rcpt-editor-toolbar">
+      <span class="rcpt-toolbar-title"><i class="fa fa-pen-to-square"></i> Receipt Layout Editor</span>
+      <div class="rcpt-toolbar-actions">
+        <button class="rcpt-btn-save" id="rcpt-ed-save"><i class="fa fa-floppy-disk"></i> Save layout</button>
+        <button class="rcpt-btn-close" id="rcpt-ed-close"><i class="fa fa-xmark"></i> Close</button>
+      </div>
+    </div>
+    <div class="rcpt-body">
+      <!-- settings panel -->
+      <div class="rcpt-editor-panel">
+
+        <div class="rcpt-ed-section">
+          <div class="rcpt-ed-label"><i class="fa fa-building"></i> Business info</div>
+          <div class="rcpt-ed-checks">
+            <label class="rcpt-ed-check"><input type="checkbox" id="rcpt-ed-show-biz"> Show business name</label>
+            <label class="rcpt-ed-check"><input type="checkbox" id="rcpt-ed-show-addr"> Show address</label>
+          </div>
+          <textarea id="rcpt-ed-address" class="rcpt-ed-textarea" rows="2" placeholder="Street, City, Phone…" style="margin-top:6px"></textarea>
+        </div>
+
+        <div class="rcpt-ed-section">
+          <label class="rcpt-ed-label" for="rcpt-ed-header"><i class="fa fa-heading"></i> Header text</label>
+          <textarea id="rcpt-ed-header" class="rcpt-ed-textarea" rows="2" placeholder="Tagline, website, hours…"></textarea>
+        </div>
+
+        <hr class="rcpt-ed-divider">
+
+        <div class="rcpt-ed-section">
+          <label class="rcpt-ed-label" for="rcpt-ed-footer"><i class="fa fa-comment"></i> Footer / thank-you</label>
+          <textarea id="rcpt-ed-footer" class="rcpt-ed-textarea" rows="2" placeholder="Thank you for your purchase!"></textarea>
+        </div>
+
+        <hr class="rcpt-ed-divider">
+
+        <div class="rcpt-ed-section">
+          <div class="rcpt-ed-label"><i class="fa fa-eye"></i> Show on every receipt</div>
+          <div class="rcpt-ed-checks">
+            <label class="rcpt-ed-check"><input type="checkbox" id="rcpt-ed-show-cashier"> Cashier name</label>
+            <label class="rcpt-ed-check"><input type="checkbox" id="rcpt-ed-show-acct"> Payment details</label>
+          </div>
+        </div>
+
+        <hr class="rcpt-ed-divider">
+
+        <div class="rcpt-ed-section">
+          <div class="rcpt-ed-label"><i class="fa fa-language"></i> Print language</div>
+          <div class="rcpt-lang-group">
+            <div class="rcpt-lang-opt">
+              <input type="radio" name="rcpt-lang" id="rcpt-lang-en" value="en" checked>
+              <label for="rcpt-lang-en">English</label>
+            </div>
+            <div class="rcpt-lang-opt">
+              <input type="radio" name="rcpt-lang" id="rcpt-lang-si" value="si">
+              <label for="rcpt-lang-si">සිංහල</label>
+            </div>
+            <div class="rcpt-lang-opt">
+              <input type="radio" name="rcpt-lang" id="rcpt-lang-ta" value="ta">
+              <label for="rcpt-lang-ta">தமிழ்</label>
+            </div>
+          </div>
+        </div>
+
+      </div>
+      <!-- live sample preview -->
+      <div class="rcpt-preview-wrap">
+        <div class="rcpt-paper" id="rcpt-ed-paper"></div>
       </div>
     </div>
   </div>
@@ -7279,6 +8842,54 @@
     <div class="eod-modal-footer" id="eod-footer" style="display:none">
       <span id="eod-footer-info" class="eod-footer-info"></span>
       <button class="eod-settle-btn" id="eod-settle-btn"><i class="fa fa-check-circle"></i> Settle All to Bank</button>
+    </div>
+  </div>
+</div>
+
+<!-- Cash Drawer — Opening Float Modal -->
+<div id="cash-opening-overlay" class="bwz-overlay" style="display:none" role="dialog" aria-modal="true">
+  <div class="eod-modal" style="width:400px">
+    <div class="eod-modal-header">
+      <span><i class="fa fa-cash-register"></i> Open Cash Drawer</span>
+    </div>
+    <div class="eod-modal-body">
+      <p style="margin:0 0 16px;color:var(--text-muted);font-size:13px">Enter the amount of cash in the drawer at the start of today's shift.</p>
+      <div class="psm-field-row" style="margin:0">
+        <label class="psm-field-label" for="cash-opening-amount">Opening cash amount</label>
+        <input type="number" id="cash-opening-amount" class="psm-input" min="0" step="0.01" placeholder="0.00" style="max-width:200px">
+      </div>
+    </div>
+    <div class="eod-modal-footer">
+      <button class="psm-btn-cancel" id="cash-opening-skip">Skip</button>
+      <button class="eod-settle-btn" id="cash-opening-confirm"><i class="fa fa-check"></i> Confirm</button>
+    </div>
+  </div>
+</div>
+
+<!-- Cash Drawer — Withdraw Modal -->
+<div id="cash-withdraw-overlay" class="bwz-overlay" style="display:none" role="dialog" aria-modal="true">
+  <div class="eod-modal" style="width:400px">
+    <div class="eod-modal-header">
+      <span><i class="fa fa-arrow-up-from-bracket"></i> Withdraw Cash</span>
+      <button class="eod-close-btn" id="cash-withdraw-close"><i class="fa fa-xmark"></i></button>
+    </div>
+    <div class="eod-modal-body">
+      <div id="cash-withdraw-balance-hint" class="cash-withdraw-balance" style="display:none"></div>
+      <div class="psm-field-row">
+        <label class="psm-field-label" for="cash-withdraw-amount">Amount</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="number" id="cash-withdraw-amount" class="psm-input" min="0.01" step="0.01" placeholder="0.00" style="max-width:160px">
+          <button class="psm-btn-cancel" id="cash-withdraw-fill-max" style="font-size:11px;padding:5px 10px;white-space:nowrap">All</button>
+        </div>
+      </div>
+      <div class="psm-field-row" style="margin-bottom:0">
+        <label class="psm-field-label" for="cash-withdraw-note">Note (optional)</label>
+        <input type="text" id="cash-withdraw-note" class="psm-input" maxlength="255" placeholder="Reason for withdrawal">
+      </div>
+    </div>
+    <div class="eod-modal-footer">
+      <button class="psm-btn-cancel" id="cash-withdraw-cancel">Cancel</button>
+      <button class="eod-settle-btn" id="cash-withdraw-confirm"><i class="fa fa-arrow-up-from-bracket"></i> Withdraw</button>
     </div>
   </div>
 </div>
@@ -8076,6 +9687,12 @@
     <img id="guide-char-img" src="img/animtors.gif" alt="Guide assistant" draggable="false">
     <button id="guide-char-dismiss" title="Hide guide"><i class="fa fa-xmark"></i></button>
   </div>
+</div>
+
+<!-- Product card context menu -->
+<div id="prod-ctx-menu">
+  <div class="prod-ctx-item" id="prod-ctx-copy-name"><i class="fa fa-font"></i> Copy product name</div>
+  <div class="prod-ctx-item" id="prod-ctx-copy-sku"><i class="fa fa-barcode"></i> Copy SKU</div>
 </div>
 
 <script src="js/d3.min.js"></script>

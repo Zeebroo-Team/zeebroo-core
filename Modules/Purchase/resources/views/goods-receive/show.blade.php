@@ -166,6 +166,38 @@
             </div>
         @endif
 
+        @php
+            $ovBalanceLines = [];
+            if ($grn->purchase?->relationLoaded('items')) {
+                foreach ($grn->purchase->items as $ovLine) {
+                    $ovRcvd = $ovLine->relationLoaded('goodsReceiveNoteItems')
+                        ? (float) $ovLine->goodsReceiveNoteItems->sum('quantity_received')
+                        : 0.0;
+                    $ovRem = max(0.0, round((float) $ovLine->quantity - $ovRcvd, 3));
+                    if ($ovRem > 0.0001) {
+                        $ovBalanceLines[] = ['name' => $ovLine->product?->name ?? 'Product #'.$ovLine->product_id, 'remaining' => $ovRem];
+                    }
+                }
+            }
+        @endphp
+        @if(!empty($ovBalanceLines))
+            <div style="margin-bottom:14px;padding:10px 13px;border:1px solid color-mix(in srgb,#f59e0b 35%,var(--border));border-radius:9px;background:color-mix(in srgb,#f59e0b 6%,var(--card));">
+                <p style="margin:0 0 6px;font-size:12px;font-weight:700;color:var(--text);"><i class="fa fa-clock" style="color:color-mix(in srgb,#f59e0b 75%,var(--text));margin-right:5px;"></i>{{ count($ovBalanceLines) }} {{ count($ovBalanceLines) === 1 ? 'item' : 'items' }} still pending on {{ $grn->purchase?->po_number ?? 'PO' }}</p>
+                <ul style="margin:0;padding:0 0 0 16px;font-size:11px;color:var(--muted);line-height:1.6;">
+                    @foreach($ovBalanceLines as $ovBl)
+                        <li>{{ $ovBl['name'] }} — <strong style="color:color-mix(in srgb,#f59e0b 80%,var(--text));">{{ rtrim(rtrim(number_format($ovBl['remaining'], 3, '.', ''), '0'), '.') }} units</strong> remaining</li>
+                    @endforeach
+                </ul>
+                @if($grn->purchase?->canReceiveGoods())
+                    <p style="margin:8px 0 0;font-size:11px;">
+                        <a href="{{ route('purchase.grn.create', $grn->purchase) }}" class="pcat-link"><i class="fa fa-plus" style="font-size:10px;"></i> Record next delivery</a>
+                    </p>
+                @endif
+            </div>
+        @elseif($grn->purchase)
+            <p style="margin:0 0 14px;font-size:12px;color:color-mix(in srgb,#22c55e 65%,var(--text));"><i class="fa fa-check" style="margin-right:4px;"></i> All items on {{ $grn->purchase->po_number }} fully received.</p>
+        @endif
+
         <p class="muted" style="margin:0;font-size:12px;">
             <a href="{{ $grnShowTabUrl('items') }}" class="pcat-link">View line items</a>
             ·
@@ -175,12 +207,18 @@
 
     {{-- Line items --}}
     <section class="grn-show-panel" id="grn-show-panel-items" @if($activeTab !== 'items') hidden @endif>
+        @php
+            $fmtQ = static fn (float $q): string => rtrim(rtrim(number_format($q, 3, '.', ''), '0'), '.');
+        @endphp
         <div class="pcat-table-wrap">
             <table class="pcat-table">
                 <thead>
                     <tr>
                         <th>Product</th>
-                        <th>Qty received</th>
+                        <th>This GRN</th>
+                        <th>PO ordered</th>
+                        <th>Total received</th>
+                        <th>Still remaining</th>
                         <th>Unit cost @if(filled($currency))({{ $currency }})@endif</th>
                         <th>Sell price @if(filled($currency))({{ $currency }})@endif</th>
                         <th style="text-align:right;">Line total</th>
@@ -188,11 +226,38 @@
                 </thead>
                 <tbody>
                     @foreach($grn->items as $item)
+                        @php
+                            $poOrdered   = $item->purchaseItem ? (float) $item->purchaseItem->quantity : null;
+                            $poTotalRcvd = $item->purchaseItem?->relationLoaded('goodsReceiveNoteItems')
+                                ? (float) $item->purchaseItem->goodsReceiveNoteItems->sum('quantity_received')
+                                : null;
+                            $poRemaining = ($poOrdered !== null && $poTotalRcvd !== null)
+                                ? max(0.0, round($poOrdered - $poTotalRcvd, 3))
+                                : null;
+                        @endphp
                         <tr>
                             <td>
                                 <strong style="color:var(--text);">{{ $item->product?->name ?? 'Product #'.$item->product_id }}</strong>
+                                @if($item->product?->sku)
+                                    <div class="muted" style="font-size:11px;margin-top:2px;">{{ $item->product->sku }}</div>
+                                @endif
                             </td>
-                            <td class="muted">{{ rtrim(rtrim(number_format((float) $item->quantity_received, 3, '.', ''), '0'), '.') }}</td>
+                            <td><strong style="color:var(--text);">{{ $fmtQ((float) $item->quantity_received) }}</strong></td>
+                            <td class="muted">{{ $poOrdered !== null ? $fmtQ($poOrdered) : '—' }}</td>
+                            <td class="muted" style="{{ $poTotalRcvd !== null && $poTotalRcvd > 0 ? 'color:color-mix(in srgb,#22c55e 70%,var(--text));font-weight:600;' : '' }}">
+                                {{ $poTotalRcvd !== null ? $fmtQ($poTotalRcvd) : '—' }}
+                            </td>
+                            <td>
+                                @if($poRemaining !== null)
+                                    @if($poRemaining > 0)
+                                        <strong style="color:color-mix(in srgb,#f59e0b 80%,var(--text));">{{ $fmtQ($poRemaining) }}</strong>
+                                    @else
+                                        <span style="font-size:11px;color:color-mix(in srgb,#22c55e 70%,var(--text));"><i class="fa fa-check"></i> Done</span>
+                                    @endif
+                                @else
+                                    <span class="muted">—</span>
+                                @endif
+                            </td>
                             <td class="muted">{{ number_format((float) $item->unit_cost, 2) }}</td>
                             <td>
                                 @if($item->selling_unit_price !== null)
@@ -207,12 +272,80 @@
                 </tbody>
                 <tfoot>
                     <tr>
-                        <td colspan="4" style="text-align:right;font-weight:700;">Total</td>
+                        <td colspan="7" style="text-align:right;font-weight:700;">GRN total</td>
                         <td style="text-align:right;font-weight:800;font-size:15px;color:var(--text);">{{ number_format((float) $grn->total, 2) }}</td>
                     </tr>
                 </tfoot>
             </table>
         </div>
+
+        @php
+            $balanceLines = [];
+            if ($grn->purchase?->relationLoaded('items')) {
+                foreach ($grn->purchase->items as $poLine) {
+                    $totalRcvd = $poLine->relationLoaded('goodsReceiveNoteItems')
+                        ? (float) $poLine->goodsReceiveNoteItems->sum('quantity_received')
+                        : 0.0;
+                    $rem = max(0.0, round((float) $poLine->quantity - $totalRcvd, 3));
+                    if ($rem > 0.0001) {
+                        $balanceLines[] = [
+                            'name'      => $poLine->product?->name ?? 'Product #'.$poLine->product_id,
+                            'sku'       => $poLine->product?->sku ?? null,
+                            'ordered'   => (float) $poLine->quantity,
+                            'received'  => $totalRcvd,
+                            'remaining' => $rem,
+                            'unit_cost' => (float) $poLine->unit_cost,
+                        ];
+                    }
+                }
+            }
+        @endphp
+        @if(!empty($balanceLines))
+            <div style="margin-top:16px;padding:12px 14px;border:1px solid color-mix(in srgb,#f59e0b 35%,var(--border));border-radius:10px;background:color-mix(in srgb,#f59e0b 6%,var(--card));">
+                <h3 style="margin:0 0 10px;font-size:13px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:7px;">
+                    <i class="fa fa-clock" style="color:color-mix(in srgb,#f59e0b 75%,var(--text));"></i>
+                    Balance remaining on {{ $grn->purchase?->po_number ?? 'purchase order' }}
+                </h3>
+                <div class="pcat-table-wrap" style="margin:0;">
+                    <table class="pcat-table" style="font-size:12px;">
+                        <thead>
+                            <tr>
+                                <th>Product</th>
+                                <th>Ordered</th>
+                                <th>Received</th>
+                                <th>Remaining</th>
+                                <th>Unit cost @if(filled($currency))({{ $currency }})@endif</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach($balanceLines as $bl)
+                                <tr>
+                                    <td>
+                                        <strong style="color:var(--text);">{{ $bl['name'] }}</strong>
+                                        @if($bl['sku'])<div class="muted" style="font-size:11px;">{{ $bl['sku'] }}</div>@endif
+                                    </td>
+                                    <td class="muted">{{ $fmtQ($bl['ordered']) }}</td>
+                                    <td class="muted">{{ $fmtQ($bl['received']) }}</td>
+                                    <td><strong style="color:color-mix(in srgb,#f59e0b 80%,var(--text));">{{ $fmtQ($bl['remaining']) }}</strong></td>
+                                    <td class="muted">{{ number_format($bl['unit_cost'], 2) }}</td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+                @if($grn->purchase?->canReceiveGoods())
+                    <p style="margin:10px 0 0;font-size:12px;">
+                        <a href="{{ route('purchase.grn.create', $grn->purchase) }}" class="linkbtn" style="padding:6px 12px;font-size:11px;display:inline-flex;align-items:center;gap:6px;text-decoration:none;">
+                            <i class="fa fa-plus"></i> Record next GRN for remaining items
+                        </a>
+                    </p>
+                @endif
+            </div>
+        @else
+            @if($grn->purchase)
+                <p class="muted" style="margin:12px 0 0;font-size:12px;"><i class="fa fa-check" style="color:color-mix(in srgb,#22c55e 70%,var(--text));margin-right:4px;"></i> All items on {{ $grn->purchase->po_number }} have been fully received.</p>
+            @endif
+        @endif
     </section>
 
     {{-- Payment --}}

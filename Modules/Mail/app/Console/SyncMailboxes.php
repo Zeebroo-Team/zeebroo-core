@@ -14,7 +14,8 @@ class SyncMailboxes extends Command
 
     public function handle(): int
     {
-        $mailboxes = Mailbox::where('is_active', true)->get();
+        $mailboxes = Mailbox::where('is_active', true)->with('business')->get()
+            ->filter(fn (Mailbox $mailbox) => $mailbox->business?->hasFeature('mail') ?? true);
 
         if ($mailboxes->isEmpty()) {
             $this->line('No active mailboxes to sync.');

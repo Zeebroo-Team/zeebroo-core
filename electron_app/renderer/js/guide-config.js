@@ -1979,6 +1979,158 @@ window.GUIDE_CONFIG = {
         { "type": "walk_click",   "selector": "#rb-svc-refresh",         "wait": 400 },
         { "type": "bubble",       "text": "All services and requests have been refreshed with the latest data from the server.", "wait": 3000 }
       ]
+    },
+
+    /* ═══════════════════════════════════════════════════════════════════
+       MAIL
+    ═══════════════════════════════════════════════════════════════════ */
+
+    /* ── Inbox ────────────────────────────────────────────────────────── */
+    {
+      "id": "mail_inbox",
+      "intent_patterns": ["open inbox", "view inbox", "check inbox", "mail inbox", "show inbox",
+                          "check emails", "view emails", "see emails", "read emails",
+                          "how to view mail", "open mail inbox"],
+      "reply": "Opening your Mail inbox!",
+      "steps": [
+        { "type": "walk_click",   "selector": "[data-tab='mail']",    "wait": 500 },
+        { "type": "walk_click",   "selector": "#rb-mail-inbox",       "wait": 600 },
+        { "type": "wait_visible", "selector": "#mail-inbox-view" },
+        { "type": "walk_to",      "selector": "#mail-inbox-view" },
+        { "type": "highlight",    "selector": "#mail-inbox-view" },
+        { "type": "bubble",       "text": "This is your Mail inbox. You can see all incoming emails here — unread ones are shown in bold with a blue envelope icon. Use the search bar to filter, or click All/Unread/Read to narrow down messages. Click any row to open the full message.", "wait": 6000 },
+        { "type": "unhighlight",  "selector": "#mail-inbox-view" }
+      ]
+    },
+
+    /* ── Compose ─────────────────────────────────────────────────────── */
+    {
+      "id": "mail_compose",
+      "intent_patterns": ["compose email", "write email", "send email", "new email", "compose mail",
+                          "send mail", "write mail", "how to send email", "how to compose mail",
+                          "want to send email", "want to compose"],
+      "reply": "Let me open the compose window for you!",
+      "steps": [
+        { "type": "walk_click",   "selector": "[data-tab='mail']",    "wait": 500 },
+        { "type": "walk_click",   "selector": "#rb-mail-compose",     "wait": 600 },
+        { "type": "wait_visible", "selector": "#mail-compose-view" },
+        { "type": "walk_to",      "selector": "#mail-compose-view" },
+        { "type": "highlight",    "selector": "#mail-compose-view" },
+        { "type": "bubble",       "text": "Compose a new email here. Fill in the recipient address, subject, and your message. You can also pick a saved template to pre-fill the content. Click Send Now to send immediately, or Schedule to set a future send time.", "wait": 6000 },
+        { "type": "unhighlight",  "selector": "#mail-compose-view" },
+        { "type": "walk_to",      "selector": "#mail-compose-to" },
+        { "type": "highlight",    "selector": "#mail-compose-to" },
+        { "type": "bubble",       "text": "Start by entering the recipient's email address here.", "wait": 4000 },
+        { "type": "unhighlight",  "selector": "#mail-compose-to" }
+      ]
+    },
+
+    /* ── Sent ────────────────────────────────────────────────────────── */
+    {
+      "id": "mail_sent",
+      "intent_patterns": ["view sent mail", "sent emails", "sent messages", "see sent",
+                          "show sent mail", "outbox", "sent box", "how to view sent emails"],
+      "reply": "Opening your Sent mail!",
+      "steps": [
+        { "type": "walk_click",   "selector": "[data-tab='mail']",    "wait": 500 },
+        { "type": "walk_click",   "selector": "#rb-mail-sent",        "wait": 600 },
+        { "type": "wait_visible", "selector": "#mail-sent-view" },
+        { "type": "walk_to",      "selector": "#mail-sent-view" },
+        { "type": "highlight",    "selector": "#mail-sent-view" },
+        { "type": "bubble",       "text": "The Sent view shows all emails you have sent from this business mailbox. Use the search to find a specific sent message. Click the eye icon or any row to view the full email content.", "wait": 5000 },
+        { "type": "unhighlight",  "selector": "#mail-sent-view" }
+      ]
+    },
+
+    /* ── Templates ───────────────────────────────────────────────────── */
+    {
+      "id": "mail_templates",
+      "intent_patterns": ["mail templates", "email templates", "view templates", "manage templates",
+                          "create template", "new template", "add template", "email template",
+                          "how to manage mail templates", "how to create email template"],
+      "reply": "Opening Mail Templates!",
+      "steps": [
+        { "type": "walk_click",   "selector": "[data-tab='mail']",        "wait": 500 },
+        { "type": "walk_click",   "selector": "#rb-mail-templates",       "wait": 600 },
+        { "type": "wait_visible", "selector": "#mail-templates-view" },
+        { "type": "walk_to",      "selector": "#btn-new-mail-template" },
+        { "type": "highlight",    "selector": "#btn-new-mail-template" },
+        { "type": "bubble",       "text": "Mail Templates save your frequently used emails — Welcome emails, Invoice reminders, Follow-ups. Once saved, you can pick a template when composing to auto-fill the subject and body. Click New Template to create one.", "wait": 6000 },
+        { "type": "unhighlight",  "selector": "#btn-new-mail-template" }
+      ]
+    },
+
+    /* ── New Template ────────────────────────────────────────────────── */
+    {
+      "id": "mail_new_template",
+      "intent_patterns": ["add mail template", "create mail template", "new mail template",
+                          "add email template", "create email template"],
+      "reply": "Let me show you how to create a new mail template!",
+      "steps": [
+        { "type": "walk_click",   "selector": "[data-tab='mail']",        "wait": 500 },
+        { "type": "walk_click",   "selector": "#rb-mail-templates",       "wait": 600 },
+        { "type": "wait_visible", "selector": "#mail-templates-view" },
+        { "type": "walk_click",   "selector": "#btn-new-mail-template",   "wait": 500 },
+        { "type": "wait_visible", "selector": "#mail-tmpl-modal" },
+        { "type": "walk_to",      "selector": "#mail-tmpl-modal" },
+        { "type": "highlight",    "selector": "#mail-tmpl-modal" },
+        { "type": "bubble",       "text": "Give the template a name (e.g. 'Invoice Reminder'), an optional default subject, and the message body. Click Save Template when done — it will appear in the template list and in the Compose dropdown.", "wait": 6000 },
+        { "type": "unhighlight",  "selector": "#mail-tmpl-modal" }
+      ]
+    },
+
+    /* ── Filters ─────────────────────────────────────────────────────── */
+    {
+      "id": "mail_filters",
+      "intent_patterns": ["mail filters", "email filters", "view filters", "inbox filters",
+                          "auto filters", "filter rules", "mail rules", "email rules",
+                          "how to view mail filters", "manage mail filters"],
+      "reply": "Opening Mail Filters!",
+      "steps": [
+        { "type": "walk_click",   "selector": "[data-tab='mail']",    "wait": 500 },
+        { "type": "walk_click",   "selector": "#rb-mail-filters",     "wait": 600 },
+        { "type": "wait_visible", "selector": "#mail-filters-view" },
+        { "type": "walk_to",      "selector": "#mail-filters-view" },
+        { "type": "highlight",    "selector": "#mail-filters-view" },
+        { "type": "bubble",       "text": "Mail Filters run automatically when new emails arrive. Each filter checks the From address or Subject for a keyword and then takes an action — Mark as Read or Delete. Filters are applied in order of their sort number. To add or change filters, use the web portal under Settings → Mail.", "wait": 7000 },
+        { "type": "unhighlight",  "selector": "#mail-filters-view" }
+      ]
+    },
+
+    /* ── Scheduled ───────────────────────────────────────────────────── */
+    {
+      "id": "mail_scheduled",
+      "intent_patterns": ["scheduled emails", "scheduled mail", "view scheduled", "pending emails",
+                          "emails scheduled", "schedule email", "show scheduled mail",
+                          "how to view scheduled emails", "manage scheduled mail"],
+      "reply": "Opening Scheduled Mail!",
+      "steps": [
+        { "type": "walk_click",   "selector": "[data-tab='mail']",    "wait": 500 },
+        { "type": "walk_click",   "selector": "#rb-mail-scheduled",   "wait": 600 },
+        { "type": "wait_visible", "selector": "#mail-scheduled-view" },
+        { "type": "walk_to",      "selector": "#mail-scheduled-view" },
+        { "type": "highlight",    "selector": "#mail-scheduled-view" },
+        { "type": "bubble",       "text": "Scheduled Emails are messages you queued to send at a future date and time. You can cancel any scheduled email by clicking the X button on its row — this removes it before it is sent.", "wait": 6000 },
+        { "type": "unhighlight",  "selector": "#mail-scheduled-view" }
+      ]
+    },
+
+    /* ── Schedule Email ──────────────────────────────────────────────── */
+    {
+      "id": "mail_schedule_send",
+      "intent_patterns": ["schedule email", "schedule send", "send later", "send email later",
+                          "schedule mail", "how to schedule email", "want to schedule email",
+                          "delayed send email"],
+      "reply": "Let me show you how to schedule an email!",
+      "steps": [
+        { "type": "walk_click",   "selector": "[data-tab='mail']",       "wait": 500 },
+        { "type": "walk_click",   "selector": "#rb-mail-compose",        "wait": 600 },
+        { "type": "wait_visible", "selector": "#mail-compose-view" },
+        { "type": "walk_to",      "selector": "#mail-compose-schedule" },
+        { "type": "highlight",    "selector": "#mail-compose-schedule" },
+        { "type": "bubble",       "text": "Fill in the To, Subject, and Message, then click Schedule (the clock button). You can pick any future date and time. The email will be held and sent automatically at the scheduled time. View or cancel pending scheduled emails in the Scheduled tab.", "wait": 7000 },
+        { "type": "unhighlight",  "selector": "#mail-compose-schedule" }
+      ]
     }
 
   ]

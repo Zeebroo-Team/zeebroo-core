@@ -231,7 +231,10 @@ class PosOnlineApiService
                 'discount_amount' => round((float) ($item->discount_amount ?? 0), 2),
                 'unit_sell_price' => round((float) $item->unit_sell_price, 2),
                 'line_total' => round((float) $item->line_total, 2),
-                'returned_quantity' => round($returnedQtys[(int) $item->id] ?? 0.0, 3),
+                'returned_quantity'   => round($returnedQtys[(int) $item->id] ?? 0.0, 3),
+                'warranty_type'       => $item->warranty_type,
+                'warranty_days'       => $item->warranty_days,
+                'warranty_expires_at' => $item->warranty_expires_at?->toDateString(),
             ])->values()->all(),
         ];
     }

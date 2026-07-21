@@ -3,10 +3,41 @@
 @section('content')
 @include('product::partials.catalog-hub-styles')
 <style>
-.mf-rule-badge{display:inline-block;font-size:10px;font-weight:700;padding:2px 7px;border-radius:999px;border:1px solid var(--border);color:var(--muted);text-transform:uppercase;letter-spacing:.03em;}
+.mf-intro{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px;}
+.mf-intro__text{max-width:520px;}
+.mf-intro__title{font-size:16px;font-weight:800;color:var(--text);margin:0 0 4px;}
+.mf-intro__desc{font-size:13px;color:var(--muted);line-height:1.5;margin:0;}
+.mf-intro__count{font-size:12px;color:var(--muted);font-weight:600;background:color-mix(in srgb,var(--muted) 12%,transparent);padding:4px 11px;border-radius:999px;white-space:nowrap;}
+
+.mf-list{display:flex;flex-direction:column;gap:10px;}
+.mf-card{border:1px solid var(--border);border-radius:14px;padding:14px 16px;background:var(--card);display:flex;align-items:center;gap:12px;transition:border-color .15s,box-shadow .15s;}
+.mf-card:hover{border-color:color-mix(in srgb,var(--primary) 30%,var(--border));box-shadow:0 4px 14px rgba(0,0,0,.05);}
+.mf-card--inactive{opacity:.55;}
+.mf-card__handle{color:var(--muted);cursor:grab;font-size:14px;padding:4px;flex-shrink:0;}
+.mf-card__handle:active{cursor:grabbing;}
+.mf-card__icon{width:38px;height:38px;border-radius:10px;background:color-mix(in srgb,var(--primary) 14%,transparent);color:var(--primary);display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;}
+.mf-card__body{flex:1;min-width:0;}
+.mf-card__rule{font-size:13.5px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.mf-card__rule .mf-quiet{color:var(--muted);font-weight:500;}
+.mf-card__rule .mf-value{color:var(--primary);}
+.mf-card__meta{display:flex;align-items:center;gap:8px;margin-top:6px;}
+.mf-rule-badge{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:700;padding:3px 9px;border-radius:999px;border:1px solid var(--border);color:var(--muted);text-transform:uppercase;letter-spacing:.03em;}
+.mf-card__actions{display:flex;gap:6px;flex-shrink:0;}
+
+.mf-icon-btn{width:30px;height:30px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--muted);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:12.5px;transition:all .15s;}
+.mf-icon-btn:hover{color:var(--text);border-color:color-mix(in srgb,var(--primary) 45%,var(--border));background:color-mix(in srgb,var(--primary) 8%,transparent);}
+.mf-icon-btn--danger:hover{color:#ef4444;border-color:#ef4444;background:color-mix(in srgb,#ef4444 8%,transparent);}
+
+.mf-empty{border:1.5px dashed var(--border);border-radius:14px;padding:40px 20px;text-align:center;}
+.mf-empty__icon{width:52px;height:52px;border-radius:14px;background:color-mix(in srgb,var(--primary) 12%,transparent);color:var(--primary);display:flex;align-items:center;justify-content:center;font-size:20px;margin:0 auto 14px;}
+.mf-empty__title{font-size:14px;font-weight:700;color:var(--text);margin:0 0 4px;}
+.mf-empty__desc{font-size:12.5px;color:var(--muted);margin:0 0 16px;}
+
+.mf-sort-ghost{opacity:.4;}
+.mf-sort-chosen{box-shadow:0 6px 18px rgba(0,0,0,.1);}
 </style>
 
-<div class="pcat-page-card card" style="max-width:720px;padding:14px;">
+<div class="pcat-page-card card" style="max-width:100%;padding:20px;">
     @if(session('status'))
         <div class="pcat-banner pcat-banner--ok" style="font-weight:600;">{{ session('status') }}</div>
     @endif
@@ -14,54 +45,62 @@
         <div class="pcat-banner pcat-banner--err">{{ $errors->first() }}</div>
     @endif
 
-    <p class="muted" style="margin:0 0 14px;font-size:13px;line-height:1.45;">
-        Automatically process incoming mail as it syncs. The first matching filter (top to bottom) wins — drag cards to reorder.
-    </p>
-
-    <div class="pcat-toolbar">
-        <span class="muted" style="margin:0;font-size:13px;">
-            {{ $filters->count() }} {{ $filters->count() === 1 ? 'filter' : 'filters' }}.
-        </span>
-        <span id="mf-reorder-status" class="pcat-reorder-status" hidden aria-live="polite"></span>
-        <button type="button" id="mf-modal-open" class="linkbtn" style="padding:8px 16px;font-size:13px;display:inline-flex;align-items:center;gap:6px;">
-            <i class="fa fa-plus"></i> Add filter
-        </button>
+    <div class="mf-intro">
+        <div class="mf-intro__text">
+            <h1 class="mf-intro__title">Mail filters</h1>
+            <p class="mf-intro__desc">Automatically process incoming mail as it syncs. The first matching filter (top to bottom) wins — drag to reorder.</p>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;">
+            <span class="mf-intro__count">{{ $filters->count() }} {{ $filters->count() === 1 ? 'filter' : 'filters' }}</span>
+            <span id="mf-reorder-status" class="pcat-reorder-status" hidden aria-live="polite"></span>
+            <button type="button" id="mf-modal-open" class="linkbtn" style="padding:9px 18px;font-size:13px;display:inline-flex;align-items:center;gap:6px;">
+                <i class="fa fa-plus"></i> Add filter
+            </button>
+        </div>
     </div>
 
     @if($filters->isEmpty())
-        <p class="muted" style="margin:24px 0;font-size:13px;">No filters yet — incoming mail is stored as-is.</p>
+        <div class="mf-empty">
+            <div class="mf-empty__icon"><i class="fa fa-filter-circle-xmark"></i></div>
+            <p class="mf-empty__title">No filters yet</p>
+            <p class="mf-empty__desc">Incoming mail is stored as-is until you add a rule.</p>
+            <button type="button" onclick="document.getElementById('mf-modal-open').click();" class="linkbtn" style="padding:8px 18px;font-size:13px;display:inline-flex;align-items:center;gap:6px;">
+                <i class="fa fa-plus"></i> Add filter
+            </button>
+        </div>
+    @else
+        <div id="mf-sort-list" class="mf-list">
+            @foreach($filters as $f)
+                <article class="mf-card {{ $f->is_active ? '' : 'mf-card--inactive' }}" data-filter-id="{{ $f->id }}">
+                    <span class="mf-card__handle pcat-drag-handle" title="Drag to reorder" aria-hidden="true"><i class="fa fa-grip-vertical"></i></span>
+                    <div class="mf-card__icon"><i class="fa {{ $f->field === 'subject' ? 'fa-heading' : 'fa-at' }}"></i></div>
+                    <div class="mf-card__body">
+                        <div class="mf-card__rule">
+                            <span class="mf-quiet">If {{ strtolower($f->fieldLabel()) }} contains</span>
+                            "<span class="mf-value">{{ $f->value }}</span>"
+                        </div>
+                        <div class="mf-card__meta">
+                            <span class="mf-rule-badge"><i class="fa fa-bolt"></i> {{ $f->actionLabel() }}</span>
+                            @if(!$f->is_active)
+                                <span class="pcat-badge">Inactive</span>
+                            @endif
+                        </div>
+                    </div>
+                    <div class="mf-card__actions">
+                        <button type="button" class="mf-icon-btn" title="Edit"
+                                onclick="mfOpenEdit({{ $f->id }}, {{ Illuminate\Support\Js::from($f->field) }}, {{ Illuminate\Support\Js::from($f->value) }}, {{ Illuminate\Support\Js::from($f->action) }}, {{ $f->is_active ? 'true' : 'false' }})">
+                            <i class="fa fa-pen"></i>
+                        </button>
+                        <form method="POST" action="{{ route('mail.filters.destroy', $f) }}" style="margin:0;" onsubmit="return confirm('Delete this filter?');">
+                            @csrf
+                            @method('DELETE')
+                            <button type="submit" class="mf-icon-btn mf-icon-btn--danger" title="Delete"><i class="fa fa-trash-can"></i></button>
+                        </form>
+                    </div>
+                </article>
+            @endforeach
+        </div>
     @endif
-
-    <div id="mf-sort-list" class="pcat-list">
-        @foreach($filters as $f)
-            <article class="pcat-card" data-filter-id="{{ $f->id }}" style="cursor:default;{{ $f->is_active ? '' : 'opacity:.55;' }}">
-                <span class="pcat-drag-handle" title="Drag to reorder" aria-hidden="true"><i class="fa fa-grip-vertical"></i></span>
-                <div class="pcat-card__body">
-                    <div class="pcat-card__head">
-                        <h3 class="pcat-card__title">If {{ strtolower($f->fieldLabel()) }} contains "{{ $f->value }}"</h3>
-                    </div>
-                    <div class="pcat-card__meta">
-                        <span class="mf-rule-badge"><i class="fa fa-bolt"></i> {{ $f->actionLabel() }}</span>
-                        @if(!$f->is_active)
-                            <span class="pcat-badge">Inactive</span>
-                        @endif
-                    </div>
-                </div>
-                <div class="pcat-card__actions">
-                    <button type="button"
-                            style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;font-size:12px;font-weight:700;border-radius:8px;border:1px solid color-mix(in srgb,var(--primary) 45%,var(--border));background:color-mix(in srgb,var(--primary) 12%,transparent);color:var(--text);cursor:pointer;"
-                            onclick="mfOpenEdit({{ $f->id }}, {{ Illuminate\Support\Js::from($f->field) }}, {{ Illuminate\Support\Js::from($f->value) }}, {{ Illuminate\Support\Js::from($f->action) }}, {{ $f->is_active ? 'true' : 'false' }})">
-                        <i class="fa fa-pen"></i> Edit
-                    </button>
-                    <form method="POST" action="{{ route('mail.filters.destroy', $f) }}" style="margin:0;" onsubmit="return confirm('Delete this filter?');">
-                        @csrf
-                        @method('DELETE')
-                        <button type="submit" class="pcat-btn-del" title="Delete"><i class="fa fa-trash-can"></i></button>
-                    </form>
-                </div>
-            </article>
-        @endforeach
-    </div>
 
     {{-- Add modal --}}
     <div id="mf-add-modal" class="pcat-modal" role="dialog" aria-modal="true" aria-labelledby="mf-add-title" aria-hidden="true">
@@ -164,7 +203,7 @@
     }
 
     function save() {
-        var ids = Array.from(list.querySelectorAll('.pcat-card[data-filter-id]'))
+        var ids = Array.from(list.querySelectorAll('.mf-card[data-filter-id]'))
             .map(function (el) { return parseInt(el.getAttribute('data-filter-id'), 10); })
             .filter(Boolean);
         if (!ids.length) return;
@@ -187,9 +226,9 @@
     Sortable.create(list, {
         animation: 150,
         handle: '.pcat-drag-handle',
-        ghostClass: 'pcat-sort-ghost',
-        chosenClass: 'pcat-sort-chosen',
-        draggable: '.pcat-card',
+        ghostClass: 'mf-sort-ghost',
+        chosenClass: 'mf-sort-chosen',
+        draggable: '.mf-card',
         onEnd: save,
     });
 })();

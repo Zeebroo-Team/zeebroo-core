@@ -14,6 +14,13 @@
                     <tr>
                         <td style="height:5px;background:linear-gradient(90deg,#4f46e5,#7c3aed,#db2777);"></td>
                     </tr>
+                    @if(!empty($letterheadHtml))
+                    <tr>
+                        <td style="padding:24px 36px 0;">
+                            {!! $letterheadHtml !!}
+                        </td>
+                    </tr>
+                    @endif
                     <tr>
                         <td style="padding:32px 36px 8px;">
                             <p style="margin:0;font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#64748b;">{{ config('app.name') }}</p>

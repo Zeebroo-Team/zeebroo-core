@@ -270,6 +270,12 @@ class PosCatalogService
             'layers' => $layers,
             'selling_units' => $this->sellingUnitsForProduct($product, $suDiscountById),
             'category_ids' => $product->categories->pluck('id')->map(fn ($id) => (int) $id)->all(),
+            // Feature flags
+            'wholesale_price'    => $product->wholesale_price !== null ? (float) $product->wholesale_price : null,
+            'has_warranty'       => (bool) $product->has_warranty,
+            'track_expiry'       => (bool) $product->track_expiry,
+            'courier_delivery'   => (bool) $product->courier_delivery,
+            'loyalty_redeemable' => (bool) $product->loyalty_redeemable,
         ];
     }
 

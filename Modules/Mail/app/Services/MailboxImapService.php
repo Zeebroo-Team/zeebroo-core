@@ -15,10 +15,14 @@ use Webklex\PHPIMAP\Message;
 class MailboxImapService
 {
     /**
-     * Only the most recent N messages are ever considered — keeps each sync
-     * bounded regardless of how large or old the mailbox is.
+     * Only the most recent N messages are fetched on the very first sync.
+     * Incremental syncs are date-filtered server-side so this cap rarely applies.
      */
-    private const SYNC_MESSAGE_LIMIT = 50;
+    private const SYNC_MESSAGE_LIMIT = 20;
+
+    /** Body size caps — large HTML emails (newsletters, etc.) can be megabytes. */
+    private const MAX_TEXT_BYTES = 50_000;
+    private const MAX_HTML_BYTES = 200_000;
 
     public function __construct(
         private readonly MailFilterService $filters,
@@ -98,27 +102,50 @@ class MailboxImapService
             $client->connect();
 
             $folder = $client->getFolder('INBOX');
-            if (!$folder) {
+            if (! $folder) {
                 throw new \RuntimeException('INBOX folder not found.');
             }
 
-            $messages = $folder->query()->whereAll()->fetchOrderDesc()->limit(self::SYNC_MESSAGE_LIMIT)->get();
-
+            $lastUid = $mailbox->last_uid ?? 0;
             $fetched = 0;
-            $maxUid  = $mailbox->last_uid ?? 0;
+            $maxUid  = $lastUid;
+
+            // webklex/php-imap v6.2 has no whereUidGreaterThan().
+            // Use a date-based server-side filter (IMAP SINCE) for incremental
+            // runs — only messages that arrived after the previous sync are
+            // downloaded. A 5-minute overlap guards against server clock skew.
+            // On first sync there is no date to filter on, so cap by count instead.
+            if ($mailbox->last_synced_at !== null) {
+                $messages = $folder->query()
+                    ->whereSince($mailbox->last_synced_at->clone()->subMinutes(5))
+                    ->get();
+            } else {
+                $messages = $folder->query()
+                    ->whereAll()
+                    ->fetchOrderDesc()
+                    ->limit(self::SYNC_MESSAGE_LIMIT)
+                    ->get();
+            }
 
             foreach ($messages as $message) {
                 /** @var Message $message */
                 $uid = (int) $message->getUid();
 
-                if ($uid <= ($mailbox->last_uid ?? 0)) {
+                if ($uid <= $lastUid) {
+                    unset($message);
                     continue;
                 }
 
                 if ($this->storeMessage($mailbox, $message, $uid)) {
                     $fetched++;
                 }
+
                 $maxUid = max($maxUid, $uid);
+
+                // Free the (potentially large) message object before the next
+                // iteration so peak memory stays bounded across the batch.
+                unset($message);
+                gc_collect_cycles();
             }
 
             $client->disconnect();
@@ -177,14 +204,25 @@ class MailboxImapService
                 'from_name'    => $from?->personal,
                 'to_address'   => $toAddresses ?: null,
                 'subject'      => $subject,
-                'body_text'    => $message->getTextBody(),
-                'body_html'    => $message->getHTMLBody(),
+                'body_text'    => $this->truncate($message->getTextBody(), self::MAX_TEXT_BYTES),
+                'body_html'    => $this->truncate($message->getHTMLBody(), self::MAX_HTML_BYTES),
                 'is_read'      => $action === MailFilter::ACTION_MARK_READ,
                 'occurred_at'  => $occurredAt,
             ]
         );
 
         return true;
+    }
+
+    private function truncate(?string $value, int $maxBytes): ?string
+    {
+        if ($value === null || strlen($value) <= $maxBytes) {
+            return $value;
+        }
+
+        // Cut at byte boundary; mb_substr would split multibyte chars, so we
+        // use substr (byte-safe) and strip any broken trailing sequence.
+        return mb_convert_encoding(substr($value, 0, $maxBytes), 'UTF-8', 'UTF-8');
     }
 
     private function makeClient(array $config): Client

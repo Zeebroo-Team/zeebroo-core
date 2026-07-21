@@ -216,6 +216,7 @@ class SaleService
         bool $deferSettlement = false,
         ?int $branchId = null,
         ?string $scheduledAt = null,
+        ?int $posCounterId = null,
     ): Sale {
         $rawProductItems = array_values(array_filter(
             $items,
@@ -245,9 +246,10 @@ class SaleService
         $cartProductIds = array_map(fn ($l) => (int) $l['product']->id, $productLines);
         $activeDiscounts = $this->discountService->activeForProducts($business, $cartProductIds);
 
-        return DB::transaction(function () use ($business, $user, $productLines, $serviceLines, $paymentMethod, $creditAccountId, $amountPaid, $notes, $channel, $discountPercent, $amountTendered, $customerId, $deferSettlement, $branchId, $activeDiscounts, $scheduledAt) {
+        return DB::transaction(function () use ($business, $user, $productLines, $serviceLines, $paymentMethod, $creditAccountId, $amountPaid, $notes, $channel, $discountPercent, $amountTendered, $customerId, $deferSettlement, $branchId, $activeDiscounts, $scheduledAt, $posCounterId) {
             $sale = $business->sales()->create([
-                'branch_id' => $branchId,
+                'branch_id'       => $branchId,
+                'pos_counter_id'  => $posCounterId,
                 'user_id' => $user->id,
                 'sale_number' => $this->nextSaleNumber($business),
                 'status' => Sale::STATUS_COMPLETED,
@@ -300,6 +302,13 @@ class SaleService
                     $lineTotal = round($allocation['quantity'] * $finalSellPrice, 2);
                     $subtotal = round($subtotal + $lineTotal, 2);
 
+                    $warrantyType = $line['warranty_type'] ?? null;
+                    $warrantyDays = $line['warranty_days'] ?? null;
+                    $warrantyExpiresAt = null;
+                    if ($warrantyType === 'days' && $warrantyDays !== null) {
+                        $warrantyExpiresAt = now()->addDays($warrantyDays)->toDateString();
+                    }
+
                     SaleItem::query()->create([
                         'pos_sale_id' => $sale->id,
                         'product_id' => $product->id,
@@ -314,6 +323,9 @@ class SaleService
                         'unit_sell_price' => $finalSellPrice,
                         'line_total' => $lineTotal,
                         'sort_order' => $sortOrder++,
+                        'warranty_type'       => $warrantyType,
+                        'warranty_days'       => $warrantyDays,
+                        'warranty_expires_at' => $warrantyExpiresAt,
                     ]);
                 }
             }
@@ -470,8 +482,8 @@ class SaleService
     }
 
     /**
-     * @param  list<array{product_id: int, quantity: float|string, product_stock_layer_id?: int|null, product_selling_unit_id?: int|null, selling_unit_label?: ?string, selling_unit_factor?: float|null}>  $items
-     * @return list<array{product: Product, quantity: float, product_stock_layer_id: ?int, product_selling_unit_id: ?int, selling_unit_label: ?string, selling_unit_factor: ?float}>
+     * @param  list<array{product_id: int, quantity: float|string, product_stock_layer_id?: int|null, product_selling_unit_id?: int|null, selling_unit_label?: ?string, selling_unit_factor?: float|null, warranty_type?: ?string, warranty_days?: ?int}>  $items
+     * @return list<array{product: Product, quantity: float, product_stock_layer_id: ?int, product_selling_unit_id: ?int, selling_unit_label: ?string, selling_unit_factor: ?float, warranty_type: ?string, warranty_days: ?int}>
      */
     private function normalizeCartItems(Business $business, array $items): array
     {
@@ -497,6 +509,11 @@ class SaleService
             if ($productId <= 0 || $quantity <= 0) {
                 continue;
             }
+            $warrantyType = isset($row['warranty_type']) && in_array($row['warranty_type'], ['lifetime', 'days'], true)
+                ? $row['warranty_type'] : null;
+            $warrantyDays = ($warrantyType === 'days' && isset($row['warranty_days']) && (int) $row['warranty_days'] > 0)
+                ? (int) $row['warranty_days'] : null;
+
             $key = $productId.':'.($layerId ?? 'fifo').':'.($suId ?? '0');
             if (! isset($merged[$key])) {
                 $merged[$key] = [
@@ -506,6 +523,8 @@ class SaleService
                     'product_selling_unit_id' => $suId,
                     'selling_unit_label' => $sellingUnitLabel,
                     'selling_unit_factor' => $sellingUnitFactor,
+                    'warranty_type' => $warrantyType,
+                    'warranty_days' => $warrantyDays,
                 ];
             }
             $merged[$key]['quantity'] = round($merged[$key]['quantity'] + $quantity, 3);
@@ -513,6 +532,11 @@ class SaleService
             $merged[$key]['product_selling_unit_id'] = $suId;
             $merged[$key]['selling_unit_label'] = $sellingUnitLabel;
             $merged[$key]['selling_unit_factor'] = $sellingUnitFactor;
+            // carry warranty (first non-null value wins)
+            if ($merged[$key]['warranty_type'] === null && $warrantyType !== null) {
+                $merged[$key]['warranty_type'] = $warrantyType;
+                $merged[$key]['warranty_days'] = $warrantyDays;
+            }
         }
 
         if ($merged === []) {
@@ -565,6 +589,8 @@ class SaleService
                 'product_selling_unit_id' => $row['product_selling_unit_id'] ?? null,
                 'selling_unit_label' => $row['selling_unit_label'] ?? null,
                 'selling_unit_factor' => $row['selling_unit_factor'] ?? null,
+                'warranty_type' => $row['warranty_type'] ?? null,
+                'warranty_days' => $row['warranty_days'] ?? null,
             ];
         }
 

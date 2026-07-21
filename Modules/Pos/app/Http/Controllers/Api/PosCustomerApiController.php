@@ -54,11 +54,12 @@ class PosCustomerApiController extends Controller
         $business = $this->businessOrAbort($request);
 
         $validated = $request->validate([
-            'name'    => ['required', 'string', 'max:255'],
-            'phone'   => ['nullable', 'string', 'max:50'],
-            'email'   => ['nullable', 'email', 'max:255'],
-            'address' => ['nullable', 'string', 'max:500'],
-            'notes'   => ['nullable', 'string', 'max:1000'],
+            'name'          => ['required', 'string', 'max:255'],
+            'phone'         => ['nullable', 'string', 'max:50'],
+            'email'         => ['nullable', 'email', 'max:255'],
+            'address'       => ['nullable', 'string', 'max:500'],
+            'notes'         => ['nullable', 'string', 'max:1000'],
+            'customer_type' => ['nullable', 'string', 'in:retail,wholesale'],
         ]);
 
         $customer = Customer::create(array_merge($validated, ['business_id' => $business->id]));
@@ -73,11 +74,12 @@ class PosCustomerApiController extends Controller
         if ((int) $customer->business_id !== (int) $business->id) abort(403);
 
         $validated = $request->validate([
-            'name'    => ['sometimes', 'required', 'string', 'max:255'],
-            'phone'   => ['nullable', 'string', 'max:50'],
-            'email'   => ['nullable', 'email', 'max:255'],
-            'address' => ['nullable', 'string', 'max:500'],
-            'notes'   => ['nullable', 'string', 'max:1000'],
+            'name'          => ['sometimes', 'required', 'string', 'max:255'],
+            'phone'         => ['nullable', 'string', 'max:50'],
+            'email'         => ['nullable', 'email', 'max:255'],
+            'address'       => ['nullable', 'string', 'max:500'],
+            'notes'         => ['nullable', 'string', 'max:1000'],
+            'customer_type' => ['nullable', 'string', 'in:retail,wholesale'],
         ]);
 
         $customer->update($validated);
@@ -99,13 +101,14 @@ class PosCustomerApiController extends Controller
     private function format(Customer $c, bool $full = false): array
     {
         $data = [
-            'id'         => $c->id,
-            'name'       => $c->name,
-            'phone'      => $c->phone,
-            'email'      => $c->email,
-            'address'    => $c->address,
-            'notes'      => $c->notes,
-            'sales_count'=> $c->sales_count ?? 0,
+            'id'            => $c->id,
+            'name'          => $c->name,
+            'phone'         => $c->phone,
+            'email'         => $c->email,
+            'address'       => $c->address,
+            'notes'         => $c->notes,
+            'customer_type' => $c->customer_type ?? 'retail',
+            'sales_count'   => $c->sales_count ?? 0,
         ];
 
         if ($full && $c->relationLoaded('sales')) {

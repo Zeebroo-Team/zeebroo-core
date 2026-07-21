@@ -41,6 +41,8 @@ use Modules\Pos\Http\Controllers\Api\PosProfitReportApiController;
 use Modules\Pos\Http\Controllers\Api\PosPayrollOverviewApiController;
 use Modules\Pos\Http\Controllers\Api\PosUserManagementApiController;
 use Modules\Pos\Http\Controllers\Api\PosRoleManagementApiController;
+use Modules\Pos\Http\Controllers\Api\PosCounterApiController;
+use Modules\Pos\Http\Controllers\Api\PosRegisterLockApiController;
 
 Route::prefix('v1/pos')->group(function (): void {
     Route::post('auth/token',             [PosAuthApiController::class, 'token'])->name('auth.token');
@@ -67,7 +69,8 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
     Route::get('online/products/{id}/sales-chart', \Modules\Pos\Http\Controllers\Api\PosProductSalesChartApiController::class)->where('id', '[0-9]+')->name('online.products.sales-chart');
     Route::get('online/products/sku/{sku}', [PosCatalogApiController::class, 'productBySku'])->name('online.products.sku');
 
-    Route::post('online/products', [PosProductApiController::class, 'store'])->name('online.products.store');
+    Route::post('online/products',        [PosProductApiController::class, 'store']  )->name('online.products.store');
+    Route::post('online/products/import', [PosProductApiController::class, 'import'] )->name('online.products.import');
     Route::patch('online/products/{product}', [PosProductApiController::class, 'update'])->name('online.products.update');
     Route::delete('online/products/{product}', [PosProductApiController::class, 'destroy'])->name('online.products.destroy');
     Route::get('online/file-manager', [PosFileManagerApiController::class, 'browse'])->name('online.file-manager.browse');
@@ -104,6 +107,10 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
 
     Route::get ('eod',            [PosEndOfDayApiController::class,    'status'])->name('eod.status');
     Route::post('eod/settle',     [PosEndOfDayApiController::class,    'settle'])->name('eod.settle');
+
+    Route::get ('cash-drawer',          [\Modules\Pos\Http\Controllers\Api\PosCashDrawerApiController::class, 'status'])  ->name('cash-drawer.status');
+    Route::post('cash-drawer/open',     [\Modules\Pos\Http\Controllers\Api\PosCashDrawerApiController::class, 'open'])    ->name('cash-drawer.open');
+    Route::post('cash-drawer/withdraw', [\Modules\Pos\Http\Controllers\Api\PosCashDrawerApiController::class, 'withdraw'])->name('cash-drawer.withdraw');
     Route::get ('today-summary',      [PosTodaySummaryApiController::class, 'show'])->name('today-summary');
     Route::get ('expenses/overview',  [PosExpensesOverviewApiController::class, 'show'])->name('expenses.overview');
     Route::get ('profit-report',      [PosProfitReportApiController::class,     'show'])->name('profit-report');
@@ -272,6 +279,69 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
     Route::put   ('roles/{role}', [PosRoleManagementApiController::class, 'update']) ->name('roles.update');
     Route::delete('roles/{role}', [PosRoleManagementApiController::class, 'destroy'])->name('roles.destroy');
 
+    // Counters
+    Route::post  ('verify-password',   [PosRegisterLockApiController::class, 'verifyPassword'])->name('verify-password');
+
+    Route::get   ('counters',          [PosCounterApiController::class, 'index'])  ->name('counters.index');
+    Route::post  ('counters',          [PosCounterApiController::class, 'store'])  ->name('counters.store');
+    Route::patch ('counters/{counter}', [PosCounterApiController::class, 'update']) ->name('counters.update');
+    Route::delete('counters/{counter}', [PosCounterApiController::class, 'destroy'])->name('counters.destroy');
+
     // Guide AI Chat
     Route::post('guide/chat', [\Modules\Pos\Http\Controllers\Api\PosGuideChatApiController::class, 'chat'])->name('guide.chat');
+
+    // CRM
+    Route::get   ('crm/projects',                      [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'projects'])    ->name('crm.projects.index');
+    Route::post  ('crm/projects',                      [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'createProject'])->name('crm.projects.store');
+    Route::get   ('crm/projects/{project}/pipeline',   [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'pipeline'])    ->name('crm.projects.pipeline');
+    Route::get   ('crm/projects/{project}/stages',     [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'stages'])       ->name('crm.projects.stages.index');
+    Route::post  ('crm/projects/{project}/stages',     [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'createStage'])  ->name('crm.projects.stages.store');
+    Route::post  ('crm/projects/{project}/stages/reorder', [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'reorderStages'])->name('crm.projects.stages.reorder');
+    Route::put   ('crm/projects/{project}/stages/{stage}', [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'updateStage'])  ->name('crm.projects.stages.update');
+    Route::delete('crm/projects/{project}/stages/{stage}', [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'deleteStage'])  ->name('crm.projects.stages.destroy');
+    Route::get   ('crm/projects/{project}/stages/{stage}/automations',              [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'automations'])      ->name('crm.stages.automations.index');
+    Route::post  ('crm/projects/{project}/stages/{stage}/automations',              [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'createAutomation']) ->name('crm.stages.automations.store');
+    Route::put   ('crm/projects/{project}/stages/{stage}/automations/{automation}', [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'updateAutomation']) ->name('crm.stages.automations.update');
+    Route::delete('crm/projects/{project}/stages/{stage}/automations/{automation}', [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'deleteAutomation']) ->name('crm.stages.automations.destroy');
+    Route::post  ('crm/projects/{project}/leads',      [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'createLead'])  ->name('crm.leads.store');
+    Route::put   ('crm/leads/{lead}',                  [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'updateLead'])  ->name('crm.leads.update');
+    Route::post  ('crm/leads/{lead}/move-stage',       [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'moveLead'])    ->name('crm.leads.move-stage');
+    Route::delete('crm/leads/{lead}',                  [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'deleteLead'])  ->name('crm.leads.destroy');
+    Route::get   ('crm/contacts',                      [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'contacts'])    ->name('crm.contacts.index');
+    Route::get   ('crm/tasks',                         [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'tasksList'])   ->name('crm.tasks.index');
+    Route::post  ('crm/tasks',                         [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'createTask'])  ->name('crm.tasks.store');
+    Route::post  ('crm/tasks/{task}/complete',         [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'completeTask'])->name('crm.tasks.complete');
+    Route::post  ('crm/tasks/{task}/reopen',           [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'reopenTask'])  ->name('crm.tasks.reopen');
+    Route::delete('crm/tasks/{task}',                  [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'deleteTask'])  ->name('crm.tasks.destroy');
+    // CRM Forms
+    Route::get   ('crm/projects/{project}/forms',                      [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'forms'])          ->name('crm.forms.index');
+    Route::post  ('crm/projects/{project}/forms',                      [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'createForm'])      ->name('crm.forms.store');
+    Route::get   ('crm/projects/{project}/forms/{form}',               [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'getForm'])         ->name('crm.forms.show');
+    Route::put   ('crm/projects/{project}/forms/{form}',               [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'updateForm'])      ->name('crm.forms.update');
+    Route::post  ('crm/projects/{project}/forms/{form}/publish',       [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'publishForm'])     ->name('crm.forms.publish');
+    Route::post  ('crm/projects/{project}/forms/{form}/unpublish',     [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'unpublishForm'])   ->name('crm.forms.unpublish');
+    Route::delete('crm/projects/{project}/forms/{form}',               [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'deleteForm'])      ->name('crm.forms.destroy');
+    Route::get   ('crm/form-templates',                                [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'formTemplates'])   ->name('crm.form-templates.index');
+    // CRM Custom Fields
+    Route::get   ('crm/projects/{project}/custom-fields',              [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'customFieldsList'])->name('crm.custom-fields.index');
+    Route::post  ('crm/projects/{project}/custom-fields',              [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'createCustomField'])->name('crm.custom-fields.store');
+
+    // Mail
+    Route::post  ('mail/sync',                        [\Modules\Pos\Http\Controllers\Api\PosMailApiController::class, 'syncMailbox'])    ->name('mail.sync');
+    Route::post  ('mail/test',                        [\Modules\Pos\Http\Controllers\Api\PosMailApiController::class, 'testMail'])        ->name('mail.test');
+    Route::post  ('mail/verify-credentials',          [\Modules\Pos\Http\Controllers\Api\PosMailApiController::class, 'verifyCredentials'])->name('mail.verify-credentials');
+    Route::get   ('mail/threads',                     [\Modules\Pos\Http\Controllers\Api\PosMailApiController::class, 'threads'])        ->name('mail.threads.index');
+    Route::get   ('mail/thread',                      [\Modules\Pos\Http\Controllers\Api\PosMailApiController::class, 'thread'])         ->name('mail.thread.show');
+    Route::get   ('mail/messages',                    [\Modules\Pos\Http\Controllers\Api\PosMailApiController::class, 'messages'])       ->name('mail.messages.index');
+    Route::get   ('mail/messages/{message}',          [\Modules\Pos\Http\Controllers\Api\PosMailApiController::class, 'show'])           ->name('mail.messages.show');
+    Route::post  ('mail/messages/{message}/read',     [\Modules\Pos\Http\Controllers\Api\PosMailApiController::class, 'markRead'])       ->name('mail.messages.read');
+    Route::post  ('mail/send',                        [\Modules\Pos\Http\Controllers\Api\PosMailApiController::class, 'send'])           ->name('mail.send');
+    Route::get   ('mail/templates',                   [\Modules\Pos\Http\Controllers\Api\PosMailApiController::class, 'templates'])      ->name('mail.templates.index');
+    Route::post  ('mail/templates',                   [\Modules\Pos\Http\Controllers\Api\PosMailApiController::class, 'createTemplate']) ->name('mail.templates.store');
+    Route::delete('mail/templates/{template}',        [\Modules\Pos\Http\Controllers\Api\PosMailApiController::class, 'deleteTemplate']) ->name('mail.templates.destroy');
+    Route::get   ('mail/scheduled',                   [\Modules\Pos\Http\Controllers\Api\PosMailApiController::class, 'scheduled'])      ->name('mail.scheduled.index');
+    Route::delete('mail/scheduled/{scheduledMail}',   [\Modules\Pos\Http\Controllers\Api\PosMailApiController::class, 'cancelScheduled'])->name('mail.scheduled.destroy');
+    Route::get   ('mail/filters',                     [\Modules\Pos\Http\Controllers\Api\PosMailApiController::class, 'filters'])        ->name('mail.filters.index');
+    Route::get   ('mail/settings',                    [\Modules\Pos\Http\Controllers\Api\PosMailApiController::class, 'settingsGet'])     ->name('mail.settings.show');
+    Route::patch ('mail/settings',                    [\Modules\Pos\Http\Controllers\Api\PosMailApiController::class, 'settingsUpdate'])  ->name('mail.settings.update');
 });

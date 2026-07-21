@@ -27,17 +27,22 @@ class SaleItem extends Model
         'unit_sell_price',
         'line_total',
         'sort_order',
+        'warranty_type',
+        'warranty_days',
+        'warranty_expires_at',
     ];
 
     protected function casts(): array
     {
         return [
-            'quantity' => 'decimal:3',
-            'unit_cost' => 'decimal:2',
-            'discount_amount' => 'decimal:2',
-            'unit_sell_price' => 'decimal:2',
-            'line_total' => 'decimal:2',
-            'sort_order' => 'integer',
+            'quantity'            => 'decimal:3',
+            'unit_cost'           => 'decimal:2',
+            'discount_amount'     => 'decimal:2',
+            'unit_sell_price'     => 'decimal:2',
+            'line_total'          => 'decimal:2',
+            'sort_order'          => 'integer',
+            'warranty_days'       => 'integer',
+            'warranty_expires_at' => 'date',
         ];
     }
 

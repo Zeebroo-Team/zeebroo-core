@@ -114,7 +114,7 @@ class GoodsReceiveNoteService
         }
 
         $purchases = Purchase::query()
-            ->with('supplier')
+            ->with(['supplier', 'items.goodsReceiveNoteItems'])
             ->where('business_id', $business->id)
             ->whereIn('id', $purchaseIds)
             ->orderByDesc('purchase_date')

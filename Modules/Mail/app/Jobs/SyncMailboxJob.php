@@ -19,8 +19,12 @@ class SyncMailboxJob implements ShouldQueue
     use Queueable;
     use SerializesModels;
 
-    /** IMAP connections over a slow/unresponsive server can take a while — give the worker room beyond the default 60s. */
-    public int $timeout = 180;
+    /**
+     * Incremental syncs (most runs) finish in seconds. The generous limit here
+     * covers a first-time sync of a mailbox with 50 large messages over a slow
+     * connection. The worker is killed if this is exceeded.
+     */
+    public int $timeout = 300;
 
     public int $tries = 1;
 

@@ -30,7 +30,7 @@ class BusinessMailConfig
     /**
      * Decoded, decrypted settings for use when actually sending mail.
      *
-     * @return array{provider:string,from_address:?string,from_name:?string,resend_api_key:?string,smtp_host:?string,smtp_port:?int,smtp_username:?string,smtp_password:?string,smtp_encryption:?string,domain_name:?string,resend_domain_id:?string,resend_domain_status:?string,cloudflare_api_token:?string,cloudflare_zone_id:?string}
+     * @return array{provider:string,from_address:?string,from_name:?string,resend_api_key:?string,smtp_host:?string,smtp_port:?int,smtp_username:?string,smtp_password:?string,smtp_encryption:?string,domain_name:?string,resend_domain_id:?string,resend_domain_status:?string,cloudflare_api_token:?string,cloudflare_zone_id:?string,letterhead_enabled:bool}
      */
     public function get(Business $business): array
     {
@@ -38,6 +38,7 @@ class BusinessMailConfig
             'provider'             => $business->getSetting('mail.provider', self::PROVIDER_PLATFORM),
             'from_address'         => $business->getSetting('mail.from_address'),
             'from_name'            => $business->getSetting('mail.from_name'),
+            'letterhead_enabled'   => (bool) $business->getSetting('mail.letterhead_enabled', false),
             'resend_api_key'       => $this->decrypt($business->getSetting('mail.resend_api_key')),
             'smtp_host'            => $business->getSetting('mail.smtp_host'),
             'smtp_port'            => $business->getSetting('mail.smtp_port') !== null ? (int) $business->getSetting('mail.smtp_port') : null,
@@ -74,6 +75,7 @@ class BusinessMailConfig
         $business->setSetting('mail.smtp_port', (int) ($data['smtp_port'] ?? 587));
         $business->setSetting('mail.smtp_username', (string) ($data['smtp_username'] ?? ''));
         $business->setSetting('mail.smtp_encryption', (string) ($data['smtp_encryption'] ?? 'tls'));
+        $business->setSetting('mail.letterhead_enabled', (bool) ($data['letterhead_enabled'] ?? false));
 
         if (filled($data['resend_api_key'] ?? '')) {
             $business->setSetting('mail.resend_api_key', Crypt::encryptString($data['resend_api_key']));

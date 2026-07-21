@@ -5,6 +5,7 @@ $obFeatures = [
     ['key' => 'account_management',   'label' => 'Account Management',   'icon' => 'fa-wallet',             'desc' => 'Track bank accounts, income, expenses and ledgers',         'required' => true],
     ['key' => 'bill_management',      'label' => 'Bill Management',       'icon' => 'fa-file-invoice-dollar','desc' => 'Manage recurring utility and service bills'],
     ['key' => 'human_resources',      'label' => 'Human Resources',       'icon' => 'fa-users-gear',         'desc' => 'Payroll, leave, attendance and employee management'],
+    ['key' => 'mail',                 'label' => 'Mail',                  'icon' => 'fa-envelope',           'desc' => 'Business inbox, templates, filters and scheduled sending'],
     ['key' => 'product_management',   'label' => 'Product Management',    'icon' => 'fa-boxes-stacked',      'desc' => 'Product catalogue, pricing, variants and categories'],
     ['key' => 'stock_management',     'label' => 'Stock Management',      'icon' => 'fa-warehouse',          'desc' => 'Inventory levels, stock transfers and low-stock alerts'],
     ['key' => 'point_of_sale',        'label' => 'Point of Sale',         'icon' => 'fa-cash-register',      'desc' => 'Counter sales, receipts, daily float and cashier shifts', 'requires' => ['product_management','stock_management']],

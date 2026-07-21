@@ -4,6 +4,19 @@
     $notes = $notes ?? collect();
     $hasNotes = $notes->isNotEmpty();
     $defaultOpen = filter_var($defaultOpen ?? false, FILTER_VALIDATE_BOOLEAN);
+
+    $poGrpTotal = 0.0; $poGrpReceived = 0.0;
+    if ($purchase->relationLoaded('items')) {
+        foreach ($purchase->items as $_gi) {
+            $poGrpTotal += (float) $_gi->quantity;
+            if ($_gi->relationLoaded('goodsReceiveNoteItems')) {
+                $poGrpReceived += (float) $_gi->goodsReceiveNoteItems->sum('quantity_received');
+            }
+        }
+    }
+    $poGrpPct = $poGrpTotal > 0 ? min(100, (int) round($poGrpReceived / $poGrpTotal * 100)) : 0;
+    $poGrpRemaining = max(0.0, round($poGrpTotal - $poGrpReceived, 3));
+    $showProgress = $poGrpTotal > 0 && ($purchase->isPartiallyReceived() || $purchase->isReceived());
 @endphp
 <details class="grn-po-group" data-grn-po-group @if($defaultOpen) open @endif>
     <summary class="grn-po-group__head">
@@ -15,10 +28,21 @@
                 @if($hasNotes)
                     <span class="grn-po-group__count">{{ $notes->count() }} {{ $notes->count() === 1 ? 'GRN' : 'GRNs' }}</span>
                 @endif
+                @if($showProgress)
+                    <span style="display:inline-flex;align-items:center;gap:5px;font-size:10px;color:var(--muted);">
+                        <span style="display:inline-block;width:52px;height:4px;border-radius:999px;background:color-mix(in srgb,var(--border) 80%,transparent);overflow:hidden;vertical-align:middle;">
+                            <span style="display:block;height:100%;width:{{ $poGrpPct }}%;background:{{ $purchase->isReceived() ? 'color-mix(in srgb,#22c55e 75%,var(--text))' : 'color-mix(in srgb,#f59e0b 75%,var(--text))' }};"></span>
+                        </span>
+                        {{ $poGrpPct }}%
+                    </span>
+                @endif
             </span>
             <span class="grn-po-group__meta">
                 {{ $purchase->purchase_date->format('M j, Y') }}
                 @if($purchase->supplier) · {{ $purchase->supplier->name }} @endif
+                @if($showProgress && !$purchase->isReceived() && $poGrpRemaining > 0)
+                    · <span style="color:color-mix(in srgb,#f59e0b 70%,var(--muted));">{{ rtrim(rtrim(number_format($poGrpRemaining, 3, '.', ''), '0'), '.') }} units pending</span>
+                @endif
             </span>
         </span>
         <span class="grn-po-group__actions" onclick="event.stopPropagation();">

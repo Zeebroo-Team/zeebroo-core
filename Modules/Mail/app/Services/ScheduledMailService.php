@@ -44,12 +44,19 @@ class ScheduledMailService
     }
 
     /**
+     * Scheduled mails that are due, excluding businesses that have since
+     * disabled the Mail feature — they stay pending and get picked up again
+     * once the feature is re-enabled, rather than being sent or dropped.
+     *
      * @return Collection<int, ScheduledMail>
      */
     public function due(): Collection
     {
         return ScheduledMail::where('status', ScheduledMail::STATUS_PENDING)
             ->where('scheduled_at', '<=', now())
-            ->get();
+            ->with('business')
+            ->get()
+            ->filter(fn (ScheduledMail $scheduled) => $scheduled->business?->hasFeature('mail') ?? true)
+            ->values();
     }
 }
