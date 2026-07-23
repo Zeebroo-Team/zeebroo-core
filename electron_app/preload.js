@@ -22,6 +22,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // API
   apiRequest:      (method, path, body) => ipcRenderer.invoke('api-request', { method, path, body }),
+  fetchJson:       (url)                => ipcRenderer.invoke('fetch-json', url),
   apiUpload:       (apiPath, filePath)  => ipcRenderer.invoke('api-upload', { path: apiPath, filePath }),
   showOpenDialog:  (options)            => ipcRenderer.invoke('show-open-dialog', options),
   checkForUpdate:  ()                   => ipcRenderer.invoke('check-for-update'),

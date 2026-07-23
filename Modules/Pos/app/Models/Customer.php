@@ -11,7 +11,7 @@ class Customer extends Model
 {
     protected $table = 'pos_customers';
 
-    protected $fillable = ['business_id', 'name', 'phone', 'email', 'address', 'notes'];
+    protected $fillable = ['business_id', 'name', 'phone', 'email', 'address', 'notes', 'customer_type'];
 
     public function business(): BelongsTo
     {

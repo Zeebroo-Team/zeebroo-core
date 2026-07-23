@@ -113,14 +113,19 @@ class PosTodaySummaryApiController extends Controller
             'total_price'    => $r->total_price !== null ? (float) $r->total_price : null,
         ])->values()->all();
 
+        $revenue     = round((float) $sales->sum('total'), 2);
+        $cogs        = round((float) $allItems->sum(fn ($i) => (float) $i->unit_cost * (float) $i->quantity), 2);
+        $grossProfit = round($revenue - $cogs, 2);
+
         return response()->json([
             'data' => [
                 'sales' => [
-                    'count'      => $sales->count(),
-                    'revenue'    => round((float) $sales->sum('total'), 2),
-                    'items_sold' => (int) $allItems->sum('quantity'),
-                    'by_method'  => $byMethod,
-                    'hourly'     => $hourly,
+                    'count'        => $sales->count(),
+                    'revenue'      => $revenue,
+                    'gross_profit' => $grossProfit,
+                    'items_sold'   => (int) $allItems->sum('quantity'),
+                    'by_method'    => $byMethod,
+                    'hourly'       => $hourly,
                 ],
                 'service_requests' => [
                     'pending'     => $svcRequests->where('status', ServiceRequest::STATUS_PENDING)->count(),

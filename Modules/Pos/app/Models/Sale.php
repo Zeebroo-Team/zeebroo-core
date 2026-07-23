@@ -33,6 +33,7 @@ class Sale extends Model
     protected $fillable = [
         'business_id',
         'branch_id',
+        'pos_counter_id',
         'user_id',
         'sale_number',
         'status',

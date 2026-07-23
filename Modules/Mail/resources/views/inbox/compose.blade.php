@@ -3,7 +3,7 @@
 @section('content')
 @include('product::partials.catalog-hub-styles')
 
-<div class="pcat-page-card card" style="max-width:640px;padding:14px;">
+<div class="pcat-page-card card" style="max-width:100%;padding:20px;">
     <div style="margin-bottom:14px;">
         <a href="{{ route('mail.inbox.index') }}" class="pcat-link">
             <i class="fa fa-arrow-left"></i> Mail

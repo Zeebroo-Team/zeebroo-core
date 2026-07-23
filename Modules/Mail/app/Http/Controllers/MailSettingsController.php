@@ -147,6 +147,7 @@ class MailSettingsController extends Controller
             'smtp_username'   => ['nullable', 'string', 'max:190'],
             'smtp_password'   => ['nullable', 'string', 'max:255'],
             'smtp_encryption' => ['nullable', 'string', Rule::in(['tls', 'ssl', 'none'])],
+            'letterhead_enabled' => ['nullable', 'boolean'],
         ]);
 
         $this->config->save($business, $data);

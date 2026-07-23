@@ -35,6 +35,8 @@ class PosCheckoutApiController extends Controller
             'items.*.quantity'               => ['required', 'numeric', 'min:0.001'],
             'items.*.product_stock_layer_id' => ['nullable', 'integer', 'min:1'],
             'items.*.product_selling_unit_id'=> ['nullable', 'integer', 'min:1'],
+            'items.*.warranty_type'          => ['nullable', 'string', 'in:lifetime,days'],
+            'items.*.warranty_days'          => ['nullable', 'integer', 'min:1', 'max:36500'],
             'payment_method'                 => ['required', 'string', 'in:cash,card,credit'],
             'channel'                        => ['nullable', 'string', 'in:retail,online'],
             'credit_account_id'              => ['nullable', 'integer', 'min:1'],
@@ -45,6 +47,7 @@ class PosCheckoutApiController extends Controller
             'notes'                          => ['nullable', 'string', 'max:2000'],
             'scheduled_at'                   => ['nullable', 'date'],
             'branch_id'                      => ['nullable', 'integer', 'min:1'],
+            'pos_counter_id'                 => ['nullable', 'integer', 'min:1'],
         ]);
 
         $channel = $validated['channel'] ?? Sale::CHANNEL_ONLINE;
@@ -69,6 +72,7 @@ class PosCheckoutApiController extends Controller
                 $deferSettlement,
                 isset($validated['branch_id']) ? (int) $validated['branch_id'] : null,
                 $validated['scheduled_at'] ?? null,
+                isset($validated['pos_counter_id']) ? (int) $validated['pos_counter_id'] : null,
             );
         } catch (ValidationException $e) {
             return response()->json([

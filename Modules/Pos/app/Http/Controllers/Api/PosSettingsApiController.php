@@ -111,7 +111,7 @@ class PosSettingsApiController extends Controller
     public function features(Request $request): JsonResponse
     {
         $business = $this->businessOrAbort($request);
-        $all      = ['account_management','bill_management','human_resources','point_of_sale','product_management','restaurant','service_management','social_media_campaign','stock_management'];
+        $all      = ['account_management','bill_management','crm','human_resources','mail','point_of_sale','product_management','restaurant','service_management','social_media_campaign','stock_management'];
         $stored   = $business->getSetting('business.features') ?? [];
         $enabled  = array_values(array_filter($all, fn ($k) => ! empty($stored[$k])));
         if (! in_array('account_management', $enabled, true)) {
@@ -123,7 +123,7 @@ class PosSettingsApiController extends Controller
     public function updateFeatures(Request $request): JsonResponse
     {
         $business = $this->businessOrAbort($request);
-        $all      = ['account_management','bill_management','human_resources','point_of_sale','product_management','restaurant','service_management','social_media_campaign','stock_management'];
+        $all      = ['account_management','bill_management','crm','human_resources','mail','point_of_sale','product_management','restaurant','service_management','social_media_campaign','stock_management'];
         $validated = $request->validate([
             'features'   => ['required', 'array'],
             'features.*' => ['boolean'],
@@ -155,11 +155,16 @@ class PosSettingsApiController extends Controller
             'receipt_footer'              => ['nullable', 'string', 'max:200'],
             'show_business_name'          => ['nullable', 'boolean'],
             'show_business_address'       => ['nullable', 'boolean'],
+            'receipt_address_line'        => ['nullable', 'string', 'max:300'],
+            'receipt_language'            => ['nullable', 'string', 'in:en,si,ta'],
             'show_account_info'           => ['nullable', 'boolean'],
             'payment_settlement_mode'     => ['nullable', 'string', 'in:immediate,end_of_day'],
             'featured_products_limit'     => ['nullable', 'integer', 'min:0', 'max:200'],
             'featured_categories_limit'   => ['nullable', 'integer', 'min:0', 'max:200'],
             'show_service_bound_products' => ['nullable', 'boolean'],
+            'dont_settle_to_account'     => ['nullable', 'boolean'],
+            'stock_selection_mode'       => ['nullable', 'string', 'in:fifo,choose,last_price'],
+            'choose_price'               => ['nullable', 'boolean'],
             // Branch
             'multi_warehouse_branch'  => ['nullable', 'boolean'],
             'branch_product_separate' => ['nullable', 'boolean'],

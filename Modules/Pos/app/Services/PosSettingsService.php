@@ -35,6 +35,18 @@ class PosSettingsService
 
     public const KEY_SHOW_SERVICE_BOUND_PRODUCTS = 'pos.show_service_bound_products';
 
+    public const KEY_DONT_SETTLE_TO_ACCOUNT = 'pos.dont_settle_to_account';
+
+    /** @var string `fifo` | `choose` | `last_price` */
+    public const KEY_STOCK_SELECTION_MODE = 'pos.stock_selection_mode';
+
+    public const KEY_CHOOSE_PRICE = 'pos.choose_price';
+
+    public const KEY_RECEIPT_ADDRESS = 'pos.receipt_address';
+
+    /** @var string `en` | `si` | `ta` */
+    public const KEY_RECEIPT_LANGUAGE = 'pos.receipt_language';
+
     public const KEY_TAX_ENABLED = 'tax.enabled';
 
     public const KEY_TAX_RATE = 'tax.rate';
@@ -83,12 +95,23 @@ class PosSettingsService
             'receipt_header' => (string) $business->getSetting(self::KEY_RECEIPT_HEADER, ''),
             'receipt_footer' => (string) $business->getSetting(self::KEY_RECEIPT_FOOTER, 'Thank you for your purchase!'),
             'show_business_name' => (bool) $business->getSetting(self::KEY_SHOW_BUSINESS_NAME, true),
-            'show_business_address' => (bool) $business->getSetting(self::KEY_SHOW_BUSINESS_ADDRESS, true),
+            'show_business_address' => (bool) $business->getSetting(self::KEY_SHOW_BUSINESS_ADDRESS, false),
+            'receipt_address_line' => (string) ($business->getSetting(self::KEY_RECEIPT_ADDRESS, '') ?: ''),
+            'receipt_language'    => (function () use ($business) {
+                $v = strtolower(trim((string) ($business->getSetting(self::KEY_RECEIPT_LANGUAGE, 'en') ?: 'en')));
+                return in_array($v, ['en', 'si', 'ta'], true) ? $v : 'en';
+            })(),
             'show_account_info' => (bool) $business->getSetting(self::KEY_SHOW_ACCOUNT_INFO, true),
             'payment_settlement_mode' => (string) $business->getSetting(self::KEY_PAYMENT_SETTLEMENT_MODE, 'immediate'),
             'featured_products_limit' => max(0, (int) $business->getSetting(self::KEY_FEATURED_PRODUCTS_LIMIT, 0)),
             'featured_categories_limit' => max(0, (int) $business->getSetting(self::KEY_FEATURED_CATEGORIES_LIMIT, 0)),
             'show_service_bound_products' => (bool) $business->getSetting(self::KEY_SHOW_SERVICE_BOUND_PRODUCTS, true),
+            'dont_settle_to_account'     => (bool) $business->getSetting(self::KEY_DONT_SETTLE_TO_ACCOUNT, false),
+            'stock_selection_mode'       => (function () use ($business) {
+                $v = strtolower(trim((string) ($business->getSetting(self::KEY_STOCK_SELECTION_MODE, 'fifo') ?: 'fifo')));
+                return in_array($v, ['fifo', 'choose', 'last_price'], true) ? $v : 'fifo';
+            })(),
+            'choose_price'               => (bool) $business->getSetting(self::KEY_CHOOSE_PRICE, false),
             // Branch / warehouse
             'multi_warehouse_branch'   => (bool) $business->getSetting('business.multi_warehouse_branch', false),
             'branch_product_separate'  => (bool) $business->getSetting('business.branch_product_separate', false),
@@ -150,8 +173,15 @@ class PosSettingsService
         $business->setSetting(self::KEY_RECEIPT_HEADER, substr(trim((string) ($data['receipt_header'] ?? '')), 0, 200));
         $business->setSetting(self::KEY_RECEIPT_FOOTER, substr(trim((string) ($data['receipt_footer'] ?? '')), 0, 200));
         $business->setSetting(self::KEY_SHOW_BUSINESS_NAME, filter_var($data['show_business_name'] ?? true, FILTER_VALIDATE_BOOLEAN));
-        $business->setSetting(self::KEY_SHOW_BUSINESS_ADDRESS, filter_var($data['show_business_address'] ?? true, FILTER_VALIDATE_BOOLEAN));
+        $business->setSetting(self::KEY_SHOW_BUSINESS_ADDRESS, filter_var($data['show_business_address'] ?? false, FILTER_VALIDATE_BOOLEAN));
         $business->setSetting(self::KEY_SHOW_ACCOUNT_INFO, filter_var($data['show_account_info'] ?? true, FILTER_VALIDATE_BOOLEAN));
+        if (array_key_exists('receipt_address_line', $data)) {
+            $business->setSetting(self::KEY_RECEIPT_ADDRESS, substr(trim((string) ($data['receipt_address_line'] ?? '')), 0, 300));
+        }
+        if (array_key_exists('receipt_language', $data)) {
+            $lang = strtolower(trim((string) ($data['receipt_language'] ?? 'en')));
+            $business->setSetting(self::KEY_RECEIPT_LANGUAGE, in_array($lang, ['en', 'si', 'ta'], true) ? $lang : 'en');
+        }
 
         $mode = strtolower(trim((string) ($data['payment_settlement_mode'] ?? 'immediate')));
         if (!in_array($mode, ['immediate', 'end_of_day'], true)) {
@@ -169,6 +199,28 @@ class PosSettingsService
             self::KEY_SHOW_SERVICE_BOUND_PRODUCTS,
             filter_var($data['show_service_bound_products'] ?? true, FILTER_VALIDATE_BOOLEAN),
         );
+
+        if (array_key_exists('dont_settle_to_account', $data)) {
+            $business->setSetting(
+                self::KEY_DONT_SETTLE_TO_ACCOUNT,
+                filter_var($data['dont_settle_to_account'] ?? false, FILTER_VALIDATE_BOOLEAN),
+            );
+        }
+
+        if (array_key_exists('stock_selection_mode', $data)) {
+            $mode = strtolower(trim((string) ($data['stock_selection_mode'] ?? 'fifo')));
+            if (!in_array($mode, ['fifo', 'choose', 'last_price'], true)) {
+                $mode = 'fifo';
+            }
+            $business->setSetting(self::KEY_STOCK_SELECTION_MODE, $mode);
+        }
+
+        if (array_key_exists('choose_price', $data)) {
+            $business->setSetting(
+                self::KEY_CHOOSE_PRICE,
+                filter_var($data['choose_price'] ?? false, FILTER_VALIDATE_BOOLEAN),
+            );
+        }
 
         // Branch / warehouse
         if (array_key_exists('multi_warehouse_branch', $data)) {

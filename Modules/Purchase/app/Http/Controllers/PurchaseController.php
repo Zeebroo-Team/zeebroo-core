@@ -105,7 +105,9 @@ class PurchaseController extends Controller
             'supplier',
             'items.product.productUnit',
             'items.goodsReceiveNoteItems',
-            'goodsReceiveNotes' => fn ($query) => $query->withSum('ledgerTransactions as ledger_paid_total', 'amount'),
+            'goodsReceiveNotes' => fn ($query) => $query
+                ->withSum('ledgerTransactions as ledger_paid_total', 'amount')
+                ->with(['chequePayments', 'ledgerTransactions']),
         ]);
 
         $currency = (string) (get_settings('business.currency', '', $business) ?: '');

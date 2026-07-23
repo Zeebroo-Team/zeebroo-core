@@ -42,7 +42,7 @@ class GoodsReceiveNoteController extends Controller
         $currency = (string) (get_settings('business.currency', '', $business) ?: '');
 
         $openPurchaseOrders = $business->purchases()
-            ->with('supplier')
+            ->with(['supplier', 'items.goodsReceiveNoteItems'])
             ->whereIn('status', [Purchase::STATUS_DRAFT, Purchase::STATUS_ORDERED, Purchase::STATUS_PARTIALLY_RECEIVED])
             ->orderByDesc('purchase_date')
             ->orderByDesc('id')
@@ -108,8 +108,9 @@ class GoodsReceiveNoteController extends Controller
 
         $goodsReceiveNote->load([
             'purchase.supplier',
+            'purchase.items.goodsReceiveNoteItems',
             'items.product',
-            'items.purchaseItem',
+            'items.purchaseItem.goodsReceiveNoteItems',
             'ledgerTransactions.deductAccount.bankType',
             'chequePayments.deductAccount.bankType',
         ]);

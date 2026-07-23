@@ -13,6 +13,7 @@ class BusinessMailerService
 {
     public function __construct(
         private readonly BusinessMailConfig $config,
+        private readonly LetterheadService $letterhead,
     ) {}
 
     /**
@@ -33,6 +34,10 @@ class BusinessMailerService
 
             if ($settings && filled($settings['from_address'])) {
                 $mailable->from($settings['from_address'], $settings['from_name'] ?: null);
+            }
+
+            if ($business && ($settings['letterhead_enabled'] ?? false)) {
+                $mailable->with('letterheadHtml', $this->letterhead->render($business));
             }
 
             Mail::mailer($mailerName)->to($to)->send($mailable);

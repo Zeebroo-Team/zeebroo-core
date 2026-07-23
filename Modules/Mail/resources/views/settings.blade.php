@@ -46,6 +46,20 @@
             @error('from_name')<div style="color:#f87171;font-size:12px;margin-top:4px;">{{ $message }}</div>@enderror
         </div>
 
+        <div class="pcat-active-row" style="grid-column:1/-1;">
+            <label class="pcat-active-row__lbl" for="mail-letterhead-toggle">
+                Show letterhead on every email
+                <div class="muted" style="font-size:11.5px;font-weight:400;margin-top:2px;">
+                    Adds your business logo and name as a header banner to every outgoing email (Compose, replies, templates, automations).
+                </div>
+            </label>
+            <label class="pcat-switch">
+                <input type="checkbox" id="mail-letterhead-toggle" name="letterhead_enabled" value="1"
+                       @checked(old('letterhead_enabled', $settings['letterhead_enabled']))>
+                <span class="pcat-switch-slider"></span>
+            </label>
+        </div>
+
         <div data-mail-provider-panel="resend" class="pcat-field" style="grid-column:1/-1;" hidden>
             <label for="mail-resend-key">Resend API key</label>
             <input type="password" id="mail-resend-key" name="resend_api_key" maxlength="255"

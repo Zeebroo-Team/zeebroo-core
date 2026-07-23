@@ -176,6 +176,34 @@ ipcMain.handle('api-request', async (_e, { method, path: p, body }) => {
   }
 });
 
+// Fetch a static JSON file from the configured server (for template loading)
+ipcMain.handle('fetch-json', async (_e, url) => {
+  return new Promise((resolve, reject) => {
+    try {
+      const parsed = new URL(url);
+      const lib = parsed.protocol === 'https:' ? https : http;
+      const req = lib.request({
+        hostname: parsed.hostname,
+        port:     parsed.port || (parsed.protocol === 'https:' ? 443 : 80),
+        path:     parsed.pathname + parsed.search,
+        method:   'GET',
+        headers:  { 'Accept': 'application/json' },
+      }, (res) => {
+        let data = '';
+        res.on('data', chunk => { data += chunk; });
+        res.on('end', () => {
+          try { resolve({ status: res.statusCode, body: JSON.parse(data) }); }
+          catch (_) { resolve({ status: res.statusCode, body: data }); }
+        });
+      });
+      req.on('error', (err) => resolve({ status: 0, body: { message: err.message } }));
+      req.end();
+    } catch (err) {
+      resolve({ status: 0, body: { message: err.message } });
+    }
+  });
+});
+
 // ── Multipart file upload ─────────────────────────────────────────────────
 const MIME_EXT = { jpg:'image/jpeg', jpeg:'image/jpeg', png:'image/png', gif:'image/gif', webp:'image/webp', svg:'image/svg+xml', pdf:'application/pdf' };
 function extMime(filePath) {

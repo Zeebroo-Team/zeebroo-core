@@ -120,6 +120,18 @@ class Business extends Model
         return filled($this->logo_path);
     }
 
+    /**
+     * Whether a Feature Manager feature (business.features.{key}) is enabled
+     * for this business. Unset keys default to enabled, matching the
+     * Feature Manager UI's own fallback.
+     */
+    public function hasFeature(string $key): bool
+    {
+        $features = (array) $this->getSetting('business.features', []);
+
+        return (bool) ($features[$key] ?? true);
+    }
+
     /** Logo URL for UI: uploaded file or shared placeholder graphic. */
     public function displayLogoUrl(): string
     {

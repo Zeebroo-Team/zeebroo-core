@@ -95,6 +95,10 @@ class GoodsReceiveNote extends Model
             return round((float) $this->attributes['ledger_paid_total'], 2);
         }
 
+        if ($this->relationLoaded('ledgerTransactions')) {
+            return round((float) $this->ledgerTransactions->sum('amount'), 2);
+        }
+
         return round((float) $this->ledgerTransactions()->sum('amount'), 2);
     }
 
