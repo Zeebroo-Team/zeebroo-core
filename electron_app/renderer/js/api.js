@@ -176,6 +176,7 @@ const API = (() => {
     design:       (id)         => request('GET',    `/design-studio/designs/${id}`),
     updateDesign: (id, body)   => request('PATCH',  `/design-studio/designs/${id}`, body),
     deleteDesign: (id)         => request('DELETE', `/design-studio/designs/${id}`),
+    designAiChat: (message)   => request('POST',   '/design-studio/ai-chat', { message }),
 
     // Customers
     customers:      (q, page) => request('GET',  `/customers?q=${encodeURIComponent(q || '')}&page=${page || 1}`),

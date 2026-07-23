@@ -9695,6 +9695,185 @@
   <div class="prod-ctx-item" id="prod-ctx-copy-sku"><i class="fa fa-barcode"></i> Copy SKU</div>
 </div>
 
+<!-- ── POS Setup Wizard ───────────────────────────────────────────────────── -->
+<div id="pos-setup-wizard" class="psw-overlay" style="display:none" aria-modal="true" role="dialog">
+  <div class="psw-card">
+
+    <!-- Header -->
+    <div class="psw-header">
+      <div class="psw-header-icon"><i class="fa fa-cash-register"></i></div>
+      <div>
+        <div class="psw-header-title">POS Setup</div>
+        <div class="psw-header-sub">Let's configure your point of sale in a few quick steps</div>
+      </div>
+      <button class="psw-skip-all" id="psw-skip-all" title="Skip setup">Skip <i class="fa fa-forward"></i></button>
+    </div>
+
+    <!-- Step indicator -->
+    <div class="psw-steps" id="psw-steps">
+      <div class="psw-step-dot active" data-step="1"><span>1</span><div class="psw-step-label">Business</div></div>
+      <div class="psw-step-line"></div>
+      <div class="psw-step-dot" data-step="2"><span>2</span><div class="psw-step-label">Receipt</div></div>
+      <div class="psw-step-line"></div>
+      <div class="psw-step-dot" data-step="3"><span>3</span><div class="psw-step-label">Tax</div></div>
+      <div class="psw-step-line"></div>
+      <div class="psw-step-dot" data-step="4"><span>4</span><div class="psw-step-label">Checkout</div></div>
+      <div class="psw-step-line"></div>
+      <div class="psw-step-dot" data-step="5"><span>5</span><div class="psw-step-label">Payment</div></div>
+    </div>
+
+    <!-- Step panels -->
+    <div class="psw-body">
+
+      <!-- Step 1: Business -->
+      <div class="psw-panel active" data-psw-panel="1">
+        <div class="psw-panel-icon" style="background:rgba(78,142,247,.12);color:#4e8ef7"><i class="fa fa-building"></i></div>
+        <h3 class="psw-panel-title">Business information</h3>
+        <p class="psw-panel-sub">This appears on your receipts and reports.</p>
+        <div class="psw-field">
+          <label>Business name</label>
+          <input type="text" id="psw-biz-name" placeholder="e.g. Sunrise Store" maxlength="120">
+        </div>
+        <div class="psw-field">
+          <label>Currency <span class="psw-hint">(symbol shown on receipts)</span></label>
+          <input type="text" id="psw-currency" placeholder="e.g. USD, LKR, EUR" maxlength="10">
+        </div>
+        <div class="psw-field">
+          <label>Receipt address <span class="psw-hint">(optional)</span></label>
+          <textarea id="psw-address" placeholder="Street, city, postal code…" rows="2" maxlength="300"></textarea>
+        </div>
+      </div>
+
+      <!-- Step 2: Receipt -->
+      <div class="psw-panel" data-psw-panel="2">
+        <div class="psw-panel-icon" style="background:rgba(20,184,166,.12);color:#14b8a6"><i class="fa fa-receipt"></i></div>
+        <h3 class="psw-panel-title">Receipt settings</h3>
+        <p class="psw-panel-sub">Customize what appears on printed and digital receipts.</p>
+        <div class="psw-field">
+          <label>Receipt header <span class="psw-hint">(shown at top)</span></label>
+          <input type="text" id="psw-rcpt-header" placeholder="e.g. Welcome to our store!" maxlength="200">
+        </div>
+        <div class="psw-field">
+          <label>Receipt footer <span class="psw-hint">(shown at bottom)</span></label>
+          <input type="text" id="psw-rcpt-footer" placeholder="e.g. Thank you for your purchase!" maxlength="200">
+        </div>
+        <div class="psw-toggles">
+          <label class="psw-toggle-row">
+            <span class="psw-toggle-lbl">Show business name on receipt</span>
+            <input type="checkbox" id="psw-show-biz-name" checked class="psw-cb">
+          </label>
+          <label class="psw-toggle-row">
+            <span class="psw-toggle-lbl">Show address on receipt</span>
+            <input type="checkbox" id="psw-show-biz-addr" class="psw-cb">
+          </label>
+          <label class="psw-toggle-row">
+            <span class="psw-toggle-lbl">Show payment &amp; change info</span>
+            <input type="checkbox" id="psw-show-acct-info" checked class="psw-cb">
+          </label>
+        </div>
+      </div>
+
+      <!-- Step 3: Tax -->
+      <div class="psw-panel" data-psw-panel="3">
+        <div class="psw-panel-icon" style="background:rgba(245,158,11,.12);color:#f59e0b"><i class="fa fa-percent"></i></div>
+        <h3 class="psw-panel-title">Tax configuration</h3>
+        <p class="psw-panel-sub">Set a default tax rate applied to all sales.</p>
+        <label class="psw-toggle-row psw-toggle-row--big" id="psw-tax-toggle-row">
+          <div>
+            <div class="psw-toggle-lbl" style="font-size:14px">Enable tax on sales</div>
+            <div class="psw-hint">Tax will be calculated and shown on receipts</div>
+          </div>
+          <input type="checkbox" id="psw-tax-enabled" class="psw-cb">
+        </label>
+        <div class="psw-field" id="psw-tax-rate-wrap" style="display:none;margin-top:16px">
+          <label>Tax rate (%)</label>
+          <input type="number" id="psw-tax-rate" min="0" max="100" step="0.01" placeholder="e.g. 10" style="max-width:180px">
+        </div>
+        <div class="psw-field">
+          <label>Invoice number prefix</label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input type="text" id="psw-inv-prefix" placeholder="INV" maxlength="10" style="max-width:100px">
+            <span class="psw-hint">- 0001, 0002 …</span>
+          </div>
+        </div>
+        <div class="psw-field">
+          <label>Next invoice number</label>
+          <input type="number" id="psw-inv-next" min="1" step="1" value="1" style="max-width:120px">
+        </div>
+      </div>
+
+      <!-- Step 4: Checkout -->
+      <div class="psw-panel" data-psw-panel="4">
+        <div class="psw-panel-icon" style="background:rgba(99,102,241,.12);color:#6366f1"><i class="fa fa-cart-shopping"></i></div>
+        <h3 class="psw-panel-title">Checkout behaviour</h3>
+        <p class="psw-panel-sub">Control how the checkout flow works for your cashiers.</p>
+        <div class="psw-toggles">
+          <label class="psw-toggle-row">
+            <span class="psw-toggle-lbl">Show discount field at checkout</span>
+            <input type="checkbox" id="psw-discount-field" checked class="psw-cb">
+          </label>
+          <label class="psw-toggle-row">
+            <span class="psw-toggle-lbl">Show checkout confirmation modal</span>
+            <input type="checkbox" id="psw-checkout-modal" checked class="psw-cb">
+          </label>
+          <label class="psw-toggle-row">
+            <span class="psw-toggle-lbl">Allow cashier to choose sell price</span>
+            <input type="checkbox" id="psw-choose-price" class="psw-cb">
+          </label>
+        </div>
+        <div class="psw-field" style="margin-top:16px">
+          <label>Stock selection mode</label>
+          <select id="psw-stock-mode">
+            <option value="fifo">FIFO — oldest stock first</option>
+            <option value="lifo">LIFO — newest stock first</option>
+            <option value="cheapest">Cheapest cost first</option>
+            <option value="manual">Manual — cashier chooses</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Step 5: Payment -->
+      <div class="psw-panel" data-psw-panel="5">
+        <div class="psw-panel-icon" style="background:rgba(34,197,94,.12);color:#22c55e"><i class="fa fa-wallet"></i></div>
+        <h3 class="psw-panel-title">Payment &amp; accounts</h3>
+        <p class="psw-panel-sub">Where should sales revenue be deposited by default?</p>
+        <div class="psw-field">
+          <label>Default deposit account</label>
+          <select id="psw-deposit-account">
+            <option value="">— None / skip for now —</option>
+          </select>
+        </div>
+        <div class="psw-field">
+          <label>Payment settlement</label>
+          <select id="psw-settlement-mode">
+            <option value="immediate">Immediate — record payment on every sale</option>
+            <option value="end_of_day">End-of-day — settle all cash at EOD</option>
+          </select>
+        </div>
+        <div class="psw-toggles" style="margin-top:4px">
+          <label class="psw-toggle-row">
+            <span class="psw-toggle-lbl">Use cash drawer (float management)</span>
+            <input type="checkbox" id="psw-cash-drawer" class="psw-cb">
+          </label>
+        </div>
+        <div class="psw-done-note" id="psw-done-note" style="display:none">
+          <i class="fa fa-circle-check" style="color:#22c55e"></i>
+          <span>All done! Click <strong>Finish</strong> to save and open the POS.</span>
+        </div>
+      </div>
+
+    </div><!-- /.psw-body -->
+
+    <!-- Footer -->
+    <div class="psw-footer">
+      <button class="psw-btn psw-btn--back" id="psw-back" style="visibility:hidden"><i class="fa fa-arrow-left"></i> Back</button>
+      <span class="psw-step-counter" id="psw-step-counter">Step 1 of 5</span>
+      <button class="psw-btn psw-btn--next" id="psw-next">Next <i class="fa fa-arrow-right"></i></button>
+    </div>
+
+  </div>
+</div>
+
 <script src="js/d3.min.js"></script>
 <script src="js/jsbarcode.min.js"></script>
 <script src="js/api.js"></script>

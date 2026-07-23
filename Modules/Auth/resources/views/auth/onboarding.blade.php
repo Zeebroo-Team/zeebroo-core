@@ -389,7 +389,7 @@ $obSteps = [
 .ob-main{
     flex:1;min-width:0;margin-left:240px;height:100vh;
     overflow-y:auto;overflow-x:hidden;
-    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    display:flex;flex-direction:column;align-items:center;
     padding:clamp(32px,7vh,80px) clamp(20px,5vw,64px) 104px;
     box-sizing:border-box;position:relative;
 }

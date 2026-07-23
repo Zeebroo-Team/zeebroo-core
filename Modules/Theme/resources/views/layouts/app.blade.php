@@ -877,6 +877,7 @@
             @endif
             @if(auth()->user()?->hasRole('admin'))
                 <a href="{{ route('admin.panel') }}" class="{{ request()->routeIs('admin.panel') ? 'active' : '' }}"><i class="fa fa-user-shield"></i><span>Admin Panel</span></a>
+                <a href="{{ route('admin.users.index') }}" class="{{ request()->routeIs('admin.users.*') ? 'active' : '' }}"><i class="fa fa-users-gear"></i><span>User Accounts</span></a>
             @endif
         </nav>
         @endif

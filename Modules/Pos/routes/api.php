@@ -245,6 +245,7 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
     Route::get('design-studio/designs/{design}',     [\Modules\Pos\Http\Controllers\Api\PosDesignStudioApiController::class, 'show'])->name('design-studio.designs.show');
     Route::patch('design-studio/designs/{design}',   [\Modules\Pos\Http\Controllers\Api\PosDesignStudioApiController::class, 'update'])->name('design-studio.designs.update');
     Route::delete('design-studio/designs/{design}',  [\Modules\Pos\Http\Controllers\Api\PosDesignStudioApiController::class, 'destroy'])->name('design-studio.designs.destroy');
+    Route::post('design-studio/ai-chat',             [\Modules\Pos\Http\Controllers\Api\DesignAiChatApiController::class, 'chat'])->name('design-studio.ai-chat');
 
     Route::get ('service/requests',                        [\Modules\Pos\Http\Controllers\Api\PosServiceApiController::class, 'requests'])->name('service.requests.index');
     Route::patch('service/requests/{serviceRequest}/status', [\Modules\Pos\Http\Controllers\Api\PosServiceApiController::class, 'updateRequestStatus'])->name('service.requests.status');

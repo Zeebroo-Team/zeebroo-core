@@ -117,7 +117,7 @@ function activateTab(tabName) {
   if (tabName !== 'rst-pos') _rstPosStopPoll();
 
   if (tabName === 'home')       loadHomeDashboard();
-  if (tabName === 'pos')        { _checkCashDrawerOpening(); _loadPosRibbonStats(); }
+  if (tabName === 'pos')        { _checkCashDrawerOpening(); _loadPosRibbonStats(); _maybePosSetupWizard(); }
   if (tabName === 'sales')      { _sal.all = []; _salSwitchView(_sal.view || 'transactions'); }
   if (tabName === 'inventory')  { if (typeof switchInvView === 'function') switchInvView('products'); else loadInventory(); }
   if (tabName === 'finance')    { switchFinView('flow'); }
@@ -11376,6 +11376,179 @@ document.addEventListener('click', (e) => {
 });
 _posAcctBtn.addEventListener('click', () => _bizSwClose());
 // ── End account dropdown ───────────────────────────────────────────────────
+
+// ── POS First-Time Setup Wizard ────────────────────────────────────────────
+
+function _posWizardKey() {
+  return 'pos_wiz_done_' + (state._bizId || 'default');
+}
+
+let _pswStep = 1;
+const _PSW_STEPS = 5;
+
+function _maybePosSetupWizard() {
+  if (localStorage.getItem(_posWizardKey())) return;
+  openPosSetupWizard();
+}
+
+async function openPosSetupWizard() {
+  const wiz = $('#pos-setup-wizard');
+  if (!wiz) return;
+
+  _pswStep = 1;
+  _pswSetStep(1);
+
+  // Load existing settings to pre-fill
+  try {
+    const [sRes, aRes] = await Promise.all([API.settingsGet(), API.accounts()]);
+    const s = sRes.body?.data ?? {};
+
+    _val('psw-biz-name',      s.business_name ?? '');
+    _val('psw-currency',      s.currency ?? '');
+    _val('psw-address',       s.receipt_address_line ?? '');
+    _val('psw-rcpt-header',   s.receipt_header ?? '');
+    _val('psw-rcpt-footer',   s.receipt_footer ?? '');
+    _chk('psw-show-biz-name', s.show_business_name !== '0' && s.show_business_name !== false);
+    _chk('psw-show-biz-addr', s.show_business_address == '1' || s.show_business_address === true);
+    _chk('psw-show-acct-info',s.show_account_info !== '0' && s.show_account_info !== false);
+    _chk('psw-tax-enabled',   s.tax_enabled == '1' || s.tax_enabled === true);
+    _val('psw-tax-rate',      s.tax_rate ?? '');
+    _val('psw-inv-prefix',    s.invoice_prefix ?? 'INV');
+    _val('psw-inv-next',      s.invoice_next_number ?? '1');
+    _chk('psw-discount-field',s.discount_field_enabled !== '0');
+    _chk('psw-checkout-modal',s.checkout_modal_enabled !== '0');
+    _chk('psw-choose-price',  s.choose_price == '1' || s.choose_price === true);
+    _val('psw-stock-mode',    s.stock_selection_mode ?? 'fifo');
+    _chk('psw-cash-drawer',   s.cash_drawer_enabled == '1' || s.cash_drawer_enabled === true);
+
+    // Populate deposit account select
+    const sel = $('#psw-deposit-account');
+    if (sel) {
+      const noSettle = s.dont_settle_to_account == '1' || s.dont_settle_to_account === true;
+      while (sel.options.length > 1) sel.remove(1);
+      const accounts = aRes.body?.data ?? [];
+      accounts.forEach(a => {
+        const opt = document.createElement('option');
+        opt.value = a.id;
+        opt.textContent = a.name;
+        if (String(a.id) === String(s.default_account_id)) opt.selected = true;
+        sel.appendChild(opt);
+      });
+      if (noSettle) sel.value = '';
+    }
+
+    _val('psw-settlement-mode', s.dont_settle_to_account == '1' ? 'end_of_day' : 'immediate');
+
+    _pswToggleTaxRate();
+  } catch (e) { /* proceed with blank fields */ }
+
+  wiz.style.display = 'flex';
+}
+
+function _val(id, v) {
+  const el = $('#' + id);
+  if (el) el.value = v;
+}
+function _chk(id, v) {
+  const el = $('#' + id);
+  if (el) el.checked = !!v;
+}
+
+function _pswSetStep(n) {
+  _pswStep = n;
+
+  // Panels
+  document.querySelectorAll('[data-psw-panel]').forEach(p => {
+    p.classList.toggle('active', +p.dataset.pswPanel === n);
+  });
+
+  // Step dots
+  document.querySelectorAll('.psw-step-dot').forEach(d => {
+    const s = +d.dataset.step;
+    d.classList.toggle('active', s === n);
+    d.classList.toggle('done',   s < n);
+  });
+
+  // Step lines
+  document.querySelectorAll('.psw-step-line').forEach((l, i) => {
+    l.classList.toggle('done', (i + 1) < n);
+  });
+
+  // Counter
+  const ctr = $('#psw-step-counter');
+  if (ctr) ctr.textContent = 'Step ' + n + ' of ' + _PSW_STEPS;
+
+  // Back button
+  const backBtn = $('#psw-back');
+  if (backBtn) backBtn.style.visibility = n === 1 ? 'hidden' : 'visible';
+
+  // Next/Finish button
+  const nextBtn = $('#psw-next');
+  if (nextBtn) {
+    if (n === _PSW_STEPS) {
+      nextBtn.innerHTML = 'Finish <i class="fa fa-check"></i>';
+      nextBtn.className = 'psw-btn psw-btn--finish';
+    } else {
+      nextBtn.innerHTML = 'Next <i class="fa fa-arrow-right"></i>';
+      nextBtn.className = 'psw-btn psw-btn--next';
+    }
+  }
+
+  // Done note on last step
+  const doneNote = $('#psw-done-note');
+  if (doneNote) doneNote.style.display = n === _PSW_STEPS ? 'flex' : 'none';
+}
+
+function _pswToggleTaxRate() {
+  const enabled = $('#psw-tax-enabled')?.checked;
+  const wrap = $('#psw-tax-rate-wrap');
+  if (wrap) wrap.style.display = enabled ? 'block' : 'none';
+}
+
+async function _pswSave() {
+  const payload = {
+    business_name:           $('#psw-biz-name')?.value ?? '',
+    currency:                $('#psw-currency')?.value ?? '',
+    receipt_address_line:    $('#psw-address')?.value ?? '',
+    receipt_header:          $('#psw-rcpt-header')?.value ?? '',
+    receipt_footer:          $('#psw-rcpt-footer')?.value ?? '',
+    show_business_name:      $('#psw-show-biz-name')?.checked ? '1' : '0',
+    show_business_address:   $('#psw-show-biz-addr')?.checked ? '1' : '0',
+    show_account_info:       $('#psw-show-acct-info')?.checked ? '1' : '0',
+    tax_enabled:             $('#psw-tax-enabled')?.checked ? '1' : '0',
+    tax_rate:                $('#psw-tax-rate')?.value ?? '0',
+    invoice_prefix:          $('#psw-inv-prefix')?.value ?? 'INV',
+    invoice_next_number:     $('#psw-inv-next')?.value ?? '1',
+    discount_field_enabled:  $('#psw-discount-field')?.checked ? '1' : '0',
+    checkout_modal_enabled:  $('#psw-checkout-modal')?.checked ? '1' : '0',
+    choose_price:            $('#psw-choose-price')?.checked ? '1' : '0',
+    stock_selection_mode:    $('#psw-stock-mode')?.value ?? 'fifo',
+    cash_drawer_enabled:     $('#psw-cash-drawer')?.checked ? '1' : '0',
+    dont_settle_to_account:  $('#psw-settlement-mode')?.value === 'end_of_day' ? '1' : '0',
+    default_account_id:      $('#psw-deposit-account')?.value ?? '',
+  };
+  try {
+    await API.settingsUpdate(payload);
+  } catch (e) { /* non-fatal — wizard still closes */ }
+  localStorage.setItem(_posWizardKey(), '1');
+  const wiz = $('#pos-setup-wizard');
+  if (wiz) wiz.style.display = 'none';
+}
+
+// Wire up wizard buttons — DOM is already ready when app.js runs
+$('#psw-next')?.addEventListener('click', () => {
+  if (_pswStep < _PSW_STEPS) { _pswSetStep(_pswStep + 1); }
+  else { _pswSave(); }
+});
+$('#psw-back')?.addEventListener('click', () => {
+  if (_pswStep > 1) _pswSetStep(_pswStep - 1);
+});
+$('#psw-skip-all')?.addEventListener('click', () => {
+  localStorage.setItem(_posWizardKey(), '1');
+  const wiz = $('#pos-setup-wizard');
+  if (wiz) wiz.style.display = 'none';
+});
+$('#psw-tax-enabled')?.addEventListener('change', _pswToggleTaxRate);
 
 // ── POS Settings Modal ─────────────────────────────────────────────────────
 async function openPosSettings() {

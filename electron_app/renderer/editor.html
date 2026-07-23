@@ -458,6 +458,46 @@ input.dsp-slider { width: 100%; accent-color: var(--accent); cursor: pointer; }
 .dsl-body::-webkit-scrollbar-track, .dsr-body::-webkit-scrollbar-track { background: transparent; }
 .dsl-body::-webkit-scrollbar-thumb, .dsr-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 .dsl-body::-webkit-scrollbar-thumb:hover, .dsr-body::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+/* ── AI Assistant Panel ─────────────────────────────────────────────────── */
+.dsr-pane-ai { padding: 0; }
+
+.dsai-char-preview {
+  display: flex; flex-direction: column; align-items: center;
+  padding: 20px 14px 16px; border-bottom: 1px solid var(--border); gap: 6px;
+}
+.dsai-char-img {
+  width: 72px; height: auto;
+  filter: drop-shadow(0 6px 14px rgba(0,0,0,.2));
+  animation: guide-float 3.8s ease-in-out infinite;
+}
+.dsai-char-label { font-size: 13px; font-weight: 700; color: var(--text); }
+.dsai-char-sub   { font-size: 11px; color: var(--text-muted); text-align: center; }
+.dsai-open-btn {
+  margin-top: 4px; display: flex; align-items: center; gap: 6px;
+  padding: 7px 16px; border-radius: 8px; border: none; cursor: pointer; font-size: 12px;
+  font-weight: 600; background: #6366f1; color: #fff; transition: background .12s;
+}
+.dsai-open-btn:hover { background: #4f46e5; }
+
+.dsai-section-title {
+  padding: 10px 14px 6px;
+  font-size: 10px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--text-muted);
+}
+.dsai-quick-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 0 12px 14px;
+}
+.dsai-quick-btn {
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  padding: 10px 6px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--surface2); color: var(--text-muted);
+  cursor: pointer; font-size: 11px; text-align: center; transition: all .12s;
+}
+.dsai-quick-btn i   { font-size: 14px; }
+.dsai-quick-btn:hover { background: rgba(99,102,241,.1); border-color: #6366f1; color: #6366f1; }
+.dsai-quick-btn:active { transform: scale(.96); }
+/* ── End AI Assistant ────────────────────────────────────────────────────── */
 </style>
 </head>
 <body>
@@ -510,6 +550,8 @@ input.dsp-slider { width: 100%; accent-color: var(--accent); cursor: pointer; }
         <button class="dst-export-item" onclick="edExport('svg')"><i class="fa fa-code"></i> Export as SVG</button>
         <div style="height:1px;background:var(--border);margin:4px 0;"></div>
         <button class="dst-export-item" onclick="edExportPdf()"><i class="fa fa-file-pdf"></i> Export as PDF</button>
+        <div style="height:1px;background:var(--border);margin:4px 0;"></div>
+        <button class="dst-export-item" onclick="edExportJson()"><i class="fa fa-brackets-curly"></i> Export as JSON</button>
       </div>
     </div>
     <button class="dst-btn dst-btn-pri" onclick="edSave()" id="dsSaveBtn">
@@ -728,6 +770,9 @@ input.dsp-slider { width: 100%; accent-color: var(--accent); cursor: pointer; }
       <button class="dsr-tab"    data-rtab="layers" onclick="switchRightTab('layers',this)">
         <i class="fa fa-layer-group"></i> Layers
       </button>
+      <button class="dsr-tab"    data-rtab="ai"     onclick="switchRightTab('ai',this)">
+        <i class="fa fa-wand-magic-sparkles"></i> AI
+      </button>
     </div>
     <div class="dsr-body">
 
@@ -865,6 +910,67 @@ input.dsp-slider { width: 100%; accent-color: var(--accent); cursor: pointer; }
       <div class="dsr-pane" id="dsrp-layers">
         <div id="dsLayersList">
           <div class="dsl-layers-empty">No objects yet. Add shapes or text to get started.</div>
+        </div>
+      </div>
+
+      <!-- AI Assistant -->
+      <div class="dsr-pane dsr-pane-ai" id="dsrp-ai">
+        <!-- Character preview -->
+        <div class="dsai-char-preview">
+          <img src="img/animtors.gif" alt="AI assistant" class="dsai-char-img">
+          <div class="dsai-char-label">AI Design Assistant</div>
+          <div class="dsai-char-sub">Ask me anything about your design</div>
+          <button class="dsai-open-btn" onclick="dsaiOpenCharacter()">
+            <i class="fa fa-comment-dots"></i> Open Chat
+          </button>
+        </div>
+
+        <!-- Quick actions -->
+        <div class="dsai-section-title">Generate full designs</div>
+        <div class="dsai-quick-grid">
+          <button class="dsai-quick-btn" onclick="dsaiQuick('Create a professional letterhead design')">
+            <i class="fa fa-file-lines"></i>
+            <span>Letterhead</span>
+          </button>
+          <button class="dsai-quick-btn" onclick="dsaiQuick('Design a business card layout')">
+            <i class="fa fa-id-card"></i>
+            <span>Business Card</span>
+          </button>
+          <button class="dsai-quick-btn" onclick="dsaiQuick('Create an invoice template')">
+            <i class="fa fa-file-invoice"></i>
+            <span>Invoice</span>
+          </button>
+          <button class="dsai-quick-btn" onclick="dsaiQuick('Create an event poster design')">
+            <i class="fa fa-calendar-star"></i>
+            <span>Event Poster</span>
+          </button>
+          <button class="dsai-quick-btn" onclick="dsaiQuick('Create a company profile cover design')">
+            <i class="fa fa-building"></i>
+            <span>Profile Cover</span>
+          </button>
+          <button class="dsai-quick-btn" onclick="dsaiQuick('Generate a formal business letter')">
+            <i class="fa fa-envelope"></i>
+            <span>Letter</span>
+          </button>
+        </div>
+        <div class="dsai-section-title" style="margin-top:10px">Quick edits</div>
+        <div class="dsai-quick-grid">
+          <button class="dsai-quick-btn" onclick="dsaiQuick('Set the background to dark navy blue')">
+            <i class="fa fa-fill-drip"></i>
+            <span>Dark bg</span>
+          </button>
+          <button class="dsai-quick-btn" onclick="dsaiQuick('Change the background to white')">
+            <i class="fa fa-sun"></i>
+            <span>White bg</span>
+          </button>
+          <button class="dsai-quick-btn" onclick="dsaiQuick('Make the selected text bold and larger')">
+            <i class="fa fa-bold"></i>
+            <span>Bold text</span>
+          </button>
+          <button class="dsai-quick-btn" onclick="dsaiQuick('Delete the selected object')">
+            <i class="fa fa-trash"></i>
+            <span>Delete</span>
+          </button>
         </div>
       </div>
 
@@ -1676,6 +1782,26 @@ function edExport(fmt) {
     showToast('Exported as '+fmt.toUpperCase(), 'ok');
 }
 
+function edExportJson() {
+    var json = JSON.stringify({
+        version:  '1.0',
+        width:    designW,
+        height:   designH,
+        canvas:   canvas.toJSON(['left','top','width','height','fill','opacity',
+                                 'fontFamily','fontSize','fontWeight','fontStyle',
+                                 'stroke','strokeWidth','rx','ry','radius',
+                                 'shadow','text','type']),
+    }, null, 2);
+    var blob = new Blob([json], { type: 'application/json' });
+    var url  = URL.createObjectURL(blob);
+    var link = document.createElement('a');
+    link.href     = url;
+    link.download = (document.getElementById('dsTitleInput').value || 'design') + '.json';
+    link.click();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
+    showToast('Exported as JSON', 'ok');
+}
+
 /* ──────────────────────────────────────────────────────────────
    PDF EXPORT
    ────────────────────────────────────────────────────────────── */
@@ -1845,6 +1971,866 @@ function showToast(msg, type) {
     toastTimer=setTimeout(function(){ el.className='ds-toast'; }, 2600);
 }
 function escH(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+/* ──────────────────────────────────────────────────────────────
+   AI PANEL — delegates to the guide character
+   ────────────────────────────────────────────────────────────── */
+
+// Open the floating guide character and its chat bubble
+function dsaiOpenCharacter() {
+    if (typeof _dsGuideOpenBubble === 'function') {
+        _dsGuideOpenBubble();
+    } else {
+        // IIFE not ready yet — show the wrap manually and retry
+        var wrap = document.getElementById('guide-char-wrap');
+        if (wrap) wrap.style.display = 'block';
+    }
+}
+
+// Quick-action chip: pre-fill the character's input and send immediately
+function dsaiQuick(message) {
+    if (typeof _dsGuideSendDirect === 'function') {
+        _dsGuideSendDirect(message);
+    } else {
+        var wrap = document.getElementById('guide-char-wrap');
+        if (wrap) wrap.style.display = 'block';
+    }
+}
+
+function dsaiExecuteCommand(cmd) {
+    if (!canvas || !cmd || !cmd.type) return null;
+
+    var cw = canvas.getWidth();
+    var ch = canvas.getHeight();
+
+    switch (cmd.type) {
+        case 'add_text': {
+            var obj = new fabric.IText(cmd.text || 'Text', {
+                left:       cmd.left !== undefined ? cmd.left : Math.round(cw * 0.1),
+                top:        cmd.top  !== undefined ? cmd.top  : Math.round(ch * 0.1),
+                fontSize:   cmd.fontSize   || 32,
+                fontWeight: cmd.fontWeight || 'normal',
+                fontStyle:  cmd.fontStyle  || 'normal',
+                fill:       cmd.fill       || '#1e293b',
+                fontFamily: cmd.fontFamily || 'Inter',
+            });
+            canvas.add(obj);
+            canvas.setActiveObject(obj);
+            canvas.renderAll();
+            saveHist();
+            return 'Added text';
+        }
+        case 'add_rect': {
+            var obj = new fabric.Rect({
+                left:        cmd.left        !== undefined ? cmd.left : Math.round(cw * 0.25),
+                top:         cmd.top         !== undefined ? cmd.top  : Math.round(ch * 0.25),
+                width:       cmd.width       || 200,
+                height:      cmd.height      || 120,
+                rx:          cmd.rx          || 0,
+                ry:          cmd.rx          || 0,
+                fill:        cmd.fill        || '#6366f1',
+                stroke:      cmd.stroke      || '',
+                strokeWidth: cmd.strokeWidth || 0,
+                opacity:     cmd.opacity     !== undefined ? cmd.opacity : 1,
+                scaleX:      cmd.scaleX      !== undefined ? cmd.scaleX : 1,
+                scaleY:      cmd.scaleY      !== undefined ? cmd.scaleY : 1,
+            });
+            canvas.add(obj);
+            canvas.setActiveObject(obj);
+            canvas.renderAll();
+            saveHist();
+            return 'Added rectangle';
+        }
+        case 'add_circle': {
+            var obj = new fabric.Circle({
+                left:        cmd.left        !== undefined ? cmd.left : Math.round(cw * 0.35),
+                top:         cmd.top         !== undefined ? cmd.top  : Math.round(ch * 0.35),
+                radius:      cmd.radius      || 60,
+                fill:        cmd.fill        || '#3b82f6',
+                stroke:      cmd.stroke      || '',
+                strokeWidth: cmd.strokeWidth || 0,
+                opacity:     cmd.opacity     !== undefined ? cmd.opacity : 1,
+                scaleX:      cmd.scaleX      !== undefined ? cmd.scaleX : 1,
+                scaleY:      cmd.scaleY      !== undefined ? cmd.scaleY : 1,
+            });
+            canvas.add(obj);
+            canvas.setActiveObject(obj);
+            canvas.renderAll();
+            saveHist();
+            return 'Added circle';
+        }
+        case 'add_triangle': {
+            var obj = new fabric.Triangle({
+                left:   cmd.left   !== undefined ? cmd.left : Math.round(cw * 0.35),
+                top:    cmd.top    !== undefined ? cmd.top  : Math.round(ch * 0.35),
+                width:  cmd.width  || 120,
+                height: cmd.height || 120,
+                fill:   cmd.fill   || '#f59e0b',
+            });
+            canvas.add(obj);
+            canvas.setActiveObject(obj);
+            canvas.renderAll();
+            saveHist();
+            return 'Added triangle';
+        }
+        case 'set_background': {
+            if (!cmd.fill) return null;
+            canvas.setBackgroundColor(cmd.fill, canvas.renderAll.bind(canvas));
+            saveHist();
+            var bgNative = document.getElementById('dsBgNative');
+            var bgHex    = document.getElementById('dsBgHex');
+            if (bgNative) bgNative.value = cmd.fill;
+            if (bgHex)    bgHex.value    = cmd.fill;
+            return 'Background changed';
+        }
+        case 'set_fill': {
+            var active = canvas.getActiveObject();
+            if (!active || !cmd.fill) return null;
+            active.set('fill', cmd.fill);
+            canvas.renderAll();
+            saveHist();
+            return 'Fill changed';
+        }
+        case 'set_text_props': {
+            var active = canvas.getActiveObject();
+            if (!active) return null;
+            if (cmd.fontSize)   active.set('fontSize',   cmd.fontSize);
+            if (cmd.fontWeight) active.set('fontWeight', cmd.fontWeight);
+            if (cmd.fontStyle)  active.set('fontStyle',  cmd.fontStyle);
+            if (cmd.fill)       active.set('fill',        cmd.fill);
+            if (cmd.fontFamily) active.set('fontFamily', cmd.fontFamily);
+            canvas.renderAll();
+            saveHist();
+            return 'Text style updated';
+        }
+        case 'delete_selected': {
+            var active = canvas.getActiveObject();
+            if (!active) return null;
+            if (active.type === 'activeSelection') {
+                active.forEachObject(function(o) { canvas.remove(o); });
+                canvas.discardActiveObject();
+            } else {
+                canvas.remove(active);
+            }
+            canvas.renderAll();
+            saveHist();
+            return 'Deleted';
+        }
+        case 'duplicate_selected': {
+            var active = canvas.getActiveObject();
+            if (!active) return null;
+            active.clone(function(cl) {
+                cl.set({ left: (cl.left || 0) + 20, top: (cl.top || 0) + 20 });
+                canvas.add(cl);
+                canvas.setActiveObject(cl);
+                canvas.renderAll();
+                saveHist();
+            });
+            return 'Duplicated';
+        }
+        case 'bring_front': {
+            var active = canvas.getActiveObject();
+            if (active) { canvas.bringToFront(active); canvas.renderAll(); saveHist(); }
+            return 'Moved to front';
+        }
+        case 'send_back': {
+            var active = canvas.getActiveObject();
+            if (active) { canvas.sendToBack(active); canvas.renderAll(); saveHist(); }
+            return 'Sent to back';
+        }
+        case 'zoom_fit': {
+            if (typeof edZoomFit === 'function') edZoomFit();
+            return 'Zoomed to fit';
+        }
+        case 'add_line': {
+            var obj = new fabric.Rect({
+                left:        cmd.left   !== undefined ? cmd.left : 0,
+                top:         cmd.top    !== undefined ? cmd.top  : Math.round(ch * 0.5),
+                width:       cmd.width  || cw,
+                height:      cmd.height || 3,
+                fill:        cmd.fill   || '#c9a843',
+                stroke:      '',
+                strokeWidth: 0,
+            });
+            if (cmd.shadow) obj.shadow = new fabric.Shadow(cmd.shadow);
+            canvas.add(obj);
+            canvas.setActiveObject(obj);
+            canvas.renderAll();
+            saveHist();
+            return 'Added line';
+        }
+        case 'set_shadow': {
+            var active = canvas.getActiveObject();
+            if (!active) return null;
+            active.shadow = new fabric.Shadow({
+                color:   cmd.color   || 'rgba(0,0,0,0.22)',
+                blur:    cmd.blur    || 12,
+                offsetX: cmd.offsetX || 0,
+                offsetY: cmd.offsetY || 4,
+            });
+            canvas.renderAll();
+            saveHist();
+            return 'Applied shadow';
+        }
+        default:
+            return null;
+    }
+}
+</script>
+
+<!-- ── AI Design Assistant Character ─────────────────────────────────────── -->
+<div id="guide-char-wrap" style="display:none">
+  <div id="guide-bubble" style="display:none">
+    <div id="guide-chat-input-wrap">
+      <textarea id="guide-chat-input" placeholder="Describe what you want to design…" rows="2"></textarea>
+      <button id="guide-chat-send"><i class="fa fa-paper-plane"></i> Ask</button>
+    </div>
+    <div id="guide-chat-reply-wrap" style="display:none">
+      <div id="guide-chat-reply-text"></div>
+      <button id="guide-chat-again"><i class="fa fa-comment"></i> Ask again</button>
+    </div>
+  </div>
+  <div id="guide-char-img-wrap">
+    <img id="guide-char-img" src="img/animtors.gif" alt="AI design assistant" draggable="false">
+    <button id="guide-char-dismiss" title="Hide assistant"><i class="fa fa-xmark"></i></button>
+  </div>
+</div>
+
+<script>
+/* ── Design Studio AI Character (mirrors main guide.js pattern exactly) ── */
+(function () {
+    var _bubbleOpen  = false;
+    var _busy        = false;
+    var _dragging    = false;
+    var _didDrag     = false;   // cleared on mouseup; read on click
+    var _lastToolSel = null;    // tracks last tool panel visited to skip redundant walks
+
+    function _el(id) { return document.getElementById(id); }
+
+    /* ── Show / hide ──────────────────────────────────────────────────────── */
+    function _show() {
+        var w = _el('guide-char-wrap');
+        if (w) w.style.display = 'block';   // must be 'block', not '' — CSS default is none
+    }
+    function _hide() {
+        _closeBubble();
+        var w = _el('guide-char-wrap');
+        if (w) w.style.display = 'none';
+    }
+
+    /* ── Bubble positioning (exact port from guide.js _positionBubble) ────── */
+    function _positionBubble() {
+        var wrap   = _el('guide-char-wrap');
+        var bubble = _el('guide-bubble');
+        if (!wrap || !bubble) return;
+
+        var BUBBLE_W = 280;
+        var BUBBLE_H = 150;
+        var GAP      = 14;
+        var MARGIN   = 8;
+
+        var wRect = wrap.getBoundingClientRect();
+        var winW  = window.innerWidth;
+        var winH  = window.innerHeight;
+
+        // Vertical: flip below if not enough room above
+        var spaceAbove = wRect.top - GAP;
+        if (spaceAbove < BUBBLE_H + MARGIN) {
+            bubble.classList.add('guide-bubble-below');
+        } else {
+            bubble.classList.remove('guide-bubble-below');
+        }
+
+        // Horizontal: shift left if bubble overflows right edge
+        var bubbleLeftDefault = wRect.right + 8 - BUBBLE_W;
+        if (bubbleLeftDefault < MARGIN) {
+            bubble.classList.add('guide-bubble-left');
+        } else {
+            bubble.classList.remove('guide-bubble-left');
+        }
+    }
+
+    /* ── Bubble open / close (exact port from guide.js) ──────────────────── */
+    function _openBubble() {
+        var bubble = _el('guide-bubble');
+        if (!bubble) return;
+        _bubbleOpen = true;
+        bubble.style.display = 'block';
+        _positionBubble();
+        bubble.classList.remove('guide-pop-out');
+        void bubble.offsetWidth;
+        bubble.classList.add('guide-pop-in');
+        _showInputState();
+        setTimeout(function () { _el('guide-chat-input')?.focus(); }, 120);
+    }
+
+    function _closeBubble() {
+        var bubble = _el('guide-bubble');
+        if (!bubble || !_bubbleOpen) return;
+        _bubbleOpen = false;
+        bubble.classList.remove('guide-pop-in');
+        bubble.classList.add('guide-pop-out');
+        setTimeout(function () {
+            if (!_bubbleOpen) bubble.style.display = 'none';
+        }, 200);
+    }
+
+    function _toggleBubble() {
+        if (_bubbleOpen) { _closeBubble(); } else { _openBubble(); }
+    }
+
+    /* ── Input / reply states ─────────────────────────────────────────────── */
+    function _showInputState() {
+        var iw  = _el('guide-chat-input-wrap');
+        var rw  = _el('guide-chat-reply-wrap');
+        var inp = _el('guide-chat-input');
+        if (iw)  iw.style.display = '';
+        if (rw)  rw.style.display = 'none';
+        if (inp) inp.value = '';
+    }
+
+    function _showReplyState(text, isHtml) {
+        var iw = _el('guide-chat-input-wrap');
+        var rw = _el('guide-chat-reply-wrap');
+        var rt = _el('guide-chat-reply-text');
+        if (iw) iw.style.display = 'none';
+        if (rw) rw.style.display = '';
+        if (rt) {
+            if (isHtml) { rt.innerHTML   = text; rt.className = 'guide-reply-rich'; }
+            else        { rt.textContent = text; rt.className = ''; }
+        }
+    }
+
+    /* ── Utility ──────────────────────────────────────────────────────────── */
+    var _sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+
+    /* ── Send to Design AI ────────────────────────────────────────────────── */
+    async function _sendMessage() {
+        if (_busy) return;
+        var inp     = _el('guide-chat-input');
+        var sendBtn = _el('guide-chat-send');
+        var message = inp ? inp.value.trim() : '';
+        if (!message) { if (inp) inp.focus(); return; }
+
+        _busy = true;
+        if (sendBtn) {
+            sendBtn.disabled  = true;
+            sendBtn.innerHTML = '<i class="fa fa-spinner fa-spin"></i>';
+        }
+
+        var replyText = '', commands = [];
+        try {
+            var res = await window.electronAPI.apiRequest(
+                'POST', '/design-studio/ai-chat', {
+                    message:       message,
+                    canvas_width:  (typeof designW !== 'undefined' ? designW : (canvas ? canvas.getWidth() : 794)),
+                    canvas_height: (typeof designH !== 'undefined' ? designH : (canvas ? canvas.getHeight() : 1123)),
+                }
+            );
+            console.log('[DS-AI] response status:', res && res.status, 'commands:', res && res.body && res.body.commands && res.body.commands.length);
+            if (res.status === 200 && res.body) {
+                replyText = res.body.reply    || 'Done!';
+                commands  = res.body.commands || [];
+            } else {
+                console.warn('[DS-AI] non-200 status:', res.status, res.body);
+                replyText = 'Something went wrong. Please try again.';
+            }
+        } catch (err) {
+            console.error('[DS-AI] error:', err);
+            replyText = 'Connection error. Please try again.';
+        }
+
+        _busy = false;
+        if (sendBtn) {
+            sendBtn.disabled  = false;
+            sendBtn.innerHTML = '<i class="fa fa-paper-plane"></i> Ask';
+        }
+
+        // Close bubble, run animated sequence, then reopen with reply
+        _closeBubble();
+        if (commands.length > 0) {
+            await _sleep(250);
+            await _animateCommands(commands);
+        }
+        await _sleep(180);
+        _openBubble();               // opens bubble (resets to input state internally)
+        _showReplyState(replyText, false);  // immediately override to show reply
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════════
+       DRAWING ANIMATION ENGINE
+       ═══════════════════════════════════════════════════════════════════════ */
+
+    /* Walk the character to sit beside a DOM element */
+    async function _charWalkTo(el) {
+        var wrap = _el('guide-char-wrap');
+        if (!wrap || !el) return;
+        var r   = el.getBoundingClientRect();
+        var cw  = wrap.offsetWidth  || 96;
+        var ch  = wrap.offsetHeight || 120;
+        // Sit to the right of the target; fall back to left if off-screen
+        var tl = r.right + 10;
+        var tt = r.top + r.height / 2 - ch / 2;
+        if (tl + cw + 8 > window.innerWidth) tl = r.left - cw - 10;
+        tl = Math.max(8, Math.min(window.innerWidth  - cw - 8, tl));
+        tt = Math.max(8, Math.min(window.innerHeight - ch - 8, tt));
+        // Ensure we're using left/top coordinates
+        wrap.style.right  = 'auto';
+        wrap.style.bottom = 'auto';
+        wrap.style.transition = 'left .52s cubic-bezier(.4,0,.2,1), top .52s cubic-bezier(.4,0,.2,1)';
+        wrap.style.left = tl + 'px';
+        wrap.style.top  = tt + 'px';
+        var img = _el('guide-char-img');
+        if (img) img.classList.add('guide-walk-bounce');
+        await _sleep(580);
+        if (img) img.classList.remove('guide-walk-bounce');
+    }
+
+    /* Walk to the canvas centre (or near the element being placed) */
+    async function _charWalkToCanvas(objLeft, objTop) {
+        var wrap     = _el('guide-char-wrap');
+        var canvasEl = document.getElementById('dsCanvasWrap');
+        if (!wrap || !canvasEl) return;
+        var r  = canvasEl.getBoundingClientRect();
+        var cw = wrap.offsetWidth  || 96;
+        var ch = wrap.offsetHeight || 120;
+        // Convert object canvas coords to screen coords
+        var zoom   = canvas ? canvas.getZoom() : 1;
+        var vpT    = canvas ? canvas.viewportTransform : [1,0,0,1,0,0];
+        var sx     = (objLeft  !== undefined ? objLeft  * zoom + vpT[4] : r.width  / 2) + r.left;
+        var sy     = (objTop   !== undefined ? objTop   * zoom + vpT[5] : r.height / 2) + r.top;
+        var tl = Math.max(8, Math.min(window.innerWidth  - cw - 8, sx - cw / 2));
+        var tt = Math.max(8, Math.min(window.innerHeight - ch - 8, sy - ch - 16));
+        wrap.style.right  = 'auto';
+        wrap.style.bottom = 'auto';
+        wrap.style.transition = 'left .45s cubic-bezier(.4,0,.2,1), top .45s cubic-bezier(.4,0,.2,1)';
+        wrap.style.left = tl + 'px';
+        wrap.style.top  = tt + 'px';
+        var img = _el('guide-char-img');
+        if (img) img.classList.add('guide-walk-bounce');
+        await _sleep(520);
+        if (img) img.classList.remove('guide-walk-bounce');
+    }
+
+    /* Animate character back to home position (bottom-right) */
+    async function _charGoHome() {
+        var wrap = _el('guide-char-wrap');
+        if (!wrap) return;
+        var cw = wrap.offsetWidth  || 96;
+        var ch = wrap.offsetHeight || 120;
+        var tl = window.innerWidth  - 24 - cw;
+        var tt = window.innerHeight - 24 - ch;
+        wrap.style.transition = 'left .65s cubic-bezier(.4,0,.2,1), top .65s cubic-bezier(.4,0,.2,1)';
+        wrap.style.left = tl + 'px';
+        wrap.style.top  = tt + 'px';
+        var img = _el('guide-char-img');
+        if (img) img.classList.add('guide-walk-bounce');
+        await _sleep(700);
+        if (img) img.classList.remove('guide-walk-bounce');
+        // Switch back to right/bottom anchor so CSS default works again
+        wrap.style.transition = '';
+        wrap.style.left   = 'auto';  wrap.style.top    = 'auto';
+        wrap.style.right  = '24px';  wrap.style.bottom = '24px';
+    }
+
+    /* Pulse a tool header to show character is "selecting" it */
+    async function _pulseEl(sel) {
+        var el = sel ? document.querySelector(sel) : null;
+        if (!el) return;
+        el.classList.add('guide-target-pulse');
+        await _sleep(550);
+        el.classList.remove('guide-target-pulse');
+    }
+
+    /* Sequential animated command execution */
+    async function _animateCommands(commands) {
+        _lastToolSel = null;
+        for (var i = 0; i < commands.length; i++) {
+            await _animOneCmd(commands[i]);
+            if (i < commands.length - 1) await _sleep(180);
+        }
+        _lastToolSel = null;
+        await _charGoHome();
+    }
+
+    /* Animate one command: walk → tool select → walk to canvas → draw */
+    async function _animOneCmd(cmd) {
+        // set_shadow applies to the active object — no tool walk, no canvas walk
+        if (cmd.type === 'set_shadow') {
+            await _drawAnimated(cmd);
+            return;
+        }
+
+        var toolSel = {
+            add_text:       '#accord-text .dsl-accord-hdr',
+            add_rect:       '#accord-shapes .dsl-accord-hdr',
+            add_circle:     '#accord-shapes .dsl-accord-hdr',
+            add_triangle:   '#accord-shapes .dsl-accord-hdr',
+            add_line:       '#accord-shapes .dsl-accord-hdr',
+            set_background: '#accord-bg .dsl-accord-hdr',
+            set_fill:       '.dsr-tab[data-rtab="props"]',
+            set_text_props: '.dsr-tab[data-rtab="props"]',
+        }[cmd.type];
+
+        // 1. Walk to the tool panel only when the tool changes
+        if (toolSel && toolSel !== _lastToolSel) {
+            _lastToolSel = toolSel;
+            var toolEl = document.querySelector(toolSel);
+            if (toolEl) {
+                await _charWalkTo(toolEl);
+                await _pulseEl(toolSel);
+                await _sleep(150);
+            }
+        }
+
+        // 2. Walk to where the object will land on canvas
+        var needsCanvasWalk = /^add_/.test(cmd.type) || cmd.type === 'set_background';
+        if (needsCanvasWalk) {
+            await _charWalkToCanvas(cmd.left, cmd.top);
+            await _sleep(150);
+        }
+
+        // 3. Draw with animation
+        await _drawAnimated(cmd);
+    }
+
+    /* ── Per-command drawing animations ───────────────────────────────────── */
+
+    function _applyShadow(obj, shadowCfg) {
+        if (!obj || !shadowCfg) return;
+        obj.shadow = new fabric.Shadow({
+            color:   shadowCfg.color   || 'rgba(0,0,0,0.22)',
+            blur:    shadowCfg.blur    || 12,
+            offsetX: shadowCfg.offsetX || 0,
+            offsetY: shadowCfg.offsetY || 4,
+        });
+    }
+
+    async function _drawAnimated(cmd) {
+        if (!canvas || !cmd.type) return;
+        var cw = canvas.getWidth(), ch = canvas.getHeight();
+
+        if (cmd.type === 'set_shadow') {
+            var active = canvas.getActiveObject();
+            if (active) {
+                active.shadow = new fabric.Shadow({
+                    color:   cmd.color   || 'rgba(0,0,0,0.22)',
+                    blur:    cmd.blur    || 12,
+                    offsetX: cmd.offsetX || 0,
+                    offsetY: cmd.offsetY || 4,
+                });
+                canvas.renderAll();
+                saveHist();
+            }
+            return;
+        }
+
+        if (cmd.type === 'add_text') {
+            var finalText = cmd.text || 'Text';
+            var obj = new fabric.IText('|', {
+                left:       cmd.left       !== undefined ? cmd.left       : Math.round(cw * 0.1),
+                top:        cmd.top        !== undefined ? cmd.top        : Math.round(ch * 0.15),
+                fontSize:   cmd.fontSize   || 32,
+                fontWeight: cmd.fontWeight || 'normal',
+                fontStyle:  cmd.fontStyle  || 'normal',
+                fill:       cmd.fill       || '#1e293b',
+                fontFamily: cmd.fontFamily || 'Inter',
+                opacity:    0,
+            });
+            if (cmd.shadow) _applyShadow(obj, cmd.shadow);
+            canvas.add(obj);
+            canvas.setActiveObject(obj);
+            await _fabAnimate(obj, 'opacity', 1, 180, null);
+            // Typewriter
+            var delay = Math.max(18, 65 - Math.floor(finalText.length / 2));
+            for (var i = 0; i <= finalText.length; i++) {
+                obj.set('text', finalText.substring(0, i) + (i < finalText.length ? '|' : ''));
+                canvas.renderAll();
+                if (i > 0) await _sleep(delay);
+            }
+            obj.set('text', finalText);
+            canvas.renderAll();
+            saveHist();
+            return;
+        }
+
+        if (cmd.type === 'add_rect') {
+            var fsx = cmd.scaleX !== undefined ? cmd.scaleX : 1;
+            var fsy = cmd.scaleY !== undefined ? cmd.scaleY : 1;
+            var obj = new fabric.Rect({
+                left:        cmd.left   !== undefined ? cmd.left : Math.round(cw * .25),
+                top:         cmd.top    !== undefined ? cmd.top  : Math.round(ch * .25),
+                width:       cmd.width  || 200,
+                height:      cmd.height || 120,
+                rx:          cmd.rx     || 0,
+                ry:          cmd.rx     || 0,
+                fill:        cmd.fill   || '#6366f1',
+                stroke:      cmd.stroke || '',
+                strokeWidth: cmd.strokeWidth || 0,
+                opacity:     cmd.opacity !== undefined ? cmd.opacity : 1,
+                scaleX: fsx * .05, scaleY: fsy * .05,
+            });
+            if (cmd.shadow) _applyShadow(obj, cmd.shadow);
+            canvas.add(obj); canvas.setActiveObject(obj);
+            await _scaleIn(obj, 480, cmd.opacity !== undefined ? cmd.opacity : 1, fsx, fsy);
+            saveHist(); return;
+        }
+
+        if (cmd.type === 'add_circle') {
+            var fsx = cmd.scaleX !== undefined ? cmd.scaleX : 1;
+            var fsy = cmd.scaleY !== undefined ? cmd.scaleY : 1;
+            var obj = new fabric.Circle({
+                left:        cmd.left   !== undefined ? cmd.left : Math.round(cw * .35),
+                top:         cmd.top    !== undefined ? cmd.top  : Math.round(ch * .35),
+                radius:      cmd.radius || 60,
+                fill:        cmd.fill   || '#3b82f6',
+                stroke:      cmd.stroke || '',
+                strokeWidth: cmd.strokeWidth || 0,
+                opacity:     cmd.opacity !== undefined ? cmd.opacity : 1,
+                scaleX: fsx * .05, scaleY: fsy * .05,
+            });
+            if (cmd.shadow) _applyShadow(obj, cmd.shadow);
+            canvas.add(obj); canvas.setActiveObject(obj);
+            await _scaleIn(obj, 480, cmd.opacity !== undefined ? cmd.opacity : 1, fsx, fsy);
+            saveHist(); return;
+        }
+
+        if (cmd.type === 'add_triangle') {
+            var fsx = cmd.scaleX !== undefined ? cmd.scaleX : 1;
+            var fsy = cmd.scaleY !== undefined ? cmd.scaleY : 1;
+            var obj = new fabric.Triangle({
+                left:   cmd.left  !== undefined ? cmd.left : Math.round(cw * .35),
+                top:    cmd.top   !== undefined ? cmd.top  : Math.round(ch * .35),
+                width:  cmd.width  || 120,
+                height: cmd.height || 120,
+                fill:   cmd.fill   || '#f59e0b',
+                opacity: cmd.opacity !== undefined ? cmd.opacity : 1,
+                scaleX: fsx * .05, scaleY: fsy * .05,
+            });
+            if (cmd.shadow) _applyShadow(obj, cmd.shadow);
+            canvas.add(obj); canvas.setActiveObject(obj);
+            await _scaleIn(obj, 480, cmd.opacity !== undefined ? cmd.opacity : 1, fsx, fsy);
+            saveHist(); return;
+        }
+
+        // add_line: draw from left to right
+        if (cmd.type === 'add_line') {
+            var obj = new fabric.Rect({
+                left:        cmd.left   !== undefined ? cmd.left : 0,
+                top:         cmd.top    !== undefined ? cmd.top  : Math.round(ch * 0.5),
+                width:       cmd.width  || cw,
+                height:      cmd.height || 3,
+                fill:        cmd.fill   || '#c9a843',
+                stroke:      '',
+                strokeWidth: 0,
+                originX:     'left',
+                scaleX:      0.01,
+            });
+            if (cmd.shadow) _applyShadow(obj, cmd.shadow);
+            canvas.add(obj); canvas.setActiveObject(obj);
+            canvas.renderAll();
+            var ease = fabric.util.ease.easeInOutCubic || fabric.util.ease.easeInOutSine || null;
+            await _fabAnimate(obj, 'scaleX', 1, 480, ease);
+            saveHist(); return;
+        }
+
+        if (cmd.type === 'set_background') {
+            var bgNow = canvas.backgroundColor;
+            var from  = (typeof bgNow === 'string' && /^#[0-9a-f]{3,6}$/i.test(bgNow)) ? bgNow : '#ffffff';
+            await _lerpBg(from, cmd.fill || '#ffffff', 650);
+            var bn = document.getElementById('dsBgNative');
+            var bh = document.getElementById('dsBgHex');
+            if (bn) bn.value = cmd.fill;
+            if (bh) bh.value = cmd.fill;
+            saveHist(); return;
+        }
+
+        // Non-animated commands execute instantly
+        dsaiExecuteCommand(cmd);
+    }
+
+    /* ── Fabric.js animation helpers ──────────────────────────────────────── */
+
+    // Generic fabric animate returning a promise
+    function _fabAnimate(obj, prop, to, duration, easing) {
+        return new Promise(function (resolve) {
+            var opts = {
+                duration: duration || 400,
+                onChange:   canvas.renderAll.bind(canvas),
+                onComplete: resolve,
+            };
+            if (easing) opts.easing = easing;
+            obj.animate(prop, to, opts);
+        });
+    }
+
+    // Scale in from tiny with elastic bounce; supports non-1 final scales (e.g. scaleX:4.23 for wide bands)
+    function _scaleIn(obj, dur, finalOpacity, finalScaleX, finalScaleY) {
+        if (finalOpacity === undefined) finalOpacity = 1;
+        finalScaleX = (finalScaleX !== undefined && finalScaleX !== null) ? finalScaleX : 1;
+        finalScaleY = (finalScaleY !== undefined && finalScaleY !== null) ? finalScaleY : 1;
+        return new Promise(function (resolve) {
+            var ease = fabric.util.ease.easeOutBack;
+            var done = 0;
+            var finish = function () { if (++done === 3) { canvas.renderAll(); resolve(); } };
+            obj.animate('scaleX', finalScaleX, { from: finalScaleX * .05, duration: dur,
+                onChange: canvas.renderAll.bind(canvas), easing: ease, onComplete: finish });
+            obj.animate('scaleY', finalScaleY, { from: finalScaleY * .05, duration: dur,
+                onChange: canvas.renderAll.bind(canvas), easing: ease, onComplete: finish });
+            obj.animate('opacity', finalOpacity, { from: 0, duration: dur * .55,
+                onChange: canvas.renderAll.bind(canvas), onComplete: finish });
+        });
+    }
+
+    // Smooth background color morph
+    function _lerpBg(from, to, dur) {
+        return new Promise(function (resolve) {
+            // Parse a #rrggbb or #rgb string to [r,g,b]
+            function parse(hex) {
+                hex = hex.replace('#','');
+                if (hex.length === 3) hex = hex[0]+hex[0]+hex[1]+hex[1]+hex[2]+hex[2];
+                return [parseInt(hex.slice(0,2),16), parseInt(hex.slice(2,4),16), parseInt(hex.slice(4,6),16)];
+            }
+            function toHex(c) { return '#'+c.map(function(v){ return Math.max(0,Math.min(255,Math.round(v))).toString(16).padStart(2,'0'); }).join(''); }
+            var a = parse(from), b = parse(to), t0 = Date.now();
+            function step() {
+                var t = Math.min(1, (Date.now() - t0) / dur);
+                // ease in-out quad
+                t = t < .5 ? 2*t*t : -1+(4-2*t)*t;
+                var color = toHex([a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t, a[2]+(b[2]-a[2])*t]);
+                canvas.setBackgroundColor(color, canvas.renderAll.bind(canvas));
+                if (t < 1) { requestAnimationFrame(step); } else { resolve(); }
+            }
+            requestAnimationFrame(step);
+        });
+    }
+
+    /* ── Draggable (character + bubble move together) ─────────────────────── */
+    function _makeDraggable(wrap, imgWrap) {
+        var active = false, startX, startY, startL, startT;
+
+        imgWrap.addEventListener('mousedown', function (e) {
+            if (e.target.closest('#guide-char-dismiss')) return;
+            active   = true;
+            _didDrag = false;
+            _dragging = false;
+            startX   = e.clientX;
+            startY   = e.clientY;
+
+            // Convert right/bottom anchor → left/top on first drag
+            var r = wrap.getBoundingClientRect();
+            wrap.style.left   = r.left + 'px';
+            wrap.style.top    = r.top  + 'px';
+            wrap.style.right  = 'auto';
+            wrap.style.bottom = 'auto';
+            startL = r.left;
+            startT = r.top;
+
+            wrap.style.transition = 'none';
+            e.preventDefault();
+        });
+
+        document.addEventListener('mousemove', function (e) {
+            if (!active) return;
+            var dx = e.clientX - startX;
+            var dy = e.clientY - startY;
+            if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+                _dragging = true;
+                _didDrag  = true;
+                document.body.style.cursor = 'grabbing';
+            }
+            if (!_dragging) return;
+
+            var maxL = window.innerWidth  - wrap.offsetWidth  - 8;
+            var maxT = window.innerHeight - wrap.offsetHeight - 8;
+            wrap.style.left = Math.max(8, Math.min(maxL, startL + dx)) + 'px';
+            wrap.style.top  = Math.max(8, Math.min(maxT, startT + dy)) + 'px';
+        });
+
+        document.addEventListener('mouseup', function () {
+            if (!active) return;
+            active    = false;
+            _dragging = false;
+            document.body.style.cursor = '';
+            wrap.style.transition = '';
+            if (_didDrag) _positionBubble();   // re-check arrow direction after move
+        });
+    }
+
+    /* ── Expose hooks for the right-panel AI tab ──────────────────────────── */
+    window._dsGuideOpenBubble = function () { _show(); _openBubble(); };
+    window._dsGuideSendDirect = function (message) {
+        _show();
+        if (_bubbleOpen) {
+            // Bubble already open — just fill and send
+            var inp = _el('guide-chat-input');
+            if (inp) inp.value = message;
+            _sendMessage();
+        } else {
+            // Open bubble first (_showInputState clears the input), then fill
+            _openBubble();
+            var inp = _el('guide-chat-input');
+            if (inp) inp.value = message;
+            setTimeout(_sendMessage, 320);
+        }
+    };
+
+    /* ── Init ─────────────────────────────────────────────────────────────── */
+    function init() {
+        var wrap    = _el('guide-char-wrap');
+        var imgWrap = _el('guide-char-img-wrap');
+        if (!wrap || !imgWrap) return;
+
+        _show();
+
+        imgWrap.addEventListener('click', function (e) {
+            if (e.target.closest('#guide-char-dismiss')) return;
+            if (_didDrag) { _didDrag = false; return; }   // skip click after drag
+            _toggleBubble();
+        });
+
+        // Prevent clicks inside bubble from reaching the document click-outside handler
+        _el('guide-bubble')?.addEventListener('mousedown', function (e) {
+            e.stopPropagation();
+        });
+
+        _el('guide-chat-send')?.addEventListener('click', function (e) {
+            e.stopPropagation();
+            _sendMessage();
+        });
+
+        _el('guide-chat-again')?.addEventListener('click', function (e) {
+            e.stopPropagation();
+            _showInputState();
+            // brief close/reopen so bubble animates fresh
+            _closeBubble();
+            setTimeout(_openBubble, 220);
+        });
+
+        _el('guide-char-dismiss')?.addEventListener('click', function (e) {
+            e.stopPropagation();
+            _hide();
+        });
+
+        _el('guide-chat-input')?.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); _sendMessage(); }
+        });
+
+        // Click outside the wrap → close bubble
+        document.addEventListener('mousedown', function (e) {
+            if (!_bubbleOpen) return;
+            if (wrap && !wrap.contains(e.target)) _closeBubble();
+        });
+
+        _makeDraggable(wrap, imgWrap);
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+    } else {
+        init();
+    }
+})();
 </script>
 
 </body>
