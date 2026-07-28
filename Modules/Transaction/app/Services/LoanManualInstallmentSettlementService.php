@@ -68,7 +68,7 @@ class LoanManualInstallmentSettlementService
             ]);
         }
 
-        return DB::transaction(function () use ($loan, $user, $business, $occurrence, $deductAccountId, $amount, $periodNumber, $summary): LedgerTransaction {
+        $result = DB::transaction(function () use ($loan, $user, $business, $occurrence, $deductAccountId, $amount, $periodNumber, $summary): LedgerTransaction {
             $ledgerExists = LedgerTransaction::query()
                 ->where('transactionable_type', Loan::class)
                 ->where('transactionable_id', $loan->getKey())
@@ -126,5 +126,24 @@ class LoanManualInstallmentSettlementService
                 ],
             ]);
         });
+
+        try {
+            app(\Modules\AutomationEditor\Services\AutomationRunnerService::class)->dispatch('loan.installment.paid', $business, [
+                'event'       => 'loan.installment.paid',
+                'loan'        => [
+                    'id'              => $loan->id,
+                    'name'            => $loan->name,
+                    'borrowed_amount' => (float) $loan->borrowed_amount,
+                ],
+                'installment' => [
+                    'amount'     => $amount,
+                    'period'     => $periodNumber,
+                    'due_date'   => $occurrenceDateYmd,
+                    'paid_at'    => now()->toIso8601String(),
+                ],
+            ]);
+        } catch (\Throwable) {}
+
+        return $result;
     }
 }

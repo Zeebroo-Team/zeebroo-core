@@ -34,7 +34,8 @@ const API = (() => {
     },
     productSearch:(q, perPage)    => request('GET', `/online/products?q=${encodeURIComponent(q || '')}&per_page=${perPage || 20}`),
     product:          (id)         => request('GET', `/online/products/${id}`),
-    productSalesChart:(id, period) => request('GET', `/online/products/${id}/sales-chart?period=${period || 'weekly'}`),
+    productSalesChart:  (id, period) => request('GET', `/online/products/${id}/sales-chart?period=${period || 'weekly'}`),
+    productStockHistory:(id)        => request('GET', `/online/products/${id}/stock-history`),
     productBySku: (sku)               => request('GET',  `/online/products/sku/${encodeURIComponent(sku)}`),
     checkout:     (body)              => request('POST', '/online/checkout', body),
     createProduct: (body)              => request('POST',   '/online/products', body),
@@ -171,12 +172,20 @@ const API = (() => {
     recomputePayrollItem: (cId, iId, body) => request('POST',  `/hr/payroll/cycles/${cId}/items/${iId}/recompute`, body),
 
     // Design Studio
-    designs:      (type)       => request('GET',    `/design-studio/designs${type ? '?type='+encodeURIComponent(type) : ''}`),
-    createDesign: (body)       => request('POST',   '/design-studio/designs', body),
-    design:       (id)         => request('GET',    `/design-studio/designs/${id}`),
-    updateDesign: (id, body)   => request('PATCH',  `/design-studio/designs/${id}`, body),
-    deleteDesign: (id)         => request('DELETE', `/design-studio/designs/${id}`),
-    designAiChat: (message)   => request('POST',   '/design-studio/ai-chat', { message }),
+    designs:        (type)        => request('GET',    `/design-studio/designs${type ? '?type='+encodeURIComponent(type) : ''}`),
+    createDesign:   (body)        => request('POST',   '/design-studio/designs', body),
+    design:         (id)          => request('GET',    `/design-studio/designs/${id}`),
+    updateDesign:   (id, body)    => request('PATCH',  `/design-studio/designs/${id}`, body),
+    deleteDesign:   (id)          => request('DELETE', `/design-studio/designs/${id}`),
+    designAiChat:   (message)     => request('POST',   '/design-studio/ai-chat', { message }),
+    proposals:      ()            => request('GET',    '/design-studio/proposals'),
+    proposalPages:  (group)       => request('GET',    `/design-studio/proposals/${encodeURIComponent(group)}/pages`),
+    createProposal:     (body)    => request('POST',   '/design-studio/proposals', body),
+    aiProposalContent:  (body)    => request('POST',   '/design-studio/proposals/ai-content', body),
+    aiProposalFill:     (group, body) => request('POST', `/design-studio/proposals/${encodeURIComponent(group)}/ai-fill`, body),
+    addProposalPage:    (group, body) => request('POST', `/design-studio/proposals/${encodeURIComponent(group)}/pages`, body),
+    deleteProposal:     (group)   => request('DELETE', `/design-studio/proposals/${encodeURIComponent(group)}`),
+    linkProposalToInvoice: (group, invoiceId) => request('POST', `/design-studio/proposals/${encodeURIComponent(group)}/link-invoice`, { invoice_id: invoiceId }),
 
     // Customers
     customers:      (q, page) => request('GET',  `/customers?q=${encodeURIComponent(q || '')}&page=${page || 1}`),
@@ -327,7 +336,8 @@ const API = (() => {
 
     // Service management (Services tab)
     serviceRequests:           (q, status) => request('GET',   `/service/requests?q=${encodeURIComponent(q || '')}&status=${encodeURIComponent(status || '')}`),
-    updateServiceRequestStatus:(id, status) => request('PATCH', `/service/requests/${id}/status`, { status }),
+    createServiceRequest:      (body)      => request('POST',  '/service/requests', body),
+    updateServiceRequestStatus:(id, status, projectId, createTask) => request('PATCH', `/service/requests/${id}/status`, { status, ...(projectId != null ? { project_id: projectId } : {}), ...(createTask === false ? { create_task: false } : {}) }),
     serviceMgmtCatalog:        (q)         => request('GET',   `/service/catalog?q=${encodeURIComponent(q || '')}`),
     createServiceItem:         (body)      => request('POST',  '/service/catalog', body),
     serviceItemDetail:         (id)        => request('GET',   `/service/catalog/${id}`),
@@ -410,7 +420,51 @@ const API = (() => {
     counterUpdate:  (id, body)  => request('PATCH',  `/counters/${id}`,     body),
     counterDelete:  (id)        => request('DELETE',  `/counters/${id}`),
 
+    // Automations
+    automations:       ()        => request('GET',    '/automations'),
+    automationGet:     (id)      => request('GET',    `/automations/${id}`),
+    automationCreate:  (body)    => request('POST',   '/automations', body),
+    automationUpdate:  (id,body) => request('PATCH',  `/automations/${id}`, body),
+    automationDelete:  (id)      => request('DELETE', `/automations/${id}`),
+    automationRuns:    (id)      => request('GET',    `/automations/${id}/runs`),
+    automationTrigger: (id,body) => request('POST',   `/automations/${id}/trigger`, body || {}),
+    automationNotifications: ()  => request('GET',    '/automation-notifications'),
+    automationNotificationsRead: () => request('POST', '/automation-notifications/read-all', {}),
+
+    // Project Management
+    pmProjects:            (filter)    => request('GET',    `/pm/projects${filter ? `?filter=${filter}` : ''}`),
+    pmProjectCreate:       (body)      => request('POST',   '/pm/projects', body),
+    pmProjectUpdate:       (id, body)  => request('PATCH',  `/pm/projects/${id}`, body),
+    pmProjectDelete:       (id)        => request('DELETE', `/pm/projects/${id}`),
+    pmBoard:               (id)        => request('GET',    `/pm/projects/${id}/board`),
+    pmTasks:               (id, qs)    => request('GET',    `/pm/projects/${id}/tasks${qs ? `?${qs}` : ''}`),
+    pmTaskCreate:          (id, body)  => request('POST',   `/pm/projects/${id}/tasks`, body),
+    pmTaskStatus:          (id, status)=> request('PATCH',  `/pm/tasks/${id}/status`, { status }),
+    pmTaskComplete:        (id)        => request('POST',   `/pm/tasks/${id}/complete`, {}),
+    pmTaskReopen:          (id)        => request('POST',   `/pm/tasks/${id}/reopen`, {}),
+    pmTaskComment:         (id, body)  => request('POST',   `/pm/tasks/${id}/comments`, { body }),
+    pmTaskTime:            (id, data)  => request('POST',   `/pm/tasks/${id}/time`, data),
+    pmTaskDelete:          (id)        => request('DELETE', `/pm/tasks/${id}`),
+    pmMyTasks:             (filter)    => request('GET',    `/pm/my-tasks${filter ? `?filter=${filter}` : ''}`),
+    pmMilestones:          (pid)       => request('GET',    `/pm/projects/${pid}/milestones`),
+    pmMilestoneCreate:     (pid, body) => request('POST',   `/pm/projects/${pid}/milestones`, body),
+    pmMilestoneComplete:   (id)        => request('POST',   `/pm/milestones/${id}/complete`, {}),
+    pmMilestoneDelete:     (id)        => request('DELETE', `/pm/milestones/${id}`),
+
     // Raw passthrough for ad-hoc requests
     _raw: (method, path, body = null) => request(method, path, body),
+
+    // Developers — API Keys
+    devKeys:            ()       => request('GET',    '/developers/keys'),
+    devKeyCreate:       (body)   => request('POST',   '/developers/keys', body),
+    devKeyToggle:       (id)     => request('PATCH',  `/developers/keys/${id}/toggle`),
+    devKeyDelete:       (id)     => request('DELETE', `/developers/keys/${id}`),
+
+    // Developers — Webhooks
+    devWebhooks:               ()        => request('GET',    '/developers/webhooks'),
+    devWebhookCreate:          (body)    => request('POST',   '/developers/webhooks', body),
+    devWebhookUpdate:          (id,body) => request('PATCH',  `/developers/webhooks/${id}`, body),
+    devWebhookRegenerateSecret:(id)      => request('POST',   `/developers/webhooks/${id}/regenerate-secret`),
+    devWebhookDelete:          (id)      => request('DELETE', `/developers/webhooks/${id}`),
   };
 })();

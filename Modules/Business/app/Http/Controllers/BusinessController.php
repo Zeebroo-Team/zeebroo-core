@@ -26,7 +26,9 @@ class BusinessController extends Controller
 {
     private const FEATURE_KEYS = [
         'account_management',
+        'automation_editor',
         'bill_management',
+        'developers',
         'human_resources',
         'mail',
         'point_of_sale',

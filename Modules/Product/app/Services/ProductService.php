@@ -89,7 +89,16 @@ class ProductService
 
         $this->productBundleService->syncBundleItems($product, $isBundle, is_array($bundleItems) ? $bundleItems : []);
 
-        return $product->load(['categories', 'brands', 'productUnit', 'imageFile', 'productImages.file', 'bundleItems.itemProduct']);
+        $product = $product->load(['categories', 'brands', 'productUnit', 'imageFile', 'productImages.file', 'bundleItems.itemProduct']);
+
+        try {
+            app(\Modules\AutomationEditor\Services\AutomationRunnerService::class)->dispatch('product.created', $business, [
+                'event'   => 'product.created',
+                'product' => ['id' => $product->id, 'name' => $product->name, 'sku' => $product->sku, 'price' => (float) $product->unit_price, 'category' => $product->categories->first()?->name],
+            ]);
+        } catch (\Throwable) {}
+
+        return $product;
     }
 
     public function update(Product $product, array $data): Product
@@ -97,6 +106,7 @@ class ProductService
         $categoryIds = $data['product_category_ids'] ?? null;
         $brandIds = $data['product_brand_ids'] ?? null;
         $fileIds = $data['file_manager_file_ids'] ?? null;
+        $oldPrice = (float) $product->unit_price;
         $isBundle = array_key_exists('is_bundle', $data) ? (bool) $data['is_bundle'] : $product->is_bundle;
         $bundleItems = $data['bundle_items'] ?? null;
         unset(
@@ -128,7 +138,19 @@ class ProductService
             is_array($bundleItems) ? $bundleItems : [],
         );
 
-        return $product->load(['categories', 'brands', 'productUnit', 'imageFile', 'productImages.file', 'bundleItems.itemProduct']);
+        $product = $product->load(['categories', 'brands', 'productUnit', 'imageFile', 'productImages.file', 'bundleItems.itemProduct']);
+
+        try {
+            $business = $product->business ?? \Modules\Business\Models\Business::find($product->business_id);
+            if ($business) {
+                app(\Modules\AutomationEditor\Services\AutomationRunnerService::class)->dispatch('product.updated', $business, [
+                    'event'   => 'product.updated',
+                    'product' => ['id' => $product->id, 'name' => $product->name, 'sku' => $product->sku, 'price' => (float) $product->unit_price, 'old_price' => $oldPrice],
+                ]);
+            }
+        } catch (\Throwable) {}
+
+        return $product;
     }
 
     public function delete(Product $product): bool

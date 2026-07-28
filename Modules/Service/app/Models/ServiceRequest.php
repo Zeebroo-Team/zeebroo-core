@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Modules\Business\Models\Business;
 use Modules\Pos\Models\Customer;
+use Modules\ProjectManage\Models\Project;
 
 class ServiceRequest extends Model
 {
@@ -18,6 +19,7 @@ class ServiceRequest extends Model
         'business_id',
         'service_item_id',
         'customer_id',
+        'project_id',
         'request_number',
         'title',
         'reference',
@@ -45,6 +47,11 @@ class ServiceRequest extends Model
     public function customer(): BelongsTo
     {
         return $this->belongsTo(Customer::class, 'customer_id');
+    }
+
+    public function project(): BelongsTo
+    {
+        return $this->belongsTo(Project::class);
     }
 
     public function isEditable(): bool

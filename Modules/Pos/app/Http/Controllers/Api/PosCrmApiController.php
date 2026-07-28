@@ -57,6 +57,7 @@ class PosCrmApiController extends Controller
     public function createProject(Request $request): JsonResponse
     {
         $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'crm_pipeline');
 
         $validated = $request->validate([
             'name'        => ['required', 'string', 'max:255'],
@@ -83,19 +84,37 @@ class PosCrmApiController extends Controller
             ->orderByDesc('id')
             ->get(['id', 'stage_id', 'name', 'company', 'email', 'phone', 'estimated_value', 'expected_close_date', 'notes']);
 
+        // Mark leads that already exist as customers (matched by email or phone)
+        $emails = $leads->pluck('email')->filter()->unique()->values()->all();
+        $phones = $leads->pluck('phone')->filter()->unique()->values()->all();
+
+        $customerEmails = $emails
+            ? Customer::where('business_id', $business->id)->whereIn('email', $emails)->pluck('email')->map(fn($e) => strtolower($e))->flip()
+            : collect();
+        $customerPhones = $phones
+            ? Customer::where('business_id', $business->id)->whereIn('phone', $phones)->pluck('phone')->flip()
+            : collect();
+
+        $leads = $leads->map(function ($lead) use ($customerEmails, $customerPhones) {
+            $byEmail = $lead->email && $customerEmails->has(strtolower($lead->email));
+            $byPhone = $lead->phone && $customerPhones->has($lead->phone);
+            $lead->is_customer = $byEmail || $byPhone;
+            return $lead;
+        });
+
         $groupedLeads = $leads->groupBy('stage_id');
 
         $columns = $allStages->map(function (LeadStage $stage) use ($groupedLeads) {
             $stageLeads = $groupedLeads->get($stage->id, collect());
             return [
-                'id'         => $stage->id,
-                'name'       => $stage->name,
-                'color'      => $stage->color,
-                'is_won'     => $stage->is_won,
-                'is_lost'    => $stage->is_lost,
+                'id'           => $stage->id,
+                'name'         => $stage->name,
+                'color'        => $stage->color,
+                'is_won'       => $stage->is_won,
+                'is_lost'      => $stage->is_lost,
                 'leads_count'  => $stageLeads->count(),
                 'value_total'  => (float) $stageLeads->sum('estimated_value'),
-                'leads'      => $stageLeads->values(),
+                'leads'        => $stageLeads->values(),
             ];
         });
 
@@ -113,6 +132,7 @@ class PosCrmApiController extends Controller
     public function createLead(Request $request, int $projectId): JsonResponse
     {
         $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'crm_pipeline');
 
         $project = Project::where('business_id', $business->id)->findOrFail($projectId);
 
@@ -135,6 +155,7 @@ class PosCrmApiController extends Controller
     public function updateLead(Request $request, int $leadId): JsonResponse
     {
         $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'crm_pipeline');
 
         $lead = Lead::where('business_id', $business->id)->findOrFail($leadId);
 
@@ -157,6 +178,7 @@ class PosCrmApiController extends Controller
     public function moveLead(Request $request, int $leadId): JsonResponse
     {
         $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'crm_pipeline');
 
         $lead = Lead::where('business_id', $business->id)->findOrFail($leadId);
 
@@ -175,6 +197,7 @@ class PosCrmApiController extends Controller
     public function deleteLead(Request $request, int $leadId): JsonResponse
     {
         $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'crm_pipeline');
 
         $lead = Lead::where('business_id', $business->id)->findOrFail($leadId);
 
@@ -262,6 +285,7 @@ class PosCrmApiController extends Controller
     public function createTask(Request $request): JsonResponse
     {
         $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'crm_tasks');
 
         $validated = $request->validate([
             'title'       => ['required', 'string', 'max:255'],
@@ -277,6 +301,7 @@ class PosCrmApiController extends Controller
     public function completeTask(Request $request, int $taskId): JsonResponse
     {
         $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'crm_tasks');
 
         $task = Task::where('business_id', $business->id)->findOrFail($taskId);
 
@@ -288,6 +313,7 @@ class PosCrmApiController extends Controller
     public function reopenTask(Request $request, int $taskId): JsonResponse
     {
         $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'crm_tasks');
 
         $task = Task::where('business_id', $business->id)->findOrFail($taskId);
 
@@ -299,6 +325,7 @@ class PosCrmApiController extends Controller
     public function deleteTask(Request $request, int $taskId): JsonResponse
     {
         $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'crm_tasks');
 
         $task = Task::where('business_id', $business->id)->findOrFail($taskId);
 
@@ -330,6 +357,7 @@ class PosCrmApiController extends Controller
     public function createStage(Request $request, int $projectId): JsonResponse
     {
         $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'crm_pipeline');
         $project  = Project::where('business_id', $business->id)->findOrFail($projectId);
 
         $validated = $request->validate([
@@ -347,6 +375,7 @@ class PosCrmApiController extends Controller
     public function updateStage(Request $request, int $projectId, int $stageId): JsonResponse
     {
         $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'crm_pipeline');
         $project  = Project::where('business_id', $business->id)->findOrFail($projectId);
         $stage    = LeadStage::where('project_id', $project->id)->findOrFail($stageId);
 
@@ -365,6 +394,7 @@ class PosCrmApiController extends Controller
     public function deleteStage(Request $request, int $projectId, int $stageId): JsonResponse
     {
         $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'crm_pipeline');
         $project  = Project::where('business_id', $business->id)->findOrFail($projectId);
         $stage    = LeadStage::where('project_id', $project->id)->findOrFail($stageId);
 
@@ -380,6 +410,7 @@ class PosCrmApiController extends Controller
     public function reorderStages(Request $request, int $projectId): JsonResponse
     {
         $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'crm_pipeline');
         $project  = Project::where('business_id', $business->id)->findOrFail($projectId);
 
         $ids = $request->validate(['ids' => ['required', 'array'], 'ids.*' => ['integer']])['ids'];
@@ -412,6 +443,7 @@ class PosCrmApiController extends Controller
     public function createAutomation(Request $request, int $projectId, int $stageId): JsonResponse
     {
         $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'crm_pipeline');
         $project  = Project::where('business_id', $business->id)->findOrFail($projectId);
         $stage    = LeadStage::where('project_id', $project->id)->findOrFail($stageId);
 
@@ -425,6 +457,7 @@ class PosCrmApiController extends Controller
     public function updateAutomation(Request $request, int $projectId, int $stageId, int $automationId): JsonResponse
     {
         $business   = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'crm_pipeline');
         $project    = Project::where('business_id', $business->id)->findOrFail($projectId);
         $stage      = LeadStage::where('project_id', $project->id)->findOrFail($stageId);
         $automation = LeadStageAutomation::where('stage_id', $stage->id)->findOrFail($automationId);
@@ -439,6 +472,7 @@ class PosCrmApiController extends Controller
     public function deleteAutomation(Request $request, int $projectId, int $stageId, int $automationId): JsonResponse
     {
         $business   = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'crm_pipeline');
         $project    = Project::where('business_id', $business->id)->findOrFail($projectId);
         $stage      = LeadStage::where('project_id', $project->id)->findOrFail($stageId);
         $automation = LeadStageAutomation::where('stage_id', $stage->id)->findOrFail($automationId);
@@ -490,6 +524,7 @@ class PosCrmApiController extends Controller
     public function createForm(Request $request, int $projectId): JsonResponse
     {
         $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'crm_forms');
         $project  = Project::where('business_id', $business->id)->findOrFail($projectId);
 
         $validated = $request->validate([
@@ -540,6 +575,7 @@ class PosCrmApiController extends Controller
     public function updateForm(Request $request, int $projectId, int $formId): JsonResponse
     {
         $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'crm_forms');
         $project  = Project::where('business_id', $business->id)->findOrFail($projectId);
         $form     = LeadForm::where('project_id', $project->id)->findOrFail($formId);
 
@@ -568,6 +604,7 @@ class PosCrmApiController extends Controller
     public function publishForm(Request $request, int $projectId, int $formId): JsonResponse
     {
         $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'crm_forms');
         $project  = Project::where('business_id', $business->id)->findOrFail($projectId);
         $form     = LeadForm::where('project_id', $project->id)->findOrFail($formId);
 
@@ -579,6 +616,7 @@ class PosCrmApiController extends Controller
     public function unpublishForm(Request $request, int $projectId, int $formId): JsonResponse
     {
         $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'crm_forms');
         $project  = Project::where('business_id', $business->id)->findOrFail($projectId);
         $form     = LeadForm::where('project_id', $project->id)->findOrFail($formId);
 
@@ -590,6 +628,7 @@ class PosCrmApiController extends Controller
     public function deleteForm(Request $request, int $projectId, int $formId): JsonResponse
     {
         $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'crm_forms');
         $project  = Project::where('business_id', $business->id)->findOrFail($projectId);
         $form     = LeadForm::where('project_id', $project->id)->findOrFail($formId);
 
@@ -623,6 +662,7 @@ class PosCrmApiController extends Controller
     public function createCustomField(Request $request, int $projectId): JsonResponse
     {
         $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'crm_forms');
         $project  = Project::where('business_id', $business->id)->findOrFail($projectId);
 
         $validated = $request->validate([

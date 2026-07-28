@@ -255,6 +255,7 @@ class PosMailApiController extends Controller
     public function send(Request $request): JsonResponse
     {
         $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'mail_compose');
 
         $validated = $request->validate([
             'to'           => ['required', 'email'],
@@ -322,6 +323,7 @@ class PosMailApiController extends Controller
     public function createTemplate(Request $request): JsonResponse
     {
         $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'mail_templates');
 
         $validated = $request->validate([
             'name'    => ['required', 'string', 'max:255'],
@@ -345,6 +347,7 @@ class PosMailApiController extends Controller
     public function deleteTemplate(Request $request, MailTemplate $template): JsonResponse
     {
         $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'mail_templates');
 
         if ((int) $template->business_id !== (int) $business->id) {
             return response()->json(['message' => 'Template not found.'], 404);
@@ -380,6 +383,7 @@ class PosMailApiController extends Controller
     public function cancelScheduled(Request $request, ScheduledMail $scheduledMail): JsonResponse
     {
         $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'mail_compose');
 
         if ((int) $scheduledMail->business_id !== (int) $business->id) {
             return response()->json(['message' => 'Scheduled mail not found.'], 404);

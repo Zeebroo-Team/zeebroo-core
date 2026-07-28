@@ -19,6 +19,7 @@ class PosHrPayrollItemApiController extends Controller
     public function recompute(Request $request, PayrollCycle $cycle, PayrollItem $item): JsonResponse
     {
         $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'hr_payroll');
 
         if ((int) $cycle->business_id !== (int) $business->id) {
             return response()->json(['message' => 'Cycle not found.'], 404);

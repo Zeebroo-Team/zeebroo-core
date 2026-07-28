@@ -26,6 +26,7 @@ class PosCashDrawerApiController extends Controller
     public function open(Request $request): JsonResponse
     {
         $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'pos_session');
 
         $validated = $request->validate([
             'opening_float' => ['required', 'numeric', 'min:0', 'max:9999999'],
@@ -46,6 +47,7 @@ class PosCashDrawerApiController extends Controller
     public function withdraw(Request $request): JsonResponse
     {
         $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'pos_session');
 
         $validated = $request->validate([
             'amount' => ['required', 'numeric', 'min:0.01', 'max:9999999'],

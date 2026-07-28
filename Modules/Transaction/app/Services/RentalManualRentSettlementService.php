@@ -69,7 +69,7 @@ class RentalManualRentSettlementService
 
         $periodsTotal = $schedule->count();
 
-        return DB::transaction(function () use (
+        $result = DB::transaction(function () use (
             $rental,
             $user,
             $business,
@@ -125,5 +125,23 @@ class RentalManualRentSettlementService
                 ],
             ]);
         });
+
+        try {
+            app(\Modules\AutomationEditor\Services\AutomationRunnerService::class)->dispatch('rental.paid', $business, [
+                'event'   => 'rental.paid',
+                'rental'  => [
+                    'id'            => $rental->id,
+                    'property_type' => $rental->property_type,
+                    'purpose'       => $rental->purpose,
+                ],
+                'payment' => [
+                    'amount'  => (float) $rental->recurring_cost,
+                    'due_date' => $occurrenceDateYmd,
+                    'paid_at'  => now()->toIso8601String(),
+                ],
+            ]);
+        } catch (\Throwable) {}
+
+        return $result;
     }
 }

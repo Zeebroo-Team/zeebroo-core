@@ -6,11 +6,14 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Modules\Business\Models\Business;
+use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesPosBusinessForApi;
 use Modules\Pos\Models\StockAudit;
 use Modules\Pos\Services\StockAuditService;
 
 class PosStockAuditApiController extends Controller
 {
+    use ResolvesPosBusinessForApi;
+
     public function __construct(private readonly StockAuditService $service) {}
 
     private function business(Request $request): Business|JsonResponse
@@ -44,6 +47,7 @@ class PosStockAuditApiController extends Controller
     {
         $business = $this->business($request);
         if ($business instanceof JsonResponse) return $business;
+        $this->abortUnlessPerm($request, $business, 'inv_audit');
 
         $data = $request->validate([
             'audit_date' => ['required', 'date'],
@@ -71,6 +75,7 @@ class PosStockAuditApiController extends Controller
     {
         $business = $this->business($request);
         if ($business instanceof JsonResponse) return $business;
+        $this->abortUnlessPerm($request, $business, 'inv_audit');
 
         $audit = $this->service->auditForBusiness($business, $stockAudit);
 
@@ -90,6 +95,7 @@ class PosStockAuditApiController extends Controller
     {
         $business = $this->business($request);
         if ($business instanceof JsonResponse) return $business;
+        $this->abortUnlessPerm($request, $business, 'inv_audit');
 
         $audit = $this->service->auditForBusiness($business, $stockAudit);
         $this->service->finalize($audit, $request->user());
@@ -101,6 +107,7 @@ class PosStockAuditApiController extends Controller
     {
         $business = $this->business($request);
         if ($business instanceof JsonResponse) return $business;
+        $this->abortUnlessPerm($request, $business, 'inv_audit');
 
         $audit = $this->service->auditForBusiness($business, $stockAudit);
         $this->service->delete($audit);

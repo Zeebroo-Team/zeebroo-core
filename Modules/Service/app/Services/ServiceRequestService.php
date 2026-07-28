@@ -41,6 +41,7 @@ class ServiceRequestService
             'business_id'     => $business->id,
             'service_item_id' => $this->nullableInt($data['service_item_id'] ?? null),
             'customer_id'     => $this->nullableInt($data['customer_id'] ?? null),
+            'project_id'      => $this->nullableInt($data['project_id'] ?? null),
             'request_number'  => $this->nextRequestNumber($business),
             'title'           => $data['title'],
             'reference'       => filled($data['reference'] ?? '') ? $data['reference'] : null,
@@ -56,6 +57,7 @@ class ServiceRequestService
         $request->update([
             'service_item_id' => $this->nullableInt($data['service_item_id'] ?? null),
             'customer_id'     => $this->nullableInt($data['customer_id'] ?? null),
+            'project_id'      => array_key_exists('project_id', $data) ? $this->nullableInt($data['project_id']) : $request->project_id,
             'title'           => $data['title'],
             'reference'       => filled($data['reference'] ?? '') ? $data['reference'] : null,
             'notes'           => filled($data['notes'] ?? '') ? $data['notes'] : null,

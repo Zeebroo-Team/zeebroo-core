@@ -40,7 +40,8 @@ class PosInvoiceApiController extends Controller
 
     public function store(Request $request): JsonResponse
     {
-        $business  = $this->businessOrAbort($request);
+        $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'pos_checkout');
         $validated = $this->validateHeader($request, $business);
 
         try {
@@ -75,6 +76,7 @@ class PosInvoiceApiController extends Controller
     {
         $business = $this->businessOrAbort($request);
         abort_unless((int) $invoice->business_id === (int) $business->id, 404);
+        $this->abortUnlessPerm($request, $business, 'pos_checkout');
 
         $validated = $this->validateHeader($request, $business);
 
@@ -140,6 +142,7 @@ class PosInvoiceApiController extends Controller
     {
         $business = $this->businessOrAbort($request);
         abort_unless((int) $invoice->business_id === (int) $business->id, 404);
+        $this->abortUnlessPerm($request, $business, 'pos_checkout');
 
         try {
             $this->invoices->delete($invoice);
@@ -166,6 +169,7 @@ class PosInvoiceApiController extends Controller
             'due_date'       => $i->due_date?->toDateString(),
             'is_overdue'     => $i->isPaymentDue(),
             'total'          => round((float) $i->total, 2),
+            'proposal_count' => (int) ($i->proposal_count ?? 0),
         ];
     }
 

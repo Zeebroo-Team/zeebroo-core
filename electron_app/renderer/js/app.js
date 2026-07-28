@@ -108,7 +108,7 @@ function activateTab(tabName) {
   $$('.ribbon-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tabName));
   $$('.ribbon-page').forEach(p => p.classList.toggle('active', p.dataset.page === tabName));
 
-  const panelMap = { home: 'panel-home', pos: 'panel-pos', sales: 'panel-sales', inventory: 'panel-inventory', finance: 'panel-finance', hr: 'panel-hr', services: 'panel-services', design: 'panel-design', restaurant: 'panel-restaurant', 'rst-pos': 'panel-rst-pos', mail: 'panel-mail', crm: 'panel-crm' };
+  const panelMap = { home: 'panel-home', pos: 'panel-pos', sales: 'panel-sales', inventory: 'panel-inventory', finance: 'panel-finance', hr: 'panel-hr', services: 'panel-services', design: 'panel-design', restaurant: 'panel-restaurant', 'rst-pos': 'panel-rst-pos', mail: 'panel-mail', crm: 'panel-crm', automations: 'panel-automations', projects: 'panel-projects' };
   $$('.content-panel').forEach(p => p.classList.remove('active'));
   const target = $('#' + (panelMap[tabName] || 'panel-pos'));
   if (target) target.classList.add('active');
@@ -128,6 +128,8 @@ function activateTab(tabName) {
   if (tabName === 'rst-pos')    { rstPosInit(); }
   if (tabName === 'mail')       { switchMailView('inbox'); }
   if (tabName === 'crm')        { switchCrmView('pipeline'); }
+  if (tabName === 'automations'){ loadAutomations(); }
+  if (tabName === 'projects')   { switchPmView('projects'); }
 }
 
 $$('.ribbon-tab').forEach(tab => {
@@ -1374,6 +1376,7 @@ function _qtRenderList() {
   <div class="qt-tbl-wrap"><table class="qt-tbl">
     <thead><tr>
       <th>Quote #</th><th>Customer</th><th>Date</th><th>Valid Until</th><th>Status</th>
+      <th style="text-align:center;width:90px">Proposals</th>
       <th style="text-align:right">Amount</th><th style="width:28px"></th>
     </tr></thead>
     <tbody>`;
@@ -1381,12 +1384,17 @@ function _qtRenderList() {
   _qt.list.forEach(q => {
     const date   = q.quote_date  ? new Date(q.quote_date  + 'T00:00:00').toLocaleDateString(undefined, { month:'short', day:'numeric', year:'numeric' }) : '—';
     const expiry = q.expiry_date ? new Date(q.expiry_date + 'T00:00:00').toLocaleDateString(undefined, { month:'short', day:'numeric', year:'numeric' }) : '—';
+    const proposalCount = q.proposal_count || 0;
+    const proposalCell  = proposalCount > 0
+      ? `<span class="qt-proposal-badge"><i class="fa fa-file-lines"></i> ${proposalCount}</span>`
+      : `<span class="qt-proposal-badge qt-proposal-none">—</span>`;
     html += `<tr data-qt-id="${q.id}">
       <td><span class="qt-tbl-num">${escHtml(q.quote_number || String(q.id))}</span></td>
       <td class="qt-tbl-customer">${escHtml(q.customer_name || 'Walk-in')}</td>
       <td class="qt-tbl-muted">${date}</td>
       <td class="qt-tbl-muted">${expiry}</td>
       <td><span class="qt-badge qt-badge-${q.status}">${escHtml(q.status_label)}</span></td>
+      <td style="text-align:center">${proposalCell}</td>
       <td class="qt-tbl-amt">${parseFloat(q.total || 0).toFixed(2)}${cur}</td>
       <td class="qt-tbl-chevron"><i class="fa fa-chevron-right"></i></td>
     </tr>`;
@@ -1515,20 +1523,33 @@ async function _qtOpenDetail(id) {
   });
 }
 
+// ── Shared: fetch letterhead from server (works even if Design tab never visited) ──
+async function _fetchLetterhead() {
+  // Prefer the in-memory cache; fall back to a direct API call so
+  // the letterhead is available even when _dsAllData hasn't been loaded yet.
+  let stub = _dsAllData.find(d => d.type === 'letterhead');
+  if (!stub) {
+    const listRes = await API.designs('letterhead');
+    if (listRes.status === 200) {
+      const items = listRes.body?.data || [];
+      stub = items.find(d => d.type === 'letterhead');
+      // Cache so subsequent prints in the same session skip the fetch
+      if (stub && !_dsAllData.find(d => d.id === stub.id)) _dsAllData.push(stub);
+    }
+  }
+  if (!stub || !stub.has_canvas) return null;
+  const res = await API.design(stub.id);
+  return (res.status === 200 && res.body?.data) ? res.body.data : null;
+}
+
 // ── Print (with optional letterhead) ─────────────────────────────────────
 async function _qtPrint(q) {
-  // Look for a letterhead design that has canvas content
-  let lhFull = null;
-  const lhStub = _dsAllData.find(d => d.type === 'letterhead');
-  if (lhStub && lhStub.has_canvas) {
-    const res = await API.design(lhStub.id);
-    if (res.status === 200 && res.body?.data) lhFull = res.body.data;
-  }
+  const lhFull = await _fetchLetterhead();
   await window.electronAPI.openQuotePrint({ quote: q, letterhead: lhFull, currency: state.currency });
 }
 
 // ── Form (Create / Edit) ──────────────────────────────────────────────────
-async function _qtOpenForm(existing) {
+async function _qtOpenForm(existing, prefill = null) {
   _qt.editingId  = existing?.id ?? null;
   _qt.lineSeq    = 0;
   _qtShowView('form');
@@ -1561,7 +1582,7 @@ async function _qtOpenForm(existing) {
     $('#qt-f-discount').value = existing.discount_amount > 0 ? existing.discount_amount : '';
     $('#qt-f-tax').value      = existing.tax_amount      > 0 ? existing.tax_amount      : '';
   } else {
-    custSel.value             = '';
+    custSel.value             = prefill?.customerId || '';
     $('#qt-f-ref').value      = '';
     $('#qt-f-date').value     = today;
     $('#qt-f-expiry').value   = '';
@@ -1574,6 +1595,8 @@ async function _qtOpenForm(existing) {
   $('#qt-items-body').innerHTML = '';
   if (existing?.items?.length) {
     existing.items.forEach(i => _qtAddLine(i.description, i.quantity, i.unit_price));
+  } else if (prefill?.items?.length) {
+    prefill.items.forEach(i => _qtAddLine(i.description, i.quantity, i.unit_price));
   }
   _qtRecalc();
 }
@@ -1705,16 +1728,26 @@ async function _qtModalSearch(q) {
   if (products.length) {
     if (showLabels) html += `<div class="qt-add-modal-section-label"><i class="fa fa-box"></i> Products</div>`;
     html += products.map(p => {
-      const stock   = parseFloat(p.total_stock ?? p.quantity_on_hand ?? 0);
-      const inStock = stock > 0;
-      const price   = parseFloat(p.unit_sell_price ?? 0);
+      const stock     = parseFloat(p.stock_quantity ?? p.total_stock ?? p.quantity_on_hand ?? 0);
+      const reserved  = parseFloat(p.reserved_qty ?? 0);
+      const available = p.available_stock !== undefined ? parseFloat(p.available_stock) : stock;
+      const inStock   = stock > 0;
+      const price     = parseFloat(p.unit_sell_price ?? 0);
+      const hasReserved = reserved > 0;
+
+      const stockBadge = `<span class="qt-prod-stk ${inStock ? 'in' : 'out'}">${inStock ? stock + ' in stock' : 'Out of stock'}</span>`;
+      const availClass  = available > 5 ? 'avail' : available > 0 ? 'avail-lo' : 'avail-no';
+      const availBadge  = hasReserved
+        ? `<span class="qt-prod-stk ${availClass}">${available} available</span>`
+        : '';
+
       return `<div class="qt-add-modal-product" data-name="${escHtml(p.name)}" data-price="${price}">
         <div class="qt-prod-ico"><i class="fa fa-box"></i></div>
         <div class="qt-prod-nfo">
           <div class="qt-prod-nm">${escHtml(p.name)}</div>
           <div class="qt-prod-sub">
             ${p.sku ? `<span>${escHtml(p.sku)}</span>` : ''}
-            <span class="qt-prod-stk ${inStock ? 'in' : 'out'}">${inStock ? stock + ' in stock' : 'Out of stock'}</span>
+            ${stockBadge}${availBadge}
           </div>
         </div>
         <div class="qt-prod-prc">${price.toFixed(2)}</div>
@@ -1892,6 +1925,8 @@ $$('.qt-chip[data-qst]').forEach(btn => {
 // Ribbon buttons (switch to quotes view first, then act)
 $('#rb-qt-new')?.addEventListener('click', () => { _salSwitchView('quotes'); setTimeout(() => _qtOpenForm(null), 50); });
 $('#rb-qt-refresh')?.addEventListener('click', () => { _salSwitchView('quotes'); });
+$('#rb-sal-new-invoice')?.addEventListener('click', () => { _salSwitchView('invoices'); setTimeout(() => _invOpenForm(null), 50); });
+$('#rb-sal-new-quotation')?.addEventListener('click', () => { _salSwitchView('quotes'); setTimeout(() => _qtOpenForm(null), 50); });
 $('#qt-new-btn').addEventListener('click', () => _qtOpenForm(null));
 // ── End Quotations Panel ──────────────────────────────────────────────────
 
@@ -1952,6 +1987,7 @@ async function loadInvoicesList() {
   <div class="qt-tbl-wrap"><table class="qt-tbl">
     <thead><tr>
       <th>Invoice #</th><th>Customer</th><th>Issue Date</th><th>Due Date</th><th>Status</th>
+      <th style="text-align:center;width:90px">Proposals</th>
       <th style="text-align:right">Amount</th><th style="width:28px"></th>
     </tr></thead>
     <tbody>`;
@@ -1962,12 +1998,17 @@ async function loadInvoicesList() {
     const issueDate = inv.issue_date ? new Date(inv.issue_date + 'T00:00:00').toLocaleDateString(undefined, { month:'short', day:'numeric', year:'numeric' }) : '—';
     const dueDate   = inv.due_date   ? new Date(inv.due_date   + 'T00:00:00').toLocaleDateString(undefined, { month:'short', day:'numeric', year:'numeric' }) : '—';
     const overdueClass = isOverdue ? 'style="color:#ef4444;font-weight:600"' : '';
+    const proposalCount = inv.proposal_count || 0;
+    const proposalCell  = proposalCount > 0
+      ? `<span class="qt-proposal-badge"><i class="fa fa-file-lines"></i> ${proposalCount}</span>`
+      : `<span class="qt-proposal-badge qt-proposal-none">—</span>`;
     html += `<tr data-sinv-id="${inv.id}">
       <td><span class="qt-tbl-num">${escHtml(inv.invoice_number)}</span></td>
       <td class="qt-tbl-customer">${escHtml(inv.customer_name || 'Walk-in')}</td>
       <td class="qt-tbl-muted">${issueDate}</td>
       <td class="qt-tbl-muted" ${overdueClass}>${dueDate}</td>
       <td><span class="qt-badge qt-badge-${statusKey}">${escHtml(inv.status_label)}</span></td>
+      <td style="text-align:center">${proposalCell}</td>
       <td class="qt-tbl-amt">${parseFloat(inv.total || 0).toFixed(2)}${cur}</td>
       <td class="qt-tbl-chevron"><i class="fa fa-chevron-right"></i></td>
     </tr>`;
@@ -2032,52 +2073,87 @@ async function _invOpenDetail(id) {
     <td class="td-r qt-item-total">${parseFloat(item.line_total).toFixed(2)}${cur}</td>
   </tr>`).join('');
 
-  const body = `<div class="qt-doc">
-    <div class="qt-doc-banner">
-      <div class="qt-doc-banner-left">
-        <div class="qt-doc-banner-num">${escHtml(inv.invoice_number)}</div>
-        <div class="qt-doc-banner-type">Invoice</div>
+  const body = `<div class="invd-layout">
+    <div class="invd-main">
+      <div class="qt-doc">
+        <div class="qt-doc-banner">
+          <div class="qt-doc-banner-left">
+            <div class="qt-doc-banner-num">${escHtml(inv.invoice_number)}</div>
+            <div class="qt-doc-banner-type">Invoice</div>
+          </div>
+          <span class="qt-badge qt-badge-${inv.status}">${escHtml(inv.status_label)}</span>
+        </div>
+        <div class="qt-doc-body">
+          <div class="qt-doc-info">
+            <div>
+              <div class="qt-doc-bill-label">Bill To</div>
+              <div class="qt-doc-bill-name">${escHtml(inv.customer_name || 'Walk-in Customer')}</div>
+              ${inv.reference ? `<div class="qt-doc-bill-ref"><i class="fa fa-hashtag" style="font-size:9px;opacity:.6"></i> ${escHtml(inv.reference)}</div>` : ''}
+            </div>
+            <div class="qt-doc-meta">
+              <div class="qt-doc-meta-row"><span>Issue Date</span><strong>${dateStr}</strong></div>
+              <div class="qt-doc-meta-row"><span>Due Date</span><strong>${dueStr}</strong></div>
+            </div>
+          </div>
+
+          <div class="qt-doc-items-wrap">
+            <table class="qt-doc-items">
+              <thead><tr>
+                <th style="width:32px">#</th>
+                <th>Description</th>
+                <th class="td-r" style="width:64px">Qty</th>
+                <th class="td-r" style="width:120px">Unit Price</th>
+                <th class="td-r" style="width:120px">Total</th>
+              </tr></thead>
+              <tbody>${itemRows}</tbody>
+            </table>
+          </div>
+
+          <div class="qt-doc-totals-wrap">
+            <div class="qt-doc-totals">
+              <div class="qt-doc-total-line"><span>Subtotal</span><span>${parseFloat(inv.subtotal).toFixed(2)}${cur}</span></div>
+              ${parseFloat(inv.discount_amount) > 0 ? `<div class="qt-doc-total-line"><span>Discount</span><span>-${parseFloat(inv.discount_amount).toFixed(2)}${cur}</span></div>` : ''}
+              ${parseFloat(inv.tax_amount) > 0      ? `<div class="qt-doc-total-line"><span>Tax</span><span>+${parseFloat(inv.tax_amount).toFixed(2)}${cur}</span></div>` : ''}
+              <div class="qt-doc-total-line grand"><span>Total</span><span>${parseFloat(inv.total).toFixed(2)}${cur}</span></div>
+            </div>
+          </div>
+
+          ${inv.notes ? `<hr class="qt-doc-divider">
+          <div class="qt-doc-notes-label"><i class="fa fa-note-sticky"></i> Notes</div>
+          <div class="qt-doc-notes-box">${escHtml(inv.notes)}</div>` : ''}
+        </div>
       </div>
-      <span class="qt-badge qt-badge-${inv.status}">${escHtml(inv.status_label)}</span>
     </div>
-    <div class="qt-doc-body">
-      <div class="qt-doc-info">
-        <div>
-          <div class="qt-doc-bill-label">Bill To</div>
-          <div class="qt-doc-bill-name">${escHtml(inv.customer_name || 'Walk-in Customer')}</div>
-          ${inv.reference ? `<div class="qt-doc-bill-ref"><i class="fa fa-hashtag" style="font-size:9px;opacity:.6"></i> ${escHtml(inv.reference)}</div>` : ''}
-        </div>
-        <div class="qt-doc-meta">
-          <div class="qt-doc-meta-row"><span>Issue Date</span><strong>${dateStr}</strong></div>
-          <div class="qt-doc-meta-row"><span>Due Date</span><strong>${dueStr}</strong></div>
-        </div>
-      </div>
 
-      <div class="qt-doc-items-wrap">
-        <table class="qt-doc-items">
-          <thead><tr>
-            <th style="width:32px">#</th>
-            <th>Description</th>
-            <th class="td-r" style="width:64px">Qty</th>
-            <th class="td-r" style="width:120px">Unit Price</th>
-            <th class="td-r" style="width:120px">Total</th>
-          </tr></thead>
-          <tbody>${itemRows}</tbody>
-        </table>
-      </div>
+    <div class="invd-sidebar">
+      <div class="invd-sidebar-label">Quick Actions</div>
 
-      <div class="qt-doc-totals-wrap">
-        <div class="qt-doc-totals">
-          <div class="qt-doc-total-line"><span>Subtotal</span><span>${parseFloat(inv.subtotal).toFixed(2)}${cur}</span></div>
-          ${parseFloat(inv.discount_amount) > 0 ? `<div class="qt-doc-total-line"><span>Discount</span><span>-${parseFloat(inv.discount_amount).toFixed(2)}${cur}</span></div>` : ''}
-          ${parseFloat(inv.tax_amount) > 0      ? `<div class="qt-doc-total-line"><span>Tax</span><span>+${parseFloat(inv.tax_amount).toFixed(2)}${cur}</span></div>` : ''}
-          <div class="qt-doc-total-line grand"><span>Total</span><span>${parseFloat(inv.total).toFixed(2)}${cur}</span></div>
-        </div>
-      </div>
+      <button class="invd-quick-btn" id="invd-qa-payment">
+        <span class="invd-quick-icon" style="background:#dbeafe;color:#1d4ed8"><i class="fa fa-credit-card"></i></span>
+        <span class="invd-quick-text">
+          <span class="invd-quick-title">Payment</span>
+          <span class="invd-quick-sub">Record a payment</span>
+        </span>
+        <i class="fa fa-chevron-right invd-quick-arrow"></i>
+      </button>
 
-      ${inv.notes ? `<hr class="qt-doc-divider">
-      <div class="qt-doc-notes-label"><i class="fa fa-note-sticky"></i> Notes</div>
-      <div class="qt-doc-notes-box">${escHtml(inv.notes)}</div>` : ''}
+      <button class="invd-quick-btn" id="invd-qa-proposal">
+        <span class="invd-quick-icon" style="background:#ede9fe;color:#6d28d9"><i class="fa fa-file-lines"></i></span>
+        <span class="invd-quick-text">
+          <span class="invd-quick-title">Create Project Proposal</span>
+          <span class="invd-quick-sub">Generate a proposal from this invoice</span>
+        </span>
+        <i class="fa fa-chevron-right invd-quick-arrow"></i>
+      </button>
+
+      <button class="invd-quick-btn" id="invd-qa-pm">
+        <span class="invd-quick-icon" style="background:#dcfce7;color:#15803d"><i class="fa fa-list-check"></i></span>
+        <span class="invd-quick-text">
+          <span class="invd-quick-title">Move to Project Manager</span>
+          <span class="invd-quick-sub">Track this invoice as a project</span>
+        </span>
+        <i class="fa fa-chevron-right invd-quick-arrow"></i>
+      </button>
     </div>
   </div>`;
 
@@ -2113,16 +2189,196 @@ async function _invOpenDetail(id) {
     if (r.status === 200) { toast('Invoice deleted', 'info'); loadInvoicesList(); }
     else toast(r.body?.message || 'Error', 'error');
   });
+
+  // Quick action sidebar
+  $('#invd-qa-payment')?.addEventListener('click', () => _invdComingSoon('Payment'));
+  $('#invd-qa-proposal')?.addEventListener('click', () => openInvProposalModal(inv));
+  $('#invd-qa-pm')?.addEventListener('click', () => _invdComingSoon('Move to Project Manager'));
 }
+
+function _invdComingSoon(feature) {
+  const existing = $('#sinv-detail-body .invd-sidebar .invd-cs-toast');
+  if (existing) return;
+  const el = document.createElement('div');
+  el.className = 'invd-cs-toast';
+  el.innerHTML = `<i class="fa fa-clock"></i> <strong>${escHtml(feature)}</strong> — Coming soon`;
+  $('#sinv-detail-body .invd-sidebar').appendChild(el);
+  setTimeout(() => el.remove(), 2800);
+}
+
+// ── Invoice → Create Project Proposal modal ───────────────────────────────
+let _invPropInv = null;
+
+async function openInvProposalModal(inv) {
+  _invPropInv = inv;
+
+  // Pre-fill project name and reset fields
+  $('#invd-pm-name').value    = `Proposal for ${inv.invoice_number}`;
+  $('#invd-pm-desc').value    = '';
+  $('#invd-pm-alert').style.display      = 'none';
+  $('#invd-pm-progress').style.display   = 'none';
+  $('#invd-pm-add-cust-form').style.display = 'none';
+  $('#invd-pm-cust-name').value  = '';
+  $('#invd-pm-cust-phone').value = '';
+  $('#invd-pm-subtitle').textContent = `From ${inv.invoice_number}`;
+  $('#invd-pm-inv-page-label').textContent = `Invoice ${inv.invoice_number}`;
+
+  // Populate customer dropdown
+  const sel = $('#invd-pm-customer');
+  sel.innerHTML = '<option value="">— Walk-in —</option>';
+  const cr = await API.customers('', 1);
+  if (cr.status === 200) {
+    (cr.body?.data || []).forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c.id; opt.textContent = c.name;
+      if (c.id === inv.customer_id) opt.selected = true;
+      sel.appendChild(opt);
+    });
+  }
+
+  $('#invd-prop-modal').style.display = 'flex';
+  setTimeout(() => $('#invd-pm-name')?.focus(), 60);
+}
+
+function _closeInvProposalModal() {
+  $('#invd-prop-modal').style.display = 'none';
+  _invPropInv = null;
+}
+
+function _invPmProgress(title, sub, pct) {
+  const prog = $('#invd-pm-progress');
+  prog.style.display = 'flex';
+  $('#invd-pm-prog-title').textContent = title;
+  $('#invd-pm-prog-sub').textContent   = sub;
+  $('#invd-pm-prog-bar').style.width   = pct + '%';
+}
+
+async function _generateInvProposal() {
+  const title   = $('#invd-pm-name').value.trim();
+  const desc    = $('#invd-pm-desc').value.trim();
+  const custSel = $('#invd-pm-customer');
+  const rawText = custSel.options[custSel.selectedIndex]?.text || '';
+  const client  = rawText === '— Walk-in —' ? null : rawText.trim() || null;
+  const alertEl = $('#invd-pm-alert');
+
+  alertEl.style.display = 'none';
+  if (!title) {
+    alertEl.textContent = 'Project name is required.';
+    alertEl.style.display = '';
+    $('#invd-pm-name').focus();
+    return;
+  }
+  if (!desc) {
+    alertEl.textContent = 'Project description is required — it tells the AI what to write.';
+    alertEl.style.display = '';
+    $('#invd-pm-desc').focus();
+    return;
+  }
+
+  const inv = _invPropInv;
+  if (!inv) return;
+
+  const genBtn = $('#invd-pm-generate');
+  genBtn.disabled = true;
+
+  try {
+    // Step 1 — create blank 6-page proposal skeleton
+    _invPmProgress('Creating proposal…', 'Setting up 6 pages', 10);
+    const createRes = await API.createProposal({ title, client });
+    if (createRes.status !== 201 || !createRes.body?.data?.group) {
+      throw new Error(createRes.body?.errors?.title?.[0] || createRes.body?.message || 'Failed to create proposal.');
+    }
+    const group = createRes.body.data.group;
+
+    // Step 2 — AI fills all 6 pages on the server (this is the slow step, ~10-20s)
+    _invPmProgress('Generating AI content…', 'Writing all 6 proposal pages — this may take up to 60 seconds', 30);
+    const fillRes = await API.aiProposalFill(group, { title, client, description: desc });
+    if (fillRes.status !== 200) {
+      // Surface the real AI error — do NOT silently continue with blank pages
+      throw new Error(fillRes.body?.message || 'AI generation failed. Please check your description and try again.');
+    }
+
+    // Step 3 — fetch the 6 AI-filled pages and open the editor
+    // The invoice is auto-imported as the last page by the editor on open
+    _invPmProgress('Opening editor…', 'Loading proposal into editor', 85);
+    const pagesRes = await API.proposalPages(group);
+    if (pagesRes.status !== 200 || !pagesRes.body?.data?.pages?.length) {
+      throw new Error('Failed to load proposal pages.');
+    }
+    const prop = pagesRes.body.data;
+
+    await window.electronAPI.openEditor({
+      proposalTitle:        prop.title,
+      proposalGroup:        prop.group,
+      proposalPages:        prop.pages,
+      proposalStartPage:    0,
+      autoImportInvoiceId:  inv.id,
+      width:                prop.pages[0]?.width  ?? 794,
+      height:               prop.pages[0]?.height ?? 1123,
+      id:                   prop.pages[0]?.id,
+      type:                 'project-proposal',
+      title:                prop.title,
+    });
+
+    _closeInvProposalModal();
+    toast(`Proposal "${title}" created with AI content — opening editor`, 'success');
+
+  } catch (err) {
+    $('#invd-pm-progress').style.display = 'none';
+    alertEl.textContent = err.message || 'Generation failed. Please try again.';
+    alertEl.style.display = '';
+  } finally {
+    genBtn.disabled = false;
+  }
+}
+
+// Wire modal buttons once on DOMContentLoaded
+document.addEventListener('DOMContentLoaded', () => {
+  $('#invd-pm-close')?.addEventListener('click', _closeInvProposalModal);
+  $('#invd-pm-cancel')?.addEventListener('click', _closeInvProposalModal);
+  $('#invd-prop-modal')?.addEventListener('click', e => { if (e.target === e.currentTarget) _closeInvProposalModal(); });
+  $('#invd-pm-generate')?.addEventListener('click', _generateInvProposal);
+
+  // Add customer toggle
+  $('#invd-pm-add-cust-toggle')?.addEventListener('click', () => {
+    const form = $('#invd-pm-add-cust-form');
+    form.style.display = form.style.display === 'none' ? '' : 'none';
+    if (form.style.display !== 'none') setTimeout(() => $('#invd-pm-cust-name')?.focus(), 40);
+  });
+  $('#invd-pm-add-cust-cancel')?.addEventListener('click', () => {
+    $('#invd-pm-add-cust-form').style.display = 'none';
+    $('#invd-pm-cust-name').value = '';
+    $('#invd-pm-cust-phone').value = '';
+  });
+  $('#invd-pm-add-cust-save')?.addEventListener('click', async () => {
+    const name  = $('#invd-pm-cust-name').value.trim();
+    const phone = $('#invd-pm-cust-phone').value.trim();
+    if (!name) { $('#invd-pm-cust-name').focus(); return; }
+    const saveBtn = $('#invd-pm-add-cust-save');
+    saveBtn.disabled = true;
+    saveBtn.innerHTML = '<i class="fa fa-spinner fa-spin"></i>';
+    const r = await API.createCustomer({ name, phone });
+    saveBtn.disabled = false;
+    saveBtn.innerHTML = '<i class="fa fa-check"></i> Save Customer';
+    if (r.status === 201 && r.body?.data) {
+      const c = r.body.data;
+      const sel = $('#invd-pm-customer');
+      const opt = document.createElement('option');
+      opt.value = c.id; opt.textContent = c.name; opt.selected = true;
+      sel.appendChild(opt);
+      $('#invd-pm-add-cust-form').style.display = 'none';
+      $('#invd-pm-cust-name').value = '';
+      $('#invd-pm-cust-phone').value = '';
+      toast(`Customer "${c.name}" added`, 'success');
+    } else {
+      toast(r.body?.message || 'Failed to create customer', 'error');
+    }
+  });
+});
 
 // ── Invoice print (with optional letterhead) ──────────────────────────────
 async function _invPrint(inv) {
-  let lhFull = null;
-  const lhStub = _dsAllData.find(d => d.type === 'letterhead');
-  if (lhStub && lhStub.has_canvas) {
-    const res = await API.design(lhStub.id);
-    if (res.status === 200 && res.body?.data) lhFull = res.body.data;
-  }
+  const lhFull = await _fetchLetterhead();
   await window.electronAPI.openQuotePrint({
     quote:      { ...inv, quote_number: inv.invoice_number, issue_date: inv.issue_date, due_date: inv.due_date, doc_type: 'Invoice' },
     letterhead: lhFull,
@@ -2172,7 +2428,7 @@ function _invRecalc() {
   $('#sinv-grand-total').textContent = Math.max(0, sub - disc + tax).toFixed(2);
 }
 
-async function _invOpenForm(existing) {
+async function _invOpenForm(existing, prefill = null) {
   _inv.editingId = existing?.id ?? null;
   _invLineSeq    = 0;
   _invShowView('form');
@@ -2201,13 +2457,15 @@ async function _invOpenForm(existing) {
     (custRes.body?.data || []).forEach(c => {
       const opt = document.createElement('option');
       opt.value = c.id; opt.textContent = c.name;
-      if (existing?.customer_id === c.id) opt.selected = true;
+      if (existing?.customer_id === c.id || (!existing && prefill?.customerId == c.id)) opt.selected = true;
       sel.appendChild(opt);
     });
   }
 
   if (existing?.items?.length) {
     existing.items.forEach(i => _invAddLine(i.description, i.quantity, i.unit_price));
+  } else if (prefill?.items?.length) {
+    prefill.items.forEach(i => _invAddLine(i.description, i.quantity, i.unit_price));
   }
   _invRecalc();
 }
@@ -2429,6 +2687,9 @@ const _obFeatureDefs = [
   { key: 'restaurant',            img: 'img/features/service.png',                    name: 'Restaurant',           desc: 'Restaurant POS, orders, menu & kitchen display', color: '#f97316' },
   { key: 'mail',                  img: 'img/features/mail.png',                       name: 'Mail',                 desc: 'Business inbox, templates & scheduled sending', color: '#06b6d4' },
   { key: 'crm',                   img: 'img/features/social-media-campaign.png',       name: 'CRM',                  desc: 'Leads pipeline, contacts & follow-up tasks',    color: '#7c3aed' },
+  { key: 'project_management',   img: 'img/features/account-management.png',          name: 'Projects',             desc: 'Projects, tasks, milestones & kanban boards',  color: '#0284c7' },
+  { key: 'automation_editor',    img: 'img/features/automation-editor.svg',            name: 'Automation Editor',    desc: 'Trigger-based workflows & automated sequences', color: '#f59e0b' },
+  { key: 'developers',           img: 'img/features/developers.svg',                  name: 'Developers',           desc: 'API keys, webhooks & third-party integrations', color: '#0f766e' },
 ];
 
 // Industries that switch to restaurant POS mode
@@ -2625,12 +2886,24 @@ function applyFeatureVisibility() {
   const rst_any         = rst_pos || rst_orders || rst_floor || rst_menu || rst_ingredients || rst_kitchen;
 
   // ── Mail ──
-  const mail_any = bf('mail');
+  const mail_inbox     = bf('mail') && mp('mail_inbox');
+  const mail_compose   = bf('mail') && mp('mail_compose');
+  const mail_templates = bf('mail') && mp('mail_templates');
+  const mail_any       = mail_inbox || mail_compose || mail_templates;
 
   // ── CRM ──
-  const crm_any = bf('crm');
+  const crm_pipeline = bf('crm') && mp('crm_pipeline');
+  const crm_contacts = bf('crm') && mp('crm_contacts');
+  const crm_tasks    = bf('crm') && mp('crm_tasks');
+  const crm_forms    = bf('crm') && mp('crm_forms');
+  const crm_any      = crm_pipeline || crm_contacts || crm_tasks || crm_forms;
+
+  const dev_enabled  = bf('developers');
+  const auto_enabled = bf('automation_editor');
+  const pm_enabled   = bf('project_management');
 
   // ── Ribbon tabs ──
+  const isAdminOrOwner = state.memberIsOwner || state.memberRole === 'admin' || state.memberPermissions === null;
   const tabFeatures = {
     pos:        pos_any,
     sales:      pos_any,
@@ -2643,7 +2916,9 @@ function applyFeatureVisibility() {
     services:   svc_any,
     mail:       mail_any,
     crm:        crm_any,
-    users:      state.memberIsOwner || state.memberRole === 'admin' || state.memberPermissions === null,
+    automations:auto_enabled,
+    projects:   pm_enabled,
+    users:      isAdminOrOwner,
   };
   $$('.ribbon-tab[data-tab]').forEach(tab => {
     const show = tabFeatures[tab.dataset.tab];
@@ -2651,18 +2926,20 @@ function applyFeatureVisibility() {
   });
 
   // ── POS ribbon groups ──
-  grp('#rb-new-session',    pos_session);                   // Session
-  grp('#rb-checkout',       pos_checkout);                  // Sales (checkout, return, clear cart)
-  grp('#rb-search',         pos_checkout);                  // Find (search, barcode, add product)
-  grp('#rb-customers',      pos_customers);                 // Customers
-  grp('#rb-pos-settings',   pos_checkout || pos_session);   // Configure
-  grp('#rb-receipt-editor', pos_checkout || pos_session);   // Receipt editor
+  grp('#rb-new-session',    pos_session);                            // Session
+  grp('#rb-checkout',       pos_checkout || pos_returns);            // Sales group
+  grp('#rb-search',         pos_checkout);                           // Find (search, barcode, add product)
+  grp('#rb-customers',      pos_customers);                          // Customers
+  grp('#rb-pos-settings',   pos_checkout || pos_session);            // Configure
+  grp('#rb-receipt-editor', pos_checkout || pos_session);            // Receipt editor
+  // Within the Sales group: individual button gating (btn declared below)
+  // (defined after btn helper in Sales Create section)
 
   // ── Sales page ribbon groups ──
-  grp('#rb-sal-refresh',    pos_checkout);                  // Transactions
-  grp('#rb-sal-return',     pos_returns);                   // Returns
-  grp('#rb-eod-open',       pos_eod);                       // Settlement
-  grp('#rb-qt-new',         pos_quotations);                // Quotations
+  grp('#rb-sal-refresh',    pos_checkout);                           // Transactions
+  grp('#rb-sal-return',     pos_returns);                            // Returns
+  grp('#rb-eod-open',       pos_eod);                                // Settlement
+  grp('#rb-qt-new',         pos_quotations);                         // Quotations
 
   // ── Services ribbon groups ──
   grp('#rb-svc-requests',   svc_requests);
@@ -2680,10 +2957,13 @@ function applyFeatureVisibility() {
   if (!mail_any && _activeTab() === 'mail')     activateTab('home');
   if (!crm_any  && _activeTab() === 'crm')      activateTab('home');
 
-  // ── Home ribbon groups ──
-  grp('#rb-home-pos',      pos_any || svc_any || rst_any);
-  grp('#rb-home-orders',   pos_any || inv_any);
-  grp('#rb-home-expenses', fin_any || hr_any);
+  // ── Developers (account dropdown entry) ──
+  const tpmDev = $('#tpm-developers');
+  if (tpmDev) tpmDev.style.display = dev_enabled ? '' : 'none';
+  if (!dev_enabled) { const d = $('#dev-dialog'); if (d?.style.display !== 'none') d.style.display = 'none'; }
+
+  // ── Automations tab ──
+  if (!auto_enabled && _activeTab() === 'automations') activateTab('home');
 
   // ── Inventory ribbon groups ──
   grp('#rb-inv-products', inv_products);
@@ -2720,6 +3000,317 @@ function applyFeatureVisibility() {
   grp('#rb-rst-menu-items',   rst_menu);
   grp('#rb-rst-ingredients',  rst_ingredients);
   grp('#rb-rst-kitchen',      rst_kitchen);
+
+  // ── Individual button gating (fine-grained, within visible groups) ──
+  const btn = (sel, show) => { const el = $(sel); if (el) el.style.display = show ? '' : 'none'; };
+
+  // POS Sales group: checkout vs return are separate permissions
+  btn('#rb-checkout',   pos_checkout);
+  btn('#rb-return',     pos_returns);
+  btn('#rb-clear-cart', pos_checkout);
+
+  // Inventory Catalog group: Products (main) vs sub-buttons
+  btn('#rb-inv-categories', inv_products);
+  btn('#rb-inv-units',      inv_products);
+
+  // Inventory Stock group: Audit vs Brands/Discounts
+  btn('#rb-inv-brands',    inv_discounts);
+  btn('#rb-inv-discounts', inv_discounts);
+
+  // Inventory Purchasing group: POs vs GRN/Cheques
+  btn('#rb-inv-grn',     inv_purchasing);
+  btn('#rb-inv-cheques', inv_purchasing);
+
+  // Sales Create group: invoice vs quotation are separate permissions
+  grp('#rb-sal-new-invoice', pos_checkout || pos_quotations);
+  btn('#rb-sal-new-invoice',   pos_checkout);
+  btn('#rb-sal-new-quotation', pos_quotations);
+
+  // ── Home: fine-grained per-element permission gating ──────────────────────
+  // Ribbon – Quick Actions group
+  btn('#rb-home-pos',           mp('home_btn_pos'));
+  btn('#rb-home-new-sale',      mp('home_btn_new_sale'));
+  btn('#rb-home-daily-summary', mp('home_btn_daily_summary'));
+  // Ribbon – Overview group
+  btn('#rb-home-dashboard',     mp('home_btn_dashboard'));
+  btn('#rb-home-analytics',     mp('home_btn_analytics'));
+  // Ribbon – Operations group
+  btn('#rb-home-orders',        mp('home_btn_orders'));
+  btn('#rb-home-customers',     mp('home_btn_customers'));
+  btn('#rb-home-suppliers',     mp('home_btn_suppliers'));
+  // Ribbon – Finance group
+  btn('#rb-home-expenses',      mp('home_btn_expenses'));
+  btn('#rb-home-profit',        mp('home_btn_profit'));
+  btn('#rb-home-payroll',       mp('home_btn_payroll'));
+  // Ribbon – Tools group
+  btn('#rb-home-settings',      mp('home_btn_settings'));
+  btn('#rb-home-help',          mp('home_btn_help'));
+
+  // Auto-hide entire Home ribbon groups when all their buttons are hidden
+  {
+    const _hgQ = $('#rb-home-pos')?.closest('.ribbon-group');
+    if (_hgQ) _hgQ.style.display = (mp('home_btn_pos') || mp('home_btn_new_sale') || mp('home_btn_daily_summary')) ? '' : 'none';
+    const _hgO = $('#rb-home-dashboard')?.closest('.ribbon-group');
+    if (_hgO) _hgO.style.display = (mp('home_btn_dashboard') || mp('home_btn_analytics')) ? '' : 'none';
+    const _hgOps = $('#rb-home-orders')?.closest('.ribbon-group');
+    if (_hgOps) _hgOps.style.display = (mp('home_btn_orders') || mp('home_btn_customers') || mp('home_btn_suppliers')) ? '' : 'none';
+    const _hgF = $('#rb-home-expenses')?.closest('.ribbon-group');
+    if (_hgF) _hgF.style.display = (mp('home_btn_expenses') || mp('home_btn_profit') || mp('home_btn_payroll')) ? '' : 'none';
+    const _hgT = $('#rb-home-settings')?.closest('.ribbon-group');
+    if (_hgT) _hgT.style.display = (mp('home_btn_settings') || mp('home_btn_help')) ? '' : 'none';
+  }
+
+  // ── Home KPI pills ──────────────────────────────────────────────────────────
+  { const el = $('#kpi-pill-sales');    if (el) el.style.display = mp('home_kpi_sales')     ? '' : 'none'; }
+  { const el = $('#kpi-pill-revenue');  if (el) el.style.display = mp('home_kpi_revenue')   ? '' : 'none'; }
+  { const el = $('#kpi-pill-products'); if (el) el.style.display = mp('home_kpi_products')  ? '' : 'none'; }
+  { const el = $('#kpi-pill-customers');if (el) el.style.display = mp('home_kpi_customers') ? '' : 'none'; }
+
+  // ── Home sub-nav tabs (hide tab button + view when not permitted) ───────────
+  {
+    const _hTabPerms = {
+      flow:      mp('home_tab_flow'),
+      today:     mp('home_tab_today'),
+      activity:  mp('home_tab_activity'),
+      analytics: mp('home_tab_analytics'),
+      expenses:  mp('home_tab_expenses'),
+      profit:    mp('home_tab_profit'),
+      payroll:   mp('home_tab_payroll'),
+      orders:    mp('home_tab_orders'),
+    };
+    let _hActiveOk = false, _hFirstVisible = null;
+    $$('.home-tab-btn[data-home-view]').forEach(tabBtn => {
+      const v = tabBtn.dataset.homeView;
+      const show = !!_hTabPerms[v];
+      tabBtn.style.display = show ? '' : 'none';
+      if (show) {
+        if (!_hFirstVisible) _hFirstVisible = v;
+        if (tabBtn.classList.contains('active')) _hActiveOk = true;
+      }
+    });
+    // If the active tab is now hidden, fall back to the first permitted tab
+    if (!_hActiveOk) {
+      const fallback = _hFirstVisible || 'flow';
+      $$('.home-tab-btn[data-home-view]').forEach(b => b.classList.remove('active'));
+      const fb = $(`.home-tab-btn[data-home-view="${fallback}"]`);
+      if (fb) fb.classList.add('active');
+      $$('.home-view').forEach(v => v.style.display = 'none');
+      const fp = $(`#home-view-${fallback}`);
+      if (fp) fp.style.display = 'flex';
+    }
+  }
+
+  // ── Home right panel sections ───────────────────────────────────────────────
+  { const el = $('#hrp-section-today'); if (el) el.style.display = mp('home_rp_today') ? '' : 'none'; }
+  { const el = $('#hrp-section-bills'); if (el) el.style.display = mp('home_rp_bills') ? '' : 'none'; }
+  btn('#hrp-new-sale',    mp('home_rp_qa_new_sale'));
+  btn('#hrp-add-product', mp('home_rp_qa_add_product'));
+  btn('#hrp-new-bill',    mp('home_rp_qa_new_bill'));
+  btn('#hrp-view-orders', mp('home_rp_qa_orders'));
+  btn('#hrp-barcodes',    mp('home_rp_qa_barcodes'));
+  {
+    const el = $('#hrp-section-actions');
+    if (el) el.style.display = (mp('home_rp_qa_new_sale') || mp('home_rp_qa_add_product') || mp('home_rp_qa_new_bill') || mp('home_rp_qa_orders') || mp('home_rp_qa_barcodes')) ? '' : 'none';
+  }
+
+  // ── POS ribbon: fine-grained per-element permission gating ──
+  btn('#rb-new-session',    mp('pos_btn_new_session'));
+  btn('#rb-close-session',  mp('pos_btn_close_session'));
+  btn('#rb-lock-register',  mp('pos_btn_lock_register'));
+  { const el = $('#rb-counter-wrap'); if (el) el.style.display = mp('pos_btn_counter') ? '' : 'none'; }
+  btn('#rb-checkout',       mp('pos_btn_checkout'));
+  btn('#rb-return',         mp('pos_btn_return'));
+  btn('#rb-clear-cart',     mp('pos_btn_clear_cart'));
+  btn('#rb-search',         mp('pos_btn_search'));
+  btn('#rb-barcode',        mp('pos_btn_barcode'));
+  btn('#rb-add-product',    mp('pos_btn_add_product'));
+  btn('#rb-customers',      mp('pos_btn_customers'));
+  btn('#rb-accounts',       mp('pos_btn_accounts'));
+  btn('#rb-pos-settings',   mp('pos_btn_settings'));
+  btn('#rb-receipt-editor', mp('pos_btn_receipt_editor'));
+  { const el = $('#pos-ribbon-stats'); if (el) el.style.display = mp('pos_btn_ribbon_stats') ? '' : 'none'; }
+  // Auto-hide POS ribbon groups when all their buttons are hidden
+  { const posGrps = $$('[data-page="pos"] .ribbon-group');
+    if (posGrps[0]) posGrps[0].style.display = (mp('pos_btn_new_session')||mp('pos_btn_close_session')||mp('pos_btn_lock_register')||mp('pos_btn_counter')) ? '' : 'none';
+    if (posGrps[1]) posGrps[1].style.display = (mp('pos_btn_checkout')||mp('pos_btn_return')||mp('pos_btn_clear_cart')) ? '' : 'none';
+    if (posGrps[2]) posGrps[2].style.display = (mp('pos_btn_search')||mp('pos_btn_barcode')||mp('pos_btn_add_product')) ? '' : 'none';
+    if (posGrps[3]) posGrps[3].style.display = (mp('pos_btn_customers')||mp('pos_btn_accounts')) ? '' : 'none';
+    if (posGrps[4]) posGrps[4].style.display = (mp('pos_btn_settings')||mp('pos_btn_receipt_editor')) ? '' : 'none'; }
+  // ── POS panel: fine-grained per-element permission gating ──
+  { const el = $('#pos-tab-add'); if (el) el.style.display = mp('pos_panel_tab_add') ? '' : 'none'; }
+  { const el = $('.pos-mode-btn[data-mode="products"]');
+    if (el) el.style.display = mp('pos_panel_mode_products') ? '' : 'none'; }
+  { const el = $('.pos-mode-btn[data-mode="services"]');
+    if (el) el.style.display = mp('pos_panel_mode_services') ? '' : 'none'; }
+  { const el = $('#product-search-bar'); if (el) el.style.display = mp('pos_panel_search') ? '' : 'none'; }
+  { const el = $('#category-filter'); if (el) el.style.display = mp('pos_panel_categories') ? '' : 'none'; }
+  { const el = $('#product-grid'); if (el) el.style.display = mp('pos_panel_product_grid') ? '' : 'none'; }
+  btn('#btn-park',     mp('pos_cart_park'));
+  btn('#btn-recall',   mp('pos_cart_recall'));
+  btn('#btn-customer', mp('pos_cart_customer'));
+  btn('#checkout-btn', mp('pos_cart_checkout'));
+  btn('#pos-to-invoice', mp('pos_cart_to_invoice'));
+  btn('#pos-to-quote',   mp('pos_cart_to_quote'));
+
+  // ── Sales ribbon: fine-grained per-element permission gating ──
+  btn('#rb-sal-new-invoice',   mp('sal_btn_new_invoice'));
+  btn('#rb-sal-new-quotation', mp('sal_btn_new_quotation'));
+  btn('#rb-sal-refresh',       mp('sal_btn_refresh'));
+  btn('#rb-sal-all',           mp('sal_btn_all_sales'));
+  btn('#rb-sal-pos',           mp('sal_btn_pos_sales'));
+  btn('#rb-sal-return',        mp('sal_btn_returns'));
+  btn('#rb-eod-open',          mp('sal_btn_eod'));
+  btn('#rb-qt-new',            mp('sal_btn_qt_new'));
+  btn('#rb-qt-refresh',        mp('sal_btn_qt_refresh'));
+  // Auto-hide Sales ribbon groups when all their buttons are hidden
+  { const salGrps = $$('[data-page="sales"] .ribbon-group');
+    if (salGrps[0]) salGrps[0].style.display = (mp('sal_btn_new_invoice')||mp('sal_btn_new_quotation')) ? '' : 'none';
+    if (salGrps[1]) salGrps[1].style.display = (mp('sal_btn_refresh')||mp('sal_btn_all_sales')||mp('sal_btn_pos_sales')) ? '' : 'none';
+    if (salGrps[2]) salGrps[2].style.display = mp('sal_btn_returns') ? '' : 'none';
+    if (salGrps[3]) salGrps[3].style.display = mp('sal_btn_eod') ? '' : 'none';
+    if (salGrps[4]) salGrps[4].style.display = (mp('sal_btn_qt_new')||mp('sal_btn_qt_refresh')) ? '' : 'none'; }
+  // ── Sales panel: sub-nav tab gating with fallback ──
+  { const _salTabPerms = { transactions: mp('sal_tab_transactions'), history: mp('sal_tab_history'), quotes: mp('sal_tab_quotes'), invoices: mp('sal_tab_invoices') };
+    $$('.sal-view-btn').forEach(b => { b.style.display = _salTabPerms[b.dataset.salView] ? '' : 'none'; });
+    const _salActive = $('.sal-view-btn.active');
+    if (_salActive && !_salTabPerms[_salActive.dataset.salView]) {
+      const _salFallback = Object.keys(_salTabPerms).find(k => _salTabPerms[k]);
+      if (_salFallback) _salSwitchView(_salFallback);
+    } }
+
+  // ── Inventory ribbon: fine-grained per-element permission gating ──
+  btn('#rb-inv-products',  mp('inv_btn_products'));
+  btn('#rb-refresh',       mp('inv_btn_refresh'));
+  btn('#rb-clear-filters', mp('inv_btn_clear'));
+  btn('#rb-inv-categories',mp('inv_btn_categories'));
+  btn('#rb-inv-units',     mp('inv_btn_units'));
+  btn('#rb-inv-audit',     mp('inv_btn_audit'));
+  btn('#rb-inv-brands',    mp('inv_btn_brands'));
+  btn('#rb-inv-discounts', mp('inv_btn_discounts'));
+  btn('#rb-orders',        mp('inv_btn_orders'));
+  btn('#rb-inv-grn',       mp('inv_btn_grn'));
+  btn('#rb-inv-cheques',   mp('inv_btn_cheques'));
+  btn('#rb-inv-suppliers', mp('inv_btn_suppliers'));
+  btn('#rb-add-supplier',  mp('inv_btn_add_supplier'));
+  btn('#rb-inv-barcodes',  mp('inv_btn_barcodes'));
+  // Auto-hide Inventory ribbon groups when all their buttons are hidden
+  { const invGrps = $$('[data-page="inventory"] .ribbon-group');
+    if (invGrps[0]) invGrps[0].style.display = (mp('inv_btn_products')||mp('inv_btn_refresh')||mp('inv_btn_clear')||mp('inv_btn_categories')||mp('inv_btn_units')) ? '' : 'none';
+    if (invGrps[1]) invGrps[1].style.display = (mp('inv_btn_audit')||mp('inv_btn_brands')||mp('inv_btn_discounts')) ? '' : 'none';
+    if (invGrps[2]) invGrps[2].style.display = (mp('inv_btn_orders')||mp('inv_btn_grn')||mp('inv_btn_cheques')) ? '' : 'none';
+    if (invGrps[3]) invGrps[3].style.display = (mp('inv_btn_suppliers')||mp('inv_btn_add_supplier')) ? '' : 'none';
+    if (invGrps[4]) invGrps[4].style.display = mp('inv_btn_barcodes') ? '' : 'none'; }
+  // ── Inventory panel: sub-nav tab gating with fallback ──
+  { const _invTabPerms = { products: mp('inv_tab_products'), suppliers: mp('inv_tab_suppliers'), po: mp('inv_tab_po'), grn: mp('inv_tab_grn'), cheques: mp('inv_tab_cheques'), audit: mp('inv_tab_audit'), categories: mp('inv_tab_categories'), units: mp('inv_tab_units'), discounts: mp('inv_tab_discounts'), brands: mp('inv_tab_brands'), barcodes: mp('inv_tab_barcodes') };
+    $$('.inv-subnav-btn').forEach(b => { b.style.display = _invTabPerms[b.dataset.invView] ? '' : 'none'; });
+    const _invActive = $('.inv-subnav-btn.active');
+    if (_invActive && !_invTabPerms[_invActive.dataset.invView]) {
+      const _invFallback = Object.keys(_invTabPerms).find(k => _invTabPerms[k]);
+      if (_invFallback) switchInvView(_invFallback);
+    } }
+
+  // ── Finance ribbon: fine-grained per-element permission gating ──
+  btn('#rb-create-bill',  mp('fin_btn_create_bill'));
+  btn('#rb-bills-list',   mp('fin_btn_bills_list'));
+  btn('#rb-loans',        mp('fin_btn_loans'));
+  btn('#rb-rentals',      mp('fin_btn_rentals'));
+  btn('#rb-properties',   mp('fin_btn_properties'));
+  btn('#rb-fin-profit',   mp('fin_btn_profit'));
+  btn('#rb-fin-sales',    mp('fin_btn_sales'));
+  // Auto-hide Finance ribbon groups when all their buttons are hidden
+  { const finGrps = $$('[data-page="finance"] .ribbon-group');
+    if (finGrps[0]) finGrps[0].style.display = (mp('fin_btn_create_bill')||mp('fin_btn_bills_list')||mp('fin_btn_loans')) ? '' : 'none';
+    if (finGrps[1]) finGrps[1].style.display = (mp('fin_btn_rentals')||mp('fin_btn_properties')) ? '' : 'none';
+    if (finGrps[2]) finGrps[2].style.display = (mp('fin_btn_profit')||mp('fin_btn_sales')) ? '' : 'none'; }
+  // ── Finance panel: sub-nav tab gating with fallback ──
+  { const _finTabPerms = { flow: mp('fin_tab_flow'), bills: mp('fin_tab_bills'), loans: mp('fin_tab_loans'), rentals: mp('fin_tab_rentals'), properties: mp('fin_tab_properties'), modifications: mp('fin_tab_modifications') };
+    $$('#panel-finance .fin-subnav-btn[data-fin]').forEach(b => { b.style.display = _finTabPerms[b.dataset.fin] ? '' : 'none'; });
+    const _finActive = $('#panel-finance .fin-subnav-btn.active');
+    if (_finActive && !_finTabPerms[_finActive.dataset.fin]) {
+      const _finFallback = Object.keys(_finTabPerms).find(k => _finTabPerms[k]);
+      if (_finFallback) switchFinView(_finFallback);
+    } }
+
+  // ── HR tab: per-button fine-grained gating ──
+  btn('#rb-employees',  hr_employees);
+  btn('#rb-departments', hr_departments);
+  btn('#rb-hr-payroll', hr_payroll);
+  // Gate the People group: show if either employees or departments access
+  const hrGrpPeople = $('#rb-employees')?.closest('.ribbon-group');
+  if (hrGrpPeople) hrGrpPeople.style.display = (hr_employees || hr_departments) ? '' : 'none';
+
+  // ── Services tab: per-button fine-grained gating ──
+  btn('#rb-svc-new-req',     svc_requests);
+  btn('#rb-svc-requests',    svc_requests);
+  btn('#rb-svc-req-all',     svc_requests);
+  btn('#rb-svc-req-pending', svc_requests);
+  btn('#rb-svc-catalog',     svc_catalog);
+  btn('#rb-svc-new-item',    svc_catalog);
+  btn('#rb-svc-categories',  svc_categories);
+  btn('#rb-svc-refresh',     svc_any);
+
+  // ── Design tab: per-button fine-grained gating ──
+  btn('#rb-design-new',            design_all);
+  btn('#rb-design-all',            design_all);
+  btn('#rb-design-letterhead',     design_all);
+  btn('#rb-design-company-profile',design_all);
+  btn('#rb-design-social-media',   design_all);
+  btn('#rb-design-business-card',  design_all);
+
+  // ── Restaurant tab: per-button fine-grained gating ──
+  btn('#rb-rst-pos',              rst_pos);
+  btn('#rb-rst-new-order',        rst_orders);
+  btn('#rb-rst-orders',           rst_orders);
+  btn('#rb-rst-tables',           rst_floor);
+  btn('#rb-rst-reservations',     rst_floor);
+  btn('#rb-rst-menu-items',       rst_menu);
+  btn('#rb-rst-menu-categories',  rst_menu);
+  btn('#rb-rst-add-menu-item',    rst_menu);
+  btn('#rb-rst-ingredients',      rst_ingredients);
+  btn('#rb-rst-stock-in',         rst_ingredients);
+  btn('#rb-rst-purchase-orders',  rst_ingredients);
+  btn('#rb-rst-kitchen',          rst_kitchen);
+
+  // ── Restaurant POS tab: group + per-button gating ──
+  grp('#rb-rst-pos-takeaway', rst_pos);    // Order group
+  grp('#rb-rst-pos-go-rst',   rst_pos);   // Navigate group
+  btn('#rb-rst-pos-takeaway', rst_pos);
+  btn('#rb-rst-pos-tables',   rst_pos);
+  btn('#rb-rst-pos-go-rst',   rst_pos);
+  btn('#rb-rst-pos-kds',      rst_kitchen);
+
+  // ── Mail ribbon groups + per-button fine-grained gating ──
+  grp('#rb-mail-inbox',     mail_inbox || mail_compose);      // Messages group
+  btn('#rb-mail-inbox',     mail_inbox);
+  btn('#rb-mail-compose',   mail_compose);
+  grp('#rb-mail-sent',      mail_inbox);                      // Sent group
+  btn('#rb-mail-sent',      mail_inbox);
+  grp('#rb-mail-templates', mail_templates);                  // Manage group
+  btn('#rb-mail-templates', mail_templates);
+  btn('#rb-mail-filters',   mail_templates);
+  grp('#rb-mail-scheduled', mail_compose || mail_templates);  // Scheduled group
+  btn('#rb-mail-scheduled', mail_compose || mail_templates);
+  grp('#rb-mail-refresh',   mail_any);                        // Actions group
+  btn('#rb-mail-refresh',   mail_any);
+  btn('#rb-mail-sync',      mail_any);
+
+  // ── CRM ribbon groups + per-button fine-grained gating ──
+  grp('#rb-crm-pipeline',  crm_pipeline);                     // Pipeline group
+  btn('#rb-crm-pipeline',  crm_pipeline);
+  btn('#rb-crm-new-lead',  crm_pipeline);
+  grp('#rb-crm-contacts',  crm_contacts);                     // Contacts group
+  btn('#rb-crm-contacts',  crm_contacts);
+  grp('#rb-crm-tasks',     crm_tasks);                        // Tasks group
+  btn('#rb-crm-tasks',     crm_tasks);
+  btn('#rb-crm-new-task',  crm_tasks);
+  grp('#rb-crm-forms',     crm_forms);                        // Forms group
+  btn('#rb-crm-forms',     crm_forms);
+  btn('#rb-crm-new-form',  crm_forms);
+  grp('#rb-crm-projects',  crm_pipeline || crm_tasks);        // Manage group
+  btn('#rb-crm-projects',  crm_pipeline || crm_tasks);
+  btn('#rb-crm-stages',    crm_pipeline || crm_tasks);
+  grp('#rb-crm-refresh',   crm_any);                          // Actions group
+  btn('#rb-crm-refresh',   crm_any);
 
   // ── Backstage sections ──
   const pos  = pos_any;
@@ -3432,6 +4023,9 @@ const _featDefs = [
   { key: 'restaurant',           name: 'Restaurant',            desc: 'Restaurant POS, orders, menu & kitchen', icon: 'fa-utensils',           color: '#f97316' },
   { key: 'mail',                 name: 'Mail',                  desc: 'Business inbox, templates & scheduled sending', icon: 'fa-envelope',   color: '#06b6d4' },
   { key: 'crm',                  name: 'CRM',                   desc: 'Leads pipeline, contacts & follow-up tasks',    icon: 'fa-bullseye',   color: '#7c3aed' },
+  { key: 'developers',           name: 'Developers',            desc: 'API keys & webhooks for third-party integrations', icon: 'fa-code',    color: '#0f766e' },
+  { key: 'automation_editor',    name: 'Automation Editor',     desc: 'Visual workflow builder — triggers, conditions & actions', icon: 'fa-bolt',           color: '#f59e0b' },
+  { key: 'project_management',  name: 'Projects',              desc: 'Projects, tasks, milestones & kanban boards',             icon: 'fa-diagram-project', color: '#0284c7' },
 ];
 
 function openFeatureMgmtModal() {
@@ -8185,7 +8779,7 @@ $('#bc-select-all')?.addEventListener('change', e => {
 
 $('#bc-print-btn')?.addEventListener('click', _barcodePrint);
 $('#bc-prev-close')?.addEventListener('click', () => { $('#bc-preview-modal').style.display = 'none'; });
-$('#bc-prev-print')?.addEventListener('click', () => window.print());
+$('#bc-prev-print')?.addEventListener('click', () => window.electronAPI.printReceipt());
 // ── End Barcode Sheets ────────────────────────────────────────────────────
 
 // ── Return / Refund Modal ─────────────────────────────────────────────────
@@ -9385,9 +9979,10 @@ async function openProductDetail(productId, productName) {
     $(`#inv-pane-${t}`).innerHTML = `<div class="inv-pane-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</div>`;
   });
 
-  // Fetch product + initial chart in parallel
-  const [res] = await Promise.all([
+  // Fetch product and stock history in parallel
+  const [res, histRes] = await Promise.all([
     API.product(productId),
+    API.productStockHistory(productId),
   ]);
   const p = res.body?.data || res.body || null;
   if (!p || res.status !== 200) {
@@ -9395,10 +9990,11 @@ async function openProductDetail(productId, productName) {
     return;
   }
 
-  renderProductDetail(p);
+  const stockHistory = histRes.status === 200 ? (histRes.body?.data || []) : [];
+  renderProductDetail(p, stockHistory);
 }
 
-function renderProductDetail(p) {
+function renderProductDetail(p, stockHistory = []) {
   _prodActiveData = p;
   // ── Hero ──
   const images = p.images || p.product_images || (p.image ? [{ url: p.image }] : []);
@@ -9534,14 +10130,18 @@ function renderProductDetail(p) {
     </div>`;
 
   // ── Stock tab ──
-  const locations = p.stock_locations || p.warehouses || [];
+  const locations      = p.stock_locations || p.warehouses || [];
+  const totalReceived  = stockHistory.reduce((s, h) => s + parseFloat(h.quantity_received  || 0), 0);
+  const grnRemaining   = stockHistory.reduce((s, h) => s + parseFloat(h.quantity_remaining || 0), 0);
+  // Use stock_quantity (the canonical denormalized column) to match POS grid
+  const displayStock   = stock ?? '—';
   const stockRows = [
-    ['Current Stock', stock != null ? stock : '—'],
+    ['Available Stock', displayStock !== '—' ? `<strong style="font-size:15px;color:var(--accent)">${Number(displayStock) % 1 === 0 ? Number(displayStock) : Number(displayStock).toFixed(3)}</strong>` : '—'],
     ['Low Stock Alert', p.low_stock_threshold ?? p.alert_quantity ?? '—'],
-    ['Manage Stock',  p.manage_stock != null ? (p.manage_stock ? 'Yes' : 'No') : '—'],
+    ['Manage Stock',    p.manage_stock != null ? (p.manage_stock ? 'Yes' : 'No') : '—'],
     ['Allow Backorder', p.allow_backorder != null ? (p.allow_backorder ? 'Yes' : 'No') : '—'],
-    ['Weight',        p.weight ? `${p.weight} ${p.weight_unit || ''}`.trim() : null],
-    ['Dimensions',    (p.length || p.width || p.height) ? `${p.length||0} × ${p.width||0} × ${p.height||0}` : null],
+    ['Weight',          p.weight ? `${p.weight} ${p.weight_unit || ''}`.trim() : null],
+    ['Dimensions',      (p.length || p.width || p.height) ? `${p.length||0} × ${p.width||0} × ${p.height||0}` : null],
   ].filter(([, v]) => v != null);
 
   const locHtml = locations.length ? `
@@ -9552,6 +10152,70 @@ function renderProductDetail(p) {
         <tbody>${locations.map(l => `<tr><td class="inv-dt-label">${escHtml(l.name||l.warehouse_name||'—')}</td><td class="inv-dt-val">${l.quantity??l.stock??'—'}</td></tr>`).join('')}</tbody>
       </table>
     </div>` : '';
+  const _stockNum    = stock != null ? Number(stock) : null;
+  const _threshold   = p.low_stock_threshold ?? p.alert_quantity ?? 5;
+  const _stockColor  = _stockNum == null ? '' : _stockNum <= 0 ? ' inv-stock-kpi--red' : _stockNum <= _threshold ? ' inv-stock-kpi--amber' : ' inv-stock-kpi--green';
+  const _stockDisp   = _stockNum != null ? (_stockNum % 1 === 0 ? _stockNum : _stockNum.toFixed(3)) : '—';
+  const stockSummaryHtml = `
+    <div class="inv-stock-summary">
+      <div class="inv-stock-kpi${_stockColor}">
+        <div class="inv-stock-kpi-val">${_stockDisp}</div>
+        <div class="inv-stock-kpi-label">Available Stock</div>
+      </div>
+      <div class="inv-stock-kpi inv-stock-kpi--blue">
+        <div class="inv-stock-kpi-val">${totalReceived % 1 === 0 ? totalReceived : totalReceived.toFixed(3)}</div>
+        <div class="inv-stock-kpi-label">Total Received (GRN)</div>
+      </div>
+      <div class="inv-stock-kpi inv-stock-kpi--gray">
+        <div class="inv-stock-kpi-val">${grnRemaining % 1 === 0 ? grnRemaining : grnRemaining.toFixed(3)}</div>
+        <div class="inv-stock-kpi-label">GRN Remaining</div>
+      </div>
+    </div>`;
+
+  const grnHistHtml = (() => {
+    if (!stockHistory.length) {
+      return `<div class="inv-section" style="margin-top:16px">
+        <div class="inv-section-title"><i class="fa fa-truck-ramp-box"></i> Stock Receive History</div>
+        <div class="inv-pane-empty" style="padding:20px 0"><i class="fa fa-inbox"></i><p>No GRN records found</p></div>
+      </div>`;
+    }
+    const rows = stockHistory.map(h => {
+      const grnLabel = h.grn_number ? escHtml(h.grn_number) : '—';
+      const grnRef   = h.grn_reference ? `<span class="inv-grn-ref">${escHtml(h.grn_reference)}</span>` : '';
+      const poLabel  = h.po_number ? `<span class="inv-grn-po"><i class="fa fa-file-invoice"></i> ${escHtml(h.po_number)}</span>` : '';
+      const supplier = h.supplier_name ? `<span class="inv-grn-supplier"><i class="fa fa-building-user"></i> ${escHtml(h.supplier_name)}</span>` : '';
+      const date     = h.received_at ? new Date(h.received_at).toLocaleDateString() : '—';
+      const qtyIn    = parseFloat(h.quantity_received || 0);
+      const qtyLeft  = parseFloat(h.quantity_remaining || 0);
+      const cost     = h.unit_cost != null ? parseFloat(h.unit_cost).toFixed(2) : '—';
+      const qtyColor = qtyLeft <= 0 ? 'color:#e74c3c' : qtyLeft < qtyIn ? 'color:#f59e0b' : 'color:#22c55e';
+      return `<tr>
+        <td class="inv-grn-td-date">${date}</td>
+        <td class="inv-grn-td-ref">
+          <span class="inv-grn-num">${grnLabel}</span>${grnRef}
+          <div class="inv-grn-meta">${poLabel}${supplier}</div>
+        </td>
+        <td class="inv-grn-td-qty" style="text-align:right">${qtyIn}</td>
+        <td class="inv-grn-td-qty" style="text-align:right;${qtyColor}">${qtyLeft}</td>
+        <td class="inv-grn-td-cost" style="text-align:right">${cost}</td>
+      </tr>`;
+    }).join('');
+    return `<div class="inv-section" style="margin-top:16px">
+      <div class="inv-section-title"><i class="fa fa-truck-ramp-box"></i> Stock Receive History (${stockHistory.length})</div>
+      <div style="overflow-x:auto">
+        <table class="inv-grn-table">
+          <thead><tr>
+            <th>Date</th>
+            <th>GRN / Reference</th>
+            <th style="text-align:right">Received</th>
+            <th style="text-align:right">Remaining</th>
+            <th style="text-align:right">Unit Cost</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>`;
+  })();
 
   $('#inv-pane-stock').innerHTML = `
     <div class="inv-section">
@@ -9560,7 +10224,7 @@ function renderProductDetail(p) {
         ${stockRows.map(([label, val]) => `
           <tr><td class="inv-dt-label">${label}</td><td class="inv-dt-val">${escHtml(String(val))}</td></tr>`).join('')}
       </table>
-    </div>${locHtml}`;
+    </div>${locHtml}${stockHistory.length ? stockSummaryHtml : ''}${grnHistHtml}`;
 
   // ── Images tab ──
   if (images.length) {
@@ -12114,10 +12778,13 @@ $('#rcpt-close').addEventListener('click', () => { $('#receipt-modal').style.dis
 $('#receipt-modal').addEventListener('click', (e) => {
   if (e.target === e.currentTarget) e.currentTarget.style.display = 'none';
 });
-$('#rcpt-print').addEventListener('click', () => {
+$('#rcpt-print').addEventListener('click', async () => {
   $('#receipt-printable').style.display = 'block';
-  window.print();
-  setTimeout(() => { $('#receipt-printable').style.display = 'none'; }, 500);
+  try {
+    await window.electronAPI.printReceipt();
+  } finally {
+    $('#receipt-printable').style.display = 'none';
+  }
 });
 
 // ── Receipt layout editor (template designer) ──────────────────────────────
@@ -12859,6 +13526,35 @@ $('#rb-checkout').addEventListener('click', () => { const t = activeTab(); if (t
 $('#btn-park')?.addEventListener('click', parkCurrentSale);
 $('#btn-recall')?.addEventListener('click', openParkedSalesModal);
 $('#btn-customer')?.addEventListener('click', openCustomerModal);
+
+function _posCartPrefill() {
+  const tab = activeTab();
+  if (!tab || !tab.cart.length) { toast('Cart is empty', 'info'); return null; }
+  return {
+    customerId: tab._customer?.id ?? null,
+    items: tab.cart.map(i => ({
+      description: i.name,
+      quantity:    i.qty,
+      unit_price:  i._basePrice ?? i.price,
+    })),
+  };
+}
+
+$('#pos-to-invoice')?.addEventListener('click', () => {
+  const prefill = _posCartPrefill();
+  if (!prefill) return;
+  activateTab('sales');
+  _salSwitchView('invoices');
+  setTimeout(() => _invOpenForm(null, prefill), 80);
+});
+
+$('#pos-to-quote')?.addEventListener('click', () => {
+  const prefill = _posCartPrefill();
+  if (!prefill) return;
+  activateTab('sales');
+  _salSwitchView('quotes');
+  setTimeout(() => _qtOpenForm(null, prefill), 80);
+});
 
 // ── Checkout ───────────────────────────────────────────────────────────────
 let _coSubtotal = 0; // base subtotal before discount
@@ -21404,6 +22100,7 @@ async function loadSvcRequests() {
 function _svcRenderRequestRows() {
   const tbody = $('#svc-req-tbody');
   const cur   = state.currency ? ' ' + state.currency : '';
+  const pmOn  = state.features?.has('project_management');
 
   const rows = _svcReqStatus
     ? _svcAllRequests.filter(r => r.status === _svcReqStatus)
@@ -21411,17 +22108,10 @@ function _svcRenderRequestRows() {
 
   if (!rows.length) {
     const msg = _svcReqStatus ? `No ${_svcReqStatus.replace('_', ' ')} requests` : 'No requests found';
-    tbody.innerHTML = `<tr><td colspan="7" class="svc-tbl-placeholder">
+    tbody.innerHTML = `<tr><td colspan="${pmOn ? 8 : 7}" class="svc-tbl-placeholder">
       <i class="fa fa-clipboard-list svc-tbl-empty-icon"></i>${msg}</td></tr>`;
     return;
   }
-
-  const actionMap = {
-    pending:     [['in_progress','svc-action-progress','<i class="fa fa-rotate"></i> Start'],['cancelled','svc-action-cancel','<i class="fa fa-ban"></i> Cancel']],
-    in_progress: [['completed','svc-action-complete','<i class="fa fa-circle-check"></i> Complete'],['cancelled','svc-action-cancel','<i class="fa fa-ban"></i> Cancel']],
-    completed:   [],
-    cancelled:   [],
-  };
 
   tbody.innerHTML = rows.map(r => {
     const sched = r.scheduled_at
@@ -21432,34 +22122,328 @@ function _svcRenderRequestRows() {
       : '<span style="color:var(--text-light)">—</span>';
     const badge = `<span class="svc-status-badge" style="background:${r.status_color}18;color:${r.status_color};border:1px solid ${r.status_color}35">${escHtml(r.status_label)}</span>`;
     const svcSub = r.service_item ? `<div class="svc-req-sub"><i class="fa fa-screwdriver-wrench" style="margin-right:3px;opacity:.6"></i>${escHtml(r.service_item.name)}</div>` : '';
-    const btns = (actionMap[r.status] || [])
-      .map(([s, cls, lbl]) => `<button class="svc-action-btn ${cls}" onclick="setSvcRequestStatus(${r.id},'${s}')">${lbl}</button>`)
-      .join('');
+
+    // Start always opens the dialog (PM options shown inside if feature is on)
+    const startBtn   = r.status === 'pending'
+      ? `<button class="svc-action-btn svc-action-progress" data-svc-start="${r.id}"><i class="fa fa-rotate"></i> Start</button>`
+      : '';
+    const cancelBtn  = (r.status === 'pending' || r.status === 'in_progress')
+      ? `<button class="svc-action-btn svc-action-cancel" data-svc-status="${r.id}" data-svc-to="cancelled"><i class="fa fa-ban"></i> Cancel</button>`
+      : '';
+    const completeBtn = r.status === 'in_progress'
+      ? `<button class="svc-action-btn svc-action-complete" data-svc-status="${r.id}" data-svc-to="completed"><i class="fa fa-circle-check"></i> Complete</button>`
+      : '';
+    const btns = [startBtn, completeBtn, cancelBtn].filter(Boolean).join('');
+
+    const projectCell = pmOn
+      ? `<td>${r.project ? `<span class="svc-proj-tag"><i class="fa fa-diagram-project" style="margin-right:4px;opacity:.6"></i>${escHtml(r.project.name)}</span>` : '<span style="color:var(--text-light);font-size:12px">—</span>'}</td>`
+      : '';
 
     return `<tr class="inv-row">
       <td><span class="svc-req-num">${escHtml(r.request_number || '—')}</span></td>
       <td><div class="svc-req-title">${escHtml(r.title || '—')}</div>${svcSub}</td>
       <td>${r.customer ? `<div style="font-weight:500">${escHtml(r.customer.name)}</div>` : '<span style="color:var(--text-light)">Walk-in</span>'}</td>
+      ${projectCell}
       <td>${badge}</td>
       <td style="font-size:12px;white-space:nowrap">${sched}</td>
       <td style="text-align:right;font-size:13px">${price}</td>
       <td style="text-align:center"><div style="display:flex;gap:5px;justify-content:center">${btns || '<span style="color:var(--text-light);font-size:12px">—</span>'}</div></td>
     </tr>`;
   }).join('');
+
+  // Hide project column header if PM not enabled
+  const projCol = document.querySelector('.svc-col-project');
+  if (projCol) projCol.style.display = pmOn ? '' : 'none';
 }
 
-async function setSvcRequestStatus(id, status) {
-  const res = await API.updateServiceRequestStatus(id, status);
+// Event delegation — handles Start, Cancel, Complete buttons rendered in tbody
+$('#svc-req-tbody')?.addEventListener('click', e => {
+  const startBtn  = e.target.closest('[data-svc-start]');
+  const statusBtn = e.target.closest('[data-svc-status]');
+  if (startBtn)  svcStartWithProject(Number(startBtn.dataset.svcStart));
+  if (statusBtn) setSvcRequestStatus(Number(statusBtn.dataset.svcStatus), statusBtn.dataset.svcTo);
+});
+
+async function setSvcRequestStatus(id, status, projectId = null, createTask = null) {
+  const res = await API.updateServiceRequestStatus(id, status, projectId, createTask);
   if (res.status === 200) {
-    // Update local cache so re-render is instant
     const r = _svcAllRequests.find(x => x.id === id);
     if (r) Object.assign(r, res.body?.data || {});
     _svcRenderRequestRows();
-    toast('Status updated', 'success');
+    if (res.body?.pm_task) toast('Task created in project', 'success');
+    else toast('Status updated', 'success');
   } else {
     toast(res.body?.message || 'Failed to update status', 'error');
   }
 }
+
+// ── Start Service Request — 2-step dialog ───────────────────────────────────
+const _svcStart = { requestId: null, request: null };
+
+function _svcStartShow(step) {
+  ['choose','project','task'].forEach(s => {
+    $('#svc-start-step-' + s).style.display = s === step ? '' : 'none';
+  });
+  const titles = {
+    choose:  '<i class="fa fa-rotate"></i> Start Service Request',
+    project: '<i class="fa fa-folder-plus"></i> Create New Project',
+    task:    '<i class="fa fa-circle-check"></i> Add as Task',
+  };
+  $('#svc-start-modal-title').innerHTML = titles[step];
+}
+
+function _svcStartClose() {
+  $('#svc-start-modal').style.display = 'none';
+  _svcStart.requestId = null;
+  _svcStart.request   = null;
+}
+
+async function svcStartWithProject(requestId) {
+  const r = _svcAllRequests.find(x => x.id === requestId);
+  _svcStart.requestId = requestId;
+  _svcStart.request   = r;
+
+  const label = r ? (r.request_number ? `${r.request_number} — ` : '') + (r.title || '') : '';
+  $('#svc-start-req-label').textContent = label;
+
+  // Show or hide PM option cards based on feature flag
+  const pmOn = state.features?.has('project_management');
+  const optRow = $('#svc-start-step-choose')?.querySelector('.svc-start-opts-row');
+  if (optRow) optRow.style.display = pmOn ? '' : 'none';
+
+  _svcStartShow('choose');
+  $('#svc-start-modal').style.display = 'flex';
+}
+
+$('#svc-start-modal-close')?.addEventListener('click', _svcStartClose);
+$('#svc-start-modal')?.addEventListener('click', e => { if (e.target === e.currentTarget) _svcStartClose(); });
+
+// Step 1: Just Start
+$('#svc-start-skip')?.addEventListener('click', () => {
+  const id = _svcStart.requestId;
+  _svcStartClose();
+  setSvcRequestStatus(id, 'in_progress');
+});
+
+// Step 1 → Step 2a: New Project
+$('#svc-start-opt-project')?.addEventListener('click', () => {
+  const r = _svcStart.request;
+  $('#svc-start-proj-name').value   = r?.title || '';
+  $('#svc-start-proj-desc').value   = r?.notes || '';
+  $('#svc-start-proj-client').value = r?.customer?.name || '';
+  $('#svc-start-proj-due').value    = r?.scheduled_at
+    ? new Date(r.scheduled_at).toISOString().slice(0, 10) : '';
+  $('#svc-start-proj-alert').style.display = 'none';
+  _svcStartShow('project');
+  setTimeout(() => $('#svc-start-proj-name')?.focus(), 60);
+});
+
+// Step 1 → Step 2b: Task in Project
+$('#svc-start-opt-task')?.addEventListener('click', async () => {
+  const r   = _svcStart.request;
+  const sel = $('#svc-start-task-project');
+  sel.innerHTML = '<option value="">— Select project —</option>';
+  const res = await API.pmProjects();
+  if (res.status === 200) {
+    (res.body?.data || []).forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.id;
+      opt.textContent = p.name;
+      sel.appendChild(opt);
+    });
+  }
+  const svcName = r?.service_item?.name ? ` — ${r.service_item.name}` : '';
+  $('#svc-start-task-title').value = (r?.title || '') + svcName;
+  $('#svc-start-task-alert').style.display = 'none';
+  _svcStartShow('task');
+});
+
+// Step 2a: Back
+$('#svc-start-proj-back')?.addEventListener('click', () => _svcStartShow('choose'));
+
+// Step 2b: Back
+$('#svc-start-task-back')?.addEventListener('click', () => _svcStartShow('choose'));
+
+// ── Client field typeahead (New Project step) ─────────────────────────────
+let _svcProjClientTimer = null;
+
+function _svcProjClientShowResults(list, q) {
+  const el = $('#svc-start-proj-client-results');
+  if (!el) return;
+  const rows = list.slice(0, 7).map(c =>
+    `<div class="svc-tab-result-item" data-cid="${c.id}" data-cname="${escHtml(c.name)}">
+      <i class="fa fa-user" style="opacity:.45;margin-right:6px;font-size:11px"></i>
+      <span>${escHtml(c.name)}</span>
+      ${c.phone ? `<span style="color:var(--text-muted);font-size:11px;margin-left:auto">${escHtml(c.phone)}</span>` : ''}
+    </div>`
+  ).join('');
+  const addRow =
+    `<div class="svc-tab-result-item" id="svc-proj-cust-add-row"
+      style="color:var(--accent);font-weight:600;border-top:1px solid var(--border);margin-top:4px;padding-top:8px">
+      <i class="fa fa-user-plus" style="margin-right:6px"></i>Add Customer
+      ${q ? `<span style="color:var(--text-muted);font-weight:400;font-size:11px;margin-left:4px">"${escHtml(q)}"</span>` : ''}
+    </div>`;
+  el.innerHTML = (list.length === 0
+    ? `<div style="padding:8px 12px;font-size:12px;color:var(--text-muted)"><i class="fa fa-magnifying-glass" style="margin-right:5px;opacity:.5"></i>No customers found</div>`
+    : rows
+  ) + addRow;
+  el.style.display = 'block';
+
+  el.querySelectorAll('.svc-tab-result-item[data-cid]').forEach(row => {
+    row.addEventListener('mousedown', e => {
+      e.preventDefault();
+      $('#svc-start-proj-client').value = row.dataset.cname;
+      el.style.display = 'none';
+    });
+  });
+  el.querySelector('#svc-proj-cust-add-row')?.addEventListener('mousedown', e => {
+    e.preventDefault();
+    el.style.display = 'none';
+    _openQuickCustomerModal();
+  });
+}
+
+$('#svc-start-proj-client')?.addEventListener('input', () => {
+  clearTimeout(_svcProjClientTimer);
+  const q = $('#svc-start-proj-client').value.trim();
+  const el = $('#svc-start-proj-client-results');
+  if (!q) { if (el) el.style.display = 'none'; return; }
+  _svcProjClientTimer = setTimeout(async () => {
+    const res = await API.customers(q);
+    _svcProjClientShowResults(res.body?.data || [], q);
+  }, 220);
+});
+$('#svc-start-proj-client')?.addEventListener('blur', () => {
+  setTimeout(() => { const el = $('#svc-start-proj-client-results'); if (el) el.style.display = 'none'; }, 160);
+});
+
+// "+" button next to client field opens modal directly
+$('#svc-proj-client-add-trigger')?.addEventListener('click', () => _openQuickCustomerModal());
+
+// ── Quick Add Customer modal ──────────────────────────────────────────────
+function _openQuickCustomerModal() {
+  const typed = $('#svc-start-proj-client').value.trim();
+  $('#svc-qc-name').value  = typed;
+  $('#svc-qc-phone').value = '';
+  $('#svc-qc-alert').style.display = 'none';
+  $('#svc-qc-modal').style.display = 'flex';
+  setTimeout(() => { const n = $('#svc-qc-name'); if (n) { n.focus(); n.select(); } }, 60);
+}
+function _closeQuickCustomerModal() {
+  $('#svc-qc-modal').style.display = 'none';
+}
+
+$('#svc-qc-close')?.addEventListener('click', _closeQuickCustomerModal);
+$('#svc-qc-cancel')?.addEventListener('click', _closeQuickCustomerModal);
+$('#svc-qc-modal')?.addEventListener('click', e => { if (e.target === e.currentTarget) _closeQuickCustomerModal(); });
+
+$('#svc-qc-save')?.addEventListener('click', async () => {
+  const name    = $('#svc-qc-name').value.trim();
+  const phone   = $('#svc-qc-phone').value.trim();
+  const alertEl = $('#svc-qc-alert');
+  alertEl.style.display = 'none';
+  if (!name) {
+    alertEl.textContent = 'Name is required.';
+    alertEl.style.display = 'block';
+    $('#svc-qc-name').focus();
+    return;
+  }
+  const btn = $('#svc-qc-save');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Adding…';
+  const res = await API.createCustomer({ name, phone: phone || null, customer_type: 'retail' });
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fa fa-user-plus"></i> Add Customer';
+  if (res.status !== 201) {
+    alertEl.textContent = res.body?.message || 'Failed to add customer.';
+    alertEl.style.display = 'block';
+    return;
+  }
+  const c = res.body?.data;
+  if (c) $('#svc-start-proj-client').value = c.name;
+  _closeQuickCustomerModal();
+  toast(`Customer "${name}" added`, 'success');
+});
+
+// Step 2a: Create Project & Start
+$('#svc-start-proj-confirm')?.addEventListener('click', async () => {
+  const btn     = $('#svc-start-proj-confirm');
+  const alertEl = $('#svc-start-proj-alert');
+  const name    = $('#svc-start-proj-name').value.trim();
+  alertEl.style.display = 'none';
+  if (!name) {
+    alertEl.textContent = 'Project name is required.';
+    alertEl.style.display = 'block';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Creating…';
+
+  const projRes = await API.pmProjectCreate({
+    name,
+    description: $('#svc-start-proj-desc').value.trim()   || null,
+    client_name: $('#svc-start-proj-client').value.trim() || null,
+    due_date:    $('#svc-start-proj-due').value           || null,
+  });
+
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fa fa-folder-plus"></i> Create Project &amp; Start';
+
+  if (projRes.status !== 201) {
+    alertEl.textContent = projRes.body?.message || 'Failed to create project.';
+    alertEl.style.display = 'block';
+    return;
+  }
+
+  const newProjectId = projRes.body.data.id;
+  const id = _svcStart.requestId;
+  _svcStartClose();
+  // create_task:false — the project itself is the deliverable, no task needed
+  await setSvcRequestStatus(id, 'in_progress', newProjectId, false);
+  toast(`Project "${name}" created`, 'success');
+});
+
+// Step 2b: Add Task & Start
+$('#svc-start-task-confirm')?.addEventListener('click', async () => {
+  const btn       = $('#svc-start-task-confirm');
+  const alertEl   = $('#svc-start-task-alert');
+  const projectId = Number($('#svc-start-task-project').value);
+  const taskTitle = $('#svc-start-task-title').value.trim();
+  alertEl.style.display = 'none';
+
+  if (!projectId) {
+    alertEl.textContent = 'Please select a project.';
+    alertEl.style.display = 'block';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Adding…';
+
+  const r       = _svcStart.request;
+  const taskRes = await API.pmTaskCreate(projectId, {
+    title:    taskTitle || r?.title || 'Service Request',
+    status:   'in_progress',
+    priority: 'normal',
+    due_date: r?.scheduled_at ? new Date(r.scheduled_at).toISOString().slice(0, 10) : null,
+    description: r?.notes || null,
+  });
+
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fa fa-circle-check"></i> Add Task &amp; Start';
+
+  if (taskRes.status !== 201) {
+    alertEl.textContent = taskRes.body?.message || 'Failed to create task.';
+    alertEl.style.display = 'block';
+    return;
+  }
+
+  const id = _svcStart.requestId;
+  _svcStartClose();
+  // Pass projectId so the request is linked; create_task:false since we just created the task
+  await setSvcRequestStatus(id, 'in_progress', projectId, false);
+});
 
 function _svcSetChip(status) {
   _svcReqStatus = status;
@@ -22266,7 +23250,138 @@ $('#svc-cat-q')?.addEventListener('input', function () {
   });
 });
 
+// ── New Service Request Modal ────────────────────────────────────────────────
+let _svcReqCustTimer = null;
+
+async function openNewRequestModal() {
+  activateTab('services');
+  switchSvcView('requests');
+
+  // Reset form
+  $('#svc-req-f-title').value       = '';
+  $('#svc-req-f-customer-q').value  = '';
+  $('#svc-req-f-customer-id').value = '';
+  $('#svc-req-f-scheduled').value   = '';
+  $('#svc-req-f-amount').value      = '';
+  $('#svc-req-f-notes').value       = '';
+  $('#svc-new-req-alert').style.display = 'none';
+
+  // Populate service dropdown
+  const svcSel = $('#svc-req-f-service');
+  svcSel.innerHTML = '<option value="">— None —</option>';
+  const catRes = await API.serviceMgmtCatalog('');
+  if (catRes.status === 200) {
+    (catRes.body?.data || []).forEach(s => {
+      const opt = document.createElement('option');
+      opt.value = s.id;
+      opt.textContent = s.name;
+      svcSel.appendChild(opt);
+    });
+  }
+
+  // Populate project dropdown (only if PM enabled)
+  const projRow = $('#svc-req-f-project-row');
+  const projSel = $('#svc-req-f-project');
+  const pmOn    = state.features?.has('project_management');
+  projRow.style.display = pmOn ? '' : 'none';
+  projSel.innerHTML = '<option value="">— None —</option>';
+  if (pmOn) {
+    const projRes = await API.pmProjects();
+    if (projRes.status === 200) {
+      (projRes.body?.data || []).forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.id;
+        opt.textContent = p.name;
+        projSel.appendChild(opt);
+      });
+    }
+  }
+
+  $('#svc-new-req-modal').style.display = 'flex';
+  setTimeout(() => $('#svc-req-f-title')?.focus(), 60);
+}
+
+function _closeNewRequestModal() {
+  $('#svc-new-req-modal').style.display = 'none';
+}
+
+// Customer typeahead
+$('#svc-req-f-customer-q')?.addEventListener('input', () => {
+  clearTimeout(_svcReqCustTimer);
+  const q = $('#svc-req-f-customer-q').value.trim();
+  const resultsEl = $('#svc-req-customer-results');
+  if (!q) { resultsEl.style.display = 'none'; $('#svc-req-f-customer-id').value = ''; return; }
+  _svcReqCustTimer = setTimeout(async () => {
+    const res = await API.customers(q);
+    const list = res.body?.data || [];
+    if (!list.length) { resultsEl.style.display = 'none'; return; }
+    resultsEl.innerHTML = list.slice(0, 8).map(c =>
+      `<div class="svc-tab-result-item" data-cid="${c.id}" data-cname="${escHtml(c.name)}">
+        <i class="fa fa-user" style="opacity:.5;margin-right:6px"></i>${escHtml(c.name)}
+        ${c.phone ? `<span style="color:var(--text-muted);font-size:11px;margin-left:4px">· ${escHtml(c.phone)}</span>` : ''}
+      </div>`
+    ).join('');
+    resultsEl.style.display = 'block';
+    resultsEl.querySelectorAll('.svc-tab-result-item').forEach(row => {
+      row.addEventListener('mousedown', e => {
+        e.preventDefault();
+        $('#svc-req-f-customer-id').value = row.dataset.cid;
+        $('#svc-req-f-customer-q').value  = row.dataset.cname;
+        resultsEl.style.display = 'none';
+      });
+    });
+  }, 220);
+});
+$('#svc-req-f-customer-q')?.addEventListener('blur', () => {
+  setTimeout(() => { const r = $('#svc-req-customer-results'); if (r) r.style.display = 'none'; }, 150);
+});
+
+$('#svc-new-req-modal-close')?.addEventListener('click',  _closeNewRequestModal);
+$('#svc-new-req-modal-cancel')?.addEventListener('click', _closeNewRequestModal);
+$('#svc-new-req-modal')?.addEventListener('click', e => { if (e.target === e.currentTarget) _closeNewRequestModal(); });
+
+$('#svc-new-req-modal-save')?.addEventListener('click', async () => {
+  const btn     = $('#svc-new-req-modal-save');
+  const alertEl = $('#svc-new-req-alert');
+  const title   = $('#svc-req-f-title').value.trim();
+  alertEl.style.display = 'none';
+
+  if (!title) {
+    alertEl.textContent = 'Title is required.';
+    alertEl.style.display = 'block';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Creating…';
+
+  const body = {
+    title,
+    service_item_id: $('#svc-req-f-service').value   || null,
+    customer_id:     $('#svc-req-f-customer-id').value || null,
+    project_id:      $('#svc-req-f-project').value    || null,
+    scheduled_at:    $('#svc-req-f-scheduled').value  || null,
+    total_price:     $('#svc-req-f-amount').value     || null,
+    notes:           $('#svc-req-f-notes').value.trim() || null,
+  };
+
+  const res = await API.createServiceRequest(body);
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fa fa-check"></i> Create Request';
+
+  if (res.status === 201) {
+    _closeNewRequestModal();
+    _svcAllRequests.unshift(res.body.data);
+    _svcRenderRequestRows();
+    toast('Request created', 'success');
+  } else {
+    alertEl.textContent = res.body?.message || 'Failed to create request.';
+    alertEl.style.display = 'block';
+  }
+});
+
 // Ribbon buttons
+$('#rb-svc-new-req')?.addEventListener('click', () => openNewRequestModal());
 $('#rb-svc-requests')?.addEventListener('click',    () => { activateTab('services'); switchSvcView('requests'); });
 $('#rb-svc-req-all')?.addEventListener('click',     () => { activateTab('services'); _svcSetChip(''); switchSvcView('requests'); });
 $('#rb-svc-req-pending')?.addEventListener('click', () => { activateTab('services'); _svcSetChip('pending'); switchSvcView('requests'); });
@@ -22306,6 +23421,22 @@ function switchDesignView(type) {
   $$('#panel-design .fin-subnav .fin-subnav-btn[data-ds]').forEach(b => {
     b.classList.toggle('active', b.dataset.ds === _dsActiveType);
   });
+
+  const propView   = $('#ds-proposals-view');
+  const listView   = $('#ds-list-view');
+  const singletons = $('.ds-singletons');
+
+  if (type === 'proposals') {
+    if (propView)   propView.style.display   = 'flex';
+    if (listView)   listView.style.display   = 'none';
+    if (singletons) singletons.style.display = 'none';
+    if (typeof window._dsLoadProposals === 'function') window._dsLoadProposals();
+    return;
+  }
+
+  if (propView)   propView.style.display   = 'none';
+  if (listView)   listView.style.display   = '';
+  if (singletons) singletons.style.display = '';
   _dsAllData = [];
   loadDesigns();
 }
@@ -22637,6 +23768,445 @@ async function submitDsCreate() {
   }
 }
 
+// ── Project Proposals ─────────────────────────────────────────────────────
+(function () {
+  const PAGE_META = {
+    1: { icon: 'fa-star',          color: '#7c3aed', bg: '#7c3aed15', label: 'Cover Page' },
+    2: { icon: 'fa-align-left',    color: '#0284c7', bg: '#0284c715', label: 'Executive Summary' },
+    3: { icon: 'fa-list-check',    color: '#059669', bg: '#05996915', label: 'Our Services' },
+    4: { icon: 'fa-calendar-days', color: '#f59e0b', bg: '#f59e0b15', label: 'Project Timeline' },
+    5: { icon: 'fa-dollar-sign',   color: '#ec4899', bg: '#ec489915', label: 'Investment & Pricing' },
+    6: { icon: 'fa-handshake',     color: '#8b5cf6', bg: '#8b5cf615', label: 'Contact & Next Steps' },
+  };
+
+  let _propData = [];
+
+  // ── Load proposals ────────────────────────────────────────────────────────
+  async function loadProposals() {
+    const area = $('#ds-proposals-area');
+    if (!area) return;
+    area.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);font-size:13px"><i class="fa fa-spinner fa-spin" style="margin-bottom:8px;display:block;font-size:24px"></i>Loading proposals…</div>';
+    const res = await API.proposals();
+    if (res.status !== 200) {
+      area.innerHTML = '<div style="text-align:center;padding:40px;color:#ef4444;font-size:13px">Failed to load proposals.</div>';
+      return;
+    }
+    _propData = res.body?.data || [];
+    renderProposals();
+  }
+
+  function renderProposals() {
+    const area = $('#ds-proposals-area');
+    if (!area) return;
+    if (!_propData.length) {
+      area.innerHTML = `
+        <div class="ds-proposals-empty">
+          <i class="fa fa-file-contract"></i>
+          <div class="ds-proposals-empty-title">No project proposals yet</div>
+          <div class="ds-proposals-empty-sub">Create a multi-page project proposal and open each page in the Design Studio.</div>
+          <button class="svc-form-btn svc-form-btn--primary" onclick="document.getElementById('ds-prop-new-btn').click()">
+            <i class="fa fa-plus"></i> New Project Proposal
+          </button>
+        </div>`;
+      return;
+    }
+
+    area.innerHTML = _propData.map(p => buildProposalCard(p)).join('');
+
+    // Delete
+    area.querySelectorAll('.ds-proposal-del').forEach(btn => {
+      btn.addEventListener('click', async e => {
+        e.stopPropagation();
+        const group = btn.dataset.group;
+        const title = btn.dataset.title;
+        if (!confirm(`Delete proposal "${title}" and all its pages? This cannot be undone.`)) return;
+        btn.disabled = true;
+        const res = await API.deleteProposal(group);
+        if (res.status === 200) {
+          _propData = _propData.filter(p => p.group !== group);
+          renderProposals();
+          toast('Proposal deleted.', 'success');
+        } else {
+          btn.disabled = false;
+          toast(res.body?.message || 'Failed to delete.', 'error');
+        }
+      });
+    });
+
+    // Edit — open all pages in the multi-page editor
+    area.querySelectorAll('.ds-prop-edit-btn').forEach(btn => {
+      btn.addEventListener('click', async e => {
+        e.stopPropagation();
+        const group = btn.dataset.group;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i>';
+        const res = await API.proposalPages(group);
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa fa-pen-to-square"></i> Edit';
+        if (res.status === 200 && res.body?.data) {
+          const prop = res.body.data;
+          await window.electronAPI.openEditor({
+            proposalTitle:     prop.title,
+            proposalGroup:     prop.group,
+            proposalPages:     prop.pages,
+            proposalStartPage: 0,
+            width:             prop.pages[0]?.width  ?? 794,
+            height:            prop.pages[0]?.height ?? 1123,
+            id:                prop.pages[0]?.id,
+            type:              'project-proposal',
+            title:             prop.title,
+          });
+        } else {
+          toast('Failed to load proposal.', 'error');
+        }
+      });
+    });
+  }
+
+  function buildProposalCard(p) {
+    const savedCount  = p.pages?.filter(pg => pg.has_canvas).length || 0;
+    const totalCount  = p.pages?.length || 0;
+    const updatedDate = p.updated_at ? p.updated_at.split(' ')[0] : '—';
+    const clientBadge = p.client
+      ? `<span class="ds-card-type-badge" style="background:#7c3aed15;color:#7c3aed;border:1px solid #7c3aed25">
+           <i class="fa fa-user"></i> ${escHtml(p.client)}
+         </span>`
+      : `<span class="ds-card-type-badge" style="background:#7c3aed15;color:#7c3aed;border:1px solid #7c3aed25">
+           <i class="fa fa-file-contract"></i> Proposal
+         </span>`;
+
+    return `
+      <div class="ds-proposal-card">
+        <div class="ds-proposal-bar"></div>
+        <div class="ds-card-body">
+          <div class="ds-card-top">
+            <div class="ds-card-icon" style="background:#7c3aed15;color:#7c3aed;font-size:20px">
+              <i class="fa fa-file-contract"></i>
+            </div>
+            <div class="ds-card-meta">
+              <span class="ds-card-title" title="${escHtml(p.title)}">${escHtml(p.title)}</span>
+              ${clientBadge}
+            </div>
+          </div>
+          <div class="ds-card-pills">
+            <span class="ds-card-pill"><i class="fa fa-layer-group"></i> ${totalCount} pages</span>
+            <span class="ds-card-pill" style="${savedCount > 0 ? 'color:#059669' : ''}">
+              <i class="fa fa-${savedCount > 0 ? 'check-circle' : 'circle-dot'}"></i> ${savedCount} saved
+            </span>
+          </div>
+        </div>
+        <div class="ds-card-footer">
+          <span class="ds-card-date">${escHtml(updatedDate)}</span>
+          <div style="display:flex;gap:5px;align-items:center">
+            <button class="ds-prop-edit-btn" data-group="${escHtml(p.group)}">
+              <i class="fa fa-pen-to-square"></i> Edit
+            </button>
+            <button class="ds-delete-btn ds-proposal-del" data-group="${escHtml(p.group)}" data-title="${escHtml(p.title)}" title="Delete proposal">
+              <i class="fa fa-trash"></i>
+            </button>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  // ── Create proposal modal ─────────────────────────────────────────────────
+  let _propGenMode = 'blank'; // 'blank' | 'ai'
+
+  function _setPropGenMode(mode) {
+    _propGenMode = mode;
+    const blankBtn = $('#ds-gen-blank-btn');
+    const aiBtn    = $('#ds-gen-ai-btn');
+    const aiSect   = $('#ds-gen-ai-section');
+    const saveBtn  = $('#ds-prop-modal-save');
+    if (mode === 'ai') {
+      blankBtn?.classList.remove('ds-gen-tab--active');
+      aiBtn?.classList.add('ds-gen-tab--active');
+      if (aiSect)  aiSect.style.display  = '';
+      if (saveBtn) { saveBtn.dataset.mode = 'ai'; saveBtn.innerHTML = '<i class="fa fa-wand-magic-sparkles"></i> Generate with AI'; }
+    } else {
+      aiBtn?.classList.remove('ds-gen-tab--active');
+      blankBtn?.classList.add('ds-gen-tab--active');
+      if (aiSect)  aiSect.style.display  = 'none';
+      if (saveBtn) { saveBtn.dataset.mode = 'blank'; saveBtn.innerHTML = '<i class="fa fa-file-contract"></i> Create Proposal'; }
+    }
+  }
+
+  function openProposalModal() {
+    $('#ds-prop-title').value  = '';
+    $('#ds-prop-client').value = '';
+    const desc = $('#ds-prop-desc');
+    if (desc) desc.value = '';
+    $('#ds-prop-alert').style.display = 'none';
+    _setPropGenMode('blank');
+    $('#ds-prop-modal').style.display = 'flex';
+    setTimeout(() => $('#ds-prop-title')?.focus(), 60);
+  }
+  function closeProposalModal() {
+    $('#ds-prop-modal').style.display = 'none';
+  }
+
+  // ── Canvas template builder for AI-generated pages ────────────────────────
+  function _buildProposalCanvas(sort, ai, propTitle, propClient) {
+    const W = 794, H = 1123;
+    const P   = '#7c3aed', PD = '#6d28d9', PDK = '#1e1b4b';
+    const TX  = '#1f2937', MT  = '#6b7280', WH  = '#ffffff', PL = '#f5f3ff';
+    const objs = [];
+
+    function rct(l, t, w, h, fill, op) {
+      const o = { type:'rect', left:l, top:t, width:w, height:h, fill:fill, selectable:true, evented:true };
+      if (op !== undefined) o.opacity = op;
+      return o;
+    }
+    function txt(str, l, t, w, size, bold, color, font, lh) {
+      return {
+        type: 'textbox',
+        text: String(str || ' ').substring(0, 600),
+        left: l, top: t, width: w || W - 100,
+        fontSize: size || 13,
+        fontWeight: bold ? 'bold' : 'normal',
+        fill: color || TX,
+        fontFamily: font || 'Inter',
+        lineHeight: lh || 1.5,
+        selectable: true, evented: true,
+      };
+    }
+    function pageHeader(title) {
+      objs.push(rct(0, 0, W, 100, P));
+      objs.push(rct(0, 100, W, 4, PD));
+      objs.push(txt(title, 50, 30, W - 100, 26, true, WH, 'Montserrat', 1.2));
+      const sub = propTitle + (propClient ? '  ·  ' + propClient : '');
+      objs.push(txt(sub, 50, 67, W - 100, 10, false, 'rgba(255,255,255,0.6)', 'Inter', 1));
+    }
+
+    switch (sort) {
+      case 1: { // Cover Page
+        objs.push(rct(0, 0, W, H, PDK));
+        objs.push(rct(0, 0, 6, H, P));
+        objs.push(rct(0, 0, W, 5, P));
+        objs.push(rct(0, H - 5, W, 5, P));
+        objs.push(txt(propTitle || 'Project Proposal', 50, 230, W - 100, 50, true, WH, 'Montserrat', 1.15));
+        if (propClient) {
+          objs.push(txt('PREPARED FOR', 50, 355, 200, 9, true, 'rgba(167,139,250,0.8)', 'Inter', 1));
+          objs.push(txt(propClient, 50, 373, W - 100, 20, true, 'rgba(255,255,255,0.85)', 'Montserrat', 1.2));
+        }
+        const tagY = propClient ? 420 : 360;
+        if (ai?.tagline) objs.push(txt(ai.tagline, 50, tagY, W - 100, 14, false, 'rgba(255,255,255,0.55)', 'Inter', 1.4));
+        const dateStr = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
+        objs.push(txt(dateStr, 50, H - 52, 300, 11, false, 'rgba(255,255,255,0.35)', 'Inter', 1));
+        return JSON.stringify({ version: '5.3.0', objects: objs, background: PDK });
+      }
+      case 2: { // Executive Summary
+        pageHeader('Executive Summary');
+        let y = 128;
+        if (ai?.summary) {
+          objs.push(txt(ai.summary, 50, y, W - 100, 13, false, TX, 'Inter', 1.65));
+          y += Math.min(Math.ceil(ai.summary.length / 80) * 22 + 30, 120);
+        }
+        if (ai?.summary_points?.length) {
+          objs.push(txt('Key Highlights', 50, y, W - 100, 15, true, PD, 'Montserrat', 1.2));
+          y += 32;
+          (ai.summary_points || []).forEach(pt => {
+            objs.push(rct(50, y + 5, 4, 13, P));
+            objs.push(txt(pt, 66, y, W - 130, 13, false, TX, 'Inter', 1.4));
+            y += 30;
+          });
+        }
+        return JSON.stringify({ version: '5.3.0', objects: objs, background: WH });
+      }
+      case 3: { // Our Services
+        pageHeader('Our Services');
+        let y = 125;
+        (ai?.services || []).forEach((svc, i) => {
+          if (i > 0) { objs.push(rct(50, y, W - 100, 1, '#e5e7eb')); y += 12; }
+          objs.push(rct(50, y + 2, 3, 40, P));
+          objs.push(txt(svc.name || '', 63, y + 2, W - 160, 14, true, PDK, 'Montserrat', 1.2));
+          objs.push(txt(svc.desc || '', 63, y + 22, W - 160, 12, false, MT, 'Inter', 1.4));
+          y += 58;
+        });
+        return JSON.stringify({ version: '5.3.0', objects: objs, background: WH });
+      }
+      case 4: { // Project Timeline
+        pageHeader('Project Timeline');
+        let y = 125;
+        const phColors = [P, '#059669', '#f59e0b', '#ef4444', '#0284c7'];
+        (ai?.timeline || []).forEach((ph, i) => {
+          const col = phColors[i % phColors.length];
+          objs.push(rct(50, y + 8, 14, 14, col)); // dot (rx not in minimal JSON, still round-ish)
+          if (i < (ai.timeline.length - 1)) objs.push(rct(56, y + 22, 2, 52, '#e5e7eb'));
+          objs.push(txt(ph.phase || ('Phase ' + (i + 1)), 76, y, 100, 10, true, col, 'Inter', 1));
+          objs.push(txt(ph.title || '', 76, y + 14, W - 260, 14, true, PDK, 'Montserrat', 1.15));
+          if (ph.duration) {
+            objs.push(rct(W - 176, y + 10, 126, 22, PL));
+            objs.push(txt(ph.duration, W - 172, y + 14, 118, 11, false, PD, 'Inter', 1));
+          }
+          objs.push(txt(ph.desc || '', 76, y + 32, W - 200, 12, false, MT, 'Inter', 1.4));
+          y += 76;
+        });
+        return JSON.stringify({ version: '5.3.0', objects: objs, background: WH });
+      }
+      case 5: { // Investment & Pricing
+        pageHeader('Investment & Pricing');
+        let y = 128;
+        const pr = ai?.pricing || {};
+        if (pr.subtitle) {
+          objs.push(txt(pr.subtitle, 50, y, W - 100, 16, true, PDK, 'Montserrat', 1.2));
+          y += 36;
+        }
+        objs.push(rct(50, y, W - 100, 38, PDK));
+        objs.push(txt('Service / Deliverable', 66, y + 11, 360, 11, true, WH, 'Inter', 1));
+        objs.push(txt('Amount', W - 186, y + 11, 110, 11, true, WH, 'Inter', 1));
+        y += 38;
+        (pr.items || []).forEach((item, i) => {
+          const bg = i % 2 === 0 ? WH : PL;
+          objs.push(rct(50, y, W - 100, 36, bg));
+          objs.push(txt(item.name || '', 66, y + 11, 340, 12, false, TX, 'Inter', 1));
+          objs.push(txt(item.amount || '', W - 186, y + 11, 110, 12, false, TX, 'Inter', 1));
+          y += 36;
+        });
+        y += 6;
+        objs.push(rct(50, y, W - 100, 50, P));
+        objs.push(txt('TOTAL INVESTMENT', 66, y + 16, 280, 12, true, WH, 'Montserrat', 1));
+        objs.push(txt(pr.total || '', W - 200, y + 12, 140, 22, true, WH, 'Montserrat', 1));
+        if (pr.note) {
+          y += 66;
+          objs.push(txt(pr.note, 50, y, W - 100, 11, false, MT, 'Inter', 1.4));
+        }
+        return JSON.stringify({ version: '5.3.0', objects: objs, background: WH });
+      }
+      case 6: { // Contact & Next Steps
+        pageHeader('Contact & Next Steps');
+        let y = 128;
+        const ct = ai?.contact || {};
+        if (ct.intro) {
+          objs.push(txt(ct.intro, 50, y, W - 100, 13, false, TX, 'Inter', 1.65));
+          y += Math.min(Math.ceil(ct.intro.length / 90) * 22 + 28, 80);
+        }
+        objs.push(txt('Next Steps', 50, y, W - 100, 16, true, PDK, 'Montserrat', 1.2));
+        y += 30;
+        (ct.steps || []).forEach((step, i) => {
+          objs.push(rct(50, y, 26, 26, P));
+          objs.push(txt(String(i + 1), 58, y + 7, 18, 11, true, WH, 'Montserrat', 1));
+          objs.push(txt(step, 86, y + 7, W - 160, 13, false, TX, 'Inter', 1.4));
+          y += 46;
+        });
+        y += 20;
+        objs.push(rct(50, y, W - 100, 1, '#e5e7eb'));
+        y += 20;
+        objs.push(txt('Ready to get started? We look forward to working with you.', 50, y, W - 100, 14, true, P, 'Montserrat', 1.2));
+        return JSON.stringify({ version: '5.3.0', objects: objs, background: WH });
+      }
+      default:
+        return JSON.stringify({ version: '5.3.0', objects: [], background: WH });
+    }
+  }
+
+  // Expose loadProposals so switchDesignView can call it
+  window._dsLoadProposals = loadProposals;
+
+  $('#ds-prop-modal-close')?.addEventListener('click',  closeProposalModal);
+  $('#ds-prop-modal-cancel')?.addEventListener('click', closeProposalModal);
+  $('#ds-prop-modal')?.addEventListener('click', e => { if (e.target === e.currentTarget) closeProposalModal(); });
+
+  $('#ds-gen-blank-btn')?.addEventListener('click', () => _setPropGenMode('blank'));
+  $('#ds-gen-ai-btn')?.addEventListener('click',    () => _setPropGenMode('ai'));
+
+  $('#ds-prop-new-btn')?.addEventListener('click', openProposalModal);
+  $('#rb-design-proposals')?.addEventListener('click', () => {
+    activateTab('design');
+    switchDesignView('proposals');
+  });
+  $('#rb-design-new-proposal')?.addEventListener('click', () => {
+    activateTab('design');
+    switchDesignView('proposals');
+    openProposalModal();
+  });
+
+  $('#ds-prop-modal-save')?.addEventListener('click', async () => {
+    const title   = $('#ds-prop-title').value.trim();
+    const client  = $('#ds-prop-client').value.trim();
+    const desc    = ($('#ds-prop-desc')?.value || '').trim();
+    const alertEl = $('#ds-prop-alert');
+    const btn     = $('#ds-prop-modal-save');
+    const isAi    = _propGenMode === 'ai';
+
+    alertEl.style.display = 'none';
+    if (!title) {
+      alertEl.textContent = 'Project title is required.';
+      alertEl.style.display = 'block';
+      $('#ds-prop-title').focus();
+      return;
+    }
+    if (isAi && !desc) {
+      alertEl.textContent = 'Please enter a project description for AI generation.';
+      alertEl.style.display = 'block';
+      $('#ds-prop-desc')?.focus();
+      return;
+    }
+
+    btn.disabled = true;
+
+    if (!isAi) {
+      // ── Blank proposal ──────────────────────────────────────────────────
+      btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Creating…';
+      const res = await API.createProposal({ title, client: client || null });
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa fa-file-contract"></i> Create Proposal';
+      if (res.status === 201) {
+        closeProposalModal();
+        toast('Project proposal created with 6 pages.', 'success');
+        _propData = [];
+        switchDesignView('proposals');
+      } else {
+        const msg = res.body?.errors?.title?.[0] || res.body?.message || 'Failed to create proposal.';
+        alertEl.textContent = msg;
+        alertEl.style.display = 'block';
+      }
+      return;
+    }
+
+    // ── AI-generated proposal ─────────────────────────────────────────────
+    try {
+      // Step 1: create blank proposal to get the group UUID
+      btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Creating proposal…';
+      const createRes = await API.createProposal({ title, client: client || null });
+      if (createRes.status !== 201) {
+        const msg = createRes.body?.errors?.title?.[0] || createRes.body?.message || 'Failed to create proposal.';
+        alertEl.textContent = msg;
+        alertEl.style.display = 'block';
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa fa-wand-magic-sparkles"></i> Generate with AI';
+        return;
+      }
+      const group = createRes.body.data.group;
+
+      // Step 2: AI generates content AND fills all 6 pages on the server in one call
+      btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Generating AI content…';
+      const fillRes = await API.aiProposalFill(group, { title, client: client || null, description: desc });
+      if (fillRes.status !== 200) {
+        const msg = fillRes.body?.message || 'AI generation failed. A blank proposal was still created.';
+        alertEl.textContent = msg;
+        alertEl.style.display = 'block';
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa fa-wand-magic-sparkles"></i> Generate with AI';
+        _propData = [];
+        switchDesignView('proposals');
+        return;
+      }
+
+      closeProposalModal();
+      toast('AI-generated proposal created — all 6 pages filled.', 'success');
+      _propData = [];
+      switchDesignView('proposals');
+    } catch (err) {
+      alertEl.textContent = 'An error occurred: ' + (err.message || 'please try again.');
+      alertEl.style.display = 'block';
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa fa-wand-magic-sparkles"></i> Generate with AI';
+    }
+  });
+}());
+
 // ── User Management ────────────────────────────────────────────────────────
 (function () {
   let _umUsers = [];         // all users (owner + members)
@@ -22650,12 +24220,226 @@ async function submitDsCreate() {
 
   const PRESET_COLORS = ['#3b82f6','#6366f1','#8b5cf6','#0ea5e9','#f59e0b','#f97316','#22c55e','#ef4444','#64748b','#ec4899'];
 
-  // Permission groups — mirrors BusinessMember::availablePermissions() structure
-  // Populated from the API response; defaults here are fallback only
-  let PERM_GROUPS = [];
+  // Permission groups — mirrors BusinessMember::availablePermissions() exactly.
+  // Pre-populated so the permission grid is never blank; overwritten by API response.
+  const PERM_GROUPS_DEFAULT = [
+    { key: 'home', label: 'Home', icon: 'fa-house', color: '#3b82f6', items: [
+      // ── Ribbon buttons ──────────────────────────────────────────────────────
+      { key: 'home_btn_pos',           label: 'Open POS',              desc: 'Ribbon Quick Actions: Open POS register button' },
+      { key: 'home_btn_new_sale',      label: 'New Sale',              desc: 'Ribbon Quick Actions: New Sale shortcut button' },
+      { key: 'home_btn_daily_summary', label: "Today's Summary",       desc: "Ribbon Quick Actions: Today's Summary shortcut" },
+      { key: 'home_btn_dashboard',     label: 'Dashboard',             desc: 'Ribbon Overview: Dashboard navigation button' },
+      { key: 'home_btn_analytics',     label: 'Analytics',             desc: 'Ribbon Overview: Analytics navigation button' },
+      { key: 'home_btn_orders',        label: 'Orders',                desc: 'Ribbon Operations: Orders navigation button' },
+      { key: 'home_btn_customers',     label: 'Customers',             desc: 'Ribbon Operations: Customers navigation button' },
+      { key: 'home_btn_suppliers',     label: 'Suppliers',             desc: 'Ribbon Operations: Suppliers navigation button' },
+      { key: 'home_btn_expenses',      label: 'Expenses',              desc: 'Ribbon Finance: Expenses navigation button' },
+      { key: 'home_btn_profit',        label: 'Profit Report',         desc: 'Ribbon Finance: Profit Report navigation button' },
+      { key: 'home_btn_payroll',       label: 'Payroll',               desc: 'Ribbon Finance: Payroll navigation button' },
+      { key: 'home_btn_settings',      label: 'Settings',              desc: 'Ribbon Tools: Settings panel button' },
+      { key: 'home_btn_help',          label: 'Help',                  desc: 'Ribbon Tools: Help & Guide button' },
+      // ── KPI pills ───────────────────────────────────────────────────────────
+      { key: 'home_kpi_sales',         label: 'KPI: Sales count',      desc: 'Dashboard top bar: Sales count pill' },
+      { key: 'home_kpi_revenue',       label: 'KPI: Revenue',          desc: 'Dashboard top bar: Revenue amount pill' },
+      { key: 'home_kpi_products',      label: 'KPI: Products',         desc: 'Dashboard top bar: Products count pill' },
+      { key: 'home_kpi_customers',     label: 'KPI: Customers',        desc: 'Dashboard top bar: Customers count pill' },
+      // ── Sub-nav tabs ────────────────────────────────────────────────────────
+      { key: 'home_tab_flow',          label: 'Tab: Business Flow',    desc: 'Dashboard: Business Flow diagram tab' },
+      { key: 'home_tab_today',         label: 'Tab: Today',            desc: "Dashboard: Today's Summary tab" },
+      { key: 'home_tab_activity',      label: 'Tab: Recent Activity',  desc: 'Dashboard: Recent transactions tab' },
+      { key: 'home_tab_analytics',     label: 'Tab: Analytics',        desc: 'Dashboard: Analytics overview tab' },
+      { key: 'home_tab_expenses',      label: 'Tab: Expenses',         desc: 'Dashboard: Expenses view tab' },
+      { key: 'home_tab_profit',        label: 'Tab: Profit Report',    desc: 'Dashboard: Profit Report tab' },
+      { key: 'home_tab_payroll',       label: 'Tab: Payroll',          desc: 'Dashboard: Payroll summary tab' },
+      { key: 'home_tab_orders',        label: 'Tab: Orders',           desc: 'Dashboard: Orders history tab' },
+      // ── Right panel ─────────────────────────────────────────────────────────
+      { key: 'home_rp_today',          label: 'Panel: Today Summary',  desc: "Right panel: Today's sales figures section" },
+      { key: 'home_rp_bills',          label: 'Panel: Upcoming Bills', desc: 'Right panel: Upcoming bills section' },
+      { key: 'home_rp_qa_new_sale',    label: 'Quick: New Sale',       desc: 'Right panel quick action: New Sale button' },
+      { key: 'home_rp_qa_add_product', label: 'Quick: Add Product',    desc: 'Right panel quick action: Add Product button' },
+      { key: 'home_rp_qa_new_bill',    label: 'Quick: New Bill',       desc: 'Right panel quick action: New Bill button' },
+      { key: 'home_rp_qa_orders',      label: 'Quick: Purchase Orders', desc: 'Right panel quick action: Purchase Orders button' },
+      { key: 'home_rp_qa_barcodes',    label: 'Quick: Print Barcodes', desc: 'Right panel quick action: Print Barcodes button' },
+    ]},
+    { key: 'pos_ribbon', label: 'POS · Ribbon', icon: 'fa-cash-register', color: '#6366f1', items: [
+      { key: 'pos_btn_new_session',    label: 'New Session',        desc: 'Ribbon Session: Open a new POS session' },
+      { key: 'pos_btn_close_session',  label: 'Close Session',      desc: 'Ribbon Session: Close current session' },
+      { key: 'pos_btn_lock_register',  label: 'Close Register',     desc: 'Ribbon Session: Lock/close the register' },
+      { key: 'pos_btn_counter',        label: 'Counter selector',   desc: 'Ribbon Session: Counter/till selector dropdown' },
+      { key: 'pos_btn_checkout',       label: 'Checkout',           desc: 'Ribbon Sales: Checkout button (process payment)' },
+      { key: 'pos_btn_return',         label: 'Return / Refund',    desc: 'Ribbon Sales: Return & refund button' },
+      { key: 'pos_btn_clear_cart',     label: 'Clear Cart',         desc: 'Ribbon Sales: Clear all items from cart' },
+      { key: 'pos_btn_search',         label: 'Search Products',    desc: 'Ribbon Find: Product search button' },
+      { key: 'pos_btn_barcode',        label: 'Scan Barcode',       desc: 'Ribbon Find: Barcode scanner button' },
+      { key: 'pos_btn_add_product',    label: 'Add Product',        desc: 'Ribbon Find: Add product button' },
+      { key: 'pos_btn_customers',      label: 'Customers',          desc: 'Ribbon Customers: Customers list button' },
+      { key: 'pos_btn_accounts',       label: 'Accounts',           desc: 'Ribbon Customers: Accounts/wallet button' },
+      { key: 'pos_btn_settings',       label: 'POS Settings',       desc: 'Ribbon Configure: POS Settings button' },
+      { key: 'pos_btn_receipt_editor', label: 'Receipt Editor',     desc: 'Ribbon Configure: Receipt Editor button' },
+      { key: 'pos_btn_ribbon_stats',   label: "Today's Stats",      desc: "Ribbon: Today's sales stats display" },
+    ]},
+    { key: 'pos_panel', label: 'POS · Panel', icon: 'fa-cart-shopping', color: '#818cf8', items: [
+      { key: 'pos_panel_tab_add',       label: 'Add Session (+)',     desc: 'Panel: Add new POS session tab button' },
+      { key: 'pos_panel_mode_products', label: 'Products mode',       desc: 'Panel: Products mode switcher button' },
+      { key: 'pos_panel_mode_services', label: 'Services mode',       desc: 'Panel: Services mode switcher button' },
+      { key: 'pos_panel_search',        label: 'Product search bar',  desc: 'Panel: Product search bar' },
+      { key: 'pos_panel_categories',    label: 'Category filter',     desc: 'Panel: Category filter chips' },
+      { key: 'pos_panel_product_grid',  label: 'Product grid',        desc: 'Panel: Product cards grid area' },
+      { key: 'pos_cart_park',           label: 'Park / Hold sale',    desc: 'Cart: Park (hold) current sale button' },
+      { key: 'pos_cart_recall',         label: 'Recall held sale',    desc: 'Cart: Recall parked sale button' },
+      { key: 'pos_cart_customer',       label: 'Assign customer',     desc: 'Cart: Assign customer to sale button' },
+      { key: 'pos_cart_checkout',       label: 'Cart Checkout (F12)', desc: 'Cart: Checkout / process payment button' },
+      { key: 'pos_cart_to_invoice',     label: 'Create Invoice',      desc: 'Cart: Convert cart to invoice button' },
+      { key: 'pos_cart_to_quote',       label: 'Create Quotation',    desc: 'Cart: Convert cart to quotation button' },
+    ]},
+    { key: 'sal_ribbon', label: 'Sales · Ribbon', icon: 'fa-file-invoice', color: '#f59e0b', items: [
+      { key: 'sal_btn_new_invoice',   label: 'New Invoice',      desc: 'Ribbon Create: New Invoice button' },
+      { key: 'sal_btn_new_quotation', label: 'New Quotation',    desc: 'Ribbon Create: New Quotation button' },
+      { key: 'sal_btn_refresh',       label: 'Refresh',          desc: 'Ribbon Transactions: Refresh sales list' },
+      { key: 'sal_btn_all_sales',     label: 'All Sales',        desc: 'Ribbon Transactions: All Sales filter' },
+      { key: 'sal_btn_pos_sales',     label: 'POS Sales',        desc: 'Ribbon Transactions: POS Sales filter' },
+      { key: 'sal_btn_returns',       label: 'Returns',          desc: 'Ribbon Returns: Process returns button' },
+      { key: 'sal_btn_eod',           label: 'End of Day',       desc: 'Ribbon Settlement: End of Day button' },
+      { key: 'sal_btn_qt_new',        label: 'New Quote',        desc: 'Ribbon Quotations: New Quotation button' },
+      { key: 'sal_btn_qt_refresh',    label: 'Quotes Refresh',   desc: 'Ribbon Quotations: Refresh quotes list' },
+    ]},
+    { key: 'sal_panel', label: 'Sales · Panel', icon: 'fa-receipt', color: '#fbbf24', items: [
+      { key: 'sal_tab_transactions', label: 'Tab: Transactions', desc: 'Sales panel: Transactions sub-nav tab' },
+      { key: 'sal_tab_history',      label: 'Tab: History',      desc: 'Sales panel: History sub-nav tab' },
+      { key: 'sal_tab_quotes',       label: 'Tab: Quotations',   desc: 'Sales panel: Quotations sub-nav tab' },
+      { key: 'sal_tab_invoices',     label: 'Tab: Invoices',     desc: 'Sales panel: Invoices sub-nav tab' },
+    ]},
+    { key: 'inv_ribbon', label: 'Inventory · Ribbon', icon: 'fa-boxes-stacked', color: '#8b5cf6', items: [
+      { key: 'inv_btn_products',    label: 'Products',         desc: 'Ribbon Catalog: Products list button' },
+      { key: 'inv_btn_refresh',     label: 'Refresh',          desc: 'Ribbon Catalog: Refresh products list' },
+      { key: 'inv_btn_clear',       label: 'Clear Filters',    desc: 'Ribbon Catalog: Clear filters button' },
+      { key: 'inv_btn_categories',  label: 'Categories',       desc: 'Ribbon Catalog: Categories button' },
+      { key: 'inv_btn_units',       label: 'Units',            desc: 'Ribbon Catalog: Units of measure button' },
+      { key: 'inv_btn_audit',       label: 'Stock Audit',      desc: 'Ribbon Stock: Stock Audit button' },
+      { key: 'inv_btn_brands',      label: 'Brands',           desc: 'Ribbon Stock: Brands button' },
+      { key: 'inv_btn_discounts',   label: 'Discounts',        desc: 'Ribbon Stock: Discounts button' },
+      { key: 'inv_btn_orders',      label: 'Purchase Orders',  desc: 'Ribbon Purchasing: Purchase Orders button' },
+      { key: 'inv_btn_grn',         label: 'Goods Receive',    desc: 'Ribbon Purchasing: Goods Receive (GRN) button' },
+      { key: 'inv_btn_cheques',     label: 'Cheques',          desc: 'Ribbon Purchasing: Cheques button' },
+      { key: 'inv_btn_suppliers',   label: 'Suppliers',        desc: 'Ribbon Suppliers: Suppliers list button' },
+      { key: 'inv_btn_add_supplier',label: 'Add Supplier',     desc: 'Ribbon Suppliers: Add new supplier button' },
+      { key: 'inv_btn_barcodes',    label: 'Barcode Sheets',   desc: 'Ribbon Print: Barcode sheets button' },
+    ]},
+    { key: 'inv_panel', label: 'Inventory · Panel', icon: 'fa-layer-group', color: '#a78bfa', items: [
+      { key: 'inv_tab_products',   label: 'Tab: Products',        desc: 'Inventory panel: Products sub-nav tab' },
+      { key: 'inv_tab_suppliers',  label: 'Tab: Suppliers',       desc: 'Inventory panel: Suppliers sub-nav tab' },
+      { key: 'inv_tab_po',         label: 'Tab: Purchase Orders', desc: 'Inventory panel: Purchase Orders sub-nav tab' },
+      { key: 'inv_tab_grn',        label: 'Tab: Goods Receive',   desc: 'Inventory panel: Goods Receive sub-nav tab' },
+      { key: 'inv_tab_cheques',    label: 'Tab: Cheques',         desc: 'Inventory panel: Cheques sub-nav tab' },
+      { key: 'inv_tab_audit',      label: 'Tab: Stock Audit',     desc: 'Inventory panel: Stock Audit sub-nav tab' },
+      { key: 'inv_tab_categories', label: 'Tab: Categories',      desc: 'Inventory panel: Categories sub-nav tab' },
+      { key: 'inv_tab_units',      label: 'Tab: Units',           desc: 'Inventory panel: Units sub-nav tab' },
+      { key: 'inv_tab_discounts',  label: 'Tab: Discounts',       desc: 'Inventory panel: Discounts sub-nav tab' },
+      { key: 'inv_tab_brands',     label: 'Tab: Brands',          desc: 'Inventory panel: Brands sub-nav tab' },
+      { key: 'inv_tab_barcodes',   label: 'Tab: Barcodes',        desc: 'Inventory panel: Barcodes sub-nav tab' },
+    ]},
+    { key: 'fin_ribbon', label: 'Finance · Ribbon', icon: 'fa-file-invoice-dollar', color: '#22c55e', items: [
+      { key: 'fin_btn_create_bill', label: 'Create Bill',      desc: 'Ribbon Bills & Loans: Create Bill button' },
+      { key: 'fin_btn_bills_list',  label: 'View Bills',       desc: 'Ribbon Bills & Loans: View Bills button' },
+      { key: 'fin_btn_loans',       label: 'Loans',            desc: 'Ribbon Bills & Loans: Loans button' },
+      { key: 'fin_btn_rentals',     label: 'Rentals',          desc: 'Ribbon Assets: Rentals button' },
+      { key: 'fin_btn_properties',  label: 'Properties',       desc: 'Ribbon Assets: Properties button' },
+      { key: 'fin_btn_profit',      label: 'Profit Analytics', desc: 'Ribbon Reports: Profit Analytics button' },
+      { key: 'fin_btn_sales',       label: 'Sales Reports',    desc: 'Ribbon Reports: Sales Reports button' },
+    ]},
+    { key: 'fin_panel', label: 'Finance · Panel', icon: 'fa-coins', color: '#4ade80', items: [
+      { key: 'fin_tab_flow',          label: 'Tab: Overview',      desc: 'Finance panel: Overview sub-nav tab' },
+      { key: 'fin_tab_bills',         label: 'Tab: Bills',         desc: 'Finance panel: Bills sub-nav tab' },
+      { key: 'fin_tab_loans',         label: 'Tab: Loans',         desc: 'Finance panel: Loans sub-nav tab' },
+      { key: 'fin_tab_rentals',       label: 'Tab: Rentals',       desc: 'Finance panel: Rentals sub-nav tab' },
+      { key: 'fin_tab_properties',    label: 'Tab: Properties',    desc: 'Finance panel: Properties sub-nav tab' },
+      { key: 'fin_tab_modifications', label: 'Tab: Modifications', desc: 'Finance panel: Modifications sub-nav tab' },
+    ]},
+    { key: 'point_of_sale', label: 'POS & Sales', icon: 'fa-cash-register', color: '#6366f1', items: [
+      { key: 'pos_session',    label: 'Open / Close Session',  desc: 'Start and end cash register sessions' },
+      { key: 'pos_checkout',   label: 'Checkout & New Sales',  desc: 'Process sales, apply discounts, accept payment' },
+      { key: 'pos_returns',    label: 'Returns & Refunds',     desc: 'Process customer returns and issue refunds' },
+      { key: 'pos_customers',  label: 'Customer Management',   desc: 'View and manage customer records at POS' },
+      { key: 'pos_eod',        label: 'End-of-Day Settlement', desc: 'Run daily cash-up and closing reports' },
+      { key: 'pos_quotations', label: 'Quotations',            desc: 'Create and send price quotations to customers' },
+    ]},
+    { key: 'inventory', label: 'Inventory', icon: 'fa-boxes-stacked', color: '#8b5cf6', items: [
+      { key: 'inv_products',   label: 'Products & Categories', desc: 'Add, edit and organise products and categories' },
+      { key: 'inv_audit',      label: 'Stock Audit',           desc: 'Perform stock counts and adjust inventory levels' },
+      { key: 'inv_discounts',  label: 'Brands & Discounts',    desc: 'Manage product brands and discount schemes' },
+      { key: 'inv_purchasing', label: 'Purchase Orders & GRN', desc: 'Raise purchase orders and receive goods (GRN)' },
+      { key: 'inv_suppliers',  label: 'Suppliers',             desc: 'View and manage supplier records' },
+      { key: 'inv_barcodes',   label: 'Barcode Printing',      desc: 'Generate and print product barcodes and labels' },
+    ]},
+    { key: 'finance', label: 'Finance & Accounts', icon: 'fa-file-invoice-dollar', color: '#22c55e', items: [
+      { key: 'fin_bills',   label: 'Bills & Loans',       desc: 'Manage recurring bills, loan records and repayments' },
+      { key: 'fin_assets',  label: 'Assets & Liabilities', desc: 'Track rentals, properties and business assets' },
+      { key: 'fin_reports', label: 'Financial Reports',    desc: 'View cash flow, income statements and account ledgers' },
+    ]},
+    { key: 'hr', label: 'HR & Payroll', icon: 'fa-people-group', color: '#f59e0b', items: [
+      { key: 'hr_employees',   label: 'Employee Records',      desc: 'Add and manage employee profiles and documents' },
+      { key: 'hr_departments', label: 'Departments',           desc: 'Create and organise company departments' },
+      { key: 'hr_payroll',     label: 'Payroll & Compensation', desc: 'Run payroll cycles, view salaries and pay slips' },
+    ]},
+    { key: 'services', label: 'Services', icon: 'fa-screwdriver-wrench', color: '#f97316', items: [
+      { key: 'svc_requests',   label: 'Service Requests', desc: 'View, assign and update customer service requests' },
+      { key: 'svc_catalog',    label: 'Service Catalog',  desc: 'Add and manage services offered to customers' },
+      { key: 'svc_categories', label: 'Categories',       desc: 'Organise services into categories' },
+    ]},
+    { key: 'design', label: 'Design & Marketing', icon: 'fa-palette', color: '#ec4899', items: [
+      { key: 'design_all', label: 'Design Studio', desc: 'Create and manage social media, letterhead and marketing designs' },
+    ]},
+    { key: 'restaurant', label: 'Restaurant', icon: 'fa-utensils', color: '#ef4444', items: [
+      { key: 'rst_pos',         label: 'Restaurant POS',      desc: 'Take orders and process payments at the table or counter' },
+      { key: 'rst_orders',      label: 'Orders',              desc: 'View, manage and update dine-in, takeaway and delivery orders' },
+      { key: 'rst_floor',       label: 'Floor Plan & Tables', desc: 'Manage table layout, reservations and seating' },
+      { key: 'rst_menu',        label: 'Menu Management',     desc: 'Add and edit menu items, prices and categories' },
+      { key: 'rst_ingredients', label: 'Ingredients & Stock', desc: 'Track ingredient inventory and receive stock' },
+      { key: 'rst_kitchen',     label: 'Kitchen Display',     desc: 'View and manage the kitchen order display (KDS)' },
+    ]},
+    { key: 'mail', label: 'Mail', icon: 'fa-envelope', color: '#0ea5e9', items: [
+      { key: 'mail_inbox',     label: 'Inbox & Conversations', desc: 'Read, reply to and manage incoming email conversations' },
+      { key: 'mail_compose',   label: 'Compose & Send',        desc: 'Write and send new emails to customers and contacts' },
+      { key: 'mail_templates', label: 'Templates & Filters',   desc: 'Create email templates, inbox filters, and manage scheduled messages' },
+    ]},
+    { key: 'crm', label: 'CRM', icon: 'fa-handshake', color: '#8b5cf6', items: [
+      { key: 'crm_pipeline', label: 'Pipeline & Leads',   desc: 'View and manage the sales pipeline and lead records' },
+      { key: 'crm_contacts', label: 'Contacts',           desc: 'View and manage CRM contact records' },
+      { key: 'crm_tasks',    label: 'Tasks',              desc: 'Create and manage CRM tasks and follow-ups' },
+      { key: 'crm_forms',    label: 'Lead Capture Forms', desc: 'Design and manage web forms for capturing leads from your website' },
+    ]},
+  ];
+
+  // Tab structure: which accordion groups belong to each app-section tab
+  const PERM_MODAL_TABS = [
+    { key: 'home',       label: 'Home',       icon: 'fa-house',              groups: ['home'] },
+    { key: 'pos',        label: 'POS',        icon: 'fa-cash-register',      groups: ['pos_ribbon', 'pos_panel', 'point_of_sale'] },
+    { key: 'sales',      label: 'Sales',      icon: 'fa-file-invoice',       groups: ['sal_ribbon', 'sal_panel'] },
+    { key: 'inventory',  label: 'Inventory',  icon: 'fa-boxes-stacked',      groups: ['inv_ribbon', 'inv_panel', 'inventory'] },
+    { key: 'finance',    label: 'Finance',    icon: 'fa-coins',              groups: ['fin_ribbon', 'fin_panel', 'finance'] },
+    { key: 'hr',         label: 'HR',         icon: 'fa-people-group',       groups: ['hr'] },
+    { key: 'services',   label: 'Services',   icon: 'fa-screwdriver-wrench', groups: ['services'] },
+    { key: 'restaurant', label: 'Restaurant', icon: 'fa-utensils',           groups: ['restaurant'] },
+    { key: 'mail',       label: 'Mail',       icon: 'fa-envelope',           groups: ['mail'] },
+    { key: 'crm',        label: 'CRM',        icon: 'fa-handshake',          groups: ['crm'] },
+    { key: 'design',     label: 'Design',     icon: 'fa-palette',            groups: ['design'] },
+  ];
+
+  let PERM_GROUPS = PERM_GROUPS_DEFAULT.slice();  // never starts empty
 
   function _buildPermGroupsFromApi(apiGroups) {
-    PERM_GROUPS = apiGroups || [];
+    PERM_GROUPS = (apiGroups && apiGroups.length > 0) ? apiGroups : PERM_GROUPS_DEFAULT;
+  }
+
+  // Ensure PERM_GROUPS is loaded — fetches from API if still at default and API not yet called
+  async function _ensurePermGroups() {
+    if (PERM_GROUPS === PERM_GROUPS_DEFAULT || PERM_GROUPS.length === 0) {
+      const res = await API.rolesList();
+      if (res.status === 200 && res.body.permissions) {
+        _buildPermGroupsFromApi(res.body.permissions);
+        if (res.body.data) _umRoles = res.body.data;
+      }
+    }
   }
 
   // Flat lookup: key → { label, groupColor, groupIcon }
@@ -22786,7 +24570,7 @@ async function submitDsCreate() {
           }).join('');
           return `<div class="um-perm-group-card${noneGranted ? ' none' : ''}">
             <div class="um-perm-group-header">
-              <div class="um-perm-group-icon" style="background:${noneGranted ? 'var(--surface3)' : g.color}"><i class="fa ${g.icon}"></i></div>
+              <div class="um-perm-group-icon" style="background:${noneGranted ? g.color + '28' : g.color};color:${noneGranted ? g.color : '#fff'}"><i class="fa ${g.icon}"></i></div>
               <div class="um-perm-group-label">${g.label}</div>
               <div class="um-perm-group-badge">
                 ${fullAccess ? '<span class="um-perm-badge full"><i class="fa fa-infinity"></i> Full</span>'
@@ -22983,108 +24767,130 @@ async function submitDsCreate() {
 
   // ── Helpers ─────────────────────────────────────────────────────────────
 
-  // _renderPermGrid: tab-based permission groups in modals
+  // _renderPermGrid: tab-strip + accordion permission groups in modals
   function _renderPermGrid(containerId, activePerms, roleSlug, roleObj) {
     const grid = $(`#${containerId}`);
     if (!grid) return;
     if (PERM_GROUPS.length === 0) { grid.innerHTML = ''; return; }
+
     const fullAccess = roleObj ? roleObj.permissions === null : roleSlug === 'admin';
     const activeSet  = new Set(activePerms || []);
-    grid.classList.remove('um-perm-grid--groups');
-    grid.classList.add('um-perm-grid--tabs');
 
-    // Build tab bar
-    const tabsHtml = PERM_GROUPS.map((g, i) => {
-      const grantedN = g.items.filter(it => fullAccess || activeSet.has(it.key)).length;
-      const dot = grantedN > 0
-        ? `<span class="um-ptab-dot" style="background:${g.color}"></span>`
-        : `<span class="um-ptab-dot" style="background:var(--border)"></span>`;
-      return `<button class="um-ptab${i === 0 ? ' active' : ''}" data-tab="${g.key}" style="--tab-color:${g.color}">
-        <i class="fa ${g.icon}"></i>
-        <span>${g.label}</span>
-        ${dot}
-      </button>`;
-    }).join('');
+    grid.className = (grid.className || '').replace(/\bum-perm-grid--\S+|\bum-perm-accordion\b/g, '').trim();
+    grid.classList.add('um-perm-accordion');
 
-    // Build panels (all groups, one visible at a time)
-    const panelsHtml = PERM_GROUPS.map((g, i) => {
-      const allOn  = g.items.every(it => fullAccess || activeSet.has(it.key));
-      const someOn = g.items.some(it =>  fullAccess || activeSet.has(it.key));
+    // Only include tabs that have at least one group present in PERM_GROUPS
+    const visibleTabs = PERM_MODAL_TABS.filter(t =>
+      t.groups.some(gKey => PERM_GROUPS.find(g => g.key === gKey))
+    );
+    const firstTabKey = visibleTabs[0]?.key || null;
+
+    // ── Tab strip ────────────────────────────────────────────────────────────
+    const tabStripHtml = `<div class="um-perm-tabs">${
+      visibleTabs.map((t, i) => {
+        const tGroups  = t.groups.map(gk => PERM_GROUPS.find(g => g.key === gk)).filter(Boolean);
+        const granted  = tGroups.reduce((s, g) => s + g.items.filter(it => fullAccess || activeSet.has(it.key)).length, 0);
+        const total    = tGroups.reduce((s, g) => s + g.items.length, 0);
+        const badgeHtml = fullAccess
+          ? `<span class="um-perm-tab-badge full"><i class="fa fa-infinity" style="font-size:8px"></i></span>`
+          : total > 0 ? `<span class="um-perm-tab-badge${granted > 0 ? ' has' : ''}">${granted}/${total}</span>` : '';
+        return `<button class="um-perm-tab${i === 0 ? ' active' : ''}" data-perm-tab="${t.key}" type="button">
+          <i class="fa ${t.icon}"></i><span>${t.label}</span>${badgeHtml}
+        </button>`;
+      }).join('')
+    }</div>`;
+
+    // ── Accordion groups ─────────────────────────────────────────────────────
+    const groupsHtml = PERM_GROUPS.map(g => {
+      const tabKey = PERM_MODAL_TABS.find(t => t.groups.includes(g.key))?.key || firstTabKey;
+      const hidden = tabKey !== firstTabKey;
+      const grantedItems = g.items.filter(it => fullAccess || activeSet.has(it.key));
+      const allOn  = g.items.length > 0 && g.items.every(it => fullAccess || activeSet.has(it.key));
+      const someOn = grantedItems.length > 0;
+      const isOpen = fullAccess || someOn;
+
       const itemsHtml = g.items.map(it => {
         const on = fullAccess || activeSet.has(it.key);
-        return `
-          <div class="um-perm-toggle${on ? ' on' : ''}${fullAccess ? ' locked' : ''}" data-perm="${it.key}" data-group="${g.key}" data-color="${g.color}">
-            <div class="um-perm-toggle-dot" style="background:${on ? g.color : 'var(--border)'}"></div>
-            <div class="um-perm-toggle-text">
-              <span class="um-perm-toggle-label">${it.label}</span>
-              ${it.desc ? `<span class="um-perm-toggle-desc">${it.desc}</span>` : ''}
-            </div>
-            <div class="um-perm-toggle-switch${on ? ' on' : ''}${fullAccess ? ' locked' : ''}">
-              <div class="um-perm-toggle-thumb"></div>
-            </div>
-            <input type="checkbox" ${on ? 'checked' : ''} ${fullAccess ? 'disabled' : ''} style="display:none">
-          </div>`;
+        return `<div class="um-perm-toggle${on ? ' on' : ''}${fullAccess ? ' locked' : ''}"
+             data-perm="${it.key}" data-group="${g.key}" data-color="${g.color}">
+          <div class="um-perm-toggle-dot" style="background:${on ? g.color : 'var(--border)'}"></div>
+          <div class="um-perm-toggle-text">
+            <span class="um-perm-toggle-label">${it.label}</span>
+            ${it.desc ? `<span class="um-perm-toggle-desc">${it.desc}</span>` : ''}
+          </div>
+          <div class="um-perm-toggle-switch${on ? ' on' : ''}${fullAccess ? ' locked' : ''}">
+            <div class="um-perm-toggle-thumb"></div>
+          </div>
+          <input type="checkbox" ${on ? 'checked' : ''} ${fullAccess ? 'disabled' : ''} style="display:none">
+        </div>`;
       }).join('');
 
       const selectAllHtml = fullAccess ? '' : `
-        <button class="um-perm-select-all${allOn ? ' active' : ''}" data-group="${g.key}">
-          ${allOn ? '<i class="fa fa-square-check"></i> All' : someOn ? '<i class="fa fa-square-minus"></i> Some' : '<i class="fa fa-square"></i> None'}
+        <button class="um-pacg-all-btn um-perm-select-all${allOn ? ' active' : ''}" data-group="${g.key}" type="button">
+          <i class="fa ${allOn ? 'fa-square-check' : someOn ? 'fa-square-minus' : 'fa-square'}"></i>
         </button>`;
 
-      return `
-        <div class="um-ptab-panel${i === 0 ? ' active' : ''}" data-panel="${g.key}">
-          <div class="um-ptab-panel-header" style="border-left:3px solid ${g.color}">
-            <div class="um-perm-section-icon" style="background:${g.color}"><i class="fa ${g.icon}"></i></div>
-            <span class="um-perm-section-title">${g.label}</span>
-            ${selectAllHtml}
+      return `<div class="um-pacg${isOpen ? ' open' : ''}" data-group="${g.key}" data-perm-tab="${tabKey}"${hidden ? ' style="display:none"' : ''}>
+        <div class="um-pacg-header" style="--grp-color:${g.color}">
+          <div class="um-pacg-icon" style="background:${someOn || fullAccess ? g.color : g.color + '28'};color:${someOn || fullAccess ? '#fff' : g.color}">
+            <i class="fa ${g.icon}"></i>
           </div>
-          <div class="um-perm-section-items">${itemsHtml}</div>
-        </div>`;
+          <span class="um-pacg-label">${g.label}</span>
+          <span class="um-pacg-count" data-group="${g.key}">
+            ${fullAccess ? '<i class="fa fa-infinity" style="font-size:9px"></i>' : `${grantedItems.length}<span class="um-pacg-count-total">/${g.items.length}</span>`}
+          </span>
+          ${selectAllHtml}
+          ${fullAccess ? '' : '<i class="fa fa-chevron-down um-pacg-chevron"></i>'}
+        </div>
+        <div class="um-pacg-body">${itemsHtml}</div>
+      </div>`;
     }).join('');
 
-    grid.innerHTML = `
-      <div class="um-ptab-bar">${tabsHtml}</div>
-      <div class="um-ptab-content">${panelsHtml}</div>`;
+    grid.innerHTML = tabStripHtml + groupsHtml;
 
-    // Tab switching
-    grid.querySelectorAll('.um-ptab').forEach(tab => {
+    // ── Tab switching ────────────────────────────────────────────────────────
+    grid.querySelectorAll('.um-perm-tab').forEach(tab => {
       tab.addEventListener('click', () => {
-        grid.querySelectorAll('.um-ptab').forEach(t => t.classList.remove('active'));
-        grid.querySelectorAll('.um-ptab-panel').forEach(p => p.classList.remove('active'));
-        tab.classList.add('active');
-        grid.querySelector(`.um-ptab-panel[data-panel="${tab.dataset.tab}"]`)?.classList.add('active');
+        const tKey = tab.dataset.permTab;
+        grid.querySelectorAll('.um-perm-tab').forEach(t => t.classList.toggle('active', t.dataset.permTab === tKey));
+        grid.querySelectorAll('.um-pacg').forEach(g => { g.style.display = g.dataset.permTab === tKey ? '' : 'none'; });
+      });
+    });
+
+    // ── Header click → expand/collapse ──────────────────────────────────────
+    grid.querySelectorAll('.um-pacg-header').forEach(header => {
+      header.addEventListener('click', e => {
+        if (e.target.closest('.um-perm-select-all')) return;
+        if (fullAccess) return;
+        header.closest('.um-pacg').classList.toggle('open');
       });
     });
 
     if (!fullAccess) {
-      // Toggle all in a group
+      // Select All / None per group
       grid.querySelectorAll('.um-perm-select-all').forEach(btn => {
         btn.addEventListener('click', e => {
           e.stopPropagation();
           const gKey  = btn.dataset.group;
-          const panel = grid.querySelector(`.um-ptab-panel[data-panel="${gKey}"]`);
-          const items = panel.querySelectorAll('.um-perm-toggle:not(.locked)');
+          const group = grid.querySelector(`.um-pacg[data-group="${gKey}"]`);
+          const items = group.querySelectorAll('.um-perm-toggle:not(.locked)');
           const allNowOn = Array.from(items).every(i => i.classList.contains('on'));
-          const setTo = !allNowOn;
-          const gDef  = PERM_GROUPS.find(g => g.key === gKey);
+          const setTo    = !allNowOn;
+          const gDef     = PERM_GROUPS.find(g => g.key === gKey);
           items.forEach(item => {
             const cb  = item.querySelector('input[type=checkbox]');
             const sw  = item.querySelector('.um-perm-toggle-switch');
             const dot = item.querySelector('.um-perm-toggle-dot');
-            cb.checked = setTo;
-            item.classList.toggle('on', setTo);
-            sw.classList.toggle('on', setTo);
+            cb.checked = setTo; item.classList.toggle('on', setTo); sw.classList.toggle('on', setTo);
             if (dot) dot.style.background = setTo ? (gDef?.color || '#64748b') : 'var(--border)';
           });
-          btn.classList.toggle('active', setTo);
-          btn.innerHTML = setTo
-            ? '<i class="fa fa-square-check"></i> All'
-            : '<i class="fa fa-square"></i> None';
-          _updateTabDot(grid, gKey, setTo || false, gDef?.color);
+          if (setTo) group.classList.add('open');
+          _syncGroupHeader(grid, gKey, gDef?.color, items.length);
+          _syncTabBadge(grid, group.dataset.permTab);
         });
       });
 
-      // Toggle individual item
+      // Individual toggle
       grid.querySelectorAll('.um-perm-toggle:not(.locked)').forEach(item => {
         item.addEventListener('click', () => {
           const cb    = item.querySelector('input[type=checkbox]');
@@ -23095,29 +24901,59 @@ async function submitDsCreate() {
           item.classList.toggle('on', cb.checked);
           sw.classList.toggle('on',  cb.checked);
           if (dot) dot.style.background = cb.checked ? color : 'var(--border)';
-
-          const gKey  = item.dataset.group;
-          const panel = grid.querySelector(`.um-ptab-panel[data-panel="${gKey}"]`);
-          const allBtn = panel?.querySelector('.um-perm-select-all');
-          if (allBtn) {
-            const sItems = panel.querySelectorAll('.um-perm-toggle:not(.locked)');
-            const allOn  = Array.from(sItems).every(i => i.classList.contains('on'));
-            const someOn = Array.from(sItems).some(i =>  i.classList.contains('on'));
-            allBtn.classList.toggle('active', allOn);
-            allBtn.innerHTML = allOn
-              ? '<i class="fa fa-square-check"></i> All'
-              : someOn ? '<i class="fa fa-square-minus"></i> Some' : '<i class="fa fa-square"></i> None';
-            const gDef = PERM_GROUPS.find(g => g.key === gKey);
-            _updateTabDot(grid, gKey, someOn || allOn, gDef?.color);
-          }
+          const gKey   = item.dataset.group;
+          const gDef   = PERM_GROUPS.find(g => g.key === gKey);
+          const gItems = grid.querySelectorAll(`.um-pacg[data-group="${gKey}"] .um-perm-toggle:not(.locked)`);
+          _syncGroupHeader(grid, gKey, gDef?.color, gItems.length);
+          const groupEl = grid.querySelector(`.um-pacg[data-group="${gKey}"]`);
+          if (groupEl) _syncTabBadge(grid, groupEl.dataset.permTab);
         });
       });
     }
   }
 
-  function _updateTabDot(grid, gKey, hasAny, color) {
-    const tab = grid.querySelector(`.um-ptab[data-tab="${gKey}"] .um-ptab-dot`);
-    if (tab) tab.style.background = hasAny ? (color || 'var(--accent)') : 'var(--border)';
+  function _syncGroupHeader(grid, gKey, color, total) {
+    const group = grid.querySelector(`.um-pacg[data-group="${gKey}"]`);
+    if (!group) return;
+    const items   = group.querySelectorAll('.um-perm-toggle:not(.locked)');
+    const onCount = Array.from(items).filter(i => i.classList.contains('on')).length;
+    const allOn   = onCount === items.length && items.length > 0;
+    const someOn  = onCount > 0;
+    // Update count badge
+    const countEl = group.querySelector(`.um-pacg-count[data-group="${gKey}"]`);
+    if (countEl) countEl.innerHTML = `${onCount}<span class="um-pacg-count-total">/${total}</span>`;
+    // Update group icon color
+    const icon = group.querySelector('.um-pacg-icon');
+    if (icon) {
+      const c = color || 'var(--accent)';
+      icon.style.background = someOn ? c : c + '28';
+      icon.style.color      = someOn ? '#fff' : c;
+    }
+    // Update All button state
+    const allBtn = group.querySelector('.um-perm-select-all');
+    if (allBtn) {
+      allBtn.classList.toggle('active', allOn);
+      allBtn.innerHTML = `<i class="fa ${allOn ? 'fa-square-check' : someOn ? 'fa-square-minus' : 'fa-square'}"></i>`;
+    }
+  }
+
+  function _syncTabBadge(grid, tKey) {
+    if (!tKey) return;
+    const tabBtn = grid.querySelector(`.um-perm-tab[data-perm-tab="${tKey}"]`);
+    if (!tabBtn) return;
+    const badge = tabBtn.querySelector('.um-perm-tab-badge');
+    if (!badge || badge.classList.contains('full')) return;
+    const tGroups = PERM_MODAL_TABS.find(t => t.key === tKey)?.groups || [];
+    let granted = 0, total = 0;
+    tGroups.forEach(gKey => {
+      const g = grid.querySelector(`.um-pacg[data-group="${gKey}"]`);
+      if (!g) return;
+      const items = g.querySelectorAll('.um-perm-toggle:not(.locked)');
+      granted += Array.from(items).filter(i => i.classList.contains('on')).length;
+      total   += items.length;
+    });
+    badge.textContent = `${granted}/${total}`;
+    badge.classList.toggle('has', granted > 0);
   }
 
   function _collectPerms(containerId) {
@@ -23320,14 +25156,16 @@ async function submitDsCreate() {
   }
 
   // Create Role
-  function openCreateRoleModal() {
+  async function openCreateRoleModal() {
     const modal = $('#um-role-create-modal');
     if (!modal) return;
+    await _ensurePermGroups();
     $('#um-rc-name').value = '';
     $('#um-rc-desc').value = '';
     $('#um-rc-error').style.display = 'none';
     _renderColorPicker('um-rc-colors', '#64748b');
     _renderPermGrid('um-rc-perm-grid', [], 'staff', { permissions: [] });
+
     modal.style.display = 'flex';
     setTimeout(() => $('#um-rc-name')?.focus(), 80);
   }
@@ -23366,10 +25204,11 @@ async function submitDsCreate() {
   }
 
   // Edit Role
-  function openEditRoleModal(role) {
+  async function openEditRoleModal(role) {
     _umRoleEditTarget = role;
     const modal = $('#um-role-edit-modal');
     if (!modal) return;
+    await _ensurePermGroups();
 
     // Name field: disabled for system roles
     const nameWrap = $('#um-re-name-wrap');
@@ -23468,12 +25307,64 @@ async function submitDsCreate() {
   $('#um-rc-close')?.addEventListener('click',  closeCreateRoleModal);
   $('#um-role-create-modal')?.addEventListener('click', e => { if (e.target === e.currentTarget) closeCreateRoleModal(); });
 
+  function _rcPermGridBulk(setTo) {
+    const grid = $('#um-rc-perm-grid');
+    if (!grid) return;
+    const activeTab = grid.querySelector('.um-perm-tab.active');
+    const tKey = activeTab?.dataset.permTab;
+    const tGroups = tKey ? (PERM_MODAL_TABS.find(t => t.key === tKey)?.groups || []) : [];
+    const visibleGroups = tGroups.length
+      ? tGroups.map(gk => grid.querySelector(`.um-pacg[data-group="${gk}"]`)).filter(Boolean)
+      : Array.from(grid.querySelectorAll('.um-pacg'));
+    if (setTo) visibleGroups.forEach(el => el.classList.add('open'));
+    visibleGroups.forEach(el => {
+      el.querySelectorAll('.um-perm-toggle:not(.locked)').forEach(item => {
+        const cb = item.querySelector('input[type=checkbox]');
+        const sw = item.querySelector('.um-perm-toggle-switch');
+        const dot = item.querySelector('.um-perm-toggle-dot');
+        cb.checked = setTo; item.classList.toggle('on', setTo); sw.classList.toggle('on', setTo);
+        if (dot) dot.style.background = setTo ? item.dataset.color : 'var(--border)';
+      });
+      const gDef = PERM_GROUPS.find(g => g.key === el.dataset.group);
+      _syncGroupHeader(grid, el.dataset.group, gDef?.color, el.querySelectorAll('.um-perm-toggle:not(.locked)').length);
+    });
+    if (tKey) _syncTabBadge(grid, tKey);
+  }
+  $('#um-rc-all')?.addEventListener('click',  () => _rcPermGridBulk(true));
+  $('#um-rc-none')?.addEventListener('click', () => _rcPermGridBulk(false));
+
   // Edit role modal
   $('#um-re-save')?.addEventListener('click',   submitEditRole);
   $('#um-re-cancel')?.addEventListener('click', closeEditRoleModal);
   $('#um-re-close')?.addEventListener('click',  closeEditRoleModal);
   $('#um-re-delete')?.addEventListener('click', () => { if (_umRoleEditTarget) deleteRole(_umRoleEditTarget); });
   $('#um-role-edit-modal')?.addEventListener('click', e => { if (e.target === e.currentTarget) closeEditRoleModal(); });
+
+  function _rePermGridBulk(setTo) {
+    const grid = $('#um-re-perm-grid');
+    if (!grid) return;
+    const activeTab = grid.querySelector('.um-perm-tab.active');
+    const tKey = activeTab?.dataset.permTab;
+    const tGroups = tKey ? (PERM_MODAL_TABS.find(t => t.key === tKey)?.groups || []) : [];
+    const visibleGroups = tGroups.length
+      ? tGroups.map(gk => grid.querySelector(`.um-pacg[data-group="${gk}"]`)).filter(Boolean)
+      : Array.from(grid.querySelectorAll('.um-pacg'));
+    if (setTo) visibleGroups.forEach(el => el.classList.add('open'));
+    visibleGroups.forEach(el => {
+      el.querySelectorAll('.um-perm-toggle:not(.locked)').forEach(item => {
+        const cb = item.querySelector('input[type=checkbox]');
+        const sw = item.querySelector('.um-perm-toggle-switch');
+        const dot = item.querySelector('.um-perm-toggle-dot');
+        cb.checked = setTo; item.classList.toggle('on', setTo); sw.classList.toggle('on', setTo);
+        if (dot) dot.style.background = setTo ? item.dataset.color : 'var(--border)';
+      });
+      const gDef = PERM_GROUPS.find(g => g.key === el.dataset.group);
+      _syncGroupHeader(grid, el.dataset.group, gDef?.color, el.querySelectorAll('.um-perm-toggle:not(.locked)').length);
+    });
+    if (tKey) _syncTabBadge(grid, tKey);
+  }
+  $('#um-re-all')?.addEventListener('click',  () => _rePermGridBulk(true));
+  $('#um-re-none')?.addEventListener('click', () => _rePermGridBulk(false));
 
   // Expose loaders so activateTab can call them
   window.loadUsersView = loadUsersView;
@@ -24188,8 +26079,9 @@ async function submitDsCreate() {
     if (!board || !_crmPipeline) return;
     board.innerHTML = _crmPipeline.columns.map(col => {
       const cards = col.leads.map(lead => `
-        <div class="crm-card" draggable="true" data-lead-id="${lead.id}" data-stage-id="${col.id}">
+        <div class="crm-card${lead.is_customer ? ' crm-card--is-customer' : ''}" draggable="true" data-lead-id="${lead.id}" data-stage-id="${col.id}">
           <div class="crm-card-name">${escHtml(lead.name)}</div>
+          ${lead.is_customer ? `<div class="crm-card-customer-badge"><i class="fa fa-circle-check"></i> Already a Customer</div>` : ''}
           ${lead.company ? `<div class="crm-card-company"><i class="fa fa-building" style="margin-right:3px;opacity:.6"></i>${escHtml(lead.company)}</div>` : ''}
           <div class="crm-card-footer">
             <span class="crm-card-value">${lead.estimated_value ? formatCurrency(lead.estimated_value) : ''}</span>
@@ -25504,7 +27396,1069 @@ async function submitDsCreate() {
     setTimeout(() => _openNewFormModal(), 80);
   });
 
+  // ── Pipeline card context menu ───────────────────────────────────────────
+  (function () {
+    let _ctxLead = null;
+
+    // Build menu DOM once
+    const menu = document.createElement('div');
+    menu.id = 'crm-ctx-menu';
+    menu.innerHTML = `
+      <div class="crm-ctx-item" id="crm-ctx-edit"><i class="fa fa-pen" style="color:var(--accent)"></i> Edit Lead</div>
+      <div class="crm-ctx-item" id="crm-ctx-convert"><i class="fa fa-user-plus" style="color:#059669"></i> Convert to Customer</div>
+      <div class="crm-ctx-item" id="crm-ctx-invoice"><i class="fa fa-file-invoice" style="color:#f59e0b"></i> Create Invoice (POS)</div>
+      <div class="crm-ctx-sep"></div>
+      <div class="crm-ctx-item crm-ctx-item--danger" id="crm-ctx-delete"><i class="fa fa-trash"></i> Delete Lead</div>
+    `;
+    document.body.appendChild(menu);
+
+    function showMenu(x, y, lead) {
+      _ctxLead = lead;
+      // Grey out "Convert" when already a customer
+      const convertItem = menu.querySelector('#crm-ctx-convert');
+      if (lead.is_customer) {
+        convertItem.style.opacity = '.4';
+        convertItem.style.pointerEvents = 'none';
+        convertItem.title = 'Already a customer';
+      } else {
+        convertItem.style.opacity = '';
+        convertItem.style.pointerEvents = '';
+        convertItem.title = '';
+      }
+      menu.style.display = 'block';
+      const mw = menu.offsetWidth, mh = menu.offsetHeight;
+      const vw = window.innerWidth,  vh = window.innerHeight;
+      menu.style.left = (x + mw > vw ? vw - mw - 8 : x) + 'px';
+      menu.style.top  = (y + mh > vh ? vh - mh - 8 : y) + 'px';
+    }
+    function hideMenu() { menu.style.display = 'none'; _ctxLead = null; }
+
+    document.addEventListener('contextmenu', e => {
+      const card = e.target.closest('.crm-card');
+      if (!card) { hideMenu(); return; }
+      e.preventDefault();
+      const lead = _findLead(parseInt(card.dataset.leadId));
+      if (!lead) return;
+      showMenu(e.clientX, e.clientY, lead);
+    });
+    document.addEventListener('click',   () => hideMenu());
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') hideMenu(); });
+    document.addEventListener('scroll',  () => hideMenu(), true);
+
+    // Edit
+    menu.querySelector('#crm-ctx-edit').addEventListener('click', () => {
+      if (!_ctxLead) return;
+      _openEditLeadModal(_ctxLead);
+      hideMenu();
+    });
+
+    // Convert to Customer
+    menu.querySelector('#crm-ctx-convert').addEventListener('click', async () => {
+      if (!_ctxLead) return;
+      const lead = _ctxLead;
+      hideMenu();
+
+      const res = await API.createCustomer({
+        name:          lead.name,
+        phone:         lead.phone  || null,
+        email:         lead.email  || null,
+        notes:         lead.notes  || null,
+        customer_type: 'retail',
+      });
+
+      if (res.status === 201) {
+        toast(`"${escHtml(lead.name)}" converted to customer.`, 'success');
+      } else {
+        const msg = res.body?.errors?.name?.[0]
+          || res.body?.errors?.phone?.[0]
+          || res.body?.message
+          || 'Failed to convert to customer.';
+        toast(msg, 'error');
+      }
+    });
+
+    // Create Invoice (POS)
+    menu.querySelector('#crm-ctx-invoice').addEventListener('click', async () => {
+      if (!_ctxLead) return;
+      const lead = _ctxLead;
+      hideMenu();
+
+      let customer = null;
+
+      if (lead.is_customer) {
+        // Lead is already a customer — look them up by phone or name
+        const q = lead.phone || lead.name;
+        const res = await API.customers(q);
+        const list = res.body?.data || [];
+        // Best match: phone exact > email exact > first result
+        customer = list.find(c => lead.phone && c.phone === lead.phone)
+          || list.find(c => lead.email && c.email === lead.email)
+          || list[0]
+          || null;
+        if (!customer) {
+          toast('Could not find customer record. Please search manually in POS.', 'warning');
+        }
+      } else {
+        // Not a customer yet — create one
+        const createRes = await API.createCustomer({
+          name:          lead.name,
+          phone:         lead.phone  || null,
+          email:         lead.email  || null,
+          notes:         lead.notes  || null,
+          customer_type: 'retail',
+        });
+        if (createRes.status !== 201) {
+          toast(createRes.body?.message || 'Failed to create customer.', 'error');
+          return;
+        }
+        customer = createRes.body?.data || null;
+        toast(`"${escHtml(lead.name)}" converted to customer.`, 'success');
+        // Refresh pipeline so the badge appears
+        loadCrmPipeline();
+      }
+
+      // Assign customer to the active POS tab and navigate
+      const posTab = activeTab();
+      if (posTab && customer) {
+        posTab._customer = customer;
+        renderCartCustomer();
+      }
+      activateTab('pos');
+      if (customer) {
+        setTimeout(() => toast(`Customer assigned: ${escHtml(customer.name)}`, 'info'), 300);
+      }
+    });
+
+    // Delete
+    menu.querySelector('#crm-ctx-delete').addEventListener('click', async () => {
+      if (!_ctxLead) return;
+      const lead = _ctxLead;
+      hideMenu();
+      if (!confirm(`Delete lead "${lead.name}"? This cannot be undone.`)) return;
+      const res = await API.crmDeleteLead(lead.id);
+      if (res.status === 200) { toast('Lead deleted.', 'success'); loadCrmPipeline(); }
+      else toast(res.body?.message || 'Failed to delete.', 'error');
+    });
+  }());
+
   window.switchCrmView = switchCrmView;
+}());
+
+// ── Automations ────────────────────────────────────────────────────────────
+(function () {
+  let _flows     = [];
+  let _triggers  = {};
+  let _selected  = null;
+
+  async function loadAutomations() {
+    const empty = $('#auto-empty');
+    const grid  = $('#auto-grid');
+    if (empty) { empty.style.display = ''; empty.innerHTML = '<i class="fa fa-spinner fa-spin" style="font-size:28px;color:#f59e0b;margin-bottom:10px;display:block"></i><div style="font-size:13px">Loading…</div>'; }
+    if (grid)  grid.style.display = 'none';
+    const res = await API.automations();
+    if (empty) { empty.innerHTML = '<i class="fa fa-bolt" style="font-size:40px;margin-bottom:12px;display:block;color:#f59e0b"></i><div style="font-size:14px;font-weight:600;margin-bottom:6px">No automation flows yet</div><div style="font-size:12px">Click <strong>New Flow</strong> in the ribbon to create your first automation.</div>'; }
+    if (res.status !== 200) return;
+    _flows    = res.body?.data || [];
+    _triggers = res.body?.triggers || {};
+    _renderGrid();
+    _populateTriggerSelect();
+  }
+
+  function _renderGrid() {
+    const grid  = $('#auto-grid');
+    const empty = $('#auto-empty');
+    const q     = ($('#auto-search')?.value || '').toLowerCase();
+    const list  = q ? _flows.filter(f => f.name.toLowerCase().includes(q) || (f.description || '').toLowerCase().includes(q)) : _flows;
+
+    if (list.length === 0) {
+      grid.style.display  = 'none';
+      empty.style.display = '';
+      return;
+    }
+    grid.style.display  = '';
+    empty.style.display = 'none';
+
+    grid.innerHTML = list.map(f => {
+      const trigLabel = _triggers[f.trigger_type] || f.trigger_type || '—';
+      const active    = f.is_active;
+      const sel       = _selected === f.id ? ' auto-card--selected' : '';
+      return `<div class="auto-card${sel}" data-id="${f.id}">
+        <div class="auto-card-header">
+          <div class="auto-card-icon"><i class="fa fa-bolt"></i></div>
+          <div class="auto-card-status ${active ? 'auto-card-status--on' : 'auto-card-status--off'}">${active ? 'Active' : 'Inactive'}</div>
+        </div>
+        <div class="auto-card-name">${escHtml(f.name)}</div>
+        <div class="auto-card-trigger"><i class="fa fa-play" style="font-size:10px;margin-right:4px"></i>${escHtml(trigLabel)}</div>
+        ${f.description ? `<div class="auto-card-desc">${escHtml(f.description)}</div>` : ''}
+        <div class="auto-card-meta">${f.run_count} run${f.run_count !== 1 ? 's' : ''} · ${f.updated_at?.slice(0,10) || ''}</div>
+      </div>`;
+    }).join('');
+
+    grid.querySelectorAll('.auto-card').forEach(card => {
+      card.addEventListener('click', () => {
+        _selected = +card.dataset.id;
+        _renderGrid();
+      });
+      card.addEventListener('dblclick', () => {
+        _selected = +card.dataset.id;
+        _openEditor();
+      });
+    });
+  }
+
+  function _populateTriggerSelect() {
+    const sel = $('#auto-new-trigger');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">— choose a trigger —</option>' +
+      Object.entries(_triggers).map(([k, v]) => `<option value="${k}">${escHtml(v)}</option>`).join('');
+  }
+
+  function _openEditor() {
+    const flow = _flows.find(f => f.id === _selected);
+    if (!flow) return;
+    API.automationGet(flow.id).then(res => {
+      if (res.status === 200) window.electronAPI.openAutomation(res.body.data);
+    });
+  }
+
+  // ── New flow modal ──
+  async function _openNewModal() {
+    $('#auto-new-name').value    = '';
+    $('#auto-new-desc').value    = '';
+    $('#auto-new-alert').style.display = 'none';
+
+    // Open modal immediately so the user sees something right away
+    const sel = $('#auto-new-trigger');
+    if (sel) sel.innerHTML = '<option value="">Loading triggers…</option>';
+    $('#auto-new-modal').style.display = 'flex';
+    setTimeout(() => $('#auto-new-name')?.focus(), 50);
+
+    // Fetch triggers from API if not yet loaded (user may not have visited the automations tab yet)
+    if (!Object.keys(_triggers).length) {
+      const res = await API.automations();
+      if (res.status === 200) {
+        if (!_flows.length) _flows = res.body?.data || [];
+        _triggers = res.body?.triggers || {};
+      }
+    }
+
+    _populateTriggerSelect();
+  }
+  function _closeNewModal() { $('#auto-new-modal').style.display = 'none'; }
+
+  $('#auto-new-close').addEventListener('click',  _closeNewModal);
+  $('#auto-new-cancel').addEventListener('click', _closeNewModal);
+  $('#auto-new-modal').addEventListener('click', e => { if (e.target === $('#auto-new-modal')) _closeNewModal(); });
+
+  $('#auto-new-save').addEventListener('click', async () => {
+    const alertEl = $('#auto-new-alert');
+    alertEl.style.display = 'none';
+    const name    = $('#auto-new-name').value.trim();
+    const desc    = $('#auto-new-desc').value.trim();
+    const trigger = $('#auto-new-trigger').value;
+    if (!name) { alertEl.textContent = 'Flow name is required.'; alertEl.style.display = ''; return; }
+    const btn = $('#auto-new-save');
+    btn.disabled = true;
+    const res = await API.automationCreate({ name, description: desc || null, trigger_type: trigger || null });
+    btn.disabled = false;
+    if (res.status === 201) {
+      _flows.unshift(res.body.data);
+      _selected = res.body.data.id;
+      _renderGrid();
+      _closeNewModal();
+      // Fetch full flow_data then open editor
+      const full = await API.automationGet(res.body.data.id);
+      if (full.status === 200) window.electronAPI.openAutomation(full.body.data);
+    } else {
+      alertEl.textContent = res.body?.message || 'Failed to create flow.';
+      alertEl.style.display = '';
+    }
+  });
+
+  // ── Ribbon buttons ──
+  $('#rb-auto-new').addEventListener('click', () => { activateTab('automations'); _openNewModal(); });
+  $('#rb-auto-open').addEventListener('click', () => {
+    if (!_selected) { toast('Select a flow first.', 'warning'); return; }
+    _openEditor();
+  });
+  $('#rb-auto-toggle').addEventListener('click', async () => {
+    if (!_selected) { toast('Select a flow first.', 'warning'); return; }
+    const flow = _flows.find(f => f.id === _selected);
+    if (!flow) return;
+    const res = await API.automationUpdate(_selected, { is_active: !flow.is_active });
+    if (res.status === 200) {
+      const i = _flows.findIndex(f => f.id === _selected);
+      if (i !== -1) _flows[i] = res.body.data;
+      _renderGrid();
+      toast(`Flow ${res.body.data.is_active ? 'activated' : 'deactivated'}.`, 'success');
+    }
+  });
+  $('#rb-auto-delete').addEventListener('click', async () => {
+    if (!_selected) { toast('Select a flow first.', 'warning'); return; }
+    const flow = _flows.find(f => f.id === _selected);
+    if (!confirm(`Delete "${flow?.name}"? This cannot be undone.`)) return;
+    const res = await API.automationDelete(_selected);
+    if (res.status === 200) {
+      _flows = _flows.filter(f => f.id !== _selected);
+      _selected = null;
+      _renderGrid();
+    }
+  });
+  $('#rb-auto-refresh').addEventListener('click', loadAutomations);
+
+  $('#auto-search')?.addEventListener('input', _renderGrid);
+
+  window.loadAutomations = loadAutomations;
+}());
+
+// ── Developers ─────────────────────────────────────────────────────────────
+(function () {
+  let _devAvailableEvents = {};
+  let _devKeys = [];
+  let _devWebhooks = [];
+  let _devEditWebhookId = null;
+  let _devLoaded = false;
+
+  // ── Dialog open / close ──
+  function openDevDialog(view) {
+    view = view || 'keys';
+    $('#dev-dialog').style.display = 'flex';
+    _switchDevView(view);
+    if (!_devLoaded) { _devLoaded = true; _loadDevData(); }
+  }
+  function closeDevDialog() { $('#dev-dialog').style.display = 'none'; }
+
+  $('#dev-dialog-close').addEventListener('click', closeDevDialog);
+  $('#dev-dialog').addEventListener('click', e => { if (e.target === $('#dev-dialog')) closeDevDialog(); });
+
+  // ── Sidebar nav ──
+  function _switchDevView(view) {
+    ['keys', 'webhooks'].forEach(v => {
+      const el = $('#dev-view-' + v);
+      el.style.display = v === view ? 'flex' : 'none';
+    });
+    $$('.dev-snav-btn').forEach(btn => {
+      btn.classList.toggle('dev-snav-btn--active', btn.dataset.dev === view);
+    });
+  }
+  $$('.dev-snav-btn').forEach(btn => btn.addEventListener('click', () => _switchDevView(btn.dataset.dev)));
+
+  // ── Load all data ──
+  async function _loadDevData() {
+    const [keysRes, webhooksRes] = await Promise.all([API.devKeys(), API.devWebhooks()]);
+    if (keysRes.status === 200) { _devKeys = keysRes.body?.data || []; _renderKeys(); }
+    if (webhooksRes.status === 200) {
+      _devAvailableEvents = webhooksRes.body?.available_events || {};
+      _devWebhooks = webhooksRes.body?.data || [];
+      _renderWebhooks();
+    }
+  }
+
+  // ── Render API Keys ──
+  function _renderKeys() {
+    const tbody = $('#dev-keys-tbody');
+    const table = $('#dev-keys-table');
+    const empty = $('#dev-keys-empty');
+    tbody.innerHTML = '';
+    if (_devKeys.length === 0) { table.style.display = 'none'; empty.style.display = ''; return; }
+    table.style.display = ''; empty.style.display = 'none';
+    _devKeys.forEach(k => {
+      const tr = document.createElement('tr');
+      const pill = k.is_active
+        ? `<span style="display:inline-block;font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600;background:#d1fae5;color:#065f46">Active</span>`
+        : `<span style="display:inline-block;font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600;background:#fee2e2;color:#991b1b">Inactive</span>`;
+      tr.innerHTML = `
+        <td style="font-weight:500">${escHtml(k.name)}</td>
+        <td><code style="font-size:12px;color:var(--accent)">${escHtml(k.token_prefix)}</code></td>
+        <td>${pill}</td>
+        <td>${k.expires_at || '<span style="color:var(--text-muted)">Never</span>'}</td>
+        <td>${k.last_used_at ? k.last_used_at.slice(0,10) : '<span style="color:var(--text-muted)">—</span>'}</td>
+        <td style="color:var(--text-muted);font-size:12px">${k.created_at?.slice(0,10) || ''}</td>
+        <td style="text-align:right;white-space:nowrap">
+          <button class="ribbon-btn-sm dev-key-toggle" data-id="${k.id}" title="${k.is_active ? 'Deactivate' : 'Activate'}"><i class="fa ${k.is_active ? 'fa-toggle-on' : 'fa-toggle-off'}"></i></button>
+          <button class="ribbon-btn-sm dev-key-delete" data-id="${k.id}" data-name="${escHtml(k.name)}" title="Delete" style="color:#ef4444"><i class="fa fa-trash"></i></button>
+        </td>`;
+      tbody.appendChild(tr);
+    });
+  }
+
+  // ── Render Webhooks ──
+  function _renderWebhooks() {
+    const tbody = $('#dev-webhooks-tbody');
+    const table = $('#dev-webhooks-table');
+    const empty = $('#dev-webhooks-empty');
+    tbody.innerHTML = '';
+    if (_devWebhooks.length === 0) { table.style.display = 'none'; empty.style.display = ''; return; }
+    table.style.display = ''; empty.style.display = 'none';
+    _devWebhooks.forEach(w => {
+      const tr = document.createElement('tr');
+      const evChips = (w.events || []).map(e => `<span style="display:inline-block;font-size:11px;padding:1px 6px;border-radius:10px;background:var(--accent-faint,#ede9fe);color:var(--accent,#7c3aed);margin:1px">${escHtml(_devAvailableEvents[e] || e)}</span>`).join('');
+      const pill = w.is_active
+        ? `<span style="display:inline-block;font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600;background:#d1fae5;color:#065f46">Active</span>`
+        : `<span style="display:inline-block;font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600;background:#fee2e2;color:#991b1b">Paused</span>`;
+      const fail = w.failure_count > 0 ? `<span style="color:#ef4444;font-weight:600">${w.failure_count}</span>` : '<span style="color:var(--text-muted)">0</span>';
+      tr.innerHTML = `
+        <td style="font-weight:500">${escHtml(w.name)}</td>
+        <td style="font-size:12px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(w.url)}">${escHtml(w.url)}</td>
+        <td>${evChips}</td>
+        <td>${pill}</td>
+        <td style="text-align:center">${fail}</td>
+        <td style="color:var(--text-muted);font-size:12px">${w.last_triggered_at ? w.last_triggered_at.slice(0,10) : '—'}</td>
+        <td style="text-align:right;white-space:nowrap">
+          <button class="ribbon-btn-sm dev-wh-edit"   data-id="${w.id}" title="Edit"><i class="fa fa-pencil"></i></button>
+          <button class="ribbon-btn-sm dev-wh-toggle" data-id="${w.id}" title="${w.is_active ? 'Pause' : 'Activate'}"><i class="fa ${w.is_active ? 'fa-toggle-on' : 'fa-toggle-off'}"></i></button>
+          <button class="ribbon-btn-sm dev-wh-regen"  data-id="${w.id}" title="Regenerate Secret"><i class="fa fa-key"></i></button>
+          <button class="ribbon-btn-sm dev-wh-delete" data-id="${w.id}" data-name="${escHtml(w.name)}" title="Delete" style="color:#ef4444"><i class="fa fa-trash"></i></button>
+        </td>`;
+      tbody.appendChild(tr);
+    });
+  }
+
+  // ── Event delegation: keys table ──
+  $('#dev-keys-list').addEventListener('click', async e => {
+    const tog = e.target.closest('.dev-key-toggle');
+    const del = e.target.closest('.dev-key-delete');
+    if (tog) {
+      const res = await API.devKeyToggle(+tog.dataset.id);
+      if (res.status === 200) { const i = _devKeys.findIndex(k => k.id === +tog.dataset.id); if (i !== -1) _devKeys[i] = res.body.data; _renderKeys(); }
+    }
+    if (del) {
+      if (!confirm(`Delete API key "${del.dataset.name}"? This cannot be undone.`)) return;
+      const res = await API.devKeyDelete(+del.dataset.id);
+      if (res.status === 200) { _devKeys = _devKeys.filter(k => k.id !== +del.dataset.id); _renderKeys(); }
+    }
+  });
+
+  // ── Event delegation: webhooks table ──
+  $('#dev-webhooks-list').addEventListener('click', async e => {
+    const edit = e.target.closest('.dev-wh-edit');
+    const tog  = e.target.closest('.dev-wh-toggle');
+    const reg  = e.target.closest('.dev-wh-regen');
+    const del  = e.target.closest('.dev-wh-delete');
+    if (edit) { const w = _devWebhooks.find(x => x.id === +edit.dataset.id); if (w) _openWebhookModal(w); }
+    if (tog) {
+      const id = +tog.dataset.id;
+      const w  = _devWebhooks.find(x => x.id === id);
+      if (!w) return;
+      const res = await API.devWebhookUpdate(id, { is_active: !w.is_active });
+      if (res.status === 200) { const i = _devWebhooks.findIndex(x => x.id === id); if (i !== -1) _devWebhooks[i] = res.body.data; _renderWebhooks(); }
+    }
+    if (reg) {
+      if (!confirm('Regenerate the signing secret? Existing integrations using the old secret will stop verifying.')) return;
+      const res = await API.devWebhookRegenerateSecret(+reg.dataset.id);
+      if (res.status === 200) {
+        const i = _devWebhooks.findIndex(x => x.id === +reg.dataset.id);
+        if (i !== -1) _devWebhooks[i] = res.body.data;
+        _renderWebhooks();
+        alert(`New secret: ${res.body.data.secret}\n\nCopy it now — it won't be shown again.`);
+      }
+    }
+    if (del) {
+      if (!confirm(`Delete webhook "${del.dataset.name}"?`)) return;
+      const res = await API.devWebhookDelete(+del.dataset.id);
+      if (res.status === 200) { _devWebhooks = _devWebhooks.filter(w => w.id !== +del.dataset.id); _renderWebhooks(); }
+    }
+  });
+
+  // ── API Key modal ──
+  function _openKeyModal() {
+    $('#dev-key-name').value = ''; $('#dev-key-expires').value = '';
+    $('#dev-key-modal-alert').style.display = 'none';
+    $('#dev-key-modal').style.display = 'flex';
+    setTimeout(() => $('#dev-key-name').focus(), 50);
+  }
+  function _closeKeyModal() { $('#dev-key-modal').style.display = 'none'; }
+  $('#dev-key-modal-close').addEventListener('click',  _closeKeyModal);
+  $('#dev-key-modal-cancel').addEventListener('click', _closeKeyModal);
+  $('#dev-key-modal').addEventListener('click', e => { if (e.target === $('#dev-key-modal')) _closeKeyModal(); });
+  $('#dev-new-key-btn').addEventListener('click', _openKeyModal);
+
+  $('#dev-key-modal-save').addEventListener('click', async () => {
+    const name = $('#dev-key-name').value.trim();
+    const expires_at = $('#dev-key-expires').value || null;
+    const alertEl = $('#dev-key-modal-alert');
+    alertEl.style.display = 'none';
+    if (!name) { alertEl.textContent = 'Name is required.'; alertEl.style.display = ''; return; }
+    const res = await API.devKeyCreate({ name, expires_at });
+    if (res.status === 201) {
+      _devKeys.unshift(res.body.data);
+      _renderKeys();
+      _closeKeyModal();
+      $('#dev-token-reveal').style.display = '';
+      $('#dev-token-value').textContent = res.body.token;
+    } else {
+      alertEl.textContent = res.body?.errors ? Object.values(res.body.errors).flat().join(' ') : (res.body?.message || 'Failed.');
+      alertEl.style.display = '';
+    }
+  });
+
+  $('#dev-token-reveal-close').addEventListener('click', () => { $('#dev-token-reveal').style.display = 'none'; });
+  $('#dev-token-copy').addEventListener('click', () => {
+    navigator.clipboard.writeText($('#dev-token-value').textContent).then(() => {
+      const btn = $('#dev-token-copy');
+      btn.innerHTML = '<i class="fa fa-check"></i> Copied';
+      setTimeout(() => { btn.innerHTML = '<i class="fa fa-copy"></i> Copy'; }, 2000);
+    });
+  });
+
+  // ── Webhook modal ──
+  function _buildEventCheckboxes(selected = []) {
+    const c = $('#dev-wh-events'); c.innerHTML = '';
+    Object.entries(_devAvailableEvents).forEach(([key, label]) => {
+      const lbl = document.createElement('label');
+      lbl.style.cssText = 'display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;padding:2px 0;min-width:45%';
+      lbl.innerHTML = `<input type="checkbox" value="${key}" ${selected.includes(key) ? 'checked' : ''}> ${escHtml(label)}`;
+      c.appendChild(lbl);
+    });
+  }
+  function _openWebhookModal(wh = null) {
+    _devEditWebhookId = wh ? wh.id : null;
+    $('#dev-webhook-modal-title').textContent = wh ? 'Edit Webhook' : 'New Webhook';
+    $('#dev-wh-name').value = wh?.name || ''; $('#dev-wh-url').value = wh?.url || '';
+    $('#dev-webhook-modal-alert').style.display = 'none';
+    _buildEventCheckboxes(wh?.events || []);
+    $('#dev-webhook-modal').style.display = 'flex';
+    setTimeout(() => $('#dev-wh-name').focus(), 50);
+  }
+  function _closeWebhookModal() { $('#dev-webhook-modal').style.display = 'none'; _devEditWebhookId = null; }
+  $('#dev-webhook-modal-close').addEventListener('click',  _closeWebhookModal);
+  $('#dev-webhook-modal-cancel').addEventListener('click', _closeWebhookModal);
+  $('#dev-webhook-modal').addEventListener('click', e => { if (e.target === $('#dev-webhook-modal')) _closeWebhookModal(); });
+  $('#dev-new-webhook-btn').addEventListener('click', () => _openWebhookModal());
+
+  $('#dev-webhook-modal-save').addEventListener('click', async () => {
+    const alertEl = $('#dev-webhook-modal-alert');
+    alertEl.style.display = 'none';
+    const name   = $('#dev-wh-name').value.trim();
+    const url    = $('#dev-wh-url').value.trim();
+    const events = Array.from($('#dev-wh-events').querySelectorAll('input:checked')).map(c => c.value);
+    if (!name)         { alertEl.textContent = 'Name is required.';          alertEl.style.display = ''; return; }
+    if (!url)          { alertEl.textContent = 'URL is required.';           alertEl.style.display = ''; return; }
+    if (!events.length){ alertEl.textContent = 'Select at least one event.'; alertEl.style.display = ''; return; }
+    const res = _devEditWebhookId
+      ? await API.devWebhookUpdate(_devEditWebhookId, { name, url, events })
+      : await API.devWebhookCreate({ name, url, events });
+    if (res.status === 200 || res.status === 201) {
+      if (_devEditWebhookId) { const i = _devWebhooks.findIndex(w => w.id === _devEditWebhookId); if (i !== -1) _devWebhooks[i] = res.body.data; }
+      else { _devWebhooks.unshift(res.body.data); }
+      _renderWebhooks(); _closeWebhookModal();
+    } else {
+      alertEl.textContent = res.body?.errors ? Object.values(res.body.errors).flat().join(' ') : (res.body?.message || 'Failed.');
+      alertEl.style.display = '';
+    }
+  });
+
+  // ── Account dropdown entry ──
+  $('#tpm-developers')?.addEventListener('click', () => {
+    $('#tb-profile-menu').classList.remove('open');
+    openDevDialog('keys');
+  });
+
+  window.openDevDialog = openDevDialog;
+}());
+
+// ── Project Management ─────────────────────────────────────────────────────
+(function () {
+  const esc = escHtml;
+
+  // ── State ──────────────────────────────────────────────────────────────────
+  const pm = {
+    projects:       [],
+    projectFilter:  'all',
+    boardProjectId: null,
+    tasksProjectId: null,
+    taskFilter:     '',
+    myTaskFilter:   'open',
+    currentView:    'projects',
+  };
+
+  // ── View switcher ───────────────────────────────────────────────────────────
+  function switchPmView(view) {
+    pm.currentView = view;
+    $$('#panel-projects [data-pmsub]').forEach(b => b.classList.toggle('active', b.dataset.pmsub === view));
+    const views = ['projects', 'board', 'tasks', 'mytasks'];
+    views.forEach(v => {
+      const el = $(`#pm-${v}-view`);
+      if (el) el.style.display = v === view ? (v === 'projects' ? 'flex' : 'flex') : 'none';
+    });
+    if (view === 'projects')  loadPmProjects();
+    if (view === 'board')     { _populatePmProjectSelects(); loadPmBoard(); }
+    if (view === 'tasks')     { _populatePmProjectSelects(); loadPmTasks(); }
+    if (view === 'mytasks')   loadPmMyTasks();
+  }
+  window.switchPmView = switchPmView;
+
+  // ── Load projects list ──────────────────────────────────────────────────────
+  async function loadPmProjects() {
+    const grid  = $('#pm-projects-grid');
+    const empty = $('#pm-projects-empty');
+    if (!grid) return;
+    grid.innerHTML = '<p style="color:var(--text-muted);font-size:12px;padding:8px 0">Loading…</p>';
+    try {
+      const res = await API.pmProjects(pm.projectFilter);
+      if (res.status >= 400) throw new Error(res.body?.message || 'Load failed');
+      pm.projects = res.body?.data || [];
+      grid.innerHTML = '';
+      if (!pm.projects.length) {
+        empty.style.display = 'block';
+        grid.style.display = 'none';
+        return;
+      }
+      empty.style.display = 'none';
+      grid.style.display = '';
+      pm.projects.forEach(p => {
+        const done  = p.task_stats?.done  || 0;
+        const total = p.task_stats?.total || 0;
+        const pct   = total > 0 ? Math.round((done / total) * 100) : 0;
+        const colorBar = p.color ? `<div class="pm-project-card--color-bar" style="background:${esc(p.color)}"></div>` : '';
+        const card = document.createElement('div');
+        card.className = 'pm-project-card';
+        card.dataset.pid = p.id;
+        card.innerHTML = `
+          ${colorBar}
+          <div class="pm-project-card-header">
+            <span class="pm-project-card-name" title="${esc(p.name)}">${esc(p.name)}</span>
+            <span class="pm-status pm-status--${esc(p.status)}">${esc(p.status.replace('_',' '))}</span>
+          </div>
+          <div class="pm-project-card-meta">
+            ${p.client_name ? `<span class="pm-project-card-client"><i class="fa fa-user" style="margin-right:3px"></i>${esc(p.client_name)}</span>` : ''}
+            <span class="pm-priority pm-priority--${esc(p.priority)}">${esc(p.priority)}</span>
+            ${p.due_date ? `<span class="pm-task-card-due"><i class="fa fa-calendar" style="margin-right:3px"></i>${esc(p.due_date)}</span>` : ''}
+          </div>
+          <div class="pm-project-card-progress">
+            <div class="pm-progress-bar-wrap"><div class="pm-progress-bar-fill" style="width:${pct}%"></div></div>
+            <span class="pm-progress-pct">${pct}%</span>
+          </div>
+          <div class="pm-task-count"><i class="fa fa-bars-progress" style="margin-right:4px;color:var(--text-muted)"></i>${total} tasks · ${done} done</div>
+        `;
+        card.addEventListener('click', () => _openProjectBoard(p.id));
+        grid.appendChild(card);
+      });
+    } catch (e) {
+      grid.innerHTML = `<p style="color:#dc2626;font-size:12px;padding:8px 0">${esc(String(e))}</p>`;
+    }
+  }
+
+  function _openProjectBoard(projectId) {
+    pm.boardProjectId = projectId;
+    switchPmView('board');
+    const sel = $('#pm-board-project-select');
+    if (sel) sel.value = projectId;
+  }
+
+  // ── Populate project selects ────────────────────────────────────────────────
+  function _populatePmProjectSelects() {
+    ['#pm-board-project-select', '#pm-tasks-project-select'].forEach(id => {
+      const sel = $(id);
+      if (!sel) return;
+      const cur = sel.value;
+      sel.innerHTML = '<option value="">— pick a project —</option>';
+      pm.projects.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.id;
+        opt.textContent = p.name;
+        sel.appendChild(opt);
+      });
+      if (cur) sel.value = cur;
+      if (!sel.value && pm.projects.length) sel.value = pm.projects[0].id;
+    });
+  }
+
+  // ── Board ───────────────────────────────────────────────────────────────────
+  async function loadPmBoard() {
+    const projectId = $('#pm-board-project-select')?.value;
+    if (!projectId) return;
+    pm.boardProjectId = projectId;
+    ['todo','in_progress','review','done'].forEach(s => {
+      const col = $(`#pm-col-${s}`);
+      if (col) col.innerHTML = '<div style="font-size:11px;color:var(--text-muted);padding:4px">Loading…</div>';
+    });
+    try {
+      const res = await API.pmBoard(projectId);
+      if (res.status >= 400) throw new Error(res.body?.message || 'Load failed');
+      res.body.columns.forEach(col => {
+        const colEl  = $(`#pm-col-${col.status}`);
+        const cntEl  = $(`#pm-col-count-${col.status}`);
+        if (!colEl) return;
+        if (cntEl) cntEl.textContent = col.tasks.length;
+        colEl.innerHTML = '';
+        if (!col.tasks.length) {
+          colEl.innerHTML = '<div style="font-size:11px;color:var(--text-muted);padding:4px 2px">No tasks</div>';
+          return;
+        }
+        col.tasks.forEach(t => colEl.appendChild(_pmTaskCard(t)));
+      });
+    } catch (e) {
+      toast('Failed to load board: ' + e, 'error');
+    }
+  }
+
+  function _pmTaskCard(t) {
+    const statuses = ['todo','in_progress','review','done'];
+    const labels   = {'todo':'To Do','in_progress':'In Progress','review':'Review','done':'Done'};
+    const overdue  = t.is_overdue;
+    const card = document.createElement('div');
+    card.className = 'pm-task-card';
+    card.dataset.tid = t.id;
+    const moveOpts = statuses.filter(s => s !== t.status)
+      .map(s => `<option value="${s}">${labels[s]}</option>`).join('');
+    card.innerHTML = `
+      <div class="pm-task-card-title">${esc(t.title)}</div>
+      <div class="pm-task-card-meta">
+        <span class="pm-priority pm-priority--${esc(t.priority)}">${esc(t.priority)}</span>
+        ${t.assigned_name ? `<span class="pm-task-card-assign"><i class="fa fa-user" style="margin-right:2px"></i>${esc(t.assigned_name)}</span>` : ''}
+        ${t.due_date ? `<span class="pm-task-card-due${overdue ? ' pm-task-card-due--overdue' : ''}">${overdue ? '<i class="fa fa-triangle-exclamation" style="margin-right:2px"></i>' : ''}${esc(t.due_date)}</span>` : ''}
+      </div>
+      <div class="pm-task-card-actions">
+        <select class="pm-task-card-move" data-tid="${t.id}" title="Move to…">
+          <option value="">Move…</option>${moveOpts}
+        </select>
+        <button class="pm-task-card-move" data-delete-tid="${t.id}" title="Delete task" style="border-color:#fca5a5;color:#dc2626"><i class="fa fa-trash"></i></button>
+      </div>
+    `;
+    card.querySelector('select[data-tid]').addEventListener('change', async function () {
+      const newStatus = this.value;
+      if (!newStatus) return;
+      try {
+        await API.pmTaskStatus(t.id, newStatus);
+        loadPmBoard();
+      } catch (e) { toast('Move failed: ' + e, 'error'); }
+    });
+    card.querySelector('button[data-delete-tid]').addEventListener('click', async function (ev) {
+      ev.stopPropagation();
+      if (!confirm('Delete task "' + t.title + '"?')) return;
+      try { await API.pmTaskDelete(t.id); loadPmBoard(); } catch (e) { toast('Delete failed: ' + e, 'error'); }
+    });
+    return card;
+  }
+
+  // ── Tasks list ──────────────────────────────────────────────────────────────
+  async function loadPmTasks() {
+    const projectId = $('#pm-tasks-project-select')?.value;
+    const tbody = $('#pm-tasks-body');
+    if (!tbody) return;
+    if (!projectId) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:24px">Select a project above.</td></tr>';
+      return;
+    }
+    pm.tasksProjectId = projectId;
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:24px">Loading…</td></tr>';
+    const qs = pm.taskFilter ? `status=${encodeURIComponent(pm.taskFilter)}` : '';
+    try {
+      const res = await API.pmTasks(projectId, qs);
+      if (res.status >= 400) throw new Error(res.body?.message || 'Load failed');
+      const tasks = res.body?.data || [];
+      if (!tasks.length) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:24px">No tasks found.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = tasks.map(t => _pmTaskRow(t, 7)).join('');
+      _bindTaskRowActions(tbody, () => loadPmTasks());
+    } catch (e) {
+      tbody.innerHTML = `<tr><td colspan="7" style="color:#dc2626;padding:12px">${esc(String(e))}</td></tr>`;
+    }
+  }
+
+  // ── My Tasks ────────────────────────────────────────────────────────────────
+  async function loadPmMyTasks() {
+    const tbody = $('#pm-mytasks-body');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:24px">Loading…</td></tr>';
+    try {
+      const res   = await API.pmMyTasks(pm.myTaskFilter);
+      if (res.status >= 400) throw new Error(res.body?.message || 'Load failed');
+      const tasks = res.body?.data || [];
+      if (!tasks.length) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:24px">No tasks.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = tasks.map(t => _pmTaskRow(t, 7, true)).join('');
+      _bindTaskRowActions(tbody, () => loadPmMyTasks());
+    } catch (e) {
+      tbody.innerHTML = `<tr><td colspan="7" style="color:#dc2626;padding:12px">${esc(String(e))}</td></tr>`;
+    }
+  }
+
+  function _pmTaskRow(t, cols, showProject = false) {
+    const overdue  = t.is_overdue;
+    const isDone   = t.status === 'done';
+    const checkIco = isDone ? 'fa-circle-check' : 'fa-circle';
+    const checkClr = isDone ? '#22c55e' : '#d1d5db';
+    const projectCol = showProject
+      ? `<td style="font-size:11px;color:var(--text-muted)">${esc(t.project_name || '')}</td>`
+      : '';
+    return `
+      <tr data-tid="${t.id}">
+        <td><i class="fa ${checkIco}" style="color:${checkClr};cursor:pointer;font-size:14px" data-toggle-tid="${t.id}" data-done="${isDone}" title="${isDone ? 'Reopen' : 'Complete'}"></i></td>
+        <td style="font-size:12px;font-weight:600">${esc(t.title)}</td>
+        ${projectCol}
+        <td><span class="pm-priority pm-priority--${esc(t.priority)}">${esc(t.priority)}</span></td>
+        <td style="font-size:11px;color:var(--text-muted)">${esc(t.assigned_name || '—')}</td>
+        <td style="font-size:11px${overdue ? ';color:#dc2626;font-weight:700' : ';color:var(--text-muted)'}">${overdue ? '<i class="fa fa-triangle-exclamation" style="margin-right:3px"></i>' : ''}${esc(t.due_date || '—')}</td>
+        <td><span class="pm-status pm-status--${esc(t.status)}">${esc(t.status.replace(/_/g,' '))}</span></td>
+        <td><button class="svc-form-btn" style="padding:2px 8px;font-size:11px" data-delete-tid="${t.id}" title="Delete"><i class="fa fa-trash" style="color:#ef4444"></i></button></td>
+      </tr>`;
+  }
+
+  function _bindTaskRowActions(tbody, reload) {
+    tbody.querySelectorAll('[data-toggle-tid]').forEach(ico => {
+      ico.addEventListener('click', async function () {
+        const tid  = +this.dataset.toggleTid;
+        const done = this.dataset.done === 'true';
+        try {
+          if (done) await API.pmTaskReopen(tid);
+          else      await API.pmTaskComplete(tid);
+          reload();
+        } catch (e) { toast('Action failed: ' + e, 'error'); }
+      });
+    });
+    tbody.querySelectorAll('[data-delete-tid]').forEach(btn => {
+      btn.addEventListener('click', async function (ev) {
+        ev.stopPropagation();
+        const tid = +this.dataset.deleteTid;
+        const row = this.closest('tr');
+        const title = row?.querySelector('td:nth-child(2)')?.textContent || 'this task';
+        if (!confirm('Delete task "' + title + '"?')) return;
+        try { await API.pmTaskDelete(tid); reload(); } catch (e) { toast('Delete failed: ' + e, 'error'); }
+      });
+    });
+  }
+
+  // ── New Project Modal ───────────────────────────────────────────────────────
+  function openNewProjectModal() {
+    const overlay = document.createElement('div');
+    overlay.className = 'pm-modal-overlay';
+    overlay.id = 'pm-new-project-overlay';
+    overlay.innerHTML = `
+      <div class="pm-modal">
+        <div class="pm-modal-hdr">
+          <i class="fa fa-folder-plus" style="color:var(--accent)"></i>
+          <span class="pm-modal-title">New Project</span>
+          <button class="pm-modal-close" id="pm-np-close"><i class="fa fa-xmark"></i></button>
+        </div>
+        <div class="pm-modal-body">
+          <div class="pm-modal-alert" id="pm-np-alert"></div>
+          <div><div class="pm-field-label">Project Name *</div><input id="pm-np-name" class="pm-field-input" maxlength="150" placeholder="e.g. Website Redesign"></div>
+          <div><div class="pm-field-label">Client Name</div><input id="pm-np-client" class="pm-field-input" maxlength="120" placeholder="Optional"></div>
+          <div class="pm-field-row">
+            <div>
+              <div class="pm-field-label">Priority</div>
+              <select id="pm-np-priority" class="pm-field-select">
+                <option value="normal">Normal</option>
+                <option value="high">High</option>
+                <option value="low">Low</option>
+              </select>
+            </div>
+            <div>
+              <div class="pm-field-label">Color</div>
+              <input id="pm-np-color" type="color" class="pm-field-input" value="#4e8ef7" style="height:36px;padding:2px 6px">
+            </div>
+          </div>
+          <div class="pm-field-row">
+            <div><div class="pm-field-label">Start Date</div><input id="pm-np-start" type="date" class="pm-field-input"></div>
+            <div><div class="pm-field-label">Due Date</div><input id="pm-np-due" type="date" class="pm-field-input"></div>
+          </div>
+          <div><div class="pm-field-label">Description</div><textarea id="pm-np-desc" class="pm-field-textarea" maxlength="2000" placeholder="Optional project description…"></textarea></div>
+        </div>
+        <div class="pm-modal-footer">
+          <button class="pm-btn-secondary" id="pm-np-cancel">Cancel</button>
+          <button class="pm-btn-primary" id="pm-np-save"><i class="fa fa-floppy-disk"></i> Create Project</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    $('#pm-np-close').addEventListener('click',  () => overlay.remove());
+    $('#pm-np-cancel').addEventListener('click', () => overlay.remove());
+    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+    $('#pm-np-save').addEventListener('click', async () => {
+      const name = $('#pm-np-name')?.value.trim();
+      const alert = $('#pm-np-alert');
+      if (!name) { alert.textContent = 'Project name is required.'; alert.style.display = 'block'; return; }
+      alert.style.display = 'none';
+      $('#pm-np-save').disabled = true;
+      try {
+        const res = await API.pmProjectCreate({
+          name,
+          client_name: $('#pm-np-client')?.value.trim() || null,
+          priority:    $('#pm-np-priority')?.value || 'normal',
+          color:       $('#pm-np-color')?.value || null,
+          start_date:  $('#pm-np-start')?.value || null,
+          due_date:    $('#pm-np-due')?.value || null,
+          description: $('#pm-np-desc')?.value.trim() || null,
+        });
+        if (res.status >= 400) throw new Error(res.body?.message || 'Save failed');
+        overlay.remove();
+        await loadPmProjects();
+        _populatePmProjectSelects();
+        toast('Project created', 'success');
+      } catch (e) {
+        alert.textContent = String(e);
+        alert.style.display = 'block';
+        $('#pm-np-save').disabled = false;
+      }
+    });
+    $('#pm-np-name').focus();
+  }
+
+  // ── New Task Modal ──────────────────────────────────────────────────────────
+  function openNewTaskModal(preProjectId = null) {
+    if (!pm.projects.length) { toast('Create a project first.', 'info'); return; }
+    const overlay = document.createElement('div');
+    overlay.className = 'pm-modal-overlay';
+    overlay.id = 'pm-new-task-overlay';
+    const projectOpts = pm.projects.map(p =>
+      `<option value="${p.id}"${+p.id === +preProjectId ? ' selected' : ''}>${esc(p.name)}</option>`
+    ).join('');
+    overlay.innerHTML = `
+      <div class="pm-modal">
+        <div class="pm-modal-hdr">
+          <i class="fa fa-plus-circle" style="color:var(--accent)"></i>
+          <span class="pm-modal-title">New Task</span>
+          <button class="pm-modal-close" id="pm-nt-close"><i class="fa fa-xmark"></i></button>
+        </div>
+        <div class="pm-modal-body">
+          <div class="pm-modal-alert" id="pm-nt-alert"></div>
+          <div>
+            <div class="pm-field-label">Project *</div>
+            <select id="pm-nt-project" class="pm-field-select">${projectOpts}</select>
+          </div>
+          <div><div class="pm-field-label">Task Title *</div><input id="pm-nt-title" class="pm-field-input" maxlength="200" placeholder="What needs to be done?"></div>
+          <div class="pm-field-row">
+            <div>
+              <div class="pm-field-label">Status</div>
+              <select id="pm-nt-status" class="pm-field-select">
+                <option value="todo">To Do</option>
+                <option value="in_progress">In Progress</option>
+                <option value="review">Review</option>
+                <option value="done">Done</option>
+              </select>
+            </div>
+            <div>
+              <div class="pm-field-label">Priority</div>
+              <select id="pm-nt-priority" class="pm-field-select">
+                <option value="normal">Normal</option>
+                <option value="high">High</option>
+                <option value="low">Low</option>
+              </select>
+            </div>
+          </div>
+          <div class="pm-field-row">
+            <div><div class="pm-field-label">Due Date</div><input id="pm-nt-due" type="date" class="pm-field-input"></div>
+            <div><div class="pm-field-label">Est. Hours</div><input id="pm-nt-hours" type="number" min="0" step="0.5" class="pm-field-input" placeholder="0"></div>
+          </div>
+          <div><div class="pm-field-label">Description</div><textarea id="pm-nt-desc" class="pm-field-textarea" maxlength="5000" placeholder="Optional…"></textarea></div>
+        </div>
+        <div class="pm-modal-footer">
+          <button class="pm-btn-secondary" id="pm-nt-cancel">Cancel</button>
+          <button class="pm-btn-primary" id="pm-nt-save"><i class="fa fa-floppy-disk"></i> Create Task</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    $('#pm-nt-close').addEventListener('click',  () => overlay.remove());
+    $('#pm-nt-cancel').addEventListener('click', () => overlay.remove());
+    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+    $('#pm-nt-save').addEventListener('click', async () => {
+      const title     = $('#pm-nt-title')?.value.trim();
+      const projectId = $('#pm-nt-project')?.value;
+      const alertEl   = $('#pm-nt-alert');
+      if (!title)     { alertEl.textContent = 'Task title is required.'; alertEl.style.display = 'block'; return; }
+      if (!projectId) { alertEl.textContent = 'Select a project.';       alertEl.style.display = 'block'; return; }
+      alertEl.style.display = 'none';
+      $('#pm-nt-save').disabled = true;
+      try {
+        const res = await API.pmTaskCreate(projectId, {
+          title,
+          status:           $('#pm-nt-status')?.value   || 'todo',
+          priority:         $('#pm-nt-priority')?.value || 'normal',
+          due_date:         $('#pm-nt-due')?.value   || null,
+          estimated_hours:  $('#pm-nt-hours')?.value || null,
+          description:      $('#pm-nt-desc')?.value.trim() || null,
+        });
+        if (res.status >= 400) throw new Error(res.body?.message || 'Save failed');
+        overlay.remove();
+        if (pm.currentView === 'board')   loadPmBoard();
+        else if (pm.currentView === 'tasks') loadPmTasks();
+        else if (pm.currentView === 'mytasks') loadPmMyTasks();
+        toast('Task created', 'success');
+      } catch (e) {
+        alertEl.textContent = String(e);
+        alertEl.style.display = 'block';
+        $('#pm-nt-save').disabled = false;
+      }
+    });
+    $('#pm-nt-title').focus();
+  }
+
+  // ── Ribbon buttons ──────────────────────────────────────────────────────────
+  $('#rb-pm-all-projects')?.addEventListener('click', () => { activateTab('projects'); switchPmView('projects'); });
+  $('#rb-pm-new-project') ?.addEventListener('click', () => { activateTab('projects'); openNewProjectModal(); });
+  $('#rb-pm-board')       ?.addEventListener('click', () => { activateTab('projects'); switchPmView('board'); });
+  $('#rb-pm-tasks')       ?.addEventListener('click', () => { activateTab('projects'); switchPmView('tasks'); });
+  $('#rb-pm-my-tasks')    ?.addEventListener('click', () => { activateTab('projects'); switchPmView('mytasks'); });
+  $('#rb-pm-new-task')    ?.addEventListener('click', () => { activateTab('projects'); openNewTaskModal(pm.boardProjectId || pm.tasksProjectId); });
+  $('#rb-pm-refresh')     ?.addEventListener('click', () => {
+    if (pm.currentView === 'projects') loadPmProjects();
+    else if (pm.currentView === 'board') loadPmBoard();
+    else if (pm.currentView === 'tasks') loadPmTasks();
+    else if (pm.currentView === 'mytasks') loadPmMyTasks();
+  });
+
+  // ── Sub-nav buttons ─────────────────────────────────────────────────────────
+  $$('#panel-projects [data-pmsub]').forEach(btn => {
+    btn.addEventListener('click', () => switchPmView(btn.dataset.pmsub));
+  });
+
+  // ── Project filter chips ────────────────────────────────────────────────────
+  $$('#pm-project-filter-chips [data-pmprojectfilter]').forEach(chip => {
+    chip.addEventListener('click', function () {
+      $$('#pm-project-filter-chips .svc-chip').forEach(c => c.classList.remove('active'));
+      this.classList.add('active');
+      pm.projectFilter = this.dataset.pmprojectfilter;
+      loadPmProjects();
+    });
+  });
+
+  // ── Task filter chips ───────────────────────────────────────────────────────
+  $$('#pm-task-filter-chips [data-pmtaskfilter]').forEach(chip => {
+    chip.addEventListener('click', function () {
+      $$('#pm-task-filter-chips .svc-chip').forEach(c => c.classList.remove('active'));
+      this.classList.add('active');
+      pm.taskFilter = this.dataset.pmtaskfilter;
+      loadPmTasks();
+    });
+  });
+
+  // ── My tasks filter chips ───────────────────────────────────────────────────
+  $$('#pm-mytask-filter-chips [data-pmmyfilter]').forEach(chip => {
+    chip.addEventListener('click', function () {
+      $$('#pm-mytask-filter-chips .svc-chip').forEach(c => c.classList.remove('active'));
+      this.classList.add('active');
+      pm.myTaskFilter = this.dataset.pmmyfilter;
+      loadPmMyTasks();
+    });
+  });
+
+  // ── Board project select ────────────────────────────────────────────────────
+  $('#pm-board-project-select')?.addEventListener('change', function () {
+    pm.boardProjectId = this.value;
+    loadPmBoard();
+  });
+
+  // ── Board new task button ───────────────────────────────────────────────────
+  $('#pm-board-new-task-btn')?.addEventListener('click', () => openNewTaskModal(pm.boardProjectId));
+
+  // ── Tasks project select ────────────────────────────────────────────────────
+  $('#pm-tasks-project-select')?.addEventListener('change', function () {
+    pm.tasksProjectId = this.value;
+    loadPmTasks();
+  });
+
+  // ── Tasks new button ────────────────────────────────────────────────────────
+  $('#pm-tasks-new-btn')?.addEventListener('click', () => openNewTaskModal(pm.tasksProjectId));
+
+  // ── Expose for debug ────────────────────────────────────────────────────────
+  window._pm = pm;
 }());
 
 // ── Boot ───────────────────────────────────────────────────────────────────

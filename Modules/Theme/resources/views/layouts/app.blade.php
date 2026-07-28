@@ -430,6 +430,7 @@
         $showSidebarPosHubLink = $navBusiness && Route::has('pos.index') && $showSidebarPosSection;
 
         $showSidebarCrmLink = $navBusiness && Route::has('crm.projects.index');
+        $showSidebarProjectManageLink = $navBusiness && Route::has('pm.projects.index');
         $mailFeatureOn = $navBusiness && $featureOn('mail');
         $showSidebarMailLink = $navBusiness && Route::has('mail.inbox.index') && $mailFeatureOn;
         $sidebarMailUnreadCount = $showSidebarMailLink
@@ -725,6 +726,20 @@
                     </a>
                     <a href="{{ route('crm.tasks.index') }}" @class(['active' => request()->routeIs('crm.tasks.*')])>
                         <i class="fa fa-list-check"></i><span>Tasks</span>
+                    </a>
+                </div>
+            @endif
+
+            @if($showSidebarProjectManageLink)
+                <div class="menu-group-title">
+                    <i class="fa fa-folder-open"></i><span>Projects</span>
+                </div>
+                <div class="submenu" aria-label="Project Management">
+                    <a href="{{ route('pm.projects.index') }}" @class(['active' => request()->routeIs('pm.projects.*') || request()->routeIs('pm.tasks.*')])>
+                        <i class="fa fa-diagram-project"></i><span>All Projects</span>
+                    </a>
+                    <a href="{{ route('pm.my-tasks') }}" @class(['active' => request()->routeIs('pm.my-tasks')])>
+                        <i class="fa fa-list-check"></i><span>My Tasks</span>
                     </a>
                 </div>
             @endif

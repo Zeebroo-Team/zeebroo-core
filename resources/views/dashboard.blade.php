@@ -43,6 +43,14 @@
             'fullDesc'   => 'Plan and execute marketing campaigns without leaving SociBiz. Design campaign briefs, set targets and budgets, schedule content across platforms, and measure performance results to keep refining your strategy.',
             'highlights' => ['Campaign planning and briefs', 'Budget and target setting', 'Content scheduling', 'Performance tracking and analytics'],
         ],
+        ['key' => 'automation_editor',    'label' => 'Automation Editor',    'icon' => 'fa-robot',              'image' => 'automation-editor.svg',         'desc' => 'Build trigger-based workflows and automated email sequences',
+            'fullDesc'   => 'Design powerful automations without writing code. Create trigger-based workflows that fire when customers act, deals move, or schedules run. Send automated emails, update records, and chain multi-step actions to save hours of manual work every week.',
+            'highlights' => ['Visual drag-and-drop workflow builder', 'Trigger on events, schedules or CRM changes', 'Automated email and notification sequences', 'Multi-step conditional action chains'],
+        ],
+        ['key' => 'developers',           'label' => 'Developers',           'icon' => 'fa-code',               'image' => 'developers.svg',                'desc' => 'API access, webhooks and developer tools for integrations',
+            'fullDesc'   => 'Connect SociBiz to your own systems and third-party apps. Generate API keys with scoped permissions, set up webhooks that push real-time events to any endpoint, browse the interactive API reference, and manage OAuth applications for your team.',
+            'highlights' => ['REST API with scoped API keys', 'Webhook delivery for real-time events', 'Interactive API reference and sandbox', 'OAuth application management'],
+        ],
     ];
 @endphp
 

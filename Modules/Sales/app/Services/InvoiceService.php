@@ -5,6 +5,7 @@ namespace Modules\Sales\Services;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
+use Modules\AutomationEditor\Services\AutomationRunnerService;
 use Modules\Business\Models\Business;
 use Modules\Pos\Services\SaleStockConsumptionService;
 use Modules\Sales\Models\Invoice;
@@ -23,6 +24,11 @@ class InvoiceService
         ?int $customerId = null,
     ): Collection {
         $query = Invoice::query()
+            ->select('invoices.*')
+            ->selectRaw(
+                '(SELECT COUNT(DISTINCT proposal_group) FROM design_studio_designs'.
+                ' WHERE invoice_id = invoices.id AND proposal_group IS NOT NULL) as proposal_count'
+            )
             ->where('business_id', $business->id)
             ->with('customer');
 
@@ -53,7 +59,7 @@ class InvoiceService
 
     public function create(Business $business, array $data, array $items): Invoice
     {
-        return DB::transaction(function () use ($business, $data, $items) {
+        $invoice = DB::transaction(function () use ($business, $data, $items) {
             $invoice = Invoice::create([
                 'business_id'     => $business->id,
                 'branch_id'       => $this->nullableInt($data['branch_id'] ?? null),
@@ -75,6 +81,11 @@ class InvoiceService
 
             return $invoice;
         });
+
+        $invoice->loadMissing('customer');
+        app(AutomationRunnerService::class)->dispatch('invoice.created', $business, $this->invoicePayload($invoice));
+
+        return $invoice;
     }
 
     public function update(Invoice $invoice, array $data, array $items): Invoice
@@ -115,7 +126,7 @@ class InvoiceService
             return $invoice;
         }
 
-        return DB::transaction(function () use ($invoice): Invoice {
+        $invoice = DB::transaction(function () use ($invoice): Invoice {
             $invoice->update(['status' => Invoice::STATUS_PAID]);
 
             $invoice->load('items.product');
@@ -135,6 +146,14 @@ class InvoiceService
 
             return $invoice;
         });
+
+        $invoice->loadMissing('customer');
+        $business = $invoice->business ?? \Modules\Business\Models\Business::find($invoice->business_id);
+        if ($business) {
+            app(AutomationRunnerService::class)->dispatch('invoice.paid', $business, $this->invoicePayload($invoice));
+        }
+
+        return $invoice;
     }
 
     public function markOverdue(Invoice $invoice): Invoice
@@ -183,6 +202,32 @@ class InvoiceService
     public function invoiceForBusiness(Business $business, Invoice $invoice): ?Invoice
     {
         return $invoice->business_id === $business->id ? $invoice : null;
+    }
+
+    private function invoicePayload(Invoice $invoice): array
+    {
+        $customer = $invoice->customer;
+        return [
+            'event'    => 'invoice.created',
+            'invoice'  => [
+                'id'             => $invoice->id,
+                'reference'      => $invoice->invoice_number,
+                'total'          => (float) $invoice->total,
+                'subtotal'       => (float) $invoice->subtotal,
+                'tax_amount'     => (float) $invoice->tax_amount,
+                'discount_amount'=> (float) $invoice->discount_amount,
+                'status'         => $invoice->status,
+                'due_date'       => $invoice->due_date?->toDateString(),
+                'issue_date'     => $invoice->issue_date,
+                'created_at'     => $invoice->created_at?->toIso8601String(),
+            ],
+            'customer' => $customer ? [
+                'id'    => $customer->id,
+                'name'  => $customer->name,
+                'email' => $customer->email,
+                'phone' => $customer->phone,
+            ] : [],
+        ];
     }
 
     private function nextInvoiceNumber(Business $business): string

@@ -1,0 +1,11 @@
+{
+    "name": "ProjectManage",
+    "alias": "projectmanage",
+    "description": "Project delivery management — tasks, milestones, board, and time tracking.",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\ProjectManage\\Providers\\ProjectManageServiceProvider"
+    ],
+    "files": []
+}

@@ -1,0 +1,11 @@
+{
+    "name": "Developers",
+    "alias": "developers",
+    "description": "API key management, webhooks, and developer tools for third-party integrations.",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\Developers\\Providers\\DevelopersServiceProvider"
+    ],
+    "files": []
+}

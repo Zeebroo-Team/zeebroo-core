@@ -26,6 +26,7 @@ class PosExpenseBillApiController extends Controller
     public function store(Request $request): JsonResponse
     {
         $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'fin_bills');
         $user     = $request->user();
 
         $request->merge([
@@ -194,6 +195,7 @@ class PosExpenseBillApiController extends Controller
     public function pay(Request $request, Bill $bill): JsonResponse
     {
         $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'fin_bills');
         $user     = $request->user();
 
         if ((int) $bill->business_id !== (int) $business->id) {
@@ -315,6 +317,7 @@ class PosExpenseBillApiController extends Controller
     public function destroy(Request $request, Bill $bill): JsonResponse
     {
         $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'fin_bills');
 
         if ((int) $bill->business_id !== (int) $business->id) {
             return response()->json(['message' => 'Bill not found.'], 404);

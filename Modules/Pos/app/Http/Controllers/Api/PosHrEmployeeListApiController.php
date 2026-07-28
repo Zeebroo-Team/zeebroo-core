@@ -71,6 +71,7 @@ class PosHrEmployeeListApiController extends Controller
     public function store(Request $request): JsonResponse
     {
         $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'hr_employees');
 
         if (! Schema::hasTable('hr_employees')) {
             return response()->json(['message' => 'HR module is not set up.'], 422);

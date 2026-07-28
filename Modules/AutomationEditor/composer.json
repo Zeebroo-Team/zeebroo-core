@@ -1,0 +1,7 @@
+{
+    "name": "socibiz/automation-editor",
+    "description": "AutomationEditor module for Socibiz POS",
+    "authors": [{"name": "Socibiz", "email": "dev@socibiz.com"}],
+    "extra": {"laravel": {"providers": ["Modules\\AutomationEditor\\Providers\\AutomationEditorServiceProvider"]}},
+    "autoload": {"psr-4": {"Modules\\AutomationEditor\\": "app/"}}
+}

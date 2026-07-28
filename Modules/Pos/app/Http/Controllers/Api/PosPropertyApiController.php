@@ -53,6 +53,7 @@ class PosPropertyApiController extends Controller
     public function store(Request $request): JsonResponse
     {
         $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'fin_assets');
         $user     = $request->user();
 
         $request->merge([
@@ -100,6 +101,7 @@ class PosPropertyApiController extends Controller
     public function destroy(Request $request, Property $property): JsonResponse
     {
         $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'fin_assets');
 
         if ((int) $property->business_id !== (int) $business->id) {
             return response()->json(['message' => 'Property not found.'], 404);

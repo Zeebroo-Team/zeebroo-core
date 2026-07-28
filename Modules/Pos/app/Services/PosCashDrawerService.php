@@ -72,12 +72,27 @@ class PosCashDrawerService
 
     public function addWithdrawal(Business $business, float $amount, ?string $note, ?int $userId = null): PosCashWithdrawal
     {
-        return PosCashWithdrawal::create([
+        $withdrawal = PosCashWithdrawal::create([
             'business_id'   => $business->id,
             'register_date' => now()->toDateString(),
             'amount'        => max(0, $amount),
             'note'          => $note ? trim(substr($note, 0, 255)) : null,
             'user_id'       => $userId,
         ]);
+
+        try {
+            app(\Modules\AutomationEditor\Services\AutomationRunnerService::class)->dispatch('eod.withdraw', $business, [
+                'event'      => 'eod.withdraw',
+                'withdrawal' => [
+                    'id'     => $withdrawal->id,
+                    'amount' => (float) $withdrawal->amount,
+                    'note'   => $withdrawal->note,
+                    'date'   => $withdrawal->register_date,
+                    'time'   => $withdrawal->created_at?->toIso8601String(),
+                ],
+            ]);
+        } catch (\Throwable) {}
+
+        return $withdrawal;
     }
 }

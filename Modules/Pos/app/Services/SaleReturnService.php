@@ -94,7 +94,7 @@ class SaleReturnService
             ]);
         }
 
-        return DB::transaction(function () use ($sale, $business, $user, $normalised, $refundMethod, $creditAccountId, $notes, $refundReason): SaleReturn {
+        $saleReturn = DB::transaction(function () use ($sale, $business, $user, $normalised, $refundMethod, $creditAccountId, $notes, $refundReason): SaleReturn {
             $total = 0.0;
             foreach ($normalised as $row) {
                 $total += round((float) $row['sale_item']->unit_sell_price * $row['quantity'], 2);
@@ -143,6 +143,17 @@ class SaleReturnService
 
             return $saleReturn->load('items');
         });
+
+        try {
+            app(\Modules\AutomationEditor\Services\AutomationRunnerService::class)->dispatch('sale.refunded', $business, [
+                'event'  => 'sale.refunded',
+                'sale'   => ['id' => $sale->id, 'reference' => $sale->sale_number, 'total' => (float) $sale->total],
+                'refund' => ['amount' => $saleReturn->total, 'reason' => $saleReturn->refund_reason, 'refunded_at' => $saleReturn->returned_at?->toIso8601String()],
+                'customer' => $sale->customer ? ['id' => $sale->customer->id, 'name' => $sale->customer->name, 'email' => $sale->customer->email] : [],
+            ]);
+        } catch (\Throwable) {}
+
+        return $saleReturn;
     }
 
     /**
@@ -190,7 +201,7 @@ class SaleReturnService
             ]);
         }
 
-        return DB::transaction(function () use ($business, $user, $normalised, $refundMethod, $creditAccountId, $notes, $refundReason): SaleReturn {
+        $saleReturn = DB::transaction(function () use ($business, $user, $normalised, $refundMethod, $creditAccountId, $notes, $refundReason): SaleReturn {
             $total = 0.0;
             foreach ($normalised as $row) {
                 $total += round($row['price'] * $row['qty'], 2);
@@ -231,6 +242,17 @@ class SaleReturnService
 
             return $saleReturn->load('items');
         });
+
+        try {
+            app(\Modules\AutomationEditor\Services\AutomationRunnerService::class)->dispatch('sale.refunded', $business, [
+                'event'  => 'sale.refunded',
+                'sale'   => [],
+                'refund' => ['amount' => $saleReturn->total, 'reason' => $saleReturn->refund_reason, 'refunded_at' => $saleReturn->returned_at?->toIso8601String()],
+                'customer' => [],
+            ]);
+        } catch (\Throwable) {}
+
+        return $saleReturn;
     }
 
     /** Returns quantities already returned per sale_item_id for the given sale. */

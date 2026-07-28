@@ -19,5 +19,8 @@
     "Service": true,
     "Restaurant": true,
     "CRM": true,
-    "Mail": true
+    "Mail": true,
+    "Developers": true,
+    "AutomationEditor": true,
+    "ProjectManage": true
 }

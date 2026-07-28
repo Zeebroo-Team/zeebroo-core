@@ -1,0 +1,11 @@
+{
+    "name": "AutomationEditor",
+    "alias": "automationeditor",
+    "description": "Visual workflow automation builder — triggers, conditions and actions.",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\AutomationEditor\\Providers\\AutomationEditorServiceProvider"
+    ],
+    "files": []
+}

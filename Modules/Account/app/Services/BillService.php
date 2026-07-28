@@ -28,7 +28,23 @@ class BillService
         $data['user_id'] = $user->id;
         $data['business_id'] = $business->id;
 
-        return Bill::create($data);
+        $bill = Bill::create($data);
+
+        try {
+            app(\Modules\AutomationEditor\Services\AutomationRunnerService::class)->dispatch('bill.created', $business, [
+                'event' => 'bill.created',
+                'bill'  => [
+                    'id'             => $bill->id,
+                    'name'           => $bill->name,
+                    'recurring_cost' => (float) $bill->recurring_cost,
+                    'recurring_type' => $bill->recurring_type,
+                    'due_date'       => $bill->due_date?->toDateString(),
+                    'created_at'     => $bill->created_at?->toIso8601String(),
+                ],
+            ]);
+        } catch (\Throwable) {}
+
+        return $bill;
     }
 
     /** @param  array<string, mixed>  $data */

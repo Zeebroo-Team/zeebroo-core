@@ -61,6 +61,7 @@ class PosHrPayrollRuleSetApiController extends Controller
     public function store(Request $request): JsonResponse
     {
         $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'hr_payroll');
 
         if (! Schema::hasTable('hr_payroll_rule_sets')) {
             return response()->json(['message' => 'Payroll module is not set up yet.'], 422);
@@ -93,6 +94,7 @@ class PosHrPayrollRuleSetApiController extends Controller
     public function update(Request $request, PayrollRuleSet $ruleSet): JsonResponse
     {
         $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'hr_payroll');
 
         if ((int) $ruleSet->business_id !== (int) $business->id) {
             return response()->json(['message' => 'Rule set not found.'], 404);
@@ -123,6 +125,7 @@ class PosHrPayrollRuleSetApiController extends Controller
     public function destroy(Request $request, PayrollRuleSet $ruleSet): JsonResponse
     {
         $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'hr_payroll');
 
         if ((int) $ruleSet->business_id !== (int) $business->id) {
             return response()->json(['message' => 'Rule set not found.'], 404);
@@ -142,6 +145,7 @@ class PosHrPayrollRuleSetApiController extends Controller
     public function storeRule(Request $request, PayrollRuleSet $ruleSet): JsonResponse
     {
         $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'hr_payroll');
 
         if ((int) $ruleSet->business_id !== (int) $business->id) {
             return response()->json(['message' => 'Rule set not found.'], 404);
@@ -191,6 +195,7 @@ class PosHrPayrollRuleSetApiController extends Controller
     public function updateRule(Request $request, PayrollRuleSet $ruleSet, PayrollRule $rule): JsonResponse
     {
         $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'hr_payroll');
 
         if ((int) $ruleSet->business_id !== (int) $business->id) {
             return response()->json(['message' => 'Rule set not found.'], 404);
@@ -229,6 +234,7 @@ class PosHrPayrollRuleSetApiController extends Controller
     public function destroyRule(Request $request, PayrollRuleSet $ruleSet, PayrollRule $rule): JsonResponse
     {
         $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'hr_payroll');
 
         if ((int) $ruleSet->business_id !== (int) $business->id) {
             return response()->json(['message' => 'Rule set not found.'], 404);

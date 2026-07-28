@@ -1,0 +1,30 @@
+{
+    "name": "nwidart/projectmanage",
+    "description": "",
+    "authors": [
+        {
+            "name": "Nicolas Widart",
+            "email": "n.widart@gmail.com"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {
+
+            }
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\ProjectManage\\": "app/",
+            "Modules\\ProjectManage\\Database\\Factories\\": "database/factories/",
+            "Modules\\ProjectManage\\Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\ProjectManage\\Tests\\": "tests/"
+        }
+    }
+}

@@ -195,7 +195,7 @@ class GoodsReceiveNoteService
 
         $lines = $this->normalizeReceiveLines($purchase, $items);
 
-        return DB::transaction(function () use ($purchase, $user, $data, $lines) {
+        $grn = DB::transaction(function () use ($purchase, $user, $data, $lines) {
             $purchase->load('business');
 
             $branchId = isset($data['branch_id']) && (int) $data['branch_id'] > 0
@@ -242,6 +242,35 @@ class GoodsReceiveNoteService
                 'chequePayments',
             ]);
         });
+
+        try {
+            $business = $purchase->business ?? \Modules\Business\Models\Business::find($purchase->business_id);
+            if ($business) {
+                $runner = app(\Modules\AutomationEditor\Services\AutomationRunnerService::class);
+                $runner->dispatch('grn.created', $business, [
+                    'event'    => 'grn.created',
+                    'grn'      => [
+                        'id'          => $grn->id,
+                        'reference'   => $grn->grn_number,
+                        'total_value' => (float) $grn->total,
+                        'received_at' => $grn->received_date,
+                        'items'       => $grn->items->map(fn ($i) => ['product_id' => $i->product_id, 'name' => $i->product?->name, 'qty' => (float) $i->quantity_received, 'unit_cost' => (float) $i->unit_cost])->values()->all(),
+                    ],
+                    'supplier' => ['id' => $purchase->supplier?->id, 'name' => $purchase->supplier?->name],
+                ]);
+                // stock.updated — one dispatch per product in the GRN
+                foreach ($grn->items as $item) {
+                    if (!$item->product) continue;
+                    $runner->dispatch('stock.updated', $business, [
+                        'event'   => 'stock.updated',
+                        'product' => ['id' => $item->product_id, 'name' => $item->product->name, 'sku' => $item->product->sku],
+                        'stock'   => ['qty_before' => null, 'qty_after' => null, 'reason' => 'grn', 'reference' => $grn->grn_number],
+                    ]);
+                }
+            }
+        } catch (\Throwable) {}
+
+        return $grn;
     }
 
     /**

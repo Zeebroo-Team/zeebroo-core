@@ -94,6 +94,7 @@ class PosGoodsReceiveNoteApiController extends Controller
         $business = $this->businessOrAbort($request);
         abort_unless((int) $purchase->business_id === (int) $business->id, 404);
         abort_unless($purchase->canReceiveGoods(), 422, 'This purchase cannot receive more goods.');
+        $this->abortUnlessPerm($request, $business, 'inv_purchasing');
 
         $validated = $request->validate([
             'received_date'      => ['required', 'date'],
@@ -134,6 +135,7 @@ class PosGoodsReceiveNoteApiController extends Controller
     {
         $business = $this->businessOrAbort($request);
         abort_unless((int) $grn->business_id === (int) $business->id, 404);
+        $this->abortUnlessPerm($request, $business, 'inv_purchasing');
 
         if ($this->settlement->isFullyPaid($grn)) {
             return response()->json(['message' => 'This GRN is already fully paid.'], 422);

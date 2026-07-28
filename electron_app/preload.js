@@ -22,6 +22,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // API
   apiRequest:      (method, path, body) => ipcRenderer.invoke('api-request', { method, path, body }),
+  printReceipt:    ()                   => ipcRenderer.invoke('print-receipt'),
   fetchJson:       (url)                => ipcRenderer.invoke('fetch-json', url),
   apiUpload:       (apiPath, filePath)  => ipcRenderer.invoke('api-upload', { path: apiPath, filePath }),
   showOpenDialog:  (options)            => ipcRenderer.invoke('show-open-dialog', options),
@@ -29,8 +30,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openExternal:    (url)                => ipcRenderer.invoke('open-external', url),
 
   // Design Studio editor window
-  openEditor:      (design) => ipcRenderer.invoke('open-editor', design),
-  getEditorDesign: ()       => ipcRenderer.invoke('get-editor-design'),
+  openEditor:        (design)            => ipcRenderer.invoke('open-editor', design),
+  getEditorDesign:   ()                  => ipcRenderer.invoke('get-editor-design'),
+  renderHtmlToJpeg:  (html, w, h)        => ipcRenderer.invoke('render-html-to-jpeg', { html, width: w, height: h }),
+
+  // Automation Editor window
+  openAutomation:      (flow) => ipcRenderer.invoke('open-automation', flow),
+  getAutomationFlow:   ()     => ipcRenderer.invoke('get-automation-flow'),
+  onAutomationChanged: (cb)   => ipcRenderer.on('automation-flow-changed', (_e, flow) => cb(flow)),
 
   // Quotation print window
   openQuotePrint:    (data) => ipcRenderer.invoke('open-quote-print', data),

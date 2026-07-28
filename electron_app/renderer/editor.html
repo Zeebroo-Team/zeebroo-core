@@ -121,6 +121,87 @@ input,select,button,textarea { font-family: inherit; font-size: inherit; }
 .dst-export-item:hover { background: var(--accent-light); }
 .dst-export-item:hover i { color: var(--accent); }
 
+/* ── Add Page Modal ── */
+.ds-apm-overlay {
+  display: none; position: fixed; inset: 0; z-index: 9998;
+  background: rgba(0,0,0,.45); backdrop-filter: blur(3px);
+  align-items: center; justify-content: center;
+}
+.ds-apm-overlay.on { display: flex; }
+.ds-apm-modal {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+  width: 480px; max-height: 82vh; display: flex; flex-direction: column; overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0,0,0,.25);
+}
+.ds-apm-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 18px 20px 14px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.ds-apm-title { font-size: 15px; font-weight: 700; color: var(--text); }
+.ds-apm-close {
+  width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--border);
+  background: var(--surface2); color: var(--text-muted); font-size: 11px;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+}
+.ds-apm-close:hover { background: var(--border); color: var(--text); }
+.ds-apm-options { display: flex; gap: 12px; padding: 20px; }
+.ds-apm-opt {
+  flex: 1; border: 2px solid var(--border); border-radius: 10px;
+  background: var(--surface2); cursor: pointer; padding: 20px 14px 18px;
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  transition: all .13s; font-family: inherit; text-align: center;
+}
+.ds-apm-opt:hover { border-color: var(--accent); background: var(--accent-light); }
+.ds-apm-opt-icon {
+  width: 48px; height: 48px; border-radius: 12px; background: var(--accent-light);
+  color: var(--accent); font-size: 20px; display: flex; align-items: center; justify-content: center;
+}
+.ds-apm-opt-label { font-size: 13px; font-weight: 700; color: var(--text); }
+.ds-apm-opt-sub { font-size: 11px; color: var(--text-muted); line-height: 1.4; }
+.ds-apm-back { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.ds-apm-back-btn {
+  border: 1px solid var(--border); background: var(--surface2); color: var(--text-muted);
+  font-size: 11px; padding: 4px 10px; border-radius: 6px; cursor: pointer; font-family: inherit;
+  display: flex; align-items: center; gap: 5px;
+}
+.ds-apm-back-btn:hover { border-color: var(--accent); color: var(--accent); }
+.ds-apm-inv-search {
+  padding: 10px 16px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+  display: flex; align-items: center; gap: 8px; color: var(--text-muted); font-size: 13px;
+}
+.ds-apm-inv-input {
+  flex: 1; border: none; background: transparent; font-size: 13px; color: var(--text);
+  font-family: inherit; outline: none;
+}
+.ds-apm-inv-list { overflow-y: auto; flex: 1; padding: 6px 0; }
+.ds-apm-loading { text-align: center; padding: 40px; color: var(--text-muted); font-size: 13px; }
+.ds-apm-inv-item {
+  display: flex; align-items: center; gap: 12px; padding: 10px 16px; cursor: pointer;
+  border-bottom: 1px solid var(--border-light); transition: background .1s;
+}
+.ds-apm-inv-item:hover { background: var(--accent-light); }
+.ds-apm-inv-num { font-size: 12px; font-weight: 700; color: var(--text); min-width: 80px; }
+.ds-apm-inv-cust { flex: 1; font-size: 12px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ds-apm-inv-amount { font-size: 12px; font-weight: 600; color: var(--text); white-space: nowrap; }
+.ds-apm-inv-badge {
+  font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 20px;
+  background: #f3f4f6; color: #6b7280;
+}
+.ds-apm-inv-badge.paid   { background: #d1fae5; color: #059669; }
+.ds-apm-inv-badge.sent   { background: #dbeafe; color: #2563eb; }
+.ds-apm-inv-badge.overdue { background: #fee2e2; color: #dc2626; }
+.ds-apm-inv-badge.draft  { background: #f3f4f6; color: #6b7280; }
+.ds-apm-prop-count {
+  display: inline-flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 700;
+  padding: 2px 8px; border-radius: 20px; background: #ede9fe; color: #6d28d9; white-space: nowrap;
+}
+.ds-apm-importing {
+  display: none; position: absolute; inset: 0; background: rgba(var(--surface-rgb, 255,255,255),.85);
+  border-radius: 14px; align-items: center; justify-content: center; flex-direction: column;
+  gap: 10px; font-size: 13px; color: var(--text-muted); z-index: 2;
+}
+.ds-apm-modal { position: relative; }
+
 /* PDF Export Overlay */
 .ds-pdf-overlay {
   display: none; position: fixed; inset: 0; z-index: 9999;
@@ -753,7 +834,7 @@ input.dsp-slider { width: 100%; accent-color: var(--accent); cursor: pointer; }
     <div class="ds-pages-bar" id="dsPagesBar" style="display:none">
       <div class="ds-pages-inner">
         <div class="ds-pages-scroll" id="dsPagesScroll"></div>
-        <button class="ds-page-add" onclick="addPage()" title="Add new page">
+        <button class="ds-page-add" onclick="openAddPageModal()" title="Add new page">
           <i class="fa fa-plus"></i>
           <span>Add</span>
         </button>
@@ -979,6 +1060,57 @@ input.dsp-slider { width: 100%; accent-color: var(--accent); cursor: pointer; }
 
 </div><!-- /ds-body -->
 
+<!-- Add Page Modal -->
+<div class="ds-apm-overlay" id="dsAddPageOverlay" onclick="if(event.target===this)closeAddPageModal()">
+  <div class="ds-apm-modal" id="dsAddPageModal">
+    <div class="ds-apm-header">
+      <span class="ds-apm-title" id="dsAddPageTitle">Add Page</span>
+      <button class="ds-apm-close" onclick="closeAddPageModal()"><i class="fa fa-times"></i></button>
+    </div>
+
+    <!-- Step 1: choose type -->
+    <div id="dsAddPageStep1">
+      <div class="ds-apm-options" style="flex-wrap:wrap">
+        <button class="ds-apm-opt" onclick="addPage()" style="flex:1;min-width:120px">
+          <div class="ds-apm-opt-icon"><i class="fa fa-file"></i></div>
+          <div class="ds-apm-opt-label">Blank Page</div>
+          <div class="ds-apm-opt-sub">Start with an empty canvas</div>
+        </button>
+        <button class="ds-apm-opt" onclick="showDocList('invoice')" style="flex:1;min-width:120px">
+          <div class="ds-apm-opt-icon" style="background:#0ea5e915;color:#0ea5e9"><i class="fa fa-file-invoice"></i></div>
+          <div class="ds-apm-opt-label">Import Invoice</div>
+          <div class="ds-apm-opt-sub">Place invoice with letterhead</div>
+        </button>
+        <button class="ds-apm-opt" onclick="showDocList('quotation')" style="flex:1;min-width:120px">
+          <div class="ds-apm-opt-icon" style="background:#a855f715;color:#a855f7"><i class="fa fa-file-contract"></i></div>
+          <div class="ds-apm-opt-label">Import Quotation</div>
+          <div class="ds-apm-opt-sub">Place quotation with letterhead</div>
+        </button>
+      </div>
+    </div>
+
+    <!-- Step 2: document list (invoices or quotations) -->
+    <div id="dsAddPageStep2" style="display:none">
+      <div class="ds-apm-back">
+        <button class="ds-apm-back-btn" onclick="showAddPageStep1()"><i class="fa fa-arrow-left"></i> Back</button>
+        <span id="dsApmDocListTitle" style="font-size:13px;font-weight:600;color:var(--text)">Select Document</span>
+      </div>
+      <div class="ds-apm-inv-search">
+        <i class="fa fa-search"></i>
+        <input type="text" id="dsApmSearch" class="ds-apm-inv-input" placeholder="Search…" oninput="filterDocList(this.value)">
+      </div>
+      <div class="ds-apm-inv-list" id="dsApmDocList">
+        <div class="ds-apm-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</div>
+      </div>
+    </div>
+    <!-- Importing spinner (shown over modal while building canvas) -->
+    <div class="ds-apm-importing" id="dsApmImporting">
+      <i class="fa fa-spinner fa-spin" style="font-size:24px"></i>
+      <span id="dsApmImportingMsg">Importing invoice…</span>
+    </div>
+  </div>
+</div>
+
 <!-- PDF Export Progress Overlay -->
 <div class="ds-pdf-overlay" id="dsPdfOverlay">
   <div class="ds-pdf-modal">
@@ -1007,9 +1139,16 @@ var designType = '';
 var canvasJson = null;
 
 /* multi-page */
-var isMultiPage  = false;
-var pages        = [];
-var currentPage  = 0;
+var isMultiPage        = false;
+var pages              = [];
+var currentPage        = 0;
+
+/* proposal multi-page */
+var isProposal         = false;
+var _proposalGroup     = '';
+var _proposalTitle     = '';
+var _proposalPageIds   = [];
+var _proposalStartPage = 0;
 
 var undoStack    = [];
 var undoIdx      = -1;
@@ -1026,16 +1165,47 @@ var fabricDragging = false;
 window.addEventListener('DOMContentLoaded', async function() {
     var d = await window.electronAPI.getEditorDesign();
     if (d) {
-        designId   = d.id   ?? null;
-        designW    = d.width  ?? 1080;
-        designH    = d.height ?? 1080;
-        designType = d.type   ?? '';
-        canvasJson = d.canvas_json ?? null;
-        document.getElementById('dsTitleInput').value = d.title ?? 'Untitled Design';
-        document.title = (d.title ?? 'Untitled Design') + ' — Design Studio';
+        if (d.proposalPages && Array.isArray(d.proposalPages) && d.proposalPages.length > 0) {
+            // ── Proposal multi-page mode ──────────────────────────────
+            isMultiPage        = true;
+            isProposal         = true;
+            _proposalTitle     = d.proposalTitle || d.title || 'Untitled Proposal';
+            _proposalGroup     = d.proposalGroup || '';
+            _proposalPageIds   = d.proposalPages.map(function(p) { return p.id; });
+            _proposalStartPage = d.proposalStartPage || 0;
+
+            designW    = d.proposalPages[0].width  || 794;
+            designH    = d.proposalPages[0].height || 1123;
+            designType = 'project-proposal';
+            designId   = d.proposalPages[0].id;
+            canvasJson = null;
+
+            pages = d.proposalPages.map(function(p) {
+                return { json: p.canvas_json || null, thumb: null, id: p.id };
+            });
+            currentPage = Math.min(_proposalStartPage, pages.length - 1);
+
+            document.getElementById('dsTitleInput').value = _proposalTitle;
+            document.title = _proposalTitle + ' — Design Studio';
+        } else {
+            // ── Single-page / company-profile ─────────────────────────
+            designId   = d.id   ?? null;
+            designW    = d.width  ?? 1080;
+            designH    = d.height ?? 1080;
+            designType = d.type   ?? '';
+            canvasJson = d.canvas_json ?? null;
+            document.getElementById('dsTitleInput').value = d.title ?? 'Untitled Design';
+            document.title = (d.title ?? 'Untitled Design') + ' — Design Studio';
+        }
     }
-    isMultiPage = (designType === 'company-profile');
+    isMultiPage = isMultiPage || (designType === 'company-profile');
     initEditor();
+
+    if (d && d.autoImportInvoiceId) {
+        setTimeout(function() { _autoImportDocOnOpen(d.autoImportInvoiceId, 'invoice'); }, 400);
+    } else if (d && d.autoImportQuotationId) {
+        setTimeout(function() { _autoImportDocOnOpen(d.autoImportQuotationId, 'quotation'); }, 400);
+    }
 });
 
 /* ──────────────────────────────────────────────────────────────
@@ -1065,16 +1235,32 @@ function initEditor() {
     canvas.on('mouse:down', function(opt){ if (opt.target) fabricDragging = true; });
     canvas.on('mouse:up',   function()  { fabricDragging = false; });
 
-    if (isMultiPage) {
-        document.getElementById('dsPagesBar').style.display = '';
-        document.getElementById('dsPageInd').style.display  = '';
-    }
+    document.getElementById('dsPagesBar').style.display = '';
+    document.getElementById('dsPageInd').style.display  = '';
 
     function afterLoad() {
         inHistory = false;
         saveHist(); updateLayers();
         requestAnimationFrame(function(){ edZoomFit(); canvas.calcOffset(); });
-        if (isMultiPage) { updatePagesPanel(); updatePageCounter(); }
+        updatePagesPanel(); updatePageCounter();
+    }
+
+    // ── Proposal bootstrap: pages already pre-populated ──────────
+    if (isProposal && pages.length > 0) {
+        document.getElementById('dsPagesBar').style.display = '';
+        document.getElementById('dsPageInd').style.display  = '';
+        var propPageJson = pages[currentPage] ? pages[currentPage].json : null;
+        if (propPageJson) {
+            inHistory = true;
+            canvas.loadFromJSON(propPageJson, function() {
+                canvas.renderAll(); afterLoad();
+            });
+        } else {
+            saveHist();
+            requestAnimationFrame(function(){ edZoomFit(); canvas.calcOffset(); });
+            updatePagesPanel(); updatePageCounter();
+        }
+        return;
     }
 
     if (canvasJson) {
@@ -1092,17 +1278,17 @@ function initEditor() {
                 canvas.renderAll(); afterLoad();
             });
         } else {
-            if (isMultiPage) { pages = [{ json: canvasJson, thumb: null }]; }
+            pages = [{ json: canvasJson, thumb: null }];
             inHistory = true;
             canvas.loadFromJSON(canvasJson, function() {
                 canvas.renderAll(); afterLoad();
             });
         }
     } else {
-        if (isMultiPage) { pages = [{ json: null, thumb: null }]; }
+        pages = [{ json: null, thumb: null }];
         saveHist();
         requestAnimationFrame(function(){ edZoomFit(); canvas.calcOffset(); });
-        if (isMultiPage) { updatePagesPanel(); updatePageCounter(); }
+        updatePagesPanel(); updatePageCounter();
     }
 
     document.addEventListener('keydown', onKeyDown);
@@ -1153,7 +1339,7 @@ function toggleAccord(id) {
    MULTI-PAGE
    ────────────────────────────────────────────────────────────── */
 function flushCurrentPage() {
-    if (!isMultiPage) return;
+    if (!pages.length) return;
     pages[currentPage].json = JSON.stringify(canvas.toJSON(['selectable','evented']));
     try {
         var mult = 80 / (designW * currentZoom);
@@ -1198,22 +1384,24 @@ function updatePagesPanel() {
         num.className = 'ds-page-num';
         num.textContent = i + 1;
 
-        var del = document.createElement('button');
-        del.className = 'ds-page-del';
-        del.innerHTML = '<i class="fa fa-times"></i>';
-        del.title = 'Delete page';
-        del.onclick = (function(idx){ return function(e){ e.stopPropagation(); deletePage(idx); }; })(i);
-
-        var dup = document.createElement('button');
-        dup.className = 'ds-page-dup';
-        dup.innerHTML = '<i class="fa fa-copy"></i>';
-        dup.title = 'Duplicate page';
-        dup.onclick = (function(idx){ return function(e){ e.stopPropagation(); duplicatePage(idx); }; })(i);
-
-        div.appendChild(dup);
+        if (!isProposal) {
+            var dup = document.createElement('button');
+            dup.className = 'ds-page-dup';
+            dup.innerHTML = '<i class="fa fa-copy"></i>';
+            dup.title = 'Duplicate page';
+            dup.onclick = (function(idx){ return function(e){ e.stopPropagation(); duplicatePage(idx); }; })(i);
+            div.appendChild(dup);
+        }
         div.appendChild(preview);
         div.appendChild(num);
-        div.appendChild(del);
+        if (pages.length > 1) {
+            var del = document.createElement('button');
+            del.className = 'ds-page-del';
+            del.innerHTML = '<i class="fa fa-times"></i>';
+            del.title = 'Delete page';
+            del.onclick = (function(idx){ return function(e){ e.stopPropagation(); deletePage(idx); }; })(i);
+            div.appendChild(del);
+        }
         scroll.appendChild(div);
     });
 }
@@ -1250,18 +1438,422 @@ function switchPage(idx) {
     loadPageIntoCanvas(pages[idx] ? pages[idx].json : null, afterPageChange);
 }
 
-function addPage() {
-    flushCurrentPage();
-    pages.push({ json: null, thumb: null });
-    currentPage = pages.length - 1;
-    loadPageIntoCanvas(null, function() {
-        afterPageChange();
-        showToast('Page ' + pages.length + ' added', 'ok');
+async function addPage() {
+    closeAddPageModal();
+    await addPageWithJson(null);
+    showToast('Page ' + pages.length + ' added', 'ok');
+}
+
+/* ──────────────────────────────────────────────────────────────
+   ADD PAGE MODAL
+   ────────────────────────────────────────────────────────────── */
+var _apmInvoices       = [];        // full list fetched from server
+var _apmQuotations     = [];
+var _apmDocType        = 'invoice'; // current step-2 type
+var _apmLetterhead     = undefined; // undefined = not fetched yet; null = fetched, none found
+var _apmLetterheadFetched = false;
+
+function openAddPageModal() {
+    document.getElementById('dsAddPageOverlay').classList.add('on');
+    document.getElementById('dsAddPageTitle').textContent = 'Add Page';
+    showAddPageStep1();
+}
+
+function closeAddPageModal() {
+    document.getElementById('dsAddPageOverlay').classList.remove('on');
+    hideApmImporting();
+}
+
+function showAddPageStep1() {
+    document.getElementById('dsAddPageStep1').style.display = '';
+    document.getElementById('dsAddPageStep2').style.display = 'none';
+    document.getElementById('dsAddPageTitle').textContent   = 'Add Page';
+}
+
+function showDocList(type) {
+    _apmDocType = type;
+    var isInv = (type === 'invoice');
+    var label = isInv ? 'Import Invoice' : 'Import Quotation';
+    var placeholder = isInv ? 'Search invoices…' : 'Search quotations…';
+    var cached = isInv ? _apmInvoices : _apmQuotations;
+
+    document.getElementById('dsAddPageStep1').style.display = 'none';
+    document.getElementById('dsAddPageStep2').style.display = '';
+    document.getElementById('dsAddPageTitle').textContent   = label;
+    document.getElementById('dsApmDocListTitle').textContent = label;
+    document.getElementById('dsApmSearch').value            = '';
+    document.getElementById('dsApmSearch').placeholder      = placeholder;
+
+    if (cached.length > 0) { renderDocList(cached, type); return; }
+
+    document.getElementById('dsApmDocList').innerHTML =
+        '<div class="ds-apm-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</div>';
+
+    var endpoint = isInv ? '/invoices?q=&status=all' : '/quotations?q=&status=all';
+    window.electronAPI.apiRequest('GET', endpoint).then(function(res) {
+        var list = (res.body && res.body.data) ? res.body.data : [];
+        if (isInv) _apmInvoices = list; else _apmQuotations = list;
+        renderDocList(list, type);
+    }).catch(function() {
+        document.getElementById('dsApmDocList').innerHTML =
+            '<div class="ds-apm-loading">Failed to load ' + (isInv ? 'invoices' : 'quotations') + '.</div>';
     });
 }
 
-function deletePage(idx) {
+function renderDocList(list, type) {
+    var isInv = (type === 'invoice');
+    var el = document.getElementById('dsApmDocList');
+    var emptyMsg = isInv ? 'No invoices found.' : 'No quotations found.';
+    if (!list.length) { el.innerHTML = '<div class="ds-apm-loading">' + emptyMsg + '</div>'; return; }
+    el.innerHTML = list.map(function(doc) {
+        var numField = isInv ? (doc.invoice_number || '#' + doc.id) : (doc.quote_number || '#' + doc.id);
+        var badgeCls = 'ds-apm-inv-badge ' + (doc.status || 'draft');
+        var amt = (doc.total || 0).toFixed(2);
+        var clickFn = isInv ? 'importInvoiceAsPage(' + doc.id + ')' : 'importQuotationAsPage(' + doc.id + ')';
+        var proposalCount = doc.proposal_count || 0;
+        var proposalTag = proposalCount > 0
+            ? '<span class="ds-apm-prop-count"><i class="fa fa-file-lines"></i> ' + proposalCount + '</span>'
+            : '';
+        return '<div class="ds-apm-inv-item" onclick="' + clickFn + '">' +
+            '<span class="ds-apm-inv-num">' + escH(numField) + '</span>' +
+            '<span class="ds-apm-inv-cust">' + escH(doc.customer_name || '—') + '</span>' +
+            '<span class="ds-apm-inv-amount">' + amt + '</span>' +
+            '<span class="' + badgeCls + '">' + escH(doc.status_label || doc.status || '') + '</span>' +
+            proposalTag +
+        '</div>';
+    }).join('');
+}
+
+function filterDocList(q) {
+    q = q.toLowerCase();
+    var isInv = (_apmDocType === 'invoice');
+    var all = isInv ? _apmInvoices : _apmQuotations;
+    var filtered = q ? all.filter(function(doc) {
+        var numField = isInv ? (doc.invoice_number || '') : (doc.quote_number || '');
+        return numField.toLowerCase().includes(q) || (doc.customer_name || '').toLowerCase().includes(q);
+    }) : all;
+    renderDocList(filtered, _apmDocType);
+}
+
+function escH(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function showApmImporting(msg) {
+    var el = document.getElementById('dsApmImporting');
+    document.getElementById('dsApmImportingMsg').textContent = msg || 'Importing invoice…';
+    el.style.display = 'flex';
+}
+function hideApmImporting() {
+    document.getElementById('dsApmImporting').style.display = 'none';
+}
+
+async function _fetchLetterheadIfNeeded() {
+    if (_apmLetterheadFetched) return;
+    showApmImporting('Loading letterhead…');
+    var lhRes  = await window.electronAPI.apiRequest('GET', '/design-studio/designs?type=letterhead');
+    var lhList = (lhRes.body && lhRes.body.data) ? lhRes.body.data : [];
+    if (lhList.length > 0 && lhList[0].has_canvas) {
+        var lhFull = await window.electronAPI.apiRequest('GET', '/design-studio/designs/' + lhList[0].id);
+        _apmLetterhead = (lhFull.body && lhFull.body.data && lhFull.body.data.canvas_json) || null;
+    } else {
+        _apmLetterhead = null;
+    }
+    _apmLetterheadFetched = true;
+}
+
+async function importInvoiceAsPage(invoiceId) {
+    showApmImporting('Fetching invoice…');
+    try {
+        var invRes = await window.electronAPI.apiRequest('GET', '/invoices/' + invoiceId);
+        if (!invRes.body || !invRes.body.data) throw new Error('Invoice not found');
+        var inv = invRes.body.data;
+
+        await _fetchLetterheadIfNeeded();
+
+        showApmImporting('Rendering invoice…');
+        var canvasJson = await buildDocCanvasJson(inv, 'invoice', _apmLetterhead, designW, designH);
+        await addPageWithJson(canvasJson, invoiceId);
+        // Invalidate cache so reopening the modal shows updated counts
+        _apmInvoices = [];
+        closeAddPageModal();
+        showToast('Invoice ' + (inv.invoice_number || '') + ' imported as page ' + pages.length, 'ok');
+    } catch(err) {
+        hideApmImporting();
+        showToast('Import failed: ' + (err.message || 'please try again'), 'err');
+    }
+}
+
+async function importQuotationAsPage(quotationId) {
+    showApmImporting('Fetching quotation…');
+    try {
+        var qtRes = await window.electronAPI.apiRequest('GET', '/quotations/' + quotationId);
+        if (!qtRes.body || !qtRes.body.data) throw new Error('Quotation not found');
+        var qt = qtRes.body.data;
+
+        await _fetchLetterheadIfNeeded();
+
+        showApmImporting('Rendering quotation…');
+        var canvasJson = await buildDocCanvasJson(qt, 'quotation', _apmLetterhead, designW, designH);
+        await addPageWithJson(canvasJson, null, quotationId);
+        // Invalidate cache so reopening the modal shows updated counts
+        _apmQuotations = [];
+        closeAddPageModal();
+        showToast('Quotation ' + (qt.quote_number || '') + ' imported as page ' + pages.length, 'ok');
+    } catch(err) {
+        hideApmImporting();
+        showToast('Import failed: ' + (err.message || 'please try again'), 'err');
+    }
+}
+
+// Called automatically when editor opens with autoImportInvoiceId / autoImportQuotationId
+async function _autoImportDocOnOpen(docId, docType) {
+    try {
+        var route = docType === 'quotation' ? '/quotations/' : '/invoices/';
+        var res   = await window.electronAPI.apiRequest('GET', route + docId);
+        if (!res.body || !res.body.data) throw new Error('Document not found');
+        var doc = res.body.data;
+
+        await _fetchLetterheadIfNeeded();
+
+        var canvasJson = await buildDocCanvasJson(doc, docType, _apmLetterhead, designW, designH);
+        var invId  = docType === 'invoice'    ? docId : null;
+        var qtId   = docType === 'quotation'  ? docId : null;
+        await addPageWithJson(canvasJson, invId, qtId);
+
+        var num = docType === 'invoice' ? (doc.invoice_number || '') : (doc.quote_number || '');
+        showToast((docType === 'invoice' ? 'Invoice ' : 'Quotation ') + num + ' attached as page ' + pages.length, 'ok');
+    } catch (err) {
+        showToast('Could not attach document: ' + (err.message || 'please try again'), 'err');
+    }
+}
+
+function addPageWithJson(canvasJson, invoiceId, quotationId) {
+    return new Promise(function(resolve) {
+        isMultiPage = true;
+        flushCurrentPage();
+
+        if (isProposal && _proposalGroup) {
+            var addBtn = document.querySelector('.ds-page-add');
+            if (addBtn) { addBtn.disabled = true; addBtn.style.opacity = '0.5'; }
+            var body = (invoiceId || quotationId)
+                ? { invoice_id: invoiceId || null, quotation_id: quotationId || null }
+                : undefined;
+            window.electronAPI.apiRequest('POST', '/design-studio/proposals/' + encodeURIComponent(_proposalGroup) + '/pages', body)
+            .then(function(res) {
+                if (res.status === 201 && res.body && res.body.data) {
+                    var newPage = res.body.data;
+                    _proposalPageIds.push(newPage.id);
+                    pages.push({ json: canvasJson, thumb: null, id: newPage.id });
+                    currentPage = pages.length - 1;
+                    loadPageIntoCanvas(canvasJson, function() { afterPageChange(); resolve(); });
+                } else {
+                    throw new Error((res.body && res.body.message) || 'Server error');
+                }
+            }).catch(function(e) {
+                showToast('Failed to add page: ' + e.message, 'err');
+                resolve();
+            }).finally(function() {
+                if (addBtn) { addBtn.disabled = false; addBtn.style.opacity = ''; }
+            });
+            return;
+        }
+
+        pages.push({ json: canvasJson, thumb: null });
+        currentPage = pages.length - 1;
+        loadPageIntoCanvas(canvasJson, function() { afterPageChange(); resolve(); });
+    });
+}
+
+/* Render a Fabric.js canvas_json to a JPEG dataURL using an off-screen canvas */
+function renderLetterheadToDataUrl(canvasJson, W, H) {
+    return new Promise(function(resolve) {
+        var el = document.createElement('canvas');
+        el.width = W; el.height = H;
+        var fc = new fabric.Canvas(el, {
+            width: W, height: H,
+            enableRetinaScaling: false,
+            renderOnAddRemove: false,
+        });
+        var parsed;
+        try { parsed = typeof canvasJson === 'string' ? JSON.parse(canvasJson) : canvasJson; }
+        catch(e) { fc.dispose(); resolve(null); return; }
+        fc.loadFromJSON(parsed, function() {
+            fc.renderAll();
+            var du = el.toDataURL('image/jpeg', 0.93);
+            fc.dispose();
+            resolve(du);
+        });
+    });
+}
+
+/* Build invoice or quotation body HTML — layout matches print-quote.html */
+function buildPrintDocHtml(doc, docType, cur) {
+    cur = cur || '';
+    var isInv = (docType === 'invoice');
+    function eh(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+    function fmtDate(d) {
+        if (!d) return '—';
+        try { return new Date(d + 'T00:00:00').toLocaleDateString(undefined, { month:'long', day:'numeric', year:'numeric' }); }
+        catch(e) { return d; }
+    }
+    function fmtN(v) { return (parseFloat(v) || 0).toFixed(2) + cur; }
+
+    var rows = (doc.items || []).map(function(item, i) {
+        var qty = parseFloat(item.quantity);
+        var qtyStr = qty % 1 === 0 ? String(Math.round(qty)) : qty.toFixed(2);
+        return '<tr>'
+            + '<td class="n">' + (i + 1) + '</td>'
+            + '<td>' + eh(item.description || '—') + '</td>'
+            + '<td class="r">' + qtyStr + '</td>'
+            + '<td class="r">' + fmtN(item.unit_price) + '</td>'
+            + '<td class="r bd">' + fmtN(item.line_total) + '</td>'
+            + '</tr>';
+    }).join('');
+
+    var statusCls = 'pq-badge pq-badge-' + (doc.status || 'draft');
+    var docNum  = isInv ? doc.invoice_number : doc.quote_number;
+    var typeLabel = isInv ? 'Invoice' : 'Quotation';
+    var toLabel   = isInv ? 'Bill To' : 'Quote To';
+    var date1Lbl  = isInv ? 'Issue Date' : 'Quote Date';
+    var date2Lbl  = isInv ? 'Due Date'   : 'Valid Until';
+    var date1Val  = isInv ? doc.issue_date  : doc.quote_date;
+    var date2Val  = isInv ? doc.due_date    : doc.expiry_date;
+
+    var totals = '<div class="pq-total-row"><span>Subtotal</span><span>' + fmtN(doc.subtotal) + '</span></div>';
+    if (parseFloat(doc.discount_amount) > 0)
+        totals += '<div class="pq-total-row"><span>Discount</span><span>&minus;' + fmtN(doc.discount_amount) + '</span></div>';
+    if (parseFloat(doc.tax_amount) > 0)
+        totals += '<div class="pq-total-row"><span>Tax</span><span>+' + fmtN(doc.tax_amount) + '</span></div>';
+    totals += '<div class="pq-total-row grand"><span>Total</span><span>' + fmtN(doc.total) + '</span></div>';
+
+    return '<div class="pq-hdr">'
+        + '<div><div class="pq-hdr-num">' + eh(docNum) + '</div><div class="pq-hdr-type">' + typeLabel + '</div></div>'
+        + '<span class="' + statusCls + '">' + eh(doc.status_label || doc.status || '') + '</span>'
+        + '</div>'
+        + '<div class="pq-info">'
+        +   '<div><div class="pq-lbl">' + toLabel + '</div>'
+        +   '<div class="pq-cust-name">' + eh(doc.customer_name || 'Walk-in Customer') + '</div>'
+        +   (doc.reference ? '<div class="pq-cust-ref"># ' + eh(doc.reference) + '</div>' : '')
+        +   '</div>'
+        +   '<div>'
+        +   '<div class="pq-meta-row"><span>' + date1Lbl + '</span><strong>' + fmtDate(date1Val) + '</strong></div>'
+        +   '<div class="pq-meta-row"><span>' + date2Lbl + '</span><strong>' + fmtDate(date2Val) + '</strong></div>'
+        +   '</div>'
+        + '</div>'
+        + '<table class="pq-table"><thead><tr>'
+        +   '<th style="width:32px;text-align:center">#</th>'
+        +   '<th>Description</th>'
+        +   '<th class="r" style="width:60px">Qty</th>'
+        +   '<th class="r" style="width:110px">Unit Price</th>'
+        +   '<th class="r" style="width:110px">Total</th>'
+        + '</tr></thead><tbody>' + rows + '</tbody></table>'
+        + '<div class="pq-totals-wrap"><div class="pq-totals">' + totals + '</div></div>'
+        + (doc.notes ? '<div class="pq-notes"><div class="pq-notes-lbl">Notes</div><div class="pq-notes-body">' + eh(doc.notes) + '</div></div>' : '');
+}
+
+/* Render document HTML via a hidden Electron BrowserWindow → JPEG dataURL */
+async function renderInvoicePageToDataUrl(invoiceBodyHtml, lhDataUrl, W, H, topPad, botPad) {
+    var css = [
+        '*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}',
+        'html,body{width:' + W + 'px;height:' + H + 'px;overflow:hidden;background:#fff}',
+        'body{font-family:Inter,-apple-system,BlinkMacSystemFont,Arial,sans-serif;font-size:12px;color:#0f172a}',
+        '.pq-page{position:relative;width:' + W + 'px;height:' + H + 'px;background:#fff;overflow:hidden}',
+        '.pq-lh{position:absolute;top:0;left:0;width:' + W + 'px;height:' + H + 'px;object-fit:cover;z-index:0}',
+        '.pq-content{position:relative;z-index:1;padding:' + topPad + 'px 52px ' + botPad + 'px}',
+        '.pq-hdr{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;padding-bottom:14px;border-bottom:2px solid #1d4ed8}',
+        '.pq-hdr-num{font-size:20px;font-weight:800;color:#1d4ed8;line-height:1.1}',
+        '.pq-hdr-type{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#94a3b8;margin-top:3px}',
+        '.pq-badge{font-size:10px;font-weight:700;padding:4px 10px;border-radius:5px;text-transform:uppercase;letter-spacing:.05em;display:inline-block}',
+        '.pq-badge-draft{background:#f1f5f9;color:#475569}',
+        '.pq-badge-sent{background:#dbeafe;color:#1d4ed8}',
+        '.pq-badge-accepted,.pq-badge-paid{background:#dcfce7;color:#15803d}',
+        '.pq-badge-rejected,.pq-badge-overdue{background:#fee2e2;color:#b91c1c}',
+        '.pq-badge-cancelled{background:#f1f5f9;color:#64748b}',
+        '.pq-info{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px}',
+        '.pq-lbl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#94a3b8;margin-bottom:5px}',
+        '.pq-cust-name{font-size:14px;font-weight:700;color:#0f172a}',
+        '.pq-cust-ref{font-size:11px;color:#64748b;margin-top:3px}',
+        '.pq-meta-row{display:flex;justify-content:space-between;font-size:11px;color:#64748b;padding:4px 0;border-bottom:1px dashed #e2e8f0}',
+        '.pq-meta-row:last-child{border-bottom:none}',
+        '.pq-meta-row strong{color:#0f172a;font-weight:600}',
+        '.pq-table{width:100%;border-collapse:collapse;margin-bottom:18px}',
+        '.pq-table thead th{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#475569;background:#f8fafc;padding:8px 10px;border:1px solid #e2e8f0;text-align:left}',
+        '.pq-table thead th.r{text-align:right}',
+        '.pq-table tbody td{font-size:11px;color:#334155;padding:7px 10px;border:1px solid #e2e8f0}',
+        '.pq-table tbody tr:nth-child(even) td{background:#f8fafc}',
+        '.pq-table td.n{color:#94a3b8;text-align:center;width:32px}',
+        '.pq-table td.r{text-align:right}',
+        '.pq-table td.bd{font-weight:600}',
+        '.pq-totals-wrap{display:flex;justify-content:flex-end;margin-bottom:18px}',
+        '.pq-totals{width:280px}',
+        '.pq-total-row{display:flex;justify-content:space-between;font-size:11px;color:#475569;padding:5px 0;border-bottom:1px solid #f1f5f9}',
+        '.pq-total-row.grand{font-size:14px;font-weight:800;color:#0f172a;border-top:2px solid #1d4ed8;border-bottom:none;padding-top:9px;margin-top:4px}',
+        '.pq-total-row.grand span:last-child{color:#1d4ed8}',
+        '.pq-notes{margin-top:18px;border-top:1px solid #e2e8f0;padding-top:12px}',
+        '.pq-notes-lbl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#94a3b8;margin-bottom:6px}',
+        '.pq-notes-body{font-size:11px;color:#475569;line-height:1.65;white-space:pre-wrap}',
+    ].join('');
+
+    var lhTag = lhDataUrl ? '<img class="pq-lh" src="' + lhDataUrl + '" alt="">' : '';
+
+    var html = '<!DOCTYPE html><html><head><meta charset="UTF-8">'
+        + '<style>' + css + '</style></head><body>'
+        + '<div class="pq-page">' + lhTag
+        + '<div class="pq-content">' + invoiceBodyHtml + '</div>'
+        + '</div></body></html>';
+
+    var base64 = await window.electronAPI.renderHtmlToJpeg(html, W, H);
+    if (!base64) throw new Error('Page rendering failed');
+    return 'data:image/jpeg;base64,' + base64;
+}
+
+/* Main entry — async, returns canvas JSON string with a single image object */
+async function buildDocCanvasJson(doc, docType, letterheadJson, W, H) {
+    W = W || 794; H = H || 1123;
+
+    var lhDataUrl = null;
+    var topPad = 50, botPad = 40;
+
+    if (letterheadJson) {
+        lhDataUrl = await renderLetterheadToDataUrl(letterheadJson, W, H);
+        if (lhDataUrl) { topPad = Math.round(H * 0.18); botPad = Math.round(H * 0.09); }
+    }
+
+    var bodyHtml  = buildPrintDocHtml(doc, docType, '');
+    var pageDataUrl = await renderInvoicePageToDataUrl(bodyHtml, lhDataUrl, W, H, topPad, botPad);
+
+    var imgObj = {
+        type: 'image', version: '5.3.0',
+        originX: 'left', originY: 'top',
+        left: 0, top: 0, width: W, height: H,
+        scaleX: 1, scaleY: 1, angle: 0,
+        opacity: 1, visible: true,
+        src: pageDataUrl, crossOrigin: null, filters: [],
+        selectable: true, evented: true,
+    };
+
+    return JSON.stringify({ version: '5.3.0', objects: [imgObj], background: '#ffffff' });
+}
+
+async function deletePage(idx) {
     if (pages.length <= 1) { showToast('Cannot delete the only page', 'err'); return; }
+    if (!confirm('Delete page ' + (idx + 1) + '? This cannot be undone.')) return;
+
+    // For proposals, delete the server record first
+    if (isProposal && _proposalPageIds[idx]) {
+        var pageId = _proposalPageIds[idx];
+        // Disable all del buttons while the request is in flight
+        document.querySelectorAll('#dsPagesScroll .ds-page-del').forEach(function(b){ b.disabled = true; });
+        var res = await window.electronAPI.apiRequest('DELETE', '/design-studio/designs/' + pageId);
+        if (res.status !== 200) {
+            document.querySelectorAll('#dsPagesScroll .ds-page-del').forEach(function(b){ b.disabled = false; });
+            showToast((res.body && res.body.message) || 'Failed to delete page.', 'err');
+            return;
+        }
+        _proposalPageIds.splice(idx, 1);
+    }
+
     flushCurrentPage();
     var wasCurrent = (idx === currentPage);
     pages.splice(idx, 1);
@@ -1275,7 +1867,7 @@ function deletePage(idx) {
     } else {
         updatePagesPanel(); updatePageCounter();
     }
-    showToast('Page deleted', 'ok');
+    showToast('Page ' + (idx + 1) + ' deleted', 'ok');
 }
 
 function duplicatePage(idx) {
@@ -1290,7 +1882,7 @@ function duplicatePage(idx) {
 }
 
 function buildCanvasJson() {
-    if (!isMultiPage) {
+    if (!isMultiPage || pages.length <= 1) {
         return JSON.stringify(canvas.toJSON(['selectable','evented']));
     }
     flushCurrentPage();
@@ -1832,11 +2424,12 @@ function edExportPdf() {
     canvas.setZoom(1);
     canvas.setDimensions({ width: designW, height: designH });
 
-    var pdfW = 297;
-    var pdfH = Math.round(pdfW * (designH / designW) * 100) / 100;
+    var pdfW        = designW >= designH ? 297 : 210;
+    var pdfH        = Math.round(pdfW * (designH / designW) * 100) / 100;
+    var orientation = designW >= designH ? 'landscape' : 'portrait';
 
     var jsPDF    = window.jspdf.jsPDF;
-    var doc      = new jsPDF({ orientation: 'landscape', unit: 'mm', format: [pdfW, pdfH] });
+    var doc      = new jsPDF({ orientation: orientation, unit: 'mm', format: [pdfW, pdfH] });
     var pagelist = isMultiPage ? pages : [{ json: null }];
     var total    = pagelist.length;
     var idx      = 0;
@@ -1851,7 +2444,7 @@ function edExportPdf() {
         function capture() {
             requestAnimationFrame(function() {
                 var imgData = canvas.toDataURL({ format: 'jpeg', quality: 0.92, multiplier: 1 });
-                if (idx > 0) doc.addPage([pdfW, pdfH]);
+                if (idx > 0) doc.addPage([pdfW, pdfH], orientation);
                 doc.addImage(imgData, 'JPEG', 0, 0, pdfW, pdfH);
                 idx++;
                 renderPage();
@@ -1896,6 +2489,7 @@ function edExportPdf() {
    SAVE  (via Electron API proxy — no CSRF)
    ────────────────────────────────────────────────────────────── */
 function edSave() {
+    if (isProposal) { edSaveProposal(); return; }
     if (!designId) { showToast('No design ID — cannot save.', 'err'); return; }
 
     var btn = document.getElementById('dsSaveBtn');
@@ -1920,6 +2514,36 @@ function edSave() {
         showToast('Save failed: ' + (err.message || 'please try again.'), 'err');
     })
     .finally(function() {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa fa-floppy-disk"></i> Save';
+    });
+}
+
+function edSaveProposal() {
+    flushCurrentPage();
+    var btn = document.getElementById('dsSaveBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
+
+    var savePromises = pages.map(function(pg, i) {
+        var pageId = _proposalPageIds[i];
+        if (!pageId || !pg.json) return Promise.resolve({ status: 200 });
+        return window.electronAPI.apiRequest('PATCH', '/design-studio/designs/' + pageId, {
+            canvas_json: pg.json,
+        });
+    });
+
+    Promise.all(savePromises).then(function(results) {
+        var failed = results.filter(function(r) { return r && r.status && (r.status < 200 || r.status >= 300); });
+        if (failed.length) {
+            showToast(failed.length + ' page(s) failed to save.', 'err');
+        } else {
+            showToast('All ' + pages.length + ' pages saved!', 'ok');
+            document.title = _proposalTitle + ' — Design Studio';
+        }
+    }).catch(function(err) {
+        showToast('Save failed: ' + (err.message || 'please try again.'), 'err');
+    }).finally(function() {
         btn.disabled = false;
         btn.innerHTML = '<i class="fa fa-floppy-disk"></i> Save';
     });

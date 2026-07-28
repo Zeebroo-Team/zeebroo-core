@@ -87,7 +87,7 @@ class BillManualPaymentSettlementService
 
         $periodsTotal = $schedule->count();
 
-        return DB::transaction(function () use (
+        $result = DB::transaction(function () use (
             $bill,
             $user,
             $business,
@@ -196,5 +196,22 @@ class BillManualPaymentSettlementService
 
             return $created;
         });
+
+        try {
+            app(\Modules\AutomationEditor\Services\AutomationRunnerService::class)->dispatch('bill.paid', $business, [
+                'event'  => 'bill.paid',
+                'bill'   => [
+                    'id'         => $bill->id,
+                    'name'       => $bill->name,
+                    'due_date'   => $occurrenceDateYmd,
+                ],
+                'payment' => [
+                    'total'      => round(array_sum(array_column($normalized, 'amount')), 2),
+                    'paid_at'    => now()->toIso8601String(),
+                ],
+            ]);
+        } catch (\Throwable) {}
+
+        return $result;
     }
 }
