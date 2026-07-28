@@ -31,7 +31,7 @@ class PosExpenseBillListApiController extends Controller
                 'id', 'name', 'recurring_cost', 'due_date', 'first_installment_due_date',
                 'payment_mode', 'bill_category', 'description', 'recurring_type',
                 'agreement_valid_until_year', 'remind_before_days', 'notes',
-                'custom_category_name', 'business_id', 'amount_varies_by_usage',
+                'bill_category_other', 'business_id', 'amount_varies_by_usage',
                 'property_id', 'employee_id', 'modification_id', 'department_id',
                 'rental_id', 'branch_id',
             ]);
