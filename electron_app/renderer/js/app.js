@@ -1525,21 +1525,28 @@ async function _qtOpenDetail(id) {
 
 // ── Shared: fetch letterhead from server (works even if Design tab never visited) ──
 async function _fetchLetterhead() {
-  // Prefer the in-memory cache; fall back to a direct API call so
-  // the letterhead is available even when _dsAllData hasn't been loaded yet.
+  // Locate the stub. Use the cache only for the ID — never trust the cached
+  // has_canvas flag, because the editor saves without notifying this window,
+  // so the flag can be stale (false) even after the user just saved a canvas.
   let stub = _dsAllData.find(d => d.type === 'letterhead');
   if (!stub) {
     const listRes = await API.designs('letterhead');
     if (listRes.status === 200) {
       const items = listRes.body?.data || [];
       stub = items.find(d => d.type === 'letterhead');
-      // Cache so subsequent prints in the same session skip the fetch
       if (stub && !_dsAllData.find(d => d.id === stub.id)) _dsAllData.push(stub);
     }
   }
-  if (!stub || !stub.has_canvas) return null;
+  if (!stub) return null;
+  // Always fetch the full design so we get the latest canvas_json regardless
+  // of what has_canvas says in the cache.
   const res = await API.design(stub.id);
-  return (res.status === 200 && res.body?.data) ? res.body.data : null;
+  if (res.status !== 200 || !res.body?.data) return null;
+  const full = res.body.data;
+  // Keep the cache in sync so the Design tab badge reflects reality.
+  const idx = _dsAllData.findIndex(d => d.id === full.id);
+  if (idx !== -1) _dsAllData[idx] = { ..._dsAllData[idx], has_canvas: full.has_canvas };
+  return full.has_canvas ? full : null;
 }
 
 // ── Print (with optional letterhead) ─────────────────────────────────────
