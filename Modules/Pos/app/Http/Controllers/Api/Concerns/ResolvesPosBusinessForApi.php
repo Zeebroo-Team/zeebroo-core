@@ -67,4 +67,38 @@ trait ResolvesPosBusinessForApi
 
         return $business;
     }
+
+    /**
+     * Resolve the BusinessMember record for the authenticated user in the given business.
+     * Returns null for the business owner (full access, no member record required).
+     */
+    protected function resolveMember(Request $request, Business $business): ?BusinessMember
+    {
+        $user = $request->user();
+        if ($user === null || (int) $business->user_id === (int) $user->id) {
+            return null; // owner — full access
+        }
+
+        return BusinessMember::query()
+            ->where('business_id', $business->id)
+            ->where('user_id', $user->id)
+            ->where('status', 'active')
+            ->first();
+    }
+
+    /**
+     * Abort with 403 unless the authenticated user has the given permission key.
+     * Business owners always pass. Admins (null permissions array) always pass.
+     */
+    protected function abortUnlessPerm(Request $request, Business $business, string $permKey): void
+    {
+        $member = $this->resolveMember($request, $business);
+        if ($member === null) return; // owner — pass
+
+        if (! $member->hasPermission($permKey)) {
+            throw new HttpResponseException(
+                response()->json(['message' => 'You do not have permission to perform this action.'], 403)
+            );
+        }
+    }
 }

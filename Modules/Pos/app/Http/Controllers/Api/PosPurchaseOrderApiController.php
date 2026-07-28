@@ -50,6 +50,7 @@ class PosPurchaseOrderApiController extends Controller
     public function store(Request $request): JsonResponse
     {
         $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'inv_purchasing');
 
         $validated = $request->validate([
             'supplier_id'            => ['nullable', 'integer', 'min:1'],
@@ -82,6 +83,7 @@ class PosPurchaseOrderApiController extends Controller
     {
         $business = $this->businessOrAbort($request);
         abort_unless((int) $purchase->business_id === (int) $business->id, 404);
+        $this->abortUnlessPerm($request, $business, 'inv_purchasing');
 
         try {
             $purchase = $this->service->markOrdered($purchase);
@@ -101,6 +103,7 @@ class PosPurchaseOrderApiController extends Controller
     {
         $business = $this->businessOrAbort($request);
         abort_unless((int) $purchase->business_id === (int) $business->id, 404);
+        $this->abortUnlessPerm($request, $business, 'inv_purchasing');
 
         try {
             $this->service->markReceived($purchase, $request->user());
@@ -120,6 +123,7 @@ class PosPurchaseOrderApiController extends Controller
     {
         $business = $this->businessOrAbort($request);
         abort_unless((int) $purchase->business_id === (int) $business->id, 404);
+        $this->abortUnlessPerm($request, $business, 'inv_purchasing');
 
         try {
             $purchase = $this->service->cancel($purchase);

@@ -26,6 +26,7 @@ class PosCheckoutApiController extends Controller
     public function store(Request $request): JsonResponse
     {
         $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'pos_checkout');
 
         $validated = $request->validate([
             'items'                          => ['required', 'array', 'min:1'],

@@ -11,6 +11,8 @@ $obFeatures = [
     ['key' => 'point_of_sale',        'label' => 'Point of Sale',         'icon' => 'fa-cash-register',      'desc' => 'Counter sales, receipts, daily float and cashier shifts', 'requires' => ['product_management','stock_management']],
     ['key' => 'service_management',   'label' => 'Service Management',    'icon' => 'fa-screwdriver-wrench', 'desc' => 'Service catalog, requests and delivery management'],
     ['key' => 'social_media_campaign','label' => 'Social Media Campaign', 'icon' => 'fa-bullhorn',           'desc' => 'Design, schedule and track marketing campaigns'],
+    ['key' => 'automation_editor',    'label' => 'Automation Editor',    'icon' => 'fa-robot',              'desc' => 'Build trigger-based workflows and automated email sequences'],
+    ['key' => 'developers',           'label' => 'Developers',           'icon' => 'fa-code',               'desc' => 'API access, webhooks and developer tools for integrations'],
 ];
 
 $obSteps = [

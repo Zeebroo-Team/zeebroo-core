@@ -31,9 +31,10 @@ function saveConfig(data) {
 }
 
 let mainWindow;
-let editorWindow  = null;
-let editorDesign  = null;
-let kdsWindow     = null;
+let editorWindow       = null;
+let editorDesign       = null;
+let automationWindow   = null;
+let kdsWindow          = null;
 let config;
 
 function createWindow() {
@@ -128,6 +129,18 @@ ipcMain.handle('config-set', (_e, patch) => {
   return config;
 });
 
+// ── Receipt printing ──────────────────────────────────────────────────────
+ipcMain.handle('print-receipt', (e) => {
+  const win = BrowserWindow.fromWebContents(e.sender);
+  if (!win) return { success: false };
+  return new Promise(resolve => {
+    win.webContents.print(
+      { silent: false, printBackground: false },
+      (success, failureReason) => resolve({ success, failureReason: failureReason || null })
+    );
+  });
+});
+
 // ── API proxy (avoids CORS in renderer) ──────────────────────────────────
 const https = require('https');
 const http  = require('http');
@@ -153,6 +166,7 @@ function apiRequest(method, path_, body, token, businessId, branchId) {
       path: url.pathname + url.search,
       method,
       headers,
+      timeout: 120000,
     }, (res) => {
       let data = '';
       res.on('data', chunk => { data += chunk; });
@@ -162,6 +176,7 @@ function apiRequest(method, path_, body, token, businessId, branchId) {
       });
     });
 
+    req.on('timeout', () => { req.destroy(new Error('Request timed out after 120s')); });
     req.on('error', reject);
     if (payload) req.write(payload);
     req.end();
@@ -302,6 +317,91 @@ ipcMain.handle('open-editor', (_e, design) => {
 });
 
 ipcMain.handle('get-editor-design', () => editorDesign);
+
+// ── Render arbitrary HTML to a JPEG (used by Design Studio invoice import) ──
+ipcMain.handle('render-html-to-jpeg', async (_e, { html, width, height }) => {
+  const os = require('os');
+  // Write to a temp file so embedded data: URIs load correctly and URL length is unlimited
+  const tmpFile = path.join(os.tmpdir(), 'sbiz-inv-' + Date.now() + '.html');
+  fs.writeFileSync(tmpFile, html, 'utf8');
+
+  return new Promise((resolve) => {
+    const cleanup = () => { try { fs.unlinkSync(tmpFile); } catch (_) {} };
+
+    const win = new BrowserWindow({
+      show: false,
+      webPreferences: {
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: false,
+      },
+    });
+
+    // Force the content area to be exactly width × height (no chrome offset)
+    win.setContentSize(width, height);
+
+    win.loadFile(tmpFile);
+
+    win.webContents.once('did-finish-load', () => {
+      // Wait for images (letterhead data: URI) and paint to complete
+      setTimeout(() => {
+        win.webContents.capturePage({ x: 0, y: 0, width, height })
+          .then(image => {
+            cleanup();
+            // Resize to target px in case of HiDPI/Retina display
+            const out = image.resize({ width, height, quality: 'best' });
+            resolve(out.toJPEG(92).toString('base64'));
+            win.destroy();
+          })
+          .catch(() => { cleanup(); resolve(null); win.destroy(); });
+      }, 500);
+    });
+
+    win.webContents.on('did-fail-load', () => { cleanup(); resolve(null); win.destroy(); });
+  });
+});
+
+// ── Automation Editor window ──────────────────────────────────────────────
+ipcMain.handle('open-automation', (_e, flow) => {
+  if (automationWindow && !automationWindow.isDestroyed()) {
+    automationWindow.webContents.send('automation-flow-changed', flow);
+    automationWindow.focus();
+    return;
+  }
+
+  automationWindow = new BrowserWindow({
+    width: 1440,
+    height: 900,
+    minWidth: 1100,
+    minHeight: 680,
+    frame: true,
+    title: flow?.name ? flow.name + ' — Automation Editor' : 'Automation Editor',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+    show: false,
+  });
+
+  automationWindow._flowData = flow || null;
+  automationWindow.loadFile(path.join(__dirname, 'renderer', 'automation.html'));
+
+  automationWindow.once('ready-to-show', () => { automationWindow.show(); });
+
+  automationWindow.webContents.on('console-message', (_e, level, msg) => {
+    const prefix = ['VERBOSE','INFO','WARN','ERROR'][level] || level;
+    console.log(`[automation:${prefix}] ${msg}`);
+  });
+
+  automationWindow.on('closed', () => { automationWindow = null; });
+});
+
+ipcMain.handle('get-automation-flow', e => {
+  const win = BrowserWindow.fromWebContents(e.sender);
+  return win?._flowData || null;
+});
 
 // ── Quotation print window ────────────────────────────────────────────────
 let printQuoteWindow = null;

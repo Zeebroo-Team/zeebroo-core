@@ -120,7 +120,7 @@ class ChequePaymentService
             ]);
         }
 
-        return ChequePayment::query()->create([
+        $cheque = ChequePayment::query()->create([
             'business_id' => $grn->business_id,
             'user_id' => $user->id,
             'goods_receive_note_id' => $grn->id,
@@ -132,6 +132,27 @@ class ChequePaymentService
             'status' => ChequePayment::STATUS_PENDING,
             'cleared_at' => null,
         ]);
+
+        try {
+            $business = \Modules\Business\Models\Business::find($grn->business_id);
+            if ($business) {
+                app(\Modules\AutomationEditor\Services\AutomationRunnerService::class)->dispatch('cheque.created', $business, [
+                    'event'  => 'cheque.created',
+                    'cheque' => [
+                        'id'            => $cheque->id,
+                        'cheque_number' => $cheque->cheque_number,
+                        'amount'        => (float) $cheque->amount,
+                        'due_date'      => $cheque->due_date instanceof \Carbon\Carbon ? $cheque->due_date->toDateString() : (string) $cheque->due_date,
+                        'status'        => $cheque->status,
+                        'grn_id'        => $grn->id,
+                        'grn_number'    => $grn->grn_number,
+                        'created_at'    => $cheque->created_at?->toIso8601String(),
+                    ],
+                ]);
+            }
+        } catch (\Throwable) {}
+
+        return $cheque;
     }
 
     public function deductFromAccount(

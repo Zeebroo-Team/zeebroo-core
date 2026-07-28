@@ -58,6 +58,7 @@ class PosHrPayrollCycleApiController extends Controller
     public function store(Request $request): JsonResponse
     {
         $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'hr_payroll');
 
         if (! Schema::hasTable('hr_payroll_cycles')) {
             return response()->json(['message' => 'Payroll module is not set up. Apply a regional template first.'], 422);
@@ -126,6 +127,7 @@ class PosHrPayrollCycleApiController extends Controller
     public function destroy(Request $request, PayrollCycle $cycle): JsonResponse
     {
         $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'hr_payroll');
 
         if ((int) $cycle->business_id !== (int) $business->id) {
             return response()->json(['message' => 'Cycle not found.'], 404);
@@ -143,6 +145,7 @@ class PosHrPayrollCycleApiController extends Controller
     public function compute(Request $request, PayrollCycle $cycle): JsonResponse
     {
         $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'hr_payroll');
 
         if ((int) $cycle->business_id !== (int) $business->id) {
             return response()->json(['message' => 'Cycle not found.'], 404);
@@ -184,6 +187,7 @@ class PosHrPayrollCycleApiController extends Controller
     public function finalize(Request $request, PayrollCycle $cycle): JsonResponse
     {
         $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'hr_payroll');
 
         if ((int) $cycle->business_id !== (int) $business->id) {
             return response()->json(['message' => 'Cycle not found.'], 404);
@@ -205,6 +209,7 @@ class PosHrPayrollCycleApiController extends Controller
     public function payment(Request $request, PayrollCycle $cycle): JsonResponse
     {
         $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'hr_payroll');
 
         if ((int) $cycle->business_id !== (int) $business->id) {
             return response()->json(['message' => 'Cycle not found.'], 404);

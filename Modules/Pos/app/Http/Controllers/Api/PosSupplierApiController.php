@@ -54,6 +54,7 @@ class PosSupplierApiController extends Controller
     public function store(Request $request): JsonResponse
     {
         $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'inv_suppliers');
 
         $validated = $request->validate([
             'name'         => ['required', 'string', 'max:255'],
@@ -78,6 +79,7 @@ class PosSupplierApiController extends Controller
     {
         $business = $this->businessOrAbort($request);
         if ((int) $supplier->business_id !== (int) $business->id) abort(403);
+        $this->abortUnlessPerm($request, $business, 'inv_suppliers');
 
         $validated = $request->validate([
             'name'         => ['sometimes', 'required', 'string', 'max:255'],
@@ -99,6 +101,7 @@ class PosSupplierApiController extends Controller
     {
         $business = $this->businessOrAbort($request);
         if ((int) $supplier->business_id !== (int) $business->id) abort(403);
+        $this->abortUnlessPerm($request, $business, 'inv_suppliers');
 
         $supplier->update(['is_active' => false]);
 

@@ -18,6 +18,11 @@ class QuotationService
         ?int $customerId = null,
     ): Collection {
         $query = Quotation::query()
+            ->select('quotations.*')
+            ->selectRaw(
+                '(SELECT COUNT(DISTINCT proposal_group) FROM design_studio_designs'.
+                ' WHERE quotation_id = quotations.id AND proposal_group IS NOT NULL) as proposal_count'
+            )
             ->where('business_id', $business->id)
             ->with('customer');
 

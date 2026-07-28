@@ -69,6 +69,10 @@
 .crm-card-actions{display:flex;gap:3px;opacity:0;transition:opacity .12s}
 .crm-card:hover .crm-card-actions{opacity:1}
 .crm-card--dragging{opacity:.35;box-shadow:none}
+.crm-card--is-customer{border-color:#059669;background:color-mix(in srgb,#059669 6%,var(--bg,#f9fafb))}
+.crm-card--is-customer:hover{box-shadow:0 2px 10px rgba(5,150,105,.15)}
+.crm-card-customer-badge{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:600;color:#059669;background:color-mix(in srgb,#059669 12%,transparent);border:1px solid color-mix(in srgb,#059669 30%,transparent);border-radius:4px;padding:1px 6px;margin-top:3px;letter-spacing:.01em}
+.crm-card-customer-badge i{font-size:9px}
 .crm-col-body--dragover{background:color-mix(in srgb,var(--accent,#4e8ef7) 10%,transparent);border-radius:7px;outline:2px dashed var(--accent,#4e8ef7)}
 .crm-card-btn{background:none;border:none;cursor:pointer;padding:3px 5px;border-radius:5px;font-size:11px;color:var(--text-muted,#6b7280)}
 .crm-card-btn:hover{background:var(--border,#e5e7eb);color:var(--text,#111827)}
@@ -470,6 +474,9 @@
           <button class="tpm-item" id="tpm-integrations">
             <i class="fa fa-plug"></i> Integrations
           </button>
+          <button class="tpm-item" id="tpm-developers">
+            <i class="fa fa-code"></i> Developers
+          </button>
 
           <div class="tpm-divider"></div>
 
@@ -528,6 +535,8 @@
         <div class="ribbon-tab" data-tab="rst-pos">Restaurant POS</div>
         <div class="ribbon-tab" data-tab="mail">Mail</div>
         <div class="ribbon-tab" data-tab="crm">CRM</div>
+        <div class="ribbon-tab" data-tab="automations">Automations</div>
+        <div class="ribbon-tab" data-tab="projects">Projects</div>
       </div>
       <button id="guide-toggle-btn" title="Show / hide guide assistant">
         <i class="fa fa-user-tie"></i> Guide
@@ -724,6 +733,18 @@
 
         <div class="ribbon-group">
           <div class="ribbon-group-content">
+            <button class="ribbon-btn-lg primary" id="rb-sal-new-invoice">
+              <i class="fa fa-file-invoice"></i>New Invoice
+            </button>
+            <button class="ribbon-btn-lg" id="rb-sal-new-quotation">
+              <i class="fa fa-file-circle-plus"></i>New Quotation
+            </button>
+          </div>
+          <div class="ribbon-group-label">Create</div>
+        </div>
+
+        <div class="ribbon-group">
+          <div class="ribbon-group-content">
             <button class="ribbon-btn-lg" id="rb-sal-refresh">
               <i class="fa fa-rotate"></i>Refresh
             </button>
@@ -892,10 +913,10 @@
 
         <div class="ribbon-group">
           <div class="ribbon-group-content">
-            <button class="ribbon-btn-lg">
+            <button class="ribbon-btn-lg" id="rb-fin-profit">
               <i class="fa fa-chart-line"></i>Profit<br>Analytics
             </button>
-            <button class="ribbon-btn-lg">
+            <button class="ribbon-btn-lg" id="rb-fin-sales">
               <i class="fa fa-chart-bar"></i>Sales<br>Reports
             </button>
           </div>
@@ -935,6 +956,9 @@
 
         <div class="ribbon-group">
           <div class="ribbon-group-content">
+            <button class="ribbon-btn-lg primary" id="rb-svc-new-req">
+              <i class="fa fa-plus"></i>New Request
+            </button>
             <button class="ribbon-btn-lg" id="rb-svc-requests">
               <i class="fa fa-clipboard-list"></i>Requests
             </button>
@@ -991,6 +1015,18 @@
             </button>
           </div>
           <div class="ribbon-group-label">Designs</div>
+        </div>
+
+        <div class="ribbon-group">
+          <div class="ribbon-group-content">
+            <button class="ribbon-btn-lg" id="rb-design-proposals">
+              <i class="fa fa-file-contract"></i>Project<br>Proposals
+            </button>
+            <button class="ribbon-btn-lg" id="rb-design-new-proposal">
+              <i class="fa fa-plus"></i>New<br>Proposal
+            </button>
+          </div>
+          <div class="ribbon-group-label">Proposals</div>
         </div>
 
         <div class="ribbon-group">
@@ -1237,7 +1273,7 @@
         <div class="ribbon-group">
           <div class="ribbon-group-content">
             <button class="ribbon-btn-lg" id="rb-crm-projects">
-              <i class="fa fa-folder-open"></i>Projects
+              <i class="fa fa-folder-open"></i>Pipeline<br>Projects
             </button>
             <button class="ribbon-btn-lg" id="rb-crm-stages">
               <i class="fa fa-layer-group"></i>Stages
@@ -1257,6 +1293,93 @@
 
       </div><!-- /crm page -->
 
+      <div class="ribbon-page" data-page="automations">
+
+        <div class="ribbon-group">
+          <div class="ribbon-group-content">
+            <button class="ribbon-btn-lg primary" id="rb-auto-new">
+              <i class="fa fa-plus"></i>New<br>Flow
+            </button>
+            <button class="ribbon-btn-lg" id="rb-auto-open">
+              <i class="fa fa-pen-to-square"></i>Open<br>Editor
+            </button>
+          </div>
+          <div class="ribbon-group-label">Flows</div>
+        </div>
+
+        <div class="ribbon-group">
+          <div class="ribbon-group-content">
+            <button class="ribbon-btn-lg" id="rb-auto-toggle">
+              <i class="fa fa-toggle-on"></i>Toggle<br>Active
+            </button>
+            <button class="ribbon-btn-lg" id="rb-auto-delete">
+              <i class="fa fa-trash" style="color:#ef4444"></i>Delete
+            </button>
+          </div>
+          <div class="ribbon-group-label">Manage</div>
+        </div>
+
+        <div class="ribbon-group">
+          <div class="ribbon-group-content">
+            <button class="ribbon-btn-lg" id="rb-auto-refresh">
+              <i class="fa fa-rotate"></i>Refresh
+            </button>
+          </div>
+          <div class="ribbon-group-label">Actions</div>
+        </div>
+
+      </div><!-- /automations page -->
+
+      <!-- ── Projects page ── -->
+      <div class="ribbon-page" data-page="projects">
+
+        <div class="ribbon-group">
+          <div class="ribbon-group-content">
+            <button class="ribbon-btn-lg" id="rb-pm-all-projects">
+              <i class="fa fa-folder-open"></i>All<br>Projects
+            </button>
+            <button class="ribbon-btn-lg primary" id="rb-pm-new-project">
+              <i class="fa fa-plus"></i>New<br>Project
+            </button>
+          </div>
+          <div class="ribbon-group-label">Projects</div>
+        </div>
+
+        <div class="ribbon-group">
+          <div class="ribbon-group-content">
+            <button class="ribbon-btn-lg" id="rb-pm-board">
+              <i class="fa fa-table-columns"></i>Board<br>View
+            </button>
+          </div>
+          <div class="ribbon-group-label">Board</div>
+        </div>
+
+        <div class="ribbon-group">
+          <div class="ribbon-group-content">
+            <button class="ribbon-btn-lg" id="rb-pm-tasks">
+              <i class="fa fa-bars-progress"></i>All<br>Tasks
+            </button>
+            <button class="ribbon-btn-lg" id="rb-pm-my-tasks">
+              <i class="fa fa-list-check"></i>My<br>Tasks
+            </button>
+            <button class="ribbon-btn-lg primary" id="rb-pm-new-task">
+              <i class="fa fa-plus"></i>New<br>Task
+            </button>
+          </div>
+          <div class="ribbon-group-label">Tasks</div>
+        </div>
+
+        <div class="ribbon-group">
+          <div class="ribbon-group-content">
+            <button class="ribbon-btn-lg" id="rb-pm-refresh">
+              <i class="fa fa-rotate"></i>Refresh
+            </button>
+          </div>
+          <div class="ribbon-group-label">Actions</div>
+        </div>
+
+      </div><!-- /projects page -->
+
 
     </div><!-- /ribbon-body -->
   </div><!-- /ribbon -->
@@ -1275,22 +1398,22 @@
           <span class="home-date" id="home-date"></span>
         </div>
         <div class="home-kpi-pills">
-          <div class="kpi-pill kpi-pill-blue">
+          <div class="kpi-pill kpi-pill-blue" id="kpi-pill-sales">
             <i class="fa fa-cart-shopping"></i>
             <strong id="kpi-sales">—</strong>
             <span>sales</span>
           </div>
-          <div class="kpi-pill kpi-pill-green">
+          <div class="kpi-pill kpi-pill-green" id="kpi-pill-revenue">
             <i class="fa fa-dollar-sign"></i>
             <strong id="kpi-revenue">—</strong>
             <span>revenue</span>
           </div>
-          <div class="kpi-pill kpi-pill-amber">
+          <div class="kpi-pill kpi-pill-amber" id="kpi-pill-products">
             <i class="fa fa-boxes-stacked"></i>
             <strong id="kpi-products">—</strong>
             <span>products</span>
           </div>
-          <div class="kpi-pill kpi-pill-purple">
+          <div class="kpi-pill kpi-pill-purple" id="kpi-pill-customers">
             <i class="fa fa-users"></i>
             <strong id="kpi-customers">—</strong>
             <span>customers</span>
@@ -1534,7 +1657,7 @@
         <div class="home-right-panel" id="home-right-panel">
 
           <!-- Today summary -->
-          <div class="hrp-section">
+          <div class="hrp-section" id="hrp-section-today">
             <div class="hrp-section-title"><i class="fa fa-sun"></i> Today</div>
             <div class="hrp-stat-row">
               <div class="hrp-stat"><div class="hrp-stat-val" id="hrp-today-sales">—</div><div class="hrp-stat-lbl">Sales</div></div>
@@ -1544,7 +1667,7 @@
           </div>
 
           <!-- Upcoming bills -->
-          <div class="hrp-section">
+          <div class="hrp-section" id="hrp-section-bills">
             <div class="hrp-section-title"><i class="fa fa-calendar-exclamation"></i> Upcoming Bills</div>
             <div id="hrp-bills" class="hrp-bills-list">
               <div class="hrp-empty"><i class="fa fa-spinner fa-spin"></i></div>
@@ -1552,7 +1675,7 @@
           </div>
 
           <!-- Quick actions -->
-          <div class="hrp-section">
+          <div class="hrp-section" id="hrp-section-actions">
             <div class="hrp-section-title"><i class="fa fa-bolt"></i> Quick Actions</div>
             <div class="hrp-actions">
               <button class="hrp-action-btn" id="hrp-new-sale"><i class="fa fa-cart-plus"></i> New Sale</button>
@@ -1639,6 +1762,10 @@
               <div class="row total"><span>Total</span><span id="cart-total">0.00</span></div>
             </div>
             <button id="checkout-btn"><i class="fa fa-cash-register"></i>&nbsp; Checkout (F12)</button>
+            <div class="cart-quick-create">
+              <button id="pos-to-invoice" title="Create invoice from cart"><i class="fa fa-file-invoice"></i> Invoice</button>
+              <button id="pos-to-quote"   title="Create quotation from cart"><i class="fa fa-file-lines"></i> Quotation</button>
+            </div>
           </div>
         </div>
       </div>
@@ -3919,11 +4046,12 @@
               <tr>
                 <th style="width:120px">Request #</th>
                 <th>Service / Title</th>
-                <th style="width:160px">Customer</th>
-                <th style="width:126px">Status</th>
-                <th style="width:140px">Scheduled</th>
-                <th style="text-align:right;width:110px">Amount</th>
-                <th style="text-align:center;width:200px">Actions</th>
+                <th style="width:150px">Customer</th>
+                <th style="width:130px" class="svc-col-project">Project</th>
+                <th style="width:120px">Status</th>
+                <th style="width:130px">Scheduled</th>
+                <th style="text-align:right;width:100px">Amount</th>
+                <th style="text-align:center;width:180px">Actions</th>
               </tr>
             </thead>
             <tbody id="svc-req-tbody">
@@ -4052,7 +4180,215 @@
         </div>
       </div>
 
-      <!-- ── New Service Modal ── -->
+      <!-- ── New Service Request Modal ── -->
+      <div class="modal-overlay" id="svc-new-req-modal" style="display:none">
+        <div class="svc-new-modal-box" style="width:500px">
+          <!-- Coloured accent header -->
+          <div style="background:linear-gradient(135deg,#0284c7 0%,#0369a1 100%);padding:18px 22px 16px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0">
+            <div style="display:flex;align-items:center;gap:10px">
+              <div style="width:34px;height:34px;border-radius:9px;background:rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center">
+                <i class="fa fa-clipboard-list" style="color:#fff;font-size:16px"></i>
+              </div>
+              <div>
+                <div style="font-size:15px;font-weight:700;color:#fff;line-height:1.2">New Service Request</div>
+                <div style="font-size:11px;color:rgba(255,255,255,.75);margin-top:1px">Fill in the details below</div>
+              </div>
+            </div>
+            <button class="svc-new-modal-close" id="svc-new-req-modal-close" style="background:rgba(255,255,255,.18);color:#fff;border:none"><i class="fa fa-xmark"></i></button>
+          </div>
+
+          <div class="svc-new-modal-body">
+            <div class="svc-form-alert" id="svc-new-req-alert" style="display:none"></div>
+
+            <div class="svc-form-group">
+              <label class="svc-form-label">Request Title <span class="svc-form-req">*</span></label>
+              <input type="text" id="svc-req-f-title" class="svc-form-input" placeholder="e.g. AC repair for Mr. Silva…" autocomplete="off">
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+              <div class="svc-form-group">
+                <label class="svc-form-label">Service</label>
+                <select id="svc-req-f-service" class="svc-form-input">
+                  <option value="">— None —</option>
+                </select>
+              </div>
+              <div class="svc-form-group" id="svc-req-f-project-row">
+                <label class="svc-form-label"><i class="fa fa-diagram-project" style="margin-right:4px;opacity:.6"></i>Project</label>
+                <select id="svc-req-f-project" class="svc-form-input">
+                  <option value="">— None —</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="svc-form-group" style="position:relative">
+              <label class="svc-form-label">Customer</label>
+              <input type="text" id="svc-req-f-customer-q" class="svc-form-input" placeholder="Search by name or phone…" autocomplete="off">
+              <input type="hidden" id="svc-req-f-customer-id">
+              <div id="svc-req-customer-results" class="svc-tab-result-list" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:10"></div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+              <div class="svc-form-group">
+                <label class="svc-form-label">Scheduled At</label>
+                <input type="datetime-local" id="svc-req-f-scheduled" class="svc-form-input">
+              </div>
+              <div class="svc-form-group">
+                <label class="svc-form-label">Amount</label>
+                <div class="svc-form-prefix-wrap">
+                  <span class="svc-form-prefix">$</span>
+                  <input type="number" id="svc-req-f-amount" class="svc-form-input svc-form-input--prefix" placeholder="0.00" min="0" step="0.01">
+                </div>
+              </div>
+            </div>
+
+            <div class="svc-form-group">
+              <label class="svc-form-label">Notes</label>
+              <textarea id="svc-req-f-notes" class="svc-form-input svc-form-textarea" rows="2" placeholder="Optional notes or special instructions…"></textarea>
+            </div>
+          </div>
+
+          <div class="svc-new-modal-footer">
+            <button class="svc-form-btn svc-form-btn--ghost" id="svc-new-req-modal-cancel">Cancel</button>
+            <button class="svc-form-btn svc-form-btn--primary" id="svc-new-req-modal-save"><i class="fa fa-check"></i> Create Request</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Start Service Request Dialog (2-step) ── -->
+      <div class="modal-overlay" id="svc-start-modal" style="display:none">
+        <div class="svc-new-modal-box" style="width:480px">
+
+          <!-- Shared header -->
+          <div class="svc-new-modal-header">
+            <div class="svc-new-modal-title" id="svc-start-modal-title">
+              <i class="fa fa-rotate"></i> Start Service Request
+            </div>
+            <button class="svc-new-modal-close" id="svc-start-modal-close"><i class="fa fa-xmark"></i></button>
+          </div>
+
+          <!-- Step 1: Choose -->
+          <div id="svc-start-step-choose">
+            <div class="svc-new-modal-body" style="gap:14px">
+              <!-- Request info pill -->
+              <div style="display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:8px;background:var(--surface2);border:1px solid var(--border)">
+                <i class="fa fa-clipboard-list" style="color:var(--accent);font-size:14px;flex-shrink:0"></i>
+                <div>
+                  <div id="svc-start-req-label" style="font-size:12px;font-weight:700;color:var(--text);line-height:1.3"></div>
+                  <div style="font-size:11px;color:var(--text-muted);margin-top:1px">Link this request to Project Management</div>
+                </div>
+              </div>
+              <!-- Option cards — grid guarantees equal columns -->
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                <button class="svc-start-option-card" id="svc-start-opt-project">
+                  <div class="svc-start-opt-icon" style="background:#0284c714;color:#0284c7"><i class="fa fa-folder-plus"></i></div>
+                  <div class="svc-start-opt-title">New Project</div>
+                  <div class="svc-start-opt-desc">Create a dedicated project for this request</div>
+                </button>
+                <button class="svc-start-option-card" id="svc-start-opt-task">
+                  <div class="svc-start-opt-icon" style="background:#7c3aed14;color:#7c3aed"><i class="fa fa-circle-check"></i></div>
+                  <div class="svc-start-opt-title">Task in Project</div>
+                  <div class="svc-start-opt-desc">Add as a task in an existing project</div>
+                </button>
+              </div>
+            </div>
+            <div class="svc-new-modal-footer" style="justify-content:space-between;align-items:center">
+              <span style="font-size:11px;color:var(--text-muted)">Or start without linking to a project</span>
+              <button class="svc-form-btn svc-form-btn--primary" id="svc-start-skip"><i class="fa fa-rotate"></i> Start Now</button>
+            </div>
+          </div>
+
+          <!-- Step 2a: New Project -->
+          <div id="svc-start-step-project" style="display:none">
+            <div class="svc-new-modal-body">
+              <div class="svc-form-alert" id="svc-start-proj-alert" style="display:none"></div>
+
+              <div class="svc-form-group">
+                <label class="svc-form-label">Project Name <span class="svc-form-req">*</span></label>
+                <input type="text" id="svc-start-proj-name" class="svc-form-input" placeholder="Project name…" autocomplete="off">
+              </div>
+
+              <div class="svc-form-group">
+                <label class="svc-form-label">Description</label>
+                <textarea id="svc-start-proj-desc" class="svc-form-input svc-form-textarea" rows="2" placeholder="Optional description…"></textarea>
+              </div>
+
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+                <!-- Client typeahead -->
+                <div class="svc-form-group" style="position:relative">
+                  <label class="svc-form-label">Client</label>
+                  <div style="position:relative">
+                    <input type="text" id="svc-start-proj-client" class="svc-form-input" placeholder="Search or type client…" autocomplete="off" style="padding-right:32px">
+                    <button type="button" id="svc-proj-client-add-trigger" title="Add new customer"
+                      style="position:absolute;right:6px;top:50%;transform:translateY(-50%);width:22px;height:22px;border-radius:5px;border:none;background:var(--accent);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:11px">
+                      <i class="fa fa-user-plus"></i>
+                    </button>
+                  </div>
+                  <div id="svc-start-proj-client-results" class="svc-tab-result-list"
+                    style="display:none;position:absolute;top:100%;left:0;right:0;z-index:30;margin-top:2px"></div>
+                </div>
+                <div class="svc-form-group">
+                  <label class="svc-form-label">Due Date</label>
+                  <input type="date" id="svc-start-proj-due" class="svc-form-input">
+                </div>
+              </div>
+            </div>
+            <div class="svc-new-modal-footer">
+              <button class="svc-form-btn svc-form-btn--ghost" id="svc-start-proj-back"><i class="fa fa-arrow-left"></i> Back</button>
+              <button class="svc-form-btn svc-form-btn--primary" id="svc-start-proj-confirm"><i class="fa fa-folder-plus"></i> Create Project &amp; Start</button>
+            </div>
+          </div>
+
+          <!-- Step 2b: Task in Project -->
+          <div id="svc-start-step-task" style="display:none">
+            <div class="svc-new-modal-body">
+              <div class="svc-form-alert" id="svc-start-task-alert" style="display:none"></div>
+
+              <div class="svc-form-group">
+                <label class="svc-form-label">Select Project <span class="svc-form-req">*</span></label>
+                <select id="svc-start-task-project" class="svc-form-input">
+                  <option value="">— Select project —</option>
+                </select>
+              </div>
+
+              <div class="svc-form-group">
+                <label class="svc-form-label">Task Title</label>
+                <input type="text" id="svc-start-task-title" class="svc-form-input" placeholder="Task title…" autocomplete="off">
+              </div>
+            </div>
+            <div class="svc-new-modal-footer">
+              <button class="svc-form-btn svc-form-btn--ghost" id="svc-start-task-back"><i class="fa fa-arrow-left"></i> Back</button>
+              <button class="svc-form-btn svc-form-btn--primary" id="svc-start-task-confirm"><i class="fa fa-circle-check"></i> Add Task &amp; Start</button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ── Quick Add Customer (used from New Project step) ── -->
+      <div class="modal-overlay" id="svc-qc-modal" style="display:none;z-index:1100">
+        <div class="svc-new-modal-box" style="width:380px">
+          <div class="svc-new-modal-header">
+            <div class="svc-new-modal-title"><i class="fa fa-user-plus"></i> Add Customer</div>
+            <button class="svc-new-modal-close" id="svc-qc-close"><i class="fa fa-xmark"></i></button>
+          </div>
+          <div class="svc-new-modal-body">
+            <div class="svc-form-alert" id="svc-qc-alert" style="display:none"></div>
+            <div class="svc-form-group">
+              <label class="svc-form-label">Name <span class="svc-form-req">*</span></label>
+              <input type="text" id="svc-qc-name" class="svc-form-input" placeholder="Full name…" autocomplete="off">
+            </div>
+            <div class="svc-form-group">
+              <label class="svc-form-label">Phone</label>
+              <input type="tel" id="svc-qc-phone" class="svc-form-input" placeholder="Phone number…" autocomplete="off">
+            </div>
+          </div>
+          <div class="svc-new-modal-footer">
+            <button class="svc-form-btn svc-form-btn--ghost" id="svc-qc-cancel">Cancel</button>
+            <button class="svc-form-btn svc-form-btn--primary" id="svc-qc-save"><i class="fa fa-user-plus"></i> Add Customer</button>
+          </div>
+        </div>
+      </div>
+
       <div class="modal-overlay" id="svc-new-modal" style="display:none">
         <div class="svc-new-modal-box">
           <div class="svc-new-modal-header">
@@ -4207,15 +4543,112 @@
 
     </div><!-- /panel-services -->
 
+    <!-- ── Invoice → Create Project Proposal Modal ─────────────── -->
+    <div id="invd-prop-modal" class="modal-overlay" style="display:none">
+      <div class="svc-new-modal-box" style="width:500px;max-height:90vh">
+        <div style="background:linear-gradient(135deg,#7c3aed 0%,#6d28d9 100%);padding:18px 22px 16px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0">
+          <div style="display:flex;align-items:center;gap:10px">
+            <div style="width:34px;height:34px;border-radius:9px;background:rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center">
+              <i class="fa fa-file-contract" style="color:#fff;font-size:16px"></i>
+            </div>
+            <div>
+              <div style="font-size:15px;font-weight:700;color:#fff;line-height:1.2">Create Project Proposal</div>
+              <div style="font-size:11px;color:rgba(255,255,255,.75);margin-top:1px" id="invd-pm-subtitle">From invoice</div>
+            </div>
+          </div>
+          <button class="svc-new-modal-close" id="invd-pm-close" style="background:rgba(255,255,255,.18);color:#fff;border:none"><i class="fa fa-xmark"></i></button>
+        </div>
+        <div class="svc-new-modal-body" style="overflow-y:auto">
+          <div class="svc-form-alert" id="invd-pm-alert" style="display:none"></div>
+
+          <div class="svc-form-group">
+            <label class="svc-form-label">Project Name <span class="svc-form-req">*</span></label>
+            <input type="text" id="invd-pm-name" class="svc-form-input" placeholder="e.g. Website Redesign 2026" autocomplete="off">
+          </div>
+
+          <div class="svc-form-group">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+              <label class="svc-form-label" style="margin:0">Client</label>
+              <button type="button" class="invd-pm-link" id="invd-pm-add-cust-toggle"><i class="fa fa-plus"></i> Add New</button>
+            </div>
+            <select id="invd-pm-customer" class="svc-form-input"></select>
+          </div>
+
+          <!-- Inline add-customer form -->
+          <div id="invd-pm-add-cust-form" style="display:none;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-top:-8px;margin-bottom:14px">
+            <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">New Customer</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+              <div>
+                <label class="svc-form-label">Name <span class="svc-form-req">*</span></label>
+                <input type="text" id="invd-pm-cust-name" class="svc-form-input" placeholder="Customer name">
+              </div>
+              <div>
+                <label class="svc-form-label">Phone</label>
+                <input type="text" id="invd-pm-cust-phone" class="svc-form-input" placeholder="+1 555 000 0000">
+              </div>
+            </div>
+            <div style="display:flex;gap:8px;justify-content:flex-end">
+              <button type="button" class="svc-form-btn svc-form-btn--ghost" id="invd-pm-add-cust-cancel" style="padding:5px 12px;font-size:11px">Cancel</button>
+              <button type="button" class="svc-form-btn svc-form-btn--primary" id="invd-pm-add-cust-save" style="padding:5px 12px;font-size:11px"><i class="fa fa-check"></i> Save Customer</button>
+            </div>
+          </div>
+
+          <div class="svc-form-group">
+            <label class="svc-form-label">Project Description <span class="svc-form-req">*</span></label>
+            <textarea id="invd-pm-desc" class="svc-form-input" rows="4"
+              placeholder="Describe the project goals, services to provide, target audience, budget range, key requirements…"
+              style="resize:vertical;min-height:80px;font-family:inherit;font-size:12px"></textarea>
+          </div>
+
+          <div style="background:#7c3aed12;border:1px solid #7c3aed30;border-radius:8px;padding:10px 12px;margin-bottom:14px;display:flex;gap:8px;align-items:flex-start">
+            <i class="fa fa-wand-magic-sparkles" style="color:#7c3aed;margin-top:1px;flex-shrink:0"></i>
+            <span style="font-size:11px;color:var(--text-muted);line-height:1.5">AI will generate professional text content for all 6 proposal pages based on your description. The invoice is also attached as an additional page.</span>
+          </div>
+
+          <div style="border:1.5px solid var(--border);border-radius:10px;overflow:hidden">
+            <div style="padding:9px 14px;background:var(--surface2);font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em">Pages included</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0">
+              <div class="ds-prop-page-preview"><i class="fa fa-star" style="color:#7c3aed"></i> Cover Page</div>
+              <div class="ds-prop-page-preview"><i class="fa fa-align-left" style="color:#0284c7"></i> Executive Summary</div>
+              <div class="ds-prop-page-preview"><i class="fa fa-list-check" style="color:#059669"></i> Our Services</div>
+              <div class="ds-prop-page-preview"><i class="fa fa-calendar-days" style="color:#f59e0b"></i> Project Timeline</div>
+              <div class="ds-prop-page-preview"><i class="fa fa-dollar-sign" style="color:#ec4899"></i> Investment &amp; Pricing</div>
+              <div class="ds-prop-page-preview"><i class="fa fa-handshake" style="color:#8b5cf6"></i> Contact &amp; Next Steps</div>
+              <div class="ds-prop-page-preview" style="grid-column:span 2;background:color-mix(in srgb,#7c3aed 6%,transparent)">
+                <i class="fa fa-file-invoice" style="color:#6d28d9"></i>
+                <span id="invd-pm-inv-page-label">Invoice page</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Progress overlay -->
+        <div id="invd-pm-progress" style="display:none;position:absolute;inset:0;background:rgba(var(--surface-rgb,255,255,255),.92);border-radius:14px;flex-direction:column;align-items:center;justify-content:center;gap:14px;z-index:2">
+          <div class="invd-pm-spinner"><i class="fa fa-wand-magic-sparkles" style="font-size:28px;color:#7c3aed"></i></div>
+          <div style="font-size:14px;font-weight:700;color:var(--text)" id="invd-pm-prog-title">Generating…</div>
+          <div style="font-size:12px;color:var(--text-muted)" id="invd-pm-prog-sub">Please wait</div>
+          <div class="invd-pm-prog-bar-wrap"><div class="invd-pm-prog-bar" id="invd-pm-prog-bar"></div></div>
+        </div>
+
+        <div class="svc-new-modal-footer">
+          <button class="svc-form-btn svc-form-btn--ghost" id="invd-pm-cancel">Cancel</button>
+          <button class="svc-form-btn svc-form-btn--primary" id="invd-pm-generate">
+            <i class="fa fa-wand-magic-sparkles"></i> Generate Proposal
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- ── Design Studio Panel ──────────────────────────────────── -->
     <div class="content-panel" id="panel-design" style="flex-direction:column">
 
-      <!-- Type filter subnav (singletons excluded — they live in the card section below) -->
+      <!-- Type filter subnav -->
       <div class="fin-subnav">
         <button class="fin-subnav-btn active" data-ds="all"><i class="fa fa-layer-group"></i> All Designs</button>
         <button class="fin-subnav-btn"         data-ds="social-media"><i class="fa fa-share-nodes"></i> Social Media</button>
         <button class="fin-subnav-btn"         data-ds="business-card"><i class="fa fa-id-card"></i> Business Card</button>
         <button class="fin-subnav-btn"         data-ds="custom"><i class="fa fa-paintbrush"></i> Custom</button>
+        <button class="fin-subnav-btn"         data-ds="proposals"><i class="fa fa-file-contract"></i> Project Proposals</button>
       </div>
 
       <!-- Singleton designs — one per business, always at the top -->
@@ -4286,7 +4719,98 @@
         <div class="finance-footer"><span id="ds-footer-text"></span></div>
       </div>
 
+      <!-- ── Project Proposals view ── -->
+      <div id="ds-proposals-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+        <div class="finance-toolbar">
+          <div style="font-size:13px;font-weight:600;color:var(--text);display:flex;align-items:center;gap:8px">
+            <i class="fa fa-file-contract" style="color:#7c3aed"></i> Project Proposals
+          </div>
+          <button class="finance-create-btn" id="ds-prop-new-btn">
+            <i class="fa fa-plus"></i> New Proposal
+          </button>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:20px 24px">
+          <div id="ds-proposals-area"></div>
+        </div>
+      </div>
+
     </div><!-- /panel-design -->
+
+    <!-- ── New Project Proposal Modal ── -->
+    <div id="ds-prop-modal" class="modal-overlay" style="display:none">
+      <div class="svc-new-modal-box" style="width:460px">
+        <div style="background:linear-gradient(135deg,#7c3aed 0%,#6d28d9 100%);padding:18px 22px 16px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0">
+          <div style="display:flex;align-items:center;gap:10px">
+            <div style="width:34px;height:34px;border-radius:9px;background:rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center">
+              <i class="fa fa-file-contract" style="color:#fff;font-size:16px"></i>
+            </div>
+            <div>
+              <div style="font-size:15px;font-weight:700;color:#fff;line-height:1.2">New Project Proposal</div>
+              <div style="font-size:11px;color:rgba(255,255,255,.75);margin-top:1px">6 pages will be created automatically</div>
+            </div>
+          </div>
+          <button class="svc-new-modal-close" id="ds-prop-modal-close" style="background:rgba(255,255,255,.18);color:#fff;border:none"><i class="fa fa-xmark"></i></button>
+        </div>
+        <div class="svc-new-modal-body">
+          <div class="svc-form-alert" id="ds-prop-alert" style="display:none"></div>
+
+          <div class="svc-form-group">
+            <label class="svc-form-label">Project Title <span class="svc-form-req">*</span></label>
+            <input type="text" id="ds-prop-title" class="svc-form-input" placeholder="e.g. Website Redesign 2026" autocomplete="off">
+          </div>
+          <div class="svc-form-group">
+            <label class="svc-form-label">Client Name</label>
+            <input type="text" id="ds-prop-client" class="svc-form-input" placeholder="e.g. Acme Corp" autocomplete="off">
+          </div>
+
+          <!-- Generation mode toggle -->
+          <div class="svc-form-group" style="margin-bottom:4px">
+            <label class="svc-form-label">Generation Mode</label>
+            <div style="display:flex;gap:6px">
+              <button type="button" id="ds-gen-blank-btn" class="ds-gen-tab ds-gen-tab--active">
+                <i class="fa fa-file"></i> Blank Pages
+              </button>
+              <button type="button" id="ds-gen-ai-btn" class="ds-gen-tab">
+                <i class="fa fa-wand-magic-sparkles"></i> AI Generate
+              </button>
+            </div>
+          </div>
+
+          <!-- AI description area (hidden until AI mode) -->
+          <div id="ds-gen-ai-section" style="display:none">
+            <div class="svc-form-group">
+              <label class="svc-form-label">Project Description <span class="svc-form-req">*</span></label>
+              <textarea id="ds-prop-desc" class="svc-form-input" rows="4"
+                placeholder="Describe the project goals, services to provide, target audience, budget range, any key requirements…"
+                style="resize:vertical;min-height:80px;font-family:inherit;font-size:12px"></textarea>
+            </div>
+            <div style="background:#7c3aed12;border:1px solid #7c3aed30;border-radius:8px;padding:10px 12px;margin-bottom:10px;display:flex;gap:8px;align-items:flex-start">
+              <i class="fa fa-circle-info" style="color:#7c3aed;margin-top:1px;flex-shrink:0"></i>
+              <span style="font-size:11px;color:var(--text-muted);line-height:1.5">AI will generate professional text content for all 6 pages based on your description. You can edit each page in the editor afterwards.</span>
+            </div>
+          </div>
+
+          <!-- Pages preview -->
+          <div style="border:1.5px solid var(--border);border-radius:10px;overflow:hidden">
+            <div style="padding:10px 14px;background:var(--surface2);font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em">
+              Pages included
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0">
+              <div class="ds-prop-page-preview"><i class="fa fa-star" style="color:#7c3aed"></i> Cover Page</div>
+              <div class="ds-prop-page-preview"><i class="fa fa-align-left" style="color:#0284c7"></i> Executive Summary</div>
+              <div class="ds-prop-page-preview"><i class="fa fa-list-check" style="color:#059669"></i> Our Services</div>
+              <div class="ds-prop-page-preview"><i class="fa fa-calendar-days" style="color:#f59e0b"></i> Project Timeline</div>
+              <div class="ds-prop-page-preview"><i class="fa fa-dollar-sign" style="color:#ec4899"></i> Investment &amp; Pricing</div>
+              <div class="ds-prop-page-preview"><i class="fa fa-handshake" style="color:#8b5cf6"></i> Contact &amp; Next Steps</div>
+            </div>
+          </div>
+        </div>
+        <div class="svc-new-modal-footer">
+          <button class="svc-form-btn svc-form-btn--ghost" id="ds-prop-modal-cancel">Cancel</button>
+          <button class="svc-form-btn svc-form-btn--primary" id="ds-prop-modal-save" data-mode="blank"><i class="fa fa-file-contract"></i> Create Proposal</button>
+        </div>
+      </div>
+    </div>
 
     <!-- ── Design Create Modal ── -->
     <div id="ds-create-modal" class="modal-overlay" style="display:none">
@@ -5147,6 +5671,161 @@
 
     </div><!-- /panel-crm -->
 
+    <!-- ── Automations Panel ─────────────────────────────────────────── -->
+    <div class="content-panel" id="panel-automations" style="flex-direction:column">
+
+      <div class="auto-search-bar">
+        <i class="fa fa-bolt" style="color:#f59e0b;font-size:15px;flex-shrink:0"></i>
+        <span style="font-size:13px;font-weight:700;flex-shrink:0">Automation Flows</span>
+        <div class="inv-search-wrap" style="flex:1;max-width:480px;margin-left:12px">
+          <i class="fa fa-magnifying-glass"></i>
+          <input type="text" id="auto-search" placeholder="Search flows…" style="width:100%">
+        </div>
+      </div>
+
+      <div style="flex:1;overflow:auto;padding:16px">
+        <div id="auto-empty" style="text-align:center;padding:60px 20px;color:var(--text-muted)">
+          <i class="fa fa-bolt" style="font-size:40px;margin-bottom:12px;display:block;color:#f59e0b"></i>
+          <div style="font-size:14px;font-weight:600;margin-bottom:6px">No automation flows yet</div>
+          <div style="font-size:12px">Click <strong>New Flow</strong> in the ribbon to create your first automation.</div>
+        </div>
+        <div id="auto-grid" class="auto-grid" style="display:none"></div>
+      </div>
+
+    </div><!-- /panel-automations -->
+
+    <!-- ── Projects Panel ───────────────────────────────────────────────── -->
+    <div class="content-panel" id="panel-projects" style="flex-direction:column">
+
+      <!-- Header bar -->
+      <div class="auto-search-bar">
+        <i class="fa fa-diagram-project" style="color:var(--accent);font-size:15px;flex-shrink:0"></i>
+        <span style="font-size:13px;font-weight:700;flex-shrink:0">Projects</span>
+        <span style="font-size:11px;color:var(--text-muted);margin-left:8px;flex-shrink:0">— delivery tracking, tasks &amp; milestones</span>
+      </div>
+
+      <!-- Subnav -->
+      <div class="fin-subnav">
+        <button class="fin-subnav-btn active" data-pmsub="projects"><i class="fa fa-folder-open"></i> Projects</button>
+        <button class="fin-subnav-btn"         data-pmsub="board"><i class="fa fa-table-columns"></i> Board</button>
+        <button class="fin-subnav-btn"         data-pmsub="tasks"><i class="fa fa-bars-progress"></i> Tasks</button>
+        <button class="fin-subnav-btn"         data-pmsub="mytasks"><i class="fa fa-list-check"></i> My Tasks</button>
+      </div>
+
+      <!-- ── Projects list view ── -->
+      <div id="pm-projects-view" style="display:flex;flex-direction:column;flex:1;overflow:hidden">
+        <div class="finance-toolbar" style="gap:8px">
+          <div class="svc-chip-bar" id="pm-project-filter-chips">
+            <button class="svc-chip active" data-pmprojectfilter="all">All</button>
+            <button class="svc-chip" data-pmprojectfilter="active">Active</button>
+            <button class="svc-chip" data-pmprojectfilter="on_hold">On Hold</button>
+            <button class="svc-chip" data-pmprojectfilter="completed">Completed</button>
+          </div>
+          <div id="pm-projects-alert" class="svc-form-alert" style="display:none;margin-left:auto"></div>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:12px">
+          <div id="pm-projects-grid" class="pm-projects-grid"></div>
+          <div id="pm-projects-empty" style="display:none;text-align:center;padding:60px 20px;color:var(--text-muted)">
+            <i class="fa fa-folder-open" style="font-size:40px;margin-bottom:12px;display:block"></i>
+            <div style="font-size:14px;font-weight:600;margin-bottom:6px">No projects yet</div>
+            <div style="font-size:12px">Click <strong>New Project</strong> in the ribbon to get started.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Board view ── -->
+      <div id="pm-board-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+        <div class="finance-toolbar" style="gap:8px">
+          <label style="font-size:12px;font-weight:600;color:var(--text-muted);white-space:nowrap"><i class="fa fa-folder-open" style="margin-right:4px"></i>Project:</label>
+          <select id="pm-board-project-select" class="svc-form-input" style="max-width:260px;appearance:auto;padding:5px 8px;font-size:12px"></select>
+          <button class="svc-form-btn svc-form-btn--primary" id="pm-board-new-task-btn" style="padding:5px 12px;font-size:12px;flex-shrink:0"><i class="fa fa-plus"></i> New Task</button>
+        </div>
+        <div id="pm-board-columns" class="pm-kanban-wrap">
+          <div class="pm-kanban-col" data-col="todo">
+            <div class="pm-kanban-col-head"><span class="pm-col-dot pm-col-dot--todo"></span>To Do <span class="pm-col-count" id="pm-col-count-todo">0</span></div>
+            <div class="pm-kanban-cards" id="pm-col-todo"></div>
+          </div>
+          <div class="pm-kanban-col" data-col="in_progress">
+            <div class="pm-kanban-col-head"><span class="pm-col-dot pm-col-dot--in-progress"></span>In Progress <span class="pm-col-count" id="pm-col-count-in_progress">0</span></div>
+            <div class="pm-kanban-cards" id="pm-col-in_progress"></div>
+          </div>
+          <div class="pm-kanban-col" data-col="review">
+            <div class="pm-kanban-col-head"><span class="pm-col-dot pm-col-dot--review"></span>Review <span class="pm-col-count" id="pm-col-count-review">0</span></div>
+            <div class="pm-kanban-cards" id="pm-col-review"></div>
+          </div>
+          <div class="pm-kanban-col" data-col="done">
+            <div class="pm-kanban-col-head"><span class="pm-col-dot pm-col-dot--done"></span>Done <span class="pm-col-count" id="pm-col-count-done">0</span></div>
+            <div class="pm-kanban-cards" id="pm-col-done"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Tasks list view ── -->
+      <div id="pm-tasks-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+        <div class="finance-toolbar" style="gap:8px">
+          <label style="font-size:12px;font-weight:600;color:var(--text-muted);white-space:nowrap"><i class="fa fa-folder-open" style="margin-right:4px"></i>Project:</label>
+          <select id="pm-tasks-project-select" class="svc-form-input" style="max-width:260px;appearance:auto;padding:5px 8px;font-size:12px"></select>
+          <div class="svc-chip-bar" id="pm-task-filter-chips" style="margin-left:8px">
+            <button class="svc-chip active" data-pmtaskfilter="">All</button>
+            <button class="svc-chip" data-pmtaskfilter="todo">To Do</button>
+            <button class="svc-chip" data-pmtaskfilter="in_progress">In Progress</button>
+            <button class="svc-chip" data-pmtaskfilter="review">Review</button>
+            <button class="svc-chip" data-pmtaskfilter="done">Done</button>
+          </div>
+          <button class="svc-form-btn svc-form-btn--primary" id="pm-tasks-new-btn" style="margin-left:auto;padding:5px 12px;font-size:12px;flex-shrink:0"><i class="fa fa-plus"></i> New Task</button>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:0 10px 10px">
+          <table class="crm-table" id="pm-tasks-table">
+            <thead>
+              <tr>
+                <th style="width:28px"></th>
+                <th>Task</th>
+                <th>Priority</th>
+                <th>Assigned</th>
+                <th>Due</th>
+                <th>Status</th>
+                <th style="width:40px"></th>
+              </tr>
+            </thead>
+            <tbody id="pm-tasks-body">
+              <tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:24px">Select a project to load tasks.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ── My Tasks view ── -->
+      <div id="pm-mytasks-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+        <div class="finance-toolbar" style="gap:8px">
+          <div class="svc-chip-bar" id="pm-mytask-filter-chips">
+            <button class="svc-chip active" data-pmmyfilter="open">Open</button>
+            <button class="svc-chip" data-pmmyfilter="overdue">Overdue</button>
+            <button class="svc-chip" data-pmmyfilter="mine">Mine</button>
+            <button class="svc-chip" data-pmmyfilter="done">Done</button>
+          </div>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:0 10px 10px">
+          <table class="crm-table" id="pm-mytasks-table">
+            <thead>
+              <tr>
+                <th style="width:28px"></th>
+                <th>Task</th>
+                <th>Project</th>
+                <th>Priority</th>
+                <th>Due</th>
+                <th>Status</th>
+                <th style="width:40px"></th>
+              </tr>
+            </thead>
+            <tbody id="pm-mytasks-body">
+              <tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:24px">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div><!-- /panel-projects -->
+
     <!-- ── Users Panel ────────────────────────────────────────────────── -->
 
   </div><!-- /content -->
@@ -5595,13 +6274,13 @@
 
   <!-- ── New Role Modal ── -->
   <div class="modal-overlay" id="um-role-create-modal" style="display:none">
-    <div class="po-aim-shell" style="width:75vw;max-height:88vh;overflow-y:auto">
-      <div class="po-aim-header">
+    <div class="po-aim-shell" style="width:75vw;max-height:88vh;overflow:hidden;display:flex;flex-direction:column">
+      <div class="po-aim-header" style="flex-shrink:0">
         <i class="fa fa-shield-halved" style="color:var(--accent)"></i>
         <span>Create Role</span>
         <button class="psm-close" id="um-rc-close"><i class="fa fa-xmark"></i></button>
       </div>
-      <div class="po-aim-body">
+      <div class="po-aim-body" style="flex:1;min-height:0;overflow-y:auto">
         <div class="po-field">
           <label class="po-field-label">Role Name <span class="po-required">*</span></label>
           <input type="text" id="um-rc-name" class="po-field-input" placeholder="e.g. Cashier, Supervisor…" maxlength="80">
@@ -5615,13 +6294,17 @@
           <div class="um-color-picker" id="um-rc-colors"></div>
         </div>
         <div class="po-field">
-          <label class="po-field-label">Module Permissions</label>
-          <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">Select which modules members with this role can access.</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+            <label class="po-field-label" style="margin:0">Module Permissions</label>
+            <button type="button" id="um-rc-all" style="margin-left:auto;font-size:11px;padding:2px 8px;border:1px solid var(--border);border-radius:4px;background:transparent;color:var(--text-muted);cursor:pointer"><i class="fa fa-square-check"></i> All</button>
+            <button type="button" id="um-rc-none" style="font-size:11px;padding:2px 8px;border:1px solid var(--border);border-radius:4px;background:transparent;color:var(--text-muted);cursor:pointer"><i class="fa fa-square"></i> None</button>
+          </div>
+          <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">Click a module to expand it and toggle individual permissions.</div>
           <div class="um-perm-grid" id="um-rc-perm-grid"></div>
         </div>
         <div id="um-rc-error" class="um-error-msg" style="display:none"></div>
       </div>
-      <div class="po-aim-footer">
+      <div class="po-aim-footer" style="flex-shrink:0">
         <button class="po-btn-ghost" id="um-rc-cancel"><i class="fa fa-xmark"></i> Cancel</button>
         <button class="po-btn-primary" id="um-rc-save"><i class="fa fa-check"></i> Create Role</button>
       </div>
@@ -5630,13 +6313,13 @@
 
   <!-- ── Edit Role Modal ── -->
   <div class="modal-overlay" id="um-role-edit-modal" style="display:none">
-    <div class="po-aim-shell" style="width:75vw;max-height:88vh;overflow-y:auto">
-      <div class="po-aim-header">
+    <div class="po-aim-shell" style="width:75vw;max-height:88vh;overflow:hidden;display:flex;flex-direction:column">
+      <div class="po-aim-header" style="flex-shrink:0">
         <i class="fa fa-pen-to-square" style="color:var(--accent)"></i>
         <span>Edit Role</span>
         <button class="psm-close" id="um-re-close"><i class="fa fa-xmark"></i></button>
       </div>
-      <div class="po-aim-body">
+      <div class="po-aim-body" style="flex:1;min-height:0;overflow-y:auto">
         <div class="po-field" id="um-re-name-wrap">
           <label class="po-field-label">Role Name <span class="po-required">*</span></label>
           <input type="text" id="um-re-name" class="po-field-input" placeholder="Role name…" maxlength="80">
@@ -5650,13 +6333,17 @@
           <div class="um-color-picker" id="um-re-colors"></div>
         </div>
         <div class="po-field">
-          <label class="po-field-label">Module Permissions</label>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+            <label class="po-field-label" style="margin:0">Module Permissions</label>
+            <button type="button" id="um-re-all" style="margin-left:auto;font-size:11px;padding:2px 8px;border:1px solid var(--border);border-radius:4px;background:transparent;color:var(--text-muted);cursor:pointer"><i class="fa fa-square-check"></i> All</button>
+            <button type="button" id="um-re-none" style="font-size:11px;padding:2px 8px;border:1px solid var(--border);border-radius:4px;background:transparent;color:var(--text-muted);cursor:pointer"><i class="fa fa-square"></i> None</button>
+          </div>
           <div id="um-re-admin-note" style="display:none;font-size:11px;color:var(--text-muted);margin-bottom:6px"><i class="fa fa-info-circle"></i> Admin role always has full access to all modules.</div>
           <div class="um-perm-grid" id="um-re-perm-grid"></div>
         </div>
         <div id="um-re-error" class="um-error-msg" style="display:none"></div>
       </div>
-      <div class="po-aim-footer" id="um-re-footer">
+      <div class="po-aim-footer" id="um-re-footer" style="flex-shrink:0">
         <button class="um-remove-btn" id="um-re-delete" style="margin-right:auto"><i class="fa fa-trash"></i> Delete Role</button>
         <button class="po-btn-ghost" id="um-re-cancel"><i class="fa fa-xmark"></i> Cancel</button>
         <button class="po-btn-primary" id="um-re-save"><i class="fa fa-check"></i> Save Changes</button>
@@ -9871,6 +10558,187 @@
       <button class="psw-btn psw-btn--next" id="psw-next">Next <i class="fa fa-arrow-right"></i></button>
     </div>
 
+  </div>
+</div>
+
+<!-- ── Automations: New Flow Modal ── -->
+<div class="modal-overlay" id="auto-new-modal" style="display:none">
+  <div class="po-aim-shell" style="width:460px">
+    <div class="po-aim-header">
+      <i class="fa fa-bolt" style="color:#f59e0b"></i>
+      <span>New Automation Flow</span>
+      <button class="psm-close" id="auto-new-close"><i class="fa fa-xmark"></i></button>
+    </div>
+    <div class="po-aim-body" style="display:flex;flex-direction:column;gap:14px">
+      <div id="auto-new-alert" class="svc-form-alert" style="display:none"></div>
+      <div class="po-field">
+        <label class="po-field-label">Flow Name <span class="po-required">*</span></label>
+        <input type="text" id="auto-new-name" class="po-field-input" placeholder="e.g. Welcome Email on New Customer" maxlength="120">
+      </div>
+      <div class="po-field">
+        <label class="po-field-label">Description <span style="color:var(--text-muted)">(optional)</span></label>
+        <input type="text" id="auto-new-desc" class="po-field-input" placeholder="What does this automation do?" maxlength="500">
+      </div>
+      <div class="po-field">
+        <label class="po-field-label">Trigger</label>
+        <select id="auto-new-trigger" class="po-field-input">
+          <option value="">— choose a trigger —</option>
+        </select>
+      </div>
+    </div>
+    <div class="po-aim-footer">
+      <button class="psm-cancel" id="auto-new-cancel">Cancel</button>
+      <button class="psm-save" id="auto-new-save"><i class="fa fa-pen-to-square"></i> Create &amp; Open Editor</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Developers Dialog ── -->
+<div class="modal-overlay" id="dev-dialog" style="display:none">
+  <div class="dev-dialog-shell">
+
+    <!-- Header -->
+    <div class="dev-dialog-hdr">
+      <i class="fa fa-code" style="color:#7c3aed;font-size:16px;flex-shrink:0"></i>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:14px;font-weight:700;line-height:1.2">Developer Settings</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:1px">API Keys &amp; Webhooks</div>
+      </div>
+      <button class="psm-close" id="dev-dialog-close"><i class="fa fa-xmark"></i></button>
+    </div>
+
+    <!-- Body: sidebar + content -->
+    <div class="dev-dialog-body">
+
+      <!-- Sidebar nav -->
+      <div class="dev-dialog-nav">
+        <button class="dev-snav-btn dev-snav-btn--active" data-dev="keys">
+          <i class="fa fa-key"></i> API Keys
+        </button>
+        <button class="dev-snav-btn" data-dev="webhooks">
+          <i class="fa fa-bolt"></i> Webhooks
+        </button>
+      </div>
+
+      <!-- Content pane -->
+      <div class="dev-dialog-content">
+
+        <!-- API Keys view -->
+        <div id="dev-view-keys" class="dev-view">
+          <div class="dev-view-topbar">
+            <div>
+              <div class="dev-view-title">API Keys</div>
+              <div class="dev-view-desc">Authenticate external requests. Keys are shown once — store them securely.</div>
+            </div>
+            <button class="psm-save" id="dev-new-key-btn" style="flex-shrink:0;white-space:nowrap"><i class="fa fa-plus"></i> New Key</button>
+          </div>
+          <!-- Token reveal banner -->
+          <div id="dev-token-reveal" class="dev-token-banner" style="display:none">
+            <div class="dev-token-banner-hdr">
+              <i class="fa fa-circle-check" style="color:#22c55e"></i>
+              <strong>API Key Created — copy it now, it won't be shown again</strong>
+              <button id="dev-token-reveal-close" class="dev-token-banner-close"><i class="fa fa-xmark"></i></button>
+            </div>
+            <div class="dev-token-banner-value">
+              <span id="dev-token-value"></span>
+              <button id="dev-token-copy" class="ribbon-btn-sm"><i class="fa fa-copy"></i> Copy</button>
+            </div>
+          </div>
+          <!-- Keys table -->
+          <div id="dev-keys-list" class="dev-list-wrap">
+            <div id="dev-keys-empty" class="dev-empty" style="display:none">
+              <i class="fa fa-key"></i>
+              <p>No API keys yet. Create one to get started.</p>
+            </div>
+            <table class="inv-table" id="dev-keys-table" style="display:none;width:100%">
+              <thead><tr><th>Name</th><th>Prefix</th><th>Status</th><th>Expires</th><th>Last Used</th><th>Created</th><th></th></tr></thead>
+              <tbody id="dev-keys-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Webhooks view -->
+        <div id="dev-view-webhooks" class="dev-view" style="display:none">
+          <div class="dev-view-topbar">
+            <div>
+              <div class="dev-view-title">Webhooks</div>
+              <div class="dev-view-desc">Receive HTTP POST notifications when events occur in your business.</div>
+            </div>
+            <button class="psm-save" id="dev-new-webhook-btn" style="flex-shrink:0;white-space:nowrap"><i class="fa fa-plus"></i> New Webhook</button>
+          </div>
+          <div id="dev-webhooks-list" class="dev-list-wrap">
+            <div id="dev-webhooks-empty" class="dev-empty" style="display:none">
+              <i class="fa fa-bolt"></i>
+              <p>No webhooks yet. Add one to receive event notifications.</p>
+            </div>
+            <table class="inv-table" id="dev-webhooks-table" style="display:none;width:100%">
+              <thead><tr><th>Name</th><th>URL</th><th>Events</th><th>Status</th><th>Failures</th><th>Last Triggered</th><th></th></tr></thead>
+              <tbody id="dev-webhooks-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+      </div><!-- /content pane -->
+    </div><!-- /body -->
+  </div><!-- /shell -->
+</div>
+
+<!-- ── Developers: New API Key Modal ── -->
+<div class="modal-overlay" id="dev-key-modal" style="display:none;z-index:1100">
+  <div class="po-aim-shell" style="width:480px">
+    <div class="po-aim-header">
+      <i class="fa fa-key" style="color:#7c3aed"></i>
+      <span>Create API Key</span>
+      <button class="psm-close" id="dev-key-modal-close"><i class="fa fa-xmark"></i></button>
+    </div>
+    <div class="po-aim-body" style="display:flex;flex-direction:column;gap:14px">
+      <div id="dev-key-modal-alert" class="svc-form-alert" style="display:none"></div>
+      <div class="po-field">
+        <label class="po-field-label">Key Name <span class="po-required">*</span></label>
+        <input type="text" id="dev-key-name" class="po-field-input" placeholder="e.g. My Shopify Integration" maxlength="100">
+      </div>
+      <div class="po-field">
+        <label class="po-field-label">Expiry Date <span style="color:var(--text-muted)">(optional)</span></label>
+        <input type="date" id="dev-key-expires" class="po-field-input">
+        <span class="po-field-hint">Leave blank for no expiry.</span>
+      </div>
+    </div>
+    <div class="po-aim-footer">
+      <button class="psm-cancel" id="dev-key-modal-cancel">Cancel</button>
+      <button class="psm-save" id="dev-key-modal-save"><i class="fa fa-key"></i> Generate Key</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Developers: New / Edit Webhook Modal ── -->
+<div class="modal-overlay" id="dev-webhook-modal" style="display:none;z-index:1100">
+  <div class="po-aim-shell" style="width:540px">
+    <div class="po-aim-header">
+      <i class="fa fa-bolt" style="color:#7c3aed"></i>
+      <span id="dev-webhook-modal-title">New Webhook</span>
+      <button class="psm-close" id="dev-webhook-modal-close"><i class="fa fa-xmark"></i></button>
+    </div>
+    <div class="po-aim-body" style="display:flex;flex-direction:column;gap:14px">
+      <div id="dev-webhook-modal-alert" class="svc-form-alert" style="display:none"></div>
+      <div class="po-field">
+        <label class="po-field-label">Name <span class="po-required">*</span></label>
+        <input type="text" id="dev-wh-name" class="po-field-input" placeholder="e.g. Order Sync" maxlength="100">
+      </div>
+      <div class="po-field">
+        <label class="po-field-label">Endpoint URL <span class="po-required">*</span></label>
+        <input type="url" id="dev-wh-url" class="po-field-input" placeholder="https://yourapp.com/webhook">
+      </div>
+      <div class="po-field">
+        <label class="po-field-label">Events <span class="po-required">*</span></label>
+        <div id="dev-wh-events" style="display:flex;flex-wrap:wrap;gap:8px;padding:10px;border:1px solid var(--border);border-radius:6px;max-height:180px;overflow-y:auto">
+          <!-- populated by JS -->
+        </div>
+      </div>
+    </div>
+    <div class="po-aim-footer">
+      <button class="psm-cancel" id="dev-webhook-modal-cancel">Cancel</button>
+      <button class="psm-save" id="dev-webhook-modal-save"><i class="fa fa-bolt"></i> Save Webhook</button>
+    </div>
   </div>
 </div>
 

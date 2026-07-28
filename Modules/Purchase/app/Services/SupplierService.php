@@ -19,7 +19,23 @@ class SupplierService
 
     public function create(Business $business, array $data): Supplier
     {
-        return $business->suppliers()->create($data);
+        $supplier = $business->suppliers()->create($data);
+
+        try {
+            app(\Modules\AutomationEditor\Services\AutomationRunnerService::class)->dispatch('supplier.created', $business, [
+                'event'    => 'supplier.created',
+                'supplier' => [
+                    'id'           => $supplier->id,
+                    'name'         => $supplier->name,
+                    'contact_name' => $supplier->contact_name,
+                    'email'        => $supplier->email,
+                    'phone'        => $supplier->phone,
+                    'created_at'   => $supplier->created_at?->toIso8601String(),
+                ],
+            ]);
+        } catch (\Throwable) {}
+
+        return $supplier;
     }
 
     public function update(Supplier $supplier, array $data): Supplier

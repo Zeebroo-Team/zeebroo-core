@@ -136,6 +136,29 @@ class StockAuditService
                 'finalized_by' => $user->id,
             ]);
         });
+
+        try {
+            $audit->refresh();
+            $business = \Modules\Business\Models\Business::find($audit->business_id);
+            if ($business) {
+                $lineCount    = StockAuditLine::where('stock_audit_id', $audit->id)->whereNotNull('counted_qty')->count();
+                $varianceCount = StockAuditLine::where('stock_audit_id', $audit->id)
+                    ->whereNotNull('counted_qty')
+                    ->whereColumn('counted_qty', '!=', 'expected_qty')
+                    ->count();
+                app(\Modules\AutomationEditor\Services\AutomationRunnerService::class)->dispatch('stock.audit.finalized', $business, [
+                    'event' => 'stock.audit.finalized',
+                    'audit' => [
+                        'id'             => $audit->id,
+                        'reference'      => $audit->audit_number,
+                        'audit_date'     => $audit->audit_date,
+                        'finalized_at'   => $audit->finalized_at?->toIso8601String(),
+                        'lines_counted'  => $lineCount,
+                        'variance_count' => $varianceCount,
+                    ],
+                ]);
+            }
+        } catch (\Throwable) {}
     }
 
     public function delete(StockAudit $audit): void

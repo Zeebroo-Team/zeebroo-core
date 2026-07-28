@@ -5,6 +5,7 @@ namespace Modules\Pos\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesPosBusinessForApi;
 use Modules\Pos\Services\PosCatalogService;
 use Modules\Pos\Services\PosOnlineApiService;
@@ -73,10 +74,50 @@ class PosCatalogApiController extends Controller
             $sort,
         );
 
+        $data = $paginated['data'];
+        $this->enrichWithReservedStock($data, (int) $business->id);
+
         return response()->json([
-            'data' => $paginated['data'],
+            'data' => $data,
             'meta' => $paginated['meta'],
         ]);
+    }
+
+    private function enrichWithReservedStock(array &$products, int $businessId): void
+    {
+        $ids = array_column($products, 'id');
+        if (empty($ids)) return;
+
+        // Sum quantities on open invoices (draft / sent)
+        $invReserved = DB::table('invoice_items')
+            ->join('invoices', 'invoice_items.invoice_id', '=', 'invoices.id')
+            ->where('invoices.business_id', $businessId)
+            ->whereIn('invoices.status', ['draft', 'sent'])
+            ->whereIn('invoice_items.product_id', $ids)
+            ->whereNotNull('invoice_items.product_id')
+            ->groupBy('invoice_items.product_id')
+            ->selectRaw('invoice_items.product_id, SUM(invoice_items.quantity) as qty')
+            ->pluck('qty', 'product_id');
+
+        // Sum quantities on active quotations (draft / sent / accepted)
+        $qtReserved = DB::table('quotation_items')
+            ->join('quotations', 'quotation_items.quotation_id', '=', 'quotations.id')
+            ->where('quotations.business_id', $businessId)
+            ->whereIn('quotations.status', ['draft', 'sent', 'accepted'])
+            ->whereIn('quotation_items.product_id', $ids)
+            ->whereNotNull('quotation_items.product_id')
+            ->groupBy('quotation_items.product_id')
+            ->selectRaw('quotation_items.product_id, SUM(quotation_items.quantity) as qty')
+            ->pluck('qty', 'product_id');
+
+        foreach ($products as &$p) {
+            $id       = $p['id'];
+            $reserved = (float)($invReserved[$id] ?? 0) + (float)($qtReserved[$id] ?? 0);
+            $stock    = (float)($p['stock_quantity'] ?? 0);
+            $p['reserved_qty']    = round($reserved, 3);
+            $p['available_stock'] = round(max(0.0, $stock - $reserved), 3);
+        }
+        unset($p);
     }
 
     public function show(Request $request, int $id): JsonResponse
@@ -161,6 +202,45 @@ class PosCatalogApiController extends Controller
                 'updated_at'   => $product->updated_at?->toDateTimeString(),
             ]),
         ]);
+    }
+
+    public function stockHistory(Request $request, int $id): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+
+        $product = $business->products()->where('id', $id)->first();
+        if ($product === null) {
+            return response()->json(['message' => 'Product not found.'], 404);
+        }
+
+        $layers = $product->stockLayers()
+            ->with([
+                'goodsReceiveNoteItem.goodsReceiveNote.purchase.supplier',
+            ])
+            ->orderByDesc('received_at')
+            ->orderByDesc('id')
+            ->get();
+
+        $data = $layers->map(function ($layer) {
+            $grnItem = $layer->goodsReceiveNoteItem;
+            $grn     = $grnItem?->goodsReceiveNote;
+            $po      = $grn?->purchase;
+
+            return [
+                'received_at'        => $layer->received_at?->toDateString(),
+                'quantity_received'  => (float) $layer->quantity_received,
+                'quantity_remaining' => (float) $layer->quantity_remaining,
+                'unit_cost'          => (float) $layer->unit_cost,
+                'grn_number'         => $grn?->grn_number,
+                'grn_reference'      => $grn?->reference,
+                'grn_id'             => $grn?->id,
+                'po_number'          => $po?->po_number,
+                'po_id'              => $po?->id,
+                'supplier_name'      => $po?->supplier?->name,
+            ];
+        });
+
+        return response()->json(['data' => $data]);
     }
 
     public function productBySku(Request $request, string $sku): JsonResponse

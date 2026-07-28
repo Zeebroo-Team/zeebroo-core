@@ -23,7 +23,24 @@ class PropertyService
         $data['user_id'] = $user->id;
         $data['business_id'] = $business->id;
 
-        return Property::create($data);
+        $property = Property::create($data);
+
+        try {
+            app(\Modules\AutomationEditor\Services\AutomationRunnerService::class)->dispatch('property.created', $business, [
+                'event'    => 'property.created',
+                'property' => [
+                    'id'            => $property->id,
+                    'property_name' => $property->property_name,
+                    'property_type' => $property->property_type,
+                    'cost'          => (float) $property->cost,
+                    'has_expiry'    => (bool) $property->has_expiry,
+                    'expire_date'   => $property->expire_date?->toDateString(),
+                    'created_at'    => $property->created_at?->toIso8601String(),
+                ],
+            ]);
+        } catch (\Throwable) {}
+
+        return $property;
     }
 
     public function deleteForUser(User $user, Property $property): bool

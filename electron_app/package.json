@@ -80,5 +80,10 @@
       "artifactName": "${productName}-${version}-${arch}.${ext}"
     },
     "publish": null
+  },
+  "overrides": {
+    "fast-uri": "^3.1.4",
+    "brace-expansion": "^5.0.8",
+    "tar": "^7.5.21"
   }
 }

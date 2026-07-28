@@ -25,6 +25,7 @@ class PosSaleReturnApiController extends Controller
     {
         $business = $this->businessOrAbort($request);
         abort_unless((int) $sale->business_id === (int) $business->id, 404);
+        $this->abortUnlessPerm($request, $business, 'pos_returns');
 
         $validated = $request->validate([
             'items'                  => 'required|array|min:1',

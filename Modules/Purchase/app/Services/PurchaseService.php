@@ -75,7 +75,7 @@ class PurchaseService
         $status = $this->normalizeStatus($data['status'] ?? Purchase::STATUS_DRAFT, allowReceived: true);
         $lines = $this->normalizeItems($business, $items);
 
-        return DB::transaction(function () use ($business, $data, $status, $lines) {
+        $purchase = DB::transaction(function () use ($business, $data, $status, $lines) {
             $purchase = $business->purchases()->create([
                 'po_number' => $this->nextPoNumber($business),
                 'supplier_id' => $this->nullableInt($data['supplier_id'] ?? null),
@@ -100,6 +100,22 @@ class PurchaseService
 
             return $purchase->load(['supplier', 'items.product']);
         });
+
+        try {
+            app(\Modules\AutomationEditor\Services\AutomationRunnerService::class)->dispatch('order.created', $business, [
+                'event'    => 'order.created',
+                'order'    => [
+                    'id'         => $purchase->id,
+                    'reference'  => $purchase->po_number,
+                    'total'      => (float) $purchase->total,
+                    'created_at' => $purchase->created_at?->toIso8601String(),
+                    'items'      => $purchase->items->map(fn ($i) => ['product_id' => $i->product_id, 'name' => $i->product?->name, 'qty' => (float) $i->quantity, 'unit_price' => (float) $i->unit_cost])->values()->all(),
+                ],
+                'supplier' => ['id' => $purchase->supplier?->id, 'name' => $purchase->supplier?->name],
+            ]);
+        } catch (\Throwable) {}
+
+        return $purchase;
     }
 
     public function update(Purchase $purchase, array $data, array $items): Purchase

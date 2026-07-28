@@ -77,7 +77,7 @@ class PosBusinessesApiController extends Controller
         ]);
 
         $allKeys     = ['account_management', 'bill_management', 'human_resources', 'point_of_sale',
-                        'product_management', 'service_management', 'social_media_campaign', 'stock_management'];
+                        'product_management', 'project_management', 'service_management', 'social_media_campaign', 'stock_management'];
         $enabledKeys = array_fill_keys($validated['features'] ?? [], true);
         $features    = [];
         foreach ($allKeys as $k) {

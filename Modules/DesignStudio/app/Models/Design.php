@@ -18,6 +18,10 @@ class Design extends Model
         'width',
         'height',
         'canvas_json',
+        'proposal_group',
+        'proposal_sort',
+        'invoice_id',
+        'quotation_id',
     ];
 
     protected $casts = [

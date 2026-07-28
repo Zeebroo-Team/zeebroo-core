@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
+use Modules\AutomationEditor\Services\AutomationRunnerService;
 use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesPosBusinessForApi;
 use Modules\Pos\Models\Sale;
 use Modules\Pos\Services\SalePaymentSettlementService;
@@ -79,6 +80,7 @@ class PosEndOfDayApiController extends Controller
     public function settle(Request $request): JsonResponse
     {
         $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'pos_eod');
         $user     = $request->user();
 
         $unsettled = $business->sales()
@@ -112,6 +114,24 @@ class PosEndOfDayApiController extends Controller
             } catch (\Throwable $e) {
                 $errors[] = 'Sale ' . $sale->sale_number . ': ' . $e->getMessage();
             }
+        }
+
+        if ($settled > 0) {
+            try {
+                $totalAmount = round($unsettled->sum(fn ($s) => (float) $s->total), 2);
+                app(AutomationRunnerService::class)->dispatch('eod.settled', $business, [
+                    'event'   => 'eod.settled',
+                    'settled' => [
+                        'count'  => $settled,
+                        'total'  => $totalAmount,
+                        'date'   => now()->toDateString(),
+                    ],
+                    'business' => [
+                        'id'   => $business->id,
+                        'name' => $business->name,
+                    ],
+                ]);
+            } catch (\Throwable) {}
         }
 
         $message = $settled > 0

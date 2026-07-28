@@ -26,7 +26,25 @@ class RentalService
         $data['user_id'] = $user->id;
         $data['business_id'] = $business->id;
 
-        return Rental::create($data);
+        $rental = Rental::create($data);
+
+        try {
+            app(\Modules\AutomationEditor\Services\AutomationRunnerService::class)->dispatch('rental.created', $business, [
+                'event'  => 'rental.created',
+                'rental' => [
+                    'id'             => $rental->id,
+                    'property_type'  => $rental->property_type,
+                    'purpose'        => $rental->purpose,
+                    'recurring_cost' => (float) $rental->recurring_cost,
+                    'recurring_type' => $rental->recurring_type,
+                    'due_date'       => $rental->due_date?->toDateString(),
+                    'key_money'      => (float) $rental->key_money,
+                    'created_at'     => $rental->created_at?->toIso8601String(),
+                ],
+            ]);
+        } catch (\Throwable) {}
+
+        return $rental;
     }
 
     /** @param  array<string, mixed>  $data */

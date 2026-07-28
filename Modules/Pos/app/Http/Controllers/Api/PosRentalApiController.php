@@ -59,6 +59,7 @@ class PosRentalApiController extends Controller
     public function store(Request $request): JsonResponse
     {
         $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'fin_assets');
         $user     = $request->user();
 
         $request->merge([
@@ -183,6 +184,7 @@ class PosRentalApiController extends Controller
         if ((int) $rental->business_id !== (int) $business->id) {
             return response()->json(['message' => 'Rental not found.'], 404);
         }
+        $this->abortUnlessPerm($request, $business, 'fin_assets');
 
         $validated = $request->validate([
             'due_date'   => ['required', 'date'],
@@ -211,6 +213,7 @@ class PosRentalApiController extends Controller
         if ((int) $rental->business_id !== (int) $business->id) {
             return response()->json(['message' => 'Rental not found.'], 404);
         }
+        $this->abortUnlessPerm($request, $business, 'fin_assets');
 
         $deleted = $this->rentalService->deleteForUser($request->user(), $rental);
 

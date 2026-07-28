@@ -26,6 +26,7 @@ class PosProductApiController extends Controller
     public function store(Request $request): JsonResponse
     {
         $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'inv_products');
 
         try {
             $quickResult = $this->quickCreate->create($business, $request->all());
@@ -81,6 +82,7 @@ class PosProductApiController extends Controller
     public function update(Request $request, Product $product): JsonResponse
     {
         $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'inv_products');
 
         if (! $this->productService->productForBusiness($business, $product)) {
             return response()->json(['message' => 'Not found.'], 404);
@@ -129,6 +131,7 @@ class PosProductApiController extends Controller
     public function destroy(Request $request, Product $product): JsonResponse
     {
         $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'inv_products');
 
         if (! $this->productService->productForBusiness($business, $product)) {
             return response()->json(['message' => 'Not found.'], 404);

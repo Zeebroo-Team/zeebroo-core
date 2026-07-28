@@ -52,6 +52,7 @@ class PosCustomerApiController extends Controller
     public function store(Request $request): JsonResponse
     {
         $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'pos_customers');
 
         $validated = $request->validate([
             'name'          => ['required', 'string', 'max:255'],
@@ -65,6 +66,13 @@ class PosCustomerApiController extends Controller
         $customer = Customer::create(array_merge($validated, ['business_id' => $business->id]));
         $customer->loadCount('sales');
 
+        try {
+            app(\Modules\AutomationEditor\Services\AutomationRunnerService::class)->dispatch('customer.created', $business, [
+                'event'    => 'customer.created',
+                'customer' => ['id' => $customer->id, 'name' => $customer->name, 'email' => $customer->email, 'phone' => $customer->phone, 'created_at' => $customer->created_at?->toIso8601String()],
+            ]);
+        } catch (\Throwable) {}
+
         return response()->json(['data' => $this->format($customer)], 201);
     }
 
@@ -72,6 +80,7 @@ class PosCustomerApiController extends Controller
     {
         $business = $this->businessOrAbort($request);
         if ((int) $customer->business_id !== (int) $business->id) abort(403);
+        $this->abortUnlessPerm($request, $business, 'pos_customers');
 
         $validated = $request->validate([
             'name'          => ['sometimes', 'required', 'string', 'max:255'],
@@ -92,6 +101,7 @@ class PosCustomerApiController extends Controller
     {
         $business = $this->businessOrAbort($request);
         if ((int) $customer->business_id !== (int) $business->id) abort(403);
+        $this->abortUnlessPerm($request, $business, 'pos_customers');
 
         $customer->delete();
 

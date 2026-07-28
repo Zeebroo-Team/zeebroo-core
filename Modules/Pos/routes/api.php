@@ -66,6 +66,7 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
     Route::get('online/categories', [PosCatalogApiController::class, 'categories'])->name('online.categories');
     Route::get('online/products', [PosCatalogApiController::class, 'products'])->name('online.products');
     Route::get('online/products/{id}', [PosCatalogApiController::class, 'show'])->where('id', '[0-9]+')->name('online.products.show');
+    Route::get('online/products/{id}/stock-history', [PosCatalogApiController::class, 'stockHistory'])->where('id', '[0-9]+')->name('online.products.stock-history');
     Route::get('online/products/{id}/sales-chart', \Modules\Pos\Http\Controllers\Api\PosProductSalesChartApiController::class)->where('id', '[0-9]+')->name('online.products.sales-chart');
     Route::get('online/products/sku/{sku}', [PosCatalogApiController::class, 'productBySku'])->name('online.products.sku');
 
@@ -245,10 +246,19 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
     Route::get('design-studio/designs/{design}',     [\Modules\Pos\Http\Controllers\Api\PosDesignStudioApiController::class, 'show'])->name('design-studio.designs.show');
     Route::patch('design-studio/designs/{design}',   [\Modules\Pos\Http\Controllers\Api\PosDesignStudioApiController::class, 'update'])->name('design-studio.designs.update');
     Route::delete('design-studio/designs/{design}',  [\Modules\Pos\Http\Controllers\Api\PosDesignStudioApiController::class, 'destroy'])->name('design-studio.designs.destroy');
+    Route::get('design-studio/proposals',                         [\Modules\Pos\Http\Controllers\Api\PosDesignStudioApiController::class, 'proposals'])->name('design-studio.proposals.index');
+    Route::post('design-studio/proposals',                        [\Modules\Pos\Http\Controllers\Api\PosDesignStudioApiController::class, 'storeProposal'])->name('design-studio.proposals.store');
+    Route::post('design-studio/proposals/ai-content',             [\Modules\Pos\Http\Controllers\Api\PosDesignStudioApiController::class, 'aiProposalContent'])->name('design-studio.proposals.ai-content');
+    Route::post('design-studio/proposals/{group}/ai-fill',        [\Modules\Pos\Http\Controllers\Api\PosDesignStudioApiController::class, 'aiProposalFill'])->name('design-studio.proposals.ai-fill');
+    Route::post('design-studio/proposals/{group}/pages',          [\Modules\Pos\Http\Controllers\Api\PosDesignStudioApiController::class, 'addProposalPage'])->name('design-studio.proposals.add-page');
+    Route::get('design-studio/proposals/{group}/pages',           [\Modules\Pos\Http\Controllers\Api\PosDesignStudioApiController::class, 'proposalPages'])->name('design-studio.proposals.pages');
+    Route::delete('design-studio/proposals/{group}',              [\Modules\Pos\Http\Controllers\Api\PosDesignStudioApiController::class, 'destroyProposal'])->name('design-studio.proposals.destroy');
+    Route::post('design-studio/proposals/{group}/link-invoice',   [\Modules\Pos\Http\Controllers\Api\PosDesignStudioApiController::class, 'linkProposalToInvoice'])->name('design-studio.proposals.link-invoice');
     Route::post('design-studio/ai-chat',             [\Modules\Pos\Http\Controllers\Api\DesignAiChatApiController::class, 'chat'])->name('design-studio.ai-chat');
 
-    Route::get ('service/requests',                        [\Modules\Pos\Http\Controllers\Api\PosServiceApiController::class, 'requests'])->name('service.requests.index');
-    Route::patch('service/requests/{serviceRequest}/status', [\Modules\Pos\Http\Controllers\Api\PosServiceApiController::class, 'updateRequestStatus'])->name('service.requests.status');
+    Route::get  ('service/requests',                           [\Modules\Pos\Http\Controllers\Api\PosServiceApiController::class, 'requests'])->name('service.requests.index');
+    Route::post ('service/requests',                           [\Modules\Pos\Http\Controllers\Api\PosServiceApiController::class, 'storeRequest'])->name('service.requests.store');
+    Route::patch('service/requests/{serviceRequest}/status',   [\Modules\Pos\Http\Controllers\Api\PosServiceApiController::class, 'updateRequestStatus'])->name('service.requests.status');
     Route::get ('service/catalog',                         [\Modules\Pos\Http\Controllers\Api\PosServiceApiController::class, 'catalog'])->name('service.catalog.index');
     Route::post('service/catalog',                         [\Modules\Pos\Http\Controllers\Api\PosServiceApiController::class, 'store'])->name('service.catalog.store');
     Route::get   ('service/catalog/{serviceItem}',          [\Modules\Pos\Http\Controllers\Api\PosServiceApiController::class, 'show'])->name('service.catalog.show');
@@ -345,4 +355,15 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
     Route::get   ('mail/filters',                     [\Modules\Pos\Http\Controllers\Api\PosMailApiController::class, 'filters'])        ->name('mail.filters.index');
     Route::get   ('mail/settings',                    [\Modules\Pos\Http\Controllers\Api\PosMailApiController::class, 'settingsGet'])     ->name('mail.settings.show');
     Route::patch ('mail/settings',                    [\Modules\Pos\Http\Controllers\Api\PosMailApiController::class, 'settingsUpdate'])  ->name('mail.settings.update');
+
+    // Developers
+    Route::get   ('developers/keys',                           [\Modules\Developers\Http\Controllers\Api\DeveloperApiKeyApiController::class,  'index'])->name('developers.keys.index');
+    Route::post  ('developers/keys',                           [\Modules\Developers\Http\Controllers\Api\DeveloperApiKeyApiController::class,  'store'])->name('developers.keys.store');
+    Route::patch ('developers/keys/{id}/toggle',               [\Modules\Developers\Http\Controllers\Api\DeveloperApiKeyApiController::class,  'toggle'])->where('id', '[0-9]+')->name('developers.keys.toggle');
+    Route::delete('developers/keys/{id}',                      [\Modules\Developers\Http\Controllers\Api\DeveloperApiKeyApiController::class,  'destroy'])->where('id', '[0-9]+')->name('developers.keys.destroy');
+    Route::get   ('developers/webhooks',                       [\Modules\Developers\Http\Controllers\Api\DeveloperWebhookApiController::class, 'index'])->name('developers.webhooks.index');
+    Route::post  ('developers/webhooks',                       [\Modules\Developers\Http\Controllers\Api\DeveloperWebhookApiController::class, 'store'])->name('developers.webhooks.store');
+    Route::patch ('developers/webhooks/{id}',                  [\Modules\Developers\Http\Controllers\Api\DeveloperWebhookApiController::class, 'update'])->where('id', '[0-9]+')->name('developers.webhooks.update');
+    Route::post  ('developers/webhooks/{id}/regenerate-secret',[\Modules\Developers\Http\Controllers\Api\DeveloperWebhookApiController::class, 'regenerateSecret'])->where('id', '[0-9]+')->name('developers.webhooks.regenerate-secret');
+    Route::delete('developers/webhooks/{id}',                  [\Modules\Developers\Http\Controllers\Api\DeveloperWebhookApiController::class, 'destroy'])->where('id', '[0-9]+')->name('developers.webhooks.destroy');
 });

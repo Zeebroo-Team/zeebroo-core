@@ -246,7 +246,7 @@ class SaleService
         $cartProductIds = array_map(fn ($l) => (int) $l['product']->id, $productLines);
         $activeDiscounts = $this->discountService->activeForProducts($business, $cartProductIds);
 
-        return DB::transaction(function () use ($business, $user, $productLines, $serviceLines, $paymentMethod, $creditAccountId, $amountPaid, $notes, $channel, $discountPercent, $amountTendered, $customerId, $deferSettlement, $branchId, $activeDiscounts, $scheduledAt, $posCounterId) {
+        $sale = DB::transaction(function () use ($business, $user, $productLines, $serviceLines, $paymentMethod, $creditAccountId, $amountPaid, $notes, $channel, $discountPercent, $amountTendered, $customerId, $deferSettlement, $branchId, $activeDiscounts, $scheduledAt, $posCounterId) {
             $sale = $business->sales()->create([
                 'branch_id'       => $branchId,
                 'pos_counter_id'  => $posCounterId,
@@ -421,6 +421,16 @@ class SaleService
 
             return $sale->refresh()->load(['items.product', 'items.serviceItem.products', 'creditAccount', 'user']);
         });
+
+        try {
+            $sale->loadMissing('customer');
+            app(\Modules\AutomationEditor\Services\AutomationRunnerService::class)
+                ->dispatch('sale.created', $business, $this->salePayload($sale));
+        } catch (\Throwable) {
+            // Automation errors must never break the checkout
+        }
+
+        return $sale;
     }
 
     public function void(Sale $sale, Business $business): Sale
@@ -435,7 +445,7 @@ class SaleService
             ]);
         }
 
-        return DB::transaction(function () use ($sale) {
+        $sale = DB::transaction(function () use ($sale) {
             $sale->load(['items.product', 'items.serviceItem.products']);
 
             foreach ($sale->items as $item) {
@@ -465,6 +475,14 @@ class SaleService
 
             return $sale->refresh();
         });
+
+        try {
+            $sale->loadMissing('customer');
+            app(\Modules\AutomationEditor\Services\AutomationRunnerService::class)
+                ->dispatch('sale.voided', $business, array_merge($this->salePayload($sale), ['event' => 'sale.voided']));
+        } catch (\Throwable) {}
+
+        return $sale;
     }
 
     public function nextSaleNumber(Business $business): string
@@ -656,5 +674,35 @@ class SaleService
         }
 
         return $channel;
+    }
+
+    private function salePayload(Sale $sale): array
+    {
+        $customer = $sale->customer;
+        return [
+            'event' => 'sale.created',
+            'sale'  => [
+                'id'             => $sale->id,
+                'reference'      => $sale->sale_number,
+                'total'          => (float) $sale->total,
+                'subtotal'       => (float) $sale->subtotal,
+                'payment_method' => $sale->payment_method,
+                'status'         => $sale->status,
+                'created_at'     => $sale->created_at?->toIso8601String(),
+                'items'          => $sale->items->map(fn ($i) => [
+                    'product_id' => $i->product_id,
+                    'name'       => $i->product_name,
+                    'qty'        => (float) $i->quantity,
+                    'unit_price' => (float) $i->unit_sell_price,
+                    'total'      => (float) $i->line_total,
+                ])->values()->all(),
+            ],
+            'customer' => $customer ? [
+                'id'    => $customer->id,
+                'name'  => $customer->name,
+                'email' => $customer->email,
+                'phone' => $customer->phone ?? null,
+            ] : [],
+        ];
     }
 }

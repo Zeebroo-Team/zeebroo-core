@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Modules\Business\Models\Business;
+use Modules\DesignStudio\Models\Design;
 use Modules\Pos\Models\Customer;
 
 class Invoice extends Model
@@ -55,6 +56,11 @@ class Invoice extends Model
     public function items(): HasMany
     {
         return $this->hasMany(InvoiceItem::class)->orderBy('sort_order');
+    }
+
+    public function proposals(): HasMany
+    {
+        return $this->hasMany(Design::class)->whereNotNull('proposal_group');
     }
 
     public function isPublic(): bool

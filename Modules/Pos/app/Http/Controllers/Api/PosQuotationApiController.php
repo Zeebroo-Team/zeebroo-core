@@ -39,6 +39,7 @@ class PosQuotationApiController extends Controller
     public function store(Request $request): JsonResponse
     {
         $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'pos_quotations');
 
         $validated = $this->validateHeader($request, $business);
 
@@ -74,6 +75,7 @@ class PosQuotationApiController extends Controller
     {
         $business = $this->businessOrAbort($request);
         abort_unless((int) $quotation->business_id === (int) $business->id, 404);
+        $this->abortUnlessPerm($request, $business, 'pos_quotations');
 
         $validated = $this->validateHeader($request, $business);
 
@@ -125,6 +127,7 @@ class PosQuotationApiController extends Controller
     {
         $business = $this->businessOrAbort($request);
         abort_unless((int) $quotation->business_id === (int) $business->id, 404);
+        $this->abortUnlessPerm($request, $business, 'pos_quotations');
 
         try {
             $this->quotations->delete($quotation);
@@ -140,16 +143,17 @@ class PosQuotationApiController extends Controller
     private function formatListItem(Quotation $q): array
     {
         return [
-            'id'            => (int) $q->id,
-            'quote_number'  => $q->quote_number,
-            'status'        => $q->status,
-            'status_label'  => $q->statusLabel(),
-            'status_color'  => $q->statusColor(),
-            'customer_name' => $q->customer?->name,
-            'reference'     => $q->reference,
-            'quote_date'    => $q->quote_date?->toDateString(),
-            'expiry_date'   => $q->expiry_date?->toDateString(),
-            'total'         => round((float) $q->total, 2),
+            'id'             => (int) $q->id,
+            'quote_number'   => $q->quote_number,
+            'status'         => $q->status,
+            'status_label'   => $q->statusLabel(),
+            'status_color'   => $q->statusColor(),
+            'customer_name'  => $q->customer?->name,
+            'reference'      => $q->reference,
+            'quote_date'     => $q->quote_date?->toDateString(),
+            'expiry_date'    => $q->expiry_date?->toDateString(),
+            'total'          => round((float) $q->total, 2),
+            'proposal_count' => (int) ($q->proposal_count ?? 0),
         ];
     }
 

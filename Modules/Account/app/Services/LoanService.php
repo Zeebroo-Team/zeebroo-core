@@ -32,7 +32,23 @@ class LoanService
         $data['user_id'] = $user->id;
         $data['business_id'] = $business->id;
 
-        return Loan::create($data);
+        $loan = Loan::create($data);
+
+        try {
+            app(\Modules\AutomationEditor\Services\AutomationRunnerService::class)->dispatch('loan.created', $business, [
+                'event' => 'loan.created',
+                'loan'  => [
+                    'id'               => $loan->id,
+                    'name'             => $loan->name,
+                    'borrowed_amount'  => (float) $loan->borrowed_amount,
+                    'interest_rate'    => (float) $loan->interest_rate,
+                    'recurring_type'   => $loan->recurring_type,
+                    'created_at'       => $loan->created_at?->toIso8601String(),
+                ],
+            ]);
+        } catch (\Throwable) {}
+
+        return $loan;
     }
 
     /** Load loan with relations only if owned by user (scoped to businesses they belong to). */
