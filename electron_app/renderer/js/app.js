@@ -13713,38 +13713,62 @@ function _coSyncCustomer() {
   if (ddEl) ddEl.style.display = 'none';
 }
 
-$('#co-cust-input')?.addEventListener('input', function () {
-  clearTimeout(_coCustTimer);
-  const q  = this.value.trim();
+// ── Checkout customer dropdown ──────────────────────────────────────────────
+// Renders the customer list (filtered by q) into the dropdown and appends a
+// persistent "Add customer" row. Shared by focus and input events.
+async function _coCustRender(q) {
   const dd = $('#co-cust-dd');
   if (!dd) return;
-  if (q.length < 1) { dd.style.display = 'none'; return; }
-  _coCustTimer = setTimeout(async () => {
-    const res  = await API.customers(q);
-    const list = res.body?.data ?? [];
-    if (!list.length) {
-      dd.innerHTML = `<div class="co-cust-dd-row"><span class="co-cust-dd-name" style="color:var(--text-muted)">No customers found</span></div>`;
-      dd.style.display = '';
-      return;
-    }
-    dd.innerHTML = list.map(c => `
-      <div class="co-cust-dd-row" data-cid="${c.id}">
-        <div class="co-cust-dd-name">${escHtml(c.name)}</div>
-        ${c.phone ? `<div class="co-cust-dd-meta">${escHtml(c.phone)}</div>` : ''}
-      </div>`).join('');
-    dd.style.display = '';
-    dd.querySelectorAll('.co-cust-dd-row[data-cid]').forEach(row => {
-      row.addEventListener('mousedown', e => {
-        e.preventDefault();
-        const c = list.find(x => x.id === Number(row.dataset.cid));
-        if (!c) return;
-        const tab = activeTab();
-        if (tab) tab._customer = c;
-        renderCartCustomer();
-        _coSyncCustomer();
-      });
+  const res  = await API.customers(q || '');
+  const list = res.body?.data ?? [];
+
+  const customerRows = list.map(c => `
+    <div class="co-cust-dd-row" data-cid="${c.id}">
+      <div class="co-cust-dd-name">${escHtml(c.name)}</div>
+      ${c.phone ? `<div class="co-cust-dd-meta">${escHtml(c.phone)}</div>` : ''}
+    </div>`).join('');
+
+  const emptyRow = !list.length
+    ? `<div class="co-cust-dd-row co-cust-dd-empty"><span class="co-cust-dd-name">No customers found</span></div>`
+    : '';
+
+  const addRow = `<div class="co-cust-dd-row co-cust-dd-add" id="co-cust-dd-add-row">
+    <i class="fa fa-user-plus" style="margin-right:6px;opacity:.75"></i>
+    <span class="co-cust-dd-name">Add customer</span>
+  </div>`;
+
+  dd.innerHTML = customerRows + emptyRow + addRow;
+  dd.style.display = '';
+
+  dd.querySelectorAll('.co-cust-dd-row[data-cid]').forEach(row => {
+    row.addEventListener('mousedown', e => {
+      e.preventDefault();
+      const c = list.find(x => x.id === Number(row.dataset.cid));
+      if (!c) return;
+      const tab = activeTab();
+      if (tab) tab._customer = c;
+      renderCartCustomer();
+      _coSyncCustomer();
     });
-  }, 250);
+  });
+
+  $('#co-cust-dd-add-row')?.addEventListener('mousedown', e => {
+    e.preventDefault();
+    dd.style.display = 'none';
+    openCustomerModal();
+    setTimeout(() => _showCustomerCreateForm(''), 60);
+  });
+}
+
+$('#co-cust-input')?.addEventListener('focus', function () {
+  clearTimeout(_coCustTimer);
+  _coCustRender(this.value.trim());
+});
+
+$('#co-cust-input')?.addEventListener('input', function () {
+  clearTimeout(_coCustTimer);
+  const q = this.value.trim();
+  _coCustTimer = setTimeout(() => _coCustRender(q), 220);
 });
 
 $('#co-cust-input')?.addEventListener('blur', () => {
@@ -13757,14 +13781,6 @@ $('#co-cust-clear')?.addEventListener('click', () => {
   renderCartCustomer();
   _coSyncCustomer();
   setTimeout(() => $('#co-cust-input')?.focus(), 50);
-});
-
-// "Add customer" button inside the checkout modal — opens the POS customer
-// modal with the create form pre-opened so the cashier can register a new
-// customer without leaving the checkout flow.
-$('#co-cust-add-btn')?.addEventListener('click', () => {
-  openCustomerModal();
-  setTimeout(() => _showCustomerCreateForm(''), 60);
 });
 
 $('#checkout-confirm').addEventListener('click', async () => {

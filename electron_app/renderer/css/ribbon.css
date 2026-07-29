@@ -4866,6 +4866,15 @@ body.dark .han-icon-amber  { color: #fbbf24; }
 .co-cust-dd-row:hover { background: var(--surface2); }
 .co-cust-dd-name { font-size: 13px; font-weight: 600; }
 .co-cust-dd-meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+.co-cust-dd-empty .co-cust-dd-name { color: var(--text-muted); font-weight: 400; }
+.co-cust-dd-add {
+  display: flex; align-items: center;
+  border-top: 1px solid var(--border); color: var(--accent);
+  font-size: 13px; font-weight: 600;
+  position: sticky; bottom: 0;
+  background: var(--surface);
+}
+.co-cust-dd-add:hover { background: rgba(212,160,74,.08); }
 
 .co-due-row, .co-change-row {
   display: flex; justify-content: space-between; align-items: center;
