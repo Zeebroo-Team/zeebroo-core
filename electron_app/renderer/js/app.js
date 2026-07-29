@@ -10844,6 +10844,7 @@ function buildServiceGrid(services) {
       <div class="svc-name">${escHtml(s.name)}</div>
       ${s.duration_label && s.duration_label !== '—' ? `<div class="svc-dur"><i class="fa fa-clock"></i> ${escHtml(s.duration_label)}</div>` : ''}
       <div class="svc-price">${s.price > 0 ? parseFloat(s.price).toFixed(2) + cur : 'Free'}</div>
+      ${s.has_warranty ? '<div class="svc-wty-badge"><i class="fa fa-shield-halved"></i></div>' : ''}
     </div>`;
 
   let html = '';
@@ -10863,7 +10864,7 @@ function buildServiceGrid(services) {
   });
 }
 
-function addServiceToCart(service) {
+async function addServiceToCart(service) {
   _beep.currentTime = 0; _beep.play().catch(() => {});
   const tab = activeTab();
   if (!tab) return;
@@ -10872,7 +10873,7 @@ function addServiceToCart(service) {
   if (existing) {
     existing.qty += 1;
   } else {
-    tab.cart.push({
+    const cartItem = {
       id: service.id, name: service.name,
       price: parseFloat(service.price) || 0,
       qty: 1, _key: key,
@@ -10880,7 +10881,15 @@ function addServiceToCart(service) {
       _discountPct: null, _note: null,
       _type: 'service',
       layerId: null, layerLabel: null, stock: null,
-    });
+      warrantyType: null, warrantyDays: null,
+    };
+    if (service.has_warranty) {
+      const wty = await _askWarranty(service.name);
+      if (wty === null) return; // cancelled
+      cartItem.warrantyType = wty.type;
+      cartItem.warrantyDays = wty.days;
+    }
+    tab.cart.push(cartItem);
   }
   renderCart(); renderPosTabBar();
   requestAnimationFrame(() => {
@@ -13868,6 +13877,8 @@ $('#checkout-confirm').addEventListener('click', async () => {
         item_type:       'service',
         service_item_id: i.id,
         quantity:        i.qty,
+        warranty_type:   i.warrantyType ?? undefined,
+        warranty_days:   i.warrantyDays ?? undefined,
       })),
     ],
   };
@@ -22891,6 +22902,7 @@ let _svcFormCatIds   = new Set();
 let _svcFormEmpIds   = new Set();
 let _svcFormActive   = true;
 let _svcFormFeatured = false;
+let _svcFormWarranty = false;
 let _svcAvailCats    = [];
 let _svcAvailEmps    = [];
 let _svcProdLines    = []; // [{product_id, name, qty}]
@@ -22901,6 +22913,7 @@ function _svcResetModal() {
   _svcFormEmpIds   = new Set();
   _svcFormActive   = true;
   _svcFormFeatured = false;
+  _svcFormWarranty = false;
   _svcProdLines    = [];
   $('#svc-form-name').value     = '';
   $('#svc-form-desc').value     = '';
@@ -22913,6 +22926,7 @@ function _svcResetModal() {
   $('#svc-form-currency').textContent = state.currency || '';
   $('#svc-toggle-ui')?.classList.add('on');
   $('#svc-featured-toggle-ui')?.classList.remove('on');
+  $('#svc-warranty-toggle-ui')?.classList.remove('on');
 }
 
 function openNewServiceModal() {
@@ -22956,8 +22970,10 @@ async function openEditServiceModal(id) {
   $('#svc-form-duration').value = d.duration_minutes || '';
   _svcFormActive   = d.is_active;
   _svcFormFeatured = d.is_featured;
+  _svcFormWarranty = !!d.has_warranty;
   $('#svc-toggle-ui')?.classList.toggle('on', d.is_active);
   $('#svc-featured-toggle-ui')?.classList.toggle('on', d.is_featured);
+  $('#svc-warranty-toggle-ui')?.classList.toggle('on', !!d.has_warranty);
 
   // Pre-select categories
   _svcFormCatIds = new Set((d.categories || []).map(c => c.id));
@@ -23095,6 +23111,11 @@ $('#svc-featured-toggle-ui')?.addEventListener('click', () => {
   $('#svc-featured-toggle-ui').classList.toggle('on', _svcFormFeatured);
 });
 
+$('#svc-warranty-toggle-ui')?.addEventListener('click', () => {
+  _svcFormWarranty = !_svcFormWarranty;
+  $('#svc-warranty-toggle-ui').classList.toggle('on', _svcFormWarranty);
+});
+
 $('#svc-new-modal-close')?.addEventListener('click', closeNewServiceModal);
 $('#svc-new-modal-cancel')?.addEventListener('click', closeNewServiceModal);
 $('#svc-new-modal')?.addEventListener('click', e => { if (e.target === e.currentTarget) closeNewServiceModal(); });
@@ -23120,6 +23141,7 @@ $('#svc-form-submit')?.addEventListener('click', async () => {
     duration_minutes:     parseInt($('#svc-form-duration').value) || null,
     is_active:            _svcFormActive,
     is_featured:          _svcFormFeatured,
+    has_warranty:         _svcFormWarranty,
     service_category_ids: [..._svcFormCatIds],
     employee_ids:         [..._svcFormEmpIds],
     product_lines:        _svcProdLines.map(l => ({ product_id: l.product_id, qty: l.qty })),

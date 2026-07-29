@@ -22,6 +22,7 @@ class ServiceItem extends Model
         'duration_minutes',
         'is_active',
         'is_featured',
+        'has_warranty',
     ];
 
     protected $casts = [
@@ -29,6 +30,7 @@ class ServiceItem extends Model
         'duration_minutes' => 'integer',
         'is_active'        => 'boolean',
         'is_featured'      => 'boolean',
+        'has_warranty'     => 'boolean',
     ];
 
     public function business(): BelongsTo
