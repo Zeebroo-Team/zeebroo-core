@@ -13654,7 +13654,18 @@ function openCheckout() {
   _coRefresh();
   _coSyncCustomer();
   $('#checkout-modal').style.display = 'flex';
-  setTimeout(() => { const a = $('#co-amount'); if (a) { a.select(); a.focus(); } }, 60);
+
+  // If the cart has warranty products and no customer is assigned, warn immediately
+  // and focus the customer input so the cashier can search/assign one.
+  const _wtyItems = tab.cart.filter(i => i.warrantyType);
+  if (_wtyItems.length && !tab._customer) {
+    const _wtyNames = _wtyItems.map(i => i.name).join(', ');
+    showAlert($('#checkout-alert'),
+      `Warranty product${_wtyItems.length > 1 ? 's' : ''} in cart (${_wtyNames}) — please assign a customer or add a customer to this bill to register the warranty.`);
+    setTimeout(() => $('#co-cust-input')?.focus(), 100);
+  } else {
+    setTimeout(() => { const a = $('#co-amount'); if (a) { a.select(); a.focus(); } }, 60);
+  }
 }
 
 $('#checkout-cancel').addEventListener('click', () => { $('#checkout-modal').style.display = 'none'; });
@@ -13765,6 +13776,13 @@ $('#checkout-confirm').addEventListener('click', async () => {
 
   if (method !== 'credit' && amount < total) {
     showAlert(alertEl, `Amount given (${amount.toFixed(2)}) is less than total (${total.toFixed(2)})`);
+    return;
+  }
+
+  // Block checkout if warranty products are in the cart but no customer is assigned
+  if (cart.some(i => i.warrantyType) && !tab?._customer) {
+    showAlert(alertEl, 'Warranty products require a customer. Please assign a customer or add a customer to this bill before completing the sale.');
+    setTimeout(() => $('#co-cust-input')?.focus(), 60);
     return;
   }
 
