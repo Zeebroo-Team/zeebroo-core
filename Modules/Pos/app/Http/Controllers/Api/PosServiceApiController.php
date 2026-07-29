@@ -353,6 +353,7 @@ class PosServiceApiController extends Controller
                 'duration_label'   => $serviceItem->durationLabel(),
                 'is_active'        => $serviceItem->is_active,
                 'is_featured'      => (bool) $serviceItem->is_featured,
+                'has_warranty'     => (bool) $serviceItem->has_warranty,
                 'categories'       => $serviceItem->categories->map(fn ($c) => [
                     'id'   => $c->id,
                     'name' => $c->name,
