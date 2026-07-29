@@ -7860,17 +7860,22 @@
           <span class="co-total-cur" id="co-currency"></span>
         </div>
 
-        <!-- Customer search -->
+        <!-- Customer dropdown -->
         <div class="co-cust-section">
           <div class="co-section-label" style="margin-bottom:6px">Customer</div>
           <div class="co-cust-wrap" id="co-cust-wrap">
-            <div class="co-cust-selected" id="co-cust-selected" style="display:none">
-              <i class="fa fa-user"></i>
-              <span id="co-cust-name-disp"></span>
-              <button id="co-cust-clear" class="co-cust-clear-btn" title="Remove customer"><i class="fa fa-xmark"></i></button>
+            <!-- Trigger — looks like a select, always visible -->
+            <div class="co-cust-trigger" id="co-cust-trigger" tabindex="0" role="button" aria-haspopup="listbox">
+              <i class="fa fa-user co-cust-trig-icon" id="co-cust-trig-icon"></i>
+              <span class="co-cust-trig-label" id="co-cust-name-disp">Select customer…</span>
+              <button class="co-cust-clear-btn" id="co-cust-clear" title="Remove customer" style="display:none"><i class="fa fa-xmark"></i></button>
+              <i class="fa fa-chevron-down co-cust-chevron"></i>
             </div>
-            <input type="text" id="co-cust-input" class="co-cust-input" placeholder="Search or select customer…" autocomplete="off">
-            <div id="co-cust-dd" class="co-cust-dd"></div>
+            <!-- Dropdown panel -->
+            <div class="co-cust-dd" id="co-cust-dd" style="display:none">
+              <input type="text" id="co-cust-input" class="co-cust-dd-search" placeholder="Search customer…" autocomplete="off">
+              <div id="co-cust-dd-list"></div>
+            </div>
           </div>
         </div>
 

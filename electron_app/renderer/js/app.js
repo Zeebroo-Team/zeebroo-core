@@ -13698,51 +13698,50 @@ let _coCustTimer = null;
 function _coSyncCustomer() {
   const tab  = activeTab();
   const cust = tab?._customer ?? null;
-  const selEl   = $('#co-cust-selected');
+  const wrap    = $('#co-cust-wrap');
   const nameEl  = $('#co-cust-name-disp');
-  const inputEl = $('#co-cust-input');
+  const clearBtn = $('#co-cust-clear');
   const ddEl    = $('#co-cust-dd');
+  const inp     = $('#co-cust-input');
+
   if (cust) {
-    if (nameEl)  nameEl.textContent = cust.name;
-    if (selEl)   selEl.style.display = 'flex';
-    if (inputEl) { inputEl.value = ''; inputEl.style.display = 'none'; }
+    if (nameEl)   nameEl.textContent = cust.name;
+    if (clearBtn) clearBtn.style.display = '';
+    if (wrap)     { wrap.classList.add('has-customer'); wrap.classList.remove('open'); }
   } else {
-    if (selEl)   selEl.style.display = 'none';
-    if (inputEl) { inputEl.value = ''; inputEl.style.display = ''; }
+    if (nameEl)   nameEl.textContent = 'Select customer…';
+    if (clearBtn) clearBtn.style.display = 'none';
+    if (wrap)     { wrap.classList.remove('has-customer', 'open'); }
   }
   if (ddEl) ddEl.style.display = 'none';
+  if (inp)  inp.value = '';
 }
 
 // ── Checkout customer dropdown ──────────────────────────────────────────────
-// Renders the customer list (filtered by q) into the dropdown and appends a
-// persistent "Add customer" row. Shared by focus and input events.
 async function _coCustRender(q) {
-  const dd = $('#co-cust-dd');
-  if (!dd) return;
+  const listEl = $('#co-cust-dd-list');
+  if (!listEl) return;
   const res  = await API.customers(q || '');
   const list = res.body?.data ?? [];
 
-  const customerRows = list.map(c => `
+  const rows = list.map(c => `
     <div class="co-cust-dd-row" data-cid="${c.id}">
       <div class="co-cust-dd-name">${escHtml(c.name)}</div>
       ${c.phone ? `<div class="co-cust-dd-meta">${escHtml(c.phone)}</div>` : ''}
     </div>`).join('');
 
   const emptyRow = !list.length
-    ? `<div class="co-cust-dd-row co-cust-dd-empty"><span class="co-cust-dd-name">No customers found</span></div>`
+    ? `<div class="co-cust-dd-row co-cust-dd-empty"><div class="co-cust-dd-name">No customers found</div></div>`
     : '';
 
-  const addRow = `<div class="co-cust-dd-row co-cust-dd-add" id="co-cust-dd-add-row">
-    <i class="fa fa-user-plus" style="margin-right:6px;opacity:.75"></i>
-    <span class="co-cust-dd-name">Add customer</span>
-  </div>`;
+  listEl.innerHTML = rows + emptyRow + `
+    <div class="co-cust-dd-row co-cust-dd-add" id="co-cust-dd-add-row">
+      <i class="fa fa-user-plus"></i>
+      <span class="co-cust-dd-name">Add customer</span>
+    </div>`;
 
-  dd.innerHTML = customerRows + emptyRow + addRow;
-  dd.style.display = '';
-
-  dd.querySelectorAll('.co-cust-dd-row[data-cid]').forEach(row => {
-    row.addEventListener('mousedown', e => {
-      e.preventDefault();
+  listEl.querySelectorAll('.co-cust-dd-row[data-cid]').forEach(row => {
+    row.addEventListener('click', () => {
       const c = list.find(x => x.id === Number(row.dataset.cid));
       if (!c) return;
       const tab = activeTab();
@@ -13752,35 +13751,63 @@ async function _coCustRender(q) {
     });
   });
 
-  $('#co-cust-dd-add-row')?.addEventListener('mousedown', e => {
-    e.preventDefault();
-    dd.style.display = 'none';
+  $('#co-cust-dd-add-row')?.addEventListener('click', () => {
+    _coSyncCustomer(); // closes panel
     openCustomerModal();
     setTimeout(() => _showCustomerCreateForm(''), 60);
   });
 }
 
-$('#co-cust-input')?.addEventListener('focus', function () {
-  clearTimeout(_coCustTimer);
-  _coCustRender(this.value.trim());
+function _coCustOpen() {
+  const dd   = $('#co-cust-dd');
+  const wrap = $('#co-cust-wrap');
+  if (!dd) return;
+  dd.style.display = '';
+  wrap?.classList.add('open');
+  _coCustRender('');
+  setTimeout(() => $('#co-cust-input')?.focus(), 50);
+}
+
+function _coCustClose() {
+  const dd   = $('#co-cust-dd');
+  const wrap = $('#co-cust-wrap');
+  if (dd) dd.style.display = 'none';
+  wrap?.classList.remove('open');
+  const inp = $('#co-cust-input');
+  if (inp) inp.value = '';
+}
+
+$('#co-cust-trigger')?.addEventListener('click', e => {
+  if (e.target.closest('#co-cust-clear')) return;
+  const isOpen = $('#co-cust-dd')?.style.display !== 'none';
+  isOpen ? _coCustClose() : _coCustOpen();
+});
+
+$('#co-cust-trigger')?.addEventListener('keydown', e => {
+  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); _coCustOpen(); }
+  if (e.key === 'Escape') _coCustClose();
 });
 
 $('#co-cust-input')?.addEventListener('input', function () {
   clearTimeout(_coCustTimer);
-  const q = this.value.trim();
-  _coCustTimer = setTimeout(() => _coCustRender(q), 220);
+  _coCustTimer = setTimeout(() => _coCustRender(this.value.trim()), 220);
 });
 
-$('#co-cust-input')?.addEventListener('blur', () => {
-  setTimeout(() => { const dd = $('#co-cust-dd'); if (dd) dd.style.display = 'none'; }, 200);
+$('#co-cust-input')?.addEventListener('keydown', e => {
+  if (e.key === 'Escape') _coCustClose();
 });
 
-$('#co-cust-clear')?.addEventListener('click', () => {
+// Close when clicking outside the dropdown
+document.addEventListener('click', e => {
+  if (!e.target.closest('#co-cust-wrap')) _coCustClose();
+}, true);
+
+$('#co-cust-clear')?.addEventListener('click', e => {
+  e.stopPropagation();
   const tab = activeTab();
   if (tab) tab._customer = null;
   renderCartCustomer();
   _coSyncCustomer();
-  setTimeout(() => $('#co-cust-input')?.focus(), 50);
 });
 
 $('#checkout-confirm').addEventListener('click', async () => {
