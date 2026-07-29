@@ -596,9 +596,8 @@ async function _salSelectSale(id) {
     const wtyBadge = i.warranty_type
       ? (() => {
           if (i.warranty_type === 'lifetime') return '<br><span class="warranty-badge"><i class="fa fa-shield-halved"></i> Lifetime warranty</span>';
-          const label = i.warranty_days ? `${i.warranty_days}d warranty` : 'Warranty';
-          const exp   = i.warranty_expires_at ? ` &mdash; expires ${i.warranty_expires_at}` : '';
-          return `<br><span class="warranty-badge"><i class="fa fa-shield-halved"></i> ${escHtml(label)}${exp}</span>`;
+          const exp = i.warranty_expires_at ? ` until ${i.warranty_expires_at}` : '';
+          return `<br><span class="warranty-badge"><i class="fa fa-shield-halved"></i> Warranty${exp}</span>`;
         })()
       : '';
     return `<tr>
@@ -10881,13 +10880,13 @@ async function addServiceToCart(service) {
       _discountPct: null, _note: null,
       _type: 'service',
       layerId: null, layerLabel: null, stock: null,
-      warrantyType: null, warrantyDays: null,
+      warrantyType: null, warrantyDate: null,
     };
     if (service.has_warranty) {
       const wty = await _askWarranty(service.name);
       if (wty === null) return; // cancelled
       cartItem.warrantyType = wty.type;
-      cartItem.warrantyDays = wty.days;
+      cartItem.warrantyDate = wty.date ?? null;
     }
     tab.cart.push(cartItem);
   }
@@ -12712,9 +12711,9 @@ function buildReceiptHTML(sale, overrides = {}) {
     let wtyLine = '';
     if (i.warranty_type === 'lifetime') {
       wtyLine = `<div class="rcpt-warranty-line"><i class="fa fa-shield-halved"></i> Lifetime warranty</div>`;
-    } else if (i.warranty_type === 'days') {
-      const exp = i.warranty_expires_at ? ` &mdash; exp. ${i.warranty_expires_at}` : '';
-      wtyLine = `<div class="rcpt-warranty-line"><i class="fa fa-shield-halved"></i> ${i.warranty_days ? i.warranty_days + 'd' : ''} warranty${exp}</div>`;
+    } else if (i.warranty_type === 'date') {
+      const exp = i.warranty_expires_at || '';
+      wtyLine = `<div class="rcpt-warranty-line"><i class="fa fa-shield-halved"></i> Warranty until ${exp}</div>`;
     }
     return `
     <div class="rcpt-item">
@@ -13134,23 +13133,12 @@ function _askWarranty(productName) {
   return new Promise(resolve => {
     _askWarrantyResolve = resolve;
     $('#pos-warranty-product-name').textContent = productName;
-    // Reset to lifetime default
     $('#wt-lifetime').checked = true;
-    $('#wt-days').checked = false;
-    $('#warranty-days-row').style.display = 'none';
-    $('#pos-warranty-days').value = '';
-    $('#warranty-expiry-preview').textContent = '';
+    $('#wt-date').checked = false;
+    $('#warranty-date-row').style.display = 'none';
+    $('#pos-warranty-date').value = '';
     $('#pos-warranty-overlay').style.display = 'flex';
   });
-}
-
-function _wtyUpdateExpiry() {
-  const days = parseInt($('#pos-warranty-days').value);
-  const preview = $('#warranty-expiry-preview');
-  if (!days || days < 1) { preview.textContent = ''; return; }
-  const exp = new Date();
-  exp.setDate(exp.getDate() + days);
-  preview.textContent = 'Expires: ' + exp.toLocaleDateString([], { dateStyle: 'medium' });
 }
 
 function _wtyResolve(result) {
@@ -13160,37 +13148,39 @@ function _wtyResolve(result) {
 
 $$('input[name="warranty-type"]').forEach(radio => {
   radio.addEventListener('change', () => {
-    const isDays = $('#wt-days').checked;
-    $('#warranty-days-row').style.display = isDays ? '' : 'none';
-    if (isDays) requestAnimationFrame(() => $('#pos-warranty-days').focus());
+    const isDate = $('#wt-date').checked;
+    $('#warranty-date-row').style.display = isDate ? '' : 'none';
+    if (isDate) requestAnimationFrame(() => $('#pos-warranty-date').focus());
   });
 });
 
 $$('.wty-shortcut').forEach(btn => {
   btn.addEventListener('click', () => {
-    const days = parseInt(btn.dataset.days);
-    $('#wt-days').checked = true;
+    const offsetDays = parseInt(btn.dataset.offsetDays);
+    const d = new Date();
+    d.setDate(d.getDate() + offsetDays);
+    const iso = d.toISOString().slice(0, 10);
+    $('#wt-date').checked = true;
     $('#wt-lifetime').checked = false;
-    $('#warranty-days-row').style.display = '';
-    $('#pos-warranty-days').value = days;
-    _wtyUpdateExpiry();
+    $('#warranty-date-row').style.display = '';
+    $('#pos-warranty-date').value = iso;
   });
 });
 
-$('#pos-warranty-days').addEventListener('input', _wtyUpdateExpiry);
-$('#pos-warranty-days').addEventListener('keydown', e => {
+$('#pos-warranty-date').addEventListener('keydown', e => {
   if (e.key === 'Enter') $('#pos-warranty-confirm').click();
   if (e.key === 'Escape') _wtyResolve(null);
 });
 
 $('#pos-warranty-confirm').addEventListener('click', () => {
   const type = $('input[name="warranty-type"]:checked')?.value || 'lifetime';
-  if (type === 'days') {
-    const days = parseInt($('#pos-warranty-days').value);
-    if (!days || days < 1) { toast('Enter a valid number of days.', 'error'); return; }
-    _wtyResolve({ type: 'days', days });
+  if (type === 'date') {
+    const date = $('#pos-warranty-date').value;
+    if (!date) { toast('Please select an expiry date.', 'error'); return; }
+    if (date <= new Date().toISOString().slice(0, 10)) { toast('Expiry date must be in the future.', 'error'); return; }
+    _wtyResolve({ type: 'date', date });
   } else {
-    _wtyResolve({ type: 'lifetime', days: null });
+    _wtyResolve({ type: 'lifetime', date: null });
   }
 });
 
@@ -13398,7 +13388,7 @@ async function handleProductClick(p) {
       const wty = await _askWarranty(cartItem.name);
       if (wty === null) return; // cancelled
       cartItem.warrantyType = wty.type;
-      cartItem.warrantyDays = wty.days;
+      cartItem.warrantyDate = wty.date ?? null;
     }
   }
 
@@ -13460,7 +13450,7 @@ function renderCart() {
     const typeBadge = item._type === 'service'
       ? `<span class="ci-badge ci-badge--service"><i class="fa fa-screwdriver-wrench"></i> Service</span>` : '';
     const warrantyBadge = item.warrantyType
-      ? `<span class="warranty-badge"><i class="fa fa-shield-halved"></i> ${item.warrantyType === 'lifetime' ? 'Lifetime warranty' : `${item.warrantyDays}d warranty`}</span>` : '';
+      ? `<span class="warranty-badge"><i class="fa fa-shield-halved"></i> ${item.warrantyType === 'lifetime' ? 'Lifetime warranty' : `Warranty until ${item.warrantyDate ?? ''}`}</span>` : '';
     const extras = (discountBadge || noteBadge || typeBadge || warrantyBadge)
       ? `<div class="ci-badges">${typeBadge}${discountBadge}${noteBadge}${warrantyBadge}</div>` : '';
     return `
@@ -13871,14 +13861,14 @@ $('#checkout-confirm').addEventListener('click', async () => {
         quantity:               i.qty,
         product_stock_layer_id: i.layerId ?? undefined,
         warranty_type:          i.warrantyType ?? undefined,
-        warranty_days:          i.warrantyDays ?? undefined,
+        warranty_date:          i.warrantyDate ?? undefined,
       })),
       ...serviceItems.map(i => ({
         item_type:       'service',
         service_item_id: i.id,
         quantity:        i.qty,
         warranty_type:   i.warrantyType ?? undefined,
-        warranty_days:   i.warrantyDays ?? undefined,
+        warranty_date:   i.warrantyDate ?? undefined,
       })),
     ],
   };

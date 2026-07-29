@@ -8367,22 +8367,21 @@
           <span class="warranty-opt-label"><i class="fa fa-infinity"></i> Lifetime warranty</span>
         </label>
         <label class="warranty-opt">
-          <input type="radio" name="warranty-type" id="wt-days" value="days">
-          <span class="warranty-opt-label"><i class="fa fa-calendar-days"></i> Fixed duration</span>
+          <input type="radio" name="warranty-type" id="wt-date" value="date">
+          <span class="warranty-opt-label"><i class="fa fa-calendar-days"></i> Fixed date</span>
         </label>
       </div>
-      <div id="warranty-days-row" style="display:none;margin-top:12px">
-        <label class="psm-field-label" for="pos-warranty-days">Warranty period (days)</label>
-        <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
-          <input type="number" id="pos-warranty-days" class="psm-input" min="1" max="36500" placeholder="365" style="max-width:120px">
-          <span style="font-size:12px;color:var(--text-muted)" id="warranty-expiry-preview"></span>
+      <div id="warranty-date-row" style="display:none;margin-top:12px">
+        <label class="psm-field-label" for="pos-warranty-date">Expires on</label>
+        <div style="margin-top:4px">
+          <input type="date" id="pos-warranty-date" class="psm-input" style="max-width:180px">
         </div>
         <div class="warranty-shortcut-btns">
-          <button type="button" class="wty-shortcut" data-days="30">30d</button>
-          <button type="button" class="wty-shortcut" data-days="90">90d</button>
-          <button type="button" class="wty-shortcut" data-days="180">6mo</button>
-          <button type="button" class="wty-shortcut" data-days="365">1yr</button>
-          <button type="button" class="wty-shortcut" data-days="730">2yr</button>
+          <button type="button" class="wty-shortcut" data-offset-days="30">+30d</button>
+          <button type="button" class="wty-shortcut" data-offset-days="90">+90d</button>
+          <button type="button" class="wty-shortcut" data-offset-days="180">+6mo</button>
+          <button type="button" class="wty-shortcut" data-offset-days="365">+1yr</button>
+          <button type="button" class="wty-shortcut" data-offset-days="730">+2yr</button>
         </div>
       </div>
     </div>
