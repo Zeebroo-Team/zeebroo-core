@@ -50,6 +50,7 @@ class ServiceItemService
             'duration_minutes' => isset($data['duration_minutes']) && $data['duration_minutes'] !== '' ? (int) $data['duration_minutes'] : null,
             'is_active'        => (bool) ($data['is_active'] ?? true),
             'is_featured'      => (bool) ($data['is_featured'] ?? false),
+            'has_warranty'     => (bool) ($data['has_warranty'] ?? false),
         ]);
 
         $item->categories()->sync($categoryIds);
@@ -72,6 +73,7 @@ class ServiceItemService
             'duration_minutes' => isset($data['duration_minutes']) && $data['duration_minutes'] !== '' ? (int) $data['duration_minutes'] : null,
             'is_active'        => (bool) ($data['is_active'] ?? true),
             'is_featured'      => (bool) ($data['is_featured'] ?? $item->is_featured),
+            'has_warranty'     => (bool) ($data['has_warranty'] ?? $item->has_warranty),
         ]);
 
         if ($categoryIds !== null)  $item->categories()->sync($categoryIds);

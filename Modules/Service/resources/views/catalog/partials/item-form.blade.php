@@ -312,6 +312,26 @@
         </div>
     </div>
 
+    {{-- ══ OPTIONAL — Warranty ══ --}}
+    @php $warrantyOn = old('has_warranty', $item->has_warranty ?? false); @endphp
+    <div class="svcf-opt-section {{ $warrantyOn ? 'is-on' : '' }}" id="{{ $pfx }}-warranty-section">
+        <label class="svcf-opt-toggle" for="{{ $pfx }}-warranty-chk">
+            <div class="svcf-opt-toggle__left">
+                <span class="svcf-opt-toggle__icon"><i class="fa fa-shield-halved" aria-hidden="true"></i></span>
+                <div>
+                    <div class="svcf-opt-toggle__text">Warranty</div>
+                    <div class="svcf-opt-toggle__sub">Prompt for warranty details when added to a POS sale; requires a customer to be assigned</div>
+                </div>
+            </div>
+            <div class="svcf-opt-toggle__switch">
+                <input type="checkbox" id="{{ $pfx }}-warranty-chk" name="has_warranty" value="1"
+                       {{ $warrantyOn ? 'checked' : '' }}>
+                <span class="svcf-switch-track"></span>
+                <span class="svcf-switch-thumb"></span>
+            </div>
+        </label>
+    </div>
+
     {{-- ══ FOOTER ══ --}}
     <div class="svcf-footer">
         @if($isEdit)

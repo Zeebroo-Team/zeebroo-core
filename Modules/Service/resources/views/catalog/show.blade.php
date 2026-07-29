@@ -122,11 +122,16 @@
                     @endforeach
                 </div>
             @endif
-            <div style="margin-top:8px;">
+            <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
                 <span style="display:inline-block;font-size:11px;font-weight:700;padding:2px 9px;border-radius:999px;
                     {{ $item->is_active ? 'background:color-mix(in srgb,#10b981 12%,transparent);border:1px solid color-mix(in srgb,#10b981 40%,var(--border));color:#10b981;' : 'background:color-mix(in srgb,var(--muted) 12%,transparent);border:1px solid var(--border);color:var(--muted);' }}">
                     {{ $item->is_active ? 'Active' : 'Inactive' }}
                 </span>
+                @if($item->has_warranty)
+                    <span style="display:inline-block;font-size:11px;font-weight:700;padding:2px 9px;border-radius:999px;background:color-mix(in srgb,#3b82f6 12%,transparent);border:1px solid color-mix(in srgb,#3b82f6 35%,var(--border));color:#3b82f6;">
+                        <i class="fa fa-shield-halved"></i> Warranty
+                    </span>
+                @endif
             </div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">

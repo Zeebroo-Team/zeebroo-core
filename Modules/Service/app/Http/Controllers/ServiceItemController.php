@@ -147,6 +147,7 @@ class ServiceItemController extends Controller
             'price'                 => ['nullable', 'numeric', 'min:0'],
             'duration_minutes'      => ['nullable', 'integer', 'min:1', 'max:99999'],
             'is_active'             => ['nullable', 'boolean'],
+            'has_warranty'          => ['nullable', 'boolean'],
             'service_category_ids'  => ['nullable', 'array'],
             'service_category_ids.*'=> [
                 'integer',

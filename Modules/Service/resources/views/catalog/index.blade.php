@@ -92,6 +92,11 @@
                                     {{ $item->is_active ? 'background:color-mix(in srgb,#10b981 12%,transparent);border:1px solid color-mix(in srgb,#10b981 40%,var(--border));color:#10b981;' : 'background:color-mix(in srgb,var(--muted) 12%,transparent);border:1px solid var(--border);color:var(--muted);' }}">
                                     {{ $item->is_active ? 'Active' : 'Inactive' }}
                                 </span>
+                                @if($item->has_warranty)
+                                    <span style="display:inline-block;font-size:11px;font-weight:700;padding:2px 9px;border-radius:999px;background:color-mix(in srgb,#3b82f6 12%,transparent);border:1px solid color-mix(in srgb,#3b82f6 35%,var(--border));color:#3b82f6;">
+                                        <i class="fa fa-shield-halved"></i> Warranty
+                                    </span>
+                                @endif
                             </td>
                             <td style="text-align:right;">
                                 <a href="{{ route('service.catalog.edit', $item) }}" class="linkbtn" style="padding:5px 10px;font-size:12px;background:transparent;border:1px solid var(--border);color:var(--text);text-decoration:none;">Edit</a>
