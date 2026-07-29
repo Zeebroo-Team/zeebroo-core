@@ -13759,6 +13759,14 @@ $('#co-cust-clear')?.addEventListener('click', () => {
   setTimeout(() => $('#co-cust-input')?.focus(), 50);
 });
 
+// "Add customer" button inside the checkout modal — opens the POS customer
+// modal with the create form pre-opened so the cashier can register a new
+// customer without leaving the checkout flow.
+$('#co-cust-add-btn')?.addEventListener('click', () => {
+  openCustomerModal();
+  setTimeout(() => _showCustomerCreateForm(''), 60);
+});
+
 $('#checkout-confirm').addEventListener('click', async () => {
   if (state.registerLockedUntil && Date.now() < state.registerLockedUntil) {
     toast('Cash register is locked. Unlock the register to process sales.', 'error');

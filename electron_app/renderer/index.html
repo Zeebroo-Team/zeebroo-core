@@ -7862,7 +7862,12 @@
 
         <!-- Customer search -->
         <div class="co-cust-section">
-          <div class="co-section-label" style="margin-bottom:6px">Customer</div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+            <div class="co-section-label">Customer</div>
+            <button id="co-cust-add-btn" type="button" style="background:none;border:none;padding:2px 4px;cursor:pointer;color:var(--accent);font-size:12px;display:flex;align-items:center;gap:4px;opacity:.85" title="Register new customer">
+              <i class="fa fa-user-plus"></i> Add customer
+            </button>
+          </div>
           <div class="co-cust-wrap" id="co-cust-wrap">
             <div class="co-cust-selected" id="co-cust-selected" style="display:none">
               <i class="fa fa-user"></i>
