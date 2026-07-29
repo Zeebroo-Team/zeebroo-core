@@ -178,6 +178,8 @@ class ServiceItemController extends Controller
 
         unset($validated['new_category_names']);
 
+        $validated['has_warranty'] = $request->boolean('has_warranty');
+
         $validated['employee_ids'] = $request->boolean('assign_employees')
             ? array_map('intval', $validated['employee_ids'] ?? [])
             : [];

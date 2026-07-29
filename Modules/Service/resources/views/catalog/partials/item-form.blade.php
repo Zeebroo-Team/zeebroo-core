@@ -365,15 +365,17 @@
 
     // ── Optional section toggles ──
     [
-        { chk: @json($pfx . '-emp-chk'),  body: @json($pfx . '-emp-body'),  section: @json($pfx . '-emp-section') },
-        { chk: @json($pfx . '-prod-chk'), body: @json($pfx . '-prod-body'), section: @json($pfx . '-prod-section') },
+        { chk: @json($pfx . '-emp-chk'),      body: @json($pfx . '-emp-body'),  section: @json($pfx . '-emp-section') },
+        { chk: @json($pfx . '-prod-chk'),     body: @json($pfx . '-prod-body'), section: @json($pfx . '-prod-section') },
+        { chk: @json($pfx . '-warranty-chk'), body: null,                       section: @json($pfx . '-warranty-section') },
     ].forEach(({ chk, body, section }) => {
         const chkEl  = document.getElementById(chk);
-        const bodyEl = document.getElementById(body);
+        const bodyEl = body ? document.getElementById(body) : null;
         const secEl  = document.getElementById(section);
-        if (!chkEl || !bodyEl) return;
+        if (!chkEl) return;
+        if (body && !bodyEl) return;
         chkEl.addEventListener('change', () => {
-            bodyEl.classList.toggle('is-open', chkEl.checked);
+            if (bodyEl) bodyEl.classList.toggle('is-open', chkEl.checked);
             secEl?.classList.toggle('is-on', chkEl.checked);
         });
     });
