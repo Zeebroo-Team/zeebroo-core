@@ -12233,6 +12233,9 @@ $('#psw-tax-enabled')?.addEventListener('change', _pswToggleTaxRate);
 async function openPosSettings() {
   const modal = $('#pos-settings-modal');
   modal.style.display = 'flex';
+  // Show Cashier Management tab only when POS feature is enabled
+  const cashierNavItem = $('.psm-nav-item--pos-only');
+  if (cashierNavItem) cashierNavItem.style.display = hasFeature('point_of_sale') ? '' : 'none';
   psmShowTab('business');
 
   const [sRes, aRes, bRes] = await Promise.all([API.settingsGet(), API.accounts(), API.branches()]);
@@ -12312,6 +12315,7 @@ $$('.psm-nav-item').forEach(btn => btn.addEventListener('click', () => {
   if (btn.dataset.tab === 'users'     && window.loadUsersForSettings) window.loadUsersForSettings();
   if (btn.dataset.tab === 'mail')     loadMailSettings();
   if (btn.dataset.tab === 'counters') loadPsmCounters();
+  if (btn.dataset.tab === 'cashiers') { _psmCashierResetForm(); loadPsmCashiers(); }
 }));
 
 $('#psm-multi-warehouse').addEventListener('change', (e) => {
@@ -12644,6 +12648,138 @@ $('#psm-counter-add-btn')?.addEventListener('click', async () => {
 });
 
 // ── End POS Counters ───────────────────────────────────────────────────────
+
+// ── Cashier Management ─────────────────────────────────────────────────────
+let _cashiers = [];
+let _cashierEditId = null;
+
+async function loadPsmCashiers() {
+  const el = $('#psm-cashiers-list');
+  if (el) el.innerHTML = '<div class="psm-hint">Loading…</div>';
+  const res = await API.cashiers();
+  if (res.status !== 200) {
+    if (el) el.innerHTML = '<div class="psm-hint">Failed to load cashiers.</div>';
+    return;
+  }
+  _cashiers = res.body?.data ?? [];
+  _renderPsmCashierList();
+}
+
+function _renderPsmCashierList() {
+  const el = $('#psm-cashiers-list');
+  if (!el) return;
+
+  if (!_cashiers.length) {
+    el.innerHTML = '<div class="psm-hint">No cashiers yet. Add one above.</div>';
+    return;
+  }
+
+  el.innerHTML = _cashiers.map(c => `
+    <div class="psm-cashier-item" data-cashier-id="${c.id}">
+      <div class="psm-cashier-info">
+        <span class="psm-cashier-name">${escHtml(c.name)}</span>
+        <span class="psm-cashier-username"><i class="fa fa-at"></i> ${escHtml(c.username)}</span>
+      </div>
+      <div class="psm-cashier-actions">
+        <button class="psm-cashier-toggle ${c.is_active ? 'active' : ''}" data-cashier-id="${c.id}" data-active="${c.is_active ? '1' : '0'}" title="${c.is_active ? 'Deactivate' : 'Activate'}">
+          <i class="fa fa-${c.is_active ? 'check-circle' : 'circle-xmark'}"></i>
+          ${c.is_active ? 'Active' : 'Inactive'}
+        </button>
+        <button class="psm-cashier-edit-btn" data-cashier-id="${c.id}"><i class="fa fa-pen"></i></button>
+        <button class="psm-cashier-del-btn" data-cashier-id="${c.id}"><i class="fa fa-trash"></i></button>
+      </div>
+    </div>`).join('');
+
+  el.querySelectorAll('.psm-cashier-toggle').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = parseInt(btn.dataset.cashierId);
+      const active = btn.dataset.active !== '1';
+      const res = await API.cashierUpdate(id, { is_active: active });
+      if (res.status !== 200) { toast('Failed to update cashier', 'error'); return; }
+      await loadPsmCashiers();
+    });
+  });
+
+  el.querySelectorAll('.psm-cashier-edit-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = parseInt(btn.dataset.cashierId);
+      const c  = _cashiers.find(x => x.id === id);
+      if (!c) return;
+      _cashierEditId = id;
+      $('#psm-cashier-name').value     = c.name;
+      $('#psm-cashier-username').value = c.username;
+      $('#psm-cashier-password').value = '';
+      $('#psm-cashier-password').placeholder = 'Leave blank to keep current';
+      $('#psm-cashier-add-btn').innerHTML = '<i class="fa fa-floppy-disk"></i> Save Changes';
+      $('#psm-cashier-add-alert').style.display = 'none';
+      $('#psm-cashier-name').focus();
+    });
+  });
+
+  el.querySelectorAll('.psm-cashier-del-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = parseInt(btn.dataset.cashierId);
+      const c  = _cashiers.find(x => x.id === id);
+      if (!confirm(`Delete cashier "${c?.name}"?`)) return;
+      const res = await API.cashierDelete(id);
+      if (res.status !== 200) { toast('Failed to delete cashier', 'error'); return; }
+      if (_cashierEditId === id) _psmCashierResetForm();
+      await loadPsmCashiers();
+      toast('Cashier deleted', 'success');
+    });
+  });
+}
+
+function _psmCashierResetForm() {
+  _cashierEditId = null;
+  $('#psm-cashier-name').value     = '';
+  $('#psm-cashier-username').value = '';
+  $('#psm-cashier-password').value = '';
+  $('#psm-cashier-password').placeholder = 'Min 4 characters';
+  $('#psm-cashier-add-btn').innerHTML = '<i class="fa fa-plus"></i> Add Cashier';
+  $('#psm-cashier-add-alert').style.display = 'none';
+}
+
+$('#psm-cashier-add-btn')?.addEventListener('click', async () => {
+  const alertEl  = $('#psm-cashier-add-alert');
+  const name     = $('#psm-cashier-name')?.value.trim();
+  const username = $('#psm-cashier-username')?.value.trim();
+  const password = $('#psm-cashier-password')?.value;
+
+  alertEl.style.display = 'none';
+
+  if (!name)     { alertEl.textContent = 'Name is required.';     alertEl.style.display = ''; return; }
+  if (!username) { alertEl.textContent = 'Username is required.'; alertEl.style.display = ''; return; }
+  if (!_cashierEditId && !password) { alertEl.textContent = 'Password is required.'; alertEl.style.display = ''; return; }
+
+  const btn = $('#psm-cashier-add-btn');
+  btn.disabled = true;
+
+  let res;
+  if (_cashierEditId) {
+    const body = { name, username };
+    if (password) body.password = password;
+    res = await API.cashierUpdate(_cashierEditId, body);
+  } else {
+    res = await API.cashierCreate({ name, username, password });
+  }
+
+  btn.disabled = false;
+
+  if (res.status !== 200 && res.status !== 201) {
+    const msg = res.body?.errors
+      ? Object.values(res.body.errors).flat().join(' ')
+      : (res.body?.message ?? 'Failed to save cashier.');
+    alertEl.textContent = msg;
+    alertEl.style.display = '';
+    return;
+  }
+
+  _psmCashierResetForm();
+  await loadPsmCashiers();
+  toast(_cashierEditId ? 'Cashier updated' : 'Cashier added', 'success');
+});
+// ── End Cashier Management ─────────────────────────────────────────────────
 
 // ── Receipt Print ──────────────────────────────────────────────────────────
 // Receipt label translations

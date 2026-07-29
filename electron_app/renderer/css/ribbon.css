@@ -12611,6 +12611,37 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
 .psm-counter-item-del:hover { background: #fee2e2; }
 /* ── End Counter ──────────────────────────────────────── */
 
+/* ── Cashier Management ───────────────────────────────── */
+.psm-cashier-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 8px 12px; border: 1px solid var(--border);
+  border-radius: var(--radius-sm); background: var(--surface);
+  margin-bottom: 6px;
+}
+.psm-cashier-info   { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.psm-cashier-name   { font-size: 13px; font-weight: 600; color: var(--text); }
+.psm-cashier-username { font-size: 11px; color: var(--text-muted); }
+.psm-cashier-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.psm-cashier-toggle {
+  font-size: 11px; padding: 3px 8px; border-radius: var(--radius-xs);
+  border: 1px solid var(--border); background: var(--surface2);
+  color: var(--text-muted); cursor: pointer; transition: all .12s;
+}
+.psm-cashier-toggle.active { background: #d1fae5; border-color: #6ee7b7; color: #065f46; }
+.psm-cashier-edit-btn {
+  font-size: 11px; padding: 3px 8px; border-radius: var(--radius-xs);
+  border: 1px solid var(--border); background: var(--surface2);
+  color: var(--text-muted); cursor: pointer; transition: all .12s;
+}
+.psm-cashier-edit-btn:hover { background: var(--surface3); color: var(--text); }
+.psm-cashier-del-btn {
+  font-size: 11px; padding: 3px 8px; border-radius: var(--radius-xs);
+  border: 1px solid #fca5a5; background: #fef2f2;
+  color: #dc2626; cursor: pointer; transition: all .12s;
+}
+.psm-cashier-del-btn:hover { background: #fee2e2; }
+/* ── End Cashier Management ───────────────────────────── */
+
 /* ── POS Setup Wizard ─────────────────────────────────────────────────────── */
 .psw-overlay {
   position: fixed; inset: 0; z-index: 3000;

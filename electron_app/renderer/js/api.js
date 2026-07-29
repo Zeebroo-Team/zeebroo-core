@@ -419,6 +419,10 @@ const API = (() => {
     counterCreate:  (body)      => request('POST',   '/counters',           body),
     counterUpdate:  (id, body)  => request('PATCH',  `/counters/${id}`,     body),
     counterDelete:  (id)        => request('DELETE',  `/counters/${id}`),
+    cashiers:       ()          => request('GET',    '/cashiers'),
+    cashierCreate:  (body)      => request('POST',   '/cashiers',           body),
+    cashierUpdate:  (id, body)  => request('PATCH',  `/cashiers/${id}`,     body),
+    cashierDelete:  (id)        => request('DELETE',  `/cashiers/${id}`),
 
     // Automations
     automations:       ()        => request('GET',    '/automations'),

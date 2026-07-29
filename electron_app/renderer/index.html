@@ -8463,6 +8463,9 @@
         <button class="psm-nav-item" data-tab="counters">
           <i class="fa fa-cash-register"></i><span>Counters</span>
         </button>
+        <button class="psm-nav-item psm-nav-item--pos-only" data-tab="cashiers" style="display:none">
+          <i class="fa fa-id-badge"></i><span>Cashiers</span>
+        </button>
       </nav>
 
       <!-- Content panels -->
@@ -8914,6 +8917,38 @@
             </div>
           </div>
         </div><!-- /psm-tab-counters -->
+
+        <!-- Cashier Management panel -->
+        <div class="psm-panel" id="psm-tab-cashiers" style="display:none">
+          <div class="psm-section">
+            <div class="psm-section-label"><i class="fa fa-id-badge"></i> Add Cashier</div>
+            <div class="psm-field-row" style="margin-bottom:8px">
+              <div>
+                <label class="psm-field-label" for="psm-cashier-name">Name</label>
+                <input type="text" id="psm-cashier-name" class="psm-input" placeholder="e.g. John Silva" maxlength="120">
+              </div>
+              <div>
+                <label class="psm-field-label" for="psm-cashier-username">Username</label>
+                <input type="text" id="psm-cashier-username" class="psm-input" placeholder="e.g. john" maxlength="80" autocomplete="off">
+              </div>
+              <div>
+                <label class="psm-field-label" for="psm-cashier-password">Password</label>
+                <input type="password" id="psm-cashier-password" class="psm-input" placeholder="Min 4 characters" maxlength="255" autocomplete="new-password">
+              </div>
+            </div>
+            <div id="psm-cashier-add-alert" class="psm-hint" style="display:none;color:#ef4444;margin-bottom:6px"></div>
+            <button class="psm-btn-save" id="psm-cashier-add-btn" style="width:auto;padding:6px 16px">
+              <i class="fa fa-plus"></i> Add Cashier
+            </button>
+          </div>
+
+          <div class="psm-section">
+            <div class="psm-section-label"><i class="fa fa-list"></i> Cashiers</div>
+            <div id="psm-cashiers-list">
+              <div class="psm-hint">Loading…</div>
+            </div>
+          </div>
+        </div><!-- /psm-tab-cashiers -->
 
       </div><!-- /psm-content -->
     </div><!-- /psm-layout -->

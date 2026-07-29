@@ -43,6 +43,7 @@ use Modules\Pos\Http\Controllers\Api\PosUserManagementApiController;
 use Modules\Pos\Http\Controllers\Api\PosRoleManagementApiController;
 use Modules\Pos\Http\Controllers\Api\PosCounterApiController;
 use Modules\Pos\Http\Controllers\Api\PosRegisterLockApiController;
+use Modules\Pos\Http\Controllers\Api\PosCashierApiController;
 
 Route::prefix('v1/pos')->group(function (): void {
     Route::post('auth/token',             [PosAuthApiController::class, 'token'])->name('auth.token');
@@ -297,6 +298,12 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
     Route::post  ('counters',          [PosCounterApiController::class, 'store'])  ->name('counters.store');
     Route::patch ('counters/{counter}', [PosCounterApiController::class, 'update']) ->name('counters.update');
     Route::delete('counters/{counter}', [PosCounterApiController::class, 'destroy'])->name('counters.destroy');
+
+    // Cashiers
+    Route::get   ('cashiers',           [PosCashierApiController::class, 'index'])  ->name('cashiers.index');
+    Route::post  ('cashiers',           [PosCashierApiController::class, 'store'])  ->name('cashiers.store');
+    Route::patch ('cashiers/{cashier}', [PosCashierApiController::class, 'update']) ->name('cashiers.update');
+    Route::delete('cashiers/{cashier}', [PosCashierApiController::class, 'destroy'])->name('cashiers.destroy');
 
     // Guide AI Chat
     Route::post('guide/chat', [\Modules\Pos\Http\Controllers\Api\PosGuideChatApiController::class, 'chat'])->name('guide.chat');
