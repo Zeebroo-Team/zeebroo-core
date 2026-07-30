@@ -24,6 +24,7 @@ use Modules\Pos\Http\Controllers\Api\PosExpenseModificationApiController;
 use Modules\Pos\Http\Controllers\Api\PosEndOfDayApiController;
 use Modules\Pos\Http\Controllers\Api\PosQuotationApiController;
 use Modules\Pos\Http\Controllers\Api\PosInvoiceApiController;
+use Modules\Pos\Http\Controllers\Api\PosSalesOrderApiController;
 use Modules\Pos\Http\Controllers\Api\PosSettingsApiController;
 use Modules\Pos\Http\Controllers\Api\PosCustomerApiController;
 use Modules\Pos\Http\Controllers\Api\PosSupplierApiController;
@@ -49,6 +50,7 @@ Route::prefix('v1/pos')->group(function (): void {
     Route::post('auth/token',             [PosAuthApiController::class, 'token'])->name('auth.token');
     Route::post('auth/register',          [PosAuthApiController::class, 'register'])->name('auth.register');
     Route::get ('auth/business-categories',[PosAuthApiController::class, 'businessCategories'])->name('auth.business-categories');
+    Route::post('cashier/login',          [PosCashierApiController::class, 'login'])->name('cashier.login');
 
     Route::get('docs', [PosApiDocsController::class, 'index'])->name('pos.docs');
     Route::get('docs/openapi.yaml', [PosApiDocsController::class, 'openapi'])->name('pos.docs.openapi');
@@ -67,9 +69,13 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
     Route::get('online/categories', [PosCatalogApiController::class, 'categories'])->name('online.categories');
     Route::get('online/products', [PosCatalogApiController::class, 'products'])->name('online.products');
     Route::get('online/products/{id}', [PosCatalogApiController::class, 'show'])->where('id', '[0-9]+')->name('online.products.show');
-    Route::get('online/products/{id}/stock-history', [PosCatalogApiController::class, 'stockHistory'])->where('id', '[0-9]+')->name('online.products.stock-history');
+    Route::get  ('online/products/{id}/stock-history',                       [PosCatalogApiController::class, 'stockHistory'])->where('id', '[0-9]+')->name('online.products.stock-history');
+    Route::patch('online/products/{id}/stock-layers/{layerId}/selling-price',   [PosCatalogApiController::class, 'updateLayerSellingPrice'])->where(['id' => '[0-9]+', 'layerId' => '[0-9]+'])->name('online.products.stock-layers.selling-price');
+    Route::patch('online/products/{id}/stock-layers/{layerId}/wholesale-price', [PosCatalogApiController::class, 'updateLayerWholesalePrice'])->where(['id' => '[0-9]+', 'layerId' => '[0-9]+'])->name('online.products.stock-layers.wholesale-price');
+    Route::patch('online/products/{id}/stock-layers/{layerId}/cost-price',      [PosCatalogApiController::class, 'updateLayerCostPrice'])->where(['id' => '[0-9]+', 'layerId' => '[0-9]+'])->name('online.products.stock-layers.cost-price');
     Route::get('online/products/{id}/sales-chart', \Modules\Pos\Http\Controllers\Api\PosProductSalesChartApiController::class)->where('id', '[0-9]+')->name('online.products.sales-chart');
     Route::get('online/products/sku/{sku}', [PosCatalogApiController::class, 'productBySku'])->name('online.products.sku');
+    Route::post('online/products/{id}/backfill-batch-skus', [PosCatalogApiController::class, 'backfillBatchSkus'])->where('id', '[0-9]+')->name('online.products.backfill-batch-skus');
 
     Route::post('online/products',        [PosProductApiController::class, 'store']  )->name('online.products.store');
     Route::post('online/products/import', [PosProductApiController::class, 'import'] )->name('online.products.import');
@@ -106,6 +112,17 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
     Route::post  ('quotations/{quotation}/accept',     [PosQuotationApiController::class, 'markAccepted'] )->name('quotations.accept');
     Route::post  ('quotations/{quotation}/reject',     [PosQuotationApiController::class, 'markRejected'] )->name('quotations.reject');
     Route::delete('quotations/{quotation}',            [PosQuotationApiController::class, 'destroy']      )->name('quotations.destroy');
+
+    // Sales Orders
+    Route::get   ('sales-orders',                            [PosSalesOrderApiController::class, 'index']   )->name('sales-orders.index');
+    Route::post  ('sales-orders',                            [PosSalesOrderApiController::class, 'store']   )->name('sales-orders.store');
+    Route::get   ('sales-orders/{salesOrder}',               [PosSalesOrderApiController::class, 'show']    )->name('sales-orders.show');
+    Route::patch ('sales-orders/{salesOrder}',               [PosSalesOrderApiController::class, 'update']  )->name('sales-orders.update');
+    Route::post  ('sales-orders/{salesOrder}/confirm',       [PosSalesOrderApiController::class, 'confirm'] )->name('sales-orders.confirm');
+    Route::post  ('sales-orders/{salesOrder}/process',       [PosSalesOrderApiController::class, 'process'] )->name('sales-orders.process');
+    Route::post  ('sales-orders/{salesOrder}/complete',      [PosSalesOrderApiController::class, 'complete'])->name('sales-orders.complete');
+    Route::post  ('sales-orders/{salesOrder}/cancel',        [PosSalesOrderApiController::class, 'cancel']  )->name('sales-orders.cancel');
+    Route::delete('sales-orders/{salesOrder}',               [PosSalesOrderApiController::class, 'destroy'] )->name('sales-orders.destroy');
 
     Route::get ('eod',            [PosEndOfDayApiController::class,    'status'])->name('eod.status');
     Route::post('eod/settle',     [PosEndOfDayApiController::class,    'settle'])->name('eod.settle');

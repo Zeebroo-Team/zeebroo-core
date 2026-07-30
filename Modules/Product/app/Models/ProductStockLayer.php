@@ -15,10 +15,12 @@ class ProductStockLayer extends Model
         'branch_id',
         'product_id',
         'goods_receive_note_item_id',
+        'batch_sku',
         'quantity_received',
         'quantity_remaining',
         'unit_cost',
         'selling_unit_price',
+        'wholesale_unit_price',
         'received_at',
     ];
 
@@ -29,6 +31,7 @@ class ProductStockLayer extends Model
             'quantity_remaining' => 'decimal:3',
             'unit_cost' => 'decimal:2',
             'selling_unit_price' => 'decimal:2',
+            'wholesale_unit_price' => 'decimal:2',
             'received_at' => 'date',
         ];
     }

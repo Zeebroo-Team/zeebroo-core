@@ -258,10 +258,12 @@ class PosMailApiController extends Controller
         $this->abortUnlessPerm($request, $business, 'mail_compose');
 
         $validated = $request->validate([
-            'to'           => ['required', 'email'],
-            'subject'      => ['required', 'string', 'max:255'],
-            'body'         => ['required', 'string'],
-            'scheduled_at' => ['nullable', 'date', 'after:now'],
+            'to'                => ['required', 'email'],
+            'subject'           => ['required', 'string', 'max:255'],
+            'body'              => ['required', 'string'],
+            'scheduled_at'      => ['nullable', 'date', 'after:now'],
+            'attachment_base64' => ['nullable', 'string'],
+            'attachment_name'   => ['nullable', 'string', 'max:120'],
         ]);
 
         if (filled($validated['scheduled_at'] ?? null)) {
@@ -276,7 +278,12 @@ class PosMailApiController extends Controller
         }
 
         $bodyHtml = nl2br(htmlspecialchars($validated['body']));
-        $mailable = new ComposedMail($validated['subject'], $bodyHtml);
+        $mailable = new ComposedMail(
+            $validated['subject'],
+            $bodyHtml,
+            $validated['attachment_base64'] ?? null,
+            $validated['attachment_name']   ?? null,
+        );
         $result   = $this->mailer->send($business, $mailable, $validated['to']);
 
         if (! $result['success']) {

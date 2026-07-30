@@ -9,10 +9,17 @@ const API = (() => {
     return res;
   }
 
+  // Public request — does NOT fire api-unauthorized on 401 (used for login endpoints)
+  async function publicRequest(method, path, body = null) {
+    return window.electronAPI.apiRequest(method, path, body);
+  }
+
   return {
     // Auth
     login:        (email, password, deviceName) =>
-      request('POST', '/auth/token', { email, password, device_name: deviceName }),
+      publicRequest('POST', '/auth/token', { email, password, device_name: deviceName }),
+    cashierLogin: (slug, username, password) =>
+      publicRequest('POST', '/cashier/login', { slug, username, password }),
     register:           (name, businessName, businessCategory, features, email, password, deviceName) =>
       request('POST', '/auth/register', { name, business_name: businessName, business_category: businessCategory, features, email, password, password_confirmation: password, device_name: deviceName }),
     businessCategories: () => request('GET', '/auth/business-categories'),
@@ -36,7 +43,14 @@ const API = (() => {
     product:          (id)         => request('GET', `/online/products/${id}`),
     productSalesChart:  (id, period) => request('GET', `/online/products/${id}/sales-chart?period=${period || 'weekly'}`),
     productStockHistory:(id)        => request('GET', `/online/products/${id}/stock-history`),
+    updateLayerSellingPrice: (productId, layerId, price) =>
+      request('PATCH', `/online/products/${productId}/stock-layers/${layerId}/selling-price`, { selling_unit_price: price }),
+    updateLayerWholesalePrice: (productId, layerId, price) =>
+      request('PATCH', `/online/products/${productId}/stock-layers/${layerId}/wholesale-price`, { wholesale_unit_price: price }),
+    updateLayerCostPrice: (productId, layerId, cost) =>
+      request('PATCH', `/online/products/${productId}/stock-layers/${layerId}/cost-price`, { unit_cost: cost }),
     productBySku: (sku)               => request('GET',  `/online/products/sku/${encodeURIComponent(sku)}`),
+    backfillBatchSkus: (productId)    => request('POST', `/online/products/${productId}/backfill-batch-skus`),
     checkout:     (body)              => request('POST', '/online/checkout', body),
     createProduct: (body)              => request('POST',   '/online/products', body),
     importProducts:(rows)             => request('POST',   '/online/products/import', { rows }),
@@ -63,6 +77,17 @@ const API = (() => {
     quotationAccept: (id)        => request('POST',   `/quotations/${id}/accept`),
     quotationReject: (id)        => request('POST',   `/quotations/${id}/reject`),
     deleteQuotation: (id)        => request('DELETE', `/quotations/${id}`),
+
+    // Sales Orders
+    salesOrders:          (q, status) => request('GET',    `/sales-orders?q=${encodeURIComponent(q||'')}&status=${status||'all'}`),
+    salesOrder:           (id)        => request('GET',    `/sales-orders/${id}`),
+    createSalesOrder:     (body)      => request('POST',   '/sales-orders', body),
+    updateSalesOrder:     (id, body)  => request('PATCH',  `/sales-orders/${id}`, body),
+    confirmSalesOrder:    (id)        => request('POST',   `/sales-orders/${id}/confirm`),
+    processSalesOrder:    (id)        => request('POST',   `/sales-orders/${id}/process`),
+    completeSalesOrder:   (id)        => request('POST',   `/sales-orders/${id}/complete`),
+    cancelSalesOrder:     (id)        => request('POST',   `/sales-orders/${id}/cancel`),
+    deleteSalesOrder:     (id)        => request('DELETE', `/sales-orders/${id}`),
 
     // End of Day
     eodStatus:  () => request('GET',  '/eod'),

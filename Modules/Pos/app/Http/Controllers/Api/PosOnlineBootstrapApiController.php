@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesPosBusinessForApi;
+use Modules\Pos\Models\PosCashier;
 use Modules\Pos\Services\PosOnlineApiService;
 
 class PosOnlineBootstrapApiController extends Controller
@@ -36,10 +37,14 @@ class PosOnlineBootstrapApiController extends Controller
             ? $request->query('sort') : 'name_asc';
         $recentSales = filter_var($request->query('recent_sales', false), FILTER_VALIDATE_BOOLEAN);
 
+        // PosCashier tokens are not App\Models\User — pass null so the service
+        // skips user-scoped account filtering and returns all business accounts.
+        $user = $request->user() instanceof PosCashier ? null : $request->user();
+
         return response()->json([
             'data' => $this->api->bootstrap(
                 $business,
-                $request->user(),
+                $user,
                 $search !== '' ? $search : null,
                 $categoryId,
                 $page,

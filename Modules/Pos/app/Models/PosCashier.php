@@ -5,10 +5,12 @@ namespace Modules\Pos\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Facades\Hash;
+use Laravel\Sanctum\HasApiTokens;
 use Modules\Business\Models\Business;
 
 class PosCashier extends Model
 {
+    use HasApiTokens;
     protected $table = 'pos_cashiers';
 
     protected $fillable = [

@@ -40,6 +40,9 @@ const state = {
   posCounterId: null,
   // Register lock: timestamp (ms) when lock expires, null = unlocked
   registerLockedUntil: null,
+  // Cashier mode — restricts UI to POS only
+  cashierMode: false,
+  cashierInfo: null, // { id, name, username }
 };
 
 // ── DOM helpers ────────────────────────────────────────────────────────────
@@ -462,15 +465,18 @@ function _salSwitchView(view) {
   const showHist     = view === 'history';
   const showQuotes   = view === 'quotes';
   const showInvoices = view === 'invoices';
+  const showOrders   = view === 'orders';
   $('#sal-list-view').style.display      = showTxn      ? '' : 'none';
   $('#sal-history-view').style.display   = showHist     ? '' : 'none';
   $('#sal-quotes-view').style.display    = showQuotes   ? 'flex' : 'none';
   $('#sal-invoices-view').style.display  = showInvoices ? 'flex' : 'none';
+  $('#sal-orders-view').style.display    = showOrders   ? 'flex' : 'none';
   $('#sal-detail-view').style.display    = 'none';
   if (showTxn      && !_sal.all.length) loadSalesList();
   if (showHist)     loadSalesHistory();
   if (showQuotes)   loadQuotesList();
   if (showInvoices) loadInvoicesList();
+  if (showOrders)   loadSalesOrderList();
 }
 
 async function loadSalesList() {
@@ -1933,6 +1939,8 @@ $('#rb-qt-new')?.addEventListener('click', () => { _salSwitchView('quotes'); set
 $('#rb-qt-refresh')?.addEventListener('click', () => { _salSwitchView('quotes'); });
 $('#rb-sal-new-invoice')?.addEventListener('click', () => { _salSwitchView('invoices'); setTimeout(() => _invOpenForm(null), 50); });
 $('#rb-sal-new-quotation')?.addEventListener('click', () => { _salSwitchView('quotes'); setTimeout(() => _qtOpenForm(null), 50); });
+$('#rb-so-new')?.addEventListener('click', () => { _salSwitchView('orders'); setTimeout(() => _soOpenForm(null), 50); });
+$('#rb-so-refresh')?.addEventListener('click', () => { _salSwitchView('orders'); loadSalesOrderList(); });
 $('#qt-new-btn').addEventListener('click', () => _qtOpenForm(null));
 // ── End Quotations Panel ──────────────────────────────────────────────────
 
@@ -2589,6 +2597,362 @@ $$('.sinv-chip').forEach(btn => {
 $('#sinv-new-btn').addEventListener('click', () => _invOpenForm(null));
 // ── End Invoices Panel ────────────────────────────────────────────────────
 
+// ── Sales Orders ─────────────────────────────────────────────────────────────
+const _so = { list: [], activeId: null, search: '', status: 'all', searchTimer: null, editingId: null, items: [], customers: [] };
+
+function _soShowView(v) {
+  $('#so-list-view').style.display   = v === 'list'   ? 'flex' : 'none';
+  $('#so-detail-view').style.display = v === 'detail' ? 'flex' : 'none';
+  $('#so-form-view').style.display   = v === 'form'   ? 'flex' : 'none';
+}
+
+async function loadSalesOrderList() {
+  _soShowView('list');
+  $('#so-list-loading').style.display = '';
+  $('#so-list-body').innerHTML = '';
+
+  const res = await API.salesOrders(_so.search, _so.status);
+  $('#so-list-loading').style.display = 'none';
+
+  if (res.status !== 200) {
+    $('#so-list-body').innerHTML = '<div class="qt-empty"><i class="fa fa-circle-exclamation"></i> Failed to load orders.</div>';
+    return;
+  }
+
+  _so.list = res.body?.data || [];
+  _soRenderList();
+}
+
+function _soRenderList() {
+  const cur = state.currency ? ' ' + state.currency : '';
+  if (!_so.list.length) {
+    $('#so-list-body').innerHTML = `<div class="qt-empty">
+      <i class="fa fa-box-open"></i>
+      <h4>No Sales Orders</h4>
+      <p>Create a new order to get started.</p>
+    </div>`;
+    return;
+  }
+
+  const counts = { pending: 0, confirmed: 0, processing: 0, completed: 0, cancelled: 0 };
+  let totalVal = 0;
+  _so.list.forEach(o => { if (counts[o.status] !== undefined) counts[o.status]++; totalVal += parseFloat(o.total || 0); });
+
+  let html = `<div class="qt-stats">
+    <div class="qt-stat"><span class="qt-stat-val">${_so.list.length}</span><span class="qt-stat-lbl">Total</span></div>
+    <div class="qt-stat" style="--sc:#f59e0b"><span class="qt-stat-val">${counts.pending}</span><span class="qt-stat-lbl">Pending</span></div>
+    <div class="qt-stat blue"><span class="qt-stat-val">${counts.confirmed}</span><span class="qt-stat-lbl">Confirmed</span></div>
+    <div class="qt-stat" style="--sc:#8b5cf6"><span class="qt-stat-val">${counts.processing}</span><span class="qt-stat-lbl">Processing</span></div>
+    <div class="qt-stat green"><span class="qt-stat-val">${counts.completed}</span><span class="qt-stat-lbl">Completed</span></div>
+    <div class="qt-stat" style="flex:2"><span class="qt-stat-val" style="font-size:16px">${totalVal.toFixed(2)}${cur}</span><span class="qt-stat-lbl">Total Value</span></div>
+  </div>
+  <div class="qt-tbl-wrap"><table class="qt-tbl">
+    <thead><tr>
+      <th>Order #</th><th>Customer</th><th>Order Date</th><th>Delivery Date</th><th>Status</th>
+      <th style="text-align:right">Items</th>
+      <th style="text-align:right">Amount</th><th style="width:28px"></th>
+    </tr></thead><tbody>`;
+
+  _so.list.forEach(o => {
+    const date     = o.order_date             ? new Date(o.order_date             + 'T00:00:00').toLocaleDateString(undefined, { month:'short', day:'numeric', year:'numeric' }) : '—';
+    const delivery = o.expected_delivery_date ? new Date(o.expected_delivery_date + 'T00:00:00').toLocaleDateString(undefined, { month:'short', day:'numeric', year:'numeric' }) : '—';
+    html += `<tr data-so-id="${o.id}">
+      <td><span class="qt-tbl-num">${escHtml(o.order_number || String(o.id))}</span></td>
+      <td class="qt-tbl-customer">${escHtml(o.customer_name || 'Walk-in')}</td>
+      <td class="qt-tbl-muted">${date}</td>
+      <td class="qt-tbl-muted">${delivery}</td>
+      <td><span class="so-badge" style="background:${o.status_color}20;color:${o.status_color};border-color:${o.status_color}40">${escHtml(o.status_label)}</span></td>
+      <td style="text-align:right;color:var(--muted)">${o.item_count || 0}</td>
+      <td class="qt-tbl-amt">${parseFloat(o.total || 0).toFixed(2)}${cur}</td>
+      <td class="qt-tbl-chevron"><i class="fa fa-chevron-right"></i></td>
+    </tr>`;
+  });
+
+  html += '</tbody></table></div>';
+  $('#so-list-body').innerHTML = html;
+  $$('#so-list-body tr[data-so-id]').forEach(row => {
+    row.addEventListener('click', () => _soOpenDetail(Number(row.dataset.soId)));
+  });
+}
+
+async function _soOpenDetail(id) {
+  _so.activeId = id;
+  _soShowView('detail');
+  $('#so-detail-title').textContent = 'Loading…';
+  $('#so-detail-body').innerHTML    = '<div class="qt-loading"><i class="fa fa-spinner fa-spin"></i></div>';
+  $('#so-detail-actions').innerHTML = '';
+
+  const res = await API.salesOrder(id);
+  if (res.status !== 200) {
+    $('#so-detail-body').innerHTML = '<div class="qt-empty"><i class="fa fa-circle-exclamation"></i> Failed to load.</div>';
+    return;
+  }
+
+  const o   = res.body?.data;
+  const cur = state.currency ? ' ' + state.currency : '';
+  $('#so-detail-title').textContent = o.order_number;
+
+  // Action buttons
+  let acts = '';
+  if (o.is_editable) acts += `<button class="qt-act-btn" id="sod-edit"><i class="fa fa-pen"></i> Edit</button>`;
+  if (o.status === 'pending')    acts += `<button class="qt-act-btn accent" id="sod-confirm"><i class="fa fa-circle-check"></i> Confirm</button>`;
+  if (o.status === 'confirmed')  acts += `<button class="qt-act-btn" id="sod-process" style="background:var(--surface);border:1.5px solid #8b5cf6;color:#8b5cf6"><i class="fa fa-gears"></i> Processing</button>`;
+  if (o.status === 'processing') acts += `<button class="qt-act-btn accent" id="sod-complete"><i class="fa fa-check-double"></i> Complete</button>`;
+  if (o.status !== 'cancelled' && o.status !== 'completed') acts += `<button class="qt-act-btn danger" id="sod-cancel"><i class="fa fa-ban"></i> Cancel</button>`;
+  if (['pending', 'cancelled'].includes(o.status)) acts += `<button class="qt-act-btn danger" id="sod-delete"><i class="fa fa-trash"></i> Delete</button>`;
+  $('#so-detail-actions').innerHTML = acts;
+
+  // Wire action buttons
+  $('#sod-edit')?.addEventListener('click', () => _soOpenForm(o));
+  $('#sod-confirm')?.addEventListener('click', () => _soAction(id, 'confirm'));
+  $('#sod-process')?.addEventListener('click', () => _soAction(id, 'process'));
+  $('#sod-complete')?.addEventListener('click', () => _soAction(id, 'complete'));
+  $('#sod-cancel')?.addEventListener('click',  () => _soAction(id, 'cancel'));
+  $('#sod-delete')?.addEventListener('click',  async () => {
+    if (!confirm(`Delete order ${o.order_number}?`)) return;
+    const r = await API.deleteSalesOrder(id);
+    if (r.status === 200) { toast('Order deleted', 'info'); loadSalesOrderList(); }
+    else toast(r.body?.message || 'Failed to delete', 'error');
+  });
+
+  // Build document body
+  const dateStr     = o.order_date             ? new Date(o.order_date             + 'T00:00:00').toLocaleDateString(undefined, { month:'long', day:'numeric', year:'numeric' }) : '—';
+  const deliveryStr = o.expected_delivery_date ? new Date(o.expected_delivery_date + 'T00:00:00').toLocaleDateString(undefined, { month:'long', day:'numeric', year:'numeric' }) : '—';
+
+  const itemRows = (o.items || []).map((item, idx) => `<tr>
+    <td class="qt-item-n">${idx + 1}</td>
+    <td>${escHtml(item.description || '—')}</td>
+    <td class="td-r">${parseFloat(item.quantity) % 1 === 0 ? parseInt(item.quantity) : parseFloat(item.quantity).toFixed(3)}</td>
+    <td class="td-r">${parseFloat(item.unit_price).toFixed(2)}${cur}</td>
+    <td class="td-r qt-item-total">${parseFloat(item.line_total).toFixed(2)}${cur}</td>
+  </tr>`).join('');
+
+  $('#so-detail-body').innerHTML = `<div class="qt-doc">
+    <div class="qt-doc-banner">
+      <div class="qt-doc-banner-left">
+        <div class="qt-doc-banner-num">${escHtml(o.order_number)}</div>
+        <div class="qt-doc-banner-type">Sales Order</div>
+      </div>
+      <div class="qt-doc-banner-right">
+        <span class="so-badge so-badge-lg" style="background:${o.status_color}20;color:${o.status_color};border-color:${o.status_color}40">${escHtml(o.status_label)}</span>
+      </div>
+    </div>
+    <div class="qt-doc-meta">
+      <div class="qt-doc-meta-block">
+        <div class="qt-doc-meta-lbl">Customer</div>
+        <div class="qt-doc-meta-val">${escHtml(o.customer_name || 'Walk-in')}</div>
+      </div>
+      <div class="qt-doc-meta-block">
+        <div class="qt-doc-meta-lbl">Order Date</div>
+        <div class="qt-doc-meta-val">${dateStr}</div>
+      </div>
+      <div class="qt-doc-meta-block">
+        <div class="qt-doc-meta-lbl">Expected Delivery</div>
+        <div class="qt-doc-meta-val">${deliveryStr}</div>
+      </div>
+      ${o.reference ? `<div class="qt-doc-meta-block"><div class="qt-doc-meta-lbl">Reference</div><div class="qt-doc-meta-val">${escHtml(o.reference)}</div></div>` : ''}
+    </div>
+    <table class="qt-item-table">
+      <thead><tr><th style="width:32px">#</th><th>Description</th><th class="td-r">Qty</th><th class="td-r">Unit Price</th><th class="td-r">Line Total</th></tr></thead>
+      <tbody>${itemRows}</tbody>
+    </table>
+    <div class="qt-doc-totals">
+      <div class="qt-doc-total-line"><span>Subtotal</span><span>${parseFloat(o.subtotal).toFixed(2)}${cur}</span></div>
+      ${parseFloat(o.discount_amount) > 0 ? `<div class="qt-doc-total-line"><span>Discount</span><span>-${parseFloat(o.discount_amount).toFixed(2)}${cur}</span></div>` : ''}
+      ${parseFloat(o.tax_amount) > 0 ? `<div class="qt-doc-total-line"><span>Tax</span><span>${parseFloat(o.tax_amount).toFixed(2)}${cur}</span></div>` : ''}
+      <div class="qt-doc-total-line qt-doc-total-bold"><span>Total</span><span>${parseFloat(o.total).toFixed(2)}${cur}</span></div>
+    </div>
+    ${o.notes ? `<div class="qt-doc-notes"><strong>Notes:</strong> ${escHtml(o.notes)}</div>` : ''}
+  </div>`;
+}
+
+async function _soAction(id, action) {
+  const fnMap = { confirm: API.confirmSalesOrder, process: API.processSalesOrder, complete: API.completeSalesOrder, cancel: API.cancelSalesOrder };
+  const res = await fnMap[action](id);
+  if (res.status === 200) {
+    toast({ confirm: 'Order confirmed', process: 'Marked as processing', complete: 'Order completed', cancel: 'Order cancelled' }[action], 'success');
+    _soOpenDetail(id);
+    loadSalesOrderList();
+  } else {
+    toast(res.body?.message || 'Action failed', 'error');
+  }
+}
+
+function _soResetForm() {
+  _so.editingId = null;
+  _so.items     = [];
+  $('#so-f-order-date').value    = new Date().toISOString().slice(0, 10);
+  $('#so-f-delivery-date').value = '';
+  $('#so-f-reference').value     = '';
+  $('#so-f-notes').value         = '';
+  $('#so-f-discount').value      = '0';
+  $('#so-f-tax').value           = '0';
+  $('#so-f-customer').value      = '';
+  _soRenderItems();
+  _soCalcTotals();
+}
+
+function _soRenderItems() {
+  const body = $('#so-items-body');
+  // Snapshot values from any existing inputs before re-render
+  $$('#so-items-body .qt-line-row').forEach(row => {
+    const idx = +row.dataset.idx;
+    if (_so.items[idx]) {
+      _so.items[idx].description = row.querySelector('.so-item-desc')?.value ?? _so.items[idx].description;
+      _so.items[idx].quantity    = parseFloat(row.querySelector('.so-item-qty')?.value)   || _so.items[idx].quantity;
+      _so.items[idx].unit_price  = parseFloat(row.querySelector('.so-item-price')?.value) || _so.items[idx].unit_price;
+    }
+  });
+
+  body.innerHTML = _so.items.map((item, idx) => {
+    const lineTotal = (parseFloat(item.quantity || 0) * parseFloat(item.unit_price || 0)).toFixed(2);
+    return `<div class="qt-line-row" data-idx="${idx}">
+      <div class="qt-line-desc">
+        <input type="text" class="qt-line-input qt-line-desc-input so-item-desc" data-idx="${idx}"
+          value="${escHtml(item.description || '')}" placeholder="Description…">
+      </div>
+      <input type="number" class="qt-line-input qt-line-num so-item-qty" data-idx="${idx}"
+        min="0.001" step="any" value="${item.quantity || 1}">
+      <input type="number" class="qt-line-input qt-line-price so-item-price" data-idx="${idx}"
+        min="0" step="any" value="${item.unit_price !== undefined ? item.unit_price : ''}" placeholder="0.00">
+      <div class="qt-line-total">${lineTotal}</div>
+      <button class="qt-line-del so-item-del" data-idx="${idx}"><i class="fa fa-xmark"></i></button>
+    </div>`;
+  }).join('');
+
+  $$('#so-items-body .so-item-desc').forEach(el => {
+    el.addEventListener('input', () => { _so.items[+el.dataset.idx].description = el.value; });
+  });
+  $$('#so-items-body .so-item-qty').forEach(el => {
+    el.addEventListener('input', () => {
+      _so.items[+el.dataset.idx].quantity = parseFloat(el.value) || 0;
+      _soRenderItems(); _soCalcTotals();
+    });
+  });
+  $$('#so-items-body .so-item-price').forEach(el => {
+    el.addEventListener('input', () => {
+      _so.items[+el.dataset.idx].unit_price = parseFloat(el.value) || 0;
+      _soRenderItems(); _soCalcTotals();
+    });
+  });
+  $$('#so-items-body .so-item-del').forEach(el => {
+    el.addEventListener('click', () => { _so.items.splice(+el.dataset.idx, 1); _soRenderItems(); _soCalcTotals(); });
+  });
+}
+
+function _soCalcTotals() {
+  const cur      = state.currency ? ' ' + state.currency : '';
+  const subtotal = _so.items.reduce((s, i) => s + (parseFloat(i.quantity || 0) * parseFloat(i.unit_price || 0)), 0);
+  const discount = parseFloat($('#so-f-discount').value) || 0;
+  const tax      = parseFloat($('#so-f-tax').value)      || 0;
+  const total    = Math.max(0, subtotal - discount + tax);
+  $('#so-f-subtotal').textContent = subtotal.toFixed(2) + cur;
+  $('#so-f-total').textContent    = total.toFixed(2) + cur;
+}
+
+async function _soOpenForm(order) {
+  _soShowView('form');
+  $('#so-form-title').textContent = order ? `Edit ${order.order_number}` : 'New Sales Order';
+  _so.editingId = order?.id ?? null;
+
+  // Populate customer dropdown
+  if (!_so.customers.length) {
+    const cRes = await API.customers();
+    _so.customers = cRes.body?.data || [];
+  }
+  const custOpts = _so.customers.map(c => `<option value="${c.id}">${escHtml(c.name)}</option>`).join('');
+  $('#so-f-customer').innerHTML = `<option value="">— Walk-in —</option>${custOpts}`;
+
+  if (order) {
+    $('#so-f-customer').value      = order.customer_id || '';
+    $('#so-f-order-date').value    = order.order_date || new Date().toISOString().slice(0, 10);
+    $('#so-f-delivery-date').value = order.expected_delivery_date || '';
+    $('#so-f-reference').value     = order.reference || '';
+    $('#so-f-discount').value      = parseFloat(order.discount_amount || 0).toFixed(2);
+    $('#so-f-tax').value           = parseFloat(order.tax_amount || 0).toFixed(2);
+    $('#so-f-notes').value         = order.notes || '';
+    _so.items = (order.items || []).map(i => ({ description: i.description || '', quantity: parseFloat(i.quantity), unit_price: parseFloat(i.unit_price) }));
+  } else {
+    _soResetForm();
+    return;
+  }
+  _soRenderItems();
+  _soCalcTotals();
+}
+
+async function _soSave() {
+  // Snapshot any in-progress edits from inputs before reading _so.items
+  $$('#so-items-body .qt-line-row').forEach(row => {
+    const idx = +row.dataset.idx;
+    if (_so.items[idx]) {
+      _so.items[idx].description = row.querySelector('.so-item-desc')?.value ?? '';
+      _so.items[idx].quantity    = parseFloat(row.querySelector('.so-item-qty')?.value)   || 1;
+      _so.items[idx].unit_price  = parseFloat(row.querySelector('.so-item-price')?.value) || 0;
+    }
+  });
+
+  const orderDate = $('#so-f-order-date').value;
+  if (!orderDate) { toast('Order date is required', 'error'); return; }
+  if (!_so.items.length) { toast('Add at least one item', 'error'); return; }
+
+  const body = {
+    customer_id:             $('#so-f-customer').value || null,
+    order_date:              orderDate,
+    expected_delivery_date:  $('#so-f-delivery-date').value || null,
+    reference:               $('#so-f-reference').value || null,
+    discount_amount:         parseFloat($('#so-f-discount').value) || 0,
+    tax_amount:              parseFloat($('#so-f-tax').value) || 0,
+    notes:                   $('#so-f-notes').value || null,
+    items: _so.items.map(i => ({ description: i.description, quantity: i.quantity, unit_price: i.unit_price })),
+  };
+
+  const saveBtn = $('#so-save-btn');
+  saveBtn.disabled = true;
+  saveBtn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
+
+  const res = _so.editingId
+    ? await API.updateSalesOrder(_so.editingId, body)
+    : await API.createSalesOrder(body);
+
+  saveBtn.disabled = false;
+  saveBtn.innerHTML = '<i class="fa fa-floppy-disk"></i> Save Order';
+
+  if (res.status === 200 || res.status === 201) {
+    toast(res.body?.message || 'Saved', 'success');
+    _so.list = [];
+    loadSalesOrderList();
+    if (res.body?.data?.id) _soOpenDetail(res.body.data.id);
+  } else {
+    toast(res.body?.message || 'Save failed', 'error');
+  }
+}
+
+// Event listeners
+$('#so-detail-back').addEventListener('click', () => { _so.activeId = null; loadSalesOrderList(); });
+$('#so-form-back').addEventListener('click',   () => { _so.editingId ? _soOpenDetail(_so.editingId) : loadSalesOrderList(); });
+$('#so-cancel-form-btn').addEventListener('click', () => { _so.editingId ? _soOpenDetail(_so.editingId) : loadSalesOrderList(); });
+$('#so-new-btn').addEventListener('click', () => _soOpenForm(null));
+$('#so-save-btn').addEventListener('click', _soSave);
+$('#so-add-item-btn').addEventListener('click', () => {
+  _so.items.push({ description: '', quantity: 1, unit_price: 0 });
+  _soRenderItems();
+  _soCalcTotals();
+  const inputs = $$('#so-items-body .so-item-desc');
+  if (inputs.length) inputs[inputs.length - 1].focus();
+});
+$('#so-search').addEventListener('input', () => {
+  _so.search = $('#so-search').value;
+  clearTimeout(_so.searchTimer);
+  _so.searchTimer = setTimeout(loadSalesOrderList, 280);
+});
+$('#so-status-filter').addEventListener('change', () => {
+  _so.status = $('#so-status-filter').value;
+  loadSalesOrderList();
+});
+$('#so-f-discount').addEventListener('input', _soCalcTotals);
+$('#so-f-tax').addEventListener('input', _soCalcTotals);
+// ── End Sales Orders ──────────────────────────────────────────────────────
+
 // ── Login flow ─────────────────────────────────────────────────────────────
 async function init() {
   state.config = await window.electronAPI.getConfig();
@@ -2603,11 +2967,16 @@ async function init() {
 
 function showLogin() {
   window.electronAPI.narrowAuth?.();
+  state.cashierMode = false;
+  state.cashierInfo = null;
+  _ctbStopClock();
+  $('#app-shell').classList.remove('cashier-mode');
   const body = $('#login-body');
   if (body) { body.style.display = ''; body.style.padding = ''; }
   $('#login-screen').style.display = 'flex';
   $('#app-shell').style.display = 'none';
   $('#signin-card').style.display = '';
+  $('#cashier-card').style.display = 'none';
   $('#signup-card').style.cssText = 'display:none';
   $('#login-step-1').style.display = '';
   $('#login-step-2').style.display = 'none';
@@ -2814,6 +3183,7 @@ function showSignup() {
   const body = $('#login-body');
   if (body) { body.style.display = 'block'; body.style.padding = '0'; }
   $('#signin-card').style.display = 'none';
+  $('#cashier-card').style.display = 'none';
   $('#signup-card').style.cssText = 'display:grid; width:100%; height:100%';
   $('#su-email').value    = '';
   $('#su-password').value = '';
@@ -2907,6 +3277,25 @@ function applyFeatureVisibility() {
   const dev_enabled  = bf('developers');
   const auto_enabled = bf('automation_editor');
   const pm_enabled   = bf('project_management');
+
+  // ── Cashier mode: POS-only ──
+  if (state.cashierMode) {
+    $('#app-shell').classList.add('cashier-mode');
+    // Populate cashier topbar
+    const ci = state.cashierInfo;
+    if (ci) {
+      const nameEl = $('#ctb-cashier-name');
+      if (nameEl) nameEl.textContent = ci.name || 'Cashier';
+    }
+    const bizEl = $('#ctb-bizname');
+    if (bizEl) bizEl.textContent = state._bizName || 'Zeebroo';
+    _ctbStartClock();
+    _ctbUpdateToday();
+    activateTab('pos');
+    return;
+  }
+  // Restore owner mode chrome
+  $('#app-shell').classList.remove('cashier-mode');
 
   // ── Ribbon tabs ──
   const isAdminOrOwner = state.memberIsOwner || state.memberRole === 'admin' || state.memberPermissions === null;
@@ -3154,9 +3543,10 @@ function applyFeatureVisibility() {
   btn('#btn-park',     mp('pos_cart_park'));
   btn('#btn-recall',   mp('pos_cart_recall'));
   btn('#btn-customer', mp('pos_cart_customer'));
-  btn('#checkout-btn', mp('pos_cart_checkout'));
-  btn('#pos-to-invoice', mp('pos_cart_to_invoice'));
-  btn('#pos-to-quote',   mp('pos_cart_to_quote'));
+  btn('#checkout-btn',        mp('pos_cart_checkout'));
+  btn('#pos-to-invoice',      mp('pos_cart_to_invoice'));
+  btn('#pos-to-quote',        mp('pos_cart_to_quote'));
+  btn('#pos-to-sales-order',  mp('pos_cart_to_sales_order'));
 
   // ── Sales ribbon: fine-grained per-element permission gating ──
   btn('#rb-sal-new-invoice',   mp('sal_btn_new_invoice'));
@@ -3174,9 +3564,10 @@ function applyFeatureVisibility() {
     if (salGrps[1]) salGrps[1].style.display = (mp('sal_btn_refresh')||mp('sal_btn_all_sales')||mp('sal_btn_pos_sales')) ? '' : 'none';
     if (salGrps[2]) salGrps[2].style.display = mp('sal_btn_returns') ? '' : 'none';
     if (salGrps[3]) salGrps[3].style.display = mp('sal_btn_eod') ? '' : 'none';
-    if (salGrps[4]) salGrps[4].style.display = (mp('sal_btn_qt_new')||mp('sal_btn_qt_refresh')) ? '' : 'none'; }
+    if (salGrps[4]) salGrps[4].style.display = (mp('sal_btn_qt_new')||mp('sal_btn_qt_refresh')) ? '' : 'none';
+    if (salGrps[5]) salGrps[5].style.display = mp('sal_tab_orders') ? '' : 'none'; }
   // ── Sales panel: sub-nav tab gating with fallback ──
-  { const _salTabPerms = { transactions: mp('sal_tab_transactions'), history: mp('sal_tab_history'), quotes: mp('sal_tab_quotes'), invoices: mp('sal_tab_invoices') };
+  { const _salTabPerms = { transactions: mp('sal_tab_transactions'), history: mp('sal_tab_history'), quotes: mp('sal_tab_quotes'), invoices: mp('sal_tab_invoices'), orders: mp('sal_tab_orders') };
     $$('.sal-view-btn').forEach(b => { b.style.display = _salTabPerms[b.dataset.salView] ? '' : 'none'; });
     const _salActive = $('.sal-view-btn.active');
     if (_salActive && !_salTabPerms[_salActive.dataset.salView]) {
@@ -3355,10 +3746,18 @@ async function loadFeatures() {
   }
 
   if (meRes.status === 200) {
+    const meData = meRes.body?.data ?? {};
     // null permissions = full access (owner or admin role)
-    state.memberPermissions = meRes.body?.data?.permissions ?? null;
-    state.memberRole        = meRes.body?.data?.role ?? null;
-    state.memberIsOwner     = meRes.body?.data?.is_owner ?? false;
+    state.memberPermissions = meData.permissions ?? null;
+    state.memberRole        = meData.role ?? null;
+    state.memberIsOwner     = meData.is_owner ?? false;
+    // Cashier token — enforce POS-only mode
+    if (meData.is_cashier) {
+      state.cashierMode = true;
+      state.cashierInfo = state.cashierInfo || {
+        id: meData.cashier_id, name: meData.cashier_name, username: ''
+      };
+    }
   } else {
     // If /me fails (e.g. owner using a different auth path), grant full access
     state.memberPermissions = null;
@@ -3620,13 +4019,143 @@ function updateProfileUI(bizName, email, userName) {
   document.getElementById('tpm-email').textContent  = email || state._userEmail || '—';
 }
 
-// Toggle between sign-in / sign-up
+// Toggle between sign-in / sign-up / cashier
 $('#go-signup').addEventListener('click', e => { e.preventDefault(); showSignup(); });
 $('#go-signin').addEventListener('click', e => { e.preventDefault(); showLogin(); });
+$('#go-cashier-login').addEventListener('click', e => { e.preventDefault(); showCashierLogin(); });
+$('#go-owner-login').addEventListener('click', e => { e.preventDefault(); showLogin(); });
 
 // Step 1: email + password
 $('#login-btn').addEventListener('click', doLogin);
 $('#login-password').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+
+// Cashier login
+$('#cashier-login-btn').addEventListener('click', doCashierLogin);
+$('#cashier-password').addEventListener('keydown', e => { if (e.key === 'Enter') doCashierLogin(); });
+
+function showCashierLogin() {
+  $('#signin-card').style.display = 'none';
+  $('#cashier-card').style.display = '';
+  $('#signup-card').style.display  = 'none';
+  $('#cashier-alert').style.display = 'none';
+  $('#cashier-slug').value     = '';
+  $('#cashier-username').value = '';
+  $('#cashier-password').value = '';
+  $('#cashier-slug').focus();
+}
+
+async function doCashierLogin() {
+  const slug     = $('#cashier-slug').value.trim();
+  const username = $('#cashier-username').value.trim();
+  const password = $('#cashier-password').value;
+  const btn      = $('#cashier-login-btn');
+  const alert    = $('#cashier-alert');
+
+  if (!slug || !username || !password) {
+    showAlert(alert, 'Enter business slug, username and password');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Logging in…';
+  alert.style.display = 'none';
+
+  const res = await API.cashierLogin(slug, username, password);
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fa fa-arrow-right-to-bracket"></i>&nbsp; Login';
+
+  if (res.status !== 200) {
+    showAlert(alert, res.body?.message || `Login failed (${res.status})`);
+    return;
+  }
+
+  const d = res.body?.data;
+  // Store cashier token + business config
+  await window.electronAPI.setConfig({
+    token:       d.token,
+    business_id: d.business_id,
+    branch_id:   null,
+  });
+  state.config = await window.electronAPI.getConfig();
+
+  // Set cashier mode state
+  state.cashierMode = true;
+  state.cashierInfo = { id: d.cashier_id, name: d.cashier_name, username: d.cashier_username };
+
+  const bizName = d.business_name;
+  state._bizName   = bizName;
+  state._userName  = d.cashier_name;
+  state._userEmail = '';
+  $('#app-title').textContent = bizName ? `Zeebroo POS — ${bizName}` : 'Zeebroo POS';
+  updateProfileUI(bizName, '', d.cashier_name);
+  $('#status-branch').innerHTML = `<i class="fa fa-building"></i> ${escHtml(bizName)}`;
+
+  showApp();
+}
+
+// ── Cashier Top Bar ────────────────────────────────────────────────────────
+let _ctbClockTimer = null;
+
+function _ctbUpdateClock() {
+  const el = $('#ctb-clock');
+  if (!el) return;
+  const now = new Date();
+  el.textContent = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function _ctbStartClock() {
+  _ctbUpdateClock();
+  if (_ctbClockTimer) clearInterval(_ctbClockTimer);
+  _ctbClockTimer = setInterval(_ctbUpdateClock, 10000);
+}
+
+function _ctbStopClock() {
+  if (_ctbClockTimer) { clearInterval(_ctbClockTimer); _ctbClockTimer = null; }
+}
+
+async function _ctbUpdateToday() {
+  const el = $('#ctb-today-amount');
+  if (!el) return;
+  try {
+    const res = await API.todaySummary();
+    if (res?.status === 200) {
+      const revenue = res.body?.data?.sales?.revenue;
+      if (revenue !== undefined && revenue !== null) {
+        const cur = state.currency || '';
+        el.textContent = cur ? `${cur} ${Number(revenue).toFixed(2)}` : Number(revenue).toFixed(2);
+        return;
+      }
+    }
+  } catch (_) {}
+  el.textContent = '—';
+}
+
+// Logout from cashier session
+$('#ctb-logout').addEventListener('click', async () => {
+  _ctbStopClock();
+  await window.electronAPI.setConfig({ token: null, business_id: null, branch_id: null });
+  state.config = await window.electronAPI.getConfig();
+  state.posTabs = []; state.activePosTabId = null; state._nextPosTabId = 1;
+  showLogin();
+  toast('Cashier session ended', 'info');
+});
+
+// New session button
+$('#ctb-new-session').addEventListener('click', () => addPosTab());
+
+// Checkout button — trigger checkout modal if cart has items
+$('#ctb-checkout-quick').addEventListener('click', () => {
+  const btn = $('#checkout-btn');
+  if (btn) btn.click();
+});
+
+// macOS traffic lights
+$('#ctb-close')?.addEventListener('click', () => window.electronAPI.close?.());
+$('#ctb-min')?.addEventListener('click',   () => window.electronAPI.minimize?.());
+$('#ctb-max')?.addEventListener('click',   () => window.electronAPI.maximize?.());
+// Windows controls
+$('#ctb-min-win')?.addEventListener('click',   () => window.electronAPI.minimize?.());
+$('#ctb-close-win')?.addEventListener('click', () => window.electronAPI.close?.());
 
 // Onboarding wizard — step navigation
 $('#ob-next-btn').addEventListener('click', () => {
@@ -6747,13 +7276,6 @@ async function _poAction(id, action) {
 
 // ── PO Create Modal ───────────────────────────────────────────────────────
 async function _poOpenModal() {
-  // Ensure products & suppliers loaded
-  if (!_po.products.length) {
-    const res = await API.bootstrap('', '', 1);
-    if (res.status === 200) {
-      _po.products = res.body?.products || res.body?.data?.products || [];
-    }
-  }
   if (!_po.suppliers.length) {
     const res = await API.suppliers('', 1);
     if (res.status === 200) {
@@ -6832,27 +7354,31 @@ function _poAimUpdateTotal() {
   $('#po-aim-total').textContent = qty > 0 && cost > 0 ? `${cur}${(qty * cost).toFixed(2)}` : '—';
 }
 
-function _poAimRenderDd(q) {
-  const cur  = state.currency || '$';
-  const dd   = $('#po-aim-dd');
-  const term = q.toLowerCase();
-  const matches = _po.products.filter(p =>
-    p.name.toLowerCase().includes(term) || (p.sku || '').toLowerCase().includes(term)
-  ).slice(0, 12);
-  if (!matches.length) {
-    dd.innerHTML = `<div class="po-ac-empty">No products found</div>`;
-    dd.style.display = 'block'; return;
+async function _poAimRenderDd(q) {
+  const cur = state.currency || '$';
+  const dd  = $('#po-aim-dd');
+  dd.innerHTML = `<div class="po-ac-empty"><i class="fa fa-spinner fa-spin"></i> Searching…</div>`;
+  dd.style.display = 'block';
+
+  const res = await API.productSearch(q, 15);
+  if ($('#po-aim-product-input').value.trim() !== q) return; // stale response
+  if (res.status !== 200) {
+    dd.innerHTML = `<div class="po-ac-empty">Search failed</div>`; return;
   }
-  dd.innerHTML = matches.map(p => {
-    const cost  = p.layers?.[0]?.unit_cost ?? 0;
-    const stock = p.stock_quantity ?? 0;
+  const products = res.body?.data || [];
+  if (!products.length) {
+    dd.innerHTML = `<div class="po-ac-empty">No products found for "${escHtml(q)}"</div>`; return;
+  }
+  dd.innerHTML = products.map(p => {
+    const stock    = p.stock_quantity ?? 0;
+    const sellDisp = p.unit_sell_price != null ? `${cur}${parseFloat(p.unit_sell_price).toFixed(2)}` : '';
     return `<div class="po-ac-item" tabindex="0"
-        data-id="${p.id}" data-name="${p.name.replace(/"/g,'&quot;')}" data-cost="${cost}">
-      <div class="po-ac-name">${p.name}</div>
+        data-id="${p.id}" data-name="${p.name.replace(/"/g,'&quot;')}" data-cost="0">
+      <div class="po-ac-name">${escHtml(p.name)}</div>
       <div class="po-ac-meta">
-        ${p.sku ? `<span class="po-ac-sku">${p.sku}</span>` : ''}
+        ${p.sku ? `<span class="po-ac-sku">${escHtml(p.sku)}</span>` : ''}
         <span class="po-ac-stock ${stock <= 0 ? 'po-ac-out' : ''}">${stock <= 0 ? 'Out of stock' : 'Stock: '+stock}</span>
-        <span class="po-ac-cost">Cost: ${cur}${parseFloat(cost).toFixed(2)}</span>
+        ${sellDisp ? `<span class="po-ac-cost">Sell: ${sellDisp}</span>` : ''}
       </div>
     </div>`;
   }).join('');
@@ -6896,7 +7422,7 @@ $('#po-aim-product-input')?.addEventListener('input', e => {
   clearTimeout(_poAim.acTimer);
   const q = e.target.value.trim();
   if (!q) { $('#po-aim-dd').style.display = 'none'; return; }
-  _poAim.acTimer = setTimeout(() => _poAimRenderDd(q), 120);
+  _poAim.acTimer = setTimeout(() => _poAimRenderDd(q), 300);
 });
 
 $('#po-aim-product-input')?.addEventListener('keydown', e => {
@@ -8678,35 +9204,31 @@ function _barcodeRenderList() {
         <div class="bc-row-name">${escHtml(p.name)}</div>
         <div class="bc-row-sku">${escHtml(barcode)}</div>
       </div>
-      <div class="bc-qty-wrap">
-        <label class="bc-qty-lbl">Qty</label>
-        <input type="number" class="bc-qty-inp" data-pid="${p.id}" value="${qty}" min="1" max="500" ${sel ? '' : 'disabled'}>
-      </div>
     </div>`;
   }).join('');
   _barcodeUpdateCount();
   // wire checkboxes
   list.querySelectorAll('.bc-chk').forEach(chk => {
-    chk.addEventListener('change', () => {
+    chk.addEventListener('change', e => {
+      e.stopPropagation();
       const pid = chk.dataset.pid;
       const p   = _bc.products.find(x => String(x.id) === pid);
       if (!p) return;
-      if (chk.checked) {
-        _bc.selected[pid] = { p, qty: 1 };
-      } else {
-        delete _bc.selected[pid];
-      }
-      const row  = chk.closest('.bc-product-row');
-      const qInp = row?.querySelector('.bc-qty-inp');
-      if (row)  row.classList.toggle('bc-selected', chk.checked);
-      if (qInp) { qInp.disabled = !chk.checked; if (chk.checked) qInp.focus(); }
+      if (chk.checked) { _bc.selected[pid] = { p, qty: 1 }; }
+      else             { delete _bc.selected[pid]; }
+      const row = chk.closest('.bc-product-row');
+      if (row) row.classList.toggle('bc-selected', chk.checked);
       _barcodeUpdateCount();
     });
   });
-  list.querySelectorAll('.bc-qty-inp').forEach(inp => {
-    inp.addEventListener('change', () => {
-      const pid = inp.dataset.pid;
-      if (_bc.selected[pid]) _bc.selected[pid].qty = Math.max(1, parseInt(inp.value) || 1);
+
+  // Click row (not checkbox) → open batch picker
+  list.querySelectorAll('.bc-product-row').forEach(row => {
+    row.addEventListener('click', e => {
+      if (e.target.closest('.bc-chk-wrap')) return;
+      const pid = row.dataset.pid;
+      const p   = _bc.products.find(x => String(x.id) === pid);
+      if (p) _bcOpenBatchPicker(p.id, p.name, p.sku || '');
     });
   });
 }
@@ -8730,9 +9252,97 @@ function _barcodePrint() {
     }
   });
   if (!items.length) return;
+  _bcRenderPreview(items, parseInt($('#bc-cols')?.value) || 3);
+}
 
-  const cols = parseInt($('#bc-cols')?.value) || 3;
+// ── Barcode batch picker ──────────────────────────────────────────────────
+$('#bc-batch-close')?.addEventListener('click', () => { $('#bc-batch-modal').style.display = 'none'; });
+$('#bc-batch-modal')?.addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.style.display = 'none'; });
 
+async function _bcOpenBatchPicker(productId, productName, productSku) {
+  const modal   = $('#bc-batch-modal');
+  const loading = $('#bc-batch-loading');
+  const list    = $('#bc-batch-list');
+  $('#bc-batch-title').textContent = productName;
+  $('#bc-batch-sku').textContent   = productSku ? productSku : '';
+  loading.style.display = '';
+  list.style.display    = 'none';
+  list.innerHTML        = '';
+  modal.style.display   = 'flex';
+
+  const res = await API.productStockHistory(productId);
+  loading.style.display = 'none';
+
+  if (res.status !== 200 || !res.body?.data?.length) {
+    list.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-muted)"><i class="fa fa-inbox"></i><p style="margin-top:8px">No stock batches found</p></div>`;
+    list.style.display = '';
+    return;
+  }
+
+  const batches = res.body.data;
+  const cur     = state.currency || '';
+
+  list.innerHTML = batches.map(h => {
+    const src      = h.source_type || (h.grn_number ? 'grn' : 'opening');
+    const qtyLeft  = parseFloat(h.quantity_remaining || 0);
+    const qtyIn    = parseFloat(h.quantity_received  || 0);
+    const batchSku = h.batch_sku || productSku || String(productId);
+    const sell     = h.selling_unit_price != null ? parseFloat(h.selling_unit_price).toFixed(2) : '';
+    const date     = h.received_at ? new Date(h.received_at).toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }) : '—';
+    const qtyStatusCls = qtyLeft <= 0 ? 'srh-qty-depleted' : qtyLeft < qtyIn ? 'srh-qty-partial' : 'srh-qty-full';
+
+    let srcBadge;
+    if (src === 'opening') srcBadge = `<span class="inv-src-badge inv-src-opening"><i class="fa fa-box-open"></i> Opening Stock</span>`;
+    else if (src === 'po') srcBadge = `<span class="inv-src-badge inv-src-po"><i class="fa fa-file-invoice"></i> PO — ${escHtml(h.po_number||'')}</span>`;
+    else                   srcBadge = `<span class="inv-src-badge inv-src-grn"><i class="fa fa-truck-ramp-box"></i> GRN — ${escHtml(h.grn_number||'')}</span>`;
+
+    return `<div class="bc-batch-row" data-layer-id="${h.id}">
+      <div class="bc-batch-info">
+        ${srcBadge}
+        <span class="bc-batch-sku-chip"><i class="fa fa-barcode"></i> ${escHtml(batchSku)}</span>
+        <span class="bc-batch-date">${date}</span>
+      </div>
+      <div class="bc-batch-qty-row">
+        <div class="bc-batch-stat">
+          <span class="bc-batch-stat-lbl">Remaining</span>
+          <span class="bc-batch-stat-val ${qtyStatusCls}">${qtyLeft % 1 === 0 ? qtyLeft : qtyLeft.toFixed(2)}</span>
+        </div>
+        <div class="bc-batch-stat">
+          <span class="bc-batch-stat-lbl">Received</span>
+          <span class="bc-batch-stat-val">${qtyIn % 1 === 0 ? qtyIn : qtyIn.toFixed(2)}</span>
+        </div>
+        ${sell ? `<div class="bc-batch-stat"><span class="bc-batch-stat-lbl">Sell Price</span><span class="bc-batch-stat-val">${cur}${sell}</span></div>` : ''}
+        <div class="bc-batch-print-ctrl">
+          <label class="bc-batch-qty-lbl">Labels</label>
+          <input type="number" class="bc-batch-qty-inp" value="${Math.max(1, Math.floor(qtyLeft)) || 1}" min="1" max="500"
+            data-batch-sku="${escHtml(batchSku)}" data-product-name="${productName.replace(/"/g,'&quot;')}">
+          <button class="bc-batch-print-btn" data-batch-sku="${escHtml(batchSku)}"
+            data-product-name="${productName.replace(/"/g,'&quot;')}" data-sell="${sell}">
+            <i class="fa fa-print"></i> Print
+          </button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+  list.style.display = '';
+
+  list.querySelectorAll('.bc-batch-print-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const batchSku  = btn.dataset.batchSku;
+      const name      = btn.dataset.productName;
+      const price     = btn.dataset.sell;
+      const row       = btn.closest('.bc-batch-row');
+      const qtyInp    = row?.querySelector('.bc-batch-qty-inp');
+      const qty       = Math.max(1, Math.min(500, parseInt(qtyInp?.value) || 1));
+      const cols      = parseInt($('#bc-cols')?.value) || 3;
+      const items     = Array.from({ length: qty }, () => ({ name, code: batchSku, price }));
+      _bcRenderPreview(items, cols);
+      $('#bc-batch-modal').style.display = 'none';
+    });
+  });
+}
+
+function _bcRenderPreview(items, cols) {
   const labelsHtml = items.map(it => `
     <div class="bc-plabel">
       <svg class="bc-psvg" data-code="${it.code.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')}"></svg>
@@ -8742,14 +9352,12 @@ function _barcodePrint() {
     </div>`).join('');
 
   const sheet = $('#bc-preview-sheet');
-  const modal  = $('#bc-preview-modal');
+  const modal = $('#bc-preview-modal');
   if (!sheet || !modal) return;
-
   sheet.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
   sheet.innerHTML = labelsHtml;
   modal.style.display = 'flex';
 
-  // Render barcodes using the locally-loaded JsBarcode
   requestAnimationFrame(() => {
     sheet.querySelectorAll('.bc-psvg').forEach(svg => {
       const code = svg.dataset.code;
@@ -9422,6 +10030,7 @@ async function _prodOpenModal(editId) {
   // Reset fields
   $('#prod-f-name').value              = '';
   $('#prod-f-sku').value               = '';
+  $('#prod-f-cost-price').value        = '';
   $('#prod-f-price').value             = '';
   $('#prod-f-wholesale-price').value   = '';
   $('#prod-f-stock').value             = '';
@@ -9459,6 +10068,7 @@ async function _prodOpenModal(editId) {
     const p = _prodActiveData;
     $('#prod-f-name').value              = p.name        || '';
     $('#prod-f-sku').value               = p.sku         || '';
+    $('#prod-f-cost-price').value        = p.cost_price != null ? p.cost_price : '';
     $('#prod-f-price').value             = p.unit_price  ?? p.price ?? '';
     $('#prod-f-wholesale-price').value   = p.wholesale_price != null ? p.wholesale_price : '';
     $('#prod-f-stock').value             = p.stock_quantity ?? p.total_stock ?? '';
@@ -9619,6 +10229,7 @@ async function _prodSave() {
     name,
     sku:                   $('#prod-f-sku').value.trim()         || null,
     unit_price:            price,
+    cost_price:            parseFloat($('#prod-f-cost-price').value) || null,
     wholesale_price:       parseFloat($('#prod-f-wholesale-price').value) || null,
     stock_quantity:        parseFloat($('#prod-f-stock').value)  || 0,
     description:           $('#prod-f-description').value.trim() || null,
@@ -9963,6 +10574,144 @@ $('#prod-brand-wrap')?.addEventListener('click', () => $('#prod-brand-input').fo
 // ── End Product CRUD ──────────────────────────────────────────────────────
 
 // ── Product detail ────────────────────────────────────────────────────────
+async function _saveLayerSellingPrice(productId, layerId, price) {
+  const statusEl = $(`.inv-layer-price-status[data-layer-id="${layerId}"]`);
+  const saveBtn  = $(`.inv-layer-price-save[data-layer-id="${layerId}"]`);
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.innerHTML = '<i class="fa fa-spinner fa-spin"></i>'; }
+  if (statusEl) statusEl.textContent = '';
+
+  const val = price === '' || price === null ? null : parseFloat(price);
+  const res = await API.updateLayerSellingPrice(productId, layerId, val);
+
+  if (saveBtn) { saveBtn.disabled = false; saveBtn.innerHTML = '<i class="fa fa-check"></i>'; }
+  if (res.status === 200) {
+    if (statusEl) {
+      statusEl.textContent = 'Saved';
+      statusEl.className = 'inv-layer-price-status inv-layer-price-ok';
+      setTimeout(() => { if (statusEl) { statusEl.textContent = ''; statusEl.className = 'inv-layer-price-status'; } }, 2000);
+    }
+  } else {
+    if (statusEl) {
+      statusEl.textContent = res.body?.message || 'Error';
+      statusEl.className = 'inv-layer-price-status inv-layer-price-err';
+    }
+  }
+}
+
+async function _saveLayerCostPrice(productId, layerId, cost) {
+  const statusEl = $(`.inv-layer-cost-status[data-layer-id="${layerId}"]`);
+  const saveBtn  = $(`.inv-layer-cost-save[data-layer-id="${layerId}"]`);
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.innerHTML = '<i class="fa fa-spinner fa-spin"></i>'; }
+  if (statusEl) statusEl.textContent = '';
+
+  const val = cost === '' || cost === null ? 0 : parseFloat(cost);
+  const res = await API.updateLayerCostPrice(productId, layerId, val);
+
+  if (saveBtn) { saveBtn.disabled = false; saveBtn.innerHTML = '<i class="fa fa-check"></i>'; }
+  if (res.status === 200) {
+    if (statusEl) {
+      statusEl.textContent = 'Saved';
+      statusEl.className = 'inv-layer-cost-status inv-layer-price-ok';
+      setTimeout(() => { if (statusEl) { statusEl.textContent = ''; statusEl.className = 'inv-layer-cost-status'; } }, 2000);
+    }
+  } else {
+    if (statusEl) {
+      statusEl.textContent = res.body?.message || 'Error';
+      statusEl.className = 'inv-layer-cost-status inv-layer-price-err';
+    }
+  }
+}
+
+function _bindLayerCostSave(productId, stockHistory) {
+  const pane = $('#inv-pane-stock');
+  if (!pane || !stockHistory.length) return;
+
+  pane.querySelectorAll('.inv-layer-cost-save').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const layerId = btn.dataset.layerId;
+      const input   = pane.querySelector(`.inv-layer-cost-input[data-layer-id="${layerId}"]`);
+      _saveLayerCostPrice(productId, layerId, input?.value ?? '');
+    });
+  });
+
+  pane.querySelectorAll('.inv-layer-cost-input').forEach(input => {
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        _saveLayerCostPrice(productId, input.dataset.layerId, input.value);
+      }
+    });
+  });
+}
+
+function _bindLayerPriceSave(productId, stockHistory) {
+  const pane = $('#inv-pane-stock');
+  if (!pane || !stockHistory.length) return;
+
+  pane.querySelectorAll('.inv-layer-price-save').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const layerId = btn.dataset.layerId;
+      const input   = pane.querySelector(`.inv-layer-price-input[data-layer-id="${layerId}"]`);
+      _saveLayerSellingPrice(productId, layerId, input?.value ?? '');
+    });
+  });
+
+  pane.querySelectorAll('.inv-layer-price-input').forEach(input => {
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        _saveLayerSellingPrice(productId, input.dataset.layerId, input.value);
+      }
+    });
+  });
+}
+
+async function _saveLayerWholesalePrice(productId, layerId, price) {
+  const statusEl = $(`.inv-layer-ws-status[data-layer-id="${layerId}"]`);
+  const saveBtn  = $(`.inv-layer-ws-save[data-layer-id="${layerId}"]`);
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.innerHTML = '<i class="fa fa-spinner fa-spin"></i>'; }
+  if (statusEl) statusEl.textContent = '';
+
+  const val = price === '' || price === null ? null : parseFloat(price);
+  const res = await API.updateLayerWholesalePrice(productId, layerId, val);
+
+  if (saveBtn) { saveBtn.disabled = false; saveBtn.innerHTML = '<i class="fa fa-check"></i>'; }
+  if (res.status === 200) {
+    if (statusEl) {
+      statusEl.textContent = 'Saved';
+      statusEl.className = 'inv-layer-ws-status inv-layer-price-ok';
+      setTimeout(() => { if (statusEl) { statusEl.textContent = ''; statusEl.className = 'inv-layer-ws-status'; } }, 2000);
+    }
+  } else {
+    if (statusEl) {
+      statusEl.textContent = res.body?.message || 'Error';
+      statusEl.className = 'inv-layer-ws-status inv-layer-price-err';
+    }
+  }
+}
+
+function _bindLayerWholesaleSave(productId, stockHistory) {
+  const pane = $('#inv-pane-stock');
+  if (!pane || !stockHistory.length) return;
+
+  pane.querySelectorAll('.inv-layer-ws-save').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const layerId = btn.dataset.layerId;
+      const input   = pane.querySelector(`.inv-layer-ws-input[data-layer-id="${layerId}"]`);
+      _saveLayerWholesalePrice(productId, layerId, input?.value ?? '');
+    });
+  });
+
+  pane.querySelectorAll('.inv-layer-ws-input').forEach(input => {
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        _saveLayerWholesalePrice(productId, input.dataset.layerId, input.value);
+      }
+    });
+  });
+}
+
 async function openProductDetail(productId, productName) {
   _prodActiveId   = productId;
   _prodActiveData = null;
@@ -10108,27 +10857,31 @@ function renderProductDetail(p, stockHistory = []) {
   });
 
   // ── Pricing tab ──
-  const price          = parseFloat(p.price || 0).toFixed(2);
-  const wholesalePrice = p.wholesale_price != null ? parseFloat(p.wholesale_price).toFixed(2) : null;
-  const costPrice      = p.cost_price != null ? parseFloat(p.cost_price).toFixed(2) : null;
-  const compareAt      = p.compare_at_price != null ? parseFloat(p.compare_at_price).toFixed(2) : null;
-  const taxRate        = p.tax_rate ?? p.tax?.rate;
-  const discount       = p.discount || p.discount_value;
-  const margin         = costPrice ? (((p.price - p.cost_price) / p.price) * 100).toFixed(1) + '%' : null;
+  // unit_price = product-level selling price (from /online/products/{id} show endpoint)
+  // unit_sell_price = resolved sell price from stock layers (from catalog card)
+  const sellingPrice   = p.unit_price != null ? parseFloat(p.unit_price) : (p.unit_sell_price != null ? parseFloat(p.unit_sell_price) : null);
+  const costPrice      = p.cost_price != null ? parseFloat(p.cost_price) : null;
+  const wholesalePrice = p.wholesale_price != null ? parseFloat(p.wholesale_price) : null;
+
+  const profit     = (sellingPrice != null && costPrice != null) ? (sellingPrice - costPrice) : null;
+  const marginPct  = (profit != null && costPrice > 0) ? ((profit / costPrice) * 100).toFixed(1) : null;
+
+  const cur = state.currency ? ' ' + state.currency : '';
+
+  const _fmt = v => v != null ? parseFloat(v).toFixed(2) + cur : null;
 
   const priceRows = [
-    ['Selling Price',    `<strong style="font-size:18px;color:var(--accent)">${price}</strong>`],
-    ['Wholesale Price',  wholesalePrice ? `<span style="color:#d97706;font-weight:600"><i class="fa fa-tags"></i> ${wholesalePrice}</span>` : null],
-    ['Cost Price',       costPrice  ? costPrice  : null],
-    ['Compare-at Price', compareAt  ? `<s style="color:var(--text-muted)">${compareAt}</s>` : null],
-    ['Tax Rate',         taxRate    != null ? `${taxRate}%` : null],
-    ['Discount',         discount   ? String(discount) : null],
-    ['Gross Margin',     margin],
-  ].filter(([, v]) => v != null);
+    ['Cost Price',       costPrice    != null ? `<strong style="font-size:16px">${_fmt(costPrice)}</strong>` : '<span style="color:var(--text-muted)">—</span>'],
+    ['Selling Price',    sellingPrice != null ? `<strong style="font-size:18px;color:var(--accent)">${_fmt(sellingPrice)}</strong>` : '<span style="color:var(--text-muted)">—</span>'],
+    ['Wholesale Price',  wholesalePrice != null ? `<span style="color:#d97706;font-weight:600"><i class="fa fa-tags"></i> ${_fmt(wholesalePrice)}</span>` : '<span style="color:var(--text-muted)">—</span>'],
+    ['Profit',           profit != null
+      ? `<span style="font-weight:700;color:${profit >= 0 ? '#16a34a' : '#dc2626'}">${profit >= 0 ? '+' : ''}${_fmt(profit)}${marginPct != null ? ` <span style="font-size:11px;opacity:.8;">(${marginPct >= 0 ? '+' : ''}${marginPct}% margin)</span>` : ''}</span>`
+      : '<span style="color:var(--text-muted)">— set cost &amp; selling price</span>'],
+  ];
 
   $('#inv-pane-pricing').innerHTML = `
     <div class="inv-section">
-      <div class="inv-section-title"><i class="fa fa-dollar-sign"></i> Pricing</div>
+      <div class="inv-section-title"><i class="fa fa-tag"></i> Pricing</div>
       <table class="inv-detail-table">
         ${priceRows.map(([label, val]) => `
           <tr><td class="inv-dt-label">${label}</td><td class="inv-dt-val">${val}</td></tr>`).join('')}
@@ -10185,41 +10938,94 @@ function renderProductDetail(p, stockHistory = []) {
         <div class="inv-pane-empty" style="padding:20px 0"><i class="fa fa-inbox"></i><p>No GRN records found</p></div>
       </div>`;
     }
-    const rows = stockHistory.map(h => {
-      const grnLabel = h.grn_number ? escHtml(h.grn_number) : '—';
-      const grnRef   = h.grn_reference ? `<span class="inv-grn-ref">${escHtml(h.grn_reference)}</span>` : '';
-      const poLabel  = h.po_number ? `<span class="inv-grn-po"><i class="fa fa-file-invoice"></i> ${escHtml(h.po_number)}</span>` : '';
-      const supplier = h.supplier_name ? `<span class="inv-grn-supplier"><i class="fa fa-building-user"></i> ${escHtml(h.supplier_name)}</span>` : '';
-      const date     = h.received_at ? new Date(h.received_at).toLocaleDateString() : '—';
-      const qtyIn    = parseFloat(h.quantity_received || 0);
-      const qtyLeft  = parseFloat(h.quantity_remaining || 0);
-      const cost     = h.unit_cost != null ? parseFloat(h.unit_cost).toFixed(2) : '—';
-      const qtyColor = qtyLeft <= 0 ? 'color:#e74c3c' : qtyLeft < qtyIn ? 'color:#f59e0b' : 'color:#22c55e';
-      return `<tr>
-        <td class="inv-grn-td-date">${date}</td>
-        <td class="inv-grn-td-ref">
-          <span class="inv-grn-num">${grnLabel}</span>${grnRef}
-          <div class="inv-grn-meta">${poLabel}${supplier}</div>
-        </td>
-        <td class="inv-grn-td-qty" style="text-align:right">${qtyIn}</td>
-        <td class="inv-grn-td-qty" style="text-align:right;${qtyColor}">${qtyLeft}</td>
-        <td class="inv-grn-td-cost" style="text-align:right">${cost}</td>
-      </tr>`;
+    const cards = stockHistory.map((h, idx) => {
+      const src     = h.source_type || (h.grn_number ? 'grn' : 'opening');
+      const date    = h.received_at ? new Date(h.received_at).toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }) : '—';
+      const qtyIn   = parseFloat(h.quantity_received || 0);
+      const qtyLeft = parseFloat(h.quantity_remaining || 0);
+      const pct     = qtyIn > 0 ? Math.max(0, Math.min(100, (qtyLeft / qtyIn) * 100)) : 0;
+      const costVal   = h.unit_cost != null ? parseFloat(h.unit_cost).toFixed(2) : '';
+      const sellPrice = h.selling_unit_price != null ? parseFloat(h.selling_unit_price).toFixed(2) : '';
+      const wsPrice   = h.wholesale_unit_price != null ? parseFloat(h.wholesale_unit_price).toFixed(2) : '';
+
+      const qtyStatusCls = qtyLeft <= 0 ? 'srh-qty-depleted' : qtyLeft < qtyIn ? 'srh-qty-partial' : 'srh-qty-full';
+      const qtyLabel     = qtyLeft <= 0 ? 'Depleted' : qtyLeft < qtyIn ? 'Partially used' : 'Full';
+      const barCls       = qtyLeft <= 0 ? 'srh-bar-depleted' : qtyLeft < qtyIn ? 'srh-bar-partial' : 'srh-bar-full';
+
+      // ── Source header ──
+      let badgeHtml, refHtml;
+      if (src === 'opening') {
+        badgeHtml = `<span class="inv-src-badge inv-src-opening"><i class="fa fa-box-open"></i> Opening Stock</span>`;
+        refHtml   = '';
+      } else if (src === 'po') {
+        badgeHtml = `<span class="inv-src-badge inv-src-po"><i class="fa fa-file-invoice"></i> Purchase Order</span>`;
+        refHtml   = [
+          h.po_number    ? `<span class="srh-ref-chip srh-ref-po"><i class="fa fa-file-invoice"></i> ${escHtml(h.po_number)}</span>` : '',
+          h.grn_number   ? `<span class="srh-ref-chip srh-ref-grn"><i class="fa fa-truck-ramp-box"></i> ${escHtml(h.grn_number)}</span>` : '',
+          h.supplier_name? `<span class="srh-ref-chip srh-ref-sup"><i class="fa fa-building-user"></i> ${escHtml(h.supplier_name)}</span>` : '',
+        ].filter(Boolean).join('');
+      } else {
+        badgeHtml = `<span class="inv-src-badge inv-src-grn"><i class="fa fa-truck-ramp-box"></i> Goods Receive</span>`;
+        refHtml   = [
+          h.grn_number    ? `<span class="srh-ref-chip srh-ref-grn"><i class="fa fa-hashtag"></i> ${escHtml(h.grn_number)}</span>` : '',
+          h.grn_reference ? `<span class="srh-ref-chip srh-ref-ref"><i class="fa fa-tag"></i> ${escHtml(h.grn_reference)}</span>` : '',
+          h.supplier_name ? `<span class="srh-ref-chip srh-ref-sup"><i class="fa fa-building-user"></i> ${escHtml(h.supplier_name)}</span>` : '',
+        ].filter(Boolean).join('');
+      }
+
+      const batchChip = h.batch_sku
+        ? `<span class="srh-batch-chip"><i class="fa fa-barcode"></i> ${escHtml(h.batch_sku)}</span>` : '';
+
+      const qtyDisp = `${qtyLeft % 1 === 0 ? qtyLeft : qtyLeft.toFixed(2)} / ${qtyIn % 1 === 0 ? qtyIn : qtyIn.toFixed(2)}`;
+      return `
+      <div class="srh-row">
+        <div class="srh-row-info">
+          ${badgeHtml}
+          ${refHtml}
+          ${batchChip}
+          <span class="srh-qty-pill ${qtyStatusCls}">
+            <span class="srh-qty-mini-bar"><span class="srh-qty-mini-fill ${barCls}" style="width:${pct.toFixed(1)}%"></span></span>
+            ${qtyDisp}
+          </span>
+          <span class="srh-date"><i class="fa fa-calendar-day"></i> ${date}</span>
+        </div>
+        <div class="srh-row-prices">
+          <div class="srh-inline-field">
+            <span class="srh-inline-label">Cost</span>
+            <div class="srh-price-input-wrap">
+              <input type="number" class="inv-layer-cost-input srh-price-input" data-layer-id="${h.id}"
+                value="${costVal}" min="0" step="0.01" placeholder="0.00">
+              <button class="inv-layer-cost-save srh-price-btn" data-layer-id="${h.id}" title="Save cost price"><i class="fa fa-check"></i></button>
+            </div>
+            <span class="inv-layer-cost-status srh-price-status" data-layer-id="${h.id}"></span>
+          </div>
+          <div class="srh-inline-field srh-inline-field--sell">
+            <span class="srh-inline-label">Selling</span>
+            <div class="srh-price-input-wrap">
+              <input type="number" class="inv-layer-price-input srh-price-input" data-layer-id="${h.id}"
+                value="${sellPrice}" min="0" step="0.01" placeholder="0.00">
+              <button class="inv-layer-price-save srh-price-btn srh-price-btn--sell" data-layer-id="${h.id}" title="Save selling price"><i class="fa fa-check"></i></button>
+            </div>
+            <span class="inv-layer-price-status srh-price-status" data-layer-id="${h.id}"></span>
+          </div>
+          <div class="srh-inline-field srh-inline-field--ws">
+            <span class="srh-inline-label">Wholesale</span>
+            <div class="srh-price-input-wrap">
+              <input type="number" class="inv-layer-ws-input srh-price-input" data-layer-id="${h.id}"
+                value="${wsPrice}" min="0" step="0.01" placeholder="0.00">
+              <button class="inv-layer-ws-save srh-price-btn srh-price-btn--ws" data-layer-id="${h.id}" title="Save wholesale price"><i class="fa fa-check"></i></button>
+            </div>
+            <span class="inv-layer-ws-status srh-price-status" data-layer-id="${h.id}"></span>
+          </div>
+        </div>
+      </div>`;
     }).join('');
-    return `<div class="inv-section" style="margin-top:16px">
-      <div class="inv-section-title"><i class="fa fa-truck-ramp-box"></i> Stock Receive History (${stockHistory.length})</div>
-      <div style="overflow-x:auto">
-        <table class="inv-grn-table">
-          <thead><tr>
-            <th>Date</th>
-            <th>GRN / Reference</th>
-            <th style="text-align:right">Received</th>
-            <th style="text-align:right">Remaining</th>
-            <th style="text-align:right">Unit Cost</th>
-          </tr></thead>
-          <tbody>${rows}</tbody>
-        </table>
+    return `<div class="inv-section srh-section">
+      <div class="srh-section-header">
+        <span class="inv-section-title" style="margin:0"><i class="fa fa-layer-group"></i> Stock Receive History</span>
+        <span class="srh-count-badge">${stockHistory.length} batch${stockHistory.length !== 1 ? 'es' : ''}</span>
       </div>
+      <div class="srh-cards">${cards}</div>
     </div>`;
   })();
 
@@ -10228,9 +11034,14 @@ function renderProductDetail(p, stockHistory = []) {
       <div class="inv-section-title"><i class="fa fa-boxes-stacked"></i> Stock Information</div>
       <table class="inv-detail-table">
         ${stockRows.map(([label, val]) => `
-          <tr><td class="inv-dt-label">${label}</td><td class="inv-dt-val">${escHtml(String(val))}</td></tr>`).join('')}
+          <tr><td class="inv-dt-label">${escHtml(String(label))}</td><td class="inv-dt-val">${val}</td></tr>`).join('')}
       </table>
     </div>${locHtml}${stockHistory.length ? stockSummaryHtml : ''}${grnHistHtml}`;
+
+  // Wire save buttons for per-layer cost, selling, and wholesale price
+  _bindLayerCostSave(p.id, stockHistory);
+  _bindLayerPriceSave(p.id, stockHistory);
+  _bindLayerWholesaleSave(p.id, stockHistory);
 
   // ── Images tab ──
   if (images.length) {
@@ -10717,7 +11528,23 @@ $('#product-search').addEventListener('input', (e) => {
   }
 });
 
-$('#product-search').addEventListener('keydown', (e) => {
+// API fallback for batch SKUs (e.g. PRD-IIW3ZFGK-02) that aren't in local state
+async function _tryBatchSkuApiAdd(q) {
+  const res = await API.productBySku(q);
+  if (res.status !== 200) return false;
+  const p = res.body?.data || res.body;
+  if (!p || !p.id) return false;
+  const layerId = p.matched_layer_id ?? null;
+  const price   = parseFloat(p.discounted_sell_price ?? p.unit_sell_price ?? p.price ?? 0);
+  addToCart({ id: p.id, name: p.name, price, stock: p.layer_qty_remaining ?? p.stock_quantity ?? null, layerId });
+  $('#product-search').value = '';
+  state.searchQuery = '';
+  _ssClose();
+  clearTimeout(searchTimer);
+  return true;
+}
+
+$('#product-search').addEventListener('keydown', async (e) => {
   const box  = $('#search-suggest');
   const open = box.style.display !== 'none';
   const q    = $('#product-search').value.trim();
@@ -10735,13 +11562,18 @@ $('#product-search').addEventListener('keydown', (e) => {
   }
   if (e.key === 'Enter') {
     e.preventDefault();
-    // 1. Exact SKU match (barcode scanner fires Enter after the scan)
+    // 1. Exact product-level SKU match in local state (fast path)
     if (q && _trySkuAdd(q)) return;
-    // 2. Highlighted suggestion
+    // 2. Batch SKU API lookup (e.g. PRD-IIW3ZFGK-02 not in local state)
+    if (q) {
+      const handled = await _tryBatchSkuApiAdd(q);
+      if (handled) return;
+    }
+    // 3. Highlighted suggestion
     if (open && _ssSelIdx >= 0) {
       _ssItems()[_ssSelIdx]?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); return;
     }
-    // 3. First available suggestion
+    // 4. First available suggestion
     if (open) {
       const first = $('#search-suggest .ss-item:not(.ss-out)');
       first?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
@@ -12256,6 +13088,11 @@ async function openPosSettings() {
 
   // Business profile
   $('#psm-biz-name').value  = s.business_name ?? '';
+  const slugEl = $('#psm-header-slug');
+  if (slugEl) {
+    const slug = s.slug ?? '';
+    slugEl.textContent = slug ? '@' + slug + '  ·  ' : '';
+  }
   $('#psm-currency').value  = s.currency ?? '';
   $('#psm-timezone').value  = s.timezone ?? '';
 
@@ -12299,6 +13136,22 @@ async function openPosSettings() {
   $('#psm-show-biz-address').checked = !!s.show_business_address;
   $('#psm-receipt-header').value     = s.receipt_header ?? '';
   $('#psm-receipt-footer').value     = s.receipt_footer ?? '';
+
+  // Delivery
+  const deliveryEnabled = !!s.delivery_enabled;
+  $('#psm-delivery-enabled').checked    = deliveryEnabled;
+  $('#psm-dm-section').style.display    = deliveryEnabled ? 'block' : 'none';
+  const enabledMethods = Array.isArray(s.delivery_methods) ? s.delivery_methods : [];
+  const dmKeys = ['dhl', 'fedex', 'uber', 'pickme', 'koobiyo', 'pronto'];
+  dmKeys.forEach(key => {
+    const input = $(`#psm-dm-${key}`);
+    const card  = $(`#dm-card-${key}`);
+    if (!input || !card) return;
+    const on = enabledMethods.includes(key);
+    input.checked = on;
+    card.classList.toggle('dm-card--on', on);
+    card.querySelector('.dm-card-status').textContent = on ? 'Enabled' : 'Disabled';
+  });
 }
 
 function psmShowTab(tab) {
@@ -12326,6 +13179,17 @@ $('#psm-tax-enabled').addEventListener('change', (e) => {
 });
 $('#psm-dont-settle').addEventListener('change', (e) => {
   $('#psm-settlement-mode').disabled = e.target.checked;
+});
+$('#psm-delivery-enabled').addEventListener('change', (e) => {
+  $('#psm-dm-section').style.display = e.target.checked ? 'block' : 'none';
+});
+$$('[data-dm]').forEach(input => {
+  input.addEventListener('change', () => {
+    const card = $(`#dm-card-${input.dataset.dm}`);
+    if (!card) return;
+    card.classList.toggle('dm-card--on', input.checked);
+    card.querySelector('.dm-card-status').textContent = input.checked ? 'Enabled' : 'Disabled';
+  });
 });
 
 $('#psm-close').addEventListener('click',  () => { $('#pos-settings-modal').style.display = 'none'; });
@@ -12494,6 +13358,8 @@ $('#psm-save').addEventListener('click', async () => {
     tax_rate:                    parseFloat($('#psm-tax-rate').value) || 0,
     invoice_prefix:              $('#psm-invoice-prefix').value.trim(),
     invoice_next_number:         parseInt($('#psm-invoice-next').value) || 1,
+    delivery_enabled:            $('#psm-delivery-enabled').checked,
+    delivery_methods:            ['dhl','fedex','uber','pickme','koobiyo','pronto'].filter(k => $(`#psm-dm-${k}`)?.checked),
   };
 
   const res = await API.settingsUpdate(payload);
@@ -13698,6 +14564,49 @@ $('#pos-to-quote')?.addEventListener('click', () => {
   setTimeout(() => _qtOpenForm(null, prefill), 80);
 });
 
+$('#pos-to-sales-order')?.addEventListener('click', async () => {
+  const tab = activeTab();
+  if (!tab || !tab.cart.length) { toast('Cart is empty', 'info'); return; }
+
+  if (!tab._customer?.id) {
+    toast('A customer is required to create a sales order', 'error');
+    const bar = $('#cart-customer-bar');
+    if (bar) {
+      bar.style.outline = '2px solid var(--accent)';
+      bar.style.borderRadius = '6px';
+      bar.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      setTimeout(() => { bar.style.outline = ''; bar.style.borderRadius = ''; }, 2000);
+    }
+    return;
+  }
+
+  const btn = $('#pos-to-sales-order');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i>';
+
+  const body = {
+    customer_id:  tab._customer.id,
+    order_date:   new Date().toISOString().slice(0, 10),
+    items: tab.cart.map(i => ({
+      description: i.name,
+      quantity:    i.qty,
+      unit_price:  i._basePrice ?? i.price,
+    })),
+  };
+
+  const res = await API.createSalesOrder(body);
+
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fa fa-box"></i> Sales Order';
+
+  if (res.status === 201) {
+    const orderNum = res.body?.data?.order_number || 'Sales Order';
+    toast(`${orderNum} created`, 'success');
+  } else {
+    toast(res.body?.message || 'Failed to create sales order', 'error');
+  }
+});
+
 // ── Checkout ───────────────────────────────────────────────────────────────
 let _coSubtotal = 0; // base subtotal before discount
 let _coAmount   = ''; // numpad string
@@ -13771,19 +14680,12 @@ function openCheckout() {
   if (notesEl) notesEl.value = '';
   $('#checkout-alert').style.display = 'none';
 
-  // Show scheduled_at when cart contains any services
-  const cartHasServices  = tab.cart.some(i => i._type === 'service');
-  const cartHasProducts  = tab.cart.some(i => i._type !== 'service');
-  const schedWrap = $('#co-scheduled-at-wrap');
-  if (schedWrap) schedWrap.style.display = cartHasServices ? '' : 'none';
-  const schedInput = $('#co-scheduled-at');
-  if (schedInput) schedInput.value = '';
-
   // Update modal subtitle
+  const cartHasServices = tab.cart.some(i => i._type === 'service');
+  const cartHasProducts = tab.cart.some(i => i._type !== 'service');
   const coSub = $('#checkout-modal .co-header-text p');
   if (coSub) coSub.textContent = cartHasServices && cartHasProducts
     ? 'Products will be sold + service requests created'
-    : cartHasServices ? 'Review services and schedule appointment'
     : 'Review your order and choose payment';
 
   _coRefresh();
@@ -13979,7 +14881,6 @@ $('#checkout-confirm').addEventListener('click', async () => {
   const productItems = cart.filter(i => i._type !== 'service');
   const serviceItems = cart.filter(i => i._type === 'service');
   const discountPct  = Math.min(100, Math.max(0, parseFloat($('#co-discount-pct')?.value) || 0));
-  const scheduledAt  = $('#co-scheduled-at')?.value || null;
 
   // Single unified checkout — products and services in one Sale record
   const body = {
@@ -13989,7 +14890,6 @@ $('#checkout-confirm').addEventListener('click', async () => {
     notes:            notes || undefined,
     discount_percent: discountPct > 0 ? discountPct : undefined,
     pos_customer_id:  tab?._customer?.id ?? undefined,
-    scheduled_at:     scheduledAt || undefined,
     pos_counter_id:   state.posCounterId ?? undefined,
     items: [
       ...productItems.map(i => ({
@@ -14214,10 +15114,15 @@ $('#rb-close-session').addEventListener('click', () => {
 $('#rb-barcode').addEventListener('click', () => {
   const sku = prompt('Enter barcode / SKU:');
   if (!sku) return;
-  API.productBySku(sku).then(res => {
+  // Try local product-level match first (fast path)
+  if (_trySkuAdd(sku.trim())) return;
+  // Fall back to API — handles batch SKUs like PRD-IIW3ZFGK-02
+  API.productBySku(sku.trim()).then(res => {
     if (res.status !== 200) { toast('Product not found', 'error'); return; }
     const p = res.body?.data || res.body;
-    addToCart({ id: p.id, name: p.name, price: parseFloat(p.discounted_sell_price ?? p.unit_sell_price ?? p.price ?? 0), stock: p.stock_quantity ?? null });
+    const layerId = p.matched_layer_id ?? null;
+    const price   = parseFloat(p.discounted_sell_price ?? p.unit_sell_price ?? p.price ?? 0);
+    addToCart({ id: p.id, name: p.name, price, stock: p.layer_qty_remaining ?? p.stock_quantity ?? null, layerId });
   });
 });
 // ── Quick Add Product ──────────────────────────────────────────────────────
@@ -23890,6 +24795,161 @@ function buildDesignCard(d) {
   </div>`;
 }
 
+// ── Design: context menu & Send as Email ───────────────────────────────────
+
+let _dsCtxDesignId    = null;   // design id that was right-clicked
+let _dsEmailDesign    = null;   // full design object (id, title, width, height)
+let _dsEmailCustomers = [];     // cached for the dropdown
+
+// Show context menu at cursor position
+function _dsShowCtx(e, designId) {
+  e.preventDefault();
+  _dsCtxDesignId = designId;
+  const menu = $('#ds-ctx-menu');
+  menu.style.display = 'block';
+  // Keep within viewport
+  const vw = window.innerWidth, vh = window.innerHeight;
+  const mw = 190, mh = 50;
+  menu.style.left = (e.clientX + mw > vw ? e.clientX - mw : e.clientX) + 'px';
+  menu.style.top  = (e.clientY + mh > vh ? e.clientY - mh : e.clientY) + 'px';
+}
+
+function _dsHideCtx() {
+  $('#ds-ctx-menu').style.display = 'none';
+}
+
+document.addEventListener('click',       _dsHideCtx);
+document.addEventListener('contextmenu', (e) => {
+  const card = e.target.closest('.ds-card');
+  // Only show on design cards inside ds-cards-area; suppress otherwise
+  if (!card || !card.closest('#ds-cards-area')) { _dsHideCtx(); return; }
+  const id = parseInt(card.querySelector('[data-id]')?.dataset.id, 10);
+  if (!id) return;
+  _dsShowCtx(e, id);
+});
+
+$('#ds-ctx-email').addEventListener('click', async () => {
+  _dsHideCtx();
+  if (!_dsCtxDesignId) return;
+
+  // Always fetch fresh from server — cached has_canvas may be stale if the
+  // user saved in the editor after the list was last loaded.
+  const r = await API.design(_dsCtxDesignId);
+  if (r.status !== 200) { toast('Failed to load design.', 'error'); return; }
+  const design = r.body?.data;
+  if (!design) { toast('Design not found.', 'error'); return; }
+
+  // Update the local cache entry so the card badge reflects reality
+  const idx = (_dsAllData || []).findIndex(d => d.id === design.id);
+  if (idx !== -1) _dsAllData[idx] = { ..._dsAllData[idx], has_canvas: design.has_canvas };
+
+  _dsEmailDesign = design;
+  $('#ds-email-design-name').textContent = design.title || 'Untitled';
+  $('#ds-email-subject').value  = `${design.title || 'Design'} — from us`;
+  $('#ds-email-addr').value     = '';
+  $('#ds-email-body').value     = '';
+  $('#ds-email-alert').style.display = 'none';
+  $('#ds-email-customer').value = '';
+
+  // Populate customers dropdown
+  const sel = $('#ds-email-customer');
+  if (_dsEmailCustomers.length === 0) {
+    sel.innerHTML = '<option value="">Loading…</option>';
+    const cr = await API.customers('');
+    if (cr.status === 200) {
+      _dsEmailCustomers = (cr.body?.data || []).filter(c => c.email);
+    }
+  }
+  sel.innerHTML = '<option value="">— Select a customer —</option>' +
+    _dsEmailCustomers.map(c => `<option value="${escHtml(c.email)}">${escHtml(c.name)} (${escHtml(c.email)})</option>`).join('');
+
+  $('#ds-email-modal').style.display = 'flex';
+});
+
+// When customer is selected, fill address field
+$('#ds-email-customer').addEventListener('change', function () {
+  if (this.value) $('#ds-email-addr').value = '';
+});
+$('#ds-email-addr').addEventListener('input', function () {
+  if (this.value.trim()) $('#ds-email-customer').value = '';
+});
+
+function _dsEmailClose() {
+  $('#ds-email-modal').style.display = 'none';
+  _dsEmailDesign = null;
+}
+$('#ds-email-close').addEventListener('click',  _dsEmailClose);
+$('#ds-email-cancel').addEventListener('click', _dsEmailClose);
+$('#ds-email-modal').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) _dsEmailClose();
+});
+
+$('#ds-email-send').addEventListener('click', async () => {
+  const alert  = $('#ds-email-alert');
+  const sendBtn  = $('#ds-email-send');
+  const sendLbl  = $('#ds-email-send-lbl');
+
+  alert.style.display = 'none';
+
+  const customerEmail = $('#ds-email-customer').value.trim();
+  const manualEmail   = $('#ds-email-addr').value.trim();
+  const to            = customerEmail || manualEmail;
+  const subject       = $('#ds-email-subject').value.trim();
+  const body          = $('#ds-email-body').value.trim() ||
+    `Please find the attached design "${_dsEmailDesign?.title || ''}" in the PDF.`;
+
+  if (!to) {
+    alert.textContent    = 'Please select a customer or enter an email address.';
+    alert.style.display  = 'block';
+    return;
+  }
+  if (!subject) {
+    alert.textContent   = 'Subject is required.';
+    alert.style.display = 'block';
+    return;
+  }
+
+  sendBtn.disabled = true;
+  sendLbl.textContent = 'Exporting PDF…';
+
+  try {
+    // canvas_json is already on _dsEmailDesign (fetched fresh when modal opened)
+    const canvasJson = _dsEmailDesign.canvas_json;
+    if (!canvasJson) throw new Error('Design has no saved canvas. Open it in the editor, draw something, then save.');
+
+    const pdfBase64 = await window.electronAPI.renderDesignToPdf(
+      canvasJson,
+      _dsEmailDesign.width  || 800,
+      _dsEmailDesign.height || 600,
+    );
+    if (!pdfBase64) throw new Error('PDF export failed. Please try again.');
+
+    sendLbl.textContent = 'Sending…';
+
+    const res = await API.mailSend({
+      to,
+      subject,
+      body,
+      attachment_base64: pdfBase64,
+      attachment_name:   ((_dsEmailDesign.title || 'design').replace(/[^a-z0-9_-]/gi, '_')) + '.pdf',
+    });
+
+    if (res.status !== 200) {
+      throw new Error(res.body?.message || 'Failed to send email. Check your mail settings.');
+    }
+
+    _dsEmailClose();
+    toast(`Email sent to ${to}`, 'success');
+
+  } catch (err) {
+    alert.textContent   = err.message || 'An unexpected error occurred.';
+    alert.style.display = 'block';
+  } finally {
+    sendBtn.disabled = false;
+    sendLbl.textContent = 'Send';
+  }
+});
+
 // ── Design: subnav ─────────────────────────────────────────────────────────
 $('#panel-design .fin-subnav').addEventListener('click', e => {
   const btn = e.target.closest('[data-ds]');
@@ -24513,8 +25573,9 @@ async function submitDsCreate() {
       { key: 'pos_cart_recall',         label: 'Recall held sale',    desc: 'Cart: Recall parked sale button' },
       { key: 'pos_cart_customer',       label: 'Assign customer',     desc: 'Cart: Assign customer to sale button' },
       { key: 'pos_cart_checkout',       label: 'Cart Checkout (F12)', desc: 'Cart: Checkout / process payment button' },
-      { key: 'pos_cart_to_invoice',     label: 'Create Invoice',      desc: 'Cart: Convert cart to invoice button' },
-      { key: 'pos_cart_to_quote',       label: 'Create Quotation',    desc: 'Cart: Convert cart to quotation button' },
+      { key: 'pos_cart_to_invoice',       label: 'Create Invoice',       desc: 'Cart: Convert cart to invoice button' },
+      { key: 'pos_cart_to_quote',         label: 'Create Quotation',     desc: 'Cart: Convert cart to quotation button' },
+      { key: 'pos_cart_to_sales_order',   label: 'Create Sales Order',   desc: 'Cart: Convert cart to sales order button' },
     ]},
     { key: 'sal_ribbon', label: 'Sales · Ribbon', icon: 'fa-file-invoice', color: '#f59e0b', items: [
       { key: 'sal_btn_new_invoice',   label: 'New Invoice',      desc: 'Ribbon Create: New Invoice button' },
@@ -24528,10 +25589,11 @@ async function submitDsCreate() {
       { key: 'sal_btn_qt_refresh',    label: 'Quotes Refresh',   desc: 'Ribbon Quotations: Refresh quotes list' },
     ]},
     { key: 'sal_panel', label: 'Sales · Panel', icon: 'fa-receipt', color: '#fbbf24', items: [
-      { key: 'sal_tab_transactions', label: 'Tab: Transactions', desc: 'Sales panel: Transactions sub-nav tab' },
-      { key: 'sal_tab_history',      label: 'Tab: History',      desc: 'Sales panel: History sub-nav tab' },
-      { key: 'sal_tab_quotes',       label: 'Tab: Quotations',   desc: 'Sales panel: Quotations sub-nav tab' },
-      { key: 'sal_tab_invoices',     label: 'Tab: Invoices',     desc: 'Sales panel: Invoices sub-nav tab' },
+      { key: 'sal_tab_transactions', label: 'Tab: Transactions',   desc: 'Sales panel: Transactions sub-nav tab' },
+      { key: 'sal_tab_history',      label: 'Tab: History',        desc: 'Sales panel: History sub-nav tab' },
+      { key: 'sal_tab_quotes',       label: 'Tab: Quotations',     desc: 'Sales panel: Quotations sub-nav tab' },
+      { key: 'sal_tab_invoices',     label: 'Tab: Invoices',       desc: 'Sales panel: Invoices sub-nav tab' },
+      { key: 'sal_tab_orders',       label: 'Tab: Sales Orders',   desc: 'Sales panel: Sales Orders sub-nav tab' },
     ]},
     { key: 'inv_ribbon', label: 'Inventory · Ribbon', icon: 'fa-boxes-stacked', color: '#8b5cf6', items: [
       { key: 'inv_btn_products',    label: 'Products',         desc: 'Ribbon Catalog: Products list button' },

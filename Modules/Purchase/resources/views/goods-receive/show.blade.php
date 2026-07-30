@@ -104,6 +104,11 @@
                 <span class="grn-show-tabs__badge">{{ number_format($amountOutstanding, 2) }} due</span>
             @endif
         </a>
+        <a href="{{ $grnShowTabUrl('barcode') }}" class="grn-show-tabs__tab @if($activeTab === 'barcode') is-active @endif" @if($activeTab === 'barcode') aria-current="page" @endif>
+            <i class="fa fa-barcode" aria-hidden="true"></i> Barcodes
+            @php $totalBarcodeQty = $grn->items->sum(fn($i) => max(1, (int) ceil((float) $i->quantity_received))); @endphp
+            <span class="grn-show-tabs__badge" style="background:color-mix(in srgb,var(--primary) 12%,transparent);color:var(--muted);">{{ $totalBarcodeQty }}</span>
+        </a>
     </nav>
 
     {{-- Overview --}}
@@ -652,4 +657,200 @@
 })();
 </script>
 @endonce
+
+{{-- ── Barcode tab ──────────────────────────────────────────────────────── --}}
+@php
+    // Use batch_sku from the stock layer if available; fall back to product SKU → product ID.
+    // Each stock batch = one label (not qty-duplicated), because each layer has its own unique barcode.
+    $grnBarcodeRows = $grn->items->map(function ($item) {
+        $product    = $item->product;
+        $layer      = $item->stockLayer;
+        // Prefer batch_sku (e.g. PRD-IIW3ZFGK-02), then product SKU, then product ID
+        $barcodeValue = $layer?->batch_sku
+            ?? (filled($product?->sku) ? $product->sku : null)
+            ?? ((string) ($product?->id ?? $item->product_id));
+        return [
+            'product_name'  => $product?->name ?? 'Unknown product',
+            'barcode_value' => $barcodeValue,
+            'batch_sku'     => $layer?->batch_sku,
+            'product_sku'   => $product?->sku,
+            'selling_price' => (float) $item->selling_unit_price,
+            'qty'           => max(1, (int) ceil((float) $item->quantity_received)),
+            'qty_remaining' => $layer ? (float) $layer->quantity_remaining : null,
+        ];
+    })->filter(fn ($r) => filled($r['barcode_value']))->values();
+    $grnTotalLabels = $grnBarcodeRows->count(); // one label per batch layer
+@endphp
+
+<section class="grn-show-panel" id="grn-show-panel-barcode" @if($activeTab !== 'barcode') hidden @endif>
+
+    {{-- Screen toolbar --}}
+    <div class="grn-bc-toolbar" id="grn-bc-toolbar">
+        <div>
+            <span style="font-size:13px;font-weight:800;color:var(--text);">{{ $grnTotalLabels }} batch {{ \Illuminate\Support\Str::plural('barcode', $grnTotalLabels) }}</span>
+            <span style="font-size:11px;color:var(--muted);margin-left:6px;">one label per stock batch &middot; scan batch barcode to deduct from that batch</span>
+        </div>
+        <div class="grn-bc-toolbar__actions">
+            <div class="grn-bc-ctrl-row">
+                <label for="grn-bc-label-type" class="grn-bc-ctrl-label">Label</label>
+                <select id="grn-bc-label-type" class="grn-bc-select">
+                    <option value="barcode_only">Barcode only</option>
+                    <option value="with_name" selected>+ Name</option>
+                    <option value="with_name_price">+ Name + Price</option>
+                    <option value="with_sku">+ SKU</option>
+                </select>
+            </div>
+            <div class="grn-bc-ctrl-row">
+                <label for="grn-bc-cols" class="grn-bc-ctrl-label">Cols</label>
+                <select id="grn-bc-cols" class="grn-bc-select">
+                    <option value="2">2</option>
+                    <option value="3">3</option>
+                    <option value="4" selected>4</option>
+                    <option value="5">5</option>
+                </select>
+            </div>
+            <button type="button" onclick="window.print()" class="linkbtn" style="padding:7px 16px;font-size:12px;display:inline-flex;align-items:center;gap:6px;">
+                <i class="fa fa-print"></i> Print
+            </button>
+        </div>
+    </div>
+
+    @if($grnBarcodeRows->isEmpty())
+        <p class="muted" style="padding:32px 0;text-align:center;font-size:13px;">No products with barcodes on this receipt.</p>
+    @else
+        <div class="grn-bc-root" id="grn-bc-root" data-label-type="with_name">
+            <div class="grn-bc-grid" id="grn-bc-grid" style="--grn-bc-cols:4;">
+                @foreach($grnBarcodeRows as $bcRow)
+                    <div class="grn-bc-label">
+                        <svg class="grn-bc-svg" data-value="{{ $bcRow['barcode_value'] }}"></svg>
+                        <div class="grn-bc-lbl-text">
+                            <span class="grn-bc-lbl-name">{{ $bcRow['product_name'] }}</span>
+                            <span class="grn-bc-lbl-price">{{ number_format($bcRow['selling_price'], 2) }}</span>
+                            <span class="grn-bc-lbl-sku">{{ $bcRow['barcode_value'] }}</span>
+                            @if($bcRow['qty_remaining'] !== null)
+                                <span class="grn-bc-lbl-qty">Qty: {{ number_format($bcRow['qty'], 0) }} received</span>
+                            @endif
+                        </div>
+                    </div>
+                @endforeach
+            </div>
+        </div>
+    @endif
+</section>
+
+<style>
+/* ── Barcode toolbar ───────────────────────────────────────────────────── */
+.grn-bc-toolbar{
+    display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;
+    padding:12px 14px;margin-bottom:14px;
+    border:1px solid color-mix(in srgb,var(--border) 90%,transparent);
+    border-radius:12px;
+    background:color-mix(in srgb,var(--card) 97%,transparent);
+}
+.grn-bc-toolbar__actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px;}
+.grn-bc-ctrl-row{display:flex;align-items:center;gap:5px;}
+.grn-bc-ctrl-label{font-size:11px;font-weight:600;color:var(--muted);white-space:nowrap;}
+.grn-bc-select{
+    font-size:12px;padding:5px 10px;border:1px solid var(--border);
+    border-radius:7px;background:var(--bg);color:var(--text);cursor:pointer;
+}
+
+/* ── Label grid ────────────────────────────────────────────────────────── */
+.grn-bc-root{
+    border:1px solid var(--border);border-radius:12px;overflow:hidden;
+    background:color-mix(in srgb,var(--bg) 60%,#e2e8f0);
+    padding:12px;
+}
+.grn-bc-grid{
+    display:grid;
+    grid-template-columns:repeat(var(--grn-bc-cols,4),1fr);
+    gap:6px;
+}
+.grn-bc-label{
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    border:0.5pt solid #ccc;border-radius:5px;
+    padding:5px 4px 4px;text-align:center;
+    background:#fff;
+    page-break-inside:avoid;break-inside:avoid;
+    min-height:22mm;
+}
+.grn-bc-svg{max-width:100%;height:auto;display:block;}
+.grn-bc-lbl-text{
+    margin-top:2px;
+    font-family:Arial,Helvetica,sans-serif;
+    font-size:7pt;color:#111;line-height:1.3;
+    display:flex;flex-direction:column;align-items:center;gap:1px;
+}
+.grn-bc-lbl-name{font-weight:700;font-size:6.5pt;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.grn-bc-lbl-price{font-size:7pt;font-weight:700;}
+.grn-bc-lbl-sku{font-size:6pt;font-family:monospace;color:#444;}
+.grn-bc-lbl-qty{font-size:5.5pt;color:#888;}
+
+/* Label-type visibility control (driven by data-label-type on root) */
+.grn-bc-root[data-label-type="barcode_only"] .grn-bc-lbl-text               { display:none; }
+.grn-bc-lbl-qty                                                               { display:none; }
+.grn-bc-root[data-label-type="with_name_price"] .grn-bc-lbl-qty,
+.grn-bc-root[data-label-type="with_sku"]        .grn-bc-lbl-qty              { display:inline; }
+.grn-bc-root[data-label-type="with_name"]    .grn-bc-lbl-price,
+.grn-bc-root[data-label-type="with_name"]    .grn-bc-lbl-sku                { display:none; }
+.grn-bc-root[data-label-type="with_name_price"] .grn-bc-lbl-sku             { display:none; }
+.grn-bc-root[data-label-type="with_sku"]    .grn-bc-lbl-name,
+.grn-bc-root[data-label-type="with_sku"]    .grn-bc-lbl-price               { display:none; }
+
+/* ── Print styles ──────────────────────────────────────────────────────── */
+@media print {
+    body.grn-bc-printing .navbar,
+    body.grn-bc-printing #appSidebar,
+    body.grn-bc-printing .sidebar,
+    body.grn-bc-printing .sidebar-mobile-backdrop,
+    body.grn-bc-printing #app-toast-container,
+    body.grn-bc-printing .grn-show-tabs,
+    body.grn-bc-printing .grn-bc-toolbar,
+    body.grn-bc-printing .grn-show-panel:not(#grn-show-panel-barcode),
+    body.grn-bc-printing .pcat-nav { display:none !important; }
+
+    body.grn-bc-printing { margin:0 !important; padding:0 !important; }
+    body.grn-bc-printing .content,
+    body.grn-bc-printing .content-inner { margin:0 !important; padding:0 !important; border:none !important; }
+
+    body.grn-bc-printing .grn-bc-root {
+        background:transparent !important;border:none !important;padding:0 !important;border-radius:0 !important;
+    }
+    body.grn-bc-printing .grn-bc-label { border-color:#bbb !important; }
+
+    @page { margin:8mm; }
+}
+</style>
+
+@if($activeTab === 'barcode')
+<script>
+(function () {
+    var root     = document.getElementById('grn-bc-root');
+    var labelSel = document.getElementById('grn-bc-label-type');
+    var colsSel  = document.getElementById('grn-bc-cols');
+    var grid     = document.getElementById('grn-bc-grid');
+
+    if (labelSel && root) {
+        labelSel.addEventListener('change', function () {
+            root.setAttribute('data-label-type', this.value);
+        });
+    }
+    if (colsSel && grid) {
+        colsSel.addEventListener('change', function () {
+            grid.style.setProperty('--grn-bc-cols', this.value);
+        });
+    }
+
+    window.addEventListener('beforeprint', function () {
+        document.body.classList.add('grn-bc-printing');
+    });
+    window.addEventListener('afterprint', function () {
+        document.body.classList.remove('grn-bc-printing');
+    });
+})();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"
+        onload="document.querySelectorAll('.grn-bc-svg').forEach(function(el){ var v=el.getAttribute('data-value'); if(!v) return; try{ JsBarcode(el,v,{format:'CODE128',lineColor:'#000',width:1.4,height:36,displayValue:false,margin:2}); }catch(e){} });"></script>
+@endif
+
 @endsection

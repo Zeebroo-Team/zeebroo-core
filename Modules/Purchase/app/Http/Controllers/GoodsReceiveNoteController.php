@@ -110,6 +110,7 @@ class GoodsReceiveNoteController extends Controller
             'purchase.supplier',
             'purchase.items.goodsReceiveNoteItems',
             'items.product',
+            'items.stockLayer',
             'items.purchaseItem.goodsReceiveNoteItems',
             'ledgerTransactions.deductAccount.bankType',
             'chequePayments.deductAccount.bankType',
@@ -215,7 +216,7 @@ class GoodsReceiveNoteController extends Controller
 
         $tab = (string) $request->query('tab', 'overview');
 
-        return in_array($tab, ['overview', 'items', 'payment'], true) ? $tab : 'overview';
+        return in_array($tab, ['overview', 'items', 'payment', 'barcode'], true) ? $tab : 'overview';
     }
 
     public function create(Request $request, Purchase $purchase): View|RedirectResponse

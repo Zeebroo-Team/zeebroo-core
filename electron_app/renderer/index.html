@@ -197,6 +197,10 @@
         <button class="btn-primary" id="login-btn">
           <i class="fa fa-arrow-right-to-bracket"></i>&nbsp; Sign In
         </button>
+        <div class="login-divider"><span>or</span></div>
+        <button class="btn-cashier-login" id="go-cashier-login">
+          <i class="fa fa-cash-register"></i>&nbsp; Login as Cashier
+        </button>
         <p class="auth-switch-link">Don't have an account? <a href="#" id="go-signup">Create one</a></p>
       </div>
 
@@ -215,6 +219,30 @@
           <i class="fa fa-building"></i>&nbsp; Continue
         </button>
       </div>
+    </div>
+
+    <!-- ── Cashier Login card ── -->
+    <div class="login-card" id="cashier-card" style="display:none">
+      <div class="cashier-login-icon"><i class="fa fa-cash-register"></i></div>
+      <h2 class="cashier-login-title">Cashier Login</h2>
+      <p>Enter your cashier credentials to access POS</p>
+      <div id="cashier-alert" class="alert alert-error" style="display:none"></div>
+      <div class="form-group">
+        <label for="cashier-slug">Business Slug</label>
+        <input type="text" id="cashier-slug" placeholder="e.g. my-business" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="form-group">
+        <label for="cashier-username">Username</label>
+        <input type="text" id="cashier-username" placeholder="username" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="form-group">
+        <label for="cashier-password">Password</label>
+        <input type="password" id="cashier-password" placeholder="••••••••" autocomplete="current-password">
+      </div>
+      <button class="btn-primary" id="cashier-login-btn">
+        <i class="fa fa-arrow-right-to-bracket"></i>&nbsp; Login
+      </button>
+      <p class="auth-switch-link" style="margin-top:14px"><a href="#" id="go-owner-login"><i class="fa fa-arrow-left"></i> Back to owner login</a></p>
     </div>
 
     <!-- ── Sign Up card (4-step onboarding wizard) ── -->
@@ -340,6 +368,51 @@
 
 <!-- ── Main Shell (hidden until logged in) ──────────────────────────── -->
 <div id="app-shell" style="display:none; flex-direction:column; height:100vh;">
+
+  <!-- ── Cashier Top Bar (shown only in cashier mode) ─────────────── -->
+  <div id="cashier-topbar" style="display:none">
+    <div class="ctb-drag"></div>
+    <div class="ctb-left">
+      <div class="ctb-traffic">
+        <button class="tl-btn tl-close" id="ctb-close" title="Close"><i class="fa fa-xmark"></i></button>
+        <button class="tl-btn tl-min"   id="ctb-min"   title="Minimize"><i class="fa fa-minus"></i></button>
+        <button class="tl-btn tl-max"   id="ctb-max"   title="Zoom"><i class="fa fa-expand"></i></button>
+      </div>
+      <div class="ctb-brand">
+        <div class="ctb-logo">Z</div>
+        <span class="ctb-bizname" id="ctb-bizname">Zeebroo</span>
+      </div>
+    </div>
+    <div class="ctb-center">
+      <span class="ctb-clock" id="ctb-clock"></span>
+    </div>
+    <div class="ctb-right">
+      <div class="ctb-summary">
+        <i class="fa fa-chart-line"></i>
+        <span id="ctb-today-label">Today</span>
+        <strong id="ctb-today-amount">—</strong>
+      </div>
+      <div class="ctb-vsep"></div>
+      <button class="ctb-action-btn" id="ctb-new-session" title="New session">
+        <i class="fa fa-plus"></i><span>New Session</span>
+      </button>
+      <button class="ctb-action-btn" id="ctb-checkout-quick" title="Checkout">
+        <i class="fa fa-cash-register"></i><span>Checkout</span>
+      </button>
+      <div class="ctb-vsep"></div>
+      <div class="ctb-cashier-pill">
+        <i class="fa fa-user-tie"></i>
+        <span id="ctb-cashier-name">Cashier</span>
+      </div>
+      <button class="ctb-action-btn ctb-logout" id="ctb-logout" title="End shift">
+        <i class="fa fa-right-from-bracket"></i><span>Logout</span>
+      </button>
+      <div class="ctb-wc">
+        <button class="wc-btn" id="ctb-min-win" title="Minimize"><i class="fa fa-minus"></i></button>
+        <button class="wc-btn close" id="ctb-close-win" title="Close"><i class="fa fa-xmark"></i></button>
+      </div>
+    </div>
+  </div>
 
   <!-- ── Title bar: Office-style ──────────────────────────────────── -->
   <div id="titlebar">
@@ -788,6 +861,18 @@
             </button>
           </div>
           <div class="ribbon-group-label">Quotations</div>
+        </div>
+
+        <div class="ribbon-group">
+          <div class="ribbon-group-content">
+            <button class="ribbon-btn-lg primary" id="rb-so-new">
+              <i class="fa fa-box"></i>New Order
+            </button>
+            <button class="ribbon-btn-lg" id="rb-so-refresh">
+              <i class="fa fa-rotate"></i>Refresh
+            </button>
+          </div>
+          <div class="ribbon-group-label">Sales Orders</div>
         </div>
 
       </div><!-- /sales ribbon page -->
@@ -1765,6 +1850,7 @@
             <div class="cart-quick-create">
               <button id="pos-to-invoice" title="Create invoice from cart"><i class="fa fa-file-invoice"></i> Invoice</button>
               <button id="pos-to-quote"   title="Create quotation from cart"><i class="fa fa-file-lines"></i> Quotation</button>
+              <button id="pos-to-sales-order" title="Create sales order from cart"><i class="fa fa-box"></i> Sales Order</button>
             </div>
           </div>
         </div>
@@ -1781,6 +1867,7 @@
         <button class="fin-subnav-btn sal-view-btn" data-sal-view="history"><i class="fa fa-clock-rotate-left"></i> History</button>
         <button class="fin-subnav-btn sal-view-btn" data-sal-view="quotes"><i class="fa fa-file-lines"></i> Quotations</button>
         <button class="fin-subnav-btn sal-view-btn" data-sal-view="invoices"><i class="fa fa-file-invoice"></i> Invoices</button>
+        <button class="fin-subnav-btn sal-view-btn" data-sal-view="orders"><i class="fa fa-box"></i> Sales Orders</button>
       </div>
 
       <!-- Transactions list -->
@@ -2079,6 +2166,109 @@
 
       </div><!-- /sal-invoices-view -->
 
+      <!-- Sales Orders -->
+      <div id="sal-orders-view" style="display:none;flex:1;flex-direction:column;overflow:hidden">
+
+        <!-- List view -->
+        <div id="so-list-view" style="display:flex;flex-direction:column;flex:1;overflow:hidden">
+          <div class="qt-topbar">
+            <div class="finance-search-wrap" style="flex:1;max-width:320px">
+              <i class="fa fa-magnifying-glass"></i>
+              <input type="text" id="so-search" placeholder="Search orders, customers…">
+            </div>
+            <select class="sal-hist-select" id="so-status-filter" style="margin-left:8px">
+              <option value="all">All Statuses</option>
+              <option value="pending">Pending</option>
+              <option value="confirmed">Confirmed</option>
+              <option value="processing">Processing</option>
+              <option value="completed">Completed</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+            <button class="qt-act-btn accent" id="so-new-btn" style="margin-left:auto"><i class="fa fa-plus"></i> New Order</button>
+          </div>
+          <div id="so-list-loading" style="display:none;padding:40px;text-align:center;color:var(--muted)"><i class="fa fa-spinner fa-spin"></i> Loading…</div>
+          <div id="so-list-body" style="flex:1;overflow-y:auto;padding:0 0 16px"></div>
+        </div>
+
+        <!-- Detail view -->
+        <div id="so-detail-view" style="display:none;flex:1;flex-direction:column;overflow:hidden">
+          <div class="qt-topbar">
+            <button class="qt-back-btn" id="so-detail-back"><i class="fa fa-arrow-left"></i> Orders</button>
+            <span class="qt-topbar-title" id="so-detail-title">Sales Order</span>
+            <div class="qt-topbar-actions" id="so-detail-actions"></div>
+          </div>
+          <div id="so-detail-body" style="flex:1;overflow-y:auto;padding:24px;background:var(--bg)"></div>
+        </div>
+
+        <!-- Form (create / edit) -->
+        <div id="so-form-view" style="display:none;flex:1;flex-direction:column;overflow:hidden">
+          <div class="qt-topbar">
+            <button class="qt-back-btn" id="so-form-back"><i class="fa fa-arrow-left"></i> Orders</button>
+            <span class="qt-topbar-title" id="so-form-title">New Sales Order</span>
+          </div>
+          <div style="flex:1;overflow-y:auto;padding:20px 24px;background:var(--bg)">
+
+            <!-- Order details card -->
+            <div class="qt-card">
+              <div class="qt-card-hd"><i class="fa fa-circle-info"></i> Order Details</div>
+              <div class="qt-fields-grid">
+                <div class="qt-field">
+                  <label class="qt-label">Customer</label>
+                  <select id="so-f-customer" class="qt-select"><option value="">— Walk-in —</option></select>
+                </div>
+                <div class="qt-field">
+                  <label class="qt-label">Reference No.</label>
+                  <input type="text" id="so-f-reference" class="qt-input" placeholder="e.g. PO-123" maxlength="120">
+                </div>
+                <div class="qt-field">
+                  <label class="qt-label">Order Date <span style="color:#ef4444">*</span></label>
+                  <input type="date" id="so-f-order-date" class="qt-input">
+                </div>
+                <div class="qt-field">
+                  <label class="qt-label">Expected Delivery</label>
+                  <input type="date" id="so-f-delivery-date" class="qt-input">
+                </div>
+              </div>
+            </div>
+
+            <!-- Line items card -->
+            <div class="qt-card" style="margin-top:14px">
+              <div class="qt-card-hd"><i class="fa fa-list"></i> Line Items</div>
+              <div class="qt-items-cols">
+                <span style="flex:1">Description</span>
+                <span class="qt-col-qty">Qty</span>
+                <span class="qt-col-price">Unit Price</span>
+                <span class="qt-col-total">Total</span>
+                <span class="qt-col-del"></span>
+              </div>
+              <div id="so-items-body"></div>
+              <button class="qt-add-line-btn" id="so-add-item-btn"><i class="fa fa-plus"></i> Add Line</button>
+            </div>
+
+            <!-- Summary: notes + totals -->
+            <div class="qt-summary-row" style="margin-top:14px">
+              <div class="qt-card qt-notes-card">
+                <div class="qt-card-hd"><i class="fa fa-note-sticky"></i> Notes</div>
+                <textarea id="so-f-notes" class="qt-textarea" rows="5" placeholder="Internal notes for this order…"></textarea>
+              </div>
+              <div class="qt-card">
+                <div class="qt-card-hd"><i class="fa fa-calculator"></i> Summary</div>
+                <div class="qt-total-row"><span>Subtotal</span><span id="so-f-subtotal">0.00</span></div>
+                <div class="qt-total-row"><span>Discount</span><input type="number" id="so-f-discount" class="qt-total-input" min="0" step="0.01" placeholder="0.00"></div>
+                <div class="qt-total-row"><span>Tax</span><input type="number" id="so-f-tax" class="qt-total-input" min="0" step="0.01" placeholder="0.00"></div>
+                <div class="qt-total-row qt-grand-total"><span>Total</span><span id="so-f-total">0.00</span></div>
+              </div>
+            </div>
+
+            <div class="qt-form-footer">
+              <button class="qt-back-btn" id="so-cancel-form-btn">Cancel</button>
+              <button class="qt-save-btn" id="so-save-btn"><i class="fa fa-floppy-disk"></i> Save Order</button>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /sal-orders-view -->
+
     </div><!-- /panel-sales -->
 
     <div class="content-panel" id="panel-inventory">
@@ -2243,8 +2433,12 @@
                 </div>
               </div>
             </div>
-            <!-- Price + Wholesale + Stock -->
+            <!-- Cost + Selling + Wholesale prices -->
             <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+              <div class="po-field">
+                <label class="po-field-label">Cost Price</label>
+                <input type="number" id="prod-f-cost-price" class="po-field-input" min="0" step="0.01" placeholder="0.00">
+              </div>
               <div class="po-field">
                 <label class="po-field-label">Selling Price <span class="po-required">*</span></label>
                 <input type="number" id="prod-f-price" class="po-field-input" min="0" step="0.01" placeholder="0.00">
@@ -2253,13 +2447,13 @@
                 <label class="po-field-label" title="Price offered to wholesale / bulk customers"><i class="fa fa-tags" style="color:var(--accent);margin-right:4px"></i>Wholesale Price</label>
                 <input type="number" id="prod-f-wholesale-price" class="po-field-input" min="0" step="0.01" placeholder="optional">
               </div>
+            </div>
+            <!-- Opening Stock + Unit + Active -->
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
               <div class="po-field" id="prod-stock-field">
                 <label class="po-field-label" id="prod-stock-label">Opening Stock</label>
                 <input type="number" id="prod-f-stock" class="po-field-input" min="0" step="0.001" placeholder="0">
               </div>
-            </div>
-            <!-- Unit + Active -->
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
               <div class="po-field">
                 <label class="po-field-label">Unit</label>
                 <select id="prod-f-unit" class="po-field-input">
@@ -2992,7 +3186,7 @@
             </select>
           </div>
           <div class="bc-sel-count" id="bc-sel-count"><i class="fa fa-tag"></i> 0 selected</div>
-          <button class="po-add-btn cat-add-btn" id="bc-print-btn" disabled>
+          <button class="po-add-btn cat-add-btn" id="bc-print-btn" disabled style="display:none">
             <i class="fa fa-print"></i> Print Sheet
           </button>
         </div>
@@ -7892,11 +8086,6 @@
           </div>
         </div>
 
-        <!-- Scheduled date/time (services only) -->
-        <div id="co-scheduled-at-wrap" style="display:none">
-          <div class="co-section-label" style="margin-bottom:6px"><i class="fa fa-calendar"></i> Schedule</div>
-          <input type="datetime-local" id="co-scheduled-at" class="co-cust-input" style="width:100%;box-sizing:border-box;">
-        </div>
       </div>
 
       <!-- Right: Payment -->
@@ -8422,7 +8611,7 @@
       <div class="psm-header-icon"><i class="fa fa-gear"></i></div>
       <div class="psm-header-text">
         <h2>Settings</h2>
-        <p>Manage your business and POS settings</p>
+        <p><span id="psm-header-slug" class="psm-header-slug"></span>Manage your business and POS settings</p>
       </div>
       <button class="psm-close" id="psm-close" title="Close"><i class="fa fa-xmark"></i></button>
     </div>
@@ -8465,6 +8654,9 @@
         </button>
         <button class="psm-nav-item psm-nav-item--pos-only" data-tab="cashiers" style="display:none">
           <i class="fa fa-id-badge"></i><span>Cashiers</span>
+        </button>
+        <button class="psm-nav-item" data-tab="delivery">
+          <i class="fa fa-truck"></i><span>Delivery</span>
         </button>
       </nav>
 
@@ -8950,6 +9142,107 @@
           </div>
         </div><!-- /psm-tab-cashiers -->
 
+        <!-- Delivery Methods panel -->
+        <div class="psm-panel" id="psm-tab-delivery" style="display:none">
+
+          <div class="psm-section">
+            <div class="psm-section-label"><i class="fa fa-truck"></i> Delivery</div>
+            <div class="psm-toggle-row">
+              <div class="psm-toggle-info">
+                <span class="psm-toggle-name">Enable Delivery Methods</span>
+                <span class="psm-toggle-desc">Allow customers to choose a delivery method at checkout</span>
+              </div>
+              <label class="psm-switch"><input type="checkbox" id="psm-delivery-enabled"><span class="psm-switch-track"></span></label>
+            </div>
+          </div>
+
+          <div class="psm-section" id="psm-dm-section" style="display:none">
+            <div class="psm-section-label"><i class="fa fa-list-check"></i> Active Delivery Partners</div>
+            <div class="dm-cards-grid">
+
+              <!-- DHL Express -->
+              <div class="dm-card" id="dm-card-dhl">
+                <div class="dm-card-top">
+                  <div class="dm-card-icon"><i class="fa fa-globe"></i></div>
+                  <div class="dm-card-name">DHL Express</div>
+                </div>
+                <div class="dm-card-desc">International express courier with time-definite delivery worldwide.</div>
+                <div class="dm-card-footer">
+                  <span class="dm-card-status">Disabled</span>
+                  <label class="psm-switch"><input type="checkbox" id="psm-dm-dhl" data-dm="dhl"><span class="psm-switch-track"></span></label>
+                </div>
+              </div>
+
+              <!-- FedEx -->
+              <div class="dm-card" id="dm-card-fedex">
+                <div class="dm-card-top">
+                  <div class="dm-card-icon"><i class="fa fa-box-open"></i></div>
+                  <div class="dm-card-name">FedEx</div>
+                </div>
+                <div class="dm-card-desc">Fast and reliable global shipping with real-time package tracking.</div>
+                <div class="dm-card-footer">
+                  <span class="dm-card-status">Disabled</span>
+                  <label class="psm-switch"><input type="checkbox" id="psm-dm-fedex" data-dm="fedex"><span class="psm-switch-track"></span></label>
+                </div>
+              </div>
+
+              <!-- Uber -->
+              <div class="dm-card" id="dm-card-uber">
+                <div class="dm-card-top">
+                  <div class="dm-card-icon"><i class="fa fa-car-side"></i></div>
+                  <div class="dm-card-name">Uber</div>
+                </div>
+                <div class="dm-card-desc">On-demand local delivery via the Uber courier network.</div>
+                <div class="dm-card-footer">
+                  <span class="dm-card-status">Disabled</span>
+                  <label class="psm-switch"><input type="checkbox" id="psm-dm-uber" data-dm="uber"><span class="psm-switch-track"></span></label>
+                </div>
+              </div>
+
+              <!-- PickMe -->
+              <div class="dm-card" id="dm-card-pickme">
+                <div class="dm-card-top">
+                  <div class="dm-card-icon"><i class="fa fa-motorcycle"></i></div>
+                  <div class="dm-card-name">PickMe</div>
+                </div>
+                <div class="dm-card-desc">Sri Lanka's leading ride-hailing platform with parcel delivery.</div>
+                <div class="dm-card-footer">
+                  <span class="dm-card-status">Disabled</span>
+                  <label class="psm-switch"><input type="checkbox" id="psm-dm-pickme" data-dm="pickme"><span class="psm-switch-track"></span></label>
+                </div>
+              </div>
+
+              <!-- Koobiyo -->
+              <div class="dm-card" id="dm-card-koobiyo">
+                <div class="dm-card-top">
+                  <div class="dm-card-icon"><i class="fa fa-bicycle"></i></div>
+                  <div class="dm-card-name">Koobiyo</div>
+                </div>
+                <div class="dm-card-desc">Last-mile e-commerce delivery built for Sri Lanka businesses.</div>
+                <div class="dm-card-footer">
+                  <span class="dm-card-status">Disabled</span>
+                  <label class="psm-switch"><input type="checkbox" id="psm-dm-koobiyo" data-dm="koobiyo"><span class="psm-switch-track"></span></label>
+                </div>
+              </div>
+
+              <!-- Pronto Lanka -->
+              <div class="dm-card" id="dm-card-pronto">
+                <div class="dm-card-top">
+                  <div class="dm-card-icon"><i class="fa fa-truck-fast"></i></div>
+                  <div class="dm-card-name">Pronto Lanka</div>
+                </div>
+                <div class="dm-card-desc">Scheduled and same-day delivery across Sri Lanka.</div>
+                <div class="dm-card-footer">
+                  <span class="dm-card-status">Disabled</span>
+                  <label class="psm-switch"><input type="checkbox" id="psm-dm-pronto" data-dm="pronto"><span class="psm-switch-track"></span></label>
+                </div>
+              </div>
+
+            </div><!-- /dm-cards-grid -->
+          </div><!-- /psm-dm-section -->
+
+        </div><!-- /psm-tab-delivery -->
+
       </div><!-- /psm-content -->
     </div><!-- /psm-layout -->
 
@@ -8957,6 +9250,61 @@
     <div class="psm-footer">
       <button class="psm-btn-cancel" id="psm-cancel"><i class="fa fa-xmark"></i> Cancel</button>
       <button class="psm-btn-save" id="psm-save"><i class="fa fa-floppy-disk"></i> Save settings</button>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── Design Studio: context menu ─────────────────────────────────────── -->
+<div id="ds-ctx-menu" class="ds-ctx-menu" style="display:none">
+  <button class="ds-ctx-item" id="ds-ctx-email">
+    <i class="fa fa-paper-plane"></i> Send as Email
+  </button>
+</div>
+
+<!-- ── Design Studio: Send as Email modal ──────────────────────────────── -->
+<div id="ds-email-modal" class="modal-overlay" style="display:none">
+  <div class="ds-email-shell">
+
+    <div class="ds-email-hd">
+      <div class="ds-email-hd-icon"><i class="fa fa-envelope"></i></div>
+      <div class="ds-email-hd-text">
+        <h3>Send Design as Email</h3>
+        <p id="ds-email-design-name">—</p>
+      </div>
+      <button class="psm-close" id="ds-email-close"><i class="fa fa-xmark"></i></button>
+    </div>
+
+    <div class="ds-email-body">
+      <div id="ds-email-alert" class="ds-email-alert" style="display:none"></div>
+
+      <span class="ds-email-label">Recipient</span>
+      <div class="ds-email-row">
+        <select id="ds-email-customer" class="ds-email-select" style="flex:1">
+          <option value="">— Select a customer —</option>
+        </select>
+        <span class="ds-email-or">or</span>
+        <input type="email" id="ds-email-addr" class="ds-email-input" placeholder="Enter email address" style="flex:1">
+      </div>
+
+      <span class="ds-email-label">Subject</span>
+      <input type="text" id="ds-email-subject" class="ds-email-input" placeholder="Email subject">
+
+      <span class="ds-email-label">Message <span style="font-weight:400;text-transform:none">(optional)</span></span>
+      <textarea id="ds-email-body" class="ds-email-textarea" placeholder="Add a personal message…"></textarea>
+
+      <div class="ds-email-attach-note">
+        <i class="fa fa-file-pdf"></i>
+        The design will be exported as a PDF and attached to this email.
+      </div>
+    </div>
+
+    <div class="ds-email-ft">
+      <button class="ds-email-btn-cancel" id="ds-email-cancel">Cancel</button>
+      <button class="ds-email-btn-send" id="ds-email-send">
+        <i class="fa fa-paper-plane"></i>
+        <span id="ds-email-send-lbl">Send</span>
+      </button>
     </div>
 
   </div>
@@ -9383,6 +9731,25 @@
 <div id="toast-container"></div>
 
 <!-- ── Barcode Preview Modal ─────────────────────────────────────────── -->
+<!-- ── Barcode Batch Picker ─────────────────────────────────────────────── -->
+<div id="bc-batch-modal" class="modal-overlay" style="display:none;z-index:1200">
+  <div class="modal-box" style="width:560px;max-width:96vw">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title"><i class="fa fa-barcode"></i> <span id="bc-batch-title">Print Barcodes</span></div>
+        <div class="modal-subtitle" id="bc-batch-sku" style="font-size:11px;color:var(--text-muted);margin-top:2px"></div>
+      </div>
+      <button class="co-close" id="bc-batch-close"><i class="fa fa-xmark"></i></button>
+    </div>
+    <div class="modal-body" style="padding:0">
+      <div id="bc-batch-loading" style="padding:32px;text-align:center;color:var(--text-muted)">
+        <i class="fa fa-spinner fa-spin"></i> Loading batches…
+      </div>
+      <div id="bc-batch-list" style="display:none"></div>
+    </div>
+  </div>
+</div>
+
 <div id="bc-preview-modal" class="bc-preview-modal" style="display:none">
   <div class="bc-preview-toolbar">
     <div class="bc-preview-title"><i class="fa fa-barcode"></i> Barcode Sheet Preview</div>

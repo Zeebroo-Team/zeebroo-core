@@ -318,6 +318,149 @@ ipcMain.handle('open-editor', (_e, design) => {
 
 ipcMain.handle('get-editor-design', () => editorDesign);
 
+// ── Build a minimal single-page PDF containing one JPEG image ─────────────
+function buildPdfFromJpeg(jpegBuf, imgW, imgH, pageWidthPt, pageHeightPt) {
+  const pW = pageWidthPt.toFixed(2);
+  const pH = pageHeightPt.toFixed(2);
+  const cs = `q ${pW} 0 0 ${pH} 0 0 cm /Im0 Do Q`;
+
+  const chunks = [];
+  const off    = {};
+  let pos = 0;
+
+  const wr = (s) => {
+    const b = Buffer.isBuffer(s) ? s : Buffer.from(s, 'binary');
+    chunks.push(b);
+    pos += b.length;
+  };
+  const obj = (n, body) => {
+    off[n] = pos;
+    wr(`${n} 0 obj\n${body}\nendobj\n`);
+  };
+
+  wr('%PDF-1.4\n');
+  obj(1, '<< /Type /Catalog /Pages 2 0 R >>');
+  obj(2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
+  obj(3, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pW} ${pH}] /Contents 4 0 R /Resources << /XObject << /Im0 5 0 R >> >> >>`);
+  obj(4, `<< /Length ${cs.length} >>\nstream\n${cs}\nendstream`);
+
+  off[5] = pos;
+  wr(`5 0 obj\n<< /Type /XObject /Subtype /Image /Width ${imgW} /Height ${imgH} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpegBuf.length} >>\nstream\n`);
+  wr(jpegBuf);
+  wr('\nendstream\nendobj\n');
+
+  const xref = pos;
+  wr('xref\n0 6\n');
+  wr('0000000000 65535 f \n');
+  [1, 2, 3, 4, 5].forEach(n => wr(String(off[n]).padStart(10, '0') + ' 00000 n \n'));
+  wr(`trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
+
+  return Buffer.concat(chunks);
+}
+
+// ── Render a design (canvas_json) to a base64 PDF ─────────────────────────
+ipcMain.handle('render-design-to-pdf', async (_e, { canvasJson, width, height }) => {
+  const os = require('os');
+
+  const w = width  || 800;
+  const h = height || 600;
+
+  const fabricSrc = path.join(__dirname, 'renderer', 'js', 'fabric.min.js');
+  if (!fs.existsSync(fabricSrc)) return null;
+  const fabricCode = fs.readFileSync(fabricSrc, 'utf8');
+
+  // Escape </script> so the HTML parser doesn't close the script block early
+  const canvasData = JSON.stringify(canvasJson || {})
+    .replace(/<\/script>/gi, '<\\/script>');
+
+  const html = `<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; overflow:hidden }
+  html, body { width:${w}px; height:${h}px; background:#fff }
+  canvas { display:block }
+</style>
+</head>
+<body>
+<canvas id="c" width="${w}" height="${h}"></canvas>
+<script>${fabricCode}</script>
+<script>
+try {
+  var raw  = ${canvasData};
+  var data = typeof raw === 'string' ? JSON.parse(raw) : raw;
+  var c = new fabric.StaticCanvas('c');
+  c.setWidth(${w});
+  c.setHeight(${h});
+  c.loadFromJSON(data, function () {
+    c.renderAll();
+    document.title = '__ready__';
+  });
+} catch (e) {
+  document.title = '__error__';
+}
+</script>
+</body></html>`;
+
+  const tmpFile = path.join(os.tmpdir(), 'sbiz-ds-' + Date.now() + '.html');
+  fs.writeFileSync(tmpFile, html, 'utf8');
+
+  return new Promise((resolve) => {
+    const cleanup = () => { try { fs.unlinkSync(tmpFile); } catch (_) {} };
+
+    let done = false;
+    const finish = (val) => {
+      if (done) return;
+      done = true;
+      cleanup();
+      if (!win.isDestroyed()) win.destroy();
+      resolve(val);
+    };
+
+    const win = new BrowserWindow({
+      show: false,
+      webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: false },
+    });
+    win.setContentSize(w, h);
+    win.loadFile(tmpFile);
+
+    const exportPdf = () => {
+      // Read pixels directly from the canvas DOM element via executeJavaScript.
+      // capturePage/printToPDF both rely on the GPU compositor which doesn't flush
+      // canvas textures for hidden windows on macOS — giving a blank result.
+      // canvas.toDataURL() reads from the canvas buffer in JS memory, bypassing
+      // the compositor entirely, so it always returns the actual rendered pixels.
+      // Composite the fabric canvas onto a white background before JPEG export,
+      // otherwise transparent pixels become black in JPEG (no alpha channel).
+      win.webContents.executeJavaScript(
+        "(function(){ var src=document.getElementById('c'); if(!src) return null; var t=document.createElement('canvas'); t.width=src.width; t.height=src.height; var ctx=t.getContext('2d'); ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,t.width,t.height); ctx.drawImage(src,0,0); return t.toDataURL('image/jpeg',0.92); })()"
+      ).then(dataUrl => {
+        if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/jpeg;base64,')) {
+          finish(null);
+          return;
+        }
+        const jpegBuf = Buffer.from(dataUrl.slice('data:image/jpeg;base64,'.length), 'base64');
+        const pW = w * 72 / 96;
+        const pH = h * 72 / 96;
+        const pdfBuf = buildPdfFromJpeg(jpegBuf, w, h, pW, pH);
+        finish(pdfBuf.toString('base64'));
+      }).catch(() => finish(null));
+    };
+
+    // __ready__ = fabric rendered; __error__ = something threw in the page
+    win.webContents.on('page-title-updated', (_ev, title) => {
+      if      (title === '__ready__') setTimeout(exportPdf, 150);
+      else if (title === '__error__') finish(null);
+    });
+
+    // Hard timeout — fail cleanly; never export a blank page
+    win.webContents.once('did-finish-load', () => {
+      setTimeout(() => { if (!done) finish(null); }, 5000);
+    });
+
+    win.webContents.on('did-fail-load', () => finish(null));
+  });
+});
+
 // ── Render arbitrary HTML to a JPEG (used by Design Studio invoice import) ──
 ipcMain.handle('render-html-to-jpeg', async (_e, { html, width, height }) => {
   const os = require('os');

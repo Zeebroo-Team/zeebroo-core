@@ -2,6 +2,7 @@
 
 namespace Modules\Pos\Services;
 
+use Illuminate\Support\Str;
 use Modules\Account\Models\Account;
 use Modules\Business\Models\Business;
 
@@ -55,6 +56,12 @@ class PosSettingsService
 
     public const KEY_INVOICE_NEXT_NUMBER = 'invoice.next_number';
 
+    public const KEY_DELIVERY_ENABLED = 'delivery.enabled';
+
+    public const KEY_DELIVERY_METHODS = 'delivery.methods';
+
+    public const DELIVERY_METHOD_KEYS = ['dhl', 'fedex', 'uber', 'pickme', 'koobiyo', 'pronto'];
+
     /**
      * @return array{
      *     default_deposit_account_id: ?int,
@@ -85,6 +92,7 @@ class PosSettingsService
         return [
             // Business profile
             'business_name'    => (string) $business->name,
+            'slug'             => Str::slug($business->name),
             'currency'         => (string) ($business->getSetting('business.currency', '') ?: ''),
             'timezone'         => (string) ($business->getSetting('business.timezone', '') ?: ''),
             // POS
@@ -123,6 +131,13 @@ class PosSettingsService
             // Invoice
             'invoice_prefix'      => (string) ($business->getSetting(self::KEY_INVOICE_PREFIX, 'INV') ?: 'INV'),
             'invoice_next_number' => max(1, (int) $business->getSetting(self::KEY_INVOICE_NEXT_NUMBER, 1)),
+            // Delivery
+            'delivery_enabled' => (bool) $business->getSetting(self::KEY_DELIVERY_ENABLED, false),
+            'delivery_methods' => (function () use ($business): array {
+                $raw = $business->getSetting(self::KEY_DELIVERY_METHODS, []);
+                $methods = is_array($raw) ? $raw : (is_string($raw) ? json_decode($raw, true) ?? [] : []);
+                return array_values(array_intersect($methods, self::DELIVERY_METHOD_KEYS));
+            })(),
         ];
     }
 
@@ -253,6 +268,18 @@ class PosSettingsService
         if (array_key_exists('invoice_next_number', $data)) {
             $next = max(1, (int) ($data['invoice_next_number'] ?? 1));
             $business->setSetting(self::KEY_INVOICE_NEXT_NUMBER, $next);
+        }
+
+        // Delivery
+        if (array_key_exists('delivery_enabled', $data)) {
+            $business->setSetting(self::KEY_DELIVERY_ENABLED, filter_var($data['delivery_enabled'], FILTER_VALIDATE_BOOLEAN));
+        }
+        if (array_key_exists('delivery_methods', $data)) {
+            $methods = is_array($data['delivery_methods']) ? $data['delivery_methods'] : [];
+            $business->setSetting(
+                self::KEY_DELIVERY_METHODS,
+                array_values(array_intersect($methods, self::DELIVERY_METHOD_KEYS)),
+            );
         }
 
         // Business profile

@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Modules\Business\Models\Business;
 use Modules\Business\Models\BusinessMember;
 use Modules\HRManagement\Models\Employee;
+use Modules\Pos\Models\PosCashier;
 
 trait ResolvesPosBusinessForApi
 {
@@ -16,6 +17,15 @@ trait ResolvesPosBusinessForApi
         $user = $request->user();
         if ($user === null) {
             return response()->json(['message' => 'Unauthenticated.'], 401);
+        }
+
+        // PosCashier token — resolve business directly from the cashier's business_id
+        if ($user instanceof PosCashier) {
+            $business = Business::find($user->business_id);
+            if (! $business) {
+                return response()->json(['message' => 'Business not found.'], 422);
+            }
+            return $business;
         }
 
         $rawId = $request->header('X-Business-Id')
@@ -75,8 +85,8 @@ trait ResolvesPosBusinessForApi
     protected function resolveMember(Request $request, Business $business): ?BusinessMember
     {
         $user = $request->user();
-        if ($user === null || (int) $business->user_id === (int) $user->id) {
-            return null; // owner — full access
+        if ($user === null || $user instanceof PosCashier || (int) $business->user_id === (int) $user->id) {
+            return null; // owner or cashier — full POS access
         }
 
         return BusinessMember::query()

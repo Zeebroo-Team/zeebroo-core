@@ -43,6 +43,7 @@ class PosProductApiController extends Controller
             if ($product) {
                 $fill = [];
                 if ($request->filled('description'))      $fill['description']        = $request->input('description');
+                if ($request->has('cost_price'))          $fill['cost_price']          = $request->input('cost_price') !== null ? (float) $request->input('cost_price') : null;
                 if ($request->has('wholesale_price'))     $fill['wholesale_price']     = $request->input('wholesale_price') !== null ? (float) $request->input('wholesale_price') : null;
                 if ($request->has('is_active'))           $fill['is_active']           = $request->boolean('is_active');
                 if ($request->has('has_warranty'))        $fill['has_warranty']        = $request->boolean('has_warranty');
@@ -93,6 +94,7 @@ class PosProductApiController extends Controller
             'sku'                       => 'nullable|string|max:120',
             'description'               => 'nullable|string|max:5000',
             'unit_price'                => 'nullable|numeric|min:0',
+            'cost_price'                => 'nullable|numeric|min:0',
             'wholesale_price'           => 'nullable|numeric|min:0',
             'stock_quantity'            => 'nullable|numeric|min:0',
             'product_unit_id'           => 'nullable|integer',

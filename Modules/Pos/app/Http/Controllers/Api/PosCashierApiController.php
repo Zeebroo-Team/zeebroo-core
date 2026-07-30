@@ -5,7 +5,10 @@ namespace Modules\Pos\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Modules\Business\Models\Business;
 use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesPosBusinessForApi;
 use Modules\Pos\Models\PosCashier;
 
@@ -87,5 +90,48 @@ class PosCashierApiController extends Controller
         $cashier->delete();
 
         return response()->json(['message' => 'Cashier deleted.']);
+    }
+
+    public function login(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'slug'     => ['required', 'string', 'max:200'],
+            'username' => ['required', 'string', 'max:80'],
+            'password' => ['required', 'string'],
+        ]);
+
+        // Find business by slug (match Str::slug(name))
+        $business = Business::all(['id', 'name'])->first(
+            fn ($b) => Str::slug($b->name) === strtolower(trim($validated['slug']))
+        );
+
+        if (! $business) {
+            return response()->json(['message' => 'Business not found. Check the business slug.'], 401);
+        }
+
+        $cashier = PosCashier::where('business_id', $business->id)
+            ->where('username', trim($validated['username']))
+            ->where('is_active', true)
+            ->first();
+
+        if (! $cashier || ! Hash::check($validated['password'], $cashier->getAttributes()['password'])) {
+            return response()->json(['message' => 'Invalid username or password.'], 401);
+        }
+
+        // Revoke old tokens and issue a fresh one
+        $cashier->tokens()->delete();
+        $token = $cashier->createToken('pos-session')->plainTextToken;
+
+        return response()->json([
+            'data' => [
+                'token'         => $token,
+                'cashier_id'    => $cashier->id,
+                'cashier_name'  => $cashier->name,
+                'cashier_username' => $cashier->username,
+                'business_id'   => $business->id,
+                'business_name' => $business->name,
+                'business_slug' => Str::slug($business->name),
+            ],
+        ]);
     }
 }

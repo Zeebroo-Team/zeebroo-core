@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 use Modules\Business\Models\BusinessMember;
 use Modules\Business\Models\BusinessRole;
 use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesPosBusinessForApi;
+use Modules\Pos\Models\PosCashier;
 
 class PosUserManagementApiController extends Controller
 {
@@ -18,6 +19,20 @@ class PosUserManagementApiController extends Controller
     {
         $business = $this->businessOrAbort($request);
         $user     = $request->user();
+
+        // Cashier — POS-only access (UI will restrict via cashierMode flag)
+        if ($user instanceof PosCashier) {
+            return response()->json([
+                'data' => [
+                    'role'        => 'cashier',
+                    'permissions' => ['pos_session', 'pos_checkout'],
+                    'is_owner'    => false,
+                    'is_cashier'  => true,
+                    'cashier_id'  => $user->id,
+                    'cashier_name'=> $user->name,
+                ],
+            ]);
+        }
 
         // Owner always has full access
         if ((int) $business->user_id === (int) $user->id) {
