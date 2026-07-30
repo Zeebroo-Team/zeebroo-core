@@ -123,15 +123,13 @@
       if (getComputedStyle(m).display !== 'none') m.style.display = 'none';
     });
     // Non-overlay modals that need individual handling
-    [
-      '#checkout-modal',
-      '#bc-preview-modal',
-      '#pos-layer-picker',
-      '#search-suggest',
-    ].forEach(sel => {
+    ['#checkout-modal', '#bc-preview-modal', '#search-suggest'].forEach(sel => {
       const el = _qs(sel);
       if (el && getComputedStyle(el).display !== 'none') el.style.display = 'none';
     });
+    // Layer picker uses visibility/opacity (not display:none) — close it properly
+    const lp = _qs('#pos-layer-picker');
+    if (lp) { lp.classList.remove('is-open'); lp.setAttribute('aria-hidden', 'true'); lp.style.display = ''; }
     // Remove any pulse highlights left over from a previous walkthrough
     document.querySelectorAll('.guide-target-pulse').forEach(el => {
       el.classList.remove('guide-target-pulse');
@@ -537,6 +535,7 @@
       _busy = true;
       await _runSteps(match.wt.steps, match.vars);
       await _returnHome();
+      _closeAllModals(); // close any modals the walkthrough left open
       _busy = false;
     }
   }

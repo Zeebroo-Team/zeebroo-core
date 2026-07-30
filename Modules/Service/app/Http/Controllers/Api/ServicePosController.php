@@ -64,6 +64,7 @@ class ServicePosController extends Controller
                     'duration_minutes' => $i->duration_minutes,
                     'duration_label'   => $i->durationLabel(),
                     'is_featured'      => (bool) $i->is_featured,
+                    'has_warranty'     => (bool) $i->has_warranty,
                     'categories'       => $i->categories->map(fn ($c) => ['id' => $c->id, 'name' => $c->name]),
                 ]),
                 'categories' => $categories,

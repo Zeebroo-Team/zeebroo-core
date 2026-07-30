@@ -303,11 +303,10 @@ class SaleService
                     $subtotal = round($subtotal + $lineTotal, 2);
 
                     $warrantyType = $line['warranty_type'] ?? null;
-                    $warrantyDays = $line['warranty_days'] ?? null;
-                    $warrantyExpiresAt = null;
-                    if ($warrantyType === 'days' && $warrantyDays !== null) {
-                        $warrantyExpiresAt = now()->addDays($warrantyDays)->toDateString();
-                    }
+                    $warrantyDate = isset($line['warranty_date']) ? $line['warranty_date'] : null;
+                    $warrantyExpiresAt = ($warrantyType === 'date' && $warrantyDate)
+                        ? $warrantyDate
+                        : null;
 
                     SaleItem::query()->create([
                         'pos_sale_id' => $sale->id,
@@ -324,7 +323,7 @@ class SaleService
                         'line_total' => $lineTotal,
                         'sort_order' => $sortOrder++,
                         'warranty_type'       => $warrantyType,
-                        'warranty_days'       => $warrantyDays,
+                        'warranty_days'       => null,
                         'warranty_expires_at' => $warrantyExpiresAt,
                     ]);
                 }
@@ -338,18 +337,27 @@ class SaleService
                 $lineTotal = round($qty * $price, 2);
                 $subtotal  = round($subtotal + $lineTotal, 2);
 
+                $svcWarrantyType = $svcLine['warranty_type'] ?? null;
+                $svcWarrantyDate = $svcLine['warranty_date'] ?? null;
+                $svcWarrantyExpiresAt = ($svcWarrantyType === 'date' && $svcWarrantyDate)
+                    ? $svcWarrantyDate
+                    : null;
+
                 SaleItem::query()->create([
-                    'pos_sale_id'     => $sale->id,
-                    'service_item_id' => $service->id,
-                    'product_id'      => null,
-                    'product_name'    => $service->name,
-                    'sku'             => null,
-                    'quantity'        => $qty,
-                    'unit_cost'       => 0,
-                    'discount_amount' => 0,
-                    'unit_sell_price' => $price,
-                    'line_total'      => $lineTotal,
-                    'sort_order'      => $sortOrder++,
+                    'pos_sale_id'         => $sale->id,
+                    'service_item_id'     => $service->id,
+                    'product_id'          => null,
+                    'product_name'        => $service->name,
+                    'sku'                 => null,
+                    'quantity'            => $qty,
+                    'unit_cost'           => 0,
+                    'discount_amount'     => 0,
+                    'unit_sell_price'     => $price,
+                    'line_total'          => $lineTotal,
+                    'sort_order'          => $sortOrder++,
+                    'warranty_type'       => $svcWarrantyType,
+                    'warranty_days'       => null,
+                    'warranty_expires_at' => $svcWarrantyExpiresAt,
                 ]);
 
                 // One ServiceRequest per unit so each appointment is tracked individually
@@ -527,10 +535,10 @@ class SaleService
             if ($productId <= 0 || $quantity <= 0) {
                 continue;
             }
-            $warrantyType = isset($row['warranty_type']) && in_array($row['warranty_type'], ['lifetime', 'days'], true)
+            $warrantyType = isset($row['warranty_type']) && in_array($row['warranty_type'], ['lifetime', 'date'], true)
                 ? $row['warranty_type'] : null;
-            $warrantyDays = ($warrantyType === 'days' && isset($row['warranty_days']) && (int) $row['warranty_days'] > 0)
-                ? (int) $row['warranty_days'] : null;
+            $warrantyDate = ($warrantyType === 'date' && !empty($row['warranty_date']))
+                ? $row['warranty_date'] : null;
 
             $key = $productId.':'.($layerId ?? 'fifo').':'.($suId ?? '0');
             if (! isset($merged[$key])) {
@@ -542,7 +550,7 @@ class SaleService
                     'selling_unit_label' => $sellingUnitLabel,
                     'selling_unit_factor' => $sellingUnitFactor,
                     'warranty_type' => $warrantyType,
-                    'warranty_days' => $warrantyDays,
+                    'warranty_date' => $warrantyDate,
                 ];
             }
             $merged[$key]['quantity'] = round($merged[$key]['quantity'] + $quantity, 3);
@@ -553,7 +561,7 @@ class SaleService
             // carry warranty (first non-null value wins)
             if ($merged[$key]['warranty_type'] === null && $warrantyType !== null) {
                 $merged[$key]['warranty_type'] = $warrantyType;
-                $merged[$key]['warranty_days'] = $warrantyDays;
+                $merged[$key]['warranty_date'] = $warrantyDate;
             }
         }
 
@@ -608,7 +616,7 @@ class SaleService
                 'selling_unit_label' => $row['selling_unit_label'] ?? null,
                 'selling_unit_factor' => $row['selling_unit_factor'] ?? null,
                 'warranty_type' => $row['warranty_type'] ?? null,
-                'warranty_days' => $row['warranty_days'] ?? null,
+                'warranty_date' => $row['warranty_date'] ?? null,
             ];
         }
 
@@ -616,8 +624,8 @@ class SaleService
     }
 
     /**
-     * @param  list<array{service_item_id: int, quantity: float|string}>  $items
-     * @return list<array{service: ServiceItem, quantity: float}>
+     * @param  list<array{service_item_id: int, quantity: float|string, warranty_type?: ?string, warranty_date?: ?string}>  $items
+     * @return list<array{service: ServiceItem, quantity: float, warranty_type: ?string, warranty_date: ?string}>
      */
     private function normalizeServiceCartItems(Business $business, array $items): array
     {
@@ -629,7 +637,16 @@ class SaleService
                 continue;
             }
             if (!isset($merged[$svcId])) {
-                $merged[$svcId] = ['service_item_id' => $svcId, 'quantity' => 0.0];
+                $warrantyType = isset($row['warranty_type']) && in_array($row['warranty_type'], ['lifetime', 'date'], true)
+                    ? $row['warranty_type'] : null;
+                $warrantyDate = ($warrantyType === 'date' && !empty($row['warranty_date']))
+                    ? $row['warranty_date'] : null;
+                $merged[$svcId] = [
+                    'service_item_id' => $svcId,
+                    'quantity'        => 0.0,
+                    'warranty_type'   => $warrantyType,
+                    'warranty_date'   => $warrantyDate,
+                ];
             }
             $merged[$svcId]['quantity'] = round($merged[$svcId]['quantity'] + $qty, 3);
         }
@@ -648,7 +665,12 @@ class SaleService
                 ]);
             }
 
-            $normalized[] = ['service' => $service, 'quantity' => $row['quantity']];
+            $normalized[] = [
+                'service'       => $service,
+                'quantity'      => $row['quantity'],
+                'warranty_type' => $row['warranty_type'],
+                'warranty_date' => $row['warranty_date'],
+            ];
         }
 
         return $normalized;

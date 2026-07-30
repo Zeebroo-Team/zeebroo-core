@@ -3,10 +3,12 @@
 namespace Modules\Pos\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesPosBusinessForApi;
+use Modules\Pos\Models\PosCashier;
 use Modules\Pos\Models\Sale;
 use Modules\Pos\Services\PosOnlineApiService;
 use Modules\Pos\Services\PosSettingsService;
@@ -36,8 +38,8 @@ class PosCheckoutApiController extends Controller
             'items.*.quantity'               => ['required', 'numeric', 'min:0.001'],
             'items.*.product_stock_layer_id' => ['nullable', 'integer', 'min:1'],
             'items.*.product_selling_unit_id'=> ['nullable', 'integer', 'min:1'],
-            'items.*.warranty_type'          => ['nullable', 'string', 'in:lifetime,days'],
-            'items.*.warranty_days'          => ['nullable', 'integer', 'min:1', 'max:36500'],
+            'items.*.warranty_type'          => ['nullable', 'string', 'in:lifetime,date'],
+            'items.*.warranty_date'          => ['nullable', 'date_format:Y-m-d'],
             'payment_method'                 => ['required', 'string', 'in:cash,card,credit'],
             'channel'                        => ['nullable', 'string', 'in:retail,online'],
             'credit_account_id'              => ['nullable', 'integer', 'min:1'],
@@ -57,10 +59,16 @@ class PosCheckoutApiController extends Controller
         $deferSettlement = ($settings['payment_settlement_mode'] ?? 'immediate') === 'end_of_day'
             && in_array($validated['payment_method'], [Sale::PAYMENT_CASH, Sale::PAYMENT_CARD], true);
 
+        // PosCashier tokens are not User instances; use the business owner as the sale's user
+        $authUser = $request->user();
+        $saleUser = $authUser instanceof PosCashier
+            ? User::findOrFail($business->user_id)
+            : $authUser;
+
         try {
             $sale = $this->sales->checkout(
                 $business,
-                $request->user(),
+                $saleUser,
                 $validated['items'],
                 $validated['payment_method'],
                 isset($validated['credit_account_id']) ? (int) $validated['credit_account_id'] : null,

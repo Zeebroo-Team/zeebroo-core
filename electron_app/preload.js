@@ -33,6 +33,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openEditor:        (design)            => ipcRenderer.invoke('open-editor', design),
   getEditorDesign:   ()                  => ipcRenderer.invoke('get-editor-design'),
   renderHtmlToJpeg:  (html, w, h)        => ipcRenderer.invoke('render-html-to-jpeg', { html, width: w, height: h }),
+  renderDesignToPdf: (canvasJson, w, h)  => ipcRenderer.invoke('render-design-to-pdf', { canvasJson, width: w, height: h }),
 
   // Automation Editor window
   openAutomation:      (flow) => ipcRenderer.invoke('open-automation', flow),

@@ -312,6 +312,26 @@
         </div>
     </div>
 
+    {{-- ══ OPTIONAL — Warranty ══ --}}
+    @php $warrantyOn = old('has_warranty', $item->has_warranty ?? false); @endphp
+    <div class="svcf-opt-section {{ $warrantyOn ? 'is-on' : '' }}" id="{{ $pfx }}-warranty-section">
+        <label class="svcf-opt-toggle" for="{{ $pfx }}-warranty-chk">
+            <div class="svcf-opt-toggle__left">
+                <span class="svcf-opt-toggle__icon"><i class="fa fa-shield-halved" aria-hidden="true"></i></span>
+                <div>
+                    <div class="svcf-opt-toggle__text">Warranty</div>
+                    <div class="svcf-opt-toggle__sub">Prompt for warranty details when added to a POS sale; requires a customer to be assigned</div>
+                </div>
+            </div>
+            <div class="svcf-opt-toggle__switch">
+                <input type="checkbox" id="{{ $pfx }}-warranty-chk" name="has_warranty" value="1"
+                       {{ $warrantyOn ? 'checked' : '' }}>
+                <span class="svcf-switch-track"></span>
+                <span class="svcf-switch-thumb"></span>
+            </div>
+        </label>
+    </div>
+
     {{-- ══ FOOTER ══ --}}
     <div class="svcf-footer">
         @if($isEdit)
@@ -345,15 +365,17 @@
 
     // ── Optional section toggles ──
     [
-        { chk: @json($pfx . '-emp-chk'),  body: @json($pfx . '-emp-body'),  section: @json($pfx . '-emp-section') },
-        { chk: @json($pfx . '-prod-chk'), body: @json($pfx . '-prod-body'), section: @json($pfx . '-prod-section') },
+        { chk: @json($pfx . '-emp-chk'),      body: @json($pfx . '-emp-body'),  section: @json($pfx . '-emp-section') },
+        { chk: @json($pfx . '-prod-chk'),     body: @json($pfx . '-prod-body'), section: @json($pfx . '-prod-section') },
+        { chk: @json($pfx . '-warranty-chk'), body: null,                       section: @json($pfx . '-warranty-section') },
     ].forEach(({ chk, body, section }) => {
         const chkEl  = document.getElementById(chk);
-        const bodyEl = document.getElementById(body);
+        const bodyEl = body ? document.getElementById(body) : null;
         const secEl  = document.getElementById(section);
-        if (!chkEl || !bodyEl) return;
+        if (!chkEl) return;
+        if (body && !bodyEl) return;
         chkEl.addEventListener('change', () => {
-            bodyEl.classList.toggle('is-open', chkEl.checked);
+            if (bodyEl) bodyEl.classList.toggle('is-open', chkEl.checked);
             secEl?.classList.toggle('is-on', chkEl.checked);
         });
     });

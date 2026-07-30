@@ -361,7 +361,9 @@ class ProductController extends Controller
             'new_brand_names.*' => ['string', 'max:255'],
             'product_unit_id' => ['nullable', 'integer', Rule::exists('product_units', 'id')->where(fn ($q) => $q->where('business_id', $business->id))],
             'unit' => ['nullable', 'string', 'max:40'],
-            'unit_price' => ['nullable', 'numeric', 'min:0'],
+            'unit_price'      => ['nullable', 'numeric', 'min:0'],
+            'cost_price'      => ['nullable', 'numeric', 'min:0'],
+            'wholesale_price' => ['nullable', 'numeric', 'min:0'],
             'stock_quantity' => ['nullable', 'numeric', 'min:0'],
             'file_manager_file_id' => ['nullable', 'integer'],
             'file_manager_file_ids' => ['nullable', 'array', 'max:20'],
@@ -399,8 +401,10 @@ class ProductController extends Controller
             $request->input('bundle_items', []),
             static fn ($row) => is_array($row) && !empty($row['product_id']),
         ));
-        $validated['unit_price'] = isset($validated['unit_price']) ? (float) $validated['unit_price'] : null;
-        $validated['stock_quantity'] = isset($validated['stock_quantity']) ? (float) $validated['stock_quantity'] : 0;
+        $validated['unit_price']      = isset($validated['unit_price'])      ? (float) $validated['unit_price']      : null;
+        $validated['cost_price']      = isset($validated['cost_price'])      ? (float) $validated['cost_price']      : null;
+        $validated['wholesale_price'] = isset($validated['wholesale_price']) ? (float) $validated['wholesale_price'] : null;
+        $validated['stock_quantity']  = isset($validated['stock_quantity'])  ? (float) $validated['stock_quantity']  : 0;
 
         $validated['product_category_ids'] = $validated['product_category_ids'] ?? [];
         $validated['product_brand_ids'] = $validated['product_brand_ids'] ?? [];

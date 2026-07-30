@@ -163,6 +163,7 @@ class PosServiceApiController extends Controller
                 'price'          => (float) $i->price,
                 'duration_label' => $i->durationLabel(),
                 'is_active'      => $i->is_active,
+                'has_warranty'   => (bool) $i->has_warranty,
                 'categories'     => $i->categories->pluck('name'),
             ]),
         ]);
@@ -180,6 +181,7 @@ class PosServiceApiController extends Controller
             'duration_minutes'           => ['nullable', 'integer', 'min:0'],
             'is_active'                  => ['boolean'],
             'is_featured'                => ['boolean'],
+            'has_warranty'               => ['boolean'],
             'service_category_ids'       => ['nullable', 'array'],
             'service_category_ids.*'     => ['integer', 'min:1'],
             'employee_ids'               => ['nullable', 'array'],
@@ -201,6 +203,7 @@ class PosServiceApiController extends Controller
             'duration_minutes'     => $validated['duration_minutes'] ?? null,
             'is_active'            => $validated['is_active'] ?? true,
             'is_featured'          => $validated['is_featured'] ?? false,
+            'has_warranty'         => $validated['has_warranty'] ?? false,
             'service_category_ids' => $validated['service_category_ids'] ?? [],
             'employee_ids'         => $validated['employee_ids'] ?? [],
             'product_lines'        => $productLinesSync,
@@ -228,6 +231,7 @@ class PosServiceApiController extends Controller
             'duration_minutes'           => ['nullable', 'integer', 'min:0'],
             'is_active'                  => ['boolean'],
             'is_featured'                => ['boolean'],
+            'has_warranty'               => ['boolean'],
             'service_category_ids'       => ['nullable', 'array'],
             'service_category_ids.*'     => ['integer', 'min:1'],
             'employee_ids'               => ['nullable', 'array'],
@@ -249,6 +253,7 @@ class PosServiceApiController extends Controller
             'duration_minutes'     => $validated['duration_minutes'] ?? null,
             'is_active'            => $validated['is_active'] ?? $serviceItem->is_active,
             'is_featured'          => $validated['is_featured'] ?? $serviceItem->is_featured,
+            'has_warranty'         => $validated['has_warranty'] ?? $serviceItem->has_warranty,
             'service_category_ids' => $validated['service_category_ids'] ?? [],
             'employee_ids'         => $validated['employee_ids'] ?? [],
             'product_lines'        => $productLinesSync,
@@ -348,6 +353,7 @@ class PosServiceApiController extends Controller
                 'duration_label'   => $serviceItem->durationLabel(),
                 'is_active'        => $serviceItem->is_active,
                 'is_featured'      => (bool) $serviceItem->is_featured,
+                'has_warranty'     => (bool) $serviceItem->has_warranty,
                 'categories'       => $serviceItem->categories->map(fn ($c) => [
                     'id'   => $c->id,
                     'name' => $c->name,
@@ -445,6 +451,7 @@ class PosServiceApiController extends Controller
             'duration_label' => $i->durationLabel(),
             'is_active'      => $i->is_active,
             'is_featured'    => (bool) $i->is_featured,
+            'has_warranty'   => (bool) $i->has_warranty,
             'categories'     => $i->categories->pluck('name'),
         ];
     }

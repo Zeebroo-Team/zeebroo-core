@@ -372,6 +372,37 @@ class PosCatalogService
     }
 
     /**
+     * Find a product and its specific stock layer by scanning a batch SKU
+     * (e.g. PRD-IIW3ZFGK-02 → product for PRD-IIW3ZFGK + layer #2).
+     *
+     * @return array{product: Product, layer: \Modules\Product\Models\ProductStockLayer}|null
+     */
+    public function findProductByBatchSku(Business $business, string $batchSku): ?array
+    {
+        $term = trim($batchSku);
+        if ($term === '') {
+            return null;
+        }
+
+        $layer = \Modules\Product\Models\ProductStockLayer::query()
+            ->where('batch_sku', $term)
+            ->where('business_id', $business->id)
+            ->with('product')
+            ->first();
+
+        if ($layer === null) {
+            return null;
+        }
+
+        $product = $layer->product;
+        if (! $product instanceof Product || ! $product->is_active) {
+            return null;
+        }
+
+        return ['product' => $product, 'layer' => $layer];
+    }
+
+    /**
      * @return array{
      *     unit_sell_price: ?float,
      *     stock_quantity: float,

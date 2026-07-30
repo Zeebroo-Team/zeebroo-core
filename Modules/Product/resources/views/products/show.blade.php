@@ -45,6 +45,11 @@
 .ps-stat{display:flex;flex-direction:column;gap:2px;padding:8px 14px;border:1px solid var(--border);border-radius:9px;background:color-mix(in srgb,var(--card) 96%,var(--border) 4%);min-width:100px;}
 .ps-stat__lbl{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);}
 .ps-stat__val{font-size:15px;font-weight:800;color:var(--text);font-variant-numeric:tabular-nums;line-height:1.1;}
+.ps-stat__val--muted{color:var(--muted);}
+.ps-stat--gain{background:color-mix(in srgb,#22c55e 8%,var(--card));border-color:color-mix(in srgb,#22c55e 25%,var(--border));}
+.ps-stat--gain .ps-stat__val{color:#16a34a;}
+.ps-stat--loss{background:color-mix(in srgb,#ef4444 8%,var(--card));border-color:color-mix(in srgb,#ef4444 25%,var(--border));}
+.ps-stat--loss .ps-stat__val{color:#dc2626;}
 
 /* ── Tabs ────────────────────────────────────────────────────────── */
 .ps-tabs{display:flex;flex-wrap:wrap;gap:4px;margin:0 0 14px;padding:4px;border-radius:11px;border:1px solid var(--border);background:color-mix(in srgb,var(--card) 92%,var(--border) 8%);width:fit-content;}
@@ -59,6 +64,18 @@
 /* ── Section label ───────────────────────────────────────────────── */
 .ps-label{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin:0 0 8px;display:flex;align-items:center;gap:6px;}
 .ps-label::after{content:'';flex:1;height:1px;background:var(--border);}
+
+/* ── Pricing grid ────────────────────────────────────────────────── */
+.ps-pricing-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;border:1px solid var(--border);border-radius:10px;overflow:hidden;margin:0 0 12px;background:var(--border);}
+@media(max-width:700px){.ps-pricing-grid{grid-template-columns:repeat(2,minmax(0,1fr));}}
+.ps-pricing-cell{padding:10px 14px;background:color-mix(in srgb,var(--card) 97%,var(--border) 3%);display:flex;flex-direction:column;gap:3px;}
+.ps-pricing-cell__lbl{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);}
+.ps-pricing-cell__val{font-size:16px;font-weight:800;color:var(--text);font-variant-numeric:tabular-nums;line-height:1.1;}
+.ps-pricing-cell--gain{background:color-mix(in srgb,#22c55e 7%,var(--card));}
+.ps-pricing-cell--gain .ps-pricing-cell__val{color:#16a34a;}
+.ps-pricing-cell--loss{background:color-mix(in srgb,#ef4444 7%,var(--card));}
+.ps-pricing-cell--loss .ps-pricing-cell__val{color:#dc2626;}
+.ps-pricing-badge{display:inline-flex;align-items:center;padding:1px 5px;border-radius:999px;font-size:9px;font-weight:700;background:color-mix(in srgb,#f59e0b 14%,transparent);border:1px solid color-mix(in srgb,#f59e0b 30%,var(--border));color:#b45309;margin-left:4px;vertical-align:middle;}
 
 /* ── Overview grid ───────────────────────────────────────────────── */
 .ps-overview-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;border:1px solid var(--border);border-radius:10px;overflow:hidden;margin:0 0 12px;background:var(--border);}
@@ -196,28 +213,46 @@
     </div>
 
     {{-- ── Stats strip ──────────────────────────────────────────── --}}
+    @php
+        $baseDiscount ??= null;
+        if ($baseDiscount && $product->unit_price !== null) {
+            $baseDiscount->setRelation('product', $product);
+            $statFinalPrice  = $baseDiscount->finalPrice();
+            $statDiscountAmt = $baseDiscount->discountAmount();
+        }
+        $statCostPrice      = $product->cost_price !== null      ? (float) $product->cost_price      : null;
+        $statSellingPrice   = $product->unit_price !== null      ? (float) $product->unit_price       : null;
+        $statWholesalePrice = $product->wholesale_price !== null ? (float) $product->wholesale_price  : null;
+        $statProfit         = ($statSellingPrice !== null && $statCostPrice !== null)
+            ? round($statSellingPrice - $statCostPrice, 2)
+            : null;
+        $statMarginPct      = ($statProfit !== null && $statCostPrice > 0)
+            ? round($statProfit / $statCostPrice * 100, 1)
+            : null;
+    @endphp
     <div class="ps-stats" role="region" aria-label="Product summary">
+
+        {{-- Cost Price --}}
         <div class="ps-stat">
-            @php
-                $baseDiscount ??= null;
-                if ($baseDiscount && $product->unit_price !== null) {
-                    $baseDiscount->setRelation('product', $product);
-                    $statFinalPrice  = $baseDiscount->finalPrice();
-                    $statDiscountAmt = $baseDiscount->discountAmount();
-                }
-            @endphp
+            <span class="ps-stat__lbl">Cost price@if(filled($currency??'')) ({{ $currency }})@endif</span>
+            @if($statCostPrice !== null)
+                <span class="ps-stat__val">{{ number_format($statCostPrice, 2) }}</span>
+            @else
+                <span class="ps-stat__val ps-stat__val--muted">—</span>
+            @endif
+        </div>
+
+        {{-- Selling Price --}}
+        <div class="ps-stat">
             <span class="ps-stat__lbl">
-                @if($baseDiscount && $product->unit_price !== null)
-                    Discounted price @if(filled($currency))({{ $currency }})@endif
-                @else
-                    Price @if(filled($currency))({{ $currency }})@endif
-                @endif
+                @if($baseDiscount && $statSellingPrice !== null)Discounted price@else Selling price@endif
+                @if(filled($currency??'')) ({{ $currency }})@endif
             </span>
-            @if($product->unit_price !== null)
+            @if($statSellingPrice !== null)
                 @if($baseDiscount)
-                    <span class="ps-stat__val" style="color:var(--text);">{{ number_format($statFinalPrice, 2) }}</span>
+                    <span class="ps-stat__val">{{ number_format($statFinalPrice, 2) }}</span>
                     <span style="display:flex;align-items:center;gap:5px;margin-top:3px;flex-wrap:wrap;">
-                        <span style="text-decoration:line-through;font-size:11px;color:var(--muted);">{{ number_format((float)$product->unit_price, 2) }}</span>
+                        <span style="text-decoration:line-through;font-size:11px;color:var(--muted);">{{ number_format($statSellingPrice, 2) }}</span>
                         <span style="display:inline-flex;align-items:center;gap:2px;padding:1px 6px;border-radius:999px;font-size:10px;font-weight:700;background:color-mix(in srgb,#f59e0b 12%,transparent);border:1px solid color-mix(in srgb,#f59e0b 30%,var(--border));color:#b45309;">
                             @if($baseDiscount->discount_type === 'percentage')
                                 −{{ rtrim(rtrim(number_format((float)$baseDiscount->discount_value,2),'0'),'.') }}%
@@ -228,16 +263,47 @@
                     </span>
                     <span style="font-size:10px;color:var(--muted);margin-top:1px;">{{ $baseDiscount->name }}</span>
                 @else
-                    <span class="ps-stat__val">{{ number_format((float) $product->unit_price, 2) }}</span>
+                    <span class="ps-stat__val">{{ number_format($statSellingPrice, 2) }}</span>
                 @endif
             @else
-                <span class="ps-stat__val">—</span>
+                <span class="ps-stat__val ps-stat__val--muted">—</span>
             @endif
         </div>
+
+        {{-- Wholesale Price --}}
+        <div class="ps-stat">
+            <span class="ps-stat__lbl">Wholesale price@if(filled($currency??'')) ({{ $currency }})@endif</span>
+            @if($statWholesalePrice !== null)
+                <span class="ps-stat__val">{{ number_format($statWholesalePrice, 2) }}</span>
+            @else
+                <span class="ps-stat__val ps-stat__val--muted">—</span>
+            @endif
+        </div>
+
+        {{-- Profit / Margin --}}
+        <div class="ps-stat ps-stat--profit @if($statProfit !== null && $statProfit < 0) ps-stat--loss @elseif($statProfit !== null) ps-stat--gain @endif">
+            <span class="ps-stat__lbl">Profit@if(filled($currency??'')) ({{ $currency }})@endif</span>
+            @if($statProfit !== null)
+                <span class="ps-stat__val">
+                    @if($statProfit >= 0)+@endif{{ number_format($statProfit, 2) }}
+                </span>
+                @if($statMarginPct !== null)
+                    <span style="font-size:10px;font-weight:700;margin-top:2px;opacity:.85;">
+                        @if($statMarginPct >= 0)+@endif{{ $statMarginPct }}% margin
+                    </span>
+                @endif
+            @else
+                <span class="ps-stat__val ps-stat__val--muted">—</span>
+                <span style="font-size:10px;color:var(--muted);margin-top:2px;">set cost &amp; selling price</span>
+            @endif
+        </div>
+
+        {{-- Stock --}}
         <div class="ps-stat">
             <span class="ps-stat__lbl">Stock</span>
             <span class="ps-stat__val">{{ rtrim(rtrim(number_format((float) $product->stock_quantity, 3), '0'), '.') }}</span>
         </div>
+
         @if($product->sellingUnits->isNotEmpty())
         <div class="ps-stat">
             <span class="ps-stat__lbl">Selling units</span>
@@ -295,7 +361,60 @@
             'productOverviewUrl' => $productOverviewUrl,
         ])
 
-        <p class="ps-label"><i class="fa fa-circle-info"></i> Details</p>
+        {{-- Pricing section --}}
+        <p class="ps-label"><i class="fa fa-tag"></i> Pricing@if(filled($currency??'')) <span style="font-weight:400;font-size:10px;color:var(--muted);">({{ $currency }})</span>@endif</p>
+        <div class="ps-pricing-grid">
+            <div class="ps-pricing-cell">
+                <span class="ps-pricing-cell__lbl">Cost price</span>
+                <span class="ps-pricing-cell__val">
+                    @if($statCostPrice !== null)
+                        {{ number_format($statCostPrice, 2) }}
+                    @else
+                        <span class="muted">—</span>
+                    @endif
+                </span>
+            </div>
+            <div class="ps-pricing-cell">
+                <span class="ps-pricing-cell__lbl">Selling price</span>
+                <span class="ps-pricing-cell__val">
+                    @if($statSellingPrice !== null)
+                        {{ number_format($statSellingPrice, 2) }}
+                        @if($baseDiscount)
+                            <span class="ps-pricing-badge">{{ $baseDiscount->discount_type === 'percentage' ? '−'.rtrim(rtrim(number_format((float)$baseDiscount->discount_value,2),'0'),'.').'%' : '−'.number_format($statDiscountAmt,2) }}</span>
+                        @endif
+                    @else
+                        <span class="muted">—</span>
+                    @endif
+                </span>
+            </div>
+            <div class="ps-pricing-cell">
+                <span class="ps-pricing-cell__lbl">Wholesale price</span>
+                <span class="ps-pricing-cell__val">
+                    @if($statWholesalePrice !== null)
+                        {{ number_format($statWholesalePrice, 2) }}
+                    @else
+                        <span class="muted">—</span>
+                    @endif
+                </span>
+            </div>
+            <div class="ps-pricing-cell ps-pricing-cell--profit @if($statProfit !== null && $statProfit < 0) ps-pricing-cell--loss @elseif($statProfit !== null) ps-pricing-cell--gain @endif">
+                <span class="ps-pricing-cell__lbl">
+                    Profit <i class="fa fa-circle-info" style="font-size:9px;" title="Selling price − Cost price"></i>
+                </span>
+                <span class="ps-pricing-cell__val">
+                    @if($statProfit !== null)
+                        @if($statProfit >= 0)+@endif{{ number_format($statProfit, 2) }}
+                        @if($statMarginPct !== null)
+                            <span style="font-size:10px;font-weight:600;margin-left:4px;opacity:.8;">(@if($statMarginPct >= 0)+@endif{{ $statMarginPct }}%)</span>
+                        @endif
+                    @else
+                        <span class="muted">—</span>
+                    @endif
+                </span>
+            </div>
+        </div>
+
+        <p class="ps-label" style="margin-top:14px;"><i class="fa fa-circle-info"></i> Details</p>
         <dl class="ps-overview-grid">
             <div class="ps-overview-cell">
                 <dt>SKU</dt>

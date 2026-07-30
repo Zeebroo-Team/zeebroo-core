@@ -24,6 +24,7 @@ class Product extends Model
         'description',
         'unit',
         'unit_price',
+        'cost_price',
         'wholesale_price',
         'stock_quantity',
         'is_active',
@@ -38,6 +39,7 @@ class Product extends Model
     {
         return [
             'unit_price'         => 'decimal:2',
+            'cost_price'         => 'decimal:2',
             'wholesale_price'    => 'decimal:2',
             'stock_quantity'     => 'decimal:3',
             'is_active'          => 'boolean',

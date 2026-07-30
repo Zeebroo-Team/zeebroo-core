@@ -9,6 +9,8 @@ use Illuminate\Support\Facades\DB;
 use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesPosBusinessForApi;
 use Modules\Pos\Services\PosCatalogService;
 use Modules\Pos\Services\PosOnlineApiService;
+use Modules\Product\Models\ProductStockLayer;
+use Modules\Product\Services\ProductStockLayerService;
 
 class PosCatalogApiController extends Controller
 {
@@ -17,6 +19,7 @@ class PosCatalogApiController extends Controller
     public function __construct(
         private readonly PosCatalogService $catalog,
         private readonly PosOnlineApiService $api,
+        private readonly ProductStockLayerService $stockLayerService,
     ) {
     }
 
@@ -163,9 +166,9 @@ class PosCatalogApiController extends Controller
                 'courier_delivery'   => (bool) $product->courier_delivery,
                 'loyalty_redeemable' => (bool) $product->loyalty_redeemable,
                 'unit_price'   => (float) $product->unit_price,
-                'cost_price'   => $product->stockLayers->isNotEmpty()
-                    ? (float) $product->stockLayers->first()->unit_cost
-                    : null,
+                'cost_price'   => $product->cost_price !== null
+                    ? (float) $product->cost_price
+                    : ($product->stockLayers->isNotEmpty() ? (float) $product->stockLayers->first()->unit_cost : null),
                 'total_stock'  => (float) $totalStock,
                 'category'      => $product->categories->first()
                     ? ['id' => $product->categories->first()->id, 'name' => $product->categories->first()->name]
@@ -194,6 +197,7 @@ class PosCatalogApiController extends Controller
                 ]),
                 'stock_layers' => $product->stockLayers->map(fn ($l) => [
                     'id'                 => $l->id,
+                    'batch_sku'          => $l->batch_sku,
                     'quantity_remaining' => (float) $l->quantity_remaining,
                     'unit_cost'          => (float) $l->unit_cost,
                     'received_at'        => $l->received_at?->toDateString(),
@@ -226,11 +230,24 @@ class PosCatalogApiController extends Controller
             $grn     = $grnItem?->goodsReceiveNote;
             $po      = $grn?->purchase;
 
+            if ($grnItem === null) {
+                $sourceType = 'opening';
+            } elseif ($po !== null) {
+                $sourceType = 'po';
+            } else {
+                $sourceType = 'grn';
+            }
+
             return [
+                'id'                 => $layer->id,
+                'batch_sku'          => $layer->batch_sku,
                 'received_at'        => $layer->received_at?->toDateString(),
                 'quantity_received'  => (float) $layer->quantity_received,
                 'quantity_remaining' => (float) $layer->quantity_remaining,
                 'unit_cost'          => (float) $layer->unit_cost,
+                'selling_unit_price'   => $layer->selling_unit_price !== null ? (float) $layer->selling_unit_price : null,
+                'wholesale_unit_price' => $layer->wholesale_unit_price !== null ? (float) $layer->wholesale_unit_price : null,
+                'source_type'        => $sourceType,
                 'grn_number'         => $grn?->grn_number,
                 'grn_reference'      => $grn?->reference,
                 'grn_id'             => $grn?->id,
@@ -247,17 +264,141 @@ class PosCatalogApiController extends Controller
     {
         $business = $this->businessOrAbort($request);
 
+        // 1. Try exact product-level SKU
         $product = $this->catalog->findSellableProductBySku($business, $sku);
-        if ($product === null) {
+        if ($product !== null) {
+            $product->loadMissing(['productUnit', 'imageFile', 'categories', 'business']);
             return response()->json([
-                'message' => 'No product found for SKU: '.$sku,
-            ], 404);
+                'data' => $this->catalog->productCardForProduct($product),
+            ]);
         }
 
-        $product->loadMissing(['productUnit', 'imageFile', 'categories', 'business']);
+        // 2. Try batch-level SKU (e.g. PRD-IIW3ZFGK-02)
+        $match = $this->catalog->findProductByBatchSku($business, $sku);
+        if ($match !== null) {
+            /** @var \Modules\Product\Models\Product $product */
+            $product = $match['product'];
+            $layer   = $match['layer'];
+            $product->loadMissing(['productUnit', 'imageFile', 'categories', 'business']);
+            $card = $this->catalog->productCardForProduct($product);
+            $card['matched_layer_id']    = (int) $layer->id;
+            $card['matched_batch_sku']   = $layer->batch_sku;
+            $card['layer_qty_remaining'] = (float) $layer->quantity_remaining;
+            return response()->json(['data' => $card]);
+        }
 
         return response()->json([
-            'data' => $this->catalog->productCardForProduct($product),
+            'message' => 'No product found for SKU: '.$sku,
+        ], 404);
+    }
+
+    public function backfillBatchSkus(Request $request, int $productId): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'inv_products');
+
+        $product = $business->products()->where('id', $productId)->first();
+        abort_if($product === null, 404, 'Product not found.');
+
+        $this->stockLayerService->backfillBatchSkus($product);
+
+        $layers = ProductStockLayer::query()
+            ->where('product_id', $product->id)
+            ->where('business_id', $business->id)
+            ->orderBy('id')
+            ->get(['id', 'batch_sku', 'quantity_remaining', 'received_at']);
+
+        return response()->json([
+            'message' => 'Batch SKUs assigned.',
+            'data'    => $layers->map(fn ($l) => [
+                'id'        => $l->id,
+                'batch_sku' => $l->batch_sku,
+            ]),
+        ]);
+    }
+
+    public function updateLayerSellingPrice(Request $request, int $productId, int $layerId): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'inv_products');
+
+        $product = $business->products()->where('id', $productId)->first();
+        abort_if($product === null, 404, 'Product not found.');
+
+        $layer = ProductStockLayer::where('id', $layerId)
+            ->where('product_id', $product->id)
+            ->where('business_id', $business->id)
+            ->first();
+        abort_if($layer === null, 404, 'Stock layer not found.');
+
+        $validated = $request->validate([
+            'selling_unit_price' => ['nullable', 'numeric', 'min:0', 'max:9999999'],
+        ]);
+
+        $layer->selling_unit_price = isset($validated['selling_unit_price'])
+            ? round((float) $validated['selling_unit_price'], 2)
+            : null;
+        $layer->save();
+
+        return response()->json([
+            'message'            => 'Selling price updated.',
+            'selling_unit_price' => $layer->selling_unit_price !== null ? (float) $layer->selling_unit_price : null,
+        ]);
+    }
+
+    public function updateLayerWholesalePrice(Request $request, int $productId, int $layerId): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'inv_products');
+
+        $product = $business->products()->where('id', $productId)->first();
+        abort_if($product === null, 404, 'Product not found.');
+
+        $layer = ProductStockLayer::where('id', $layerId)
+            ->where('product_id', $product->id)
+            ->where('business_id', $business->id)
+            ->first();
+        abort_if($layer === null, 404, 'Stock layer not found.');
+
+        $validated = $request->validate([
+            'wholesale_unit_price' => ['nullable', 'numeric', 'min:0', 'max:9999999'],
+        ]);
+
+        $layer->wholesale_unit_price = isset($validated['wholesale_unit_price'])
+            ? round((float) $validated['wholesale_unit_price'], 2)
+            : null;
+        $layer->save();
+
+        return response()->json([
+            'message'              => 'Wholesale price updated.',
+            'wholesale_unit_price' => $layer->wholesale_unit_price !== null ? (float) $layer->wholesale_unit_price : null,
+        ]);
+    }
+
+    public function updateLayerCostPrice(Request $request, int $productId, int $layerId): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'inv_products');
+
+        $product = $business->products()->where('id', $productId)->first();
+        abort_if($product === null, 404, 'Product not found.');
+
+        $layer = ProductStockLayer::where('id', $layerId)
+            ->where('product_id', $product->id)
+            ->where('business_id', $business->id)
+            ->first();
+        abort_if($layer === null, 404, 'Stock layer not found.');
+
+        $validated = $request->validate([
+            'unit_cost' => ['required', 'numeric', 'min:0', 'max:9999999'],
+        ]);
+
+        $layer->unit_cost = round((float) $validated['unit_cost'], 2);
+        $layer->save();
+
+        return response()->json([
+            'message'   => 'Cost price updated.',
+            'unit_cost' => (float) $layer->unit_cost,
         ]);
     }
 }

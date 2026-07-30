@@ -7,8 +7,10 @@
     $idUnit = $pfxRaw !== '' ? $pfxRaw . '-unit' : 'product-unit';
     $idBranch = $pfxRaw !== '' ? $pfxRaw . '-branch' : 'product-branch';
     $idDesc = $pfxRaw !== '' ? $pfxRaw . '-desc' : 'product-desc';
-    $idPrice = $pfxRaw !== '' ? $pfxRaw . '-price' : 'product-price';
-    $idStock = $pfxRaw !== '' ? $pfxRaw . '-stock' : 'product-stock';
+    $idPrice          = $pfxRaw !== '' ? $pfxRaw . '-price'           : 'product-price';
+    $idCostPrice      = $pfxRaw !== '' ? $pfxRaw . '-cost-price'      : 'product-cost-price';
+    $idWholesalePrice = $pfxRaw !== '' ? $pfxRaw . '-wholesale-price' : 'product-wholesale-price';
+    $idStock          = $pfxRaw !== '' ? $pfxRaw . '-stock'           : 'product-stock';
     $idActive = $pfxRaw !== '' ? $pfxRaw . '-active' : 'product-active';
     $activeOld = old('is_active', $productModel ? ($productModel->is_active ? '1' : '0') : '1');
     $categories = $categories ?? collect();
@@ -68,9 +70,12 @@
 
 @once
 <style>
-.product-field-row--pricing-stock{display:grid;gap:10px;grid-template-columns:1fr;}
-@media (min-width:720px){.product-field-row--pricing-stock{grid-template-columns:repeat(3,minmax(0,1fr));gap:12px 16px;}}
-.product-field-row--pricing-stock .product-field{min-width:0;}
+.product-field-row--prices{display:grid;gap:10px;grid-template-columns:1fr;}
+@media (min-width:600px){.product-field-row--prices{grid-template-columns:repeat(3,minmax(0,1fr));gap:12px 16px;}}
+.product-field-row--prices .product-field{min-width:0;}
+.product-field-row--stock-unit{display:grid;gap:10px;grid-template-columns:1fr;}
+@media (min-width:600px){.product-field-row--stock-unit{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 16px;}}
+.product-field-row--stock-unit .product-field{min-width:0;}
 .product-sku-row{display:flex;align-items:stretch;gap:6px;}
 .product-sku-row__input,.product-sku-row input[type="text"]{flex:1 1 auto;min-width:0;}
 .product-sku-generate-btn{
@@ -184,15 +189,43 @@
     @error('description')<div style="color:#f87171;font-size:12px;margin-top:4px;">{{ $message }}</div>@enderror
 </div>
 @endunless
-<div class="product-field-row product-field-row--pricing-stock" style="grid-column:1/-1;">
+{{-- Pricing --}}
+<div class="product-field-row product-field-row--prices" style="grid-column:1/-1;">
     <div class="product-field">
-        <label for="{{ $idPrice }}">Unit price @if(filled($currency ?? null)) ({{ $currency }}) @endif</label>
-        <input id="{{ $idPrice }}" type="number" name="unit_price" value="{{ old('unit_price', $productModel?->unit_price) }}" step="0.01" min="0" inputmode="decimal" placeholder="0.00">
+        <label for="{{ $idCostPrice }}">
+            Cost price@if(filled($currency ?? null)) ({{ $currency }})@endif
+        </label>
+        <input id="{{ $idCostPrice }}" type="number" name="cost_price"
+               value="{{ old('cost_price', $productModel?->cost_price) }}"
+               step="0.01" min="0" inputmode="decimal" placeholder="0.00">
+        @error('cost_price')<div style="color:#f87171;font-size:12px;margin-top:4px;">{{ $message }}</div>@enderror
+    </div>
+    <div class="product-field">
+        <label for="{{ $idPrice }}">
+            Selling price@if(filled($currency ?? null)) ({{ $currency }})@endif
+        </label>
+        <input id="{{ $idPrice }}" type="number" name="unit_price"
+               value="{{ old('unit_price', $productModel?->unit_price) }}"
+               step="0.01" min="0" inputmode="decimal" placeholder="0.00">
         @error('unit_price')<div style="color:#f87171;font-size:12px;margin-top:4px;">{{ $message }}</div>@enderror
     </div>
     <div class="product-field">
+        <label for="{{ $idWholesalePrice }}">
+            Wholesale price@if(filled($currency ?? null)) ({{ $currency }})@endif
+        </label>
+        <input id="{{ $idWholesalePrice }}" type="number" name="wholesale_price"
+               value="{{ old('wholesale_price', $productModel?->wholesale_price) }}"
+               step="0.01" min="0" inputmode="decimal" placeholder="0.00">
+        @error('wholesale_price')<div style="color:#f87171;font-size:12px;margin-top:4px;">{{ $message }}</div>@enderror
+    </div>
+</div>
+{{-- Stock & unit --}}
+<div class="product-field-row product-field-row--stock-unit" style="grid-column:1/-1;">
+    <div class="product-field">
         <label for="{{ $idStock }}">Stock on hand</label>
-        <input id="{{ $idStock }}" type="number" name="stock_quantity" value="{{ old('stock_quantity', $productModel?->stock_quantity ?? 0) }}" step="0.001" min="0" inputmode="decimal" placeholder="0">
+        <input id="{{ $idStock }}" type="number" name="stock_quantity"
+               value="{{ old('stock_quantity', $productModel?->stock_quantity ?? 0) }}"
+               step="0.001" min="0" inputmode="decimal" placeholder="0">
         @error('stock_quantity')<div style="color:#f87171;font-size:12px;margin-top:4px;">{{ $message }}</div>@enderror
     </div>
     <div class="product-field">

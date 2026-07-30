@@ -92,7 +92,7 @@ class ProductStockLayerService
             $item->save();
         }
 
-        return ProductStockLayer::query()->updateOrCreate(
+        $layer = ProductStockLayer::query()->updateOrCreate(
             ['goods_receive_note_item_id' => $item->id],
             [
                 'business_id' => (int) $grn->business_id,
@@ -105,6 +105,10 @@ class ProductStockLayerService
                 'received_at' => $grn->received_date,
             ],
         );
+
+        $this->assignBatchSku($layer, $product);
+
+        return $layer;
     }
 
     public function reverseForGrn(GoodsReceiveNote $grn): void
@@ -183,6 +187,7 @@ class ProductStockLayerService
         float $quantity,
         float $unitCost,
         ?float $sellingUnitPrice = null,
+        ?float $wholesaleUnitPrice = null,
     ): ProductStockLayer {
         if ($quantity <= 0) {
             throw ValidationException::withMessages([
@@ -192,6 +197,7 @@ class ProductStockLayerService
 
         $unitCost = round(max(0, $unitCost), 2);
         $sell = $this->resolveSellingUnitPrice($business, $product, $unitCost, $sellingUnitPrice);
+        $wholesale = $wholesaleUnitPrice !== null ? round(max(0, $wholesaleUnitPrice), 2) : null;
 
         $layer = ProductStockLayer::query()->create([
             'business_id' => $business->id,
@@ -201,13 +207,68 @@ class ProductStockLayerService
             'quantity_remaining' => round($quantity, 3),
             'unit_cost' => $unitCost,
             'selling_unit_price' => $sell,
+            'wholesale_unit_price' => $wholesale,
             'received_at' => now()->toDateString(),
         ]);
+
+        $this->assignBatchSku($layer, $product);
 
         $product->stock_quantity = round((float) $product->stock_quantity + $quantity, 3);
         $product->save();
 
         return $layer;
+    }
+
+    /**
+     * Assign a sequential batch SKU (e.g. PRD-IIW3ZFGK-02) to a stock layer.
+     * Only runs when the product has a SKU and the layer has no batch_sku yet.
+     */
+    public function assignBatchSku(ProductStockLayer $layer, Product $product): void
+    {
+        if (! $product->sku || $layer->batch_sku !== null) {
+            return;
+        }
+
+        // This layer's ordinal position among all layers for the product (1-indexed)
+        $position = (int) ProductStockLayer::query()
+            ->where('product_id', $product->id)
+            ->where('business_id', $product->business_id)
+            ->where('id', '<=', $layer->id)
+            ->count();
+
+        for ($attempt = 0; $attempt < 500; $attempt++) {
+            $candidate = $product->sku . '-' . str_pad((string) ($position + $attempt), 2, '0', STR_PAD_LEFT);
+            $taken = ProductStockLayer::query()
+                ->where('batch_sku', $candidate)
+                ->where('id', '!=', $layer->id)
+                ->exists();
+            if (! $taken) {
+                $layer->batch_sku = $candidate;
+                $layer->save();
+                return;
+            }
+        }
+    }
+
+    /**
+     * Backfill batch_sku for all layers of a product that don't have one yet.
+     * Layers are numbered in ascending ID order.
+     */
+    public function backfillBatchSkus(Product $product): void
+    {
+        if (! $product->sku) {
+            return;
+        }
+
+        $layers = ProductStockLayer::query()
+            ->where('product_id', $product->id)
+            ->where('business_id', $product->business_id)
+            ->orderBy('id')
+            ->get();
+
+        foreach ($layers as $layer) {
+            $this->assignBatchSku($layer, $product);
+        }
     }
 
     public function updateSellingPrice(ProductStockLayer $layer, float $sellingUnitPrice): ProductStockLayer

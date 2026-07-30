@@ -29,8 +29,10 @@ class PosProductQuickCreateService
     {
         $validated = $this->validate($business, $input);
 
-        $openingStock = (float) ($validated['stock_quantity'] ?? 0);
-        $unitPrice = (float) ($validated['unit_price'] ?? 0);
+        $openingStock   = (float) ($validated['stock_quantity'] ?? 0);
+        $unitPrice      = (float) ($validated['unit_price'] ?? 0);
+        $costPrice      = isset($validated['cost_price'])      ? (float) $validated['cost_price']      : 0.0;
+        $wholesalePrice = isset($validated['wholesale_price']) ? (float) $validated['wholesale_price'] : null;
 
         $branchId = isset($validated['branch_id']) && $validated['branch_id'] > 0
             ? (int) $validated['branch_id']
@@ -40,6 +42,8 @@ class PosProductQuickCreateService
             'name' => $validated['name'],
             'sku' => $validated['sku'] ?? null,
             'unit_price' => $unitPrice,
+            'cost_price' => $costPrice ?: null,
+            'wholesale_price' => $wholesalePrice,
             'stock_quantity' => 0,
             'product_unit_id' => $validated['product_unit_id'] ?? null,
             'product_category_ids' => [],
@@ -59,8 +63,9 @@ class PosProductQuickCreateService
                 $business,
                 $product,
                 $openingStock,
-                $unitPrice,
-                $unitPrice,
+                $costPrice,      // unit cost (what was paid to acquire)
+                $unitPrice,      // selling price per unit
+                $wholesalePrice, // wholesale price per unit
             );
         }
 
@@ -81,6 +86,8 @@ class PosProductQuickCreateService
             'name' => ['required', 'string', 'max:255'],
             'sku' => ['nullable', 'string', 'max:120'],
             'unit_price' => ['required', 'numeric', 'min:0'],
+            'cost_price' => ['nullable', 'numeric', 'min:0'],
+            'wholesale_price' => ['nullable', 'numeric', 'min:0'],
             'stock_quantity' => ['nullable', 'numeric', 'min:0'],
             'product_unit_id' => [
                 'nullable',
