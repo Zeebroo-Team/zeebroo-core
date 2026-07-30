@@ -14208,8 +14208,7 @@ function posLayersDifferInPrice(layers) {
 
 function openPosLayerPicker() {
   const m = $('#pos-layer-picker');
-  if (m) { m.classList.add('is-open'); m.setAttribute('aria-hidden', 'false'); }
-  // Auto-highlight first option
+  if (m) { m.style.display = ''; m.classList.add('is-open'); m.setAttribute('aria-hidden', 'false'); }
   requestAnimationFrame(() => _lpHighlight(0));
 }
 
