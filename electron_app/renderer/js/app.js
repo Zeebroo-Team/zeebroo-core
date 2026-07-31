@@ -9315,7 +9315,7 @@ function _barcodeRenderList() {
       if (e.target.closest('.bc-chk-wrap')) return;
       const pid = row.dataset.pid;
       const p   = _bc.products.find(x => String(x.id) === pid);
-      if (p) _bcOpenBatchPicker(p.id, p.name, p.sku || '');
+      if (p) _bcOpenBatchPicker(p.id, p.name, p.sku || '', p.stock_quantity, p.unit_sell_price);
     });
   });
 }
@@ -9346,7 +9346,7 @@ function _barcodePrint() {
 $('#bc-batch-close')?.addEventListener('click', () => { $('#bc-batch-modal').style.display = 'none'; });
 $('#bc-batch-modal')?.addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.style.display = 'none'; });
 
-async function _bcOpenBatchPicker(productId, productName, productSku) {
+async function _bcOpenBatchPicker(productId, productName, productSku, productQty, productSellPrice) {
   const modal   = $('#bc-batch-modal');
   const loading = $('#bc-batch-loading');
   const list    = $('#bc-batch-list');
@@ -9360,13 +9360,33 @@ async function _bcOpenBatchPicker(productId, productName, productSku) {
   const res = await API.productStockHistory(productId);
   loading.style.display = 'none';
 
-  if (res.status !== 200 || !res.body?.data?.length) {
+  let batches = res.status === 200 ? (res.body?.data ?? []) : [];
+
+  // No stock layers → product has opening stock set directly (no GRN/manual layer exists yet).
+  // Synthesise a single opening-stock entry so the user can still print a barcode.
+  if (!batches.length) {
+    const qty = parseFloat(productQty) || 0;
+    const sell = parseFloat(productSellPrice) || null;
+    batches = [{
+      id:                  null,
+      batch_sku:           productSku || null,
+      received_at:         null,
+      quantity_received:   qty,
+      quantity_remaining:  qty,
+      unit_cost:           null,
+      selling_unit_price:  sell,
+      wholesale_unit_price: null,
+      source_type:         'opening',
+      grn_number:          null,
+      po_number:           null,
+    }];
+  }
+
+  if (!batches.length) {
     list.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-muted)"><i class="fa fa-inbox"></i><p style="margin-top:8px">No stock batches found</p></div>`;
     list.style.display = '';
     return;
   }
-
-  const batches = res.body.data;
   const cur     = state.currency || '';
 
   list.innerHTML = batches.map(h => {
@@ -9448,7 +9468,13 @@ function _bcRenderPreview(items, cols) {
   requestAnimationFrame(() => {
     sheet.querySelectorAll('.bc-psvg').forEach(svg => {
       const code = svg.dataset.code;
-      if (!code) return;
+      if (!code) {
+        const fb = document.createElement('div');
+        fb.style.cssText = 'font-size:9px;text-align:center;color:#ef4444;padding:6px 0';
+        fb.textContent = 'No SKU';
+        svg.replaceWith(fb);
+        return;
+      }
       try {
         JsBarcode(svg, code, { format: 'CODE128', width: 1.5, height: 48, displayValue: false, margin: 4 });
       } catch (e) {
