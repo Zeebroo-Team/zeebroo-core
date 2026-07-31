@@ -12,6 +12,7 @@ use Modules\Product\Models\Product;
 use Modules\Product\Models\ProductBrand;
 use Modules\Product\Models\ProductCategory;
 use Modules\Product\Services\ProductService;
+use Modules\Product\Services\ProductStockLayerService;
 
 class PosProductApiController extends Controller
 {
@@ -20,6 +21,7 @@ class PosProductApiController extends Controller
     public function __construct(
         private readonly PosProductQuickCreateService $quickCreate,
         private readonly ProductService $productService,
+        private readonly ProductStockLayerService $stockLayers,
     ) {
     }
 
@@ -42,14 +44,25 @@ class PosProductApiController extends Controller
             $product = $business->products()->find($quickResult['id']);
             if ($product) {
                 $fill = [];
-                if ($request->filled('description'))      $fill['description']        = $request->input('description');
-                if ($request->has('cost_price'))          $fill['cost_price']          = $request->input('cost_price') !== null ? (float) $request->input('cost_price') : null;
-                if ($request->has('wholesale_price'))     $fill['wholesale_price']     = $request->input('wholesale_price') !== null ? (float) $request->input('wholesale_price') : null;
-                if ($request->has('is_active'))           $fill['is_active']           = $request->boolean('is_active');
-                if ($request->has('has_warranty'))        $fill['has_warranty']        = $request->boolean('has_warranty');
-                if ($request->has('track_expiry'))        $fill['track_expiry']        = $request->boolean('track_expiry');
-                if ($request->has('courier_delivery'))    $fill['courier_delivery']    = $request->boolean('courier_delivery');
-                if ($request->has('loyalty_redeemable')) $fill['loyalty_redeemable']  = $request->boolean('loyalty_redeemable');
+                if ($request->filled('description'))         $fill['description']          = $request->input('description');
+                if ($request->filled('model_no'))            $fill['model_no']             = $request->input('model_no');
+                if ($request->filled('size'))                $fill['size']                 = $request->input('size');
+                if ($request->filled('mfg_date'))            $fill['mfg_date']             = $request->input('mfg_date');
+                if ($request->filled('exp_date'))            $fill['exp_date']             = $request->input('exp_date');
+                if ($request->has('cost_price'))             $fill['cost_price']           = $request->input('cost_price') !== null ? (float) $request->input('cost_price') : null;
+                if ($request->has('wholesale_price'))        $fill['wholesale_price']      = $request->input('wholesale_price') !== null ? (float) $request->input('wholesale_price') : null;
+                if ($request->has('is_active'))              $fill['is_active']            = $request->boolean('is_active');
+                if ($request->has('has_warranty'))           $fill['has_warranty']         = $request->boolean('has_warranty');
+                if ($request->filled('warranty_duration'))   $fill['warranty_duration']    = $request->input('warranty_duration');
+                if ($request->has('warranty_duration') && !$request->filled('warranty_duration')) $fill['warranty_duration'] = null;
+                if ($request->has('track_expiry'))           $fill['track_expiry']         = $request->boolean('track_expiry');
+                if ($request->has('courier_delivery'))       $fill['courier_delivery']     = $request->boolean('courier_delivery');
+                if ($request->has('loyalty_redeemable'))     $fill['loyalty_redeemable']   = $request->boolean('loyalty_redeemable');
+                if ($request->has('is_customer_required'))   $fill['is_customer_required'] = $request->boolean('is_customer_required');
+                if ($request->has('is_rental'))              $fill['is_rental']            = $request->boolean('is_rental');
+                if ($request->has('is_subscription'))        $fill['is_subscription']      = $request->boolean('is_subscription');
+                if ($request->has('item_wise_tax'))          $fill['item_wise_tax']        = $request->boolean('item_wise_tax');
+                if ($request->has('item_wise_discount'))     $fill['item_wise_discount']   = $request->boolean('item_wise_discount');
                 if ($fill) $product->fill($fill)->save();
 
                 if ($request->has('product_category_ids')) {
@@ -70,6 +83,17 @@ class PosProductApiController extends Controller
                     $isBundle    = $request->boolean('is_bundle');
                     $bundleItems = (array) $request->input('bundle_items', []);
                     $this->productService->update($product, ['is_bundle' => $isBundle, 'bundle_items' => $bundleItems]);
+                }
+
+                // Create one stock layer per opening batch
+                $openingBatches = (array) $request->input('opening_batches', []);
+                foreach ($openingBatches as $batch) {
+                    $qty = (float) ($batch['quantity'] ?? 0);
+                    if ($qty <= 0) continue;
+                    $cost     = isset($batch['cost_price'])      && $batch['cost_price']      !== null ? (float) $batch['cost_price']      : (float) ($product->cost_price ?? 0);
+                    $selling  = isset($batch['selling_price'])   && $batch['selling_price']   !== null ? (float) $batch['selling_price']   : null;
+                    $wholesale = isset($batch['wholesale_price']) && $batch['wholesale_price'] !== null ? (float) $batch['wholesale_price'] : ($product->wholesale_price !== null ? (float) $product->wholesale_price : null);
+                    $this->stockLayers->createManualLayer($business, $product, $qty, $cost, $selling, $wholesale);
                 }
             }
         }
@@ -92,6 +116,10 @@ class PosProductApiController extends Controller
         $data = $request->validate([
             'name'                      => 'sometimes|required|string|max:255',
             'sku'                       => 'nullable|string|max:120',
+            'model_no'                  => 'nullable|string|max:120',
+            'size'                      => 'nullable|string|max:120',
+            'mfg_date'                  => 'nullable|date',
+            'exp_date'                  => 'nullable|date',
             'description'               => 'nullable|string|max:5000',
             'unit_price'                => 'nullable|numeric|min:0',
             'cost_price'                => 'nullable|numeric|min:0',
@@ -101,9 +129,15 @@ class PosProductApiController extends Controller
             'is_active'                 => 'boolean',
             'is_bundle'                 => 'boolean',
             'has_warranty'              => 'boolean',
+            'warranty_duration'         => 'nullable|string|max:120',
             'track_expiry'              => 'boolean',
             'courier_delivery'          => 'boolean',
             'loyalty_redeemable'        => 'boolean',
+            'is_customer_required'      => 'boolean',
+            'is_rental'                 => 'boolean',
+            'is_subscription'           => 'boolean',
+            'item_wise_tax'             => 'boolean',
+            'item_wise_discount'        => 'boolean',
             'product_category_ids'      => 'nullable|array',
             'product_category_ids.*'    => 'integer',
             'product_brand_ids'         => 'nullable|array',
@@ -115,12 +149,17 @@ class PosProductApiController extends Controller
             'bundle_items.*.quantity'   => 'required_with:bundle_items|numeric|min:0.001',
         ]);
 
-        if ($request->has('is_active'))           $data['is_active']           = $request->boolean('is_active');
-        if ($request->has('is_bundle'))           $data['is_bundle']           = $request->boolean('is_bundle');
-        if ($request->has('has_warranty'))        $data['has_warranty']        = $request->boolean('has_warranty');
-        if ($request->has('track_expiry'))        $data['track_expiry']        = $request->boolean('track_expiry');
-        if ($request->has('courier_delivery'))    $data['courier_delivery']    = $request->boolean('courier_delivery');
-        if ($request->has('loyalty_redeemable'))  $data['loyalty_redeemable']  = $request->boolean('loyalty_redeemable');
+        if ($request->has('is_active'))              $data['is_active']            = $request->boolean('is_active');
+        if ($request->has('is_bundle'))              $data['is_bundle']            = $request->boolean('is_bundle');
+        if ($request->has('has_warranty'))           $data['has_warranty']         = $request->boolean('has_warranty');
+        if ($request->has('track_expiry'))           $data['track_expiry']         = $request->boolean('track_expiry');
+        if ($request->has('courier_delivery'))       $data['courier_delivery']     = $request->boolean('courier_delivery');
+        if ($request->has('loyalty_redeemable'))     $data['loyalty_redeemable']   = $request->boolean('loyalty_redeemable');
+        if ($request->has('is_customer_required'))   $data['is_customer_required'] = $request->boolean('is_customer_required');
+        if ($request->has('is_rental'))              $data['is_rental']            = $request->boolean('is_rental');
+        if ($request->has('is_subscription'))        $data['is_subscription']      = $request->boolean('is_subscription');
+        if ($request->has('item_wise_tax'))          $data['item_wise_tax']        = $request->boolean('item_wise_tax');
+        if ($request->has('item_wise_discount'))     $data['item_wise_discount']   = $request->boolean('item_wise_discount');
 
         $this->productService->update($product, $data);
 

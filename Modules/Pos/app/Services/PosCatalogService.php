@@ -273,6 +273,7 @@ class PosCatalogService
             // Feature flags
             'wholesale_price'    => $product->wholesale_price !== null ? (float) $product->wholesale_price : null,
             'has_warranty'       => (bool) $product->has_warranty,
+            'warranty_duration'  => $product->warranty_duration,
             'track_expiry'       => (bool) $product->track_expiry,
             'courier_delivery'   => (bool) $product->courier_delivery,
             'loyalty_redeemable' => (bool) $product->loyalty_redeemable,

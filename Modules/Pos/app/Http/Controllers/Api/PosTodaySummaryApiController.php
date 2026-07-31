@@ -22,7 +22,7 @@ class PosTodaySummaryApiController extends Controller
         $sales = $business->sales()
             ->where('status', Sale::STATUS_COMPLETED)
             ->where('sold_at', '>=', $today)
-            ->with('items')
+            ->with(['items', 'customer'])
             ->get();
 
         $byMethod = [];
@@ -117,6 +117,27 @@ class PosTodaySummaryApiController extends Controller
         $cogs        = round((float) $allItems->sum(fn ($i) => (float) $i->unit_cost * (float) $i->quantity), 2);
         $grossProfit = round($revenue - $cogs, 2);
 
+        $mapSale = fn ($s) => [
+            'id'              => $s->id,
+            'sale_number'     => $s->sale_number,
+            'total'           => round((float) $s->total, 2),
+            'payment_method'  => $s->payment_method,
+            'sold_at'         => $s->sold_at?->toIso8601String(),
+            'items_count'     => $s->items->count(),
+            'customer_name'   => $s->customer?->name,
+            'credit_due_date' => $s->credit_due_date?->format('Y-m-d'),
+        ];
+
+        $salesByMethod = [];
+        foreach (['cash', 'card', 'credit'] as $method) {
+            $group = $sales->where('payment_method', $method)->sortByDesc('sold_at')->values();
+            $salesByMethod[$method] = [
+                'count' => $group->count(),
+                'total' => round((float) $group->sum('total'), 2),
+                'sales' => $group->map($mapSale)->values()->all(),
+            ];
+        }
+
         return response()->json([
             'data' => [
                 'sales' => [
@@ -133,9 +154,10 @@ class PosTodaySummaryApiController extends Controller
                     'completed'   => $svcRequests->where('status', ServiceRequest::STATUS_COMPLETED)->count(),
                     'list'        => $svcList,
                 ],
-                'top_products' => $topProducts,
-                'top_services' => $topServices,
-                'recent_sales' => $recentSales,
+                'top_products'     => $topProducts,
+                'top_services'     => $topServices,
+                'recent_sales'     => $recentSales,
+                'sales_by_method'  => $salesByMethod,
             ],
         ]);
     }

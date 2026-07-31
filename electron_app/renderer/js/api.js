@@ -97,8 +97,9 @@ const API = (() => {
     todaySummary: () => request('GET', '/today-summary'),
 
     // Sales
-    sales:        (q, limit)          => request('GET',  `/sales?q=${encodeURIComponent(q)}${limit ? '&limit='+limit : ''}`),
-    sale:         (id)                => request('GET',  `/sales/${id}`),
+    sales:          (q, limit)        => request('GET',  `/sales?q=${encodeURIComponent(q)}${limit ? '&limit='+limit : ''}`),
+    sale:           (id)              => request('GET',  `/sales/${id}`),
+    pendingCredits: ()                => request('GET',  '/sales/pending-credits'),
     voidSale:     (id)                => request('POST', `/sales/${id}/void`),
     salesHistory: (params)            => {
       const p = new URLSearchParams();

@@ -217,6 +217,7 @@ class SaleService
         ?int $branchId = null,
         ?string $scheduledAt = null,
         ?int $posCounterId = null,
+        ?string $creditDueDate = null,
     ): Sale {
         $rawProductItems = array_values(array_filter(
             $items,
@@ -246,7 +247,7 @@ class SaleService
         $cartProductIds = array_map(fn ($l) => (int) $l['product']->id, $productLines);
         $activeDiscounts = $this->discountService->activeForProducts($business, $cartProductIds);
 
-        $sale = DB::transaction(function () use ($business, $user, $productLines, $serviceLines, $paymentMethod, $creditAccountId, $amountPaid, $notes, $channel, $discountPercent, $amountTendered, $customerId, $deferSettlement, $branchId, $activeDiscounts, $scheduledAt, $posCounterId) {
+        $sale = DB::transaction(function () use ($business, $user, $productLines, $serviceLines, $paymentMethod, $creditAccountId, $amountPaid, $notes, $channel, $discountPercent, $amountTendered, $customerId, $deferSettlement, $branchId, $activeDiscounts, $scheduledAt, $posCounterId, $creditDueDate) {
             $sale = $business->sales()->create([
                 'branch_id'       => $branchId,
                 'pos_counter_id'  => $posCounterId,
@@ -259,6 +260,7 @@ class SaleService
                     ? $creditAccountId
                     : null,
                 'pos_customer_id' => $customerId,
+                'credit_due_date' => $paymentMethod === Sale::PAYMENT_CREDIT ? $creditDueDate : null,
                 'subtotal' => 0,
                 'total' => 0,
                 'amount_paid' => 0,

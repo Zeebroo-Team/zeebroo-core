@@ -72,6 +72,62 @@ class PosSaleApiController extends Controller
         ]);
     }
 
+    public function pendingCredits(Request $request): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $today    = now()->startOfDay();
+
+        $sales = $business->sales()
+            ->where('payment_method', Sale::PAYMENT_CREDIT)
+            ->where('status', Sale::STATUS_COMPLETED)
+            ->with('customer')
+            ->orderBy('sold_at', 'desc')
+            ->get();
+
+        // Group by customer (null customer → walk-in group)
+        $groups = $sales->groupBy(fn ($s) => $s->pos_customer_id ?? 0);
+
+        $result = $groups->map(function ($group) use ($today) {
+            $first       = $group->first();
+            $totalOwed   = round((float) $group->sum('total'), 2);
+            $overdueAmt  = 0.0;
+            $hasOverdue  = false;
+
+            $salesArr = $group->map(function ($s) use ($today, &$overdueAmt, &$hasOverdue) {
+                $isOverdue = $s->credit_due_date !== null && $s->credit_due_date->lt($today);
+                if ($isOverdue) {
+                    $overdueAmt += (float) $s->total;
+                    $hasOverdue  = true;
+                }
+                return [
+                    'id'              => $s->id,
+                    'sale_number'     => $s->sale_number,
+                    'total'           => round((float) $s->total, 2),
+                    'sold_at'         => $s->sold_at?->toIso8601String(),
+                    'credit_due_date' => $s->credit_due_date?->format('Y-m-d'),
+                    'is_overdue'      => $isOverdue,
+                ];
+            })->values()->all();
+
+            return [
+                'customer_id'    => $first->pos_customer_id,
+                'customer_name'  => $first->customer?->name ?? 'Walk-in / Unknown',
+                'customer_phone' => $first->customer?->phone,
+                'total_owed'     => $totalOwed,
+                'overdue_amount' => round($overdueAmt, 2),
+                'has_overdue'    => $hasOverdue,
+                'sale_count'     => count($salesArr),
+                'sales'          => $salesArr,
+            ];
+        })
+        ->sortByDesc('has_overdue')
+        ->sortByDesc('overdue_amount')
+        ->values()
+        ->all();
+
+        return response()->json(['data' => $result]);
+    }
+
     public function history(Request $request): JsonResponse
     {
         $business = $this->businessOrAbort($request);
