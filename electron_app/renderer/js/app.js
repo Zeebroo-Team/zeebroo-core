@@ -4467,23 +4467,25 @@ async function openUpdateModal() {
     body.innerHTML = `<div style="text-align:center;padding:16px 0">
       <i class="fa fa-triangle-exclamation" style="font-size:28px;color:#f59e0b;margin-bottom:12px;display:block"></i>
       <div style="font-weight:600;margin-bottom:6px">Could not check for updates</div>
-      <div style="font-size:13px;color:var(--text-muted)">Please check your internet connection and try again.</div>
+      <div style="font-size:13px;color:var(--text-muted)">Please check your connection and try again.</div>
     </div>`;
     return;
   }
 
+  const platform = window.electronAPI.platform;
+
+  // No release record exists yet
   if (!release) {
     body.innerHTML = `<div style="text-align:center;padding:16px 0">
-      <i class="fa fa-circle-check" style="font-size:36px;color:#22c55e;margin-bottom:12px;display:block"></i>
-      <div style="font-weight:700;font-size:16px;margin-bottom:6px">You're up to date!</div>
-      <div style="font-size:13px;color:var(--text-muted)">Zeebroo POS <strong>v${escHtml(current)}</strong> is the latest version.</div>
+      <i class="fa fa-circle-info" style="font-size:36px;color:var(--accent);margin-bottom:12px;display:block"></i>
+      <div style="font-weight:700;font-size:16px;margin-bottom:6px">No release info available</div>
+      <div style="font-size:13px;color:var(--text-muted)">Running <strong>v${escHtml(current)}</strong>. No releases have been published yet.</div>
     </div>`;
     return;
   }
 
   const latest    = release.version;
   const hasUpdate = _semverGt(latest, current);
-  const platform  = window.electronAPI.platform;
   const dlUrl     = platform === 'win32'  ? release.windows_url
                   : platform === 'darwin' ? release.macos_url
                   : release.linux_url;
@@ -4503,38 +4505,106 @@ async function openUpdateModal() {
     return;
   }
 
-  body.innerHTML = `
-    <div style="display:flex;align-items:center;gap:14px;margin-bottom:18px">
-      <div style="width:48px;height:48px;border-radius:12px;background:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0">
-        <i class="fa fa-download" style="color:#fff;font-size:20px"></i>
-      </div>
-      <div>
-        <div style="font-weight:700;font-size:16px">Update Available</div>
-        <div style="font-size:13px;color:var(--text-muted);margin-top:2px">Version <strong>v${escHtml(latest)}</strong> is ready to download</div>
-      </div>
-    </div>
-    <div style="background:var(--surface2);border-radius:8px;padding:12px 14px;font-size:13px;margin-bottom:18px">
-      <div style="display:flex;justify-content:space-between;margin-bottom:4px">
-        <span style="color:var(--text-muted)">Current version</span>
-        <span style="font-weight:600">v${escHtml(current)}</span>
-      </div>
-      <div style="display:flex;justify-content:space-between">
-        <span style="color:var(--text-muted)">Latest version</span>
-        <span style="font-weight:600;color:#22c55e">v${escHtml(latest)}</span>
-      </div>
-      ${release.release_date ? `<div style="display:flex;justify-content:space-between;margin-top:4px"><span style="color:var(--text-muted)">Released</span><span>${escHtml(release.release_date)}</span></div>` : ''}
-    </div>
-    ${notes}
-    <div style="display:flex;gap:10px;margin-top:20px;justify-content:flex-end">
-      <button class="po-btn-ghost" onclick="$('#update-modal-overlay').style.display='none'">Later</button>
-      ${dlUrl ? `<button class="po-btn-primary" id="update-download-btn"><i class="fa fa-download"></i> Download v${escHtml(latest)}</button>` : '<span style="font-size:12px;color:var(--text-muted)">No download available for your platform.</span>'}
-    </div>`;
+  // Update available
+  const ext = platform === 'win32' ? 'exe' : platform === 'darwin' ? 'zip' : 'AppImage';
+  const filename = `ZeebrooPOS-${latest}-${platform}.${ext}`;
 
-  if (dlUrl) {
-    $('#update-download-btn')?.addEventListener('click', () => {
-      window.electronAPI.openExternal(dlUrl);
-    });
+  function _renderUpdateAvailable(extraHtml = '') {
+    return `
+      <div style="display:flex;align-items:center;gap:14px;margin-bottom:18px">
+        <div style="width:48px;height:48px;border-radius:12px;background:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          <i class="fa fa-download" style="color:#fff;font-size:20px"></i>
+        </div>
+        <div>
+          <div style="font-weight:700;font-size:16px">Update Available</div>
+          <div style="font-size:13px;color:var(--text-muted);margin-top:2px">Version <strong>v${escHtml(latest)}</strong> is ready to download</div>
+        </div>
+      </div>
+      <div style="background:var(--surface2);border-radius:8px;padding:12px 14px;font-size:13px;margin-bottom:14px">
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+          <span style="color:var(--text-muted)">Installed</span>
+          <span style="font-weight:600">v${escHtml(current)}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between">
+          <span style="color:var(--text-muted)">New version</span>
+          <span style="font-weight:700;color:#22c55e">v${escHtml(latest)}</span>
+        </div>
+        ${release.release_date ? `<div style="display:flex;justify-content:space-between;margin-top:4px"><span style="color:var(--text-muted)">Released</span><span>${escHtml(release.release_date)}</span></div>` : ''}
+      </div>
+      ${notes}
+      ${extraHtml}`;
   }
+
+  body.innerHTML = _renderUpdateAvailable(`
+    <div style="display:flex;gap:10px;margin-top:18px;justify-content:flex-end">
+      <button class="po-btn-ghost" onclick="$('#update-modal-overlay').style.display='none'">Later</button>
+      ${dlUrl
+        ? `<button class="po-btn-primary" id="update-download-btn"><i class="fa fa-download"></i> Download &amp; Install v${escHtml(latest)}</button>`
+        : `<span style="font-size:12px;color:var(--text-muted)">No download available for your platform.</span>`}
+    </div>`);
+
+  if (!dlUrl) return;
+
+  $('#update-download-btn')?.addEventListener('click', async () => {
+    // Progress UI
+    body.innerHTML = _renderUpdateAvailable(`
+      <div style="margin-top:18px">
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-muted);margin-bottom:6px">
+          <span>Downloading v${escHtml(latest)}…</span>
+          <span id="upd-pct">0%</span>
+        </div>
+        <div style="background:var(--surface2);border-radius:6px;height:8px;overflow:hidden">
+          <div id="upd-bar" style="height:100%;background:var(--accent);width:0%;transition:width .2s;border-radius:6px"></div>
+        </div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:8px" id="upd-status">Starting download…</div>
+      </div>`);
+
+    // Wire progress
+    const offProgress = window.electronAPI.onDownloadProgress(pct => {
+      const bar = $('#upd-bar');
+      const pctEl = $('#upd-pct');
+      if (bar) bar.style.width = pct + '%';
+      if (pctEl) pctEl.textContent = pct + '%';
+    });
+
+    const result = await window.electronAPI.downloadUpdate({ url: dlUrl, filename });
+
+    if (result?.error) {
+      body.innerHTML = _renderUpdateAvailable(`
+        <div style="margin-top:14px;padding:10px 12px;background:#fef2f2;border-radius:8px;color:#b91c1c;font-size:13px">
+          <i class="fa fa-circle-exclamation"></i> Download failed: ${escHtml(result.error)}
+          <div style="margin-top:10px;display:flex;justify-content:flex-end;gap:8px">
+            <button class="po-btn-ghost" onclick="$('#update-modal-overlay').style.display='none'">Close</button>
+            <button class="po-btn-primary" id="update-download-btn"><i class="fa fa-rotate-right"></i> Retry</button>
+          </div>
+        </div>`);
+      // Re-wire retry
+      $('#update-download-btn')?.addEventListener('click', () => openUpdateModal());
+      return;
+    }
+
+    if (result?.path) {
+      const isWin = platform === 'win32';
+      const isMac = platform === 'darwin';
+      body.innerHTML = _renderUpdateAvailable(`
+        <div style="margin-top:14px;padding:12px 14px;background:#f0fdf4;border-radius:8px;color:#15803d;font-size:13px">
+          <i class="fa fa-circle-check"></i> <strong>Download complete!</strong>
+          <div style="color:var(--text-muted);margin-top:4px;font-size:11px;word-break:break-all">${escHtml(result.path)}</div>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:14px;justify-content:flex-end">
+          <button class="po-btn-ghost" id="upd-show-folder"><i class="fa fa-folder-open"></i> Show in Folder</button>
+          <button class="po-btn-primary" id="upd-install-btn"><i class="fa fa-bolt"></i> ${isWin ? 'Run Installer' : 'Open'}</button>
+        </div>`);
+
+      $('#upd-show-folder')?.addEventListener('click', () => {
+        window.electronAPI.showInFolder(result.path);
+      });
+      $('#upd-install-btn')?.addEventListener('click', async () => {
+        await window.electronAPI.openPath(result.path);
+        if (isWin) setTimeout(() => window.electronAPI.quit?.(), 1500);
+      });
+    }
+  });
 }
 $('#tpm-logout').addEventListener('click', async () => {
   closeProfileMenu();
@@ -4703,7 +4773,7 @@ $$('.ribbon-tab').forEach(tab => {
 });
 
 // ── Quick Access Toolbar stubs ─────────────────────────────────────────────
-$('#qat-save').addEventListener('click', () => toast('Saved', 'success'));
+$('#qat-restart').addEventListener('click', () => window.electronAPI.restartApp());
 $('#qat-undo').addEventListener('click', () => toast('Nothing to undo', 'info'));
 $('#qat-redo').addEventListener('click', () => toast('Nothing to redo', 'info'));
 
@@ -7227,8 +7297,10 @@ function _poRenderDetail(po) {
                                actions.push(`<button class="po-dv-action-btn primary" data-po-action="receive"><i class="fa fa-truck-ramp-box"></i> Receive Goods</button>`);
   if (po.status !== 'cancelled' && po.status !== 'received')
                                actions.push(`<button class="po-dv-action-btn danger" data-po-action="cancel"><i class="fa fa-ban"></i> Cancel</button>`);
+  actions.push(`<button class="po-dv-action-btn" data-po-action="print"><i class="fa fa-print"></i> Print</button>`);
   $('#po-dv-actions').innerHTML = actions.join('');
   $('#po-dv-actions').querySelectorAll('[data-po-action]').forEach(btn => {
+    if (btn.dataset.poAction === 'print') { btn.addEventListener('click', () => _poPrint(po)); return; }
     btn.addEventListener('click', () => _poAction(po.id, btn.dataset.poAction));
   });
 
@@ -7249,6 +7321,11 @@ function _poRenderDetail(po) {
   const notesEl = $('#po-dv-notes');
   if (po.notes) { notesEl.textContent = po.notes; notesEl.style.display = 'block'; }
   else           { notesEl.style.display = 'none'; }
+}
+
+async function _poPrint(po) {
+  const lhFull = await _fetchLetterhead();
+  await window.electronAPI.openPoPrint({ po, letterhead: lhFull, currency: state.currency });
 }
 
 async function _poAction(id, action) {
@@ -7722,6 +7799,11 @@ function _grnRenderDetail(g) {
     payBtn.addEventListener('click', () => _grnOpenPayModal(g.id, g));
     actDiv.appendChild(payBtn);
   }
+  const printBtn = document.createElement('button');
+  printBtn.className = 'po-dv-action-btn';
+  printBtn.innerHTML = '<i class="fa fa-print"></i> Print';
+  printBtn.addEventListener('click', () => _grnPrint(g));
+  actDiv.appendChild(printBtn);
 
   // Summary cards
   $('#grn-dv-summary').innerHTML = `
@@ -7766,6 +7848,11 @@ function _grnRenderDetail(g) {
     : '';
 
   _grnShowDetail(true);
+}
+
+async function _grnPrint(g) {
+  const lhFull = await _fetchLetterhead();
+  await window.electronAPI.openGrnPrint({ grn: g, letterhead: lhFull, currency: state.currency });
 }
 
 // ── Create GRN Modal ──────────────────────────────────────────────────────
@@ -9228,7 +9315,7 @@ function _barcodeRenderList() {
       if (e.target.closest('.bc-chk-wrap')) return;
       const pid = row.dataset.pid;
       const p   = _bc.products.find(x => String(x.id) === pid);
-      if (p) _bcOpenBatchPicker(p.id, p.name, p.sku || '');
+      if (p) _bcOpenBatchPicker(p.id, p.name, p.sku || '', p.stock_quantity, p.unit_sell_price);
     });
   });
 }
@@ -9259,7 +9346,7 @@ function _barcodePrint() {
 $('#bc-batch-close')?.addEventListener('click', () => { $('#bc-batch-modal').style.display = 'none'; });
 $('#bc-batch-modal')?.addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.style.display = 'none'; });
 
-async function _bcOpenBatchPicker(productId, productName, productSku) {
+async function _bcOpenBatchPicker(productId, productName, productSku, productQty, productSellPrice) {
   const modal   = $('#bc-batch-modal');
   const loading = $('#bc-batch-loading');
   const list    = $('#bc-batch-list');
@@ -9273,13 +9360,33 @@ async function _bcOpenBatchPicker(productId, productName, productSku) {
   const res = await API.productStockHistory(productId);
   loading.style.display = 'none';
 
-  if (res.status !== 200 || !res.body?.data?.length) {
+  let batches = res.status === 200 ? (res.body?.data ?? []) : [];
+
+  // No stock layers → product has opening stock set directly (no GRN/manual layer exists yet).
+  // Synthesise a single opening-stock entry so the user can still print a barcode.
+  if (!batches.length) {
+    const qty = parseFloat(productQty) || 0;
+    const sell = parseFloat(productSellPrice) || null;
+    batches = [{
+      id:                  null,
+      batch_sku:           productSku || null,
+      received_at:         null,
+      quantity_received:   qty,
+      quantity_remaining:  qty,
+      unit_cost:           null,
+      selling_unit_price:  sell,
+      wholesale_unit_price: null,
+      source_type:         'opening',
+      grn_number:          null,
+      po_number:           null,
+    }];
+  }
+
+  if (!batches.length) {
     list.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-muted)"><i class="fa fa-inbox"></i><p style="margin-top:8px">No stock batches found</p></div>`;
     list.style.display = '';
     return;
   }
-
-  const batches = res.body.data;
   const cur     = state.currency || '';
 
   list.innerHTML = batches.map(h => {
@@ -9361,7 +9468,13 @@ function _bcRenderPreview(items, cols) {
   requestAnimationFrame(() => {
     sheet.querySelectorAll('.bc-psvg').forEach(svg => {
       const code = svg.dataset.code;
-      if (!code) return;
+      if (!code) {
+        const fb = document.createElement('div');
+        fb.style.cssText = 'font-size:9px;text-align:center;color:#ef4444;padding:6px 0';
+        fb.textContent = 'No SKU';
+        svg.replaceWith(fb);
+        return;
+      }
       try {
         JsBarcode(svg, code, { format: 'CODE128', width: 1.5, height: 48, displayValue: false, margin: 4 });
       } catch (e) {
@@ -14563,11 +14676,9 @@ $('#pos-to-quote')?.addEventListener('click', () => {
   setTimeout(() => _qtOpenForm(null, prefill), 80);
 });
 
-$('#pos-to-sales-order')?.addEventListener('click', async () => {
-  const tab = activeTab();
-  if (!tab || !tab.cart.length) { toast('Cart is empty', 'info'); return; }
-
-  if (!tab._customer?.id) {
+// ── Sales Order confirmation modal ─────────────────────────────────────────
+(function () {
+  function _soRequireCustomer(tab) {
     toast('A customer is required to create a sales order', 'error');
     const bar = $('#cart-customer-bar');
     if (bar) {
@@ -14576,35 +14687,100 @@ $('#pos-to-sales-order')?.addEventListener('click', async () => {
       bar.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       setTimeout(() => { bar.style.outline = ''; bar.style.borderRadius = ''; }, 2000);
     }
-    return;
   }
 
-  const btn = $('#pos-to-sales-order');
-  btn.disabled = true;
-  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i>';
+  function _soOpenConfirm(tab) {
+    const cur = state.currency || '';
+    // Populate customer line
+    $('#so-confirm-customer').textContent = tab._customer?.name
+      ? `Customer: ${tab._customer.name}`
+      : 'Customer: —';
 
-  const body = {
-    customer_id:  tab._customer.id,
-    order_date:   new Date().toISOString().slice(0, 10),
-    items: tab.cart.map(i => ({
-      description: i.name,
-      quantity:    i.qty,
-      unit_price:  i._basePrice ?? i.price,
-    })),
-  };
+    // Populate items table
+    let subtotal = 0;
+    $('#so-confirm-rows').innerHTML = tab.cart.map(i => {
+      const price = i._basePrice ?? i.price ?? 0;
+      const line  = Math.round(price * i.qty * 100) / 100;
+      subtotal   += line;
+      const qtyStr = i.qty % 1 === 0 ? i.qty : i.qty.toFixed(3).replace(/\.?0+$/, '');
+      return `<tr>
+        <td>${escHtml(i.name)}</td>
+        <td class="r">${qtyStr}</td>
+        <td class="r">${cur}${price.toFixed(2)}</td>
+        <td class="r">${cur}${line.toFixed(2)}</td>
+      </tr>`;
+    }).join('');
 
-  const res = await API.createSalesOrder(body);
+    $('#so-confirm-total').textContent = cur + subtotal.toFixed(2);
 
-  btn.disabled = false;
-  btn.innerHTML = '<i class="fa fa-box"></i> Sales Order';
+    // Reset optional fields
+    $('#so-confirm-delivery').value = '';
+    $('#so-confirm-notes').value    = '';
 
-  if (res.status === 201) {
-    const orderNum = res.body?.data?.order_number || 'Sales Order';
-    toast(`${orderNum} created`, 'success');
-  } else {
-    toast(res.body?.message || 'Failed to create sales order', 'error');
+    $('#so-confirm-modal').style.display = 'flex';
+    $('#so-confirm-delivery').focus();
   }
-});
+
+  $('#pos-to-sales-order')?.addEventListener('click', () => {
+    const tab = activeTab();
+    if (!tab || !tab.cart.length) { toast('Cart is empty', 'info'); return; }
+    if (!tab._customer?.id) { _soRequireCustomer(tab); return; }
+    _soOpenConfirm(tab);
+  });
+
+  function _soClose() {
+    $('#so-confirm-modal').style.display = 'none';
+  }
+
+  $('#so-confirm-close')?.addEventListener('click',  _soClose);
+  $('#so-confirm-cancel')?.addEventListener('click', _soClose);
+  $('#so-confirm-modal')?.addEventListener('click', e => {
+    if (e.target === e.currentTarget) _soClose();
+  });
+
+  $('#so-confirm-submit')?.addEventListener('click', async () => {
+    const tab = activeTab();
+    if (!tab || !tab.cart.length) { _soClose(); return; }
+    if (!tab._customer?.id) { _soClose(); _soRequireCustomer(tab); return; }
+
+    const submitBtn = $('#so-confirm-submit');
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Creating…';
+
+    const delivery = $('#so-confirm-delivery').value || null;
+    const notes    = $('#so-confirm-notes').value.trim() || null;
+
+    const body = {
+      customer_id:           tab._customer.id,
+      order_date:            new Date().toISOString().slice(0, 10),
+      expected_delivery_date: delivery,
+      notes,
+      items: tab.cart.map(i => ({
+        description: i.name,
+        quantity:    i.qty,
+        unit_price:  i._basePrice ?? i.price,
+      })),
+    };
+
+    const res = await API.createSalesOrder(body);
+
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = '<i class="fa fa-check"></i> Confirm &amp; Create Order';
+
+    if (res.status === 201) {
+      const orderNum = res.body?.data?.order_number || 'Sales Order';
+      _soClose();
+      // Clear cart and customer
+      tab.cart      = [];
+      tab._customer = null;
+      renderCart();
+      renderPosTabBar();
+      toast(`${orderNum} created — cart cleared`, 'success');
+    } else {
+      toast(res.body?.message || 'Failed to create sales order', 'error');
+    }
+  });
+}());
 
 // ── Checkout ───────────────────────────────────────────────────────────────
 let _coSubtotal = 0; // base subtotal before discount

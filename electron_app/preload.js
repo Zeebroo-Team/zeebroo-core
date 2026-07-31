@@ -26,7 +26,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   fetchJson:       (url)                => ipcRenderer.invoke('fetch-json', url),
   apiUpload:       (apiPath, filePath)  => ipcRenderer.invoke('api-upload', { path: apiPath, filePath }),
   showOpenDialog:  (options)            => ipcRenderer.invoke('show-open-dialog', options),
-  checkForUpdate:  ()                   => ipcRenderer.invoke('check-for-update'),
+  checkForUpdate:   ()                    => ipcRenderer.invoke('check-for-update'),
+  downloadUpdate:   (opts)               => ipcRenderer.invoke('download-update', opts),
+  onDownloadProgress: (cb)              => ipcRenderer.on('download-progress', (_e, pct) => cb(pct)),
+  openPath:         (p)                  => ipcRenderer.invoke('open-path', p),
+  showInFolder:     (p)                  => ipcRenderer.invoke('show-in-folder', p),
+  restartApp:       ()                   => ipcRenderer.invoke('restart-app'),
   openExternal:    (url)                => ipcRenderer.invoke('open-external', url),
 
   // Design Studio editor window
@@ -44,6 +49,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openQuotePrint:    (data) => ipcRenderer.invoke('open-quote-print', data),
   getQuotePrintData: ()     => ipcRenderer.invoke('get-quote-print-data'),
   onQuotePrintRefresh: (cb) => ipcRenderer.on('quote-print-refresh', (_e, data) => cb(data)),
+
+  // Purchase Order print window
+  openPoPrint:       (data) => ipcRenderer.invoke('open-po-print', data),
+  getPoPrintData:    ()     => ipcRenderer.invoke('get-po-print-data'),
+  onPoPrintRefresh:  (cb)   => ipcRenderer.on('po-print-refresh', (_e, data) => cb(data)),
+
+  // Goods Receive Note print window
+  openGrnPrint:      (data) => ipcRenderer.invoke('open-grn-print', data),
+  getGrnPrintData:   ()     => ipcRenderer.invoke('get-grn-print-data'),
+  onGrnPrintRefresh: (cb)   => ipcRenderer.on('grn-print-refresh', (_e, data) => cb(data)),
 
   // Kitchen Display window
   openKds:          ()       => ipcRenderer.invoke('open-kds'),

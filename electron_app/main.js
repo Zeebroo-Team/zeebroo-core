@@ -114,7 +114,11 @@ ipcMain.handle('config-get', () => ({ ...config, api_base_url: API_BASE_URL, app
 ipcMain.handle('open-external', (_e, url) => shell.openExternal(url));
 ipcMain.handle('check-for-update', () => new Promise(resolve => {
   const https = require('https');
-  https.get('https://zeebroo.com/api/releases/latest', { headers: { Accept: 'application/json' } }, res => {
+  const http  = require('http');
+  const base  = API_BASE_URL.replace(/\/$/, '');
+  const url   = new URL(base + '/api/releases/latest');
+  const lib   = url.protocol === 'https:' ? https : http;
+  lib.get(url.toString(), { headers: { Accept: 'application/json' } }, res => {
     let d = '';
     res.on('data', c => { d += c; });
     res.on('end', () => {
@@ -123,6 +127,53 @@ ipcMain.handle('check-for-update', () => new Promise(resolve => {
     });
   }).on('error', () => resolve({ status: 0, body: null }));
 }));
+
+// ── Update download with progress ─────────────────────────────────────────
+ipcMain.handle('download-update', async (_e, { url, filename }) => {
+  const https  = require('https');
+  const http   = require('http');
+  const os     = require('os');
+
+  const dest = path.join(app.getPath('downloads'), filename);
+  const lib  = url.startsWith('https') ? https : http;
+
+  return new Promise((resolve) => {
+    const file = fs.createWriteStream(dest);
+
+    const request = lib.get(url, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        // Follow redirect
+        file.close(() => fs.unlink(dest, () => {}));
+        ipcMain.emit('download-update', _e, { url: res.headers.location, filename });
+        resolve(null); // caller retries via redirect — handled client-side
+        return;
+      }
+      const total = parseInt(res.headers['content-length'] || '0', 10);
+      let received = 0;
+      res.on('data', chunk => {
+        received += chunk.length;
+        if (total > 0) {
+          const pct = Math.round((received / total) * 100);
+          _e.sender.send('download-progress', pct);
+        }
+        file.write(chunk);
+      });
+      res.on('end', () => {
+        file.end();
+        resolve({ path: dest });
+      });
+    });
+
+    request.on('error', (err) => {
+      file.close(() => fs.unlink(dest, () => {}));
+      resolve({ error: err.message });
+    });
+  });
+});
+
+ipcMain.handle('open-path', (_e, filePath) => shell.openPath(filePath));
+ipcMain.handle('show-in-folder', (_e, filePath) => shell.showItemInFolder(filePath));
+ipcMain.handle('restart-app', () => { app.relaunch(); app.exit(0); });
 ipcMain.handle('config-set', (_e, patch) => {
   config = { ...config, ...patch };
   saveConfig(config);
@@ -590,6 +641,84 @@ ipcMain.handle('open-quote-print', (_e, data) => {
 });
 
 ipcMain.handle('get-quote-print-data', () => printQuoteData);
+
+// ── Purchase Order print window ───────────────────────────────────────────
+let printPoWindow = null;
+let printPoData   = null;
+
+ipcMain.handle('open-po-print', (_e, data) => {
+  printPoData = data;
+
+  if (printPoWindow && !printPoWindow.isDestroyed()) {
+    printPoWindow.webContents.send('po-print-refresh', data);
+    printPoWindow.focus();
+    return;
+  }
+
+  printPoWindow = new BrowserWindow({
+    width:     860,
+    height:    1060,
+    minWidth:  600,
+    minHeight: 700,
+    title:     'Print Purchase Order',
+    webPreferences: {
+      preload:          path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration:  false,
+      sandbox:          false,
+    },
+    show: false,
+  });
+
+  printPoWindow.loadFile(path.join(__dirname, 'renderer', 'print-po.html'));
+  printPoWindow.once('ready-to-show', () => { printPoWindow.show(); });
+  printPoWindow.webContents.on('console-message', (_e, level, msg) => {
+    const prefix = ['VERBOSE','INFO','WARN','ERROR'][level] || level;
+    console.log(`[print-po:${prefix}] ${msg}`);
+  });
+  printPoWindow.on('closed', () => { printPoWindow = null; printPoData = null; });
+});
+
+ipcMain.handle('get-po-print-data', () => printPoData);
+
+// ── Goods Receive Note print window ──────────────────────────────────────
+let printGrnWindow = null;
+let printGrnData   = null;
+
+ipcMain.handle('open-grn-print', (_e, data) => {
+  printGrnData = data;
+
+  if (printGrnWindow && !printGrnWindow.isDestroyed()) {
+    printGrnWindow.webContents.send('grn-print-refresh', data);
+    printGrnWindow.focus();
+    return;
+  }
+
+  printGrnWindow = new BrowserWindow({
+    width:     860,
+    height:    1060,
+    minWidth:  600,
+    minHeight: 700,
+    title:     'Print Goods Receive Note',
+    webPreferences: {
+      preload:          path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration:  false,
+      sandbox:          false,
+    },
+    show: false,
+  });
+
+  printGrnWindow.loadFile(path.join(__dirname, 'renderer', 'print-grn.html'));
+  printGrnWindow.once('ready-to-show', () => { printGrnWindow.show(); });
+  printGrnWindow.webContents.on('console-message', (_e, level, msg) => {
+    const prefix = ['VERBOSE','INFO','WARN','ERROR'][level] || level;
+    console.log(`[print-grn:${prefix}] ${msg}`);
+  });
+  printGrnWindow.on('closed', () => { printGrnWindow = null; printGrnData = null; });
+});
+
+ipcMain.handle('get-grn-print-data', () => printGrnData);
 
 // ── Kitchen Display window ────────────────────────────────────────────────
 ipcMain.handle('open-kds', () => {

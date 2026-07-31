@@ -1361,3 +1361,32 @@ li strong { color: var(--text); }
 .module-card-title { font-size: 14.5px; font-weight: 700; color: var(--text); margin-bottom: 4px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .module-card-desc { font-size: 12.5px; color: var(--text-muted); line-height: 1.5; }
 @media (max-width: 860px) { .module-grid { grid-template-columns: 1fr; } }
+
+/* ── Group divider (single-page version: marks the start of a resource group) ── */
+.group-divider {
+  margin: 56px 0 32px;
+  padding-top: 36px;
+  border-top: 3px solid var(--accent-bright);
+  scroll-margin-top: 64px;
+}
+.group-divider-label {
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.group-divider-title {
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -.03em;
+  margin: 6px 0 8px;
+  color: var(--text);
+}
+.group-divider-desc {
+  font-size: 14px;
+  color: var(--text-muted);
+  max-width: 640px;
+  line-height: 1.6;
+}

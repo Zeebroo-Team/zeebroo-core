@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Print Goods Receive Note</title>
+<link rel="icon" type="image/x-icon" href="favicons/favicon.ico">
+<style>
+@page { size: A4; margin: 0; }
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: Inter, -apple-system, BlinkMacSystemFont, Arial, sans-serif;
+  font-size: 12px;
+  background: #f0f2f5;
+  color: #0f172a;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+/* ── Loading overlay ── */
+#pgrn-loading {
+  position: fixed; inset: 0;
+  display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 12px;
+  background: #fff; z-index: 999;
+  font-size: 14px; font-weight: 600; color: #64748b;
+}
+.pgrn-spinner {
+  width: 36px; height: 36px; border-radius: 50%;
+  border: 3px solid #e2e8f0; border-top-color: #10b981;
+  animation: pgrnSpin .8s linear infinite;
+}
+@keyframes pgrnSpin { to { transform: rotate(360deg); } }
+
+/* ── Screen wrapper ── */
+.pgrn-screen-wrap {
+  display: flex; justify-content: center; align-items: flex-start;
+  padding: 24px; padding-top: 84px;
+  min-height: 100vh;
+  background: #e5e7eb;
+}
+
+/* ── A4 page ── */
+.pgrn-page {
+  position: relative;
+  width: 794px; min-height: 1123px;
+  background: #fff;
+  box-shadow: 0 4px 24px rgba(0,0,0,.15);
+  flex-shrink: 0; overflow: hidden;
+}
+.pgrn-lh-img {
+  position: absolute; top: 0; left: 0;
+  width: 794px; height: 1123px;
+  object-fit: cover; display: block; pointer-events: none;
+}
+.pgrn-content {
+  position: relative; z-index: 1;
+  padding: var(--ct, 52px) 52px var(--cb, 52px);
+  min-height: 1123px;
+}
+
+/* ── GRN header ── */
+.pgrn-hdr {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  margin-bottom: 22px; padding-bottom: 16px;
+  border-bottom: 2px solid #10b981;
+}
+.pgrn-hdr-num  { font-size: 22px; font-weight: 800; color: #10b981; line-height: 1.1; }
+.pgrn-hdr-type {
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .12em; color: #94a3b8; margin-top: 4px;
+}
+.pgrn-badge {
+  font-size: 10px; font-weight: 700;
+  padding: 5px 12px; border-radius: 6px;
+  text-transform: uppercase; letter-spacing: .06em;
+  display: inline-block; margin-top: 4px;
+}
+.pgrn-badge-paid_full  { background: #dcfce7; color: #15803d; }
+.pgrn-badge-partial    { background: #fef3c7; color: #b45309; }
+.pgrn-badge-unpaid     { background: #fee2e2; color: #b91c1c; }
+.pgrn-badge-no_amount  { background: #f1f5f9; color: #64748b; }
+.pgrn-badge-credit     { background: #ede9fe; color: #6d28d9; }
+
+/* ── Info grid ── */
+.pgrn-info {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 24px; margin-bottom: 22px;
+}
+.pgrn-lbl {
+  font-size: 9px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .11em; color: #94a3b8; margin-bottom: 6px;
+}
+.pgrn-supplier-name { font-size: 14px; font-weight: 700; color: #0f172a; }
+.pgrn-supplier-sub  { font-size: 11px; color: #64748b; margin-top: 3px; }
+.pgrn-meta-row {
+  display: flex; justify-content: space-between;
+  font-size: 11px; color: #64748b;
+  padding: 5px 0; border-bottom: 1px dashed #e2e8f0;
+}
+.pgrn-meta-row:last-child { border-bottom: none; }
+.pgrn-meta-row strong { color: #0f172a; font-weight: 600; }
+
+/* ── Section label ── */
+.pgrn-section-lbl {
+  font-size: 9px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .1em; color: #94a3b8;
+  margin-bottom: 8px; margin-top: 18px;
+}
+.pgrn-section-lbl:first-of-type { margin-top: 4px; }
+
+/* ── Items table ── */
+.pgrn-table { width: 100%; border-collapse: collapse; margin-bottom: 4px; }
+.pgrn-table thead th {
+  font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em;
+  color: #475569; background: #f0fdf4;
+  padding: 8px 10px; border: 1px solid #e2e8f0; text-align: left;
+}
+.pgrn-table thead th.r { text-align: right; }
+.pgrn-table tbody td {
+  font-size: 11px; color: #334155;
+  padding: 8px 10px; border: 1px solid #e2e8f0;
+}
+.pgrn-table tbody tr:nth-child(even) td { background: #f8fafc; }
+.pgrn-table td.n     { color: #94a3b8; text-align: center; width: 30px; font-size: 10px; }
+.pgrn-table td.r     { text-align: right; }
+.pgrn-table td.muted { font-size: 10px; color: #94a3b8; }
+.pgrn-table td.bd    { font-weight: 700; }
+
+/* ── Totals ── */
+.pgrn-totals-wrap { display: flex; justify-content: flex-end; margin: 12px 0 4px; }
+.pgrn-totals { width: 280px; }
+.pgrn-total-row {
+  display: flex; justify-content: space-between;
+  font-size: 11px; color: #475569;
+  padding: 5px 0; border-bottom: 1px solid #f1f5f9;
+}
+.pgrn-total-row.grand {
+  font-size: 15px; font-weight: 800; color: #0f172a;
+  border-top: 2px solid #10b981; border-bottom: none;
+  padding-top: 10px; margin-top: 4px;
+}
+.pgrn-total-row.grand span:last-child { color: #10b981; }
+.pgrn-total-row.paid    { color: #15803d; }
+.pgrn-total-row.owed    { color: #b91c1c; font-weight: 600; }
+
+/* ── Payments table ── */
+.pgrn-pay-table { width: 100%; border-collapse: collapse; }
+.pgrn-pay-table th {
+  font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em;
+  color: #475569; background: #f8fafc;
+  padding: 6px 10px; border: 1px solid #e2e8f0; text-align: left;
+}
+.pgrn-pay-table th.r { text-align: right; }
+.pgrn-pay-table td {
+  font-size: 11px; color: #334155;
+  padding: 6px 10px; border: 1px solid #e2e8f0;
+}
+.pgrn-pay-table td.r { text-align: right; font-weight: 600; color: #15803d; }
+
+/* ── Notes ── */
+.pgrn-notes { margin-top: 18px; border-top: 1px solid #e2e8f0; padding-top: 14px; }
+.pgrn-notes-lbl  { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: #94a3b8; margin-bottom: 6px; }
+.pgrn-notes-body { font-size: 11px; color: #475569; line-height: 1.65; white-space: pre-wrap; }
+
+/* ── Top bar (screen only) ── */
+.pgrn-topbar {
+  position: fixed; top: 0; left: 0; right: 0;
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 16px;
+  background: #fff; border-bottom: 1px solid #e2e8f0;
+  z-index: 200;
+}
+.pgrn-topbar-title { font-size: 14px; font-weight: 700; color: #0f172a; flex: 1; }
+.pgrn-print-btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 8px 18px; font-size: 13px; font-weight: 600;
+  background: #10b981; color: #fff;
+  border: none; border-radius: 8px; cursor: pointer; font-family: inherit;
+}
+.pgrn-print-btn:hover { opacity: .88; }
+.pgrn-close-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 14px; font-size: 13px; font-weight: 600;
+  background: #f1f5f9; color: #475569;
+  border: 1px solid #e2e8f0; border-radius: 8px; cursor: pointer; font-family: inherit;
+}
+.pgrn-close-btn:hover { background: #e2e8f0; }
+
+@media print {
+  #pgrn-loading, .pgrn-topbar {
+    display: none !important; position: static !important;
+    height: 0 !important; width: 0 !important; overflow: hidden !important;
+  }
+  body { background: transparent !important; }
+  .pgrn-screen-wrap {
+    display: block !important; padding: 0 !important; margin: 0 !important;
+    min-height: 0 !important; background: transparent !important;
+  }
+  .pgrn-page {
+    box-shadow: none !important; width: 794px; min-height: 1123px;
+    overflow: visible !important; break-before: avoid;
+  }
+}
+</style>
+</head>
+<body>
+
+<div id="pgrn-loading">
+  <div class="pgrn-spinner"></div>
+  Preparing layout…
+</div>
+
+<div class="pgrn-topbar" id="pgrn-topbar" style="display:none">
+  <span class="pgrn-topbar-title" id="pgrn-topbar-title">Goods Receive Note</span>
+  <button class="pgrn-close-btn" onclick="window.close()">Close</button>
+  <button class="pgrn-print-btn" onclick="window.print()">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+    Print / Save PDF
+  </button>
+</div>
+
+<div class="pgrn-screen-wrap" id="pgrn-screen-wrap" style="display:none">
+  <div class="pgrn-page" id="pgrn-page">
+    <div id="pgrn-lh-wrap" style="display:none">
+      <img id="pgrn-lh-img" class="pgrn-lh-img" alt="">
+    </div>
+    <div class="pgrn-content" id="pgrn-content"></div>
+  </div>
+</div>
+
+<script src="js/fabric.min.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  function escH(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function fmtDate(d) {
+    if (!d) return '—';
+    return new Date(d + 'T00:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
+  }
+
+  function buildGrnHtml(g, cur) {
+    // Payment status badge
+    var payStatus = g.payment_status || 'unpaid';
+    if (g.payment_method === 'credit') payStatus = 'credit';
+    var badgeCls = 'pgrn-badge-' + payStatus;
+    var badgeLbl = g.payment_status_label || payStatus;
+
+    // Items rows
+    var itemRows = (g.items || []).map(function (it, i) {
+      var qty = parseFloat(it.quantity_received);
+      var qtyStr = qty % 1 === 0 ? String(Math.round(qty)) : qty.toFixed(3).replace(/\.?0+$/, '');
+      return '<tr>'
+        + '<td class="n">' + (i + 1) + '</td>'
+        + '<td class="bd">' + escH(it.product_name || '—') + '</td>'
+        + '<td class="muted">' + escH(it.sku || '—') + '</td>'
+        + '<td class="r">' + qtyStr + '</td>'
+        + '<td class="r">' + cur + parseFloat(it.unit_cost).toFixed(2) + '</td>'
+        + '<td class="r bd">' + cur + parseFloat(it.line_total).toFixed(2) + '</td>'
+        + '</tr>';
+    }).join('');
+
+    // Totals
+    var subtotal    = parseFloat(g.subtotal    || g.total || 0);
+    var total       = parseFloat(g.total       || 0);
+    var amountPaid  = parseFloat(g.amount_paid || 0);
+    var outstanding = parseFloat(g.amount_outstanding || 0);
+
+    var totalsHtml = '<div class="pgrn-total-row"><span>Subtotal</span><span>' + cur + subtotal.toFixed(2) + '</span></div>'
+      + '<div class="pgrn-total-row grand"><span>Total</span><span>' + cur + total.toFixed(2) + '</span></div>';
+
+    if (g.payment_method !== 'credit') {
+      totalsHtml += '<div class="pgrn-total-row paid"><span>Amount Paid</span><span>' + cur + amountPaid.toFixed(2) + '</span></div>';
+      if (outstanding > 0) {
+        totalsHtml += '<div class="pgrn-total-row owed"><span>Outstanding</span><span>' + cur + outstanding.toFixed(2) + '</span></div>';
+      }
+    }
+
+    // Payments table
+    var paymentsHtml = '';
+    var payments = g.payments || [];
+    if (payments.length) {
+      paymentsHtml = '<div class="pgrn-section-lbl">Payment History</div>'
+        + '<table class="pgrn-pay-table"><thead><tr>'
+        + '<th>Date</th><th>Account</th><th class="r">Amount</th>'
+        + '</tr></thead><tbody>'
+        + payments.map(function (p) {
+            return '<tr>'
+              + '<td>' + escH(fmtDate(p.date)) + '</td>'
+              + '<td>' + escH(p.account || '—') + '</td>'
+              + '<td class="r">' + cur + parseFloat(p.amount).toFixed(2) + '</td>'
+              + '</tr>';
+          }).join('')
+        + '</tbody></table>';
+    }
+
+    return ''
+      + '<div class="pgrn-hdr">'
+        + '<div>'
+          + '<div class="pgrn-hdr-num">' + escH(g.grn_number) + '</div>'
+          + '<div class="pgrn-hdr-type">Goods Receive Note</div>'
+        + '</div>'
+        + '<span class="pgrn-badge ' + badgeCls + '">' + escH(badgeLbl) + '</span>'
+      + '</div>'
+
+      + '<div class="pgrn-info">'
+        + '<div>'
+          + '<div class="pgrn-lbl">Supplier</div>'
+          + '<div class="pgrn-supplier-name">' + escH(g.supplier_name || '— No Supplier —') + '</div>'
+          + (g.po_number  ? '<div class="pgrn-supplier-sub">PO: ' + escH(g.po_number) + '</div>'   : '')
+          + (g.reference  ? '<div class="pgrn-supplier-sub">Ref: ' + escH(g.reference) + '</div>' : '')
+        + '</div>'
+        + '<div>'
+          + '<div class="pgrn-meta-row"><span>Received Date</span><strong>' + fmtDate(g.received_date) + '</strong></div>'
+          + '<div class="pgrn-meta-row"><span>Payment Method</span><strong>' + escH(g.payment_method || '—') + '</strong></div>'
+          + '<div class="pgrn-meta-row"><span>Payment Status</span><strong>' + escH(badgeLbl) + '</strong></div>'
+        + '</div>'
+      + '</div>'
+
+      + '<div class="pgrn-section-lbl">Items Received</div>'
+      + '<table class="pgrn-table">'
+        + '<thead><tr>'
+          + '<th style="width:30px;text-align:center">#</th>'
+          + '<th>Product</th>'
+          + '<th style="width:100px">SKU</th>'
+          + '<th class="r" style="width:60px">Qty</th>'
+          + '<th class="r" style="width:100px">Unit Cost</th>'
+          + '<th class="r" style="width:100px">Total</th>'
+        + '</tr></thead>'
+        + '<tbody>' + (itemRows || '<tr><td colspan="6" style="text-align:center;color:#94a3b8;padding:12px">No items</td></tr>') + '</tbody>'
+      + '</table>'
+
+      + '<div class="pgrn-totals-wrap"><div class="pgrn-totals">' + totalsHtml + '</div></div>'
+
+      + paymentsHtml
+
+      + (g.notes
+          ? '<div class="pgrn-notes"><div class="pgrn-notes-lbl">Notes</div><div class="pgrn-notes-body">' + escH(g.notes) + '</div></div>'
+          : '');
+  }
+
+  async function renderLetterhead(canvasJson, width, height) {
+    return new Promise(function (resolve) {
+      var el = document.createElement('canvas');
+      el.width  = width  || 794;
+      el.height = height || 1123;
+      var c = new fabric.Canvas(el, {
+        width: width || 794, height: height || 1123,
+        enableRetinaScaling: false, renderOnAddRemove: false,
+      });
+      var parsed;
+      try { parsed = typeof canvasJson === 'string' ? JSON.parse(canvasJson) : canvasJson; }
+      catch (e) { resolve(null); return; }
+      c.loadFromJSON(parsed, function () {
+        c.renderAll();
+        var dataUrl = c.toDataURL({ format: 'png', multiplier: 1 });
+        c.dispose();
+        resolve(dataUrl);
+      });
+    });
+  }
+
+  async function render(data) {
+    var g   = data.grn;
+    var lh  = data.letterhead;
+    var cur = data.currency || '';
+
+    document.getElementById('pgrn-topbar-title').textContent = g.grn_number + ' — Goods Receive Note';
+    document.getElementById('pgrn-content').innerHTML = buildGrnHtml(g, cur);
+
+    if (lh && lh.canvas_json) {
+      var imgData = await renderLetterhead(lh.canvas_json, lh.width, lh.height);
+      if (imgData) {
+        document.getElementById('pgrn-lh-img').src = imgData;
+        document.getElementById('pgrn-lh-wrap').style.display = '';
+        var topPad = Math.round((lh.height || 1123) * 0.18);
+        var botPad = Math.round((lh.height || 1123) * 0.09);
+        var content = document.getElementById('pgrn-content');
+        content.style.setProperty('--ct', topPad + 'px');
+        content.style.setProperty('--cb', botPad + 'px');
+        content.style.paddingTop    = topPad + 'px';
+        content.style.paddingBottom = botPad + 'px';
+      }
+    }
+
+    document.getElementById('pgrn-loading').style.display     = 'none';
+    document.getElementById('pgrn-topbar').style.display      = '';
+    document.getElementById('pgrn-screen-wrap').style.display = '';
+  }
+
+  window.addEventListener('DOMContentLoaded', async function () {
+    var data = await window.electronAPI.getGrnPrintData();
+    if (!data || !data.grn) {
+      document.getElementById('pgrn-loading').textContent = 'No goods receive note data received.';
+      return;
+    }
+    await render(data);
+
+    window.electronAPI.onGrnPrintRefresh(async function (newData) {
+      document.getElementById('pgrn-loading').style.display      = 'flex';
+      document.getElementById('pgrn-topbar').style.display       = 'none';
+      document.getElementById('pgrn-screen-wrap').style.display  = 'none';
+      document.getElementById('pgrn-lh-wrap').style.display      = 'none';
+      await render(newData);
+    });
+  });
+}());
+</script>
+</body>
+</html>

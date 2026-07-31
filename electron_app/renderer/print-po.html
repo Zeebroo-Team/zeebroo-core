@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Print Purchase Order</title>
+<link rel="icon" type="image/x-icon" href="favicons/favicon.ico">
+<style>
+@page { size: A4; margin: 0; }
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: Inter, -apple-system, BlinkMacSystemFont, Arial, sans-serif;
+  font-size: 12px;
+  background: #f0f2f5;
+  color: #0f172a;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+/* ── Loading overlay ── */
+#ppo-loading {
+  position: fixed; inset: 0;
+  display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 12px;
+  background: #fff; z-index: 999;
+  font-size: 14px; font-weight: 600; color: #64748b;
+}
+.ppo-spinner {
+  width: 36px; height: 36px; border-radius: 50%;
+  border: 3px solid #e2e8f0; border-top-color: #0ea5e9;
+  animation: ppoSpin .8s linear infinite;
+}
+@keyframes ppoSpin { to { transform: rotate(360deg); } }
+
+/* ── Screen wrapper ── */
+.ppo-screen-wrap {
+  display: flex; justify-content: center; align-items: flex-start;
+  padding: 24px; padding-top: 84px;
+  min-height: 100vh;
+  background: #e5e7eb;
+}
+
+/* ── A4 page ── */
+.ppo-page {
+  position: relative;
+  width: 794px; min-height: 1123px;
+  background: #fff;
+  box-shadow: 0 4px 24px rgba(0,0,0,.15);
+  flex-shrink: 0; overflow: hidden;
+}
+.ppo-lh-img {
+  position: absolute; top: 0; left: 0;
+  width: 794px; height: 1123px;
+  object-fit: cover; display: block; pointer-events: none;
+}
+.ppo-content {
+  position: relative; z-index: 1;
+  padding: var(--ct, 52px) 52px var(--cb, 52px);
+  min-height: 1123px;
+}
+
+/* ── PO header ── */
+.ppo-hdr {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  margin-bottom: 22px; padding-bottom: 16px;
+  border-bottom: 2px solid #0ea5e9;
+}
+.ppo-hdr-left {}
+.ppo-hdr-num  { font-size: 22px; font-weight: 800; color: #0ea5e9; line-height: 1.1; }
+.ppo-hdr-type {
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .12em; color: #94a3b8; margin-top: 4px;
+}
+.ppo-badge {
+  font-size: 10px; font-weight: 700;
+  padding: 5px 12px; border-radius: 6px;
+  text-transform: uppercase; letter-spacing: .06em;
+  display: inline-block; margin-top: 4px;
+}
+.ppo-badge-draft              { background: #f1f5f9; color: #475569; }
+.ppo-badge-ordered            { background: #dbeafe; color: #1d4ed8; }
+.ppo-badge-partially_received { background: #fef3c7; color: #b45309; }
+.ppo-badge-received           { background: #dcfce7; color: #15803d; }
+.ppo-badge-cancelled          { background: #fee2e2; color: #b91c1c; }
+
+/* ── Info grid ── */
+.ppo-info {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 24px; margin-bottom: 22px;
+}
+.ppo-lbl {
+  font-size: 9px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .11em; color: #94a3b8; margin-bottom: 6px;
+}
+.ppo-supplier-name { font-size: 14px; font-weight: 700; color: #0f172a; }
+.ppo-supplier-ref  { font-size: 11px; color: #64748b; margin-top: 3px; }
+.ppo-meta-row {
+  display: flex; justify-content: space-between;
+  font-size: 11px; color: #64748b;
+  padding: 5px 0; border-bottom: 1px dashed #e2e8f0;
+}
+.ppo-meta-row:last-child { border-bottom: none; }
+.ppo-meta-row strong { color: #0f172a; font-weight: 600; }
+
+/* ── Section label ── */
+.ppo-section-lbl {
+  font-size: 9px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .1em; color: #94a3b8;
+  margin-bottom: 8px; margin-top: 4px;
+}
+
+/* ── Items table ── */
+.ppo-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+.ppo-table thead th {
+  font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em;
+  color: #475569; background: #f0f9ff;
+  padding: 8px 10px; border: 1px solid #e2e8f0; text-align: left;
+}
+.ppo-table thead th.r { text-align: right; }
+.ppo-table tbody td {
+  font-size: 11px; color: #334155;
+  padding: 8px 10px; border: 1px solid #e2e8f0;
+}
+.ppo-table tbody tr:nth-child(even) td { background: #f8fafc; }
+.ppo-table td.n  { color: #94a3b8; text-align: center; width: 30px; font-size: 10px; }
+.ppo-table td.r  { text-align: right; }
+.ppo-table td.muted { font-size: 10px; color: #94a3b8; }
+.ppo-table td.bd { font-weight: 700; }
+
+/* ── Totals ── */
+.ppo-totals-wrap { display: flex; justify-content: flex-end; margin-bottom: 20px; }
+.ppo-totals { width: 260px; }
+.ppo-total-row {
+  display: flex; justify-content: space-between;
+  font-size: 11px; color: #475569;
+  padding: 5px 0; border-bottom: 1px solid #f1f5f9;
+}
+.ppo-total-row.grand {
+  font-size: 15px; font-weight: 800; color: #0f172a;
+  border-top: 2px solid #0ea5e9; border-bottom: none;
+  padding-top: 10px; margin-top: 4px;
+}
+.ppo-total-row.grand span:last-child { color: #0ea5e9; }
+
+/* ── Notes ── */
+.ppo-notes { margin-top: 18px; border-top: 1px solid #e2e8f0; padding-top: 14px; }
+.ppo-notes-lbl  { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: #94a3b8; margin-bottom: 6px; }
+.ppo-notes-body { font-size: 11px; color: #475569; line-height: 1.65; white-space: pre-wrap; }
+
+/* ── Footer stamp ── */
+.ppo-footer {
+  position: absolute; bottom: 28px; left: 52px; right: 52px;
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 9px; color: #cbd5e1;
+  border-top: 1px solid #f1f5f9; padding-top: 10px;
+}
+
+/* ── Top bar (screen only) ── */
+.ppo-topbar {
+  position: fixed; top: 0; left: 0; right: 0;
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 16px;
+  background: #fff; border-bottom: 1px solid #e2e8f0;
+  z-index: 200;
+}
+.ppo-topbar-title { font-size: 14px; font-weight: 700; color: #0f172a; flex: 1; }
+.ppo-print-btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 8px 18px; font-size: 13px; font-weight: 600;
+  background: #0ea5e9; color: #fff;
+  border: none; border-radius: 8px; cursor: pointer; font-family: inherit;
+}
+.ppo-print-btn:hover { opacity: .88; }
+.ppo-close-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 14px; font-size: 13px; font-weight: 600;
+  background: #f1f5f9; color: #475569;
+  border: 1px solid #e2e8f0; border-radius: 8px; cursor: pointer; font-family: inherit;
+}
+.ppo-close-btn:hover { background: #e2e8f0; }
+
+@media print {
+  #ppo-loading, .ppo-topbar {
+    display: none !important; position: static !important;
+    height: 0 !important; width: 0 !important; overflow: hidden !important;
+  }
+  body { background: transparent !important; }
+  .ppo-screen-wrap {
+    display: block !important; padding: 0 !important; margin: 0 !important;
+    min-height: 0 !important; background: transparent !important;
+  }
+  .ppo-page {
+    box-shadow: none !important; width: 794px; min-height: 1123px;
+    overflow: visible !important; break-before: avoid;
+  }
+}
+</style>
+</head>
+<body>
+
+<div id="ppo-loading">
+  <div class="ppo-spinner"></div>
+  Preparing layout…
+</div>
+
+<div class="ppo-topbar" id="ppo-topbar" style="display:none">
+  <span class="ppo-topbar-title" id="ppo-topbar-title">Purchase Order</span>
+  <button class="ppo-close-btn" onclick="window.close()">Close</button>
+  <button class="ppo-print-btn" onclick="window.print()">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+    Print / Save PDF
+  </button>
+</div>
+
+<div class="ppo-screen-wrap" id="ppo-screen-wrap" style="display:none">
+  <div class="ppo-page" id="ppo-page">
+    <div id="ppo-lh-wrap" style="display:none">
+      <img id="ppo-lh-img" class="ppo-lh-img" alt="">
+    </div>
+    <div class="ppo-content" id="ppo-content"></div>
+  </div>
+</div>
+
+<script src="js/fabric.min.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  function escH(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function fmtDate(d) {
+    if (!d) return '—';
+    return new Date(d + 'T00:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
+  }
+
+  function buildPoHtml(po, cur) {
+    var statusCls = 'ppo-badge-' + (po.status || 'draft');
+    var statusLbl = po.status_label || po.status || '';
+
+    var rows = (po.items || []).map(function (it, i) {
+      var qty = parseFloat(it.quantity);
+      var qtyStr = qty % 1 === 0 ? String(Math.round(qty)) : qty.toFixed(3).replace(/\.?0+$/, '');
+      return '<tr>'
+        + '<td class="n">' + (i + 1) + '</td>'
+        + '<td class="bd">' + escH(it.product_name || '—') + '</td>'
+        + '<td class="muted">' + escH(it.sku || '—') + '</td>'
+        + '<td class="r">' + qtyStr + '</td>'
+        + '<td class="r">' + cur + parseFloat(it.unit_cost).toFixed(2) + '</td>'
+        + '<td class="r bd">' + cur + parseFloat(it.line_total).toFixed(2) + '</td>'
+        + '</tr>';
+    }).join('');
+
+    var subtotal = parseFloat(po.subtotal || po.total || 0);
+    var total    = parseFloat(po.total || 0);
+
+    var totalsHtml = '<div class="ppo-total-row"><span>Subtotal</span><span>' + cur + subtotal.toFixed(2) + '</span></div>'
+      + '<div class="ppo-total-row grand"><span>Total</span><span>' + cur + total.toFixed(2) + '</span></div>';
+
+    return ''
+      + '<div class="ppo-hdr">'
+        + '<div class="ppo-hdr-left">'
+          + '<div class="ppo-hdr-num">' + escH(po.po_number) + '</div>'
+          + '<div class="ppo-hdr-type">Purchase Order</div>'
+        + '</div>'
+        + '<span class="ppo-badge ' + statusCls + '">' + escH(statusLbl) + '</span>'
+      + '</div>'
+
+      + '<div class="ppo-info">'
+        + '<div>'
+          + '<div class="ppo-lbl">Supplier</div>'
+          + '<div class="ppo-supplier-name">' + escH(po.supplier_name || '— No Supplier —') + '</div>'
+          + (po.reference ? '<div class="ppo-supplier-ref">Ref: ' + escH(po.reference) + '</div>' : '')
+        + '</div>'
+        + '<div>'
+          + '<div class="ppo-meta-row"><span>Order Date</span><strong>' + fmtDate(po.purchase_date) + '</strong></div>'
+          + '<div class="ppo-meta-row"><span>Expected Delivery</span><strong>' + fmtDate(po.expected_delivery_date) + '</strong></div>'
+          + '<div class="ppo-meta-row"><span>Status</span><strong>' + escH(statusLbl) + '</strong></div>'
+        + '</div>'
+      + '</div>'
+
+      + '<div class="ppo-section-lbl">Line Items</div>'
+      + '<table class="ppo-table">'
+        + '<thead><tr>'
+          + '<th style="width:30px;text-align:center">#</th>'
+          + '<th>Product</th>'
+          + '<th style="width:100px">SKU</th>'
+          + '<th class="r" style="width:60px">Qty</th>'
+          + '<th class="r" style="width:110px">Unit Cost</th>'
+          + '<th class="r" style="width:110px">Total</th>'
+        + '</tr></thead>'
+        + '<tbody>' + rows + '</tbody>'
+      + '</table>'
+
+      + '<div class="ppo-totals-wrap"><div class="ppo-totals">' + totalsHtml + '</div></div>'
+
+      + (po.notes
+          ? '<div class="ppo-notes"><div class="ppo-notes-lbl">Notes</div><div class="ppo-notes-body">' + escH(po.notes) + '</div></div>'
+          : '');
+  }
+
+  async function renderLetterhead(canvasJson, width, height) {
+    return new Promise(function (resolve) {
+      var el = document.createElement('canvas');
+      el.width  = width  || 794;
+      el.height = height || 1123;
+      var c = new fabric.Canvas(el, {
+        width: width || 794, height: height || 1123,
+        enableRetinaScaling: false, renderOnAddRemove: false,
+      });
+      var parsed;
+      try { parsed = typeof canvasJson === 'string' ? JSON.parse(canvasJson) : canvasJson; }
+      catch (e) { resolve(null); return; }
+      c.loadFromJSON(parsed, function () {
+        c.renderAll();
+        var dataUrl = c.toDataURL({ format: 'png', multiplier: 1 });
+        c.dispose();
+        resolve(dataUrl);
+      });
+    });
+  }
+
+  async function render(data) {
+    var po  = data.po;
+    var lh  = data.letterhead;
+    var cur = data.currency || '';
+
+    document.getElementById('ppo-topbar-title').textContent = po.po_number + ' — Purchase Order';
+    document.getElementById('ppo-content').innerHTML = buildPoHtml(po, cur);
+
+    if (lh && lh.canvas_json) {
+      var imgData = await renderLetterhead(lh.canvas_json, lh.width, lh.height);
+      if (imgData) {
+        document.getElementById('ppo-lh-img').src = imgData;
+        document.getElementById('ppo-lh-wrap').style.display = '';
+        var topPad = Math.round((lh.height || 1123) * 0.18);
+        var botPad = Math.round((lh.height || 1123) * 0.09);
+        var content = document.getElementById('ppo-content');
+        content.style.setProperty('--ct', topPad + 'px');
+        content.style.setProperty('--cb', botPad + 'px');
+        content.style.paddingTop    = topPad + 'px';
+        content.style.paddingBottom = botPad + 'px';
+      }
+    }
+
+    document.getElementById('ppo-loading').style.display     = 'none';
+    document.getElementById('ppo-topbar').style.display      = '';
+    document.getElementById('ppo-screen-wrap').style.display = '';
+  }
+
+  window.addEventListener('DOMContentLoaded', async function () {
+    var data = await window.electronAPI.getPoPrintData();
+    if (!data || !data.po) {
+      document.getElementById('ppo-loading').textContent = 'No purchase order data received.';
+      return;
+    }
+    await render(data);
+
+    window.electronAPI.onPoPrintRefresh(async function (newData) {
+      document.getElementById('ppo-loading').style.display      = 'flex';
+      document.getElementById('ppo-topbar').style.display       = 'none';
+      document.getElementById('ppo-screen-wrap').style.display  = 'none';
+      document.getElementById('ppo-lh-wrap').style.display      = 'none';
+      await render(newData);
+    });
+  });
+}());
+</script>
+</body>
+</html>
