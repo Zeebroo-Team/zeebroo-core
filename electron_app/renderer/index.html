@@ -429,7 +429,7 @@
       <span class="tb-appname">Zeebroo</span>
       <div class="tb-vsep"></div>
       <div class="tb-qat">
-        <button class="qat-btn" id="qat-save"  title="Save (Ctrl+S)"><i class="fa fa-floppy-disk"></i></button>
+        <button class="qat-btn" id="qat-restart" title="Restart App"><i class="fa fa-arrows-rotate"></i></button>
         <button class="qat-btn" id="qat-undo"  title="Undo (Ctrl+Z)" disabled><i class="fa fa-rotate-left"></i></button>
         <button class="qat-btn" id="qat-redo"  title="Redo (Ctrl+Y)" disabled><i class="fa fa-rotate-right"></i></button>
         <button class="qat-btn qat-arrow"       title="Customize Quick Access Toolbar"><i class="fa fa-angle-down"></i></button>
@@ -9729,6 +9729,55 @@
 <div id="receipt-printable" style="display:none"></div>
 
 <div id="toast-container"></div>
+
+<!-- ── Sales Order Confirmation Modal ──────────────────────────────────── -->
+<div id="so-confirm-modal" class="modal-overlay" style="display:none;z-index:1050">
+  <div class="so-confirm-box">
+    <div class="so-confirm-header">
+      <div class="so-confirm-icon"><i class="fa fa-box"></i></div>
+      <div>
+        <div class="so-confirm-title">Create Sales Order</div>
+        <div class="so-confirm-sub" id="so-confirm-customer"></div>
+      </div>
+      <button class="co-close" id="so-confirm-close"><i class="fa fa-xmark"></i></button>
+    </div>
+    <div class="so-confirm-body">
+      <table class="so-confirm-table">
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th class="r">Qty</th>
+            <th class="r">Unit Price</th>
+            <th class="r">Total</th>
+          </tr>
+        </thead>
+        <tbody id="so-confirm-rows"></tbody>
+      </table>
+      <div class="so-confirm-totals">
+        <div class="so-confirm-total-row grand">
+          <span>Total</span>
+          <strong id="so-confirm-total">0.00</strong>
+        </div>
+      </div>
+      <div class="so-confirm-fields">
+        <div class="so-confirm-field">
+          <label class="so-confirm-label">Expected Delivery <span style="font-weight:400;color:var(--text-muted)">(optional)</span></label>
+          <input type="date" id="so-confirm-delivery" class="so-confirm-input">
+        </div>
+        <div class="so-confirm-field">
+          <label class="so-confirm-label">Notes <span style="font-weight:400;color:var(--text-muted)">(optional)</span></label>
+          <textarea id="so-confirm-notes" class="so-confirm-input so-confirm-textarea" rows="2" placeholder="Add any notes…"></textarea>
+        </div>
+      </div>
+    </div>
+    <div class="so-confirm-footer">
+      <button class="so-confirm-cancel" id="so-confirm-cancel">Cancel</button>
+      <button class="so-confirm-submit" id="so-confirm-submit">
+        <i class="fa fa-check"></i> Confirm &amp; Create Order
+      </button>
+    </div>
+  </div>
+</div>
 
 <!-- ── Barcode Preview Modal ─────────────────────────────────────────── -->
 <!-- ── Barcode Batch Picker ─────────────────────────────────────────────── -->

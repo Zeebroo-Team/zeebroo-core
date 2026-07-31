@@ -9292,6 +9292,81 @@ body.dark .pc-modal-head {
 .bc-batch-print-btn:hover { opacity: .88; }
 /* ── End Barcode Sheets View ──────────────────────────── */
 
+/* ── Sales Order Confirmation Modal ──────────────────── */
+.so-confirm-box {
+  background: var(--surface); border-radius: 16px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.28);
+  width: 540px; max-width: 96vw; max-height: 88vh;
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.so-confirm-header {
+  display: flex; align-items: center; gap: 14px;
+  padding: 18px 20px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.so-confirm-icon {
+  width: 42px; height: 42px; border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; color: var(--accent); flex-shrink: 0;
+}
+.so-confirm-title { font-size: 15px; font-weight: 800; color: var(--text); }
+.so-confirm-sub   { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.so-confirm-body  { flex: 1; overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 14px; }
+
+.so-confirm-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.so-confirm-table thead th {
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--text-muted); padding: 0 8px 8px; border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+.so-confirm-table thead th.r { text-align: right; }
+.so-confirm-table tbody td {
+  padding: 8px 8px; border-bottom: 1px solid var(--border);
+  color: var(--text); font-size: 12px;
+}
+.so-confirm-table tbody tr:last-child td { border-bottom: none; }
+.so-confirm-table td.r  { text-align: right; font-variant-numeric: tabular-nums; }
+.so-confirm-table td.muted { font-size: 10px; color: var(--text-muted); }
+
+.so-confirm-totals { border-top: 2px solid var(--border); padding-top: 10px; }
+.so-confirm-total-row {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 13px; color: var(--text-muted);
+}
+.so-confirm-total-row.grand { font-size: 17px; font-weight: 800; color: var(--text); }
+.so-confirm-total-row.grand strong { color: var(--accent); font-variant-numeric: tabular-nums; }
+
+.so-confirm-fields { display: flex; flex-direction: column; gap: 10px; }
+.so-confirm-field  { display: flex; flex-direction: column; gap: 4px; }
+.so-confirm-label  { font-size: 11px; font-weight: 700; color: var(--text); }
+.so-confirm-input  {
+  padding: 8px 10px; border: 1.5px solid var(--border); border-radius: 8px;
+  background: var(--surface2); color: var(--text); font-size: 13px; font-family: inherit;
+  width: 100%;
+}
+.so-confirm-input:focus { outline: none; border-color: var(--accent); }
+.so-confirm-textarea { resize: vertical; min-height: 54px; }
+
+.so-confirm-footer {
+  display: flex; gap: 10px; align-items: center; justify-content: flex-end;
+  padding: 14px 20px; border-top: 1px solid var(--border); flex-shrink: 0;
+}
+.so-confirm-cancel {
+  padding: 9px 18px; border-radius: 9px; border: 1.5px solid var(--border);
+  background: var(--surface2); color: var(--text); font-size: 13px; font-weight: 600;
+  cursor: pointer; font-family: inherit; transition: background .12s;
+}
+.so-confirm-cancel:hover { background: var(--surface3); }
+.so-confirm-submit {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 9px 22px; border-radius: 9px; border: none;
+  background: var(--accent); color: #fff; font-size: 13px; font-weight: 700;
+  cursor: pointer; font-family: inherit; transition: opacity .12s;
+}
+.so-confirm-submit:hover   { opacity: .88; }
+.so-confirm-submit:disabled { opacity: .55; cursor: default; }
+/* ── End Sales Order Confirmation Modal ───────────────── */
+
 /* ── Barcode Preview Modal ────────────────────────────── */
 .bc-preview-modal {
   position: fixed; inset: 0; z-index: 9999;
