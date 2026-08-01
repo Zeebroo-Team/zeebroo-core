@@ -123,6 +123,8 @@ body {
 .pq-table td.n  { color: #94a3b8; text-align: center; width: 32px; }
 .pq-table td.r  { text-align: right; }
 .pq-table td.bd { font-weight: 600; }
+.pq-table td.disc-cell { text-align: right; color: #16a34a; font-weight: 600; }
+.pq-table th.disc-th   { text-align: right; }
 
 /* ── Totals ── */
 .pq-totals-wrap { display: flex; justify-content: flex-end; margin-bottom: 18px; }
@@ -239,14 +241,25 @@ body {
     var dateStr   = rawDate   ? new Date(rawDate   + 'T00:00:00').toLocaleDateString(undefined, { month:'long', day:'numeric', year:'numeric' }) : '—';
     var expiryStr = rawExpiry ? new Date(rawExpiry + 'T00:00:00').toLocaleDateString(undefined, { month:'long', day:'numeric', year:'numeric' }) : '—';
 
+    var hasItemDisc = (q.items || []).some(function(item) {
+      return parseFloat(item.item_discount_per_unit || 0) > 0;
+    });
+
     var rows = (q.items || []).map(function(item, i) {
       var qty = parseFloat(item.quantity);
       var qtyStr = qty % 1 === 0 ? String(Math.round(qty)) : qty.toFixed(2);
+      var discPerUnit = parseFloat(item.item_discount_per_unit || 0);
+      var discCell = hasItemDisc
+        ? (discPerUnit > 0
+            ? '<td class="r disc-cell">&minus;' + (discPerUnit * qty).toFixed(2) + cur + '</td>'
+            : '<td class="r disc-cell" style="color:#94a3b8">&mdash;</td>')
+        : '';
       return '<tr>'
         + '<td class="n">' + (i + 1) + '</td>'
         + '<td>' + escH(item.description || '—') + '</td>'
         + '<td class="r">' + qtyStr + '</td>'
         + '<td class="r">' + parseFloat(item.unit_price).toFixed(2) + cur + '</td>'
+        + discCell
         + '<td class="r bd">' + parseFloat(item.line_total).toFixed(2) + cur + '</td>'
         + '</tr>';
     }).join('');
@@ -285,6 +298,7 @@ body {
           + '<th>Description</th>'
           + '<th class="r" style="width:60px">Qty</th>'
           + '<th class="r" style="width:110px">Unit Price</th>'
+          + (hasItemDisc ? '<th class="r disc-th" style="width:100px">Discount</th>' : '')
           + '<th class="r" style="width:110px">Total</th>'
         + '</tr></thead>'
         + '<tbody>' + rows + '</tbody>'

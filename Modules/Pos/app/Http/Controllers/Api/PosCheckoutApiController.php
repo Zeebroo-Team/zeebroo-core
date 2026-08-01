@@ -40,10 +40,12 @@ class PosCheckoutApiController extends Controller
             'items.*.product_selling_unit_id'=> ['nullable', 'integer', 'min:1'],
             'items.*.warranty_type'          => ['nullable', 'string', 'in:lifetime,date'],
             'items.*.warranty_date'          => ['nullable', 'date_format:Y-m-d'],
+            'items.*.item_discount_percent'  => ['nullable', 'numeric', 'min:0', 'max:100'],
             'payment_method'                 => ['required', 'string', 'in:cash,card,credit'],
             'channel'                        => ['nullable', 'string', 'in:retail,online'],
             'credit_account_id'              => ['nullable', 'integer', 'min:1'],
             'pos_customer_id'                => ['nullable', 'integer', 'min:1'],
+            'credit_due_date'                => ['nullable', 'date'],
             'amount_paid'                    => ['nullable', 'numeric', 'min:0'],
             'amount_tendered'                => ['nullable', 'numeric', 'min:0'],
             'discount_percent'               => ['nullable', 'numeric', 'min:0', 'max:100'],
@@ -52,6 +54,13 @@ class PosCheckoutApiController extends Controller
             'branch_id'                      => ['nullable', 'integer', 'min:1'],
             'pos_counter_id'                 => ['nullable', 'integer', 'min:1'],
         ]);
+
+        if ($validated['payment_method'] === 'credit' && empty($validated['pos_customer_id'])) {
+            return response()->json([
+                'message' => 'A customer must be assigned for credit payment.',
+                'errors'  => ['pos_customer_id' => ['A customer is required for credit payment.']],
+            ], 422);
+        }
 
         $channel = $validated['channel'] ?? Sale::CHANNEL_ONLINE;
 
@@ -82,6 +91,7 @@ class PosCheckoutApiController extends Controller
                 isset($validated['branch_id']) ? (int) $validated['branch_id'] : null,
                 $validated['scheduled_at'] ?? null,
                 isset($validated['pos_counter_id']) ? (int) $validated['pos_counter_id'] : null,
+                $validated['credit_due_date'] ?? null,
             );
         } catch (ValidationException $e) {
             return response()->json([

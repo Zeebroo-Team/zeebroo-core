@@ -106,6 +106,172 @@ $('#toggle-dark').addEventListener('change', async (e) => {
   await window.electronAPI.setConfig({ dark_mode: dark });
 });
 
+// ── Sidebar sub-item definitions ──────────────────────────────────────────
+const _sbSubItems = {
+  home: [
+    { view:'today',          icon:'fa-gauge-high',           label:'Today' },
+    { view:'analytics',      icon:'fa-chart-line',           label:'Analytics' },
+    { view:'activity',       icon:'fa-clock-rotate-left',    label:'Activity' },
+    { view:'expenses',       icon:'fa-file-invoice-dollar',  label:'Expenses' },
+    { view:'profit',         icon:'fa-chart-pie',            label:'Profit' },
+    { view:'payroll',        icon:'fa-money-check-dollar',   label:'Payroll' },
+    { view:'orders',         icon:'fa-box',                  label:'Orders' },
+  ],
+  sales: [
+    { view:'transactions',   icon:'fa-cash-register',        label:'Transactions' },
+    { view:'history',        icon:'fa-clock-rotate-left',    label:'History' },
+    { view:'credits',        icon:'fa-hand-holding-dollar',  label:'Credits' },
+    { view:'quotes',         icon:'fa-file-lines',           label:'Quotations' },
+    { view:'invoices',       icon:'fa-file-invoice',         label:'Invoices' },
+    { view:'orders',         icon:'fa-box',                  label:'Orders' },
+  ],
+  inventory: [
+    { view:'products',       icon:'fa-box',                  label:'Products' },
+    { view:'categories',     icon:'fa-tags',                 label:'Categories' },
+    { view:'brands',         icon:'fa-award',                label:'Brands' },
+    { view:'units',          icon:'fa-ruler',                label:'Units' },
+    { view:'discounts',      icon:'fa-tag',                  label:'Discounts' },
+    { view:'suppliers',      icon:'fa-building-user',        label:'Suppliers' },
+    { view:'audit',          icon:'fa-clipboard-list',       label:'Stock Audit' },
+    { view:'po',             icon:'fa-file-invoice',         label:'Purchase Orders' },
+    { view:'grn',            icon:'fa-truck-ramp-box',       label:'Goods Receive' },
+    { view:'cheques',        icon:'fa-money-check',          label:'Cheques' },
+    { view:'barcodes',       icon:'fa-barcode',              label:'Barcodes' },
+  ],
+  finance: [
+    { view:'flow',           icon:'fa-diagram-project',      label:'Flow' },
+    { view:'bills',          icon:'fa-file-invoice-dollar',  label:'Bills' },
+    { view:'loans',          icon:'fa-money-bill-trend-up',  label:'Loans' },
+    { view:'rentals',        icon:'fa-house',                label:'Rentals' },
+    { view:'properties',     icon:'fa-building',             label:'Properties' },
+    { view:'modifications',  icon:'fa-screwdriver-wrench',   label:'Modifications' },
+  ],
+  hr: [
+    { view:'employees',      icon:'fa-users',                label:'Employees' },
+    { view:'departments',    icon:'fa-sitemap',              label:'Departments' },
+    { view:'payroll',        icon:'fa-money-check-dollar',   label:'Payroll' },
+    { view:'rule-sets',      icon:'fa-list-check',           label:'Rule Sets' },
+    { view:'allowance-types',icon:'fa-coins',                label:'Allowances' },
+  ],
+  services: [
+    { view:'requests',       icon:'fa-clipboard-list',       label:'Requests' },
+    { view:'catalog',        icon:'fa-list',                 label:'Catalog' },
+    { view:'categories',     icon:'fa-tags',                 label:'Categories' },
+  ],
+  restaurant: [
+    { view:'orders',         icon:'fa-receipt',              label:'Orders' },
+    { view:'tables',         icon:'fa-table',                label:'Tables' },
+    { view:'reservations',   icon:'fa-calendar-check',       label:'Reservations' },
+    { view:'menu-items',     icon:'fa-utensils',             label:'Menu Items' },
+    { view:'menu-categories',icon:'fa-layer-group',          label:'Menu Cats' },
+    { view:'ingredients',    icon:'fa-carrot',               label:'Ingredients' },
+    { view:'purchase-orders',icon:'fa-file-invoice',         label:'Purchase Orders' },
+    { view:'kitchen',        icon:'fa-fire-burner',          label:'Kitchen' },
+  ],
+  mail: [
+    { view:'inbox',          icon:'fa-inbox',                label:'Inbox' },
+    { view:'sent',           icon:'fa-paper-plane',          label:'Sent' },
+    { view:'compose',        icon:'fa-pen',                  label:'Compose' },
+    { view:'templates',      icon:'fa-file-lines',           label:'Templates' },
+    { view:'filters',        icon:'fa-filter',               label:'Filters' },
+    { view:'scheduled',      icon:'fa-clock',                label:'Scheduled' },
+  ],
+  crm: [
+    { view:'pipeline',       icon:'fa-angles-right',         label:'Pipeline' },
+    { view:'contacts',       icon:'fa-address-book',         label:'Contacts' },
+    { view:'tasks',          icon:'fa-list-check',           label:'Tasks' },
+    { view:'forms',          icon:'fa-wpforms',              label:'Forms' },
+  ],
+  projects: [
+    { view:'projects',       icon:'fa-diagram-project',      label:'Projects' },
+    { view:'board',          icon:'fa-table-columns',        label:'Board' },
+    { view:'tasks',          icon:'fa-list-check',           label:'Tasks' },
+    { view:'mytasks',        icon:'fa-user-check',           label:'My Tasks' },
+  ],
+};
+
+function _buildSidebarSubNavs() {
+  Object.entries(_sbSubItems).forEach(([tab, items]) => {
+    const navItem = $(`.sb-nav-item[data-tab="${tab}"]`);
+    if (!navItem) return;
+    const sub = document.createElement('div');
+    sub.className = 'sb-sub-nav';
+    sub.dataset.subOf = tab;
+    const inner = document.createElement('div');
+    inner.className = 'sb-sub-nav-inner';
+    inner.innerHTML = items.map((it, idx) =>
+      `<div class="sb-sub-item" data-tab="${tab}" data-sub-view="${it.view}" style="transition-delay:${(idx * 0.03).toFixed(2)}s"><i class="fa ${it.icon}"></i><span>${it.label}</span></div>`
+    ).join('');
+    sub.appendChild(inner);
+    navItem.insertAdjacentElement('afterend', sub);
+  });
+  // Wire sub-item clicks
+  $$('.sb-sub-item').forEach(item => {
+    item.addEventListener('click', (e) => {
+      e.stopPropagation();
+      _sbNavSubSwitch(item.dataset.tab, item.dataset.subView);
+    });
+  });
+}
+
+function _sbNavExpand(tabName) {
+  $$('.sb-nav-item[data-tab]').forEach(item => {
+    const isTarget = item.dataset.tab === tabName;
+    const sub = $(`.sb-sub-nav[data-sub-of="${item.dataset.tab}"]`);
+    if (isTarget) {
+      item.classList.add('expanded');
+      if (sub) sub.classList.add('open');
+    } else {
+      item.classList.remove('expanded');
+      if (sub) sub.classList.remove('open');
+    }
+  });
+}
+
+function _sbSubActivate(tab, view) {
+  $$('.sb-sub-item').forEach(i => {
+    i.classList.toggle('active', i.dataset.tab === tab && i.dataset.subView === view);
+  });
+}
+
+function _sbNavSubSwitch(tab, view) {
+  if (tab === 'home')            switchHomeView(view);
+  else if (tab === 'sales')      _salSwitchView(view);
+  else if (tab === 'inventory')  switchInvView(view);
+  else if (tab === 'finance')    switchFinView(view);
+  else if (tab === 'hr')         switchHrView(view);
+  else if (tab === 'services')   switchSvcView(view);
+  else if (tab === 'restaurant') switchRstView(view);
+  else if (tab === 'mail')       window.switchMailView?.(view);
+  else if (tab === 'crm')        window.switchCrmView?.(view);
+  else if (tab === 'projects')   window.switchPmView?.(view);
+  _sbSubActivate(tab, view);
+}
+
+_buildSidebarSubNavs();
+
+// ── Sidebar / Ribbon layout mode ───────────────────────────────────────────
+function _syncSidebarActive(tabName) {
+  $$('.sb-nav-item[data-tab]').forEach(item => {
+    item.classList.toggle('active', item.dataset.tab === tabName);
+  });
+}
+
+function _applyLayoutMode(mode) {
+  const isSidebar = mode === 'sidebar';
+  $('#app-shell').classList.toggle('sidebar-mode', isSidebar);
+  const activeTab = $$('.ribbon-tab.active')[0]?.dataset.tab;
+  if (activeTab) _syncSidebarActive(activeTab);
+}
+
+async function _toggleLayoutMode() {
+  const cur = state.config?.layout_mode || 'ribbon';
+  const next = cur === 'ribbon' ? 'sidebar' : 'ribbon';
+  if (state.config) state.config.layout_mode = next;
+  _applyLayoutMode(next);
+  await window.electronAPI.setConfig({ layout_mode: next });
+}
+
 // ── Ribbon tabs ────────────────────────────────────────────────────────────
 function activateTab(tabName) {
   $$('.ribbon-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tabName));
@@ -133,11 +299,23 @@ function activateTab(tabName) {
   if (tabName === 'crm')        { switchCrmView('pipeline'); }
   if (tabName === 'automations'){ loadAutomations(); }
   if (tabName === 'projects')   { switchPmView('projects'); }
+  _syncSidebarActive(tabName);
+  _sbNavExpand(tabName);
 }
 
 $$('.ribbon-tab').forEach(tab => {
   tab.addEventListener('click', () => activateTab(tab.dataset.tab));
 });
+$$('.sb-nav-item[data-tab]').forEach(item => {
+  item.addEventListener('click', () => {
+    const tab = item.dataset.tab;
+    activateTab(tab);
+    // Activate first visible sub-item when switching to a tab with sub-nav
+    const firstSub = $(`.sb-sub-item[data-tab="${tab}"]`);
+    if (firstSub) _sbSubActivate(tab, firstSub.dataset.subView);
+  });
+});
+$('#sidebar-file-btn').addEventListener('click', () => openBackstage('new'));
 
 // ── Backstage (File Menu) ──────────────────────────────────────────────────
 function openBackstage(page) {
@@ -216,6 +394,7 @@ function _bsAction(action) {
     // Settings
     case 'navPosSettings':   nav('pos'); setTimeout(() => $('#rb-pos-settings')?.click(), 80); break;
     case 'toggleDark':       $('#toggle-dark').click(); break;
+    case 'toggleLayout':     C(); _toggleLayoutMode(); break;
     case 'showShortcuts':    C(); showShortcutsModal(); break;
     case 'switchBranch':     C(); $('#tpm-switch-branch')?.click(); break;
     case 'signOut':          C(); document.dispatchEvent(new CustomEvent('logout-requested')); break;
@@ -336,11 +515,12 @@ const _bsOpenSections = [
 
 // ── Settings items ─────────────────────────────────────────────────────────
 const _bsSettingsItems = [
-  { label:'POS Settings',       desc:'Receipt, tax & checkout preferences', icon:'fa-cash-register',       color:'#4e8ef7', action:'navPosSettings' },
-  { label:'Dark Mode',          desc:'Toggle between light and dark theme',  icon:'fa-moon',                color:'#334155', action:'toggleDark' },
-  { label:'Keyboard Shortcuts', desc:'View all keyboard shortcuts',          icon:'fa-keyboard',            color:'#9c6ef7', action:'showShortcuts' },
-  { label:'Switch Branch',      desc:'Change the active business branch',    icon:'fa-code-branch',         color:'#f7a54e', action:'switchBranch' },
-  { label:'Sign Out',           desc:'Log out of your account',              icon:'fa-right-from-bracket',  color:'#f74e6c', action:'signOut' },
+  { label:'POS Settings',       desc:'Receipt, tax & checkout preferences',      icon:'fa-cash-register',       color:'#4e8ef7', action:'navPosSettings' },
+  { label:'Dark Mode',          desc:'Toggle between light and dark theme',       icon:'fa-moon',                color:'#334155', action:'toggleDark' },
+  { label:'Layout Mode',        desc:'Switch between Ribbon and Sidebar navigation', icon:'fa-table-columns',   color:'#4caf7d', action:'toggleLayout' },
+  { label:'Keyboard Shortcuts', desc:'View all keyboard shortcuts',               icon:'fa-keyboard',            color:'#9c6ef7', action:'showShortcuts' },
+  { label:'Switch Branch',      desc:'Change the active business branch',         icon:'fa-code-branch',         color:'#f7a54e', action:'switchBranch' },
+  { label:'Sign Out',           desc:'Log out of your account',                   icon:'fa-right-from-bracket',  color:'#f74e6c', action:'signOut' },
 ];
 
 // ── About page ─────────────────────────────────────────────────────────────
@@ -463,17 +643,20 @@ function _salSwitchView(view) {
   $$('.sal-txn-ctrl').forEach(el => el.style.display = view === 'transactions' ? '' : 'none');
   const showTxn      = view === 'transactions';
   const showHist     = view === 'history';
+  const showCredits  = view === 'credits';
   const showQuotes   = view === 'quotes';
   const showInvoices = view === 'invoices';
   const showOrders   = view === 'orders';
   $('#sal-list-view').style.display      = showTxn      ? '' : 'none';
   $('#sal-history-view').style.display   = showHist     ? '' : 'none';
+  $('#sal-credits-view').style.display   = showCredits  ? 'flex' : 'none';
   $('#sal-quotes-view').style.display    = showQuotes   ? 'flex' : 'none';
   $('#sal-invoices-view').style.display  = showInvoices ? 'flex' : 'none';
   $('#sal-orders-view').style.display    = showOrders   ? 'flex' : 'none';
   $('#sal-detail-view').style.display    = 'none';
   if (showTxn      && !_sal.all.length) loadSalesList();
   if (showHist)     loadSalesHistory();
+  if (showCredits)  loadPendingCredits();
   if (showQuotes)   loadQuotesList();
   if (showInvoices) loadInvoicesList();
   if (showOrders)   loadSalesOrderList();
@@ -491,6 +674,123 @@ async function loadSalesList() {
   }
   _sal.all = res.body?.data || [];
   _salApplyFilters();
+}
+
+// ── Pending Credits ──────────────────────────────────────────────────────────
+let _pcAll = [];   // all customer groups from API
+let _pcSearch = '';
+
+async function loadPendingCredits() {
+  const body = $('#sal-credits-body');
+  const kpi  = $('#sal-credits-kpi');
+  body.innerHTML = '<div class="finance-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</div>';
+  if (kpi) kpi.style.display = 'none';
+
+  const res = await API.pendingCredits();
+  if (res.status !== 200) {
+    body.innerHTML = '<div class="finance-loading"><i class="fa fa-circle-exclamation" style="color:#ef4444"></i> Failed to load pending credits</div>';
+    return;
+  }
+  _pcAll = res.body?.data || [];
+  _pcRender();
+}
+
+function _pcRender() {
+  const cur    = state.currency ? ' ' + state.currency : '';
+  const body   = $('#sal-credits-body');
+  const kpiEl  = $('#sal-credits-kpi');
+  const q      = _pcSearch.toLowerCase();
+
+  const groups = _pcAll.filter(g =>
+    !q ||
+    (g.customer_name || '').toLowerCase().includes(q) ||
+    (g.customer_phone || '').toLowerCase().includes(q) ||
+    g.sales.some(s => (s.sale_number || '').toLowerCase().includes(q))
+  );
+
+  // KPI totals
+  const totalOwed    = groups.reduce((s, g) => s + g.total_owed, 0);
+  const totalOverdue = groups.reduce((s, g) => s + g.overdue_amount, 0);
+  const totalCust    = groups.length;
+  const overdueCust  = groups.filter(g => g.has_overdue).length;
+
+  if (kpiEl) {
+    kpiEl.style.display = '';
+    kpiEl.innerHTML = `
+      <div class="pc-kpi">
+        <div class="pc-kpi-label">Customers</div>
+        <div class="pc-kpi-value">${totalCust}</div>
+      </div>
+      <div class="pc-kpi">
+        <div class="pc-kpi-label">Total Outstanding</div>
+        <div class="pc-kpi-value">${totalOwed.toFixed(2)}${cur}</div>
+      </div>
+      <div class="pc-kpi overdue">
+        <div class="pc-kpi-label">Overdue</div>
+        <div class="pc-kpi-value">${totalOverdue.toFixed(2)}${cur}</div>
+      </div>
+      <div class="pc-kpi overdue">
+        <div class="pc-kpi-label">Overdue Customers</div>
+        <div class="pc-kpi-value">${overdueCust}</div>
+      </div>`;
+  }
+
+  if (!groups.length) {
+    body.innerHTML = `<div class="pc-empty"><i class="fa fa-circle-check" style="color:#22c55e"></i>${
+      _pcSearch ? 'No results for "' + escHtml(_pcSearch) + '"' : 'No pending credit sales — all clear!'
+    }</div>`;
+    return;
+  }
+
+  const fmtDate = d => d ? new Date(d + 'T00:00:00').toLocaleDateString(undefined, { month:'short', day:'numeric', year:'numeric' }) : '—';
+  const fmtTime = d => d ? new Date(d).toLocaleDateString(undefined, { month:'short', day:'numeric', year:'numeric' }) : '—';
+  const initial = name => (name || '?')[0].toUpperCase();
+
+  body.innerHTML = groups.map((g, gi) => {
+    const hasBadge    = g.has_overdue;
+    const cardClass   = hasBadge ? 'pc-customer-card has-overdue' : 'pc-customer-card';
+
+    const rows = g.sales.map(s => {
+      const rowCls = s.is_overdue ? 'pc-sale-row overdue' : 'pc-sale-row';
+      const dueDateHtml = s.credit_due_date
+        ? `<span class="pc-due-date">${fmtDate(s.credit_due_date)}</span>${s.is_overdue ? '<span class="pc-overdue-tag"><i class="fa fa-triangle-exclamation"></i> Overdue</span>' : ''}`
+        : '<span style="color:var(--text-muted)">—</span>';
+      return `<tr class="${rowCls}">
+        <td style="font-weight:700">${escHtml(s.sale_number || String(s.id))}</td>
+        <td>${fmtTime(s.sold_at)}</td>
+        <td>${dueDateHtml}</td>
+        <td style="text-align:right;font-weight:700">${s.total.toFixed(2)}${cur}</td>
+      </tr>`;
+    }).join('');
+
+    return `<div class="${cardClass}" data-pc-idx="${gi}">
+      <div class="pc-customer-hdr">
+        <div class="pc-customer-avatar">${escHtml(initial(g.customer_name))}</div>
+        <div class="pc-customer-info">
+          <div class="pc-customer-name">${escHtml(g.customer_name)}</div>
+          <div class="pc-customer-meta">${g.customer_phone ? escHtml(g.customer_phone) + ' · ' : ''}${g.sale_count} sale${g.sale_count !== 1 ? 's' : ''}</div>
+        </div>
+        <div class="pc-customer-right">
+          <div class="pc-customer-total">${g.total_owed.toFixed(2)}${cur}</div>
+          ${hasBadge ? `<div class="pc-overdue-badge"><i class="fa fa-triangle-exclamation"></i> Overdue ${g.overdue_amount.toFixed(2)}${cur}</div>` : ''}
+        </div>
+        <i class="fa fa-chevron-down pc-customer-chevron"></i>
+      </div>
+      <div class="pc-sales-table-wrap">
+        <table class="pc-sales-table">
+          <thead><tr><th>Sale #</th><th>Date</th><th>Due Date</th><th style="text-align:right">Amount</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>`;
+  }).join('');
+
+  // Wire card expand/collapse
+  body.querySelectorAll('.pc-customer-card').forEach(card => {
+    card.querySelector('.pc-customer-hdr').addEventListener('click', () => {
+      card.classList.toggle('expanded');
+    });
+  });
 }
 
 function _salApplyFilters() {
@@ -677,6 +977,20 @@ function _salCloseDetail() {
 // ── View switcher ─────────────────────────────────────────────────────────
 $$('.sal-view-btn').forEach(btn => {
   btn.addEventListener('click', () => _salSwitchView(btn.dataset.salView));
+});
+
+// ── Pending Credits search / refresh ─────────────────────────────────────
+let _pcSearchTimer = null;
+$('#sal-credits-search')?.addEventListener('input', e => {
+  clearTimeout(_pcSearchTimer);
+  _pcSearch = e.target.value.trim();
+  _pcSearchTimer = setTimeout(_pcRender, 200);
+});
+$('#sal-credits-refresh')?.addEventListener('click', () => {
+  _pcSearch = '';
+  const inp = $('#sal-credits-search');
+  if (inp) inp.value = '';
+  loadPendingCredits();
 });
 
 // ── Transactions filters ──────────────────────────────────────────────────
@@ -987,7 +1301,9 @@ async function _eodLoad() {
   const history   = d.history   || [];
   const byMethod  = eodSum.by_method || {};
 
-  const sales     = sumRes.status === 200 ? (sumRes.body?.data?.sales || {}) : {};
+  const salesData = sumRes.status === 200 ? (sumRes.body?.data || {}) : {};
+  const sales     = salesData.sales || {};
+  const salesByMethod = salesData.sales_by_method || {};
   const dr        = drawerRes?.status === 200 ? (drawerRes.body?.data || null) : null;
   const today     = new Date().toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
@@ -1012,20 +1328,75 @@ async function _eodLoad() {
       <p class="eod-stat__value">${fmt(sales.gross_profit)}</p>
     </div>
     <div class="eod-stat">
-      <p class="eod-stat__label">Cash Sales</p>
-      <p class="eod-stat__value">${fmt(sales.by_method?.cash?.total)}</p>
-      <p class="eod-stat__sub">${sales.by_method?.cash?.count ?? 0} sales</p>
+      <p class="eod-stat__label">Cash</p>
+      <p class="eod-stat__value">${fmt(salesByMethod.cash?.total)}</p>
+      <p class="eod-stat__sub">${salesByMethod.cash?.count ?? 0} sales</p>
     </div>
     <div class="eod-stat">
-      <p class="eod-stat__label">Card Sales</p>
-      <p class="eod-stat__value">${fmt(sales.by_method?.card?.total)}</p>
-      <p class="eod-stat__sub">${sales.by_method?.card?.count ?? 0} sales</p>
+      <p class="eod-stat__label">Card</p>
+      <p class="eod-stat__value">${fmt(salesByMethod.card?.total)}</p>
+      <p class="eod-stat__sub">${salesByMethod.card?.count ?? 0} sales</p>
     </div>
     <div class="eod-stat">
-      <p class="eod-stat__label">Items Sold</p>
-      <p class="eod-stat__value">${sales.items_sold ?? 0}</p>
+      <p class="eod-stat__label">Credit</p>
+      <p class="eod-stat__value">${fmt(salesByMethod.credit?.total)}</p>
+      <p class="eod-stat__sub">${salesByMethod.credit?.count ?? 0} sales</p>
     </div>
   </div>`;
+
+  // ── Payment method tabs ───────────────────────────────────────────────────
+  {
+    const fmtDue = d => d ? new Date(d + 'T00:00:00').toLocaleDateString(undefined, { month:'short', day:'numeric', year:'numeric' }) : '—';
+
+    const tabDef = [
+      { key: 'cash',   label: 'Cash',   icon: 'fa-money-bill-wave',      badge: 'eod-badge-cash'   },
+      { key: 'card',   label: 'Card',   icon: 'fa-credit-card',           badge: 'eod-badge-card'   },
+      { key: 'credit', label: 'Credit', icon: 'fa-file-invoice-dollar',   badge: 'eod-badge-credit' },
+    ];
+
+    html += `<p class="eod-section-lbl"><i class="fa fa-layer-group"></i> Sales by Payment Method</p>`;
+    html += `<div class="eod-pay-tabs">`;
+    tabDef.forEach((t, i) => {
+      const m   = salesByMethod[t.key] || { count: 0, total: 0 };
+      html += `<div class="eod-pay-tab${i === 0 ? ' active' : ''}" data-eod-tab="${t.key}">
+        <i class="fa ${t.icon} eod-pay-tab-icon"></i>
+        <span class="eod-pay-tab-label">${t.label}</span>
+        <span class="eod-pay-tab-meta">${m.count} sale${m.count !== 1 ? 's' : ''} · ${fmt(m.total)}</span>
+      </div>`;
+    });
+    html += `</div>`;
+
+    tabDef.forEach((t, i) => {
+      const m    = salesByMethod[t.key] || { count: 0, total: 0, sales: [] };
+      const list = m.sales || [];
+      const isCredit = t.key === 'credit';
+      html += `<div class="eod-pay-panel${i === 0 ? ' active' : ''}" data-eod-panel="${t.key}">`;
+      if (!list.length) {
+        html += `<div class="eod-pay-empty"><i class="fa fa-inbox"></i> No ${t.label.toLowerCase()} sales today</div>`;
+      } else {
+        html += `<div class="eod-tbl-wrap"><table class="eod-tbl"><thead><tr>
+          <th>Sale #</th><th>Time</th><th>Customer</th>
+          ${isCredit ? '<th>Due Date</th>' : ''}
+          <th style="text-align:right">Total</th>
+        </tr></thead><tbody>`;
+        list.forEach(s => {
+          const t2 = s.sold_at ? new Date(s.sold_at).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' }) : '—';
+          html += `<tr>
+            <td style="font-weight:700">${escHtml(s.sale_number || String(s.id))}</td>
+            <td style="color:var(--text-muted)">${t2}</td>
+            <td style="color:var(--text-muted)">${escHtml(s.customer_name || '—')}</td>
+            ${isCredit ? `<td style="color:var(--text-muted)">${fmtDue(s.credit_due_date)}</td>` : ''}
+            <td style="text-align:right;font-weight:700">${s.total.toFixed(2)}${currency}</td>
+          </tr>`;
+        });
+        html += `</tbody><tfoot><tr>
+          <td colspan="${isCredit ? 4 : 3}" style="text-align:right;font-size:11px;font-weight:700;color:var(--text-muted);padding:8px 10px">Total</td>
+          <td style="text-align:right;font-size:14px;font-weight:800;padding:8px 10px">${fmt(m.total)}</td>
+        </tr></tfoot></table></div>`;
+      }
+      html += `</div>`;
+    });
+  }
 
   // ── Cash drawer ───────────────────────────────────────────────────────────
   if (dontSettle && dr) {
@@ -1140,6 +1511,15 @@ async function _eodLoad() {
   }
 
   body.innerHTML = html;
+
+  // Wire payment method tab clicks
+  body.querySelectorAll('[data-eod-tab]').forEach(tab => {
+    tab.addEventListener('click', () => {
+      const key = tab.dataset.eodTab;
+      body.querySelectorAll('[data-eod-tab]').forEach(t => t.classList.toggle('active', t.dataset.eodTab === key));
+      body.querySelectorAll('[data-eod-panel]').forEach(p => p.classList.toggle('active', p.dataset.eodPanel === key));
+    });
+  });
 
   const wBtn = body.querySelector('#eod-withdraw-btn');
   if (wBtn) wBtn.addEventListener('click', () => _openCashWithdrawModal(dr?.balance ?? null));
@@ -3319,6 +3699,10 @@ function applyFeatureVisibility() {
     const show = tabFeatures[tab.dataset.tab];
     tab.style.display = (show === undefined || show) ? '' : 'none';
   });
+  $$('.sb-nav-item[data-tab]').forEach(item => {
+    const show = tabFeatures[item.dataset.tab];
+    item.style.display = (show === undefined || show) ? '' : 'none';
+  });
 
   // ── POS ribbon groups ──
   grp('#rb-new-session',    pos_session);                            // Session
@@ -3567,7 +3951,7 @@ function applyFeatureVisibility() {
     if (salGrps[4]) salGrps[4].style.display = (mp('sal_btn_qt_new')||mp('sal_btn_qt_refresh')) ? '' : 'none';
     if (salGrps[5]) salGrps[5].style.display = mp('sal_tab_orders') ? '' : 'none'; }
   // ── Sales panel: sub-nav tab gating with fallback ──
-  { const _salTabPerms = { transactions: mp('sal_tab_transactions'), history: mp('sal_tab_history'), quotes: mp('sal_tab_quotes'), invoices: mp('sal_tab_invoices'), orders: mp('sal_tab_orders') };
+  { const _salTabPerms = { transactions: mp('sal_tab_transactions'), history: mp('sal_tab_history'), credits: mp('sal_tab_transactions'), quotes: mp('sal_tab_quotes'), invoices: mp('sal_tab_invoices'), orders: mp('sal_tab_orders') };
     $$('.sal-view-btn').forEach(b => { b.style.display = _salTabPerms[b.dataset.salView] ? '' : 'none'; });
     const _salActive = $('.sal-view-btn.active');
     if (_salActive && !_salTabPerms[_salActive.dataset.salView]) {
@@ -3869,6 +4253,8 @@ function showApp() {
   updateParkedBadge();
   // Start on Home tab; load products in background for POS
   loadProducts();
+  // Apply saved layout mode (ribbon vs sidebar)
+  _applyLayoutMode(state.config?.layout_mode || 'ribbon');
   // Give one frame for layout + title update before activating Home
   requestAnimationFrame(() => activateTab('home'));
   // Check if bank account onboarding is needed
@@ -3989,6 +4375,9 @@ async function _bwzSubmit() {
 
   $('#bwz-overlay').style.display = 'none';
   toast('Bank account created', 'success');
+  // Refresh the account dropdown so the new account appears immediately
+  _posAccountsCache = null;
+  loadPosAccounts();
 }
 
 // Wire wizard buttons once on page load
@@ -6231,7 +6620,7 @@ $('#rb-home-suppliers').addEventListener('click', () => { activateTab('inventory
 $('#rb-home-expenses').addEventListener('click',      () => { activateTab('home'); switchHomeView('expenses'); });
 $('#rb-home-profit').addEventListener('click',        () => { activateTab('home'); switchHomeView('profit'); });
 $('#rb-home-payroll').addEventListener('click',       () => { activateTab('home'); switchHomeView('payroll'); });
-$('#rb-home-settings').addEventListener('click',      () => toast('Settings coming soon', 'info'));
+$('#rb-home-settings').addEventListener('click',      () => openPosSettings());
 $('#rb-home-help').addEventListener('click',          () => showShortcutsModal());
 
 // ── React Flow Business Flowchart ─────────────────────────────────────────
@@ -9257,138 +9646,107 @@ $$('.brand-ft-btn').forEach(btn => {
 // ── End Product Brands ────────────────────────────────────────────────────
 
 // ── Barcode Sheets ────────────────────────────────────────────────────────
-const _bc = { q: '', timer: null, products: [], selected: {} };
+const _bc      = { items: [], queue: [], searchTimer: null };
+const _bcPrint = { pageType: 'roll', rollCols: 1, a4Cols: 3, a4Rows: 8 };
 
-async function _barcodeLoad() {
-  const list = $('#bc-product-list');
-  if (!list) return;
-  list.innerHTML = `<div class="inv-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</div>`;
-  const res = await API.productSearch(_bc.q, 200);
-  if (res.status !== 200) {
-    list.innerHTML = `<div class="inv-loading" style="color:#ef4444"><i class="fa fa-triangle-exclamation"></i> Failed to load</div>`;
+function _bcGetPrintConfig() {
+  if (_bcPrint.pageType === 'a4') {
+    return { pageType: 'a4', cols: _bcPrint.a4Cols, rowsPerPage: _bcPrint.a4Rows };
+  }
+  return { pageType: 'roll', cols: _bcPrint.rollCols };
+}
+
+function _barcodeLoad() { _bcRefreshTab(); }
+
+// ── Primary modal ─────────────────────────────────────────────────────────
+$('#bc-open-main')?.addEventListener('click', _bcOpenMain);
+$('#bc-main-close')?.addEventListener('click', () => { $('#bc-main-modal').style.display = 'none'; });
+$('#bc-main-modal')?.addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.style.display = 'none'; });
+
+function _bcOpenMain() {
+  _bc.items = [];
+  const inp = $('#bc-product-search-inp');
+  if (inp) inp.value = '';
+  const dd = $('#bc-product-dropdown');
+  if (dd) dd.style.display = 'none';
+  _bcRefreshPreview();
+  $('#bc-main-modal').style.display = 'flex';
+  setTimeout(() => $('#bc-product-search-inp')?.focus(), 80);
+}
+
+// product search dropdown
+$('#bc-product-search-inp')?.addEventListener('input', e => {
+  const q = e.target.value.trim();
+  clearTimeout(_bc.searchTimer);
+  if (!q) { const dd = $('#bc-product-dropdown'); if (dd) dd.style.display = 'none'; return; }
+  _bc.searchTimer = setTimeout(() => _bcSearchProducts(q), 250);
+});
+$('#bc-product-search-inp')?.addEventListener('blur', () => {
+  setTimeout(() => { const dd = $('#bc-product-dropdown'); if (dd) dd.style.display = 'none'; }, 180);
+});
+
+async function _bcSearchProducts(q) {
+  const dd = $('#bc-product-dropdown');
+  if (!dd) return;
+  dd.innerHTML = `<div class="bc-dd-loading"><i class="fa fa-spinner fa-spin"></i> Searching…</div>`;
+  dd.style.display = '';
+  const res  = await API.productSearch(q, 20);
+  const list = res.status === 200 ? (res.body?.data ?? []) : [];
+  if (!list.length) {
+    dd.innerHTML = `<div class="bc-dd-empty"><i class="fa fa-inbox"></i> No products found</div>`;
     return;
   }
-  _bc.products = res.body?.data ?? [];
-  _barcodeRenderList();
-}
-
-function _barcodeRenderList() {
-  const list = $('#bc-product-list');
-  if (!list) return;
-  if (!_bc.products.length) {
-    list.innerHTML = `<div class="inv-loading"><i class="fa fa-boxes-stacked"></i> No products found</div>`;
-    return;
-  }
-  list.innerHTML = _bc.products.map(p => {
-    const barcode = p.sku || String(p.id);
-    const sel = !!_bc.selected[p.id];
-    const qty = _bc.selected[p.id]?.qty ?? 1;
-    return `<div class="bc-product-row${sel ? ' bc-selected' : ''}" data-pid="${p.id}">
-      <label class="bc-chk-wrap bc-row-chk">
-        <input type="checkbox" class="bc-chk" data-pid="${p.id}"${sel ? ' checked' : ''}>
-      </label>
-      <div class="bc-row-info">
-        <div class="bc-row-name">${escHtml(p.name)}</div>
-        <div class="bc-row-sku">${escHtml(barcode)}</div>
-      </div>
-    </div>`;
-  }).join('');
-  _barcodeUpdateCount();
-  // wire checkboxes
-  list.querySelectorAll('.bc-chk').forEach(chk => {
-    chk.addEventListener('change', e => {
-      e.stopPropagation();
-      const pid = chk.dataset.pid;
-      const p   = _bc.products.find(x => String(x.id) === pid);
-      if (!p) return;
-      if (chk.checked) { _bc.selected[pid] = { p, qty: 1 }; }
-      else             { delete _bc.selected[pid]; }
-      const row = chk.closest('.bc-product-row');
-      if (row) row.classList.toggle('bc-selected', chk.checked);
-      _barcodeUpdateCount();
-    });
-  });
-
-  // Click row (not checkbox) → open batch picker
-  list.querySelectorAll('.bc-product-row').forEach(row => {
-    row.addEventListener('click', e => {
-      if (e.target.closest('.bc-chk-wrap')) return;
-      const pid = row.dataset.pid;
-      const p   = _bc.products.find(x => String(x.id) === pid);
-      if (p) _bcOpenBatchPicker(p.id, p.name, p.sku || '', p.stock_quantity, p.unit_sell_price);
+  dd.innerHTML = list.map(p => `
+    <div class="bc-dd-item"
+      data-pid="${p.id}"
+      data-name="${p.name.replace(/&/g,'&amp;').replace(/"/g,'&quot;')}"
+      data-sku="${(p.sku||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;')}"
+      data-qty="${p.stock_quantity || 0}"
+      data-price="${p.unit_sell_price || ''}">
+      <div class="bc-dd-item-name">${escHtml(p.name)}</div>
+      <div class="bc-dd-item-sku">${p.sku ? escHtml(p.sku) : '<span style="opacity:.4">No SKU</span>'}</div>
+    </div>`).join('');
+  dd.querySelectorAll('.bc-dd-item').forEach(el => {
+    el.addEventListener('mousedown', () => {
+      const inp = $('#bc-product-search-inp');
+      if (inp) inp.value = el.dataset.name;
+      dd.style.display = 'none';
+      _bcOpenStockModal(el.dataset.pid, el.dataset.name, el.dataset.sku, el.dataset.qty, el.dataset.price);
     });
   });
 }
 
-function _barcodeUpdateCount() {
-  const n = Object.keys(_bc.selected).length;
-  const el = $('#bc-sel-count');
-  const btn = $('#bc-print-btn');
-  if (el)  el.innerHTML = `<i class="fa fa-tag"></i> ${n} selected`;
-  if (btn) btn.disabled = n === 0;
-  const allChk = $('#bc-select-all');
-  if (allChk) allChk.checked = _bc.products.length > 0 && n === _bc.products.length;
-}
+// ── Secondary stock popup ─────────────────────────────────────────────────
+$('#bc-stock-close')?.addEventListener('click', () => { $('#bc-stock-modal').style.display = 'none'; });
+$('#bc-stock-modal')?.addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.style.display = 'none'; });
 
-function _barcodePrint() {
-  const items = [];
-  Object.values(_bc.selected).forEach(({ p, qty }) => {
-    const code = p.sku || String(p.id);
-    for (let i = 0; i < Math.min(qty, 500); i++) {
-      items.push({ name: p.name, code, price: p.unit_sell_price ?? '' });
-    }
-  });
-  if (!items.length) return;
-  _bcRenderPreview(items, parseInt($('#bc-cols')?.value) || 3);
-}
-
-// ── Barcode batch picker ──────────────────────────────────────────────────
-$('#bc-batch-close')?.addEventListener('click', () => { $('#bc-batch-modal').style.display = 'none'; });
-$('#bc-batch-modal')?.addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.style.display = 'none'; });
-
-async function _bcOpenBatchPicker(productId, productName, productSku, productQty, productSellPrice) {
-  const modal   = $('#bc-batch-modal');
-  const loading = $('#bc-batch-loading');
-  const list    = $('#bc-batch-list');
-  $('#bc-batch-title').textContent = productName;
-  $('#bc-batch-sku').textContent   = productSku ? productSku : '';
+async function _bcOpenStockModal(productId, productName, productSku, productQty, productSellPrice) {
+  const loading = $('#bc-stock-loading');
+  const list    = $('#bc-stock-list');
+  $('#bc-stock-title').textContent   = productName;
+  $('#bc-stock-sku-sub').textContent = productSku || '';
   loading.style.display = '';
   list.style.display    = 'none';
   list.innerHTML        = '';
-  modal.style.display   = 'flex';
+  $('#bc-stock-modal').style.display = 'flex';
 
   const res = await API.productStockHistory(productId);
   loading.style.display = 'none';
-
   let batches = res.status === 200 ? (res.body?.data ?? []) : [];
 
-  // No stock layers → product has opening stock set directly (no GRN/manual layer exists yet).
-  // Synthesise a single opening-stock entry so the user can still print a barcode.
+  // Synthesise opening-stock entry when no stock layers exist yet
   if (!batches.length) {
-    const qty = parseFloat(productQty) || 0;
-    const sell = parseFloat(productSellPrice) || null;
     batches = [{
-      id:                  null,
-      batch_sku:           productSku || null,
-      received_at:         null,
-      quantity_received:   qty,
-      quantity_remaining:  qty,
-      unit_cost:           null,
-      selling_unit_price:  sell,
-      wholesale_unit_price: null,
-      source_type:         'opening',
-      grn_number:          null,
-      po_number:           null,
+      id: null, batch_sku: productSku || null, received_at: null,
+      quantity_received: parseFloat(productQty) || 0,
+      quantity_remaining: parseFloat(productQty) || 0,
+      unit_cost: null, selling_unit_price: parseFloat(productSellPrice) || null,
+      wholesale_unit_price: null, source_type: 'opening',
+      grn_number: null, po_number: null,
     }];
   }
 
-  if (!batches.length) {
-    list.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-muted)"><i class="fa fa-inbox"></i><p style="margin-top:8px">No stock batches found</p></div>`;
-    list.style.display = '';
-    return;
-  }
-  const cur     = state.currency || '';
-
+  const cur = state.currency || '';
   list.innerHTML = batches.map(h => {
     const src      = h.source_type || (h.grn_number ? 'grn' : 'opening');
     const qtyLeft  = parseFloat(h.quantity_remaining || 0);
@@ -9397,72 +9755,183 @@ async function _bcOpenBatchPicker(productId, productName, productSku, productQty
     const sell     = h.selling_unit_price != null ? parseFloat(h.selling_unit_price).toFixed(2) : '';
     const date     = h.received_at ? new Date(h.received_at).toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }) : '—';
     const qtyStatusCls = qtyLeft <= 0 ? 'srh-qty-depleted' : qtyLeft < qtyIn ? 'srh-qty-partial' : 'srh-qty-full';
-
     let srcBadge;
     if (src === 'opening') srcBadge = `<span class="inv-src-badge inv-src-opening"><i class="fa fa-box-open"></i> Opening Stock</span>`;
     else if (src === 'po') srcBadge = `<span class="inv-src-badge inv-src-po"><i class="fa fa-file-invoice"></i> PO — ${escHtml(h.po_number||'')}</span>`;
     else                   srcBadge = `<span class="inv-src-badge inv-src-grn"><i class="fa fa-truck-ramp-box"></i> GRN — ${escHtml(h.grn_number||'')}</span>`;
-
-    return `<div class="bc-batch-row" data-layer-id="${h.id}">
-      <div class="bc-batch-info">
-        ${srcBadge}
-        <span class="bc-batch-sku-chip"><i class="fa fa-barcode"></i> ${escHtml(batchSku)}</span>
-        <span class="bc-batch-date">${date}</span>
+    const price = sell ? `${cur}${sell}` : '';
+    return `<div class="bc-stock-row">
+      <div class="bc-stock-row-info">
+        <div class="bc-stock-row-badges">
+          ${srcBadge}
+          <span class="bc-batch-sku-chip"><i class="fa fa-barcode"></i> ${escHtml(batchSku)}</span>
+          <span class="bc-batch-date">${date}</span>
+        </div>
+        <div class="bc-stock-row-stats">
+          <div class="bc-batch-stat">
+            <span class="bc-batch-stat-lbl">Remaining</span>
+            <span class="bc-batch-stat-val ${qtyStatusCls}">${qtyLeft % 1 === 0 ? qtyLeft : qtyLeft.toFixed(2)}</span>
+          </div>
+          <div class="bc-batch-stat">
+            <span class="bc-batch-stat-lbl">Received</span>
+            <span class="bc-batch-stat-val">${qtyIn % 1 === 0 ? qtyIn : qtyIn.toFixed(2)}</span>
+          </div>
+          ${sell ? `<div class="bc-batch-stat"><span class="bc-batch-stat-lbl">Sell Price</span><span class="bc-batch-stat-val">${cur}${sell}</span></div>` : ''}
+        </div>
       </div>
-      <div class="bc-batch-qty-row">
-        <div class="bc-batch-stat">
-          <span class="bc-batch-stat-lbl">Remaining</span>
-          <span class="bc-batch-stat-val ${qtyStatusCls}">${qtyLeft % 1 === 0 ? qtyLeft : qtyLeft.toFixed(2)}</span>
-        </div>
-        <div class="bc-batch-stat">
-          <span class="bc-batch-stat-lbl">Received</span>
-          <span class="bc-batch-stat-val">${qtyIn % 1 === 0 ? qtyIn : qtyIn.toFixed(2)}</span>
-        </div>
-        ${sell ? `<div class="bc-batch-stat"><span class="bc-batch-stat-lbl">Sell Price</span><span class="bc-batch-stat-val">${cur}${sell}</span></div>` : ''}
-        <div class="bc-batch-print-ctrl">
-          <label class="bc-batch-qty-lbl">Labels</label>
-          <input type="number" class="bc-batch-qty-inp" value="${Math.max(1, Math.floor(qtyLeft)) || 1}" min="1" max="500"
-            data-batch-sku="${escHtml(batchSku)}" data-product-name="${productName.replace(/"/g,'&quot;')}">
-          <button class="bc-batch-print-btn" data-batch-sku="${escHtml(batchSku)}"
-            data-product-name="${productName.replace(/"/g,'&quot;')}" data-sell="${sell}">
-            <i class="fa fa-print"></i> Print
-          </button>
-        </div>
+      <div class="bc-stock-row-action">
+        <label class="bc-stock-qty-lbl">Qty</label>
+        <input type="number" class="bc-stock-qty-inp" value="${Math.max(1, Math.floor(qtyLeft)) || 1}" min="1" max="500">
+        <button class="bc-stock-add-btn"
+          data-sku="${escHtml(batchSku)}"
+          data-name="${productName.replace(/&/g,'&amp;').replace(/"/g,'&quot;')}"
+          data-price="${escHtml(price)}">
+          <i class="fa fa-plus"></i> Add
+        </button>
       </div>
     </div>`;
   }).join('');
   list.style.display = '';
 
-  list.querySelectorAll('.bc-batch-print-btn').forEach(btn => {
+  list.querySelectorAll('.bc-stock-add-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      const batchSku  = btn.dataset.batchSku;
-      const name      = btn.dataset.productName;
-      const price     = btn.dataset.sell;
-      const row       = btn.closest('.bc-batch-row');
-      const qtyInp    = row?.querySelector('.bc-batch-qty-inp');
-      const qty       = Math.max(1, Math.min(500, parseInt(qtyInp?.value) || 1));
-      const cols      = parseInt($('#bc-cols')?.value) || 3;
-      const items     = Array.from({ length: qty }, () => ({ name, code: batchSku, price }));
-      _bcRenderPreview(items, cols);
-      $('#bc-batch-modal').style.display = 'none';
+      const row    = btn.closest('.bc-stock-row');
+      const qtyInp = row?.querySelector('.bc-stock-qty-inp');
+      const qty    = Math.max(1, Math.min(500, parseInt(qtyInp?.value) || 1));
+      for (let i = 0; i < qty; i++) {
+        _bc.items.push({ name: btn.dataset.name, code: btn.dataset.sku, price: btn.dataset.price });
+      }
+      _bcRefreshPreview();
+      $('#bc-stock-modal').style.display = 'none';
     });
   });
 }
 
-function _bcRenderPreview(items, cols) {
-  const labelsHtml = items.map(it => `
-    <div class="bc-plabel">
-      <svg class="bc-psvg" data-code="${it.code.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')}"></svg>
-      <div class="bc-pname">${escHtml(it.name).substring(0, 30)}</div>
+// ── Inline preview inside primary modal ───────────────────────────────────
+// options panel — paper size + custom text → refresh preview on any change
+document.querySelectorAll('input[name="bc-paper"]').forEach(r => {
+  r.addEventListener('change', () => {
+    const isCustom = r.value === 'custom' && r.checked;
+    const customSize = $('#bc-custom-size');
+    if (customSize) customSize.style.display = document.querySelector('input[name="bc-paper"]:checked')?.value === 'custom' ? '' : 'none';
+    _bcRefreshPreview();
+  });
+});
+$('#bc-custom-w')?.addEventListener('input', _bcRefreshPreview);
+$('#bc-custom-h')?.addEventListener('input', _bcRefreshPreview);
+$('#bc-top-text')?.addEventListener('input', _bcRefreshPreview);
+$('#bc-custom-text')?.addEventListener('input', _bcRefreshPreview);
+
+function _bcLabelConfig() {
+  const paper = document.querySelector('input[name="bc-paper"]:checked')?.value || 'single';
+  // returns { labelW, labelH, barcodeH } in px for the preview card
+  if (paper === 'single') return { labelW: 240, labelH: null, barcodeH: 44 };
+  if (paper === 'double') return { labelW: 240, labelH: null, barcodeH: 80 };
+  // custom — scale mm → px keeping max 260px wide
+  const wMm = Math.max(10, parseInt($('#bc-custom-w')?.value) || 60);
+  const hMm = Math.max(10, parseInt($('#bc-custom-h')?.value) || 30);
+  const scale = Math.min(260 / wMm, 220 / hMm);
+  const labelW = Math.round(wMm * scale);
+  const labelH = Math.round(hMm * scale);
+  const barcodeH = Math.max(28, Math.round(labelH * 0.48));
+  return { labelW, labelH, barcodeH };
+}
+
+function _bcRefreshPreview() {
+  const body        = $('#bc-main-preview-body');
+  const countEl     = $('#bc-main-label-count');
+  const printBtn    = $('#bc-print-btn');
+  const footerCount = $('#bc-footer-count');
+  const addToPrint  = $('#bc-add-to-print');
+  if (!body) return;
+  const n = _bc.items.length;
+  if (countEl) countEl.innerHTML = n ? `<span class="bc-label-badge">${n}</span>` : '';
+  if (printBtn) printBtn.disabled = !n;
+  if (footerCount) footerCount.textContent = n ? `${n} label${n !== 1 ? 's' : ''} ready` : 'No labels added';
+  if (addToPrint) addToPrint.disabled = !n;
+  if (!n) {
+    body.innerHTML = `<div class="bc-preview-ph"><i class="fa fa-barcode"></i><span>Search for a product above, then add barcode labels from its stock layers</span></div>`;
+    return;
+  }
+  const it          = _bc.items[_bc.items.length - 1];
+  const topText     = ($('#bc-top-text')?.value    || '').trim();
+  const bottomText  = ($('#bc-custom-text')?.value || '').trim();
+  const { labelW, labelH, barcodeH } = _bcLabelConfig();
+  const sizeStyle   = `width:${labelW}px;${labelH ? `height:${labelH}px;` : ''}`;
+  body.innerHTML = `<div class="bc-single-preview">
+    <div class="bc-plabel bc-plabel-lg" style="${sizeStyle}">
+      ${topText ? `<div class="bc-ptoptext">${escHtml(topText)}</div>` : ''}
+      <svg class="bc-psvg" data-barcode-h="${barcodeH}"
+        data-code="${it.code.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')}"></svg>
+      <div class="bc-pname">${escHtml(it.name).substring(0,30)}</div>
       <div class="bc-psku">${escHtml(it.code)}</div>
-      ${it.price ? `<div class="bc-pprice">${escHtml(String(it.price))}</div>` : ''}
-    </div>`).join('');
+      ${it.price ? `<div class="bc-pprice">${escHtml(it.price)}</div>` : ''}
+      ${bottomText ? `<div class="bc-pcustom">${escHtml(bottomText)}</div>` : ''}
+    </div>
+  </div>`;
+  requestAnimationFrame(() => {
+    body.querySelectorAll('.bc-psvg').forEach(svg => {
+      const code = svg.dataset.code;
+      const h    = parseInt(svg.dataset.barcodeH) || 52;
+      if (!code) { const fb=document.createElement('div'); fb.style.cssText='font-size:9px;text-align:center;color:#ef4444;padding:6px 0'; fb.textContent='No SKU'; svg.replaceWith(fb); return; }
+      try { JsBarcode(svg, code, { format:'CODE128', width:1.8, height:h, displayValue:false, margin:4 }); }
+      catch (_) { const fb=document.createElement('div'); fb.style.cssText='font-size:10px;text-align:center;letter-spacing:2px;font-family:monospace;padding:8px 0'; fb.textContent=code; svg.replaceWith(fb); }
+    });
+  });
+}
+
+$('#bc-print-btn')?.addEventListener('click', () => {
+  if (!_bc.items.length) return;
+  const paper = document.querySelector('input[name="bc-paper"]:checked')?.value || 'single';
+  const cols  = paper === 'double' ? 2 : 1;
+  _bcRenderPreview(_bc.items,
+    { pageType: 'roll', cols },
+    ($('#bc-top-text')?.value || '').trim(),
+    ($('#bc-custom-text')?.value || '').trim());
+});
+
+function _bcRenderPreview(items, config, topText = '', bottomText = '') {
+  // accept both legacy numeric cols arg and new config object
+  const cfg = typeof config === 'number' ? { pageType: 'roll', cols: config } : (config || {});
+  const { pageType = 'roll', cols = 3, rowsPerPage = null } = cfg;
 
   const sheet = $('#bc-preview-sheet');
   const modal = $('#bc-preview-modal');
   if (!sheet || !modal) return;
-  sheet.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
-  sheet.innerHTML = labelsHtml;
+
+  const mkLabel = it => {
+    const top = it.topText    !== undefined ? it.topText    : topText;
+    const bot = it.bottomText !== undefined ? it.bottomText : bottomText;
+    return `<div class="bc-plabel">
+      ${top ? `<div class="bc-ptoptext">${escHtml(top)}</div>`    : ''}
+      <svg class="bc-psvg" data-code="${it.code.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')}"></svg>
+      <div class="bc-pname">${escHtml(it.name).substring(0, 30)}</div>
+      <div class="bc-psku">${escHtml(it.code)}</div>
+      ${it.price ? `<div class="bc-pprice">${escHtml(String(it.price))}</div>` : ''}
+      ${bot ? `<div class="bc-pcustom">${escHtml(bot)}</div>` : ''}
+    </div>`;
+  };
+
+  if (pageType === 'a4' && rowsPerPage) {
+    const perPage = cols * rowsPerPage;
+    const parts = [];
+    for (let i = 0; i < items.length; i += perPage) {
+      const chunk   = items.slice(i, i + perPage);
+      const pageNum = Math.floor(i / perPage) + 1;
+      parts.push(`<div class="bc-a4-page" style="grid-template-columns:repeat(${cols},1fr)">${chunk.map(mkLabel).join('')}</div>`);
+      if (i + perPage < items.length) {
+        parts.push(`<div class="bc-page-sep"><span>Page ${pageNum + 1}</span></div>`);
+      }
+    }
+    sheet.className = 'bc-preview-sheet bc-ps-a4';
+    sheet.removeAttribute('style');
+    sheet.innerHTML = parts.join('');
+  } else {
+    sheet.className = 'bc-preview-sheet';
+    sheet.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+    sheet.innerHTML = items.map(mkLabel).join('');
+  }
+
   modal.style.display = 'flex';
 
   requestAnimationFrame(() => {
@@ -9487,26 +9956,130 @@ function _bcRenderPreview(items, cols) {
   });
 }
 
-$('#bc-search')?.addEventListener('input', e => {
-  _bc.q = e.target.value.trim();
-  clearTimeout(_bc.timer);
-  _bc.timer = setTimeout(_barcodeLoad, 300);
-});
-
-$('#bc-select-all')?.addEventListener('change', e => {
-  if (e.target.checked) {
-    _bc.products.forEach(p => {
-      if (!_bc.selected[p.id]) _bc.selected[p.id] = { p, qty: 1 };
-    });
-  } else {
-    _bc.selected = {};
-  }
-  _barcodeRenderList();
-});
-
-$('#bc-print-btn')?.addEventListener('click', _barcodePrint);
 $('#bc-prev-close')?.addEventListener('click', () => { $('#bc-preview-modal').style.display = 'none'; });
 $('#bc-prev-print')?.addEventListener('click', () => window.electronAPI.printReceipt());
+
+// ── Add to Print (modal footer) ───────────────────────────────────────────
+$('#bc-add-to-print')?.addEventListener('click', () => {
+  if (!_bc.items.length) return;
+  const copies     = Math.max(1, Math.min(100, parseInt($('#bc-footer-copies')?.value) || 1));
+  const topText    = ($('#bc-top-text')?.value    || '').trim();
+  const bottomText = ($('#bc-custom-text')?.value || '').trim();
+  const paper      = document.querySelector('input[name="bc-paper"]:checked')?.value || 'single';
+  const customW    = parseInt($('#bc-custom-w')?.value) || 60;
+  const customH    = parseInt($('#bc-custom-h')?.value) || 30;
+  const batchItems = _bc.items.map(it => ({ ...it, topText, bottomText }));
+  const allItems   = [];
+  for (let c = 0; c < copies; c++) allItems.push(...batchItems);
+  _bc.queue.push({
+    items: allItems,
+    topText, bottomText, paper, customW, customH,
+    productName: _bc.items[0]?.name || 'Labels',
+    labelCount: allItems.length,
+  });
+  $('#bc-main-modal').style.display = 'none';
+  _bcRefreshTab();
+});
+
+// ── Print All (tab header) ────────────────────────────────────────────────
+$('#bc-print-all-btn')?.addEventListener('click', () => {
+  if (!_bc.queue.length) return;
+  const allItems = _bc.queue.flatMap(b => b.items);
+  _bcRenderPreview(allItems, _bcGetPrintConfig(), '', '');
+});
+
+// ── Print settings strip ──────────────────────────────────────────────────
+$('#bc-ps-type')?.querySelectorAll('.bc-ps-seg-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    $('#bc-ps-type').querySelectorAll('.bc-ps-seg-btn').forEach(b => b.classList.remove('bc-ps-active'));
+    btn.classList.add('bc-ps-active');
+    _bcPrint.pageType = btn.dataset.val;
+    $('#bc-ps-roll').style.display = _bcPrint.pageType === 'roll' ? '' : 'none';
+    $('#bc-ps-a4').style.display   = _bcPrint.pageType === 'a4'   ? '' : 'none';
+    _bcRefreshTab();
+  });
+});
+$('#bc-ps-roll-size')?.querySelectorAll('.bc-ps-seg-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    $('#bc-ps-roll-size').querySelectorAll('.bc-ps-seg-btn').forEach(b => b.classList.remove('bc-ps-active'));
+    btn.classList.add('bc-ps-active');
+    _bcPrint.rollCols = parseInt(btn.dataset.cols) || 1;
+    _bcRefreshTab();
+  });
+});
+$('#bc-ps-a4-cols')?.addEventListener('input', e => { _bcPrint.a4Cols = Math.max(1, Math.min(10, parseInt(e.target.value) || 3)); _bcRefreshTab(); });
+$('#bc-ps-a4-rows')?.addEventListener('input', e => { _bcPrint.a4Rows = Math.max(1, Math.min(30, parseInt(e.target.value) || 8)); _bcRefreshTab(); });
+
+// ── Tab queue view ────────────────────────────────────────────────────────
+function _bcRefreshTab() {
+  const content  = $('#bc-tab-content');
+  const countEl  = $('#bc-tab-queue-count');
+  const printAll = $('#bc-print-all-btn');
+  if (!content) return;
+  const batchCount     = _bc.queue.length;
+  const totalLabels    = _bc.queue.reduce((s, b) => s + b.labelCount, 0);
+  const uniqueProducts = new Set(_bc.queue.map(b => b.productName)).size;
+  const pcfg           = _bcGetPrintConfig();
+  const labelsPerPage  = pcfg.pageType === 'a4' ? pcfg.cols * (pcfg.rowsPerPage || 8) : pcfg.cols * 10;
+  const estPages       = totalLabels ? Math.ceil(totalLabels / labelsPerPage) : 0;
+  if (countEl) countEl.innerHTML = totalLabels ? `<span class="bc-label-badge">${totalLabels}</span>` : '';
+  if (printAll) printAll.disabled = !batchCount;
+  // footer stats
+  const tfBatches  = $('#bc-tf-batches');
+  const tfLabels   = $('#bc-tf-labels');
+  const tfProducts = $('#bc-tf-products');
+  const tfPages    = $('#bc-tf-pages');
+  const tfStatus   = $('#bc-tf-status');
+  if (tfBatches)  tfBatches.textContent  = batchCount;
+  if (tfLabels)   tfLabels.textContent   = totalLabels;
+  if (tfProducts) tfProducts.textContent = uniqueProducts;
+  if (tfPages)    tfPages.textContent    = estPages || 0;
+  if (tfStatus) {
+    tfStatus.innerHTML = batchCount
+      ? `<i class="fa fa-circle-check" style="color:#16a34a"></i> <span>${totalLabels} label${totalLabels !== 1 ? 's' : ''} ready to print</span>`
+      : `<i class="fa fa-circle-dot"></i> <span>Queue empty</span>`;
+  }
+  if (!_bc.queue.length) {
+    content.innerHTML = `<div class="bc-empty-state">
+      <div class="bc-empty-icon"><i class="fa fa-barcode"></i></div>
+      <div class="bc-empty-title">No Labels Yet</div>
+      <div class="bc-empty-desc">Click "Generate Barcode" to add products to your print queue</div>
+    </div>`;
+    return;
+  }
+  content.innerHTML = _bc.queue.map((batch, i) => {
+    const paperLabel = batch.paper === 'single' ? 'Single Row' : batch.paper === 'double' ? 'Double Row' : `${batch.customW}×${batch.customH} mm`;
+    return `<div class="bc-batch-card">
+      <div class="bc-batch-card-icon"><i class="fa fa-barcode"></i></div>
+      <div class="bc-batch-card-info">
+        <div class="bc-batch-card-name">${escHtml(batch.productName)}</div>
+        <div class="bc-batch-card-meta">
+          <span class="bc-label-badge">${batch.labelCount} label${batch.labelCount !== 1 ? 's' : ''}</span>
+          ${batch.topText    ? `<span class="bc-batch-meta-tag"><i class="fa fa-arrow-up"></i> ${escHtml(batch.topText)}</span>`    : ''}
+          ${batch.bottomText ? `<span class="bc-batch-meta-tag"><i class="fa fa-arrow-down"></i> ${escHtml(batch.bottomText)}</span>` : ''}
+          <span class="bc-batch-meta-paper"><i class="fa fa-ruler-combined"></i> ${escHtml(paperLabel)}</span>
+        </div>
+      </div>
+      <div class="bc-batch-card-actions">
+        <button class="bc-batch-print-btn" data-idx="${i}"><i class="fa fa-print"></i> Print</button>
+        <button class="bc-batch-del-btn" data-idx="${i}"><i class="fa fa-trash"></i></button>
+      </div>
+    </div>`;
+  }).join('');
+  content.querySelectorAll('.bc-batch-del-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      _bc.queue.splice(parseInt(btn.dataset.idx), 1);
+      _bcRefreshTab();
+    });
+  });
+  content.querySelectorAll('.bc-batch-print-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const batch = _bc.queue[parseInt(btn.dataset.idx)];
+      if (batch) _bcRenderPreview(batch.items, _bcGetPrintConfig(), batch.topText, batch.bottomText);
+    });
+  });
+}
+
 // ── End Barcode Sheets ────────────────────────────────────────────────────
 
 // ── Return / Refund Modal ─────────────────────────────────────────────────
@@ -9770,6 +10343,8 @@ const _prod = {
   imageFileId:        null,
   bundleItems:        [],
   _bundleSearchWired: false,
+  batches:            [],
+  batchPricing:       false,
 };
 
 // ── SKU generator ─────────────────────────────────────────────────────────
@@ -9778,6 +10353,7 @@ function _prodGenerateSku() {
   let s = 'PRD-';
   for (let i = 0; i < 8; i++) s += chars[Math.floor(Math.random() * chars.length)];
   $('#prod-f-sku').value = s;
+  if (!_prod.editingId) _prodBatchRender();
 }
 
 // ── Image picker ──────────────────────────────────────────────────────────
@@ -9886,6 +10462,61 @@ function _prodSetImage(fileId, url) {
   const thumb = $('#prod-img-thumb');
   thumb.innerHTML = url ? `<img src="${escHtml(url)}" alt="">` : '<i class="fa fa-image" style="font-size:22px;color:var(--text-muted)"></i>';
   $('#prod-img-remove').style.display = url ? 'inline-flex' : 'none';
+}
+
+// ── Opening stock batches ─────────────────────────────────────────────────
+function _prodBatchRender() {
+  const wrap = $('#prod-batch-wrap');
+  if (!wrap) return;
+  const sku = ($('#prod-f-sku')?.value || '').trim();
+  const pricing = _prod.batchPricing;
+  if (!_prod.batches.length) {
+    wrap.innerHTML = `<div class="prod-batch-empty"><i class="fa fa-inbox"></i> No batches yet — click "Add Batch" to start</div>`;
+    return;
+  }
+  wrap.innerHTML = `<table class="prod-batch-table">
+    <thead><tr>
+      <th class="prod-batch-num">#</th>
+      <th>Batch SKU</th>
+      <th style="width:110px">Quantity</th>
+      ${pricing ? `
+      <th style="width:120px">Cost Price</th>
+      <th style="width:120px">Selling Price</th>
+      <th style="width:120px">Wholesale Price</th>
+      ` : ''}
+      <th style="width:36px"></th>
+    </tr></thead>
+    <tbody>${_prod.batches.map((b, i) => {
+      const num = String(i + 1).padStart(2, '0');
+      const batchSku = sku ? `${sku}-${num}` : '—';
+      return `<tr>
+        <td class="prod-batch-num">${num}</td>
+        <td class="prod-batch-sku-cell">${escHtml(batchSku)}</td>
+        <td><input type="number" class="prod-batch-qty po-field-input" data-idx="${i}" value="${escHtml(String(b.qty))}" min="0" step="0.001" placeholder="0"></td>
+        ${pricing ? `
+        <td><input type="number" class="prod-batch-cost po-field-input" data-idx="${i}" value="${escHtml(String(b.cost))}" min="0" step="0.01" placeholder="0.00"></td>
+        <td><input type="number" class="prod-batch-selling po-field-input" data-idx="${i}" value="${escHtml(String(b.selling))}" min="0" step="0.01" placeholder="0.00"></td>
+        <td><input type="number" class="prod-batch-wholesale po-field-input" data-idx="${i}" value="${escHtml(String(b.wholesale))}" min="0" step="0.01" placeholder="optional"></td>
+        ` : ''}
+        <td><button type="button" class="prod-batch-del" data-idx="${i}"><i class="fa fa-trash"></i></button></td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table>`;
+  wrap.querySelectorAll('.prod-batch-qty').forEach(inp => {
+    inp.addEventListener('input', () => { _prod.batches[+inp.dataset.idx].qty = inp.value; });
+  });
+  wrap.querySelectorAll('.prod-batch-cost').forEach(inp => {
+    inp.addEventListener('input', () => { _prod.batches[+inp.dataset.idx].cost = inp.value; });
+  });
+  wrap.querySelectorAll('.prod-batch-selling').forEach(inp => {
+    inp.addEventListener('input', () => { _prod.batches[+inp.dataset.idx].selling = inp.value; });
+  });
+  wrap.querySelectorAll('.prod-batch-wholesale').forEach(inp => {
+    inp.addEventListener('input', () => { _prod.batches[+inp.dataset.idx].wholesale = inp.value; });
+  });
+  wrap.querySelectorAll('.prod-batch-del').forEach(btn => {
+    btn.addEventListener('click', () => { _prod.batches.splice(+btn.dataset.idx, 1); _prodBatchRender(); });
+  });
 }
 
 // ── Bundle items ──────────────────────────────────────────────────────────
@@ -10138,7 +10769,6 @@ async function _prodOpenModal(editId) {
   _prod.editingId = editId || null;
   const isEdit = !!editId;
   $('#prod-modal-title').textContent  = isEdit ? 'Edit Product' : 'New Product';
-  $('#prod-stock-label').textContent   = isEdit ? 'Stock Quantity' : 'Opening Stock';
 
   // Reset fields
   $('#prod-f-name').value              = '';
@@ -10152,10 +10782,21 @@ async function _prodOpenModal(editId) {
   $('#prod-f-unit').value        = '';
   $('#prod-f-bundle').checked    = false;
   $('#prod-bundle-section').style.display = 'none';
-  $('#prod-f-warranty').checked  = false;
-  $('#prod-f-expiry').checked    = false;
-  $('#prod-f-courier').checked   = false;
-  $('#prod-f-loyalty').checked   = false;
+  $('#prod-f-warranty').checked           = false;
+  $('#prod-f-warranty-duration').value    = '';
+  $$('#prod-warranty-duration-row .warranty-chip').forEach(c => c.classList.remove('active'));
+  $('#prod-f-expiry').checked             = false;
+  $('#prod-f-exp-date').value             = '';
+  $('#prod-f-courier').checked            = false;
+  $('#prod-f-loyalty').checked            = false;
+  $('#prod-f-model-no').value             = '';
+  $('#prod-f-size').value                 = '';
+  $('#prod-f-mfg-date').value             = '';
+  $('#prod-f-customer-required').checked  = false;
+  $('#prod-f-rental').checked             = false;
+  $('#prod-f-subscription').checked       = false;
+  $('#prod-f-item-tax').checked           = false;
+  $('#prod-f-item-discount').checked      = false;
 
   // Reset image
   _prod.imageFileId = null;
@@ -10164,6 +10805,12 @@ async function _prodOpenModal(editId) {
   // Reset bundle
   _prod.bundleItems = [];
   _prodBundleRender();
+
+  // Reset batches
+  _prod.batches = [];
+  _prod.batchPricing = false;
+  const batchPricingChk = $('#prod-batch-pricing-chk');
+  if (batchPricingChk) batchPricingChk.checked = false;
 
   // Reset tag selections
   _prod._nextTempId    = -1;
@@ -10188,10 +10835,21 @@ async function _prodOpenModal(editId) {
     $('#prod-f-description').value = p.description || '';
     $('#prod-f-active').checked    = p.is_active !== false;
     if (p.product_unit_id) $('#prod-f-unit').value = p.product_unit_id;
-    $('#prod-f-warranty').checked  = !!p.has_warranty;
-    $('#prod-f-expiry').checked    = !!p.track_expiry;
-    $('#prod-f-courier').checked   = !!p.courier_delivery;
-    $('#prod-f-loyalty').checked   = !!p.loyalty_redeemable;
+    $('#prod-f-warranty').checked           = !!p.has_warranty;
+    $('#prod-f-warranty-duration').value    = p.warranty_duration || '';
+    _prodSyncWarrantyChips();
+    $('#prod-f-expiry').checked             = !!p.track_expiry;
+    $('#prod-f-exp-date').value             = p.exp_date  || '';
+    $('#prod-f-courier').checked            = !!p.courier_delivery;
+    $('#prod-f-loyalty').checked            = !!p.loyalty_redeemable;
+    $('#prod-f-model-no').value             = p.model_no  || '';
+    $('#prod-f-size').value                 = p.size      || '';
+    $('#prod-f-mfg-date').value             = p.mfg_date  || '';
+    $('#prod-f-customer-required').checked  = !!p.is_customer_required;
+    $('#prod-f-rental').checked             = !!p.is_rental;
+    $('#prod-f-subscription').checked       = !!p.is_subscription;
+    $('#prod-f-item-tax').checked           = !!p.item_wise_tax;
+    $('#prod-f-item-discount').checked      = !!p.item_wise_discount;
 
     // Image
     if (p.file_manager_file_id) {
@@ -10216,6 +10874,24 @@ async function _prodOpenModal(editId) {
     _tagRender('prod-cat-tags',   _prod.selectedCats,   _prodRemoveCat);
     _tagRender('prod-brand-tags', _prod.selectedBrands, _prodRemoveBrand);
   }
+
+  // Show stock field (edit) or batch table (create)
+  const saveNewBtn = $('#prod-modal-save-new');
+  if (isEdit) {
+    $('#prod-stock-field').style.display  = '';
+    $('#prod-batch-section').style.display = 'none';
+    if (saveNewBtn) saveNewBtn.style.display = 'none';
+  } else {
+    $('#prod-stock-field').style.display  = 'none';
+    $('#prod-batch-section').style.display = '';
+    if (saveNewBtn) saveNewBtn.style.display = '';
+    _prod.batches.push({ qty: '', cost: '', selling: '', wholesale: '' });
+    _prodBatchRender();
+  }
+
+  // Reset to first tab
+  $$('#product-modal .prod-modal-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === 'basic'));
+  $$('#product-modal .prod-modal-pane').forEach(p => p.classList.toggle('active', p.dataset.pane === 'basic'));
 
   $('#product-modal').style.display = 'flex';
   setTimeout(() => $('#prod-f-name').focus(), 80);
@@ -10287,14 +10963,16 @@ async function _prodLoadFormOptions() {
   _prod._optionsLoaded = true;
 }
 
-async function _prodSave() {
+async function _prodSave(andNew = false) {
   const name  = $('#prod-f-name').value.trim();
   const price = parseFloat($('#prod-f-price').value);
   if (!name)                    { toast('Product name is required', 'error'); return; }
   if (isNaN(price) || price < 0) { toast('Selling price must be 0 or more', 'error'); return; }
 
-  const btn = $('#prod-modal-save');
+  const btn    = $('#prod-modal-save');
+  const btnNew = $('#prod-modal-save-new');
   btn.disabled = true;
+  if (btnNew) btnNew.disabled = true;
 
   // Create any pending new categories first
   const catIds = [];
@@ -10344,7 +11022,7 @@ async function _prodSave() {
     unit_price:            price,
     cost_price:            parseFloat($('#prod-f-cost-price').value) || null,
     wholesale_price:       parseFloat($('#prod-f-wholesale-price').value) || null,
-    stock_quantity:        parseFloat($('#prod-f-stock').value)  || 0,
+    stock_quantity:        _prod.editingId ? (parseFloat($('#prod-f-stock').value) || 0) : 0,
     description:           $('#prod-f-description').value.trim() || null,
     product_unit_id:       parseInt($('#prod-f-unit').value)     || null,
     product_category_ids:  catIds,
@@ -10353,26 +11031,53 @@ async function _prodSave() {
     is_bundle:             isBundle,
     bundle_items:          bundleItems,
     has_warranty:          $('#prod-f-warranty').checked,
+    warranty_duration:     $('#prod-f-warranty').checked ? ($('#prod-f-warranty-duration').value.trim() || null) : null,
     track_expiry:          $('#prod-f-expiry').checked,
     courier_delivery:      $('#prod-f-courier').checked,
     loyalty_redeemable:    $('#prod-f-loyalty').checked,
+    model_no:              $('#prod-f-model-no').value.trim()  || null,
+    size:                  $('#prod-f-size').value.trim()      || null,
+    mfg_date:              $('#prod-f-mfg-date').value         || null,
+    exp_date:              $('#prod-f-exp-date').value         || null,
+    is_customer_required:  $('#prod-f-customer-required').checked,
+    is_rental:             $('#prod-f-rental').checked,
+    is_subscription:       $('#prod-f-subscription').checked,
+    item_wise_tax:         $('#prod-f-item-tax').checked,
+    item_wise_discount:    $('#prod-f-item-discount').checked,
   };
   if (_prod.imageFileId) body.file_manager_file_ids = [_prod.imageFileId];
+  if (!_prod.editingId) {
+    body.opening_batches = _prod.batches
+      .filter(b => parseFloat(b.qty) > 0)
+      .map(b => ({
+        quantity:        parseFloat(b.qty),
+        cost_price:      _prod.batchPricing ? (parseFloat(b.cost)      || null) : null,
+        selling_price:   _prod.batchPricing ? (parseFloat(b.selling)   || null) : null,
+        wholesale_price: _prod.batchPricing ? (parseFloat(b.wholesale) || null) : null,
+      }));
+  }
 
   const res = _prod.editingId
     ? await API.updateProduct(_prod.editingId, body)
     : await API.createProduct(body);
 
   btn.disabled = false;
+  if (btnNew) btnNew.disabled = false;
 
   if (res.status === 200 || res.status === 201) {
     toast(_prod.editingId ? 'Product updated' : 'Product created', 'success');
-    $('#product-modal').style.display = 'none';
-    if (_prod.editingId) {
-      openProductDetail(_prod.editingId, body.name);
-    } else {
+    if (andNew && !_prod.editingId) {
       invState.loaded = false;
       loadInventory('', 0, 1);
+      _prodOpenModal(null);
+    } else {
+      $('#product-modal').style.display = 'none';
+      if (_prod.editingId) {
+        openProductDetail(_prod.editingId, body.name);
+      } else {
+        invState.loaded = false;
+        loadInventory('', 0, 1);
+      }
     }
   } else {
     const errors = res.body?.errors;
@@ -10405,10 +11110,63 @@ $('#prod-edit-btn')?.addEventListener('click',        () => _prodOpenModal(_prod
 $('#prod-delete-btn')?.addEventListener('click',      _prodDelete);
 $('#prod-modal-close')?.addEventListener('click',   () => { $('#product-modal').style.display = 'none'; });
 $('#prod-modal-cancel')?.addEventListener('click',  () => { $('#product-modal').style.display = 'none'; });
-$('#prod-modal-save')?.addEventListener('click',    _prodSave);
+$('#prod-modal-save')?.addEventListener('click',     () => _prodSave(false));
+$('#prod-modal-save-new')?.addEventListener('click', () => _prodSave(true));
+
+// ── Product modal tab switching ───────────────────────────────────────────
+$$('#product-modal .prod-modal-tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    $$('#product-modal .prod-modal-tab').forEach(b => b.classList.remove('active'));
+    $$('#product-modal .prod-modal-pane').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    const pane = $('#product-modal .prod-modal-pane[data-pane="' + btn.dataset.tab + '"]');
+    if (pane) pane.classList.add('active');
+  });
+});
+
+// Warranty duration
+function _prodSyncWarrantyChips() {
+  const val = ($('#prod-f-warranty-duration')?.value || '').trim().toLowerCase();
+  $$('#prod-warranty-duration-row .warranty-chip').forEach(c => {
+    c.classList.toggle('active', c.dataset.val.toLowerCase() === val);
+  });
+}
+$('#prod-f-warranty')?.addEventListener('change', function () {
+  if (!this.checked) {
+    $('#prod-f-warranty-duration').value = '';
+    $$('#prod-warranty-duration-row .warranty-chip').forEach(c => c.classList.remove('active'));
+  }
+});
+$('#prod-f-expiry')?.addEventListener('change', function () {
+  if (!this.checked) $('#prod-f-exp-date').value = '';
+});
+$('#prod-f-warranty-duration')?.addEventListener('input', _prodSyncWarrantyChips);
+$$('#prod-warranty-duration-row .warranty-chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    $('#prod-f-warranty-duration').value = chip.dataset.val;
+    _prodSyncWarrantyChips();
+  });
+});
 
 // SKU generate
 $('#prod-sku-gen')?.addEventListener('click', _prodGenerateSku);
+
+// Batch: add row
+$('#prod-batch-add-btn')?.addEventListener('click', () => {
+  _prod.batches.push({ qty: '', cost: '', selling: '', wholesale: '' });
+  _prodBatchRender();
+});
+
+// Batch: refresh SKU preview when SKU field changes manually
+$('#prod-f-sku')?.addEventListener('input', () => {
+  if (!_prod.editingId) _prodBatchRender();
+});
+
+// Batch: pricing toggle
+$('#prod-batch-pricing-chk')?.addEventListener('change', function () {
+  _prod.batchPricing = this.checked;
+  _prodBatchRender();
+});
 
 // ── CSV Product Import ─────────────────────────────────────────────────────
 const _CSV_SAMPLE = [
@@ -11512,23 +12270,41 @@ function _ssOpen() {
 }
 
 // Add product directly to cart without showing layer picker (barcode scanner mode)
-function _addToCartDirectly(p) {
+async function _addToCartDirectly(p) {
   const layers = p.layers || [];
   const layer  = layers.find(l => parseFloat(l.quantity_remaining) > 0) || null;
+  let cartItem;
   if (layer) {
-    addToCart({
+    cartItem = {
       id: p.id, layerId: layer.id, layerLabel: layer.label || null,
       name: p.name, price: parseFloat(layer.unit_sell_price),
       stock: parseFloat(layer.quantity_remaining),
-    });
+    };
   } else {
-    // No in-stock layer — omit layerId so server uses FIFO or surfaces stock error
-    addToCart({
+    cartItem = {
       id: p.id, layerId: null, layerLabel: null,
       name: p.name, price: parseFloat(p.discounted_sell_price ?? layers[0]?.unit_sell_price ?? p.unit_sell_price ?? 0),
       stock: p.stock_quantity != null ? parseFloat(p.stock_quantity) : null,
-    });
+    };
   }
+  if (p.has_warranty) {
+    const tab = activeTab();
+    const key = cartItem.layerId != null ? `${cartItem.id}:${cartItem.layerId}` : `${cartItem.id}`;
+    const alreadyInCart = tab?.cart.some(i => i._key === key);
+    if (!alreadyInCart) {
+      if (p.warranty_duration) {
+        const wty = _resolveWarrantyFromDuration(p.warranty_duration);
+        cartItem.warrantyType = wty.type;
+        cartItem.warrantyDate = wty.date ?? null;
+      } else {
+        const wty = await _askWarranty(cartItem.name);
+        if (wty === null) return;
+        cartItem.warrantyType = wty.type;
+        cartItem.warrantyDate = wty.date ?? null;
+      }
+    }
+  }
+  addToCart(cartItem);
 }
 
 // Find product by exact SKU (case-insensitive, trimmed)
@@ -11648,8 +12424,32 @@ async function _tryBatchSkuApiAdd(q) {
   const p = res.body?.data || res.body;
   if (!p || !p.id) return false;
   const layerId = p.matched_layer_id ?? null;
-  const price   = parseFloat(p.discounted_sell_price ?? p.unit_sell_price ?? p.price ?? 0);
-  addToCart({ id: p.id, name: p.name, price, stock: p.layer_qty_remaining ?? p.stock_quantity ?? null, layerId });
+  const matchedLayer = layerId && p.layers ? p.layers.find(l => l.id === layerId) : null;
+  const price = matchedLayer
+    ? parseFloat(matchedLayer.unit_sell_price)
+    : parseFloat(p.discounted_sell_price ?? p.unit_sell_price ?? p.price ?? 0);
+  const cartItem = { id: p.id, name: p.name, price, stock: p.layer_qty_remaining ?? p.stock_quantity ?? null, layerId };
+  if (p.has_warranty) {
+    const tab = activeTab();
+    const key = layerId != null ? `${p.id}:${layerId}` : `${p.id}`;
+    const alreadyInCart = tab?.cart.some(i => i._key === key);
+    if (!alreadyInCart) {
+      if (p.warranty_duration) {
+        const wty = _resolveWarrantyFromDuration(p.warranty_duration);
+        cartItem.warrantyType = wty.type;
+        cartItem.warrantyDate = wty.date ?? null;
+      } else {
+        const wty = await _askWarranty(cartItem.name);
+        if (wty === null) {
+          $('#product-search').value = ''; state.searchQuery = ''; _ssClose(); clearTimeout(searchTimer);
+          return true;
+        }
+        cartItem.warrantyType = wty.type;
+        cartItem.warrantyDate = wty.date ?? null;
+      }
+    }
+  }
+  addToCart(cartItem);
   $('#product-search').value = '';
   state.searchQuery = '';
   _ssClose();
@@ -12992,6 +13792,13 @@ $('#pos-account-refresh').addEventListener('click', (e) => {
   loadPosAccounts();
 });
 
+$('#pos-acct-add-btn').addEventListener('click', (e) => {
+  e.stopPropagation();
+  _posAcctDrop.classList.remove('open');
+  _posAcctBtn.classList.remove('active');
+  _bankWizOpen();
+});
+
 document.addEventListener('click', (e) => {
   if (!$('#tb-acct-wrap').contains(e.target)) {
     _posAcctDrop.classList.remove('open');
@@ -13229,6 +14036,8 @@ async function openPosSettings() {
 
   // General
   $('#psm-theme').value              = s.display_theme ?? 'inherit';
+  $('#psm-receipt-mode').value       = s.receipt_mode ?? 'bill';
+  $('#psm-layout-mode').value        = state.config?.layout_mode || 'ribbon';
   $('#psm-discount-field').checked   = !!s.discount_field_enabled;
   $('#psm-checkout-modal').checked   = !!s.checkout_modal_enabled;
   $('#psm-service-products').checked = !!s.show_service_bound_products;
@@ -13448,6 +14257,7 @@ $('#psm-save').addEventListener('click', async () => {
     currency:                    $('#psm-currency').value.trim(),
     timezone:                    $('#psm-timezone').value.trim(),
     display_theme:               $('#psm-theme').value,
+    receipt_mode:                $('#psm-receipt-mode').value,
     discount_field_enabled:      $('#psm-discount-field').checked,
     checkout_modal_enabled:      $('#psm-checkout-modal').checked,
     show_service_bound_products: $('#psm-service-products').checked,
@@ -13486,10 +14296,18 @@ $('#psm-save').addEventListener('click', async () => {
 
   // Sync relevant settings into state so in-session logic stays current
   const saved = res.body?.data || {};
-  const syncKeys = ['dont_settle_to_account', 'stock_selection_mode', 'choose_price'];
+  const syncKeys = ['dont_settle_to_account', 'stock_selection_mode', 'choose_price', 'receipt_mode'];
   syncKeys.forEach(k => {
     if (saved[k] !== undefined) state.receiptSettings = { ...state.receiptSettings, [k]: saved[k] };
   });
+
+  // Apply layout mode locally (it's an electron config, not a server setting)
+  const newLayout = $('#psm-layout-mode').value;
+  if (newLayout !== (state.config?.layout_mode || 'ribbon')) {
+    if (state.config) state.config.layout_mode = newLayout;
+    _applyLayoutMode(newLayout);
+    await window.electronAPI.setConfig({ layout_mode: newLayout });
+  }
 
   $('#pos-settings-modal').style.display = 'none';
   toast('POS settings saved', 'success');
@@ -13815,7 +14633,8 @@ function buildReceiptHTML(sale, overrides = {}) {
   const addrText     = 'receipt_address_line'   in overrides ? overrides.receipt_address_line   : (s.receipt_address_line || '');
   const headerText   = 'receipt_header'         in overrides ? overrides.receipt_header         : (s.receipt_header  || '');
   const footerText   = 'receipt_footer'         in overrides ? overrides.receipt_footer         : (s.receipt_footer  || 'Thank you for your purchase!');
-  const customerName = 'customer_name'          in overrides ? overrides.customer_name          : (sale.customer?.name || '');
+  const logoUrl      = 'receipt_logo_url'       in overrides ? overrides.receipt_logo_url       : (s.receipt_logo_url || '');
+  const customerName = 'customer_name'          in overrides ? overrides.customer_name          : (sale.customer?.name || sale.customer_name || '');
   const noteText     = 'note'                   in overrides ? overrides.note                   : (sale.notes || '');
 
   const dateStr = sale.sold_at
@@ -13830,13 +14649,22 @@ function buildReceiptHTML(sale, overrides = {}) {
       const exp = i.warranty_expires_at || '';
       wtyLine = `<div class="rcpt-warranty-line"><i class="fa fa-shield-halved"></i> Warranty until ${exp}</div>`;
     }
+    const discPerUnit = parseFloat(i.discount_amount || 0);
+    const qty = parseFloat(i.quantity);
+    const discLine = discPerUnit > 0
+      ? `<div class="rcpt-item-disc">
+          <span class="rid-label"><i class="fa fa-tag"></i> Discount</span>
+          <span class="rid-per">-${discPerUnit.toFixed(2)}</span>
+          <span class="rid-total">-${(discPerUnit * qty).toFixed(2)}</span>
+        </div>`
+      : '';
     return `
     <div class="rcpt-item">
       <span class="ri-name">${escHtml(i.product_name)}</span>
-      <span class="ri-qty">${i.quantity % 1 === 0 ? parseInt(i.quantity) : parseFloat(i.quantity).toFixed(2)}</span>
+      <span class="ri-qty">${qty % 1 === 0 ? parseInt(qty) : qty.toFixed(2)}</span>
       <span class="ri-price">${parseFloat(i.unit_sell_price).toFixed(2)}</span>
       <span class="ri-total">${parseFloat(i.line_total).toFixed(2)}</span>
-    </div>${wtyLine}`;
+    </div>${discLine}${wtyLine}`;
   }).join('');
 
   const discount = parseFloat(sale.discount_amount || 0);
@@ -13864,6 +14692,7 @@ function buildReceiptHTML(sale, overrides = {}) {
   return {
     lang,
     html: `
+    ${logoUrl    ? `<div class="rcpt-logo-wrap"><img class="rcpt-logo-img" src="${escHtml(logoUrl)}" alt="Logo"></div>` : ''}
     ${bizName    ? `<div class="rcpt-biz-name">${escHtml(bizName)}</div>` : ''}
     ${addrLines}
     ${headerText ? `<div class="rcpt-biz-sub">${escHtml(headerText)}</div>` : ''}
@@ -13895,6 +14724,62 @@ function _applyReceipt(containerEl, printableEl, result) {
   printableEl.innerHTML       = `<div class="rcpt-paper" data-lang="${result.lang}">${result.html}</div>`;
 }
 
+// ── Invoice from POS sale ──────────────────────────────────────────────────
+async function _posCreateInvoiceFromSale(sale, customerId) {
+  const today = new Date().toISOString().split('T')[0];
+  const lines = (sale.items || []).map(i => {
+    const discPerUnit = parseFloat(i.discount_amount || 0);
+    return {
+      item_type:   'custom',
+      description: i.product_name || 'Item',
+      quantity:    i.quantity,
+      // Pass the original (pre-discount) unit price so the discount is visible in the totals
+      unit_price:  parseFloat(i.unit_sell_price) + discPerUnit,
+    };
+  });
+
+  if (!lines.length) {
+    toast('No items to invoice', 'error');
+    return;
+  }
+
+  // Total of all per-item discounts across all quantities
+  const itemDiscountsTotal = Math.round(
+    (sale.items || []).reduce((s, i) =>
+      s + parseFloat(i.discount_amount || 0) * parseFloat(i.quantity), 0
+    ) * 100
+  ) / 100;
+  const totalDiscount = Math.round(((parseFloat(sale.discount_amount) || 0) + itemDiscountsTotal) * 100) / 100;
+
+  const body = {
+    customer_id:     customerId ?? null,
+    reference:       sale.sale_number || null,
+    issue_date:      today,
+    due_date:        null,
+    notes:           sale.notes || null,
+    discount_amount: totalDiscount,
+    tax_amount:      0,
+    items:           lines,
+  };
+
+  const res = await API.createInvoice(body);
+  if (res.status === 200 || res.status === 201) {
+    const inv = res.body?.data;
+    if (inv) {
+      toast(`Invoice ${inv.invoice_number} created`, 'success');
+      // Stamp per-item discount onto each invoice line so the print template can render it
+      if (Array.isArray(inv.items)) {
+        inv.items.forEach((invItem, idx) => {
+          invItem.item_discount_per_unit = parseFloat(sale.items?.[idx]?.discount_amount || 0);
+        });
+      }
+      _invPrint(inv);
+    }
+  } else {
+    toast(res.body?.message || 'Failed to create invoice', 'error');
+  }
+}
+
 // ── Receipt preview (simple, shown after checkout) ─────────────────────────
 let _receiptSale = null;
 
@@ -13918,6 +14803,189 @@ $('#rcpt-print').addEventListener('click', async () => {
 });
 
 // ── Receipt layout editor (template designer) ──────────────────────────────
+// ── Receipt layout templates ────────────────────────────────────────────────
+const _RCPT_TEMPLATES = [
+  {
+    id: 'classic', name: 'Classic', icon: 'fa-receipt', color: '#4f8ef7',
+    desc: 'Business name, cashier & payment info',
+    settings: { show_business_name:true, show_business_address:false, receipt_address_line:'', receipt_header:'', receipt_footer:'Thank you for your purchase!', show_cashier:true, show_account_info:true },
+    strip: ['b s','sdiv','','s','','sdiv','xs','s','s b','xs c'],
+  },
+  {
+    id: 'minimal', name: 'Minimal', icon: 'fa-align-justify', color: '#6b7280',
+    desc: 'Items and total only — no extras',
+    settings: { show_business_name:true, show_business_address:false, receipt_address_line:'', receipt_header:'', receipt_footer:'', show_cashier:false, show_account_info:false },
+    strip: ['b s','sdiv','','s','','sdiv','s b'],
+  },
+  {
+    id: 'detailed', name: 'Detailed', icon: 'fa-list-ul', color: '#10b981',
+    desc: 'Full address, cashier & payment details',
+    settings: { show_business_name:true, show_business_address:true, receipt_address_line:'', receipt_header:'', receipt_footer:'Returns accepted within 7 days.', show_cashier:true, show_account_info:true },
+    strip: ['b s','xs','sdiv','','s','','','sdiv','xs','s','s b','xs c'],
+  },
+  {
+    id: 'branded', name: 'Branded', icon: 'fa-star', color: '#f59e0b',
+    desc: 'Tagline header + promotional footer',
+    settings: { show_business_name:true, show_business_address:true, receipt_address_line:'', receipt_header:'Quality you can trust.', receipt_footer:'Rate us online! Thank you for shopping with us.', show_cashier:true, show_account_info:false },
+    strip: ['xs c','b s','xs','sdiv','','s','','sdiv','xs','s b','xs c','xs c'],
+  },
+  {
+    id: 'cafe', name: 'Cafe', icon: 'fa-mug-hot', color: '#92400e',
+    desc: 'Coffee shop with warm greeting footer',
+    settings: { show_business_name:true, show_business_address:false, receipt_address_line:'', receipt_header:'Crafted with care.', receipt_footer:'Come back for your next cup!', show_cashier:true, show_account_info:false },
+    strip: ['xs c','b s','sdiv','','s','','sdiv','xs','s b','xs c'],
+  },
+  {
+    id: 'restaurant', name: 'Restaurant', icon: 'fa-utensils', color: '#dc2626',
+    desc: 'Dine-in receipt with warm thank-you',
+    settings: { show_business_name:true, show_business_address:true, receipt_address_line:'', receipt_header:'Good food, great memories.', receipt_footer:'Thank you for dining with us!', show_cashier:true, show_account_info:true },
+    strip: ['xs c','b s','xs','sdiv','','s','','','sdiv','xs','s','s b','xs c'],
+  },
+  {
+    id: 'boutique', name: 'Boutique', icon: 'fa-bag-shopping', color: '#be185d',
+    desc: 'Fashion & apparel with exchange policy',
+    settings: { show_business_name:true, show_business_address:false, receipt_address_line:'', receipt_header:'Style that speaks.', receipt_footer:'Exchange within 14 days with receipt.', show_cashier:true, show_account_info:false },
+    strip: ['xs c','b s','sdiv','','s','','sdiv','xs','s b','','xs c'],
+  },
+  {
+    id: 'tech', name: 'Tech Store', icon: 'fa-microchip', color: '#0ea5e9',
+    desc: 'Electronics with warranty support info',
+    settings: { show_business_name:true, show_business_address:true, receipt_address_line:'', receipt_header:'Powering your world.', receipt_footer:'Warranty & support: visit our service centre.', show_cashier:true, show_account_info:true },
+    strip: ['xs c','b s','xs','sdiv','','s','','','sdiv','xs','s','s b','xs c','xs c'],
+  },
+  {
+    id: 'pharmacy', name: 'Pharmacy', icon: 'fa-pills', color: '#16a34a',
+    desc: 'Medical / pharmacy with safety reminder',
+    settings: { show_business_name:true, show_business_address:true, receipt_address_line:'', receipt_header:'Your health, our priority.', receipt_footer:'Keep medicines out of reach of children. Dispose responsibly.', show_cashier:true, show_account_info:true },
+    strip: ['xs c','b s','xs','sdiv','','s','','sdiv','xs','s b','xs c','xs c'],
+  },
+  {
+    id: 'grocery', name: 'Grocery', icon: 'fa-basket-shopping', color: '#65a30d',
+    desc: 'Supermarket with savings tagline',
+    settings: { show_business_name:true, show_business_address:false, receipt_address_line:'', receipt_header:'', receipt_footer:'Fresh. Quality. Affordable. See you soon!', show_cashier:true, show_account_info:true },
+    strip: ['b s','sdiv','','s','','','sdiv','xs','s','s b','xs c'],
+  },
+  {
+    id: 'salon', name: 'Salon & Spa', icon: 'fa-scissors', color: '#a855f7',
+    desc: 'Beauty services with booking reminder',
+    settings: { show_business_name:true, show_business_address:false, receipt_address_line:'', receipt_header:'Look good, feel great.', receipt_footer:'Book your next appointment today. We look forward to seeing you!', show_cashier:true, show_account_info:false },
+    strip: ['xs c','b s','sdiv','','s','','sdiv','xs','s b','xs c','xs c'],
+  },
+  {
+    id: 'loyalty', name: 'Loyalty', icon: 'fa-gift', color: '#f97316',
+    desc: 'Highlights points & loyalty program',
+    settings: { show_business_name:true, show_business_address:false, receipt_address_line:'', receipt_header:'', receipt_footer:'Earn points on every purchase! Ask us about our loyalty rewards program.', show_cashier:true, show_account_info:true },
+    strip: ['b s','sdiv','','s','','sdiv','xs','s','s b','xs c','xs c'],
+  },
+  {
+    id: 'corporate', name: 'Corporate', icon: 'fa-briefcase', color: '#334155',
+    desc: 'Formal "Official Receipt" with tax note',
+    settings: { show_business_name:true, show_business_address:true, receipt_address_line:'', receipt_header:'Official Receipt', receipt_footer:'Retain this receipt for your records. Tax invoice available on request.', show_cashier:true, show_account_info:true },
+    strip: ['xs c','b s','xs','sdiv','','s','','sdiv','xs','s','s b','xs c','xs c'],
+  },
+  {
+    id: 'festive', name: 'Festive', icon: 'fa-gifts', color: '#e11d48',
+    desc: 'Holiday greetings header & footer',
+    settings: { show_business_name:true, show_business_address:false, receipt_address_line:'', receipt_header:"Season's Greetings!", receipt_footer:'Thank you and happy holidays! Wishing you joy and prosperity.', show_cashier:true, show_account_info:false },
+    strip: ['xs c','b s','sdiv','','s','','sdiv','xs','s b','xs c','xs c'],
+  },
+  {
+    id: 'eco', name: 'Eco Friendly', icon: 'fa-leaf', color: '#15803d',
+    desc: 'Paperless-friendly with green reminder',
+    settings: { show_business_name:true, show_business_address:false, receipt_address_line:'', receipt_header:'', receipt_footer:'Thank you for supporting our eco-friendly practices. Consider going paperless!', show_cashier:false, show_account_info:false },
+    strip: ['b s','sdiv','','s','','sdiv','s b','xs c','xs c'],
+  },
+  {
+    id: 'hotel', name: 'Hospitality', icon: 'fa-hotel', color: '#b45309',
+    desc: 'Hotel & guest services receipt',
+    settings: { show_business_name:true, show_business_address:true, receipt_address_line:'', receipt_header:'Welcome, valued guest.', receipt_footer:'We hope you enjoyed your stay. See you again soon!', show_cashier:true, show_account_info:true },
+    strip: ['xs c','b s','xs','sdiv','','s','','sdiv','xs','s','s b','xs c'],
+  },
+  {
+    id: 'bakery', name: 'Bakery', icon: 'fa-bread-slice', color: '#d97706',
+    desc: 'Fresh-baked with social media footer',
+    settings: { show_business_name:true, show_business_address:false, receipt_address_line:'', receipt_header:'Baked fresh daily.', receipt_footer:'Follow us on social media for daily specials!', show_cashier:true, show_account_info:false },
+    strip: ['xs c','b s','sdiv','','s','','sdiv','xs','s b','xs c'],
+  },
+  {
+    id: 'auto', name: 'Auto Parts', icon: 'fa-car', color: '#1e40af',
+    desc: 'Automotive with warranty terms footer',
+    settings: { show_business_name:true, show_business_address:true, receipt_address_line:'', receipt_header:'Quality parts, every time.', receipt_footer:'All sales subject to manufacturer warranty. No cash refunds.', show_cashier:true, show_account_info:true },
+    strip: ['xs c','b s','xs','sdiv','','s','','','sdiv','xs','s','s b','xs c','xs c'],
+  },
+  {
+    id: 'service', name: 'Service Shop', icon: 'fa-screwdriver-wrench', color: '#7c3aed',
+    desc: 'Repair & service with follow-up note',
+    settings: { show_business_name:true, show_business_address:true, receipt_address_line:'', receipt_header:'Professional service guaranteed.', receipt_footer:'Thank you for trusting us. Call us for any follow-up queries.', show_cashier:true, show_account_info:true },
+    strip: ['xs c','b s','xs','sdiv','','s','','','sdiv','xs','s','s b','xs c'],
+  },
+  {
+    id: 'no-extras', name: 'No Extras', icon: 'fa-ban', color: '#94a3b8',
+    desc: 'Bare minimum — name, items, total only',
+    settings: { show_business_name:true, show_business_address:false, receipt_address_line:'', receipt_header:'', receipt_footer:'', show_cashier:false, show_account_info:false },
+    strip: ['b s','sdiv','','s','','','sdiv','s b'],
+  },
+];
+
+function _rcptTplStripHTML(tpl) {
+  return '<div class="rcpt-tpl-strip">' + tpl.strip.map(cls =>
+    cls === 'sdiv'
+      ? '<div class="rcpt-tpl-sdiv"></div>'
+      : `<div class="rcpt-tpl-sl ${cls}"></div>`
+  ).join('') + '</div>';
+}
+
+function _rcptApplyTemplate(tpl) {
+  const s = tpl.settings;
+  $('#rcpt-ed-show-biz').checked    = !!s.show_business_name;
+  $('#rcpt-ed-show-addr').checked   = !!s.show_business_address;
+  $('#rcpt-ed-address').value       = s.receipt_address_line ?? '';
+  $('#rcpt-ed-header').value        = s.receipt_header ?? '';
+  $('#rcpt-ed-footer').value        = s.receipt_footer ?? '';
+  $('#rcpt-ed-show-cashier').checked = !!s.show_cashier;
+  $('#rcpt-ed-show-acct').checked   = !!s.show_account_info;
+  document.querySelectorAll('.rcpt-tpl-card').forEach(el => el.classList.remove('active'));
+  const card = document.querySelector(`.rcpt-tpl-card[data-tpl="${tpl.id}"]`);
+  if (card) card.classList.add('active');
+  _syncEditorPreview();
+}
+
+function _buildReceiptTemplates() {
+  const list = $('#rcpt-tpl-list');
+  if (!list || list.children.length) return;
+  list.innerHTML = _RCPT_TEMPLATES.map(t => `
+    <div class="rcpt-tpl-card" data-tpl="${t.id}">
+      <div class="rcpt-tpl-meta">
+        <div class="rcpt-tpl-icon" style="background:${t.color}"><i class="fa ${t.icon}"></i></div>
+        <div>
+          <div class="rcpt-tpl-name">${t.name}</div>
+          <div class="rcpt-tpl-desc">${t.desc}</div>
+        </div>
+      </div>
+      ${_rcptTplStripHTML(t)}
+    </div>
+  `).join('');
+  _RCPT_TEMPLATES.forEach(t => {
+    document.querySelector(`.rcpt-tpl-card[data-tpl="${t.id}"]`)
+      .addEventListener('click', () => _rcptApplyTemplate(t));
+  });
+}
+
+let _rcptLogoUrl = '';
+
+function _rcptEdLogoRender() {
+  const img = $('#rcpt-ed-logo-img');
+  const ph  = $('#rcpt-ed-logo-ph');
+  if (_rcptLogoUrl) {
+    img.src           = _rcptLogoUrl;
+    img.style.display = '';
+    ph.style.display  = 'none';
+  } else {
+    img.style.display = 'none';
+    ph.style.display  = '';
+  }
+}
+
 function _rcptEdOverrides() {
   return {
     receipt_language:      ($('input[name="rcpt-lang"]:checked') || {}).value || 'en',
@@ -13928,6 +14996,7 @@ function _rcptEdOverrides() {
     receipt_footer:        $('#rcpt-ed-footer').value,
     show_cashier:          $('#rcpt-ed-show-cashier').checked,
     show_account_info:     $('#rcpt-ed-show-acct').checked,
+    receipt_logo_url:      _rcptLogoUrl,
   };
 }
 
@@ -13949,6 +15018,9 @@ function showReceiptEditor() {
   $('#rcpt-ed-footer').value         = s.receipt_footer        || 'Thank you for your purchase!';
   $('#rcpt-ed-show-cashier').checked = true;
   $('#rcpt-ed-show-acct').checked    = s.show_account_info !== false;
+  _rcptLogoUrl = s.receipt_logo_url || '';
+  _rcptEdLogoRender();
+  _buildReceiptTemplates();
   _syncEditorPreview();
   $('#receipt-editor-modal').style.display = 'flex';
 }
@@ -13956,6 +15028,19 @@ function showReceiptEditor() {
 $('#rcpt-ed-close').addEventListener('click', () => { $('#receipt-editor-modal').style.display = 'none'; });
 $('#receipt-editor-modal').addEventListener('click', (e) => {
   if (e.target === e.currentTarget) e.currentTarget.style.display = 'none';
+});
+
+$('#rcpt-logo-choose').addEventListener('click', () => {
+  openImgPicker((fileId, url) => {
+    _rcptLogoUrl = url;
+    _rcptEdLogoRender();
+    _syncEditorPreview();
+  });
+});
+$('#rcpt-logo-remove').addEventListener('click', () => {
+  _rcptLogoUrl = '';
+  _rcptEdLogoRender();
+  _syncEditorPreview();
 });
 
 ['rcpt-ed-address', 'rcpt-ed-header', 'rcpt-ed-footer'].forEach(id => {
@@ -13980,6 +15065,7 @@ $('#rcpt-ed-save').addEventListener('click', async () => {
     receipt_header:        ov.receipt_header,
     receipt_footer:        ov.receipt_footer,
     show_account_info:     ov.show_account_info,
+    receipt_logo_url:      ov.receipt_logo_url || null,
   });
 
   btn.disabled = false;
@@ -13993,7 +15079,7 @@ $('#rcpt-ed-save').addEventListener('click', async () => {
   // Sync into in-session state
   const saved = res.body?.data || {};
   ['receipt_language','show_business_name','show_business_address','receipt_address_line',
-   'receipt_header','receipt_footer','show_account_info'].forEach(k => {
+   'receipt_header','receipt_footer','show_account_info','receipt_logo_url'].forEach(k => {
     if (saved[k] !== undefined) state.receiptSettings = { ...state.receiptSettings, [k]: saved[k] };
   });
 
@@ -14242,6 +15328,24 @@ $('#pos-price-input').addEventListener('keydown', e => {
 // ── End Price override prompt ──────────────────────────────────────────────
 
 // ── Warranty prompt ────────────────────────────────────────────────────────
+// Resolve a warranty type/date from a duration string (e.g. "1 Year", "30 Days", "Lifetime")
+function _resolveWarrantyFromDuration(duration) {
+  const d = (duration || '').trim();
+  if (!d || d.toLowerCase() === 'lifetime') return { type: 'lifetime', date: null };
+  const m = d.match(/^(\d+(?:\.\d+)?)\s*(day|days|week|weeks|month|months|year|years)$/i);
+  if (m) {
+    const n = parseFloat(m[1]);
+    const unit = m[2].toLowerCase();
+    const exp = new Date();
+    if (unit.startsWith('day'))   exp.setDate(exp.getDate() + Math.round(n));
+    else if (unit.startsWith('week'))  exp.setDate(exp.getDate() + Math.round(n * 7));
+    else if (unit.startsWith('month')) exp.setMonth(exp.getMonth() + Math.round(n));
+    else if (unit.startsWith('year'))  exp.setFullYear(exp.getFullYear() + Math.round(n));
+    return { type: 'date', date: exp.toISOString().split('T')[0] };
+  }
+  return { type: 'lifetime', date: null };
+}
+
 let _askWarrantyResolve = null;
 
 function _askWarranty(productName) {
@@ -14499,10 +15603,18 @@ async function handleProductClick(p) {
     const key = cartItem.layerId != null ? `${cartItem.id}:${cartItem.layerId}` : `${cartItem.id}`;
     const alreadyInCart = tab?.cart.some(i => i._key === key);
     if (!alreadyInCart) {
-      const wty = await _askWarranty(cartItem.name);
-      if (wty === null) return; // cancelled
-      cartItem.warrantyType = wty.type;
-      cartItem.warrantyDate = wty.date ?? null;
+      if (p.warranty_duration) {
+        // Preset duration — auto-apply, no popup
+        const wty = _resolveWarrantyFromDuration(p.warranty_duration);
+        cartItem.warrantyType = wty.type;
+        cartItem.warrantyDate = wty.date ?? null;
+      } else {
+        // No preset — ask via popup
+        const wty = await _askWarranty(cartItem.name);
+        if (wty === null) return; // cancelled
+        cartItem.warrantyType = wty.type;
+        cartItem.warrantyDate = wty.date ?? null;
+      }
     }
   }
 
@@ -14783,8 +15895,51 @@ $('#pos-to-quote')?.addEventListener('click', () => {
 }());
 
 // ── Checkout ───────────────────────────────────────────────────────────────
-let _coSubtotal = 0; // base subtotal before discount
+let _coSubtotal = 0; // base subtotal before order-level discount
 let _coAmount   = ''; // numpad string
+
+function _coComputeSubtotal() {
+  const tab = activeTab();
+  if (!tab) return 0;
+  return Math.round(tab.cart.reduce((s, i) => {
+    const d = Math.min(100, Math.max(0, parseFloat(i.itemDiscountPct) || 0));
+    return s + i.price * i.qty * (1 - d / 100);
+  }, 0) * 100) / 100;
+}
+
+function _coRenderItems() {
+  const tab  = activeTab();
+  const list = $('#co-items-list');
+  const badge = $('#co-items-badge');
+  const ftrTotal = $('#co-items-ftr-total');
+  if (!list || !tab) return;
+  const cur = state.currency ? ' ' + state.currency : '';
+  const items = tab.cart;
+  if (badge) badge.textContent = items.length;
+  list.innerHTML = items.map((i, idx) => {
+    const svc   = i._type === 'service';
+    const qty   = i.qty % 1 === 0 ? parseInt(i.qty) : parseFloat(i.qty).toFixed(2);
+    const price = parseFloat(i.price).toFixed(2);
+    const disc  = Math.min(100, Math.max(0, parseFloat(i.itemDiscountPct) || 0));
+    const line  = (i.price * i.qty * (1 - disc / 100)).toFixed(2);
+    return `<div class="co-ir" data-idx="${idx}">
+      <div class="co-ir-icon ${svc ? 'is-service' : 'is-product'}">
+        <i class="fa ${svc ? 'fa-screwdriver-wrench' : 'fa-box'}"></i>
+      </div>
+      <div class="co-ir-name" title="${escHtml(i.name)}">${escHtml(i.name)}</div>
+      <div class="co-ir-qty">${qty}</div>
+      <div class="co-ir-price">${price}</div>
+      <div class="co-ir-disc">
+        <input type="number" class="co-ir-disc-inp${disc > 0 ? ' has-discount' : ''}"
+               data-idx="${idx}" value="${disc || ''}" min="0" max="100" step="0.5" placeholder="0">
+        <span class="co-ir-disc-pct">%</span>
+      </div>
+      <div class="co-ir-total">${line}</div>
+    </div>`;
+  }).join('');
+  _coSubtotal = _coComputeSubtotal();
+  if (ftrTotal) ftrTotal.textContent = _coSubtotal.toFixed(2) + cur;
+}
 
 function _coGetTotal() {
   const pct = Math.min(100, Math.max(0, parseFloat($('#co-discount-pct')?.value) || 0));
@@ -14808,7 +15963,7 @@ function _coRefresh() {
   if ($('#co-total'))    $('#co-total').textContent    = total.toFixed(2);
   if ($('#co-currency')) $('#co-currency').textContent = state.currency || '';
   const amountEl = $('#co-amount');
-  if (amountEl && document.activeElement !== amountEl) amountEl.value = _coAmount || '';
+  if (amountEl) amountEl.value = _coAmount || '';
   if ($('#co-amount-due')) $('#co-amount-due').textContent = total.toFixed(2) + cur;
   const changeEl = $('#co-change');
   if (changeEl) {
@@ -14839,7 +15994,7 @@ function _coNumpadKey(key) {
 function openCheckout() {
   const tab = activeTab();
   if (!tab || !tab.cart.length) { toast('Cart is empty', 'error'); return; }
-  _coSubtotal = tab.cart.reduce((s, i) => s + i.price * i.qty, 0);
+  _coSubtotal = _coComputeSubtotal();
   _coAmount   = _coSubtotal.toFixed(2);
 
   // Reset discount
@@ -14850,6 +16005,11 @@ function openCheckout() {
   $$('.co-pay-method').forEach(b => b.classList.remove('active'));
   $$('.co-pay-method')[0]?.classList.add('active');
 
+  // Reset credit fields
+  const creditDueDateEl = $('#co-credit-due-date');
+  if (creditDueDateEl) creditDueDateEl.value = '';
+  _coSyncPaymentSections();
+
   // Reset notes & alert
   const notesEl = $('#co-notes');
   if (notesEl) notesEl.value = '';
@@ -14858,12 +16018,13 @@ function openCheckout() {
   // Update modal subtitle
   const cartHasServices = tab.cart.some(i => i._type === 'service');
   const cartHasProducts = tab.cart.some(i => i._type !== 'service');
-  const coSub = $('#checkout-modal .co-header-text p');
+  const coSub = $('#co-header-sub');
   if (coSub) coSub.textContent = cartHasServices && cartHasProducts
     ? 'Products will be sold + service requests created'
-    : 'Review your order and choose payment';
+    : 'Review your order and complete payment';
 
   _coRefresh();
+  _coRenderItems();
   _coSyncCustomer();
   $('#checkout-modal').style.display = 'flex';
 
@@ -14882,16 +16043,56 @@ function openCheckout() {
 
 $('#checkout-cancel').addEventListener('click', () => { $('#checkout-modal').style.display = 'none'; });
 
+function _coSyncPaymentSections() {
+  const isCredit = _coGetMethod() === 'credit';
+  const creditSec  = $('#co-credit-section');
+  const cashSec    = $('#co-cash-section');
+  const numpadSec  = $('#co-numpad-section');
+  if (creditSec)  creditSec.style.display  = isCredit ? '' : 'none';
+  if (cashSec)    cashSec.style.display    = isCredit ? 'none' : '';
+  if (numpadSec)  numpadSec.style.display  = isCredit ? 'none' : '';
+  _coSyncCreditNotice();
+}
+
+function _coSyncCreditNotice() {
+  const notice = $('#co-credit-customer-notice');
+  if (!notice) return;
+  const tab = activeTab();
+  notice.style.display = (_coGetMethod() === 'credit' && !tab?._customer) ? '' : 'none';
+}
+
 // Payment method tabs
 $$('.co-pay-method').forEach(btn => {
   btn.addEventListener('click', () => {
     $$('.co-pay-method').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
+    _coSyncPaymentSections();
   });
 });
 
-// Discount input
+// Discount input (order-level)
 $('#co-discount-pct').addEventListener('input', _coRefresh);
+
+// Per-item discount inputs (event delegation on the list container)
+$('#co-items-list').addEventListener('input', e => {
+  const inp = e.target.closest('.co-ir-disc-inp');
+  if (!inp) return;
+  const idx = parseInt(inp.dataset.idx);
+  const tab = activeTab();
+  if (!tab?.cart[idx]) return;
+  const disc = Math.min(100, Math.max(0, parseFloat(inp.value) || 0));
+  tab.cart[idx].itemDiscountPct = disc;
+  inp.classList.toggle('has-discount', disc > 0);
+  const row = inp.closest('.co-ir');
+  const totalEl = row?.querySelector('.co-ir-total');
+  const i = tab.cart[idx];
+  if (totalEl) totalEl.textContent = (i.price * i.qty * (1 - disc / 100)).toFixed(2);
+  _coSubtotal = _coComputeSubtotal();
+  const cur = state.currency ? ' ' + state.currency : '';
+  const ftrEl = $('#co-items-ftr-total');
+  if (ftrEl) ftrEl.textContent = _coSubtotal.toFixed(2) + cur;
+  _coRefresh();
+});
 
 // Numpad
 $$('.co-key').forEach(btn => {
@@ -14960,6 +16161,7 @@ async function _coCustRender(q) {
       if (tab) tab._customer = c;
       renderCartCustomer();
       _coSyncCustomer();
+      _coSyncCreditNotice();
     });
   });
 
@@ -15020,6 +16222,7 @@ $('#co-cust-clear')?.addEventListener('click', e => {
   if (tab) tab._customer = null;
   renderCartCustomer();
   _coSyncCustomer();
+  _coSyncCreditNotice();
 });
 
 $('#checkout-confirm').addEventListener('click', async () => {
@@ -15039,6 +16242,14 @@ $('#checkout-confirm').addEventListener('click', async () => {
 
   if (method !== 'credit' && amount < total) {
     showAlert(alertEl, `Amount given (${amount.toFixed(2)}) is less than total (${total.toFixed(2)})`);
+    return;
+  }
+
+  // Credit payment requires a customer
+  if (method === 'credit' && !tab?._customer) {
+    showAlert(alertEl, 'Credit payment requires a customer. Please assign a customer above.');
+    _coSyncCreditNotice();
+    setTimeout(() => $('#co-cust-trigger')?.focus(), 60);
     return;
   }
 
@@ -15066,6 +16277,7 @@ $('#checkout-confirm').addEventListener('click', async () => {
     discount_percent: discountPct > 0 ? discountPct : undefined,
     pos_customer_id:  tab?._customer?.id ?? undefined,
     pos_counter_id:   state.posCounterId ?? undefined,
+    credit_due_date:  method === 'credit' ? ($('#co-credit-due-date')?.value || undefined) : undefined,
     items: [
       ...productItems.map(i => ({
         product_id:             i.id,
@@ -15073,13 +16285,15 @@ $('#checkout-confirm').addEventListener('click', async () => {
         product_stock_layer_id: i.layerId ?? undefined,
         warranty_type:          i.warrantyType ?? undefined,
         warranty_date:          i.warrantyDate ?? undefined,
+        item_discount_percent:  (parseFloat(i.itemDiscountPct) || 0) > 0 ? parseFloat(i.itemDiscountPct) : undefined,
       })),
       ...serviceItems.map(i => ({
-        item_type:       'service',
-        service_item_id: i.id,
-        quantity:        i.qty,
-        warranty_type:   i.warrantyType ?? undefined,
-        warranty_date:   i.warrantyDate ?? undefined,
+        item_type:              'service',
+        service_item_id:        i.id,
+        quantity:               i.qty,
+        warranty_type:          i.warrantyType ?? undefined,
+        warranty_date:          i.warrantyDate ?? undefined,
+        item_discount_percent:  (parseFloat(i.itemDiscountPct) || 0) > 0 ? parseFloat(i.itemDiscountPct) : undefined,
       })),
     ],
   };
@@ -15094,6 +16308,7 @@ $('#checkout-confirm').addEventListener('click', async () => {
     return;
   }
 
+  const postCustomerId = tab?._customer?.id ?? null;
   $('#checkout-modal').style.display = 'none';
   if (tab) { tab.cart = []; tab._customer = null; }
   renderCart(); renderPosTabBar(); renderCartCustomer();
@@ -15103,7 +16318,13 @@ $('#checkout-confirm').addEventListener('click', async () => {
   if (serviceItems.length && state.posMode === 'services') loadServices(state.serviceSearchQuery, state.serviceActiveCategory);
 
   const sale = res.body?.data;
-  if (sale) showReceiptModal(sale);
+  if (sale) {
+    if ((state.receiptSettings?.receipt_mode || 'bill') === 'invoice') {
+      _posCreateInvoiceFromSale(sale, postCustomerId);
+    } else {
+      showReceiptModal(sale);
+    }
+  }
 
   // Refresh ribbon stats after each sale
   _loadPosRibbonStats();
@@ -15286,19 +16507,39 @@ $('#rb-close-session').addEventListener('click', () => {
   const tab = activeTab();
   if (tab) closePosTab(tab.id);
 });
-$('#rb-barcode').addEventListener('click', () => {
+$('#rb-barcode').addEventListener('click', async () => {
   const sku = prompt('Enter barcode / SKU:');
   if (!sku) return;
   // Try local product-level match first (fast path)
   if (_trySkuAdd(sku.trim())) return;
   // Fall back to API — handles batch SKUs like PRD-IIW3ZFGK-02
-  API.productBySku(sku.trim()).then(res => {
-    if (res.status !== 200) { toast('Product not found', 'error'); return; }
-    const p = res.body?.data || res.body;
-    const layerId = p.matched_layer_id ?? null;
-    const price   = parseFloat(p.discounted_sell_price ?? p.unit_sell_price ?? p.price ?? 0);
-    addToCart({ id: p.id, name: p.name, price, stock: p.layer_qty_remaining ?? p.stock_quantity ?? null, layerId });
-  });
+  const res = await API.productBySku(sku.trim());
+  if (res.status !== 200) { toast('Product not found', 'error'); return; }
+  const p = res.body?.data || res.body;
+  const layerId = p.matched_layer_id ?? null;
+  const matchedLayer = layerId && p.layers ? p.layers.find(l => l.id === layerId) : null;
+  const price = matchedLayer
+    ? parseFloat(matchedLayer.unit_sell_price)
+    : parseFloat(p.discounted_sell_price ?? p.unit_sell_price ?? p.price ?? 0);
+  const cartItem = { id: p.id, name: p.name, price, stock: p.layer_qty_remaining ?? p.stock_quantity ?? null, layerId };
+  if (p.has_warranty) {
+    const tab = activeTab();
+    const key = layerId != null ? `${p.id}:${layerId}` : `${p.id}`;
+    const alreadyInCart = tab?.cart.some(i => i._key === key);
+    if (!alreadyInCart) {
+      if (p.warranty_duration) {
+        const wty = _resolveWarrantyFromDuration(p.warranty_duration);
+        cartItem.warrantyType = wty.type;
+        cartItem.warrantyDate = wty.date ?? null;
+      } else {
+        const wty = await _askWarranty(cartItem.name);
+        if (wty === null) return;
+        cartItem.warrantyType = wty.type;
+        cartItem.warrantyDate = wty.date ?? null;
+      }
+    }
+  }
+  addToCart(cartItem);
 });
 // ── Quick Add Product ──────────────────────────────────────────────────────
 async function openAddProductModal() {

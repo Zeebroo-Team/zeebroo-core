@@ -495,6 +495,11 @@
             <span>Total balance</span>
             <strong id="pos-account-total">—</strong>
           </div>
+          <div class="pos-acct-add-row">
+            <button id="pos-acct-add-btn" class="pos-acct-add-btn">
+              <i class="fa fa-plus"></i> Add Bank Account
+            </button>
+          </div>
         </div>
       </div>
 
@@ -588,6 +593,34 @@
       <button class="wc-btn close" id="wc-close" title="Close"><i class="fa fa-xmark"></i></button>
     </div>
   </div>
+
+  <!-- ── Main area: sidebar + right column (ribbon + content) ─────── -->
+  <div id="app-main">
+
+    <!-- Sidebar (shown when layout_mode = sidebar, hidden in ribbon mode) -->
+    <div id="sidebar">
+      <nav id="sidebar-nav">
+        <div class="sb-nav-item has-sub" data-tab="home"><i class="fa fa-house"></i><span>Home</span><i class="fa fa-chevron-right sb-nav-chevron"></i></div>
+        <div class="sb-nav-item" data-tab="pos"><i class="fa fa-cart-shopping"></i><span>POS</span></div>
+        <div class="sb-nav-item has-sub" data-tab="sales"><i class="fa fa-receipt"></i><span>Sales</span><i class="fa fa-chevron-right sb-nav-chevron"></i></div>
+        <div class="sb-nav-item has-sub" data-tab="inventory"><i class="fa fa-boxes-stacked"></i><span>Inventory</span><i class="fa fa-chevron-right sb-nav-chevron"></i></div>
+        <div class="sb-nav-item has-sub" data-tab="finance"><i class="fa fa-file-invoice-dollar"></i><span>Finance</span><i class="fa fa-chevron-right sb-nav-chevron"></i></div>
+        <div class="sb-nav-item has-sub" data-tab="hr"><i class="fa fa-users"></i><span>HR</span><i class="fa fa-chevron-right sb-nav-chevron"></i></div>
+        <div class="sb-nav-item has-sub" data-tab="services"><i class="fa fa-screwdriver-wrench"></i><span>Services</span><i class="fa fa-chevron-right sb-nav-chevron"></i></div>
+        <div class="sb-nav-item" data-tab="design"><i class="fa fa-palette"></i><span>Design</span></div>
+        <div class="sb-nav-item has-sub" data-tab="restaurant"><i class="fa fa-utensils"></i><span>Restaurant</span><i class="fa fa-chevron-right sb-nav-chevron"></i></div>
+        <div class="sb-nav-item" data-tab="rst-pos"><i class="fa fa-cash-register"></i><span>RST POS</span></div>
+        <div class="sb-nav-item has-sub" data-tab="mail"><i class="fa fa-envelope"></i><span>Mail</span><i class="fa fa-chevron-right sb-nav-chevron"></i></div>
+        <div class="sb-nav-item has-sub" data-tab="crm"><i class="fa fa-handshake"></i><span>CRM</span><i class="fa fa-chevron-right sb-nav-chevron"></i></div>
+        <div class="sb-nav-item" data-tab="automations"><i class="fa fa-bolt"></i><span>Automations</span></div>
+        <div class="sb-nav-item has-sub" data-tab="projects"><i class="fa fa-diagram-project"></i><span>Projects</span><i class="fa fa-chevron-right sb-nav-chevron"></i></div>
+      </nav>
+      <div id="sidebar-bottom">
+        <button id="sidebar-file-btn"><i class="fa fa-bars"></i><span>Menu</span></button>
+      </div>
+    </div>
+
+    <div id="app-right">
 
   <!-- ── Ribbon ────────────────────────────────────────────────────── -->
   <div id="ribbon">
@@ -1865,6 +1898,7 @@
       <div class="fin-subnav" id="sal-subnav">
         <button class="fin-subnav-btn sal-view-btn active" data-sal-view="transactions"><i class="fa fa-receipt"></i> Transactions</button>
         <button class="fin-subnav-btn sal-view-btn" data-sal-view="history"><i class="fa fa-clock-rotate-left"></i> History</button>
+        <button class="fin-subnav-btn sal-view-btn" data-sal-view="credits"><i class="fa fa-hand-holding-dollar"></i> Pending Credits</button>
         <button class="fin-subnav-btn sal-view-btn" data-sal-view="quotes"><i class="fa fa-file-lines"></i> Quotations</button>
         <button class="fin-subnav-btn sal-view-btn" data-sal-view="invoices"><i class="fa fa-file-invoice"></i> Invoices</button>
         <button class="fin-subnav-btn sal-view-btn" data-sal-view="orders"><i class="fa fa-box"></i> Sales Orders</button>
@@ -1899,6 +1933,21 @@
           </div>
         </div>
         <div id="sal-detail-body" style="flex:1;overflow-y:auto;padding:20px 24px"></div>
+      </div>
+
+      <!-- Pending Credits view -->
+      <div id="sal-credits-view" class="fin-view" style="display:none;flex-direction:column">
+        <div class="finance-toolbar">
+          <div class="finance-search-wrap">
+            <i class="fa fa-magnifying-glass"></i>
+            <input type="text" id="sal-credits-search" placeholder="Search customer or sale number…">
+          </div>
+          <button class="po-btn-ghost" id="sal-credits-refresh" style="margin-left:auto"><i class="fa fa-arrows-rotate"></i> Refresh</button>
+        </div>
+        <div id="sal-credits-kpi" class="pc-kpi-bar" style="display:none"></div>
+        <div id="sal-credits-body" style="flex:1;overflow-y:auto;padding:16px 20px">
+          <div class="finance-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</div>
+        </div>
       </div>
 
       <!-- History view -->
@@ -2418,135 +2467,288 @@
             <span id="prod-modal-title">New Product</span>
             <button class="psm-close" id="prod-modal-close"><i class="fa fa-xmark"></i></button>
           </div>
-          <div class="po-aim-body prod-modal-body">
-            <!-- Name + SKU -->
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-              <div class="po-field">
-                <label class="po-field-label">Name <span class="po-required">*</span></label>
-                <input type="text" id="prod-f-name" class="po-field-input" placeholder="Product name" maxlength="255">
-              </div>
-              <div class="po-field">
-                <label class="po-field-label">SKU</label>
-                <div style="display:flex;gap:6px">
-                  <input type="text" id="prod-f-sku" class="po-field-input" placeholder="Barcode / SKU" maxlength="120" style="flex:1;min-width:0">
-                  <button type="button" id="prod-sku-gen" class="po-btn-ghost" style="padding:0 10px;flex-shrink:0;white-space:nowrap" title="Auto-generate SKU"><i class="fa fa-wand-magic-sparkles"></i></button>
+          <!-- Tab navigation -->
+          <div class="prod-modal-tabs">
+            <button class="prod-modal-tab active" data-tab="basic"><i class="fa fa-circle-info"></i> Basic</button>
+            <button class="prod-modal-tab" data-tab="pricing"><i class="fa fa-tag"></i> Pricing &amp; Stock</button>
+            <button class="prod-modal-tab" data-tab="media"><i class="fa fa-image"></i> Media</button>
+            <button class="prod-modal-tab" data-tab="advanced"><i class="fa fa-sliders"></i> Advanced</button>
+          </div>
+          <div class="prod-modal-body">
+
+            <!-- Pane 1: Basic -->
+            <div class="prod-modal-pane active" data-pane="basic">
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                <div class="po-field">
+                  <label class="po-field-label">Name <span class="po-required">*</span></label>
+                  <input type="text" id="prod-f-name" class="po-field-input" placeholder="Product name" maxlength="255">
+                </div>
+                <div class="po-field">
+                  <label class="po-field-label">SKU</label>
+                  <div style="display:flex;gap:6px">
+                    <input type="text" id="prod-f-sku" class="po-field-input" placeholder="Barcode / SKU" maxlength="120" style="flex:1;min-width:0">
+                    <button type="button" id="prod-sku-gen" class="po-btn-ghost" style="padding:0 10px;flex-shrink:0;white-space:nowrap" title="Auto-generate SKU"><i class="fa fa-wand-magic-sparkles"></i></button>
+                  </div>
                 </div>
               </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                <div class="po-field">
+                  <label class="po-field-label">Model No</label>
+                  <input type="text" id="prod-f-model-no" class="po-field-input" placeholder="e.g. ABC-2024" maxlength="120">
+                </div>
+                <div class="po-field">
+                  <label class="po-field-label">Size</label>
+                  <input type="text" id="prod-f-size" class="po-field-input" placeholder="e.g. XL, 500ml, 12cm" maxlength="120">
+                </div>
+              </div>
+              <div class="po-field" style="max-width:220px">
+                <label class="po-field-label">Mfg Date</label>
+                <input type="date" id="prod-f-mfg-date" class="po-field-input">
+              </div>
+              <div class="po-field">
+                <label class="po-field-label">Description</label>
+                <textarea id="prod-f-description" class="po-field-input" rows="4" placeholder="Optional product description…" maxlength="5000" style="resize:vertical;min-height:80px"></textarea>
+              </div>
+              <div class="po-field" style="flex-direction:row;align-items:center;gap:10px">
+                <input type="checkbox" id="prod-f-active" checked style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent)">
+                <label for="prod-f-active" class="po-field-label" style="margin:0;cursor:pointer">Active</label>
+              </div>
             </div>
-            <!-- Cost + Selling + Wholesale prices -->
-            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
-              <div class="po-field">
-                <label class="po-field-label">Cost Price</label>
-                <input type="number" id="prod-f-cost-price" class="po-field-input" min="0" step="0.01" placeholder="0.00">
+
+            <!-- Pane 2: Pricing & Stock -->
+            <div class="prod-modal-pane" data-pane="pricing">
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+                <div class="po-field">
+                  <label class="po-field-label">Cost Price</label>
+                  <input type="number" id="prod-f-cost-price" class="po-field-input" min="0" step="0.01" placeholder="0.00">
+                </div>
+                <div class="po-field">
+                  <label class="po-field-label">Selling Price <span class="po-required">*</span></label>
+                  <input type="number" id="prod-f-price" class="po-field-input" min="0" step="0.01" placeholder="0.00">
+                </div>
+                <div class="po-field">
+                  <label class="po-field-label" title="Price offered to wholesale / bulk customers"><i class="fa fa-tags" style="color:var(--accent);margin-right:4px"></i>Wholesale Price</label>
+                  <input type="number" id="prod-f-wholesale-price" class="po-field-input" min="0" step="0.01" placeholder="optional">
+                </div>
               </div>
-              <div class="po-field">
-                <label class="po-field-label">Selling Price <span class="po-required">*</span></label>
-                <input type="number" id="prod-f-price" class="po-field-input" min="0" step="0.01" placeholder="0.00">
-              </div>
-              <div class="po-field">
-                <label class="po-field-label" title="Price offered to wholesale / bulk customers"><i class="fa fa-tags" style="color:var(--accent);margin-right:4px"></i>Wholesale Price</label>
-                <input type="number" id="prod-f-wholesale-price" class="po-field-input" min="0" step="0.01" placeholder="optional">
-              </div>
-            </div>
-            <!-- Opening Stock + Unit + Active -->
-            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
-              <div class="po-field" id="prod-stock-field">
-                <label class="po-field-label" id="prod-stock-label">Opening Stock</label>
-                <input type="number" id="prod-f-stock" class="po-field-input" min="0" step="0.001" placeholder="0">
-              </div>
-              <div class="po-field">
+              <div class="po-field" style="max-width:220px">
                 <label class="po-field-label">Unit</label>
                 <select id="prod-f-unit" class="po-field-input">
                   <option value="">— No unit —</option>
                 </select>
               </div>
-              <div class="po-field" style="flex-direction:row;align-items:center;gap:10px;padding-top:22px">
-                <input type="checkbox" id="prod-f-active" checked style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent)">
-                <label for="prod-f-active" class="po-field-label" style="margin:0;cursor:pointer">Active</label>
+              <!-- Edit mode: single stock quantity -->
+              <div class="po-field" id="prod-stock-field" style="display:none;max-width:220px">
+                <label class="po-field-label" id="prod-stock-label">Stock Quantity</label>
+                <input type="number" id="prod-f-stock" class="po-field-input" min="0" step="0.001" placeholder="0">
               </div>
-            </div>
-            <!-- Image -->
-            <div class="po-field">
-              <label class="po-field-label">Image</label>
-              <div class="prod-img-row">
-                <div class="prod-img-thumb" id="prod-img-thumb">
-                  <i class="fa fa-image" style="font-size:22px;color:var(--text-muted)"></i>
+              <!-- Create mode: opening stock batch table -->
+              <div id="prod-batch-section">
+                <div class="prod-batch-hdr">
+                  <div class="prod-batch-hdr-title"><i class="fa fa-layer-group"></i> Opening Stock Batches</div>
+                  <div style="display:flex;align-items:center;gap:10px">
+                    <label class="prod-batch-pricing-lbl" id="prod-batch-pricing-label" title="Set different prices per batch">
+                      <input type="checkbox" id="prod-batch-pricing-chk">
+                      <span>Batch-wise pricing</span>
+                    </label>
+                    <button type="button" id="prod-batch-add-btn" class="po-btn-ghost" style="display:flex;align-items:center;gap:6px;font-size:12px"><i class="fa fa-plus"></i> Add Batch</button>
+                  </div>
                 </div>
-                <div style="display:flex;flex-direction:column;gap:6px">
-                  <button type="button" id="prod-img-choose" class="po-btn-ghost" style="width:fit-content"><i class="fa fa-folder-open"></i> Choose Image</button>
-                  <button type="button" id="prod-img-remove" class="po-btn-ghost" style="display:none;width:fit-content;color:var(--danger,#e74c3c)"><i class="fa fa-trash"></i> Remove</button>
+                <div id="prod-batch-wrap"></div>
+              </div>
+            </div>
+
+            <!-- Pane 3: Media -->
+            <div class="prod-modal-pane" data-pane="media">
+              <div class="po-field">
+                <label class="po-field-label">Image</label>
+                <div class="prod-img-row">
+                  <div class="prod-img-thumb" id="prod-img-thumb">
+                    <i class="fa fa-image" style="font-size:22px;color:var(--text-muted)"></i>
+                  </div>
+                  <div style="display:flex;flex-direction:column;gap:6px">
+                    <button type="button" id="prod-img-choose" class="po-btn-ghost" style="width:fit-content"><i class="fa fa-folder-open"></i> Choose Image</button>
+                    <button type="button" id="prod-img-remove" class="po-btn-ghost" style="display:none;width:fit-content;color:var(--danger,#e74c3c)"><i class="fa fa-trash"></i> Remove</button>
+                  </div>
+                </div>
+              </div>
+              <div class="po-field">
+                <label class="po-field-label">Categories</label>
+                <div class="tag-input-wrap" id="prod-cat-wrap">
+                  <div id="prod-cat-tags" class="tag-input-tags"></div>
+                  <input type="text" id="prod-cat-input" class="tag-input-field" placeholder="Search categories…" autocomplete="off">
+                </div>
+                <div class="tag-input-dd" id="prod-cat-dd" style="display:none"></div>
+              </div>
+              <div class="po-field">
+                <label class="po-field-label">Brands</label>
+                <div class="tag-input-wrap" id="prod-brand-wrap">
+                  <div id="prod-brand-tags" class="tag-input-tags"></div>
+                  <input type="text" id="prod-brand-input" class="tag-input-field" placeholder="Search brands…" autocomplete="off">
+                </div>
+                <div class="tag-input-dd" id="prod-brand-dd" style="display:none"></div>
+              </div>
+            </div>
+
+            <!-- Pane 4: Advanced -->
+            <div class="prod-modal-pane" data-pane="advanced">
+              <div class="prod-bundle-toggle-row">
+                <input type="checkbox" id="prod-f-bundle" class="prod-bundle-checkbox">
+                <label for="prod-f-bundle" class="prod-bundle-toggle-label">
+                  <i class="fa fa-cubes"></i> Bundle product
+                  <span class="prod-bundle-toggle-hint">Combine multiple products into one</span>
+                </label>
+              </div>
+              <div id="prod-bundle-section" class="prod-bundle-section" style="display:none">
+                <div class="prod-bundle-search-row">
+                  <div class="prod-bundle-search-wrap">
+                    <i class="fa fa-search prod-bundle-search-icon"></i>
+                    <input type="text" id="prod-bundle-search" class="prod-bundle-search-input" placeholder="Search and add products to this bundle…" autocomplete="off">
+                  </div>
+                  <div id="prod-bundle-dd" class="tag-input-dd" style="display:none"></div>
+                </div>
+                <div id="prod-bundle-items" class="prod-bundle-list">
+                  <div class="prod-bundle-empty"><i class="fa fa-box-open"></i> No items yet — search above to add products</div>
+                </div>
+                <div class="prod-bundle-footer">
+                  <span id="prod-bundle-count" class="prod-bundle-count-label">0 items in bundle</span>
+                </div>
+              </div>
+              <div class="prod-adv-cards">
+                <!-- Warranty -->
+                <div class="prod-adv-card">
+                  <input type="checkbox" id="prod-f-warranty" class="prod-adv-card-chk">
+                  <label class="prod-adv-card-top" for="prod-f-warranty">
+                    <div class="prod-adv-card-icon"><i class="fa fa-shield-halved"></i></div>
+                    <div class="prod-adv-card-text">
+                      <span class="prod-adv-card-name">Warranty</span>
+                      <span class="prod-adv-card-desc">Product includes a seller or manufacturer warranty</span>
+                    </div>
+                    <div class="prod-adv-card-sw"><div class="prod-adv-card-knob"></div></div>
+                  </label>
+                  <div class="prod-adv-card-fields" id="prod-warranty-duration-row">
+                    <div class="po-field-label" style="margin-bottom:6px"><i class="fa fa-clock" style="color:var(--accent);margin-right:4px"></i> Warranty Duration</div>
+                    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                      <input type="text" id="prod-f-warranty-duration" class="po-field-input" style="max-width:180px" placeholder="e.g. 1 Year">
+                      <div class="warranty-chips">
+                        <button type="button" class="warranty-chip" data-val="7 Days">7 Days</button>
+                        <button type="button" class="warranty-chip" data-val="30 Days">30 Days</button>
+                        <button type="button" class="warranty-chip" data-val="1 Year">1 Year</button>
+                        <button type="button" class="warranty-chip" data-val="Lifetime"><i class="fa fa-infinity"></i> Lifetime</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <!-- Expiration -->
+                <div class="prod-adv-card">
+                  <input type="checkbox" id="prod-f-expiry" class="prod-adv-card-chk">
+                  <label class="prod-adv-card-top" for="prod-f-expiry">
+                    <div class="prod-adv-card-icon"><i class="fa fa-calendar-xmark"></i></div>
+                    <div class="prod-adv-card-text">
+                      <span class="prod-adv-card-name">Expiration</span>
+                      <span class="prod-adv-card-desc">Track and record this product's expiration date</span>
+                    </div>
+                    <div class="prod-adv-card-sw"><div class="prod-adv-card-knob"></div></div>
+                  </label>
+                  <div class="prod-adv-card-fields" id="prod-exp-date-row">
+                    <div class="po-field-label" style="margin-bottom:6px"><i class="fa fa-calendar-xmark" style="color:var(--accent);margin-right:4px"></i> Expiration Date</div>
+                    <input type="date" id="prod-f-exp-date" class="po-field-input" style="max-width:100%">
+                  </div>
+                </div>
+                <!-- Courier Delivery -->
+                <div class="prod-adv-card">
+                  <input type="checkbox" id="prod-f-courier" class="prod-adv-card-chk">
+                  <label class="prod-adv-card-top" for="prod-f-courier">
+                    <div class="prod-adv-card-icon"><i class="fa fa-truck"></i></div>
+                    <div class="prod-adv-card-text">
+                      <span class="prod-adv-card-name">Courier Delivery</span>
+                      <span class="prod-adv-card-desc">Available for delivery and courier orders</span>
+                    </div>
+                    <div class="prod-adv-card-sw"><div class="prod-adv-card-knob"></div></div>
+                  </label>
+                </div>
+                <!-- Loyalty Redeemable -->
+                <div class="prod-adv-card">
+                  <input type="checkbox" id="prod-f-loyalty" class="prod-adv-card-chk">
+                  <label class="prod-adv-card-top" for="prod-f-loyalty">
+                    <div class="prod-adv-card-icon"><i class="fa fa-star"></i></div>
+                    <div class="prod-adv-card-text">
+                      <span class="prod-adv-card-name">Loyalty Redeemable</span>
+                      <span class="prod-adv-card-desc">Customers can redeem loyalty points for this product</span>
+                    </div>
+                    <div class="prod-adv-card-sw"><div class="prod-adv-card-knob"></div></div>
+                  </label>
+                </div>
+                <!-- Customer Required -->
+                <div class="prod-adv-card">
+                  <input type="checkbox" id="prod-f-customer-required" class="prod-adv-card-chk">
+                  <label class="prod-adv-card-top" for="prod-f-customer-required">
+                    <div class="prod-adv-card-icon"><i class="fa fa-user-check"></i></div>
+                    <div class="prod-adv-card-text">
+                      <span class="prod-adv-card-name">Customer Required</span>
+                      <span class="prod-adv-card-desc">A customer must be selected before selling</span>
+                    </div>
+                    <div class="prod-adv-card-sw"><div class="prod-adv-card-knob"></div></div>
+                  </label>
+                </div>
+                <!-- Rental -->
+                <div class="prod-adv-card">
+                  <input type="checkbox" id="prod-f-rental" class="prod-adv-card-chk">
+                  <label class="prod-adv-card-top" for="prod-f-rental">
+                    <div class="prod-adv-card-icon"><i class="fa fa-key"></i></div>
+                    <div class="prod-adv-card-text">
+                      <span class="prod-adv-card-name">Rental</span>
+                      <span class="prod-adv-card-desc">This product can be rented instead of sold</span>
+                    </div>
+                    <div class="prod-adv-card-sw"><div class="prod-adv-card-knob"></div></div>
+                  </label>
+                </div>
+                <!-- Subscription -->
+                <div class="prod-adv-card">
+                  <input type="checkbox" id="prod-f-subscription" class="prod-adv-card-chk">
+                  <label class="prod-adv-card-top" for="prod-f-subscription">
+                    <div class="prod-adv-card-icon"><i class="fa fa-repeat"></i></div>
+                    <div class="prod-adv-card-text">
+                      <span class="prod-adv-card-name">Subscription</span>
+                      <span class="prod-adv-card-desc">Sold as a recurring subscription product</span>
+                    </div>
+                    <div class="prod-adv-card-sw"><div class="prod-adv-card-knob"></div></div>
+                  </label>
+                </div>
+                <!-- Item Wise Tax -->
+                <div class="prod-adv-card">
+                  <input type="checkbox" id="prod-f-item-tax" class="prod-adv-card-chk">
+                  <label class="prod-adv-card-top" for="prod-f-item-tax">
+                    <div class="prod-adv-card-icon"><i class="fa fa-percent"></i></div>
+                    <div class="prod-adv-card-text">
+                      <span class="prod-adv-card-name">Item Wise Tax</span>
+                      <span class="prod-adv-card-desc">Tax is calculated per item, not on the order total</span>
+                    </div>
+                    <div class="prod-adv-card-sw"><div class="prod-adv-card-knob"></div></div>
+                  </label>
+                </div>
+                <!-- Item Wise Discount -->
+                <div class="prod-adv-card">
+                  <input type="checkbox" id="prod-f-item-discount" class="prod-adv-card-chk">
+                  <label class="prod-adv-card-top" for="prod-f-item-discount">
+                    <div class="prod-adv-card-icon"><i class="fa fa-tag"></i></div>
+                    <div class="prod-adv-card-text">
+                      <span class="prod-adv-card-name">Item Wise Discount</span>
+                      <span class="prod-adv-card-desc">Discount is applied to each item individually</span>
+                    </div>
+                    <div class="prod-adv-card-sw"><div class="prod-adv-card-knob"></div></div>
+                  </label>
                 </div>
               </div>
             </div>
-            <!-- Categories -->
-            <div class="po-field">
-              <label class="po-field-label">Categories</label>
-              <div class="tag-input-wrap" id="prod-cat-wrap">
-                <div id="prod-cat-tags" class="tag-input-tags"></div>
-                <input type="text" id="prod-cat-input" class="tag-input-field" placeholder="Search categories…" autocomplete="off">
-              </div>
-              <div class="tag-input-dd" id="prod-cat-dd" style="display:none"></div>
-            </div>
-            <!-- Brands -->
-            <div class="po-field">
-              <label class="po-field-label">Brands</label>
-              <div class="tag-input-wrap" id="prod-brand-wrap">
-                <div id="prod-brand-tags" class="tag-input-tags"></div>
-                <input type="text" id="prod-brand-input" class="tag-input-field" placeholder="Search brands…" autocomplete="off">
-              </div>
-              <div class="tag-input-dd" id="prod-brand-dd" style="display:none"></div>
-            </div>
-            <!-- Bundle toggle + section -->
-            <div class="prod-bundle-toggle-row">
-              <input type="checkbox" id="prod-f-bundle" class="prod-bundle-checkbox">
-              <label for="prod-f-bundle" class="prod-bundle-toggle-label">
-                <i class="fa fa-cubes"></i> Bundle product
-                <span class="prod-bundle-toggle-hint">Combine multiple products into one</span>
-              </label>
-            </div>
-            <div id="prod-bundle-section" class="prod-bundle-section" style="display:none">
-              <div class="prod-bundle-search-row">
-                <div class="prod-bundle-search-wrap">
-                  <i class="fa fa-search prod-bundle-search-icon"></i>
-                  <input type="text" id="prod-bundle-search" class="prod-bundle-search-input" placeholder="Search and add products to this bundle…" autocomplete="off">
-                </div>
-                <div id="prod-bundle-dd" class="tag-input-dd" style="display:none"></div>
-              </div>
-              <div id="prod-bundle-items" class="prod-bundle-list">
-                <div class="prod-bundle-empty"><i class="fa fa-box-open"></i> No items yet — search above to add products</div>
-              </div>
-              <div class="prod-bundle-footer">
-                <span id="prod-bundle-count" class="prod-bundle-count-label">0 items in bundle</span>
-              </div>
-            </div>
-            <!-- Product feature flags -->
-            <div class="prod-flags-row">
-              <label class="prod-flag-item">
-                <input type="checkbox" id="prod-f-warranty" class="prod-flag-cb">
-                <span class="prod-flag-label"><i class="fa fa-shield-halved"></i> Warranty</span>
-              </label>
-              <label class="prod-flag-item">
-                <input type="checkbox" id="prod-f-expiry" class="prod-flag-cb">
-                <span class="prod-flag-label"><i class="fa fa-calendar-xmark"></i> Expiration</span>
-              </label>
-              <label class="prod-flag-item">
-                <input type="checkbox" id="prod-f-courier" class="prod-flag-cb">
-                <span class="prod-flag-label"><i class="fa fa-truck"></i> Courier Delivery</span>
-              </label>
-              <label class="prod-flag-item">
-                <input type="checkbox" id="prod-f-loyalty" class="prod-flag-cb">
-                <span class="prod-flag-label"><i class="fa fa-star"></i> Loyalty Redeemable</span>
-              </label>
-            </div>
-            <!-- Description -->
-            <div class="po-field">
-              <label class="po-field-label">Description</label>
-              <textarea id="prod-f-description" class="po-field-input" rows="3" placeholder="Optional product description…" maxlength="5000" style="resize:vertical;min-height:70px"></textarea>
-            </div>
-          </div>
+
+          </div><!-- /prod-modal-body -->
           <div class="po-aim-footer">
             <button class="po-btn-ghost" id="prod-modal-cancel"><i class="fa fa-xmark"></i> Cancel</button>
-            <button class="po-btn-primary" id="prod-modal-save"><i class="fa fa-check"></i> Save Product</button>
+            <div style="display:flex;gap:8px;margin-left:auto">
+              <button class="po-btn-ghost" id="prod-modal-save-new" style="display:none"><i class="fa fa-plus"></i> Save &amp; New</button>
+              <button class="po-btn-primary" id="prod-modal-save"><i class="fa fa-check"></i> Save Product</button>
+            </div>
           </div>
         </div>
       </div>
@@ -3165,43 +3367,108 @@
       </div>
 
       <!-- ── Barcode Sheets ──────────────────────────────────────────────── -->
-      <div id="inv-barcodes-view" style="display:none;flex-direction:column;height:100%">
-        <div class="po-toolbar bc-toolbar">
-          <div class="po-search-wrap">
-            <i class="fa fa-magnifying-glass"></i>
-            <input type="text" id="bc-search" placeholder="Search products…">
+      <div id="inv-barcodes-view" style="display:none;flex-direction:column;height:100%;">
+
+        <!-- tab header — always visible -->
+        <div class="bc-tab-header">
+          <div class="bc-tab-header-left">
+            <i class="fa fa-barcode"></i>
+            <span class="bc-tab-header-title">Barcode Generator</span>
+            <span id="bc-tab-queue-count"></span>
           </div>
-          <div class="bc-label-opts">
-            <label class="bc-opt-label">Size</label>
-            <select id="bc-label-size" class="bc-select">
-              <option value="small">Small (2×1 in)</option>
-              <option value="medium" selected>Medium (2.6×1 in)</option>
-              <option value="large">Large (4×2 in)</option>
-            </select>
-            <label class="bc-opt-label">Cols</label>
-            <select id="bc-cols" class="bc-select">
-              <option value="2">2</option>
-              <option value="3" selected>3</option>
-              <option value="4">4</option>
-            </select>
-          </div>
-          <div class="bc-sel-count" id="bc-sel-count"><i class="fa fa-tag"></i> 0 selected</div>
-          <button class="po-add-btn cat-add-btn" id="bc-print-btn" disabled style="display:none">
-            <i class="fa fa-print"></i> Print Sheet
-          </button>
-        </div>
-        <div class="bc-body">
-          <div class="bc-list-wrap">
-            <div class="bc-list-header">
-              <label class="bc-chk-wrap">
-                <input type="checkbox" id="bc-select-all"> Select All
-              </label>
-            </div>
-            <div id="bc-product-list" class="bc-product-list">
-              <div class="inv-loading"><i class="fa fa-spinner fa-spin"></i> Loading products…</div>
-            </div>
+          <div class="bc-tab-header-right">
+            <button class="bc-print-all-btn" id="bc-print-all-btn" disabled>
+              <i class="fa fa-print"></i> Print All
+            </button>
+            <button class="bc-gen-btn bc-gen-btn-sm" id="bc-open-main">
+              <i class="fa fa-barcode"></i> Generate Barcode
+            </button>
           </div>
         </div>
+
+        <!-- print settings strip -->
+        <div class="bc-ps-strip">
+
+          <!-- Printer Type -->
+          <div class="bc-ps-group">
+            <span class="bc-ps-lbl"><i class="fa fa-print"></i> Printer Type</span>
+            <div class="bc-ps-seg" id="bc-ps-type">
+              <button class="bc-ps-seg-btn bc-ps-active" data-val="roll"><i class="fa fa-tag"></i> Label Printer</button>
+              <button class="bc-ps-seg-btn" data-val="a4"><i class="fa fa-file-lines"></i> Regular</button>
+            </div>
+          </div>
+
+          <div class="bc-ps-vsep"></div>
+
+          <!-- Roll sub-options -->
+          <div class="bc-ps-group" id="bc-ps-roll">
+            <span class="bc-ps-lbl"><i class="fa fa-ruler-combined"></i> Label Size</span>
+            <div class="bc-ps-seg" id="bc-ps-roll-size">
+              <button class="bc-ps-seg-btn bc-ps-active" data-val="1x50x25"  data-cols="1">1 Label (50×25mm)</button>
+              <button class="bc-ps-seg-btn"              data-val="2x50x25"  data-cols="2">2 Label (50×25mm)</button>
+              <button class="bc-ps-seg-btn"              data-val="1x100x50" data-cols="1">1 Label (100×50mm)</button>
+              <button class="bc-ps-seg-btn"              data-val="2x38x25"  data-cols="2">2 Label (38×25mm)</button>
+            </div>
+          </div>
+
+          <!-- A4 sub-options (hidden by default) -->
+          <div class="bc-ps-group" id="bc-ps-a4" style="display:none">
+            <span class="bc-ps-lbl"><i class="fa fa-table-cells"></i> Layout</span>
+            <div class="bc-ps-field">
+              <label class="bc-ps-field-lbl" for="bc-ps-a4-cols">Cols</label>
+              <input type="number" id="bc-ps-a4-cols" class="bc-ps-dim-inp" value="3" min="1" max="10">
+            </div>
+            <div class="bc-ps-vsep"></div>
+            <div class="bc-ps-field">
+              <label class="bc-ps-field-lbl" for="bc-ps-a4-rows">Rows / page</label>
+              <input type="number" id="bc-ps-a4-rows" class="bc-ps-dim-inp" value="8" min="1" max="30">
+            </div>
+          </div>
+
+        </div><!-- /bc-ps-strip -->
+
+        <!-- queue content — empty state or batch cards -->
+        <div class="bc-tab-content" id="bc-tab-content">
+          <div class="bc-empty-state">
+            <div class="bc-empty-icon"><i class="fa fa-barcode"></i></div>
+            <div class="bc-empty-title">No Labels Yet</div>
+            <div class="bc-empty-desc">Click "Generate Barcode" to add products to your print queue</div>
+          </div>
+        </div>
+
+        <!-- footer stats stripe -->
+        <div class="bc-tab-footer">
+          <div class="bc-tf-stats">
+            <div class="bc-tf-stat">
+              <i class="fa fa-layer-group"></i>
+              <span class="bc-tf-val" id="bc-tf-batches">0</span>
+              <span class="bc-tf-lbl">Batches</span>
+            </div>
+            <div class="bc-tf-sep"></div>
+            <div class="bc-tf-stat">
+              <i class="fa fa-tags"></i>
+              <span class="bc-tf-val" id="bc-tf-labels">0</span>
+              <span class="bc-tf-lbl">Labels Total</span>
+            </div>
+            <div class="bc-tf-sep"></div>
+            <div class="bc-tf-stat">
+              <i class="fa fa-box"></i>
+              <span class="bc-tf-val" id="bc-tf-products">0</span>
+              <span class="bc-tf-lbl">Products</span>
+            </div>
+            <div class="bc-tf-sep"></div>
+            <div class="bc-tf-stat">
+              <i class="fa fa-print"></i>
+              <span class="bc-tf-val" id="bc-tf-pages">0</span>
+              <span class="bc-tf-lbl">Print Pages</span>
+            </div>
+          </div>
+          <div class="bc-tf-status" id="bc-tf-status">
+            <i class="fa fa-circle-dot"></i>
+            <span>Queue empty</span>
+          </div>
+        </div>
+
       </div><!-- /inv-barcodes-view -->
 
     </div><!-- /panel-inventory -->
@@ -6037,6 +6304,9 @@
 
   </div><!-- /content -->
 
+    </div><!-- /app-right -->
+  </div><!-- /app-main -->
+
   <!-- ── CRM: New Lead Modal ── -->
   <div class="modal-overlay" id="crm-lead-modal" style="display:none">
     <div class="po-aim-shell" style="width:500px">
@@ -8028,121 +8298,157 @@
 
     <!-- Header -->
     <div class="co-header">
-      <div class="co-header-icon"><i class="fa fa-cash-register"></i></div>
-      <div class="co-header-text">
-        <h2>Checkout</h2>
-        <p>Review your order and choose payment</p>
+      <div class="co-header-left">
+        <div class="co-header-icon"><i class="fa fa-cash-register"></i></div>
+        <div>
+          <div class="co-header-title">Checkout</div>
+          <div class="co-header-sub" id="co-header-sub">Review your order and complete payment</div>
+        </div>
       </div>
       <button class="co-close" id="checkout-cancel"><i class="fa fa-xmark"></i></button>
     </div>
 
-    <!-- Body -->
+    <!-- Body: Left | Middle (items) | Right -->
     <div class="co-body">
 
-      <!-- Left: Order summary -->
+      <!-- Col 1: Summary + Customer -->
       <div class="co-left">
-        <div class="co-section-label">Order Summary</div>
 
-        <div class="co-summary-box">
-          <div class="co-summary-row">
+        <div class="co-panel-label"><i class="fa fa-receipt"></i> Summary</div>
+
+        <div class="co-sum-rows">
+          <div class="co-sum-row">
             <span>Subtotal</span>
             <strong id="co-subtotal">0.00</strong>
           </div>
-          <div class="co-discount-wrap">
-            <div class="co-discount-tag"><i class="fa fa-tag"></i> Discount</div>
-            <div class="co-discount-input-row">
-              <input type="number" id="co-discount-pct" value="0" min="0" max="100" step="1">
-              <span>%</span>
+          <div class="co-disc-row">
+            <div class="co-disc-top">
+              <span class="co-disc-tag"><i class="fa fa-tag"></i> Discount</span>
+              <div class="co-disc-input-wrap">
+                <input type="number" id="co-discount-pct" class="co-disc-input" value="0" min="0" max="100" step="1">
+                <span class="co-disc-pct">%</span>
+              </div>
             </div>
-            <div class="co-saved-row">
-              <span>Discount saved</span>
-              <strong id="co-saved">—</strong>
-            </div>
+          </div>
+          <div class="co-sum-row">
+            <span style="color:var(--text-muted);font-size:12px">You save</span>
+            <strong id="co-saved" style="color:#16a34a;font-size:12px">—</strong>
           </div>
         </div>
 
-        <div class="co-total-box">
-          <span class="co-total-label">Total</span>
-          <strong id="co-total">0.00</strong>
-          <span class="co-total-cur" id="co-currency"></span>
+        <div class="co-grand-total">
+          <div class="co-gt-label">Grand Total</div>
+          <div class="co-gt-row">
+            <span class="co-gt-amount" id="co-total">0.00</span>
+            <span class="co-gt-cur" id="co-currency"></span>
+          </div>
         </div>
 
-        <!-- Customer dropdown -->
-        <div class="co-cust-section">
-          <div class="co-section-label" style="margin-bottom:6px">Customer</div>
-          <div class="co-cust-wrap" id="co-cust-wrap">
-            <!-- Trigger — looks like a select, always visible -->
-            <div class="co-cust-trigger" id="co-cust-trigger" tabindex="0" role="button" aria-haspopup="listbox">
-              <i class="fa fa-user co-cust-trig-icon" id="co-cust-trig-icon"></i>
-              <span class="co-cust-trig-label" id="co-cust-name-disp">Select customer…</span>
-              <button class="co-cust-clear-btn" id="co-cust-clear" title="Remove customer" style="display:none"><i class="fa fa-xmark"></i></button>
-              <i class="fa fa-chevron-down co-cust-chevron"></i>
-            </div>
-            <!-- Dropdown panel -->
-            <div class="co-cust-dd" id="co-cust-dd" style="display:none">
-              <input type="text" id="co-cust-input" class="co-cust-dd-search" placeholder="Search customer…" autocomplete="off">
-              <div id="co-cust-dd-list"></div>
-            </div>
+        <div class="co-panel-label"><i class="fa fa-user"></i> Customer</div>
+        <div class="co-cust-wrap" id="co-cust-wrap">
+          <div class="co-cust-trigger" id="co-cust-trigger" tabindex="0" role="button" aria-haspopup="listbox">
+            <i class="fa fa-user co-cust-trig-icon" id="co-cust-trig-icon"></i>
+            <span class="co-cust-trig-label" id="co-cust-name-disp">Select customer…</span>
+            <button class="co-cust-clear-btn" id="co-cust-clear" title="Remove customer" style="display:none"><i class="fa fa-xmark"></i></button>
+            <i class="fa fa-chevron-down co-cust-chevron"></i>
+          </div>
+          <div class="co-cust-dd" id="co-cust-dd" style="display:none">
+            <input type="text" id="co-cust-input" class="co-cust-dd-search" placeholder="Search customer…" autocomplete="off">
+            <div id="co-cust-dd-list"></div>
           </div>
         </div>
 
       </div>
 
-      <!-- Right: Payment -->
-      <div class="co-right">
-        <div class="co-section-label">Payment</div>
+      <!-- Col 2 (Middle): Order items -->
+      <div class="co-mid">
+        <div class="co-mid-hdr">
+          <span class="co-panel-label" style="flex:1"><i class="fa fa-basket-shopping"></i> Order Items</span>
+          <span class="co-items-badge" id="co-items-badge">0</span>
+        </div>
+        <div class="co-mid-col-hdr">
+          <span></span>
+          <span>Item</span>
+          <span>Qty</span>
+          <span>Price</span>
+          <span>Disc %</span>
+          <span>Total</span>
+        </div>
+        <div class="co-items-list" id="co-items-list"></div>
+        <div class="co-mid-ftr">
+          <span>Subtotal</span>
+          <strong id="co-items-ftr-total">0.00</strong>
+        </div>
+      </div>
 
-        <!-- Payment method tabs -->
+      <!-- Col 3: Payment -->
+      <div class="co-right">
+
+        <div class="co-panel-label"><i class="fa fa-wallet"></i> Payment</div>
+
         <div class="co-pay-methods">
           <button class="co-pay-method active" data-method="cash">
-            <i class="fa fa-money-bill-wave"></i> Cash
+            <i class="fa fa-money-bill-wave"></i>
+            <span>Cash</span>
           </button>
           <button class="co-pay-method" data-method="card">
-            <i class="fa fa-credit-card"></i> Card payment
+            <i class="fa fa-credit-card"></i>
+            <span>Card</span>
           </button>
           <button class="co-pay-method" data-method="credit">
-            <i class="fa fa-file-invoice-dollar"></i> Credit payment
+            <i class="fa fa-file-invoice-dollar"></i>
+            <span>Credit</span>
           </button>
         </div>
 
-        <!-- Amount given -->
-        <div>
-          <div class="co-section-label" style="margin-bottom:6px">Amount Customer Gave</div>
-          <input type="number" id="co-amount" class="co-amount-input" placeholder="0.00" min="0" step="0.01">
-          <div style="margin-top:8px;display:flex;flex-direction:column;gap:4px">
-            <div class="co-due-row">
+        <!-- Credit fields -->
+        <div id="co-credit-section" style="display:none">
+          <div id="co-credit-customer-notice" class="co-credit-notice" style="display:none">
+            <i class="fa fa-triangle-exclamation"></i> A customer is required for credit payment.
+          </div>
+          <div class="co-field-label">Payment Due Date <span class="co-field-opt">(optional)</span></div>
+          <input type="date" id="co-credit-due-date" class="co-amount-input co-date-input">
+        </div>
+
+        <!-- Cash / Card -->
+        <div id="co-cash-section">
+          <div class="co-field-label">Amount Received</div>
+          <input type="text" inputmode="decimal" id="co-amount" class="co-amount-input" placeholder="0.00" autocomplete="off">
+          <div class="co-calc-rows">
+            <div class="co-calc-row">
               <span>Amount due</span>
               <strong id="co-amount-due">0.00</strong>
             </div>
-            <div class="co-change-row">
-              <span>Change / balance</span>
+            <div class="co-calc-row co-change-row">
+              <span>Change</span>
               <strong id="co-change" class="co-change-pos">0.00</strong>
             </div>
           </div>
         </div>
 
-        <!-- Notes -->
-        <div class="co-notes">
-          <div class="co-section-label" style="margin-bottom:6px">Notes</div>
-          <textarea id="co-notes" placeholder="Optional note…"></textarea>
+        <!-- Numpad -->
+        <div id="co-numpad-section">
+          <div class="co-numpad">
+            <button class="co-key" data-key="7">7</button>
+            <button class="co-key" data-key="8">8</button>
+            <button class="co-key" data-key="9">9</button>
+            <button class="co-key" data-key="4">4</button>
+            <button class="co-key" data-key="5">5</button>
+            <button class="co-key" data-key="6">6</button>
+            <button class="co-key" data-key="1">1</button>
+            <button class="co-key" data-key="2">2</button>
+            <button class="co-key" data-key="3">3</button>
+            <button class="co-key" data-key=".">.</button>
+            <button class="co-key" data-key="0">0</button>
+            <button class="co-key" data-key="back"><i class="fa fa-delete-left"></i></button>
+            <button class="co-key" data-key="exact">Exact amount</button>
+            <button class="co-key" data-key="clear">Clear</button>
+          </div>
         </div>
 
-        <!-- Numpad -->
-        <div class="co-numpad">
-          <button class="co-key" data-key="7">7</button>
-          <button class="co-key" data-key="8">8</button>
-          <button class="co-key" data-key="9">9</button>
-          <button class="co-key" data-key="4">4</button>
-          <button class="co-key" data-key="5">5</button>
-          <button class="co-key" data-key="6">6</button>
-          <button class="co-key" data-key="1">1</button>
-          <button class="co-key" data-key="2">2</button>
-          <button class="co-key" data-key="3">3</button>
-          <button class="co-key" data-key=".">.</button>
-          <button class="co-key" data-key="0">0</button>
-          <button class="co-key" data-key="back"><i class="fa fa-delete-left"></i></button>
-          <button class="co-key" data-key="exact">Exact due</button>
-          <button class="co-key" data-key="clear">Clear</button>
+        <!-- Notes -->
+        <div class="co-notes">
+          <textarea id="co-notes" placeholder="Add a note…"></textarea>
         </div>
 
         <!-- Error -->
@@ -8150,8 +8456,9 @@
 
         <!-- Complete -->
         <button id="checkout-confirm" class="co-complete-btn">
-          <i class="fa fa-check"></i> Complete sale
+          <i class="fa fa-check-circle"></i> Complete Sale
         </button>
+
       </div>
     </div>
   </div>
@@ -8730,6 +9037,21 @@
                 <option value="light">Light</option>
                 <option value="dark">Dark</option>
               </select>
+            </div>
+            <div class="psm-field-row">
+              <label class="psm-field-label" for="psm-layout-mode">Navigation Layout</label>
+              <select id="psm-layout-mode" class="psm-select">
+                <option value="ribbon">Ribbon (top bar with tabs &amp; buttons)</option>
+                <option value="sidebar">Sidebar (left-side navigation panel)</option>
+              </select>
+            </div>
+            <div class="psm-field-row">
+              <label class="psm-field-label" for="psm-receipt-mode">POS Receipt / Invoice Mode</label>
+              <select id="psm-receipt-mode" class="psm-select">
+                <option value="bill">Bill Printing — thermal receipt after each sale</option>
+                <option value="invoice">Invoice — create &amp; print a formal invoice after each sale</option>
+              </select>
+              <span class="psm-hint">Controls what is generated after a POS sale is completed</span>
             </div>
             <div class="psm-field-2col">
               <div>
@@ -9666,6 +9988,23 @@
       <div class="rcpt-editor-panel">
 
         <div class="rcpt-ed-section">
+          <div class="rcpt-ed-label"><i class="fa fa-image"></i> Business logo</div>
+          <div class="rcpt-ed-logo-wrap" id="rcpt-ed-logo-wrap">
+            <div class="rcpt-ed-logo-ph" id="rcpt-ed-logo-ph">
+              <i class="fa fa-image"></i>
+              <span>No logo set</span>
+            </div>
+            <img id="rcpt-ed-logo-img" class="rcpt-ed-logo-img" style="display:none" src="" alt="Logo">
+          </div>
+          <div class="rcpt-ed-logo-btns">
+            <button class="rcpt-ed-logo-btn" id="rcpt-logo-choose"><i class="fa fa-folder-open"></i> Choose image</button>
+            <button class="rcpt-ed-logo-btn rcpt-ed-logo-btn--rm" id="rcpt-logo-remove" title="Remove logo"><i class="fa fa-trash"></i></button>
+          </div>
+        </div>
+
+        <hr class="rcpt-ed-divider">
+
+        <div class="rcpt-ed-section">
           <div class="rcpt-ed-label"><i class="fa fa-building"></i> Business info</div>
           <div class="rcpt-ed-checks">
             <label class="rcpt-ed-check"><input type="checkbox" id="rcpt-ed-show-biz"> Show business name</label>
@@ -9720,6 +10059,11 @@
       <!-- live sample preview -->
       <div class="rcpt-preview-wrap">
         <div class="rcpt-paper" id="rcpt-ed-paper"></div>
+      </div>
+      <!-- receipt templates panel -->
+      <div class="rcpt-templates-panel">
+        <div class="rcpt-tpl-header"><i class="fa fa-layer-group"></i> Templates</div>
+        <div class="rcpt-tpl-list" id="rcpt-tpl-list"></div>
       </div>
     </div>
   </div>
@@ -9779,25 +10123,164 @@
   </div>
 </div>
 
-<!-- ── Barcode Preview Modal ─────────────────────────────────────────── -->
-<!-- ── Barcode Batch Picker ─────────────────────────────────────────────── -->
-<div id="bc-batch-modal" class="modal-overlay" style="display:none;z-index:1200">
-  <div class="modal-box" style="width:560px;max-width:96vw">
+<!-- ── Barcode Generator — Primary Modal ─────────────────────────────── -->
+<div id="bc-main-modal" class="modal-overlay" style="display:none;z-index:1100">
+  <div class="bc-main-box">
+
+    <!-- header -->
+    <div class="bc-main-header">
+      <div class="bc-main-header-left">
+        <div class="bc-main-header-icon"><i class="fa fa-barcode"></i></div>
+        <div>
+          <div class="bc-main-title">Generate Barcode</div>
+          <div class="bc-main-sub">Search a product to add barcode labels</div>
+        </div>
+      </div>
+      <button class="co-close" id="bc-main-close"><i class="fa fa-xmark"></i></button>
+    </div>
+
+    <!-- product search -->
+    <div class="bc-main-search-wrap">
+      <div class="bc-product-search-box">
+        <i class="fa fa-magnifying-glass bc-search-ico"></i>
+        <input type="text" id="bc-product-search-inp" class="bc-product-search-inp"
+          placeholder="Search product by name or SKU…" autocomplete="off" spellcheck="false">
+        <div class="bc-product-dropdown" id="bc-product-dropdown" style="display:none"></div>
+      </div>
+    </div>
+
+    <!-- split: preview ← → options -->
+    <div class="bc-main-content">
+
+      <!-- LEFT: barcode preview -->
+      <div class="bc-main-preview-wrap">
+        <div class="bc-main-preview-header">
+          <div class="bc-main-preview-title">
+            <i class="fa fa-eye"></i> Barcode Preview
+            <span class="bc-main-label-count" id="bc-main-label-count"></span>
+          </div>
+          <button class="po-add-btn cat-add-btn" id="bc-print-btn" disabled>
+            <i class="fa fa-print"></i> Print Sheet
+          </button>
+        </div>
+        <div class="bc-main-preview-body" id="bc-main-preview-body">
+          <div class="bc-preview-ph">
+            <i class="fa fa-barcode"></i>
+            <span>Search for a product above, then add barcode labels from its stock layers</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT: options panel -->
+      <div class="bc-options-panel">
+
+        <!-- Paper Size -->
+        <div class="bc-opt-section">
+          <div class="bc-opt-section-title"><i class="fa fa-ruler-combined"></i> Paper Size</div>
+          <div class="bc-paper-opts">
+
+            <label class="bc-paper-opt">
+              <input type="radio" name="bc-paper" id="bc-paper-single" value="single" checked>
+              <div class="bc-paper-opt-card">
+                <div class="bc-paper-icon bc-paper-icon-single">
+                  <div class="bc-paper-stripe"></div>
+                </div>
+                <span>Single Row</span>
+              </div>
+            </label>
+
+            <label class="bc-paper-opt">
+              <input type="radio" name="bc-paper" id="bc-paper-double" value="double">
+              <div class="bc-paper-opt-card">
+                <div class="bc-paper-icon bc-paper-icon-double">
+                  <div class="bc-paper-stripe"></div>
+                  <div class="bc-paper-stripe"></div>
+                </div>
+                <span>Double Row</span>
+              </div>
+            </label>
+
+            <label class="bc-paper-opt">
+              <input type="radio" name="bc-paper" id="bc-paper-custom" value="custom">
+              <div class="bc-paper-opt-card">
+                <div class="bc-paper-icon bc-paper-icon-custom">
+                  <i class="fa fa-up-right-and-down-left-from-center"></i>
+                </div>
+                <span>Custom Size</span>
+              </div>
+            </label>
+
+          </div>
+
+          <!-- Custom size fields (shown only when custom selected) -->
+          <div class="bc-custom-size" id="bc-custom-size" style="display:none">
+            <div class="bc-custom-size-row">
+              <label>Width (mm)</label>
+              <input type="number" id="bc-custom-w" class="bc-custom-dim-inp" value="60" min="10" max="300">
+            </div>
+            <div class="bc-custom-size-row">
+              <label>Height (mm)</label>
+              <input type="number" id="bc-custom-h" class="bc-custom-dim-inp" value="30" min="10" max="300">
+            </div>
+          </div>
+        </div>
+
+        <!-- Custom Text -->
+        <div class="bc-opt-section">
+          <div class="bc-opt-section-title"><i class="fa fa-font"></i> Custom Text</div>
+          <div class="bc-text-row">
+            <span class="bc-text-pos-lbl"><i class="fa fa-arrow-up"></i> Top</span>
+            <input type="text" id="bc-top-text" class="bc-custom-text-inp"
+              placeholder="e.g. Store name…" maxlength="60">
+          </div>
+          <div class="bc-text-row">
+            <span class="bc-text-pos-lbl"><i class="fa fa-arrow-down"></i> Bottom</span>
+            <input type="text" id="bc-custom-text" class="bc-custom-text-inp"
+              placeholder="e.g. Phone, website…" maxlength="60">
+          </div>
+        </div>
+
+      </div><!-- /bc-options-panel -->
+    </div><!-- /bc-main-content -->
+
+    <!-- modal footer: label count + copies + Add to Print -->
+    <div class="bc-modal-footer">
+      <div class="bc-footer-info">
+        <i class="fa fa-tags"></i>
+        <span id="bc-footer-count">No labels added</span>
+      </div>
+      <div class="bc-footer-actions">
+        <label class="bc-footer-copies-lbl" for="bc-footer-copies">Copies</label>
+        <input type="number" id="bc-footer-copies" class="bc-footer-copies-inp" value="1" min="1" max="100">
+        <button class="bc-add-to-print-btn" id="bc-add-to-print" disabled>
+          <i class="fa fa-layer-group"></i> Add to Print
+        </button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── Barcode Generator — Stock Layers Popup ────────────────────────── -->
+<div id="bc-stock-modal" class="modal-overlay" style="display:none;z-index:1200">
+  <div class="modal-box bc-stock-box">
     <div class="modal-header">
       <div>
-        <div class="modal-title"><i class="fa fa-barcode"></i> <span id="bc-batch-title">Print Barcodes</span></div>
-        <div class="modal-subtitle" id="bc-batch-sku" style="font-size:11px;color:var(--text-muted);margin-top:2px"></div>
+        <div class="modal-title"><i class="fa fa-boxes-stacked"></i> <span id="bc-stock-title">Stock Layers</span></div>
+        <div id="bc-stock-sku-sub" style="font-size:11px;color:var(--text-muted);margin-top:2px;font-family:monospace"></div>
       </div>
-      <button class="co-close" id="bc-batch-close"><i class="fa fa-xmark"></i></button>
+      <button class="co-close" id="bc-stock-close"><i class="fa fa-xmark"></i></button>
     </div>
-    <div class="modal-body" style="padding:0">
-      <div id="bc-batch-loading" style="padding:32px;text-align:center;color:var(--text-muted)">
-        <i class="fa fa-spinner fa-spin"></i> Loading batches…
+    <div class="modal-body" style="padding:0;max-height:420px;overflow-y:auto">
+      <div id="bc-stock-loading" style="padding:32px;text-align:center;color:var(--text-muted)">
+        <i class="fa fa-spinner fa-spin"></i> Loading stock layers…
       </div>
-      <div id="bc-batch-list" style="display:none"></div>
+      <div id="bc-stock-list" style="display:none"></div>
     </div>
   </div>
 </div>
+
+<!-- ── Barcode Preview Modal ─────────────────────────────────────────── -->
 
 <div id="bc-preview-modal" class="bc-preview-modal" style="display:none">
   <div class="bc-preview-toolbar">
