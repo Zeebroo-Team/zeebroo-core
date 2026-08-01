@@ -495,6 +495,11 @@
             <span>Total balance</span>
             <strong id="pos-account-total">—</strong>
           </div>
+          <div class="pos-acct-add-row">
+            <button id="pos-acct-add-btn" class="pos-acct-add-btn">
+              <i class="fa fa-plus"></i> Add Bank Account
+            </button>
+          </div>
         </div>
       </div>
 
@@ -588,6 +593,34 @@
       <button class="wc-btn close" id="wc-close" title="Close"><i class="fa fa-xmark"></i></button>
     </div>
   </div>
+
+  <!-- ── Main area: sidebar + right column (ribbon + content) ─────── -->
+  <div id="app-main">
+
+    <!-- Sidebar (shown when layout_mode = sidebar, hidden in ribbon mode) -->
+    <div id="sidebar">
+      <nav id="sidebar-nav">
+        <div class="sb-nav-item has-sub" data-tab="home"><i class="fa fa-house"></i><span>Home</span><i class="fa fa-chevron-right sb-nav-chevron"></i></div>
+        <div class="sb-nav-item" data-tab="pos"><i class="fa fa-cart-shopping"></i><span>POS</span></div>
+        <div class="sb-nav-item has-sub" data-tab="sales"><i class="fa fa-receipt"></i><span>Sales</span><i class="fa fa-chevron-right sb-nav-chevron"></i></div>
+        <div class="sb-nav-item has-sub" data-tab="inventory"><i class="fa fa-boxes-stacked"></i><span>Inventory</span><i class="fa fa-chevron-right sb-nav-chevron"></i></div>
+        <div class="sb-nav-item has-sub" data-tab="finance"><i class="fa fa-file-invoice-dollar"></i><span>Finance</span><i class="fa fa-chevron-right sb-nav-chevron"></i></div>
+        <div class="sb-nav-item has-sub" data-tab="hr"><i class="fa fa-users"></i><span>HR</span><i class="fa fa-chevron-right sb-nav-chevron"></i></div>
+        <div class="sb-nav-item has-sub" data-tab="services"><i class="fa fa-screwdriver-wrench"></i><span>Services</span><i class="fa fa-chevron-right sb-nav-chevron"></i></div>
+        <div class="sb-nav-item" data-tab="design"><i class="fa fa-palette"></i><span>Design</span></div>
+        <div class="sb-nav-item has-sub" data-tab="restaurant"><i class="fa fa-utensils"></i><span>Restaurant</span><i class="fa fa-chevron-right sb-nav-chevron"></i></div>
+        <div class="sb-nav-item" data-tab="rst-pos"><i class="fa fa-cash-register"></i><span>RST POS</span></div>
+        <div class="sb-nav-item has-sub" data-tab="mail"><i class="fa fa-envelope"></i><span>Mail</span><i class="fa fa-chevron-right sb-nav-chevron"></i></div>
+        <div class="sb-nav-item has-sub" data-tab="crm"><i class="fa fa-handshake"></i><span>CRM</span><i class="fa fa-chevron-right sb-nav-chevron"></i></div>
+        <div class="sb-nav-item" data-tab="automations"><i class="fa fa-bolt"></i><span>Automations</span></div>
+        <div class="sb-nav-item has-sub" data-tab="projects"><i class="fa fa-diagram-project"></i><span>Projects</span><i class="fa fa-chevron-right sb-nav-chevron"></i></div>
+      </nav>
+      <div id="sidebar-bottom">
+        <button id="sidebar-file-btn"><i class="fa fa-bars"></i><span>Menu</span></button>
+      </div>
+    </div>
+
+    <div id="app-right">
 
   <!-- ── Ribbon ────────────────────────────────────────────────────── -->
   <div id="ribbon">
@@ -6271,6 +6304,9 @@
 
   </div><!-- /content -->
 
+    </div><!-- /app-right -->
+  </div><!-- /app-main -->
+
   <!-- ── CRM: New Lead Modal ── -->
   <div class="modal-overlay" id="crm-lead-modal" style="display:none">
     <div class="po-aim-shell" style="width:500px">
@@ -8262,141 +8298,167 @@
 
     <!-- Header -->
     <div class="co-header">
-      <div class="co-header-icon"><i class="fa fa-cash-register"></i></div>
-      <div class="co-header-text">
-        <h2>Checkout</h2>
-        <p>Review your order and choose payment</p>
+      <div class="co-header-left">
+        <div class="co-header-icon"><i class="fa fa-cash-register"></i></div>
+        <div>
+          <div class="co-header-title">Checkout</div>
+          <div class="co-header-sub" id="co-header-sub">Review your order and complete payment</div>
+        </div>
       </div>
       <button class="co-close" id="checkout-cancel"><i class="fa fa-xmark"></i></button>
     </div>
 
-    <!-- Body -->
+    <!-- Body: Left | Middle (items) | Right -->
     <div class="co-body">
 
-      <!-- Left: Order summary -->
+      <!-- Col 1: Summary + Customer -->
       <div class="co-left">
-        <div class="co-section-label">Order Summary</div>
 
-        <div class="co-summary-box">
-          <div class="co-summary-row">
+        <div class="co-panel-label"><i class="fa fa-receipt"></i> Summary</div>
+
+        <div class="co-sum-rows">
+          <div class="co-sum-row">
             <span>Subtotal</span>
             <strong id="co-subtotal">0.00</strong>
           </div>
-          <div class="co-discount-wrap">
-            <div class="co-discount-tag"><i class="fa fa-tag"></i> Discount</div>
-            <div class="co-discount-input-row">
-              <input type="number" id="co-discount-pct" value="0" min="0" max="100" step="1">
-              <span>%</span>
+          <div class="co-disc-row">
+            <div class="co-disc-top">
+              <span class="co-disc-tag"><i class="fa fa-tag"></i> Discount</span>
+              <div class="co-disc-input-wrap">
+                <input type="number" id="co-discount-pct" class="co-disc-input" value="0" min="0" max="100" step="1">
+                <span class="co-disc-pct">%</span>
+              </div>
             </div>
-            <div class="co-saved-row">
-              <span>Discount saved</span>
-              <strong id="co-saved">—</strong>
-            </div>
+          </div>
+          <div class="co-sum-row">
+            <span style="color:var(--text-muted);font-size:12px">You save</span>
+            <strong id="co-saved" style="color:#16a34a;font-size:12px">—</strong>
           </div>
         </div>
 
-        <div class="co-total-box">
-          <span class="co-total-label">Total</span>
-          <strong id="co-total">0.00</strong>
-          <span class="co-total-cur" id="co-currency"></span>
+        <div class="co-grand-total">
+          <div class="co-gt-label">Grand Total</div>
+          <div class="co-gt-row">
+            <span class="co-gt-amount" id="co-total">0.00</span>
+            <span class="co-gt-cur" id="co-currency"></span>
+          </div>
         </div>
 
-        <!-- Customer dropdown -->
-        <div class="co-cust-section">
-          <div class="co-section-label" style="margin-bottom:6px">Customer</div>
-          <div class="co-cust-wrap" id="co-cust-wrap">
-            <!-- Trigger — looks like a select, always visible -->
-            <div class="co-cust-trigger" id="co-cust-trigger" tabindex="0" role="button" aria-haspopup="listbox">
-              <i class="fa fa-user co-cust-trig-icon" id="co-cust-trig-icon"></i>
-              <span class="co-cust-trig-label" id="co-cust-name-disp">Select customer…</span>
-              <button class="co-cust-clear-btn" id="co-cust-clear" title="Remove customer" style="display:none"><i class="fa fa-xmark"></i></button>
-              <i class="fa fa-chevron-down co-cust-chevron"></i>
-            </div>
-            <!-- Dropdown panel -->
-            <div class="co-cust-dd" id="co-cust-dd" style="display:none">
-              <input type="text" id="co-cust-input" class="co-cust-dd-search" placeholder="Search customer…" autocomplete="off">
-              <div id="co-cust-dd-list"></div>
-            </div>
+        <div class="co-panel-label"><i class="fa fa-user"></i> Customer</div>
+        <div class="co-cust-wrap" id="co-cust-wrap">
+          <div class="co-cust-trigger" id="co-cust-trigger" tabindex="0" role="button" aria-haspopup="listbox">
+            <i class="fa fa-user co-cust-trig-icon" id="co-cust-trig-icon"></i>
+            <span class="co-cust-trig-label" id="co-cust-name-disp">Select customer…</span>
+            <button class="co-cust-clear-btn" id="co-cust-clear" title="Remove customer" style="display:none"><i class="fa fa-xmark"></i></button>
+            <i class="fa fa-chevron-down co-cust-chevron"></i>
+          </div>
+          <div class="co-cust-dd" id="co-cust-dd" style="display:none">
+            <input type="text" id="co-cust-input" class="co-cust-dd-search" placeholder="Search customer…" autocomplete="off">
+            <div id="co-cust-dd-list"></div>
           </div>
         </div>
 
       </div>
 
-      <!-- Right: Payment -->
-      <div class="co-right">
-        <div class="co-section-label">Payment</div>
+      <!-- Col 2 (Middle): Order items -->
+      <div class="co-mid">
+        <div class="co-mid-hdr">
+          <span class="co-panel-label" style="flex:1"><i class="fa fa-basket-shopping"></i> Order Items</span>
+          <span class="co-items-badge" id="co-items-badge">0</span>
+        </div>
+        <div class="co-mid-col-hdr">
+          <span></span>
+          <span>Item</span>
+          <span>Qty</span>
+          <span>Price</span>
+          <span>Disc %</span>
+          <span>Total</span>
+        </div>
+        <div class="co-items-list" id="co-items-list"></div>
+        <div class="co-mid-ftr">
+          <span>Subtotal</span>
+          <strong id="co-items-ftr-total">0.00</strong>
+        </div>
+      </div>
 
-        <!-- Payment method tabs -->
+      <!-- Col 3: Payment -->
+      <div class="co-right">
+
+        <div class="co-panel-label"><i class="fa fa-wallet"></i> Payment</div>
+
         <div class="co-pay-methods">
           <button class="co-pay-method active" data-method="cash">
-            <i class="fa fa-money-bill-wave"></i> Cash
+            <i class="fa fa-money-bill-wave"></i>
+            <span>Cash</span>
           </button>
           <button class="co-pay-method" data-method="card">
-            <i class="fa fa-credit-card"></i> Card payment
+            <i class="fa fa-credit-card"></i>
+            <span>Card</span>
           </button>
           <button class="co-pay-method" data-method="credit">
-            <i class="fa fa-file-invoice-dollar"></i> Credit payment
+            <i class="fa fa-file-invoice-dollar"></i>
+            <span>Credit</span>
           </button>
         </div>
 
-        <!-- Credit payment fields (visible only when Credit method is selected) -->
+        <!-- Credit fields -->
         <div id="co-credit-section" style="display:none">
           <div id="co-credit-customer-notice" class="co-credit-notice" style="display:none">
-            <i class="fa fa-triangle-exclamation"></i> A customer is required for credit payment — please assign one above.
+            <i class="fa fa-triangle-exclamation"></i> A customer is required for credit payment.
           </div>
-          <div>
-            <div class="co-section-label" style="margin-bottom:6px">Payment Due Date <span style="font-weight:400;color:var(--text-muted)">(optional)</span></div>
-            <input type="date" id="co-credit-due-date" class="co-amount-input" style="max-width:100%;cursor:pointer">
-          </div>
+          <div class="co-field-label">Payment Due Date <span class="co-field-opt">(optional)</span></div>
+          <input type="date" id="co-credit-due-date" class="co-amount-input co-date-input">
         </div>
 
-        <!-- Cash / Card amount section (hidden when Credit is selected) -->
+        <!-- Cash / Card -->
         <div id="co-cash-section">
-          <div class="co-section-label" style="margin-bottom:6px">Amount Customer Gave</div>
-          <input type="number" id="co-amount" class="co-amount-input" placeholder="0.00" min="0" step="0.01">
-          <div style="margin-top:8px;display:flex;flex-direction:column;gap:4px">
-            <div class="co-due-row">
+          <div class="co-field-label">Amount Received</div>
+          <input type="text" inputmode="decimal" id="co-amount" class="co-amount-input" placeholder="0.00" autocomplete="off">
+          <div class="co-calc-rows">
+            <div class="co-calc-row">
               <span>Amount due</span>
               <strong id="co-amount-due">0.00</strong>
             </div>
-            <div class="co-change-row">
-              <span>Change / balance</span>
+            <div class="co-calc-row co-change-row">
+              <span>Change</span>
               <strong id="co-change" class="co-change-pos">0.00</strong>
             </div>
           </div>
         </div>
 
-        <!-- Notes -->
-        <div class="co-notes">
-          <div class="co-section-label" style="margin-bottom:6px">Notes</div>
-          <textarea id="co-notes" placeholder="Optional note…"></textarea>
+        <!-- Numpad -->
+        <div id="co-numpad-section">
+          <div class="co-numpad">
+            <button class="co-key" data-key="7">7</button>
+            <button class="co-key" data-key="8">8</button>
+            <button class="co-key" data-key="9">9</button>
+            <button class="co-key" data-key="4">4</button>
+            <button class="co-key" data-key="5">5</button>
+            <button class="co-key" data-key="6">6</button>
+            <button class="co-key" data-key="1">1</button>
+            <button class="co-key" data-key="2">2</button>
+            <button class="co-key" data-key="3">3</button>
+            <button class="co-key" data-key=".">.</button>
+            <button class="co-key" data-key="0">0</button>
+            <button class="co-key" data-key="back"><i class="fa fa-delete-left"></i></button>
+            <button class="co-key" data-key="exact">Exact amount</button>
+            <button class="co-key" data-key="clear">Clear</button>
+          </div>
         </div>
 
-        <!-- Numpad (hidden when Credit is selected) -->
-        <div id="co-numpad-section"><div class="co-numpad">
-          <button class="co-key" data-key="7">7</button>
-          <button class="co-key" data-key="8">8</button>
-          <button class="co-key" data-key="9">9</button>
-          <button class="co-key" data-key="4">4</button>
-          <button class="co-key" data-key="5">5</button>
-          <button class="co-key" data-key="6">6</button>
-          <button class="co-key" data-key="1">1</button>
-          <button class="co-key" data-key="2">2</button>
-          <button class="co-key" data-key="3">3</button>
-          <button class="co-key" data-key=".">.</button>
-          <button class="co-key" data-key="0">0</button>
-          <button class="co-key" data-key="back"><i class="fa fa-delete-left"></i></button>
-          <button class="co-key" data-key="exact">Exact due</button>
-          <button class="co-key" data-key="clear">Clear</button>
-        </div></div>
+        <!-- Notes -->
+        <div class="co-notes">
+          <textarea id="co-notes" placeholder="Add a note…"></textarea>
+        </div>
 
         <!-- Error -->
         <div id="checkout-alert" class="co-alert" style="display:none"></div>
 
         <!-- Complete -->
         <button id="checkout-confirm" class="co-complete-btn">
-          <i class="fa fa-check"></i> Complete sale
+          <i class="fa fa-check-circle"></i> Complete Sale
         </button>
+
       </div>
     </div>
   </div>
@@ -8975,6 +9037,21 @@
                 <option value="light">Light</option>
                 <option value="dark">Dark</option>
               </select>
+            </div>
+            <div class="psm-field-row">
+              <label class="psm-field-label" for="psm-layout-mode">Navigation Layout</label>
+              <select id="psm-layout-mode" class="psm-select">
+                <option value="ribbon">Ribbon (top bar with tabs &amp; buttons)</option>
+                <option value="sidebar">Sidebar (left-side navigation panel)</option>
+              </select>
+            </div>
+            <div class="psm-field-row">
+              <label class="psm-field-label" for="psm-receipt-mode">POS Receipt / Invoice Mode</label>
+              <select id="psm-receipt-mode" class="psm-select">
+                <option value="bill">Bill Printing — thermal receipt after each sale</option>
+                <option value="invoice">Invoice — create &amp; print a formal invoice after each sale</option>
+              </select>
+              <span class="psm-hint">Controls what is generated after a POS sale is completed</span>
             </div>
             <div class="psm-field-2col">
               <div>
@@ -9911,6 +9988,23 @@
       <div class="rcpt-editor-panel">
 
         <div class="rcpt-ed-section">
+          <div class="rcpt-ed-label"><i class="fa fa-image"></i> Business logo</div>
+          <div class="rcpt-ed-logo-wrap" id="rcpt-ed-logo-wrap">
+            <div class="rcpt-ed-logo-ph" id="rcpt-ed-logo-ph">
+              <i class="fa fa-image"></i>
+              <span>No logo set</span>
+            </div>
+            <img id="rcpt-ed-logo-img" class="rcpt-ed-logo-img" style="display:none" src="" alt="Logo">
+          </div>
+          <div class="rcpt-ed-logo-btns">
+            <button class="rcpt-ed-logo-btn" id="rcpt-logo-choose"><i class="fa fa-folder-open"></i> Choose image</button>
+            <button class="rcpt-ed-logo-btn rcpt-ed-logo-btn--rm" id="rcpt-logo-remove" title="Remove logo"><i class="fa fa-trash"></i></button>
+          </div>
+        </div>
+
+        <hr class="rcpt-ed-divider">
+
+        <div class="rcpt-ed-section">
           <div class="rcpt-ed-label"><i class="fa fa-building"></i> Business info</div>
           <div class="rcpt-ed-checks">
             <label class="rcpt-ed-check"><input type="checkbox" id="rcpt-ed-show-biz"> Show business name</label>
@@ -9965,6 +10059,11 @@
       <!-- live sample preview -->
       <div class="rcpt-preview-wrap">
         <div class="rcpt-paper" id="rcpt-ed-paper"></div>
+      </div>
+      <!-- receipt templates panel -->
+      <div class="rcpt-templates-panel">
+        <div class="rcpt-tpl-header"><i class="fa fa-layer-group"></i> Templates</div>
+        <div class="rcpt-tpl-list" id="rcpt-tpl-list"></div>
       </div>
     </div>
   </div>

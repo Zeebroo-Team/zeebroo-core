@@ -151,6 +151,8 @@ class PosSettingsApiController extends Controller
             'discount_field_enabled'      => ['nullable', 'boolean'],
             'checkout_modal_enabled'      => ['nullable', 'boolean'],
             'display_theme'               => ['nullable', 'string', 'in:light,dark,inherit'],
+            'receipt_mode'                => ['nullable', 'string', 'in:bill,invoice'],
+            'receipt_logo_url'            => ['nullable', 'string', 'max:1000'],
             'receipt_header'              => ['nullable', 'string', 'max:200'],
             'receipt_footer'              => ['nullable', 'string', 'max:200'],
             'show_business_name'          => ['nullable', 'boolean'],

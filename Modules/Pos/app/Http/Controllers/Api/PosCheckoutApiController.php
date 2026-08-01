@@ -40,6 +40,7 @@ class PosCheckoutApiController extends Controller
             'items.*.product_selling_unit_id'=> ['nullable', 'integer', 'min:1'],
             'items.*.warranty_type'          => ['nullable', 'string', 'in:lifetime,date'],
             'items.*.warranty_date'          => ['nullable', 'date_format:Y-m-d'],
+            'items.*.item_discount_percent'  => ['nullable', 'numeric', 'min:0', 'max:100'],
             'payment_method'                 => ['required', 'string', 'in:cash,card,credit'],
             'channel'                        => ['nullable', 'string', 'in:retail,online'],
             'credit_account_id'              => ['nullable', 'integer', 'min:1'],

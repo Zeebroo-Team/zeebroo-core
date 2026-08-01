@@ -301,6 +301,14 @@ class SaleService
                     }
                     $finalSellPrice = round(max(0.0, $rawPrice - $discountPerUnit), 2);
 
+                    // Apply optional cashier-entered per-item discount on top of catalog price
+                    $itemDiscPct = isset($line['item_discount_percent']) ? (float) $line['item_discount_percent'] : 0.0;
+                    if ($itemDiscPct > 0.0) {
+                        $additionalDiscount = round($finalSellPrice * ($itemDiscPct / 100), 2);
+                        $discountPerUnit    = round($discountPerUnit + $additionalDiscount, 2);
+                        $finalSellPrice     = round(max(0.0, $finalSellPrice - $additionalDiscount), 2);
+                    }
+
                     $lineTotal = round($allocation['quantity'] * $finalSellPrice, 2);
                     $subtotal = round($subtotal + $lineTotal, 2);
 
@@ -336,6 +344,10 @@ class SaleService
                 $service  = $svcLine['service'];
                 $qty      = (float) $svcLine['quantity'];
                 $price    = round((float) $service->price, 2);
+                $svcDiscPct = isset($svcLine['item_discount_percent']) ? (float) $svcLine['item_discount_percent'] : 0.0;
+                if ($svcDiscPct > 0.0) {
+                    $price = round(max(0.0, $price * (1 - $svcDiscPct / 100)), 2);
+                }
                 $lineTotal = round($qty * $price, 2);
                 $subtotal  = round($subtotal + $lineTotal, 2);
 
@@ -553,6 +565,8 @@ class SaleService
                     'selling_unit_factor' => $sellingUnitFactor,
                     'warranty_type' => $warrantyType,
                     'warranty_date' => $warrantyDate,
+                    'item_discount_percent' => isset($row['item_discount_percent']) && (float) $row['item_discount_percent'] > 0
+                        ? (float) $row['item_discount_percent'] : null,
                 ];
             }
             $merged[$key]['quantity'] = round($merged[$key]['quantity'] + $quantity, 3);
@@ -619,6 +633,7 @@ class SaleService
                 'selling_unit_factor' => $row['selling_unit_factor'] ?? null,
                 'warranty_type' => $row['warranty_type'] ?? null,
                 'warranty_date' => $row['warranty_date'] ?? null,
+                'item_discount_percent' => $row['item_discount_percent'] ?? null,
             ];
         }
 
@@ -644,10 +659,12 @@ class SaleService
                 $warrantyDate = ($warrantyType === 'date' && !empty($row['warranty_date']))
                     ? $row['warranty_date'] : null;
                 $merged[$svcId] = [
-                    'service_item_id' => $svcId,
-                    'quantity'        => 0.0,
-                    'warranty_type'   => $warrantyType,
-                    'warranty_date'   => $warrantyDate,
+                    'service_item_id'      => $svcId,
+                    'quantity'             => 0.0,
+                    'warranty_type'        => $warrantyType,
+                    'warranty_date'        => $warrantyDate,
+                    'item_discount_percent' => isset($row['item_discount_percent']) && (float) $row['item_discount_percent'] > 0
+                        ? (float) $row['item_discount_percent'] : null,
                 ];
             }
             $merged[$svcId]['quantity'] = round($merged[$svcId]['quantity'] + $qty, 3);
@@ -668,10 +685,11 @@ class SaleService
             }
 
             $normalized[] = [
-                'service'       => $service,
-                'quantity'      => $row['quantity'],
-                'warranty_type' => $row['warranty_type'],
-                'warranty_date' => $row['warranty_date'],
+                'service'              => $service,
+                'quantity'             => $row['quantity'],
+                'warranty_type'        => $row['warranty_type'],
+                'warranty_date'        => $row['warranty_date'],
+                'item_discount_percent' => $row['item_discount_percent'] ?? null,
             ];
         }
 

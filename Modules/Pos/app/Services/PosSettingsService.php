@@ -43,6 +43,11 @@ class PosSettingsService
 
     public const KEY_CHOOSE_PRICE = 'pos.choose_price';
 
+    /** @var string `bill` | `invoice` */
+    public const KEY_RECEIPT_MODE = 'pos.receipt_mode';
+
+    public const KEY_RECEIPT_LOGO_URL = 'pos.receipt_logo_url';
+
     public const KEY_RECEIPT_ADDRESS = 'pos.receipt_address';
 
     /** @var string `en` | `si` | `ta` */
@@ -120,6 +125,11 @@ class PosSettingsService
                 return in_array($v, ['fifo', 'choose', 'last_price'], true) ? $v : 'fifo';
             })(),
             'choose_price'               => (bool) $business->getSetting(self::KEY_CHOOSE_PRICE, false),
+            'receipt_logo_url'           => (string) ($business->getSetting(self::KEY_RECEIPT_LOGO_URL, '') ?: ''),
+            'receipt_mode'               => (function () use ($business) {
+                $v = strtolower(trim((string) ($business->getSetting(self::KEY_RECEIPT_MODE, 'bill') ?: 'bill')));
+                return in_array($v, ['bill', 'invoice'], true) ? $v : 'bill';
+            })(),
             // Branch / warehouse
             'multi_warehouse_branch'   => (bool) $business->getSetting('business.multi_warehouse_branch', false),
             'branch_product_separate'  => (bool) $business->getSetting('business.branch_product_separate', false),
@@ -235,6 +245,15 @@ class PosSettingsService
                 self::KEY_CHOOSE_PRICE,
                 filter_var($data['choose_price'] ?? false, FILTER_VALIDATE_BOOLEAN),
             );
+        }
+
+        if (array_key_exists('receipt_mode', $data)) {
+            $receiptMode = strtolower(trim((string) ($data['receipt_mode'] ?? 'bill')));
+            $business->setSetting(self::KEY_RECEIPT_MODE, in_array($receiptMode, ['bill', 'invoice'], true) ? $receiptMode : 'bill');
+        }
+
+        if (array_key_exists('receipt_logo_url', $data)) {
+            $business->setSetting(self::KEY_RECEIPT_LOGO_URL, $data['receipt_logo_url'] ? trim((string) $data['receipt_logo_url']) : null);
         }
 
         // Branch / warehouse

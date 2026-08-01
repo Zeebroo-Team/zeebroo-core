@@ -106,6 +106,172 @@ $('#toggle-dark').addEventListener('change', async (e) => {
   await window.electronAPI.setConfig({ dark_mode: dark });
 });
 
+// ── Sidebar sub-item definitions ──────────────────────────────────────────
+const _sbSubItems = {
+  home: [
+    { view:'today',          icon:'fa-gauge-high',           label:'Today' },
+    { view:'analytics',      icon:'fa-chart-line',           label:'Analytics' },
+    { view:'activity',       icon:'fa-clock-rotate-left',    label:'Activity' },
+    { view:'expenses',       icon:'fa-file-invoice-dollar',  label:'Expenses' },
+    { view:'profit',         icon:'fa-chart-pie',            label:'Profit' },
+    { view:'payroll',        icon:'fa-money-check-dollar',   label:'Payroll' },
+    { view:'orders',         icon:'fa-box',                  label:'Orders' },
+  ],
+  sales: [
+    { view:'transactions',   icon:'fa-cash-register',        label:'Transactions' },
+    { view:'history',        icon:'fa-clock-rotate-left',    label:'History' },
+    { view:'credits',        icon:'fa-hand-holding-dollar',  label:'Credits' },
+    { view:'quotes',         icon:'fa-file-lines',           label:'Quotations' },
+    { view:'invoices',       icon:'fa-file-invoice',         label:'Invoices' },
+    { view:'orders',         icon:'fa-box',                  label:'Orders' },
+  ],
+  inventory: [
+    { view:'products',       icon:'fa-box',                  label:'Products' },
+    { view:'categories',     icon:'fa-tags',                 label:'Categories' },
+    { view:'brands',         icon:'fa-award',                label:'Brands' },
+    { view:'units',          icon:'fa-ruler',                label:'Units' },
+    { view:'discounts',      icon:'fa-tag',                  label:'Discounts' },
+    { view:'suppliers',      icon:'fa-building-user',        label:'Suppliers' },
+    { view:'audit',          icon:'fa-clipboard-list',       label:'Stock Audit' },
+    { view:'po',             icon:'fa-file-invoice',         label:'Purchase Orders' },
+    { view:'grn',            icon:'fa-truck-ramp-box',       label:'Goods Receive' },
+    { view:'cheques',        icon:'fa-money-check',          label:'Cheques' },
+    { view:'barcodes',       icon:'fa-barcode',              label:'Barcodes' },
+  ],
+  finance: [
+    { view:'flow',           icon:'fa-diagram-project',      label:'Flow' },
+    { view:'bills',          icon:'fa-file-invoice-dollar',  label:'Bills' },
+    { view:'loans',          icon:'fa-money-bill-trend-up',  label:'Loans' },
+    { view:'rentals',        icon:'fa-house',                label:'Rentals' },
+    { view:'properties',     icon:'fa-building',             label:'Properties' },
+    { view:'modifications',  icon:'fa-screwdriver-wrench',   label:'Modifications' },
+  ],
+  hr: [
+    { view:'employees',      icon:'fa-users',                label:'Employees' },
+    { view:'departments',    icon:'fa-sitemap',              label:'Departments' },
+    { view:'payroll',        icon:'fa-money-check-dollar',   label:'Payroll' },
+    { view:'rule-sets',      icon:'fa-list-check',           label:'Rule Sets' },
+    { view:'allowance-types',icon:'fa-coins',                label:'Allowances' },
+  ],
+  services: [
+    { view:'requests',       icon:'fa-clipboard-list',       label:'Requests' },
+    { view:'catalog',        icon:'fa-list',                 label:'Catalog' },
+    { view:'categories',     icon:'fa-tags',                 label:'Categories' },
+  ],
+  restaurant: [
+    { view:'orders',         icon:'fa-receipt',              label:'Orders' },
+    { view:'tables',         icon:'fa-table',                label:'Tables' },
+    { view:'reservations',   icon:'fa-calendar-check',       label:'Reservations' },
+    { view:'menu-items',     icon:'fa-utensils',             label:'Menu Items' },
+    { view:'menu-categories',icon:'fa-layer-group',          label:'Menu Cats' },
+    { view:'ingredients',    icon:'fa-carrot',               label:'Ingredients' },
+    { view:'purchase-orders',icon:'fa-file-invoice',         label:'Purchase Orders' },
+    { view:'kitchen',        icon:'fa-fire-burner',          label:'Kitchen' },
+  ],
+  mail: [
+    { view:'inbox',          icon:'fa-inbox',                label:'Inbox' },
+    { view:'sent',           icon:'fa-paper-plane',          label:'Sent' },
+    { view:'compose',        icon:'fa-pen',                  label:'Compose' },
+    { view:'templates',      icon:'fa-file-lines',           label:'Templates' },
+    { view:'filters',        icon:'fa-filter',               label:'Filters' },
+    { view:'scheduled',      icon:'fa-clock',                label:'Scheduled' },
+  ],
+  crm: [
+    { view:'pipeline',       icon:'fa-angles-right',         label:'Pipeline' },
+    { view:'contacts',       icon:'fa-address-book',         label:'Contacts' },
+    { view:'tasks',          icon:'fa-list-check',           label:'Tasks' },
+    { view:'forms',          icon:'fa-wpforms',              label:'Forms' },
+  ],
+  projects: [
+    { view:'projects',       icon:'fa-diagram-project',      label:'Projects' },
+    { view:'board',          icon:'fa-table-columns',        label:'Board' },
+    { view:'tasks',          icon:'fa-list-check',           label:'Tasks' },
+    { view:'mytasks',        icon:'fa-user-check',           label:'My Tasks' },
+  ],
+};
+
+function _buildSidebarSubNavs() {
+  Object.entries(_sbSubItems).forEach(([tab, items]) => {
+    const navItem = $(`.sb-nav-item[data-tab="${tab}"]`);
+    if (!navItem) return;
+    const sub = document.createElement('div');
+    sub.className = 'sb-sub-nav';
+    sub.dataset.subOf = tab;
+    const inner = document.createElement('div');
+    inner.className = 'sb-sub-nav-inner';
+    inner.innerHTML = items.map((it, idx) =>
+      `<div class="sb-sub-item" data-tab="${tab}" data-sub-view="${it.view}" style="transition-delay:${(idx * 0.03).toFixed(2)}s"><i class="fa ${it.icon}"></i><span>${it.label}</span></div>`
+    ).join('');
+    sub.appendChild(inner);
+    navItem.insertAdjacentElement('afterend', sub);
+  });
+  // Wire sub-item clicks
+  $$('.sb-sub-item').forEach(item => {
+    item.addEventListener('click', (e) => {
+      e.stopPropagation();
+      _sbNavSubSwitch(item.dataset.tab, item.dataset.subView);
+    });
+  });
+}
+
+function _sbNavExpand(tabName) {
+  $$('.sb-nav-item[data-tab]').forEach(item => {
+    const isTarget = item.dataset.tab === tabName;
+    const sub = $(`.sb-sub-nav[data-sub-of="${item.dataset.tab}"]`);
+    if (isTarget) {
+      item.classList.add('expanded');
+      if (sub) sub.classList.add('open');
+    } else {
+      item.classList.remove('expanded');
+      if (sub) sub.classList.remove('open');
+    }
+  });
+}
+
+function _sbSubActivate(tab, view) {
+  $$('.sb-sub-item').forEach(i => {
+    i.classList.toggle('active', i.dataset.tab === tab && i.dataset.subView === view);
+  });
+}
+
+function _sbNavSubSwitch(tab, view) {
+  if (tab === 'home')            switchHomeView(view);
+  else if (tab === 'sales')      _salSwitchView(view);
+  else if (tab === 'inventory')  switchInvView(view);
+  else if (tab === 'finance')    switchFinView(view);
+  else if (tab === 'hr')         switchHrView(view);
+  else if (tab === 'services')   switchSvcView(view);
+  else if (tab === 'restaurant') switchRstView(view);
+  else if (tab === 'mail')       window.switchMailView?.(view);
+  else if (tab === 'crm')        window.switchCrmView?.(view);
+  else if (tab === 'projects')   window.switchPmView?.(view);
+  _sbSubActivate(tab, view);
+}
+
+_buildSidebarSubNavs();
+
+// ── Sidebar / Ribbon layout mode ───────────────────────────────────────────
+function _syncSidebarActive(tabName) {
+  $$('.sb-nav-item[data-tab]').forEach(item => {
+    item.classList.toggle('active', item.dataset.tab === tabName);
+  });
+}
+
+function _applyLayoutMode(mode) {
+  const isSidebar = mode === 'sidebar';
+  $('#app-shell').classList.toggle('sidebar-mode', isSidebar);
+  const activeTab = $$('.ribbon-tab.active')[0]?.dataset.tab;
+  if (activeTab) _syncSidebarActive(activeTab);
+}
+
+async function _toggleLayoutMode() {
+  const cur = state.config?.layout_mode || 'ribbon';
+  const next = cur === 'ribbon' ? 'sidebar' : 'ribbon';
+  if (state.config) state.config.layout_mode = next;
+  _applyLayoutMode(next);
+  await window.electronAPI.setConfig({ layout_mode: next });
+}
+
 // ── Ribbon tabs ────────────────────────────────────────────────────────────
 function activateTab(tabName) {
   $$('.ribbon-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tabName));
@@ -133,11 +299,23 @@ function activateTab(tabName) {
   if (tabName === 'crm')        { switchCrmView('pipeline'); }
   if (tabName === 'automations'){ loadAutomations(); }
   if (tabName === 'projects')   { switchPmView('projects'); }
+  _syncSidebarActive(tabName);
+  _sbNavExpand(tabName);
 }
 
 $$('.ribbon-tab').forEach(tab => {
   tab.addEventListener('click', () => activateTab(tab.dataset.tab));
 });
+$$('.sb-nav-item[data-tab]').forEach(item => {
+  item.addEventListener('click', () => {
+    const tab = item.dataset.tab;
+    activateTab(tab);
+    // Activate first visible sub-item when switching to a tab with sub-nav
+    const firstSub = $(`.sb-sub-item[data-tab="${tab}"]`);
+    if (firstSub) _sbSubActivate(tab, firstSub.dataset.subView);
+  });
+});
+$('#sidebar-file-btn').addEventListener('click', () => openBackstage('new'));
 
 // ── Backstage (File Menu) ──────────────────────────────────────────────────
 function openBackstage(page) {
@@ -216,6 +394,7 @@ function _bsAction(action) {
     // Settings
     case 'navPosSettings':   nav('pos'); setTimeout(() => $('#rb-pos-settings')?.click(), 80); break;
     case 'toggleDark':       $('#toggle-dark').click(); break;
+    case 'toggleLayout':     C(); _toggleLayoutMode(); break;
     case 'showShortcuts':    C(); showShortcutsModal(); break;
     case 'switchBranch':     C(); $('#tpm-switch-branch')?.click(); break;
     case 'signOut':          C(); document.dispatchEvent(new CustomEvent('logout-requested')); break;
@@ -336,11 +515,12 @@ const _bsOpenSections = [
 
 // ── Settings items ─────────────────────────────────────────────────────────
 const _bsSettingsItems = [
-  { label:'POS Settings',       desc:'Receipt, tax & checkout preferences', icon:'fa-cash-register',       color:'#4e8ef7', action:'navPosSettings' },
-  { label:'Dark Mode',          desc:'Toggle between light and dark theme',  icon:'fa-moon',                color:'#334155', action:'toggleDark' },
-  { label:'Keyboard Shortcuts', desc:'View all keyboard shortcuts',          icon:'fa-keyboard',            color:'#9c6ef7', action:'showShortcuts' },
-  { label:'Switch Branch',      desc:'Change the active business branch',    icon:'fa-code-branch',         color:'#f7a54e', action:'switchBranch' },
-  { label:'Sign Out',           desc:'Log out of your account',              icon:'fa-right-from-bracket',  color:'#f74e6c', action:'signOut' },
+  { label:'POS Settings',       desc:'Receipt, tax & checkout preferences',      icon:'fa-cash-register',       color:'#4e8ef7', action:'navPosSettings' },
+  { label:'Dark Mode',          desc:'Toggle between light and dark theme',       icon:'fa-moon',                color:'#334155', action:'toggleDark' },
+  { label:'Layout Mode',        desc:'Switch between Ribbon and Sidebar navigation', icon:'fa-table-columns',   color:'#4caf7d', action:'toggleLayout' },
+  { label:'Keyboard Shortcuts', desc:'View all keyboard shortcuts',               icon:'fa-keyboard',            color:'#9c6ef7', action:'showShortcuts' },
+  { label:'Switch Branch',      desc:'Change the active business branch',         icon:'fa-code-branch',         color:'#f7a54e', action:'switchBranch' },
+  { label:'Sign Out',           desc:'Log out of your account',                   icon:'fa-right-from-bracket',  color:'#f74e6c', action:'signOut' },
 ];
 
 // ── About page ─────────────────────────────────────────────────────────────
@@ -3519,6 +3699,10 @@ function applyFeatureVisibility() {
     const show = tabFeatures[tab.dataset.tab];
     tab.style.display = (show === undefined || show) ? '' : 'none';
   });
+  $$('.sb-nav-item[data-tab]').forEach(item => {
+    const show = tabFeatures[item.dataset.tab];
+    item.style.display = (show === undefined || show) ? '' : 'none';
+  });
 
   // ── POS ribbon groups ──
   grp('#rb-new-session',    pos_session);                            // Session
@@ -4069,6 +4253,8 @@ function showApp() {
   updateParkedBadge();
   // Start on Home tab; load products in background for POS
   loadProducts();
+  // Apply saved layout mode (ribbon vs sidebar)
+  _applyLayoutMode(state.config?.layout_mode || 'ribbon');
   // Give one frame for layout + title update before activating Home
   requestAnimationFrame(() => activateTab('home'));
   // Check if bank account onboarding is needed
@@ -4189,6 +4375,9 @@ async function _bwzSubmit() {
 
   $('#bwz-overlay').style.display = 'none';
   toast('Bank account created', 'success');
+  // Refresh the account dropdown so the new account appears immediately
+  _posAccountsCache = null;
+  loadPosAccounts();
 }
 
 // Wire wizard buttons once on page load
@@ -6431,7 +6620,7 @@ $('#rb-home-suppliers').addEventListener('click', () => { activateTab('inventory
 $('#rb-home-expenses').addEventListener('click',      () => { activateTab('home'); switchHomeView('expenses'); });
 $('#rb-home-profit').addEventListener('click',        () => { activateTab('home'); switchHomeView('profit'); });
 $('#rb-home-payroll').addEventListener('click',       () => { activateTab('home'); switchHomeView('payroll'); });
-$('#rb-home-settings').addEventListener('click',      () => toast('Settings coming soon', 'info'));
+$('#rb-home-settings').addEventListener('click',      () => openPosSettings());
 $('#rb-home-help').addEventListener('click',          () => showShortcutsModal());
 
 // ── React Flow Business Flowchart ─────────────────────────────────────────
@@ -13603,6 +13792,13 @@ $('#pos-account-refresh').addEventListener('click', (e) => {
   loadPosAccounts();
 });
 
+$('#pos-acct-add-btn').addEventListener('click', (e) => {
+  e.stopPropagation();
+  _posAcctDrop.classList.remove('open');
+  _posAcctBtn.classList.remove('active');
+  _bankWizOpen();
+});
+
 document.addEventListener('click', (e) => {
   if (!$('#tb-acct-wrap').contains(e.target)) {
     _posAcctDrop.classList.remove('open');
@@ -13840,6 +14036,8 @@ async function openPosSettings() {
 
   // General
   $('#psm-theme').value              = s.display_theme ?? 'inherit';
+  $('#psm-receipt-mode').value       = s.receipt_mode ?? 'bill';
+  $('#psm-layout-mode').value        = state.config?.layout_mode || 'ribbon';
   $('#psm-discount-field').checked   = !!s.discount_field_enabled;
   $('#psm-checkout-modal').checked   = !!s.checkout_modal_enabled;
   $('#psm-service-products').checked = !!s.show_service_bound_products;
@@ -14059,6 +14257,7 @@ $('#psm-save').addEventListener('click', async () => {
     currency:                    $('#psm-currency').value.trim(),
     timezone:                    $('#psm-timezone').value.trim(),
     display_theme:               $('#psm-theme').value,
+    receipt_mode:                $('#psm-receipt-mode').value,
     discount_field_enabled:      $('#psm-discount-field').checked,
     checkout_modal_enabled:      $('#psm-checkout-modal').checked,
     show_service_bound_products: $('#psm-service-products').checked,
@@ -14097,10 +14296,18 @@ $('#psm-save').addEventListener('click', async () => {
 
   // Sync relevant settings into state so in-session logic stays current
   const saved = res.body?.data || {};
-  const syncKeys = ['dont_settle_to_account', 'stock_selection_mode', 'choose_price'];
+  const syncKeys = ['dont_settle_to_account', 'stock_selection_mode', 'choose_price', 'receipt_mode'];
   syncKeys.forEach(k => {
     if (saved[k] !== undefined) state.receiptSettings = { ...state.receiptSettings, [k]: saved[k] };
   });
+
+  // Apply layout mode locally (it's an electron config, not a server setting)
+  const newLayout = $('#psm-layout-mode').value;
+  if (newLayout !== (state.config?.layout_mode || 'ribbon')) {
+    if (state.config) state.config.layout_mode = newLayout;
+    _applyLayoutMode(newLayout);
+    await window.electronAPI.setConfig({ layout_mode: newLayout });
+  }
 
   $('#pos-settings-modal').style.display = 'none';
   toast('POS settings saved', 'success');
@@ -14426,7 +14633,8 @@ function buildReceiptHTML(sale, overrides = {}) {
   const addrText     = 'receipt_address_line'   in overrides ? overrides.receipt_address_line   : (s.receipt_address_line || '');
   const headerText   = 'receipt_header'         in overrides ? overrides.receipt_header         : (s.receipt_header  || '');
   const footerText   = 'receipt_footer'         in overrides ? overrides.receipt_footer         : (s.receipt_footer  || 'Thank you for your purchase!');
-  const customerName = 'customer_name'          in overrides ? overrides.customer_name          : (sale.customer?.name || '');
+  const logoUrl      = 'receipt_logo_url'       in overrides ? overrides.receipt_logo_url       : (s.receipt_logo_url || '');
+  const customerName = 'customer_name'          in overrides ? overrides.customer_name          : (sale.customer?.name || sale.customer_name || '');
   const noteText     = 'note'                   in overrides ? overrides.note                   : (sale.notes || '');
 
   const dateStr = sale.sold_at
@@ -14441,13 +14649,22 @@ function buildReceiptHTML(sale, overrides = {}) {
       const exp = i.warranty_expires_at || '';
       wtyLine = `<div class="rcpt-warranty-line"><i class="fa fa-shield-halved"></i> Warranty until ${exp}</div>`;
     }
+    const discPerUnit = parseFloat(i.discount_amount || 0);
+    const qty = parseFloat(i.quantity);
+    const discLine = discPerUnit > 0
+      ? `<div class="rcpt-item-disc">
+          <span class="rid-label"><i class="fa fa-tag"></i> Discount</span>
+          <span class="rid-per">-${discPerUnit.toFixed(2)}</span>
+          <span class="rid-total">-${(discPerUnit * qty).toFixed(2)}</span>
+        </div>`
+      : '';
     return `
     <div class="rcpt-item">
       <span class="ri-name">${escHtml(i.product_name)}</span>
-      <span class="ri-qty">${i.quantity % 1 === 0 ? parseInt(i.quantity) : parseFloat(i.quantity).toFixed(2)}</span>
+      <span class="ri-qty">${qty % 1 === 0 ? parseInt(qty) : qty.toFixed(2)}</span>
       <span class="ri-price">${parseFloat(i.unit_sell_price).toFixed(2)}</span>
       <span class="ri-total">${parseFloat(i.line_total).toFixed(2)}</span>
-    </div>${wtyLine}`;
+    </div>${discLine}${wtyLine}`;
   }).join('');
 
   const discount = parseFloat(sale.discount_amount || 0);
@@ -14475,6 +14692,7 @@ function buildReceiptHTML(sale, overrides = {}) {
   return {
     lang,
     html: `
+    ${logoUrl    ? `<div class="rcpt-logo-wrap"><img class="rcpt-logo-img" src="${escHtml(logoUrl)}" alt="Logo"></div>` : ''}
     ${bizName    ? `<div class="rcpt-biz-name">${escHtml(bizName)}</div>` : ''}
     ${addrLines}
     ${headerText ? `<div class="rcpt-biz-sub">${escHtml(headerText)}</div>` : ''}
@@ -14506,6 +14724,62 @@ function _applyReceipt(containerEl, printableEl, result) {
   printableEl.innerHTML       = `<div class="rcpt-paper" data-lang="${result.lang}">${result.html}</div>`;
 }
 
+// ── Invoice from POS sale ──────────────────────────────────────────────────
+async function _posCreateInvoiceFromSale(sale, customerId) {
+  const today = new Date().toISOString().split('T')[0];
+  const lines = (sale.items || []).map(i => {
+    const discPerUnit = parseFloat(i.discount_amount || 0);
+    return {
+      item_type:   'custom',
+      description: i.product_name || 'Item',
+      quantity:    i.quantity,
+      // Pass the original (pre-discount) unit price so the discount is visible in the totals
+      unit_price:  parseFloat(i.unit_sell_price) + discPerUnit,
+    };
+  });
+
+  if (!lines.length) {
+    toast('No items to invoice', 'error');
+    return;
+  }
+
+  // Total of all per-item discounts across all quantities
+  const itemDiscountsTotal = Math.round(
+    (sale.items || []).reduce((s, i) =>
+      s + parseFloat(i.discount_amount || 0) * parseFloat(i.quantity), 0
+    ) * 100
+  ) / 100;
+  const totalDiscount = Math.round(((parseFloat(sale.discount_amount) || 0) + itemDiscountsTotal) * 100) / 100;
+
+  const body = {
+    customer_id:     customerId ?? null,
+    reference:       sale.sale_number || null,
+    issue_date:      today,
+    due_date:        null,
+    notes:           sale.notes || null,
+    discount_amount: totalDiscount,
+    tax_amount:      0,
+    items:           lines,
+  };
+
+  const res = await API.createInvoice(body);
+  if (res.status === 200 || res.status === 201) {
+    const inv = res.body?.data;
+    if (inv) {
+      toast(`Invoice ${inv.invoice_number} created`, 'success');
+      // Stamp per-item discount onto each invoice line so the print template can render it
+      if (Array.isArray(inv.items)) {
+        inv.items.forEach((invItem, idx) => {
+          invItem.item_discount_per_unit = parseFloat(sale.items?.[idx]?.discount_amount || 0);
+        });
+      }
+      _invPrint(inv);
+    }
+  } else {
+    toast(res.body?.message || 'Failed to create invoice', 'error');
+  }
+}
+
 // ── Receipt preview (simple, shown after checkout) ─────────────────────────
 let _receiptSale = null;
 
@@ -14529,6 +14803,189 @@ $('#rcpt-print').addEventListener('click', async () => {
 });
 
 // ── Receipt layout editor (template designer) ──────────────────────────────
+// ── Receipt layout templates ────────────────────────────────────────────────
+const _RCPT_TEMPLATES = [
+  {
+    id: 'classic', name: 'Classic', icon: 'fa-receipt', color: '#4f8ef7',
+    desc: 'Business name, cashier & payment info',
+    settings: { show_business_name:true, show_business_address:false, receipt_address_line:'', receipt_header:'', receipt_footer:'Thank you for your purchase!', show_cashier:true, show_account_info:true },
+    strip: ['b s','sdiv','','s','','sdiv','xs','s','s b','xs c'],
+  },
+  {
+    id: 'minimal', name: 'Minimal', icon: 'fa-align-justify', color: '#6b7280',
+    desc: 'Items and total only — no extras',
+    settings: { show_business_name:true, show_business_address:false, receipt_address_line:'', receipt_header:'', receipt_footer:'', show_cashier:false, show_account_info:false },
+    strip: ['b s','sdiv','','s','','sdiv','s b'],
+  },
+  {
+    id: 'detailed', name: 'Detailed', icon: 'fa-list-ul', color: '#10b981',
+    desc: 'Full address, cashier & payment details',
+    settings: { show_business_name:true, show_business_address:true, receipt_address_line:'', receipt_header:'', receipt_footer:'Returns accepted within 7 days.', show_cashier:true, show_account_info:true },
+    strip: ['b s','xs','sdiv','','s','','','sdiv','xs','s','s b','xs c'],
+  },
+  {
+    id: 'branded', name: 'Branded', icon: 'fa-star', color: '#f59e0b',
+    desc: 'Tagline header + promotional footer',
+    settings: { show_business_name:true, show_business_address:true, receipt_address_line:'', receipt_header:'Quality you can trust.', receipt_footer:'Rate us online! Thank you for shopping with us.', show_cashier:true, show_account_info:false },
+    strip: ['xs c','b s','xs','sdiv','','s','','sdiv','xs','s b','xs c','xs c'],
+  },
+  {
+    id: 'cafe', name: 'Cafe', icon: 'fa-mug-hot', color: '#92400e',
+    desc: 'Coffee shop with warm greeting footer',
+    settings: { show_business_name:true, show_business_address:false, receipt_address_line:'', receipt_header:'Crafted with care.', receipt_footer:'Come back for your next cup!', show_cashier:true, show_account_info:false },
+    strip: ['xs c','b s','sdiv','','s','','sdiv','xs','s b','xs c'],
+  },
+  {
+    id: 'restaurant', name: 'Restaurant', icon: 'fa-utensils', color: '#dc2626',
+    desc: 'Dine-in receipt with warm thank-you',
+    settings: { show_business_name:true, show_business_address:true, receipt_address_line:'', receipt_header:'Good food, great memories.', receipt_footer:'Thank you for dining with us!', show_cashier:true, show_account_info:true },
+    strip: ['xs c','b s','xs','sdiv','','s','','','sdiv','xs','s','s b','xs c'],
+  },
+  {
+    id: 'boutique', name: 'Boutique', icon: 'fa-bag-shopping', color: '#be185d',
+    desc: 'Fashion & apparel with exchange policy',
+    settings: { show_business_name:true, show_business_address:false, receipt_address_line:'', receipt_header:'Style that speaks.', receipt_footer:'Exchange within 14 days with receipt.', show_cashier:true, show_account_info:false },
+    strip: ['xs c','b s','sdiv','','s','','sdiv','xs','s b','','xs c'],
+  },
+  {
+    id: 'tech', name: 'Tech Store', icon: 'fa-microchip', color: '#0ea5e9',
+    desc: 'Electronics with warranty support info',
+    settings: { show_business_name:true, show_business_address:true, receipt_address_line:'', receipt_header:'Powering your world.', receipt_footer:'Warranty & support: visit our service centre.', show_cashier:true, show_account_info:true },
+    strip: ['xs c','b s','xs','sdiv','','s','','','sdiv','xs','s','s b','xs c','xs c'],
+  },
+  {
+    id: 'pharmacy', name: 'Pharmacy', icon: 'fa-pills', color: '#16a34a',
+    desc: 'Medical / pharmacy with safety reminder',
+    settings: { show_business_name:true, show_business_address:true, receipt_address_line:'', receipt_header:'Your health, our priority.', receipt_footer:'Keep medicines out of reach of children. Dispose responsibly.', show_cashier:true, show_account_info:true },
+    strip: ['xs c','b s','xs','sdiv','','s','','sdiv','xs','s b','xs c','xs c'],
+  },
+  {
+    id: 'grocery', name: 'Grocery', icon: 'fa-basket-shopping', color: '#65a30d',
+    desc: 'Supermarket with savings tagline',
+    settings: { show_business_name:true, show_business_address:false, receipt_address_line:'', receipt_header:'', receipt_footer:'Fresh. Quality. Affordable. See you soon!', show_cashier:true, show_account_info:true },
+    strip: ['b s','sdiv','','s','','','sdiv','xs','s','s b','xs c'],
+  },
+  {
+    id: 'salon', name: 'Salon & Spa', icon: 'fa-scissors', color: '#a855f7',
+    desc: 'Beauty services with booking reminder',
+    settings: { show_business_name:true, show_business_address:false, receipt_address_line:'', receipt_header:'Look good, feel great.', receipt_footer:'Book your next appointment today. We look forward to seeing you!', show_cashier:true, show_account_info:false },
+    strip: ['xs c','b s','sdiv','','s','','sdiv','xs','s b','xs c','xs c'],
+  },
+  {
+    id: 'loyalty', name: 'Loyalty', icon: 'fa-gift', color: '#f97316',
+    desc: 'Highlights points & loyalty program',
+    settings: { show_business_name:true, show_business_address:false, receipt_address_line:'', receipt_header:'', receipt_footer:'Earn points on every purchase! Ask us about our loyalty rewards program.', show_cashier:true, show_account_info:true },
+    strip: ['b s','sdiv','','s','','sdiv','xs','s','s b','xs c','xs c'],
+  },
+  {
+    id: 'corporate', name: 'Corporate', icon: 'fa-briefcase', color: '#334155',
+    desc: 'Formal "Official Receipt" with tax note',
+    settings: { show_business_name:true, show_business_address:true, receipt_address_line:'', receipt_header:'Official Receipt', receipt_footer:'Retain this receipt for your records. Tax invoice available on request.', show_cashier:true, show_account_info:true },
+    strip: ['xs c','b s','xs','sdiv','','s','','sdiv','xs','s','s b','xs c','xs c'],
+  },
+  {
+    id: 'festive', name: 'Festive', icon: 'fa-gifts', color: '#e11d48',
+    desc: 'Holiday greetings header & footer',
+    settings: { show_business_name:true, show_business_address:false, receipt_address_line:'', receipt_header:"Season's Greetings!", receipt_footer:'Thank you and happy holidays! Wishing you joy and prosperity.', show_cashier:true, show_account_info:false },
+    strip: ['xs c','b s','sdiv','','s','','sdiv','xs','s b','xs c','xs c'],
+  },
+  {
+    id: 'eco', name: 'Eco Friendly', icon: 'fa-leaf', color: '#15803d',
+    desc: 'Paperless-friendly with green reminder',
+    settings: { show_business_name:true, show_business_address:false, receipt_address_line:'', receipt_header:'', receipt_footer:'Thank you for supporting our eco-friendly practices. Consider going paperless!', show_cashier:false, show_account_info:false },
+    strip: ['b s','sdiv','','s','','sdiv','s b','xs c','xs c'],
+  },
+  {
+    id: 'hotel', name: 'Hospitality', icon: 'fa-hotel', color: '#b45309',
+    desc: 'Hotel & guest services receipt',
+    settings: { show_business_name:true, show_business_address:true, receipt_address_line:'', receipt_header:'Welcome, valued guest.', receipt_footer:'We hope you enjoyed your stay. See you again soon!', show_cashier:true, show_account_info:true },
+    strip: ['xs c','b s','xs','sdiv','','s','','sdiv','xs','s','s b','xs c'],
+  },
+  {
+    id: 'bakery', name: 'Bakery', icon: 'fa-bread-slice', color: '#d97706',
+    desc: 'Fresh-baked with social media footer',
+    settings: { show_business_name:true, show_business_address:false, receipt_address_line:'', receipt_header:'Baked fresh daily.', receipt_footer:'Follow us on social media for daily specials!', show_cashier:true, show_account_info:false },
+    strip: ['xs c','b s','sdiv','','s','','sdiv','xs','s b','xs c'],
+  },
+  {
+    id: 'auto', name: 'Auto Parts', icon: 'fa-car', color: '#1e40af',
+    desc: 'Automotive with warranty terms footer',
+    settings: { show_business_name:true, show_business_address:true, receipt_address_line:'', receipt_header:'Quality parts, every time.', receipt_footer:'All sales subject to manufacturer warranty. No cash refunds.', show_cashier:true, show_account_info:true },
+    strip: ['xs c','b s','xs','sdiv','','s','','','sdiv','xs','s','s b','xs c','xs c'],
+  },
+  {
+    id: 'service', name: 'Service Shop', icon: 'fa-screwdriver-wrench', color: '#7c3aed',
+    desc: 'Repair & service with follow-up note',
+    settings: { show_business_name:true, show_business_address:true, receipt_address_line:'', receipt_header:'Professional service guaranteed.', receipt_footer:'Thank you for trusting us. Call us for any follow-up queries.', show_cashier:true, show_account_info:true },
+    strip: ['xs c','b s','xs','sdiv','','s','','','sdiv','xs','s','s b','xs c'],
+  },
+  {
+    id: 'no-extras', name: 'No Extras', icon: 'fa-ban', color: '#94a3b8',
+    desc: 'Bare minimum — name, items, total only',
+    settings: { show_business_name:true, show_business_address:false, receipt_address_line:'', receipt_header:'', receipt_footer:'', show_cashier:false, show_account_info:false },
+    strip: ['b s','sdiv','','s','','','sdiv','s b'],
+  },
+];
+
+function _rcptTplStripHTML(tpl) {
+  return '<div class="rcpt-tpl-strip">' + tpl.strip.map(cls =>
+    cls === 'sdiv'
+      ? '<div class="rcpt-tpl-sdiv"></div>'
+      : `<div class="rcpt-tpl-sl ${cls}"></div>`
+  ).join('') + '</div>';
+}
+
+function _rcptApplyTemplate(tpl) {
+  const s = tpl.settings;
+  $('#rcpt-ed-show-biz').checked    = !!s.show_business_name;
+  $('#rcpt-ed-show-addr').checked   = !!s.show_business_address;
+  $('#rcpt-ed-address').value       = s.receipt_address_line ?? '';
+  $('#rcpt-ed-header').value        = s.receipt_header ?? '';
+  $('#rcpt-ed-footer').value        = s.receipt_footer ?? '';
+  $('#rcpt-ed-show-cashier').checked = !!s.show_cashier;
+  $('#rcpt-ed-show-acct').checked   = !!s.show_account_info;
+  document.querySelectorAll('.rcpt-tpl-card').forEach(el => el.classList.remove('active'));
+  const card = document.querySelector(`.rcpt-tpl-card[data-tpl="${tpl.id}"]`);
+  if (card) card.classList.add('active');
+  _syncEditorPreview();
+}
+
+function _buildReceiptTemplates() {
+  const list = $('#rcpt-tpl-list');
+  if (!list || list.children.length) return;
+  list.innerHTML = _RCPT_TEMPLATES.map(t => `
+    <div class="rcpt-tpl-card" data-tpl="${t.id}">
+      <div class="rcpt-tpl-meta">
+        <div class="rcpt-tpl-icon" style="background:${t.color}"><i class="fa ${t.icon}"></i></div>
+        <div>
+          <div class="rcpt-tpl-name">${t.name}</div>
+          <div class="rcpt-tpl-desc">${t.desc}</div>
+        </div>
+      </div>
+      ${_rcptTplStripHTML(t)}
+    </div>
+  `).join('');
+  _RCPT_TEMPLATES.forEach(t => {
+    document.querySelector(`.rcpt-tpl-card[data-tpl="${t.id}"]`)
+      .addEventListener('click', () => _rcptApplyTemplate(t));
+  });
+}
+
+let _rcptLogoUrl = '';
+
+function _rcptEdLogoRender() {
+  const img = $('#rcpt-ed-logo-img');
+  const ph  = $('#rcpt-ed-logo-ph');
+  if (_rcptLogoUrl) {
+    img.src           = _rcptLogoUrl;
+    img.style.display = '';
+    ph.style.display  = 'none';
+  } else {
+    img.style.display = 'none';
+    ph.style.display  = '';
+  }
+}
+
 function _rcptEdOverrides() {
   return {
     receipt_language:      ($('input[name="rcpt-lang"]:checked') || {}).value || 'en',
@@ -14539,6 +14996,7 @@ function _rcptEdOverrides() {
     receipt_footer:        $('#rcpt-ed-footer').value,
     show_cashier:          $('#rcpt-ed-show-cashier').checked,
     show_account_info:     $('#rcpt-ed-show-acct').checked,
+    receipt_logo_url:      _rcptLogoUrl,
   };
 }
 
@@ -14560,6 +15018,9 @@ function showReceiptEditor() {
   $('#rcpt-ed-footer').value         = s.receipt_footer        || 'Thank you for your purchase!';
   $('#rcpt-ed-show-cashier').checked = true;
   $('#rcpt-ed-show-acct').checked    = s.show_account_info !== false;
+  _rcptLogoUrl = s.receipt_logo_url || '';
+  _rcptEdLogoRender();
+  _buildReceiptTemplates();
   _syncEditorPreview();
   $('#receipt-editor-modal').style.display = 'flex';
 }
@@ -14567,6 +15028,19 @@ function showReceiptEditor() {
 $('#rcpt-ed-close').addEventListener('click', () => { $('#receipt-editor-modal').style.display = 'none'; });
 $('#receipt-editor-modal').addEventListener('click', (e) => {
   if (e.target === e.currentTarget) e.currentTarget.style.display = 'none';
+});
+
+$('#rcpt-logo-choose').addEventListener('click', () => {
+  openImgPicker((fileId, url) => {
+    _rcptLogoUrl = url;
+    _rcptEdLogoRender();
+    _syncEditorPreview();
+  });
+});
+$('#rcpt-logo-remove').addEventListener('click', () => {
+  _rcptLogoUrl = '';
+  _rcptEdLogoRender();
+  _syncEditorPreview();
 });
 
 ['rcpt-ed-address', 'rcpt-ed-header', 'rcpt-ed-footer'].forEach(id => {
@@ -14591,6 +15065,7 @@ $('#rcpt-ed-save').addEventListener('click', async () => {
     receipt_header:        ov.receipt_header,
     receipt_footer:        ov.receipt_footer,
     show_account_info:     ov.show_account_info,
+    receipt_logo_url:      ov.receipt_logo_url || null,
   });
 
   btn.disabled = false;
@@ -14604,7 +15079,7 @@ $('#rcpt-ed-save').addEventListener('click', async () => {
   // Sync into in-session state
   const saved = res.body?.data || {};
   ['receipt_language','show_business_name','show_business_address','receipt_address_line',
-   'receipt_header','receipt_footer','show_account_info'].forEach(k => {
+   'receipt_header','receipt_footer','show_account_info','receipt_logo_url'].forEach(k => {
     if (saved[k] !== undefined) state.receiptSettings = { ...state.receiptSettings, [k]: saved[k] };
   });
 
@@ -15420,8 +15895,51 @@ $('#pos-to-quote')?.addEventListener('click', () => {
 }());
 
 // ── Checkout ───────────────────────────────────────────────────────────────
-let _coSubtotal = 0; // base subtotal before discount
+let _coSubtotal = 0; // base subtotal before order-level discount
 let _coAmount   = ''; // numpad string
+
+function _coComputeSubtotal() {
+  const tab = activeTab();
+  if (!tab) return 0;
+  return Math.round(tab.cart.reduce((s, i) => {
+    const d = Math.min(100, Math.max(0, parseFloat(i.itemDiscountPct) || 0));
+    return s + i.price * i.qty * (1 - d / 100);
+  }, 0) * 100) / 100;
+}
+
+function _coRenderItems() {
+  const tab  = activeTab();
+  const list = $('#co-items-list');
+  const badge = $('#co-items-badge');
+  const ftrTotal = $('#co-items-ftr-total');
+  if (!list || !tab) return;
+  const cur = state.currency ? ' ' + state.currency : '';
+  const items = tab.cart;
+  if (badge) badge.textContent = items.length;
+  list.innerHTML = items.map((i, idx) => {
+    const svc   = i._type === 'service';
+    const qty   = i.qty % 1 === 0 ? parseInt(i.qty) : parseFloat(i.qty).toFixed(2);
+    const price = parseFloat(i.price).toFixed(2);
+    const disc  = Math.min(100, Math.max(0, parseFloat(i.itemDiscountPct) || 0));
+    const line  = (i.price * i.qty * (1 - disc / 100)).toFixed(2);
+    return `<div class="co-ir" data-idx="${idx}">
+      <div class="co-ir-icon ${svc ? 'is-service' : 'is-product'}">
+        <i class="fa ${svc ? 'fa-screwdriver-wrench' : 'fa-box'}"></i>
+      </div>
+      <div class="co-ir-name" title="${escHtml(i.name)}">${escHtml(i.name)}</div>
+      <div class="co-ir-qty">${qty}</div>
+      <div class="co-ir-price">${price}</div>
+      <div class="co-ir-disc">
+        <input type="number" class="co-ir-disc-inp${disc > 0 ? ' has-discount' : ''}"
+               data-idx="${idx}" value="${disc || ''}" min="0" max="100" step="0.5" placeholder="0">
+        <span class="co-ir-disc-pct">%</span>
+      </div>
+      <div class="co-ir-total">${line}</div>
+    </div>`;
+  }).join('');
+  _coSubtotal = _coComputeSubtotal();
+  if (ftrTotal) ftrTotal.textContent = _coSubtotal.toFixed(2) + cur;
+}
 
 function _coGetTotal() {
   const pct = Math.min(100, Math.max(0, parseFloat($('#co-discount-pct')?.value) || 0));
@@ -15445,7 +15963,7 @@ function _coRefresh() {
   if ($('#co-total'))    $('#co-total').textContent    = total.toFixed(2);
   if ($('#co-currency')) $('#co-currency').textContent = state.currency || '';
   const amountEl = $('#co-amount');
-  if (amountEl && document.activeElement !== amountEl) amountEl.value = _coAmount || '';
+  if (amountEl) amountEl.value = _coAmount || '';
   if ($('#co-amount-due')) $('#co-amount-due').textContent = total.toFixed(2) + cur;
   const changeEl = $('#co-change');
   if (changeEl) {
@@ -15476,7 +15994,7 @@ function _coNumpadKey(key) {
 function openCheckout() {
   const tab = activeTab();
   if (!tab || !tab.cart.length) { toast('Cart is empty', 'error'); return; }
-  _coSubtotal = tab.cart.reduce((s, i) => s + i.price * i.qty, 0);
+  _coSubtotal = _coComputeSubtotal();
   _coAmount   = _coSubtotal.toFixed(2);
 
   // Reset discount
@@ -15500,12 +16018,13 @@ function openCheckout() {
   // Update modal subtitle
   const cartHasServices = tab.cart.some(i => i._type === 'service');
   const cartHasProducts = tab.cart.some(i => i._type !== 'service');
-  const coSub = $('#checkout-modal .co-header-text p');
+  const coSub = $('#co-header-sub');
   if (coSub) coSub.textContent = cartHasServices && cartHasProducts
     ? 'Products will be sold + service requests created'
-    : 'Review your order and choose payment';
+    : 'Review your order and complete payment';
 
   _coRefresh();
+  _coRenderItems();
   _coSyncCustomer();
   $('#checkout-modal').style.display = 'flex';
 
@@ -15551,8 +16070,29 @@ $$('.co-pay-method').forEach(btn => {
   });
 });
 
-// Discount input
+// Discount input (order-level)
 $('#co-discount-pct').addEventListener('input', _coRefresh);
+
+// Per-item discount inputs (event delegation on the list container)
+$('#co-items-list').addEventListener('input', e => {
+  const inp = e.target.closest('.co-ir-disc-inp');
+  if (!inp) return;
+  const idx = parseInt(inp.dataset.idx);
+  const tab = activeTab();
+  if (!tab?.cart[idx]) return;
+  const disc = Math.min(100, Math.max(0, parseFloat(inp.value) || 0));
+  tab.cart[idx].itemDiscountPct = disc;
+  inp.classList.toggle('has-discount', disc > 0);
+  const row = inp.closest('.co-ir');
+  const totalEl = row?.querySelector('.co-ir-total');
+  const i = tab.cart[idx];
+  if (totalEl) totalEl.textContent = (i.price * i.qty * (1 - disc / 100)).toFixed(2);
+  _coSubtotal = _coComputeSubtotal();
+  const cur = state.currency ? ' ' + state.currency : '';
+  const ftrEl = $('#co-items-ftr-total');
+  if (ftrEl) ftrEl.textContent = _coSubtotal.toFixed(2) + cur;
+  _coRefresh();
+});
 
 // Numpad
 $$('.co-key').forEach(btn => {
@@ -15745,13 +16285,15 @@ $('#checkout-confirm').addEventListener('click', async () => {
         product_stock_layer_id: i.layerId ?? undefined,
         warranty_type:          i.warrantyType ?? undefined,
         warranty_date:          i.warrantyDate ?? undefined,
+        item_discount_percent:  (parseFloat(i.itemDiscountPct) || 0) > 0 ? parseFloat(i.itemDiscountPct) : undefined,
       })),
       ...serviceItems.map(i => ({
-        item_type:       'service',
-        service_item_id: i.id,
-        quantity:        i.qty,
-        warranty_type:   i.warrantyType ?? undefined,
-        warranty_date:   i.warrantyDate ?? undefined,
+        item_type:              'service',
+        service_item_id:        i.id,
+        quantity:               i.qty,
+        warranty_type:          i.warrantyType ?? undefined,
+        warranty_date:          i.warrantyDate ?? undefined,
+        item_discount_percent:  (parseFloat(i.itemDiscountPct) || 0) > 0 ? parseFloat(i.itemDiscountPct) : undefined,
       })),
     ],
   };
@@ -15766,6 +16308,7 @@ $('#checkout-confirm').addEventListener('click', async () => {
     return;
   }
 
+  const postCustomerId = tab?._customer?.id ?? null;
   $('#checkout-modal').style.display = 'none';
   if (tab) { tab.cart = []; tab._customer = null; }
   renderCart(); renderPosTabBar(); renderCartCustomer();
@@ -15775,7 +16318,13 @@ $('#checkout-confirm').addEventListener('click', async () => {
   if (serviceItems.length && state.posMode === 'services') loadServices(state.serviceSearchQuery, state.serviceActiveCategory);
 
   const sale = res.body?.data;
-  if (sale) showReceiptModal(sale);
+  if (sale) {
+    if ((state.receiptSettings?.receipt_mode || 'bill') === 'invoice') {
+      _posCreateInvoiceFromSale(sale, postCustomerId);
+    } else {
+      showReceiptModal(sale);
+    }
+  }
 
   // Refresh ribbon stats after each sale
   _loadPosRibbonStats();
