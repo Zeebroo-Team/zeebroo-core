@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Print Invoice</title>
+<link rel="icon" type="image/x-icon" href="favicons/favicon.ico">
+<style>
+@page { size: A4; margin: 0; }
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: Inter, -apple-system, BlinkMacSystemFont, Arial, sans-serif;
+  font-size: 12px;
+  background: #e5e7eb;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+/* ── Loading overlay ── */
+#pi-loading {
+  position: fixed; inset: 0;
+  display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 12px;
+  background: #fff; z-index: 999;
+  font-size: 14px; font-weight: 600; color: #64748b;
+}
+.pi-spinner {
+  width: 34px; height: 34px; border-radius: 50%;
+  border: 3px solid #e2e8f0; border-top-color: #3b82f6;
+  animation: piSpin .8s linear infinite;
+}
+@keyframes piSpin { to { transform: rotate(360deg); } }
+
+/* ── Fixed topbar (screen only) ── */
+#pi-topbar {
+  position: fixed; top: 0; left: 0; right: 0; height: 54px;
+  background: #1e293b; display: flex; align-items: center;
+  justify-content: space-between; padding: 0 20px;
+  z-index: 100; box-shadow: 0 2px 10px rgba(0,0,0,.35);
+}
+#pi-topbar-left  { display: flex; align-items: center; gap: 10px; min-width: 0; overflow: hidden; }
+#pi-topbar-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+#pi-title {
+  font-size: 14px; font-weight: 700; color: #f1f5f9;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+#pi-badge {
+  font-size: 10px; font-weight: 700; padding: 2px 9px; border-radius: 20px;
+  letter-spacing: .04em; white-space: nowrap; flex-shrink: 0;
+}
+
+#pi-btn-close {
+  padding: 6px 14px; border-radius: 7px; font-size: 13px; font-weight: 600; cursor: pointer;
+  background: transparent; color: #94a3b8; border: 1px solid rgba(255,255,255,.18);
+  font-family: inherit;
+}
+#pi-btn-close:hover { background: rgba(255,255,255,.08); color: #f1f5f9; }
+
+#pi-btn-print {
+  padding: 7px 20px; border-radius: 7px; border: none;
+  background: #3b82f6; color: #fff; font-size: 13px; font-weight: 700;
+  cursor: pointer; display: flex; align-items: center; gap: 7px;
+  font-family: inherit;
+}
+#pi-btn-print:hover { background: #2563eb; }
+
+/* ── Scroll area ── */
+.pi-wrap {
+  display: flex; justify-content: center; align-items: flex-start;
+  padding: 24px; padding-top: 78px; min-height: 100vh;
+}
+
+/* ── A4 page shell ── */
+.pi-page {
+  position: relative;
+  width: 794px;
+  min-height: 1123px;
+  background: #fff;
+  box-shadow: 0 4px 24px rgba(0,0,0,.15);
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+/* The iframe fills the page shell exactly */
+.pi-frame {
+  width: 794px;
+  height: 1123px;
+  border: none;
+  display: block;
+}
+
+@media print {
+  #pi-loading,
+  #pi-topbar { display: none !important; position: static !important; height: 0 !important; width: 0 !important; overflow: hidden !important; }
+  body { background: transparent !important; }
+  .pi-wrap {
+    display: block !important;
+    padding: 0 !important; margin: 0 !important;
+    min-height: 0 !important;
+    background: transparent !important;
+  }
+  .pi-page {
+    box-shadow: none !important;
+    width: 794px; min-height: 1123px;
+    overflow: visible !important;
+    break-before: avoid;
+  }
+  .pi-frame {
+    width: 794px; height: 1123px;
+  }
+}
+</style>
+<link rel="stylesheet" href="css/font-awesome.min.css">
+</head>
+<body>
+
+<div id="pi-loading">
+  <div class="pi-spinner"></div>
+  Preparing invoice…
+</div>
+
+<!-- Screen topbar (hidden on print) -->
+<div id="pi-topbar" style="display:none">
+  <div id="pi-topbar-left">
+    <i class="fa fa-file-invoice" style="color:#64748b;font-size:15px;flex-shrink:0"></i>
+    <span id="pi-title">Invoice</span>
+    <span id="pi-badge"></span>
+  </div>
+  <div id="pi-topbar-right">
+    <button id="pi-btn-close" onclick="window.close()">Close</button>
+    <button id="pi-btn-print" onclick="printInvoice()">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+      Print Invoice
+    </button>
+  </div>
+</div>
+
+<!-- A4 output -->
+<div class="pi-wrap" id="pi-wrap" style="display:none">
+  <div class="pi-page" id="pi-page">
+    <iframe id="pi-frame" class="pi-frame" scrolling="no" frameborder="0"></iframe>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  function render(data) {
+    var title = document.getElementById('pi-title');
+    var badge = document.getElementById('pi-badge');
+    if (title) title.textContent = data.number ? 'Invoice ' + data.number : 'Invoice';
+    if (badge && data.status) {
+      var bgMap  = { paid:'#dcfce7', overdue:'#fee2e2', draft:'#f1f5f9', sent:'#dbeafe', cancelled:'#fee2e2' };
+      var txtMap = { paid:'#15803d', overdue:'#dc2626', draft:'#64748b', sent:'#1d4ed8', cancelled:'#dc2626' };
+      badge.textContent      = data.statusLabel || data.status;
+      badge.style.background = bgMap[data.status]  || '#f1f5f9';
+      badge.style.color      = txtMap[data.status] || '#64748b';
+    }
+
+    var frame = document.getElementById('pi-frame');
+    frame.srcdoc = data.html || '';
+
+    document.getElementById('pi-loading').style.display = 'none';
+    document.getElementById('pi-topbar').style.display  = 'flex';
+    document.getElementById('pi-wrap').style.display    = 'flex';
+  }
+
+  function printInvoice() {
+    var frame = document.getElementById('pi-frame');
+    if (frame && frame.contentWindow) {
+      frame.contentWindow.print();
+    } else {
+      window.print();
+    }
+  }
+  window.printInvoice = printInvoice;
+
+  window.addEventListener('DOMContentLoaded', async function () {
+    var data = await window.electronAPI.getInvoicePrintData();
+    if (!data || !data.html) {
+      document.getElementById('pi-loading').textContent = 'No invoice data received.';
+      return;
+    }
+    render(data);
+
+    window.electronAPI.onInvoicePrintRefresh(function (newData) {
+      document.getElementById('pi-loading').style.display = 'flex';
+      document.getElementById('pi-topbar').style.display  = 'none';
+      document.getElementById('pi-wrap').style.display    = 'none';
+      render(newData);
+    });
+  });
+})();
+</script>
+</body>
+</html>

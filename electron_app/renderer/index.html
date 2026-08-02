@@ -877,6 +877,15 @@
 
         <div class="ribbon-group">
           <div class="ribbon-group-content">
+            <button class="ribbon-btn-lg" id="rb-sal-invoice-setup">
+              <i class="fa fa-sliders"></i>Invoice Setup
+            </button>
+          </div>
+          <div class="ribbon-group-label">Configuration</div>
+        </div>
+
+        <div class="ribbon-group">
+          <div class="ribbon-group-content">
             <button class="ribbon-btn-lg" id="rb-eod-open">
               <i class="fa fa-building-columns"></i>End of Day
             </button>
@@ -8293,6 +8302,162 @@
   </div>
 </div>
 
+<!-- ── Invoice Setup Modal ──────────────────────────────────────────── -->
+<div id="isetup-modal" style="display:none">
+  <div class="isetup-modal">
+
+    <!-- Header -->
+    <div class="isetup-hdr">
+      <div class="isetup-hdr-left">
+        <div class="isetup-hdr-icon"><i class="fa fa-file-invoice"></i></div>
+        <div>
+          <div class="isetup-hdr-title">Invoice Setup</div>
+          <div class="isetup-hdr-sub">Configure template, paper size and print layout</div>
+        </div>
+      </div>
+      <button class="isetup-close" id="isetup-close"><i class="fa fa-xmark"></i></button>
+    </div>
+
+    <!-- 3-column body -->
+    <div class="isetup-body">
+
+      <!-- LEFT: Print settings -->
+      <div class="isetup-left">
+
+        <div class="isetup-sec-title"><i class="fa fa-print"></i> Printer &amp; Paper</div>
+
+        <div class="isetup-field">
+          <label class="isetup-lbl">Printer Type</label>
+          <select id="isetup-printer" class="isetup-sel">
+            <option value="laser_a4">Laser / Inkjet — A4</option>
+            <option value="laser_a5">Laser / Inkjet — A5</option>
+            <option value="thermal_80">Thermal — 80 mm roll</option>
+            <option value="thermal_58">Thermal — 58 mm roll</option>
+          </select>
+        </div>
+
+        <div class="isetup-field">
+          <label class="isetup-lbl">Paper Size</label>
+          <select id="isetup-paper" class="isetup-sel">
+            <option value="a4">A4  (210 × 297 mm)</option>
+            <option value="a5">A5  (148 × 210 mm)</option>
+            <option value="letter">Letter (216 × 279 mm)</option>
+            <option value="legal">Legal  (216 × 356 mm)</option>
+          </select>
+        </div>
+
+        <div class="isetup-field">
+          <label class="isetup-lbl">Orientation</label>
+          <div class="isetup-radio-row">
+            <label class="isetup-radio"><input type="radio" name="isetup-orient" value="portrait" checked> <i class="fa fa-file"></i> Portrait</label>
+            <label class="isetup-radio"><input type="radio" name="isetup-orient" value="landscape"> <i class="fa fa-file" style="display:inline-block;rotate:90deg"></i> Landscape</label>
+          </div>
+        </div>
+
+        <div class="isetup-sec-title" style="margin-top:20px"><i class="fa fa-border-all"></i> Margins <span class="isetup-unit">(mm)</span></div>
+
+        <div class="isetup-margin-grid">
+          <div class="isetup-margin-field">
+            <label class="isetup-lbl">Top</label>
+            <input type="number" id="isetup-mg-top" class="isetup-num" value="20" min="0" max="80" step="1">
+          </div>
+          <div class="isetup-margin-field">
+            <label class="isetup-lbl">Bottom</label>
+            <input type="number" id="isetup-mg-bot" class="isetup-num" value="20" min="0" max="80" step="1">
+          </div>
+          <div class="isetup-margin-field">
+            <label class="isetup-lbl">Left</label>
+            <input type="number" id="isetup-mg-left" class="isetup-num" value="15" min="0" max="60" step="1">
+          </div>
+          <div class="isetup-margin-field">
+            <label class="isetup-lbl">Right</label>
+            <input type="number" id="isetup-mg-right" class="isetup-num" value="15" min="0" max="60" step="1">
+          </div>
+        </div>
+
+        <div class="isetup-sec-title" style="margin-top:20px"><i class="fa fa-table-columns"></i> Arrangement</div>
+
+        <div class="isetup-field">
+          <label class="isetup-lbl">Header layout</label>
+          <select id="isetup-hdr-layout" class="isetup-sel">
+            <option value="num-left">Number left, status right</option>
+            <option value="num-center">Centered number &amp; title</option>
+            <option value="num-right">Number right</option>
+          </select>
+        </div>
+
+        <div class="isetup-field">
+          <label class="isetup-lbl">Logo / letterhead position</label>
+          <select id="isetup-logo-pos" class="isetup-sel">
+            <option value="header">Inside letterhead header</option>
+            <option value="top-left">Top-left corner</option>
+            <option value="top-right">Top-right corner</option>
+          </select>
+        </div>
+
+      </div>
+
+      <!-- CENTER: Live preview -->
+      <div class="isetup-center">
+        <div class="isetup-prev-topbar">
+          <span class="isetup-prev-label"><i class="fa fa-eye"></i> Preview</span>
+          <div class="isetup-zoom-bar">
+            <button class="isetup-zoom-btn" id="isetup-zoom-out" title="Zoom out"><i class="fa fa-minus"></i></button>
+            <span id="isetup-zoom-label" class="isetup-zoom-label">100%</span>
+            <button class="isetup-zoom-btn" id="isetup-zoom-in" title="Zoom in"><i class="fa fa-plus"></i></button>
+            <button class="isetup-zoom-btn" id="isetup-zoom-fit" title="Fit to screen"><i class="fa fa-compress"></i></button>
+          </div>
+        </div>
+        <div class="isetup-prev-bg" id="isetup-prev-bg">
+          <div id="isetup-prev-scaler" class="isetup-prev-scaler">
+            <iframe id="isetup-prev-frame" class="isetup-prev-frame" scrolling="no"></iframe>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT: Template cards -->
+      <div class="isetup-right">
+        <div class="isetup-sec-title"><i class="fa fa-palette"></i> Templates</div>
+        <div id="isetup-tpl-list" class="isetup-tpl-list"></div>
+      </div>
+
+    </div>
+
+    <!-- Footer -->
+    <div class="isetup-footer">
+      <button class="isetup-btn-cancel" id="isetup-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+      <button class="isetup-btn-save" id="isetup-save"><i class="fa fa-floppy-disk"></i> Save Setup</button>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── Invoice Preview Modal (shown after sale saved in invoice mode) ────── -->
+<div id="inv-preview-modal" class="inv-preview-modal" style="display:none">
+  <div class="invp-hdr">
+    <div class="invp-hdr-left">
+      <i class="fa fa-file-invoice" style="color:#94a3b8;font-size:15px"></i>
+      <span id="invp-title" class="invp-title">Invoice</span>
+      <span id="invp-badge" class="invp-badge"></span>
+    </div>
+    <div class="invp-hdr-right">
+      <div class="invp-zoom-bar">
+        <button class="invp-zoom-btn" id="invp-zoom-out" title="Zoom out"><i class="fa fa-minus"></i></button>
+        <span id="invp-zoom-label" class="invp-zoom-label">100%</span>
+        <button class="invp-zoom-btn" id="invp-zoom-in" title="Zoom in"><i class="fa fa-plus"></i></button>
+        <button class="invp-zoom-btn" id="invp-zoom-fit" title="Fit"><i class="fa fa-compress"></i></button>
+      </div>
+      <button class="invp-btn-print" id="invp-print"><i class="fa fa-print"></i> Print</button>
+      <button class="invp-btn-close" id="invp-close" title="Close"><i class="fa fa-times"></i></button>
+    </div>
+  </div>
+  <div class="invp-bg" id="invp-bg">
+    <div id="invp-scaler" class="invp-scaler">
+      <iframe id="invp-frame" class="invp-frame" scrolling="no"></iframe>
+    </div>
+  </div>
+</div>
+
 <div id="checkout-modal" style="display:none">
   <div class="co-modal">
 
@@ -8307,6 +8472,9 @@
       </div>
       <button class="co-close" id="checkout-cancel"><i class="fa fa-xmark"></i></button>
     </div>
+
+    <!-- Alert bar (shown below header, full width) -->
+    <div id="checkout-alert" class="co-alert-bar" style="display:none"></div>
 
     <!-- Body: Left | Middle (items) | Right -->
     <div class="co-body">
@@ -8334,6 +8502,7 @@
             <span style="color:var(--text-muted);font-size:12px">You save</span>
             <strong id="co-saved" style="color:#16a34a;font-size:12px">—</strong>
           </div>
+          <div id="co-tax-rows"></div>
         </div>
 
         <div class="co-grand-total">
@@ -8450,9 +8619,6 @@
         <div class="co-notes">
           <textarea id="co-notes" placeholder="Add a note…"></textarea>
         </div>
-
-        <!-- Error -->
-        <div id="checkout-alert" class="co-alert" style="display:none"></div>
 
         <!-- Complete -->
         <button id="checkout-confirm" class="co-complete-btn">
@@ -9189,15 +9355,50 @@
             <div class="psm-section-label"><i class="fa fa-percent"></i> Tax Settings</div>
             <div class="psm-toggle-row">
               <div class="psm-toggle-info">
-                <span class="psm-toggle-name">Enable tax</span>
+                <span class="psm-toggle-name">Enable tax on sales</span>
                 <span class="psm-toggle-desc">Apply tax calculations on sales transactions</span>
               </div>
               <label class="psm-switch"><input type="checkbox" id="psm-tax-enabled"><span class="psm-switch-track"></span></label>
             </div>
-            <div class="psm-field-row" id="psm-tax-rate-row" style="display:none">
-              <label class="psm-field-label" for="psm-tax-rate">Tax Rate (%)</label>
-              <input type="number" id="psm-tax-rate" class="psm-input" min="0" max="100" step="0.01" placeholder="e.g. 15">
-              <span class="psm-hint">Percentage applied to taxable sales</span>
+
+            <div id="psm-tax-rules-section" style="display:none;margin-top:20px">
+              <div class="psm-trules-hdr">
+                <span class="psm-field-label" style="margin:0;font-size:12px;font-weight:700">Tax Rules</span>
+                <button type="button" class="psm-tr-add-btn" id="psm-tax-rule-add-btn">
+                  <i class="fa fa-plus"></i> Add Rule
+                </button>
+              </div>
+
+              <!-- inline add / edit form -->
+              <div id="psm-tax-rule-form" style="display:none" class="psm-tr-form-wrap">
+                <div class="psm-tr-form-grid">
+                  <div>
+                    <div class="psm-field-label" style="font-size:11px;margin-bottom:4px">Name</div>
+                    <input type="text" id="psm-tr-name" class="psm-input" maxlength="50" placeholder="e.g. VAT, GST">
+                  </div>
+                  <div>
+                    <div class="psm-field-label" style="font-size:11px;margin-bottom:4px">Amount Type</div>
+                    <select id="psm-tr-type" class="psm-input">
+                      <option value="percentage">Percentage (%)</option>
+                      <option value="flat">Flat amount</option>
+                    </select>
+                  </div>
+                  <div>
+                    <div class="psm-field-label" style="font-size:11px;margin-bottom:4px">Value</div>
+                    <input type="number" id="psm-tr-value" class="psm-input" min="0" step="0.01" placeholder="0">
+                  </div>
+                </div>
+                <div class="psm-tr-form-acts">
+                  <button type="button" id="psm-tr-save" class="psm-tr-btn-save"><i class="fa fa-check"></i> Save rule</button>
+                  <button type="button" id="psm-tr-cancel" class="psm-tr-btn-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+                </div>
+              </div>
+
+              <!-- rules list -->
+              <div id="psm-tax-rules-list"></div>
+              <div id="psm-tax-rules-empty" style="display:none;text-align:center;color:var(--text-muted);font-size:13px;padding:18px 0 6px">
+                <i class="fa fa-circle-info"></i> No tax rules yet — click <strong>Add Rule</strong> to get started.
+              </div>
             </div>
           </div>
         </div>
@@ -11426,6 +11627,9 @@
         <div class="psw-field" id="psw-tax-rate-wrap" style="display:none;margin-top:16px">
           <label>Tax rate (%)</label>
           <input type="number" id="psw-tax-rate" min="0" max="100" step="0.01" placeholder="e.g. 10" style="max-width:180px">
+        </div>
+        <div class="psw-hint" id="psw-tax-rules-note" style="display:none;margin-top:8px;font-size:11px">
+          <i class="fa fa-circle-info"></i> You can add multiple tax rules from POS Settings after setup.
         </div>
         <div class="psw-field">
           <label>Invoice number prefix</label>

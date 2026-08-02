@@ -57,6 +57,8 @@ class PosSettingsService
 
     public const KEY_TAX_RATE = 'tax.rate';
 
+    public const KEY_TAX_RULES = 'tax.rules';
+
     public const KEY_INVOICE_PREFIX = 'invoice.prefix';
 
     public const KEY_INVOICE_NEXT_NUMBER = 'invoice.next_number';
@@ -137,7 +139,11 @@ class PosSettingsService
             'branch_pos_separate'      => (bool) $business->getSetting('business.branch_pos_separate', false),
             // Tax
             'tax_enabled'   => (bool) $business->getSetting(self::KEY_TAX_ENABLED, false),
-            'tax_rate'      => round((float) $business->getSetting(self::KEY_TAX_RATE, 0), 4),
+            'tax_rules'     => (function () use ($business) {
+                $raw   = $business->getSetting(self::KEY_TAX_RULES, []);
+                $rules = is_array($raw) ? $raw : (is_string($raw) ? (json_decode($raw, true) ?? []) : []);
+                return array_values(array_filter($rules, fn ($r) => is_array($r) && isset($r['name'], $r['type'], $r['value'])));
+            })(),
             // Invoice
             'invoice_prefix'      => (string) ($business->getSetting(self::KEY_INVOICE_PREFIX, 'INV') ?: 'INV'),
             'invoice_next_number' => max(1, (int) $business->getSetting(self::KEY_INVOICE_NEXT_NUMBER, 1)),
@@ -274,9 +280,20 @@ class PosSettingsService
         if (array_key_exists('tax_enabled', $data)) {
             $business->setSetting(self::KEY_TAX_ENABLED, filter_var($data['tax_enabled'], FILTER_VALIDATE_BOOLEAN));
         }
-        if (array_key_exists('tax_rate', $data)) {
-            $rate = max(0, min(100, round((float) ($data['tax_rate'] ?? 0), 4)));
-            $business->setSetting(self::KEY_TAX_RATE, $rate);
+        if (array_key_exists('tax_rules', $data)) {
+            $rules = is_array($data['tax_rules']) ? $data['tax_rules'] : [];
+            $sanitized = [];
+            foreach ($rules as $r) {
+                if (! is_array($r)) { continue; }
+                $name  = substr(trim((string) ($r['name'] ?? '')), 0, 50);
+                $type  = in_array($r['type'] ?? '', ['percentage', 'flat'], true) ? $r['type'] : 'percentage';
+                $value = max(0, (float) ($r['value'] ?? 0));
+                $id    = isset($r['id']) ? substr((string) $r['id'], 0, 36) : (string) \Illuminate\Support\Str::uuid();
+                if ($name !== '') {
+                    $sanitized[] = ['id' => $id, 'name' => $name, 'type' => $type, 'value' => $value];
+                }
+            }
+            $business->setSetting(self::KEY_TAX_RULES, $sanitized);
         }
 
         // Invoice

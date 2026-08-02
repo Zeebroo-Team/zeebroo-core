@@ -512,6 +512,72 @@ try {
   });
 });
 
+// ── Render a Fabric.js canvas_json to a PNG data URL ──────────────────────
+ipcMain.handle('render-canvas-to-dataurl', async (_e, { canvasJson, width, height }) => {
+  const w = width  || 794;
+  const h = height || 1123;
+
+  const fabricSrc = path.join(__dirname, 'renderer', 'js', 'fabric.min.js');
+  if (!fs.existsSync(fabricSrc)) return null;
+  const fabricCode = fs.readFileSync(fabricSrc, 'utf8');
+
+  const canvasData = JSON.stringify(canvasJson || {})
+    .replace(/<\/script>/gi, '<\\/script>');
+
+  const html = `<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<style>*{margin:0;padding:0;box-sizing:border-box;overflow:hidden}html,body{width:${w}px;height:${h}px;background:transparent}canvas{display:block}</style>
+</head><body>
+<canvas id="c" width="${w}" height="${h}"></canvas>
+<script>${fabricCode}</script>
+<script>
+try{
+  var raw=${canvasData};
+  var data=typeof raw==='string'?JSON.parse(raw):raw;
+  var c=new fabric.Canvas('c',{width:${w},height:${h},enableRetinaScaling:false});
+  c.loadFromJSON(data,function(){c.renderAll();document.title='__ready__';});
+}catch(e){document.title='__error__';}
+</script>
+</body></html>`;
+
+  const tmpFile = path.join(require('os').tmpdir(), 'sbiz-lh-' + Date.now() + '.html');
+  fs.writeFileSync(tmpFile, html, 'utf8');
+
+  return new Promise((resolve) => {
+    const cleanup = () => { try { fs.unlinkSync(tmpFile); } catch (_) {} };
+    let done = false;
+    const finish = (val) => {
+      if (done) return;
+      done = true;
+      cleanup();
+      if (!win.isDestroyed()) win.destroy();
+      resolve(val);
+    };
+
+    const win = new BrowserWindow({
+      show: false,
+      webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: false },
+    });
+    win.setContentSize(w, h);
+    win.loadFile(tmpFile);
+
+    const getDataUrl = () => {
+      win.webContents.executeJavaScript(
+        "(function(){var c=document.getElementById('c');if(!c)return null;return c.toDataURL('image/png');})()"
+      ).then(dataUrl => {
+        finish(typeof dataUrl === 'string' && dataUrl.startsWith('data:image/png;base64,') ? dataUrl : null);
+      }).catch(() => finish(null));
+    };
+
+    win.webContents.on('page-title-updated', (_ev, title) => {
+      if      (title === '__ready__') setTimeout(getDataUrl, 150);
+      else if (title === '__error__') finish(null);
+    });
+    win.webContents.once('did-finish-load', () => setTimeout(() => { if (!done) finish(null); }, 5000));
+    win.webContents.on('did-fail-load', () => finish(null));
+  });
+});
+
 // ── Render arbitrary HTML to a JPEG (used by Design Studio invoice import) ──
 ipcMain.handle('render-html-to-jpeg', async (_e, { html, width, height }) => {
   const os = require('os');
@@ -641,6 +707,45 @@ ipcMain.handle('open-quote-print', (_e, data) => {
 });
 
 ipcMain.handle('get-quote-print-data', () => printQuoteData);
+
+// ── Invoice print window (template-based layout) ──────────────────────────
+let printInvWindow = null;
+let printInvData   = null;
+
+ipcMain.handle('open-invoice-print', (_e, data) => {
+  printInvData = data;
+
+  if (printInvWindow && !printInvWindow.isDestroyed()) {
+    printInvWindow.webContents.send('invoice-print-refresh', data);
+    printInvWindow.focus();
+    return;
+  }
+
+  printInvWindow = new BrowserWindow({
+    width:     900,
+    height:    1060,
+    minWidth:  620,
+    minHeight: 700,
+    title:     'Print Invoice',
+    webPreferences: {
+      preload:          path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration:  false,
+      sandbox:          false,
+    },
+    show: false,
+  });
+
+  printInvWindow.loadFile(path.join(__dirname, 'renderer', 'print-invoice.html'));
+  printInvWindow.once('ready-to-show', () => { printInvWindow.show(); });
+  printInvWindow.webContents.on('console-message', (_e, level, msg) => {
+    const prefix = ['VERBOSE','INFO','WARN','ERROR'][level] || level;
+    console.log(`[print-invoice:${prefix}] ${msg}`);
+  });
+  printInvWindow.on('closed', () => { printInvWindow = null; printInvData = null; });
+});
+
+ipcMain.handle('get-invoice-print-data', () => printInvData);
 
 // ── Purchase Order print window ───────────────────────────────────────────
 let printPoWindow = null;

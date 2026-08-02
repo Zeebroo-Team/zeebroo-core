@@ -37,8 +37,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Design Studio editor window
   openEditor:        (design)            => ipcRenderer.invoke('open-editor', design),
   getEditorDesign:   ()                  => ipcRenderer.invoke('get-editor-design'),
-  renderHtmlToJpeg:  (html, w, h)        => ipcRenderer.invoke('render-html-to-jpeg', { html, width: w, height: h }),
-  renderDesignToPdf: (canvasJson, w, h)  => ipcRenderer.invoke('render-design-to-pdf', { canvasJson, width: w, height: h }),
+  renderHtmlToJpeg:     (html, w, h)       => ipcRenderer.invoke('render-html-to-jpeg', { html, width: w, height: h }),
+  renderDesignToPdf:    (canvasJson, w, h) => ipcRenderer.invoke('render-design-to-pdf', { canvasJson, width: w, height: h }),
+  renderCanvasToDataUrl:(canvasJson, w, h) => ipcRenderer.invoke('render-canvas-to-dataurl', { canvasJson, width: w, height: h }),
 
   // Automation Editor window
   openAutomation:      (flow) => ipcRenderer.invoke('open-automation', flow),
@@ -49,6 +50,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openQuotePrint:    (data) => ipcRenderer.invoke('open-quote-print', data),
   getQuotePrintData: ()     => ipcRenderer.invoke('get-quote-print-data'),
   onQuotePrintRefresh: (cb) => ipcRenderer.on('quote-print-refresh', (_e, data) => cb(data)),
+
+  // Invoice print window (renders full template layout)
+  openInvoicePrint:     (data) => ipcRenderer.invoke('open-invoice-print', data),
+  getInvoicePrintData:  ()     => ipcRenderer.invoke('get-invoice-print-data'),
+  onInvoicePrintRefresh:(cb)   => ipcRenderer.on('invoice-print-refresh', (_e, data) => cb(data)),
 
   // Purchase Order print window
   openPoPrint:       (data) => ipcRenderer.invoke('open-po-print', data),

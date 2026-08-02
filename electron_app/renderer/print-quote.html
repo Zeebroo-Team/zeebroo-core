@@ -76,9 +76,9 @@ body {
   display: flex; justify-content: space-between; align-items: flex-start;
   margin-bottom: 20px;
   padding-bottom: 14px;
-  border-bottom: 2px solid #1d4ed8;
+  border-bottom: 2px solid var(--inv-accent, #1d4ed8);
 }
-.pq-hdr-num  { font-size: 20px; font-weight: 800; color: #1d4ed8; line-height: 1.1; }
+.pq-hdr-num  { font-size: 20px; font-weight: 800; color: var(--inv-accent, #1d4ed8); line-height: 1.1; }
 .pq-hdr-type { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: #94a3b8; margin-top: 3px; }
 
 .pq-badge {
@@ -111,7 +111,7 @@ body {
 .pq-table { width: 100%; border-collapse: collapse; margin-bottom: 18px; }
 .pq-table thead th {
   font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em;
-  color: #475569; background: #f8fafc;
+  color: var(--inv-hdr-txt, #475569); background: var(--inv-hdr-bg, #f8fafc);
   padding: 8px 10px; border: 1px solid #e2e8f0; text-align: left;
 }
 .pq-table thead th.r { text-align: right; }
@@ -136,10 +136,10 @@ body {
 }
 .pq-total-row.grand {
   font-size: 14px; font-weight: 800; color: #0f172a;
-  border-top: 2px solid #1d4ed8; border-bottom: none;
+  border-top: 2px solid var(--inv-accent, #1d4ed8); border-bottom: none;
   padding-top: 9px; margin-top: 4px;
 }
-.pq-total-row.grand span:last-child { color: #1d4ed8; }
+.pq-total-row.grand span:last-child { color: var(--inv-accent, #1d4ed8); }
 
 /* ── Notes ── */
 .pq-notes { margin-top: 18px; border-top: 1px solid #e2e8f0; padding-top: 12px; }
@@ -358,6 +358,26 @@ body {
       }
     }
 
+    // Apply invoice template (colours)
+    if (data.template) {
+      var t = data.template;
+      document.documentElement.style.setProperty('--inv-accent',  t.accent  || '#1d4ed8');
+      document.documentElement.style.setProperty('--inv-hdr-bg',  t.hdrBg   || '#f8fafc');
+      document.documentElement.style.setProperty('--inv-hdr-txt', t.hdrTxt  || '#475569');
+    }
+    // Apply custom margins (only when no letterhead is occupying top/bottom)
+    if (data.margins) {
+      var m = data.margins;
+      var content = document.getElementById('pq-content');
+      if (content) {
+        content.style.paddingLeft  = (m.left  || 15) + 'mm';
+        content.style.paddingRight = (m.right || 15) + 'mm';
+        if (!lh || !lh.canvas_json) {
+          content.style.paddingTop    = (m.top    || 20) + 'mm';
+          content.style.paddingBottom = (m.bottom || 20) + 'mm';
+        }
+      }
+    }
     document.getElementById('pq-loading').style.display     = 'none';
     document.getElementById('pq-topbar').style.display      = '';
     document.getElementById('pq-screen-wrap').style.display = '';

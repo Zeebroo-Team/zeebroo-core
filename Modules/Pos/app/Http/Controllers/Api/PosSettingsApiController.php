@@ -173,8 +173,12 @@ class PosSettingsApiController extends Controller
             'branch_stock_separate'   => ['nullable', 'boolean'],
             'branch_pos_separate'     => ['nullable', 'boolean'],
             // Tax
-            'tax_enabled' => ['nullable', 'boolean'],
-            'tax_rate'    => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'tax_enabled'          => ['nullable', 'boolean'],
+            'tax_rules'            => ['nullable', 'array', 'max:20'],
+            'tax_rules.*.id'       => ['nullable', 'string', 'max:36'],
+            'tax_rules.*.name'     => ['required_with:tax_rules', 'string', 'max:50'],
+            'tax_rules.*.type'     => ['required_with:tax_rules', 'string', 'in:percentage,flat'],
+            'tax_rules.*.value'    => ['required_with:tax_rules', 'numeric', 'min:0'],
             // Invoice
             'invoice_prefix'      => ['nullable', 'string', 'max:20'],
             'invoice_next_number' => ['nullable', 'integer', 'min:1'],

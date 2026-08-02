@@ -45,6 +45,10 @@ const state = {
   cashierInfo: null, // { id, name, username }
 };
 
+// Template-literal sentinels used by invoice template builders.
+// Defaults are empty; _invBuildActualDoc overrides them with const-shadowing.
+let bodyPos = '', pgStack = '', lhLayer = '';
+
 // ── DOM helpers ────────────────────────────────────────────────────────────
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => document.querySelectorAll(sel);
@@ -2771,12 +2775,100 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ── Invoice print (with optional letterhead) ──────────────────────────────
-async function _invPrint(inv) {
+// ── Invoice preview modal (shows the invoice before/instead of printing) ──────
+let _invpFitSc = 0.5, _invpZoom = 1, _invpPanX = 0, _invpPanY = 0;
+let _invpCurrentInv = null;
+
+function _invpApplyTransform() {
+  const sc = $('#invp-scaler');
+  if (!sc) return;
+  sc.style.transform = `translate(${_invpPanX}px,${_invpPanY}px) scale(${_invpFitSc * _invpZoom})`;
+}
+function _invpUpdateZoomLabel() {
+  const el = $('#invp-zoom-label');
+  if (el) el.textContent = Math.round(_invpZoom * 100) + '%';
+}
+function _invpResetView() {
+  const bg = $('#invp-bg');
+  if (!bg) return;
+  const w = bg.clientWidth, h = bg.clientHeight;
+  if (!w || !h) return;
+  _invpFitSc = Math.min((w - 40) / 794, (h - 40) / 1123);
+  _invpZoom  = 1;
+  _invpPanX  = (w - 794 * _invpFitSc) / 2;
+  _invpPanY  = (h - 1123 * _invpFitSc) / 2;
+  _invpApplyTransform();
+  _invpUpdateZoomLabel();
+}
+function _invpZoomAt(nz, px, py) {
+  const bg = $('#invp-bg');
+  nz = Math.max(0.25, Math.min(6, nz));
+  if (px === undefined) { px = (bg ? bg.clientWidth : 600) / 2; py = (bg ? bg.clientHeight : 500) / 2; }
+  const r = nz / _invpZoom;
+  _invpPanX = px - (px - _invpPanX) * r;
+  _invpPanY = py - (py - _invpPanY) * r;
+  _invpZoom = nz;
+  _invpApplyTransform();
+  _invpUpdateZoomLabel();
+}
+
+async function showInvoicePreviewModal(inv) {
+  _invpCurrentInv = inv;
+  const modal = $('#inv-preview-modal');
+  if (!modal) { _invPrint(inv); return; }
+
+  const title = document.getElementById('invp-title');
+  const badge = document.getElementById('invp-badge');
+  if (title) title.textContent = 'Invoice ' + (inv.invoice_number || '');
+  if (badge) {
+    const bgMap  = { paid: '#dcfce7', overdue: '#fee2e2', draft: '#f1f5f9', sent: '#dbeafe', cancelled: '#fee2e2' };
+    const txtMap = { paid: '#15803d', overdue: '#dc2626', draft: '#64748b', sent: '#1d4ed8', cancelled: '#dc2626' };
+    badge.textContent      = inv.status_label || inv.status || '';
+    badge.style.background = bgMap[inv.status]  || '#f1f5f9';
+    badge.style.color      = txtMap[inv.status] || '#64748b';
+  }
+
+  const ic    = _isetupGetCfg();
+  const tpl   = INV_TEMPLATES.find(t => t.id === ic.template) || INV_TEMPLATES[0];
+  const mg    = { top: ic.mgTop, bot: ic.mgBot, left: ic.mgLeft, right: ic.mgRight };
+  const frame = document.getElementById('invp-frame');
+
+  // Show immediately without letterhead so the modal opens instantly
+  if (frame) frame.srcdoc = _invBuildActualDoc(inv, tpl, mg, state.currency || '');
+  modal.style.display = 'flex';
+  setTimeout(_invpResetView, 50);
+
+  // Load letterhead asynchronously and update the preview once ready
   const lhFull = await _fetchLetterhead();
-  await window.electronAPI.openQuotePrint({
-    quote:      { ...inv, quote_number: inv.invoice_number, issue_date: inv.issue_date, due_date: inv.due_date, doc_type: 'Invoice' },
-    letterhead: lhFull,
-    currency:   state.currency,
+  if (lhFull && lhFull.canvas_json && frame) {
+    const lhDataUrl = await window.electronAPI.renderCanvasToDataUrl(
+      lhFull.canvas_json,
+      lhFull.width  || 794,
+      lhFull.height || 1123
+    );
+    if (lhDataUrl) frame.srcdoc = _invBuildActualDoc(inv, tpl, mg, state.currency || '', lhDataUrl);
+  }
+}
+
+async function _invPrint(inv) {
+  const ic     = _isetupGetCfg();
+  const tpl    = INV_TEMPLATES.find(t => t.id === ic.template) || INV_TEMPLATES[0];
+  const mg     = { top: ic.mgTop, bot: ic.mgBot, left: ic.mgLeft, right: ic.mgRight };
+  const lhFull = await _fetchLetterhead();
+  let   lhDataUrl = null;
+  if (lhFull && lhFull.canvas_json) {
+    lhDataUrl = await window.electronAPI.renderCanvasToDataUrl(
+      lhFull.canvas_json,
+      lhFull.width  || 794,
+      lhFull.height || 1123
+    );
+  }
+  const html = _invBuildActualDoc(inv, tpl, mg, state.currency || '', lhDataUrl);
+  await window.electronAPI.openInvoicePrint({
+    html,
+    number:      inv.invoice_number || '',
+    status:      inv.status         || '',
+    statusLabel: inv.status_label   || '',
   });
 }
 
@@ -4740,8 +4832,9 @@ $('#select-biz-btn').addEventListener('click', async () => {
 });
 
 function showAlert(el, msg) {
+  if (!el) return;
   el.textContent = msg;
-  el.style.display = 'block';
+  el.style.display = el.classList.contains('co-alert-bar') ? 'flex' : 'block';
 }
 
 // ── Unauthorized auto-logout ───────────────────────────────────────────────
@@ -13843,7 +13936,8 @@ async function openPosSetupWizard() {
     _chk('psw-show-biz-addr', s.show_business_address == '1' || s.show_business_address === true);
     _chk('psw-show-acct-info',s.show_account_info !== '0' && s.show_account_info !== false);
     _chk('psw-tax-enabled',   s.tax_enabled == '1' || s.tax_enabled === true);
-    _val('psw-tax-rate',      s.tax_rate ?? '');
+    const _pswFirstRule = Array.isArray(s.tax_rules) && s.tax_rules.find(r => r.type === 'percentage');
+    _val('psw-tax-rate', _pswFirstRule ? _pswFirstRule.value : '');
     _val('psw-inv-prefix',    s.invoice_prefix ?? 'INV');
     _val('psw-inv-next',      s.invoice_next_number ?? '1');
     _chk('psw-discount-field',s.discount_field_enabled !== '0');
@@ -13934,6 +14028,8 @@ function _pswToggleTaxRate() {
   const enabled = $('#psw-tax-enabled')?.checked;
   const wrap = $('#psw-tax-rate-wrap');
   if (wrap) wrap.style.display = enabled ? 'block' : 'none';
+  const note = $('#psw-tax-rules-note');
+  if (note) note.style.display = enabled ? '' : 'none';
 }
 
 async function _pswSave() {
@@ -13947,7 +14043,10 @@ async function _pswSave() {
     show_business_address:   $('#psw-show-biz-addr')?.checked ? '1' : '0',
     show_account_info:       $('#psw-show-acct-info')?.checked ? '1' : '0',
     tax_enabled:             $('#psw-tax-enabled')?.checked ? '1' : '0',
-    tax_rate:                $('#psw-tax-rate')?.value ?? '0',
+    tax_rules:               (() => {
+      const rate = parseFloat($('#psw-tax-rate')?.value);
+      return (rate > 0) ? [{ id: _uuid(), name: 'Tax', type: 'percentage', value: rate }] : [];
+    })(),
     invoice_prefix:          $('#psw-inv-prefix')?.value ?? 'INV',
     invoice_next_number:     $('#psw-inv-next')?.value ?? '1',
     discount_field_enabled:  $('#psw-discount-field')?.checked ? '1' : '0',
@@ -13980,6 +14079,1254 @@ $('#psw-skip-all')?.addEventListener('click', () => {
   if (wiz) wiz.style.display = 'none';
 });
 $('#psw-tax-enabled')?.addEventListener('change', _pswToggleTaxRate);
+
+// ── Invoice Setup ────────────────────────────────────────────────────────
+const INV_TEMPLATES = [
+  { id: 'classic',   name: 'Classic',     desc: 'Traditional bordered table with letterhead', swatch: '#1d4ed8', accent: '#1d4ed8' },
+  { id: 'sidebar',   name: 'Side Panel',  desc: 'Dark accent column left, content right',     swatch: '#0f172a', accent: '#0f172a' },
+  { id: 'bold',      name: 'Bold Banner', desc: 'Full-width colour header, large number',      swatch: '#e11d48', accent: '#e11d48' },
+  { id: 'minimal',   name: 'Minimal',     desc: 'Pure typography, no fills or colour blocks',  swatch: '#374151', accent: '#374151' },
+  { id: 'compact',   name: 'Compact',     desc: 'Card-style info grid with teal accent',       swatch: '#0891b2', accent: '#0891b2' },
+  { id: 'executive', name: 'Executive',   desc: 'Dark luxury header with gold accent trim',    swatch: '#1e1b4b', accent: '#c7a84f' },
+];
+
+let _isetupActiveTpl = 'classic';
+
+function _isetupGetCfg() {
+  const c = state.config || {};
+  return {
+    template:    c.invoice_template    || 'classic',
+    printer:     c.invoice_printer     || 'laser_a4',
+    paper:       c.invoice_paper       || 'a4',
+    orientation: c.invoice_orientation || 'portrait',
+    mgTop:       c.invoice_mg_top      ?? 20,
+    mgBot:       c.invoice_mg_bot      ?? 20,
+    mgLeft:      c.invoice_mg_left     ?? 15,
+    mgRight:     c.invoice_mg_right    ?? 15,
+    hdrLayout:   c.invoice_hdr_layout  || 'num-left',
+    logoPos:     c.invoice_logo_pos    || 'header',
+  };
+}
+
+function _isetupBuildPreviewDoc(tpl, mg, cur) {
+  const fn = { classic: _iTPLClassic, sidebar: _iTPLSidebar, bold: _iTPLBold, minimal: _iTPLMinimal, compact: _iTPLCompact, executive: _iTPLExecutive }[tpl.id] || _iTPLClassic;
+  return fn(tpl, mg, cur);
+}
+
+function _iTPLDummy(cur) {
+  return {
+    biz:  escHtml(state.receiptSettings?.business_name        || 'Your Business'),
+    addr: escHtml(state.receiptSettings?.receipt_address_line || '10 Innovation Way, Floor 4'),
+    c:    cur ? ' ' + cur : '',
+  };
+}
+
+// ── Template 1: Classic ── traditional bordered table, blue letterhead ──────
+function _iTPLClassic(tpl, mg, cur) {
+  const a = tpl.accent, { biz, addr, c } = _iTPLDummy(cur);
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Inter,Arial,sans-serif;font-size:12px;color:#0f172a;background:#fff;${bodyPos}}
+.pg{width:794px;padding:${mg.top}mm ${mg.right}mm ${mg.bot}mm ${mg.left}mm;${pgStack}}
+.top{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:20px;border-bottom:2.5px solid ${a};margin-bottom:24px}
+.bn{font-size:21px;font-weight:900;color:${a}}.bi{font-size:10px;color:#64748b;margin-top:5px;line-height:1.6}
+.it{font-size:30px;font-weight:900;text-transform:uppercase;color:${a};text-align:right}
+.in{font-size:12px;color:#64748b;text-align:right;margin-top:4px}
+.meta{display:grid;grid-template-columns:1fr auto;gap:24px;margin-bottom:22px}
+.btl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#94a3b8;margin-bottom:6px}
+.btn{font-size:14px;font-weight:800}.bti{font-size:11px;color:#64748b;margin-top:3px;line-height:1.5}
+.dts{min-width:205px}
+.dr{display:flex;justify-content:space-between;font-size:11px;padding:6px 0;border-bottom:1px dashed #e2e8f0}
+.dr:last-child{border-bottom:none}.dk{color:#94a3b8}.dv{font-weight:700}
+table{width:100%;border-collapse:collapse;margin-bottom:20px}
+thead th{background:${a};color:#fff;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:9px 10px}
+thead th.r{text-align:right}
+tbody td{font-size:11px;padding:8px 10px;border-bottom:1px solid #e2e8f0}
+tbody tr:nth-child(even) td{background:#f8fafc}
+td.n{color:#94a3b8;text-align:center;width:26px}td.r{text-align:right}td.b{font-weight:700}
+.ds{font-size:10px;color:#94a3b8;display:block;margin-top:1px}
+.bot{display:grid;grid-template-columns:1fr 248px;gap:20px}
+.nb{padding:13px;border:1px solid #e2e8f0;border-radius:6px;background:#f8fafc}
+.nl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#94a3b8;margin-bottom:5px}
+.nt{font-size:11px;color:#64748b;line-height:1.55}
+.tr{display:flex;justify-content:space-between;font-size:11px;padding:5px 0;border-bottom:1px solid #f1f5f9;color:#475569}
+.tr:last-child{border-bottom:none}.tr span:first-child{color:#64748b}
+.gr{font-size:15px;font-weight:900;border-top:2.5px solid ${a};margin-top:4px;padding-top:9px}
+.gr span:last-child{color:${a}}
+.ft{margin-top:22px;padding-top:12px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:10px;color:#94a3b8}
+</style></head><body>${lhLayer}<div class="pg">
+<div class="top">
+  <div><div class="bn">${biz}</div><div class="bi">${addr}<br>invoices@example.com · +1 555 000-0001</div></div>
+  <div><div class="it">Invoice</div><div class="in">INV-0024 · 01 Aug 2026</div></div>
+</div>
+<div class="meta">
+  <div><div class="btl">Billed To</div><div class="btn">Acme Corporation</div><div class="bti">Jennifer Walters<br>45 Commerce Drive, Suite 3, New York NY 10001</div></div>
+  <div class="dts">
+    <div class="dr"><span class="dk">Issue Date</span><span class="dv">01 Aug 2026</span></div>
+    <div class="dr"><span class="dk">Due Date</span><span class="dv">15 Aug 2026</span></div>
+    <div class="dr"><span class="dk">Status</span><span class="dv" style="color:#15803d">Paid</span></div>
+  </div>
+</div>
+<table>
+  <thead><tr><th style="width:26px;text-align:center">#</th><th>Description</th><th class="r" style="width:50px">Qty</th><th class="r" style="width:100px">Unit Price</th><th class="r" style="width:100px">Total</th></tr></thead>
+  <tbody>
+    <tr><td class="n">1</td><td><b>Brand Identity Design</b><span class="ds">Logo, colour palette, typography kit</span></td><td class="r">1</td><td class="r">1,800.00${c}</td><td class="r b">1,800.00${c}</td></tr>
+    <tr><td class="n">2</td><td><b>UI / UX Design</b><span class="ds">10 screens, mobile-first, Figma source files</span></td><td class="r">1</td><td class="r">3,500.00${c}</td><td class="r b">3,500.00${c}</td></tr>
+    <tr><td class="n">3</td><td><b>Frontend Development</b><span class="ds">React, Next.js, Tailwind CSS — 40 hrs</span></td><td class="r">40</td><td class="r">85.00${c}</td><td class="r b">3,400.00${c}</td></tr>
+    <tr><td class="n">4</td><td><b>SEO Optimisation</b><span class="ds">On-page audit + 3-month strategy</span></td><td class="r">1</td><td class="r">650.00${c}</td><td class="r b">650.00${c}</td></tr>
+    <tr><td class="n">5</td><td><b>Monthly Hosting &amp; Support</b><span class="ds">VPS, monitoring, daily backups</span></td><td class="r">3</td><td class="r">120.00${c}</td><td class="r b">360.00${c}</td></tr>
+  </tbody>
+</table>
+<div class="bot">
+  <div class="nb"><div class="nl">Notes &amp; Terms</div><div class="nt">Payment due within 14 days.<br>Bank transfer only — details on file.<br>Thank you for your business!</div></div>
+  <div>
+    <div class="tr"><span>Subtotal</span><span>9,710.00${c}</span></div>
+    <div class="tr"><span>Discount (5%)</span><span style="color:#ef4444">−485.50${c}</span></div>
+    <div class="tr"><span>Tax (15%)</span><span>+1,383.67${c}</span></div>
+    <div class="tr gr"><span>Total Due</span><span>10,608.17${c}</span></div>
+  </div>
+</div>
+<div class="ft"><span>INV-0024 · ${biz}</span><span>${biz}</span></div>
+</div></body></html>`;
+}
+
+// ── Template 2: Side Panel ── dark accent sidebar, content column right ───────
+function _iTPLSidebar(tpl, mg, cur) {
+  const a = tpl.accent, { biz, addr, c } = _iTPLDummy(cur);
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Inter,Arial,sans-serif;font-size:12px;color:#0f172a;background:#fff;${bodyPos}}
+.pg{width:794px;min-height:1123px;display:flex;${pgStack}}
+.sb{width:195px;background:${a};padding:30px 16px;flex-shrink:0;display:flex;flex-direction:column}
+.sb-biz{font-size:14px;font-weight:900;color:#fff;line-height:1.2;margin-bottom:4px}
+.sb-addr{font-size:9px;color:rgba(255,255,255,.55);line-height:1.6;margin-bottom:20px}
+.sb-hr{height:1px;background:rgba(255,255,255,.18);margin-bottom:16px}
+.sb-lbl{font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:rgba(255,255,255,.45);margin-bottom:3px}
+.sb-num{font-size:20px;font-weight:900;color:#fff;margin-bottom:14px}
+.sb-badge{display:inline-block;padding:3px 9px;background:rgba(255,255,255,.15);color:#fff;border-radius:20px;font-size:9px;font-weight:700;letter-spacing:.05em;margin-bottom:18px}
+.sb-row{margin-bottom:11px}
+.sb-dk{font-size:8px;color:rgba(255,255,255,.45);text-transform:uppercase;letter-spacing:.08em;font-weight:700;margin-bottom:2px}
+.sb-dv{font-size:11px;color:#fff;font-weight:600}
+.sb-amt{font-size:16px;font-weight:900;color:#fff;margin-top:4px}
+.ct{flex:1;padding:${mg.top}mm 18px ${mg.bot}mm 22px;min-width:0}
+.bt{margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid #e2e8f0}
+.btl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#94a3b8;margin-bottom:5px}
+.btn{font-size:14px;font-weight:800;margin-bottom:3px}
+.bti{font-size:11px;color:#64748b;line-height:1.5}
+table{width:100%;border-collapse:collapse;margin-bottom:18px}
+thead th{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#475569;padding:8px 8px;border-bottom:2px solid ${a}}
+thead th.r{text-align:right}
+tbody td{font-size:11px;padding:7px 8px;border-bottom:1px solid #f1f5f9}
+td.n{color:#94a3b8;text-align:center;width:22px}td.r{text-align:right}td.b{font-weight:700}
+.ds{font-size:10px;color:#94a3b8;display:block;margin-top:1px}
+.tot{display:flex;justify-content:flex-end}
+.ti{width:220px}
+.tr{display:flex;justify-content:space-between;font-size:11px;padding:5px 0;border-bottom:1px solid #f1f5f9;color:#475569}
+.tr:last-child{border-bottom:none}.tr span:first-child{color:#64748b}
+.gr{font-size:14px;font-weight:900;border-top:2.5px solid ${a};margin-top:4px;padding-top:9px}
+.gr span:last-child{color:${a}}
+</style></head><body>${lhLayer}<div class="pg">
+<div class="sb">
+  <div class="sb-biz">${biz}</div>
+  <div class="sb-addr">${addr}<br>invoices@example.com</div>
+  <div class="sb-hr"></div>
+  <div class="sb-lbl">Invoice</div>
+  <div class="sb-num">INV-0024</div>
+  <div class="sb-badge">● Paid</div>
+  <div class="sb-row"><div class="sb-dk">Issue Date</div><div class="sb-dv">01 Aug 2026</div></div>
+  <div class="sb-row"><div class="sb-dk">Due Date</div><div class="sb-dv">15 Aug 2026</div></div>
+  <div class="sb-hr" style="margin-top:12px"></div>
+  <div class="sb-row"><div class="sb-dk">Amount Due</div><div class="sb-amt">10,608.17${c}</div></div>
+</div>
+<div class="ct">
+  <div class="bt"><div class="btl">Billed To</div><div class="btn">Acme Corporation</div><div class="bti">Jennifer Walters · 45 Commerce Drive, Suite 3<br>New York, NY 10001</div></div>
+  <table>
+    <thead><tr><th style="width:22px;text-align:center">#</th><th>Description</th><th class="r" style="width:44px">Qty</th><th class="r" style="width:86px">Price</th><th class="r" style="width:88px">Total</th></tr></thead>
+    <tbody>
+      <tr><td class="n">1</td><td><b>Brand Identity Design</b><span class="ds">Logo, palette, typography</span></td><td class="r">1</td><td class="r">1,800.00${c}</td><td class="r b">1,800.00${c}</td></tr>
+      <tr><td class="n">2</td><td><b>UI / UX Design</b><span class="ds">10 screens, Figma files</span></td><td class="r">1</td><td class="r">3,500.00${c}</td><td class="r b">3,500.00${c}</td></tr>
+      <tr><td class="n">3</td><td><b>Frontend Development</b><span class="ds">React, Next.js — 40 hrs</span></td><td class="r">40</td><td class="r">85.00${c}</td><td class="r b">3,400.00${c}</td></tr>
+      <tr><td class="n">4</td><td><b>SEO Optimisation</b><span class="ds">Audit + 3-month strategy</span></td><td class="r">1</td><td class="r">650.00${c}</td><td class="r b">650.00${c}</td></tr>
+      <tr><td class="n">5</td><td><b>Monthly Hosting &amp; Support</b><span class="ds">VPS, monitoring, backups</span></td><td class="r">3</td><td class="r">120.00${c}</td><td class="r b">360.00${c}</td></tr>
+    </tbody>
+  </table>
+  <div class="tot"><div class="ti">
+    <div class="tr"><span>Subtotal</span><span>9,710.00${c}</span></div>
+    <div class="tr"><span>Discount (5%)</span><span style="color:#ef4444">−485.50${c}</span></div>
+    <div class="tr"><span>Tax (15%)</span><span>+1,383.67${c}</span></div>
+    <div class="tr gr"><span>Total Due</span><span>10,608.17${c}</span></div>
+  </div></div>
+</div>
+</div></body></html>`;
+}
+
+// ── Template 3: Bold Banner ── full-width colour header, borderless table ─────
+function _iTPLBold(tpl, mg, cur) {
+  const a = tpl.accent, { biz, addr, c } = _iTPLDummy(cur);
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Inter,Arial,sans-serif;font-size:12px;color:#0f172a;background:#fff;${bodyPos}}
+.pg{width:794px;min-height:1123px;display:flex;flex-direction:column;${pgStack}}
+.banner{background:${a};padding:28px ${mg.right}mm 26px ${mg.left}mm;display:flex;justify-content:space-between;align-items:flex-end}
+.b-biz{font-size:20px;font-weight:900;color:#fff}
+.b-addr{font-size:10px;color:rgba(255,255,255,.7);margin-top:4px;line-height:1.5}
+.b-num{font-size:38px;font-weight:900;color:#fff;letter-spacing:-.02em;line-height:1;text-align:right}
+.b-lbl{font-size:10px;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.15em;font-weight:700;margin-bottom:4px;text-align:right}
+.body{padding:22px ${mg.right}mm ${mg.bot}mm ${mg.left}mm;flex:1}
+.cards{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px}
+.card{padding:13px 15px;border:1.5px solid #e2e8f0;border-radius:7px}
+.cl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#94a3b8;margin-bottom:5px}
+.cn{font-size:14px;font-weight:800;margin-bottom:3px}
+.ci{font-size:11px;color:#64748b;line-height:1.5}
+table{width:100%;border-collapse:collapse;margin-bottom:20px}
+thead th{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#64748b;padding:8px 0;border-bottom:2px solid ${a}}
+thead th.r{text-align:right}
+tbody td{font-size:11px;padding:9px 0;border-bottom:1px solid #f1f5f9}
+td.n{color:#94a3b8;text-align:center;width:26px}td.r{text-align:right}td.b{font-weight:700}
+.ds{font-size:10px;color:#94a3b8;display:block;margin-top:1px}
+.bot{display:grid;grid-template-columns:1fr 255px;gap:18px}
+.nb{padding:13px;border:1.5px solid #e2e8f0;border-radius:7px;background:#f8fafc}
+.nl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#94a3b8;margin-bottom:5px}
+.nt{font-size:11px;color:#64748b;line-height:1.55}
+.tc{border:1.5px solid #e2e8f0;border-radius:7px;overflow:hidden}
+.tr{display:flex;justify-content:space-between;font-size:11px;padding:8px 13px;border-bottom:1px solid #f1f5f9;color:#475569}
+.tr:last-child{border-bottom:none}.tr span:first-child{color:#64748b}
+.gr{background:${a};color:#fff!important;font-weight:900;font-size:14px}
+.gr span{color:#fff!important}
+</style></head><body>${lhLayer}<div class="pg">
+<div class="banner">
+  <div><div class="b-biz">${biz}</div><div class="b-addr">${addr}<br>invoices@example.com</div></div>
+  <div><div class="b-lbl">Invoice</div><div class="b-num">INV-0024</div></div>
+</div>
+<div class="body">
+  <div class="cards">
+    <div class="card"><div class="cl">Billed To</div><div class="cn">Acme Corporation</div><div class="ci">Jennifer Walters<br>45 Commerce Drive, Suite 3, New York NY 10001</div></div>
+    <div class="card"><div class="cl">Invoice Details</div><div class="ci" style="line-height:1.9"><b>Issue Date</b> &nbsp; 01 Aug 2026<br><b>Due Date</b> &nbsp;&nbsp; 15 Aug 2026<br><b>Status</b> &nbsp;&nbsp;&nbsp;&nbsp; <span style="color:#15803d;font-weight:700">Paid</span></div></div>
+  </div>
+  <table>
+    <thead><tr><th style="width:26px;text-align:center">#</th><th>Description</th><th class="r" style="width:50px">Qty</th><th class="r" style="width:100px">Unit Price</th><th class="r" style="width:100px">Total</th></tr></thead>
+    <tbody>
+      <tr><td class="n">1</td><td><b>Brand Identity Design</b><span class="ds">Logo, colour palette, typography kit</span></td><td class="r">1</td><td class="r">1,800.00${c}</td><td class="r b">1,800.00${c}</td></tr>
+      <tr><td class="n">2</td><td><b>UI / UX Design</b><span class="ds">10 screens, mobile-first, Figma files</span></td><td class="r">1</td><td class="r">3,500.00${c}</td><td class="r b">3,500.00${c}</td></tr>
+      <tr><td class="n">3</td><td><b>Frontend Development</b><span class="ds">React, Next.js, Tailwind CSS — 40 hrs</span></td><td class="r">40</td><td class="r">85.00${c}</td><td class="r b">3,400.00${c}</td></tr>
+      <tr><td class="n">4</td><td><b>SEO Optimisation</b><span class="ds">On-page audit + 3-month strategy plan</span></td><td class="r">1</td><td class="r">650.00${c}</td><td class="r b">650.00${c}</td></tr>
+      <tr><td class="n">5</td><td><b>Monthly Hosting &amp; Support</b><span class="ds">VPS, monitoring, daily backups</span></td><td class="r">3</td><td class="r">120.00${c}</td><td class="r b">360.00${c}</td></tr>
+    </tbody>
+  </table>
+  <div class="bot">
+    <div class="nb"><div class="nl">Notes &amp; Terms</div><div class="nt">Payment due within 14 days.<br>Bank transfer only — details on file.<br>Thank you for your business!</div></div>
+    <div class="tc">
+      <div class="tr"><span>Subtotal</span><span>9,710.00${c}</span></div>
+      <div class="tr"><span>Discount (5%)</span><span style="color:#ef4444">−485.50${c}</span></div>
+      <div class="tr"><span>Tax (15%)</span><span>+1,383.67${c}</span></div>
+      <div class="tr gr"><span>Total Due</span><span>10,608.17${c}</span></div>
+    </div>
+  </div>
+</div>
+</div></body></html>`;
+}
+
+// ── Template 4: Minimal ── typography-only, serif, no fills ───────────────────
+function _iTPLMinimal(tpl, mg, cur) {
+  const a = tpl.accent, { biz, addr, c } = _iTPLDummy(cur);
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Georgia,'Times New Roman',serif;font-size:12px;color:#1a1a1a;background:#fff;${bodyPos}}
+.pg{width:794px;padding:${mg.top}mm ${mg.right}mm ${mg.bot}mm ${mg.left}mm;${pgStack}}
+.top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:30px}
+.bn{font-size:18px;font-weight:700;font-family:Georgia,serif}
+.bi{font-size:10px;color:#6b7280;margin-top:5px;line-height:1.7;font-family:Arial,sans-serif}
+.inv-word{font-size:46px;font-weight:700;font-family:Georgia,serif;color:#e5e7eb;line-height:1;text-align:right;letter-spacing:-.02em}
+.inv-ref{font-size:11px;color:#6b7280;text-align:right;margin-top:5px;font-family:Arial,sans-serif}
+.rule{height:1.5px;background:#1a1a1a;margin-bottom:20px}
+.meta{display:flex;justify-content:space-between;margin-bottom:28px}
+.btl{font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.16em;color:#9ca3af;margin-bottom:5px;font-family:Arial,sans-serif}
+.btn{font-size:15px;font-weight:700;font-family:Georgia,serif;margin-bottom:3px}
+.bti{font-size:10px;color:#6b7280;line-height:1.6;font-family:Arial,sans-serif}
+.dts{text-align:right}
+.dr{display:flex;gap:18px;justify-content:flex-end;font-size:11px;padding:3px 0;font-family:Arial,sans-serif}
+.dk{color:#9ca3af}.dv{font-weight:700;color:#1a1a1a}
+table{width:100%;border-collapse:collapse;margin-bottom:24px;font-family:Arial,sans-serif}
+thead th{font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.14em;color:#9ca3af;padding:0 0 8px;border-bottom:1.5px solid #1a1a1a}
+thead th.r{text-align:right}
+tbody td{font-size:11px;padding:9px 0;border-bottom:1px solid #e5e7eb;vertical-align:top}
+td.n{color:#d1d5db;text-align:center;width:26px;font-style:italic}td.r{text-align:right}td.b{font-weight:700}
+.ds{font-size:10px;color:#9ca3af;display:block;margin-top:1px}
+.bot{display:grid;grid-template-columns:1fr 215px;gap:24px}
+.nt{font-size:11px;color:#6b7280;line-height:1.65;font-family:Arial,sans-serif;border-top:1px solid #e5e7eb;padding-top:12px}
+.tr{display:flex;justify-content:space-between;font-size:11px;padding:5px 0;color:#6b7280;font-family:Arial,sans-serif}
+.rule2{height:1px;background:#e5e7eb;margin:4px 0}
+.gr{display:flex;justify-content:space-between;font-size:16px;font-weight:700;padding-top:8px;font-family:Georgia,serif;color:#1a1a1a;border-top:1.5px solid #1a1a1a;margin-top:4px}
+.ft{margin-top:28px;padding-top:12px;border-top:1px solid #e5e7eb;font-size:9px;color:#9ca3af;text-align:center;letter-spacing:.06em;font-family:Arial,sans-serif;text-transform:uppercase}
+</style></head><body>${lhLayer}<div class="pg">
+<div class="top">
+  <div><div class="bn">${biz}</div><div class="bi">${addr}<br>invoices@example.com · +1 555 000-0001</div></div>
+  <div><div class="inv-word">INVOICE</div><div class="inv-ref">INV-0024 / 01 Aug 2026</div></div>
+</div>
+<div class="rule"></div>
+<div class="meta">
+  <div><div class="btl">Billed To</div><div class="btn">Acme Corporation</div><div class="bti">Jennifer Walters<br>45 Commerce Drive, Suite 3<br>New York, NY 10001</div></div>
+  <div class="dts">
+    <div class="dr"><span class="dk">Issued</span><span class="dv">01 Aug 2026</span></div>
+    <div class="dr"><span class="dk">Due</span><span class="dv">15 Aug 2026</span></div>
+    <div class="dr"><span class="dk">Status</span><span class="dv">PAID</span></div>
+  </div>
+</div>
+<table>
+  <thead><tr><th style="width:26px;text-align:center">#</th><th>Description</th><th class="r" style="width:50px">Qty</th><th class="r" style="width:100px">Rate</th><th class="r" style="width:100px">Amount</th></tr></thead>
+  <tbody>
+    <tr><td class="n"><i>1</i></td><td><b>Brand Identity Design</b><span class="ds">Logo, colour palette, typography kit</span></td><td class="r">1</td><td class="r">1,800.00${c}</td><td class="r b">1,800.00${c}</td></tr>
+    <tr><td class="n"><i>2</i></td><td><b>UI / UX Design</b><span class="ds">10 screens, mobile-first, Figma source files</span></td><td class="r">1</td><td class="r">3,500.00${c}</td><td class="r b">3,500.00${c}</td></tr>
+    <tr><td class="n"><i>3</i></td><td><b>Frontend Development</b><span class="ds">React, Next.js, Tailwind CSS — 40 hrs</span></td><td class="r">40</td><td class="r">85.00${c}</td><td class="r b">3,400.00${c}</td></tr>
+    <tr><td class="n"><i>4</i></td><td><b>SEO Optimisation</b><span class="ds">On-page audit + 3-month strategy plan</span></td><td class="r">1</td><td class="r">650.00${c}</td><td class="r b">650.00${c}</td></tr>
+    <tr><td class="n"><i>5</i></td><td><b>Monthly Hosting &amp; Support</b><span class="ds">VPS, monitoring, daily backups</span></td><td class="r">3</td><td class="r">120.00${c}</td><td class="r b">360.00${c}</td></tr>
+  </tbody>
+</table>
+<div class="bot">
+  <div class="nt">Payment due within 14 days of invoice date.<br>Bank transfer only — account details on file.<br>Late payments may incur a 1.5% monthly fee.</div>
+  <div>
+    <div class="tr"><span>Subtotal</span><span>9,710.00${c}</span></div>
+    <div class="tr"><span>Discount (5%)</span><span>−485.50${c}</span></div>
+    <div class="tr"><span>Tax (15%)</span><span>+1,383.67${c}</span></div>
+    <div class="rule2"></div>
+    <div class="gr"><span>Total</span><span>10,608.17${c}</span></div>
+  </div>
+</div>
+<div class="ft">Invoice INV-0024 &nbsp;·&nbsp; ${biz} &nbsp;·&nbsp; 01 Aug 2026</div>
+</div></body></html>`;
+}
+
+// ── Template 5: Compact ── card info grid, teal accent chips ──────────────────
+function _iTPLCompact(tpl, mg, cur) {
+  const a = tpl.accent, { biz, addr, c } = _iTPLDummy(cur);
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Inter,Arial,sans-serif;font-size:12px;color:#0f172a;background:#fff;${bodyPos}}
+.pg{width:794px;padding:${mg.top}mm ${mg.right}mm ${mg.bot}mm ${mg.left}mm;${pgStack}}
+.topbar{background:${a};border-radius:9px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
+.tb-biz{font-size:18px;font-weight:900;color:#fff}
+.tb-addr{font-size:10px;color:rgba(255,255,255,.72);margin-top:3px}
+.tb-il{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:rgba(255,255,255,.65);margin-bottom:3px;text-align:right}
+.tb-in{font-size:22px;font-weight:900;color:#fff;text-align:right}
+.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px}
+.gc{padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:7px;border-left:3px solid ${a}}
+.gcl{font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:#94a3b8;margin-bottom:4px}
+.gcv{font-size:12px;font-weight:800;color:#0f172a}
+.bt-cell{grid-column:span 2;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:7px;border-left:3px solid ${a}}
+table{width:100%;border-collapse:collapse;margin-bottom:18px}
+thead th{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:${a};padding:8px 10px;border-bottom:2px solid ${a};background:${a}14}
+thead th.r{text-align:right}
+tbody td{font-size:11px;padding:8px 10px;border-bottom:1px solid #f1f5f9}
+tbody tr:nth-child(even) td{background:${a}08}
+td.n{color:#94a3b8;text-align:center;width:26px}td.r{text-align:right}td.b{font-weight:700}
+.ds{font-size:10px;color:#94a3b8;display:block;margin-top:1px}
+.bot{display:grid;grid-template-columns:1fr 255px;gap:16px}
+.nb{padding:12px;border:1.5px solid #e2e8f0;border-radius:7px;background:#f8fafc}
+.nl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#94a3b8;margin-bottom:5px}
+.nt{font-size:11px;color:#64748b;line-height:1.55}
+.tc{border:1.5px solid #e2e8f0;border-radius:7px;overflow:hidden}
+.tr{display:flex;justify-content:space-between;font-size:11px;padding:8px 12px;border-bottom:1px solid #f1f5f9;color:#475569}
+.tr:last-child{border-bottom:none}.tr span:first-child{color:#64748b}
+.gr{background:${a};font-weight:900;font-size:14px}
+.gr span{color:#fff!important}
+.ft{margin-top:16px;padding-top:10px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:10px;color:#94a3b8}
+</style></head><body>${lhLayer}<div class="pg">
+<div class="topbar">
+  <div><div class="tb-biz">${biz}</div><div class="tb-addr">${addr}</div></div>
+  <div><div class="tb-il">Invoice</div><div class="tb-in">INV-0024</div></div>
+</div>
+<div class="grid4">
+  <div class="bt-cell" style="grid-column:span 2">
+    <div class="gcl">Billed To</div>
+    <div style="font-size:14px;font-weight:800;margin-bottom:3px">Acme Corporation</div>
+    <div style="font-size:11px;color:#64748b">Jennifer Walters · 45 Commerce Drive, New York NY 10001</div>
+  </div>
+  <div class="gc"><div class="gcl">Issue Date</div><div class="gcv">01 Aug 2026</div></div>
+  <div class="gc"><div class="gcl">Due Date</div><div class="gcv">15 Aug 2026</div></div>
+  <div class="gc"><div class="gcl">Status</div><div class="gcv" style="color:#15803d">Paid ✓</div></div>
+  <div class="gc"><div class="gcl">Amount</div><div class="gcv" style="color:${a}">10,608.17${c}</div></div>
+</div>
+<table>
+  <thead><tr><th style="width:26px;text-align:center">#</th><th>Description</th><th class="r" style="width:50px">Qty</th><th class="r" style="width:100px">Unit Price</th><th class="r" style="width:100px">Total</th></tr></thead>
+  <tbody>
+    <tr><td class="n">1</td><td><b>Brand Identity Design</b><span class="ds">Logo, colour palette, typography kit</span></td><td class="r">1</td><td class="r">1,800.00${c}</td><td class="r b">1,800.00${c}</td></tr>
+    <tr><td class="n">2</td><td><b>UI / UX Design</b><span class="ds">10 screens, mobile-first, Figma source files</span></td><td class="r">1</td><td class="r">3,500.00${c}</td><td class="r b">3,500.00${c}</td></tr>
+    <tr><td class="n">3</td><td><b>Frontend Development</b><span class="ds">React, Next.js, Tailwind CSS — 40 hrs</span></td><td class="r">40</td><td class="r">85.00${c}</td><td class="r b">3,400.00${c}</td></tr>
+    <tr><td class="n">4</td><td><b>SEO Optimisation</b><span class="ds">On-page audit + 3-month strategy plan</span></td><td class="r">1</td><td class="r">650.00${c}</td><td class="r b">650.00${c}</td></tr>
+    <tr><td class="n">5</td><td><b>Monthly Hosting &amp; Support</b><span class="ds">VPS, monitoring, daily backups</span></td><td class="r">3</td><td class="r">120.00${c}</td><td class="r b">360.00${c}</td></tr>
+  </tbody>
+</table>
+<div class="bot">
+  <div class="nb"><div class="nl">Notes &amp; Terms</div><div class="nt">Payment due within 14 days.<br>Bank transfer only — details on file.<br>Thank you for your business!</div></div>
+  <div class="tc">
+    <div class="tr"><span>Subtotal</span><span>9,710.00${c}</span></div>
+    <div class="tr"><span>Discount (5%)</span><span style="color:#ef4444">−485.50${c}</span></div>
+    <div class="tr"><span>Tax (15%)</span><span>+1,383.67${c}</span></div>
+    <div class="tr gr"><span>Total Due</span><span>10,608.17${c}</span></div>
+  </div>
+</div>
+<div class="ft"><span>INV-0024 · ${biz}</span><span>01 Aug 2026</span></div>
+</div></body></html>`;
+}
+
+// ── Template 6: Executive ── dark navy header, gold accent, premium ───────────
+function _iTPLExecutive(tpl, mg, cur) {
+  const a = tpl.accent; // gold #c7a84f
+  const dk = '#0f172a'; // dark navy
+  const { biz, addr, c } = _iTPLDummy(cur);
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Inter,Arial,sans-serif;font-size:12px;color:#0f172a;background:#fff;${bodyPos}}
+.pg{width:794px;min-height:1123px;display:flex;flex-direction:column;${pgStack}}
+.hdr{background:${dk};padding:30px ${mg.right}mm 26px ${mg.left}mm}
+.hdr-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px}
+.biz-n{font-size:22px;font-weight:900;color:#fff;letter-spacing:-.01em}
+.biz-i{font-size:10px;color:rgba(255,255,255,.45);margin-top:5px;line-height:1.7}
+.il{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.15em;color:${a};margin-bottom:5px;text-align:right}
+.in{font-size:28px;font-weight:900;color:#fff;text-align:right;letter-spacing:-.01em}
+.hdr-rule{height:1px;background:${a};opacity:.45;margin-bottom:16px}
+.hdr-meta{display:flex;gap:0}
+.hm{border-left:2px solid ${a};padding:0 0 0 12px;margin-right:24px}
+.hml{font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:rgba(255,255,255,.4);margin-bottom:3px}
+.hmv{font-size:12px;font-weight:700;color:#fff}
+.body{flex:1;padding:22px ${mg.right}mm ${mg.bot}mm ${mg.left}mm}
+.bt{margin-bottom:20px;padding:13px 15px;border:1px solid #e2e8f0;border-radius:6px;border-left:3px solid ${a}}
+.btl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#94a3b8;margin-bottom:5px}
+.btn{font-size:14px;font-weight:800;margin-bottom:3px}
+.bti{font-size:11px;color:#64748b;line-height:1.5}
+table{width:100%;border-collapse:collapse;margin-bottom:20px}
+thead th{background:${dk};color:${a};font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:9px 10px}
+thead th.r{text-align:right}
+tbody td{font-size:11px;padding:9px 10px;border-bottom:1px solid #e2e8f0}
+tbody tr:nth-child(even) td{background:#f8fafc}
+td.n{color:#94a3b8;text-align:center;width:26px}td.r{text-align:right}td.b{font-weight:700}
+.ds{font-size:10px;color:#94a3b8;display:block;margin-top:1px}
+.bot{display:grid;grid-template-columns:1fr 248px;gap:20px}
+.nb{padding:13px;border:1px solid #e2e8f0;border-radius:6px;background:#f8fafc}
+.nl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#94a3b8;margin-bottom:5px}
+.nt{font-size:11px;color:#64748b;line-height:1.55}
+.tr{display:flex;justify-content:space-between;font-size:11px;padding:5px 0;border-bottom:1px solid #f1f5f9;color:#475569}
+.tr:last-child{border-bottom:none}.tr span:first-child{color:#64748b}
+.gr{font-size:15px;font-weight:900;border-top:2px solid ${a};margin-top:4px;padding-top:9px}
+.gr span:last-child{color:${a}}
+.ft{margin-top:22px;padding-top:12px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:10px;color:#94a3b8}
+</style></head><body>${lhLayer}<div class="pg">
+<div class="hdr">
+  <div class="hdr-top">
+    <div><div class="biz-n">${biz}</div><div class="biz-i">${addr}<br>invoices@example.com · +1 555 000-0001</div></div>
+    <div><div class="il">Invoice</div><div class="in">INV-0024</div></div>
+  </div>
+  <div class="hdr-rule"></div>
+  <div class="hdr-meta">
+    <div class="hm"><div class="hml">Issue Date</div><div class="hmv">01 Aug 2026</div></div>
+    <div class="hm"><div class="hml">Due Date</div><div class="hmv">15 Aug 2026</div></div>
+    <div class="hm"><div class="hml">Status</div><div class="hmv" style="color:#4ade80">Paid</div></div>
+  </div>
+</div>
+<div class="body">
+  <div class="bt"><div class="btl">Billed To</div><div class="btn">Acme Corporation</div><div class="bti">Jennifer Walters · 45 Commerce Drive, Suite 3 · New York, NY 10001 · jennifer@acme.com</div></div>
+  <table>
+    <thead><tr><th style="width:26px;text-align:center">#</th><th>Description</th><th class="r" style="width:50px">Qty</th><th class="r" style="width:100px">Unit Price</th><th class="r" style="width:100px">Total</th></tr></thead>
+    <tbody>
+      <tr><td class="n">1</td><td><b>Brand Identity Design</b><span class="ds">Logo, colour palette, typography kit</span></td><td class="r">1</td><td class="r">1,800.00${c}</td><td class="r b">1,800.00${c}</td></tr>
+      <tr><td class="n">2</td><td><b>UI / UX Design</b><span class="ds">10 screens, mobile-first, Figma source files</span></td><td class="r">1</td><td class="r">3,500.00${c}</td><td class="r b">3,500.00${c}</td></tr>
+      <tr><td class="n">3</td><td><b>Frontend Development</b><span class="ds">React, Next.js, Tailwind CSS — 40 hrs</span></td><td class="r">40</td><td class="r">85.00${c}</td><td class="r b">3,400.00${c}</td></tr>
+      <tr><td class="n">4</td><td><b>SEO Optimisation</b><span class="ds">On-page audit + 3-month strategy plan</span></td><td class="r">1</td><td class="r">650.00${c}</td><td class="r b">650.00${c}</td></tr>
+      <tr><td class="n">5</td><td><b>Monthly Hosting &amp; Support</b><span class="ds">VPS, monitoring, daily backups</span></td><td class="r">3</td><td class="r">120.00${c}</td><td class="r b">360.00${c}</td></tr>
+    </tbody>
+  </table>
+  <div class="bot">
+    <div class="nb"><div class="nl">Notes &amp; Terms</div><div class="nt">Payment due within 14 days.<br>Bank transfer only — details on file.<br>Thank you for your business!</div></div>
+    <div>
+      <div class="tr"><span>Subtotal</span><span>9,710.00${c}</span></div>
+      <div class="tr"><span>Discount (5%)</span><span style="color:#ef4444">−485.50${c}</span></div>
+      <div class="tr"><span>Tax (15%)</span><span>+1,383.67${c}</span></div>
+      <div class="tr gr"><span>Total Due</span><span>10,608.17${c}</span></div>
+    </div>
+  </div>
+  <div class="ft"><span>INV-0024 · ${biz}</span><span>${biz}</span></div>
+</div>
+</div></body></html>`;
+}
+
+// ── Invoice document builder with REAL invoice data ───────────────────────
+// Builds the same HTML as the 6 template builders but populated with actual
+// invoice fields (invoice_number, customer_name, items, totals, etc.)
+function _invBuildActualDoc(inv, tpl, mg, cur, lhDataUrl = null) {
+  const a    = tpl.accent;
+  const biz  = escHtml(state.receiptSettings?.business_name        || 'Your Business');
+  const addr = escHtml(state.receiptSettings?.receipt_address_line || '');
+  const c    = cur ? ' ' + cur : '';
+  const fmt  = n => parseFloat(n || 0).toFixed(2);
+
+  const invNum  = escHtml(inv.invoice_number || '');
+  const issDate = escHtml(inv.issue_date     || '');
+  const dueDate = escHtml(inv.due_date       || '—');
+  const cust    = escHtml(inv.customer_name  || 'Walk-in Customer');
+  const sLabel  = escHtml(inv.status_label   || inv.status || '');
+  const sColor  = ({ paid:'#15803d', overdue:'#ef4444', sent:'#0891b2', cancelled:'#ef4444' })[inv.status] || '#64748b';
+  const sColorDk= ({ paid:'#4ade80', overdue:'#f87171', sent:'#60a5fa', cancelled:'#f87171' })[inv.status] || '#94a3b8';
+  const notesText = escHtml(inv.notes || 'Thank you for your business!');
+  const sub  = fmt(inv.subtotal);
+  const disc = parseFloat(inv.discount_amount || 0);
+  const tax  = parseFloat(inv.tax_amount      || 0);
+  const tot  = fmt(inv.total);
+
+  const rows = (italic) => (inv.items || []).map((it, i) => {
+    const n   = italic ? `<i>${i + 1}</i>` : (i + 1);
+    const qty = parseFloat(it.quantity) % 1 === 0 ? parseInt(it.quantity) : parseFloat(it.quantity).toFixed(2);
+    const up  = fmt(it.unit_price);
+    const t   = fmt(it.total != null ? it.total : parseFloat(it.unit_price || 0) * parseFloat(it.quantity || 1));
+    return `<tr><td class="n">${n}</td><td><b>${escHtml(it.description || '')}</b></td><td class="r">${qty}</td><td class="r">${up}${c}</td><td class="r b">${t}${c}</td></tr>`;
+  }).join('\n    ');
+
+  const discRow = disc > 0 ? `<div class="tr"><span>Discount</span><span style="color:#ef4444">−${disc.toFixed(2)}${c}</span></div>` : '';
+  const taxRow  = tax  > 0 ? `<div class="tr"><span>Tax</span><span>+${tax.toFixed(2)}${c}</span></div>` : '';
+
+  // Letterhead: absolute image layer behind content (embedded as data URL)
+  const lhLayer   = lhDataUrl
+    ? `<img src="${lhDataUrl}" style="position:absolute;top:0;left:0;width:794px;height:1123px;z-index:0;pointer-events:none;display:block;object-fit:cover;" alt="">`
+    : '';
+  const bodyPos   = lhDataUrl ? 'position:relative;overflow:hidden;' : '';
+  const pgStack   = lhDataUrl ? 'position:relative;z-index:1;' : '';
+
+  if (tpl.id === 'sidebar') {
+    return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Inter,Arial,sans-serif;font-size:12px;color:#0f172a;background:#fff;${bodyPos}}
+.pg{width:794px;min-height:1123px;display:flex;${pgStack}}
+.sb{width:195px;background:${a};padding:30px 16px;flex-shrink:0;display:flex;flex-direction:column}
+.sb-biz{font-size:14px;font-weight:900;color:#fff;line-height:1.2;margin-bottom:4px}
+.sb-addr{font-size:9px;color:rgba(255,255,255,.55);line-height:1.6;margin-bottom:20px}
+.sb-hr{height:1px;background:rgba(255,255,255,.18);margin-bottom:16px}
+.sb-lbl{font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:rgba(255,255,255,.45);margin-bottom:3px}
+.sb-num{font-size:20px;font-weight:900;color:#fff;margin-bottom:14px}
+.sb-badge{display:inline-block;padding:3px 9px;background:rgba(255,255,255,.15);color:#fff;border-radius:20px;font-size:9px;font-weight:700;letter-spacing:.05em;margin-bottom:18px}
+.sb-row{margin-bottom:11px}.sb-dk{font-size:8px;color:rgba(255,255,255,.45);text-transform:uppercase;letter-spacing:.08em;font-weight:700;margin-bottom:2px}
+.sb-dv{font-size:11px;color:#fff;font-weight:600}.sb-amt{font-size:16px;font-weight:900;color:#fff;margin-top:4px}
+.ct{flex:1;padding:${mg.top}mm 18px ${mg.bot}mm 22px;min-width:0}
+.bt{margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid #e2e8f0}
+.btl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#94a3b8;margin-bottom:5px}
+.btn{font-size:14px;font-weight:800;margin-bottom:3px}.bti{font-size:11px;color:#64748b;line-height:1.5}
+table{width:100%;border-collapse:collapse;margin-bottom:18px}
+thead th{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#475569;padding:8px;border-bottom:2px solid ${a}}
+thead th.r{text-align:right}
+tbody td{font-size:11px;padding:7px 8px;border-bottom:1px solid #f1f5f9}
+td.n{color:#94a3b8;text-align:center;width:22px}td.r{text-align:right}td.b{font-weight:700}
+.tot{display:flex;justify-content:flex-end}.ti{width:220px}
+.tr{display:flex;justify-content:space-between;font-size:11px;padding:5px 0;border-bottom:1px solid #f1f5f9;color:#475569}
+.tr:last-child{border-bottom:none}.tr span:first-child{color:#64748b}
+.gr{font-size:14px;font-weight:900;border-top:2.5px solid ${a};margin-top:4px;padding-top:9px}
+.gr span:last-child{color:${a}}
+</style></head><body>${lhLayer}<div class="pg">
+<div class="sb">
+  <div class="sb-biz">${biz}</div><div class="sb-addr">${addr}</div>
+  <div class="sb-hr"></div>
+  <div class="sb-lbl">Invoice</div><div class="sb-num">${invNum}</div>
+  <div class="sb-badge">● ${sLabel}</div>
+  <div class="sb-row"><div class="sb-dk">Issue Date</div><div class="sb-dv">${issDate}</div></div>
+  <div class="sb-row"><div class="sb-dk">Due Date</div><div class="sb-dv">${dueDate}</div></div>
+  <div class="sb-hr" style="margin-top:12px"></div>
+  <div class="sb-row"><div class="sb-dk">Amount Due</div><div class="sb-amt">${tot}${c}</div></div>
+</div>
+<div class="ct">
+  <div class="bt"><div class="btl">Billed To</div><div class="btn">${cust}</div></div>
+  <table><thead><tr><th style="width:22px;text-align:center">#</th><th>Description</th><th class="r" style="width:44px">Qty</th><th class="r" style="width:86px">Price</th><th class="r" style="width:88px">Total</th></tr></thead>
+  <tbody>${rows(false)}</tbody></table>
+  <div class="tot"><div class="ti">
+    <div class="tr"><span>Subtotal</span><span>${sub}${c}</span></div>
+    ${discRow}${taxRow}
+    <div class="tr gr"><span>Total Due</span><span>${tot}${c}</span></div>
+  </div></div>
+</div></div></body></html>`;
+  }
+
+  if (tpl.id === 'bold') {
+    return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Inter,Arial,sans-serif;font-size:12px;color:#0f172a;background:#fff;${bodyPos}}
+.pg{width:794px;min-height:1123px;display:flex;flex-direction:column;${pgStack}}
+.banner{background:${a};padding:28px ${mg.right}mm 26px ${mg.left}mm;display:flex;justify-content:space-between;align-items:flex-end}
+.b-biz{font-size:20px;font-weight:900;color:#fff}.b-addr{font-size:10px;color:rgba(255,255,255,.7);margin-top:4px;line-height:1.5}
+.b-num{font-size:38px;font-weight:900;color:#fff;letter-spacing:-.02em;line-height:1;text-align:right}
+.b-lbl{font-size:10px;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.15em;font-weight:700;margin-bottom:4px;text-align:right}
+.body{padding:22px ${mg.right}mm ${mg.bot}mm ${mg.left}mm;flex:1}
+.cards{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px}
+.card{padding:13px 15px;border:1.5px solid #e2e8f0;border-radius:7px}
+.cl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#94a3b8;margin-bottom:5px}
+.cn{font-size:14px;font-weight:800;margin-bottom:3px}.ci{font-size:11px;color:#64748b;line-height:1.5}
+table{width:100%;border-collapse:collapse;margin-bottom:20px}
+thead th{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#64748b;padding:8px 0;border-bottom:2px solid ${a}}
+thead th.r{text-align:right}
+tbody td{font-size:11px;padding:9px 0;border-bottom:1px solid #f1f5f9}
+td.n{color:#94a3b8;text-align:center;width:26px}td.r{text-align:right}td.b{font-weight:700}
+.bot{display:grid;grid-template-columns:1fr 255px;gap:18px}
+.nb{padding:13px;border:1.5px solid #e2e8f0;border-radius:7px;background:#f8fafc}
+.nl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#94a3b8;margin-bottom:5px}
+.nt{font-size:11px;color:#64748b;line-height:1.55}
+.tc{border:1.5px solid #e2e8f0;border-radius:7px;overflow:hidden}
+.tr{display:flex;justify-content:space-between;font-size:11px;padding:8px 13px;border-bottom:1px solid #f1f5f9;color:#475569}
+.tr:last-child{border-bottom:none}.tr span:first-child{color:#64748b}
+.gr{background:${a};color:#fff!important;font-weight:900;font-size:14px}.gr span{color:#fff!important}
+</style></head><body>${lhLayer}<div class="pg">
+<div class="banner">
+  <div><div class="b-biz">${biz}</div><div class="b-addr">${addr}</div></div>
+  <div><div class="b-lbl">Invoice</div><div class="b-num">${invNum}</div></div>
+</div>
+<div class="body">
+  <div class="cards">
+    <div class="card"><div class="cl">Billed To</div><div class="cn">${cust}</div></div>
+    <div class="card"><div class="cl">Invoice Details</div><div class="ci" style="line-height:1.9"><b>Issue Date</b> &nbsp; ${issDate}<br><b>Due Date</b> &nbsp;&nbsp; ${dueDate}<br><b>Status</b> &nbsp;&nbsp;&nbsp;&nbsp; <span style="color:${sColor};font-weight:700">${sLabel}</span></div></div>
+  </div>
+  <table><thead><tr><th style="width:26px;text-align:center">#</th><th>Description</th><th class="r" style="width:50px">Qty</th><th class="r" style="width:100px">Unit Price</th><th class="r" style="width:100px">Total</th></tr></thead>
+  <tbody>${rows(false)}</tbody></table>
+  <div class="bot">
+    <div class="nb"><div class="nl">Notes</div><div class="nt">${notesText}</div></div>
+    <div class="tc">
+      <div class="tr"><span>Subtotal</span><span>${sub}${c}</span></div>
+      ${discRow}${taxRow}
+      <div class="tr gr"><span>Total Due</span><span>${tot}${c}</span></div>
+    </div>
+  </div>
+</div></div></body></html>`;
+  }
+
+  if (tpl.id === 'minimal') {
+    return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Georgia,'Times New Roman',serif;font-size:12px;color:#1a1a1a;background:#fff;${bodyPos}}
+.pg{width:794px;padding:${mg.top}mm ${mg.right}mm ${mg.bot}mm ${mg.left}mm;${pgStack}}
+.top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:30px}
+.bn{font-size:18px;font-weight:700;font-family:Georgia,serif}
+.bi{font-size:10px;color:#6b7280;margin-top:5px;line-height:1.7;font-family:Arial,sans-serif}
+.inv-word{font-size:46px;font-weight:700;font-family:Georgia,serif;color:#e5e7eb;line-height:1;text-align:right;letter-spacing:-.02em}
+.inv-ref{font-size:11px;color:#6b7280;text-align:right;margin-top:5px;font-family:Arial,sans-serif}
+.rule{height:1.5px;background:#1a1a1a;margin-bottom:20px}
+.meta{display:flex;justify-content:space-between;margin-bottom:28px}
+.btl{font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.16em;color:#9ca3af;margin-bottom:5px;font-family:Arial,sans-serif}
+.btn{font-size:15px;font-weight:700;font-family:Georgia,serif;margin-bottom:3px}
+.dts{text-align:right}
+.dr{display:flex;gap:18px;justify-content:flex-end;font-size:11px;padding:3px 0;font-family:Arial,sans-serif}
+.dk{color:#9ca3af}.dv{font-weight:700;color:#1a1a1a}
+table{width:100%;border-collapse:collapse;margin-bottom:24px;font-family:Arial,sans-serif}
+thead th{font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.14em;color:#9ca3af;padding:0 0 8px;border-bottom:1.5px solid #1a1a1a}
+thead th.r{text-align:right}
+tbody td{font-size:11px;padding:9px 0;border-bottom:1px solid #e5e7eb;vertical-align:top}
+td.n{color:#d1d5db;text-align:center;width:26px;font-style:italic}td.r{text-align:right}td.b{font-weight:700}
+.bot{display:grid;grid-template-columns:1fr 215px;gap:24px}
+.nt{font-size:11px;color:#6b7280;line-height:1.65;font-family:Arial,sans-serif;border-top:1px solid #e5e7eb;padding-top:12px}
+.tr{display:flex;justify-content:space-between;font-size:11px;padding:5px 0;color:#6b7280;font-family:Arial,sans-serif}
+.rule2{height:1px;background:#e5e7eb;margin:4px 0}
+.gr{display:flex;justify-content:space-between;font-size:16px;font-weight:700;padding-top:8px;font-family:Georgia,serif;color:#1a1a1a;border-top:1.5px solid #1a1a1a;margin-top:4px}
+.ft{margin-top:28px;padding-top:12px;border-top:1px solid #e5e7eb;font-size:9px;color:#9ca3af;text-align:center;letter-spacing:.06em;font-family:Arial,sans-serif;text-transform:uppercase}
+</style></head><body>${lhLayer}<div class="pg">
+<div class="top">
+  <div><div class="bn">${biz}</div><div class="bi">${addr}</div></div>
+  <div><div class="inv-word">INVOICE</div><div class="inv-ref">${invNum} / ${issDate}</div></div>
+</div>
+<div class="rule"></div>
+<div class="meta">
+  <div><div class="btl">Billed To</div><div class="btn">${cust}</div></div>
+  <div class="dts">
+    <div class="dr"><span class="dk">Issued</span><span class="dv">${issDate}</span></div>
+    <div class="dr"><span class="dk">Due</span><span class="dv">${dueDate}</span></div>
+    <div class="dr"><span class="dk">Status</span><span class="dv">${sLabel}</span></div>
+  </div>
+</div>
+<table><thead><tr><th style="width:26px;text-align:center">#</th><th>Description</th><th class="r" style="width:50px">Qty</th><th class="r" style="width:100px">Rate</th><th class="r" style="width:100px">Amount</th></tr></thead>
+<tbody>${rows(true)}</tbody></table>
+<div class="bot">
+  <div class="nt">${notesText}</div>
+  <div>
+    <div class="tr"><span>Subtotal</span><span>${sub}${c}</span></div>
+    ${discRow}${taxRow}
+    <div class="rule2"></div>
+    <div class="gr"><span>Total</span><span>${tot}${c}</span></div>
+  </div>
+</div>
+<div class="ft">Invoice ${invNum} &nbsp;·&nbsp; ${biz} &nbsp;·&nbsp; ${issDate}</div>
+</div></body></html>`;
+  }
+
+  if (tpl.id === 'compact') {
+    return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Inter,Arial,sans-serif;font-size:12px;color:#0f172a;background:#fff;${bodyPos}}
+.pg{width:794px;padding:${mg.top}mm ${mg.right}mm ${mg.bot}mm ${mg.left}mm;${pgStack}}
+.topbar{background:${a};border-radius:9px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
+.tb-biz{font-size:18px;font-weight:900;color:#fff}.tb-addr{font-size:10px;color:rgba(255,255,255,.72);margin-top:3px}
+.tb-il{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:rgba(255,255,255,.65);margin-bottom:3px;text-align:right}
+.tb-in{font-size:22px;font-weight:900;color:#fff;text-align:right}
+.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px}
+.gc{padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:7px;border-left:3px solid ${a}}
+.gcl{font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:#94a3b8;margin-bottom:4px}
+.gcv{font-size:12px;font-weight:800;color:#0f172a}
+.bt-cell{grid-column:span 2;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:7px;border-left:3px solid ${a}}
+table{width:100%;border-collapse:collapse;margin-bottom:18px}
+thead th{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:${a};padding:8px 10px;border-bottom:2px solid ${a};background:${a}14}
+thead th.r{text-align:right}
+tbody td{font-size:11px;padding:8px 10px;border-bottom:1px solid #f1f5f9}
+tbody tr:nth-child(even) td{background:${a}08}
+td.n{color:#94a3b8;text-align:center;width:26px}td.r{text-align:right}td.b{font-weight:700}
+.bot{display:grid;grid-template-columns:1fr 255px;gap:16px}
+.nb{padding:12px;border:1.5px solid #e2e8f0;border-radius:7px;background:#f8fafc}
+.nl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#94a3b8;margin-bottom:5px}
+.nt{font-size:11px;color:#64748b;line-height:1.55}
+.tc{border:1.5px solid #e2e8f0;border-radius:7px;overflow:hidden}
+.tr{display:flex;justify-content:space-between;font-size:11px;padding:8px 12px;border-bottom:1px solid #f1f5f9;color:#475569}
+.tr:last-child{border-bottom:none}.tr span:first-child{color:#64748b}
+.gr{background:${a};font-weight:900;font-size:14px}.gr span{color:#fff!important}
+.ft{margin-top:16px;padding-top:10px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:10px;color:#94a3b8}
+</style></head><body>${lhLayer}<div class="pg">
+<div class="topbar">
+  <div><div class="tb-biz">${biz}</div><div class="tb-addr">${addr}</div></div>
+  <div><div class="tb-il">Invoice</div><div class="tb-in">${invNum}</div></div>
+</div>
+<div class="grid4">
+  <div class="bt-cell"><div class="gcl">Billed To</div><div style="font-size:14px;font-weight:800;margin-bottom:3px">${cust}</div></div>
+  <div class="gc"><div class="gcl">Issue Date</div><div class="gcv">${issDate}</div></div>
+  <div class="gc"><div class="gcl">Due Date</div><div class="gcv">${dueDate}</div></div>
+  <div class="gc"><div class="gcl">Status</div><div class="gcv" style="color:${sColor}">${sLabel}</div></div>
+  <div class="gc"><div class="gcl">Amount</div><div class="gcv" style="color:${a}">${tot}${c}</div></div>
+</div>
+<table><thead><tr><th style="width:26px;text-align:center">#</th><th>Description</th><th class="r" style="width:50px">Qty</th><th class="r" style="width:100px">Unit Price</th><th class="r" style="width:100px">Total</th></tr></thead>
+<tbody>${rows(false)}</tbody></table>
+<div class="bot">
+  <div class="nb"><div class="nl">Notes</div><div class="nt">${notesText}</div></div>
+  <div class="tc">
+    <div class="tr"><span>Subtotal</span><span>${sub}${c}</span></div>
+    ${discRow}${taxRow}
+    <div class="tr gr"><span>Total Due</span><span>${tot}${c}</span></div>
+  </div>
+</div>
+<div class="ft"><span>${invNum} · ${biz}</span><span>${issDate}</span></div>
+</div></body></html>`;
+  }
+
+  if (tpl.id === 'executive') {
+    const dk = '#0f172a';
+    return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Inter,Arial,sans-serif;font-size:12px;color:#0f172a;background:#fff;${bodyPos}}
+.pg{width:794px;min-height:1123px;display:flex;flex-direction:column;${pgStack}}
+.hdr{background:${dk};padding:30px ${mg.right}mm 26px ${mg.left}mm}
+.hdr-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px}
+.biz-n{font-size:22px;font-weight:900;color:#fff;letter-spacing:-.01em}
+.biz-i{font-size:10px;color:rgba(255,255,255,.45);margin-top:5px;line-height:1.7}
+.il{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.15em;color:${a};margin-bottom:5px;text-align:right}
+.in{font-size:28px;font-weight:900;color:#fff;text-align:right;letter-spacing:-.01em}
+.hdr-rule{height:1px;background:${a};opacity:.45;margin-bottom:16px}
+.hdr-meta{display:flex;gap:0}
+.hm{border-left:2px solid ${a};padding:0 0 0 12px;margin-right:24px}
+.hml{font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:rgba(255,255,255,.4);margin-bottom:3px}
+.hmv{font-size:12px;font-weight:700;color:#fff}
+.body{flex:1;padding:22px ${mg.right}mm ${mg.bot}mm ${mg.left}mm}
+.bt{margin-bottom:20px;padding:13px 15px;border:1px solid #e2e8f0;border-radius:6px;border-left:3px solid ${a}}
+.btl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#94a3b8;margin-bottom:5px}
+.btn{font-size:14px;font-weight:800;margin-bottom:3px}.bti{font-size:11px;color:#64748b;line-height:1.5}
+table{width:100%;border-collapse:collapse;margin-bottom:20px}
+thead th{background:${dk};color:${a};font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:9px 10px}
+thead th.r{text-align:right}
+tbody td{font-size:11px;padding:9px 10px;border-bottom:1px solid #e2e8f0}
+tbody tr:nth-child(even) td{background:#f8fafc}
+td.n{color:#94a3b8;text-align:center;width:26px}td.r{text-align:right}td.b{font-weight:700}
+.bot{display:grid;grid-template-columns:1fr 248px;gap:20px}
+.nb{padding:13px;border:1px solid #e2e8f0;border-radius:6px;background:#f8fafc}
+.nl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#94a3b8;margin-bottom:5px}
+.nt{font-size:11px;color:#64748b;line-height:1.55}
+.tr{display:flex;justify-content:space-between;font-size:11px;padding:5px 0;border-bottom:1px solid #f1f5f9;color:#475569}
+.tr:last-child{border-bottom:none}.tr span:first-child{color:#64748b}
+.gr{font-size:15px;font-weight:900;border-top:2px solid ${a};margin-top:4px;padding-top:9px}
+.gr span:last-child{color:${a}}
+.ft{margin-top:22px;padding-top:12px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:10px;color:#94a3b8}
+</style></head><body>${lhLayer}<div class="pg">
+<div class="hdr">
+  <div class="hdr-top">
+    <div><div class="biz-n">${biz}</div><div class="biz-i">${addr}</div></div>
+    <div><div class="il">Invoice</div><div class="in">${invNum}</div></div>
+  </div>
+  <div class="hdr-rule"></div>
+  <div class="hdr-meta">
+    <div class="hm"><div class="hml">Issue Date</div><div class="hmv">${issDate}</div></div>
+    <div class="hm"><div class="hml">Due Date</div><div class="hmv">${dueDate}</div></div>
+    <div class="hm"><div class="hml">Status</div><div class="hmv" style="color:${sColorDk}">${sLabel}</div></div>
+  </div>
+</div>
+<div class="body">
+  <div class="bt"><div class="btl">Billed To</div><div class="btn">${cust}</div></div>
+  <table><thead><tr><th style="width:26px;text-align:center">#</th><th>Description</th><th class="r" style="width:50px">Qty</th><th class="r" style="width:100px">Unit Price</th><th class="r" style="width:100px">Total</th></tr></thead>
+  <tbody>${rows(false)}</tbody></table>
+  <div class="bot">
+    <div class="nb"><div class="nl">Notes</div><div class="nt">${notesText}</div></div>
+    <div>
+      <div class="tr"><span>Subtotal</span><span>${sub}${c}</span></div>
+      ${discRow}${taxRow}
+      <div class="tr gr"><span>Total Due</span><span>${tot}${c}</span></div>
+    </div>
+  </div>
+  <div class="ft"><span>${invNum} · ${biz}</span><span>${biz}</span></div>
+</div></div></body></html>`;
+  }
+
+  // Classic (default / fallback)
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Inter,Arial,sans-serif;font-size:12px;color:#0f172a;background:#fff;${bodyPos}}
+.pg{width:794px;padding:${mg.top}mm ${mg.right}mm ${mg.bot}mm ${mg.left}mm;${pgStack}}
+.top{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:20px;border-bottom:2.5px solid ${a};margin-bottom:24px}
+.bn{font-size:21px;font-weight:900;color:${a}}.bi{font-size:10px;color:#64748b;margin-top:5px;line-height:1.6}
+.it{font-size:30px;font-weight:900;text-transform:uppercase;color:${a};text-align:right}
+.in{font-size:12px;color:#64748b;text-align:right;margin-top:4px}
+.meta{display:grid;grid-template-columns:1fr auto;gap:24px;margin-bottom:22px}
+.btl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#94a3b8;margin-bottom:6px}
+.btn{font-size:14px;font-weight:800}.bti{font-size:11px;color:#64748b;margin-top:3px;line-height:1.5}
+.dts{min-width:205px}
+.dr{display:flex;justify-content:space-between;font-size:11px;padding:6px 0;border-bottom:1px dashed #e2e8f0}
+.dr:last-child{border-bottom:none}.dk{color:#94a3b8}.dv{font-weight:700}
+table{width:100%;border-collapse:collapse;margin-bottom:20px}
+thead th{background:${a};color:#fff;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:9px 10px}
+thead th.r{text-align:right}
+tbody td{font-size:11px;padding:8px 10px;border-bottom:1px solid #e2e8f0}
+tbody tr:nth-child(even) td{background:#f8fafc}
+td.n{color:#94a3b8;text-align:center;width:26px}td.r{text-align:right}td.b{font-weight:700}
+.bot{display:grid;grid-template-columns:1fr 248px;gap:20px}
+.nb{padding:13px;border:1px solid #e2e8f0;border-radius:6px;background:#f8fafc}
+.nl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#94a3b8;margin-bottom:5px}
+.nt{font-size:11px;color:#64748b;line-height:1.55}
+.tr{display:flex;justify-content:space-between;font-size:11px;padding:5px 0;border-bottom:1px solid #f1f5f9;color:#475569}
+.tr:last-child{border-bottom:none}.tr span:first-child{color:#64748b}
+.gr{font-size:15px;font-weight:900;border-top:2.5px solid ${a};margin-top:4px;padding-top:9px}
+.gr span:last-child{color:${a}}
+.ft{margin-top:22px;padding-top:12px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:10px;color:#94a3b8}
+</style></head><body>${lhLayer}<div class="pg">
+<div class="top">
+  <div><div class="bn">${biz}</div><div class="bi">${addr}</div></div>
+  <div><div class="it">Invoice</div><div class="in">${invNum} · ${issDate}</div></div>
+</div>
+<div class="meta">
+  <div><div class="btl">Billed To</div><div class="btn">${cust}</div></div>
+  <div class="dts">
+    <div class="dr"><span class="dk">Issue Date</span><span class="dv">${issDate}</span></div>
+    <div class="dr"><span class="dk">Due Date</span><span class="dv">${dueDate}</span></div>
+    <div class="dr"><span class="dk">Status</span><span class="dv" style="color:${sColor}">${sLabel}</span></div>
+  </div>
+</div>
+<table><thead><tr><th style="width:26px;text-align:center">#</th><th>Description</th><th class="r" style="width:50px">Qty</th><th class="r" style="width:100px">Unit Price</th><th class="r" style="width:100px">Total</th></tr></thead>
+<tbody>${rows(false)}</tbody></table>
+<div class="bot">
+  <div class="nb"><div class="nl">Notes</div><div class="nt">${notesText}</div></div>
+  <div>
+    <div class="tr"><span>Subtotal</span><span>${sub}${c}</span></div>
+    ${discRow}${taxRow}
+    <div class="tr gr"><span>Total Due</span><span>${tot}${c}</span></div>
+  </div>
+</div>
+<div class="ft"><span>${invNum} · ${biz}</span><span>${biz}</span></div>
+</div></body></html>`;
+}
+
+function _isetupReadMg() {
+  return {
+    top:   parseInt($('#isetup-mg-top')?.value)   ?? 20,
+    bot:   parseInt($('#isetup-mg-bot')?.value)   ?? 20,
+    left:  parseInt($('#isetup-mg-left')?.value)  ?? 15,
+    right: parseInt($('#isetup-mg-right')?.value) ?? 15,
+  };
+}
+
+// Pan / zoom state
+let _isetupFitSc = 0.5;
+let _isetupZoom  = 1.0;
+let _isetupPanX  = 0;
+let _isetupPanY  = 0;
+
+function _isetupApplyTransform() {
+  const sc = $('#isetup-prev-scaler');
+  if (!sc) return;
+  const s = _isetupFitSc * _isetupZoom;
+  sc.style.transform = `translate(${_isetupPanX}px,${_isetupPanY}px) scale(${s})`;
+}
+
+function _isetupUpdateZoomLabel() {
+  const el = $('#isetup-zoom-label');
+  if (el) el.textContent = Math.round(_isetupZoom * 100) + '%';
+}
+
+function _isetupResetView() {
+  const bg = $('#isetup-prev-bg');
+  if (!bg) return;
+  const w = bg.clientWidth, h = bg.clientHeight;
+  if (!w || !h) return;
+  _isetupFitSc = Math.min((w - 40) / 794, (h - 40) / 1123);
+  _isetupZoom  = 1;
+  _isetupPanX  = (w - 794 * _isetupFitSc) / 2;
+  _isetupPanY  = (h - 1123 * _isetupFitSc) / 2;
+  _isetupApplyTransform();
+  _isetupUpdateZoomLabel();
+}
+
+function _isetupZoomAt(newZoom, pivotX, pivotY) {
+  const bg = $('#isetup-prev-bg');
+  newZoom = Math.max(0.25, Math.min(6, newZoom));
+  if (pivotX === undefined) {
+    pivotX = (bg ? bg.clientWidth  : 600) / 2;
+    pivotY = (bg ? bg.clientHeight : 500) / 2;
+  }
+  const ratio = newZoom / _isetupZoom;
+  _isetupPanX = pivotX - (pivotX - _isetupPanX) * ratio;
+  _isetupPanY = pivotY - (pivotY - _isetupPanY) * ratio;
+  _isetupZoom = newZoom;
+  _isetupApplyTransform();
+  _isetupUpdateZoomLabel();
+}
+
+function _isetupUpdatePreview() {
+  const tpl    = INV_TEMPLATES.find(t => t.id === _isetupActiveTpl) || INV_TEMPLATES[0];
+  const mg     = _isetupReadMg();
+  const iframe = $('#isetup-prev-frame');
+  if (!iframe) return;
+  iframe.srcdoc = _isetupBuildPreviewDoc(tpl, mg, state.currency || '');
+  setTimeout(_isetupResetView, 40);
+}
+
+function _isetupRenderTpls() {
+  const list = $('#isetup-tpl-list');
+  if (!list) return;
+  list.innerHTML = INV_TEMPLATES.map(t => `
+    <div class="isetup-tpl-card${t.id === _isetupActiveTpl ? ' active' : ''}" data-tpl-id="${t.id}">
+      <div class="isetup-tpl-swatch" style="background:${t.swatch}"></div>
+      <div class="isetup-tpl-info">
+        <div class="isetup-tpl-name">${t.name}</div>
+        <div class="isetup-tpl-desc">${t.desc}</div>
+      </div>
+      ${t.id === _isetupActiveTpl ? '<i class="fa fa-circle-check isetup-tpl-check"></i>' : ''}
+    </div>`).join('');
+}
+
+async function openInvoiceSetup() {
+  const modal = $('#isetup-modal');
+  if (!modal) return;
+  const cfg = _isetupGetCfg();
+  _isetupActiveTpl = cfg.template;
+
+  // Populate left panel
+  if ($('#isetup-printer'))    $('#isetup-printer').value    = cfg.printer;
+  if ($('#isetup-paper'))      $('#isetup-paper').value      = cfg.paper;
+  if ($('#isetup-mg-top'))     $('#isetup-mg-top').value     = cfg.mgTop;
+  if ($('#isetup-mg-bot'))     $('#isetup-mg-bot').value     = cfg.mgBot;
+  if ($('#isetup-mg-left'))    $('#isetup-mg-left').value    = cfg.mgLeft;
+  if ($('#isetup-mg-right'))   $('#isetup-mg-right').value   = cfg.mgRight;
+  if ($('#isetup-hdr-layout')) $('#isetup-hdr-layout').value = cfg.hdrLayout;
+  if ($('#isetup-logo-pos'))   $('#isetup-logo-pos').value   = cfg.logoPos;
+  const orientEl = document.querySelector(`input[name="isetup-orient"][value="${cfg.orientation}"]`);
+  if (orientEl) orientEl.checked = true;
+
+  _isetupRenderTpls();
+  modal.style.display = 'flex';
+  // Defer preview render until modal is visible and has dimensions
+  setTimeout(_isetupUpdatePreview, 80);
+}
+
+async function _isetupSave() {
+  const tpl   = _isetupActiveTpl;
+  const orient = document.querySelector('input[name="isetup-orient"]:checked')?.value || 'portrait';
+  const update = {
+    invoice_template:    tpl,
+    invoice_printer:     $('#isetup-printer')?.value    || 'laser_a4',
+    invoice_paper:       $('#isetup-paper')?.value      || 'a4',
+    invoice_orientation: orient,
+    invoice_mg_top:      parseInt($('#isetup-mg-top')?.value)   ?? 20,
+    invoice_mg_bot:      parseInt($('#isetup-mg-bot')?.value)   ?? 20,
+    invoice_mg_left:     parseInt($('#isetup-mg-left')?.value)  ?? 15,
+    invoice_mg_right:    parseInt($('#isetup-mg-right')?.value) ?? 15,
+    invoice_hdr_layout:  $('#isetup-hdr-layout')?.value || 'num-left',
+    invoice_logo_pos:    $('#isetup-logo-pos')?.value   || 'header',
+  };
+  if (state.config) Object.assign(state.config, update);
+  await window.electronAPI.setConfig(update);
+  toast('Invoice setup saved', 'success');
+  $('#isetup-modal').style.display = 'none';
+}
+
+// Wire events
+$('#isetup-close')?.addEventListener('click',  () => { $('#isetup-modal').style.display = 'none'; });
+$('#isetup-cancel')?.addEventListener('click', () => { $('#isetup-modal').style.display = 'none'; });
+$('#isetup-save')?.addEventListener('click', _isetupSave);
+
+$('#isetup-tpl-list')?.addEventListener('click', e => {
+  const card = e.target.closest('[data-tpl-id]');
+  if (!card) return;
+  _isetupActiveTpl = card.dataset.tplId;
+  _isetupRenderTpls();
+  _isetupUpdatePreview();
+});
+
+['isetup-printer','isetup-paper','isetup-mg-top','isetup-mg-bot','isetup-mg-left','isetup-mg-right','isetup-hdr-layout','isetup-logo-pos'].forEach(id => {
+  const el = $('#' + id);
+  if (el) { el.addEventListener('change', _isetupUpdatePreview); el.addEventListener('input', _isetupUpdatePreview); }
+});
+document.querySelectorAll('input[name="isetup-orient"]').forEach(r => r.addEventListener('change', _isetupUpdatePreview));
+
+$('#rb-sal-invoice-setup')?.addEventListener('click', openInvoiceSetup);
+
+// Invoice preview modal controls
+$('#invp-zoom-in')?.addEventListener('click',  () => _invpZoomAt(_invpZoom * 1.25));
+$('#invp-zoom-out')?.addEventListener('click', () => _invpZoomAt(_invpZoom / 1.25));
+$('#invp-zoom-fit')?.addEventListener('click', _invpResetView);
+$('#invp-print')?.addEventListener('click',    () => _invpCurrentInv && _invPrint(_invpCurrentInv));
+$('#invp-close')?.addEventListener('click',    () => { const m = $('#inv-preview-modal'); if (m) m.style.display = 'none'; });
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && $('#inv-preview-modal')?.style.display !== 'none') {
+    $('#inv-preview-modal').style.display = 'none';
+  }
+});
+
+(function _invpBindPanZoom() {
+  const bg = $('#invp-bg');
+  if (!bg) return;
+
+  bg.addEventListener('wheel', e => {
+    e.preventDefault();
+    const rect = bg.getBoundingClientRect();
+    _invpZoomAt(_invpZoom * (e.deltaY < 0 ? 1.12 : 1 / 1.12), e.clientX - rect.left, e.clientY - rect.top);
+  }, { passive: false });
+
+  let dragging = false, dsx = 0, dsy = 0, dpx = 0, dpy = 0;
+  bg.addEventListener('mousedown', e => {
+    if (e.button !== 0) return;
+    dragging = true; dsx = e.clientX; dsy = e.clientY; dpx = _invpPanX; dpy = _invpPanY;
+    bg.classList.add('invp-dragging'); e.preventDefault();
+  });
+  document.addEventListener('mousemove', e => {
+    if (!dragging) return;
+    _invpPanX = dpx + (e.clientX - dsx); _invpPanY = dpy + (e.clientY - dsy);
+    _invpApplyTransform();
+  });
+  document.addEventListener('mouseup', () => {
+    if (dragging) { dragging = false; bg.classList.remove('invp-dragging'); }
+  });
+
+  let lastDist = 0, lastMidX = 0, lastMidY = 0;
+  bg.addEventListener('touchstart', e => {
+    e.preventDefault();
+    if (e.touches.length === 1) {
+      const t = e.touches[0]; dragging = true;
+      dsx = t.clientX; dsy = t.clientY; dpx = _invpPanX; dpy = _invpPanY;
+    } else if (e.touches.length === 2) {
+      dragging = false;
+      const [t1, t2] = e.touches;
+      lastDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+      lastMidX = (t1.clientX + t2.clientX) / 2; lastMidY = (t1.clientY + t2.clientY) / 2;
+    }
+  }, { passive: false });
+  bg.addEventListener('touchmove', e => {
+    e.preventDefault();
+    if (e.touches.length === 1 && dragging) {
+      const t = e.touches[0];
+      _invpPanX = dpx + (t.clientX - dsx); _invpPanY = dpy + (t.clientY - dsy);
+      _invpApplyTransform();
+    } else if (e.touches.length === 2) {
+      const [t1, t2] = e.touches;
+      const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+      const midX = (t1.clientX + t2.clientX) / 2, midY = (t1.clientY + t2.clientY) / 2;
+      const rect = bg.getBoundingClientRect();
+      const px = midX - rect.left, py = midY - rect.top;
+      const nz = Math.max(0.25, Math.min(6, _invpZoom * (dist / lastDist)));
+      const r  = nz / _invpZoom;
+      _invpPanX  = px - (px - _invpPanX) * r + (midX - lastMidX);
+      _invpPanY  = py - (py - _invpPanY) * r + (midY - lastMidY);
+      _invpZoom  = nz; _invpApplyTransform(); _invpUpdateZoomLabel();
+      lastDist = dist; lastMidX = midX; lastMidY = midY;
+    }
+  }, { passive: false });
+  bg.addEventListener('touchend', e => { if (e.touches.length < 1) dragging = false; });
+})();
+
+// Zoom buttons
+$('#isetup-zoom-in')?.addEventListener('click',  () => _isetupZoomAt(_isetupZoom * 1.25));
+$('#isetup-zoom-out')?.addEventListener('click', () => _isetupZoomAt(_isetupZoom / 1.25));
+$('#isetup-zoom-fit')?.addEventListener('click', _isetupResetView);
+
+// Pan / zoom interactions wired once on the preview container
+(function _isetupBindPanZoom() {
+  const bg = $('#isetup-prev-bg');
+  if (!bg) return;
+
+  // ── Mouse wheel zoom ─────────────────────────────────────────────────────
+  bg.addEventListener('wheel', e => {
+    e.preventDefault();
+    const rect   = bg.getBoundingClientRect();
+    const px     = e.clientX - rect.left;
+    const py     = e.clientY - rect.top;
+    const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+    _isetupZoomAt(_isetupZoom * factor, px, py);
+  }, { passive: false });
+
+  // ── Mouse drag pan ───────────────────────────────────────────────────────
+  let dragging = false, dsx = 0, dsy = 0, dpx = 0, dpy = 0;
+
+  bg.addEventListener('mousedown', e => {
+    if (e.button !== 0) return;
+    dragging = true; dsx = e.clientX; dsy = e.clientY;
+    dpx = _isetupPanX; dpy = _isetupPanY;
+    bg.classList.add('isetup-dragging');
+    e.preventDefault();
+  });
+  document.addEventListener('mousemove', e => {
+    if (!dragging) return;
+    _isetupPanX = dpx + (e.clientX - dsx);
+    _isetupPanY = dpy + (e.clientY - dsy);
+    _isetupApplyTransform();
+  });
+  document.addEventListener('mouseup', () => {
+    if (dragging) { dragging = false; bg.classList.remove('isetup-dragging'); }
+  });
+
+  // ── Touch: single-finger pan, two-finger pinch-zoom ──────────────────────
+  let lastDist = 0, lastMidX = 0, lastMidY = 0;
+
+  bg.addEventListener('touchstart', e => {
+    e.preventDefault();
+    if (e.touches.length === 1) {
+      const t = e.touches[0];
+      dragging = true; dsx = t.clientX; dsy = t.clientY;
+      dpx = _isetupPanX; dpy = _isetupPanY;
+    } else if (e.touches.length === 2) {
+      dragging = false;
+      const t1 = e.touches[0], t2 = e.touches[1];
+      lastDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+      lastMidX = (t1.clientX + t2.clientX) / 2;
+      lastMidY = (t1.clientY + t2.clientY) / 2;
+    }
+  }, { passive: false });
+
+  bg.addEventListener('touchmove', e => {
+    e.preventDefault();
+    if (e.touches.length === 1 && dragging) {
+      const t = e.touches[0];
+      _isetupPanX = dpx + (t.clientX - dsx);
+      _isetupPanY = dpy + (t.clientY - dsy);
+      _isetupApplyTransform();
+    } else if (e.touches.length === 2) {
+      const t1 = e.touches[0], t2 = e.touches[1];
+      const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+      const midX = (t1.clientX + t2.clientX) / 2;
+      const midY = (t1.clientY + t2.clientY) / 2;
+      const rect = bg.getBoundingClientRect();
+      const px   = midX - rect.left;
+      const py   = midY - rect.top;
+      // Zoom around the pinch midpoint
+      const oldZ = _isetupZoom;
+      const newZ = Math.max(0.25, Math.min(6, oldZ * (dist / lastDist)));
+      const ratio = newZ / oldZ;
+      _isetupPanX = px - (px - _isetupPanX) * ratio + (midX - lastMidX);
+      _isetupPanY = py - (py - _isetupPanY) * ratio + (midY - lastMidY);
+      _isetupZoom = newZ;
+      _isetupApplyTransform();
+      _isetupUpdateZoomLabel();
+      lastDist = dist; lastMidX = midX; lastMidY = midY;
+    }
+  }, { passive: false });
+
+  bg.addEventListener('touchend', e => {
+    if (e.touches.length < 1) dragging = false;
+  });
+})();
+
+// ── Tax rules manager (PSM) ────────────────────────────────────────────────
+let _psmTaxRules  = [];
+let _psmTrEditIdx = -1; // -1 = new, >=0 = editing
+
+function _uuid() {
+  return typeof crypto?.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+        const r = Math.random() * 16 | 0;
+        return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+      });
+}
+
+function _psmRenderTaxRules() {
+  const list  = $('#psm-tax-rules-list');
+  const empty = $('#psm-tax-rules-empty');
+  if (!list) return;
+  if (!_psmTaxRules.length) {
+    list.innerHTML = '';
+    if (empty) empty.style.display = '';
+    return;
+  }
+  if (empty) empty.style.display = 'none';
+  const cur = state.currency ? ' ' + state.currency : '';
+  list.innerHTML = _psmTaxRules.map((r, i) => {
+    const valStr = r.type === 'flat'
+      ? parseFloat(r.value).toFixed(2) + cur
+      : parseFloat(r.value) + '%';
+    const badge  = r.type === 'flat' ? 'Flat' : 'Percentage';
+    return `<div class="psm-tax-rule-row">
+      <span class="psm-tr-rname">${escHtml(r.name || '—')}</span>
+      <span class="psm-tr-badge">${badge}</span>
+      <span class="psm-tr-rval">${valStr}</span>
+      <div class="psm-tr-racts">
+        <button class="psm-tr-act" data-tr-edit="${i}" title="Edit"><i class="fa fa-pen"></i></button>
+        <button class="psm-tr-act del" data-tr-del="${i}" title="Delete"><i class="fa fa-trash"></i></button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function _psmShowTrForm() { const f = $('#psm-tax-rule-form'); if (f) f.style.display = ''; }
+function _psmHideTrForm() { const f = $('#psm-tax-rule-form'); if (f) f.style.display = 'none'; }
+
+$('#psm-tax-rule-add-btn')?.addEventListener('click', () => {
+  _psmTrEditIdx = -1;
+  $('#psm-tr-name').value  = '';
+  $('#psm-tr-type').value  = 'percentage';
+  $('#psm-tr-value').value = '';
+  _psmShowTrForm();
+  setTimeout(() => $('#psm-tr-name')?.focus(), 50);
+});
+
+$('#psm-tax-rules-list')?.addEventListener('click', e => {
+  const editBtn = e.target.closest('[data-tr-edit]');
+  const delBtn  = e.target.closest('[data-tr-del]');
+  if (editBtn) {
+    _psmTrEditIdx = parseInt(editBtn.dataset.trEdit);
+    const r = _psmTaxRules[_psmTrEditIdx];
+    if (!r) return;
+    $('#psm-tr-name').value  = r.name || '';
+    $('#psm-tr-type').value  = r.type || 'percentage';
+    $('#psm-tr-value').value = r.value ?? '';
+    _psmShowTrForm();
+    setTimeout(() => $('#psm-tr-name')?.focus(), 50);
+  }
+  if (delBtn) {
+    const idx = parseInt(delBtn.dataset.trDel);
+    _psmTaxRules.splice(idx, 1);
+    _psmRenderTaxRules();
+  }
+});
+
+$('#psm-tr-save')?.addEventListener('click', () => {
+  const name  = ($('#psm-tr-name')?.value || '').trim();
+  const type  = $('#psm-tr-type')?.value || 'percentage';
+  const value = parseFloat($('#psm-tr-value')?.value);
+  if (!name)             { toast('Tax rule name is required', 'error'); return; }
+  if (isNaN(value) || value < 0) { toast('Enter a valid value', 'error'); return; }
+  const rule = {
+    id:    _psmTrEditIdx >= 0 ? (_psmTaxRules[_psmTrEditIdx]?.id || _uuid()) : _uuid(),
+    name, type, value,
+  };
+  if (_psmTrEditIdx >= 0) {
+    _psmTaxRules[_psmTrEditIdx] = rule;
+  } else {
+    _psmTaxRules.push(rule);
+  }
+  _psmHideTrForm();
+  _psmRenderTaxRules();
+});
+
+$('#psm-tr-cancel')?.addEventListener('click', _psmHideTrForm);
 
 // ── POS Settings Modal ─────────────────────────────────────────────────────
 async function openPosSettings() {
@@ -14024,11 +15371,13 @@ async function openPosSettings() {
   $('#psm-branch-stock').checked   = !!s.branch_stock_separate;
   $('#psm-branch-pos').checked     = !!s.branch_pos_separate;
 
-  // Tax
+  // Tax rules
   const taxEnabled = !!s.tax_enabled;
   $('#psm-tax-enabled').checked = taxEnabled;
-  $('#psm-tax-rate-row').style.display = taxEnabled ? 'block' : 'none';
-  $('#psm-tax-rate').value = s.tax_rate ?? 0;
+  $('#psm-tax-rules-section').style.display = taxEnabled ? '' : 'none';
+  _psmTaxRules = Array.isArray(s.tax_rules) ? s.tax_rules.map(r => ({ ...r })) : [];
+  _psmHideTrForm();
+  _psmRenderTaxRules();
 
   // Invoice
   $('#psm-invoice-prefix').value = s.invoice_prefix ?? 'INV';
@@ -14097,7 +15446,8 @@ $('#psm-multi-warehouse').addEventListener('change', (e) => {
   $('#psm-branch-rows').style.display = e.target.checked ? 'flex' : 'none';
 });
 $('#psm-tax-enabled').addEventListener('change', (e) => {
-  $('#psm-tax-rate-row').style.display = e.target.checked ? 'block' : 'none';
+  const sec = $('#psm-tax-rules-section');
+  if (sec) sec.style.display = e.target.checked ? '' : 'none';
 });
 $('#psm-dont-settle').addEventListener('change', (e) => {
   $('#psm-settlement-mode').disabled = e.target.checked;
@@ -14278,7 +15628,7 @@ $('#psm-save').addEventListener('click', async () => {
     branch_stock_separate:       $('#psm-branch-stock').checked,
     branch_pos_separate:         $('#psm-branch-pos').checked,
     tax_enabled:                 $('#psm-tax-enabled').checked,
-    tax_rate:                    parseFloat($('#psm-tax-rate').value) || 0,
+    tax_rules:                   _psmTaxRules,
     invoice_prefix:              $('#psm-invoice-prefix').value.trim(),
     invoice_next_number:         parseInt($('#psm-invoice-next').value) || 1,
     delivery_enabled:            $('#psm-delivery-enabled').checked,
@@ -14296,7 +15646,7 @@ $('#psm-save').addEventListener('click', async () => {
 
   // Sync relevant settings into state so in-session logic stays current
   const saved = res.body?.data || {};
-  const syncKeys = ['dont_settle_to_account', 'stock_selection_mode', 'choose_price', 'receipt_mode'];
+  const syncKeys = ['dont_settle_to_account', 'stock_selection_mode', 'choose_price', 'receipt_mode', 'tax_enabled', 'tax_rules'];
   syncKeys.forEach(k => {
     if (saved[k] !== undefined) state.receiptSettings = { ...state.receiptSettings, [k]: saved[k] };
   });
@@ -14670,10 +16020,17 @@ function buildReceiptHTML(sale, overrides = {}) {
   const discount = parseFloat(sale.discount_amount || 0);
   const change   = parseFloat(sale.change_amount || 0);
 
+  const afterDiscount = parseFloat(sale.subtotal) - discount;
+  const rcptTaxes = _coGetTaxBreakdown(afterDiscount);
+
   let totalsHTML = `<div class="rcpt-total-row"><span>${lbl.subtotal}</span><span>${parseFloat(sale.subtotal).toFixed(2)}${cur}</span></div>`;
   if (discount > 0) {
     totalsHTML += `<div class="rcpt-total-row"><span>${lbl.discount}${sale.discount_percent ? ' (' + sale.discount_percent + '%)' : ''}</span><span>-${discount.toFixed(2)}${cur}</span></div>`;
   }
+  rcptTaxes.forEach(t => {
+    const lx = escHtml(t.name) + (t.type === 'flat' ? '' : ' ' + t.value + '%');
+    totalsHTML += `<div class="rcpt-total-row"><span>${lx}</span><span>+${t.amount.toFixed(2)}${cur}</span></div>`;
+  });
   totalsHTML += `
     <hr class="rcpt-divider-solid">
     <div class="rcpt-total-row grand"><span>${lbl.grandTotal}</span><span>${parseFloat(sale.total).toFixed(2)}${cur}</span></div>`;
@@ -14751,6 +16108,12 @@ async function _posCreateInvoiceFromSale(sale, customerId) {
   ) / 100;
   const totalDiscount = Math.round(((parseFloat(sale.discount_amount) || 0) + itemDiscountsTotal) * 100) / 100;
 
+  // Compute tax amount for invoice using the same multi-rule breakdown
+  const _invAfterDisc = parseFloat(sale.subtotal || 0) - (parseFloat(sale.discount_amount) || 0);
+  const _invTaxAmt = Math.round(
+    _coGetTaxBreakdown(_invAfterDisc).reduce((s, t) => s + t.amount, 0) * 100
+  ) / 100;
+
   const body = {
     customer_id:     customerId ?? null,
     reference:       sale.sale_number || null,
@@ -14758,7 +16121,7 @@ async function _posCreateInvoiceFromSale(sale, customerId) {
     due_date:        null,
     notes:           sale.notes || null,
     discount_amount: totalDiscount,
-    tax_amount:      0,
+    tax_amount:      _invTaxAmt,
     items:           lines,
   };
 
@@ -14766,6 +16129,12 @@ async function _posCreateInvoiceFromSale(sale, customerId) {
   if (res.status === 200 || res.status === 201) {
     const inv = res.body?.data;
     if (inv) {
+      // Mark paid immediately for cash/card; leave unpaid for credit
+      if (sale.payment_method !== 'credit') {
+        await API.invoicePaid(inv.id);
+        inv.status       = 'paid';
+        inv.status_label = 'Paid';
+      }
       toast(`Invoice ${inv.invoice_number} created`, 'success');
       // Stamp per-item discount onto each invoice line so the print template can render it
       if (Array.isArray(inv.items)) {
@@ -14773,7 +16142,7 @@ async function _posCreateInvoiceFromSale(sale, customerId) {
           invItem.item_discount_per_unit = parseFloat(sale.items?.[idx]?.discount_amount || 0);
         });
       }
-      _invPrint(inv);
+      showInvoicePreviewModal(inv);
     }
   } else {
     toast(res.body?.message || 'Failed to create invoice', 'error');
@@ -15941,9 +17310,31 @@ function _coRenderItems() {
   if (ftrTotal) ftrTotal.textContent = _coSubtotal.toFixed(2) + cur;
 }
 
-function _coGetTotal() {
+function _coGetAfterDiscount() {
   const pct = Math.min(100, Math.max(0, parseFloat($('#co-discount-pct')?.value) || 0));
   return Math.max(0, Math.round(_coSubtotal * (1 - pct / 100) * 100) / 100);
+}
+
+function _coGetTaxBreakdown(afterDisc) {
+  const s = state.receiptSettings || {};
+  if (!s.tax_enabled) return [];
+  const rules = Array.isArray(s.tax_rules) ? s.tax_rules : [];
+  return rules
+    .filter(r => parseFloat(r.value || 0) > 0)
+    .map(r => {
+      const v   = parseFloat(r.value || 0);
+      const amt = r.type === 'flat'
+        ? Math.round(v * 100) / 100
+        : Math.round(afterDisc * v / 100 * 100) / 100;
+      return { name: r.name || 'Tax', type: r.type || 'percentage', value: v, amount: amt };
+    });
+}
+
+function _coGetTotal() {
+  const afterDisc = _coGetAfterDiscount();
+  const taxes     = _coGetTaxBreakdown(afterDisc);
+  const taxTotal  = Math.round(taxes.reduce((s, t) => s + t.amount, 0) * 100) / 100;
+  return Math.round((afterDisc + taxTotal) * 100) / 100;
 }
 
 function _coGetMethod() {
@@ -15951,15 +17342,29 @@ function _coGetMethod() {
 }
 
 function _coRefresh() {
-  const pct      = Math.min(100, Math.max(0, parseFloat($('#co-discount-pct')?.value) || 0));
-  const total    = _coGetTotal();
-  const saved    = Math.round((_coSubtotal - total) * 100) / 100;
-  const cur      = state.currency ? ' ' + state.currency : '';
-  const amount   = parseFloat(_coAmount) || 0;
-  const change   = Math.round((amount - total) * 100) / 100;
+  const afterDisc = _coGetAfterDiscount();
+  const taxes     = _coGetTaxBreakdown(afterDisc);
+  const taxTotal  = Math.round(taxes.reduce((s, t) => s + t.amount, 0) * 100) / 100;
+  const total     = Math.round((afterDisc + taxTotal) * 100) / 100;
+  const saved     = Math.round((_coSubtotal - afterDisc) * 100) / 100;
+  const cur       = state.currency ? ' ' + state.currency : '';
+  const amount    = parseFloat(_coAmount) || 0;
+  const change    = Math.round((amount - total) * 100) / 100;
 
   if ($('#co-subtotal')) $('#co-subtotal').textContent = _coSubtotal.toFixed(2) + cur;
   if ($('#co-saved'))    $('#co-saved').textContent    = saved > 0 ? saved.toFixed(2) + cur : '—';
+
+  const taxRowsEl = $('#co-tax-rows');
+  if (taxRowsEl) {
+    taxRowsEl.innerHTML = taxes.map(t => {
+      const lbl = escHtml(t.name) + (t.type === 'flat' ? '' : ' ' + t.value + '%');
+      return `<div class="co-sum-row">
+        <span style="color:var(--text-muted);font-size:12px">${lbl}</span>
+        <strong style="color:#f59e0b;font-size:12px">+${t.amount.toFixed(2)}${cur}</strong>
+      </div>`;
+    }).join('');
+  }
+
   if ($('#co-total'))    $('#co-total').textContent    = total.toFixed(2);
   if ($('#co-currency')) $('#co-currency').textContent = state.currency || '';
   const amountEl = $('#co-amount');
@@ -15995,11 +17400,11 @@ function openCheckout() {
   const tab = activeTab();
   if (!tab || !tab.cart.length) { toast('Cart is empty', 'error'); return; }
   _coSubtotal = _coComputeSubtotal();
-  _coAmount   = _coSubtotal.toFixed(2);
 
-  // Reset discount
+  // Reset discount first so _coGetTotal() computes at 0% discount
   const discEl = $('#co-discount-pct');
   if (discEl) discEl.value = '0';
+  _coAmount = _coGetTotal().toFixed(2);
 
   // Reset payment method to cash
   $$('.co-pay-method').forEach(b => b.classList.remove('active'));
