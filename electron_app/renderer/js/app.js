@@ -14581,7 +14581,13 @@ function _invBuildActualDoc(inv, tpl, mg, cur, lhDataUrl = null) {
   }).join('\n    ');
 
   const discRow = disc > 0 ? `<div class="tr"><span>Discount</span><span style="color:#ef4444">−${disc.toFixed(2)}${c}</span></div>` : '';
-  const taxRow  = tax  > 0 ? `<div class="tr"><span>Tax</span><span>+${tax.toFixed(2)}${c}</span></div>` : '';
+  const _taxRules = Array.isArray(inv._taxBreakdown) && inv._taxBreakdown.length
+    ? inv._taxBreakdown
+    : (tax > 0 ? [{ name: 'Tax', type: 'flat', value: tax, amount: tax }] : []);
+  const taxRow = _taxRules.map(t => {
+    const lbl = escHtml(t.name) + (t.type !== 'flat' ? ' ' + t.value + '%' : '');
+    return `<div class="tr"><span>${lbl}</span><span>+${t.amount.toFixed(2)}${c}</span></div>`;
+  }).join('');
 
   // Letterhead: absolute image layer behind content (embedded as data URL)
   const lhLayer   = lhDataUrl
@@ -14980,13 +14986,36 @@ function _isetupZoomAt(newZoom, pivotX, pivotY) {
   _isetupUpdateZoomLabel();
 }
 
+// Cached letterhead data URL for the invoice setup preview (reset on open)
+let _isetupLhDataUrl = null;
+
 function _isetupUpdatePreview() {
   const tpl    = INV_TEMPLATES.find(t => t.id === _isetupActiveTpl) || INV_TEMPLATES[0];
   const mg     = _isetupReadMg();
   const iframe = $('#isetup-prev-frame');
   if (!iframe) return;
+  // Temporarily borrow the module-level letterhead vars so _iTPL* functions render with letterhead
+  if (_isetupLhDataUrl) {
+    lhLayer = `<img src="${_isetupLhDataUrl}" style="position:absolute;top:0;left:0;width:794px;height:1123px;z-index:0;pointer-events:none;display:block;object-fit:cover;" alt="">`;
+    bodyPos = 'position:relative;overflow:hidden;';
+    pgStack = 'position:relative;z-index:1;';
+  }
   iframe.srcdoc = _isetupBuildPreviewDoc(tpl, mg, state.currency || '');
+  // Always reset so normal preview-builder calls remain unaffected
+  lhLayer = ''; bodyPos = ''; pgStack = '';
   setTimeout(_isetupResetView, 40);
+}
+
+async function _isetupLoadLetterhead() {
+  const lhFull = await _fetchLetterhead();
+  if (lhFull && lhFull.canvas_json) {
+    _isetupLhDataUrl = await window.electronAPI.renderCanvasToDataUrl(
+      lhFull.canvas_json, lhFull.width || 794, lhFull.height || 1123
+    ) || null;
+  } else {
+    _isetupLhDataUrl = null;
+  }
+  _isetupUpdatePreview();
 }
 
 function _isetupRenderTpls() {
@@ -15021,10 +15050,12 @@ async function openInvoiceSetup() {
   const orientEl = document.querySelector(`input[name="isetup-orient"][value="${cfg.orientation}"]`);
   if (orientEl) orientEl.checked = true;
 
+  _isetupLhDataUrl = null; // clear stale cache from previous open
   _isetupRenderTpls();
   modal.style.display = 'flex';
-  // Defer preview render until modal is visible and has dimensions
+  // Show preview immediately (no letterhead), then fetch letterhead in background
   setTimeout(_isetupUpdatePreview, 80);
+  _isetupLoadLetterhead();
 }
 
 async function _isetupSave() {
@@ -16021,7 +16052,9 @@ function buildReceiptHTML(sale, overrides = {}) {
   const change   = parseFloat(sale.change_amount || 0);
 
   const afterDiscount = parseFloat(sale.subtotal) - discount;
-  const rcptTaxes = _coGetTaxBreakdown(afterDiscount);
+  const rcptTaxes = (Array.isArray(sale._taxBreakdown) && sale._taxBreakdown.length)
+    ? sale._taxBreakdown
+    : _coGetTaxBreakdown(afterDiscount);
 
   let totalsHTML = `<div class="rcpt-total-row"><span>${lbl.subtotal}</span><span>${parseFloat(sale.subtotal).toFixed(2)}${cur}</span></div>`;
   if (discount > 0) {
@@ -16109,9 +16142,12 @@ async function _posCreateInvoiceFromSale(sale, customerId) {
   const totalDiscount = Math.round(((parseFloat(sale.discount_amount) || 0) + itemDiscountsTotal) * 100) / 100;
 
   // Compute tax amount for invoice using the same multi-rule breakdown
-  const _invAfterDisc = parseFloat(sale.subtotal || 0) - (parseFloat(sale.discount_amount) || 0);
+  const _invAfterDisc    = parseFloat(sale.subtotal || 0) - (parseFloat(sale.discount_amount) || 0);
+  const _invTaxBreakdown = (Array.isArray(sale._taxBreakdown) && sale._taxBreakdown.length)
+    ? sale._taxBreakdown
+    : _coGetTaxBreakdown(_invAfterDisc);
   const _invTaxAmt = Math.round(
-    _coGetTaxBreakdown(_invAfterDisc).reduce((s, t) => s + t.amount, 0) * 100
+    _invTaxBreakdown.reduce((s, t) => s + t.amount, 0) * 100
   ) / 100;
 
   const body = {
@@ -16142,6 +16178,8 @@ async function _posCreateInvoiceFromSale(sale, customerId) {
           invItem.item_discount_per_unit = parseFloat(sale.items?.[idx]?.discount_amount || 0);
         });
       }
+      // Stamp tax breakdown for per-rule rendering in the invoice template
+      if (_invTaxBreakdown.length > 0) inv._taxBreakdown = _invTaxBreakdown;
       showInvoicePreviewModal(inv);
     }
   } else {
@@ -17266,14 +17304,31 @@ $('#pos-to-quote')?.addEventListener('click', () => {
 // ── Checkout ───────────────────────────────────────────────────────────────
 let _coSubtotal = 0; // base subtotal before order-level discount
 let _coAmount   = ''; // numpad string
+let _coDiscType = 'pct'; // 'pct' | 'flat'
+
+function _itemEffectivePct(item) {
+  const gross = item.price * item.qty;
+  if ((item.itemDiscType || 'pct') === 'flat') {
+    const flat = Math.max(0, parseFloat(item.itemDiscountFlat) || 0);
+    return gross > 0 ? Math.min(100, Math.round(flat / gross * 10000) / 100) : 0;
+  }
+  return Math.min(100, Math.max(0, parseFloat(item.itemDiscountPct) || 0));
+}
+
+function _itemLineNet(item) {
+  const gross = item.price * item.qty;
+  if ((item.itemDiscType || 'pct') === 'flat') {
+    const flat = Math.max(0, parseFloat(item.itemDiscountFlat) || 0);
+    return Math.max(0, Math.round((gross - flat) * 100) / 100);
+  }
+  const d = Math.min(100, Math.max(0, parseFloat(item.itemDiscountPct) || 0));
+  return Math.round(gross * (1 - d / 100) * 100) / 100;
+}
 
 function _coComputeSubtotal() {
   const tab = activeTab();
   if (!tab) return 0;
-  return Math.round(tab.cart.reduce((s, i) => {
-    const d = Math.min(100, Math.max(0, parseFloat(i.itemDiscountPct) || 0));
-    return s + i.price * i.qty * (1 - d / 100);
-  }, 0) * 100) / 100;
+  return Math.round(tab.cart.reduce((s, i) => s + _itemLineNet(i), 0) * 100) / 100;
 }
 
 function _coRenderItems() {
@@ -17285,12 +17340,36 @@ function _coRenderItems() {
   const cur = state.currency ? ' ' + state.currency : '';
   const items = tab.cart;
   if (badge) badge.textContent = items.length;
+
+  const s = state.receiptSettings || {};
+  const taxRules = Array.isArray(s.tax_rules)
+    ? s.tax_rules.filter(r => parseFloat(r.value || 0) > 0)
+    : [];
+  const midEl = list.closest('.co-mid');
+  if (midEl) midEl.classList.toggle('co-has-tax', taxRules.length > 0);
+
   list.innerHTML = items.map((i, idx) => {
-    const svc   = i._type === 'service';
-    const qty   = i.qty % 1 === 0 ? parseInt(i.qty) : parseFloat(i.qty).toFixed(2);
-    const price = parseFloat(i.price).toFixed(2);
-    const disc  = Math.min(100, Math.max(0, parseFloat(i.itemDiscountPct) || 0));
-    const line  = (i.price * i.qty * (1 - disc / 100)).toFixed(2);
+    const svc      = i._type === 'service';
+    const qty      = i.qty % 1 === 0 ? parseInt(i.qty) : parseFloat(i.qty).toFixed(2);
+    const price    = parseFloat(i.price).toFixed(2);
+    const discType = i.itemDiscType || 'pct';
+    const discVal  = discType === 'flat'
+      ? (parseFloat(i.itemDiscountFlat) || 0)
+      : (Math.min(100, Math.max(0, parseFloat(i.itemDiscountPct) || 0)));
+    const hasDisc  = discVal > 0;
+    const line     = _itemLineNet(i).toFixed(2);
+    const typeLbl  = discType === 'flat' ? escHtml(state.currency || '¤') : '%';
+    const taxOpts  = taxRules.map((r, ri) => {
+      const isSel = i.itemTaxRule
+        && i.itemTaxRule.name === r.name
+        && String(i.itemTaxRule.value) === String(r.value)
+        && i.itemTaxRule.type  === r.type;
+      const lbl = escHtml(r.name) + (r.type !== 'flat' ? ' ' + r.value + '%' : '');
+      return `<option value="${ri}"${isSel ? ' selected' : ''}>${lbl}</option>`;
+    }).join('');
+    const taxCell = taxRules.length > 0
+      ? `<div class="co-ir-tax"><select class="co-ir-tax-sel${i.itemTaxRule ? ' has-tax' : ''}" data-idx="${idx}"><option value="">–</option>${taxOpts}</select></div>`
+      : '<div class="co-ir-tax"></div>';
     return `<div class="co-ir" data-idx="${idx}">
       <div class="co-ir-icon ${svc ? 'is-service' : 'is-product'}">
         <i class="fa ${svc ? 'fa-screwdriver-wrench' : 'fa-box'}"></i>
@@ -17299,10 +17378,12 @@ function _coRenderItems() {
       <div class="co-ir-qty">${qty}</div>
       <div class="co-ir-price">${price}</div>
       <div class="co-ir-disc">
-        <input type="number" class="co-ir-disc-inp${disc > 0 ? ' has-discount' : ''}"
-               data-idx="${idx}" value="${disc || ''}" min="0" max="100" step="0.5" placeholder="0">
-        <span class="co-ir-disc-pct">%</span>
+        <input type="number" class="co-ir-disc-inp${hasDisc ? ' has-discount' : ''}"
+               data-idx="${idx}" value="${discVal || ''}"
+               min="0" ${discType === 'pct' ? 'max="100"' : ''} step="${discType === 'flat' ? '0.01' : '0.5'}" placeholder="0">
+        <button class="co-ir-disc-type${discType === 'flat' ? ' is-flat' : ''}" data-idx="${idx}" title="Toggle % / flat">${typeLbl}</button>
       </div>
+      ${taxCell}
       <div class="co-ir-total">${line}</div>
     </div>`;
   }).join('');
@@ -17311,12 +17392,35 @@ function _coRenderItems() {
 }
 
 function _coGetAfterDiscount() {
-  const pct = Math.min(100, Math.max(0, parseFloat($('#co-discount-pct')?.value) || 0));
+  const raw = parseFloat($('#co-discount-pct')?.value) || 0;
+  if (_coDiscType === 'flat') {
+    return Math.max(0, Math.round((_coSubtotal - Math.max(0, raw)) * 100) / 100);
+  }
+  const pct = Math.min(100, Math.max(0, raw));
   return Math.max(0, Math.round(_coSubtotal * (1 - pct / 100) * 100) / 100);
 }
 
 function _coGetTaxBreakdown(afterDisc) {
-  const s = state.receiptSettings || {};
+  const s    = state.receiptSettings || {};
+  const tab  = activeTab();
+  const cart = tab?.cart || [];
+  const hasItemTax = cart.some(i => i.itemTaxRule);
+  if (hasItemTax) {
+    const grouped = {};
+    cart.forEach(i => {
+      if (!i.itemTaxRule) return;
+      const base = _itemLineNet(i);
+      const r   = i.itemTaxRule;
+      const v   = parseFloat(r.value || 0);
+      const amt = r.type === 'flat'
+        ? Math.round(v * 100) / 100
+        : Math.round(base * v / 100 * 100) / 100;
+      const key = `${r.name}|${r.type}|${v}`;
+      if (!grouped[key]) grouped[key] = { name: r.name, type: r.type, value: v, amount: 0 };
+      grouped[key].amount = Math.round((grouped[key].amount + amt) * 100) / 100;
+    });
+    return Object.values(grouped).filter(t => t.amount > 0);
+  }
   if (!s.tax_enabled) return [];
   const rules = Array.isArray(s.tax_rules) ? s.tax_rules : [];
   return rules
@@ -17402,8 +17506,13 @@ function openCheckout() {
   _coSubtotal = _coComputeSubtotal();
 
   // Reset discount first so _coGetTotal() computes at 0% discount
+  _coDiscType = 'pct';
+  $('#co-disc-btn-pct')?.classList.add('active');
+  $('#co-disc-btn-flat')?.classList.remove('active');
+  const discSuffix = $('#co-disc-suffix');
+  if (discSuffix) discSuffix.textContent = '%';
   const discEl = $('#co-discount-pct');
-  if (discEl) discEl.value = '0';
+  if (discEl) { discEl.value = '0'; discEl.max = '100'; discEl.step = '1'; }
   _coAmount = _coGetTotal().toFixed(2);
 
   // Reset payment method to cash
@@ -17478,6 +17587,26 @@ $$('.co-pay-method').forEach(btn => {
 // Discount input (order-level)
 $('#co-discount-pct').addEventListener('input', _coRefresh);
 
+// Flat / percent toggle
+$$('#co-disc-btn-pct, #co-disc-btn-flat').forEach(btn => {
+  btn.addEventListener('click', () => {
+    _coDiscType = btn.dataset.type;
+    $$('.co-disc-type-btn').forEach(b => b.classList.toggle('active', b === btn));
+    const discEl = $('#co-discount-pct');
+    const suffix = $('#co-disc-suffix');
+    if (discEl) {
+      discEl.value = '0';
+      if (_coDiscType === 'flat') {
+        discEl.removeAttribute('max'); discEl.step = '0.01';
+      } else {
+        discEl.max = '100'; discEl.step = '1';
+      }
+    }
+    if (suffix) suffix.textContent = _coDiscType === 'flat' ? (state.currency || '—') : '%';
+    _coRefresh();
+  });
+});
+
 // Per-item discount inputs (event delegation on the list container)
 $('#co-items-list').addEventListener('input', e => {
   const inp = e.target.closest('.co-ir-disc-inp');
@@ -17485,17 +17614,53 @@ $('#co-items-list').addEventListener('input', e => {
   const idx = parseInt(inp.dataset.idx);
   const tab = activeTab();
   if (!tab?.cart[idx]) return;
-  const disc = Math.min(100, Math.max(0, parseFloat(inp.value) || 0));
-  tab.cart[idx].itemDiscountPct = disc;
-  inp.classList.toggle('has-discount', disc > 0);
-  const row = inp.closest('.co-ir');
-  const totalEl = row?.querySelector('.co-ir-total');
-  const i = tab.cart[idx];
-  if (totalEl) totalEl.textContent = (i.price * i.qty * (1 - disc / 100)).toFixed(2);
+  const item = tab.cart[idx];
+  const raw = Math.max(0, parseFloat(inp.value) || 0);
+  if ((item.itemDiscType || 'pct') === 'flat') {
+    item.itemDiscountFlat = raw;
+  } else {
+    item.itemDiscountPct = Math.min(100, raw);
+  }
+  inp.classList.toggle('has-discount', raw > 0);
+  const totalEl = inp.closest('.co-ir')?.querySelector('.co-ir-total');
+  if (totalEl) totalEl.textContent = _itemLineNet(item).toFixed(2);
   _coSubtotal = _coComputeSubtotal();
   const cur = state.currency ? ' ' + state.currency : '';
   const ftrEl = $('#co-items-ftr-total');
   if (ftrEl) ftrEl.textContent = _coSubtotal.toFixed(2) + cur;
+  _coRefresh();
+});
+
+// Per-item discount type toggle (% / flat)
+$('#co-items-list').addEventListener('click', e => {
+  const btn = e.target.closest('.co-ir-disc-type');
+  if (!btn) return;
+  const idx = parseInt(btn.dataset.idx);
+  const tab = activeTab();
+  if (!tab?.cart[idx]) return;
+  const item = tab.cart[idx];
+  const newType = (item.itemDiscType || 'pct') === 'pct' ? 'flat' : 'pct';
+  item.itemDiscType     = newType;
+  item.itemDiscountPct  = 0;
+  item.itemDiscountFlat = 0;
+  _coRenderItems();
+  _coRefresh();
+});
+
+// Per-item tax select (event delegation)
+$('#co-items-list').addEventListener('change', e => {
+  const sel = e.target.closest('.co-ir-tax-sel');
+  if (!sel) return;
+  const idx = parseInt(sel.dataset.idx);
+  const tab = activeTab();
+  if (!tab?.cart[idx]) return;
+  const s = state.receiptSettings || {};
+  const taxRules = Array.isArray(s.tax_rules)
+    ? s.tax_rules.filter(r => parseFloat(r.value || 0) > 0)
+    : [];
+  const ri = sel.value === '' ? -1 : parseInt(sel.value);
+  tab.cart[idx].itemTaxRule = ri >= 0 && taxRules[ri] ? taxRules[ri] : null;
+  sel.classList.toggle('has-tax', !!tab.cart[idx].itemTaxRule);
   _coRefresh();
 });
 
@@ -17671,7 +17836,9 @@ $('#checkout-confirm').addEventListener('click', async () => {
 
   const productItems = cart.filter(i => i._type !== 'service');
   const serviceItems = cart.filter(i => i._type === 'service');
-  const discountPct  = Math.min(100, Math.max(0, parseFloat($('#co-discount-pct')?.value) || 0));
+  const _discRaw    = parseFloat($('#co-discount-pct')?.value) || 0;
+  const discountPct  = _coDiscType === 'pct' ? Math.min(100, Math.max(0, _discRaw)) : 0;
+  const discountFlat = _coDiscType === 'flat' ? Math.max(0, _discRaw) : 0;
 
   // Single unified checkout — products and services in one Sale record
   const body = {
@@ -17679,7 +17846,8 @@ $('#checkout-confirm').addEventListener('click', async () => {
     amount_paid:      method === 'credit' ? total : amount,
     amount_tendered:  method === 'cash'   ? amount : undefined,
     notes:            notes || undefined,
-    discount_percent: discountPct > 0 ? discountPct : undefined,
+    discount_percent: discountPct  > 0 ? discountPct  : undefined,
+    discount_flat:    discountFlat > 0 ? discountFlat : undefined,
     pos_customer_id:  tab?._customer?.id ?? undefined,
     pos_counter_id:   state.posCounterId ?? undefined,
     credit_due_date:  method === 'credit' ? ($('#co-credit-due-date')?.value || undefined) : undefined,
@@ -17690,7 +17858,8 @@ $('#checkout-confirm').addEventListener('click', async () => {
         product_stock_layer_id: i.layerId ?? undefined,
         warranty_type:          i.warrantyType ?? undefined,
         warranty_date:          i.warrantyDate ?? undefined,
-        item_discount_percent:  (parseFloat(i.itemDiscountPct) || 0) > 0 ? parseFloat(i.itemDiscountPct) : undefined,
+        item_discount_percent:  _itemEffectivePct(i) > 0 ? _itemEffectivePct(i) : undefined,
+        item_tax_rule:          i.itemTaxRule ?? undefined,
       })),
       ...serviceItems.map(i => ({
         item_type:              'service',
@@ -17698,7 +17867,8 @@ $('#checkout-confirm').addEventListener('click', async () => {
         quantity:               i.qty,
         warranty_type:          i.warrantyType ?? undefined,
         warranty_date:          i.warrantyDate ?? undefined,
-        item_discount_percent:  (parseFloat(i.itemDiscountPct) || 0) > 0 ? parseFloat(i.itemDiscountPct) : undefined,
+        item_discount_percent:  _itemEffectivePct(i) > 0 ? _itemEffectivePct(i) : undefined,
+        item_tax_rule:          i.itemTaxRule ?? undefined,
       })),
     ],
   };
@@ -17714,6 +17884,8 @@ $('#checkout-confirm').addEventListener('click', async () => {
   }
 
   const postCustomerId = tab?._customer?.id ?? null;
+  // Snapshot tax breakdown before clearing the cart (per-item taxes live in cart items)
+  const _taxSnap = _coGetTaxBreakdown(_coGetAfterDiscount());
   $('#checkout-modal').style.display = 'none';
   if (tab) { tab.cart = []; tab._customer = null; }
   renderCart(); renderPosTabBar(); renderCartCustomer();
@@ -17724,6 +17896,7 @@ $('#checkout-confirm').addEventListener('click', async () => {
 
   const sale = res.body?.data;
   if (sale) {
+    if (_taxSnap.length > 0) sale._taxBreakdown = _taxSnap;
     if ((state.receiptSettings?.receipt_mode || 'bill') === 'invoice') {
       _posCreateInvoiceFromSale(sale, postCustomerId);
     } else {

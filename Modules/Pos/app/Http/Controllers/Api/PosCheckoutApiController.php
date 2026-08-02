@@ -49,6 +49,7 @@ class PosCheckoutApiController extends Controller
             'amount_paid'                    => ['nullable', 'numeric', 'min:0'],
             'amount_tendered'                => ['nullable', 'numeric', 'min:0'],
             'discount_percent'               => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'discount_flat'                  => ['nullable', 'numeric', 'min:0'],
             'notes'                          => ['nullable', 'string', 'max:2000'],
             'scheduled_at'                   => ['nullable', 'date'],
             'branch_id'                      => ['nullable', 'integer', 'min:1'],
@@ -92,6 +93,7 @@ class PosCheckoutApiController extends Controller
                 $validated['scheduled_at'] ?? null,
                 isset($validated['pos_counter_id']) ? (int) $validated['pos_counter_id'] : null,
                 $validated['credit_due_date'] ?? null,
+                isset($validated['discount_flat']) ? (float) $validated['discount_flat'] : null,
             );
         } catch (ValidationException $e) {
             return response()->json([

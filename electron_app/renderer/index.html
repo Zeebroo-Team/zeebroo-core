@@ -8492,9 +8492,15 @@
           <div class="co-disc-row">
             <div class="co-disc-top">
               <span class="co-disc-tag"><i class="fa fa-tag"></i> Discount</span>
-              <div class="co-disc-input-wrap">
-                <input type="number" id="co-discount-pct" class="co-disc-input" value="0" min="0" max="100" step="1">
-                <span class="co-disc-pct">%</span>
+              <div class="co-disc-right">
+                <div class="co-disc-type-wrap">
+                  <button class="co-disc-type-btn active" data-type="pct" id="co-disc-btn-pct">%</button>
+                  <button class="co-disc-type-btn" data-type="flat" id="co-disc-btn-flat"><i class="fa fa-dollar-sign"></i></button>
+                </div>
+                <div class="co-disc-input-wrap">
+                  <input type="number" id="co-discount-pct" class="co-disc-input" value="0" min="0" max="100" step="1">
+                  <span class="co-disc-pct" id="co-disc-suffix">%</span>
+                </div>
               </div>
             </div>
           </div>
@@ -8540,7 +8546,8 @@
           <span>Item</span>
           <span>Qty</span>
           <span>Price</span>
-          <span>Disc %</span>
+          <span>Disc</span>
+          <span class="co-th-tax">Tax</span>
           <span>Total</span>
         </div>
         <div class="co-items-list" id="co-items-list"></div>
