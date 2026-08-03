@@ -48,6 +48,8 @@ class PosSettingsService
 
     public const KEY_RECEIPT_LOGO_URL = 'pos.receipt_logo_url';
 
+    public const KEY_BUSINESS_LOGO_URL = 'business.logo_url';
+
     public const KEY_RECEIPT_ADDRESS = 'pos.receipt_address';
 
     /** @var string `en` | `si` | `ta` */
@@ -102,6 +104,7 @@ class PosSettingsService
             'slug'             => Str::slug($business->name),
             'currency'         => (string) ($business->getSetting('business.currency', '') ?: ''),
             'timezone'         => (string) ($business->getSetting('business.timezone', '') ?: ''),
+            'business_logo_url' => (string) ($business->getSetting(self::KEY_BUSINESS_LOGO_URL, '') ?: ''),
             // POS
             'default_deposit_account_id' => $accountId,
             'discount_field_enabled' => (bool) $business->getSetting(self::KEY_DISCOUNT_FIELD_ENABLED, false),
@@ -260,6 +263,10 @@ class PosSettingsService
 
         if (array_key_exists('receipt_logo_url', $data)) {
             $business->setSetting(self::KEY_RECEIPT_LOGO_URL, $data['receipt_logo_url'] ? trim((string) $data['receipt_logo_url']) : null);
+        }
+
+        if (array_key_exists('business_logo_url', $data)) {
+            $business->setSetting(self::KEY_BUSINESS_LOGO_URL, $data['business_logo_url'] ? trim((string) $data['business_logo_url']) : null);
         }
 
         // Branch / warehouse

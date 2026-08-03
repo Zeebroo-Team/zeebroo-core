@@ -12368,10 +12368,11 @@ async function _addToCartDirectly(p) {
   const layer  = layers.find(l => parseFloat(l.quantity_remaining) > 0) || null;
   let cartItem;
   if (layer) {
+    // FIFO: no layerId pinning — backend consumeFifo spans all layers if needed
     cartItem = {
-      id: p.id, layerId: layer.id, layerLabel: layer.label || null,
+      id: p.id, layerId: null, layerLabel: null,
       name: p.name, price: parseFloat(layer.unit_sell_price),
-      stock: parseFloat(layer.quantity_remaining),
+      stock: p.stock_quantity != null ? parseFloat(p.stock_quantity) : null,
     };
   } else {
     cartItem = {
@@ -14591,7 +14592,7 @@ function _invBuildActualDoc(inv, tpl, mg, cur, lhDataUrl = null) {
 
   // Letterhead: absolute image layer behind content (embedded as data URL)
   const lhLayer   = lhDataUrl
-    ? `<img src="${lhDataUrl}" style="position:absolute;top:0;left:0;width:794px;height:1123px;z-index:0;pointer-events:none;display:block;object-fit:cover;" alt="">`
+    ? `<img src="${lhDataUrl}" style="position:absolute;top:0;left:0;width:794px;height:1123px;z-index:0;pointer-events:none;display:block;object-fit:fill;image-rendering:auto;" alt="">`
     : '';
   const bodyPos   = lhDataUrl ? 'position:relative;overflow:hidden;' : '';
   const pgStack   = lhDataUrl ? 'position:relative;z-index:1;' : '';
@@ -14996,7 +14997,7 @@ function _isetupUpdatePreview() {
   if (!iframe) return;
   // Temporarily borrow the module-level letterhead vars so _iTPL* functions render with letterhead
   if (_isetupLhDataUrl) {
-    lhLayer = `<img src="${_isetupLhDataUrl}" style="position:absolute;top:0;left:0;width:794px;height:1123px;z-index:0;pointer-events:none;display:block;object-fit:cover;" alt="">`;
+    lhLayer = `<img src="${_isetupLhDataUrl}" style="position:absolute;top:0;left:0;width:794px;height:1123px;z-index:0;pointer-events:none;display:block;object-fit:fill;image-rendering:auto;" alt="">`;
     bodyPos = 'position:relative;overflow:hidden;';
     pgStack = 'position:relative;z-index:1;';
   }
@@ -15267,6 +15268,7 @@ $('#isetup-zoom-fit')?.addEventListener('click', _isetupResetView);
 
 // ── Tax rules manager (PSM) ────────────────────────────────────────────────
 let _psmTaxRules  = [];
+let _psmBizLogoUrl = '';
 let _psmTrEditIdx = -1; // -1 = new, >=0 = editing
 
 function _uuid() {
@@ -15360,6 +15362,20 @@ $('#psm-tr-save')?.addEventListener('click', () => {
 $('#psm-tr-cancel')?.addEventListener('click', _psmHideTrForm);
 
 // ── POS Settings Modal ─────────────────────────────────────────────────────
+function _psmBizLogoRender() {
+  const img = $('#psm-logo-img');
+  const ph  = $('#psm-logo-ph');
+  if (!img || !ph) return;
+  if (_psmBizLogoUrl) {
+    img.src = _psmBizLogoUrl;
+    img.style.display = '';
+    ph.style.display  = 'none';
+  } else {
+    img.style.display = 'none';
+    ph.style.display  = '';
+  }
+}
+
 async function openPosSettings() {
   const modal = $('#pos-settings-modal');
   modal.style.display = 'flex';
@@ -15391,6 +15407,8 @@ async function openPosSettings() {
     const slug = s.slug ?? '';
     slugEl.textContent = slug ? '@' + slug + '  ·  ' : '';
   }
+  _psmBizLogoUrl = s.business_logo_url || '';
+  _psmBizLogoRender();
   $('#psm-currency').value  = s.currency ?? '';
   $('#psm-timezone').value  = s.timezone ?? '';
 
@@ -15499,6 +15517,17 @@ $('#psm-close').addEventListener('click',  () => { $('#pos-settings-modal').styl
 $('#psm-cancel').addEventListener('click', () => { $('#pos-settings-modal').style.display = 'none'; });
 $('#pos-settings-modal').addEventListener('click', (e) => {
   if (e.target === e.currentTarget) e.currentTarget.style.display = 'none';
+});
+
+$('#psm-logo-choose')?.addEventListener('click', () => {
+  openImgPicker((fileId, url) => {
+    _psmBizLogoUrl = url;
+    _psmBizLogoRender();
+  });
+});
+$('#psm-logo-remove')?.addEventListener('click', () => {
+  _psmBizLogoUrl = '';
+  _psmBizLogoRender();
 });
 
 $('#rb-pos-settings').addEventListener('click', openPosSettings);
@@ -15635,6 +15664,7 @@ $('#psm-save').addEventListener('click', async () => {
 
   const payload = {
     business_name:               $('#psm-biz-name').value.trim(),
+    business_logo_url:           _psmBizLogoUrl || null,
     currency:                    $('#psm-currency').value.trim(),
     timezone:                    $('#psm-timezone').value.trim(),
     display_theme:               $('#psm-theme').value,
@@ -16969,13 +16999,13 @@ async function handleProductClick(p) {
       _retailPrice: retailP, _wholesalePrice,
     };
   } else if (inStock.length > 0) {
-    // FIFO: first available in-stock layer
+    // FIFO: backend handles layer selection; no layerId pinned so consumeFifo runs server-side
     const layer = inStock[0];
     const retailP = parseFloat(layer.unit_sell_price);
     cartItem = {
-      id: p.id, layerId: layer.id, layerLabel: layer.label || `Batch #${layer.id}`,
+      id: p.id, layerId: null, layerLabel: null,
       name: p.name, price: (_isWholesale && _wholesalePrice != null) ? _wholesalePrice : retailP,
-      stock: parseFloat(layer.quantity_remaining),
+      stock: p.stock_quantity != null ? parseFloat(p.stock_quantity) : null,
       _retailPrice: retailP, _wholesalePrice,
     };
   } else if (layers.length >= 1) {

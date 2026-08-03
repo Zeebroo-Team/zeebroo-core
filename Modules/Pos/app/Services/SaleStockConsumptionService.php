@@ -51,26 +51,85 @@ class SaleStockConsumptionService
             }
 
             $available = (float) $layer->quantity_remaining;
-            if ($available + self::QTY_TOLERANCE < $quantity) {
-                throw ValidationException::withMessages([
-                    'items' => 'Not enough stock in the selected batch for '.$product->name
-                        .'. Available in batch: '.number_format($available, 3, '.', '').'.',
-                ]);
+
+            if ($available + self::QTY_TOLERANCE >= $quantity) {
+                // Requested layer has enough stock — fast path
+                $sellPrice = $this->resolveLayerSellPrice($product, $layer);
+                $layer->quantity_remaining = round(max(0, $available - $quantity), 3);
+                $layer->save();
+
+                $product->stock_quantity = max(0.0, round((float) $product->stock_quantity - $quantity, 3));
+                $product->save();
+
+                return [[
+                    'product_stock_layer_id' => (int) $layer->id,
+                    'quantity' => round($quantity, 3),
+                    'unit_cost' => round((float) $layer->unit_cost, 2),
+                    'unit_sell_price' => $sellPrice,
+                ]];
             }
 
-            $sellPrice = $this->resolveLayerSellPrice($product, $layer);
-            $layer->quantity_remaining = round(max(0, $available - $quantity), 3);
-            $layer->save();
+            // Requested layer is under-stocked — drain it first, then FIFO for the remainder
+            $allocations = [];
+            $remaining = $quantity;
+
+            if ($available > self::QTY_TOLERANCE) {
+                $sellPrice = $this->resolveLayerSellPrice($product, $layer);
+                $allocations[] = [
+                    'product_stock_layer_id' => (int) $layer->id,
+                    'quantity' => round($available, 3),
+                    'unit_cost' => round((float) $layer->unit_cost, 2),
+                    'unit_sell_price' => $sellPrice,
+                ];
+                $layer->quantity_remaining = 0;
+                $layer->save();
+                $remaining = round($remaining - $available, 3);
+            }
+
+            if ($remaining > self::QTY_TOLERANCE) {
+                $fifoLayers = ProductStockLayer::query()
+                    ->where('product_id', $product->id)
+                    ->where('business_id', $product->business_id)
+                    ->where('quantity_remaining', '>', 0)
+                    ->where('id', '!=', $layerId)
+                    ->orderBy('received_at')
+                    ->orderBy('id')
+                    ->lockForUpdate()
+                    ->get();
+
+                foreach ($fifoLayers as $fl) {
+                    if ($remaining <= self::QTY_TOLERANCE) {
+                        break;
+                    }
+                    $avail = (float) $fl->quantity_remaining;
+                    if ($avail <= self::QTY_TOLERANCE) {
+                        continue;
+                    }
+                    $take = min($remaining, $avail);
+                    $sp = $this->resolveLayerSellPrice($product, $fl);
+                    $allocations[] = [
+                        'product_stock_layer_id' => (int) $fl->id,
+                        'quantity' => round($take, 3),
+                        'unit_cost' => round((float) $fl->unit_cost, 2),
+                        'unit_sell_price' => $sp,
+                    ];
+                    $fl->quantity_remaining = round($avail - $take, 3);
+                    $fl->save();
+                    $remaining = round($remaining - $take, 3);
+                }
+            }
+
+            if ($remaining > self::QTY_TOLERANCE) {
+                throw ValidationException::withMessages([
+                    'items' => 'Insufficient stock for '.$product->name
+                        .'. Available: '.number_format((float) $product->stock_quantity, 3, '.', '').'.',
+                ]);
+            }
 
             $product->stock_quantity = max(0.0, round((float) $product->stock_quantity - $quantity, 3));
             $product->save();
 
-            return [[
-                'product_stock_layer_id' => (int) $layer->id,
-                'quantity' => round($quantity, 3),
-                'unit_cost' => round((float) $layer->unit_cost, 2),
-                'unit_sell_price' => $sellPrice,
-            ]];
+            return $allocations;
         });
     }
 

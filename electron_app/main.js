@@ -512,10 +512,14 @@ try {
   });
 });
 
-// ── Render a Fabric.js canvas_json to a PNG data URL ──────────────────────
-ipcMain.handle('render-canvas-to-dataurl', async (_e, { canvasJson, width, height }) => {
-  const w = width  || 794;
-  const h = height || 1123;
+// ── Render a Fabric.js canvas_json to a high-res PNG data URL ─────────────
+ipcMain.handle('render-canvas-to-dataurl', async (_e, { canvasJson, width, height, scale }) => {
+  const w  = width  || 794;
+  const h  = height || 1123;
+  // Render at sc× resolution so the embedded image is sharp (default 2×)
+  const sc = Math.max(1, Math.min(4, parseFloat(scale) || 2));
+  const pw = Math.round(w * sc); // pixel canvas width
+  const ph = Math.round(h * sc); // pixel canvas height
 
   const fabricSrc = path.join(__dirname, 'renderer', 'js', 'fabric.min.js');
   if (!fs.existsSync(fabricSrc)) return null;
@@ -526,16 +530,22 @@ ipcMain.handle('render-canvas-to-dataurl', async (_e, { canvasJson, width, heigh
 
   const html = `<!DOCTYPE html>
 <html><head><meta charset="UTF-8">
-<style>*{margin:0;padding:0;box-sizing:border-box;overflow:hidden}html,body{width:${w}px;height:${h}px;background:transparent}canvas{display:block}</style>
+<style>*{margin:0;padding:0;box-sizing:border-box;overflow:hidden}html,body{width:${w}px;height:${h}px;background:transparent}canvas{display:block;width:${w}px;height:${h}px}</style>
 </head><body>
-<canvas id="c" width="${w}" height="${h}"></canvas>
+<canvas id="c" width="${pw}" height="${ph}"></canvas>
 <script>${fabricCode}</script>
 <script>
 try{
   var raw=${canvasData};
   var data=typeof raw==='string'?JSON.parse(raw):raw;
-  var c=new fabric.Canvas('c',{width:${w},height:${h},enableRetinaScaling:false});
-  c.loadFromJSON(data,function(){c.renderAll();document.title='__ready__';});
+  var c=new fabric.Canvas('c',{width:${pw},height:${ph},enableRetinaScaling:false});
+  c.loadFromJSON(data,function(){
+    c.setZoom(${sc});
+    c.setWidth(${pw});
+    c.setHeight(${ph});
+    c.renderAll();
+    document.title='__ready__';
+  });
 }catch(e){document.title='__error__';}
 </script>
 </body></html>`;
@@ -570,10 +580,10 @@ try{
     };
 
     win.webContents.on('page-title-updated', (_ev, title) => {
-      if      (title === '__ready__') setTimeout(getDataUrl, 150);
+      if      (title === '__ready__') setTimeout(getDataUrl, 200);
       else if (title === '__error__') finish(null);
     });
-    win.webContents.once('did-finish-load', () => setTimeout(() => { if (!done) finish(null); }, 5000));
+    win.webContents.once('did-finish-load', () => setTimeout(() => { if (!done) finish(null); }, 8000));
     win.webContents.on('did-fail-load', () => finish(null));
   });
 });
