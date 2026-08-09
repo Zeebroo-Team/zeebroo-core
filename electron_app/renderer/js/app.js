@@ -33452,7 +33452,10 @@ async function submitDsCreate() {
     const h2 = '<tr>' + _ssDateRange.map(d => `<th style="${TH2}">${_ssDateLabel(d)}</th>`).join('')
              + `<th style="${TH2}">TRANSPORT<br>ALLOWANCE</th></tr>`;
 
-    const rowsHtml = _ssRows.map((row, idx) => _ssBuildRowHtml(row, idx)).join('');
+    const totalCols = 7 + n + 11; // all columns: 7 fixed-left + n dates + 11 fixed-right
+    const rowsHtml = _ssRows.length > 0
+      ? _ssRows.map((row, idx) => _ssBuildRowHtml(row, idx)).join('')
+      : `<tr><td colspan="${totalCols}" style="text-align:center;color:var(--text-muted);padding:48px 20px;font-size:13px">No rows yet — click <strong>Add Row</strong> to begin.</td></tr>`;
     const totalNet = _ssRows.reduce((s, r) => s + r.net_amount, 0);
     const foot = `<tr style="background:#e0f2fe">
       <td colspan="${7 + n + 7}" style="text-align:right;padding:5px 10px;border:1px solid #bfdbfe;font-size:10px;font-weight:700;color:#1e40af">TOTAL NET</td>
