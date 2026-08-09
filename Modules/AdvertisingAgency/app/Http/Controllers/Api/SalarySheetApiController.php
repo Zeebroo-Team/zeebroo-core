@@ -35,8 +35,8 @@ class SalarySheetApiController extends Controller
         $business  = $this->businessOrAbort($request);
         $validated = $request->validate([
             'location'  => ['nullable', 'string', 'max:200'],
-            'date_from' => ['required', 'date'],
-            'date_to'   => ['required', 'date', 'gte:date_from'],
+            'date_from' => ['nullable', 'date'],
+            'date_to'   => ['nullable', 'date', 'gte:date_from'],
             'job_id'    => ['nullable', 'integer'],
             'notes'     => ['nullable', 'string', 'max:2000'],
         ]);

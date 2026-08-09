@@ -30,8 +30,8 @@ class SalarySheetService
                 'sheet_ref'  => $s->sheet_ref,
                 'location'   => $s->location,
                 'job_id'     => $s->job_id,
-                'date_from'  => $s->date_from->format('Y-m-d'),
-                'date_to'    => $s->date_to->format('Y-m-d'),
+                'date_from'  => $s->date_from?->format('Y-m-d'),
+                'date_to'    => $s->date_to?->format('Y-m-d'),
                 'status'     => $s->status,
                 'rows_count' => $s->rows_count,
             ]);
@@ -43,8 +43,11 @@ class SalarySheetService
     {
         $ref = $this->generateRef($business);
         // Auto-generate a title from location + date range
-        $location = $data['location'] ?? null;
-        $title    = trim(($location ?: 'Salary Sheet') . ' — ' . $data['date_from'] . ' to ' . $data['date_to']);
+        $location  = $data['location'] ?? null;
+        $dateFrom  = $data['date_from'] ?? null;
+        $dateTo    = $data['date_to']   ?? null;
+        $datePart  = $dateFrom && $dateTo ? " — {$dateFrom} to {$dateTo}" : '';
+        $title     = trim(($location ?: 'Salary Sheet') . $datePart);
 
         return SalarySheet::create([
             'business_id' => $business->id,
@@ -52,8 +55,8 @@ class SalarySheetService
             'sheet_ref'   => $ref,
             'title'       => $title,
             'location'    => $location,
-            'date_from'   => $data['date_from'],
-            'date_to'     => $data['date_to'],
+            'date_from'   => $dateFrom,
+            'date_to'     => $dateTo,
             'status'      => 'draft',
             'notes'       => $data['notes']    ?? null,
         ]);
@@ -88,8 +91,8 @@ class SalarySheetService
             'title'                   => $sheet->title,
             'location'                => $sheet->location,
             'job_id'                  => $sheet->job_id,
-            'date_from'               => $sheet->date_from->format('Y-m-d'),
-            'date_to'                 => $sheet->date_to->format('Y-m-d'),
+            'date_from'               => $sheet->date_from?->format('Y-m-d'),
+            'date_to'                 => $sheet->date_to?->format('Y-m-d'),
             'status'                  => $sheet->status,
             'notes'                   => $sheet->notes,
             'default_coordinator_fee' => $sheet->default_coordinator_fee ?? 0,
@@ -138,9 +141,12 @@ class SalarySheetService
         $location = array_key_exists('location', $data) ? $data['location'] : $sheet->location;
 
         // Auto-regenerate title when location or dates change via setup modal
-        $dateFrom = $data['date_from'] ?? $sheet->date_from;
-        $dateTo   = $data['date_to']   ?? $sheet->date_to;
-        $newTitle = trim(($location ?: 'Salary Sheet') . ' — ' . (is_string($dateFrom) ? $dateFrom : $dateFrom->format('Y-m-d')) . ' to ' . (is_string($dateTo) ? $dateTo : $dateTo->format('Y-m-d')));
+        $dateFrom   = array_key_exists('date_from', $data) ? $data['date_from'] : $sheet->date_from;
+        $dateTo     = array_key_exists('date_to',   $data) ? $data['date_to']   : $sheet->date_to;
+        $dfStr      = $dateFrom ? (is_string($dateFrom) ? $dateFrom : $dateFrom->format('Y-m-d')) : null;
+        $dtStr      = $dateTo   ? (is_string($dateTo)   ? $dateTo   : $dateTo->format('Y-m-d'))   : null;
+        $datePart   = ($dfStr && $dtStr) ? " — {$dfStr} to {$dtStr}" : '';
+        $newTitle   = trim(($location ?: 'Salary Sheet') . $datePart);
 
         $sheet->update([
             'job_id'                  => array_key_exists('job_id', $data) ? $data['job_id'] : $sheet->job_id,

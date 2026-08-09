@@ -33292,8 +33292,10 @@ async function submitDsCreate() {
 
   function _ssItemNum(sheet, idx) {
     if (!sheet) return '';
-    const d = new Date(sheet.date_from + 'T00:00:00');
-    return `ITM/${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(idx+1).padStart(3,'0')}`;
+    const base = sheet.date_from
+      ? (() => { const d = new Date(sheet.date_from + 'T00:00:00'); return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}`; })()
+      : (() => { const d = new Date(); return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}`; })();
+    return `ITM/${base}/${String(idx+1).padStart(3,'0')}`;
   }
 
   function _ssRecalcRow(row, dateRange) {
@@ -33337,7 +33339,7 @@ async function submitDsCreate() {
       return `<tr>
         <td style="font-size:11px;font-weight:700;font-family:monospace;color:var(--accent,#6366f1)">${escHtml(s.sheet_ref)}</td>
         <td style="font-size:12px;color:var(--text-muted)">${escHtml(s.location || '—')}</td>
-        <td style="font-size:12px;color:var(--text-muted)">${escHtml(s.date_from)} → ${escHtml(s.date_to)}</td>
+        <td style="font-size:12px;color:var(--text-muted)">${s.date_from && s.date_to ? escHtml(s.date_from) + ' → ' + escHtml(s.date_to) : '—'}</td>
         <td style="font-size:12px;text-align:center">${s.rows_count}</td>
         <td><span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px;background:${sc}20;color:${sc}">${sl}</span></td>
         <td style="text-align:right;white-space:nowrap">
@@ -33402,7 +33404,8 @@ async function submitDsCreate() {
     if (ev) ev.style.display = 'flex';
     const titleEl = $('#ss-editor-title'), datesEl = $('#ss-editor-dates');
     if (titleEl) titleEl.textContent = sheetData.sheet_ref || sheetData.title;
-    if (datesEl) datesEl.textContent = `${sheetData.date_from}  →  ${sheetData.date_to}`;
+    if (datesEl) datesEl.textContent = sheetData.date_from && sheetData.date_to
+      ? `${sheetData.date_from}  →  ${sheetData.date_to}` : '';
     const alertEl = $('#ss-editor-alert');
     if (alertEl) alertEl.style.display = 'none';
 
@@ -33878,9 +33881,7 @@ async function submitDsCreate() {
     const al = $('#ss-create-alert');
     const err = msg => { if (al) { al.textContent = msg; al.style.display = ''; al.style.color = '#ef4444'; } };
 
-    if (!dateFrom)         { err('Start date is required.'); return; }
-    if (!dateTo)           { err('End date is required.'); return; }
-    if (dateFrom > dateTo) { err('Start date must be before end date.'); return; }
+    if (dateFrom && dateTo && dateFrom > dateTo) { err('Start date must be before end date.'); return; }
 
     const btn = $('#ss-create-save'); if (btn) btn.disabled = true;
     const res = await API.salarySheetCreate({
