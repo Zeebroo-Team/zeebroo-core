@@ -33298,13 +33298,20 @@ async function submitDsCreate() {
     return `ITM/${base}/${String(idx+1).padStart(3,'0')}`;
   }
 
-  function _ssRecalcRow(row, dateRange) {
-    const p = dateRange.filter(d => row.attendance[d] === 'P').length;
-    row.total_days        = p;
-    row.attendance_amount = p * (row.daily_rate || 0);
+  // Recalculate monetary amounts from row.total_days (does NOT re-count attendance)
+  function _ssCalcAmounts(row) {
+    row.attendance_amount = (row.total_days || 0) * (row.daily_rate || 0);
     row.base_amount       = row.attendance_amount;
-    row.net_amount        = row.base_amount + (row.transport_allowance || 0)
-                          - (row.expenses   || 0) - (row.hold_amount   || 0);
+    row.net_amount        = row.base_amount
+                          + (row.transport_allowance || 0)
+                          - (row.expenses            || 0)
+                          - (row.hold_amount         || 0);
+  }
+
+  // Re-count 'P' marks from attendance → update total_days → recalculate amounts
+  function _ssRecalcRow(row, dateRange) {
+    row.total_days = dateRange.filter(d => row.attendance[d] === 'P').length;
+    _ssCalcAmounts(row);
   }
 
   // ── State ──────────────────────────────────────────────────────────────────
@@ -33485,7 +33492,7 @@ async function submitDsCreate() {
       html += `<td data-ss-att="${d}" style="padding:4px 8px;border:1px solid #d1d5db;text-align:center;background:${bg};color:${clr};font-weight:700;cursor:pointer;min-width:48px;user-select:none">${st}</td>`;
     });
 
-    html += `<td data-ss-field="total_days"        style="${TD};font-weight:700;min-width:55px">${row.total_days}</td>`;
+    html += `<td style="${TDE};font-weight:700;min-width:55px;text-align:center" class="ss-editable" data-ss-row="${idx}" data-ss-field="total_days" data-ss-type="number">${row.total_days}</td>`;
     html += `<td data-ss-field="attendance_amount"  style="${amtStyle(row.attendance_amount, true)}">${_fmtRs(row.attendance_amount)}</td>`;
     html += `<td data-ss-field="base_amount"        style="${amtStyle(row.base_amount, true)};font-weight:700">${_fmtRs(row.base_amount)}</td>`;
     html += `<td style="${TDE};text-align:right" class="ss-editable" data-ss-row="${idx}" data-ss-field="transport_allowance" data-ss-type="number" style="color:#059669">${_fmtRs(row.transport_allowance)}</td>`;
@@ -33521,7 +33528,8 @@ async function submitDsCreate() {
     });
 
     // Inline-editable cells
-    const numFields = ['daily_rate','transport_allowance','expenses','hold_amount','coordination_fee'];
+    // These fields trigger a monetary recalculation on commit (using current total_days)
+    const numFields = ['total_days','daily_rate','transport_allowance','expenses','hold_amount','coordination_fee'];
     wrap.querySelectorAll('.ss-editable').forEach(cell => {
       const rowIdx = parseInt(cell.dataset.ssRow ?? '-1');
       const field  = cell.dataset.ssField;
@@ -33623,13 +33631,13 @@ async function submitDsCreate() {
         const commit = () => {
           const nv = isNum ? (parseFloat(inp.value) || 0) : inp.value.trim();
           row[field] = nv;
-          if (numFields.includes(field)) { _ssRecalcRow(row, _ssDateRange); _ssUpdateRowCells(rowIdx); }
+          if (numFields.includes(field)) { _ssCalcAmounts(row); _ssUpdateRowCells(rowIdx); }
           else { cell.textContent = escHtml(nv || (field.includes('coordinator') ? 'N/A' : '')); }
         };
         inp.addEventListener('blur', commit);
         inp.addEventListener('keydown', e => {
           if (e.key === 'Enter')  { commit(); inp.blur(); }
-          if (e.key === 'Escape') { cell.textContent = isNum ? _fmtRs(row[field]) : escHtml(row[field] || ''); }
+          if (e.key === 'Escape') { cell.textContent = isNum ? (field === 'total_days' ? (row[field] || 0) : _fmtRs(row[field])) : escHtml(row[field] || ''); }
         });
       });
     });
@@ -33659,7 +33667,8 @@ async function submitDsCreate() {
     });
 
     const f = field => tr.querySelector(`[data-ss-field="${field}"]`);
-    if (f('total_days'))       f('total_days').textContent        = row.total_days;
+    const tdEl = f('total_days');
+    if (tdEl && !tdEl.querySelector('input')) tdEl.textContent = row.total_days;
     if (f('attendance_amount'))f('attendance_amount').textContent = _fmtRs(row.attendance_amount);
     if (f('base_amount'))      f('base_amount').textContent       = _fmtRs(row.base_amount);
 
