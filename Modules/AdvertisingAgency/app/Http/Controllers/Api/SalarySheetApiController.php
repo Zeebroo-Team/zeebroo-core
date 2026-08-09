@@ -36,7 +36,7 @@ class SalarySheetApiController extends Controller
         $validated = $request->validate([
             'location'  => ['nullable', 'string', 'max:200'],
             'date_from' => ['nullable', 'date'],
-            'date_to'   => ['nullable', 'date', 'gte:date_from'],
+            'date_to'   => ['nullable', 'date'],
             'job_id'    => ['nullable', 'integer'],
             'notes'     => ['nullable', 'string', 'max:2000'],
         ]);
@@ -59,8 +59,8 @@ class SalarySheetApiController extends Controller
         $validated = $request->validate([
             'job_id'                         => ['sometimes', 'nullable', 'integer'],
             'location'                       => ['nullable', 'string', 'max:200'],
-            'date_from'                      => ['sometimes', 'date'],
-            'date_to'                        => ['sometimes', 'date'],
+            'date_from'                      => ['sometimes', 'nullable', 'date'],
+            'date_to'                        => ['sometimes', 'nullable', 'date'],
             'status'                         => ['sometimes', 'string', 'in:draft,completed,approved,rejected,paid'],
             'notes'                          => ['nullable', 'string', 'max:2000'],
             'default_coordinator_fee'        => ['sometimes', 'nullable', 'numeric', 'min:0'],
