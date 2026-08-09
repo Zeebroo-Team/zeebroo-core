@@ -20,9 +20,13 @@ class SalarySheetService
             ->where('business_id', $business->id)
             ->when($q, fn ($qry) => $qry->where(function ($sub) use ($q) {
                 $sub->where('sheet_ref', 'like', "%{$q}%")
-                    ->orWhere('location', 'like', "%{$q}%");
+                    ->orWhere('location', 'like', "%{$q}%")
+                    ->orWhereHas('job', fn ($j) => $j->where('name', 'like', "%{$q}%"));
             }))
+            ->with('job:id,name,job_ref')
             ->withCount('rows')
+            ->orderByRaw('CASE WHEN job_id IS NULL THEN 1 ELSE 0 END')
+            ->orderBy('job_id')
             ->orderByDesc('created_at')
             ->get()
             ->map(fn ($s) => [
@@ -30,6 +34,8 @@ class SalarySheetService
                 'sheet_ref'  => $s->sheet_ref,
                 'location'   => $s->location,
                 'job_id'     => $s->job_id,
+                'job_name'   => $s->job?->name,
+                'job_ref'    => $s->job?->job_ref,
                 'date_from'  => $s->date_from?->format('Y-m-d'),
                 'date_to'    => $s->date_to?->format('Y-m-d'),
                 'status'     => $s->status,

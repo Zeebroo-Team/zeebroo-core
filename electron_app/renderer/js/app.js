@@ -33340,21 +33340,46 @@ async function submitDsCreate() {
       tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:32px">No salary sheets yet. Click <strong>New Salary Sheet</strong> to create one.</td></tr>';
       return;
     }
-    tbody.innerHTML = sheets.map(s => {
-      const sc = s.status === 'finalized' ? '#10b981' : '#f59e0b';
-      const sl = s.status === 'finalized' ? 'Finalized' : 'Draft';
-      return `<tr>
-        <td style="font-size:11px;font-weight:700;font-family:monospace;color:var(--accent,#6366f1)">${escHtml(s.sheet_ref)}</td>
-        <td style="font-size:12px;color:var(--text-muted)">${escHtml(s.location || '—')}</td>
-        <td style="font-size:12px;color:var(--text-muted)">${s.date_from && s.date_to ? escHtml(s.date_from) + ' → ' + escHtml(s.date_to) : '—'}</td>
-        <td style="font-size:12px;text-align:center">${s.rows_count}</td>
-        <td><span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px;background:${sc}20;color:${sc}">${sl}</span></td>
-        <td style="text-align:right;white-space:nowrap">
-          <button class="crm-card-btn" data-action="open" data-id="${s.id}" title="Open Sheet"><i class="fa fa-table-cells"></i></button>
-          <button class="crm-card-btn" style="color:#ef4444" data-action="delete" data-id="${s.id}" title="Delete"><i class="fa fa-trash"></i></button>
+
+    // Group by job (null job_id → "No Job Linked")
+    const groups = [];
+    const groupMap = {};
+    for (const s of sheets) {
+      const key = s.job_id ?? '__none__';
+      if (!groupMap[key]) {
+        groupMap[key] = { label: s.job_name || 'No Job Linked', ref: s.job_ref || null, sheets: [] };
+        groups.push(groupMap[key]);
+      }
+      groupMap[key].sheets.push(s);
+    }
+
+    const rows = [];
+    for (const g of groups) {
+      const jobLabel = escHtml(g.label) + (g.ref ? ` <span style="font-weight:400;opacity:.7">(${escHtml(g.ref)})</span>` : '');
+      rows.push(`<tr>
+        <td colspan="6" style="background:var(--sidebar-bg,#f1f5f9);padding:5px 12px;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--accent,#6366f1);border-top:2px solid var(--accent,#6366f1);border-bottom:1px solid var(--border-color)">
+          <i class="fa fa-briefcase" style="margin-right:6px;opacity:.7"></i>${jobLabel}
+          <span style="font-weight:400;color:var(--text-muted);margin-left:6px">${g.sheets.length} sheet${g.sheets.length !== 1 ? 's' : ''}</span>
         </td>
-      </tr>`;
-    }).join('');
+      </tr>`);
+
+      for (const s of g.sheets) {
+        const sc = s.status === 'finalized' ? '#10b981' : '#f59e0b';
+        const sl = s.status === 'finalized' ? 'Finalized' : 'Draft';
+        rows.push(`<tr>
+          <td style="font-size:11px;font-weight:700;font-family:monospace;color:var(--accent,#6366f1);padding-left:22px">${escHtml(s.sheet_ref)}</td>
+          <td style="font-size:12px;color:var(--text-muted)">${escHtml(s.location || '—')}</td>
+          <td style="font-size:12px;color:var(--text-muted)">${s.date_from && s.date_to ? escHtml(s.date_from) + ' → ' + escHtml(s.date_to) : '—'}</td>
+          <td style="font-size:12px;text-align:center">${s.rows_count}</td>
+          <td><span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px;background:${sc}20;color:${sc}">${sl}</span></td>
+          <td style="text-align:right;white-space:nowrap">
+            <button class="crm-card-btn" data-action="open" data-id="${s.id}" title="Open Sheet"><i class="fa fa-table-cells"></i></button>
+            <button class="crm-card-btn" style="color:#ef4444" data-action="delete" data-id="${s.id}" title="Delete"><i class="fa fa-trash"></i></button>
+          </td>
+        </tr>`);
+      }
+    }
+    tbody.innerHTML = rows.join('');
 
     tbody.querySelectorAll('[data-action="open"]').forEach(btn => {
       btn.addEventListener('click', async () => {

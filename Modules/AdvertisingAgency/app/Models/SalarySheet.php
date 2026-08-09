@@ -19,6 +19,11 @@ class SalarySheet extends Model
         'date_to'   => 'date:Y-m-d',
     ];
 
+    public function job(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(Job::class, 'job_id');
+    }
+
     public function rows(): \Illuminate\Database\Eloquent\Relations\HasMany
     {
         return $this->hasMany(SalarySheetRow::class, 'sheet_id')->orderBy('sort_order');
