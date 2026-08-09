@@ -34126,12 +34126,16 @@ async function submitDsCreate() {
       jobSel.value = _ssCurrentSheet.job_id ?? '';
     }
 
-    const locEl   = $('#ss-setup-location');
-    const notesEl = $('#ss-setup-notes');
-    const feeEl   = $('#ss-setup-coord-fee');
-    if (locEl)   locEl.value   = _ssCurrentSheet.location ?? '';
-    if (notesEl) notesEl.value = _ssCurrentSheet.notes    ?? '';
-    if (feeEl)   feeEl.value   = _ssCurrentSheet.default_coordinator_fee ?? 0;
+    const locEl      = $('#ss-setup-location');
+    const notesEl    = $('#ss-setup-notes');
+    const feeEl      = $('#ss-setup-coord-fee');
+    const dateFromEl = $('#ss-setup-date-from');
+    const dateToEl   = $('#ss-setup-date-to');
+    if (locEl)      locEl.value      = _ssCurrentSheet.location ?? '';
+    if (dateFromEl) dateFromEl.value = _ssCurrentSheet.date_from ?? '';
+    if (dateToEl)   dateToEl.value   = _ssCurrentSheet.date_to   ?? '';
+    if (notesEl)    notesEl.value    = _ssCurrentSheet.notes    ?? '';
+    if (feeEl)      feeEl.value      = _ssCurrentSheet.default_coordinator_fee ?? 0;
 
     // Seed allowances
     _ssAllowances = (_ssCurrentSheet.allowances || []).map(a => ({ ...a }));
@@ -34189,9 +34193,18 @@ async function submitDsCreate() {
       }
     }
 
+    const dateFrom = $('#ss-setup-date-from')?.value || null;
+    const dateTo   = $('#ss-setup-date-to')?.value   || null;
+    if (dateFrom && dateTo && dateFrom > dateTo) {
+      showErr('Start date must be before end date.');
+      return;
+    }
+
     const body = {
       job_id:                  $('#ss-setup-job-id').value || null,
       location:                ($('#ss-setup-location').value  || '').trim() || null,
+      date_from:               dateFrom,
+      date_to:                 dateTo,
       notes:                   ($('#ss-setup-notes').value     || '').trim() || null,
       default_coordinator_fee: parseFloat($('#ss-setup-coord-fee').value) || 0,
       allowances: _ssAllowances.map(a => ({
@@ -34216,9 +34229,26 @@ async function submitDsCreate() {
     if (res.status === 200) {
       // Response is the full show() payload — includes fresh allowance IDs
       _ssCurrentSheet = res.body?.data || _ssCurrentSheet;
+
+      // Update editor header
       const titleEl = $('#ss-editor-title');
       if (titleEl) titleEl.textContent = _ssCurrentSheet.sheet_ref || _ssCurrentSheet.title;
+      const datesEl = $('#ss-editor-dates');
+      if (datesEl) datesEl.textContent = _ssCurrentSheet.date_from && _ssCurrentSheet.date_to
+        ? `${_ssCurrentSheet.date_from}  →  ${_ssCurrentSheet.date_to}` : '';
+
+      // Recompute date range; preserve existing attendance where dates overlap
+      const newRange = _ssDatesInRange(_ssCurrentSheet.date_from, _ssCurrentSheet.date_to);
+      _ssRows.forEach(row => {
+        const merged = {};
+        newRange.forEach(d => { merged[d] = row.attendance[d] || 'A'; });
+        row.attendance = merged;
+        _ssRecalcRow(row, newRange);
+      });
+      _ssDateRange = newRange;
+
       _ssCloseSetupModal();
+      _ssRenderTable(); // re-render with updated date columns
     } else {
       showErr(res.body?.message || 'Failed to save setup.');
     }
