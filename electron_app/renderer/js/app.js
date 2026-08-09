@@ -33399,6 +33399,24 @@ async function submitDsCreate() {
   }
 
   // ── Editor ─────────────────────────────────────────────────────────────────
+  const _ssLockedStatuses = new Set(['completed', 'paid', 'approved']);
+  function _ssIsLocked() { return _ssLockedStatuses.has(_ssCurrentSheet?.status); }
+
+  function _ssApplyLockState() {
+    const locked = _ssIsLocked();
+    const show   = (id, visible) => { const el = $(id); if (el) el.style.display = visible ? '' : 'none'; };
+    show('#ss-add-row-btn', !locked);
+    show('#ss-save-btn',    !locked);
+    show('#ss-setup-btn',   !locked);
+
+    const notice = $('#ss-lock-notice');
+    if (notice) {
+      notice.style.display = locked ? 'flex' : 'none';
+      const lbl = $('#ss-lock-status-label');
+      if (lbl && _ssCurrentSheet) lbl.textContent = _ssCurrentSheet.status;
+    }
+  }
+
   function _ssOpenEditor(sheetData) {
     _ssCurrentSheet = sheetData;
     _ssDateRange    = _ssDatesInRange(sheetData.date_from, sheetData.date_to);
@@ -33441,6 +33459,7 @@ async function submitDsCreate() {
     const alertEl = $('#ss-editor-alert');
     if (alertEl) alertEl.style.display = 'none';
     _ssUpdateStatusBadge(sheetData.status || 'draft');
+    _ssApplyLockState();
 
     _ssRenderTable();
   }
@@ -33499,41 +33518,47 @@ async function submitDsCreate() {
   }
 
   function _ssBuildRowHtml(row, idx) {
+    const locked = _ssIsLocked();
     const TD  = 'padding:5px 8px;border:1px solid #d1d5db;text-align:center';
-    const TDE = `${TD};cursor:pointer;min-width:90px` ;
+    const TDE = locked ? `${TD};min-width:90px` : `${TD};cursor:pointer;min-width:90px`;
+    const ec  = (cls) => locked ? '' : cls;          // editable class — stripped when locked
+    const ed  = (attrs) => locked ? '' : attrs;      // editable data attrs — stripped when locked
     const amtStyle = (v, alwaysGreen) => {
       const c = alwaysGreen ? '#059669' : (v < 0 ? '#dc2626' : v > 0 ? '#059669' : '#6b7280');
       return `${TD};text-align:right;min-width:110px;color:${c}`;
     };
     let html = `<tr data-ss-row="${idx}" style="background:${idx%2===0?'#fff':'#f9fafb'}">`;
     html += `<td style="${TD};font-weight:700;font-size:10px;min-width:115px">${escHtml(_ssItemNum(_ssCurrentSheet, idx))}</td>`;
-    html += `<td style="${TDE}" class="ss-editable" data-ss-row="${idx}" data-ss-field="location" data-ss-type="text">${escHtml(row.location||'N/A')}</td>`;
-    html += `<td style="${TDE}" class="ss-editable" data-ss-row="${idx}" data-ss-field="position" data-ss-type="text">${escHtml(row.position||'')}</td>`;
-    html += `<td style="${TDE};min-width:130px" class="ss-editable" data-ss-row="${idx}" data-ss-field="promoter_name"  data-ss-type="text">${escHtml(row.promoter_name||'')}</td>`;
-    html += `<td style="${TDE};min-width:120px" class="ss-editable" data-ss-row="${idx}" data-ss-field="bank_name"      data-ss-type="text">${escHtml(row.bank_name||'')}</td>`;
-    html += `<td style="${TDE};min-width:120px" class="ss-editable" data-ss-row="${idx}" data-ss-field="bank_branch"    data-ss-type="text">${escHtml(row.bank_branch||'')}</td>`;
-    html += `<td style="${TDE};min-width:110px" class="ss-editable" data-ss-row="${idx}" data-ss-field="bank_account"   data-ss-type="text">${escHtml(row.bank_account||'')}</td>`;
+    html += `<td style="${TDE}" ${ec('class="ss-editable"')} ${ed(`data-ss-row="${idx}" data-ss-field="location" data-ss-type="text"`)}>${escHtml(row.location||'N/A')}</td>`;
+    html += `<td style="${TDE}" ${ec('class="ss-editable"')} ${ed(`data-ss-row="${idx}" data-ss-field="position" data-ss-type="text"`)}>${escHtml(row.position||'')}</td>`;
+    html += `<td style="${TDE};min-width:130px" ${ec('class="ss-editable"')} ${ed(`data-ss-row="${idx}" data-ss-field="promoter_name" data-ss-type="text"`)}>${escHtml(row.promoter_name||'')}</td>`;
+    html += `<td style="${TDE};min-width:120px" ${ec('class="ss-editable"')} ${ed(`data-ss-row="${idx}" data-ss-field="bank_name" data-ss-type="text"`)}>${escHtml(row.bank_name||'')}</td>`;
+    html += `<td style="${TDE};min-width:120px" ${ec('class="ss-editable"')} ${ed(`data-ss-row="${idx}" data-ss-field="bank_branch" data-ss-type="text"`)}>${escHtml(row.bank_branch||'')}</td>`;
+    html += `<td style="${TDE};min-width:110px" ${ec('class="ss-editable"')} ${ed(`data-ss-row="${idx}" data-ss-field="bank_account" data-ss-type="text"`)}>${escHtml(row.bank_account||'')}</td>`;
 
     _ssDateRange.forEach(d => {
       const st  = row.attendance[d] || 'A';
       const bg  = st === 'P' ? '#dcfce7' : '#fee2e2';
       const clr = st === 'P' ? '#16a34a' : '#dc2626';
-      html += `<td data-ss-att="${d}" style="padding:4px 8px;border:1px solid #d1d5db;text-align:center;background:${bg};color:${clr};font-weight:700;cursor:pointer;min-width:48px;user-select:none">${st}</td>`;
+      const cur = locked ? '' : 'cursor:pointer;';
+      html += `<td ${locked ? '' : `data-ss-att="${d}"`} style="padding:4px 8px;border:1px solid #d1d5db;text-align:center;background:${bg};color:${clr};font-weight:700;${cur}min-width:48px;user-select:none">${st}</td>`;
     });
 
-    html += `<td style="${TDE};font-weight:700;min-width:55px;text-align:center" class="ss-editable" data-ss-row="${idx}" data-ss-field="total_days" data-ss-type="number">${row.total_days}</td>`;
+    html += `<td style="${TDE};font-weight:700;min-width:55px;text-align:center" ${ec('class="ss-editable"')} ${ed(`data-ss-row="${idx}" data-ss-field="total_days" data-ss-type="number"`)}>${row.total_days}</td>`;
     html += `<td data-ss-field="attendance_amount"  style="${amtStyle(row.attendance_amount, true)}">${_fmtRs(row.attendance_amount)}</td>`;
     html += `<td data-ss-field="base_amount"        style="${amtStyle(row.base_amount, true)};font-weight:700">${_fmtRs(row.base_amount)}</td>`;
-    html += `<td style="${TDE};text-align:right" class="ss-editable" data-ss-row="${idx}" data-ss-field="transport_allowance" data-ss-type="number" style="color:#059669">${_fmtRs(row.transport_allowance)}</td>`;
-    html += `<td style="${TDE};text-align:right" class="ss-editable" data-ss-row="${idx}" data-ss-field="expenses"            data-ss-type="number">${_fmtRs(row.expenses)}</td>`;
-    html += `<td style="${TDE};text-align:right" class="ss-editable" data-ss-row="${idx}" data-ss-field="hold_amount"         data-ss-type="number">${_fmtRs(row.hold_amount)}</td>`;
+    html += `<td style="${TDE};text-align:right" ${ec('class="ss-editable"')} ${ed(`data-ss-row="${idx}" data-ss-field="transport_allowance" data-ss-type="number"`)}>${_fmtRs(row.transport_allowance)}</td>`;
+    html += `<td style="${TDE};text-align:right" ${ec('class="ss-editable"')} ${ed(`data-ss-row="${idx}" data-ss-field="expenses" data-ss-type="number"`)}>${_fmtRs(row.expenses)}</td>`;
+    html += `<td style="${TDE};text-align:right" ${ec('class="ss-editable"')} ${ed(`data-ss-row="${idx}" data-ss-field="hold_amount" data-ss-type="number"`)}>${_fmtRs(row.hold_amount)}</td>`;
     html += `<td data-ss-field="net_amount"         style="${TD};text-align:right;font-weight:700;font-size:12px;min-width:110px;color:${row.net_amount<0?'#dc2626':'inherit'}">${_fmtRs(row.net_amount)}</td>`;
-    html += `<td style="${TDE};min-width:110px" class="ss-editable" data-ss-row="${idx}" data-ss-field="coordinator_name"    data-ss-type="text">${escHtml(row.coordinator_name||'N/A')}</td>`;
-    html += `<td style="${TDE};text-align:right" class="ss-editable" data-ss-row="${idx}" data-ss-field="coordination_fee"   data-ss-type="number">${_fmtRs(row.coordination_fee)}</td>`;
+    html += `<td style="${TDE};min-width:110px" ${ec('class="ss-editable"')} ${ed(`data-ss-row="${idx}" data-ss-field="coordinator_name" data-ss-type="text"`)}>${escHtml(row.coordinator_name||'N/A')}</td>`;
+    html += `<td style="${TDE};text-align:right" ${ec('class="ss-editable"')} ${ed(`data-ss-row="${idx}" data-ss-field="coordination_fee" data-ss-type="number"`)}>${_fmtRs(row.coordination_fee)}</td>`;
     html += `<td style="${TD};min-width:140px;font-size:10px;color:var(--text-muted)">${escHtml(row.coordinator_bank_details||'N/A')}</td>`;
-    html += `<td style="${TD};padding:3px 6px">
-      <button class="crm-card-btn ss-del-row" style="color:#ef4444" data-ss-row="${idx}" title="Remove row"><i class="fa fa-trash"></i></button>
-    </td>`;
+    html += locked
+      ? `<td style="${TD};padding:3px 6px"></td>`
+      : `<td style="${TD};padding:3px 6px">
+          <button class="crm-card-btn ss-del-row" style="color:#ef4444" data-ss-row="${idx}" title="Remove row"><i class="fa fa-trash"></i></button>
+        </td>`;
     html += '</tr>';
     return html;
   }
@@ -33541,6 +33566,7 @@ async function submitDsCreate() {
   function _ssAttachTableListeners() {
     const wrap = $('#ss-table-wrap');
     if (!wrap) return;
+    if (_ssIsLocked()) return; // sheet is read-only — no interactive listeners
 
     // Attendance toggle
     wrap.querySelectorAll('[data-ss-att]').forEach(cell => {
@@ -35005,6 +35031,8 @@ async function submitDsCreate() {
     if (res.status === 200) {
       _ssCurrentSheet.status = _ssSelectedStatus;
       _ssUpdateStatusBadge(_ssSelectedStatus);
+      _ssApplyLockState();  // show/hide buttons + lock notice
+      _ssRenderTable();     // re-render rows without editable attrs when locked
       _ssCloseStatusModal();
     } else {
       if (al) {
