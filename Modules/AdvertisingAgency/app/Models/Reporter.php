@@ -11,6 +11,7 @@ class Reporter extends Model
 
     protected $fillable = [
         'business_id',
+        'user_id',
         'name',
         'email',
         'password',
