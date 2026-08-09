@@ -281,7 +281,7 @@ function activateTab(tabName) {
   $$('.ribbon-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tabName));
   $$('.ribbon-page').forEach(p => p.classList.toggle('active', p.dataset.page === tabName));
 
-  const panelMap = { home: 'panel-home', pos: 'panel-pos', sales: 'panel-sales', inventory: 'panel-inventory', finance: 'panel-finance', hr: 'panel-hr', services: 'panel-services', design: 'panel-design', restaurant: 'panel-restaurant', 'rst-pos': 'panel-rst-pos', mail: 'panel-mail', crm: 'panel-crm', automations: 'panel-automations', projects: 'panel-projects' };
+  const panelMap = { home: 'panel-home', pos: 'panel-pos', sales: 'panel-sales', inventory: 'panel-inventory', finance: 'panel-finance', hr: 'panel-hr', services: 'panel-services', design: 'panel-design', restaurant: 'panel-restaurant', 'rst-pos': 'panel-rst-pos', mail: 'panel-mail', crm: 'panel-crm', automations: 'panel-automations', projects: 'panel-projects', 'event-mgmt': 'panel-event-mgmt' };
   $$('.content-panel').forEach(p => p.classList.remove('active'));
   const target = $('#' + (panelMap[tabName] || 'panel-pos'));
   if (target) target.classList.add('active');
@@ -302,7 +302,8 @@ function activateTab(tabName) {
   if (tabName === 'mail')       { switchMailView('inbox'); }
   if (tabName === 'crm')        { switchCrmView('pipeline'); }
   if (tabName === 'automations'){ loadAutomations(); }
-  if (tabName === 'projects')   { switchPmView('projects'); }
+  if (tabName === 'projects')    { switchPmView('projects'); }
+  if (tabName === 'event-mgmt') { switchEvtView('brands'); }
   _syncSidebarActive(tabName);
   _sbNavExpand(tabName);
 }
@@ -3536,6 +3537,7 @@ const _obFeatureDefs = [
   { key: 'crm',                   img: 'img/features/social-media-campaign.png',       name: 'CRM',                  desc: 'Leads pipeline, contacts & follow-up tasks',    color: '#7c3aed' },
   { key: 'project_management',   img: 'img/features/account-management.png',          name: 'Projects',             desc: 'Projects, tasks, milestones & kanban boards',  color: '#0284c7' },
   { key: 'automation_editor',    img: 'img/features/automation-editor.svg',            name: 'Automation Editor',    desc: 'Trigger-based workflows & automated sequences', color: '#f59e0b' },
+  { key: 'event_management',     img: 'img/features/account-management.png',           name: 'Brand Management',     desc: 'Brands, short codes, contacts & company details', color: '#0ea5e9' },
   { key: 'developers',           img: 'img/features/developers.svg',                  name: 'Developers',           desc: 'API keys, webhooks & third-party integrations', color: '#0f766e' },
 ];
 
@@ -3749,6 +3751,7 @@ function applyFeatureVisibility() {
   const dev_enabled  = bf('developers');
   const auto_enabled = bf('automation_editor');
   const pm_enabled   = bf('project_management');
+  const evt_enabled  = bf('event_management');
 
   // ── Cashier mode: POS-only ──
   if (state.cashierMode) {
@@ -3783,9 +3786,10 @@ function applyFeatureVisibility() {
     services:   svc_any,
     mail:       mail_any,
     crm:        crm_any,
-    automations:auto_enabled,
-    projects:   pm_enabled,
-    users:      isAdminOrOwner,
+    automations:  auto_enabled,
+    projects:     pm_enabled,
+    'event-mgmt': evt_enabled,
+    users:        isAdminOrOwner,
   };
   $$('.ribbon-tab[data-tab]').forEach(tab => {
     const show = tabFeatures[tab.dataset.tab];
@@ -3826,7 +3830,8 @@ function applyFeatureVisibility() {
   // ── If currently on a hidden tab, go home ──
   if (!svc_any  && _activeTab() === 'services') activateTab('home');
   if (!mail_any && _activeTab() === 'mail')     activateTab('home');
-  if (!crm_any  && _activeTab() === 'crm')      activateTab('home');
+  if (!crm_any   && _activeTab() === 'crm')        activateTab('home');
+  if (!evt_enabled && _activeTab() === 'event-mgmt') activateTab('home');
 
   // ── Developers (account dropdown entry) ──
   const tpmDev = $('#tpm-developers');
@@ -4184,6 +4189,34 @@ function applyFeatureVisibility() {
   btn('#rb-crm-stages',    crm_pipeline || crm_tasks);
   grp('#rb-crm-refresh',   crm_any);                          // Actions group
   btn('#rb-crm-refresh',   crm_any);
+
+  // ── Event ribbon groups ──
+  grp('#rb-brd-all',     evt_enabled);
+  btn('#rb-brd-all',     evt_enabled);
+  btn('#rb-brd-new',     evt_enabled);
+  grp('#rb-rpt-all',     evt_enabled);
+  btn('#rb-rpt-all',     evt_enabled);
+  btn('#rb-rpt-new',     evt_enabled);
+  grp('#rb-ofc-all',     evt_enabled);
+  btn('#rb-ofc-all',     evt_enabled);
+  btn('#rb-ofc-new',     evt_enabled);
+  grp('#rb-agc-all',     evt_enabled);
+  btn('#rb-agc-all',     evt_enabled);
+  btn('#rb-agc-new',     evt_enabled);
+  grp('#rb-ss-all',      evt_enabled);
+  btn('#rb-ss-all',      evt_enabled);
+  btn('#rb-ss-new',      evt_enabled);
+  grp('#rb-crd-all',     evt_enabled);
+  btn('#rb-crd-all',     evt_enabled);
+  btn('#rb-crd-new',     evt_enabled);
+  grp('#rb-pmt-all',     evt_enabled);
+  btn('#rb-pmt-all',     evt_enabled);
+  btn('#rb-pmt-new',     evt_enabled);
+  grp('#rb-job-all',     evt_enabled);
+  btn('#rb-job-all',     evt_enabled);
+  btn('#rb-job-new',     evt_enabled);
+  grp('#rb-brd-refresh', evt_enabled);
+  btn('#rb-brd-refresh', evt_enabled);
 
   // ── Backstage sections ──
   const pos  = pos_any;
@@ -9610,7 +9643,7 @@ const _brand = { list: [], q: '', status: '', searchTimer: null, editingId: null
 async function _brandLoad() {
   const tbody = $('#brand-tbody');
   tbody.innerHTML = `<tr><td colspan="6" class="inv-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</td></tr>`;
-  const res = await API.brands(_brand.q, _brand.status);
+  const res = await API.productBrands(_brand.q, _brand.status);
   if (res.status !== 200) {
     tbody.innerHTML = `<tr><td colspan="6" class="inv-loading"><i class="fa fa-triangle-exclamation"></i> Failed to load</td></tr>`;
     return;
@@ -9687,8 +9720,8 @@ async function _brandSave() {
   btn.disabled = true;
 
   const res = _brand.editingId
-    ? await API.updateBrand(_brand.editingId, body)
-    : await API.createBrand(body);
+    ? await API.productBrandUpdate(_brand.editingId, body)
+    : await API.productBrandCreate(body);
 
   btn.disabled = false;
 
@@ -9707,7 +9740,7 @@ async function _brandDelete(id) {
   const b = _brand.list.find(x => x.id === id);
   if (!b) return;
   if (!confirm(`Delete brand "${b.name}"?`)) return;
-  const res = await API.deleteBrand(id);
+  const res = await API.productBrandDelete(id);
   if (res.status === 200) {
     toast('Brand deleted', 'success');
     _brandLoad();
@@ -11005,7 +11038,7 @@ async function _prodLoadFormOptions() {
   const [unitRes, catRes, brandRes] = await Promise.all([
     API.units(),
     API.categoryParentOpts(),
-    API.brands('', ''),
+    API.productBrands('', ''),
   ]);
 
   // Units select
@@ -11088,7 +11121,7 @@ async function _prodSave(andNew = false) {
   const brandIds = [];
   for (const brand of _prod.selectedBrands) {
     if (brand._new) {
-      const res = await API.createBrand({ name: brand.name, is_active: true });
+      const res = await API.productBrandCreate({ name: brand.name, is_active: true });
       if (res.status !== 201) {
         const msg = res.body?.errors ? Object.values(res.body.errors)[0]?.[0] : null;
         toast(msg || `Failed to create brand "${brand.name}"`, 'error');
@@ -20971,6 +21004,9 @@ async function submitLoanForm() {
 // ── Utilities ──────────────────────────────────────────────────────────────
 function escHtml(str) {
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function escAttr(str) {
+  return String(str ?? '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
 // ── Platform class ─────────────────────────────────────────────────────────
@@ -32769,6 +32805,2188 @@ async function submitDsCreate() {
 
   // ── Expose for debug ────────────────────────────────────────────────────────
   window._pm = pm;
+}());
+
+// ── Event Tab: Brands + Reporters ────────────────────────────────────────
+(function () {
+  'use strict';
+
+  // ── State ────────────────────────────────────────────────────────────────
+  let _brdQ  = '';
+  let _rptQ  = '';
+  let _ofcQ  = '';
+  let _jobQ  = '';
+  let _jobStatusFilter = '';
+  let _evtCurrentView = 'brands';   // 'brands'|'reporters'|'officers'|'coordinators'|'promoters'|'jobs'|'salary'
+
+  // ── Sub-view switch ───────────────────────────────────────────────────────
+  function switchEvtView(view) {
+    _evtCurrentView = view;
+    const views = { brands:'#evt-brands-view', reporters:'#evt-reporters-view', officers:'#evt-officers-view',
+                    coordinators:'#evt-coordinators-view', promoters:'#evt-promoters-view',
+                    agencies:'#evt-agencies-view', jobs:'#evt-jobs-view', salary:'#evt-salary-view' };
+    Object.entries(views).forEach(([k, sel]) => {
+      const el = $(sel);
+      if (el) el.style.display = k === view ? 'flex' : 'none';
+    });
+    $$('[data-evtview]').forEach(b =>
+      b.classList.toggle('active', b.dataset.evtview === view));
+    if (view === 'brands')       loadBrands();
+    if (view === 'reporters')    loadReporters();
+    if (view === 'officers')     loadOfficers();
+    if (view === 'coordinators') loadCoordinators();
+    if (view === 'promoters')    loadPromoters();
+    if (view === 'agencies')     loadAgencies();
+    if (view === 'jobs')         loadJobs();
+    if (view === 'salary')       loadSalarySheets();
+  }
+  window.switchEvtView = switchEvtView;
+
+  // ── Alert helpers ─────────────────────────────────────────────────────────
+  function _brdAlert(msg, ok) {
+    const el = $('#brd-modal-alert');
+    if (!el) return;
+    el.textContent   = msg;
+    el.style.display = msg ? '' : 'none';
+    el.style.color   = ok ? '#10b981' : '#ef4444';
+  }
+  function _brdPanelAlert(msg, ok) {
+    const el = $('#brd-alert');
+    if (!el) return;
+    el.textContent   = msg;
+    el.style.display = msg ? '' : 'none';
+    el.style.color   = ok ? '#10b981' : '#ef4444';
+  }
+  function _rptAlert(msg, ok) {
+    const el = $('#rpt-modal-alert');
+    if (!el) return;
+    el.textContent   = msg;
+    el.style.display = msg ? '' : 'none';
+    el.style.color   = ok ? '#10b981' : '#ef4444';
+  }
+  function _rptPanelAlert(msg, ok) {
+    const el = $('#rpt-alert');
+    if (!el) return;
+    el.textContent   = msg;
+    el.style.display = msg ? '' : 'none';
+    el.style.color   = ok ? '#10b981' : '#ef4444';
+  }
+
+  // ═══════════════════════════ BRANDS ═══════════════════════════════════════
+
+  async function loadBrands() {
+    const tbody = $('#brd-body');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:28px">Loading…</td></tr>';
+    _brdPanelAlert('', true);
+
+    const res = await API.brands(_brdQ);
+    if (res.status !== 200) {
+      tbody.innerHTML = `<tr><td colspan="7" style="color:#ef4444;text-align:center;padding:24px">${escHtml(res.body?.message || 'Failed to load brands')}</td></tr>`;
+      return;
+    }
+    const rows = res.body?.data || [];
+    if (rows.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:32px">No brands yet. Click <strong>New Brand</strong> to add one.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map(b => `
+      <tr>
+        <td style="font-size:12px;font-weight:600">${escHtml(b.name)}</td>
+        <td><span style="font-family:monospace;font-size:11px;font-weight:700;letter-spacing:0.1em;color:var(--accent)">${escHtml(b.short_code)}</span></td>
+        <td style="font-size:12px;color:var(--text-muted)">${escHtml(b.email ?? '—')}</td>
+        <td style="font-size:12px;color:var(--text-muted)">${escHtml(b.phone ?? '—')}</td>
+        <td style="font-size:12px">${escHtml(b.company_name ?? '—')}</td>
+        <td style="font-size:12px">${escHtml(b.contact_person ?? '—')}</td>
+        <td style="text-align:right;white-space:nowrap">
+          <button class="crm-card-btn" data-action="edit" data-id="${b.id}" title="Edit"><i class="fa fa-pencil"></i></button>
+          <button class="crm-card-btn" style="color:#ef4444" data-action="delete" data-id="${b.id}" title="Delete"><i class="fa fa-trash"></i></button>
+        </td>
+      </tr>
+    `).join('');
+
+    tbody.querySelectorAll('[data-action="edit"]').forEach(btn => {
+      btn.addEventListener('click', () => openBrandModal(rows.find(b => String(b.id) === btn.dataset.id)));
+    });
+    tbody.querySelectorAll('[data-action="delete"]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Delete this brand?')) return;
+        const r = await API.brandDelete(btn.dataset.id);
+        if (r.status === 200 || r.status === 204) { loadBrands(); }
+        else _brdPanelAlert(r.body?.message || 'Delete failed.', false);
+      });
+    });
+  }
+  window.loadBrands = loadBrands;
+
+  function openBrandModal(brand) {
+    const modal = $('#brd-modal');
+    if (!modal) return;
+    $('#brd-id').value             = brand?.id ?? '';
+    $('#brd-name').value           = brand?.name ?? '';
+    $('#brd-short-code').value     = brand?.short_code ?? '';
+    $('#brd-email').value          = brand?.email ?? '';
+    $('#brd-phone').value          = brand?.phone ?? '';
+    $('#brd-company-name').value   = brand?.company_name ?? '';
+    $('#brd-contact-person').value = brand?.contact_person ?? '';
+    $('#brd-address').value        = brand?.address ?? '';
+    $('#brd-modal-title').textContent = brand ? 'Edit Brand' : 'New Brand';
+    _brdAlert('', true);
+    modal.style.display = '';
+    setTimeout(() => $('#brd-name')?.focus(), 80);
+  }
+
+  function _closeBrandModal() {
+    const m = $('#brd-modal');
+    if (m) m.style.display = 'none';
+  }
+
+  async function _saveBrand() {
+    const id        = $('#brd-id').value;
+    const shortCode = ($('#brd-short-code').value || '').toUpperCase();
+    const body = {
+      name:           ($('#brd-name').value || '').trim(),
+      short_code:     shortCode,
+      email:          ($('#brd-email').value || '').trim(),
+      phone:          ($('#brd-phone').value || '').trim() || null,
+      company_name:   ($('#brd-company-name').value || '').trim() || null,
+      contact_person: ($('#brd-contact-person').value || '').trim() || null,
+      address:        ($('#brd-address').value || '').trim() || null,
+    };
+    if (!body.name)                           { _brdAlert('Brand name is required.', false); return; }
+    if (!/^[A-Z]{3}$/.test(body.short_code)) { _brdAlert('Short code must be exactly 3 uppercase letters (A–Z).', false); return; }
+    if (!body.email)                          { _brdAlert('Email address is required.', false); return; }
+
+    const saveBtn = $('#brd-modal-save');
+    if (saveBtn) saveBtn.disabled = true;
+    const res = id ? await API.brandUpdate(id, body) : await API.brandCreate(body);
+    if (saveBtn) saveBtn.disabled = false;
+
+    if (res.status === 200 || res.status === 201) {
+      _closeBrandModal();
+      loadBrands();
+    } else {
+      _brdAlert(res.body?.message || (id ? 'Update failed.' : 'Create failed.'), false);
+    }
+  }
+
+  // ═══════════════════════════ REPORTERS ════════════════════════════════════
+
+  async function loadReporters() {
+    const tbody = $('#rpt-body');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--text-muted);padding:28px">Loading…</td></tr>';
+    _rptPanelAlert('', true);
+
+    const res = await API.reporters(_rptQ);
+    if (res.status !== 200) {
+      tbody.innerHTML = `<tr><td colspan="3" style="color:#ef4444;text-align:center;padding:24px">${escHtml(res.body?.message || 'Failed to load reporters')}</td></tr>`;
+      return;
+    }
+    const rows = res.body?.data || [];
+    if (rows.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--text-muted);padding:32px">No reporters yet. Click <strong>New Reporter</strong> to add one.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map(r => `
+      <tr>
+        <td style="font-size:12px;font-weight:600">${escHtml(r.name)}</td>
+        <td style="font-size:12px;color:var(--text-muted)">${escHtml(r.email)}</td>
+        <td style="text-align:right;white-space:nowrap">
+          <button class="crm-card-btn" data-action="edit" data-id="${r.id}" title="Edit"><i class="fa fa-pencil"></i></button>
+          <button class="crm-card-btn" style="color:#ef4444" data-action="delete" data-id="${r.id}" title="Delete"><i class="fa fa-trash"></i></button>
+        </td>
+      </tr>
+    `).join('');
+
+    tbody.querySelectorAll('[data-action="edit"]').forEach(btn => {
+      btn.addEventListener('click', () => openReporterModal(rows.find(r => String(r.id) === btn.dataset.id)));
+    });
+    tbody.querySelectorAll('[data-action="delete"]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Delete this reporter?')) return;
+        const r = await API.reporterDelete(btn.dataset.id);
+        if (r.status === 200 || r.status === 204) { loadReporters(); }
+        else _rptPanelAlert(r.body?.message || 'Delete failed.', false);
+      });
+    });
+  }
+
+  function openReporterModal(reporter) {
+    const modal = $('#rpt-modal');
+    if (!modal) return;
+    const isEdit = !!reporter;
+    $('#rpt-id').value    = reporter?.id ?? '';
+    $('#rpt-name').value  = reporter?.name ?? '';
+    $('#rpt-email').value = reporter?.email ?? '';
+    $('#rpt-password').value         = '';
+    $('#rpt-confirm-password').value = '';
+    $('#rpt-modal-title').textContent = isEdit ? 'Edit Reporter' : 'New Reporter';
+
+    // Password field visibility
+    const pwField  = $('#rpt-pw-field');
+    const cpwField = $('#rpt-cpw-field');
+    const chkRow   = $('#rpt-change-pw-row');
+    const chk      = $('#rpt-change-pw-chk');
+    if (isEdit) {
+      if (chkRow) chkRow.style.display = '';
+      if (chk)    chk.checked = false;
+      if (pwField)  pwField.style.display  = 'none';
+      if (cpwField) cpwField.style.display = 'none';
+    } else {
+      if (chkRow) chkRow.style.display = 'none';
+      if (pwField)  pwField.style.display  = '';
+      if (cpwField) cpwField.style.display = '';
+    }
+
+    _rptAlert('', true);
+    modal.style.display = '';
+    setTimeout(() => $('#rpt-name')?.focus(), 80);
+  }
+
+  function _closeReporterModal() {
+    const m = $('#rpt-modal');
+    if (m) m.style.display = 'none';
+  }
+
+  async function _saveReporter() {
+    const id      = $('#rpt-id').value;
+    const isEdit  = !!id;
+    const chk     = $('#rpt-change-pw-chk');
+    const wantPw  = !isEdit || (chk && chk.checked);
+
+    const body = {
+      name:  ($('#rpt-name').value || '').trim(),
+      email: ($('#rpt-email').value || '').trim(),
+    };
+
+    if (!body.name)  { _rptAlert('Full name is required.', false); return; }
+    if (!body.email) { _rptAlert('Email address is required.', false); return; }
+
+    if (wantPw) {
+      const pw  = $('#rpt-password').value;
+      const cpw = $('#rpt-confirm-password').value;
+      if (!pw)          { _rptAlert('Password is required.', false); return; }
+      if (pw.length < 8){ _rptAlert('Password must be at least 8 characters.', false); return; }
+      if (pw !== cpw)   { _rptAlert('Passwords do not match.', false); return; }
+      body.password = pw;
+    }
+
+    const saveBtn = $('#rpt-modal-save');
+    if (saveBtn) saveBtn.disabled = true;
+    const res = isEdit ? await API.reporterUpdate(id, body) : await API.reporterCreate(body);
+    if (saveBtn) saveBtn.disabled = false;
+
+    if (res.status === 200 || res.status === 201) {
+      _closeReporterModal();
+      loadReporters();
+    } else {
+      _rptAlert(res.body?.message || (isEdit ? 'Update failed.' : 'Create failed.'), false);
+    }
+  }
+
+
+  // ═══════════════════════════ OFFICERS ═════════════════════════════════════
+
+  async function loadOfficers() {
+    const tbody = $('#ofc-body');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--text-muted);padding:28px">Loading…</td></tr>';
+    const el = $('#ofc-alert'); if (el) { el.textContent = ''; el.style.display = 'none'; }
+
+    const res = await API.officers(_ofcQ);
+    if (res.status !== 200) {
+      tbody.innerHTML = `<tr><td colspan="3" style="color:#ef4444;text-align:center;padding:24px">${escHtml(res.body?.message || 'Failed to load officers')}</td></tr>`;
+      return;
+    }
+    const rows = res.body?.data || [];
+    if (rows.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--text-muted);padding:32px">No officers yet. Click <strong>New Officer</strong> to add one.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map(o => `
+      <tr>
+        <td style="font-size:12px;font-weight:600">${escHtml(o.name)}</td>
+        <td style="font-size:12px;color:var(--text-muted)">${escHtml(o.email)}</td>
+        <td style="text-align:right;white-space:nowrap">
+          <button class="crm-card-btn" data-action="edit" data-id="${o.id}" title="Edit"><i class="fa fa-pencil"></i></button>
+          <button class="crm-card-btn" style="color:#ef4444" data-action="delete" data-id="${o.id}" title="Delete"><i class="fa fa-trash"></i></button>
+        </td>
+      </tr>
+    `).join('');
+
+    tbody.querySelectorAll('[data-action="edit"]').forEach(btn => {
+      btn.addEventListener('click', () => openOfficerModal(rows.find(o => String(o.id) === btn.dataset.id)));
+    });
+    tbody.querySelectorAll('[data-action="delete"]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Delete this officer?')) return;
+        const r = await API.officerDelete(btn.dataset.id);
+        if (r.status === 200 || r.status === 204) { loadOfficers(); }
+        else {
+          const pa = $('#ofc-alert');
+          if (pa) { pa.textContent = r.body?.message || 'Delete failed.'; pa.style.display = ''; pa.style.color = '#ef4444'; }
+        }
+      });
+    });
+  }
+
+  function openOfficerModal(officer) {
+    const modal = $('#ofc-modal');
+    if (!modal) return;
+    const isEdit = !!officer;
+    $('#ofc-id').value    = officer?.id ?? '';
+    $('#ofc-name').value  = officer?.name ?? '';
+    $('#ofc-email').value = officer?.email ?? '';
+    $('#ofc-password').value         = '';
+    $('#ofc-confirm-password').value = '';
+    $('#ofc-modal-title').textContent = isEdit ? 'Edit Officer' : 'New Officer';
+
+    const pwField  = $('#ofc-pw-field');
+    const cpwField = $('#ofc-cpw-field');
+    const chkRow   = $('#ofc-change-pw-row');
+    const chk      = $('#ofc-change-pw-chk');
+    if (isEdit) {
+      if (chkRow) chkRow.style.display = '';
+      if (chk)    chk.checked = false;
+      if (pwField)  pwField.style.display  = 'none';
+      if (cpwField) cpwField.style.display = 'none';
+    } else {
+      if (chkRow) chkRow.style.display = 'none';
+      if (pwField)  pwField.style.display  = '';
+      if (cpwField) cpwField.style.display = '';
+    }
+
+    const alertEl = $('#ofc-modal-alert');
+    if (alertEl) { alertEl.textContent = ''; alertEl.style.display = 'none'; }
+    modal.style.display = '';
+    setTimeout(() => $('#ofc-name')?.focus(), 80);
+  }
+
+  function _closeOfficerModal() {
+    const m = $('#ofc-modal'); if (m) m.style.display = 'none';
+  }
+
+  async function _saveOfficer() {
+    const id     = $('#ofc-id').value;
+    const isEdit = !!id;
+    const chk    = $('#ofc-change-pw-chk');
+    const wantPw = !isEdit || (chk && chk.checked);
+
+    const body = {
+      name:  ($('#ofc-name').value  || '').trim(),
+      email: ($('#ofc-email').value || '').trim(),
+    };
+
+    const alertEl = $('#ofc-modal-alert');
+    const showErr = msg => { if (alertEl) { alertEl.textContent = msg; alertEl.style.display = ''; alertEl.style.color = '#ef4444'; } };
+
+    if (!body.name)  { showErr('Full name is required.');     return; }
+    if (!body.email) { showErr('Email address is required.'); return; }
+
+    if (wantPw) {
+      const pw  = $('#ofc-password').value;
+      const cpw = $('#ofc-confirm-password').value;
+      if (!pw)           { showErr('Password is required.');                    return; }
+      if (pw.length < 8) { showErr('Password must be at least 8 characters.'); return; }
+      if (pw !== cpw)    { showErr('Passwords do not match.');                  return; }
+      body.password = pw;
+    }
+
+    const saveBtn = $('#ofc-modal-save');
+    if (saveBtn) saveBtn.disabled = true;
+    const res = isEdit ? await API.officerUpdate(id, body) : await API.officerCreate(body);
+    if (saveBtn) saveBtn.disabled = false;
+
+    if (res.status === 200 || res.status === 201) {
+      _closeOfficerModal();
+      loadOfficers();
+    } else {
+      showErr(res.body?.message || (isEdit ? 'Update failed.' : 'Create failed.'));
+    }
+  }
+
+
+  // ═══════════════════════════ JOBS ════════════════════════════════════════
+
+  const JOB_STATUS_LABEL = {
+    pending:     'Pending',
+    in_progress: 'In Progress',
+    completed:   'Completed',
+    cancelled:   'Cancelled',
+  };
+  const JOB_STATUS_COLOR = {
+    pending:     '#f59e0b',
+    in_progress: '#3b82f6',
+    completed:   '#10b981',
+    cancelled:   '#ef4444',
+  };
+
+  async function loadJobs() {
+    const tbody = $('#job-body');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:28px">Loading…</td></tr>';
+    const pa = $('#job-alert'); if (pa) { pa.textContent = ''; pa.style.display = 'none'; }
+
+    const res = await API.jobs(_jobQ, _jobStatusFilter);
+    if (res.status !== 200) {
+      tbody.innerHTML = `<tr><td colspan="8" style="color:#ef4444;text-align:center;padding:24px">${escHtml(res.body?.message || 'Failed to load jobs')}</td></tr>`;
+      return;
+    }
+    const rows = res.body?.data || [];
+    if (rows.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:32px">No jobs yet. Click <strong>New Job</strong> to add one.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map(j => {
+      const sc = JOB_STATUS_COLOR[j.status] || '#94a3b8';
+      const sl = JOB_STATUS_LABEL[j.status] || j.status;
+      return `
+      <tr>
+        <td style="font-size:11px;font-weight:700;font-family:monospace;color:var(--accent, #6366f1);white-space:nowrap">${escHtml(j.job_ref || '—')}</td>
+        <td style="font-size:12px;font-weight:600">${escHtml(j.name)}</td>
+        <td style="font-size:12px">${escHtml(j.client_brand_name || '—')}</td>
+        <td style="font-size:12px;color:var(--text-muted)">${escHtml(j.officer_name || '—')}</td>
+        <td style="font-size:12px;color:var(--text-muted)">${escHtml(j.reporter_name || '—')}</td>
+        <td><span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px;background:${sc}20;color:${sc}">${escHtml(sl)}</span></td>
+        <td style="font-size:12px;color:var(--text-muted)">${j.start_date ? new Date(j.start_date).toLocaleDateString(undefined, {day:'2-digit',month:'short',year:'numeric'}) : '—'}</td>
+        <td style="text-align:right;white-space:nowrap">
+          <button class="crm-card-btn" data-action="edit"   data-id="${j.id}" title="Edit"><i class="fa fa-pencil"></i></button>
+          <button class="crm-card-btn" style="color:#ef4444" data-action="delete" data-id="${j.id}" title="Delete"><i class="fa fa-trash"></i></button>
+        </td>
+      </tr>`;
+    }).join('');
+
+    tbody.querySelectorAll('[data-action="edit"]').forEach(btn => {
+      btn.addEventListener('click', () => openJobModal(rows.find(j => String(j.id) === btn.dataset.id)));
+    });
+    tbody.querySelectorAll('[data-action="delete"]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Delete this job?')) return;
+        const r = await API.jobDelete(btn.dataset.id);
+        if (r.status === 200 || r.status === 204) { loadJobs(); }
+        else { if (pa) { pa.textContent = r.body?.message || 'Delete failed.'; pa.style.display = ''; pa.style.color = '#ef4444'; } }
+      });
+    });
+  }
+
+  // ═══════════════════════════ SALARY SHEETS ═══════════════════════════════
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
+  const _fmtRs  = n => `Rs. ${(+n || 0).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+
+  function _ssDatesInRange(from, to) {
+    const dates = [];
+    if (!from || !to) return dates;
+    const cur = new Date(from + 'T00:00:00');
+    const end = new Date(to   + 'T00:00:00');
+    while (cur <= end) { dates.push(cur.toISOString().slice(0, 10)); cur.setDate(cur.getDate() + 1); }
+    return dates;
+  }
+
+  function _ssDateLabel(d) {
+    const dt = new Date(d + 'T00:00:00');
+    return ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'][dt.getMonth()]
+      + ' ' + String(dt.getDate()).padStart(2, '0');
+  }
+
+  function _ssItemNum(sheet, idx) {
+    if (!sheet) return '';
+    const d = new Date(sheet.date_from + 'T00:00:00');
+    return `ITM/${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(idx+1).padStart(3,'0')}`;
+  }
+
+  function _ssRecalcRow(row, dateRange) {
+    const p = dateRange.filter(d => row.attendance[d] === 'P').length;
+    row.total_days        = p;
+    row.attendance_amount = p * (row.daily_rate || 0);
+    row.base_amount       = row.attendance_amount;
+    row.net_amount        = row.base_amount + (row.transport_allowance || 0)
+                          - (row.expenses   || 0) - (row.hold_amount   || 0);
+  }
+
+  // ── State ──────────────────────────────────────────────────────────────────
+  let _ssQ             = '';
+  let _ssCurrentSheet  = null;
+  let _ssRows          = [];
+  let _ssDateRange     = [];
+  let _ssPromoterCache = [];
+
+  // ── List ───────────────────────────────────────────────────────────────────
+  async function loadSalarySheets() {
+    const lv = $('#ss-list-view'), ev = $('#ss-editor-view');
+    if (lv) lv.style.display = 'flex';
+    if (ev) ev.style.display = 'none';
+    const tbody = $('#ss-list-body');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:28px">Loading…</td></tr>';
+
+    const res = await API.salarySheets(_ssQ);
+    if (res.status !== 200) {
+      tbody.innerHTML = `<tr><td colspan="6" style="color:#ef4444;text-align:center;padding:24px">${escHtml(res.body?.message || 'Failed to load')}</td></tr>`;
+      return;
+    }
+    const sheets = res.body?.data || [];
+    if (sheets.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:32px">No salary sheets yet. Click <strong>New Salary Sheet</strong> to create one.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = sheets.map(s => {
+      const sc = s.status === 'finalized' ? '#10b981' : '#f59e0b';
+      const sl = s.status === 'finalized' ? 'Finalized' : 'Draft';
+      return `<tr>
+        <td style="font-size:11px;font-weight:700;font-family:monospace;color:var(--accent,#6366f1)">${escHtml(s.sheet_ref)}</td>
+        <td style="font-size:12px;color:var(--text-muted)">${escHtml(s.location || '—')}</td>
+        <td style="font-size:12px;color:var(--text-muted)">${escHtml(s.date_from)} → ${escHtml(s.date_to)}</td>
+        <td style="font-size:12px;text-align:center">${s.rows_count}</td>
+        <td><span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px;background:${sc}20;color:${sc}">${sl}</span></td>
+        <td style="text-align:right;white-space:nowrap">
+          <button class="crm-card-btn" data-action="open" data-id="${s.id}" title="Open Sheet"><i class="fa fa-table-cells"></i></button>
+          <button class="crm-card-btn" style="color:#ef4444" data-action="delete" data-id="${s.id}" title="Delete"><i class="fa fa-trash"></i></button>
+        </td>
+      </tr>`;
+    }).join('');
+
+    tbody.querySelectorAll('[data-action="open"]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const r = await API.salarySheetGet(btn.dataset.id);
+        if (r.status === 200) _ssOpenEditor(r.body.data);
+        else alert('Failed to load sheet.');
+      });
+    });
+    tbody.querySelectorAll('[data-action="delete"]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Delete this salary sheet and all its data?')) return;
+        const r = await API.salarySheetDelete(btn.dataset.id);
+        if (r.status === 200 || r.status === 204) loadSalarySheets();
+        else alert(r.body?.message || 'Delete failed.');
+      });
+    });
+  }
+
+  // ── Editor ─────────────────────────────────────────────────────────────────
+  function _ssOpenEditor(sheetData) {
+    _ssCurrentSheet = sheetData;
+    _ssDateRange    = _ssDatesInRange(sheetData.date_from, sheetData.date_to);
+
+    _ssRows = (sheetData.rows || []).map(r => {
+      const att = {};
+      _ssDateRange.forEach(d => { att[d] = 'A'; });
+      (r.attendances || []).forEach(a => { att[a.attendance_date] = a.attendance_status; });
+      const row = {
+        id:                      r.id,
+        location:                r.location                || 'N/A',
+        position:                r.position                || '',
+        promoter_id:             r.promoter_id             || null,
+        promoter_name:           r.promoter_name           || '',
+        bank_name:               r.bank_name               || '',
+        bank_branch:             r.bank_branch             || '',
+        bank_account:            r.bank_account            || '',
+        daily_rate:              parseFloat(r.daily_rate)  || 0,
+        attendance:              att,
+        transport_allowance:     parseFloat(r.transport_allowance)  || 0,
+        expenses:                parseFloat(r.expenses)             || 0,
+        hold_amount:             parseFloat(r.hold_amount)          || 0,
+        coordinator_id:          r.coordinator_id          || null,
+        coordinator_name:        r.coordinator_name        || 'N/A',
+        coordination_fee:        parseFloat(r.coordination_fee)     || 0,
+        coordinator_bank_details:r.coordinator_bank_details|| 'N/A',
+        total_days: 0, attendance_amount: 0, base_amount: 0, net_amount: 0,
+      };
+      _ssRecalcRow(row, _ssDateRange);
+      return row;
+    });
+
+    const lv = $('#ss-list-view'), ev = $('#ss-editor-view');
+    if (lv) lv.style.display = 'none';
+    if (ev) ev.style.display = 'flex';
+    const titleEl = $('#ss-editor-title'), datesEl = $('#ss-editor-dates');
+    if (titleEl) titleEl.textContent = sheetData.sheet_ref || sheetData.title;
+    if (datesEl) datesEl.textContent = `${sheetData.date_from}  →  ${sheetData.date_to}`;
+    const alertEl = $('#ss-editor-alert');
+    if (alertEl) alertEl.style.display = 'none';
+
+    _ssRenderTable();
+  }
+
+  // ── Table renderer ─────────────────────────────────────────────────────────
+  function _ssRenderTable() {
+    const wrap = $('#ss-table-wrap');
+    if (!wrap) return;
+
+    const TH1 = 'background:#1e3a5f;color:#fff;padding:6px 10px;border:1px solid #2d4f7a;font-size:9px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap;text-align:center;position:sticky;top:0;z-index:5';
+    const TH2 = 'background:#2d4f7a;color:#fff;padding:5px 8px;border:1px solid #3a5e8a;font-size:9px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap;text-align:center;position:sticky;top:32px;z-index:4';
+    const n   = _ssDateRange.length;
+
+    const h1 = `<tr>
+      <th style="${TH1}" rowspan="2">ITEM #</th>
+      <th style="${TH1}" rowspan="2">LOCATION</th>
+      <th style="${TH1}" rowspan="2">POSITION</th>
+      <th style="${TH1}" rowspan="2">PROMOTER</th>
+      <th style="${TH1}" rowspan="2">BANK NAME</th>
+      <th style="${TH1}" rowspan="2">BANK BRANCH</th>
+      <th style="${TH1}" rowspan="2">ACCOUNT NO.</th>
+      <th style="${TH1}" colspan="${n}">DAILY ATTENDANCE</th>
+      <th style="${TH1}" rowspan="2">TOTAL<br>DAYS</th>
+      <th style="${TH1}" rowspan="2">ATTENDANCE<br>AMOUNT</th>
+      <th style="${TH1}" rowspan="2">BASE<br>AMOUNT</th>
+      <th style="${TH1}" colspan="1">DYNAMIC ALLOWANCES</th>
+      <th style="${TH1}" rowspan="2">EXPENSES</th>
+      <th style="${TH1}" rowspan="2">HOLD FOR<br>WEEKS</th>
+      <th style="${TH1}" rowspan="2">NET<br>AMOUNT</th>
+      <th style="${TH1}" rowspan="2">COORDINATOR</th>
+      <th style="${TH1}" rowspan="2">COORDINATION<br>FEE</th>
+      <th style="${TH1}" rowspan="2">COORDINATOR<br>BANK DETAILS</th>
+      <th style="${TH1}" rowspan="2"></th>
+    </tr>`;
+    const h2 = '<tr>' + _ssDateRange.map(d => `<th style="${TH2}">${_ssDateLabel(d)}</th>`).join('')
+             + `<th style="${TH2}">TRANSPORT<br>ALLOWANCE</th></tr>`;
+
+    const rowsHtml = _ssRows.map((row, idx) => _ssBuildRowHtml(row, idx)).join('');
+    const totalNet = _ssRows.reduce((s, r) => s + r.net_amount, 0);
+    const foot = `<tr style="background:#e0f2fe">
+      <td colspan="${7 + n + 7}" style="text-align:right;padding:5px 10px;border:1px solid #bfdbfe;font-size:10px;font-weight:700;color:#1e40af">TOTAL NET</td>
+      <td id="ss-total-net" style="padding:5px 10px;border:1px solid #bfdbfe;font-size:12px;font-weight:700;color:#059669;text-align:right">${_fmtRs(totalNet)}</td>
+      <td colspan="3" style="border:1px solid #bfdbfe"></td>
+    </tr>`;
+
+    wrap.innerHTML = `<table style="border-collapse:collapse;white-space:nowrap;font-size:11px;min-width:max-content">
+      <thead>${h1}${h2}</thead>
+      <tbody id="ss-tbody">${rowsHtml}</tbody>
+      <tfoot>${foot}</tfoot>
+    </table>`;
+
+    _ssAttachTableListeners();
+  }
+
+  function _ssBuildRowHtml(row, idx) {
+    const TD  = 'padding:5px 8px;border:1px solid #d1d5db;text-align:center';
+    const TDE = `${TD};cursor:pointer;min-width:90px` ;
+    const amtStyle = (v, alwaysGreen) => {
+      const c = alwaysGreen ? '#059669' : (v < 0 ? '#dc2626' : v > 0 ? '#059669' : '#6b7280');
+      return `${TD};text-align:right;min-width:110px;color:${c}`;
+    };
+    let html = `<tr data-ss-row="${idx}" style="background:${idx%2===0?'#fff':'#f9fafb'}">`;
+    html += `<td style="${TD};font-weight:700;font-size:10px;min-width:115px">${escHtml(_ssItemNum(_ssCurrentSheet, idx))}</td>`;
+    html += `<td style="${TDE}" class="ss-editable" data-ss-row="${idx}" data-ss-field="location" data-ss-type="text">${escHtml(row.location||'N/A')}</td>`;
+    html += `<td style="${TDE}" class="ss-editable" data-ss-row="${idx}" data-ss-field="position" data-ss-type="text">${escHtml(row.position||'')}</td>`;
+    html += `<td style="${TDE};min-width:130px" class="ss-editable" data-ss-row="${idx}" data-ss-field="promoter_name"  data-ss-type="text">${escHtml(row.promoter_name||'')}</td>`;
+    html += `<td style="${TDE};min-width:120px" class="ss-editable" data-ss-row="${idx}" data-ss-field="bank_name"      data-ss-type="text">${escHtml(row.bank_name||'')}</td>`;
+    html += `<td style="${TDE};min-width:120px" class="ss-editable" data-ss-row="${idx}" data-ss-field="bank_branch"    data-ss-type="text">${escHtml(row.bank_branch||'')}</td>`;
+    html += `<td style="${TDE};min-width:110px" class="ss-editable" data-ss-row="${idx}" data-ss-field="bank_account"   data-ss-type="text">${escHtml(row.bank_account||'')}</td>`;
+
+    _ssDateRange.forEach(d => {
+      const st  = row.attendance[d] || 'A';
+      const bg  = st === 'P' ? '#dcfce7' : '#fee2e2';
+      const clr = st === 'P' ? '#16a34a' : '#dc2626';
+      html += `<td data-ss-att="${d}" style="padding:4px 8px;border:1px solid #d1d5db;text-align:center;background:${bg};color:${clr};font-weight:700;cursor:pointer;min-width:48px;user-select:none">${st}</td>`;
+    });
+
+    html += `<td data-ss-field="total_days"        style="${TD};font-weight:700;min-width:55px">${row.total_days}</td>`;
+    html += `<td data-ss-field="attendance_amount"  style="${amtStyle(row.attendance_amount, true)}">${_fmtRs(row.attendance_amount)}</td>`;
+    html += `<td data-ss-field="base_amount"        style="${amtStyle(row.base_amount, true)};font-weight:700">${_fmtRs(row.base_amount)}</td>`;
+    html += `<td style="${TDE};text-align:right" class="ss-editable" data-ss-row="${idx}" data-ss-field="transport_allowance" data-ss-type="number" style="color:#059669">${_fmtRs(row.transport_allowance)}</td>`;
+    html += `<td style="${TDE};text-align:right" class="ss-editable" data-ss-row="${idx}" data-ss-field="expenses"            data-ss-type="number">${_fmtRs(row.expenses)}</td>`;
+    html += `<td style="${TDE};text-align:right" class="ss-editable" data-ss-row="${idx}" data-ss-field="hold_amount"         data-ss-type="number">${_fmtRs(row.hold_amount)}</td>`;
+    html += `<td data-ss-field="net_amount"         style="${TD};text-align:right;font-weight:700;font-size:12px;min-width:110px;color:${row.net_amount<0?'#dc2626':'inherit'}">${_fmtRs(row.net_amount)}</td>`;
+    html += `<td style="${TDE};min-width:110px" class="ss-editable" data-ss-row="${idx}" data-ss-field="coordinator_name"    data-ss-type="text">${escHtml(row.coordinator_name||'N/A')}</td>`;
+    html += `<td style="${TDE};text-align:right" class="ss-editable" data-ss-row="${idx}" data-ss-field="coordination_fee"   data-ss-type="number">${_fmtRs(row.coordination_fee)}</td>`;
+    html += `<td style="${TD};min-width:140px;font-size:10px;color:var(--text-muted)">${escHtml(row.coordinator_bank_details||'N/A')}</td>`;
+    html += `<td style="${TD};padding:3px 6px">
+      <button class="crm-card-btn ss-del-row" style="color:#ef4444" data-ss-row="${idx}" title="Remove row"><i class="fa fa-trash"></i></button>
+    </td>`;
+    html += '</tr>';
+    return html;
+  }
+
+  function _ssAttachTableListeners() {
+    const wrap = $('#ss-table-wrap');
+    if (!wrap) return;
+
+    // Attendance toggle
+    wrap.querySelectorAll('[data-ss-att]').forEach(cell => {
+      const tr     = cell.closest('[data-ss-row]');
+      const rowIdx = tr ? parseInt(tr.dataset.ssRow) : -1;
+      if (rowIdx < 0) return;
+      cell.addEventListener('click', () => {
+        const row = _ssRows[rowIdx]; if (!row) return;
+        const d   = cell.dataset.ssAtt;
+        row.attendance[d] = row.attendance[d] === 'P' ? 'A' : 'P';
+        _ssRecalcRow(row, _ssDateRange);
+        _ssUpdateRowCells(rowIdx);
+      });
+    });
+
+    // Inline-editable cells
+    const numFields = ['daily_rate','transport_allowance','expenses','hold_amount','coordination_fee'];
+    wrap.querySelectorAll('.ss-editable').forEach(cell => {
+      const rowIdx = parseInt(cell.dataset.ssRow ?? '-1');
+      const field  = cell.dataset.ssField;
+      const isNum  = cell.dataset.ssType === 'number';
+      if (rowIdx < 0 || !field) return;
+
+      // ── Promoter name: autocomplete with bank-details auto-fill ─────────────
+      if (field === 'promoter_name') {
+        cell.addEventListener('click', async function () {
+          if (this.querySelector('input')) return;
+
+          // Lazy-load promoter list once
+          if (_ssPromoterCache.length === 0) {
+            const res = await API.promoters('');
+            _ssPromoterCache = res.body?.data || [];
+          }
+
+          const row = _ssRows[rowIdx];
+          const inp = document.createElement('input');
+          inp.type  = 'text';
+          inp.value = row.promoter_name || '';
+          inp.style.cssText = 'width:100%;box-sizing:border-box;border:none;outline:2px solid var(--accent);border-radius:2px;background:var(--bg-base,#fff);color:inherit;font-size:11px;padding:2px 4px';
+          this.textContent = '';
+          this.appendChild(inp);
+          inp.focus(); inp.select();
+
+          // Show suggestions immediately then on each keystroke
+          _ssShowPromoterDrop(this, inp, rowIdx);
+          inp.addEventListener('input', () => _ssShowPromoterDrop(this, inp, rowIdx));
+
+          const commit = () => {
+            document.querySelector('#ss-promo-dd')?.remove();
+            const nv = inp.value.trim();
+            row.promoter_name = nv;
+            this.textContent  = escHtml(nv || '');
+          };
+          inp.addEventListener('blur',    commit);
+          inp.addEventListener('keydown', e => {
+            if (e.key === 'Enter')  { commit(); inp.blur(); }
+            if (e.key === 'Escape') {
+              document.querySelector('#ss-promo-dd')?.remove();
+              this.textContent = escHtml(row.promoter_name || '');
+            }
+          });
+        });
+        return; // skip generic handler below
+      }
+
+      // ── Position: dropdown from sheet position rules + daily rate auto-fill ──
+      if (field === 'position') {
+        cell.addEventListener('click', function () {
+          if (this.querySelector('input')) return;
+
+          const row = _ssRows[rowIdx];
+          const inp = document.createElement('input');
+          inp.type  = 'text';
+          inp.value = row.position || '';
+          inp.style.cssText = 'width:100%;box-sizing:border-box;border:none;outline:2px solid var(--accent);border-radius:2px;background:var(--bg-base,#fff);color:inherit;font-size:11px;padding:2px 4px';
+          this.textContent = '';
+          this.appendChild(inp);
+          inp.focus(); inp.select();
+
+          // Show position rules immediately + filter on each keystroke
+          _ssShowPositionDrop(this, inp, rowIdx);
+          inp.addEventListener('input', () => _ssShowPositionDrop(this, inp, rowIdx));
+
+          const commit = () => {
+            document.querySelector('#ss-pos-dd')?.remove();
+            const nv = inp.value.trim();
+            row.position     = nv;
+            this.textContent = escHtml(nv || '');
+          };
+          inp.addEventListener('blur',    commit);
+          inp.addEventListener('keydown', e => {
+            if (e.key === 'Enter')  { commit(); inp.blur(); }
+            if (e.key === 'Escape') {
+              document.querySelector('#ss-pos-dd')?.remove();
+              this.textContent = escHtml(row.position || '');
+            }
+          });
+        });
+        return; // skip generic handler below
+      }
+
+      // ── Generic editable cells ───────────────────────────────────────────────
+      cell.addEventListener('click', function () {
+        if (this.querySelector('input')) return;
+        const row    = _ssRows[rowIdx];
+        const curVal = row[field] ?? (isNum ? 0 : '');
+        const inp    = document.createElement('input');
+        inp.type     = isNum ? 'number' : 'text';
+        inp.value    = isNum ? (curVal || 0) : (curVal || '');
+        inp.style.cssText = `width:100%;box-sizing:border-box;border:none;outline:2px solid var(--accent);border-radius:2px;background:var(--bg-base,#fff);color:inherit;font-size:11px;padding:2px 4px;text-align:${isNum?'right':'left'}`;
+        if (isNum) { inp.step = '0.01'; inp.min = '0'; }
+        this.textContent = '';
+        this.appendChild(inp);
+        inp.focus(); inp.select();
+
+        const commit = () => {
+          const nv = isNum ? (parseFloat(inp.value) || 0) : inp.value.trim();
+          row[field] = nv;
+          if (numFields.includes(field)) { _ssRecalcRow(row, _ssDateRange); _ssUpdateRowCells(rowIdx); }
+          else { cell.textContent = escHtml(nv || (field.includes('coordinator') ? 'N/A' : '')); }
+        };
+        inp.addEventListener('blur', commit);
+        inp.addEventListener('keydown', e => {
+          if (e.key === 'Enter')  { commit(); inp.blur(); }
+          if (e.key === 'Escape') { cell.textContent = isNum ? _fmtRs(row[field]) : escHtml(row[field] || ''); }
+        });
+      });
+    });
+
+    // Delete row
+    wrap.querySelectorAll('.ss-del-row').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const rowIdx = parseInt(btn.dataset.ssRow ?? '-1');
+        if (rowIdx < 0 || !confirm('Remove this row?')) return;
+        _ssRows.splice(rowIdx, 1);
+        _ssRenderTable();
+      });
+    });
+  }
+
+  function _ssUpdateRowCells(rowIdx) {
+    const row = _ssRows[rowIdx];
+    const tr  = document.querySelector(`[data-ss-row="${rowIdx}"]`);
+    if (!tr || !row) return;
+
+    _ssDateRange.forEach(d => {
+      const cell = tr.querySelector(`[data-ss-att="${d}"]`); if (!cell) return;
+      const st   = row.attendance[d] || 'A';
+      cell.textContent    = st;
+      cell.style.background = st === 'P' ? '#dcfce7' : '#fee2e2';
+      cell.style.color      = st === 'P' ? '#16a34a' : '#dc2626';
+    });
+
+    const f = field => tr.querySelector(`[data-ss-field="${field}"]`);
+    if (f('total_days'))       f('total_days').textContent        = row.total_days;
+    if (f('attendance_amount'))f('attendance_amount').textContent = _fmtRs(row.attendance_amount);
+    if (f('base_amount'))      f('base_amount').textContent       = _fmtRs(row.base_amount);
+
+    const numericCells = ['daily_rate','transport_allowance','expenses','hold_amount','coordination_fee'];
+    numericCells.forEach(field => {
+      const el = f(field);
+      if (el && !el.querySelector('input')) el.textContent = _fmtRs(row[field]);
+    });
+
+    if (f('net_amount')) {
+      f('net_amount').textContent = _fmtRs(row.net_amount);
+      f('net_amount').style.color = row.net_amount < 0 ? '#dc2626' : 'inherit';
+    }
+
+    const totEl = $('#ss-total-net');
+    if (totEl) totEl.textContent = _fmtRs(_ssRows.reduce((s, r) => s + r.net_amount, 0));
+  }
+
+  // ── Promoter autocomplete dropdown ─────────────────────────────────────────
+  function _ssShowPromoterDrop(cell, inp, rowIdx) {
+    document.querySelector('#ss-promo-dd')?.remove();
+
+    const q       = (inp.value || '').toLowerCase();
+    const matches = _ssPromoterCache
+      .filter(p => !q || p.name.toLowerCase().includes(q) || (p.position||'').toLowerCase().includes(q))
+      .slice(0, 8);
+    if (matches.length === 0) return;
+
+    const rect = cell.getBoundingClientRect();
+    const dd   = document.createElement('div');
+    dd.id = 'ss-promo-dd';
+    dd.style.cssText = [
+      'position:fixed',
+      `top:${rect.bottom + 2}px`,
+      `left:${rect.left}px`,
+      `min-width:${Math.max(rect.width, 240)}px`,
+      'z-index:9999',
+      'background:var(--bg-card,#fff)',
+      'border:1px solid var(--border-color,#d1d5db)',
+      'border-radius:6px',
+      'box-shadow:0 4px 20px rgba(0,0,0,.18)',
+      'max-height:220px',
+      'overflow-y:auto',
+    ].join(';');
+
+    dd.innerHTML = matches.map((p, i) => `
+      <div class="ss-promo-item" data-pi="${i}"
+           style="padding:7px 12px;cursor:pointer;border-bottom:1px solid var(--border-color,#f0f0f0)">
+        <div style="font-size:12px;font-weight:600;color:var(--text-base)">${escHtml(p.name)}</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:1px">
+          ${[p.position, p.bank_name].filter(Boolean).map(escHtml).join(' · ')}
+        </div>
+      </div>`).join('');
+
+    document.body.appendChild(dd);
+
+    dd.querySelectorAll('.ss-promo-item').forEach(item => {
+      item.addEventListener('mouseenter', () => {
+        dd.querySelectorAll('.ss-promo-item').forEach(el => el.style.background = '');
+        item.style.background = 'var(--accent-bg,#eff6ff)';
+      });
+      item.addEventListener('mouseleave', () => { item.style.background = ''; });
+
+      // mousedown so it fires before the input's blur
+      item.addEventListener('mousedown', e => {
+        e.preventDefault();
+        const promo = matches[parseInt(item.dataset.pi, 10)];
+        if (!promo) return;
+
+        const row         = _ssRows[rowIdx];
+        row.promoter_id   = promo.id;
+        row.promoter_name = promo.name;
+        row.bank_name     = promo.bank_name    || '';
+        row.bank_branch   = promo.bank_branch  || '';
+        row.bank_account  = promo.bank_account || '';
+
+        // Auto-fill position from the promoter's position field
+        if (promo.position) {
+          row.position = promo.position;
+
+          // If a matching position rule exists, also apply its daily rate & transport
+          const rule = (_ssCurrentSheet?.position_rules || [])
+            .find(r => r.position_name.toLowerCase() === promo.position.toLowerCase());
+          if (rule) {
+            row.daily_rate          = parseFloat(rule.daily_rate)          || 0;
+            row.transport_allowance = parseFloat(rule.transport_allowance)  || 0;
+          }
+        }
+
+        inp.value = promo.name;
+
+        // Patch text cells and recalculate
+        const tr = document.querySelector(`[data-ss-row="${rowIdx}"]`);
+        if (tr) {
+          const patch = (f, v) => {
+            const el = tr.querySelector(`[data-ss-field="${f}"]`);
+            if (el && !el.querySelector('input')) el.textContent = escHtml(v || '');
+          };
+          patch('bank_name',    row.bank_name);
+          patch('bank_branch',  row.bank_branch);
+          patch('bank_account', row.bank_account);
+          if (promo.position) patch('position', row.position);
+        }
+
+        // Recalculate if daily_rate or transport changed
+        _ssRecalcRow(row, _ssDateRange);
+        _ssUpdateRowCells(rowIdx);
+
+        dd.remove();
+      });
+    });
+  }
+
+  // ── Position dropdown (from sheet's position rules) ─────────────────────────
+  function _ssShowPositionDrop(cell, inp, rowIdx) {
+    document.querySelector('#ss-pos-dd')?.remove();
+
+    const rules   = _ssCurrentSheet?.position_rules || [];
+    const q       = (inp.value || '').toLowerCase();
+    const matches = rules.filter(r => !q || r.position_name.toLowerCase().includes(q));
+    if (matches.length === 0) return;
+
+    const rect = cell.getBoundingClientRect();
+    const dd   = document.createElement('div');
+    dd.id = 'ss-pos-dd';
+    dd.style.cssText = [
+      'position:fixed',
+      `top:${rect.bottom + 2}px`,
+      `left:${rect.left}px`,
+      `min-width:${Math.max(rect.width, 220)}px`,
+      'z-index:9999',
+      'background:var(--bg-card,#fff)',
+      'border:1px solid var(--border-color,#d1d5db)',
+      'border-radius:6px',
+      'box-shadow:0 4px 20px rgba(0,0,0,.18)',
+      'max-height:200px',
+      'overflow-y:auto',
+    ].join(';');
+
+    dd.innerHTML = matches.map((r, i) => `
+      <div class="ss-pos-item" data-pi="${i}"
+           style="padding:7px 12px;cursor:pointer;border-bottom:1px solid var(--border-color,#f0f0f0)">
+        <div style="font-size:12px;font-weight:600;color:var(--text-base)">${escHtml(r.position_name)}</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:1px">
+          Daily: ${_fmtRs(r.daily_rate)} &nbsp;·&nbsp; Transport: ${_fmtRs(r.transport_allowance)}
+        </div>
+      </div>`).join('');
+
+    document.body.appendChild(dd);
+
+    dd.querySelectorAll('.ss-pos-item').forEach(item => {
+      item.addEventListener('mouseenter', () => {
+        dd.querySelectorAll('.ss-pos-item').forEach(el => el.style.background = '');
+        item.style.background = 'var(--accent-bg,#eff6ff)';
+      });
+      item.addEventListener('mouseleave', () => { item.style.background = ''; });
+
+      item.addEventListener('mousedown', e => {
+        e.preventDefault();
+        const rule = matches[parseInt(item.dataset.pi, 10)];
+        if (!rule) return;
+
+        const row              = _ssRows[rowIdx];
+        row.position           = rule.position_name;
+        row.daily_rate         = parseFloat(rule.daily_rate)          || 0;
+        row.transport_allowance= parseFloat(rule.transport_allowance)  || 0;
+
+        inp.value = rule.position_name;
+
+        // Recalculate totals and refresh all numeric cells
+        _ssRecalcRow(row, _ssDateRange);
+        _ssUpdateRowCells(rowIdx);
+
+        dd.remove();
+      });
+    });
+  }
+
+  // ── Create sheet modal ──────────────────────────────────────────────────────
+  async function _ssOpenCreateModal() {
+    const m = $('#ss-create-modal'); if (!m) return;
+    const al = $('#ss-create-alert'); if (al) { al.textContent = ''; al.style.display = 'none'; }
+
+    // Reset fields
+    if ($('#ss-create-ref-preview')) $('#ss-create-ref-preview').value = 'Generating…';
+    if ($('#ss-create-job-id'))      $('#ss-create-job-id').innerHTML  = '<option value="">— No Job —</option>';
+    if ($('#ss-create-location'))    $('#ss-create-location').value    = '';
+    if ($('#ss-create-date-from'))   $('#ss-create-date-from').value   = '';
+    if ($('#ss-create-date-to'))     $('#ss-create-date-to').value     = '';
+
+    m.style.display = '';
+    setTimeout(() => $('#ss-create-location')?.focus(), 80);
+
+    // Fetch next ref preview and jobs list in parallel
+    const [refRes, jobsRes] = await Promise.all([
+      API.salarySheetNextRef(),
+      API.jobs('', ''),
+    ]);
+
+    if (refRes.status === 200 && $('#ss-create-ref-preview')) {
+      $('#ss-create-ref-preview').value = refRes.body?.ref || '—';
+    }
+    if (jobsRes.status === 200) {
+      const jobs = jobsRes.body?.data || [];
+      const sel  = $('#ss-create-job-id');
+      if (sel) {
+        sel.innerHTML = '<option value="">— No Job —</option>'
+          + jobs.map(j => `<option value="${j.id}">${escHtml(j.job_ref ? j.job_ref + ' — ' : '')}${escHtml(j.name)}</option>`).join('');
+      }
+    }
+  }
+  function _ssCloseCreateModal() { const m = $('#ss-create-modal'); if (m) m.style.display = 'none'; }
+
+  async function _ssConfirmCreate() {
+    const jobId    = $('#ss-create-job-id')?.value    || null;
+    const location = ($('#ss-create-location')?.value  || '').trim() || null;
+    const dateFrom = $('#ss-create-date-from')?.value  || '';
+    const dateTo   = $('#ss-create-date-to')?.value    || '';
+    const al = $('#ss-create-alert');
+    const err = msg => { if (al) { al.textContent = msg; al.style.display = ''; al.style.color = '#ef4444'; } };
+
+    if (!dateFrom)         { err('Start date is required.'); return; }
+    if (!dateTo)           { err('End date is required.'); return; }
+    if (dateFrom > dateTo) { err('Start date must be before end date.'); return; }
+
+    const btn = $('#ss-create-save'); if (btn) btn.disabled = true;
+    const res = await API.salarySheetCreate({
+      job_id:    jobId   || null,
+      location:  location,
+      date_from: dateFrom,
+      date_to:   dateTo,
+    });
+    if (btn) btn.disabled = false;
+
+    if (res.status === 201) {
+      _ssCloseCreateModal();
+      const r2 = await API.salarySheetGet(res.body.data.id);
+      if (r2.status === 200) _ssOpenEditor(r2.body.data);
+    } else {
+      err(res.body?.message || 'Create failed.');
+    }
+  }
+
+  // ── Add row modal ───────────────────────────────────────────────────────────
+  function _ssAddEmptyRow() {
+    const att = {};
+    _ssDateRange.forEach(d => { att[d] = 'A'; });
+
+    _ssRows.push({
+      id: null,
+      location: _ssCurrentSheet?.location || '', position: '',
+      promoter_id: null, promoter_name: '',
+      bank_name: '', bank_branch: '', bank_account: '',
+      daily_rate: 0, attendance: att,
+      transport_allowance: 0, expenses: 0, hold_amount: 0,
+      coordinator_id: null, coordinator_name: '',
+      coordination_fee: 0, coordinator_bank_details: '',
+      total_days: 0, attendance_amount: 0, base_amount: 0, net_amount: 0,
+    });
+
+    _ssRenderTable();
+
+    // Scroll the new row into view and auto-activate the first editable cell (Location)
+    const newIdx  = _ssRows.length - 1;
+    const wrap    = $('#ss-table-wrap');
+    if (wrap) wrap.scrollTop = wrap.scrollHeight;
+
+    setTimeout(() => {
+      const newRow  = document.querySelector(`[data-ss-row="${newIdx}"]`);
+      const firstCell = newRow?.querySelector('.ss-editable[data-ss-field="location"]');
+      if (firstCell) firstCell.click();
+    }, 40);
+  }
+
+  // ── Save ────────────────────────────────────────────────────────────────────
+  async function _ssSaveSheet() {
+    const btn = $('#ss-save-btn'); if (btn) btn.disabled = true;
+
+    const payload = _ssRows.map((row, idx) => ({
+      id:                      typeof row.id === 'number' ? row.id : null,
+      item_number:             _ssItemNum(_ssCurrentSheet, idx),
+      location:                row.location                || 'N/A',
+      position:                row.position                || '',
+      promoter_id:             row.promoter_id             || null,
+      promoter_name:           row.promoter_name           || '',
+      bank_name:               row.bank_name               || null,
+      bank_branch:             row.bank_branch             || null,
+      bank_account:            row.bank_account            || null,
+      daily_rate:              row.daily_rate              || 0,
+      transport_allowance:     row.transport_allowance     || 0,
+      expenses:                row.expenses                || 0,
+      hold_amount:             row.hold_amount             || 0,
+      coordinator_id:          row.coordinator_id          || null,
+      coordinator_name:        row.coordinator_name        || 'N/A',
+      coordination_fee:        row.coordination_fee        || 0,
+      coordinator_bank_details:row.coordinator_bank_details|| 'N/A',
+      attendances:             Object.entries(row.attendance).map(([date, status]) => ({ date, status })),
+    }));
+
+    const res = await API.salarySheetSaveRows(_ssCurrentSheet.id, { rows: payload });
+    if (btn) btn.disabled = false;
+
+    const al = $('#ss-editor-alert');
+    if (res.status === 200) {
+      _ssOpenEditor(res.body.data);
+      if (al) { al.textContent = 'Saved successfully.'; al.style.display = ''; al.style.color = '#059669'; al.style.background = '#dcfce7'; al.style.padding = '3px 10px'; al.style.borderRadius = '4px'; setTimeout(() => { al.style.display = 'none'; }, 3000); }
+    } else {
+      if (al) { al.textContent = res.body?.message || 'Save failed.'; al.style.display = ''; al.style.color = '#dc2626'; al.style.background = '#fee2e2'; al.style.padding = '3px 10px'; al.style.borderRadius = '4px'; }
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  //  Salary Sheet Setup Modal
+  // ─────────────────────────────────────────────────────────────────────────
+
+  let _ssSetupActiveTab  = 'general';
+  let _ssAllowances      = [];   // working copy while modal is open
+  let _ssPosRules        = [];   // position-wise salary rules, working copy
+  let _ssPosCache        = [];   // promoter positions for the select dropdown
+
+  // ── Tab switching ──────────────────────────────────────────────
+  function _ssSetupSwitchTab(tab) {
+    _ssSetupActiveTab = tab;
+    document.querySelectorAll('.ss-setup-tab').forEach(btn => {
+      const active = btn.dataset.tab === tab;
+      btn.style.color       = active ? 'var(--accent)' : 'var(--text-muted)';
+      btn.style.borderBottomColor = active ? 'var(--accent)' : 'transparent';
+    });
+    document.querySelectorAll('.ss-setup-tab-panel').forEach(panel => {
+      panel.style.display = panel.id === `ss-setup-tab-${tab}` ? 'flex' : 'none';
+    });
+  }
+
+  // ── Allowance rows ─────────────────────────────────────────────
+  function _ssRenderAllowances() {
+    const tbody = $('#ss-allowance-body');
+    if (!tbody) return;
+    if (_ssAllowances.length === 0) {
+      tbody.innerHTML = '<tr id="ss-allowance-empty"><td colspan="4" style="text-align:center;color:var(--text-muted);padding:24px">No allowances yet. Click <strong>Add Row</strong> to add one.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = _ssAllowances.map((a, i) => `
+      <tr data-idx="${i}">
+        <td style="padding:4px 6px">
+          <input type="text" class="po-field-input sa-type" value="${escAttr(a.allowance_type)}"
+            placeholder="e.g. Transport" maxlength="150"
+            style="width:100%;font-size:12px;padding:3px 6px">
+        </td>
+        <td style="padding:4px 6px">
+          <input type="number" class="po-field-input sa-amount" value="${escAttr(a.amount ?? 0)}"
+            min="0" step="0.01"
+            style="width:100%;font-size:12px;padding:3px 6px;text-align:right">
+        </td>
+        <td style="padding:4px 6px">
+          <input type="text" class="po-field-input sa-desc" value="${escAttr(a.description ?? '')}"
+            placeholder="Optional description" maxlength="200"
+            style="width:100%;font-size:12px;padding:3px 6px">
+        </td>
+        <td style="padding:4px 6px;text-align:center">
+          <button class="crm-card-btn sa-del" data-idx="${i}" style="color:#ef4444" title="Remove">
+            <i class="fa fa-trash"></i>
+          </button>
+        </td>
+      </tr>`).join('');
+
+    // Sync input changes back to _ssAllowances in real-time
+    tbody.querySelectorAll('tr[data-idx]').forEach(tr => {
+      const idx = parseInt(tr.dataset.idx, 10);
+      tr.querySelector('.sa-type')?.addEventListener('input',   e => { _ssAllowances[idx].allowance_type = e.target.value; });
+      tr.querySelector('.sa-amount')?.addEventListener('input', e => { _ssAllowances[idx].amount         = parseFloat(e.target.value) || 0; });
+      tr.querySelector('.sa-desc')?.addEventListener('input',   e => { _ssAllowances[idx].description    = e.target.value; });
+      tr.querySelector('.sa-del')?.addEventListener('click',    () => {
+        _ssAllowances.splice(idx, 1);
+        _ssRenderAllowances();
+      });
+    });
+  }
+
+  // ── Position Rules rows ────────────────────────────────────────
+  function _ssRenderPosRules() {
+    const tbody = $('#ss-posrule-body');
+    if (!tbody) return;
+
+    // Build position options HTML once
+    const posOpts = _ssPosCache.map(p =>
+      `<option value="${escAttr(p.name)}">${escHtml(p.name)}</option>`
+    ).join('');
+
+    if (_ssPosRules.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--text-muted);padding:24px">No rules yet. Click <strong>Add Rule</strong> to define one.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = _ssPosRules.map((r, i) => `
+      <tr data-ridx="${i}">
+        <td style="padding:4px 6px">
+          <select class="po-field-input spr-pos" style="width:100%;font-size:12px;padding:3px 6px">
+            <option value="">— Select position —</option>
+            ${posOpts}
+          </select>
+        </td>
+        <td style="padding:4px 6px">
+          <input type="number" class="po-field-input spr-rate" value="${escAttr(r.daily_rate ?? 0)}"
+            min="0" step="0.01"
+            style="width:100%;font-size:12px;padding:3px 6px;text-align:right">
+        </td>
+        <td style="padding:4px 6px">
+          <input type="number" class="po-field-input spr-transport" value="${escAttr(r.transport_allowance ?? 0)}"
+            min="0" step="0.01"
+            style="width:100%;font-size:12px;padding:3px 6px;text-align:right">
+        </td>
+        <td style="padding:4px 6px;text-align:center">
+          <button class="crm-card-btn spr-del" data-ridx="${i}" style="color:#ef4444" title="Remove">
+            <i class="fa fa-trash"></i>
+          </button>
+        </td>
+      </tr>`).join('');
+
+    // Set select values and wire listeners
+    tbody.querySelectorAll('tr[data-ridx]').forEach(tr => {
+      const idx = parseInt(tr.dataset.ridx, 10);
+      const sel = tr.querySelector('.spr-pos');
+      if (sel) {
+        sel.value = _ssPosRules[idx].position_name ?? '';
+        sel.addEventListener('change', e => { _ssPosRules[idx].position_name = e.target.value; });
+      }
+      tr.querySelector('.spr-rate')?.addEventListener('input',      e => { _ssPosRules[idx].daily_rate          = parseFloat(e.target.value) || 0; });
+      tr.querySelector('.spr-transport')?.addEventListener('input',  e => { _ssPosRules[idx].transport_allowance = parseFloat(e.target.value) || 0; });
+      tr.querySelector('.spr-del')?.addEventListener('click', () => {
+        _ssPosRules.splice(idx, 1);
+        _ssRenderPosRules();
+      });
+    });
+  }
+
+  // ── Open ────────────────────────────────────────────────────────
+  async function _ssOpenSetupModal() {
+    if (!_ssCurrentSheet) return;
+    const modal = $('#ss-setup-modal');
+    if (!modal) return;
+
+    const alertEl = $('#ss-setup-alert');
+    if (alertEl) { alertEl.textContent = ''; alertEl.style.display = 'none'; }
+
+    // Load jobs + positions in parallel
+    const [jRes, pRes] = await Promise.all([API.jobs('', ''), API.promoterPositions('')]);
+
+    const jobSel = $('#ss-setup-job-id');
+    if (jobSel) {
+      const opts = (jRes.body?.data || []).map(j =>
+        `<option value="${j.id}">${escHtml(j.name)}${j.job_ref ? ' (' + escHtml(j.job_ref) + ')' : ''}</option>`
+      ).join('');
+      jobSel.innerHTML = '<option value="">— No job linked —</option>' + opts;
+      jobSel.value = _ssCurrentSheet.job_id ?? '';
+    }
+
+    const locEl   = $('#ss-setup-location');
+    const notesEl = $('#ss-setup-notes');
+    const feeEl   = $('#ss-setup-coord-fee');
+    if (locEl)   locEl.value   = _ssCurrentSheet.location ?? '';
+    if (notesEl) notesEl.value = _ssCurrentSheet.notes    ?? '';
+    if (feeEl)   feeEl.value   = _ssCurrentSheet.default_coordinator_fee ?? 0;
+
+    // Seed allowances
+    _ssAllowances = (_ssCurrentSheet.allowances || []).map(a => ({ ...a }));
+    _ssRenderAllowances();
+
+    // Seed position rules
+    _ssPosCache = pRes.body?.data || [];
+    _ssPosRules = (_ssCurrentSheet.position_rules || []).map(r => ({ ...r }));
+    _ssRenderPosRules();
+
+    // Always open on General tab
+    _ssSetupSwitchTab('general');
+    modal.style.display = '';
+    setTimeout(() => jobSel?.focus(), 80);
+  }
+
+  // ── Close ───────────────────────────────────────────────────────
+  function _ssCloseSetupModal() {
+    const m = $('#ss-setup-modal'); if (m) m.style.display = 'none';
+    _ssAllowances = [];
+    _ssPosRules   = [];
+  }
+
+  // ── Save ────────────────────────────────────────────────────────
+  async function _ssSaveSetup() {
+    if (!_ssCurrentSheet) return;
+    const alertEl = $('#ss-setup-alert');
+    const showErr = msg => {
+      if (alertEl) {
+        alertEl.textContent = msg;
+        alertEl.style.display = '';
+        alertEl.style.color      = '#dc2626';
+        alertEl.style.background = '#fee2e2';
+        alertEl.style.padding    = '3px 10px';
+        alertEl.style.borderRadius = '4px';
+        alertEl.style.border     = '1px solid #fca5a5';
+      }
+    };
+
+    // Validate allowances: type required
+    for (const a of _ssAllowances) {
+      if (!(a.allowance_type || '').trim()) {
+        _ssSetupSwitchTab('allowances');
+        showErr('Each allowance must have a type name.');
+        return;
+      }
+    }
+
+    // Validate position rules: position name required
+    for (const r of _ssPosRules) {
+      if (!(r.position_name || '').trim()) {
+        _ssSetupSwitchTab('pos-rules');
+        showErr('Each position rule must have a position selected.');
+        return;
+      }
+    }
+
+    const body = {
+      job_id:                  $('#ss-setup-job-id').value || null,
+      location:                ($('#ss-setup-location').value  || '').trim() || null,
+      notes:                   ($('#ss-setup-notes').value     || '').trim() || null,
+      default_coordinator_fee: parseFloat($('#ss-setup-coord-fee').value) || 0,
+      allowances: _ssAllowances.map(a => ({
+        id:             a.id   || null,
+        allowance_type: (a.allowance_type || '').trim(),
+        amount:         parseFloat(a.amount) || 0,
+        description:    (a.description || '').trim() || null,
+      })),
+      position_rules: _ssPosRules.map(r => ({
+        id:                  r.id   || null,
+        position_name:       (r.position_name || '').trim(),
+        daily_rate:          parseFloat(r.daily_rate) || 0,
+        transport_allowance: parseFloat(r.transport_allowance) || 0,
+      })),
+    };
+
+    const saveBtn = $('#ss-setup-modal-save');
+    if (saveBtn) saveBtn.disabled = true;
+    const res = await API.salarySheetUpdate(_ssCurrentSheet.id, body);
+    if (saveBtn) saveBtn.disabled = false;
+
+    if (res.status === 200) {
+      // Response is the full show() payload — includes fresh allowance IDs
+      _ssCurrentSheet = res.body?.data || _ssCurrentSheet;
+      const titleEl = $('#ss-editor-title');
+      if (titleEl) titleEl.textContent = _ssCurrentSheet.sheet_ref || _ssCurrentSheet.title;
+      _ssCloseSetupModal();
+    } else {
+      showErr(res.body?.message || 'Failed to save setup.');
+    }
+  }
+
+  // ── Listeners ───────────────────────────────────────────────────
+  $('#ss-setup-btn')?.addEventListener('click',          _ssOpenSetupModal);
+  $('#ss-setup-modal-close')?.addEventListener('click',  _ssCloseSetupModal);
+  $('#ss-setup-modal-cancel')?.addEventListener('click', _ssCloseSetupModal);
+  $('#ss-setup-modal-save')?.addEventListener('click',   _ssSaveSetup);
+  $('#ss-setup-modal')?.addEventListener('click', e => { if (e.target === $('#ss-setup-modal')) _ssCloseSetupModal(); });
+
+  // Tab buttons
+  document.querySelectorAll('.ss-setup-tab').forEach(btn => {
+    btn.addEventListener('click', () => _ssSetupSwitchTab(btn.dataset.tab));
+  });
+
+  // Add allowance row
+  $('#ss-allowance-add-btn')?.addEventListener('click', () => {
+    _ssAllowances.push({ id: null, allowance_type: '', amount: 0, description: '' });
+    _ssRenderAllowances();
+    const rows = $('#ss-allowance-body')?.querySelectorAll('tr[data-idx]');
+    rows?.[rows.length - 1]?.querySelector('.sa-type')?.focus();
+  });
+
+  // Add position rule row
+  $('#ss-posrule-add-btn')?.addEventListener('click', () => {
+    _ssPosRules.push({ id: null, position_name: '', daily_rate: 0, transport_allowance: 0 });
+    _ssRenderPosRules();
+    // Focus the position select of the new last row
+    const rows = $('#ss-posrule-body')?.querySelectorAll('tr[data-ridx]');
+    rows?.[rows.length - 1]?.querySelector('.spr-pos')?.focus();
+  });
+
+  // ═══════════════════════════ AGENCIES ════════════════════════════════════
+
+  const AGC_STATUS_LABEL = { active: 'Active', inactive: 'Inactive' };
+  const AGC_STATUS_COLOR = { active: '#10b981', inactive: '#94a3b8' };
+
+  let _agcQ = '';
+
+  async function loadAgencies() {
+    const tbody = $('#agc-body');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:28px">Loading…</td></tr>';
+    const pa = $('#agc-alert'); if (pa) { pa.textContent = ''; pa.style.display = 'none'; }
+
+    const res = await API.agencies(_agcQ);
+    if (res.status !== 200) {
+      tbody.innerHTML = `<tr><td colspan="6" style="color:#ef4444;text-align:center;padding:24px">${escHtml(res.body?.message || 'Failed to load agencies')}</td></tr>`;
+      return;
+    }
+    const rows = res.body?.data || [];
+    if (rows.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:32px">No agencies yet. Click <strong>New Agency</strong> to add one.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map(a => {
+      const sc = AGC_STATUS_COLOR[a.status] || '#94a3b8';
+      const sl = AGC_STATUS_LABEL[a.status] || a.status;
+      return `<tr>
+        <td style="font-size:12px;font-weight:600">${escHtml(a.name)}</td>
+        <td style="font-size:12px;color:var(--text-muted)">${escHtml(a.contact_person || '—')}</td>
+        <td style="font-size:12px;color:var(--text-muted)">${escHtml(a.email || '—')}</td>
+        <td style="font-size:12px;color:var(--text-muted)">${escHtml(a.phone || '—')}</td>
+        <td><span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px;background:${sc}20;color:${sc}">${escHtml(sl)}</span></td>
+        <td style="text-align:right;white-space:nowrap">
+          <button class="crm-card-btn" data-action="edit"   data-id="${a.id}" title="Edit"><i class="fa fa-pencil"></i></button>
+          <button class="crm-card-btn" style="color:#ef4444" data-action="delete" data-id="${a.id}" title="Delete"><i class="fa fa-trash"></i></button>
+        </td>
+      </tr>`;
+    }).join('');
+
+    tbody.querySelectorAll('[data-action="edit"]').forEach(btn => {
+      btn.addEventListener('click', () => openAgencyModal(rows.find(a => String(a.id) === btn.dataset.id)));
+    });
+    tbody.querySelectorAll('[data-action="delete"]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Delete this agency?')) return;
+        const r = await API.agencyDelete(btn.dataset.id);
+        if (r.status === 200 || r.status === 204) { loadAgencies(); }
+        else { if (pa) { pa.textContent = r.body?.message || 'Delete failed.'; pa.style.display = ''; pa.style.color = '#ef4444'; } }
+      });
+    });
+  }
+
+  function openAgencyModal(agency) {
+    const modal = $('#agc-modal');
+    if (!modal) return;
+    const alertEl = $('#agc-modal-alert');
+    if (alertEl) { alertEl.textContent = ''; alertEl.style.display = 'none'; }
+
+    $('#agc-id').value      = agency?.id      ?? '';
+    $('#agc-name').value    = agency?.name    ?? '';
+    $('#agc-contact').value = agency?.contact_person ?? '';
+    $('#agc-phone').value   = agency?.phone   ?? '';
+    $('#agc-email').value   = agency?.email   ?? '';
+    $('#agc-address').value = agency?.address ?? '';
+    $('#agc-status').value  = agency?.status  ?? 'active';
+    $('#agc-modal-title').textContent = agency ? 'Edit Agency' : 'New Agency';
+
+    modal.style.display = '';
+    setTimeout(() => $('#agc-name')?.focus(), 80);
+  }
+
+  function _closeAgencyModal() {
+    const m = $('#agc-modal'); if (m) m.style.display = 'none';
+  }
+
+  async function _saveAgency() {
+    const id   = $('#agc-id').value;
+    const body = {
+      name:           ($('#agc-name').value    || '').trim(),
+      contact_person: ($('#agc-contact').value || '').trim() || null,
+      phone:          ($('#agc-phone').value   || '').trim() || null,
+      email:          ($('#agc-email').value   || '').trim() || null,
+      address:        ($('#agc-address').value || '').trim() || null,
+      status:         $('#agc-status').value   || 'active',
+    };
+
+    const alertEl = $('#agc-modal-alert');
+    const showErr = msg => { if (alertEl) { alertEl.textContent = msg; alertEl.style.display = ''; alertEl.style.color = '#ef4444'; } };
+
+    if (!body.name) { showErr('Agency name is required.'); return; }
+
+    const saveBtn = $('#agc-modal-save');
+    if (saveBtn) saveBtn.disabled = true;
+    const res = id ? await API.agencyUpdate(id, body) : await API.agencyCreate(body);
+    if (saveBtn) saveBtn.disabled = false;
+
+    if (res.status === 200 || res.status === 201) {
+      _closeAgencyModal();
+      loadAgencies();
+    } else {
+      showErr(res.body?.message || (id ? 'Update failed.' : 'Create failed.'));
+    }
+  }
+
+  // ═══════════════════════════ COORDINATORS ════════════════════════════════
+
+  const CRD_STATUS_LABEL = { active: 'Active', inactive: 'Inactive' };
+  const CRD_STATUS_COLOR = { active: '#10b981', inactive: '#94a3b8' };
+
+  let _crdQ = '';
+
+  async function loadCoordinators() {
+    const tbody = $('#crd-body');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:28px">Loading…</td></tr>';
+    const pa = $('#crd-alert'); if (pa) { pa.textContent = ''; pa.style.display = 'none'; }
+
+    const res = await API.coordinators(_crdQ);
+    if (res.status !== 200) {
+      tbody.innerHTML = `<tr><td colspan="7" style="color:#ef4444;text-align:center;padding:24px">${escHtml(res.body?.message || 'Failed to load coordinators')}</td></tr>`;
+      return;
+    }
+    const rows = res.body?.data || [];
+    if (rows.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:32px">No coordinators yet. Click <strong>New Coordinator</strong> to add one.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map(c => {
+      const sc = CRD_STATUS_COLOR[c.status] || '#94a3b8';
+      const sl = CRD_STATUS_LABEL[c.status] || c.status;
+      return `
+      <tr>
+        <td style="font-size:12px;font-weight:600">${escHtml(c.name)}</td>
+        <td style="font-size:12px;color:var(--text-muted)">${escHtml(c.nic || '—')}</td>
+        <td style="font-size:12px;color:var(--text-muted)">${escHtml(c.phone || '—')}</td>
+        <td><span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px;background:${sc}20;color:${sc}">${escHtml(sl)}</span></td>
+        <td style="font-size:12px;color:var(--text-muted)">${escHtml(c.bank_name || '—')}</td>
+        <td style="font-size:12px;color:var(--text-muted)">${escHtml(c.bank_account || '—')}</td>
+        <td style="text-align:right;white-space:nowrap">
+          <button class="crm-card-btn" data-action="edit"   data-id="${c.id}" title="Edit"><i class="fa fa-pencil"></i></button>
+          <button class="crm-card-btn" style="color:#ef4444" data-action="delete" data-id="${c.id}" title="Delete"><i class="fa fa-trash"></i></button>
+        </td>
+      </tr>`;
+    }).join('');
+
+    tbody.querySelectorAll('[data-action="edit"]').forEach(btn => {
+      btn.addEventListener('click', () => openCoordinatorModal(rows.find(c => String(c.id) === btn.dataset.id)));
+    });
+    tbody.querySelectorAll('[data-action="delete"]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Delete this coordinator?')) return;
+        const r = await API.coordinatorDelete(btn.dataset.id);
+        if (r.status === 200 || r.status === 204) { loadCoordinators(); }
+        else { if (pa) { pa.textContent = r.body?.message || 'Delete failed.'; pa.style.display = ''; pa.style.color = '#ef4444'; } }
+      });
+    });
+  }
+
+  function openCoordinatorModal(coordinator) {
+    const modal = $('#crd-modal');
+    if (!modal) return;
+    const alertEl = $('#crd-modal-alert');
+    if (alertEl) { alertEl.textContent = ''; alertEl.style.display = 'none'; }
+
+    $('#crd-id').value          = coordinator?.id ?? '';
+    $('#crd-name').value        = coordinator?.name ?? '';
+    $('#crd-nic').value         = coordinator?.nic ?? '';
+    $('#crd-phone').value       = coordinator?.phone ?? '';
+    $('#crd-status').value      = coordinator?.status ?? '';
+    $('#crd-bank-name').value   = coordinator?.bank_name ?? '';
+    $('#crd-bank-branch').value = coordinator?.bank_branch ?? '';
+    $('#crd-bank-account').value= coordinator?.bank_account ?? '';
+    $('#crd-modal-title').textContent = coordinator ? 'Edit Coordinator' : 'New Coordinator';
+
+    modal.style.display = '';
+    setTimeout(() => $('#crd-name')?.focus(), 80);
+  }
+
+  function _closeCoordinatorModal() {
+    const m = $('#crd-modal'); if (m) m.style.display = 'none';
+  }
+
+  async function _saveCoordinator() {
+    const id   = $('#crd-id').value;
+    const body = {
+      name:        ($('#crd-name').value        || '').trim(),
+      nic:         ($('#crd-nic').value         || '').trim(),
+      phone:       ($('#crd-phone').value       || '').trim(),
+      status:      $('#crd-status').value       || '',
+      bank_name:   ($('#crd-bank-name').value   || '').trim(),
+      bank_branch: ($('#crd-bank-branch').value || '').trim(),
+      bank_account:($('#crd-bank-account').value|| '').trim(),
+    };
+
+    const alertEl = $('#crd-modal-alert');
+    const showErr = msg => { if (alertEl) { alertEl.textContent = msg; alertEl.style.display = ''; alertEl.style.color = '#ef4444'; } };
+
+    if (!body.name)         { showErr('Coordinator name is required.');     return; }
+    if (!body.nic)          { showErr('NIC number is required.');           return; }
+    if (!body.phone)        { showErr('Phone number is required.');         return; }
+    if (!body.status)       { showErr('Status is required.');               return; }
+    if (!body.bank_name)    { showErr('Bank name is required.');            return; }
+    if (!body.bank_branch)  { showErr('Bank branch name is required.');     return; }
+    if (!body.bank_account) { showErr('Account number is required.');       return; }
+
+    const saveBtn = $('#crd-modal-save');
+    if (saveBtn) saveBtn.disabled = true;
+    const res = id ? await API.coordinatorUpdate(id, body) : await API.coordinatorCreate(body);
+    if (saveBtn) saveBtn.disabled = false;
+
+    if (res.status === 200 || res.status === 201) {
+      _closeCoordinatorModal();
+      loadCoordinators();
+    } else {
+      showErr(res.body?.message || (id ? 'Update failed.' : 'Create failed.'));
+    }
+  }
+
+  // ═══════════════════════════ PROMOTERS ════════════════════════════════════
+
+  let _pmtQ = '';
+
+  async function loadPromoters() {
+    const tbody = $('#pmt-body');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:28px">Loading…</td></tr>';
+    const pa = $('#pmt-alert'); if (pa) { pa.textContent = ''; pa.style.display = 'none'; }
+
+    const res = await API.promoters(_pmtQ);
+    if (res.status !== 200) {
+      tbody.innerHTML = `<tr><td colspan="7" style="color:#ef4444;text-align:center;padding:24px">${escHtml(res.body?.message || 'Failed to load promoters')}</td></tr>`;
+      return;
+    }
+    const rows = res.body?.data || [];
+    if (rows.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:32px">No promoters yet. Click <strong>New Promoter</strong> to add one.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map(p => `
+      <tr>
+        <td style="font-size:12px;font-weight:600">${escHtml(p.name)}</td>
+        <td style="font-size:12px;color:var(--text-muted)">${escHtml(p.position || '—')}</td>
+        <td style="font-size:12px;color:var(--text-muted)">${escHtml(p.nic || '—')}</td>
+        <td style="font-size:12px;color:var(--text-muted)">${escHtml(p.phone || '—')}</td>
+        <td style="font-size:12px;color:var(--text-muted)">${escHtml(p.bank_name || '—')}</td>
+        <td style="font-size:12px;color:var(--text-muted)">${escHtml(p.bank_account || '—')}</td>
+        <td style="text-align:right;white-space:nowrap">
+          <button class="crm-card-btn" data-action="edit"   data-id="${p.id}" title="Edit"><i class="fa fa-pencil"></i></button>
+          <button class="crm-card-btn" style="color:#ef4444" data-action="delete" data-id="${p.id}" title="Delete"><i class="fa fa-trash"></i></button>
+        </td>
+      </tr>`).join('');
+
+    tbody.querySelectorAll('[data-action="edit"]').forEach(btn => {
+      btn.addEventListener('click', () => openPromoterModal(rows.find(p => String(p.id) === btn.dataset.id)));
+    });
+    tbody.querySelectorAll('[data-action="delete"]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Delete this promoter?')) return;
+        const r = await API.promoterDelete(btn.dataset.id);
+        if (r.status === 200 || r.status === 204) { loadPromoters(); }
+        else { if (pa) { pa.textContent = r.body?.message || 'Delete failed.'; pa.style.display = ''; pa.style.color = '#ef4444'; } }
+      });
+    });
+  }
+
+  async function openPromoterModal(promoter) {
+    const modal = $('#pmt-modal');
+    if (!modal) return;
+    const alertEl = $('#pmt-modal-alert');
+    if (alertEl) { alertEl.textContent = ''; alertEl.style.display = 'none'; }
+
+    $('#pmt-id').value          = promoter?.id ?? '';
+    $('#pmt-name').value        = promoter?.name ?? '';
+    $('#pmt-nic').value         = promoter?.nic ?? '';
+    $('#pmt-phone').value       = promoter?.phone ?? '';
+    $('#pmt-bank-name').value   = promoter?.bank_name ?? '';
+    $('#pmt-bank-branch').value = promoter?.bank_branch ?? '';
+    $('#pmt-bank-account').value= promoter?.bank_account ?? '';
+    $('#pmt-modal-title').textContent = promoter ? 'Edit Promoter' : 'New Promoter';
+
+    // Populate position dropdown
+    const posSel = $('#pmt-position');
+    if (posSel) {
+      const pRes = await API.promoterPositions('');
+      const posOpts = (pRes.body?.data || []).map(p => `<option value="${escHtml(p.name)}">${escHtml(p.name)}</option>`).join('');
+      posSel.innerHTML = '<option value="">— Select position (optional) —</option>' + posOpts;
+      posSel.value = promoter?.position ?? '';
+    }
+
+    modal.style.display = '';
+    setTimeout(() => $('#pmt-name')?.focus(), 80);
+  }
+
+  function _closePromoterModal() {
+    const m = $('#pmt-modal'); if (m) m.style.display = 'none';
+  }
+
+  async function _savePromoter() {
+    const id   = $('#pmt-id').value;
+    const body = {
+      name:        ($('#pmt-name').value        || '').trim(),
+      position:    ($('#pmt-position').value    || '').trim() || null,
+      nic:         ($('#pmt-nic').value         || '').trim() || null,
+      phone:       ($('#pmt-phone').value       || '').trim() || null,
+      bank_name:   ($('#pmt-bank-name').value   || '').trim(),
+      bank_branch: ($('#pmt-bank-branch').value || '').trim(),
+      bank_account:($('#pmt-bank-account').value|| '').trim(),
+    };
+
+    const alertEl = $('#pmt-modal-alert');
+    const showErr = msg => { if (alertEl) { alertEl.textContent = msg; alertEl.style.display = ''; alertEl.style.color = '#ef4444'; } };
+
+    if (!body.name)         { showErr('Promoter name is required.');        return; }
+    if (!body.bank_name)    { showErr('Bank name is required.');            return; }
+    if (!body.bank_branch)  { showErr('Bank branch name is required.');     return; }
+    if (!body.bank_account) { showErr('Bank account number is required.');  return; }
+
+    const saveBtn = $('#pmt-modal-save');
+    if (saveBtn) saveBtn.disabled = true;
+    const res = id ? await API.promoterUpdate(id, body) : await API.promoterCreate(body);
+    if (saveBtn) saveBtn.disabled = false;
+
+    if (res.status === 200 || res.status === 201) {
+      _closePromoterModal();
+      loadPromoters();
+    } else {
+      showErr(res.body?.message || (id ? 'Update failed.' : 'Create failed.'));
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  Promoter Positions modal
+  // ═══════════════════════════════════════════════════════════════
+  let _pposQ = '';
+  let _pposEditId = null; // id of the row currently being inline-edited
+
+  function openPposModal() {
+    const modal = $('#ppos-modal');
+    if (!modal) return;
+    const alertEl = $('#ppos-alert');
+    if (alertEl) { alertEl.textContent = ''; alertEl.style.display = 'none'; }
+    $('#ppos-search').value = '';
+    _pposQ = '';
+    _pposEditId = null;
+    modal.style.display = '';
+    loadPposRows();
+  }
+
+  function closePposModal() {
+    const m = $('#ppos-modal'); if (m) m.style.display = 'none';
+    _pposEditId = null;
+  }
+
+  async function loadPposRows() {
+    const tbody = $('#ppos-body');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--text-muted);padding:28px">Loading…</td></tr>';
+
+    const res = await API.promoterPositions(_pposQ);
+    if (res.status !== 200) {
+      tbody.innerHTML = `<tr><td colspan="3" style="color:#ef4444;text-align:center;padding:24px">${escHtml(res.body?.message || 'Failed to load positions')}</td></tr>`;
+      return;
+    }
+    const items = res.body?.data || [];
+    _renderPposRows(items);
+  }
+
+  function _renderPposRows(items) {
+    const tbody = $('#ppos-body');
+    if (!tbody) return;
+    if (items.length === 0 && _pposEditId !== 'new') {
+      tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--text-muted);padding:32px">No positions yet. Click <strong>Add Position</strong> to create one.</td></tr>';
+    } else {
+      tbody.innerHTML = items.map(p => {
+        if (_pposEditId === p.id) {
+          return `<tr data-ppos-id="${p.id}">
+            <td><input type="text" class="po-field-input ppos-name-input" value="${escAttr(p.name)}" maxlength="150" style="width:100%;font-size:12px;padding:3px 6px"></td>
+            <td><input type="text" class="po-field-input ppos-desc-input" value="${escAttr(p.description||'')}" maxlength="300" style="width:100%;font-size:12px;padding:3px 6px"></td>
+            <td style="text-align:right;white-space:nowrap">
+              <button class="crm-card-btn" style="color:#22c55e" data-action="save-edit" data-id="${p.id}" title="Save"><i class="fa fa-check"></i></button>
+              <button class="crm-card-btn" data-action="cancel-edit" title="Cancel"><i class="fa fa-xmark"></i></button>
+            </td>
+          </tr>`;
+        }
+        return `<tr data-ppos-id="${p.id}">
+          <td style="font-size:12px;font-weight:600">${escHtml(p.name)}</td>
+          <td style="font-size:12px;color:var(--text-muted)">${escHtml(p.description || '—')}</td>
+          <td style="text-align:right;white-space:nowrap">
+            <button class="crm-card-btn" data-action="edit" data-id="${p.id}" title="Edit"><i class="fa fa-pencil"></i></button>
+            <button class="crm-card-btn" style="color:#ef4444" data-action="delete" data-id="${p.id}" title="Delete"><i class="fa fa-trash"></i></button>
+          </td>
+        </tr>`;
+      }).join('');
+    }
+
+    // Append new-row if in add mode
+    if (_pposEditId === 'new') {
+      const tr = document.createElement('tr');
+      tr.dataset.pposId = 'new';
+      tr.innerHTML = `
+        <td><input type="text" class="po-field-input ppos-name-input" placeholder="Position name" maxlength="150" style="width:100%;font-size:12px;padding:3px 6px"></td>
+        <td><input type="text" class="po-field-input ppos-desc-input" placeholder="Description (optional)" maxlength="300" style="width:100%;font-size:12px;padding:3px 6px"></td>
+        <td style="text-align:right;white-space:nowrap">
+          <button class="crm-card-btn" style="color:#22c55e" data-action="save-new" title="Save"><i class="fa fa-check"></i></button>
+          <button class="crm-card-btn" data-action="cancel-new" title="Cancel"><i class="fa fa-xmark"></i></button>
+        </td>`;
+      tbody.appendChild(tr);
+      tr.querySelector('.ppos-name-input')?.focus();
+    }
+
+    // Wire buttons
+    tbody.querySelectorAll('[data-action="edit"]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        _pposEditId = parseInt(btn.dataset.id, 10);
+        loadPposRows();
+      });
+    });
+    tbody.querySelectorAll('[data-action="delete"]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Delete this position?')) return;
+        const alertEl = $('#ppos-alert');
+        const r = await API.promoterPositionDelete(btn.dataset.id);
+        if (r.status === 200 || r.status === 204) { loadPposRows(); }
+        else { if (alertEl) { alertEl.textContent = r.body?.message || 'Delete failed.'; alertEl.style.display = ''; alertEl.style.color = '#ef4444'; } }
+      });
+    });
+    tbody.querySelectorAll('[data-action="save-edit"]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const row   = btn.closest('tr');
+        const name  = (row.querySelector('.ppos-name-input')?.value || '').trim();
+        const desc  = (row.querySelector('.ppos-desc-input')?.value || '').trim() || null;
+        const alertEl = $('#ppos-alert');
+        if (!name) { if (alertEl) { alertEl.textContent = 'Position name is required.'; alertEl.style.display = ''; alertEl.style.color = '#ef4444'; } return; }
+        const r = await API.promoterPositionUpdate(btn.dataset.id, { name, description: desc });
+        if (r.status === 200) { _pposEditId = null; loadPposRows(); }
+        else { if (alertEl) { alertEl.textContent = r.body?.message || 'Update failed.'; alertEl.style.display = ''; alertEl.style.color = '#ef4444'; } }
+      });
+    });
+    tbody.querySelectorAll('[data-action="cancel-edit"]').forEach(btn => {
+      btn.addEventListener('click', () => { _pposEditId = null; loadPposRows(); });
+    });
+    tbody.querySelector('[data-action="save-new"]')?.addEventListener('click', async () => {
+      const row   = tbody.querySelector('[data-ppos-id="new"]');
+      const name  = (row?.querySelector('.ppos-name-input')?.value || '').trim();
+      const desc  = (row?.querySelector('.ppos-desc-input')?.value || '').trim() || null;
+      const alertEl = $('#ppos-alert');
+      if (!name) { if (alertEl) { alertEl.textContent = 'Position name is required.'; alertEl.style.display = ''; alertEl.style.color = '#ef4444'; } return; }
+      const r = await API.promoterPositionCreate({ name, description: desc });
+      if (r.status === 201) { _pposEditId = null; loadPposRows(); }
+      else { if (alertEl) { alertEl.textContent = r.body?.message || 'Create failed.'; alertEl.style.display = ''; alertEl.style.color = '#ef4444'; } }
+    });
+    tbody.querySelector('[data-action="cancel-new"]')?.addEventListener('click', () => {
+      _pposEditId = null; loadPposRows();
+    });
+  }
+
+  // ── Listeners for positions modal ─────────────────────────────
+  $('#ppos-modal-close')?.addEventListener('click', closePposModal);
+  $('#ppos-modal')?.addEventListener('click', e => { if (e.target === $('#ppos-modal')) closePposModal(); });
+  $('#ppos-add-btn')?.addEventListener('click', () => {
+    _pposEditId = 'new';
+    loadPposRows();
+  });
+
+  let _pposSearchTimer = null;
+  $('#ppos-search')?.addEventListener('input', e => {
+    _pposQ = e.target.value.trim();
+    clearTimeout(_pposSearchTimer);
+    _pposSearchTimer = setTimeout(loadPposRows, 350);
+  });
+
+  // Ribbon + promoters-view button
+  $('#rb-ppos-manage')?.addEventListener('click', openPposModal);
+  $('#pmt-positions-btn')?.addEventListener('click', openPposModal);
+
+  // ═══════════════════════════════════════════════════════════════
+
+  async function _populateJobDropdowns() {
+    // Client Brand
+    const cbSel = $('#job-client-brand-id');
+    if (cbSel) {
+      const r = await API.brands('');
+      const opts = (r.body?.data || []).map(b => `<option value="${b.id}">${escHtml(b.name)} (${escHtml(b.short_code)})</option>`).join('');
+      cbSel.innerHTML = '<option value="">— Select a Brand —</option>' + opts;
+    }
+    // Officers
+    const oSel = $('#job-officer-id');
+    if (oSel) {
+      const r = await API.officers('');
+      const opts = (r.body?.data || []).map(o => `<option value="${o.id}">${escHtml(o.name)}</option>`).join('');
+      oSel.innerHTML = '<option value="">— Select officer —</option>' + opts;
+    }
+    // Reporters
+    const rSel = $('#job-reporter-id');
+    if (rSel) {
+      const r = await API.reporters('');
+      const opts = (r.body?.data || []).map(r2 => `<option value="${r2.id}">${escHtml(r2.name)}</option>`).join('');
+      rSel.innerHTML = '<option value="">— Select reporter —</option>' + opts;
+    }
+  }
+
+  async function openJobModal(job) {
+    const modal = $('#job-modal');
+    if (!modal) return;
+    const alertEl = $('#job-modal-alert');
+    if (alertEl) { alertEl.textContent = ''; alertEl.style.display = 'none'; }
+
+    $('#job-id').value          = job?.id ?? '';
+    $('#job-name').value        = job?.name ?? '';
+    $('#job-description').value = job?.description ?? '';
+    $('#job-status').value      = job?.status ?? 'pending';
+    $('#job-start-date').value  = job?.start_date ?? '';
+    $('#job-modal-title').textContent = job ? 'Edit Job' : 'New Job';
+
+    modal.style.display = '';
+    await _populateJobDropdowns();
+
+    // Set dropdown values after populating
+    if (job?.client_brand_id) { const s = $('#job-client-brand-id'); if (s) s.value = job.client_brand_id; }
+    if (job?.officer_id)      { const s = $('#job-officer-id');       if (s) s.value = job.officer_id; }
+    if (job?.reporter_id)     { const s = $('#job-reporter-id');      if (s) s.value = job.reporter_id; }
+
+    setTimeout(() => $('#job-name')?.focus(), 80);
+  }
+
+  function _closeJobModal() {
+    const m = $('#job-modal'); if (m) m.style.display = 'none';
+  }
+
+  async function _saveJob() {
+    const id   = $('#job-id').value;
+    const body = {
+      name:             ($('#job-name').value        || '').trim(),
+      client_brand_id:  $('#job-client-brand-id').value || null,
+      officer_id:       $('#job-officer-id').value  || null,
+      reporter_id:      $('#job-reporter-id').value || null,
+      description:      ($('#job-description').value || '').trim() || null,
+      status:           $('#job-status').value || 'pending',
+      start_date:       $('#job-start-date').value  || null,
+    };
+
+    const alertEl = $('#job-modal-alert');
+    const showErr = msg => { if (alertEl) { alertEl.textContent = msg; alertEl.style.display = ''; alertEl.style.color = '#ef4444'; } };
+
+    if (!body.name)             { showErr('Job name is required.');  return; }
+    if (!body.client_brand_id)  { showErr('Client (Brand) is required.'); return; }
+
+    const saveBtn = $('#job-modal-save');
+    if (saveBtn) saveBtn.disabled = true;
+    const res = id ? await API.jobUpdate(id, body) : await API.jobCreate(body);
+    if (saveBtn) saveBtn.disabled = false;
+
+    if (res.status === 200 || res.status === 201) {
+      _closeJobModal();
+      loadJobs();
+    } else {
+      showErr(res.body?.message || (id ? 'Update failed.' : 'Create failed.'));
+    }
+  }
+
+  // ═══════════════════════════ LISTENERS ════════════════════════════════════
+
+  // Sub-nav
+  $$('[data-evtview]').forEach(btn =>
+    btn.addEventListener('click', () => switchEvtView(btn.dataset.evtview)));
+
+  // Ribbon — Brands
+  $('#rb-brd-all')?.addEventListener('click', () => { activateTab('event-mgmt'); switchEvtView('brands'); });
+  $('#rb-brd-new')?.addEventListener('click', () => { activateTab('event-mgmt'); switchEvtView('brands'); openBrandModal(null); });
+
+  // Ribbon — Reporters
+  $('#rb-rpt-all')?.addEventListener('click', () => { activateTab('event-mgmt'); switchEvtView('reporters'); });
+  $('#rb-rpt-new')?.addEventListener('click', () => { activateTab('event-mgmt'); switchEvtView('reporters'); openReporterModal(null); });
+
+  // Ribbon — Officers
+  $('#rb-ofc-all')?.addEventListener('click', () => { activateTab('event-mgmt'); switchEvtView('officers'); });
+  $('#rb-ofc-new')?.addEventListener('click', () => { activateTab('event-mgmt'); switchEvtView('officers'); openOfficerModal(null); });
+
+  // Ribbon — Agencies
+  $('#rb-agc-all')?.addEventListener('click', () => { activateTab('event-mgmt'); switchEvtView('agencies'); });
+  $('#rb-agc-new')?.addEventListener('click', () => { activateTab('event-mgmt'); switchEvtView('agencies'); openAgencyModal(null); });
+
+  // Ribbon — Salary Sheets
+  $('#rb-ss-all')?.addEventListener('click', () => { activateTab('event-mgmt'); switchEvtView('salary'); });
+  $('#rb-ss-new')?.addEventListener('click', () => { activateTab('event-mgmt'); switchEvtView('salary'); _ssOpenCreateModal(); });
+
+  // Ribbon — Coordinators
+  $('#rb-crd-all')?.addEventListener('click', () => { activateTab('event-mgmt'); switchEvtView('coordinators'); });
+  $('#rb-crd-new')?.addEventListener('click', () => { activateTab('event-mgmt'); switchEvtView('coordinators'); openCoordinatorModal(null); });
+
+  // Ribbon — Promoters
+  $('#rb-pmt-all')?.addEventListener('click', () => { activateTab('event-mgmt'); switchEvtView('promoters'); });
+  $('#rb-pmt-new')?.addEventListener('click', () => { activateTab('event-mgmt'); switchEvtView('promoters'); openPromoterModal(null); });
+
+  // Ribbon — Jobs
+  $('#rb-job-all')?.addEventListener('click', () => { activateTab('event-mgmt'); switchEvtView('jobs'); });
+  $('#rb-job-new')?.addEventListener('click', () => { activateTab('event-mgmt'); switchEvtView('jobs'); openJobModal(null); });
+
+  // Ribbon — Refresh
+  $('#rb-brd-refresh')?.addEventListener('click', () => {
+    if      (_evtCurrentView === 'reporters')    loadReporters();
+    else if (_evtCurrentView === 'officers')     loadOfficers();
+    else if (_evtCurrentView === 'coordinators') loadCoordinators();
+    else if (_evtCurrentView === 'promoters')    loadPromoters();
+    else if (_evtCurrentView === 'agencies')     loadAgencies();
+    else if (_evtCurrentView === 'jobs')         loadJobs();
+    else if (_evtCurrentView === 'salary')       loadSalarySheets();
+    else loadBrands();
+  });
+
+  // Panel toolbars
+  $('#brd-new-btn')?.addEventListener('click', () => openBrandModal(null));
+  $('#rpt-new-btn')?.addEventListener('click', () => openReporterModal(null));
+  $('#ofc-new-btn')?.addEventListener('click', () => openOfficerModal(null));
+  $('#agc-new-btn')?.addEventListener('click', () => openAgencyModal(null));
+  $('#agc-modal-close')?.addEventListener('click',  _closeAgencyModal);
+  $('#agc-modal-cancel')?.addEventListener('click', _closeAgencyModal);
+  $('#agc-modal-save')?.addEventListener('click',   _saveAgency);
+  $('#agc-modal')?.addEventListener('click', e => { if (e.target === $('#agc-modal')) _closeAgencyModal(); });
+  $('#ss-new-btn')?.addEventListener('click',  _ssOpenCreateModal);
+  $('#ss-back-btn')?.addEventListener('click', () => {
+    document.querySelector('#ss-promo-dd')?.remove();
+    document.querySelector('#ss-pos-dd')?.remove();
+    loadSalarySheets();
+  });
+  $('#ss-add-row-btn')?.addEventListener('click', _ssAddEmptyRow);
+  $('#ss-save-btn')?.addEventListener('click',    _ssSaveSheet);
+  $('#ss-create-close')?.addEventListener('click',  _ssCloseCreateModal);
+  $('#ss-create-cancel')?.addEventListener('click', _ssCloseCreateModal);
+  $('#ss-create-save')?.addEventListener('click',   _ssConfirmCreate);
+  $('#ss-create-modal')?.addEventListener('click', e => { if (e.target === $('#ss-create-modal')) _ssCloseCreateModal(); });
+  // (ss-addrow modal removed — Add Row now inserts an empty row directly)
+  $('#crd-new-btn')?.addEventListener('click', () => openCoordinatorModal(null));
+  $('#pmt-new-btn')?.addEventListener('click', () => openPromoterModal(null));
+  $('#job-new-btn')?.addEventListener('click', () => openJobModal(null));
+
+  // Search
+  let _brdSearchTimer, _rptSearchTimer, _ofcSearchTimer, _crdSearchTimer, _pmtSearchTimer, _agcSearchTimer, _ssSearchTimer;
+  $('#brd-search')?.addEventListener('input', e => {
+    clearTimeout(_brdSearchTimer);
+    _brdQ = e.target.value;
+    _brdSearchTimer = setTimeout(loadBrands, 350);
+  });
+  $('#rpt-search')?.addEventListener('input', e => {
+    clearTimeout(_rptSearchTimer);
+    _rptQ = e.target.value;
+    _rptSearchTimer = setTimeout(loadReporters, 350);
+  });
+  $('#ofc-search')?.addEventListener('input', e => {
+    clearTimeout(_ofcSearchTimer);
+    _ofcQ = e.target.value;
+    _ofcSearchTimer = setTimeout(loadOfficers, 350);
+  });
+  $('#agc-search')?.addEventListener('input', e => {
+    clearTimeout(_agcSearchTimer);
+    _agcQ = e.target.value;
+    _agcSearchTimer = setTimeout(loadAgencies, 350);
+  });
+  $('#ss-search')?.addEventListener('input', e => {
+    clearTimeout(_ssSearchTimer);
+    _ssQ = e.target.value;
+    _ssSearchTimer = setTimeout(loadSalarySheets, 350);
+  });
+  $('#crd-search')?.addEventListener('input', e => {
+    clearTimeout(_crdSearchTimer);
+    _crdQ = e.target.value;
+    _crdSearchTimer = setTimeout(loadCoordinators, 350);
+  });
+  $('#pmt-search')?.addEventListener('input', e => {
+    clearTimeout(_pmtSearchTimer);
+    _pmtQ = e.target.value;
+    _pmtSearchTimer = setTimeout(loadPromoters, 350);
+  });
+  let _jobSearchTimer;
+  $('#job-search')?.addEventListener('input', e => {
+    clearTimeout(_jobSearchTimer);
+    _jobQ = e.target.value;
+    _jobSearchTimer = setTimeout(loadJobs, 350);
+  });
+  $('#job-status-filter')?.addEventListener('change', function () {
+    _jobStatusFilter = this.value;
+    loadJobs();
+  });
+
+  // Short-code auto-uppercase
+  $('#brd-short-code')?.addEventListener('input', function () {
+    const pos = this.selectionStart;
+    this.value = this.value.toUpperCase();
+    this.setSelectionRange(pos, pos);
+  });
+
+  // Brand modal
+  $('#brd-modal-close')?.addEventListener('click',  _closeBrandModal);
+  $('#brd-modal-cancel')?.addEventListener('click', _closeBrandModal);
+  $('#brd-modal-save')?.addEventListener('click',   _saveBrand);
+  $('#brd-modal')?.addEventListener('click', e => { if (e.target === $('#brd-modal')) _closeBrandModal(); });
+
+  // Reporter modal
+  $('#rpt-modal-close')?.addEventListener('click',  _closeReporterModal);
+  $('#rpt-modal-cancel')?.addEventListener('click', _closeReporterModal);
+  $('#rpt-modal-save')?.addEventListener('click',   _saveReporter);
+  $('#rpt-modal')?.addEventListener('click', e => { if (e.target === $('#rpt-modal')) _closeReporterModal(); });
+
+  // "Change password" checkbox toggle — reporter
+  $('#rpt-change-pw-chk')?.addEventListener('change', function () {
+    const show = this.checked;
+    const pwField  = $('#rpt-pw-field');
+    const cpwField = $('#rpt-cpw-field');
+    if (pwField)  pwField.style.display  = show ? '' : 'none';
+    if (cpwField) cpwField.style.display = show ? '' : 'none';
+    if (!show) { $('#rpt-password').value = ''; $('#rpt-confirm-password').value = ''; }
+  });
+
+  // Officer modal
+  $('#ofc-modal-close')?.addEventListener('click',  _closeOfficerModal);
+  $('#ofc-modal-cancel')?.addEventListener('click', _closeOfficerModal);
+  $('#ofc-modal-save')?.addEventListener('click',   _saveOfficer);
+  $('#ofc-modal')?.addEventListener('click', e => { if (e.target === $('#ofc-modal')) _closeOfficerModal(); });
+
+  // Coordinator modal
+  $('#crd-modal-close')?.addEventListener('click',  _closeCoordinatorModal);
+  $('#crd-modal-cancel')?.addEventListener('click', _closeCoordinatorModal);
+  $('#crd-modal-save')?.addEventListener('click',   _saveCoordinator);
+  $('#crd-modal')?.addEventListener('click', e => { if (e.target === $('#crd-modal')) _closeCoordinatorModal(); });
+
+  // Promoter modal
+  $('#pmt-modal-close')?.addEventListener('click',  _closePromoterModal);
+  $('#pmt-modal-cancel')?.addEventListener('click', _closePromoterModal);
+  $('#pmt-modal-save')?.addEventListener('click',   _savePromoter);
+  $('#pmt-modal')?.addEventListener('click', e => { if (e.target === $('#pmt-modal')) _closePromoterModal(); });
+
+  // Job modal
+  $('#job-modal-close')?.addEventListener('click',  _closeJobModal);
+  $('#job-modal-cancel')?.addEventListener('click', _closeJobModal);
+  $('#job-modal-save')?.addEventListener('click',   _saveJob);
+  $('#job-modal')?.addEventListener('click', e => { if (e.target === $('#job-modal')) _closeJobModal(); });
+
+  // "Change password" checkbox toggle — officer
+  $('#ofc-change-pw-chk')?.addEventListener('change', function () {
+    const show = this.checked;
+    const pwField  = $('#ofc-pw-field');
+    const cpwField = $('#ofc-cpw-field');
+    if (pwField)  pwField.style.display  = show ? '' : 'none';
+    if (cpwField) cpwField.style.display = show ? '' : 'none';
+    if (!show) { $('#ofc-password').value = ''; $('#ofc-confirm-password').value = ''; }
+  });
+
 }());
 
 // ── Boot ───────────────────────────────────────────────────────────────────

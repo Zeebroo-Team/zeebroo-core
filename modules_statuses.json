@@ -22,5 +22,7 @@
     "Mail": true,
     "Developers": true,
     "AutomationEditor": true,
-    "ProjectManage": true
+    "ProjectManage": true,
+    "EventManagement": true,
+    "AdvertisingAgency": true
 }

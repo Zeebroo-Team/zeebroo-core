@@ -204,6 +204,11 @@ body.macos .ctb-wc { display: none; }
 #app-shell.sidebar-mode #ribbon         { display: none !important; }
 #app-shell.cashier-mode #sidebar        { display: none !important; }
 
+/* Sidebar mode: hide the horizontal sub-tab bars — the sidebar handles that navigation */
+#app-shell.sidebar-mode .home-subnav,
+#app-shell.sidebar-mode .fin-subnav,
+#app-shell.sidebar-mode .inv-subnav   { display: none !important; }
+
 @keyframes sb-slide-in {
   from { transform: translateX(-100%); opacity: 0; }
   to   { transform: translateX(0);     opacity: 1; }
@@ -279,7 +284,6 @@ body.macos .ctb-wc { display: none; }
   grid-template-rows: 0fr;
   transition: grid-template-rows .32s cubic-bezier(0.4, 0, 0.2, 1);
   background: transparent;
-  border-left: 2px solid rgba(255,255,255,.25);
   margin-left: 16px;
   overflow: hidden;
 }
@@ -15199,3 +15203,70 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
   width: 794px; height: 1123px; border: none; display: block;
   background: #fff; pointer-events: none;
 }
+
+/* ── Event Management ─────────────────────────────────────────────────── */
+.evt-card {
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 10px;
+  background: var(--card, #fff);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  position: relative;
+}
+.evt-card-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.evt-card-status {
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 2px 8px;
+  text-transform: capitalize;
+}
+.evt-card-cat {
+  font-size: 10px;
+  background: var(--border, #e5e7eb);
+  color: var(--text-muted, #6b7280);
+  border-radius: 999px;
+  padding: 2px 8px;
+  text-transform: capitalize;
+}
+.evt-card-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text, #111827);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.evt-card-meta {
+  font-size: 11px;
+  color: var(--text-muted, #6b7280);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.evt-card-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+  opacity: 0;
+  transition: opacity .12s;
+}
+.evt-card:hover .evt-card-actions { opacity: 1; }
+.evt-card-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 5px;
+  font-size: 11px;
+  color: var(--text-muted, #6b7280);
+}
+.evt-card-btn:hover { background: var(--border, #e5e7eb); color: var(--text, #111827); }
+.evt-card-btn--danger:hover { background: #fee2e2; color: #ef4444; }

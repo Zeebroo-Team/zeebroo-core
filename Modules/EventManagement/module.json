@@ -1,0 +1,11 @@
+{
+    "name": "EventManagement",
+    "alias": "event-management",
+    "description": "Manage events, attendees, ticket types, and check-in.",
+    "keywords": ["events", "attendees", "tickets", "check-in"],
+    "priority": 0,
+    "providers": [
+        "Modules\\EventManagement\\Providers\\EventManagementServiceProvider"
+    ],
+    "files": []
+}

@@ -1,0 +1,23 @@
+{
+    "name": "nwidart/advertising-agency",
+    "description": "Advertising Agency module.",
+    "authors": [
+        {
+            "name": "Socibiz",
+            "email": "support@socibiz.com"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {}
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\AdvertisingAgency\\": "app/",
+            "Modules\\AdvertisingAgency\\Database\\Factories\\": "database/factories/",
+            "Modules\\AdvertisingAgency\\Database\\Seeders\\": "database/seeders/"
+        }
+    }
+}

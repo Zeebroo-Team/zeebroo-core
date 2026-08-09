@@ -1,0 +1,67 @@
+<?php
+
+namespace Modules\AdvertisingAgency\Http\Controllers\Api\Concerns;
+
+use Illuminate\Http\Exceptions\HttpResponseException;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Modules\Business\Models\Business;
+use Modules\Business\Models\BusinessMember;
+use Modules\HRManagement\Models\Employee;
+
+trait ResolvesBusinessForApi
+{
+    protected function resolveBusinessForApi(Request $request): Business|JsonResponse
+    {
+        $user = $request->user();
+        if ($user === null) {
+            return response()->json(['message' => 'Unauthenticated.'], 401);
+        }
+
+        $rawId = $request->header('X-Business-Id')
+            ?? $request->query('business_id')
+            ?? session('selected_business_id');
+
+        $business = null;
+        if ($rawId !== null && $rawId !== '') {
+            $employeeBusinessIds = Employee::query()
+                ->where('user_id', $user->id)
+                ->whereNotNull('user_id')
+                ->pluck('business_id');
+
+            $memberBusinessIds = BusinessMember::query()
+                ->where('user_id', $user->id)
+                ->where('status', 'active')
+                ->pluck('business_id');
+
+            $business = Business::query()
+                ->where(function ($q) use ($user, $employeeBusinessIds, $memberBusinessIds) {
+                    $q->where('user_id', $user->id)
+                      ->orWhereIn('id', $employeeBusinessIds)
+                      ->orWhereIn('id', $memberBusinessIds);
+                })
+                ->whereKey((int) $rawId)
+                ->first();
+        } else {
+            $business = Business::currentForNavbar($user);
+        }
+
+        if ($business === null) {
+            return response()->json([
+                'message' => 'No business selected. Send X-Business-Id header.',
+            ], 422);
+        }
+
+        return $business;
+    }
+
+    protected function businessOrAbort(Request $request): Business
+    {
+        $business = $this->resolveBusinessForApi($request);
+        if ($business instanceof JsonResponse) {
+            throw new HttpResponseException($business);
+        }
+
+        return $business;
+    }
+}

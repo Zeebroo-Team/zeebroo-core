@@ -111,11 +111,15 @@ class PosSettingsApiController extends Controller
     public function features(Request $request): JsonResponse
     {
         $business = $this->businessOrAbort($request);
-        $all      = ['account_management','automation_editor','bill_management','crm','developers','human_resources','mail','point_of_sale','product_management','project_management','restaurant','service_management','social_media_campaign','stock_management'];
+        $all      = ['account_management','automation_editor','bill_management','crm','developers','event_management','human_resources','mail','point_of_sale','product_management','project_management','restaurant','service_management','social_media_campaign','stock_management'];
         $stored   = $business->getSetting('business.features') ?? [];
         $enabled  = array_values(array_filter($all, fn ($k) => ! empty($stored[$k])));
-        if (! in_array('account_management', $enabled, true)) {
-            array_unshift($enabled, 'account_management');
+
+        // These features are always enabled regardless of stored settings.
+        foreach (['account_management', 'event_management'] as $alwaysOn) {
+            if (! in_array($alwaysOn, $enabled, true)) {
+                $enabled[] = $alwaysOn;
+            }
         }
         return response()->json(['data' => $enabled]);
     }
@@ -123,7 +127,7 @@ class PosSettingsApiController extends Controller
     public function updateFeatures(Request $request): JsonResponse
     {
         $business = $this->businessOrAbort($request);
-        $all      = ['account_management','automation_editor','bill_management','crm','developers','human_resources','mail','point_of_sale','product_management','project_management','restaurant','service_management','social_media_campaign','stock_management'];
+        $all      = ['account_management','automation_editor','bill_management','crm','developers','event_management','human_resources','mail','point_of_sale','product_management','project_management','restaurant','service_management','social_media_campaign','stock_management'];
         $validated = $request->validate([
             'features'   => ['required', 'array'],
             'features.*' => ['boolean'],
