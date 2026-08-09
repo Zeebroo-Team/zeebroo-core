@@ -6693,6 +6693,7 @@
               <span id="ss-editor-dates" style="font-size:11px;color:var(--text-muted)">—</span>
             </div>
             <div id="ss-editor-alert" style="display:none;font-size:12px;padding:3px 10px;border-radius:4px;margin-left:8px"></div>
+            <span id="ss-status-badge" style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px;margin-left:4px;display:none"></span>
             <button class="svc-form-btn" id="ss-setup-btn" style="margin-left:auto;padding:5px 12px;font-size:12px;flex-shrink:0">
               <i class="fa fa-gear"></i> Setup
             </button>
@@ -6701,6 +6702,9 @@
             </button>
             <button class="svc-form-btn" id="ss-save-btn" style="padding:5px 14px;font-size:12px;flex-shrink:0;background:#059669;color:#fff;border:1px solid #059669;border-radius:5px;cursor:pointer">
               <i class="fa fa-floppy-disk"></i> Save
+            </button>
+            <button class="svc-form-btn" id="ss-finish-btn" style="padding:5px 14px;font-size:12px;flex-shrink:0;background:#7c3aed;color:#fff;border:1px solid #7c3aed;border-radius:5px;cursor:pointer">
+              <i class="fa fa-flag-checkered"></i> Finish
             </button>
           </div>
           <div id="ss-table-wrap" style="flex:1;overflow:auto;padding:10px 10px 20px">
@@ -7095,6 +7099,28 @@
   </div>
 
   <!-- ── Salary Sheet: Create Modal ── -->
+  <!-- ── Salary Sheet Status Modal ───────────────────────────────────────── -->
+  <div class="modal-overlay" id="ss-status-modal" style="display:none">
+    <div class="po-aim-shell" style="width:420px">
+      <div class="po-aim-header">
+        <i class="fa fa-flag-checkered" style="color:#7c3aed"></i>
+        <span>Update Sheet Status</span>
+        <button class="psm-close" id="ss-status-modal-close"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div class="po-aim-body" style="gap:10px">
+        <p style="font-size:12px;color:var(--text-muted);margin:0 0 4px">Select the new status for this salary sheet.</p>
+        <div id="ss-status-options" style="display:flex;flex-direction:column;gap:8px">
+          <!-- rendered by JS -->
+        </div>
+        <div id="ss-status-alert" class="svc-form-alert" style="display:none;margin-top:4px"></div>
+      </div>
+      <div class="po-aim-footer">
+        <button class="po-btn-ghost" id="ss-status-modal-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+        <button class="po-btn-primary" id="ss-status-modal-save" style="background:#7c3aed;border-color:#7c3aed"><i class="fa fa-flag-checkered"></i> Update Status</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-overlay" id="ss-create-modal" style="display:none">
     <div class="po-aim-shell" style="width:460px">
       <div class="po-aim-header">

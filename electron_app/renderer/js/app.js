@@ -33440,6 +33440,7 @@ async function submitDsCreate() {
       ? `${sheetData.date_from}  →  ${sheetData.date_to}` : '';
     const alertEl = $('#ss-editor-alert');
     if (alertEl) alertEl.style.display = 'none';
+    _ssUpdateStatusBadge(sheetData.status || 'draft');
 
     _ssRenderTable();
   }
@@ -34928,6 +34929,103 @@ async function submitDsCreate() {
   $('#agc-modal-save')?.addEventListener('click',   _saveAgency);
   $('#agc-modal')?.addEventListener('click', e => { if (e.target === $('#agc-modal')) _closeAgencyModal(); });
   $('#ss-new-btn')?.addEventListener('click',  _ssOpenCreateModal);
+  // ── Status modal ────────────────────────────────────────────────────────
+  const _ssStatuses = [
+    { value: 'draft',     label: 'Draft',     color: '#6b7280', icon: 'fa-pencil'         },
+    { value: 'completed', label: 'Completed', color: '#3b82f6', icon: 'fa-circle-check'   },
+    { value: 'approved',  label: 'Approved',  color: '#10b981', icon: 'fa-thumbs-up'      },
+    { value: 'rejected',  label: 'Rejected',  color: '#ef4444', icon: 'fa-circle-xmark'   },
+    { value: 'paid',      label: 'Paid',      color: '#8b5cf6', icon: 'fa-money-bill-wave' },
+  ];
+
+  function _ssStatusMeta(value) {
+    return _ssStatuses.find(s => s.value === value) || _ssStatuses[0];
+  }
+
+  function _ssUpdateStatusBadge(status) {
+    const badge = $('#ss-status-badge');
+    if (!badge) return;
+    const m = _ssStatusMeta(status);
+    badge.textContent    = m.label;
+    badge.style.background = m.color + '20';
+    badge.style.color      = m.color;
+    badge.style.border     = `1px solid ${m.color}60`;
+    badge.style.display    = '';
+  }
+
+  let _ssSelectedStatus = '';
+
+  function _ssOpenStatusModal() {
+    if (!_ssCurrentSheet) return;
+    _ssSelectedStatus = _ssCurrentSheet.status || 'draft';
+
+    const opts = $('#ss-status-options');
+    if (opts) {
+      opts.innerHTML = _ssStatuses.map(s => {
+        const active = s.value === _ssSelectedStatus;
+        return `<label data-ss-status-opt="${s.value}" style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:8px;border:2px solid ${active ? s.color : 'var(--border-color)'};background:${active ? s.color + '12' : 'transparent'};cursor:pointer;transition:border .15s,background .15s">
+          <input type="radio" name="ss_status" value="${s.value}" ${active ? 'checked' : ''} style="accent-color:${s.color};width:16px;height:16px;flex-shrink:0">
+          <i class="fa ${s.icon}" style="color:${s.color};width:18px;text-align:center"></i>
+          <span style="font-weight:700;font-size:13px;color:${s.color}">${s.label}</span>
+        </label>`;
+      }).join('');
+
+      // Highlight selected on click
+      opts.querySelectorAll('[data-ss-status-opt]').forEach(lbl => {
+        lbl.addEventListener('click', () => {
+          _ssSelectedStatus = lbl.dataset.ssStatusOpt;
+          opts.querySelectorAll('[data-ss-status-opt]').forEach(l => {
+            const m = _ssStatusMeta(l.dataset.ssStatusOpt);
+            const sel = l.dataset.ssStatusOpt === _ssSelectedStatus;
+            l.style.border     = `2px solid ${sel ? m.color : 'var(--border-color)'}`;
+            l.style.background = sel ? m.color + '12' : 'transparent';
+          });
+        });
+      });
+    }
+
+    const al = $('#ss-status-alert');
+    if (al) { al.textContent = ''; al.style.display = 'none'; }
+    const m = $('#ss-status-modal'); if (m) m.style.display = '';
+  }
+
+  function _ssCloseStatusModal() {
+    const m = $('#ss-status-modal'); if (m) m.style.display = 'none';
+  }
+
+  async function _ssSaveStatus() {
+    if (!_ssCurrentSheet || !_ssSelectedStatus) return;
+    const al  = $('#ss-status-alert');
+    const btn = $('#ss-status-modal-save');
+    if (btn) btn.disabled = true;
+
+    const res = await API.salarySheetUpdate(_ssCurrentSheet.id, { status: _ssSelectedStatus });
+    if (btn) btn.disabled = false;
+
+    if (res.status === 200) {
+      _ssCurrentSheet.status = _ssSelectedStatus;
+      _ssUpdateStatusBadge(_ssSelectedStatus);
+      _ssCloseStatusModal();
+    } else {
+      if (al) {
+        al.textContent    = res.body?.message || 'Failed to update status.';
+        al.style.display  = '';
+        al.style.color    = '#dc2626';
+        al.style.background = '#fee2e2';
+        al.style.padding  = '4px 10px';
+        al.style.border   = '1px solid #fca5a5';
+        al.style.borderRadius = '4px';
+      }
+    }
+  }
+
+  $('#ss-finish-btn')?.addEventListener('click',         _ssOpenStatusModal);
+  $('#ss-status-modal-close')?.addEventListener('click',  _ssCloseStatusModal);
+  $('#ss-status-modal-cancel')?.addEventListener('click', _ssCloseStatusModal);
+  $('#ss-status-modal-save')?.addEventListener('click',   _ssSaveStatus);
+  $('#ss-status-modal')?.addEventListener('click', e => { if (e.target === $('#ss-status-modal')) _ssCloseStatusModal(); });
+
+  // ── Editor navigation ────────────────────────────────────────────────────
   $('#ss-back-btn')?.addEventListener('click', () => {
     document.querySelector('#ss-promo-dd')?.remove();
     document.querySelector('#ss-pos-dd')?.remove();

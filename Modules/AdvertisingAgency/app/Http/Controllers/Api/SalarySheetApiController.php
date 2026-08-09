@@ -61,7 +61,7 @@ class SalarySheetApiController extends Controller
             'location'                       => ['nullable', 'string', 'max:200'],
             'date_from'                      => ['sometimes', 'date'],
             'date_to'                        => ['sometimes', 'date'],
-            'status'                         => ['sometimes', 'string', 'in:draft,finalized'],
+            'status'                         => ['sometimes', 'string', 'in:draft,completed,approved,rejected,paid'],
             'notes'                          => ['nullable', 'string', 'max:2000'],
             'default_coordinator_fee'        => ['sometimes', 'nullable', 'numeric', 'min:0'],
             'allowances'                          => ['sometimes', 'array'],
