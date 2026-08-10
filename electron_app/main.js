@@ -323,6 +323,14 @@ ipcMain.handle('show-open-dialog', async (_e, options) => {
   return dialog.showOpenDialog(mainWindow, options);
 });
 
+ipcMain.handle('read-text-file', async (_e, filePath) => {
+  try {
+    return { ok: true, content: fs.readFileSync(filePath, 'utf8') };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
 // ── Design Studio editor window ───────────────────────────────────────────
 ipcMain.handle('open-editor', (_e, design) => {
   editorDesign = design;

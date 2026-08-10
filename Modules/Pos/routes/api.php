@@ -51,7 +51,6 @@ Route::prefix('v1/pos')->group(function (): void {
     Route::post('auth/register',          [PosAuthApiController::class, 'register'])->name('auth.register');
     Route::get ('auth/business-categories',[PosAuthApiController::class, 'businessCategories'])->name('auth.business-categories');
     Route::post('cashier/login',          [PosCashierApiController::class, 'login'])->name('cashier.login');
-
     Route::get('docs', [PosApiDocsController::class, 'index'])->name('pos.docs');
     Route::get('docs/openapi.yaml', [PosApiDocsController::class, 'openapi'])->name('pos.docs.openapi');
     Route::get('docs/openapi.json', [PosApiDocsController::class, 'openapiJson'])->name('pos.docs.openapi.json');
@@ -396,6 +395,7 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
     // ── Brands ──────────────────────────────────────────────────────────────
     Route::get   ('brand-mgmt/brands',              [\Modules\AdvertisingAgency\Http\Controllers\Api\BrandApiController::class,    'index'])   ->name('brand-mgmt.brands.index');
     Route::post  ('brand-mgmt/brands',              [\Modules\AdvertisingAgency\Http\Controllers\Api\BrandApiController::class,    'store'])   ->name('brand-mgmt.brands.store');
+    Route::post  ('brand-mgmt/brands/import',       [\Modules\AdvertisingAgency\Http\Controllers\Api\BrandApiController::class,    'import'])  ->name('brand-mgmt.brands.import');
     Route::put   ('brand-mgmt/brands/{brand}',      [\Modules\AdvertisingAgency\Http\Controllers\Api\BrandApiController::class,    'update'])  ->name('brand-mgmt.brands.update');
     Route::delete('brand-mgmt/brands/{brand}',      [\Modules\AdvertisingAgency\Http\Controllers\Api\BrandApiController::class,    'destroy']) ->name('brand-mgmt.brands.destroy');
     // ── Reporters ────────────────────────────────────────────────────────────
@@ -411,6 +411,7 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
     // ── Jobs ─────────────────────────────────────────────────────────────────
     Route::get   ('brand-mgmt/jobs',                [\Modules\AdvertisingAgency\Http\Controllers\Api\JobApiController::class,      'index'])   ->name('brand-mgmt.jobs.index');
     Route::post  ('brand-mgmt/jobs',                [\Modules\AdvertisingAgency\Http\Controllers\Api\JobApiController::class,      'store'])   ->name('brand-mgmt.jobs.store');
+    Route::post  ('brand-mgmt/jobs/import',         [\Modules\AdvertisingAgency\Http\Controllers\Api\JobApiController::class,      'import'])  ->name('brand-mgmt.jobs.import');
     Route::put   ('brand-mgmt/jobs/{job}',          [\Modules\AdvertisingAgency\Http\Controllers\Api\JobApiController::class,      'update'])  ->name('brand-mgmt.jobs.update');
     Route::delete('brand-mgmt/jobs/{job}',          [\Modules\AdvertisingAgency\Http\Controllers\Api\JobApiController::class,      'destroy']) ->name('brand-mgmt.jobs.destroy');
     // ── Agencies ─────────────────────────────────────────────────────────────

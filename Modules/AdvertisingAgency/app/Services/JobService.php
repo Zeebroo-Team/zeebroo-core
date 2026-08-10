@@ -4,11 +4,13 @@ namespace Modules\AdvertisingAgency\Services;
 
 use Modules\AdvertisingAgency\Models\Brand;
 use Modules\AdvertisingAgency\Models\Job;
+use Modules\AdvertisingAgency\Models\Officer;
+use Modules\AdvertisingAgency\Models\Reporter;
 use Modules\Business\Models\Business;
 
 class JobService
 {
-    public function list(Business $business, ?string $q = null, ?string $status = null)
+    public function list(Business $business, ?string $q = null, ?string $status = null, ?int $reporterId = null)
     {
         return Job::query()
             ->where('business_id', $business->id)
@@ -19,6 +21,7 @@ class JobService
                     ->orWhereHas('clientBrand', fn ($bq) => $bq->where('name', 'like', "%{$q}%"));
             }))
             ->when($status, fn ($query) => $query->where('status', $status))
+            ->when($reporterId, fn ($query) => $query->where('reporter_id', $reporterId))
             ->orderByDesc('created_at')
             ->get()
             ->map(fn ($j) => [
@@ -94,6 +97,82 @@ class JobService
     public function delete(Job $job): void
     {
         $job->delete();
+    }
+
+    /**
+     * Bulk-import jobs from a validated rows array.
+     * Resolves brand by short_code, officer/reporter by name (case-insensitive).
+     * All valid rows are created; unresolvable brand/officer/reporter references
+     * are noted in the result but do not block creation.
+     */
+    public function import(Business $business, array $rows): array
+    {
+        $created    = 0;
+        $rowResults = [];
+
+        // Pre-load lookup maps scoped to this business
+        $brands   = Brand::where('business_id', $business->id)->get()
+            ->keyBy(fn ($b) => strtoupper($b->short_code));
+        $officers = Officer::where('business_id', $business->id)->get()
+            ->keyBy(fn ($o) => strtolower($o->name));
+        $reporters = Reporter::where('business_id', $business->id)->get()
+            ->keyBy(fn ($r) => strtolower($r->name));
+
+        foreach ($rows as $i => $row) {
+            $name         = trim($row['name']);
+            $brandCode    = strtoupper(trim($row['brand_code'] ?? ''));
+            $status       = ($row['status'] ?? '') ?: 'pending';
+            $startDate    = ($row['start_date'] ?? '') ?: null;
+            $description  = ($row['description'] ?? '') ?: null;
+            $officerName  = strtolower(trim($row['officer']  ?? ''));
+            $reporterName = strtolower(trim($row['reporter'] ?? ''));
+
+            // Resolve brand
+            $clientBrandId = null;
+            $notes         = [];
+            if ($brandCode !== '') {
+                $brand = $brands->get($brandCode);
+                $clientBrandId = $brand?->id;
+                if (!$brand) {
+                    $notes[] = "Brand '{$brandCode}' not found";
+                }
+            }
+
+            // Resolve officer / reporter (soft — missing is just a note)
+            $officerId  = $officerName  !== '' ? ($officers->get($officerName)?->id  ?? null) : null;
+            $reporterId = $reporterName !== '' ? ($reporters->get($reporterName)?->id ?? null) : null;
+            if ($officerName  !== '' && !$officerId)  $notes[] = "Officer '{$row['officer']}' not found";
+            if ($reporterName !== '' && !$reporterId) $notes[] = "Reporter '{$row['reporter']}' not found";
+
+            $jobRef = $this->generateJobRef($business, $clientBrandId);
+
+            Job::create([
+                'business_id'     => $business->id,
+                'name'            => $name,
+                'job_ref'         => $jobRef,
+                'client_brand_id' => $clientBrandId,
+                'officer_id'      => $officerId,
+                'reporter_id'     => $reporterId,
+                'description'     => $description,
+                'status'          => $status,
+                'start_date'      => $startDate,
+            ]);
+
+            $created++;
+            $rowResults[] = [
+                'row'     => $i + 1,
+                'name'    => $name,
+                'job_ref' => $jobRef,
+                'status'  => 'created',
+                'notes'   => $notes,
+            ];
+        }
+
+        return [
+            'created' => $created,
+            'total'   => count($rows),
+            'rows'    => $rowResults,
+        ];
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

@@ -85,6 +85,25 @@ class BrandApiController extends Controller
         return response()->json(['data' => $brand]);
     }
 
+    /** POST /brand-mgmt/brands/import */
+    public function import(Request $request): JsonResponse
+    {
+        $business  = $this->businessOrAbort($request);
+        $validated = $request->validate([
+            'rows'                  => ['required', 'array', 'min:1', 'max:500'],
+            'rows.*.name'           => ['required', 'string', 'max:150'],
+            'rows.*.short_code'     => ['required', 'string', 'size:3', 'regex:/^[A-Za-z]{3}$/'],
+            'rows.*.email'          => ['required', 'email', 'max:150'],
+            'rows.*.phone'          => ['nullable', 'string', 'max:40'],
+            'rows.*.company_name'   => ['nullable', 'string', 'max:150'],
+            'rows.*.contact_person' => ['nullable', 'string', 'max:150'],
+            'rows.*.address'        => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $results = $this->brandService->import($business, $validated['rows']);
+        return response()->json($results);
+    }
+
     /** DELETE /brand-mgmt/brands/{brand} */
     public function destroy(Request $request, int $id): JsonResponse
     {

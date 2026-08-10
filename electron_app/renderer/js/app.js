@@ -3440,8 +3440,8 @@ async function init() {
 
 function showLogin() {
   window.electronAPI.narrowAuth?.();
-  state.cashierMode = false;
-  state.cashierInfo = null;
+  state.cashierMode  = false;
+  state.cashierInfo  = null;
   _ctbStopClock();
   $('#app-shell').classList.remove('cashier-mode');
   const body = $('#login-body');
@@ -3799,6 +3799,17 @@ function applyFeatureVisibility() {
     const show = tabFeatures[item.dataset.tab];
     item.style.display = (show === undefined || show) ? '' : 'none';
   });
+
+  // ── Officer role: restrict to Event tab only ──
+  if (state.memberRole === 'officer') {
+    $$('.ribbon-tab[data-tab]').forEach(tab => {
+      tab.style.display = tab.dataset.tab === 'event-mgmt' ? '' : 'none';
+    });
+    $$('.sb-nav-item[data-tab]').forEach(item => {
+      item.style.display = item.dataset.tab === 'event-mgmt' ? '' : 'none';
+    });
+    if (_activeTab() !== 'event-mgmt') activateTab('event-mgmt');
+  }
 
   // ── POS ribbon groups ──
   grp('#rb-new-session',    pos_session);                            // Session
@@ -4546,6 +4557,7 @@ $('#login-password').addEventListener('keydown', e => { if (e.key === 'Enter') d
 // Cashier login
 $('#cashier-login-btn').addEventListener('click', doCashierLogin);
 $('#cashier-password').addEventListener('keydown', e => { if (e.key === 'Enter') doCashierLogin(); });
+
 
 function showCashierLogin() {
   $('#signin-card').style.display = 'none';
@@ -32970,6 +32982,451 @@ async function submitDsCreate() {
     }
   }
 
+  // ════════════════���══════════ BRAND CSV IMPORT ═════════════════════���═══════
+
+  let _brdImportRows = [];   // valid parsed rows pending import
+  let _brdImportStep = 1;    // 1 = pick, 2 = preview, 3 = results
+
+  function _brdImportOpen() {
+    _brdImportRows = [];
+    _brdImportStep = 1;
+    _brdImportSetStep(1);
+    const fn = $('#brd-import-filename'); if (fn) fn.textContent = 'No file chosen';
+    const al = $('#brd-import-step1-alert'); if (al) al.style.display = 'none';
+    const m  = $('#brd-import-modal'); if (m) m.style.display = '';
+  }
+  function _brdImportClose() {
+    const m = $('#brd-import-modal'); if (m) m.style.display = 'none';
+  }
+  function _brdImportSetStep(step) {
+    _brdImportStep = step;
+    [$('#brd-import-step-1'), $('#brd-import-step-2'), $('#brd-import-step-3')].forEach((el, i) => {
+      if (el) el.style.display = (i + 1 === step) ? 'flex' : 'none';
+    });
+    // Footer buttons
+    const nextBtn   = $('#brd-import-next');
+    const cancelBtn = $('#brd-import-cancel');
+    if (step === 1) {
+      if (nextBtn)   { nextBtn.innerHTML = '<i class="fa fa-eye"></i> Preview';         nextBtn.disabled = true; nextBtn.style.background = '#10b981'; nextBtn.style.borderColor = '#10b981'; }
+      if (cancelBtn) { cancelBtn.style.display = ''; cancelBtn.textContent = ''; cancelBtn.innerHTML = '<i class="fa fa-xmark"></i> Cancel'; }
+    } else if (step === 2) {
+      if (nextBtn)   { nextBtn.innerHTML = '<i class="fa fa-upload"></i> Import ' + _brdImportRows.length + ' Brands'; nextBtn.disabled = (_brdImportRows.length === 0); nextBtn.style.background = '#10b981'; nextBtn.style.borderColor = '#10b981'; }
+      if (cancelBtn) { cancelBtn.innerHTML = '<i class="fa fa-arrow-left"></i> Back'; }
+    } else {
+      if (nextBtn)   { nextBtn.innerHTML = '<i class="fa fa-check"></i> Done'; nextBtn.disabled = false; nextBtn.style.background = 'var(--accent)'; nextBtn.style.borderColor = 'var(--accent)'; }
+      if (cancelBtn) { cancelBtn.style.display = 'none'; }
+    }
+  }
+
+  // Simple CSV parser — handles quoted fields, comma delimiter
+  function _parseCsv(text) {
+    const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').filter(l => l.trim());
+    if (lines.length < 2) return null;
+
+    function parseLine(line) {
+      const fields = [];
+      let cur = '', inQ = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (inQ) {
+          if (ch === '"' && line[i + 1] === '"') { cur += '"'; i++; }
+          else if (ch === '"') inQ = false;
+          else cur += ch;
+        } else {
+          if (ch === '"') inQ = true;
+          else if (ch === ',') { fields.push(cur.trim()); cur = ''; }
+          else cur += ch;
+        }
+      }
+      fields.push(cur.trim());
+      return fields;
+    }
+
+    const headers = parseLine(lines[0]).map(h => h.toLowerCase().replace(/\s+/g, '_'));
+    return lines.slice(1).map(line => {
+      const vals = parseLine(line);
+      const obj  = {};
+      headers.forEach((h, i) => { obj[h] = vals[i] ?? ''; });
+      return obj;
+    });
+  }
+
+  async function _brdImportPickFile() {
+    const result = await window.electronAPI.showOpenDialog({
+      title: 'Select CSV file',
+      filters: [{ name: 'CSV Files', extensions: ['csv'] }],
+      properties: ['openFile'],
+    });
+    if (result.canceled || !result.filePaths.length) return;
+
+    const filePath = result.filePaths[0];
+    const fileName = filePath.split(/[\\/]/).pop();
+    const read     = await window.electronAPI.readTextFile(filePath);
+    const al       = $('#brd-import-step1-alert');
+    const fn       = $('#brd-import-filename');
+    if (fn) fn.textContent = fileName;
+
+    if (!read.ok) {
+      if (al) { al.textContent = 'Could not read file: ' + read.error; al.style.display = ''; }
+      return;
+    }
+
+    const parsed = _parseCsv(read.content);
+    if (!parsed || !parsed.length) {
+      if (al) { al.textContent = 'File is empty or could not be parsed. Make sure it has a header row and at least one data row.'; al.style.display = ''; }
+      $('#brd-import-next').disabled = true;
+      return;
+    }
+
+    if (!('name' in parsed[0]) || !('short_code' in parsed[0]) || !('email' in parsed[0])) {
+      if (al) { al.textContent = 'Missing required columns: name, short_code, email must be in the header row.'; al.style.display = ''; }
+      $('#brd-import-next').disabled = true;
+      return;
+    }
+
+    if (al) al.style.display = 'none';
+
+    // Validate each row client-side (warn but still let valid ones through)
+    const validRows = [];
+    const previewBody = $('#brd-import-preview-body');
+    let previewHtml = '';
+
+    parsed.forEach((row, i) => {
+      const name      = (row.name          || '').trim();
+      const code      = (row.short_code    || '').trim().toUpperCase();
+      const email     = (row.email         || '').trim();
+      let   rowError  = null;
+
+      if (!name)                          rowError = 'Name is empty';
+      else if (!/^[A-Z]{3}$/.test(code)) rowError = 'Short code must be 3 letters';
+      else if (!email || !email.includes('@')) rowError = 'Invalid email';
+
+      const statusHtml = rowError
+        ? `<span style="color:#dc2626;font-size:10px"><i class="fa fa-xmark-circle"></i> ${escHtml(rowError)}</span>`
+        : `<span style="color:#059669;font-size:10px"><i class="fa fa-check-circle"></i> OK</span>`;
+
+      previewHtml += `<tr style="border-bottom:1px solid var(--border-color,#e2e8f0);${rowError ? 'background:#fff5f5' : ''}">
+        <td style="padding:5px 8px;color:var(--text-muted)">${i + 1}</td>
+        <td style="padding:5px 8px">${escHtml(name || '—')}</td>
+        <td style="padding:5px 8px;font-family:monospace;font-weight:600;color:var(--accent)">${escHtml(code || '—')}</td>
+        <td style="padding:5px 8px;color:var(--text-muted)">${escHtml(email || '—')}</td>
+        <td style="padding:5px 8px;color:var(--text-muted)">${escHtml((row.phone||'').trim() || '—')}</td>
+        <td style="padding:5px 8px;color:var(--text-muted)">${escHtml((row.company_name||'').trim() || '—')}</td>
+        <td style="padding:5px 8px">${statusHtml}</td>
+      </tr>`;
+
+      if (!rowError) {
+        validRows.push({
+          name,
+          short_code:     code,
+          email,
+          phone:          (row.phone          || '').trim() || null,
+          company_name:   (row.company_name   || '').trim() || null,
+          contact_person: (row.contact_person || '').trim() || null,
+          address:        (row.address        || '').trim() || null,
+        });
+      }
+    });
+
+    if (previewBody) previewBody.innerHTML = previewHtml;
+    const info = $('#brd-import-preview-info');
+    if (info) info.textContent = `${parsed.length} rows found — ${validRows.length} valid, ${parsed.length - validRows.length} with errors (errors will be skipped)`;
+
+    _brdImportRows = validRows;
+    _brdImportSetStep(2);
+  }
+
+  async function _brdImportNext() {
+    if (_brdImportStep === 1) {
+      // "Preview" clicked — trigger file picker (step advances inside _brdImportPickFile)
+      await _brdImportPickFile();
+    } else if (_brdImportStep === 2) {
+      // "Import" clicked
+      if (!_brdImportRows.length) return;
+      const nextBtn = $('#brd-import-next');
+      if (nextBtn) { nextBtn.disabled = true; nextBtn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Importing…'; }
+
+      const res = await API.brandImport({ rows: _brdImportRows });
+      if (nextBtn) { nextBtn.disabled = false; }
+
+      if (res.status !== 200) {
+        const al = $('#brd-import-step2-alert');
+        if (al) { al.textContent = res.body?.message || 'Import failed. Please try again.'; al.style.display = ''; }
+        _brdImportSetStep(2);
+        return;
+      }
+
+      // Show results
+      const { created, skipped, total, rows } = res.body;
+      const summary = $('#brd-import-result-summary');
+      if (summary) {
+        summary.innerHTML = `
+          <div style="display:flex;gap:16px;flex-wrap:wrap">
+            <span style="color:#059669"><i class="fa fa-check-circle"></i> <strong>${created}</strong> created</span>
+            <span style="color:#f59e0b"><i class="fa fa-skip-forward"></i> <strong>${skipped}</strong> skipped (duplicate code)</span>
+            <span style="color:var(--text-muted)">of <strong>${total}</strong> total rows</span>
+          </div>`;
+      }
+      const resultBody = $('#brd-import-result-body');
+      if (resultBody) {
+        resultBody.innerHTML = (rows || []).map(r => {
+          const isCreated = r.status === 'created';
+          return `<tr style="border-bottom:1px solid var(--border-color,#e2e8f0)">
+            <td style="padding:5px 8px;color:var(--text-muted)">${r.row}</td>
+            <td style="padding:5px 8px">${escHtml(r.name)}</td>
+            <td style="padding:5px 8px;font-family:monospace;font-weight:600;color:var(--accent)">${escHtml(r.short_code)}</td>
+            <td style="padding:5px 8px">
+              ${isCreated
+                ? '<span style="color:#059669"><i class="fa fa-check-circle"></i> Created</span>'
+                : `<span style="color:#f59e0b"><i class="fa fa-exclamation-circle"></i> Skipped — ${escHtml(r.reason || '')}</span>`}
+            </td>
+          </tr>`;
+        }).join('');
+      }
+      _brdImportSetStep(3);
+      if (created > 0) loadBrands();   // refresh list if anything was created
+    } else {
+      // "Done" — close
+      _brdImportClose();
+    }
+  }
+
+  function _brdImportCancelOrBack() {
+    if (_brdImportStep === 2) {
+      _brdImportSetStep(1);  // go back
+    } else {
+      _brdImportClose();
+    }
+  }
+
+  $('#brd-import-btn')?.addEventListener('click',   _brdImportOpen);
+  $('#brd-import-close')?.addEventListener('click', _brdImportClose);
+  $('#brd-import-pick-btn')?.addEventListener('click', _brdImportPickFile);
+  $('#brd-import-next')?.addEventListener('click',   _brdImportNext);
+  $('#brd-import-cancel')?.addEventListener('click', _brdImportCancelOrBack);
+  $('#brd-import-modal')?.addEventListener('click', e => { if (e.target === $('#brd-import-modal')) _brdImportClose(); });
+
+  // ─── Job CSV Import ───────────────────────────────────────────────────────
+
+  let _jbImportRows = [];   // valid parsed rows pending import
+  let _jbImportStep = 1;    // 1 = pick, 2 = preview, 3 = results
+
+  const VALID_JOB_STATUSES = ['pending', 'in_progress', 'completed', 'cancelled'];
+
+  function _jbImportOpen() {
+    _jbImportRows = [];
+    _jbImportStep = 1;
+    _jbImportSetStep(1);
+    const fn = $('#job-import-filename'); if (fn) fn.textContent = 'No file chosen';
+    const al = $('#job-import-step1-alert'); if (al) al.style.display = 'none';
+    const m  = $('#job-import-modal'); if (m) m.style.display = '';
+  }
+  function _jbImportClose() {
+    const m = $('#job-import-modal'); if (m) m.style.display = 'none';
+  }
+  function _jbImportSetStep(step) {
+    _jbImportStep = step;
+    [$('#job-import-step-1'), $('#job-import-step-2'), $('#job-import-step-3')].forEach((el, i) => {
+      if (el) el.style.display = (i + 1 === step) ? (step === 1 ? 'flex' : 'flex') : 'none';
+    });
+    const nextBtn   = $('#job-import-next');
+    const cancelBtn = $('#job-import-cancel');
+    if (step === 1) {
+      if (nextBtn)   { nextBtn.innerHTML = '<i class="fa fa-eye"></i> Preview'; nextBtn.disabled = true; nextBtn.style.background = ''; nextBtn.style.borderColor = ''; }
+      if (cancelBtn) cancelBtn.innerHTML = '<i class="fa fa-xmark"></i> Cancel';
+    } else if (step === 2) {
+      if (nextBtn)   { nextBtn.innerHTML = '<i class="fa fa-upload"></i> Import ' + _jbImportRows.length + ' Jobs'; nextBtn.disabled = (_jbImportRows.length === 0); nextBtn.style.background = '#10b981'; nextBtn.style.borderColor = '#10b981'; }
+      if (cancelBtn) cancelBtn.innerHTML = '<i class="fa fa-arrow-left"></i> Back';
+    } else {
+      if (nextBtn)   { nextBtn.innerHTML = '<i class="fa fa-check"></i> Done'; nextBtn.disabled = false; nextBtn.style.background = '#10b981'; nextBtn.style.borderColor = '#10b981'; }
+      if (cancelBtn) cancelBtn.style.display = 'none';
+    }
+  }
+
+  async function _jbImportPickFile() {
+    const result = await window.electronAPI.showOpenDialog({
+      title: 'Select CSV file',
+      filters: [{ name: 'CSV Files', extensions: ['csv'] }],
+      properties: ['openFile'],
+    });
+    if (result.canceled || !result.filePaths.length) return;
+
+    const filePath = result.filePaths[0];
+    const fileName = filePath.split(/[\\/]/).pop();
+    const read     = await window.electronAPI.readTextFile(filePath);
+    const al       = $('#job-import-step1-alert');
+    const fn       = $('#job-import-filename');
+    if (fn) fn.textContent = fileName;
+
+    if (!read.ok) {
+      if (al) { al.textContent = 'Could not read file: ' + read.error; al.style.display = ''; }
+      return;
+    }
+
+    const parsed = _parseCsv(read.content);
+    if (!parsed || !parsed.length) {
+      if (al) { al.textContent = 'File is empty or could not be parsed. Make sure it has a header row and at least one data row.'; al.style.display = ''; }
+      $('#job-import-next').disabled = true;
+      return;
+    }
+
+    if (!('name' in parsed[0])) {
+      if (al) { al.textContent = 'Missing required column: "name" must be in the header row.'; al.style.display = ''; }
+      $('#job-import-next').disabled = true;
+      return;
+    }
+
+    if (al) al.style.display = 'none';
+
+    const validRows   = [];
+    const previewBody = $('#job-import-preview-body');
+    let   previewHtml = '';
+
+    parsed.forEach((row, i) => {
+      const name       = (row.name        || '').trim();
+      const brandCode  = (row.brand_code  || '').trim().toUpperCase();
+      const status     = (row.status      || '').trim().toLowerCase() || 'pending';
+      const startDate  = (row.start_date  || '').trim();
+      const officer    = (row.officer     || '').trim();
+      const reporter   = (row.reporter    || '').trim();
+      let   rowError   = null;
+
+      if (!name)                                          rowError = 'Name is empty';
+      else if (brandCode && !/^[A-Z]{3}$/.test(brandCode)) rowError = 'Brand code must be 3 letters';
+      else if (!VALID_JOB_STATUSES.includes(status))    rowError = 'Invalid status: ' + status;
+      else if (startDate && isNaN(Date.parse(startDate)))rowError = 'Invalid start_date format (use YYYY-MM-DD)';
+
+      const statusHtml = rowError
+        ? `<span style="color:#dc2626;font-size:10px"><i class="fa fa-xmark-circle"></i> ${escHtml(rowError)}</span>`
+        : `<span style="color:#059669;font-size:10px"><i class="fa fa-check-circle"></i> OK</span>`;
+
+      previewHtml += `<tr style="border-bottom:1px solid var(--border-color,#e2e8f0);${rowError ? 'background:#fff5f5' : ''}">
+        <td style="padding:5px 8px;color:var(--text-muted)">${i + 1}</td>
+        <td style="padding:5px 8px">${escHtml(name || '—')}</td>
+        <td style="padding:5px 8px;font-family:monospace;font-weight:600;color:var(--accent)">${escHtml(brandCode || '—')}</td>
+        <td style="padding:5px 8px;color:var(--text-muted)">${escHtml(status)}</td>
+        <td style="padding:5px 8px;color:var(--text-muted)">${escHtml(startDate || '—')}</td>
+        <td style="padding:5px 8px;color:var(--text-muted)">${escHtml(officer || '—')}</td>
+        <td style="padding:5px 8px;color:var(--text-muted)">${escHtml(reporter || '—')}</td>
+        <td style="padding:5px 8px">${statusHtml}</td>
+      </tr>`;
+
+      if (!rowError) {
+        validRows.push({
+          name,
+          brand_code:  brandCode  || null,
+          status,
+          start_date:  startDate  || null,
+          description: (row.description || '').trim() || null,
+          officer:     officer    || null,
+          reporter:    reporter   || null,
+        });
+      }
+    });
+
+    if (previewBody) previewBody.innerHTML = previewHtml;
+    const info = $('#job-import-preview-info');
+    if (info) info.textContent = `${parsed.length} rows found — ${validRows.length} valid, ${parsed.length - validRows.length} with errors (errors will be skipped)`;
+
+    _jbImportRows = validRows;
+    _jbImportSetStep(2);
+  }
+
+  async function _jbImportNext() {
+    if (_jbImportStep === 1) {
+      await _jbImportPickFile();
+    } else if (_jbImportStep === 2) {
+      if (!_jbImportRows.length) return;
+      const nextBtn = $('#job-import-next');
+      const al      = $('#job-import-step2-alert');
+      if (al) al.style.display = 'none';
+
+      // Split into batches of 500 to stay within server validation limit
+      const BATCH_SIZE  = 500;
+      const allRows     = _jbImportRows;
+      const totalBatches = Math.ceil(allRows.length / BATCH_SIZE);
+      let allCreated    = 0;
+      let allTotal      = 0;
+      const allRowResults = [];
+      let rowOffset     = 0;
+
+      for (let b = 0; b < totalBatches; b++) {
+        const chunk = allRows.slice(b * BATCH_SIZE, (b + 1) * BATCH_SIZE);
+        if (nextBtn) {
+          nextBtn.disabled = true;
+          nextBtn.innerHTML = totalBatches > 1
+            ? `<i class="fa fa-spinner fa-spin"></i> Importing batch ${b + 1}/${totalBatches}…`
+            : '<i class="fa fa-spinner fa-spin"></i> Importing…';
+        }
+
+        const res = await API.jobImport({ rows: chunk });
+
+        if (res.status !== 200) {
+          if (nextBtn) { nextBtn.disabled = false; }
+          if (al) { al.textContent = res.body?.message || 'Import failed. Please try again.'; al.style.display = ''; }
+          _jbImportSetStep(2);
+          return;
+        }
+
+        const { created, total, rows } = res.body;
+        allCreated += created;
+        allTotal   += total;
+        // Re-number rows to be global (not per-batch)
+        (rows || []).forEach(r => allRowResults.push({ ...r, row: rowOffset + r.row }));
+        rowOffset += chunk.length;
+      }
+
+      if (nextBtn) { nextBtn.disabled = false; }
+
+      const summary = $('#job-import-result-summary');
+      if (summary) {
+        summary.innerHTML = `
+          <div style="display:flex;gap:16px;flex-wrap:wrap">
+            <span style="color:#059669"><i class="fa fa-check-circle"></i> <strong>${allCreated}</strong> created</span>
+            <span style="color:var(--text-muted)">of <strong>${allTotal}</strong> total rows</span>
+          </div>`;
+      }
+      const resultBody = $('#job-import-result-body');
+      if (resultBody) {
+        resultBody.innerHTML = allRowResults.map(r => {
+          const noteHtml = r.notes && r.notes.length
+            ? `<span style="color:#f59e0b;font-size:10px;display:block">${r.notes.map(n => escHtml(n)).join(' · ')}</span>`
+            : '';
+          return `<tr style="border-bottom:1px solid var(--border-color,#e2e8f0)">
+            <td style="padding:5px 8px;color:var(--text-muted)">${r.row}</td>
+            <td style="padding:5px 8px">${escHtml(r.name)}</td>
+            <td style="padding:5px 8px;font-family:monospace;font-weight:600;color:var(--accent)">${escHtml(r.job_ref || '')}</td>
+            <td style="padding:5px 8px">
+              <span style="color:#059669"><i class="fa fa-check-circle"></i> Created</span>
+              ${noteHtml}
+            </td>
+          </tr>`;
+        }).join('');
+      }
+      _jbImportSetStep(3);
+      if (allCreated > 0) loadJobs();   // refresh jobs list
+    } else {
+      _jbImportClose();
+    }
+  }
+
+  function _jbImportCancelOrBack() {
+    if (_jbImportStep === 2) {
+      _jbImportSetStep(1);
+    } else {
+      _jbImportClose();
+    }
+  }
+
+  $('#job-import-btn')?.addEventListener('click',       _jbImportOpen);
+  $('#job-import-close')?.addEventListener('click',     _jbImportClose);
+  $('#job-import-pick-btn')?.addEventListener('click',  _jbImportPickFile);
+  $('#job-import-next')?.addEventListener('click',      _jbImportNext);
+  $('#job-import-cancel')?.addEventListener('click',    _jbImportCancelOrBack);
+  $('#job-import-modal')?.addEventListener('click', e => { if (e.target === $('#job-import-modal')) _jbImportClose(); });
+
+  // ─── End Job CSV Import ───────────────────────────────────────────────────
+
   // ═══════════════════════════ REPORTERS ════════════════════════════════════
 
   async function loadReporters() {
@@ -33403,11 +33860,13 @@ async function submitDsCreate() {
   function _ssIsLocked() { return _ssLockedStatuses.has(_ssCurrentSheet?.status); }
 
   function _ssApplyLockState() {
-    const locked = _ssIsLocked();
-    const show   = (id, visible) => { const el = $(id); if (el) el.style.display = visible ? '' : 'none'; };
-    show('#ss-add-row-btn', !locked);
-    show('#ss-save-btn',    !locked);
-    show('#ss-setup-btn',   !locked);
+    const locked   = _ssIsLocked();
+    const hasDates = _ssDateRange.length > 0;
+    const show     = (id, visible) => { const el = $(id); if (el) el.style.display = visible ? '' : 'none'; };
+    show('#ss-add-row-btn',   !locked);
+    show('#ss-save-btn',      !locked);
+    show('#ss-setup-btn',     !locked);
+    show('#ss-add-dates-btn', !locked && !hasDates);
 
     const notice = $('#ss-lock-notice');
     if (notice) {
@@ -33419,7 +33878,11 @@ async function submitDsCreate() {
 
   function _ssOpenEditor(sheetData) {
     _ssCurrentSheet = sheetData;
-    _ssDateRange    = _ssDatesInRange(sheetData.date_from, sheetData.date_to);
+    // custom_dates (individual specific dates) takes priority over date_from/date_to range
+    const cd = sheetData.custom_dates;
+    _ssDateRange = (Array.isArray(cd) && cd.length > 0)
+      ? [...cd].sort()
+      : _ssDatesInRange(sheetData.date_from, sheetData.date_to);
 
     _ssRows = (sheetData.rows || []).map(r => {
       const att = {};
@@ -33443,9 +33906,19 @@ async function submitDsCreate() {
         coordinator_name:        r.coordinator_name        || 'N/A',
         coordination_fee:        parseFloat(r.coordination_fee)     || 0,
         coordinator_bank_details:r.coordinator_bank_details|| 'N/A',
-        total_days: 0, attendance_amount: 0, base_amount: 0, net_amount: 0,
+        total_days:        0,
+        attendance_amount: 0,
+        base_amount:       0,
+        net_amount:        0,
       };
-      _ssRecalcRow(row, _ssDateRange);
+      // If the server sent a saved total_days (> 0), honour it (manual edit was saved).
+      // Otherwise count P marks from attendance (new row or pre-migration row).
+      if (r.total_days > 0) {
+        row.total_days = r.total_days;
+        _ssCalcAmounts(row);
+      } else {
+        _ssRecalcRow(row, _ssDateRange);
+      }
       return row;
     });
 
@@ -33473,29 +33946,35 @@ async function submitDsCreate() {
     const TH2 = 'background:#2d4f7a;color:#fff;padding:5px 8px;border:1px solid #3a5e8a;font-size:9px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap;text-align:center;position:sticky;top:32px;z-index:4';
     const n   = _ssDateRange.length;
 
-    const h1 = `<tr>
-      <th style="${TH1}" rowspan="2">ITEM #</th>
-      <th style="${TH1}" rowspan="2">LOCATION</th>
-      <th style="${TH1}" rowspan="2">POSITION</th>
-      <th style="${TH1}" rowspan="2">PROMOTER</th>
-      <th style="${TH1}" rowspan="2">BANK NAME</th>
-      <th style="${TH1}" rowspan="2">BANK BRANCH</th>
-      <th style="${TH1}" rowspan="2">ACCOUNT NO.</th>
-      <th style="${TH1}" colspan="${n}">DAILY ATTENDANCE</th>
-      <th style="${TH1}" rowspan="2">TOTAL<br>DAYS</th>
-      <th style="${TH1}" rowspan="2">ATTENDANCE<br>AMOUNT</th>
-      <th style="${TH1}" rowspan="2">BASE<br>AMOUNT</th>
-      <th style="${TH1}" colspan="1">DYNAMIC ALLOWANCES</th>
-      <th style="${TH1}" rowspan="2">EXPENSES</th>
-      <th style="${TH1}" rowspan="2">HOLD FOR<br>WEEKS</th>
-      <th style="${TH1}" rowspan="2">NET<br>AMOUNT</th>
-      <th style="${TH1}" rowspan="2">COORDINATOR</th>
-      <th style="${TH1}" rowspan="2">COORDINATION<br>FEE</th>
-      <th style="${TH1}" rowspan="2">COORDINATOR<br>BANK DETAILS</th>
-      <th style="${TH1}" rowspan="2"></th>
-    </tr>`;
-    const h2 = '<tr>' + _ssDateRange.map(d => `<th style="${TH2}">${_ssDateLabel(d)}</th>`).join('')
-             + `<th style="${TH2}">TRANSPORT<br>ALLOWANCE</th></tr>`;
+    // When no date range: single-row header (no DAILY ATTENDANCE group).
+    // When dates present: two-row header with DAILY ATTENDANCE spanning all date columns.
+    const fixedLeft  = `
+      <th style="${n > 0 ? TH1 : TH1.replace('position:sticky;top:0', 'position:sticky;top:0')}" ${n > 0 ? 'rowspan="2"' : ''}>ITEM #</th>
+      <th style="${TH1}" ${n > 0 ? 'rowspan="2"' : ''}>LOCATION</th>
+      <th style="${TH1}" ${n > 0 ? 'rowspan="2"' : ''}>POSITION</th>
+      <th style="${TH1}" ${n > 0 ? 'rowspan="2"' : ''}>PROMOTER</th>
+      <th style="${TH1}" ${n > 0 ? 'rowspan="2"' : ''}>BANK NAME</th>
+      <th style="${TH1}" ${n > 0 ? 'rowspan="2"' : ''}>BANK BRANCH</th>
+      <th style="${TH1}" ${n > 0 ? 'rowspan="2"' : ''}>ACCOUNT NO.</th>`;
+    const fixedRight = `
+      <th style="${TH1}" ${n > 0 ? 'rowspan="2"' : ''}>TOTAL<br>DAYS</th>
+      <th style="${TH1}" ${n > 0 ? 'rowspan="2"' : ''}>ATTENDANCE<br>AMOUNT</th>
+      <th style="${TH1}" ${n > 0 ? 'rowspan="2"' : ''}>BASE<br>AMOUNT</th>
+      ${n > 0 ? `<th style="${TH1}" colspan="1">DYNAMIC ALLOWANCES</th>` : `<th style="${TH1}">TRANSPORT<br>ALLOWANCE</th>`}
+      <th style="${TH1}" ${n > 0 ? 'rowspan="2"' : ''}>EXPENSES</th>
+      <th style="${TH1}" ${n > 0 ? 'rowspan="2"' : ''}>HOLD FOR<br>WEEKS</th>
+      <th style="${TH1}" ${n > 0 ? 'rowspan="2"' : ''}>NET<br>AMOUNT</th>
+      <th style="${TH1}" ${n > 0 ? 'rowspan="2"' : ''}>COORDINATOR</th>
+      <th style="${TH1}" ${n > 0 ? 'rowspan="2"' : ''}>COORDINATION<br>FEE</th>
+      <th style="${TH1}" ${n > 0 ? 'rowspan="2"' : ''}>COORDINATOR<br>BANK DETAILS</th>
+      <th style="${TH1}" ${n > 0 ? 'rowspan="2"' : ''}></th>`;
+
+    const h1 = n > 0
+      ? `<tr>${fixedLeft}<th style="${TH1}" colspan="${n}">DAILY ATTENDANCE</th>${fixedRight}</tr>`
+      : `<tr>${fixedLeft}${fixedRight}</tr>`;
+    const h2 = n > 0
+      ? '<tr>' + _ssDateRange.map(d => `<th style="${TH2}">${_ssDateLabel(d)}</th>`).join('') + `<th style="${TH2}">TRANSPORT<br>ALLOWANCE</th></tr>`
+      : '';
 
     const totalCols = 7 + n + 11; // all columns: 7 fixed-left + n dates + 11 fixed-right
     const rowsHtml = _ssRows.length > 0
@@ -34014,6 +34493,10 @@ async function submitDsCreate() {
       transport_allowance:     row.transport_allowance     || 0,
       expenses:                row.expenses                || 0,
       hold_amount:             row.hold_amount             || 0,
+      total_days:              row.total_days              || 0,
+      attendance_amount:       row.attendance_amount       || 0,
+      base_amount:             row.base_amount             || 0,
+      net_amount:              row.net_amount              || 0,
       coordinator_id:          row.coordinator_id          || null,
       coordinator_name:        row.coordinator_name        || 'N/A',
       coordination_fee:        row.coordination_fee        || 0,
@@ -35052,6 +35535,112 @@ async function submitDsCreate() {
   $('#ss-status-modal-cancel')?.addEventListener('click', _ssCloseStatusModal);
   $('#ss-status-modal-save')?.addEventListener('click',   _ssSaveStatus);
   $('#ss-status-modal')?.addEventListener('click', e => { if (e.target === $('#ss-status-modal')) _ssCloseStatusModal(); });
+
+  // ── Add Dates modal (individual date picker) ─────────────────────────────────
+  let _ssAddDatesSelected = [];   // working list while modal is open
+
+  function _ssAddDatesRenderChips() {
+    const wrap = $('#ss-dates-chips'); if (!wrap) return;
+    if (!_ssAddDatesSelected.length) {
+      wrap.innerHTML = '<span style="font-size:11px;color:var(--text-muted);line-height:22px">No dates added yet</span>';
+      return;
+    }
+    wrap.innerHTML = _ssAddDatesSelected.map(d => `
+      <span class="ss-date-chip" data-d="${d}" style="
+        display:inline-flex;align-items:center;gap:5px;
+        padding:2px 8px;border-radius:12px;font-size:11px;font-weight:500;
+        background:#e0f2fe;color:#0369a1;border:1px solid #bae6fd;cursor:default">
+        ${d}
+        <i class="fa fa-xmark ss-chip-remove" data-d="${d}"
+           style="cursor:pointer;opacity:.7;font-size:10px"></i>
+      </span>`).join('');
+    // Remove listeners
+    wrap.querySelectorAll('.ss-chip-remove').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const date = btn.dataset.d;
+        _ssAddDatesSelected = _ssAddDatesSelected.filter(x => x !== date);
+        _ssAddDatesRenderChips();
+      });
+    });
+  }
+
+  function _ssOpenAddDatesModal() {
+    const m = $('#ss-add-dates-modal'); if (!m) return;
+    // Pre-load existing custom_dates (or empty)
+    const cd = _ssCurrentSheet?.custom_dates;
+    _ssAddDatesSelected = (Array.isArray(cd) && cd.length) ? [...cd].sort() : [..._ssDateRange];
+    const inp = $('#ss-add-date-single'); if (inp) inp.value = '';
+    const al  = $('#ss-add-dates-alert'); if (al) al.style.display = 'none';
+    _ssAddDatesRenderChips();
+    m.style.display = '';
+  }
+  function _ssCloseAddDatesModal() {
+    const m = $('#ss-add-dates-modal'); if (m) m.style.display = 'none';
+  }
+
+  // "Add" button inside modal — push date into working list
+  $('#ss-add-date-add-btn')?.addEventListener('click', () => {
+    const inp = $('#ss-add-date-single');
+    const al  = $('#ss-add-dates-alert');
+    const val = inp?.value?.trim();
+    if (!val) {
+      if (al) { al.textContent = 'Please pick a date first.'; al.style.display = ''; }
+      return;
+    }
+    if (al) al.style.display = 'none';
+    if (_ssAddDatesSelected.includes(val)) {
+      if (al) { al.textContent = `${val} is already added.`; al.style.display = ''; }
+      return;
+    }
+    _ssAddDatesSelected.push(val);
+    _ssAddDatesSelected.sort();
+    _ssAddDatesRenderChips();
+    if (inp) inp.value = '';
+  });
+
+  async function _ssSaveAddDates() {
+    const al = $('#ss-add-dates-alert');
+    const showErr = msg => { if (al) { al.textContent = msg; al.style.display = ''; } };
+    if (!_ssAddDatesSelected.length) return showErr('Add at least one date before applying.');
+
+    const saveBtn = $('#ss-add-dates-save');
+    if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
+    try {
+      const dates = [..._ssAddDatesSelected].sort();
+      const res   = await API.salarySheetUpdate(_ssCurrentSheet.id, { custom_dates: dates });
+      if (res.status !== 200) throw new Error(res.body?.message || 'Save failed');
+
+      // Update in-memory sheet from fresh server data
+      _ssCurrentSheet = res.body?.data || { ..._ssCurrentSheet, custom_dates: dates };
+
+      // Merge attendance: keep existing marks, default new dates to 'A'
+      const newRange = (Array.isArray(_ssCurrentSheet.custom_dates) && _ssCurrentSheet.custom_dates.length)
+        ? [..._ssCurrentSheet.custom_dates].sort()
+        : _ssDatesInRange(_ssCurrentSheet.date_from, _ssCurrentSheet.date_to);
+
+      _ssRows.forEach(row => {
+        const merged = {};
+        newRange.forEach(d => { merged[d] = row.attendance[d] || 'A'; });
+        row.attendance = merged;
+        _ssRecalcRow(row, newRange);
+      });
+      _ssDateRange = newRange;
+
+      _ssApplyLockState();   // hides "Add Dates" button now that dates exist
+      _ssCloseAddDatesModal();
+      _ssRenderTable();
+    } catch (e) {
+      showErr(e.message || 'An error occurred.');
+    } finally {
+      if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Apply Dates'; }
+    }
+  }
+
+  $('#ss-add-dates-btn')?.addEventListener('click',    _ssOpenAddDatesModal);
+  $('#ss-add-dates-close')?.addEventListener('click',  _ssCloseAddDatesModal);
+  $('#ss-add-dates-cancel')?.addEventListener('click', _ssCloseAddDatesModal);
+  $('#ss-add-dates-save')?.addEventListener('click',   _ssSaveAddDates);
+  $('#ss-add-dates-modal')?.addEventListener('click', e => { if (e.target === $('#ss-add-dates-modal')) _ssCloseAddDatesModal(); });
 
   // ── Editor navigation ────────────────────────────────────────────────────
   $('#ss-back-btn')?.addEventListener('click', () => {

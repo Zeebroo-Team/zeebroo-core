@@ -7,7 +7,9 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Modules\AdvertisingAgency\Http\Controllers\Api\Concerns\ResolvesBusinessForApi;
 use Modules\AdvertisingAgency\Models\Job;
+use Modules\AdvertisingAgency\Models\Reporter;
 use Modules\AdvertisingAgency\Services\JobService;
+use Modules\Business\Models\BusinessMember;
 
 class JobApiController extends Controller
 {
@@ -21,10 +23,26 @@ class JobApiController extends Controller
     public function index(Request $request): JsonResponse
     {
         $business = $this->businessOrAbort($request);
-        $data     = $this->jobService->list(
+
+        // If the authenticated user is a business member with the 'reporter' role,
+        // restrict the list to jobs assigned to their linked reporter record only.
+        $reporterId = null;
+        $member = BusinessMember::where('business_id', $business->id)
+            ->where('user_id', $request->user()->id)
+            ->where('status', 'active')
+            ->first();
+        if ($member && $member->role === 'reporter') {
+            $reporter   = Reporter::where('business_id', $business->id)
+                ->where('user_id', $request->user()->id)
+                ->first();
+            $reporterId = $reporter?->id;
+        }
+
+        $data = $this->jobService->list(
             $business,
             $request->query('q')      ?: null,
             $request->query('status') ?: null,
+            $reporterId,
         );
         return response()->json(['data' => $data]);
     }
@@ -65,6 +83,25 @@ class JobApiController extends Controller
         ]);
 
         return response()->json(['data' => $this->jobService->update($job, $validated)]);
+    }
+
+    /** POST /brand-mgmt/jobs/import */
+    public function import(Request $request): JsonResponse
+    {
+        $business  = $this->businessOrAbort($request);
+        $validated = $request->validate([
+            'rows'                  => ['required', 'array', 'min:1', 'max:500'],
+            'rows.*.name'           => ['required', 'string', 'max:200'],
+            'rows.*.brand_code'     => ['nullable', 'string', 'max:10'],
+            'rows.*.status'         => ['nullable', 'string', 'in:pending,in_progress,completed,cancelled'],
+            'rows.*.start_date'     => ['nullable', 'date'],
+            'rows.*.description'    => ['nullable', 'string', 'max:2000'],
+            'rows.*.officer'        => ['nullable', 'string', 'max:200'],
+            'rows.*.reporter'       => ['nullable', 'string', 'max:200'],
+        ]);
+
+        $results = $this->jobService->import($business, $validated['rows']);
+        return response()->json($results);
     }
 
     /** DELETE /brand-mgmt/jobs/{job} */

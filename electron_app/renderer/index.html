@@ -6429,7 +6429,10 @@
             <i class="fa fa-magnifying-glass"></i>
             <input type="text" id="brd-search" placeholder="Search brands…" autocomplete="off">
           </div>
-          <button class="svc-form-btn svc-form-btn--primary" id="brd-new-btn" style="margin-left:auto;padding:5px 14px;font-size:12px;flex-shrink:0">
+          <button class="svc-form-btn" id="brd-import-btn" style="margin-left:auto;padding:5px 12px;font-size:12px;flex-shrink:0">
+            <i class="fa fa-file-csv"></i> Import CSV
+          </button>
+          <button class="svc-form-btn svc-form-btn--primary" id="brd-new-btn" style="padding:5px 14px;font-size:12px;flex-shrink:0">
             <i class="fa fa-plus"></i> New Brand
           </button>
           <div id="brd-alert" class="svc-form-alert" style="display:none;margin-left:8px"></div>
@@ -6622,7 +6625,10 @@
             <option value="completed">Completed</option>
             <option value="cancelled">Cancelled</option>
           </select>
-          <button class="svc-form-btn svc-form-btn--primary" id="job-new-btn" style="margin-left:auto;padding:5px 14px;font-size:12px;flex-shrink:0">
+          <button class="svc-form-btn" id="job-import-btn" style="margin-left:auto;padding:5px 12px;font-size:12px;flex-shrink:0">
+            <i class="fa fa-file-csv"></i> Import CSV
+          </button>
+          <button class="svc-form-btn svc-form-btn--primary" id="job-new-btn" style="padding:5px 14px;font-size:12px;flex-shrink:0">
             <i class="fa fa-plus"></i> New Job
           </button>
           <div id="job-alert" class="svc-form-alert" style="display:none;margin-left:8px"></div>
@@ -6694,7 +6700,10 @@
             </div>
             <div id="ss-editor-alert" style="display:none;font-size:12px;padding:3px 10px;border-radius:4px;margin-left:8px"></div>
             <span id="ss-status-badge" style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px;margin-left:4px;display:none"></span>
-            <button class="svc-form-btn" id="ss-setup-btn" style="margin-left:auto;padding:5px 12px;font-size:12px;flex-shrink:0">
+            <button class="svc-form-btn" id="ss-add-dates-btn" style="margin-left:auto;padding:5px 12px;font-size:12px;flex-shrink:0;display:none;background:#0ea5e9;color:#fff;border-color:#0ea5e9">
+              <i class="fa fa-calendar-plus"></i> Add Dates
+            </button>
+            <button class="svc-form-btn" id="ss-setup-btn" style="padding:5px 12px;font-size:12px;flex-shrink:0">
               <i class="fa fa-gear"></i> Setup
             </button>
             <button class="svc-form-btn svc-form-btn--primary" id="ss-add-row-btn" style="padding:5px 14px;font-size:12px;flex-shrink:0">
@@ -6892,6 +6901,178 @@
       <div class="po-aim-footer">
         <button class="po-btn-ghost" id="brd-modal-cancel"><i class="fa fa-xmark"></i> Cancel</button>
         <button class="po-btn-primary" id="brd-modal-save"><i class="fa fa-floppy-disk"></i> Save Brand</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Brand CSV Import Modal ── -->
+  <div class="modal-overlay" id="brd-import-modal" style="display:none">
+    <div class="po-aim-shell" style="width:680px;max-height:90vh;display:flex;flex-direction:column">
+      <div class="po-aim-header">
+        <i class="fa fa-file-csv" style="color:#10b981"></i>
+        <span id="brd-import-modal-title">Import Brands from CSV</span>
+        <button class="psm-close" id="brd-import-close"><i class="fa fa-xmark"></i></button>
+      </div>
+
+      <!-- Step 1: pick file -->
+      <div id="brd-import-step-1" class="po-aim-body" style="gap:14px">
+        <div style="background:var(--bg-secondary,#f8fafc);border:1px solid var(--border-color,#e2e8f0);border-radius:6px;padding:12px 14px;font-size:12px;line-height:1.7">
+          <p style="margin:0 0 6px;font-weight:600;color:var(--text-primary)"><i class="fa fa-info-circle" style="color:#0ea5e9"></i> CSV format</p>
+          <p style="margin:0;color:var(--text-muted)">
+            First row must be the header. Columns (in any order):<br>
+            <code style="font-size:11px">name</code>&nbsp;(required) &nbsp;
+            <code style="font-size:11px">short_code</code>&nbsp;(3 letters, required) &nbsp;
+            <code style="font-size:11px">email</code>&nbsp;(required) &nbsp;
+            <code style="font-size:11px">phone</code> &nbsp;
+            <code style="font-size:11px">company_name</code> &nbsp;
+            <code style="font-size:11px">contact_person</code> &nbsp;
+            <code style="font-size:11px">address</code>
+          </p>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <button class="svc-form-btn" id="brd-import-pick-btn" style="padding:6px 16px;font-size:12px">
+            <i class="fa fa-folder-open"></i> Choose CSV File
+          </button>
+          <span id="brd-import-filename" style="font-size:12px;color:var(--text-muted)">No file chosen</span>
+        </div>
+        <div id="brd-import-step1-alert" class="svc-form-alert" style="display:none"></div>
+      </div>
+
+      <!-- Step 2: preview parsed rows -->
+      <div id="brd-import-step-2" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+        <div style="padding:10px 16px;flex-shrink:0;border-bottom:1px solid var(--border-color,#e2e8f0)">
+          <span id="brd-import-preview-info" style="font-size:12px;color:var(--text-muted)"></span>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:0 4px 4px">
+          <table style="width:100%;border-collapse:collapse;font-size:11px" id="brd-import-preview-table">
+            <thead>
+              <tr style="background:var(--bg-secondary,#f8fafc);position:sticky;top:0">
+                <th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--border-color,#e2e8f0)">#</th>
+                <th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--border-color,#e2e8f0)">Brand Name</th>
+                <th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--border-color,#e2e8f0)">Short Code</th>
+                <th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--border-color,#e2e8f0)">Email</th>
+                <th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--border-color,#e2e8f0)">Phone</th>
+                <th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--border-color,#e2e8f0)">Company</th>
+                <th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--border-color,#e2e8f0)">Status</th>
+              </tr>
+            </thead>
+            <tbody id="brd-import-preview-body"></tbody>
+          </table>
+        </div>
+        <div id="brd-import-step2-alert" class="svc-form-alert" style="display:none;margin:8px 16px"></div>
+      </div>
+
+      <!-- Step 3: results after import -->
+      <div id="brd-import-step-3" style="display:none;flex-direction:column;gap:10px" class="po-aim-body">
+        <div id="brd-import-result-summary" style="font-size:13px"></div>
+        <div style="flex:1;overflow-y:auto;max-height:320px">
+          <table style="width:100%;border-collapse:collapse;font-size:11px">
+            <thead>
+              <tr style="background:var(--bg-secondary,#f8fafc)">
+                <th style="padding:5px 8px;text-align:left;border-bottom:1px solid var(--border-color,#e2e8f0)">#</th>
+                <th style="padding:5px 8px;text-align:left;border-bottom:1px solid var(--border-color,#e2e8f0)">Name</th>
+                <th style="padding:5px 8px;text-align:left;border-bottom:1px solid var(--border-color,#e2e8f0)">Code</th>
+                <th style="padding:5px 8px;text-align:left;border-bottom:1px solid var(--border-color,#e2e8f0)">Result</th>
+              </tr>
+            </thead>
+            <tbody id="brd-import-result-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="po-aim-footer" id="brd-import-footer">
+        <button class="po-btn-ghost" id="brd-import-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+        <button class="po-btn-primary" id="brd-import-next" style="background:#10b981;border-color:#10b981" disabled>
+          <i class="fa fa-eye"></i> Preview
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Job CSV Import Modal ── -->
+  <div class="modal-overlay" id="job-import-modal" style="display:none">
+    <div class="po-aim-shell" style="width:700px;max-height:90vh;display:flex;flex-direction:column">
+      <div class="po-aim-header">
+        <i class="fa fa-file-csv" style="color:#10b981"></i>
+        <span id="job-import-modal-title">Import Jobs from CSV</span>
+        <button class="psm-close" id="job-import-close"><i class="fa fa-xmark"></i></button>
+      </div>
+
+      <!-- Step 1: pick file -->
+      <div id="job-import-step-1" class="po-aim-body" style="gap:14px">
+        <div style="background:var(--bg-secondary,#f8fafc);border:1px solid var(--border-color,#e2e8f0);border-radius:6px;padding:12px 14px;font-size:12px;line-height:1.7">
+          <p style="margin:0 0 6px;font-weight:600;color:var(--text-primary)"><i class="fa fa-info-circle" style="color:#0ea5e9"></i> CSV format</p>
+          <p style="margin:0;color:var(--text-muted)">
+            First row must be the header. Columns (in any order):<br>
+            <code style="font-size:11px">name</code>&nbsp;(required) &nbsp;
+            <code style="font-size:11px">brand_code</code>&nbsp;(3-letter short code) &nbsp;
+            <code style="font-size:11px">status</code>&nbsp;(pending / in_progress / completed / cancelled) &nbsp;
+            <code style="font-size:11px">start_date</code>&nbsp;(YYYY-MM-DD) &nbsp;
+            <code style="font-size:11px">description</code> &nbsp;
+            <code style="font-size:11px">officer</code> &nbsp;
+            <code style="font-size:11px">reporter</code>
+          </p>
+          <p style="margin:4px 0 0;color:var(--text-muted);font-size:11px">
+            <i class="fa fa-circle-info"></i> Brand, officer, and reporter are matched by name/code against existing records. Unmatched values are skipped with a note.
+          </p>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <button class="svc-form-btn" id="job-import-pick-btn" style="padding:6px 16px;font-size:12px">
+            <i class="fa fa-folder-open"></i> Choose CSV File
+          </button>
+          <span id="job-import-filename" style="font-size:12px;color:var(--text-muted)">No file chosen</span>
+        </div>
+        <div id="job-import-step1-alert" class="svc-form-alert" style="display:none"></div>
+      </div>
+
+      <!-- Step 2: preview parsed rows -->
+      <div id="job-import-step-2" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+        <div style="padding:10px 16px;flex-shrink:0;border-bottom:1px solid var(--border-color,#e2e8f0)">
+          <span id="job-import-preview-info" style="font-size:12px;color:var(--text-muted)"></span>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:0 4px 4px">
+          <table style="width:100%;border-collapse:collapse;font-size:11px" id="job-import-preview-table">
+            <thead>
+              <tr style="background:var(--bg-secondary,#f8fafc);position:sticky;top:0">
+                <th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--border-color,#e2e8f0)">#</th>
+                <th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--border-color,#e2e8f0)">Job Name</th>
+                <th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--border-color,#e2e8f0)">Brand</th>
+                <th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--border-color,#e2e8f0)">Status</th>
+                <th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--border-color,#e2e8f0)">Start Date</th>
+                <th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--border-color,#e2e8f0)">Officer</th>
+                <th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--border-color,#e2e8f0)">Reporter</th>
+                <th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--border-color,#e2e8f0)">Valid</th>
+              </tr>
+            </thead>
+            <tbody id="job-import-preview-body"></tbody>
+          </table>
+        </div>
+        <div id="job-import-step2-alert" class="svc-form-alert" style="display:none;margin:8px 16px"></div>
+      </div>
+
+      <!-- Step 3: results after import -->
+      <div id="job-import-step-3" style="display:none;flex-direction:column;gap:10px" class="po-aim-body">
+        <div id="job-import-result-summary" style="font-size:13px"></div>
+        <div style="flex:1;overflow-y:auto;max-height:320px">
+          <table style="width:100%;border-collapse:collapse;font-size:11px">
+            <thead>
+              <tr style="background:var(--bg-secondary,#f8fafc)">
+                <th style="padding:5px 8px;text-align:left;border-bottom:1px solid var(--border-color,#e2e8f0)">#</th>
+                <th style="padding:5px 8px;text-align:left;border-bottom:1px solid var(--border-color,#e2e8f0)">Job Name</th>
+                <th style="padding:5px 8px;text-align:left;border-bottom:1px solid var(--border-color,#e2e8f0)">Job Ref</th>
+                <th style="padding:5px 8px;text-align:left;border-bottom:1px solid var(--border-color,#e2e8f0)">Result</th>
+              </tr>
+            </thead>
+            <tbody id="job-import-result-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="po-aim-footer" id="job-import-footer">
+        <button class="po-btn-ghost" id="job-import-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+        <button class="po-btn-primary" id="job-import-next" style="background:#10b981;border-color:#10b981" disabled>
+          <i class="fa fa-eye"></i> Preview
+        </button>
       </div>
     </div>
   </div>
@@ -7103,6 +7284,34 @@
   </div>
 
   <!-- ── Salary Sheet: Create Modal ── -->
+  <!-- ── Salary Sheet Add Dates Modal ────────────────────────────────────── -->
+  <div class="modal-overlay" id="ss-add-dates-modal" style="display:none">
+    <div class="po-aim-shell" style="width:420px">
+      <div class="po-aim-header">
+        <i class="fa fa-calendar-plus" style="color:#0ea5e9"></i>
+        <span>Add Attendance Dates</span>
+        <button class="psm-close" id="ss-add-dates-close"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div class="po-aim-body" style="gap:12px">
+        <p style="font-size:12px;color:var(--text-muted);margin:0">Pick individual dates to add as attendance columns. Each date becomes its own column.</p>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="date" id="ss-add-date-single" class="po-field-input" style="flex:1;min-width:0">
+          <button class="po-btn-primary" id="ss-add-date-add-btn" style="padding:5px 14px;white-space:nowrap;flex-shrink:0">
+            <i class="fa fa-plus"></i> Add
+          </button>
+        </div>
+        <div id="ss-dates-chips" style="display:flex;flex-wrap:wrap;gap:6px;min-height:34px;padding:6px 8px;background:var(--bg-secondary,#f8fafc);border:1px solid var(--border-color,#e2e8f0);border-radius:6px">
+          <!-- date chips rendered here -->
+        </div>
+        <div id="ss-add-dates-alert" class="svc-form-alert" style="display:none"></div>
+      </div>
+      <div class="po-aim-footer">
+        <button class="po-btn-ghost" id="ss-add-dates-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+        <button class="po-btn-primary" id="ss-add-dates-save" style="background:#0ea5e9;border-color:#0ea5e9"><i class="fa fa-calendar-check"></i> Apply Dates</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ── Salary Sheet Status Modal ───────────────────────────────────────── -->
   <div class="modal-overlay" id="ss-status-modal" style="display:none">
     <div class="po-aim-shell" style="width:420px">

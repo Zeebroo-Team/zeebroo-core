@@ -10,13 +10,14 @@ class SalarySheet extends Model
 
     protected $fillable = [
         'business_id', 'job_id', 'sheet_ref', 'title',
-        'location', 'date_from', 'date_to', 'status', 'notes',
+        'location', 'date_from', 'date_to', 'custom_dates', 'status', 'notes',
         'default_coordinator_fee',
     ];
 
     protected $casts = [
-        'date_from' => 'date:Y-m-d',
-        'date_to'   => 'date:Y-m-d',
+        'date_from'    => 'date:Y-m-d',
+        'date_to'      => 'date:Y-m-d',
+        'custom_dates' => 'array',
     ];
 
     public function job(): \Illuminate\Database\Eloquent\Relations\BelongsTo

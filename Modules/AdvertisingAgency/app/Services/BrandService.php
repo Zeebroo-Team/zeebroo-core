@@ -55,4 +55,50 @@ class BrandService
     {
         $brand->delete();
     }
+
+    /**
+     * Bulk-import brands from a validated rows array.
+     * Each row is independently created or skipped (duplicate short_code).
+     * Returns { created, skipped, errors } counts and a per-row results array.
+     */
+    public function import(Business $business, array $rows): array
+    {
+        $created = 0;
+        $skipped = 0;
+        $rowResults = [];
+
+        foreach ($rows as $i => $row) {
+            $code = strtoupper($row['short_code']);
+            $exists = Brand::query()
+                ->where('business_id', $business->id)
+                ->where('short_code', $code)
+                ->exists();
+
+            if ($exists) {
+                $skipped++;
+                $rowResults[] = ['row' => $i + 1, 'name' => $row['name'], 'short_code' => $code, 'status' => 'skipped', 'reason' => "Short code {$code} already exists"];
+                continue;
+            }
+
+            Brand::create([
+                'business_id'    => $business->id,
+                'name'           => $row['name'],
+                'short_code'     => $code,
+                'email'          => $row['email'],
+                'phone'          => $row['phone']          ?? null,
+                'company_name'   => $row['company_name']   ?? null,
+                'contact_person' => $row['contact_person'] ?? null,
+                'address'        => $row['address']        ?? null,
+            ]);
+            $created++;
+            $rowResults[] = ['row' => $i + 1, 'name' => $row['name'], 'short_code' => $code, 'status' => 'created'];
+        }
+
+        return [
+            'created' => $created,
+            'skipped' => $skipped,
+            'total'   => count($rows),
+            'rows'    => $rowResults,
+        ];
+    }
 }

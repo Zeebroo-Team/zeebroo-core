@@ -484,6 +484,7 @@ const API = (() => {
     // Brand Management
     brands:       (q)          => request('GET',    `/brand-mgmt/brands?q=${encodeURIComponent(q||'')}`),
     brandCreate:  (body)       => request('POST',   '/brand-mgmt/brands', body),
+    brandImport:  (body)       => request('POST',   '/brand-mgmt/brands/import', body),
     brandUpdate:  (id, body)   => request('PUT',    `/brand-mgmt/brands/${id}`, body),
     brandDelete:  (id)         => request('DELETE', `/brand-mgmt/brands/${id}`),
 
@@ -535,6 +536,7 @@ const API = (() => {
     // Jobs
     jobs:        (q, status)  => request('GET',    `/brand-mgmt/jobs?q=${encodeURIComponent(q||'')}&status=${status||''}`),
     jobCreate:   (body)       => request('POST',   '/brand-mgmt/jobs', body),
+    jobImport:   (body)       => request('POST',   '/brand-mgmt/jobs/import', body),
     jobUpdate:   (id, body)   => request('PUT',    `/brand-mgmt/jobs/${id}`, body),
     jobDelete:   (id)         => request('DELETE', `/brand-mgmt/jobs/${id}`),
 

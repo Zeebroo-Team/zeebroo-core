@@ -6,8 +6,10 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Modules\AdvertisingAgency\Http\Controllers\Api\Concerns\ResolvesBusinessForApi;
+use Modules\AdvertisingAgency\Models\Reporter;
 use Modules\AdvertisingAgency\Models\SalarySheet;
 use Modules\AdvertisingAgency\Services\SalarySheetService;
+use Modules\Business\Models\BusinessMember;
 
 class SalarySheetApiController extends Controller
 {
@@ -26,7 +28,21 @@ class SalarySheetApiController extends Controller
     public function index(Request $request): JsonResponse
     {
         $business = $this->businessOrAbort($request);
-        return response()->json(['data' => $this->service->list($business, $request->query('q') ?: null)]);
+
+        // If the authenticated user is a reporter-role member, scope to their assigned jobs only
+        $reporterId = null;
+        $member = BusinessMember::where('business_id', $business->id)
+            ->where('user_id', $request->user()->id)
+            ->where('status', 'active')
+            ->first();
+        if ($member && $member->role === 'reporter') {
+            $reporter   = Reporter::where('business_id', $business->id)
+                ->where('user_id', $request->user()->id)
+                ->first();
+            $reporterId = $reporter?->id;
+        }
+
+        return response()->json(['data' => $this->service->list($business, $request->query('q') ?: null, $reporterId)]);
     }
 
     /** POST /brand-mgmt/salary-sheets */
@@ -61,6 +77,8 @@ class SalarySheetApiController extends Controller
             'location'                       => ['nullable', 'string', 'max:200'],
             'date_from'                      => ['sometimes', 'nullable', 'date'],
             'date_to'                        => ['sometimes', 'nullable', 'date'],
+            'custom_dates'                   => ['sometimes', 'nullable', 'array'],
+            'custom_dates.*'                 => ['date'],
             'status'                         => ['sometimes', 'string', 'in:draft,completed,approved,rejected,paid'],
             'notes'                          => ['nullable', 'string', 'max:2000'],
             'default_coordinator_fee'        => ['sometimes', 'nullable', 'numeric', 'min:0'],
@@ -109,6 +127,10 @@ class SalarySheetApiController extends Controller
             'rows.*.transport_allowance'      => ['nullable', 'numeric', 'min:0'],
             'rows.*.expenses'                 => ['nullable', 'numeric', 'min:0'],
             'rows.*.hold_amount'              => ['nullable', 'numeric', 'min:0'],
+            'rows.*.total_days'               => ['nullable', 'integer', 'min:0'],
+            'rows.*.attendance_amount'        => ['nullable', 'numeric', 'min:0'],
+            'rows.*.base_amount'              => ['nullable', 'numeric', 'min:0'],
+            'rows.*.net_amount'               => ['nullable', 'numeric'],
             'rows.*.coordinator_id'           => ['nullable', 'integer'],
             'rows.*.coordinator_name'         => ['nullable', 'string', 'max:150'],
             'rows.*.coordination_fee'         => ['nullable', 'numeric', 'min:0'],

@@ -173,6 +173,7 @@ body.macos .ctb-wc { display: none; }
 #app-shell.cashier-mode #statusbar { display: none !important; }
 #app-shell.cashier-mode #cashier-topbar { display: flex !important; }
 
+
 /* ── Sidebar layout mode ─────────────────────────────────────────────────── */
 #app-main {
   flex: 1;

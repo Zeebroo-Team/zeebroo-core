@@ -14,7 +14,7 @@ class SalarySheetService
 {
     // ── List ─────────────────────────────────────────────────────────────────
 
-    public function list(Business $business, ?string $q = null): \Illuminate\Support\Collection
+    public function list(Business $business, ?string $q = null, ?int $reporterId = null): \Illuminate\Support\Collection
     {
         return SalarySheet::query()
             ->where('business_id', $business->id)
@@ -23,6 +23,7 @@ class SalarySheetService
                     ->orWhere('location', 'like', "%{$q}%")
                     ->orWhereHas('job', fn ($j) => $j->where('name', 'like', "%{$q}%"));
             }))
+            ->when($reporterId, fn ($qry) => $qry->whereHas('job', fn ($j) => $j->where('reporter_id', $reporterId)))
             ->with('job:id,name,job_ref')
             ->withCount('rows')
             ->orderByRaw('CASE WHEN job_id IS NULL THEN 1 ELSE 0 END')
@@ -99,6 +100,7 @@ class SalarySheetService
             'job_id'                  => $sheet->job_id,
             'date_from'               => $sheet->date_from?->format('Y-m-d'),
             'date_to'                 => $sheet->date_to?->format('Y-m-d'),
+            'custom_dates'            => $sheet->custom_dates ?? [],
             'status'                  => $sheet->status,
             'notes'                   => $sheet->notes,
             'default_coordinator_fee' => $sheet->default_coordinator_fee ?? 0,
@@ -128,6 +130,10 @@ class SalarySheetService
                 'transport_allowance'      => $r->transport_allowance,
                 'expenses'                 => $r->expenses,
                 'hold_amount'              => $r->hold_amount,
+                'total_days'               => (int) $r->total_days,
+                'attendance_amount'        => (float) $r->attendance_amount,
+                'base_amount'              => (float) $r->base_amount,
+                'net_amount'               => (float) $r->net_amount,
                 'coordinator_id'           => $r->coordinator_id,
                 'coordinator_name'         => $r->coordinator_name,
                 'coordination_fee'         => $r->coordination_fee,
@@ -154,12 +160,26 @@ class SalarySheetService
         $datePart   = ($dfStr && $dtStr) ? " — {$dfStr} to {$dtStr}" : '';
         $newTitle   = trim(($location ?: 'Salary Sheet') . $datePart);
 
+        // custom_dates: sort and deduplicate when provided; null clears them
+        $customDates = $sheet->custom_dates ?? [];
+        if (array_key_exists('custom_dates', $data)) {
+            $raw = $data['custom_dates'] ?? [];
+            if (is_array($raw) && count($raw)) {
+                $raw = array_values(array_unique(array_filter($raw)));
+                sort($raw);
+                $customDates = $raw;
+            } else {
+                $customDates = [];
+            }
+        }
+
         $sheet->update([
             'job_id'                  => array_key_exists('job_id', $data) ? $data['job_id'] : $sheet->job_id,
             'location'                => $location,
             'title'                   => $newTitle,
             'date_from'               => $dateFrom,
             'date_to'                 => $dateTo,
+            'custom_dates'            => $customDates ?: null,
             'status'                  => $data['status']                    ?? $sheet->status,
             'notes'                   => array_key_exists('notes', $data) ? $data['notes'] : $sheet->notes,
             'default_coordinator_fee' => array_key_exists('default_coordinator_fee', $data)
@@ -255,6 +275,10 @@ class SalarySheetService
                     'transport_allowance'      => $rowData['transport_allowance']      ?? 0,
                     'expenses'                 => $rowData['expenses']                 ?? 0,
                     'hold_amount'              => $rowData['hold_amount']              ?? 0,
+                    'total_days'               => $rowData['total_days']               ?? 0,
+                    'attendance_amount'        => $rowData['attendance_amount']        ?? 0,
+                    'base_amount'              => $rowData['base_amount']              ?? 0,
+                    'net_amount'               => $rowData['net_amount']               ?? 0,
                     'coordinator_id'           => $rowData['coordinator_id']           ?: null,
                     'coordinator_name'         => $rowData['coordinator_name']         ?? 'N/A',
                     'coordination_fee'         => $rowData['coordination_fee']         ?? 0,
