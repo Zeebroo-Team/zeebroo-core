@@ -3537,7 +3537,7 @@ const _obFeatureDefs = [
   { key: 'crm',                   img: 'img/features/social-media-campaign.png',       name: 'CRM',                  desc: 'Leads pipeline, contacts & follow-up tasks',    color: '#7c3aed' },
   { key: 'project_management',   img: 'img/features/account-management.png',          name: 'Projects',             desc: 'Projects, tasks, milestones & kanban boards',  color: '#0284c7' },
   { key: 'automation_editor',    img: 'img/features/automation-editor.svg',            name: 'Automation Editor',    desc: 'Trigger-based workflows & automated sequences', color: '#f59e0b' },
-  { key: 'event_management',     img: 'img/features/account-management.png',           name: 'Brand Management',     desc: 'Brands, short codes, contacts & company details', color: '#0ea5e9' },
+  { key: 'event_management',     img: 'img/features/account-management.png',           name: 'Event Advertising Agency', desc: 'Brands, jobs, reporters, officers & salary sheets', color: '#0ea5e9' },
   { key: 'developers',           img: 'img/features/developers.svg',                  name: 'Developers',           desc: 'API keys, webhooks & third-party integrations', color: '#0f766e' },
 ];
 

@@ -115,11 +115,9 @@ class PosSettingsApiController extends Controller
         $stored   = $business->getSetting('business.features') ?? [];
         $enabled  = array_values(array_filter($all, fn ($k) => ! empty($stored[$k])));
 
-        // These features are always enabled regardless of stored settings.
-        foreach (['account_management', 'event_management'] as $alwaysOn) {
-            if (! in_array($alwaysOn, $enabled, true)) {
-                $enabled[] = $alwaysOn;
-            }
+        // account_management is always enabled; event_management is user-controlled.
+        if (! in_array('account_management', $enabled, true)) {
+            $enabled[] = 'account_management';
         }
         return response()->json(['data' => $enabled]);
     }
