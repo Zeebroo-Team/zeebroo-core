@@ -5158,6 +5158,7 @@ const _featDefs = [
   { key: 'developers',           name: 'Developers',            desc: 'API keys & webhooks for third-party integrations', icon: 'fa-code',    color: '#0f766e' },
   { key: 'automation_editor',    name: 'Automation Editor',     desc: 'Visual workflow builder — triggers, conditions & actions', icon: 'fa-bolt',           color: '#f59e0b' },
   { key: 'project_management',  name: 'Projects',              desc: 'Projects, tasks, milestones & kanban boards',             icon: 'fa-diagram-project', color: '#0284c7' },
+  { key: 'event_management',    name: 'Event Advertising Agency', desc: 'Brands, jobs, reporters, officers & salary sheets',    icon: 'fa-tag',            color: '#0ea5e9' },
 ];
 
 function openFeatureMgmtModal() {
