@@ -3042,8 +3042,12 @@ function _invAddLine(desc = '', qty = 1, price = 0) {
 function _invRecalc() {
   let sub = 0;
   $$('#sinv-items-body .qt-line-row').forEach(row => {
-    sub += (parseFloat(row.querySelector('[data-role="qty"]').value)   || 0)
-         * (parseFloat(row.querySelector('[data-role="price"]').value) || 0);
+    const qty   = parseFloat(row.querySelector('[data-role="qty"]')?.value)   || 0;
+    const price = parseFloat(row.querySelector('[data-role="price"]')?.value) || 0;
+    const lt    = qty * price;
+    const ltEl  = document.getElementById(`inv-lt-${row.dataset.lineId}`);
+    if (ltEl) ltEl.textContent = lt.toFixed(2);
+    sub += lt;
   });
   const disc = parseFloat($('#sinv-f-discount').value) || 0;
   const tax  = parseFloat($('#sinv-f-tax').value)      || 0;
