@@ -2430,11 +2430,22 @@ async function _invOpenDetail(id) {
 
   const res = await API.invoice(id);
   if (res.status !== 200) {
-    $('#sinv-detail-body').innerHTML = '<div class="qt-empty"><i class="fa fa-circle-exclamation"></i> Failed to load.</div>';
+    const msg = res.body?.message || (res.status === 0 ? 'Cannot reach server' : 'Failed to load');
+    $('#sinv-detail-body').innerHTML = `<div class="qt-empty">
+      <i class="fa fa-circle-exclamation"></i>
+      <h4>Could not load invoice</h4>
+      <p style="font-size:12px;color:var(--text-muted)">${escHtml(msg)} (${res.status || 'network error'})</p>
+      <button class="qt-new-btn" id="invd-retry" style="margin-top:12px"><i class="fa fa-rotate-right"></i> Retry</button>
+    </div>`;
+    $('#invd-retry')?.addEventListener('click', () => _invOpenDetail(id));
     return;
   }
 
   const inv = res.body?.data;
+  if (!inv) {
+    $('#sinv-detail-body').innerHTML = '<div class="qt-empty"><i class="fa fa-circle-exclamation"></i> Invalid response from server.</div>';
+    return;
+  }
   const cur  = state.currency ? ' ' + state.currency : '';
   $('#sinv-detail-title').textContent = inv.invoice_number;
 
@@ -2527,8 +2538,8 @@ async function _invOpenDetail(id) {
       <td>${escHtml(item.description || '—')}</td>
       <td class="td-r">${qty % 1 === 0 ? parseInt(qty) : qty.toFixed(2)}</td>
       <td class="td-r">${price.toFixed(2)}${cur}</td>
-      ${hasAnyDisc ? `<td class="td-r">${discCell}</td>` : ''}
-      ${hasAnyTax  ? `<td class="td-r">${taxCell}</td>` : ''}
+      <td class="td-r">${discCell}</td>
+      <td class="td-r">${taxCell}</td>
       <td class="td-r qt-item-total">${parseFloat(item.line_total).toFixed(2)}${cur}</td>
     </tr>`;
   }).join('');
@@ -2556,52 +2567,94 @@ async function _invOpenDetail(id) {
     summaryHtml += `<div class="qt-doc-total-line invd-tot-tax"><span>Tax</span><span>+${parseFloat(inv.tax_amount).toFixed(2)}${cur}</span></div>`;
   summaryHtml += `<div class="qt-doc-total-line grand"><span>Total</span><span>${parseFloat(inv.total).toFixed(2)}${cur}</span></div>`;
 
-  const body = `<div class="invd-layout">
+  let body;
+  try {
+  const bizName    = escHtml(state.receiptSettings?.business_name        || '');
+  const bizAddr    = escHtml(state.receiptSettings?.receipt_address_line || '');
+  const totalAmt   = parseFloat(inv.total).toFixed(2);
+
+  body = `<div class="invd-layout">
     <div class="invd-main">
       <div class="qt-doc">
-        <div class="qt-doc-banner">
-          <div class="qt-doc-banner-left">
-            <div class="qt-doc-banner-num">${escHtml(inv.invoice_number)}</div>
-            <div class="qt-doc-banner-type">Invoice</div>
+
+        <!-- ── Letterhead header (shown when a Design Studio letterhead exists) ── -->
+        <div class="invd-lh-hdr" id="invd-lh-hdr" style="display:none">
+          <div class="invd-lh-img-wrap">
+            <img class="invd-lh-img" id="invd-lh-img" src="" alt="">
           </div>
-          <span class="qt-badge qt-badge-${inv.status}">${escHtml(inv.status_label)}</span>
-        </div>
-        <div class="qt-doc-body">
-          <div class="qt-doc-info">
+          <div class="invd-lh-num-row">
             <div>
-              <div class="qt-doc-bill-label">Bill To</div>
-              <div class="qt-doc-bill-name">${escHtml(inv.customer_name || 'Walk-in Customer')}</div>
-              ${inv.reference ? `<div class="qt-doc-bill-ref"><i class="fa fa-hashtag" style="font-size:9px;opacity:.6"></i> ${escHtml(inv.reference)}</div>` : ''}
+              <div class="invd-lh-lbl">Invoice</div>
+              <div class="invd-lh-num">${escHtml(inv.invoice_number)}</div>
             </div>
-            <div class="qt-doc-meta">
-              <div class="qt-doc-meta-row"><span>Issue Date</span><strong>${dateStr}</strong></div>
-              <div class="qt-doc-meta-row"><span>Due Date</span><strong>${dueStr}</strong></div>
-            </div>
+            <span class="qt-badge qt-badge-${inv.status}">${escHtml(inv.status_label)}</span>
           </div>
+        </div>
 
-          <div class="qt-doc-items-wrap">
-            <table class="qt-doc-items">
-              <thead><tr>
-                <th style="width:28px">#</th>
-                <th>Description</th>
-                <th class="td-r" style="width:56px">Qty</th>
-                <th class="td-r" style="width:100px">Unit Price</th>
-                ${hasAnyDisc ? `<th class="td-r" style="width:90px">Disc</th>` : ''}
-                ${hasAnyTax  ? `<th class="td-r" style="width:110px">Tax</th>` : ''}
-                <th class="td-r" style="width:100px">Total</th>
-              </tr></thead>
-              <tbody>${itemRows}</tbody>
-            </table>
+        <!-- ── Blue banner: shown when no letterhead ─────────────────── -->
+        <div class="qt-doc-banner invd-banner-pro" id="invd-blue-banner">
+          <div class="invd-bpro-left">
+            ${bizName ? `<div class="invd-bpro-biz">${bizName}</div>` : ''}
+            ${bizAddr ? `<div class="invd-bpro-addr">${bizAddr}</div>` : ''}
           </div>
+          <div class="invd-bpro-right">
+            <div class="invd-bpro-lbl">Invoice</div>
+            <div class="invd-bpro-num">${escHtml(inv.invoice_number)}</div>
+            <span class="qt-badge qt-badge-${inv.status}">${escHtml(inv.status_label)}</span>
+          </div>
+        </div>
 
-          <div class="qt-doc-totals-wrap">
+        <!-- ── Meta strip: billed-to | dates | amount due ─────────── -->
+        <div class="invd-meta-strip">
+          <div class="invd-ms-cell">
+            <div class="invd-ms-lbl">Billed To</div>
+            <div class="invd-ms-val invd-ms-cust">${escHtml(inv.customer_name || 'Walk-in Customer')}</div>
+            ${inv.reference ? `<div class="invd-ms-ref"><i class="fa fa-hashtag"></i> ${escHtml(inv.reference)}</div>` : ''}
+          </div>
+          <div class="invd-ms-div"></div>
+          <div class="invd-ms-cell">
+            <div class="invd-ms-lbl">Issue Date</div>
+            <div class="invd-ms-val">${dateStr}</div>
+          </div>
+          <div class="invd-ms-div"></div>
+          <div class="invd-ms-cell">
+            <div class="invd-ms-lbl">Due Date</div>
+            <div class="invd-ms-val">${dueStr}</div>
+          </div>
+          <div class="invd-ms-grow"></div>
+          <div class="invd-ms-cell invd-ms-amt-cell">
+            <div class="invd-ms-lbl">Amount Due</div>
+            <div class="invd-ms-amt">${totalAmt}${cur}</div>
+          </div>
+        </div>
+
+        <!-- ── Line items table ────────────────────────────────────── -->
+        <div class="invd-tbl-wrap">
+          <table class="qt-doc-items invd-items-full">
+            <thead><tr>
+              <th style="width:32px">#</th>
+              <th>Description</th>
+              <th class="td-r" style="width:52px">Qty</th>
+              <th class="td-r" style="width:105px">Unit Price</th>
+              <th class="td-r" style="width:90px">Disc</th>
+              <th class="td-r" style="width:115px">Tax</th>
+              <th class="td-r" style="width:105px">Total</th>
+            </tr></thead>
+            <tbody>${itemRows}</tbody>
+          </table>
+        </div>
+
+        <!-- ── Footer: notes + totals ─────────────────────────────── -->
+        <div class="invd-foot">
+          <div class="invd-foot-notes">
+            ${inv.notes ? `<div class="invd-foot-notes-lbl"><i class="fa fa-note-sticky"></i> Notes</div>
+            <div class="qt-doc-notes-box">${escHtml(inv.notes)}</div>` : ''}
+          </div>
+          <div class="invd-foot-totals">
             <div class="qt-doc-totals">${summaryHtml}</div>
           </div>
-
-          ${inv.notes ? `<hr class="qt-doc-divider">
-          <div class="qt-doc-notes-label"><i class="fa fa-note-sticky"></i> Notes</div>
-          <div class="qt-doc-notes-box">${escHtml(inv.notes)}</div>` : ''}
         </div>
+
       </div>
     </div>
 
@@ -2636,16 +2689,43 @@ async function _invOpenDetail(id) {
       </button>
     </div>
   </div>`;
+  } catch (err) {
+    console.error('[_invOpenDetail] body build error:', err);
+    $('#sinv-detail-body').innerHTML = `<div class="qt-empty"><i class="fa fa-circle-exclamation"></i> Render error: ${escHtml(err.message)}</div>`;
+    return;
+  }
 
   $('#sinv-detail-body').innerHTML = body;
 
+  // ── Load letterhead asynchronously and swap banner ────────────────────────
+  // Capture the invoice id NOW so we can detect mid-flight navigation later.
+  const _lhForInvId = inv.id;
+  (async () => {
+    const lhFull = await _fetchLetterhead();
+    if (!lhFull?.canvas_json) return;
+    const lhDataUrl = await window.electronAPI.renderCanvasToDataUrl(
+      lhFull.canvas_json,
+      lhFull.width  || 794,
+      lhFull.height || 1123
+    );
+    if (!lhDataUrl) return;
+    // Guard 1: user navigated away from the invoices section entirely.
+    const img = document.getElementById('invd-lh-img');
+    const hdr = document.getElementById('invd-lh-hdr');
+    const blu = document.getElementById('invd-blue-banner');
+    if (!img || !hdr || !blu) return;
+    // Guard 2: user navigated to a DIFFERENT invoice — same IDs exist but
+    // belong to the new invoice; don't stamp the old letterhead onto it.
+    if (_inv.activeId !== _lhForInvId) return;
+    img.onload        = () => img.classList.add('loaded');
+    img.src           = lhDataUrl;
+    hdr.style.display = '';
+    blu.style.display = 'none';
+  })();
+
   // Wire actions
   $('#invd-edit')?.addEventListener('click', () => _invOpenForm(inv));
-  $('#invd-sent')?.addEventListener('click', async () => {
-    const r = await API.invoiceSent(inv.id);
-    if (r.status === 200) { toast('Marked as sent', 'success'); _invOpenDetail(inv.id); }
-    else toast(r.body?.message || 'Error', 'error');
-  });
+  $('#invd-sent')?.addEventListener('click', () => _invShowSendModal(inv));
   $('#invd-paid')?.addEventListener('click', async () => {
     const r = await API.invoicePaid(inv.id);
     if (r.status === 200) { toast('Invoice marked as paid', 'success'); _invOpenDetail(inv.id); }
@@ -2674,6 +2754,174 @@ async function _invOpenDetail(id) {
   $('#invd-qa-payment')?.addEventListener('click', () => _invdComingSoon('Payment'));
   $('#invd-qa-proposal')?.addEventListener('click', () => openInvProposalModal(inv));
   $('#invd-qa-pm')?.addEventListener('click', () => _invdComingSoon('Move to Project Manager'));
+}
+
+// ── Send Invoice modal (share link + social sharing) ─────────────────────────
+async function _invShowSendModal(inv) {
+  // Remove any existing instance
+  document.getElementById('invd-send-modal')?.remove();
+
+  const invNum = escHtml(inv.invoice_number || '');
+  const custName = escHtml(inv.customer_name || '');
+
+  // Build modal skeleton with loading state
+  const overlay = document.createElement('div');
+  overlay.id = 'invd-send-modal';
+  overlay.className = 'invd-send-overlay';
+  overlay.innerHTML = `
+    <div class="invd-send-box" role="dialog" aria-modal="true">
+      <div class="invd-send-hdr">
+        <div class="invd-send-hdr-left">
+          <span class="invd-send-hdr-icon"><i class="fa fa-paper-plane"></i></span>
+          <div>
+            <div class="invd-send-title">Send Invoice</div>
+            <div class="invd-send-sub">${invNum}${custName ? ' · ' + custName : ''}</div>
+          </div>
+        </div>
+        <button class="invd-send-close" id="invd-send-close"><i class="fa fa-xmark"></i></button>
+      </div>
+
+      <div class="invd-send-body">
+        <div class="invd-send-link-section">
+          <div class="invd-send-section-lbl"><i class="fa fa-link"></i> Shareable Link</div>
+          <div class="invd-send-link-row">
+            <div class="invd-send-link-box" id="invd-send-link-box">
+              <i class="fa fa-spinner fa-spin" style="color:var(--text-muted)"></i>
+              <span id="invd-send-link-txt" style="color:var(--text-muted)">Generating link…</span>
+            </div>
+            <button class="invd-send-copy-btn" id="invd-send-copy" disabled>
+              <i class="fa fa-copy"></i> Copy
+            </button>
+          </div>
+        </div>
+
+        <div class="invd-send-social-section">
+          <div class="invd-send-section-lbl"><i class="fa fa-share-nodes"></i> Share via</div>
+          <div class="invd-send-social-row">
+            <button class="invd-send-social-btn invd-social-wa" id="invd-send-wa" disabled>
+              <svg class="invd-social-ico" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.127.558 4.122 1.532 5.849L.057 23.57a.75.75 0 0 0 .918.919l5.709-1.47A11.944 11.944 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.75a9.724 9.724 0 0 1-4.966-1.362l-.357-.212-3.685.949.974-3.578-.232-.37A9.75 9.75 0 1 1 12 21.75z"/></svg>
+              WhatsApp
+            </button>
+            <button class="invd-send-social-btn invd-social-fb" id="invd-send-fb" disabled>
+              <svg class="invd-social-ico" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073C24 5.405 18.627 0 12 0S0 5.405 0 12.073C0 18.1 4.388 23.094 10.125 24v-8.437H7.078v-3.49h3.047V9.41c0-3.025 1.792-4.697 4.533-4.697 1.312 0 2.686.236 2.686.236v2.97h-1.513c-1.491 0-1.956.932-1.956 1.889v2.265h3.328l-.532 3.49h-2.796V24C19.612 23.094 24 18.1 24 12.073z"/></svg>
+              Facebook
+            </button>
+            <button class="invd-send-social-btn invd-social-email" id="invd-send-email" disabled>
+              <i class="fa fa-envelope invd-social-ico"></i>
+              Email
+            </button>
+          </div>
+        </div>
+
+        <div class="invd-send-info-note">
+          <i class="fa fa-circle-info"></i>
+          Anyone with this link can view the invoice without logging in.
+        </div>
+      </div>
+
+      <div class="invd-send-footer">
+        <button class="invd-send-btn-cancel" id="invd-send-cancel">Close</button>
+        <button class="invd-send-btn-send" id="invd-send-confirm">
+          <i class="fa fa-paper-plane"></i> Mark as Sent
+        </button>
+      </div>
+    </div>`;
+
+  document.body.appendChild(overlay);
+  requestAnimationFrame(() => overlay.classList.add('invd-send-in'));
+
+  let shareUrl = inv.share_url || null;
+
+  // Enable share link (generate token if needed)
+  const fetchShareLink = async () => {
+    const r = await API.invoiceEnableShare(inv.id);
+    if (r.status === 200 && r.body?.share_url) {
+      shareUrl = r.body.share_url;
+      const box  = document.getElementById('invd-send-link-box');
+      const txt  = document.getElementById('invd-send-link-txt');
+      const copy = document.getElementById('invd-send-copy');
+      const wa   = document.getElementById('invd-send-wa');
+      const fb   = document.getElementById('invd-send-fb');
+      const em   = document.getElementById('invd-send-email');
+      if (txt) { box.innerHTML = ''; box.textContent = shareUrl; }
+      if (copy) copy.disabled = false;
+      if (wa)   wa.disabled   = false;
+      if (fb)   fb.disabled   = false;
+      if (em)   em.disabled   = false;
+    } else {
+      const box = document.getElementById('invd-send-link-box');
+      if (box) box.innerHTML = '<span style="color:#ef4444"><i class="fa fa-triangle-exclamation"></i> Failed to generate link</span>';
+    }
+  };
+  fetchShareLink();
+
+  // Close helpers
+  let _closing = false;
+  const close = () => {
+    if (_closing) return;
+    _closing = true;
+    overlay.classList.remove('invd-send-in');
+    // Fallback: if transitionend never fires (prefers-reduced-motion, timing
+    // edge case), remove after the transition duration anyway.
+    const fallback = setTimeout(() => overlay.remove(), 350);
+    overlay.addEventListener('transitionend', () => { clearTimeout(fallback); overlay.remove(); }, { once: true });
+    document.removeEventListener('keydown', escClose);
+  };
+  // NOTE: no { once: true } — we want to check EVERY keydown while the modal
+  // is open, not just the first one (once:true removes the listener after any key).
+  function escClose(e) { if (e.key === 'Escape') close(); }
+  document.getElementById('invd-send-close')?.addEventListener('click', close);
+  document.getElementById('invd-send-cancel')?.addEventListener('click', close);
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+  document.addEventListener('keydown', escClose);
+
+  // Copy link
+  document.getElementById('invd-send-copy')?.addEventListener('click', async () => {
+    if (!shareUrl) return;
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      const btn = document.getElementById('invd-send-copy');
+      if (btn) { btn.innerHTML = '<i class="fa fa-check"></i> Copied!'; btn.classList.add('copied'); }
+      setTimeout(() => {
+        const b = document.getElementById('invd-send-copy');
+        if (b) { b.innerHTML = '<i class="fa fa-copy"></i> Copy'; b.classList.remove('copied'); }
+      }, 2000);
+    } catch { toast('Could not copy to clipboard', 'error'); }
+  });
+
+  // Social share handlers
+  document.getElementById('invd-send-wa')?.addEventListener('click', () => {
+    if (!shareUrl) return;
+    const msg = `Hi, please find your invoice ${inv.invoice_number} here: ${shareUrl}`;
+    window.electronAPI.openExternal(`https://wa.me/?text=${encodeURIComponent(msg)}`);
+  });
+
+  document.getElementById('invd-send-fb')?.addEventListener('click', () => {
+    if (!shareUrl) return;
+    window.electronAPI.openExternal(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`);
+  });
+
+  document.getElementById('invd-send-email')?.addEventListener('click', () => {
+    if (!shareUrl) return;
+    const subj = `Invoice ${inv.invoice_number}`;
+    const body  = `Hi${custName ? ' ' + inv.customer_name : ''},\n\nPlease find your invoice ${inv.invoice_number} at the link below:\n\n${shareUrl}\n\nThank you for your business.`;
+    window.electronAPI.openExternal(`mailto:?subject=${encodeURIComponent(subj)}&body=${encodeURIComponent(body)}`);
+  });
+
+  // Mark as Sent
+  document.getElementById('invd-send-confirm')?.addEventListener('click', async () => {
+    const btn = document.getElementById('invd-send-confirm');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Sending…'; }
+    const r = await API.invoiceSent(inv.id);
+    if (r.status === 200) {
+      close();
+      toast('Invoice marked as sent', 'success');
+      _invOpenDetail(inv.id);
+    } else {
+      if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa fa-paper-plane"></i> Mark as Sent'; }
+      toast(r.body?.message || 'Error', 'error');
+    }
+  });
 }
 
 function _invdComingSoon(feature) {
@@ -14915,22 +15163,87 @@ function _invBuildActualDoc(inv, tpl, mg, cur, lhDataUrl = null) {
   const tax  = parseFloat(inv.tax_amount      || 0);
   const tot  = fmt(inv.total);
 
+  // ── Per-line disc/tax aggregates (for print columns + summary) ────────────
+  const taxRulesPrint = Array.isArray(state.receiptSettings?.tax_rules)
+    ? state.receiptSettings.tax_rules.filter(r => parseFloat(r.value || 0) > 0)
+    : [];
+  // Always show Disc/Tax columns so the print layout is consistent regardless
+  // of whether this particular invoice has per-line adjustments.
+  const hasAnyDisc = true;
+  const hasAnyTax  = true;
+
+  let rawSub = 0, plDiscTot = 0, plTaxTot = 0;
+  (inv.items || []).forEach(it => {
+    const g   = parseFloat(it.quantity) * parseFloat(it.unit_price);
+    const dt  = it.discount_type || 'pct';
+    const dv  = parseFloat(it.discount_value) || 0;
+    const da  = dt === 'flat' ? Math.min(dv, g) : (g * dv / 100);
+    const net = Math.max(0, g - da);
+    const tt  = it.tax_type || 'pct';
+    const tv  = parseFloat(it.tax_pct) || 0;
+    const ta  = tt === 'flat' ? tv : (net * tv / 100);
+    rawSub   += g;
+    plDiscTot += da;
+    plTaxTot  += ta;
+  });
+
+  // Table header extra columns (always present — keeps layout consistent)
+  const thDisc  = `<th class="r" style="width:68px">Disc</th>`;
+  const thTax   = `<th class="r" style="width:86px">Tax</th>`;
+  const extraTh = thDisc + thTax;
+
   const rows = (italic) => (inv.items || []).map((it, i) => {
-    const n   = italic ? `<i>${i + 1}</i>` : (i + 1);
-    const qty = parseFloat(it.quantity) % 1 === 0 ? parseInt(it.quantity) : parseFloat(it.quantity).toFixed(2);
-    const up  = fmt(it.unit_price);
-    const t   = fmt(it.total != null ? it.total : parseFloat(it.unit_price || 0) * parseFloat(it.quantity || 1));
-    return `<tr><td class="n">${n}</td><td><b>${escHtml(it.description || '')}</b></td><td class="r">${qty}</td><td class="r">${up}${c}</td><td class="r b">${t}${c}</td></tr>`;
+    const n    = italic ? `<i>${i + 1}</i>` : (i + 1);
+    const qty  = parseFloat(it.quantity) % 1 === 0 ? parseInt(it.quantity) : parseFloat(it.quantity).toFixed(2);
+    const up   = fmt(it.unit_price);
+    const lt   = fmt(it.line_total != null ? it.line_total : (parseFloat(it.unit_price || 0) * parseFloat(it.quantity || 1)));
+
+    let discTd = '';
+    if (hasAnyDisc) {
+      const dv = parseFloat(it.discount_value) || 0;
+      const dt = it.discount_type || 'pct';
+      const g  = parseFloat(it.quantity) * parseFloat(it.unit_price);
+      const da = dt === 'flat' ? Math.min(dv, g) : (g * dv / 100);
+      discTd = dv > 0
+        ? `<td class="r" style="color:#ef4444;font-size:10px">${dt === 'flat' ? `−${da.toFixed(2)}${c}` : `${dv}%`}</td>`
+        : `<td class="r" style="color:#94a3b8">—</td>`;
+    }
+
+    let taxTd = '';
+    if (hasAnyTax) {
+      const tv = parseFloat(it.tax_pct) || 0;
+      const tt = it.tax_type || 'pct';
+      if (tv > 0) {
+        const match = taxRulesPrint.find(r =>
+          (r.type === tt || (r.type === 'percentage' && tt === 'pct')) && String(r.value) === String(tv)
+        );
+        const lbl = match
+          ? escHtml(match.name) + (tt !== 'flat' ? ' ' + tv + '%' : '')
+          : (tt === 'flat' ? tv.toFixed(2) + c : tv + '%');
+        taxTd = `<td class="r" style="color:#10b981;font-size:10px">${lbl}</td>`;
+      } else {
+        taxTd = `<td class="r" style="color:#94a3b8">—</td>`;
+      }
+    }
+
+    return `<tr><td class="n">${n}</td><td><b>${escHtml(it.description || '')}</b></td><td class="r">${qty}</td><td class="r">${up}${c}</td>${discTd}${taxTd}<td class="r b">${lt}${c}</td></tr>`;
   }).join('\n    ');
 
-  const discRow = disc > 0 ? `<div class="tr"><span>Discount</span><span style="color:#ef4444">−${disc.toFixed(2)}${c}</span></div>` : '';
-  const _taxRules = Array.isArray(inv._taxBreakdown) && inv._taxBreakdown.length
-    ? inv._taxBreakdown
-    : (tax > 0 ? [{ name: 'Tax', type: 'flat', value: tax, amount: tax }] : []);
-  const taxRow = _taxRules.map(t => {
-    const lbl = escHtml(t.name) + (t.type !== 'flat' ? ' ' + t.value + '%' : '');
-    return `<div class="tr"><span>${lbl}</span><span>+${t.amount.toFixed(2)}${c}</span></div>`;
-  }).join('');
+  // ── Summary rows ──────────────────────────────────────────────────────────
+  const hasPlAdj = plDiscTot > 0.001 || plTaxTot > 0.001;
+  let totRows = '';
+  if (hasPlAdj) {
+    totRows += `<div class="tr"><span>Gross Subtotal</span><span>${rawSub.toFixed(2)}${c}</span></div>`;
+    if (plDiscTot > 0.001) totRows += `<div class="tr"><span>Item Discounts</span><span style="color:#ef4444">−${plDiscTot.toFixed(2)}${c}</span></div>`;
+    if (plTaxTot  > 0.001) totRows += `<div class="tr"><span>Item Taxes</span><span style="color:#10b981">+${plTaxTot.toFixed(2)}${c}</span></div>`;
+    if (disc > 0 || tax > 0) totRows += `<div class="tr" style="font-weight:700"><span>Line Subtotal</span><span>${fmt(inv.subtotal)}${c}</span></div>`;
+  } else {
+    totRows += `<div class="tr"><span>Subtotal</span><span>${sub}${c}</span></div>`;
+  }
+  if (disc > 0) totRows += `<div class="tr"><span>Discount</span><span style="color:#ef4444">−${disc.toFixed(2)}${c}</span></div>`;
+  if (tax  > 0) totRows += `<div class="tr"><span>Tax</span><span style="color:#10b981">+${tax.toFixed(2)}${c}</span></div>`;
+  // kept for backwards compatibility with callers that inject _taxBreakdown
+  const discRow = ''; const taxRow = '';
 
   // Letterhead: absolute image layer behind content (embedded as data URL)
   const lhLayer   = lhDataUrl
@@ -14980,11 +15293,10 @@ td.n{color:#94a3b8;text-align:center;width:22px}td.r{text-align:right}td.b{font-
 </div>
 <div class="ct">
   <div class="bt"><div class="btl">Billed To</div><div class="btn">${cust}</div></div>
-  <table><thead><tr><th style="width:22px;text-align:center">#</th><th>Description</th><th class="r" style="width:44px">Qty</th><th class="r" style="width:86px">Price</th><th class="r" style="width:88px">Total</th></tr></thead>
+  <table><thead><tr><th style="width:22px;text-align:center">#</th><th>Description</th><th class="r" style="width:44px">Qty</th><th class="r" style="width:86px">Price</th>${extraTh}<th class="r" style="width:88px">Total</th></tr></thead>
   <tbody>${rows(false)}</tbody></table>
   <div class="tot"><div class="ti">
-    <div class="tr"><span>Subtotal</span><span>${sub}${c}</span></div>
-    ${discRow}${taxRow}
+    ${totRows}
     <div class="tr gr"><span>Total Due</span><span>${tot}${c}</span></div>
   </div></div>
 </div></div></body></html>`;
@@ -15027,13 +15339,12 @@ td.n{color:#94a3b8;text-align:center;width:26px}td.r{text-align:right}td.b{font-
     <div class="card"><div class="cl">Billed To</div><div class="cn">${cust}</div></div>
     <div class="card"><div class="cl">Invoice Details</div><div class="ci" style="line-height:1.9"><b>Issue Date</b> &nbsp; ${issDate}<br><b>Due Date</b> &nbsp;&nbsp; ${dueDate}<br><b>Status</b> &nbsp;&nbsp;&nbsp;&nbsp; <span style="color:${sColor};font-weight:700">${sLabel}</span></div></div>
   </div>
-  <table><thead><tr><th style="width:26px;text-align:center">#</th><th>Description</th><th class="r" style="width:50px">Qty</th><th class="r" style="width:100px">Unit Price</th><th class="r" style="width:100px">Total</th></tr></thead>
+  <table><thead><tr><th style="width:26px;text-align:center">#</th><th>Description</th><th class="r" style="width:50px">Qty</th><th class="r" style="width:100px">Unit Price</th>${extraTh}<th class="r" style="width:100px">Total</th></tr></thead>
   <tbody>${rows(false)}</tbody></table>
   <div class="bot">
     <div class="nb"><div class="nl">Notes</div><div class="nt">${notesText}</div></div>
     <div class="tc">
-      <div class="tr"><span>Subtotal</span><span>${sub}${c}</span></div>
-      ${discRow}${taxRow}
+      ${totRows}
       <div class="tr gr"><span>Total Due</span><span>${tot}${c}</span></div>
     </div>
   </div>
@@ -15082,13 +15393,12 @@ td.n{color:#d1d5db;text-align:center;width:26px;font-style:italic}td.r{text-alig
     <div class="dr"><span class="dk">Status</span><span class="dv">${sLabel}</span></div>
   </div>
 </div>
-<table><thead><tr><th style="width:26px;text-align:center">#</th><th>Description</th><th class="r" style="width:50px">Qty</th><th class="r" style="width:100px">Rate</th><th class="r" style="width:100px">Amount</th></tr></thead>
+<table><thead><tr><th style="width:26px;text-align:center">#</th><th>Description</th><th class="r" style="width:50px">Qty</th><th class="r" style="width:100px">Rate</th>${extraTh}<th class="r" style="width:100px">Amount</th></tr></thead>
 <tbody>${rows(true)}</tbody></table>
 <div class="bot">
   <div class="nt">${notesText}</div>
   <div>
-    <div class="tr"><span>Subtotal</span><span>${sub}${c}</span></div>
-    ${discRow}${taxRow}
+    ${totRows}
     <div class="rule2"></div>
     <div class="gr"><span>Total</span><span>${tot}${c}</span></div>
   </div>
@@ -15138,13 +15448,12 @@ td.n{color:#94a3b8;text-align:center;width:26px}td.r{text-align:right}td.b{font-
   <div class="gc"><div class="gcl">Status</div><div class="gcv" style="color:${sColor}">${sLabel}</div></div>
   <div class="gc"><div class="gcl">Amount</div><div class="gcv" style="color:${a}">${tot}${c}</div></div>
 </div>
-<table><thead><tr><th style="width:26px;text-align:center">#</th><th>Description</th><th class="r" style="width:50px">Qty</th><th class="r" style="width:100px">Unit Price</th><th class="r" style="width:100px">Total</th></tr></thead>
+<table><thead><tr><th style="width:26px;text-align:center">#</th><th>Description</th><th class="r" style="width:50px">Qty</th><th class="r" style="width:100px">Unit Price</th>${extraTh}<th class="r" style="width:100px">Total</th></tr></thead>
 <tbody>${rows(false)}</tbody></table>
 <div class="bot">
   <div class="nb"><div class="nl">Notes</div><div class="nt">${notesText}</div></div>
   <div class="tc">
-    <div class="tr"><span>Subtotal</span><span>${sub}${c}</span></div>
-    ${discRow}${taxRow}
+    ${totRows}
     <div class="tr gr"><span>Total Due</span><span>${tot}${c}</span></div>
   </div>
 </div>
@@ -15203,13 +15512,12 @@ td.n{color:#94a3b8;text-align:center;width:26px}td.r{text-align:right}td.b{font-
 </div>
 <div class="body">
   <div class="bt"><div class="btl">Billed To</div><div class="btn">${cust}</div></div>
-  <table><thead><tr><th style="width:26px;text-align:center">#</th><th>Description</th><th class="r" style="width:50px">Qty</th><th class="r" style="width:100px">Unit Price</th><th class="r" style="width:100px">Total</th></tr></thead>
+  <table><thead><tr><th style="width:26px;text-align:center">#</th><th>Description</th><th class="r" style="width:50px">Qty</th><th class="r" style="width:100px">Unit Price</th>${extraTh}<th class="r" style="width:100px">Total</th></tr></thead>
   <tbody>${rows(false)}</tbody></table>
   <div class="bot">
     <div class="nb"><div class="nl">Notes</div><div class="nt">${notesText}</div></div>
     <div>
-      <div class="tr"><span>Subtotal</span><span>${sub}${c}</span></div>
-      ${discRow}${taxRow}
+      ${totRows}
       <div class="tr gr"><span>Total Due</span><span>${tot}${c}</span></div>
     </div>
   </div>
@@ -15260,13 +15568,12 @@ td.n{color:#94a3b8;text-align:center;width:26px}td.r{text-align:right}td.b{font-
     <div class="dr"><span class="dk">Status</span><span class="dv" style="color:${sColor}">${sLabel}</span></div>
   </div>
 </div>
-<table><thead><tr><th style="width:26px;text-align:center">#</th><th>Description</th><th class="r" style="width:50px">Qty</th><th class="r" style="width:100px">Unit Price</th><th class="r" style="width:100px">Total</th></tr></thead>
+<table><thead><tr><th style="width:26px;text-align:center">#</th><th>Description</th><th class="r" style="width:50px">Qty</th><th class="r" style="width:100px">Unit Price</th>${extraTh}<th class="r" style="width:100px">Total</th></tr></thead>
 <tbody>${rows(false)}</tbody></table>
 <div class="bot">
   <div class="nb"><div class="nl">Notes</div><div class="nt">${notesText}</div></div>
   <div>
-    <div class="tr"><span>Subtotal</span><span>${sub}${c}</span></div>
-    ${discRow}${taxRow}
+    ${totRows}
     <div class="tr gr"><span>Total Due</span><span>${tot}${c}</span></div>
   </div>
 </div>

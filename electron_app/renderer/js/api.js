@@ -62,6 +62,7 @@ const API = (() => {
     invoice:        (id)        => request('GET',    `/invoices/${id}`),
     createInvoice:  (body)      => request('POST',   '/invoices', body),
     updateInvoice:  (id, body)  => request('PATCH',  `/invoices/${id}`, body),
+    invoiceEnableShare: (id)    => request('POST',   `/invoices/${id}/enable-share`),
     invoiceSent:    (id)        => request('POST',   `/invoices/${id}/mark-sent`),
     invoicePaid:    (id)        => request('POST',   `/invoices/${id}/mark-paid`),
     invoiceOverdue: (id)        => request('POST',   `/invoices/${id}/mark-overdue`),

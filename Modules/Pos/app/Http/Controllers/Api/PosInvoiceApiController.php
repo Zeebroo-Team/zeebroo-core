@@ -94,6 +94,19 @@ class PosInvoiceApiController extends Controller
         ]);
     }
 
+    public function enableShare(Request $request, Invoice $invoice): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        abort_unless((int) $invoice->business_id === (int) $business->id, 404);
+
+        $invoice = $this->invoices->enableShare($invoice);
+
+        return response()->json([
+            'share_token' => $invoice->share_token,
+            'share_url'   => url('/invoice/share/' . $invoice->share_token),
+        ]);
+    }
+
     public function markSent(Request $request, Invoice $invoice): JsonResponse
     {
         $business = $this->businessOrAbort($request);
@@ -183,6 +196,8 @@ class PosInvoiceApiController extends Controller
             'notes'           => $i->notes,
             'customer_id'     => $i->customer_id,
             'is_editable'     => $i->isEditable(),
+            'share_token'     => $i->share_token,
+            'share_url'       => $i->share_token ? url('/invoice/share/' . $i->share_token) : null,
             'items'           => $i->items->map(fn ($item) => [
                 'id'             => (int) $item->id,
                 'product_id'     => $item->product_id,

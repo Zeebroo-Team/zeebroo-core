@@ -274,11 +274,37 @@ class InvoiceController extends Controller
         $mainBranch = $business->branches()->first();
         $currency   = (string) (get_settings('business.currency', '', $business) ?: '');
 
+        // Load the business letterhead (respects lh_links setting)
+        $lhLinks              = (array) get_settings('design_studio.lh_links', ['po', 'grn', 'hr_payslip', 'hr_salary_sheet', 'sales_quotation', 'sales_invoice'], $business);
+        $letterheadCanvasJson = null;
+        if (in_array('sales_invoice', $lhLinks)) {
+            $letterhead = Design::query()
+                ->where('business_id', $business->id)
+                ->where('type', 'letterhead')
+                ->latest('updated_at')
+                ->first();
+
+            if ($letterhead && $letterhead->has_canvas) {
+                try {
+                    $raw     = (string) $letterhead->canvas_json;
+                    $decoded = json_decode($raw, true);
+                    if (is_array($decoded)) {
+                        if (isset($decoded['objects'])) {
+                            $letterheadCanvasJson = $raw;
+                        } elseif (!empty($decoded[0]['json'])) {
+                            $letterheadCanvasJson = $decoded[0]['json'];
+                        }
+                    }
+                } catch (\Throwable) {}
+            }
+        }
+
         return view('sales::invoices.public', [
-            'invoice'    => $invoice,
-            'business'   => $business,
-            'mainBranch' => $mainBranch,
-            'currency'   => $currency,
+            'invoice'             => $invoice,
+            'business'            => $business,
+            'mainBranch'          => $mainBranch,
+            'currency'            => $currency,
+            'letterheadCanvasJson' => $letterheadCanvasJson,
         ]);
     }
 

@@ -96,6 +96,7 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
     Route::post  ('invoices',                          [PosInvoiceApiController::class, 'store']          )->name('invoices.store');
     Route::get   ('invoices/{invoice}',                [PosInvoiceApiController::class, 'show']           )->name('invoices.show');
     Route::patch ('invoices/{invoice}',                [PosInvoiceApiController::class, 'update']         )->name('invoices.update');
+    Route::post  ('invoices/{invoice}/enable-share',    [PosInvoiceApiController::class, 'enableShare']    )->name('invoices.enable-share');
     Route::post  ('invoices/{invoice}/mark-sent',      [PosInvoiceApiController::class, 'markSent']       )->name('invoices.mark-sent');
     Route::post  ('invoices/{invoice}/mark-paid',      [PosInvoiceApiController::class, 'markPaid']       )->name('invoices.mark-paid');
     Route::post  ('invoices/{invoice}/mark-overdue',   [PosInvoiceApiController::class, 'markOverdue']    )->name('invoices.mark-overdue');
