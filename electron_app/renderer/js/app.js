@@ -2892,9 +2892,91 @@ function _invAddLine(desc = '', qty = 1, price = 0) {
     <button class="qt-line-del" title="Remove"><i class="fa fa-xmark"></i></button>`;
 
   // Product + service search typeahead on description
-  const descInp = row.querySelector('.qt-line-desc-input');
-  const sug     = row.querySelector('.qt-product-suggest');
+  const descInp  = row.querySelector('.qt-line-desc-input');
+  const priceInp = row.querySelector('[data-role="price"]');
+  const sug      = row.querySelector('.qt-product-suggest');
   let sugTimer;
+
+  // ── Suggestion item selection with full POS logic ────────────────────────
+  async function _invHandleSugClick(el) {
+    sug.style.display = 'none';
+    sug.innerHTML = '';
+
+    const isProduct = el.dataset.type === 'product';
+
+    if (!isProduct) {
+      // Service: no layers, no warranty — simple fill
+      descInp.value   = el.dataset.name;
+      priceInp.value  = parseFloat(el.dataset.price || 0).toFixed(2);
+      _invRecalc();
+      priceInp.focus();
+      return;
+    }
+
+    // Product: fetch full detail for layers + warranty
+    const res = await API.product(el.dataset.id);
+    const p   = res.status === 200 ? (res.body?.data ?? res.body) : null;
+
+    if (!p) {
+      // Fallback — just fill with what we already have
+      descInp.value  = el.dataset.name;
+      priceInp.value = parseFloat(el.dataset.price || 0).toFixed(2);
+      _invRecalc();
+      return;
+    }
+
+    const layers   = p.layers || [];
+    const inStock  = layers.filter(l => parseFloat(l.quantity_remaining) > 0);
+    const stockMode = state.receiptSettings?.stock_selection_mode ?? 'fifo';
+    let chosenPrice;
+
+    // ── Layer / batch picker (same logic as POS handleProductClick) ──────
+    if (stockMode === 'choose' && layers.length > 1) {
+      const pickable = inStock.length > 0 ? inStock : layers;
+      const layer = await posPickStockLayer(p, pickable);
+      if (!layer) return; // user cancelled
+      chosenPrice = parseFloat(layer.unit_sell_price);
+    } else if (posLayersDifferInPrice(layers)) {
+      // Multiple different prices — always offer a picker so the user can choose
+      const pickable = inStock.length > 0 ? inStock : layers;
+      if (pickable.length > 1) {
+        const layer = await posPickStockLayer(p, pickable);
+        if (!layer) return; // cancelled
+        chosenPrice = parseFloat(layer.unit_sell_price);
+      } else {
+        chosenPrice = parseFloat(pickable[0]?.unit_sell_price ?? p.unit_sell_price ?? 0);
+      }
+    } else if (inStock.length > 0) {
+      chosenPrice = parseFloat(inStock[0].unit_sell_price);
+    } else if (layers.length > 0) {
+      chosenPrice = parseFloat(layers[0].unit_sell_price);
+    } else {
+      chosenPrice = parseFloat(p.discounted_sell_price ?? p.unit_sell_price ?? el.dataset.price ?? 0);
+    }
+
+    // ── Warranty ─────────────────────────────────────────────────────────
+    if (p.has_warranty) {
+      if (p.warranty_duration) {
+        // Preset duration — auto-apply, no popup
+        const wty = _resolveWarrantyFromDuration(p.warranty_duration);
+        row.dataset.warrantyType = wty.type;
+        row.dataset.warrantyDate = wty.date ?? '';
+      } else {
+        // Ask via popup
+        const wty = await _askWarranty(p.name);
+        if (wty === null) return; // cancelled
+        row.dataset.warrantyType = wty.type;
+        row.dataset.warrantyDate = wty.date ?? '';
+      }
+    }
+
+    descInp.value  = p.name;
+    priceInp.value = chosenPrice.toFixed(2);
+    _invRecalc();
+    priceInp.focus();
+  }
+
+  // ── Typeahead input listener ─────────────────────────────────────────────
   descInp.addEventListener('input', () => {
     clearTimeout(sugTimer);
     const q = descInp.value.trim();
@@ -2908,20 +2990,18 @@ function _invAddLine(desc = '', qty = 1, price = 0) {
       const services = svcRes.body?.data  || [];
       if (!products.length && !services.length) { sug.style.display = 'none'; return; }
       sug.innerHTML = [
-        ...products.map(p => `<div class="qt-suggest-item" data-name="${escHtml(p.name)}" data-price="${p.unit_sell_price ?? 0}">
+        ...products.map(p => `<div class="qt-suggest-item" data-type="product" data-id="${p.id}" data-name="${escHtml(p.name)}" data-price="${p.unit_sell_price ?? 0}">
           <i class="fa fa-box" style="opacity:.45;margin-right:5px;font-size:11px"></i>${escHtml(p.name)}<span class="qt-suggest-sku">${p.sku ? escHtml(p.sku) : ''}</span>
         </div>`),
-        ...services.map(s => `<div class="qt-suggest-item" data-name="${escHtml(s.name)}" data-price="${s.price ?? 0}">
+        ...services.map(s => `<div class="qt-suggest-item" data-type="service" data-id="${s.id}" data-name="${escHtml(s.name)}" data-price="${s.price ?? 0}">
           <i class="fa fa-screwdriver-wrench" style="color:#10b981;margin-right:5px;font-size:11px"></i>${escHtml(s.name)}${s.duration_label ? `<span class="qt-suggest-sku">${escHtml(s.duration_label)}</span>` : ''}
         </div>`),
       ].join('');
       sug.style.display = '';
       sug.querySelectorAll('.qt-suggest-item').forEach(el => {
-        el.addEventListener('click', () => {
-          descInp.value = el.dataset.name;
-          row.querySelector('[data-role="price"]').value = parseFloat(el.dataset.price || 0).toFixed(2);
-          sug.style.display = 'none';
-          _invRecalc();
+        el.addEventListener('mousedown', e => {
+          e.preventDefault(); // keep focus so blur doesn't close sug before click fires
+          _invHandleSugClick(el);
         });
       });
     }, 200);
@@ -2929,10 +3009,10 @@ function _invAddLine(desc = '', qty = 1, price = 0) {
   descInp.addEventListener('blur', () => setTimeout(() => { sug.style.display = 'none'; }, 200));
 
   row.querySelector('[data-role="qty"]').addEventListener('input', _invRecalc);
-  row.querySelector('[data-role="price"]').addEventListener('input', _invRecalc);
+  priceInp.addEventListener('input', _invRecalc);
   row.querySelector('.qt-line-del').addEventListener('click', () => { row.remove(); _invRecalc(); });
   $('#sinv-items-body').appendChild(row);
-  // Focus the description field so the user can type immediately
+  // Focus description so the user can type immediately when adding a blank line
   if (!desc) setTimeout(() => descInp.focus(), 40);
   _invRecalc();
 }
@@ -3002,7 +3082,13 @@ $('#sinv-form-save').addEventListener('click', async () => {
   $$('#sinv-items-body .qt-line-row').forEach(row => {
     const qty   = parseFloat(row.querySelector('[data-role="qty"]').value)   || 0;
     const price = parseFloat(row.querySelector('[data-role="price"]').value) || 0;
-    const desc  = (row.querySelector('[data-role="desc"]')?.value || '').trim();
+    let   desc  = (row.querySelector('[data-role="desc"]')?.value || '').trim();
+    // Append warranty info to description if captured during product selection
+    if (row.dataset.warrantyType === 'lifetime') {
+      desc += (desc ? ' ' : '') + '(Warranty: Lifetime)';
+    } else if (row.dataset.warrantyType === 'date' && row.dataset.warrantyDate) {
+      desc += (desc ? ' ' : '') + `(Warranty expires: ${row.dataset.warrantyDate})`;
+    }
     if (qty > 0 || price > 0 || desc) {
       lines.push({ item_type: 'custom', description: desc, quantity: qty, unit_price: price });
     }
