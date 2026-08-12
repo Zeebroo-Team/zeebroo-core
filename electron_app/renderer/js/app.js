@@ -2890,11 +2890,11 @@ function _invAddLine(desc = '', qty = 1, price = 0, discType = 'pct', discValue 
     <input type="number" class="qt-line-input qt-line-num"   value="${qty}" min="0.001" step="any" data-role="qty">
     <input type="number" class="qt-line-input qt-line-price" value="${price > 0 ? price.toFixed(2) : ''}" min="0" step="any" data-role="price" placeholder="0.00">
     <div class="qt-line-disc-wrap">
-      <input type="number" class="qt-line-input qt-line-disc-inp${discValue > 0 ? ' has-val' : ''}"
+      <input type="number" class="qt-line-disc-inp${discValue > 0 ? ' has-val' : ''}"
         value="${discValue > 0 ? discValue : ''}" min="0" ${discType === 'pct' ? 'max="100"' : ''} step="any" data-role="disc" placeholder="0">
       <button class="qt-disc-toggle${discType === 'flat' ? ' is-flat' : ''}" data-role="disc-toggle" title="Toggle % / flat">${discType === 'flat' ? escHtml(cur) : '%'}</button>
     </div>
-    <input type="number" class="qt-line-input qt-line-tax-inp${taxPct > 0 ? ' has-val' : ''}"
+    <input type="number" class="qt-line-tax-inp${taxPct > 0 ? ' has-val' : ''}"
       value="${taxPct > 0 ? taxPct : ''}" min="0" max="100" step="any" data-role="tax" placeholder="0">
     <div class="qt-line-total" id="inv-lt-${id}">0.00</div>
     <button class="qt-line-del" title="Remove"><i class="fa fa-xmark"></i></button>`;
