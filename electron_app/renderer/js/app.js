@@ -2876,13 +2876,28 @@ async function _invPrint(inv) {
 // ── Invoice form ──────────────────────────────────────────────────────────
 let _invLineSeq = 0;
 
-function _invAddLine(desc = '', qty = 1, price = 0, discType = 'pct', discValue = 0, taxPct = 0) {
+function _invAddLine(desc = '', qty = 1, price = 0, discType = 'pct', discValue = 0, taxType = 'pct', taxValue = 0) {
   const id  = ++_invLineSeq;
   const row = document.createElement('div');
   row.className        = 'qt-line-row';
   row.dataset.lineId   = id;
   row.dataset.discType = discType;
+
   const cur = state.currency || '¤';
+  const s   = state.receiptSettings || {};
+  const taxRules = Array.isArray(s.tax_rules)
+    ? s.tax_rules.filter(r => parseFloat(r.value || 0) > 0)
+    : [];
+
+  // Build tax option list; pre-select rule that matches stored taxType+taxValue
+  const taxOpts = taxRules.map((r, ri) => {
+    const lbl = escHtml(r.name) + (r.type === 'flat'
+      ? ' (' + escHtml(cur) + parseFloat(r.value).toFixed(2) + ')'
+      : ' ' + parseFloat(r.value) + '%');
+    const sel = r.type === taxType && String(r.value) === String(taxValue) ? ' selected' : '';
+    return `<option value="${ri}"${sel}>${lbl}</option>`;
+  }).join('');
+
   row.innerHTML = `
     <div class="qt-line-desc">
       <input type="text" class="qt-line-input qt-line-desc-input" placeholder="Description or search product…" value="${escHtml(desc)}" data-role="desc" data-lid="${id}">
@@ -2894,8 +2909,10 @@ function _invAddLine(desc = '', qty = 1, price = 0, discType = 'pct', discValue 
         value="${discValue > 0 ? discValue : ''}" min="0" ${discType === 'pct' ? 'max="100"' : ''} step="any" data-role="disc" placeholder="0">
       <button class="qt-disc-toggle${discType === 'flat' ? ' is-flat' : ''}" data-role="disc-toggle" title="Toggle % / flat">${discType === 'flat' ? escHtml(cur) : '%'}</button>
     </div>
-    <input type="number" class="qt-line-tax-inp${taxPct > 0 ? ' has-val' : ''}"
-      value="${taxPct > 0 ? taxPct : ''}" min="0" max="100" step="any" data-role="tax" placeholder="0">
+    <select class="qt-line-tax-sel${taxValue > 0 ? ' has-tax' : ''}" data-role="tax">
+      <option value="">– None</option>
+      ${taxOpts}
+    </select>
     <div class="qt-line-total" id="inv-lt-${id}">0.00</div>
     <button class="qt-line-del" title="Remove"><i class="fa fa-xmark"></i></button>`;
 
@@ -3055,10 +3072,22 @@ function _invAddLine(desc = '', qty = 1, price = 0, discType = 'pct', discValue 
     _invRecalc();
   });
 
-  // Tax % input
-  const taxInp = row.querySelector('[data-role="tax"]');
-  taxInp.addEventListener('input', () => {
-    taxInp.classList.toggle('has-val', (parseFloat(taxInp.value) || 0) > 0);
+  // Tax rule select — read chosen rule from settings, store type+value on row dataset
+  const taxSel = row.querySelector('[data-role="tax"]');
+  // Seed initial dataset from params
+  if (taxValue > 0) {
+    row.dataset.taxType  = taxType;
+    row.dataset.taxValue = taxValue;
+  }
+  taxSel.addEventListener('change', () => {
+    const rules = Array.isArray(state.receiptSettings?.tax_rules)
+      ? state.receiptSettings.tax_rules.filter(r => parseFloat(r.value || 0) > 0)
+      : [];
+    const ri = taxSel.value === '' ? -1 : parseInt(taxSel.value);
+    const rule = ri >= 0 && rules[ri] ? rules[ri] : null;
+    taxSel.classList.toggle('has-tax', !!rule);
+    row.dataset.taxType  = rule ? rule.type  : 'pct';
+    row.dataset.taxValue = rule ? rule.value : 0;
     _invRecalc();
   });
 
@@ -3082,15 +3111,16 @@ function _invRecalc() {
     const price    = parseFloat(row.querySelector('[data-role="price"]')?.value) || 0;
     const discType = row.dataset.discType || 'pct';
     const discVal  = parseFloat(row.querySelector('[data-role="disc"]')?.value)  || 0;
-    const taxPct   = parseFloat(row.querySelector('[data-role="tax"]')?.value)   || 0;
+    const taxType  = row.dataset.taxType  || 'pct';
+    const taxValue = parseFloat(row.dataset.taxValue) || 0;
 
-    const gross  = qty * price;
+    const gross   = qty * price;
     const discAmt = discType === 'flat'
       ? Math.min(discVal, gross)
       : (gross * discVal / 100);
-    const net    = Math.max(0, gross - discAmt);
-    const taxAmt = net * taxPct / 100;
-    const lt     = Math.round((net + taxAmt) * 100) / 100;
+    const net     = Math.max(0, gross - discAmt);
+    const taxAmt  = taxType === 'flat' ? taxValue : (net * taxValue / 100);
+    const lt      = Math.round((net + taxAmt) * 100) / 100;
 
     const ltEl = document.getElementById(`inv-lt-${row.dataset.lineId}`);
     if (ltEl) ltEl.textContent = lt.toFixed(2);
@@ -3139,12 +3169,14 @@ async function _invOpenForm(existing, prefill = null) {
   if (existing?.items?.length) {
     existing.items.forEach(i => _invAddLine(
       i.description, i.quantity, i.unit_price,
-      i.discount_type || 'pct', i.discount_value || 0, i.tax_pct || 0,
+      i.discount_type || 'pct', i.discount_value || 0,
+      i.tax_type || 'pct', i.tax_pct || 0,
     ));
   } else if (prefill?.items?.length) {
     prefill.items.forEach(i => _invAddLine(
       i.description, i.quantity, i.unit_price,
-      i.discount_type || 'pct', i.discount_value || 0, i.tax_pct || 0,
+      i.discount_type || 'pct', i.discount_value || 0,
+      i.tax_type || 'pct', i.tax_pct || 0,
     ));
   }
   _invRecalc();
@@ -3162,8 +3194,9 @@ $('#sinv-form-save').addEventListener('click', async () => {
     const qty      = parseFloat(row.querySelector('[data-role="qty"]').value)   || 0;
     const price    = parseFloat(row.querySelector('[data-role="price"]').value) || 0;
     const discType = row.dataset.discType || 'pct';
-    const discVal  = parseFloat(row.querySelector('[data-role="disc"]')?.value)  || 0;
-    const taxPct   = parseFloat(row.querySelector('[data-role="tax"]')?.value)   || 0;
+    const discVal  = parseFloat(row.querySelector('[data-role="disc"]')?.value) || 0;
+    const taxType  = row.dataset.taxType  || 'pct';
+    const taxValue = parseFloat(row.dataset.taxValue) || 0;
     let   desc  = (row.querySelector('[data-role="desc"]')?.value || '').trim();
     // Append warranty info to description if captured during product selection
     if (row.dataset.warrantyType === 'lifetime') {
@@ -3179,7 +3212,8 @@ $('#sinv-form-save').addEventListener('click', async () => {
         unit_price:     price,
         discount_type:  discType,
         discount_value: discVal,
-        tax_pct:        taxPct,
+        tax_pct:        taxValue,
+        tax_type:       taxType,
       });
     }
   });

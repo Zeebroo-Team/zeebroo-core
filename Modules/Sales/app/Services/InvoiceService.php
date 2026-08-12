@@ -262,6 +262,7 @@ class InvoiceService
                 'discount_type'   => $item['discount_type'],
                 'discount_value'  => $item['discount_value'],
                 'tax_pct'         => $item['tax_pct'],
+                'tax_type'        => $item['tax_type'],
                 'line_total'      => $item['line_total'],
                 'sort_order'      => $i,
             ]);
@@ -280,14 +281,18 @@ class InvoiceService
             $type      = $item['item_type'] ?? null;
             $discType  = in_array($item['discount_type'] ?? 'pct', ['pct', 'flat']) ? ($item['discount_type'] ?? 'pct') : 'pct';
             $discValue = max(0, (float) ($item['discount_value'] ?? 0));
-            $taxPct    = max(0, min(100, (float) ($item['tax_pct'] ?? 0)));
+            $taxType   = in_array($item['tax_type'] ?? 'pct', ['pct', 'flat']) ? ($item['tax_type'] ?? 'pct') : 'pct';
+            $taxValue  = max(0, (float) ($item['tax_pct'] ?? 0));
 
             $lineGross = $qty * $price;
             $discAmt   = $discType === 'flat'
                 ? min($discValue, $lineGross)
                 : ($lineGross * $discValue / 100);
             $lineNet   = max(0, $lineGross - $discAmt);
-            $taxAmt    = $lineNet * $taxPct / 100;
+            // tax_pct stores the raw rule value; tax_type says whether it's % or flat
+            $taxAmt    = $taxType === 'flat'
+                ? $taxValue
+                : ($lineNet * $taxValue / 100);
             $lineTotal = round($lineNet + $taxAmt, 2);
 
             $normalized[] = [
@@ -298,7 +303,8 @@ class InvoiceService
                 'unit_price'      => $price,
                 'discount_type'   => $discType,
                 'discount_value'  => round($discValue, 2),
-                'tax_pct'         => round($taxPct, 2),
+                'tax_pct'         => round($taxValue, 2),
+                'tax_type'        => $taxType,
                 'line_total'      => $lineTotal,
             ];
         }

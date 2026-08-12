@@ -193,6 +193,7 @@ class PosInvoiceApiController extends Controller
                 'discount_type'  => $item->discount_type ?? 'pct',
                 'discount_value' => round((float) ($item->discount_value ?? 0), 2),
                 'tax_pct'        => round((float) ($item->tax_pct ?? 0), 2),
+                'tax_type'       => $item->tax_type ?? 'pct',
                 'line_total'     => round((float) $item->line_total, 2),
             ])->values()->all(),
         ];
@@ -217,7 +218,8 @@ class PosInvoiceApiController extends Controller
             'items.*.unit_price'      => ['required', 'numeric', 'min:0'],
             'items.*.discount_type'   => ['nullable', 'string', 'in:pct,flat'],
             'items.*.discount_value'  => ['nullable', 'numeric', 'min:0'],
-            'items.*.tax_pct'         => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'items.*.tax_pct'         => ['nullable', 'numeric', 'min:0'],
+            'items.*.tax_type'        => ['nullable', 'string', 'in:pct,flat'],
         ]);
     }
 }

@@ -10944,7 +10944,7 @@ body.dark .bc-main-preview-body { background: #1a1a1a; }
 .qt-col-qty   { width: 72px; text-align: right; }
 .qt-col-price { width: 110px; text-align: right; }
 .qt-col-disc  { width: 106px; text-align: right; }
-.qt-col-tax   { width: 72px; text-align: right; }
+.qt-col-tax   { width: 130px; text-align: right; }
 .qt-col-total { width: 110px; text-align: right; }
 .qt-col-del   { width: 32px; }
 .qt-line-row {
@@ -10986,17 +10986,17 @@ body.dark .bc-main-preview-body { background: #1a1a1a; }
   transition: background .15s, color .15s;
 }
 .qt-disc-toggle:hover, .qt-disc-toggle.is-flat { background: var(--accent); color: #fff; border-color: var(--accent); }
-/* Per-line tax input (standalone fixed width, no qt-line-input cascade) */
-.qt-line-tax-inp {
-  width: 72px; flex-shrink: 0; text-align: right;
-  padding: 5px 8px; font-size: 12px; font-family: inherit;
+/* Per-line tax rule select */
+.qt-line-tax-sel {
+  width: 130px; flex-shrink: 0;
+  padding: 5px 6px; font-size: 12px; font-family: inherit;
   border: 1px solid transparent; border-radius: 5px;
   background: transparent; color: var(--text); outline: none;
-  -moz-appearance: textfield;
+  cursor: pointer; appearance: auto;
 }
-.qt-line-tax-inp:hover  { border-color: var(--border); background: var(--surface2); }
-.qt-line-tax-inp:focus  { border-color: var(--accent); background: var(--surface); }
-.qt-line-tax-inp.has-val { border-color: #10b981; background: color-mix(in srgb,#10b981 6%,transparent); }
+.qt-line-tax-sel:hover  { border-color: var(--border); background: var(--surface2); }
+.qt-line-tax-sel:focus  { border-color: var(--accent); background: var(--surface); }
+.qt-line-tax-sel.has-tax { border-color: #10b981; background: color-mix(in srgb,#10b981 8%,transparent); color: #10b981; }
 .qt-line-total { width: 110px; padding: 6px 8px; font-size: 13px; font-weight: 600; text-align: right; color: var(--text); }
 .qt-line-del { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border: none; background: none; cursor: pointer; color: var(--text-muted); border-radius: 5px; flex-shrink: 0; }
 .qt-line-del:hover { background: color-mix(in srgb,#ef4444 10%,transparent); color:#ef4444; }
