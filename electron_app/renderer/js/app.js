@@ -2883,24 +2883,58 @@ function _invAddLine(desc = '', qty = 1, price = 0) {
   row.dataset.lineId = id;
   row.innerHTML = `
     <div class="qt-line-desc">
-      <input type="text" class="qt-line-input" placeholder="Description" value="${escHtml(desc)}" data-role="desc">
+      <input type="text" class="qt-line-input qt-line-desc-input" placeholder="Description or search product…" value="${escHtml(desc)}" data-role="desc" data-lid="${id}">
+      <div class="qt-product-suggest" id="inv-sug-${id}"></div>
     </div>
     <input type="number" class="qt-line-input qt-line-num"   value="${qty}" min="0.001" step="any" data-role="qty">
-    <input type="number" class="qt-line-input qt-line-price" value="${price.toFixed(2)}" min="0" step="any" data-role="price" placeholder="0.00">
+    <input type="number" class="qt-line-input qt-line-price" value="${price > 0 ? price.toFixed(2) : ''}" min="0" step="any" data-role="price" placeholder="0.00">
     <div class="qt-line-total" id="inv-lt-${id}">0.00</div>
     <button class="qt-line-del" title="Remove"><i class="fa fa-xmark"></i></button>`;
-  const recalc = () => {
-    const q = parseFloat(row.querySelector('[data-role="qty"]').value)   || 0;
-    const p = parseFloat(row.querySelector('[data-role="price"]').value) || 0;
-    const el = $(`#inv-lt-${id}`);
-    if (el) el.textContent = (q * p).toFixed(2);
-    _invRecalc();
-  };
-  row.querySelector('[data-role="qty"]').addEventListener('input', recalc);
-  row.querySelector('[data-role="price"]').addEventListener('input', recalc);
+
+  // Product + service search typeahead on description
+  const descInp = row.querySelector('.qt-line-desc-input');
+  const sug     = row.querySelector('.qt-product-suggest');
+  let sugTimer;
+  descInp.addEventListener('input', () => {
+    clearTimeout(sugTimer);
+    const q = descInp.value.trim();
+    if (q.length < 2) { sug.style.display = 'none'; sug.innerHTML = ''; return; }
+    sugTimer = setTimeout(async () => {
+      const [prodRes, svcRes] = await Promise.all([
+        API.productSearch(q, 6),
+        API.serviceMgmtCatalog(q),
+      ]);
+      const products = prodRes.body?.data || [];
+      const services = svcRes.body?.data  || [];
+      if (!products.length && !services.length) { sug.style.display = 'none'; return; }
+      sug.innerHTML = [
+        ...products.map(p => `<div class="qt-suggest-item" data-name="${escHtml(p.name)}" data-price="${p.unit_sell_price ?? 0}">
+          <i class="fa fa-box" style="opacity:.45;margin-right:5px;font-size:11px"></i>${escHtml(p.name)}<span class="qt-suggest-sku">${p.sku ? escHtml(p.sku) : ''}</span>
+        </div>`),
+        ...services.map(s => `<div class="qt-suggest-item" data-name="${escHtml(s.name)}" data-price="${s.price ?? 0}">
+          <i class="fa fa-screwdriver-wrench" style="color:#10b981;margin-right:5px;font-size:11px"></i>${escHtml(s.name)}${s.duration_label ? `<span class="qt-suggest-sku">${escHtml(s.duration_label)}</span>` : ''}
+        </div>`),
+      ].join('');
+      sug.style.display = '';
+      sug.querySelectorAll('.qt-suggest-item').forEach(el => {
+        el.addEventListener('click', () => {
+          descInp.value = el.dataset.name;
+          row.querySelector('[data-role="price"]').value = parseFloat(el.dataset.price || 0).toFixed(2);
+          sug.style.display = 'none';
+          _invRecalc();
+        });
+      });
+    }, 200);
+  });
+  descInp.addEventListener('blur', () => setTimeout(() => { sug.style.display = 'none'; }, 200));
+
+  row.querySelector('[data-role="qty"]').addEventListener('input', _invRecalc);
+  row.querySelector('[data-role="price"]').addEventListener('input', _invRecalc);
   row.querySelector('.qt-line-del').addEventListener('click', () => { row.remove(); _invRecalc(); });
   $('#sinv-items-body').appendChild(row);
-  recalc();
+  // Focus the description field so the user can type immediately
+  if (!desc) setTimeout(() => descInp.focus(), 40);
+  _invRecalc();
 }
 
 function _invRecalc() {
@@ -2957,39 +2991,8 @@ async function _invOpenForm(existing, prefill = null) {
   _invRecalc();
 }
 
-// ── Invoice Add Product Modal (shares qt-add-overlay) ────────────────────
-function _invOpenAddModal() {
-  $('#qt-add-modal-q').value = '';
-  $('#qt-add-modal-list').innerHTML = '<div class="qt-add-modal-empty"><i class="fa fa-magnifying-glass"></i><p>Type to search products or services</p></div>';
-  $('#qt-add-modal-bottom').style.display = 'none';
-  $('#qt-add-modal-add').style.display    = 'none';
-  $('#qt-add-modal-qty').value   = '1';
-  $('#qt-add-modal-price').value = '';
-  $('#qt-add-modal-disc').value  = '0';
-  $('#qt-add-modal-total').textContent = '0.00';
-  _qtMod.product = null; // reset so quotation bubble handler won't fire in inv mode
-  $('#qt-add-overlay').dataset.invMode = '1';
-  $('#qt-add-overlay').style.display = '';
-  setTimeout(() => $('#qt-add-modal-q').focus(), 60);
-}
 
-// Capture-phase: fires before quotation bubble listener.
-// stopImmediatePropagation() prevents the quotation handler when in inv mode.
-$('#qt-add-modal-add').addEventListener('click', e => {
-  if ($('#qt-add-overlay').dataset.invMode !== '1') return;
-  e.stopImmediatePropagation();
-  if (!_qtMod.product) return;
-  const qty   = parseFloat($('#qt-add-modal-qty').value)   || 1;
-  const price = parseFloat($('#qt-add-modal-price').value) || 0;
-  const disc  = parseFloat($('#qt-add-modal-disc').value)  || 0;
-  const effectivePrice = qty > 0 ? Math.max(0, (qty * price - disc) / qty) : price;
-  _invAddLine(_qtMod.product.name, qty, effectivePrice);
-  $('#qt-add-overlay').dataset.invMode = '';
-  $('#qt-add-overlay').style.display = 'none';
-  _invRecalc();
-}, true);
-
-$('#sinv-add-line').addEventListener('click', () => _invOpenAddModal());
+$('#sinv-add-line').addEventListener('click', () => _invAddLine());
 $('#sinv-f-discount').addEventListener('input', _invRecalc);
 $('#sinv-f-tax').addEventListener('input', _invRecalc);
 
