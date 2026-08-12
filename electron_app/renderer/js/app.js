@@ -2897,7 +2897,8 @@ function _invAddLine(desc = '', qty = 1, price = 0) {
   const sug = document.createElement('div');
   sug.className = 'qt-product-suggest';
   // Override position to fixed so it escapes all scrollable/overflow containers
-  sug.style.cssText = 'position:fixed;z-index:9999;display:none;';
+  // CSS class has display:none + position:absolute + right:0 — all must be overridden inline
+  sug.style.cssText = 'position:fixed!important;z-index:9999;display:none;right:auto!important;';
   document.body.appendChild(sug);
 
   function _sugPosition() {
@@ -2905,8 +2906,10 @@ function _invAddLine(desc = '', qty = 1, price = 0) {
     sug.style.top   = r.bottom + 2 + 'px';
     sug.style.left  = r.left + 'px';
     sug.style.width = r.width + 'px';
+    sug.style.right = 'auto';
   }
-  function _sugShow() { _sugPosition(); sug.style.display = ''; }
+  // Must set display:'block' not '' — empty string falls back to CSS class's display:none
+  function _sugShow() { _sugPosition(); sug.style.display = 'block'; }
   function _sugHide() { sug.style.display = 'none'; sug.innerHTML = ''; }
 
   // Reposition on scroll (close is simpler and avoids stale coordinates)
