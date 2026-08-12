@@ -2884,60 +2884,74 @@ function _invAddLine(desc = '', qty = 1, price = 0) {
   row.innerHTML = `
     <div class="qt-line-desc">
       <input type="text" class="qt-line-input qt-line-desc-input" placeholder="Description or search product…" value="${escHtml(desc)}" data-role="desc" data-lid="${id}">
-      <div class="qt-product-suggest" id="inv-sug-${id}"></div>
     </div>
     <input type="number" class="qt-line-input qt-line-num"   value="${qty}" min="0.001" step="any" data-role="qty">
     <input type="number" class="qt-line-input qt-line-price" value="${price > 0 ? price.toFixed(2) : ''}" min="0" step="any" data-role="price" placeholder="0.00">
     <div class="qt-line-total" id="inv-lt-${id}">0.00</div>
     <button class="qt-line-del" title="Remove"><i class="fa fa-xmark"></i></button>`;
 
-  // Product + service search typeahead on description
   const descInp  = row.querySelector('.qt-line-desc-input');
   const priceInp = row.querySelector('[data-role="price"]');
-  const sug      = row.querySelector('.qt-product-suggest');
+
+  // ── Suggestion portal — appended to body to escape overflow:hidden containers ──
+  const sug = document.createElement('div');
+  sug.className = 'qt-product-suggest';
+  // Override position to fixed so it escapes all scrollable/overflow containers
+  sug.style.cssText = 'position:fixed;z-index:9999;display:none;';
+  document.body.appendChild(sug);
+
+  function _sugPosition() {
+    const r = descInp.getBoundingClientRect();
+    sug.style.top   = r.bottom + 2 + 'px';
+    sug.style.left  = r.left + 'px';
+    sug.style.width = r.width + 'px';
+  }
+  function _sugShow() { _sugPosition(); sug.style.display = ''; }
+  function _sugHide() { sug.style.display = 'none'; sug.innerHTML = ''; }
+
+  // Reposition on scroll (close is simpler and avoids stale coordinates)
+  const _onScroll = () => _sugHide();
+  window.addEventListener('scroll', _onScroll, { passive: true, capture: true });
+
   let sugTimer;
 
-  // ── Suggestion item selection with full POS logic ────────────────────────
+  // ── Full POS product-selection logic on suggestion click ─────────────────
   async function _invHandleSugClick(el) {
-    sug.style.display = 'none';
-    sug.innerHTML = '';
-
+    _sugHide();
     const isProduct = el.dataset.type === 'product';
 
     if (!isProduct) {
-      // Service: no layers, no warranty — simple fill
-      descInp.value   = el.dataset.name;
-      priceInp.value  = parseFloat(el.dataset.price || 0).toFixed(2);
+      // Service: simple fill — no layers or warranty
+      descInp.value  = el.dataset.name;
+      priceInp.value = parseFloat(el.dataset.price || 0).toFixed(2);
       _invRecalc();
       priceInp.focus();
       return;
     }
 
-    // Product: fetch full detail for layers + warranty
+    // Product: fetch full detail for layer-picker + warranty
     const res = await API.product(el.dataset.id);
     const p   = res.status === 200 ? (res.body?.data ?? res.body) : null;
 
     if (!p) {
-      // Fallback — just fill with what we already have
       descInp.value  = el.dataset.name;
       priceInp.value = parseFloat(el.dataset.price || 0).toFixed(2);
       _invRecalc();
       return;
     }
 
-    const layers   = p.layers || [];
-    const inStock  = layers.filter(l => parseFloat(l.quantity_remaining) > 0);
+    const layers    = p.layers || [];
+    const inStock   = layers.filter(l => parseFloat(l.quantity_remaining) > 0);
     const stockMode = state.receiptSettings?.stock_selection_mode ?? 'fifo';
     let chosenPrice;
 
-    // ── Layer / batch picker (same logic as POS handleProductClick) ──────
+    // ── Stock / batch picker (mirrors POS handleProductClick) ────────────
     if (stockMode === 'choose' && layers.length > 1) {
       const pickable = inStock.length > 0 ? inStock : layers;
       const layer = await posPickStockLayer(p, pickable);
-      if (!layer) return; // user cancelled
+      if (!layer) return; // cancelled
       chosenPrice = parseFloat(layer.unit_sell_price);
     } else if (posLayersDifferInPrice(layers)) {
-      // Multiple different prices — always offer a picker so the user can choose
       const pickable = inStock.length > 0 ? inStock : layers;
       if (pickable.length > 1) {
         const layer = await posPickStockLayer(p, pickable);
@@ -2954,15 +2968,13 @@ function _invAddLine(desc = '', qty = 1, price = 0) {
       chosenPrice = parseFloat(p.discounted_sell_price ?? p.unit_sell_price ?? el.dataset.price ?? 0);
     }
 
-    // ── Warranty ─────────────────────────────────────────────────────────
+    // ── Warranty (mirrors POS handleProductClick) ─────────────────────────
     if (p.has_warranty) {
       if (p.warranty_duration) {
-        // Preset duration — auto-apply, no popup
         const wty = _resolveWarrantyFromDuration(p.warranty_duration);
         row.dataset.warrantyType = wty.type;
         row.dataset.warrantyDate = wty.date ?? '';
       } else {
-        // Ask via popup
         const wty = await _askWarranty(p.name);
         if (wty === null) return; // cancelled
         row.dataset.warrantyType = wty.type;
@@ -2976,11 +2988,11 @@ function _invAddLine(desc = '', qty = 1, price = 0) {
     priceInp.focus();
   }
 
-  // ── Typeahead input listener ─────────────────────────────────────────────
+  // ── Typeahead input listener ──────────────────────────────────────────────
   descInp.addEventListener('input', () => {
     clearTimeout(sugTimer);
     const q = descInp.value.trim();
-    if (q.length < 2) { sug.style.display = 'none'; sug.innerHTML = ''; return; }
+    if (q.length < 2) { _sugHide(); return; }
     sugTimer = setTimeout(async () => {
       const [prodRes, svcRes] = await Promise.all([
         API.productSearch(q, 6),
@@ -2988,7 +3000,7 @@ function _invAddLine(desc = '', qty = 1, price = 0) {
       ]);
       const products = prodRes.body?.data || [];
       const services = svcRes.body?.data  || [];
-      if (!products.length && !services.length) { sug.style.display = 'none'; return; }
+      if (!products.length && !services.length) { _sugHide(); return; }
       sug.innerHTML = [
         ...products.map(p => `<div class="qt-suggest-item" data-type="product" data-id="${p.id}" data-name="${escHtml(p.name)}" data-price="${p.unit_sell_price ?? 0}">
           <i class="fa fa-box" style="opacity:.45;margin-right:5px;font-size:11px"></i>${escHtml(p.name)}<span class="qt-suggest-sku">${p.sku ? escHtml(p.sku) : ''}</span>
@@ -2997,22 +3009,29 @@ function _invAddLine(desc = '', qty = 1, price = 0) {
           <i class="fa fa-screwdriver-wrench" style="color:#10b981;margin-right:5px;font-size:11px"></i>${escHtml(s.name)}${s.duration_label ? `<span class="qt-suggest-sku">${escHtml(s.duration_label)}</span>` : ''}
         </div>`),
       ].join('');
-      sug.style.display = '';
+      _sugShow();
       sug.querySelectorAll('.qt-suggest-item').forEach(el => {
         el.addEventListener('mousedown', e => {
-          e.preventDefault(); // keep focus so blur doesn't close sug before click fires
+          e.preventDefault(); // prevent blur firing before mousedown resolves
           _invHandleSugClick(el);
         });
       });
     }, 200);
   });
-  descInp.addEventListener('blur', () => setTimeout(() => { sug.style.display = 'none'; }, 200));
+
+  descInp.addEventListener('blur', () => setTimeout(_sugHide, 150));
 
   row.querySelector('[data-role="qty"]').addEventListener('input', _invRecalc);
   priceInp.addEventListener('input', _invRecalc);
-  row.querySelector('.qt-line-del').addEventListener('click', () => { row.remove(); _invRecalc(); });
+  row.querySelector('.qt-line-del').addEventListener('click', () => {
+    _sugHide();
+    window.removeEventListener('scroll', _onScroll, { capture: true });
+    sug.remove();
+    row.remove();
+    _invRecalc();
+  });
+
   $('#sinv-items-body').appendChild(row);
-  // Focus description so the user can type immediately when adding a blank line
   if (!desc) setTimeout(() => descInp.focus(), 40);
   _invRecalc();
 }
