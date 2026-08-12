@@ -3086,7 +3086,9 @@ function _invAddLine(desc = '', qty = 1, price = 0, discType = 'pct', discValue 
     const ri = taxSel.value === '' ? -1 : parseInt(taxSel.value);
     const rule = ri >= 0 && rules[ri] ? rules[ri] : null;
     taxSel.classList.toggle('has-tax', !!rule);
-    row.dataset.taxType  = rule ? rule.type  : 'pct';
+    // Normalize 'percentage' (POS settings format) → 'pct'
+    const ruleType = rule ? (rule.type === 'percentage' ? 'pct' : rule.type) : 'pct';
+    row.dataset.taxType  = ruleType;
     row.dataset.taxValue = rule ? rule.value : 0;
     _invRecalc();
   });

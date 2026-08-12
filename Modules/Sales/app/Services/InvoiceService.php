@@ -281,7 +281,9 @@ class InvoiceService
             $type      = $item['item_type'] ?? null;
             $discType  = in_array($item['discount_type'] ?? 'pct', ['pct', 'flat']) ? ($item['discount_type'] ?? 'pct') : 'pct';
             $discValue = max(0, (float) ($item['discount_value'] ?? 0));
-            $taxType   = in_array($item['tax_type'] ?? 'pct', ['pct', 'flat']) ? ($item['tax_type'] ?? 'pct') : 'pct';
+            // Normalize 'percentage' (POS settings format) → 'pct'
+            $rawTaxType = $item['tax_type'] ?? 'pct';
+            $taxType    = $rawTaxType === 'percentage' ? 'pct' : (in_array($rawTaxType, ['pct', 'flat']) ? $rawTaxType : 'pct');
             $taxValue  = max(0, (float) ($item['tax_pct'] ?? 0));
 
             $lineGross = $qty * $price;

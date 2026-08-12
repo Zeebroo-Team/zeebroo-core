@@ -219,7 +219,7 @@ class PosInvoiceApiController extends Controller
             'items.*.discount_type'   => ['nullable', 'string', 'in:pct,flat'],
             'items.*.discount_value'  => ['nullable', 'numeric', 'min:0'],
             'items.*.tax_pct'         => ['nullable', 'numeric', 'min:0'],
-            'items.*.tax_type'        => ['nullable', 'string', 'in:pct,flat'],
+            'items.*.tax_type'        => ['nullable', 'string', 'in:pct,flat,percentage'],
         ]);
     }
 }
