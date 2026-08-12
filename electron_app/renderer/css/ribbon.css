@@ -10805,11 +10805,19 @@ body.dark .bc-main-preview-body { background: #1a1a1a; }
 .qt-doc-items .qt-item-n { color: var(--text-muted); font-size: 11px; width: 32px; }
 .qt-doc-items .qt-item-total { font-weight: 700; }
 .qt-doc-totals-wrap { display: flex; justify-content: flex-end; margin-bottom: 4px; }
-.qt-doc-totals { width: 300px; }
-.qt-doc-total-line { display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px; color: var(--text-muted); border-bottom: 1px solid var(--border-light); }
+.qt-doc-totals { width: 320px; }
+.qt-doc-total-line { display: flex; justify-content: space-between; padding: 6px 2px; font-size: 13px; color: var(--text-muted); border-bottom: 1px solid var(--border-light); }
 .qt-doc-total-line:last-child { border-bottom: none; }
 .qt-doc-total-line.grand { font-size: 16px; font-weight: 800; color: var(--text); border-top: 2px solid var(--border); border-bottom: none; margin-top: 4px; padding-top: 10px; }
 .qt-doc-total-line.grand span:last-child { color: var(--accent); }
+/* Colored summary rows */
+.qt-doc-total-line.invd-tot-disc span { color: #ef4444; }
+.qt-doc-total-line.invd-tot-tax  span { color: #10b981; }
+.qt-doc-total-line.invd-tot-sub  { font-weight: 600; color: var(--text); border-top: 1px solid var(--border); padding-top: 8px; margin-top: 2px; }
+/* Per-line disc / tax badges in item table */
+.invd-adj-badge { display: inline-block; padding: 2px 7px; border-radius: 4px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+.invd-disc-badge { background: color-mix(in srgb,#ef4444 10%,transparent); color: #ef4444; }
+.invd-tax-badge  { background: color-mix(in srgb,#10b981 10%,transparent); color: #10b981; }
 .qt-doc-divider { border: none; border-top: 1px solid var(--border-light); margin: 22px 0; }
 .qt-doc-notes-label { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; color: var(--text-muted); margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
 .qt-doc-notes-box { background: var(--surface2); border: 1px solid var(--border-light); border-radius: 8px; padding: 14px 16px; font-size: 13px; color: var(--text); white-space: pre-wrap; line-height: 1.65; }

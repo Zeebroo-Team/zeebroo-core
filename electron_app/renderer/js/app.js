@@ -2464,13 +2464,97 @@ async function _invOpenDetail(id) {
   const dateStr = inv.issue_date ? new Date(inv.issue_date + 'T00:00:00').toLocaleDateString(undefined, { month:'long', day:'numeric', year:'numeric' }) : '—';
   const dueStr  = inv.due_date   ? new Date(inv.due_date   + 'T00:00:00').toLocaleDateString(undefined, { month:'long', day:'numeric', year:'numeric' }) : '—';
 
-  const itemRows = (inv.items || []).map((item, idx) => `<tr>
-    <td class="qt-item-n">${idx + 1}</td>
-    <td>${escHtml(item.description || '—')}</td>
-    <td class="td-r">${parseFloat(item.quantity) % 1 === 0 ? parseInt(item.quantity) : parseFloat(item.quantity).toFixed(2)}</td>
-    <td class="td-r">${parseFloat(item.unit_price).toFixed(2)}${cur}</td>
-    <td class="td-r qt-item-total">${parseFloat(item.line_total).toFixed(2)}${cur}</td>
-  </tr>`).join('');
+  // ── Per-line aggregates ───────────────────────────────────────────────────
+  const taxRulesForLookup = Array.isArray(state.receiptSettings?.tax_rules)
+    ? state.receiptSettings.tax_rules.filter(r => parseFloat(r.value || 0) > 0)
+    : [];
+
+  let rawSubtotal = 0, perLineDiscTotal = 0, perLineTaxTotal = 0;
+  const hasAnyDisc = (inv.items || []).some(i => parseFloat(i.discount_value) > 0);
+  const hasAnyTax  = (inv.items || []).some(i => parseFloat(i.tax_pct) > 0);
+
+  (inv.items || []).forEach(item => {
+    const gross    = parseFloat(item.quantity) * parseFloat(item.unit_price);
+    const discType = item.discount_type || 'pct';
+    const discVal  = parseFloat(item.discount_value) || 0;
+    const discAmt  = discType === 'flat' ? Math.min(discVal, gross) : (gross * discVal / 100);
+    const net      = Math.max(0, gross - discAmt);
+    const taxType  = item.tax_type || 'pct';
+    const taxVal   = parseFloat(item.tax_pct) || 0;
+    const taxAmt   = taxType === 'flat' ? taxVal : (net * taxVal / 100);
+    rawSubtotal      += gross;
+    perLineDiscTotal += discAmt;
+    perLineTaxTotal  += taxAmt;
+  });
+
+  // ── Item table rows ───────────────────────────────────────────────────────
+  const itemRows = (inv.items || []).map((item, idx) => {
+    const qty      = parseFloat(item.quantity);
+    const price    = parseFloat(item.unit_price);
+    const gross    = qty * price;
+    const discType = item.discount_type || 'pct';
+    const discVal  = parseFloat(item.discount_value) || 0;
+    const discAmt  = discType === 'flat' ? Math.min(discVal, gross) : (gross * discVal / 100);
+    const net      = Math.max(0, gross - discAmt);
+    const taxType  = item.tax_type || 'pct';
+    const taxVal   = parseFloat(item.tax_pct) || 0;
+    const taxAmt   = taxType === 'flat' ? taxVal : (net * taxVal / 100);
+
+    // Disc cell
+    let discCell = '—';
+    if (discVal > 0) {
+      const discLabel = discType === 'flat'
+        ? `−${discAmt.toFixed(2)}${cur}`
+        : `${discVal}%`;
+      discCell = `<span class="invd-adj-badge invd-disc-badge">${discLabel}</span>`;
+    }
+
+    // Tax cell — try to match a rule name from settings
+    let taxCell = '—';
+    if (taxVal > 0) {
+      const matchRule = taxRulesForLookup.find(r =>
+        (r.type === taxType || (r.type === 'percentage' && taxType === 'pct')) &&
+        String(r.value) === String(taxVal)
+      );
+      const taxLabel = matchRule
+        ? escHtml(matchRule.name) + (taxType !== 'flat' ? ' ' + taxVal + '%' : '')
+        : (taxType === 'flat' ? taxAmt.toFixed(2) + cur : taxVal + '%');
+      taxCell = `<span class="invd-adj-badge invd-tax-badge">${taxLabel}</span>`;
+    }
+
+    return `<tr>
+      <td class="qt-item-n">${idx + 1}</td>
+      <td>${escHtml(item.description || '—')}</td>
+      <td class="td-r">${qty % 1 === 0 ? parseInt(qty) : qty.toFixed(2)}</td>
+      <td class="td-r">${price.toFixed(2)}${cur}</td>
+      ${hasAnyDisc ? `<td class="td-r">${discCell}</td>` : ''}
+      ${hasAnyTax  ? `<td class="td-r">${taxCell}</td>` : ''}
+      <td class="td-r qt-item-total">${parseFloat(item.line_total).toFixed(2)}${cur}</td>
+    </tr>`;
+  }).join('');
+
+  // ── Summary rows ──────────────────────────────────────────────────────────
+  const hasPerLineAdj  = perLineDiscTotal > 0.001 || perLineTaxTotal > 0.001;
+  const hasHeaderDisc  = parseFloat(inv.discount_amount) > 0;
+  const hasHeaderTax   = parseFloat(inv.tax_amount) > 0;
+
+  let summaryHtml = '';
+  if (hasPerLineAdj) {
+    summaryHtml += `<div class="qt-doc-total-line"><span>Gross Subtotal</span><span>${rawSubtotal.toFixed(2)}${cur}</span></div>`;
+    if (perLineDiscTotal > 0.001)
+      summaryHtml += `<div class="qt-doc-total-line invd-tot-disc"><span>Item Discounts</span><span>−${perLineDiscTotal.toFixed(2)}${cur}</span></div>`;
+    if (perLineTaxTotal > 0.001)
+      summaryHtml += `<div class="qt-doc-total-line invd-tot-tax"><span>Item Taxes</span><span>+${perLineTaxTotal.toFixed(2)}${cur}</span></div>`;
+    if (hasHeaderDisc || hasHeaderTax)
+      summaryHtml += `<div class="qt-doc-total-line invd-tot-sub"><span>Line Subtotal</span><span>${parseFloat(inv.subtotal).toFixed(2)}${cur}</span></div>`;
+  } else {
+    summaryHtml += `<div class="qt-doc-total-line"><span>Subtotal</span><span>${parseFloat(inv.subtotal).toFixed(2)}${cur}</span></div>`;
+  }
+  if (hasHeaderDisc)
+    summaryHtml += `<div class="qt-doc-total-line invd-tot-disc"><span>Discount</span><span>−${parseFloat(inv.discount_amount).toFixed(2)}${cur}</span></div>`;
+  if (hasHeaderTax)
+    summaryHtml += `<div class="qt-doc-total-line invd-tot-tax"><span>Tax</span><span>+${parseFloat(inv.tax_amount).toFixed(2)}${cur}</span></div>`;
+  summaryHtml += `<div class="qt-doc-total-line grand"><span>Total</span><span>${parseFloat(inv.total).toFixed(2)}${cur}</span></div>`;
 
   const body = `<div class="invd-layout">
     <div class="invd-main">
@@ -2498,23 +2582,20 @@ async function _invOpenDetail(id) {
           <div class="qt-doc-items-wrap">
             <table class="qt-doc-items">
               <thead><tr>
-                <th style="width:32px">#</th>
+                <th style="width:28px">#</th>
                 <th>Description</th>
-                <th class="td-r" style="width:64px">Qty</th>
-                <th class="td-r" style="width:120px">Unit Price</th>
-                <th class="td-r" style="width:120px">Total</th>
+                <th class="td-r" style="width:56px">Qty</th>
+                <th class="td-r" style="width:100px">Unit Price</th>
+                ${hasAnyDisc ? `<th class="td-r" style="width:90px">Disc</th>` : ''}
+                ${hasAnyTax  ? `<th class="td-r" style="width:110px">Tax</th>` : ''}
+                <th class="td-r" style="width:100px">Total</th>
               </tr></thead>
               <tbody>${itemRows}</tbody>
             </table>
           </div>
 
           <div class="qt-doc-totals-wrap">
-            <div class="qt-doc-totals">
-              <div class="qt-doc-total-line"><span>Subtotal</span><span>${parseFloat(inv.subtotal).toFixed(2)}${cur}</span></div>
-              ${parseFloat(inv.discount_amount) > 0 ? `<div class="qt-doc-total-line"><span>Discount</span><span>-${parseFloat(inv.discount_amount).toFixed(2)}${cur}</span></div>` : ''}
-              ${parseFloat(inv.tax_amount) > 0      ? `<div class="qt-doc-total-line"><span>Tax</span><span>+${parseFloat(inv.tax_amount).toFixed(2)}${cur}</span></div>` : ''}
-              <div class="qt-doc-total-line grand"><span>Total</span><span>${parseFloat(inv.total).toFixed(2)}${cur}</span></div>
-            </div>
+            <div class="qt-doc-totals">${summaryHtml}</div>
           </div>
 
           ${inv.notes ? `<hr class="qt-doc-divider">
