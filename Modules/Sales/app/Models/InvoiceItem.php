@@ -16,14 +16,19 @@ class InvoiceItem extends Model
         'description',
         'quantity',
         'unit_price',
+        'discount_type',
+        'discount_value',
+        'tax_pct',
         'line_total',
         'sort_order',
     ];
 
     protected $casts = [
-        'quantity'   => 'decimal:3',
-        'unit_price' => 'decimal:2',
-        'line_total' => 'decimal:2',
+        'quantity'       => 'decimal:3',
+        'unit_price'     => 'decimal:2',
+        'discount_value' => 'decimal:2',
+        'tax_pct'        => 'decimal:2',
+        'line_total'     => 'decimal:2',
     ];
 
     public function invoice(): BelongsTo

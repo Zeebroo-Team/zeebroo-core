@@ -184,13 +184,16 @@ class PosInvoiceApiController extends Controller
             'customer_id'     => $i->customer_id,
             'is_editable'     => $i->isEditable(),
             'items'           => $i->items->map(fn ($item) => [
-                'id'          => (int) $item->id,
-                'product_id'  => $item->product_id,
-                'item_type'   => $item->product_id ? 'product' : ($item->service_item_id ? 'service' : 'custom'),
-                'description' => $item->description,
-                'quantity'    => round((float) $item->quantity, 3),
-                'unit_price'  => round((float) $item->unit_price, 2),
-                'line_total'  => round((float) $item->line_total, 2),
+                'id'             => (int) $item->id,
+                'product_id'     => $item->product_id,
+                'item_type'      => $item->product_id ? 'product' : ($item->service_item_id ? 'service' : 'custom'),
+                'description'    => $item->description,
+                'quantity'       => round((float) $item->quantity, 3),
+                'unit_price'     => round((float) $item->unit_price, 2),
+                'discount_type'  => $item->discount_type ?? 'pct',
+                'discount_value' => round((float) ($item->discount_value ?? 0), 2),
+                'tax_pct'        => round((float) ($item->tax_pct ?? 0), 2),
+                'line_total'     => round((float) $item->line_total, 2),
             ])->values()->all(),
         ];
     }
@@ -212,6 +215,9 @@ class PosInvoiceApiController extends Controller
             'items.*.description'     => ['nullable', 'string', 'max:255'],
             'items.*.quantity'        => ['required', 'numeric', 'min:0.001'],
             'items.*.unit_price'      => ['required', 'numeric', 'min:0'],
+            'items.*.discount_type'   => ['nullable', 'string', 'in:pct,flat'],
+            'items.*.discount_value'  => ['nullable', 'numeric', 'min:0'],
+            'items.*.tax_pct'         => ['nullable', 'numeric', 'min:0', 'max:100'],
         ]);
     }
 }

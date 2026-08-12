@@ -259,6 +259,9 @@ class InvoiceService
                 'description'     => $item['description'],
                 'quantity'        => $item['quantity'],
                 'unit_price'      => $item['unit_price'],
+                'discount_type'   => $item['discount_type'],
+                'discount_value'  => $item['discount_value'],
+                'tax_pct'         => $item['tax_pct'],
                 'line_total'      => $item['line_total'],
                 'sort_order'      => $i,
             ]);
@@ -274,14 +277,29 @@ class InvoiceService
             if ($qty <= 0 && $price <= 0 && empty($item['description'])) {
                 continue;
             }
-            $type = $item['item_type'] ?? null;
+            $type      = $item['item_type'] ?? null;
+            $discType  = in_array($item['discount_type'] ?? 'pct', ['pct', 'flat']) ? ($item['discount_type'] ?? 'pct') : 'pct';
+            $discValue = max(0, (float) ($item['discount_value'] ?? 0));
+            $taxPct    = max(0, min(100, (float) ($item['tax_pct'] ?? 0)));
+
+            $lineGross = $qty * $price;
+            $discAmt   = $discType === 'flat'
+                ? min($discValue, $lineGross)
+                : ($lineGross * $discValue / 100);
+            $lineNet   = max(0, $lineGross - $discAmt);
+            $taxAmt    = $lineNet * $taxPct / 100;
+            $lineTotal = round($lineNet + $taxAmt, 2);
+
             $normalized[] = [
                 'product_id'      => $type === 'product' ? $this->nullableInt($item['product_id'] ?? null) : null,
                 'service_item_id' => $type === 'service' ? $this->nullableInt($item['service_item_id'] ?? null) : null,
                 'description'     => trim((string) ($item['description'] ?? '')),
                 'quantity'        => $qty,
                 'unit_price'      => $price,
-                'line_total'      => round($qty * $price, 2),
+                'discount_type'   => $discType,
+                'discount_value'  => round($discValue, 2),
+                'tax_pct'         => round($taxPct, 2),
+                'line_total'      => $lineTotal,
             ];
         }
 
@@ -291,7 +309,9 @@ class InvoiceService
     private function recalculateTotals(Invoice $invoice, array $data): void
     {
         $invoice->load('items');
-        $subtotal = $invoice->items->sum('line_total');
+        // Subtotal is the sum of line_totals; each line_total already includes
+        // per-line discount and tax, so we add any header-level adjustments on top.
+        $subtotal = (float) $invoice->items->sum('line_total');
 
         $discountAmount = max(0, (float) ($data['discount_amount'] ?? 0));
         $taxAmount      = max(0, (float) ($data['tax_amount'] ?? 0));
