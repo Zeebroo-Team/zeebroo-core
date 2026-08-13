@@ -89,6 +89,9 @@ tbody td.right{text-align:right;}
             @if($invoice->reference)
                 <p>Ref: <strong>{{ $invoice->reference }}</strong></p>
             @endif
+            @if($invoice->payment_method)
+                <p>Payment method: <strong>{{ $invoice->paymentMethodLabel() }}</strong></p>
+            @endif
             <p style="margin-top:6px;">
                 <span style="display:inline-block;padding:2px 10px;border-radius:999px;font-size:11px;font-weight:700;
                     background:color-mix(in srgb,{{ $invoice->statusColor() }} 15%,#fff);

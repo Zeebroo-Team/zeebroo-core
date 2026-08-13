@@ -42,6 +42,11 @@
             @if($invoice->reference)
                 <p class="muted" style="margin:4px 0 0;font-size:12px;">Ref: {{ $invoice->reference }}</p>
             @endif
+            @if($invoice->payment_method)
+                <p class="muted" style="margin:4px 0 0;font-size:12px;">
+                    <i class="fa fa-credit-card" style="margin-right:4px;"></i>{{ $invoice->paymentMethodLabel() }}
+                </p>
+            @endif
             <span class="inv-status inv-status--{{ $invoice->status }}" style="margin-top:8px;display:inline-block;">
                 {{ $invoice->statusLabel() }}
             </span>

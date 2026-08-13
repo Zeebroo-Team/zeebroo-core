@@ -70,6 +70,7 @@ class InvoiceService
                 'due_date'        => filled($data['due_date'] ?? '') ? $data['due_date'] : null,
                 'status'          => Invoice::STATUS_DRAFT,
                 'notes'           => filled($data['notes'] ?? '') ? $data['notes'] : null,
+                'payment_method'  => filled($data['payment_method'] ?? '') ? $data['payment_method'] : null,
                 'subtotal'        => 0,
                 'discount_amount' => 0,
                 'tax_amount'      => 0,
@@ -100,8 +101,9 @@ class InvoiceService
                 'customer_id' => $this->nullableInt($data['customer_id'] ?? null),
                 'reference'   => filled($data['reference'] ?? '') ? $data['reference'] : null,
                 'issue_date'  => $data['issue_date'],
-                'due_date'    => filled($data['due_date'] ?? '') ? $data['due_date'] : null,
-                'notes'       => filled($data['notes'] ?? '') ? $data['notes'] : null,
+                'due_date'       => filled($data['due_date'] ?? '') ? $data['due_date'] : null,
+                'notes'          => filled($data['notes'] ?? '') ? $data['notes'] : null,
+                'payment_method' => filled($data['payment_method'] ?? '') ? $data['payment_method'] : null,
             ]);
 
             $this->syncItems($invoice, $items);

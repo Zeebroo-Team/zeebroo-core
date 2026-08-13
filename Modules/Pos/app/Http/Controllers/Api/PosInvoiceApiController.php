@@ -171,18 +171,20 @@ class PosInvoiceApiController extends Controller
     private function formatListItem(Invoice $i): array
     {
         return [
-            'id'             => (int) $i->id,
-            'invoice_number' => $i->invoice_number,
-            'status'         => $i->status,
-            'status_label'   => $i->statusLabel(),
-            'status_color'   => $i->statusColor(),
-            'customer_name'  => $i->customer?->name,
-            'reference'      => $i->reference,
-            'issue_date'     => $i->issue_date?->toDateString(),
-            'due_date'       => $i->due_date?->toDateString(),
-            'is_overdue'     => $i->isPaymentDue(),
-            'total'          => round((float) $i->total, 2),
-            'proposal_count' => (int) ($i->proposal_count ?? 0),
+            'id'                   => (int) $i->id,
+            'invoice_number'       => $i->invoice_number,
+            'status'               => $i->status,
+            'status_label'         => $i->statusLabel(),
+            'status_color'         => $i->statusColor(),
+            'customer_name'        => $i->customer?->name,
+            'reference'            => $i->reference,
+            'issue_date'           => $i->issue_date?->toDateString(),
+            'due_date'             => $i->due_date?->toDateString(),
+            'is_overdue'           => $i->isPaymentDue(),
+            'total'                => round((float) $i->total, 2),
+            'payment_method'       => $i->payment_method,
+            'payment_method_label' => $i->paymentMethodLabel(),
+            'proposal_count'       => (int) ($i->proposal_count ?? 0),
         ];
     }
 
@@ -194,6 +196,7 @@ class PosInvoiceApiController extends Controller
             'discount_amount' => round((float) $i->discount_amount, 2),
             'tax_amount'      => round((float) $i->tax_amount, 2),
             'notes'           => $i->notes,
+            'payment_method'  => $i->payment_method,
             'customer_id'     => $i->customer_id,
             'is_editable'     => $i->isEditable(),
             'share_token'     => $i->share_token,
@@ -222,6 +225,7 @@ class PosInvoiceApiController extends Controller
             'issue_date'              => ['required', 'date'],
             'due_date'                => ['nullable', 'date'],
             'notes'                   => ['nullable', 'string', 'max:5000'],
+            'payment_method'          => ['nullable', 'string', Rule::in(array_keys(Invoice::PAYMENT_METHODS))],
             'discount_amount'         => ['nullable', 'numeric', 'min:0'],
             'tax_amount'              => ['nullable', 'numeric', 'min:0'],
             'items'                   => ['required', 'array', 'min:1'],

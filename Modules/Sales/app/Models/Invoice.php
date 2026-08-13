@@ -17,6 +17,13 @@ class Invoice extends Model
     const STATUS_OVERDUE   = 'overdue';
     const STATUS_CANCELLED = 'cancelled';
 
+    const PAYMENT_METHODS = [
+        'bank_transfer'   => 'Bank Transfer',
+        'credit_payment'  => 'Credit Payment',
+        'cash'            => 'Cash',
+        'card'            => 'Card',
+    ];
+
     protected $fillable = [
         'business_id',
         'branch_id',
@@ -28,6 +35,7 @@ class Invoice extends Model
         'status',
         'share_token',
         'notes',
+        'payment_method',
         'subtotal',
         'discount_amount',
         'tax_amount',
@@ -95,6 +103,11 @@ class Invoice extends Model
             self::STATUS_CANCELLED => 'Cancelled',
             default                => ucfirst($this->status),
         };
+    }
+
+    public function paymentMethodLabel(): string
+    {
+        return self::PAYMENT_METHODS[$this->payment_method ?? ''] ?? '';
     }
 
     public function statusColor(): string

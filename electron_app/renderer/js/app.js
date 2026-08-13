@@ -2621,6 +2621,11 @@ async function _invOpenDetail(id) {
             <div class="invd-ms-lbl">Due Date</div>
             <div class="invd-ms-val">${dueStr}</div>
           </div>
+          ${inv.payment_method_label ? `<div class="invd-ms-div"></div>
+          <div class="invd-ms-cell">
+            <div class="invd-ms-lbl">Payment Method</div>
+            <div class="invd-ms-val">${escHtml(inv.payment_method_label)}</div>
+          </div>` : ''}
           <div class="invd-ms-grow"></div>
           <div class="invd-ms-cell invd-ms-amt-cell">
             <div class="invd-ms-lbl">Amount Due</div>
@@ -3478,6 +3483,7 @@ async function _invOpenForm(existing, prefill = null) {
   $('#sinv-grand-total').textContent   = '0.00';
   $('#sinv-f-date').value              = existing?.issue_date || new Date().toISOString().slice(0, 10);
   $('#sinv-f-due').value               = existing?.due_date   || '';
+  $('#sinv-f-payment').value           = existing?.payment_method || '';
 
   if (existing?.discount_amount) $('#sinv-f-discount').value = existing.discount_amount;
   if (existing?.tax_amount)      $('#sinv-f-tax').value      = existing.tax_amount;
@@ -3565,6 +3571,7 @@ $('#sinv-form-save').addEventListener('click', async () => {
     issue_date:      $('#sinv-f-date').value,
     due_date:        $('#sinv-f-due').value            || null,
     notes:           $('#sinv-f-notes').value.trim()   || null,
+    payment_method:  $('#sinv-f-payment').value        || null,
     discount_amount: parseFloat($('#sinv-f-discount').value) || 0,
     tax_amount:      parseFloat($('#sinv-f-tax').value)      || 0,
     items:           lines,

@@ -395,6 +395,7 @@ class InvoiceController extends Controller
             'issue_date'           => ['required', 'date'],
             'due_date'             => ['nullable', 'date', 'after_or_equal:issue_date'],
             'notes'                => ['nullable', 'string', 'max:5000'],
+            'payment_method'       => ['nullable', 'string', Rule::in(array_keys(\Modules\Sales\Models\Invoice::PAYMENT_METHODS))],
             'discount_amount'      => ['nullable', 'numeric', 'min:0', 'max:9999999'],
             'tax_amount'           => ['nullable', 'numeric', 'min:0', 'max:9999999'],
             'items'                => ['required', 'array', 'min:1'],
