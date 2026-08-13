@@ -15,6 +15,7 @@ use Modules\HRManagement\Http\Controllers\HrPayrollController;
 
 Route::get('hr-portal/login', [HrEmployeePortalController::class, 'showLogin'])->name('hr.portal.login');
 Route::post('hr-portal/login', [HrEmployeePortalController::class, 'login'])->name('hr.portal.login.submit');
+Route::get('hr-portal/auth/google', [HrEmployeePortalController::class, 'redirectToGoogle'])->name('hr.portal.auth.google.redirect');
 
 Route::middleware('auth')->group(function (): void {
     Route::get('hr-portal', [HrEmployeePortalController::class, 'dashboard'])->name('hr.portal.dashboard');

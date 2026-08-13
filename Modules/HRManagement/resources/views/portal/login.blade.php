@@ -39,7 +39,7 @@
         </form>
         @if(! empty($googleAuthConfigured))
             <div class="auth-divider" role="presentation"><span>{{ __('Or continue with') }}</span></div>
-            <a class="auth-oauth" href="{{ route('auth.google.redirect') }}">
+            <a class="auth-oauth" href="{{ route('hr.portal.auth.google.redirect') }}">
                 <i class="fa-brands fa-google" aria-hidden="true"></i>{{ __('Continue with Google') }}
             </a>
         @endif

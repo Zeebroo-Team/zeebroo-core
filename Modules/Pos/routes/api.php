@@ -273,7 +273,8 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
     Route::get('design-studio/proposals/{group}/pages',           [\Modules\Pos\Http\Controllers\Api\PosDesignStudioApiController::class, 'proposalPages'])->name('design-studio.proposals.pages');
     Route::delete('design-studio/proposals/{group}',              [\Modules\Pos\Http\Controllers\Api\PosDesignStudioApiController::class, 'destroyProposal'])->name('design-studio.proposals.destroy');
     Route::post('design-studio/proposals/{group}/link-invoice',   [\Modules\Pos\Http\Controllers\Api\PosDesignStudioApiController::class, 'linkProposalToInvoice'])->name('design-studio.proposals.link-invoice');
-    Route::post('design-studio/ai-chat',             [\Modules\Pos\Http\Controllers\Api\DesignAiChatApiController::class, 'chat'])->name('design-studio.ai-chat');
+    Route::post('design-studio/ai-chat',                                  [\Modules\Pos\Http\Controllers\Api\DesignAiChatApiController::class, 'chat'])->name('design-studio.ai-chat');
+    Route::get ('design-studio/ai-image-job/{jobId}',                    [\Modules\Pos\Http\Controllers\Api\DesignAiChatApiController::class, 'imageJobStatus'])->name('design-studio.ai-image-job');
 
     Route::get  ('service/requests',                           [\Modules\Pos\Http\Controllers\Api\PosServiceApiController::class, 'requests'])->name('service.requests.index');
     Route::post ('service/requests',                           [\Modules\Pos\Http\Controllers\Api\PosServiceApiController::class, 'storeRequest'])->name('service.requests.store');

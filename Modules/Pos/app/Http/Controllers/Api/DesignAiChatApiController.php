@@ -5,7 +5,11 @@ namespace Modules\Pos\Http\Controllers\Api;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
+use Modules\Pos\Jobs\GenerateDesignImageJob;
 
 class DesignAiChatApiController extends Controller
 {
@@ -40,6 +44,19 @@ CRITICAL RULES — VIOLATION BREAKS THE APP:
 {"type":"set_fill","fill":"#ef4444"}
 {"type":"set_text_props","fontSize":24,"fontWeight":"bold","fill":"#1e293b","fontFamily":"Inter"}
 {"type":"bring_front"} {"type":"send_back"} {"type":"delete_selected"} {"type":"zoom_fit"}
+
+{"type":"transform_text","scope":"all","transform":"title_case"}
+  Bulk-renames every text layer on the canvas. Use whenever the user asks to change
+  capitalisation, rename products/labels, or reformat all text at once.
+  scope     → "all" (every text object) | "selected" (active object only)
+  transform → "capitalize"    first letter of entire string uppercase   "hello world" → "Hello world"
+            | "title_case"   first letter of EACH word uppercase        "hello world" → "Hello World"
+            | "upper_first_2" first TWO characters uppercase            "hello world" → "HEllo world"
+            | "uppercase"    entire string uppercase
+            | "lowercase"    entire string lowercase
+            | "sentence_case" first letter up, rest lowercase
+  Trigger phrases: "first letter capital", "capitalize all", "title case", "rename products",
+                   "first 2 letters capital", "make uppercase", "all caps", "lowercase everything"
 
 ━━━ GEOMETRY NOTES ━━━
 - add_circle: "left" and "top" are the LEFT and TOP edges of the bounding box (not the centre).
@@ -258,12 +275,86 @@ Triggers: company profile, profile cover, report cover, brochure cover, annual r
 
 ━━━ FOR SIMPLE / SHORT REQUESTS ━━━
 Use 1–5 commands. Pick a palette that matches the mood. Reply text: 1–2 friendly sentences.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+IMAGE-BACKED DESIGNS  (real photos, product images, scenic backgrounds)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+When the request contains any of these:
+  • Real-world locations / scenes → beach, ocean, mountain, city, forest, sunset, sky, restaurant interior, office, market, park, night scene
+  • Product / object photos      → drink, food, coffee, product, shoe, bag, phone, car, furniture, merchandise, bottle
+  • Explicit photo request        → "show image of", "add photo of", "with a picture of", "real photo"
+
+…include an "image_prompts" array in your JSON response AND keep ALL shape/text commands in "commands".
+
+image_prompts item schema:
+{
+  "id":         "bg" | "obj1" | "obj2" …  (unique per image)
+  "prompt":     English phrase for Gemini image generation (craft carefully)
+  "role":       "background" | "object"
+  "aspect":     "landscape" | "portrait" | "square"
+  // For "object" role ONLY:
+  "left_pct":   0.0–1.0   ← fraction of canvas width for left edge
+  "top_pct":    0.0–1.0   ← fraction of canvas height for top edge
+  "height_pct": 0.0–1.0   ← image height as fraction of canvas height
+}
+
+CRITICAL RULES:
+1. "commands" → shapes and text ONLY — never add any image commands there
+2. Background image fills the whole canvas; it is placed behind everything
+3. Position text on the OPPOSITE side from the object image (object right → text left)
+4. Text fills must contrast with the image (white + shadow on photos; #1e293b on light objects)
+5. For OBJECT images: always end the prompt with ", isolated object, solid bright lime-green background (#00FF00), no shadows on the background, clean studio lighting, product photography"
+   The client automatically removes the green background — do NOT write "transparent background" or "PNG format".
+6. ALWAYS append to background prompts: ", photorealistic, no text overlays, vibrant, professional marketing photo"
+7. Object sizing: height_pct controls the image height; the image width is proportional.
+   Keep height_pct ≤ 0.75 and ensure left_pct + estimated_width_pct ≤ 0.98 (stay within canvas).
+   For a square object image at height_pct=0.65: estimated_width_pct ≈ 0.65*(canvas_height/canvas_width).
+   When in doubt, use height_pct=0.60 and left_pct=0.52 for right-side objects.
+8. Choose "aspect" for background to match canvas shape:
+   • canvas_width > canvas_height × 1.2  → "landscape"
+   • canvas_height > canvas_width × 1.2  → "portrait"
+   • Otherwise                            → "square"
+9. Text coordinates are in canvas pixels (canvas_width × canvas_height space).
+   Keep all text left + estimated_text_width < canvas_width − 40.
+
+EXAMPLE — "beach background, cool drink, MARINO 20% OFF This weekend" on a 1080×1080 canvas:
+{
+  "reply": "Generating your beach promo — I'll fetch the images now!",
+  "commands": [
+    {"type":"add_text","text":"MARINO","fontSize":90,"fontWeight":"900","fill":"#FFFFFF","fontFamily":"Montserrat","left":50,"top":200,"shadow":{"color":"rgba(0,0,0,0.55)","blur":22,"offsetX":0,"offsetY":5}},
+    {"type":"add_text","text":"20% OFF","fontSize":60,"fontWeight":"800","fill":"#FF9900","fontFamily":"Montserrat","left":50,"top":318,"shadow":{"color":"rgba(0,0,0,0.45)","blur":18,"offsetX":0,"offsetY":4}},
+    {"type":"add_text","text":"This Weekend","fontSize":32,"fontWeight":"400","fill":"#FFFFFF","fontFamily":"Inter","left":50,"top":405,"shadow":{"color":"rgba(0,0,0,0.35)","blur":12,"offsetX":0,"offsetY":3}}
+  ],
+  "image_prompts": [
+    {
+      "id": "bg",
+      "prompt": "tropical beach with turquoise waves and golden sand, sunny day, aerial view, photorealistic, no text overlays, vibrant, professional marketing photo",
+      "role": "background",
+      "aspect": "square"
+    },
+    {
+      "id": "obj1",
+      "prompt": "cold refreshing cocktail drink with ice and lime garnish, isolated object, solid bright lime-green background (#00FF00), no shadows on the background, clean studio lighting, product photography",
+      "role": "object",
+      "left_pct": 0.52,
+      "top_pct": 0.08,
+      "height_pct": 0.60
+    }
+  ]
+}
 PROMPT;
 
     private const MODELS = [
         'gemini-2.5-flash',
         'gemini-2.5-pro',
         'gemini-2.5-flash-lite-preview-06-17',
+    ];
+
+    /** Models that support native image generation via responseModalities */
+    private const IMAGE_MODELS = [
+        'gemini-2.0-flash-preview-image-generation',
+        'gemini-2.0-flash-exp',
     ];
 
     // 8 colour palettes: header · arc · watermark-light-1 · watermark-light-2 · divider · contact-text
@@ -657,7 +748,7 @@ PROMPT;
         $payload = [
             'systemInstruction' => ['parts' => [['text' => $systemPrompt]]],
             'contents'          => [['role' => 'user', 'parts' => [['text' => $request->input('message')]]]],
-            'generationConfig'  => ['maxOutputTokens' => 4096, 'temperature' => 0.65],
+            'generationConfig'  => ['temperature' => 0.65],
         ];
 
         try {
@@ -721,10 +812,52 @@ PROMPT;
                         $safeCommands[] = $cmd;
                     }
 
-                    return response()->json([
+                    $result = [
                         'reply'    => trim($parsed['reply']),
                         'commands' => $safeCommands,
-                    ]);
+                    ];
+
+                    // Dispatch a background job for each image prompt; return job IDs for client polling
+                    if (!empty($parsed['image_prompts']) && is_array($parsed['image_prompts'])) {
+                        $imageJobs = [];
+
+                        foreach ($parsed['image_prompts'] as $ip) {
+                            if (!isset($ip['id'], $ip['prompt'], $ip['role'])
+                                || !is_string($ip['prompt'])
+                                || !in_array($ip['role'], ['background', 'object'], true)) {
+                                continue;
+                            }
+
+                            $jobId = (string) Str::uuid();
+
+                            // Seed the cache entry so the poller sees 'pending' immediately
+                            Cache::put(
+                                GenerateDesignImageJob::cacheKey($jobId),
+                                ['status' => 'pending', 'path' => null, 'error' => null],
+                                now()->addHours(2),
+                            );
+
+                            GenerateDesignImageJob::dispatch($jobId, $ip['prompt'], $ip['aspect'] ?? 'square', $apiKey);
+
+                            $imageJobs[] = array_filter([
+                                'job_id'     => $jobId,
+                                'role'       => $ip['role'],
+                                // Object images are generated with a lime-green background;
+                                // chroma_key:true tells the Electron client to strip it.
+                                // Use ?: null so background jobs omit this key after array_filter.
+                                'chroma_key' => ($ip['role'] === 'object') ?: null,
+                                'left_pct'   => $ip['left_pct']   ?? null,
+                                'top_pct'    => $ip['top_pct']    ?? null,
+                                'height_pct' => $ip['height_pct'] ?? null,
+                            ], fn ($v) => $v !== null);
+                        }
+
+                        if (!empty($imageJobs)) {
+                            $result['image_jobs'] = array_values($imageJobs);
+                        }
+                    }
+
+                    return response()->json($result);
                 }
 
                 \Log::warning('Gemini AI: JSON parse failed', [
@@ -741,5 +874,57 @@ PROMPT;
             'reply'    => "I'm having trouble reaching the AI right now. Please try again.",
             'commands' => [],
         ], 200);
+    }
+
+    // ── Image job polling endpoint ─────────────────────────────────────────────
+
+    /**
+     * Poll the status of a queued image-generation job.
+     *
+     * GET /pos-api/design-studio/ai-image-job/{jobId}
+     *
+     * Returns:
+     *   { status: 'pending' | 'processing' | 'completed' | 'failed',
+     *     data_url: 'data:image/png;base64,...' | null,
+     *     error: string | null }
+     */
+    public function imageJobStatus(string $jobId): JsonResponse
+    {
+        // Strict UUID-v4 validation — never hit the cache with arbitrary input
+        if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i', $jobId)) {
+            return response()->json(['status' => 'not_found'], 404);
+        }
+
+        $entry = Cache::get(GenerateDesignImageJob::cacheKey($jobId));
+        if (!is_array($entry)) {
+            return response()->json(['status' => 'not_found'], 404);
+        }
+
+        // Job is done — read image from local storage and return as data URL
+        if ($entry['status'] === 'completed' && !empty($entry['path'])) {
+            try {
+                $binary  = Storage::disk('local')->get($entry['path']);
+                $mime    = $entry['mime'] ?? 'image/png';
+                $dataUrl = 'data:' . $mime . ';base64,' . base64_encode($binary);
+
+                // Clean up: remove file after first successful read (client caches the data URL)
+                Storage::disk('local')->delete($entry['path']);
+                Cache::forget(GenerateDesignImageJob::cacheKey($jobId));
+
+                return response()->json([
+                    'status'   => 'completed',
+                    'data_url' => $dataUrl,
+                    'error'    => null,
+                ]);
+            } catch (\Throwable $e) {
+                return response()->json(['status' => 'failed', 'error' => 'Could not read generated image.'], 500);
+            }
+        }
+
+        return response()->json([
+            'status'   => $entry['status'],
+            'data_url' => null,
+            'error'    => $entry['error'] ?? null,
+        ]);
     }
 }

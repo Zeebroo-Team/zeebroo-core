@@ -35,7 +35,8 @@ final class GoogleAuthService
 
     public function handleCallback(Request $request): RedirectResponse
     {
-        $failRoute = (string) $request->session()->pull('oauth_auth_fail_route', 'login');
+        $failRoute    = (string) $request->session()->pull('oauth_auth_fail_route', 'login');
+        $portalOrigin = (bool)   $request->session()->pull('oauth_origin_portal', false);
 
         try {
             /** @var SocialiteUser $googleUser */
@@ -57,6 +58,12 @@ final class GoogleAuthService
 
         $gid = (string) $googleUser->getId();
 
+        // ── HR portal origin: employee must already exist — never auto-create ──────
+        if ($portalOrigin) {
+            return $this->handlePortalCallback($gid, $email, $request);
+        }
+
+        // ── Main workspace flow ────────────────────────────────────────────────────
         $user = User::query()->where('google_id', $gid)->first();
 
         if ($user === null) {
@@ -99,6 +106,46 @@ final class GoogleAuthService
         }
 
         return redirect()->intended(route('dashboard'));
+    }
+
+    /**
+     * Portal-specific callback: the employee account MUST already exist.
+     * We never auto-create a new user from the portal — employees are provisioned
+     * by HR admins, not by self-registration.
+     */
+    private function handlePortalCallback(string $gid, string $email, Request $request): RedirectResponse
+    {
+        // Find by google_id first (returning user), then by email (first-time Google link)
+        $user = User::query()->where('google_id', $gid)->first()
+            ?? User::query()->where('email', $email)->first();
+
+        if ($user === null) {
+            return redirect()->route('hr.portal.login')->withErrors([
+                'email' => __('No employee account was found for this Google email address. Please contact your HR administrator.'),
+            ]);
+        }
+
+        // Guard: email already linked to a different Google account
+        if ($user->google_id !== null && $user->google_id !== $gid) {
+            return redirect()->route('hr.portal.login')->withErrors([
+                'email' => __('This email is already linked to a different Google account.'),
+            ]);
+        }
+
+        // First-time Google link for this employee account
+        if ($user->google_id === null) {
+            $user->forceFill(['google_id' => $gid])->save();
+            $user = $user->refresh();
+        }
+
+        if ($user->email_verified_at === null) {
+            $user->forceFill(['email_verified_at' => now()])->save();
+        }
+
+        Auth::login($user, true);
+        $request->session()->regenerate();
+
+        return redirect()->route('hr.portal.dashboard');
     }
 
     private function authRedirectUrl(): string

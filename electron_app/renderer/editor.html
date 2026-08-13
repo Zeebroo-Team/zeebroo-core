@@ -2796,6 +2796,92 @@ function dsaiExecuteCommand(cmd) {
             saveHist();
             return 'Applied shadow';
         }
+        case 'transform_text': {
+            // Bulk text transformation across all (or selected) text objects on the canvas.
+            var _scope   = cmd.scope     || 'all';
+            var _xform   = cmd.transform || 'capitalize';
+            var _targets = [];
+
+            if (_scope === 'selected') {
+                var _active = canvas.getActiveObject();
+                if (_active) {
+                    _targets = _active.type === 'activeSelection'
+                        ? _active.getObjects().filter(function(o) { return o.text !== undefined; })
+                        : (_active.text !== undefined ? [_active] : []);
+                }
+            } else {
+                _targets = canvas.getObjects().filter(function(o) { return o.text !== undefined; });
+            }
+
+            if (!_targets.length) return 'No text objects found on canvas';
+
+            function _applyXform(text, xf) {
+                if (!text) return text;
+                switch (xf) {
+                    case 'capitalize':    return text.charAt(0).toUpperCase() + text.slice(1);
+                    case 'title_case':   return text.replace(/\b\w/g, function(c) { return c.toUpperCase(); });
+                    case 'upper_first_2':return text.slice(0, 2).toUpperCase() + text.slice(2);
+                    case 'uppercase':    return text.toUpperCase();
+                    case 'lowercase':    return text.toLowerCase();
+                    case 'sentence_case':return text.charAt(0).toUpperCase() + text.slice(1).toLowerCase();
+                    default:             return text;
+                }
+            }
+
+            var _changed = 0;
+            _targets.forEach(function(obj) {
+                var orig    = obj.text || '';
+                var updated = _applyXform(orig, _xform);
+                if (updated !== orig) { obj.set('text', updated); _changed++; }
+            });
+
+            if (_changed) { canvas.renderAll(); saveHist(); }
+            return 'Renamed ' + _changed + ' text object' + (_changed === 1 ? '' : 's');
+        }
+        case 'add_image': {
+            // Synchronous-style handler — returns a sentinel; caller uses _drawAnimated for animation
+            if (!cmd.src) return null;
+            // Use design dimensions, NOT canvas.getWidth()/getHeight() — those return the
+            // display-pixel size (designW × zoomLevel) when the canvas is zoomed, which
+            // causes the image to be scaled to only ~zoomLevel fraction of the canvas.
+            var cw = designW, ch = designH;
+            fabric.Image.fromURL(cmd.src, function (img) {
+                var nw = (img._element && img._element.naturalWidth)  || img.width  || 1;
+                var nh = (img._element && img._element.naturalHeight) || img.height || 1;
+                if (cmd.role === 'background') {
+                    var sc = Math.max(cw / nw, ch / nh);
+                    img.set({
+                        originX:    'center',
+                        originY:    'center',
+                        left:       Math.round(cw / 2),
+                        top:        Math.round(ch / 2),
+                        scaleX:     sc,
+                        scaleY:     sc,
+                        selectable: false,
+                        evented:    false,
+                    });
+                    canvas.add(img);
+                    canvas.sendToBack(img);
+                } else {
+                    var targetH = ch * (cmd.height_pct || 0.5);
+                    var sc      = targetH / nh;
+                    // Clamp so image right edge stays within canvas
+                    var scaledW = nw * sc;
+                    var left    = Math.round(cw * (cmd.left_pct || 0));
+                    if (left + scaledW > cw) { sc = (cw - left) / nw; }
+                    img.set({
+                        left:   left,
+                        top:    Math.round(ch * (cmd.top_pct || 0)),
+                        scaleX: sc,
+                        scaleY: sc,
+                    });
+                    canvas.add(img);
+                }
+                canvas.renderAll();
+                saveHist();
+            }, { crossOrigin: 'anonymous' });
+            return 'Adding image';
+        }
         default:
             return null;
     }
@@ -2942,7 +3028,7 @@ function dsaiExecuteCommand(cmd) {
             sendBtn.innerHTML = '<i class="fa fa-spinner fa-spin"></i>';
         }
 
-        var replyText = '', commands = [];
+        var replyText = '', commands = [], imageJobs = [];
         try {
             var res = await window.electronAPI.apiRequest(
                 'POST', '/design-studio/ai-chat', {
@@ -2951,10 +3037,13 @@ function dsaiExecuteCommand(cmd) {
                     canvas_height: (typeof designH !== 'undefined' ? designH : (canvas ? canvas.getHeight() : 1123)),
                 }
             );
-            console.log('[DS-AI] response status:', res && res.status, 'commands:', res && res.body && res.body.commands && res.body.commands.length);
+            console.log('[DS-AI] response status:', res && res.status,
+                        'commands:', res.body && res.body.commands && res.body.commands.length,
+                        'image_jobs:', res.body && res.body.image_jobs && res.body.image_jobs.length);
             if (res.status === 200 && res.body) {
-                replyText = res.body.reply    || 'Done!';
-                commands  = res.body.commands || [];
+                replyText  = res.body.reply      || 'Done!';
+                commands   = res.body.commands   || [];
+                imageJobs  = res.body.image_jobs || [];
             } else {
                 console.warn('[DS-AI] non-200 status:', res.status, res.body);
                 replyText = 'Something went wrong. Please try again.';
@@ -2970,15 +3059,214 @@ function dsaiExecuteCommand(cmd) {
             sendBtn.innerHTML = '<i class="fa fa-paper-plane"></i> Ask';
         }
 
-        // Close bubble, run animated sequence, then reopen with reply
+        // ── Phase 1: animate shape/text commands ──────────────────────────
         _closeBubble();
         if (commands.length > 0) {
             await _sleep(250);
             await _animateCommands(commands);
         }
+
+        // ── Phase 2: poll queued image jobs + place each as it arrives ────
+        if (imageJobs.length > 0) {
+            await _pollImageJobs(imageJobs);
+            await _sleep(200);
+        }
+
         await _sleep(180);
-        _openBubble();               // opens bubble (resets to input state internally)
-        _showReplyState(replyText, false);  // immediately override to show reply
+        _openBubble();
+        _showReplyState(replyText, false);
+    }
+
+    /* ── Polling: wait for queued image jobs, place each on canvas ─────────── */
+    /**
+     * Chroma-key background remover.
+     *
+     * Object images are generated with a solid lime-green (#00FF00) background so that
+     * Gemini returns an opaque JPEG we can process — asking for "transparent background"
+     * has no effect on JPEG output.
+     *
+     * Algorithm: HSV hue-based detection (tolerant of JPEG compression artefacts around
+     * edges) + spill suppression (desaturates residual green tint on soft edges).
+     *
+     * Returns a Promise<dataUrl> — a PNG data URL with the green replaced by transparency.
+     */
+    async function _removeChromaKey(dataUrl) {
+        return new Promise(function (resolve) {
+            var img = new Image();
+            img.onload = function () {
+                var W   = img.naturalWidth  || img.width  || 1;
+                var H   = img.naturalHeight || img.height || 1;
+                var oc  = document.createElement('canvas');
+                oc.width  = W;
+                oc.height = H;
+                var ctx = oc.getContext('2d');
+                ctx.drawImage(img, 0, 0);
+
+                var imageData = ctx.getImageData(0, 0, W, H);
+                var d   = imageData.data;
+                var len = d.length;
+
+                for (var i = 0; i < len; i += 4) {
+                    var r = d[i], g = d[i + 1], b = d[i + 2];
+
+                    // Only process pixels where green is the dominant channel.
+                    // When max is R or B the hue is outside the green family — skip cheaply.
+                    if (g <= r || g <= b) continue;
+
+                    // HSV (max === green branch):
+                    //   hue = 60 * ((b − r) / delta + 2)  →  120° for pure #00FF00
+                    //   NOTE: the formula is "+2" not "+4" — "+4" gives 240° (blue), which
+                    //   causes every green pixel to fail the hue check and be skipped.
+                    var delta = g - Math.min(r, b);
+                    if (delta === 0) continue;
+
+                    var s = delta / g;                         // saturation 0–1
+                    var v = g / 255;                           // brightness 0–1
+                    var h = 60 * ((b - r) / delta + 2);       // hue °, range 60–180 for max=G
+
+                    // Lime-green hue band: 85°–165°.
+                    // Higher saturation floor (0.42) keeps natural subject greens
+                    // (leaves ≈ 0.30–0.50, lime garnish ≈ 0.40–0.55) mostly intact
+                    // while still catching the chroma background (s > 0.80 for JPEG of #00FF00).
+                    if (h < 85 || h > 165 || s < 0.42 || v < 0.18) continue;
+
+                    // Greenness 0→1: starts at s=0.42, reaches 1 at s=0.90+
+                    var greenness = Math.min(1, (s - 0.42) / 0.48);
+
+                    // Blend alpha: strong chroma → fully transparent; soft edge → partial
+                    d[i + 3] = Math.round(d[i + 3] * (1 - greenness));
+
+                    // Spill suppression: neutralise residual green tint on edge pixels
+                    // so they don't look sickly when composited over the background.
+                    if (d[i + 3] > 0 && greenness > 0.08) {
+                        var spill   = greenness * 0.55;
+                        var neutral = Math.max(r, b);   // push green toward its stronger sibling
+                        d[i + 1]   = Math.round(d[i + 1] * (1 - spill) + neutral * spill);
+                    }
+                }
+
+                ctx.putImageData(imageData, 0, 0);
+                resolve(oc.toDataURL('image/png'));
+            };
+            img.onerror = function () { resolve(dataUrl); }; // graceful fallback
+            img.src = dataUrl;
+        });
+    }
+
+    async function _pollImageJobs(jobs) {
+        _busy = true;
+
+        var POLL_INTERVAL_MS = 2500;  // check every 2.5 seconds
+        var MAX_POLLS        = 60;    // give up after 2.5 min per job (Gemini can take ~40s)
+
+        // Track per-job state
+        var pending = jobs.slice().map(function (j) {
+            return { job: j, polls: 0, done: false };
+        });
+
+        function _showProgress() {
+            var waiting = pending.filter(function (p) { return !p.done; });
+            if (!waiting.length) return;
+            var labels = waiting.map(function (p) {
+                return p.job.role === 'background' ? 'background' : 'product image';
+            });
+            var uniqueLabels = labels.filter(function (v, i, a) { return a.indexOf(v) === i; });
+            if (!_bubbleOpen) _openBubble();
+            _showReplyState(
+                '<i class="fa fa-wand-magic-sparkles fa-spin" style="color:#6366f1;margin-right:7px"></i>' +
+                'Generating ' + uniqueLabels.join(' &amp; ') + '…',
+                true
+            );
+        }
+
+        // ── Main polling loop ──────────────────────────────────────────────
+        while (pending.some(function (p) { return !p.done; })) {
+
+            _showProgress();
+
+            // Check all pending jobs in parallel (one GET each, sequential await)
+            for (var i = 0; i < pending.length; i++) {
+                var state = pending[i];
+                if (state.done) continue;
+
+                state.polls++;
+                if (state.polls > MAX_POLLS) {
+                    state.done = true;
+                    console.warn('[DS-AI] polling timeout for job', state.job.job_id);
+                    continue;
+                }
+
+                try {
+                    var res = await window.electronAPI.apiRequest(
+                        'GET', '/design-studio/ai-image-job/' + state.job.job_id, null
+                    );
+
+                    if (!res || res.status === 404) {
+                        state.done = true;
+                        continue;
+                    }
+
+                    var body = res.body || {};
+
+                    if (body.status === 'completed' && body.data_url) {
+                        state.done = true;
+
+                        // For object images: strip the lime-green chroma-key background
+                        var finalSrc = body.data_url;
+                        if (state.job.chroma_key) {
+                            _showReplyState(
+                                '<i class="fa fa-wand-magic-sparkles fa-spin" style="color:#6366f1;margin-right:7px"></i>' +
+                                'Removing background…',
+                                true
+                            );
+                            finalSrc = await _removeChromaKey(finalSrc);
+                        }
+
+                        // Animate placement
+                        _closeBubble();
+                        await _sleep(80);
+
+                        var cw = canvas ? canvas.getWidth()  : 794;
+                        var ch = canvas ? canvas.getHeight() : 1123;
+                        await _charWalkToCanvas(
+                            state.job.role === 'background'
+                                ? cw * 0.5
+                                : cw * (state.job.left_pct  != null ? state.job.left_pct  : 0.5),
+                            state.job.role === 'background'
+                                ? ch * 0.5
+                                : ch * (state.job.top_pct   != null ? state.job.top_pct   : 0.1)
+                        );
+                        await _sleep(80);
+
+                        await _drawAnimated({
+                            type:       'add_image',
+                            src:        finalSrc,
+                            role:       state.job.role,
+                            left_pct:   state.job.left_pct,
+                            top_pct:    state.job.top_pct,
+                            height_pct: state.job.height_pct,
+                        });
+
+                        await _sleep(200);
+
+                    } else if (body.status === 'failed') {
+                        state.done = true;
+                        console.warn('[DS-AI] job failed:', state.job.job_id, body.error);
+                    }
+                    // status 'pending' | 'processing' → continue waiting
+
+                } catch (err) {
+                    console.error('[DS-AI] poll error for job', state.job.job_id, err);
+                }
+            }
+
+            // Wait before the next poll sweep (only if any jobs remain)
+            if (pending.some(function (p) { return !p.done; })) {
+                await _sleep(POLL_INTERVAL_MS);
+            }
+        }
+
+        _busy = false;
     }
 
     /* ═══════════════════════════════════════════════════════════════════════
@@ -3267,6 +3555,116 @@ function dsaiExecuteCommand(cmd) {
             if (bn) bn.value = cmd.fill;
             if (bh) bh.value = cmd.fill;
             saveHist(); return;
+        }
+
+        // transform_text: walk to each text object, flash it, apply the rename
+        if (cmd.type === 'transform_text') {
+            var _scope   = cmd.scope     || 'all';
+            var _xform   = cmd.transform || 'capitalize';
+            var _targets = [];
+
+            if (_scope === 'selected') {
+                var _active = canvas.getActiveObject();
+                if (_active) {
+                    _targets = _active.type === 'activeSelection'
+                        ? _active.getObjects().filter(function(o) { return o.text !== undefined; })
+                        : (_active.text !== undefined ? [_active] : []);
+                }
+            } else {
+                _targets = canvas.getObjects().filter(function(o) { return o.text !== undefined; });
+            }
+
+            if (!_targets.length) return;
+
+            function _applyXformAnim(text, xf) {
+                if (!text) return text;
+                switch (xf) {
+                    case 'capitalize':    return text.charAt(0).toUpperCase() + text.slice(1);
+                    case 'title_case':   return text.replace(/\b\w/g, function(c) { return c.toUpperCase(); });
+                    case 'upper_first_2':return text.slice(0, 2).toUpperCase() + text.slice(2);
+                    case 'uppercase':    return text.toUpperCase();
+                    case 'lowercase':    return text.toLowerCase();
+                    case 'sentence_case':return text.charAt(0).toUpperCase() + text.slice(1).toLowerCase();
+                    default:             return text;
+                }
+            }
+
+            // Walk character to first text object, then flash-rename each in sequence
+            var _first = _targets[0];
+            var _zoom  = canvas.getZoom() || 1;
+            await _charWalkToCanvas(_first.left * _zoom, _first.top * _zoom);
+            await _sleep(80);
+
+            var _changed = 0;
+            for (var _ti = 0; _ti < _targets.length; _ti++) {
+                var _obj  = _targets[_ti];
+                var _orig = _obj.text || '';
+                var _upd  = _applyXformAnim(_orig, _xform);
+                if (_upd === _orig) continue;
+
+                // Flash: dim → update text → brighten
+                await _fabAnimate(_obj, 'opacity', 0.25, 100, null);
+                _obj.set('text', _upd);
+                canvas.renderAll();
+                await _fabAnimate(_obj, 'opacity', 1, 180, null);
+                await _sleep(55);
+                _changed++;
+            }
+
+            if (_changed) saveHist();
+            return;
+        }
+
+        // add_image: fade in from transparent
+        if (cmd.type === 'add_image') {
+            if (!cmd.src) return;
+            // Use design dimensions — canvas.getWidth()/getHeight() returns the display-pixel
+            // size (designW × zoomLevel) which causes images to be scaled too small when zoomed.
+            var cw = designW, ch = designH;
+            await new Promise(function (resolve) {
+                fabric.Image.fromURL(cmd.src, function (img) {
+                    var nw = (img._element && img._element.naturalWidth)  || img.width  || 1;
+                    var nh = (img._element && img._element.naturalHeight) || img.height || 1;
+                    img.set('opacity', 0);
+
+                    if (cmd.role === 'background') {
+                        var sc = Math.max(cw / nw, ch / nh);
+                        img.set({
+                            originX:    'center',
+                            originY:    'center',
+                            left:       Math.round(cw / 2),
+                            top:        Math.round(ch / 2),
+                            scaleX:     sc,
+                            scaleY:     sc,
+                            selectable: false,
+                            evented:    false,
+                        });
+                        canvas.add(img);
+                        canvas.sendToBack(img);
+                    } else {
+                        var targetH = ch * (cmd.height_pct || 0.5);
+                        var sc      = targetH / nh;
+                        // Clamp so image right edge stays within canvas
+                        var scaledW = nw * sc;
+                        var left    = Math.round(cw * (cmd.left_pct || 0));
+                        if (left + scaledW > cw) { sc = (cw - left) / nw; }
+                        img.set({
+                            left:   left,
+                            top:    Math.round(ch * (cmd.top_pct || 0)),
+                            scaleX: sc,
+                            scaleY: sc,
+                        });
+                        canvas.add(img);
+                    }
+
+                    canvas.renderAll();
+                    _fabAnimate(img, 'opacity', 1, 800, null).then(function () {
+                        saveHist();
+                        resolve();
+                    });
+                }, { crossOrigin: 'anonymous' });
+            });
+            return;
         }
 
         // Non-animated commands execute instantly
