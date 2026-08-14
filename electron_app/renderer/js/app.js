@@ -4942,6 +4942,8 @@ function showApp() {
   loadProducts();
   // Apply saved layout mode (ribbon vs sidebar)
   _applyLayoutMode(state.config?.layout_mode || 'ribbon');
+  // Apply saved ribbon customizations (tab order, visibility, button sizes)
+  if (typeof window.rbcInit === 'function') window.rbcInit();
   // Give one frame for layout + title update before activating Home
   requestAnimationFrame(() => activateTab('home'));
   // Check if bank account onboarding is needed
