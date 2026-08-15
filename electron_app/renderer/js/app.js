@@ -3876,6 +3876,7 @@ function _soCalcTotals() {
 
 async function _soOpenForm(order) {
   _soShowView('form');
+  _soApplySettings();   // re-apply field visibility each time the form opens
   $('#so-form-title').textContent = order ? `Edit ${order.order_number}` : 'New Sales Order';
   _so.editingId = order?.id ?? null;
 
@@ -3975,6 +3976,223 @@ $('#so-status-filter').addEventListener('change', () => {
 });
 $('#so-f-discount').addEventListener('input', _soCalcTotals);
 $('#so-f-tax').addEventListener('input', _soCalcTotals);
+$('#so-settings-btn').addEventListener('click', _soOpenSettings);
+
+// ── Sales Order Settings ───────────────────────────────────────────────────
+const _SO_SETTINGS_KEY = 'so_settings';
+
+// Live settings state (applied immediately)
+let _soSettings = {
+  defaultStatus: 'pending',     // 'pending' | 'confirmed'
+  fieldHide: {
+    reference:        false,
+    expected_delivery: false,
+    notes:            false,
+    discount:         false,
+    tax:              false,
+  },
+};
+
+// Staged (dialog) copies
+let _soPickedSettings = {};
+let _soPfsOuter       = 'general'; // 'general' | 'fields'
+
+const _SO_FIELD_MAP = [
+  { id: 'reference',         label: 'Reference No.',      desc: 'Internal or external PO reference for this order.',        icon: 'fa-tag' },
+  { id: 'expected_delivery', label: 'Expected Delivery',  desc: 'Expected delivery date field on the order form.',          icon: 'fa-calendar-check' },
+  { id: 'notes',             label: 'Notes',              desc: 'Internal notes textarea at the bottom of the form.',       icon: 'fa-note-sticky' },
+  { id: 'discount',          label: 'Discount',           desc: 'Order-level discount amount in the summary section.',      icon: 'fa-percent' },
+  { id: 'tax',               label: 'Tax',                desc: 'Order-level tax amount in the summary section.',           icon: 'fa-receipt' },
+];
+
+function _soApplySettings() {
+  // Show/hide form fields based on current settings
+  const hide = _soSettings.fieldHide;
+  _soFieldToggle('so-f-reference',     '.qt-field:has(#so-f-reference)',      hide.reference);
+  _soFieldToggle('so-f-delivery-date', '.qt-field:has(#so-f-delivery-date)',  hide.expected_delivery);
+  _soFieldToggle('so-f-notes',         '.qt-notes-card',                      hide.notes);
+  _soFieldToggle('so-f-discount',      '.qt-total-row:has(#so-f-discount)',   hide.discount);
+  _soFieldToggle('so-f-tax',           '.qt-total-row:has(#so-f-tax)',        hide.tax);
+}
+
+function _soFieldToggle(id, selector, hidden) {
+  // Try the scoped selector first (for rows/wrappers), fall back to the element itself
+  const el = document.querySelector(selector) || document.getElementById(id);
+  if (el) el.style.display = hidden ? 'none' : '';
+}
+
+function _soOpenSettings() {
+  let ov = document.getElementById('so-settings-overlay');
+
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id        = 'so-settings-overlay';
+    ov.className = 'modal-overlay';
+    ov.style.zIndex = '10003';
+
+    // ── General panel ─────────────────────────────────────────────────────
+    const genPanel = document.createElement('div');
+    genPanel.className = 'pfs-panel pfs-gen-body';
+    genPanel.id = 'sofs-panel-general';
+    genPanel.innerHTML = `
+      <div class="pfs-section-label">Default Status for New Orders</div>
+      <div class="pfs-view-rows">
+        <div class="pfs-view-row" data-so-status="pending">
+          <div class="pfs-view-row-icon" style="background:color-mix(in srgb,#f59e0b 14%,transparent);color:#f59e0b"><i class="fa fa-clock"></i></div>
+          <div class="pfs-view-row-body">
+            <div class="pfs-view-row-title">Pending</div>
+            <div class="pfs-view-row-desc">New orders start as Pending — awaiting confirmation from the customer.</div>
+          </div>
+          <i class="fa fa-circle-check pfs-view-row-chk"></i>
+        </div>
+        <div class="pfs-view-row" data-so-status="confirmed">
+          <div class="pfs-view-row-icon" style="background:color-mix(in srgb,#3b82f6 14%,transparent);color:#3b82f6"><i class="fa fa-circle-check"></i></div>
+          <div class="pfs-view-row-body">
+            <div class="pfs-view-row-title">Confirmed</div>
+            <div class="pfs-view-row-desc">New orders are immediately Confirmed and ready for processing.</div>
+          </div>
+          <i class="fa fa-circle-check pfs-view-row-chk"></i>
+        </div>
+      </div>`;
+
+    genPanel.addEventListener('click', e => {
+      const row = e.target.closest('.pfs-view-row[data-so-status]');
+      if (!row) return;
+      _soPickedSettings.defaultStatus = row.dataset.soStatus;
+      _soSyncGeneral(genPanel);
+    });
+
+    // ── Fields panel ──────────────────────────────────────────────────────
+    const fieldsPanel = document.createElement('div');
+    fieldsPanel.className = 'pfs-panel pfs-fields-body';
+    fieldsPanel.id = 'sofs-panel-fields';
+    fieldsPanel.style.display = 'none';
+
+    _SO_FIELD_MAP.forEach(f => {
+      const row = document.createElement('div');
+      row.className = 'pfs-field-row';
+      row.innerHTML = `
+        <div class="pfs-field-icon"><i class="fa ${f.icon}"></i></div>
+        <div class="pfs-field-body">
+          <div class="pfs-field-label">${escHtml(f.label)}</div>
+          <div class="pfs-field-desc">${escHtml(f.desc)}</div>
+        </div>
+        <label class="pfs-sw" title="Show / hide this field">
+          <input type="checkbox" class="pfs-sw-input sofs-field-inp" data-sof="${f.id}">
+          <span class="pfs-sw-track"><span class="pfs-sw-knob"></span></span>
+        </label>`;
+      row.querySelector('.sofs-field-inp').addEventListener('change', function () {
+        _soPickedSettings.fieldHide[this.dataset.sof] = !this.checked;
+        row.classList.toggle('pfs-field-hidden', !this.checked);
+      });
+      fieldsPanel.appendChild(row);
+    });
+
+    // ── Shell ─────────────────────────────────────────────────────────────
+    ov.innerHTML = `
+      <div class="po-aim-shell pfs-shell">
+        <div class="po-aim-header">
+          <i class="fa fa-gear" style="color:var(--accent)"></i>
+          <span>Sales Order Settings</span>
+          <button class="psm-close" id="sofs-close"><i class="fa fa-xmark"></i></button>
+        </div>
+        <nav class="pfs-tab-nav" id="sofs-outer-nav">
+          <button class="pfs-opt-tab active" data-sofs-outer="general"><i class="fa fa-sliders"></i>&ensp;General</button>
+          <button class="pfs-opt-tab"        data-sofs-outer="fields" ><i class="fa fa-list-check"></i>&ensp;Fields</button>
+        </nav>
+        <div id="sofs-panels"></div>
+        <div class="po-aim-footer">
+          <button class="po-btn-ghost"   id="sofs-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+          <button class="po-btn-primary" id="sofs-apply" ><i class="fa fa-check"></i> Apply</button>
+        </div>
+      </div>`;
+
+    const panelsHost = ov.querySelector('#sofs-panels');
+    panelsHost.appendChild(genPanel);
+    panelsHost.appendChild(fieldsPanel);
+    document.body.appendChild(ov);
+
+    // Nav tabs
+    ov.querySelector('#sofs-outer-nav').addEventListener('click', e => {
+      const btn = e.target.closest('.pfs-opt-tab[data-sofs-outer]');
+      if (!btn) return;
+      _soPfsOuter = btn.dataset.sofsOuter;
+      _soSyncOuter(ov);
+    });
+
+    ov.addEventListener('pointerdown', e => { if (e.target === ov) ov.style.display = 'none'; });
+    ov.querySelector('#sofs-close') .addEventListener('click', () => ov.style.display = 'none');
+    ov.querySelector('#sofs-cancel').addEventListener('click', () => ov.style.display = 'none');
+
+    ov.querySelector('#sofs-apply').addEventListener('click', async () => {
+      _soSettings = {
+        defaultStatus: _soPickedSettings.defaultStatus,
+        fieldHide:     Object.assign({}, _soPickedSettings.fieldHide),
+      };
+      ov.style.display = 'none';
+      _soApplySettings();
+      try {
+        await window.electronAPI?.setConfig?.({ [_SO_SETTINGS_KEY]: _soSettings });
+      } catch (_) {}
+    });
+  }
+
+  // Each open: stage current state and sync UI
+  _soPfsOuter        = 'general';
+  _soPickedSettings  = {
+    defaultStatus: _soSettings.defaultStatus,
+    fieldHide:     Object.assign({}, _soSettings.fieldHide),
+  };
+
+  _soSyncOuter(ov);
+  _soSyncGeneral(ov.querySelector('#sofs-panel-general'));
+  _soSyncFields(ov.querySelector('#sofs-panel-fields'));
+
+  ov.style.display = 'flex';
+}
+
+function _soSyncOuter(ov) {
+  ov.querySelectorAll('#sofs-outer-nav .pfs-opt-tab').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.sofsOuter === _soPfsOuter);
+  });
+  const panels = { general: '#sofs-panel-general', fields: '#sofs-panel-fields' };
+  Object.entries(panels).forEach(([key, sel]) => {
+    const el = ov.querySelector(sel);
+    if (el) el.style.display = _soPfsOuter === key ? '' : 'none';
+  });
+}
+
+function _soSyncGeneral(panel) {
+  if (!panel) return;
+  panel.querySelectorAll('.pfs-view-row[data-so-status]').forEach(row => {
+    row.classList.toggle('selected', row.dataset.soStatus === _soPickedSettings.defaultStatus);
+  });
+}
+
+function _soSyncFields(panel) {
+  if (!panel) return;
+  panel.querySelectorAll('.sofs-field-inp[data-sof]').forEach(inp => {
+    const hidden = !!_soPickedSettings.fieldHide[inp.dataset.sof];
+    inp.checked = !hidden;
+    inp.closest('.pfs-field-row')?.classList.toggle('pfs-field-hidden', hidden);
+  });
+}
+
+// Restore SO settings from Electron config at startup
+;(async () => {
+  try {
+    const cfg = await window.electronAPI?.getConfig?.();
+    const s   = cfg?.[_SO_SETTINGS_KEY];
+    if (s && typeof s === 'object') {
+      if (s.defaultStatus) _soSettings.defaultStatus = s.defaultStatus;
+      if (s.fieldHide && typeof s.fieldHide === 'object') {
+        _soSettings.fieldHide = Object.assign({}, _soSettings.fieldHide, s.fieldHide);
+      }
+    }
+  } catch (_) {}
+  _soApplySettings();
+})();
+
 // ── End Sales Orders ──────────────────────────────────────────────────────
 
 // ── Login flow ─────────────────────────────────────────────────────────────
@@ -8898,7 +9116,7 @@ function _grnRenderDetail(g) {
       approveBtn.disabled = true;
       approveBtn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Approving…';
       try {
-        const res = await API.post(`grns/${g.id}/approve`, {});
+        const res = await API.approveGrn(g.id);
         if (res.ok) _grnRenderDetail(res.body?.data ?? res.body);
         else _showToast(res.body?.message || 'Approval failed', 'error');
       } catch (_) { _showToast('Approval failed', 'error'); }
@@ -8912,7 +9130,7 @@ function _grnRenderDetail(g) {
       if (!confirm('Reject this GRN? Stock will not be applied.')) return;
       rejectBtn.disabled = true;
       try {
-        const res = await API.post(`grns/${g.id}/reject`, {});
+        const res = await API.rejectGrn(g.id);
         if (res.ok) _grnRenderDetail(res.body?.data ?? res.body);
         else _showToast(res.body?.message || 'Rejection failed', 'error');
       } catch (_) { _showToast('Rejection failed', 'error'); }
@@ -9372,7 +9590,7 @@ function _openGrnSettings() {
           [_GRN_PERMISSIONS_KEY]:  _grnPermissions,
         });
         // Persist permissions to server so the approval gate is enforced server-side
-        await API.put('grn-permissions', {
+        await API.saveGrnPermissions({
           approval_mode:    _grnPermissions.approval_mode,
           role_permissions: _grnPermissions.role_perms,
         });
@@ -9382,6 +9600,10 @@ function _openGrnSettings() {
     // Permissions panel — mode dropdown wiring
     permPanel.querySelector('#gfs-perm-mode').addEventListener('change', function () {
       _grnPickedPermissions.approval_mode = this.value;
+      // Don't clear the cache — just re-render the table with current roles
+      // but wipe the tbody so the approval column shows/hides correctly
+      const tb = permPanel.querySelector('#gfs-perm-tbody');
+      if (tb) tb.innerHTML = '';
       _grnSyncPermMode(permPanel);
     });
   }
@@ -9393,6 +9615,7 @@ function _openGrnSettings() {
   _grnPickedLineItems       = Object.assign({}, _grnLineItems);
   _grnPickedExpenses        = _grnExpenses.map(e => Object.assign({}, e));
   _grnPickedPermissions     = { approval_mode: _grnPermissions.approval_mode, role_perms: Object.assign({}, _grnPermissions.role_perms) };
+  _grnPermRolesCache        = null;  // clear cache so roles are always freshly fetched on open
 
   _grnSyncOuter(ov);
   _grnSyncGeneral(ov.querySelector('#gfs-panel-general'));
@@ -9488,7 +9711,7 @@ async function _grnLoadPermRoles(panel) {
 
   if (!_grnPermRolesCache) {
     try {
-      const res = await API.get('grn-permissions');
+      const res = await API.grnPermissions();
       const d   = res.body?.data || {};
       _grnPermRolesCache = d.roles || [];
       // Merge server role_permissions into picked state (first load only)

@@ -269,12 +269,16 @@ const API = (() => {
     clearCheque:   (id, body)         => request('POST', `/cheques/${id}/clear`, body || {}),
 
     // Goods Receive Notes
-    grns:           (q, payment)       => request('GET',  `/grns?q=${encodeURIComponent(q||'')}&payment=${payment||'all'}`),
-    grn:            (id)               => request('GET',  `/grns/${id}`),
-    payGrn:         (id, body)         => request('POST', `/grns/${id}/pay`, body),
-    grnForm:        (purchaseId)       => request('GET',  `/purchase-orders/${purchaseId}/grn-form`),
-    createGrn:      (purchaseId, body) => request('POST', `/purchase-orders/${purchaseId}/grns`, body),
-    createDirectGrn:(body)             => request('POST', `/grns`, body),
+    grns:              (q, payment)       => request('GET',  `/grns?q=${encodeURIComponent(q||'')}&payment=${payment||'all'}`),
+    grn:               (id)               => request('GET',  `/grns/${id}`),
+    payGrn:            (id, body)         => request('POST', `/grns/${id}/pay`, body),
+    approveGrn:        (id)               => request('POST', `/grns/${id}/approve`, {}),
+    rejectGrn:         (id)               => request('POST', `/grns/${id}/reject`,  {}),
+    grnForm:           (purchaseId)       => request('GET',  `/purchase-orders/${purchaseId}/grn-form`),
+    createGrn:         (purchaseId, body) => request('POST', `/purchase-orders/${purchaseId}/grns`, body),
+    createDirectGrn:   (body)             => request('POST', `/grns`, body),
+    grnPermissions:    ()                 => request('GET',  `/grn-permissions`),
+    saveGrnPermissions:(body)             => request('PUT',  `/grn-permissions`, body),
 
     purchaseOrders:(q, status)        => request('GET',  `/purchase-orders?q=${encodeURIComponent(q||'')}&status=${status||''}`),
     purchaseOrder: (id)               => request('GET',  `/purchase-orders/${id}`),
