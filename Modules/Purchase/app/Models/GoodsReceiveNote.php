@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Modules\Business\Models\Branch;
 use Modules\Business\Models\Business;
+use Modules\Purchase\Models\Supplier;
 use Modules\Purchase\Services\GrnPaymentSettlementService;
 use Modules\Transaction\Models\LedgerTransaction;
 
@@ -17,27 +18,46 @@ class GoodsReceiveNote extends Model
         'business_id',
         'branch_id',
         'purchase_id',
+        'supplier_id',
         'grn_number',
         'received_date',
         'reference',
         'notes',
+        'expense_lines',
         'subtotal',
         'total',
         'payment_method',
         'payment_reference',
         'cheque_due_date',
+        'payment_terms_days',
+        'payment_due_date',
         'stock_applied',
+        'approval_status',
     ];
 
     protected function casts(): array
     {
         return [
-            'received_date' => 'date',
-            'cheque_due_date' => 'date',
-            'subtotal' => 'decimal:2',
-            'total' => 'decimal:2',
-            'stock_applied' => 'boolean',
+            'received_date'      => 'date',
+            'cheque_due_date'    => 'date',
+            'payment_due_date'   => 'date',
+            'payment_terms_days' => 'integer',
+            'subtotal'           => 'decimal:2',
+            'total'              => 'decimal:2',
+            'stock_applied'      => 'boolean',
+            'expense_lines'      => 'array',
         ];
+    }
+
+    /** null = no approval required, 'pending' | 'approved' | 'rejected' */
+    public function approvalStatusLabel(): string
+    {
+        return match ($this->approval_status) {
+            'pending'  => 'Pending Approval',
+            'approved' => 'Approved',
+            'rejected' => 'Rejected',
+            default    => '',
+        };
     }
 
     public function business(): BelongsTo
@@ -53,6 +73,20 @@ class GoodsReceiveNote extends Model
     public function purchase(): BelongsTo
     {
         return $this->belongsTo(Purchase::class);
+    }
+
+    /** Direct supplier — used when no purchase order is linked */
+    public function supplier(): BelongsTo
+    {
+        return $this->belongsTo(Supplier::class);
+    }
+
+    /** Resolved supplier name — prefers purchase supplier, falls back to direct supplier */
+    public function resolvedSupplierName(): ?string
+    {
+        return $this->purchase?->supplier?->name
+            ?? $this->supplier?->name
+            ?? null;
     }
 
     public function items(): HasMany

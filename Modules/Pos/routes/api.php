@@ -30,6 +30,7 @@ use Modules\Pos\Http\Controllers\Api\PosCustomerApiController;
 use Modules\Pos\Http\Controllers\Api\PosSupplierApiController;
 use Modules\Pos\Http\Controllers\Api\PosReturnReasonsApiController;
 use Modules\Pos\Http\Controllers\Api\PosGoodsReceiveNoteApiController;
+use Modules\Pos\Http\Controllers\Api\PosGrnPermissionApiController;
 use Modules\Pos\Http\Controllers\Api\PosGrnChequeApiController;
 use Modules\Pos\Http\Controllers\Api\PosProductCategoryApiController;
 use Modules\Pos\Http\Controllers\Api\PosProductUnitApiController;
@@ -172,9 +173,15 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
     Route::get('cheques', [PosGrnChequeApiController::class, 'index'])->name('cheques.index');
     Route::post('cheques/{cheque}/clear', [PosGrnChequeApiController::class, 'clear'])->name('cheques.clear');
 
+    Route::get ('grn-permissions',     [PosGrnPermissionApiController::class, 'show'])  ->name('grn-permissions.show');
+    Route::put ('grn-permissions',     [PosGrnPermissionApiController::class, 'update'])->name('grn-permissions.update');
+
     Route::get('grns', [PosGoodsReceiveNoteApiController::class, 'index'])->name('grns.index');
+    Route::post('grns', [PosGoodsReceiveNoteApiController::class, 'storeDirect'])->name('grns.store-direct');
     Route::get('grns/{grn}', [PosGoodsReceiveNoteApiController::class, 'show'])->name('grns.show');
-    Route::post('grns/{grn}/pay', [PosGoodsReceiveNoteApiController::class, 'pay'])->name('grns.pay');
+    Route::post('grns/{grn}/pay',     [PosGoodsReceiveNoteApiController::class, 'pay'])    ->name('grns.pay');
+    Route::post('grns/{grn}/approve', [PosGoodsReceiveNoteApiController::class, 'approve'])->name('grns.approve');
+    Route::post('grns/{grn}/reject',  [PosGoodsReceiveNoteApiController::class, 'reject']) ->name('grns.reject');
     Route::get('purchase-orders/{purchase}/grn-form', [PosGoodsReceiveNoteApiController::class, 'createForm'])->name('grns.create-form');
     Route::post('purchase-orders/{purchase}/grns', [PosGoodsReceiveNoteApiController::class, 'store'])->name('grns.store');
 

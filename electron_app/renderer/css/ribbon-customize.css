@@ -3,24 +3,7 @@
    ══════════════════════════════════════════════════════════════════ */
 
 /* ── Context menu ─────────────────────────────────────────────────── */
-#rbc-ctx {
-  position: fixed;
-  z-index: 99999;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  box-shadow: 0 8px 28px rgba(0,0,0,.22);
-  padding: 4px;
-  min-width: 210px;
-  display: none;
-  user-select: none;
-  animation: rbcCtxIn .11s ease;
-}
-#rbc-ctx.open { display: block; }
-@keyframes rbcCtxIn {
-  from { opacity: 0; transform: scale(.96) translateY(-4px); }
-  to   { opacity: 1; transform: scale(1)   translateY(0); }
-}
+/* #rbc-ctx shell is styled entirely via JS inline cssText — no rule needed here */
 .rbc-ctx-head {
   padding: 6px 12px 4px;
   font-size: 11px;
@@ -116,6 +99,67 @@
   transition: background .1s, color .1s;
 }
 .rbc-head-close:hover { background: var(--surface2); color: var(--text); }
+
+/* ── Scope bar ────────────────────────────────────────────────────── */
+.rbc-scope-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 20px;
+  background: var(--surface2);
+  border-bottom: 1px solid var(--border-light);
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+.rbc-scope-for {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: .03em;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-right: 4px;
+  white-space: nowrap;
+}
+.rbc-scope-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background .12s, color .12s, border-color .12s;
+  white-space: nowrap;
+}
+.rbc-scope-pill:hover {
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  color: var(--text);
+}
+.rbc-scope-pill.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.rbc-scope-div {
+  width: 1px;
+  height: 18px;
+  background: var(--border);
+  margin: 0 4px;
+  flex-shrink: 0;
+}
+.rbc-scope-roles {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
 
 /* ── Two-panel body ───────────────────────────────────────────────── */
 .rbc-body {

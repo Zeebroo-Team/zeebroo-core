@@ -82,11 +82,42 @@ body {
 .pgrn-badge-no_amount  { background: #f1f5f9; color: #64748b; }
 .pgrn-badge-credit     { background: #ede9fe; color: #6d28d9; }
 
-/* ── Info grid ── */
-.pgrn-info {
+/* ── Parties row (Supplier ↔ Business) ── */
+.pgrn-parties {
   display: grid; grid-template-columns: 1fr 1fr;
-  gap: 24px; margin-bottom: 22px;
+  gap: 16px; margin-bottom: 16px;
 }
+.pgrn-party {
+  background: #f8fafc; border: 1px solid #e2e8f0;
+  border-radius: 6px; padding: 12px 14px;
+}
+.pgrn-party-lbl {
+  font-size: 8.5px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: .13em; color: #94a3b8; margin-bottom: 7px;
+}
+.pgrn-party-name { font-size: 13px; font-weight: 800; color: #0f172a; margin-bottom: 4px; }
+.pgrn-party-row {
+  font-size: 10.5px; color: #64748b; margin-top: 3px;
+  display: flex; align-items: center; gap: 5px;
+}
+
+/* ── Meta row (date, payment, status…) ── */
+.pgrn-meta-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 0; background: #f0fdf4;
+  border: 1px solid #d1fae5; border-radius: 6px;
+  overflow: hidden; margin-bottom: 18px;
+}
+.pgrn-meta-cell {
+  padding: 9px 12px; border-right: 1px solid #d1fae5;
+  font-size: 10px;
+}
+.pgrn-meta-cell:last-child { border-right: none; }
+.pgrn-meta-cell-lbl { font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: #6ee7b7; margin-bottom: 3px; }
+.pgrn-meta-cell-val { font-weight: 700; color: #0f172a; }
+.pgrn-meta-cell-due .pgrn-meta-cell-val { color: #b45309; }
+
+/* ── Legacy ── */
 .pgrn-lbl {
   font-size: 9px; font-weight: 700; text-transform: uppercase;
   letter-spacing: .11em; color: #94a3b8; margin-bottom: 6px;
@@ -100,6 +131,8 @@ body {
 }
 .pgrn-meta-row:last-child { border-bottom: none; }
 .pgrn-meta-row strong { color: #0f172a; font-weight: 600; }
+.pgrn-due-row { background: #fef3c7; margin: 2px -4px; padding: 5px 4px; border-radius: 3px; border-bottom: none; }
+.pgrn-due-row strong { color: #b45309; }
 
 /* ── Section label ── */
 .pgrn-section-lbl {
@@ -129,11 +162,19 @@ body {
 
 /* ── Totals ── */
 .pgrn-totals-wrap { display: flex; justify-content: flex-end; margin: 12px 0 4px; }
-.pgrn-totals { width: 280px; }
+.pgrn-totals { width: 300px; }
 .pgrn-total-row {
   display: flex; justify-content: space-between;
   font-size: 11px; color: #475569;
   padding: 5px 0; border-bottom: 1px solid #f1f5f9;
+}
+.pgrn-total-row.expense { color: #64748b; }
+.pgrn-total-row.expense .pgrn-exp-badge {
+  display: inline-block;
+  font-size: 8.5px; font-weight: 700;
+  background: #f1f5f9; color: #94a3b8;
+  border-radius: 3px; padding: 1px 4px;
+  margin-left: 4px; letter-spacing: .03em;
 }
 .pgrn-total-row.grand {
   font-size: 15px; font-weight: 800; color: #0f172a;
@@ -244,24 +285,58 @@ body {
     return new Date(d + 'T00:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
   }
 
-  function buildGrnHtml(g, cur) {
+  function buildGrnHtml(g, cur, lineItemCols, biz) {
     // Payment status badge
     var payStatus = g.payment_status || 'unpaid';
     if (g.payment_method === 'credit') payStatus = 'credit';
     var badgeCls = 'pgrn-badge-' + payStatus;
     var badgeLbl = g.payment_status_label || payStatus;
 
+    // Optional column flags
+    var cols     = lineItemCols || {};
+    var showUc   = !!cols['unit-in-case'];
+    var showUom  = !!cols['uom'];
+    var showDisc = !!cols['discount'];
+    var showNgv  = !!cols['net-gross'];
+    // #, Product, SKU, Qty, Unit Cost = 5 base; Total or Gross+Net = +1 or +2
+    var colSpan  = 5 + (showUc ? 1 : 0) + (showUom ? 1 : 0) + (showDisc ? 1 : 0) + (showNgv ? 2 : 1);
+
+    // Items header
+    var itemHeader = '<tr>'
+      + '<th style="width:30px;text-align:center">#</th>'
+      + '<th>Product</th>'
+      + '<th style="width:80px">SKU</th>'
+      + '<th class="r" style="width:50px">Qty</th>'
+      + '<th class="r" style="width:85px">Unit Cost</th>'
+      + (showUc   ? '<th class="r" style="width:55px">Unit/Case</th>' : '')
+      + (showUom  ? '<th style="width:50px">UOM</th>'                 : '')
+      + (showDisc ? '<th class="r" style="width:55px">Disc %</th>'    : '')
+      + (showNgv
+          ? '<th class="r" style="width:85px">Gross</th><th class="r" style="width:85px">Net</th>'
+          : '<th class="r" style="width:85px">Total</th>')
+      + '</tr>';
+
     // Items rows
     var itemRows = (g.items || []).map(function (it, i) {
-      var qty = parseFloat(it.quantity_received);
+      var qty   = parseFloat(it.quantity_received);
+      var cost  = parseFloat(it.unit_cost);
+      var gross = qty * cost;
+      var disc  = parseFloat(it.discount_percent || 0);
+      var net   = gross * (1 - disc / 100);
       var qtyStr = qty % 1 === 0 ? String(Math.round(qty)) : qty.toFixed(3).replace(/\.?0+$/, '');
       return '<tr>'
         + '<td class="n">' + (i + 1) + '</td>'
         + '<td class="bd">' + escH(it.product_name || '—') + '</td>'
         + '<td class="muted">' + escH(it.sku || '—') + '</td>'
         + '<td class="r">' + qtyStr + '</td>'
-        + '<td class="r">' + cur + parseFloat(it.unit_cost).toFixed(2) + '</td>'
-        + '<td class="r bd">' + cur + parseFloat(it.line_total).toFixed(2) + '</td>'
+        + '<td class="r">' + cur + cost.toFixed(2) + '</td>'
+        + (showUc   ? '<td class="r">' + escH(it.units_per_case != null ? it.units_per_case : '—') + '</td>' : '')
+        + (showUom  ? '<td>' + escH(it.uom || '—') + '</td>'                                                 : '')
+        + (showDisc ? '<td class="r">' + (disc > 0 ? disc.toFixed(2) + '%' : '—') + '</td>'                  : '')
+        + (showNgv
+            ? '<td class="r">' + cur + gross.toFixed(2) + '</td>'
+              + '<td class="r bd" style="color:#10b981">' + cur + net.toFixed(2) + '</td>'
+            : '<td class="r bd">' + cur + parseFloat(it.line_total).toFixed(2) + '</td>')
         + '</tr>';
     }).join('');
 
@@ -271,8 +346,21 @@ body {
     var amountPaid  = parseFloat(g.amount_paid || 0);
     var outstanding = parseFloat(g.amount_outstanding || 0);
 
-    var totalsHtml = '<div class="pgrn-total-row"><span>Subtotal</span><span>' + cur + subtotal.toFixed(2) + '</span></div>'
-      + '<div class="pgrn-total-row grand"><span>Total</span><span>' + cur + total.toFixed(2) + '</span></div>';
+    var totalsHtml = '<div class="pgrn-total-row"><span>Subtotal</span><span>' + cur + subtotal.toFixed(2) + '</span></div>';
+
+    // Expense lines
+    var expLines = g.expense_lines || [];
+    expLines.forEach(function (e) {
+      var val = parseFloat(e.value) || 0;
+      var amt = e.type === 'pct' ? subtotal * val / 100 : val;
+      var lbl = e.type === 'pct' ? (val.toFixed(2).replace(/\.?0+$/, '') + '%') : 'Flat';
+      totalsHtml += '<div class="pgrn-total-row expense">'
+        + '<span>' + escH(e.name) + '<span class="pgrn-exp-badge">' + escH(lbl) + '</span></span>'
+        + '<span>+' + cur + amt.toFixed(2) + '</span>'
+        + '</div>';
+    });
+
+    totalsHtml += '<div class="pgrn-total-row grand"><span>Total</span><span>' + cur + total.toFixed(2) + '</span></div>';
 
     if (g.payment_method !== 'credit') {
       totalsHtml += '<div class="pgrn-total-row paid"><span>Amount Paid</span><span>' + cur + amountPaid.toFixed(2) + '</span></div>';
@@ -308,31 +396,40 @@ body {
         + '<span class="pgrn-badge ' + badgeCls + '">' + escH(badgeLbl) + '</span>'
       + '</div>'
 
-      + '<div class="pgrn-info">'
-        + '<div>'
-          + '<div class="pgrn-lbl">Supplier</div>'
-          + '<div class="pgrn-supplier-name">' + escH(g.supplier_name || '— No Supplier —') + '</div>'
-          + (g.po_number  ? '<div class="pgrn-supplier-sub">PO: ' + escH(g.po_number) + '</div>'   : '')
-          + (g.reference  ? '<div class="pgrn-supplier-sub">Ref: ' + escH(g.reference) + '</div>' : '')
+      // ── Parties row ──────────────────────────────────────────────────────
+      + '<div class="pgrn-parties">'
+        + '<div class="pgrn-party">'
+          + '<div class="pgrn-party-lbl">Supplier</div>'
+          + '<div class="pgrn-party-name">' + escH(g.supplier_name || '— No Supplier —') + '</div>'
+          + (g.supplier_contact_name ? '<div class="pgrn-party-row">' + escH(g.supplier_contact_name) + '</div>' : '')
+          + (g.supplier_email        ? '<div class="pgrn-party-row">' + escH(g.supplier_email)        + '</div>' : '')
+          + (g.supplier_phone        ? '<div class="pgrn-party-row">' + escH(g.supplier_phone)        + '</div>' : '')
+          + (g.po_number             ? '<div class="pgrn-party-row" style="margin-top:6px;font-size:9.5px;color:#94a3b8">PO: ' + escH(g.po_number) + '</div>' : '')
+          + (g.reference             ? '<div class="pgrn-party-row" style="font-size:9.5px;color:#94a3b8">Ref: ' + escH(g.reference) + '</div>' : '')
         + '</div>'
-        + '<div>'
-          + '<div class="pgrn-meta-row"><span>Received Date</span><strong>' + fmtDate(g.received_date) + '</strong></div>'
-          + '<div class="pgrn-meta-row"><span>Payment Method</span><strong>' + escH(g.payment_method || '—') + '</strong></div>'
-          + '<div class="pgrn-meta-row"><span>Payment Status</span><strong>' + escH(badgeLbl) + '</strong></div>'
+        + '<div class="pgrn-party" style="text-align:right">'
+          + '<div class="pgrn-party-lbl">Received By</div>'
+          + ((biz && biz.name)    ? '<div class="pgrn-party-name">'                                                      + escH(biz.name)    + '</div>' : '')
+          + ((biz && biz.address) ? '<div class="pgrn-party-row" style="justify-content:flex-end">' + escH(biz.address) + '</div>' : '')
         + '</div>'
+      + '</div>'
+      // ── Meta grid ────────────────────────────────────────────────────────
+      + '<div class="pgrn-meta-grid">'
+        + '<div class="pgrn-meta-cell"><div class="pgrn-meta-cell-lbl">Received Date</div><div class="pgrn-meta-cell-val">' + fmtDate(g.received_date) + '</div></div>'
+        + '<div class="pgrn-meta-cell"><div class="pgrn-meta-cell-lbl">Payment Method</div><div class="pgrn-meta-cell-val">' + escH((g.payment_method || '—').replace(/\b\w/g, function(c){return c.toUpperCase();})) + '</div></div>'
+        + '<div class="pgrn-meta-cell"><div class="pgrn-meta-cell-lbl">Payment Status</div><div class="pgrn-meta-cell-val">' + escH(badgeLbl) + '</div></div>'
+        + (g.payment_method === 'credit' && g.payment_terms_days
+            ? '<div class="pgrn-meta-cell"><div class="pgrn-meta-cell-lbl">Payment Terms</div><div class="pgrn-meta-cell-val">' + escH(String(g.payment_terms_days)) + ' days</div></div>'
+            : '')
+        + (g.payment_method === 'credit' && g.payment_due_date
+            ? '<div class="pgrn-meta-cell pgrn-meta-cell-due"><div class="pgrn-meta-cell-lbl">Due Date</div><div class="pgrn-meta-cell-val">' + fmtDate(g.payment_due_date) + '</div></div>'
+            : '')
       + '</div>'
 
       + '<div class="pgrn-section-lbl">Items Received</div>'
       + '<table class="pgrn-table">'
-        + '<thead><tr>'
-          + '<th style="width:30px;text-align:center">#</th>'
-          + '<th>Product</th>'
-          + '<th style="width:100px">SKU</th>'
-          + '<th class="r" style="width:60px">Qty</th>'
-          + '<th class="r" style="width:100px">Unit Cost</th>'
-          + '<th class="r" style="width:100px">Total</th>'
-        + '</tr></thead>'
-        + '<tbody>' + (itemRows || '<tr><td colspan="6" style="text-align:center;color:#94a3b8;padding:12px">No items</td></tr>') + '</tbody>'
+        + '<thead>' + itemHeader + '</thead>'
+        + '<tbody>' + (itemRows || '<tr><td colspan="' + colSpan + '" style="text-align:center;color:#94a3b8;padding:12px">No items</td></tr>') + '</tbody>'
       + '</table>'
 
       + '<div class="pgrn-totals-wrap"><div class="pgrn-totals">' + totalsHtml + '</div></div>'
@@ -366,12 +463,14 @@ body {
   }
 
   async function render(data) {
-    var g   = data.grn;
-    var lh  = data.letterhead;
-    var cur = data.currency || '';
+    var g           = data.grn;
+    var lh          = data.letterhead;
+    var cur         = data.currency || '';
+    var lineItemCols = data.lineItemCols || {};
+    var biz         = data.bizSettings || {};
 
     document.getElementById('pgrn-topbar-title').textContent = g.grn_number + ' — Goods Receive Note';
-    document.getElementById('pgrn-content').innerHTML = buildGrnHtml(g, cur);
+    document.getElementById('pgrn-content').innerHTML = buildGrnHtml(g, cur, lineItemCols, biz);
 
     if (lh && lh.canvas_json) {
       var imgData = await renderLetterhead(lh.canvas_json, lh.width, lh.height);

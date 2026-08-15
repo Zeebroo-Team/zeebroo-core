@@ -4344,7 +4344,9 @@ function applyFeatureVisibility() {
   };
   $$('.ribbon-tab[data-tab]').forEach(tab => {
     const show = tabFeatures[tab.dataset.tab];
-    tab.style.display = (show === undefined || show) ? '' : 'none';
+    const visible = (show === undefined || show);
+    tab.style.display = visible ? '' : 'none';
+    tab.dataset.rbcFeature = visible ? '1' : '0';
   });
   $$('.sb-nav-item[data-tab]').forEach(item => {
     const show = tabFeatures[item.dataset.tab];
@@ -4354,7 +4356,9 @@ function applyFeatureVisibility() {
   // ── Officer role: restrict to Event tab only ──
   if (state.memberRole === 'officer') {
     $$('.ribbon-tab[data-tab]').forEach(tab => {
-      tab.style.display = tab.dataset.tab === 'event-mgmt' ? '' : 'none';
+      const visible = tab.dataset.tab === 'event-mgmt';
+      tab.style.display = visible ? '' : 'none';
+      tab.dataset.rbcFeature = visible ? '1' : '0';
     });
     $$('.sb-nav-item[data-tab]').forEach(item => {
       item.style.display = item.dataset.tab === 'event-mgmt' ? '' : 'none';
@@ -8807,6 +8811,17 @@ function _grnPayBadge(g) {
   return `<span class="grn-payment-badge ${cls}">${label}</span>`;
 }
 
+function _grnApprovalBadge(g) {
+  if (!g.approval_status) return '';
+  const map = {
+    pending:  ['grn-appr-badge-pending',  'Pending Approval'],
+    approved: ['grn-appr-badge-approved', 'Approved'],
+    rejected: ['grn-appr-badge-rejected', 'Rejected'],
+  };
+  const [cls, label] = map[g.approval_status] || ['grn-appr-badge-pending', g.approval_status];
+  return `<span class="grn-approval-badge ${cls}">${label}</span>`;
+}
+
 function _grnRenderList() {
   const tbody = $('#grn-tbody');
   const cur = window._activeSession?.currency || '';
@@ -8873,7 +8888,39 @@ function _grnRenderDetail(g) {
   // Actions
   const actDiv = $('#grn-dv-actions');
   actDiv.innerHTML = '';
-  if (g.payment_status !== 'paid_full' && g.payment_status !== 'no_amount') {
+
+  // Approval action buttons (shown when GRN is pending)
+  if (g.approval_status === 'pending') {
+    const approveBtn = document.createElement('button');
+    approveBtn.className = 'po-btn-primary grn-approve-btn';
+    approveBtn.innerHTML = '<i class="fa fa-circle-check"></i> Approve';
+    approveBtn.addEventListener('click', async () => {
+      approveBtn.disabled = true;
+      approveBtn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Approving…';
+      try {
+        const res = await API.post(`grns/${g.id}/approve`, {});
+        if (res.ok) _grnRenderDetail(res.body?.data ?? res.body);
+        else _showToast(res.body?.message || 'Approval failed', 'error');
+      } catch (_) { _showToast('Approval failed', 'error'); }
+    });
+    actDiv.appendChild(approveBtn);
+
+    const rejectBtn = document.createElement('button');
+    rejectBtn.className = 'po-dv-action-btn grn-reject-btn';
+    rejectBtn.innerHTML = '<i class="fa fa-circle-xmark"></i> Reject';
+    rejectBtn.addEventListener('click', async () => {
+      if (!confirm('Reject this GRN? Stock will not be applied.')) return;
+      rejectBtn.disabled = true;
+      try {
+        const res = await API.post(`grns/${g.id}/reject`, {});
+        if (res.ok) _grnRenderDetail(res.body?.data ?? res.body);
+        else _showToast(res.body?.message || 'Rejection failed', 'error');
+      } catch (_) { _showToast('Rejection failed', 'error'); }
+    });
+    actDiv.appendChild(rejectBtn);
+  }
+
+  if (g.payment_status !== 'paid_full' && g.payment_status !== 'no_amount' && g.approval_status !== 'pending') {
     const payBtn = document.createElement('button');
     payBtn.className = 'po-btn-primary';
     payBtn.innerHTML = '<i class="fa fa-money-bill-wave"></i> Make Payment';
@@ -8886,29 +8933,101 @@ function _grnRenderDetail(g) {
   printBtn.addEventListener('click', () => _grnPrint(g));
   actDiv.appendChild(printBtn);
 
-  // Summary cards
+  // Summary cards — add approval status card if applicable
+  const approvalCard = g.approval_status
+    ? `<div><div class="po-dv-sf-label">Approval</div><div class="po-dv-sf-val">${_grnApprovalBadge(g)}</div></div>`
+    : '';
+  const creditTermsCard = g.payment_method === 'credit' && g.payment_terms_days
+    ? `<div><div class="po-dv-sf-label">Payment Terms</div><div class="po-dv-sf-val">${g.payment_terms_days} days</div></div>`
+    : '';
+  const creditDueCard = g.payment_method === 'credit' && g.payment_due_date
+    ? `<div><div class="po-dv-sf-label">Due Date</div><div class="po-dv-sf-val grn-due-date-val"><i class="fa fa-clock"></i> ${g.payment_due_date}</div></div>`
+    : '';
   $('#grn-dv-summary').innerHTML = `
     <div class="po-dv-summary">
       <div><div class="po-dv-sf-label">Status</div><div class="po-dv-sf-val">${_grnPayBadge(g)}</div></div>
+      ${approvalCard}
       <div><div class="po-dv-sf-label">Total</div><div class="po-dv-sf-val">${cur}${(g.total||0).toFixed(2)}</div></div>
       <div><div class="po-dv-sf-label">Paid</div><div class="po-dv-sf-val">${cur}${(g.amount_paid||0).toFixed(2)}</div></div>
       <div><div class="po-dv-sf-label">Outstanding</div><div class="po-dv-sf-val">${cur}${(g.amount_outstanding||0).toFixed(2)}</div></div>
       ${g.payment_method ? `<div><div class="po-dv-sf-label">Pay method</div><div class="po-dv-sf-val">${g.payment_method}</div></div>` : ''}
+      ${creditTermsCard}${creditDueCard}
       ${g.reference ? `<div><div class="po-dv-sf-label">Reference</div><div class="po-dv-sf-val">${g.reference}</div></div>` : ''}
     </div>`;
 
-  // Items
+  // Parties — supplier left, our business right
+  const biz        = state.receiptSettings || {};
+  const bizName    = escHtml(biz.business_name || '');
+  const bizAddr    = escHtml(biz.receipt_address_line || '');
+  const supName    = escHtml(g.supplier_name || '— No Supplier —');
+  const supContact = escHtml(g.supplier_contact_name || '');
+  const supEmail   = escHtml(g.supplier_email || '');
+  const supPhone   = escHtml(g.supplier_phone || '');
+  const partiesEl  = document.getElementById('grn-dv-parties');
+  if (partiesEl) {
+    partiesEl.innerHTML = `
+      <div class="grn-dv-parties-inner">
+        <div class="grn-dv-party">
+          <div class="grn-dv-party-label"><i class="fa fa-building-user"></i> Supplier</div>
+          <div class="grn-dv-party-name">${supName}</div>
+          ${supContact ? `<div class="grn-dv-party-row"><i class="fa fa-user"></i>${supContact}</div>` : ''}
+          ${supEmail   ? `<div class="grn-dv-party-row"><i class="fa fa-envelope"></i>${supEmail}</div>` : ''}
+          ${supPhone   ? `<div class="grn-dv-party-row"><i class="fa fa-phone"></i>${supPhone}</div>` : ''}
+        </div>
+        <div class="grn-dv-party grn-dv-party-biz">
+          <div class="grn-dv-party-label"><i class="fa fa-store"></i> Received By</div>
+          ${bizName ? `<div class="grn-dv-party-name">${bizName}</div>` : ''}
+          ${bizAddr ? `<div class="grn-dv-party-row"><i class="fa fa-location-dot"></i>${bizAddr}</div>` : ''}
+        </div>
+      </div>`;
+  }
+
+  // Items — build dynamic columns based on saved lineItems settings
+  const li         = _grnLineItems || {};
+  const showUc     = !!li['unit-in-case'];
+  const showUom    = !!li['uom'];
+  const showDisc   = !!li['discount'];
+  const showNgv    = !!li['net-gross'];   // show Gross + Net, hide Total
+  let colCount = 4; // Product, SKU, Qty, Unit Cost always present
+  if (showUc)  colCount++;
+  if (showUom) colCount++;
+  if (showDisc) colCount++;
+  if (showNgv) colCount += 2; else colCount++; // +2 Gross+Net or +1 Total
+
+  // Rebuild header
+  const theadTr = document.createElement('tr');
+  theadTr.innerHTML = '<th>Product</th><th>SKU</th><th>Qty</th><th>Unit Cost</th>'
+    + (showUc   ? '<th>Unit/Case</th>' : '')
+    + (showUom  ? '<th>UOM</th>'       : '')
+    + (showDisc ? '<th>Disc %</th>'    : '')
+    + (showNgv  ? '<th style="text-align:right">Gross</th><th style="text-align:right">Net</th>' : '<th style="text-align:right">Total</th>');
+  const thead = document.getElementById('grn-dv-thead');
+  if (thead) { thead.innerHTML = ''; thead.appendChild(theadTr); }
+
   const items = g.items || [];
+  const colSpan = colCount;
   $('#grn-dv-items').innerHTML = items.length
-    ? items.map(it => `
-        <tr>
-          <td>${it.product_name}</td>
-          <td>${it.sku || '—'}</td>
-          <td style="text-align:right">${(it.quantity_received||0)}</td>
-          <td style="text-align:right">${cur}${(it.unit_cost||0).toFixed(2)}</td>
-          <td style="text-align:right">${cur}${(it.line_total||0).toFixed(2)}</td>
-        </tr>`).join('')
-    : `<tr><td colspan="5" style="text-align:center;color:var(--text-muted)">No items</td></tr>`;
+    ? items.map(it => {
+        const qty   = (it.quantity_received || 0);
+        const cost  = (it.unit_cost || 0);
+        const gross = qty * cost;
+        const disc  = it.discount_percent || 0;
+        const net   = gross * (1 - disc / 100);
+        const qtyStr = qty % 1 === 0 ? String(Math.round(qty)) : qty.toFixed(3).replace(/\.?0+$/,'');
+        return '<tr>'
+          + `<td>${it.product_name || '—'}</td>`
+          + `<td>${it.sku || '—'}</td>`
+          + `<td style="text-align:right">${qtyStr}</td>`
+          + `<td style="text-align:right">${cur}${cost.toFixed(2)}</td>`
+          + (showUc   ? `<td style="text-align:right">${it.units_per_case ?? '—'}</td>` : '')
+          + (showUom  ? `<td>${it.uom || '—'}</td>` : '')
+          + (showDisc ? `<td style="text-align:right">${disc > 0 ? disc + '%' : '—'}</td>` : '')
+          + (showNgv
+              ? `<td style="text-align:right">${cur}${gross.toFixed(2)}</td><td style="text-align:right;color:var(--accent);font-weight:600">${cur}${net.toFixed(2)}</td>`
+              : `<td style="text-align:right">${cur}${(it.line_total||0).toFixed(2)}</td>`)
+          + '</tr>';
+      }).join('')
+    : `<tr><td colspan="${colSpan}" style="text-align:center;color:var(--text-muted)">No items</td></tr>`;
 
   // Payments
   const payments = g.payments || [];
@@ -8918,11 +9037,24 @@ function _grnRenderDetail(g) {
        </tbody></table>`
     : `<div style="padding:8px 0;color:var(--text-muted);font-size:12px">No payments recorded</div>`;
 
-  $('#grn-dv-totals').innerHTML = `
-    <div class="po-dv-totals">
-      <span>Subtotal: ${cur}${(g.subtotal||0).toFixed(2)}</span>
-      <strong>Total: ${cur}${(g.total||0).toFixed(2)}</strong>
-    </div>`;
+  // Totals breakdown (subtotal → expenses → grand total)
+  const expLines  = g.expense_lines || [];
+  const subtotalV = (g.subtotal || 0);
+  let totalsHtml = `<div class="grn-dv-br-row"><span>Subtotal</span><span>${cur}${subtotalV.toFixed(2)}</span></div>`;
+  if (expLines.length) {
+    totalsHtml += `<div class="grn-dv-br-divider"></div>`;
+    expLines.forEach(e => {
+      const val = parseFloat(e.value) || 0;
+      const amt = e.type === 'pct' ? subtotalV * val / 100 : val;
+      const lbl = e.type === 'pct' ? `${val}%` : 'Flat';
+      totalsHtml += `<div class="grn-dv-br-row grn-dv-br-exp">
+        <span><i class="fa fa-receipt" style="font-size:10px;margin-right:5px;opacity:.55"></i>${escHtml(e.name)}<em>${escHtml(lbl)}</em></span>
+        <span>+${cur}${amt.toFixed(2)}</span>
+      </div>`;
+    });
+  }
+  totalsHtml += `<div class="grn-dv-br-total"><span>Total</span><strong>${cur}${(g.total||0).toFixed(2)}</strong></div>`;
+  $('#grn-dv-totals').innerHTML = totalsHtml;
 
   $('#grn-dv-notes').innerHTML = g.notes
     ? `<div class="po-dv-notes">${g.notes}</div>`
@@ -8933,8 +9065,557 @@ function _grnRenderDetail(g) {
 
 async function _grnPrint(g) {
   const lhFull = await _fetchLetterhead();
-  await window.electronAPI.openGrnPrint({ grn: g, letterhead: lhFull, currency: state.currency });
+  const rs = state.receiptSettings || {};
+  await window.electronAPI.openGrnPrint({
+    grn:          g,
+    letterhead:   lhFull,
+    currency:     state.currency,
+    lineItemCols: Object.assign({}, _grnLineItems),
+    fieldHide:    Object.assign({}, _grnFieldHide),
+    bizSettings:  {
+      name:    rs.business_name         || '',
+      address: rs.receipt_address_line  || '',
+    },
+  });
 }
+
+// ── GRN Form Settings ─────────────────────────────────────────────────────
+const _GRN_FIELDS_KEY    = 'grn_modal_fields';
+const _GRN_SETTINGS_KEY  = 'grn_modal_settings';
+const _GRN_LINEITEMS_KEY = 'grn_lineitems_cols';
+const _GRN_EXPENSES_KEY  = 'grn_expenses';
+
+const _GRN_FIELD_MAP = [
+  // Receipt Details
+  { id: 'reference',      label: 'Reference',                    icon: 'fa-tag',         section: 'Receipt Details',
+    getEl()       { return document.getElementById('grn-field-reference'); },
+    getElDirect() { return document.getElementById('grn-direct-field-reference'); } },
+  { id: 'notes',          label: 'Notes',                        icon: 'fa-align-left',  section: 'Receipt Details',
+    getEl()       { return document.getElementById('grn-field-notes'); },
+    getElDirect() { return document.getElementById('grn-direct-field-notes'); } },
+  // Payment
+  { id: 'payment-method', label: 'Payment Method',               icon: 'fa-credit-card', section: 'Payment',
+    getEl()       { return document.getElementById('grn-field-payment-method'); },
+    getElDirect() { return document.getElementById('grn-direct-field-payment-method'); } },
+  { id: 'pay-options',    label: 'Pay Options (Full / Partial)', icon: 'fa-coins',       section: 'Payment',
+    getEl()       { return document.getElementById('grn-field-pay-options'); },
+    getElDirect() { return document.getElementById('grn-direct-field-pay-options'); } },
+];
+
+let _grnFieldHide      = {};         // {fieldId: true} — hidden fields
+let _grnDefaultMethod  = 'cash';     // default payment method: cash|cheque|credit
+let _grnLineItems      = { 'unit-in-case': false, 'uom': false, 'discount': false, 'net-gross': false };
+let _grnExpenses       = [];         // [{id, name, type:'flat'|'pct', value}]
+let _grnPermissions    = { approval_mode: 'without_permission', role_perms: {} }; // live permission config
+
+const _GRN_PERMISSIONS_KEY = 'grn_permissions';
+
+// ─ Dialog state (staging — applied only on "Apply") ──────────────────────
+let _grnPfsOuter          = 'general';  // 'general'|'fields'|'lineitems'|'expenses'|'permissions'
+let _grnPickedMethod      = 'cash';
+let _grnPickedHide        = {};
+let _grnPickedLineItems   = {};
+let _grnPickedExpenses    = [];  // staging copy of expense rules
+let _grnPickedPermissions = { approval_mode: 'without_permission', role_perms: {} };
+
+function _applyGrnPrefs() {
+  // Apply to both GRN modals (PO-based and direct)
+  _GRN_FIELD_MAP.forEach(f => {
+    const hidden = !!_grnFieldHide[f.id];
+    const el  = f.getEl?.();
+    const elD = f.getElDirect?.();
+    if (el)  el.style.display  = hidden ? 'none' : '';
+    if (elD) elD.style.display = hidden ? 'none' : '';
+  });
+  _applyGrnLineItems();
+}
+
+function _applyGrnLineItems() {
+  document.querySelectorAll('.grn-items-table').forEach(tbl => {
+    tbl.classList.toggle('grn-show-uc',   !!_grnLineItems['unit-in-case']);
+    tbl.classList.toggle('grn-show-uom',  !!_grnLineItems['uom']);
+    tbl.classList.toggle('grn-show-disc', !!_grnLineItems['discount']);
+    tbl.classList.toggle('grn-show-ngv',  !!_grnLineItems['net-gross']);
+  });
+}
+
+function _grnApplyDefaultMethod(method) {
+  $$('#grn-method-btns .grn-method-btn').forEach(b => b.classList.toggle('active', b.dataset.method === method));
+  const pf = document.getElementById('grn-payment-fields');
+  if (pf) pf.style.display = method === 'credit' ? 'none' : '';
+  const cf = document.getElementById('grn-cheque-fields');
+  if (cf) cf.style.display = method === 'cheque' ? 'flex' : 'none';
+  const ct = document.getElementById('grn-credit-terms');
+  if (ct) ct.style.display = method === 'credit' ? '' : 'none';
+}
+
+function _openGrnSettings() {
+  let ov = document.getElementById('grn-settings-overlay');
+
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'grn-settings-overlay';
+    ov.className = 'modal-overlay';
+    ov.style.zIndex = '10003';
+
+    // ── General panel: default payment method ────────────────────────────
+    const genPanel = document.createElement('div');
+    genPanel.className = 'pfs-panel pfs-gen-body';
+    genPanel.id = 'gfs-panel-general';
+    genPanel.innerHTML = `
+      <div class="pfs-section-label">Default Payment Method</div>
+      <div class="pfs-view-rows">
+        <div class="pfs-view-row" data-method="cash">
+          <div class="pfs-view-row-icon"><i class="fa fa-money-bill"></i></div>
+          <div class="pfs-view-row-body">
+            <div class="pfs-view-row-title">Cash</div>
+            <div class="pfs-view-row-desc">Payment method will default to Cash when the modal opens.</div>
+          </div>
+          <i class="fa fa-circle-check pfs-view-row-chk"></i>
+        </div>
+        <div class="pfs-view-row" data-method="cheque">
+          <div class="pfs-view-row-icon"><i class="fa fa-money-check"></i></div>
+          <div class="pfs-view-row-body">
+            <div class="pfs-view-row-title">Cheque</div>
+            <div class="pfs-view-row-desc">Payment method will default to Cheque when the modal opens.</div>
+          </div>
+          <i class="fa fa-circle-check pfs-view-row-chk"></i>
+        </div>
+        <div class="pfs-view-row" data-method="credit">
+          <div class="pfs-view-row-icon"><i class="fa fa-clock"></i></div>
+          <div class="pfs-view-row-body">
+            <div class="pfs-view-row-title">Credit</div>
+            <div class="pfs-view-row-desc">Payment will default to Credit (on account) — no upfront payment required.</div>
+          </div>
+          <i class="fa fa-circle-check pfs-view-row-chk"></i>
+        </div>
+      </div>`;
+
+    // ── Fields panel: per-field show/hide toggles ────────────────────────
+    const fieldsPanel = document.createElement('div');
+    fieldsPanel.className = 'pfs-panel pfs-fields-body';
+    fieldsPanel.id = 'gfs-panel-fields';
+    fieldsPanel.style.display = 'none';
+
+    const sectionOrder = [], sectionMap = {};
+    _GRN_FIELD_MAP.forEach(f => {
+      if (!sectionMap[f.section]) { sectionMap[f.section] = []; sectionOrder.push(f.section); }
+      sectionMap[f.section].push(f);
+    });
+    sectionOrder.forEach(sec => {
+      const hd = document.createElement('div');
+      hd.className = 'pfs-fields-sec-hd';
+      hd.textContent = sec;
+      fieldsPanel.appendChild(hd);
+      sectionMap[sec].forEach(f => {
+        const row = document.createElement('div');
+        row.className = 'pfs-field-row';
+        row.dataset.fieldId = f.id;
+        row.innerHTML = `
+          <div class="pfs-field-icon"><i class="fa ${f.icon}"></i></div>
+          <span class="pfs-field-label">${escHtml(f.label)}</span>
+          <label class="pfs-sw" title="Show / hide field">
+            <input type="checkbox" class="pfs-sw-input" data-field="${f.id}" checked>
+            <span class="pfs-sw-track"><span class="pfs-sw-knob"></span></span>
+          </label>`;
+        fieldsPanel.appendChild(row);
+        row.querySelector('.pfs-sw-input').addEventListener('change', function () {
+          if (this.checked) { delete _grnPickedHide[this.dataset.field]; }
+          else              { _grnPickedHide[this.dataset.field] = true; }
+          row.classList.toggle('pfs-field-hidden', !this.checked);
+        });
+      });
+    });
+
+    // ── Line Items panel: optional column toggles ────────────────────────
+    const lineItemDefs = [
+      { id: 'unit-in-case', label: 'Unit In Case',     icon: 'fa-layer-group',  desc: 'Show a "Units per case / carton" column so you can record how many units are in each case received.' },
+      { id: 'uom',          label: 'UOM',               icon: 'fa-weight-scale', desc: 'Show a Unit of Measure column (kg, pcs, box…) alongside each line item.' },
+      { id: 'discount',     label: 'Discount / Com %',  icon: 'fa-tag',          desc: 'Show a Discount / Commission % column on each item to record trade discounts or supplier commissions.' },
+      { id: 'net-gross',    label: 'Net & Gross Value', icon: 'fa-calculator',   desc: 'Show Gross Value (Qty × Cost) and Net Value (after Discount %) columns. Replaces the plain Total column.' },
+    ];
+    const linePanel = document.createElement('div');
+    linePanel.className = 'pfs-panel pfs-gen-body';
+    linePanel.id = 'gfs-panel-lineitems';
+    linePanel.style.display = 'none';
+    linePanel.innerHTML = `<div class="pfs-section-label">Optional Item Columns</div><div class="pfs-view-rows" id="gfs-li-rows"></div>`;
+
+    const liRows = linePanel.querySelector('#gfs-li-rows');
+    lineItemDefs.forEach(def => {
+      const card = document.createElement('div');
+      card.className = 'pfs-view-row pfs-view-row--toggle';
+      card.dataset.liId = def.id;
+      card.innerHTML = `
+        <div class="pfs-view-row-icon"><i class="fa ${def.icon}"></i></div>
+        <div class="pfs-view-row-body">
+          <div class="pfs-view-row-title">${escHtml(def.label)}</div>
+          <div class="pfs-view-row-desc">${escHtml(def.desc)}</div>
+        </div>
+        <label class="pfs-sw" title="Enable / disable column">
+          <input type="checkbox" class="pfs-sw-input gfs-li-inp" data-li="${def.id}">
+          <span class="pfs-sw-track"><span class="pfs-sw-knob"></span></span>
+        </label>`;
+      card.querySelector('.gfs-li-inp').addEventListener('change', function () {
+        _grnPickedLineItems[this.dataset.li] = this.checked;
+        card.classList.toggle('selected', this.checked);
+      });
+      liRows.appendChild(card);
+    });
+
+    // ── Expenses panel: custom expense rules ─────────────────────────────
+    const expPanel = document.createElement('div');
+    expPanel.className = 'pfs-panel pfs-gen-body';
+    expPanel.id = 'gfs-panel-expenses';
+    expPanel.style.display = 'none';
+    expPanel.innerHTML = `
+      <div class="pfs-section-label">Custom Expenses</div>
+      <div class="pfs-exp-desc">Add costs to the GRN grand total (shipping, customs, handling…). Each expense can be a flat amount or a % of the items subtotal.</div>
+      <div id="gfs-exp-rows"></div>
+      <button class="pfs-exp-add-btn" id="gfs-exp-add"><i class="fa fa-plus"></i> Add Expense</button>`;
+    expPanel.querySelector('#gfs-exp-add').addEventListener('click', () => {
+      const newExp = { id: Date.now(), name: '', type: 'flat', value: '' };
+      _grnPickedExpenses.push(newExp);
+      _grnRenderExpRow(expPanel.querySelector('#gfs-exp-rows'), newExp);
+    });
+
+    // ── Permissions panel: approval mode + role table ─────────────────────
+    const permPanel = document.createElement('div');
+    permPanel.className = 'pfs-panel pfs-gen-body';
+    permPanel.id = 'gfs-panel-permissions';
+    permPanel.style.display = 'none';
+    permPanel.innerHTML = `
+      <div class="pfs-section-label">GRN Approval Processing</div>
+      <div class="gfs-perm-mode-wrap">
+        <select id="gfs-perm-mode" class="gfs-perm-mode-select">
+          <option value="without_permission">GRN add to stock without permission</option>
+          <option value="approval_processing">GRN add to stock approval processing</option>
+        </select>
+        <div class="gfs-perm-mode-hint" id="gfs-perm-mode-hint"></div>
+      </div>
+      <div id="gfs-perm-role-section" style="display:none">
+        <div class="pfs-section-label" style="margin-top:18px">Role-wise GRN Permissions</div>
+        <div class="gfs-perm-loading" id="gfs-perm-loading"><i class="fa fa-spinner fa-spin"></i> Loading roles…</div>
+        <div id="gfs-perm-table-wrap" style="display:none">
+          <table class="gfs-perm-table" id="gfs-perm-table">
+            <thead><tr id="gfs-perm-thead"></tr></thead>
+            <tbody id="gfs-perm-tbody"></tbody>
+          </table>
+        </div>
+      </div>`;
+
+    // ── Shell ─────────────────────────────────────────────────────────────
+    ov.innerHTML = `
+      <div class="po-aim-shell pfs-shell">
+        <div class="po-aim-header">
+          <i class="fa fa-gear" style="color:var(--accent)"></i>
+          <span>GRN Form Settings</span>
+          <button class="psm-close" id="gfs-close"><i class="fa fa-xmark"></i></button>
+        </div>
+        <nav class="pfs-tab-nav" id="gfs-outer-nav">
+          <button class="pfs-opt-tab active" data-outer="general"    ><i class="fa fa-sliders"></i>&ensp;General</button>
+          <button class="pfs-opt-tab"        data-outer="fields"     ><i class="fa fa-list-check"></i>&ensp;Fields</button>
+          <button class="pfs-opt-tab"        data-outer="lineitems"  ><i class="fa fa-table-columns"></i>&ensp;Line Items</button>
+          <button class="pfs-opt-tab"        data-outer="expenses"   ><i class="fa fa-receipt"></i>&ensp;Expenses</button>
+          <button class="pfs-opt-tab"        data-outer="permissions"><i class="fa fa-shield-halved"></i>&ensp;Permissions</button>
+        </nav>
+        <div id="gfs-panels"></div>
+        <div class="po-aim-footer">
+          <button class="po-btn-ghost"   id="gfs-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+          <button class="po-btn-primary" id="gfs-apply" ><i class="fa fa-check"></i> Apply</button>
+        </div>
+      </div>`;
+
+    const panelsHost = ov.querySelector('#gfs-panels');
+    panelsHost.appendChild(genPanel);
+    panelsHost.appendChild(fieldsPanel);
+    panelsHost.appendChild(linePanel);
+    panelsHost.appendChild(expPanel);
+    panelsHost.appendChild(permPanel);
+    document.body.appendChild(ov);
+
+    // Events
+    ov.addEventListener('pointerdown', e => { if (e.target === ov) ov.style.display = 'none'; });
+    ov.querySelector('#gfs-close') .addEventListener('click', () => ov.style.display = 'none');
+    ov.querySelector('#gfs-cancel').addEventListener('click', () => ov.style.display = 'none');
+
+    ov.querySelector('#gfs-outer-nav').addEventListener('click', e => {
+      const btn = e.target.closest('.pfs-opt-tab[data-outer]');
+      if (!btn) return;
+      _grnPfsOuter = btn.dataset.outer;
+      _grnSyncOuter(ov);
+    });
+
+    genPanel.addEventListener('click', e => {
+      const row = e.target.closest('.pfs-view-row[data-method]');
+      if (!row) return;
+      _grnPickedMethod = row.dataset.method;
+      _grnSyncGeneral(genPanel);
+    });
+
+    ov.querySelector('#gfs-apply').addEventListener('click', async () => {
+      _grnDefaultMethod = _grnPickedMethod;
+      _grnFieldHide     = Object.assign({}, _grnPickedHide);
+      _grnLineItems     = Object.assign({}, _grnPickedLineItems);
+      _grnExpenses      = _grnPickedExpenses.filter(e => e.name.trim() && parseFloat(e.value) > 0)
+                            .map(e => ({ id: e.id, name: e.name.trim(), type: e.type, value: parseFloat(e.value) }));
+      _grnPermissions   = { approval_mode: _grnPickedPermissions.approval_mode, role_perms: Object.assign({}, _grnPickedPermissions.role_perms) };
+      ov.style.display  = 'none';
+      _applyGrnPrefs();
+      _grnCalcFormTotal();
+      _dgrnCalcTotal();
+      try {
+        await window.electronAPI?.setConfig?.({
+          [_GRN_SETTINGS_KEY]:     { defaultMethod: _grnDefaultMethod },
+          [_GRN_FIELDS_KEY]:       _grnFieldHide,
+          [_GRN_LINEITEMS_KEY]:    _grnLineItems,
+          [_GRN_EXPENSES_KEY]:     _grnExpenses,
+          [_GRN_PERMISSIONS_KEY]:  _grnPermissions,
+        });
+        // Persist permissions to server so the approval gate is enforced server-side
+        await API.put('grn-permissions', {
+          approval_mode:    _grnPermissions.approval_mode,
+          role_permissions: _grnPermissions.role_perms,
+        });
+      } catch (_) {}
+    });
+
+    // Permissions panel — mode dropdown wiring
+    permPanel.querySelector('#gfs-perm-mode').addEventListener('change', function () {
+      _grnPickedPermissions.approval_mode = this.value;
+      _grnSyncPermMode(permPanel);
+    });
+  }
+
+  // Each open: copy current state into staging, sync UI
+  _grnPfsOuter              = 'general';
+  _grnPickedMethod          = _grnDefaultMethod;
+  _grnPickedHide            = Object.assign({}, _grnFieldHide);
+  _grnPickedLineItems       = Object.assign({}, _grnLineItems);
+  _grnPickedExpenses        = _grnExpenses.map(e => Object.assign({}, e));
+  _grnPickedPermissions     = { approval_mode: _grnPermissions.approval_mode, role_perms: Object.assign({}, _grnPermissions.role_perms) };
+
+  _grnSyncOuter(ov);
+  _grnSyncGeneral(ov.querySelector('#gfs-panel-general'));
+  _grnSyncFields(ov.querySelector('#gfs-panel-fields'));
+  _grnSyncLineItems(ov.querySelector('#gfs-panel-lineitems'));
+  _grnSyncExpenses(ov.querySelector('#gfs-panel-expenses'));
+  _grnSyncPermissions(ov.querySelector('#gfs-panel-permissions'));
+
+  ov.style.display = 'flex';
+}
+
+function _grnSyncOuter(ov) {
+  ov.querySelectorAll('#gfs-outer-nav .pfs-opt-tab').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.outer === _grnPfsOuter);
+  });
+  const map = {
+    general:     '#gfs-panel-general',
+    fields:      '#gfs-panel-fields',
+    lineitems:   '#gfs-panel-lineitems',
+    expenses:    '#gfs-panel-expenses',
+    permissions: '#gfs-panel-permissions',
+  };
+  Object.entries(map).forEach(([key, sel]) => {
+    const el = ov.querySelector(sel);
+    if (el) el.style.display = _grnPfsOuter === key ? '' : 'none';
+  });
+}
+
+function _grnRenderExpRow(container, exp) {
+  const row = document.createElement('div');
+  row.className = 'gfs-exp-row';
+  row.dataset.expId = exp.id;
+  row.innerHTML = `
+    <input type="text"   class="gfs-exp-name"  placeholder="e.g. Shipping" value="${escHtml(exp.name || '')}">
+    <select class="gfs-exp-type">
+      <option value="flat" ${exp.type === 'flat' ? 'selected' : ''}>Flat</option>
+      <option value="pct"  ${exp.type === 'pct'  ? 'selected' : ''}>%</option>
+    </select>
+    <input type="number" class="gfs-exp-value" placeholder="0.00" min="0" step="0.01" value="${escHtml(String(exp.value || ''))}">
+    <button class="gfs-exp-remove" title="Remove"><i class="fa fa-trash"></i></button>`;
+  row.querySelector('.gfs-exp-name').addEventListener('input',  function () { exp.name  = this.value; });
+  row.querySelector('.gfs-exp-type').addEventListener('change', function () { exp.type  = this.value; });
+  row.querySelector('.gfs-exp-value').addEventListener('input', function () { exp.value = this.value; });
+  row.querySelector('.gfs-exp-remove').addEventListener('click', () => {
+    _grnPickedExpenses = _grnPickedExpenses.filter(e => e.id !== exp.id);
+    row.remove();
+  });
+  container.appendChild(row);
+}
+
+function _grnSyncExpenses(panel) {
+  if (!panel) return;
+  const container = panel.querySelector('#gfs-exp-rows');
+  if (!container) return;
+  container.innerHTML = '';
+  _grnPickedExpenses.forEach(exp => _grnRenderExpRow(container, exp));
+}
+
+// ── Permissions panel helpers ─────────────────────────────────────────────
+function _grnSyncPermissions(panel) {
+  if (!panel) return;
+  const sel = panel.querySelector('#gfs-perm-mode');
+  if (sel) sel.value = _grnPickedPermissions.approval_mode;
+  _grnSyncPermMode(panel);
+}
+
+function _grnSyncPermMode(panel) {
+  if (!panel) return;
+  const mode    = _grnPickedPermissions.approval_mode;
+  const hintEl  = panel.querySelector('#gfs-perm-mode-hint');
+  const section = panel.querySelector('#gfs-perm-role-section');
+  if (hintEl) {
+    hintEl.textContent = mode === 'approval_processing'
+      ? 'GRNs will be queued for approval before stock is applied. Assign which roles may Create, Read, and Approve GRNs.'
+      : 'Stock is applied immediately when a GRN is created. No approval step is required.';
+  }
+  if (section) section.style.display = '';   // always show role section
+  _grnLoadPermRoles(panel);
+}
+
+let _grnPermRolesCache = null;  // cached role list to avoid repeat fetches
+
+async function _grnLoadPermRoles(panel) {
+  if (!panel) return;
+  const loading  = panel.querySelector('#gfs-perm-loading');
+  const tableWrap = panel.querySelector('#gfs-perm-table-wrap');
+  const tbody    = panel.querySelector('#gfs-perm-tbody');
+  const thead    = panel.querySelector('#gfs-perm-thead');
+  if (!tbody || !thead) return;
+
+  if (loading)   loading.style.display   = '';
+  if (tableWrap) tableWrap.style.display = 'none';
+
+  if (!_grnPermRolesCache) {
+    try {
+      const res = await API.get('grn-permissions');
+      const d   = res.body?.data || {};
+      _grnPermRolesCache = d.roles || [];
+      // Merge server role_permissions into picked state (first load only)
+      if (d.role_permissions && Object.keys(_grnPickedPermissions.role_perms).length === 0) {
+        _grnPickedPermissions.role_perms = Object.assign({}, d.role_permissions);
+      }
+    } catch (_) {
+      _grnPermRolesCache = [];
+    }
+  }
+
+  const roles   = _grnPermRolesCache;
+  const mode    = _grnPickedPermissions.approval_mode;
+  const showApproval = mode === 'approval_processing';
+
+  // Rebuild header
+  thead.innerHTML = `
+    <th class="gfs-perm-th-role">Role</th>
+    <th class="gfs-perm-th-perm">GRN Create</th>
+    <th class="gfs-perm-th-perm">GRN Read</th>
+    ${showApproval ? '<th class="gfs-perm-th-perm gfs-perm-th-approval">GRN Approval</th>' : ''}`;
+
+  // Rebuild body
+  tbody.innerHTML = '';
+  roles.forEach(role => {
+    const perms = _grnPickedPermissions.role_perms[role.slug] || {};
+    const canCreate   = perms.create   !== false;   // default true
+    const canRead     = perms.read     !== false;   // default true
+    const canApprove  = !!perms.approval;           // default false
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="gfs-perm-td-role">
+        <span class="gfs-perm-role-dot" style="background:${escHtml(role.color||'#94a3b8')}"></span>
+        ${escHtml(role.name)}
+        ${role.is_system ? '<span class="gfs-perm-sys-badge">system</span>' : ''}
+      </td>
+      <td class="gfs-perm-td-chk">
+        <label class="gfs-perm-chk-label">
+          <input type="checkbox" class="gfs-perm-inp" data-slug="${escHtml(role.slug)}" data-perm="create" ${canCreate ? 'checked' : ''}>
+          <span class="gfs-perm-chk-box"></span>
+        </label>
+      </td>
+      <td class="gfs-perm-td-chk">
+        <label class="gfs-perm-chk-label">
+          <input type="checkbox" class="gfs-perm-inp" data-slug="${escHtml(role.slug)}" data-perm="read" ${canRead ? 'checked' : ''}>
+          <span class="gfs-perm-chk-box"></span>
+        </label>
+      </td>
+      ${showApproval ? `<td class="gfs-perm-td-chk gfs-perm-td-approval">
+        <label class="gfs-perm-chk-label">
+          <input type="checkbox" class="gfs-perm-inp" data-slug="${escHtml(role.slug)}" data-perm="approval" ${canApprove ? 'checked' : ''}>
+          <span class="gfs-perm-chk-box"></span>
+        </label>
+      </td>` : ''}`;
+
+    tbody.appendChild(tr);
+  });
+
+  // Checkbox change handler
+  tbody.querySelectorAll('.gfs-perm-inp').forEach(inp => {
+    inp.addEventListener('change', function () {
+      const slug = this.dataset.slug;
+      const perm = this.dataset.perm;
+      if (!_grnPickedPermissions.role_perms[slug]) {
+        _grnPickedPermissions.role_perms[slug] = { create: true, read: true, approval: false };
+      }
+      _grnPickedPermissions.role_perms[slug][perm] = this.checked;
+    });
+  });
+
+  if (loading)   loading.style.display   = 'none';
+  if (tableWrap) tableWrap.style.display = '';
+}
+
+function _grnSyncLineItems(panel) {
+  if (!panel) return;
+  panel.querySelectorAll('.gfs-li-inp[data-li]').forEach(inp => {
+    const on = !!_grnPickedLineItems[inp.dataset.li];
+    inp.checked = on;
+    inp.closest('.pfs-view-row')?.classList.toggle('selected', on);
+  });
+}
+
+function _grnSyncGeneral(panel) {
+  if (!panel) return;
+  panel.querySelectorAll('.pfs-view-row[data-method]').forEach(row => {
+    row.classList.toggle('selected', row.dataset.method === _grnPickedMethod);
+  });
+}
+
+function _grnSyncFields(panel) {
+  if (!panel) return;
+  panel.querySelectorAll('.pfs-sw-input[data-field]').forEach(inp => {
+    const hidden = !!_grnPickedHide[inp.dataset.field];
+    inp.checked = !hidden;
+    inp.closest('.pfs-field-row')?.classList.toggle('pfs-field-hidden', hidden);
+  });
+}
+
+document.getElementById('grn-modal-settings-btn')?.addEventListener('click', e => {
+  e.stopPropagation();
+  _openGrnSettings();
+});
+
+// Load saved GRN prefs on startup
+(async () => {
+  try {
+    const cfg = await window.electronAPI?.getConfig?.();
+    const sf  = cfg?.[_GRN_FIELDS_KEY];
+    if (sf && typeof sf === 'object') _grnFieldHide = sf;
+    const ss  = cfg?.[_GRN_SETTINGS_KEY];
+    if (ss?.defaultMethod) _grnDefaultMethod = ss.defaultMethod;
+    const sl  = cfg?.[_GRN_LINEITEMS_KEY];
+    if (sl && typeof sl === 'object') _grnLineItems = { ..._grnLineItems, ...sl };
+    const se  = cfg?.[_GRN_EXPENSES_KEY];
+    if (Array.isArray(se)) _grnExpenses = se;
+    const sp  = cfg?.[_GRN_PERMISSIONS_KEY];
+    if (sp && typeof sp === 'object') {
+      _grnPermissions = {
+        approval_mode: sp.approval_mode || 'without_permission',
+        role_perms:    sp.role_perms && typeof sp.role_perms === 'object' ? sp.role_perms : {},
+      };
+    }
+  } catch (_) {}
+  _applyGrnPrefs();
+})();
 
 // ── Create GRN Modal ──────────────────────────────────────────────────────
 async function _grnOpenCreateModal(purchaseId) {
@@ -8949,12 +9630,14 @@ async function _grnOpenCreateModal(purchaseId) {
   $('#grn-f-date').value = today;
   $('#grn-f-reference').value = '';
   $('#grn-f-notes').value = '';
-  // Reset payment method to cash
-  $$('#grn-method-btns .grn-method-btn').forEach(b => b.classList.toggle('active', b.dataset.method === 'cash'));
-  $('#grn-payment-fields').style.display = '';
-  const cf = $('#grn-cheque-fields'); if (cf) cf.style.display = 'none';
+  // Reset payment method to saved default
+  _grnApplyDefaultMethod(_grnDefaultMethod);
+  const cf = $('#grn-cheque-fields'); if (cf && _grnDefaultMethod !== 'cheque') cf.style.display = 'none';
   $('#grn-f-cheque-ref').value = '';
   $('#grn-f-cheque-date').value = '';
+  // Reset credit terms
+  const gcd = $('#grn-f-credit-days'); if (gcd) gcd.value = '';
+  const gdd = $('#grn-credit-due-display'); if (gdd) gdd.style.display = 'none';
   document.querySelectorAll('input[name="grn-pay-opt"]').forEach(r => { r.checked = r.value === 'full'; });
   $('#grn-partial-row').style.display = 'none';
 
@@ -8984,6 +9667,7 @@ async function _grnOpenCreateModal(purchaseId) {
 
   _grnRenderFormItems();
   _grnCalcFormTotal();
+  _applyGrnPrefs();
 }
 
 function _grnRenderFormItems() {
@@ -8993,7 +9677,9 @@ function _grnRenderFormItems() {
     tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:20px">No items on this PO</td></tr>`;
     return;
   }
-  tbody.innerHTML = _grn.formItems.map((it, idx) => `
+  tbody.innerHTML = _grn.formItems.map((it, idx) => {
+    const gross = ((it.quantity_remaining||0) * (it.unit_cost||0));
+    return `
     <tr class="grn-item-row" data-idx="${idx}">
       <td class="grn-td-product">${it.product_name}</td>
       <td class="grn-td-num">${(it.quantity_ordered||0)}</td>
@@ -9001,35 +9687,76 @@ function _grnRenderFormItems() {
       <td class="grn-td-num">${(it.quantity_remaining||0)}</td>
       <td class="grn-td-num"><input type="number" class="grn-item-qty po-item-num" data-idx="${idx}" value="${(it.quantity_remaining||0)}" min="0" step="0.001" max="${it.quantity_remaining||0}"></td>
       <td class="grn-td-num"><input type="number" class="grn-item-cost po-item-num" data-idx="${idx}" value="${(it.unit_cost||0).toFixed(2)}" min="0" step="0.01"></td>
-      <td class="grn-td-num grn-item-linetotal">${cur}${((it.quantity_remaining||0)*(it.unit_cost||0)).toFixed(2)}</td>
-    </tr>`).join('');
+      <td class="grn-td-num grn-col-uc"><input type="number" class="grn-item-uc" data-idx="${idx}" value="" min="0" step="1" placeholder="—"></td>
+      <td class="grn-col-uom"><input type="text" class="grn-item-uom" data-idx="${idx}" value="" placeholder="pcs"></td>
+      <td class="grn-td-num grn-col-disc"><input type="number" class="grn-item-disc" data-idx="${idx}" value="" min="0" max="100" step="0.01" placeholder="0"></td>
+      <td class="grn-td-num grn-col-gross grn-item-gross">${cur}${gross.toFixed(2)}</td>
+      <td class="grn-td-num grn-col-net grn-item-net">${cur}${gross.toFixed(2)}</td>
+      <td class="grn-td-num grn-item-linetotal grn-th-total">${cur}${gross.toFixed(2)}</td>
+    </tr>`;
+  }).join('');
 
-  tbody.querySelectorAll('.grn-item-qty,.grn-item-cost').forEach(inp => {
+  tbody.querySelectorAll('.grn-item-qty,.grn-item-cost,.grn-item-disc').forEach(inp => {
     inp.addEventListener('input', () => {
-      const idx = +inp.dataset.idx;
-      const row = tbody.querySelector(`.grn-item-row[data-idx="${idx}"]`);
+      const idx  = +inp.dataset.idx;
+      const row  = tbody.querySelector(`.grn-item-row[data-idx="${idx}"]`);
       const qty  = parseFloat(row.querySelector('.grn-item-qty').value)  || 0;
       const cost = parseFloat(row.querySelector('.grn-item-cost').value) || 0;
-      const cur  = window._activeSession?.currency || '';
-      row.querySelector('.grn-item-linetotal').textContent = `${cur}${(qty*cost).toFixed(2)}`;
+      const disc = parseFloat(row.querySelector('.grn-item-disc')?.value) || 0;
+      const cur2 = window._activeSession?.currency || '';
+      const gross = qty * cost;
+      const net   = gross * (1 - disc / 100);
+      row.querySelector('.grn-item-linetotal').textContent = `${cur2}${gross.toFixed(2)}`;
+      row.querySelector('.grn-item-gross').textContent     = `${cur2}${gross.toFixed(2)}`;
+      row.querySelector('.grn-item-net').textContent       = `${cur2}${net.toFixed(2)}`;
       _grnCalcFormTotal();
     });
   });
 }
 
+// ── Expense helper ────────────────────────────────────────────────────────
+// Returns { expHtml: string, grandTotal: number } given a subtotal + expense rules.
+function _calcExpenses(subtotal, cur, expenses) {
+  let expHtml = '';
+  let expTotal = 0;
+  (expenses || []).forEach(exp => {
+    const val = parseFloat(exp.value) || 0;
+    if (!exp.name || val <= 0) return;
+    const amt = exp.type === 'pct' ? subtotal * val / 100 : val;
+    expTotal += amt;
+    const typeLabel = exp.type === 'pct' ? `${val}%` : `Flat`;
+    expHtml += `<div class="po-summary-row grn-exp-row">
+      <span><i class="fa fa-receipt" style="font-size:10px;opacity:.6;margin-right:4px"></i>${escHtml(exp.name)}<span class="grn-exp-type">${escHtml(typeLabel)}</span></span>
+      <span>${cur}${amt.toFixed(2)}</span>
+    </div>`;
+  });
+  return { expHtml, grandTotal: subtotal + expTotal };
+}
+
 function _grnCalcFormTotal() {
-  const cur = window._activeSession?.currency || '';
-  const tbody = $('#grn-items-tbody');
-  let total = 0, items = 0;
+  const cur    = window._activeSession?.currency || '';
+  const useNgv = !!_grnLineItems['net-gross'];
+  const tbody  = $('#grn-items-tbody');
+  let subtotal = 0, items = 0;
   (tbody?.querySelectorAll('.grn-item-row') || []).forEach(row => {
     const qty  = parseFloat(row.querySelector('.grn-item-qty')?.value)  || 0;
     const cost = parseFloat(row.querySelector('.grn-item-cost')?.value) || 0;
-    if (qty > 0) { total += qty * cost; items++; }
+    const disc = parseFloat(row.querySelector('.grn-item-disc')?.value) || 0;
+    if (qty > 0) {
+      const gross = qty * cost;
+      subtotal += useNgv ? gross * (1 - disc / 100) : gross;
+      items++;
+    }
   });
-  const elItems = $('#grn-summary-items');
-  const elTotal = $('#grn-summary-total');
-  if (elItems) elItems.textContent = items;
-  if (elTotal) elTotal.textContent = `${cur}${total.toFixed(2)}`;
+  const { expHtml, grandTotal } = _calcExpenses(subtotal, cur, _grnExpenses);
+  const elItems    = $('#grn-summary-items');
+  const elSubtotal = $('#grn-summary-subtotal');
+  const elExpLines = $('#grn-expense-lines');
+  const elTotal    = $('#grn-summary-total');
+  if (elItems)    elItems.textContent    = items;
+  if (elSubtotal) elSubtotal.textContent = `${cur}${subtotal.toFixed(2)}`;
+  if (elExpLines) elExpLines.innerHTML   = expHtml;
+  if (elTotal)    elTotal.textContent    = `${cur}${grandTotal.toFixed(2)}`;
 }
 
 async function _grnSubmitCreate() {
@@ -9047,6 +9774,9 @@ async function _grnSubmitCreate() {
       purchase_item_id:   fi.id,
       quantity_received:  qty,
       unit_cost:          parseFloat(row.querySelector('.grn-item-cost')?.value) || fi.unit_cost || 0,
+      units_per_case:     parseFloat(row.querySelector('.grn-item-uc')?.value)   || null,
+      uom:                row.querySelector('.grn-item-uom')?.value.trim()       || null,
+      discount_percent:   parseFloat(row.querySelector('.grn-item-disc')?.value) || null,
     });
   });
 
@@ -9065,6 +9795,9 @@ async function _grnSubmitCreate() {
     pay_amount:          (isCash && payOption === 'partial') ? (parseFloat($('#grn-f-amount').value) || null) : null,
     payment_reference:   method === 'cheque' ? ($('#grn-f-cheque-ref').value.trim() || null) : null,
     cheque_due_date:     method === 'cheque' ? ($('#grn-f-cheque-date').value || null) : null,
+    payment_terms_days:  method === 'credit' ? (parseInt($('#grn-f-credit-days')?.value) || null) : null,
+    expense_lines:       _grnExpenses.filter(e => e.name && parseFloat(e.value) > 0)
+                           .map(e => ({ name: e.name, type: e.type, value: parseFloat(e.value) })),
     items,
   };
 
@@ -9164,6 +9897,43 @@ $('#grn-modal-cancel')?.addEventListener('click', () => { $('#grn-modal').style.
 $('#grn-modal-save')?.addEventListener('click',   _grnSubmitCreate);
 
 // Method toggle in create modal
+// ── Credit payment terms: live due-date calculation ───────────────────────
+function _grnCreditDueDate(receivedDateStr, days) {
+  const d = parseInt(days) || 0;
+  if (!receivedDateStr || d <= 0) return null;
+  const dt = new Date(receivedDateStr + 'T00:00:00');
+  if (isNaN(dt)) return null;
+  dt.setDate(dt.getDate() + d);
+  return dt.toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+function _grnUpdateCreditDue() {
+  const dateVal = $('#grn-f-date')?.value;
+  const days    = $('#grn-f-credit-days')?.value;
+  const label   = _grnCreditDueDate(dateVal, days);
+  const display = $('#grn-credit-due-display');
+  const text    = $('#grn-credit-due-text');
+  if (display) display.style.display = label ? '' : 'none';
+  if (text)    text.textContent      = label || '—';
+}
+
+function _dgrnUpdateCreditDue() {
+  const dateVal = $('#grn-direct-date')?.value;
+  const days    = $('#grn-direct-f-credit-days')?.value;
+  const label   = _grnCreditDueDate(dateVal, days);
+  const display = $('#grn-direct-credit-due-display');
+  const text    = $('#grn-direct-credit-due-text');
+  if (display) display.style.display = label ? '' : 'none';
+  if (text)    text.textContent      = label || '—';
+}
+
+// Wire: days input → update due date
+$('#grn-f-credit-days')?.addEventListener('input', _grnUpdateCreditDue);
+$('#grn-direct-f-credit-days')?.addEventListener('input', _dgrnUpdateCreditDue);
+// Wire: date input → update due date (both modals share the same date field)
+$('#grn-f-date')?.addEventListener('change', _grnUpdateCreditDue);
+$('#grn-direct-date')?.addEventListener('change', _dgrnUpdateCreditDue);
+
 $('#grn-method-btns')?.addEventListener('click', e => {
   const btn = e.target.closest('.grn-method-btn');
   if (!btn) return;
@@ -9172,7 +9942,10 @@ $('#grn-method-btns')?.addEventListener('click', e => {
   const method = btn.dataset.method;
   $('#grn-payment-fields').style.display = method === 'credit' ? 'none' : '';
   const cf = $('#grn-cheque-fields');
-  if (cf) { cf.style.display = method === 'cheque' ? 'flex' : 'none'; }
+  if (cf) cf.style.display = method === 'cheque' ? 'flex' : 'none';
+  const ct = $('#grn-credit-terms');
+  if (ct) ct.style.display = method === 'credit' ? '' : 'none';
+  if (method === 'credit') _grnUpdateCreditDue();
 });
 
 // Partial amount toggle in create modal
@@ -9208,6 +9981,355 @@ $('#grn-receive-all-btn')?.addEventListener('click', () => {
     inp.value = max;
     inp.dispatchEvent(new Event('input'));
   });
+});
+
+// ── Direct GRN (no Purchase Order) ───────────────────────────────────────
+const _dgrnState = {
+  items: [],    // [{id, rowEl, productId, productName, qty, unitCost}]
+  method: 'cash',
+};
+
+function _dgrnOpen() {
+  const modal = $('#grn-direct-modal');
+  if (!modal) return;
+
+  // Reset state
+  _dgrnState.items  = [];
+  _dgrnState.method = _grnDefaultMethod;
+
+  // Set today's date
+  const todayEl = $('#grn-direct-date');
+  if (todayEl) todayEl.value = new Date().toISOString().slice(0, 10);
+
+  // Clear fields
+  ['#grn-direct-reference','#grn-direct-notes','#grn-direct-cheque-ref','#grn-direct-cheque-date','#grn-direct-amount']
+    .forEach(sel => { const el = $(sel); if (el) el.value = ''; });
+
+  // Apply saved default payment method
+  $$('#grn-direct-method-btns .grn-method-btn').forEach(b => b.classList.toggle('active', b.dataset.method === _grnDefaultMethod));
+  const pf = $('#grn-direct-payment-fields');
+  if (pf) pf.style.display = _grnDefaultMethod === 'credit' ? 'none' : '';
+  const cf = $('#grn-direct-cheque-fields');
+  if (cf) cf.style.display = _grnDefaultMethod === 'cheque' ? 'flex' : 'none';
+  const ct = $('#grn-direct-credit-terms');
+  if (ct) ct.style.display = _grnDefaultMethod === 'credit' ? '' : 'none';
+  // Reset credit days + due date display
+  const dcd = $('#grn-direct-f-credit-days'); if (dcd) dcd.value = '';
+  const ddd = $('#grn-direct-credit-due-display'); if (ddd) ddd.style.display = 'none';
+  const pr = $('#grn-direct-partial-row');
+  if (pr) pr.style.display = 'none';
+  document.querySelectorAll('input[name="grn-direct-pay-opt"]').forEach(r => { r.checked = r.value === 'full'; });
+
+  // Clear items table
+  $('#grn-direct-items-tbody').innerHTML = '';
+  _dgrnRenderEmpty();
+  _dgrnCalcTotal();
+
+  // Load suppliers into dropdown
+  _dgrnLoadSuppliers();
+
+  // Load accounts into dropdown
+  _dgrnLoadAccounts();
+
+  // Apply field visibility prefs
+  _applyGrnPrefs();
+
+  modal.style.display = 'flex';
+}
+
+async function _dgrnLoadSuppliers() {
+  const sel = $('#grn-direct-supplier');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">— None / Walk-in —</option>';
+  try {
+    const res = await API.suppliers?.() ?? { status: 0 };
+    if (res.status === 200) {
+      (res.body?.data ?? []).forEach(s => {
+        const opt = document.createElement('option');
+        opt.value = s.id;
+        opt.textContent = s.name;
+        sel.appendChild(opt);
+      });
+    }
+  } catch (_) { /* suppliers endpoint may not exist yet */ }
+}
+
+async function _dgrnLoadAccounts() {
+  const sel = $('#grn-direct-account');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">— Select account —</option>';
+  const res = await API.accounts();
+  if (res.status === 200) {
+    (res.body?.data ?? []).forEach(a => {
+      const opt = document.createElement('option');
+      opt.value = a.id;
+      opt.textContent = a.account_name + (a.bank_name ? ' · ' + a.bank_name : '');
+      sel.appendChild(opt);
+    });
+  }
+}
+
+function _dgrnRenderEmpty() {
+  const tbody = $('#grn-direct-items-tbody');
+  const emptyDiv = $('#grn-direct-items-empty');
+  if (!tbody || !emptyDiv) return;
+  const hasItems = tbody.querySelectorAll('tr').length > 0;
+  emptyDiv.style.display = hasItems ? 'none' : 'flex';
+}
+
+function _dgrnCalcTotal() {
+  const cur    = window._activeSession?.currency || '';
+  const useNgv = !!_grnLineItems['net-gross'];
+  let subtotal = 0, count = 0;
+  _dgrnState.items.forEach(item => {
+    const gross = (parseFloat(item.qty) || 0) * (parseFloat(item.unitCost) || 0);
+    const disc  = parseFloat(item.discount) || 0;
+    subtotal += useNgv ? gross * (1 - disc / 100) : gross;
+    count++;
+  });
+  const { expHtml, grandTotal } = _calcExpenses(subtotal, cur, _grnExpenses);
+  const sumItems    = $('#grn-direct-summary-items');
+  const sumSubtotal = $('#grn-direct-summary-subtotal');
+  const sumExpLines = $('#grn-direct-expense-lines');
+  const sumTotal    = $('#grn-direct-summary-total');
+  if (sumItems)    sumItems.textContent    = count;
+  if (sumSubtotal) sumSubtotal.textContent = `${cur}${subtotal.toFixed(2)}`;
+  if (sumExpLines) sumExpLines.innerHTML   = expHtml;
+  if (sumTotal)    sumTotal.textContent    = `${cur}${grandTotal.toFixed(2)}`;
+}
+
+function _dgrnAddItemRow() {
+  const tbody = $('#grn-direct-items-tbody');
+  const emptyDiv = $('#grn-direct-items-empty');
+  if (!tbody) return;
+  if (emptyDiv) emptyDiv.style.display = 'none';
+
+  const itemId = Date.now() + Math.random();
+  const item = { id: itemId, productId: null, productName: '', qty: 1, unitCost: 0 };
+  _dgrnState.items.push(item);
+
+  const tr = document.createElement('tr');
+  tr.dataset.itemId = itemId;
+  tr.innerHTML = `
+    <td class="grn-td-product">
+      <div class="grn-item-product-wrap">
+        <input type="text" class="grn-item-search-inp" placeholder="Search product…" autocomplete="off">
+        <div class="grn-item-search-dd" style="display:none"></div>
+      </div>
+    </td>
+    <td class="grn-td-num">
+      <input type="number" class="grn-item-qty" value="1" min="0.001" step="any">
+    </td>
+    <td class="grn-td-num">
+      <input type="number" class="grn-item-cost" value="0" min="0" step="any">
+    </td>
+    <td class="grn-td-num grn-col-uc">
+      <input type="number" class="grn-item-uc" min="0" step="1" placeholder="—">
+    </td>
+    <td class="grn-col-uom">
+      <input type="text" class="grn-item-uom" placeholder="pcs">
+    </td>
+    <td class="grn-td-num grn-col-disc">
+      <input type="number" class="grn-item-disc" min="0" max="100" step="0.01" placeholder="0">
+    </td>
+    <td class="grn-td-num grn-col-gross grn-item-gross">0.00</td>
+    <td class="grn-td-num grn-col-net   grn-item-net">0.00</td>
+    <td class="grn-td-num grn-item-linetotal grn-th-total">0.00</td>
+    <td>
+      <button class="grn-item-remove-btn" title="Remove"><i class="fa fa-times"></i></button>
+    </td>
+  `;
+  tbody.appendChild(tr);
+
+  const searchInp  = tr.querySelector('.grn-item-search-inp');
+  const dd         = tr.querySelector('.grn-item-search-dd');
+  const qtyInp     = tr.querySelector('.grn-item-qty');
+  const costInp    = tr.querySelector('.grn-item-cost');
+  const discInp    = tr.querySelector('.grn-item-disc');
+  const grossCell  = tr.querySelector('.grn-item-gross');
+  const netCell    = tr.querySelector('.grn-item-net');
+  const lineTotal  = tr.querySelector('.grn-item-linetotal');
+  const removeBtn  = tr.querySelector('.grn-item-remove-btn');
+
+  function _updateLine() {
+    const qty  = parseFloat(qtyInp.value)  || 0;
+    const cost = parseFloat(costInp.value) || 0;
+    const disc = parseFloat(discInp?.value) || 0;
+    const gross = qty * cost;
+    const net   = gross * (1 - disc / 100);
+    if (lineTotal) lineTotal.textContent = gross.toFixed(2);
+    if (grossCell) grossCell.textContent = gross.toFixed(2);
+    if (netCell)   netCell.textContent   = net.toFixed(2);
+    item.qty      = qty;
+    item.unitCost = cost;
+    item.discount = disc;
+    _dgrnCalcTotal();
+  }
+  qtyInp.addEventListener('input',  _updateLine);
+  costInp.addEventListener('input', _updateLine);
+  discInp?.addEventListener('input', _updateLine);
+
+  removeBtn.addEventListener('click', () => {
+    _dgrnState.items = _dgrnState.items.filter(i => i.id !== itemId);
+    tr.remove();
+    _dgrnCalcTotal();
+    _dgrnRenderEmpty();
+  });
+
+  // Product search
+  let _searchTimer;
+  searchInp.addEventListener('input', () => {
+    clearTimeout(_searchTimer);
+    const q = searchInp.value.trim();
+    if (q.length < 2) { dd.style.display = 'none'; return; }
+    _searchTimer = setTimeout(async () => {
+      const res = await API.productSearch(q);
+      if (res.status !== 200) return;
+      const prods = res.body?.data ?? res.body?.products ?? [];
+      dd.innerHTML = '';
+      if (!prods.length) {
+        dd.innerHTML = '<div class="grn-item-search-dd-row" style="color:var(--text-muted)">No results</div>';
+      } else {
+        prods.slice(0, 10).forEach(p => {
+          const row = document.createElement('div');
+          row.className = 'grn-item-search-dd-row';
+          row.innerHTML = `<span class="grn-isddr-name">${escHtml(p.name)}</span><span class="grn-isddr-sku">${escHtml(p.sku || '')}</span>`;
+          row.addEventListener('mousedown', e => {
+            e.preventDefault();
+            item.productId   = p.id;
+            item.productName = p.name;
+            searchInp.value  = p.name;
+            dd.style.display = 'none';
+            // Pre-fill last cost if available
+            if (p.last_purchase_cost || p.cost_price) {
+              costInp.value = p.last_purchase_cost ?? p.cost_price ?? 0;
+              _updateLine();
+            }
+          });
+          dd.appendChild(row);
+        });
+      }
+      dd.style.display = 'block';
+    }, 220);
+  });
+  searchInp.addEventListener('blur', () => { setTimeout(() => { dd.style.display = 'none'; }, 150); });
+
+  searchInp.focus();
+  _dgrnCalcTotal();
+}
+
+async function _dgrnSubmit() {
+  const saveBtn = $('#grn-direct-save');
+  if (!saveBtn || saveBtn.disabled) return;
+
+  // Validate items
+  const validItems = _dgrnState.items.filter(i => i.productId && i.qty > 0);
+  if (!validItems.length) { toast('Add at least one product', 'warning'); return; }
+
+  const dateVal = $('#grn-direct-date')?.value;
+  if (!dateVal) { toast('Select received date', 'warning'); return; }
+
+  const method = _dgrnState.method;
+  let accountId = null;
+  let chequeRef = null;
+  let chequeDate = null;
+  let payAmount = null;
+
+  if (method !== 'credit') {
+    accountId = parseInt($('#grn-direct-account')?.value) || null;
+    if (!accountId) { toast('Select an account for payment', 'warning'); return; }
+    const payOpt = document.querySelector('input[name="grn-direct-pay-opt"]:checked')?.value ?? 'full';
+    if (payOpt === 'partial') {
+      payAmount = parseFloat($('#grn-direct-amount')?.value) || null;
+      if (!payAmount) { toast('Enter partial payment amount', 'warning'); return; }
+    }
+    if (method === 'cheque') {
+      chequeRef  = $('#grn-direct-cheque-ref')?.value.trim() || null;
+      chequeDate = $('#grn-direct-cheque-date')?.value || null;
+    }
+  }
+
+  const body = {
+    supplier_id:  parseInt($('#grn-direct-supplier')?.value) || null,
+    received_date: dateVal,
+    reference:    $('#grn-direct-reference')?.value.trim() || null,
+    notes:        $('#grn-direct-notes')?.value.trim()     || null,
+    payment_method:    method,
+    deduct_account_id: accountId,
+    payment_option:    document.querySelector('input[name="grn-direct-pay-opt"]:checked')?.value ?? 'full',
+    pay_amount:        payAmount,
+    payment_reference:  chequeRef,
+    cheque_due_date:    chequeDate,
+    payment_terms_days: method === 'credit' ? (parseInt($('#grn-direct-f-credit-days')?.value) || null) : null,
+    expense_lines:      _grnExpenses.filter(e => e.name && parseFloat(e.value) > 0)
+                          .map(e => ({ name: e.name, type: e.type, value: parseFloat(e.value) })),
+    items: (() => {
+      const tbody2 = $('#grn-direct-items-tbody');
+      return validItems.map(i => {
+        const row = tbody2?.querySelector(`tr[data-item-id="${i.id}"]`);
+        return {
+          product_id:        i.productId,
+          quantity_received: i.qty,
+          unit_cost:         i.unitCost,
+          discount_percent:  i.discount  || null,
+          units_per_case:    row ? (parseFloat(row.querySelector('.grn-item-uc')?.value)  || null) : null,
+          uom:               row ? (row.querySelector('.grn-item-uom')?.value.trim()      || null) : null,
+        };
+      });
+    })(),
+  };
+
+  saveBtn.disabled = true;
+  saveBtn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
+
+  const res = await API.createDirectGrn(body);
+
+  saveBtn.disabled = false;
+  saveBtn.innerHTML = '<i class="fa fa-truck-ramp-box"></i> Record Receipt';
+
+  if (res.status !== 200 && res.status !== 201) {
+    toast('Failed to save: ' + (res.body?.message ?? 'unknown error'), 'error');
+    return;
+  }
+
+  $('#grn-direct-modal').style.display = 'none';
+  toast('Goods received and stock updated', 'success');
+  // Refresh GRN list
+  _grnLoad?.();
+}
+
+// Wiring
+$('#grn-add-direct-btn')?.addEventListener('click', _dgrnOpen);
+$('#grn-direct-settings-btn')?.addEventListener('click', e => { e.stopPropagation(); _openGrnSettings(); });
+$('#grn-direct-close')?.addEventListener('click',  () => { $('#grn-direct-modal').style.display = 'none'; });
+$('#grn-direct-cancel')?.addEventListener('click', () => { $('#grn-direct-modal').style.display = 'none'; });
+$('#grn-direct-save')?.addEventListener('click',   _dgrnSubmit);
+$('#grn-direct-add-item-btn')?.addEventListener('click', _dgrnAddItemRow);
+
+$('#grn-direct-method-btns')?.addEventListener('click', e => {
+  const btn = e.target.closest('.grn-method-btn');
+  if (!btn) return;
+  $$('#grn-direct-method-btns .grn-method-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  _dgrnState.method = btn.dataset.method;
+  const pf = $('#grn-direct-payment-fields');
+  if (pf) pf.style.display = btn.dataset.method === 'credit' ? 'none' : '';
+  const cf = $('#grn-direct-cheque-fields');
+  if (cf) cf.style.display = btn.dataset.method === 'cheque' ? 'flex' : 'none';
+  const ct = $('#grn-direct-credit-terms');
+  if (ct) ct.style.display = btn.dataset.method === 'credit' ? '' : 'none';
+  if (btn.dataset.method === 'credit') _dgrnUpdateCreditDue();
+});
+
+document.querySelectorAll('input[name="grn-direct-pay-opt"]').forEach(r => {
+  r.addEventListener('change', () => {
+    const pr = $('#grn-direct-partial-row');
+    if (pr) pr.style.display = r.value === 'partial' && r.checked ? '' : 'none';
+  });
+});
+
+$('#grn-direct-modal')?.addEventListener('click', e => {
+  if (e.target === e.currentTarget) e.currentTarget.style.display = 'none';
 });
 
 // ── End Goods Receive Notes ────────────────────────────────────────────────
@@ -11581,7 +12703,7 @@ async function _prodOpenModal(editId) {
     _prodBatchRender();
   }
 
-  // Reset to first tab
+  // Reset to Basic tab
   $$('#product-modal .prod-modal-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === 'basic'));
   $$('#product-modal .prod-modal-pane').forEach(p => p.classList.toggle('active', p.dataset.pane === 'basic'));
 
@@ -11815,6 +12937,270 @@ $$('#product-modal .prod-modal-tab').forEach(btn => {
     if (pane) pane.classList.add('active');
   });
 });
+
+// ── Product modal: view mode & field visibility settings ────────────────────
+const _PROD_VIEW_KEY   = 'prod_modal_view';
+const _PROD_FIELDS_KEY = 'prod_modal_fields';
+
+let _prodViewMode  = 'tab';  // 'tab' | 'single'
+let _prodFieldHide = {};     // { 'field-id': true } → true = hidden
+
+const _PROD_PANE_META = {
+  basic:    { label: 'Basic',           icon: 'fa-circle-info' },
+  pricing:  { label: 'Pricing & Stock', icon: 'fa-tag'         },
+  media:    { label: 'Media',           icon: 'fa-image'       },
+  advanced: { label: 'Advanced',        icon: 'fa-sliders'     },
+};
+
+// ─ Every hideable field in the product form ─────────────────────────────────
+const _PROD_FIELD_MAP = [
+  // Basic
+  { id: 'sku',         label: 'SKU / Barcode',  icon: 'fa-barcode',        section: 'Basic',           getEl() { return document.getElementById('prod-f-sku')?.closest('.po-field'); } },
+  { id: 'model-no',    label: 'Model No',        icon: 'fa-hashtag',        section: 'Basic',           getEl() { return document.getElementById('prod-f-model-no')?.closest('.po-field'); } },
+  { id: 'size',        label: 'Size',            icon: 'fa-ruler',          section: 'Basic',           getEl() { return document.getElementById('prod-f-size')?.closest('.po-field'); } },
+  { id: 'mfg-date',    label: 'Mfg Date',        icon: 'fa-calendar',       section: 'Basic',           getEl() { return document.getElementById('prod-f-mfg-date')?.closest('.po-field'); } },
+  { id: 'description', label: 'Description',     icon: 'fa-align-left',     section: 'Basic',           getEl() { return document.getElementById('prod-f-description')?.closest('.po-field'); } },
+  { id: 'active',      label: 'Active flag',     icon: 'fa-toggle-on',      section: 'Basic',           getEl() { return document.getElementById('prod-f-active')?.closest('.po-field'); } },
+  // Pricing & Stock
+  { id: 'cost-price',      label: 'Cost Price',      icon: 'fa-coins',          section: 'Pricing & Stock', getEl() { return document.getElementById('prod-f-cost-price')?.closest('.po-field'); } },
+  { id: 'wholesale-price', label: 'Wholesale Price', icon: 'fa-tags',           section: 'Pricing & Stock', getEl() { return document.getElementById('prod-f-wholesale-price')?.closest('.po-field'); } },
+  { id: 'unit',            label: 'Unit',            icon: 'fa-weight-scale',   section: 'Pricing & Stock', getEl() { return document.getElementById('prod-f-unit')?.closest('.po-field'); } },
+  { id: 'opening-stock',   label: 'Opening Stock',   icon: 'fa-layer-group',    section: 'Pricing & Stock', getEl() { return document.getElementById('prod-batch-section'); } },
+  // Media
+  { id: 'image',      label: 'Image',      icon: 'fa-image',     section: 'Media', getEl() { return document.getElementById('prod-img-thumb')?.closest('.po-field'); } },
+  { id: 'categories', label: 'Categories', icon: 'fa-folder',    section: 'Media', getEl() { return document.getElementById('prod-cat-wrap')?.closest('.po-field'); } },
+  { id: 'brands',     label: 'Brands',     icon: 'fa-trademark', section: 'Media', getEl() { return document.getElementById('prod-brand-wrap')?.closest('.po-field'); } },
+  // Advanced
+  { id: 'bundle',            label: 'Bundle Product',     icon: 'fa-cubes',          section: 'Advanced', getEl() { return document.querySelector('#product-modal .prod-bundle-toggle-row'); } },
+  { id: 'warranty',          label: 'Warranty',           icon: 'fa-shield-halved',  section: 'Advanced', getEl() { return document.getElementById('prod-f-warranty')?.closest('.prod-adv-card'); } },
+  { id: 'expiry',            label: 'Expiration',         icon: 'fa-calendar-xmark', section: 'Advanced', getEl() { return document.getElementById('prod-f-expiry')?.closest('.prod-adv-card'); } },
+  { id: 'courier',           label: 'Courier Delivery',   icon: 'fa-truck',          section: 'Advanced', getEl() { return document.getElementById('prod-f-courier')?.closest('.prod-adv-card'); } },
+  { id: 'loyalty',           label: 'Loyalty Redeemable', icon: 'fa-star',           section: 'Advanced', getEl() { return document.getElementById('prod-f-loyalty')?.closest('.prod-adv-card'); } },
+  { id: 'customer-required', label: 'Customer Required',  icon: 'fa-user-check',     section: 'Advanced', getEl() { return document.getElementById('prod-f-customer-required')?.closest('.prod-adv-card'); } },
+  { id: 'rental',            label: 'Rental',             icon: 'fa-key',            section: 'Advanced', getEl() { return document.getElementById('prod-f-rental')?.closest('.prod-adv-card'); } },
+  { id: 'subscription',      label: 'Subscription',       icon: 'fa-repeat',         section: 'Advanced', getEl() { return document.getElementById('prod-f-subscription')?.closest('.prod-adv-card'); } },
+  { id: 'item-tax',          label: 'Item Wise Tax',      icon: 'fa-percent',        section: 'Advanced', getEl() { return document.getElementById('prod-f-item-tax')?.closest('.prod-adv-card'); } },
+  { id: 'item-discount',     label: 'Item Wise Discount', icon: 'fa-tag',            section: 'Advanced', getEl() { return document.getElementById('prod-f-item-discount')?.closest('.prod-adv-card'); } },
+];
+
+function _applyProdTabPrefs() {
+  const modal = $('#product-modal');
+  if (!modal) return;
+
+  // ── View mode ──────────────────────────────────────────────────────────────
+  const isSingle = _prodViewMode === 'single';
+  modal.classList.toggle('prod-view-single', isSingle);
+  $$('#product-modal .prod-modal-pane[data-pane]').forEach(pane => {
+    const existing = pane.querySelector('.prod-pane-section-hd');
+    if (isSingle) {
+      if (!existing) {
+        const meta = _PROD_PANE_META[pane.dataset.pane] || {};
+        const hd   = document.createElement('div');
+        hd.className = 'prod-pane-section-hd';
+        hd.innerHTML = `<i class="fa ${meta.icon || 'fa-layer-group'}"></i>&ensp;${escHtml(meta.label || pane.dataset.pane)}`;
+        pane.insertBefore(hd, pane.firstChild);
+      }
+    } else {
+      existing?.remove();
+    }
+  });
+
+  // ── Field visibility ───────────────────────────────────────────────────────
+  _PROD_FIELD_MAP.forEach(f => {
+    const el = f.getEl();
+    if (!el) return;
+    el.style.display = _prodFieldHide[f.id] ? 'none' : '';
+  });
+}
+
+// ─ Dialog state ─────────────────────────────────────────────────────────────
+let _pfsActiveOuter = 'general'; // 'general' | 'fields'
+let _pfsPickedView  = 'tab';     // staging view mode (not applied until Apply)
+let _pfsPickedHide  = {};        // staging field-hide map
+
+function _openProdViewSettings() {
+  let ov = $('#prod-settings-overlay');
+
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'prod-settings-overlay';
+    ov.className = 'modal-overlay';
+    ov.style.zIndex = '10002';
+
+    // ── General panel: view mode chooser ────────────────────────────────────
+    const genPanel = document.createElement('div');
+    genPanel.className = 'pfs-panel pfs-gen-body';
+    genPanel.id = 'pfs-panel-general';
+    genPanel.innerHTML = `
+      <div class="pfs-section-label">Display Mode</div>
+      <div class="pfs-view-rows">
+        <div class="pfs-view-row" data-view="tab">
+          <div class="pfs-view-row-icon"><i class="fa fa-table-columns"></i></div>
+          <div class="pfs-view-row-body">
+            <div class="pfs-view-row-title">Tab View</div>
+            <div class="pfs-view-row-desc">Fields organized into sections — Basic, Pricing &amp; Stock, Media, and Advanced. Click the tabs to navigate.</div>
+          </div>
+          <i class="fa fa-circle-check pfs-view-row-chk"></i>
+        </div>
+        <div class="pfs-view-row" data-view="single">
+          <div class="pfs-view-row-icon"><i class="fa fa-bars"></i></div>
+          <div class="pfs-view-row-body">
+            <div class="pfs-view-row-title">Single View</div>
+            <div class="pfs-view-row-desc">All fields in one continuous scrollable form with section headings.</div>
+          </div>
+          <i class="fa fa-circle-check pfs-view-row-chk"></i>
+        </div>
+      </div>`;
+
+    // ── Fields panel: per-field show/hide toggles ────────────────────────────
+    const fieldsPanel = document.createElement('div');
+    fieldsPanel.className = 'pfs-panel pfs-fields-body';
+    fieldsPanel.id = 'pfs-panel-fields';
+    fieldsPanel.style.display = 'none';
+
+    const sectionOrder = [], sectionMap = {};
+    _PROD_FIELD_MAP.forEach(f => {
+      if (!sectionMap[f.section]) { sectionMap[f.section] = []; sectionOrder.push(f.section); }
+      sectionMap[f.section].push(f);
+    });
+    sectionOrder.forEach(sec => {
+      const hd = document.createElement('div');
+      hd.className = 'pfs-fields-sec-hd';
+      hd.textContent = sec;
+      fieldsPanel.appendChild(hd);
+
+      sectionMap[sec].forEach(f => {
+        const row = document.createElement('div');
+        row.className = 'pfs-field-row';
+        row.dataset.fieldId = f.id;
+        row.innerHTML = `
+          <div class="pfs-field-icon"><i class="fa ${f.icon}"></i></div>
+          <span class="pfs-field-label">${escHtml(f.label)}</span>
+          <label class="pfs-sw" title="Show / hide field">
+            <input type="checkbox" class="pfs-sw-input" data-field="${f.id}" checked>
+            <span class="pfs-sw-track"><span class="pfs-sw-knob"></span></span>
+          </label>`;
+        fieldsPanel.appendChild(row);
+
+        row.querySelector('.pfs-sw-input').addEventListener('change', function () {
+          if (this.checked) { delete _pfsPickedHide[this.dataset.field]; }
+          else              { _pfsPickedHide[this.dataset.field] = true; }
+          row.classList.toggle('pfs-field-hidden', !this.checked);
+        });
+      });
+    });
+
+    // ── Shell HTML ─────────────────────────────────────────────────────────
+    ov.innerHTML = `
+      <div class="po-aim-shell pfs-shell">
+        <div class="po-aim-header">
+          <i class="fa fa-gear" style="color:var(--accent)"></i>
+          <span>Product Form Settings</span>
+          <button class="psm-close" id="prod-settings-close"><i class="fa fa-xmark"></i></button>
+        </div>
+        <nav class="pfs-tab-nav" id="pfs-outer-nav">
+          <button class="pfs-opt-tab active" data-outer="general"><i class="fa fa-sliders"></i>&ensp;General</button>
+          <button class="pfs-opt-tab"        data-outer="fields" ><i class="fa fa-list-check"></i>&ensp;Fields</button>
+        </nav>
+        <div id="pfs-panels"></div>
+        <div class="po-aim-footer">
+          <button class="po-btn-ghost"   id="prod-settings-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+          <button class="po-btn-primary" id="prod-settings-apply" ><i class="fa fa-check"></i> Apply</button>
+        </div>
+      </div>`;
+
+    const panelsHost = ov.querySelector('#pfs-panels');
+    panelsHost.appendChild(genPanel);
+    panelsHost.appendChild(fieldsPanel);
+    document.body.appendChild(ov);
+
+    // Events ─────────────────────────────────────────────────────────────────
+    ov.addEventListener('pointerdown', e => { if (e.target === ov) ov.style.display = 'none'; });
+    ov.querySelector('#prod-settings-close') .addEventListener('click', () => ov.style.display = 'none');
+    ov.querySelector('#prod-settings-cancel').addEventListener('click', () => ov.style.display = 'none');
+
+    ov.querySelector('#pfs-outer-nav').addEventListener('click', e => {
+      const btn = e.target.closest('.pfs-opt-tab[data-outer]');
+      if (!btn) return;
+      _pfsActiveOuter = btn.dataset.outer;
+      _syncPfsOuter(ov);
+    });
+
+    genPanel.addEventListener('click', e => {
+      const row = e.target.closest('.pfs-view-row[data-view]');
+      if (!row) return;
+      _pfsPickedView = row.dataset.view;
+      _syncPfsGeneral(genPanel);
+    });
+
+    ov.querySelector('#prod-settings-apply').addEventListener('click', async () => {
+      _prodViewMode  = _pfsPickedView;
+      _prodFieldHide = Object.assign({}, _pfsPickedHide);
+      ov.style.display = 'none';
+      _applyProdTabPrefs();
+      try {
+        await window.electronAPI?.setConfig?.({
+          [_PROD_VIEW_KEY]:   _prodViewMode,
+          [_PROD_FIELDS_KEY]: _prodFieldHide,
+        });
+      } catch (_) {}
+    });
+  }
+
+  // Each open: copy current state into staging and sync UI
+  _pfsActiveOuter = 'general';
+  _pfsPickedView  = _prodViewMode;
+  _pfsPickedHide  = Object.assign({}, _prodFieldHide);
+
+  _syncPfsOuter(ov);
+  _syncPfsGeneral(ov.querySelector('#pfs-panel-general'));
+  _syncPfsFields(ov.querySelector('#pfs-panel-fields'));
+
+  ov.style.display = 'flex';
+}
+
+function _syncPfsOuter(ov) {
+  ov.querySelectorAll('#pfs-outer-nav .pfs-opt-tab').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.outer === _pfsActiveOuter);
+  });
+  const gp = ov.querySelector('#pfs-panel-general');
+  const fp = ov.querySelector('#pfs-panel-fields');
+  if (gp) gp.style.display = _pfsActiveOuter === 'general' ? '' : 'none';
+  if (fp) fp.style.display = _pfsActiveOuter === 'fields'  ? '' : 'none';
+}
+
+function _syncPfsGeneral(panel) {
+  if (!panel) return;
+  panel.querySelectorAll('.pfs-view-row[data-view]').forEach(row => {
+    row.classList.toggle('selected', row.dataset.view === _pfsPickedView);
+  });
+}
+
+function _syncPfsFields(panel) {
+  if (!panel) return;
+  panel.querySelectorAll('.pfs-sw-input[data-field]').forEach(inp => {
+    const hidden = !!_pfsPickedHide[inp.dataset.field];
+    inp.checked = !hidden;
+    inp.closest('.pfs-field-row')?.classList.toggle('pfs-field-hidden', hidden);
+  });
+}
+
+$('#prod-modal-settings-btn')?.addEventListener('click', e => {
+  e.stopPropagation();
+  _openProdViewSettings();
+});
+
+// Load saved prefs and apply on startup
+(async () => {
+  try {
+    const cfg = await window.electronAPI?.getConfig?.();
+    const sv  = cfg?.[_PROD_VIEW_KEY];
+    if (sv === 'tab' || sv === 'single') _prodViewMode = sv;
+    const sf = cfg?.[_PROD_FIELDS_KEY];
+    if (sf && typeof sf === 'object') _prodFieldHide = sf;
+  } catch (_) {}
+  _applyProdTabPrefs();
+})();
 
 // Warranty duration
 function _prodSyncWarrantyChips() {
@@ -12791,6 +14177,9 @@ async function loadProducts(search = '', catId = 0, page = 1) {
   state.activePage      = products_meta.current_page || page;
   if (currency)       state.currency = currency;
   if (business?.name) state._bizName = state._bizName || business.name;
+
+  // Apply purchase-order mode based on setting (default: enabled)
+  _applyPurchaseOrderMode(settings.purchase_order_enabled !== false);
 
   buildCategoryBar(categories, catId);
   buildProductGrid(products);
@@ -16130,6 +17519,28 @@ async function openPosSettings() {
     card.classList.toggle('dm-card--on', on);
     card.querySelector('.dm-card-status').textContent = on ? 'Enabled' : 'Disabled';
   });
+
+  // Courier services
+  const courierServices = (s.courier_services && typeof s.courier_services === 'object') ? s.courier_services : {};
+  const courKeys = ['courier', 'domex', 'koobiyo', 'pronto', 'citypak'];
+  courKeys.forEach(key => {
+    const svc    = courierServices[key] || {};
+    const input  = $(`#psm-cour-${key}`);
+    const card   = $(`#dm-cour-card-${key}`);
+    const charge = $(`#dm-cour-charge-${key}`);
+    if (!input || !card) return;
+    const on = !!svc.enabled;
+    input.checked = on;
+    card.classList.toggle('dm-card--on', on);
+    card.querySelector('.dm-card-status').textContent = on ? 'Enabled' : 'Disabled';
+    if (charge) charge.value = svc.charge ?? '';
+  });
+
+  // Purchasing workflow
+  const poEnabled = s.purchase_order_enabled !== false; // default true
+  const poToggle  = $('#psm-purchase-order-enabled');
+  if (poToggle) poToggle.checked = poEnabled;
+  _applyPurchaseOrderMode(poEnabled);
 }
 
 function psmShowTab(tab) {
@@ -16170,6 +17581,28 @@ $$('[data-dm]').forEach(input => {
     card.querySelector('.dm-card-status').textContent = input.checked ? 'Enabled' : 'Disabled';
   });
 });
+
+// Courier service toggles
+$$('[data-cour]').forEach(input => {
+  input.addEventListener('change', () => {
+    const card = $(`#dm-cour-card-${input.dataset.cour}`);
+    if (!card) return;
+    card.classList.toggle('dm-card--on', input.checked);
+    card.querySelector('.dm-card-status').textContent = input.checked ? 'Enabled' : 'Disabled';
+  });
+});
+
+// ── Purchase Order mode ────────────────────────────────────────────────────
+function _applyPurchaseOrderMode(enabled) {
+  // Ribbon: Purchase Orders button
+  const rbOrders = $('#rb-orders');
+  if (rbOrders) rbOrders.style.display = enabled ? '' : 'none';
+  // Purchasing sub-nav tab
+  $$('[data-inv-view="po"]').forEach(el => { el.style.display = enabled ? '' : 'none'; });
+  // Direct GRN add button (shown only when PO is disabled)
+  const grnDirectBtn = $('#grn-add-direct-btn');
+  if (grnDirectBtn) grnDirectBtn.style.display = enabled ? 'none' : '';
+}
 
 $('#psm-close').addEventListener('click',  () => { $('#pos-settings-modal').style.display = 'none'; });
 $('#psm-cancel').addEventListener('click', () => { $('#pos-settings-modal').style.display = 'none'; });
@@ -16352,6 +17785,13 @@ $('#psm-save').addEventListener('click', async () => {
     invoice_next_number:         parseInt($('#psm-invoice-next').value) || 1,
     delivery_enabled:            $('#psm-delivery-enabled').checked,
     delivery_methods:            ['dhl','fedex','uber','pickme','koobiyo','pronto'].filter(k => $(`#psm-dm-${k}`)?.checked),
+    courier_services:            Object.fromEntries(
+      ['courier','domex','koobiyo','pronto','citypak'].map(k => [k, {
+        enabled: !!$(`#psm-cour-${k}`)?.checked,
+        charge:  parseFloat($(`#dm-cour-charge-${k}`)?.value) || 0,
+      }])
+    ),
+    purchase_order_enabled:      $('#psm-purchase-order-enabled')?.checked !== false,
   };
 
   const res = await API.settingsUpdate(payload);
@@ -16362,6 +17802,9 @@ $('#psm-save').addEventListener('click', async () => {
     toast('Failed to save: ' + (res.body?.message ?? 'unknown error'), 'error');
     return;
   }
+
+  // Apply purchase order mode immediately from the toggle
+  _applyPurchaseOrderMode(!!$('#psm-purchase-order-enabled')?.checked);
 
   // Sync relevant settings into state so in-session logic stays current
   const saved = res.body?.data || {};
@@ -36384,6 +37827,26 @@ async function submitDsCreate() {
   });
 
 }());
+
+// ── Ribbon user-context bridge ─────────────────────────────────────────────
+// Exposes the minimum state ribbon-customize.js needs without coupling the
+// two files together via module imports.
+window.getRibbonUserCtx = function () {
+  return {
+    /** Stable key for storing per-user prefs. Email for members, 'cashier_N' for cashiers. */
+    userKey:  state.cashierMode
+                ? ('cashier_' + (state.cashierInfo?.id ?? '0'))
+                : (state._userEmail || null),
+    userName: state._userName || state.cashierInfo?.name || null,
+    /** Effective role string: 'owner' | 'admin' | 'officer' | 'cashier' | null */
+    role:     state.cashierMode  ? 'cashier'
+              : state.memberRole ? state.memberRole
+              : state.memberIsOwner ? 'owner'
+              : null,
+    /** True if this user may edit role-level defaults */
+    isAdmin:  !state.cashierMode && (state.memberIsOwner || state.memberRole === 'admin'),
+  };
+};
 
 // ── Boot ───────────────────────────────────────────────────────────────────
 init();

@@ -2585,6 +2585,7 @@
           <div class="po-aim-header">
             <i class="fa fa-box" style="color:var(--accent)"></i>
             <span id="prod-modal-title">New Product</span>
+            <button id="prod-modal-settings-btn" title="Form settings"><i class="fa fa-gear"></i></button>
             <button class="psm-close" id="prod-modal-close"><i class="fa fa-xmark"></i></button>
           </div>
           <!-- Tab navigation -->
@@ -2979,6 +2980,7 @@
             <button class="grn-pf-btn" data-payment="pending">Payment pending</button>
             <button class="grn-pf-btn" data-payment="no_amount">No amount</button>
           </div>
+          <button class="po-add-btn" id="grn-add-direct-btn" style="display:none" title="Add Goods Receive Note without a Purchase Order"><i class="fa fa-plus"></i> Add GRN</button>
           <button class="po-add-btn" id="grn-refresh-btn"><i class="fa fa-arrows-rotate"></i></button>
         </div>
         <div class="po-body">
@@ -3007,14 +3009,15 @@
                 <div class="po-dv-actions" id="grn-dv-actions"></div>
               </div>
               <div class="po-dv-summary" id="grn-dv-summary"></div>
+              <div class="grn-dv-parties" id="grn-dv-parties"></div>
               <div class="po-dv-section-label">Items Received</div>
-              <table class="po-items-table">
-                <thead><tr><th>Product</th><th>SKU</th><th>Qty</th><th>Unit Cost</th><th>Total</th></tr></thead>
+              <table class="po-items-table" id="grn-dv-table">
+                <thead id="grn-dv-thead"><tr><th>Product</th><th>SKU</th><th>Qty</th><th>Unit Cost</th><th>Total</th></tr></thead>
                 <tbody id="grn-dv-items"></tbody>
               </table>
               <div class="po-dv-section-label" style="margin-top:10px">Payments</div>
               <div id="grn-dv-payments"></div>
-              <div class="po-dv-totals" id="grn-dv-totals"></div>
+              <div class="grn-dv-totals-wrap" id="grn-dv-totals"></div>
               <div class="po-dv-notes" id="grn-dv-notes"></div>
             </div>
           </div>
@@ -3602,6 +3605,7 @@
             <div class="po-modal-title" id="grn-modal-title">Receive Goods</div>
             <div class="po-modal-subtitle" id="grn-modal-sub">Enter quantities received and payment details</div>
           </div>
+          <button class="grn-settings-btn" id="grn-modal-settings-btn" title="Form settings"><i class="fa fa-gear"></i></button>
           <button class="psm-close" id="grn-modal-close"><i class="fa fa-xmark"></i></button>
         </div>
         <div class="grn-modal-body">
@@ -3615,24 +3619,37 @@
                 <input type="date" id="grn-f-date" class="po-field-input po-field-with-icon">
               </div>
             </div>
-            <div class="po-field">
+            <div class="po-field" id="grn-field-reference">
               <label class="po-field-label">Reference</label>
               <div class="po-field-icon-wrap">
                 <i class="fa fa-tag po-fi"></i>
                 <input type="text" id="grn-f-reference" class="po-field-input po-field-with-icon" placeholder="Delivery note, invoice #…">
               </div>
             </div>
-            <div class="po-field">
+            <div class="po-field" id="grn-field-notes">
               <label class="po-field-label">Notes</label>
               <textarea id="grn-f-notes" class="po-field-textarea" placeholder="Optional notes…" rows="3"></textarea>
             </div>
-            <div class="po-section-title" style="margin-top:12px"><i class="fa fa-credit-card"></i> Payment</div>
-            <div class="po-field">
+            <div class="po-section-title" id="grn-payment-section-title" style="margin-top:12px"><i class="fa fa-credit-card"></i> Payment</div>
+            <div class="po-field" id="grn-field-payment-method">
               <label class="po-field-label">Payment Method</label>
               <div class="grn-method-btns" id="grn-method-btns">
                 <button class="grn-method-btn active" data-method="cash"><i class="fa fa-money-bill"></i> Cash</button>
                 <button class="grn-method-btn" data-method="cheque"><i class="fa fa-money-check"></i> Cheque</button>
                 <button class="grn-method-btn" data-method="credit"><i class="fa fa-clock"></i> Credit</button>
+              </div>
+            </div>
+            <div id="grn-credit-terms" style="display:none" class="grn-credit-terms-block">
+              <div class="po-field">
+                <label class="po-field-label"><i class="fa fa-calendar-days" style="margin-right:4px;opacity:.6"></i>Payment Terms</label>
+                <div class="grn-credit-terms-row">
+                  <input type="number" id="grn-f-credit-days" class="po-field-input" placeholder="30" min="1" max="3650" style="width:80px">
+                  <span class="grn-credit-days-lbl">days</span>
+                </div>
+              </div>
+              <div class="grn-credit-due-display" id="grn-credit-due-display" style="display:none">
+                <i class="fa fa-clock" style="color:var(--accent)"></i>
+                <span>Due: </span><strong id="grn-credit-due-text">—</strong>
               </div>
             </div>
             <div id="grn-payment-fields" style="">
@@ -3650,7 +3667,7 @@
                   <input type="date" id="grn-f-cheque-date" class="po-field-input">
                 </div>
               </div>
-              <div class="po-field">
+              <div class="po-field" id="grn-field-pay-options">
                 <label class="po-field-label">Pay</label>
                 <div class="grn-pay-opts">
                   <label class="grn-pay-opt"><input type="radio" name="grn-pay-opt" value="full" checked> Pay in full</label>
@@ -3665,6 +3682,9 @@
             <div class="po-order-summary" style="margin-top:auto">
               <div class="po-summary-row"><span>Items</span><span id="grn-summary-items">0</span></div>
               <div class="po-summary-divider"></div>
+              <div class="po-summary-row"><span>Subtotal</span><span id="grn-summary-subtotal">0.00</span></div>
+              <div id="grn-expense-lines"></div>
+              <div class="po-summary-divider"></div>
               <div class="po-summary-row po-summary-total"><span>Total</span><strong id="grn-summary-total">0.00</strong></div>
             </div>
           </div>
@@ -3675,9 +3695,15 @@
               <button class="po-item-add-btn" id="grn-receive-all-btn"><i class="fa fa-check-double"></i> Receive All</button>
             </div>
             <div class="grn-items-scroll">
-              <table class="grn-items-table">
+              <table class="grn-items-table" id="grn-items-table">
                 <thead><tr>
-                  <th>Product</th><th class="po-th-num">Ordered</th><th class="po-th-num">Received</th><th class="po-th-num">Remaining</th><th class="po-th-num">Qty Now</th><th class="po-th-num">Cost</th><th class="po-th-num">Total</th>
+                  <th>Product</th><th class="po-th-num">Ordered</th><th class="po-th-num">Received</th><th class="po-th-num">Remaining</th><th class="po-th-num">Qty Now</th><th class="po-th-num">Cost</th>
+                  <th class="po-th-num grn-col-uc">Unit/Case</th>
+                  <th class="po-th-num grn-col-uom">UOM</th>
+                  <th class="po-th-num grn-col-disc">Disc/Com %</th>
+                  <th class="po-th-num grn-col-gross">Gross</th>
+                  <th class="po-th-num grn-col-net">Net</th>
+                  <th class="po-th-num grn-th-total">Total</th>
                 </tr></thead>
                 <tbody id="grn-items-tbody"></tbody>
               </table>
@@ -3746,6 +3772,137 @@
         <div class="po-modal-footer" style="background:var(--surface2)">
           <button class="po-btn-ghost" id="grn-pay-cancel"><i class="fa fa-xmark"></i> Cancel</button>
           <button class="po-btn-primary" id="grn-pay-save"><i class="fa fa-check"></i> Record Payment</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Direct GRN Modal (no PO required) ──────────────────────────────────── -->
+    <div id="grn-direct-modal" class="modal-overlay" style="display:none">
+      <div class="grn-modal-shell grn-direct-shell">
+        <div class="grn-modal-header">
+          <div class="po-modal-header-icon"><i class="fa fa-truck-ramp-box"></i></div>
+          <div class="po-modal-header-text">
+            <div class="po-modal-title">New Goods Receipt</div>
+            <div class="po-modal-subtitle">Record goods received directly — no purchase order needed</div>
+          </div>
+          <button class="grn-settings-btn" id="grn-direct-settings-btn" title="Form settings"><i class="fa fa-gear"></i></button>
+          <button class="psm-close" id="grn-direct-close"><i class="fa fa-xmark"></i></button>
+        </div>
+        <div class="grn-modal-body">
+          <!-- Left: details + payment -->
+          <div class="grn-modal-left">
+            <div class="po-section-title"><i class="fa fa-circle-info"></i> Receipt Details</div>
+            <div class="po-field">
+              <label class="po-field-label">Supplier</label>
+              <select id="grn-direct-supplier" class="po-field-input">
+                <option value="">— None / Walk-in —</option>
+              </select>
+            </div>
+            <div class="po-field">
+              <label class="po-field-label">Received Date <span class="po-required">*</span></label>
+              <div class="po-field-icon-wrap">
+                <i class="fa fa-calendar po-fi"></i>
+                <input type="date" id="grn-direct-date" class="po-field-input po-field-with-icon">
+              </div>
+            </div>
+            <div class="po-field" id="grn-direct-field-reference">
+              <label class="po-field-label">Reference</label>
+              <div class="po-field-icon-wrap">
+                <i class="fa fa-tag po-fi"></i>
+                <input type="text" id="grn-direct-reference" class="po-field-input po-field-with-icon" placeholder="Delivery note, invoice #…">
+              </div>
+            </div>
+            <div class="po-field" id="grn-direct-field-notes">
+              <label class="po-field-label">Notes</label>
+              <textarea id="grn-direct-notes" class="po-field-textarea" placeholder="Optional notes…" rows="2"></textarea>
+            </div>
+            <div class="po-section-title" id="grn-direct-payment-section-title" style="margin-top:10px"><i class="fa fa-credit-card"></i> Payment</div>
+            <div class="po-field" id="grn-direct-field-payment-method">
+              <label class="po-field-label">Payment Method</label>
+              <div class="grn-method-btns" id="grn-direct-method-btns">
+                <button class="grn-method-btn active" data-method="cash"><i class="fa fa-money-bill"></i> Cash</button>
+                <button class="grn-method-btn" data-method="cheque"><i class="fa fa-money-check"></i> Cheque</button>
+                <button class="grn-method-btn" data-method="credit"><i class="fa fa-clock"></i> Credit</button>
+              </div>
+            </div>
+            <div id="grn-direct-credit-terms" style="display:none" class="grn-credit-terms-block">
+              <div class="po-field">
+                <label class="po-field-label"><i class="fa fa-calendar-days" style="margin-right:4px;opacity:.6"></i>Payment Terms</label>
+                <div class="grn-credit-terms-row">
+                  <input type="number" id="grn-direct-f-credit-days" class="po-field-input" placeholder="30" min="1" max="3650" style="width:80px">
+                  <span class="grn-credit-days-lbl">days</span>
+                </div>
+              </div>
+              <div class="grn-credit-due-display" id="grn-direct-credit-due-display" style="display:none">
+                <i class="fa fa-clock" style="color:var(--accent)"></i>
+                <span>Due: </span><strong id="grn-direct-credit-due-text">—</strong>
+              </div>
+            </div>
+            <div id="grn-direct-payment-fields">
+              <div class="po-field">
+                <label class="po-field-label">Account <span class="po-required">*</span></label>
+                <select id="grn-direct-account" class="po-field-input"></select>
+              </div>
+              <div id="grn-direct-cheque-fields" style="display:none;flex-direction:column;gap:8px">
+                <div class="po-field">
+                  <label class="po-field-label">Cheque Number</label>
+                  <input type="text" id="grn-direct-cheque-ref" class="po-field-input" placeholder="Cheque number…">
+                </div>
+                <div class="po-field">
+                  <label class="po-field-label">Cheque Due Date</label>
+                  <input type="date" id="grn-direct-cheque-date" class="po-field-input">
+                </div>
+              </div>
+              <div class="po-field" id="grn-direct-field-pay-options">
+                <label class="po-field-label">Pay</label>
+                <div class="grn-pay-opts">
+                  <label class="grn-pay-opt"><input type="radio" name="grn-direct-pay-opt" value="full" checked> Pay in full</label>
+                  <label class="grn-pay-opt"><input type="radio" name="grn-direct-pay-opt" value="partial"> Partial</label>
+                </div>
+              </div>
+              <div id="grn-direct-partial-row" style="display:none" class="po-field">
+                <label class="po-field-label">Amount</label>
+                <input type="number" id="grn-direct-amount" class="po-field-input" min="0.01" step="0.01" placeholder="0.00">
+              </div>
+            </div>
+            <div class="po-order-summary" style="margin-top:auto">
+              <div class="po-summary-row"><span>Items</span><span id="grn-direct-summary-items">0</span></div>
+              <div class="po-summary-divider"></div>
+              <div class="po-summary-row"><span>Subtotal</span><span id="grn-direct-summary-subtotal">0.00</span></div>
+              <div id="grn-direct-expense-lines"></div>
+              <div class="po-summary-divider"></div>
+              <div class="po-summary-row po-summary-total"><span>Total</span><strong id="grn-direct-summary-total">0.00</strong></div>
+            </div>
+          </div>
+          <!-- Right: items table -->
+          <div class="grn-modal-right">
+            <div class="po-items-header">
+              <div class="po-section-title"><i class="fa fa-boxes-stacked"></i> Items</div>
+              <button class="po-item-add-btn" id="grn-direct-add-item-btn"><i class="fa fa-plus"></i> Add Item</button>
+            </div>
+            <div class="grn-items-scroll">
+              <table class="grn-items-table grn-direct-items-table" id="grn-direct-items-table">
+                <thead><tr>
+                  <th>Product</th><th class="po-th-num">Qty</th><th class="po-th-num">Unit Cost</th>
+                  <th class="po-th-num grn-col-uc">Unit/Case</th>
+                  <th class="po-th-num grn-col-uom">UOM</th>
+                  <th class="po-th-num grn-col-disc">Disc/Com %</th>
+                  <th class="po-th-num grn-col-gross">Gross</th>
+                  <th class="po-th-num grn-col-net">Net</th>
+                  <th class="po-th-num grn-th-total">Total</th><th></th>
+                </tr></thead>
+                <tbody id="grn-direct-items-tbody"></tbody>
+              </table>
+              <div id="grn-direct-items-empty" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:36px;color:var(--text-muted);font-size:13px">
+                <i class="fa fa-box-open" style="font-size:28px;opacity:.35"></i>
+                <span>No items yet — click "Add Item" to search and add products</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="grn-modal-footer">
+          <button class="po-btn-ghost" id="grn-direct-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+          <button class="po-btn-primary" id="grn-direct-save"><i class="fa fa-truck-ramp-box"></i> Record Receipt</button>
         </div>
       </div>
     </div>
@@ -10540,6 +10697,17 @@
                 <span class="psm-toggle-desc">Show products that are linked to a service offering</span>
               </div>
               <label class="psm-switch"><input type="checkbox" id="psm-service-products"><span class="psm-switch-track"></span></label>
+            </div>
+          </div>
+
+          <div class="psm-section">
+            <div class="psm-section-label"><i class="fa fa-file-invoice"></i> Purchasing</div>
+            <div class="psm-toggle-row">
+              <div class="psm-toggle-info">
+                <span class="psm-toggle-name">Purchase Order workflow</span>
+                <span class="psm-toggle-desc">When enabled, goods must be received against a purchase order. Disable to allow creating Goods Receive Notes directly without a purchase order.</span>
+              </div>
+              <label class="psm-switch"><input type="checkbox" id="psm-purchase-order-enabled" checked><span class="psm-switch-track"></span></label>
             </div>
           </div>
         </div>

@@ -1,101 +1,147 @@
 /* ══════════════════════════════════════════════════════════════════
-   RIBBON CUSTOMIZER
-   • Right-click a specific tab  →  tab-scoped context menu →
-     dialog shows only THAT tab's buttons (no left panel)
-   • Click the ⚙ button          →  full editor (all tabs + buttons)
-   Prefs stored in electron config as "ribbon_prefs" per user.
+   RIBBON CUSTOMIZER  — role-wise + user-wise
    ══════════════════════════════════════════════════════════════════ */
 
 (function () {
   'use strict';
 
   const PREFS_KEY = 'ribbon_prefs';
+  const ROLES = [
+    { key: 'cashier', label: 'Cashier' },
+    { key: 'officer', label: 'Officer' },
+    { key: 'admin',   label: 'Admin'   },
+    { key: 'owner',   label: 'Owner'   },
+  ];
 
-  // ── Local DOM helpers ──────────────────────────────────────────────
   const $q  = (s, p) => (p || document).querySelector(s);
   const $qa = (s, p) => [...(p || document).querySelectorAll(s)];
 
-  // ── Module state ───────────────────────────────────────────────────
-  let _defs    = null;   // snapped from DOM
-  let _saved   = null;   // last persisted
-  let _edit    = null;   // working copy while dialog open
-  let _selTab  = null;   // tab selected in full-editor left panel
-  let _ctxTab  = null;   // tab element that received the right-click
-  let _dragSrc = null;   // id being dragged
+  let _defs   = null;
+  let _raw    = null;
+  let _edit   = null;
+  let _selTab = null;
+  let _scope  = null;
+  let _ctxTab = null;
+  let _dragSrc = null;
 
-  // ══════════════════════════════════════════════════════════════════
-  // SNAPSHOT — read current ribbon DOM into _defs
-  // ══════════════════════════════════════════════════════════════════
-  function _snap() {
-    const tabs = $qa('#ribbon-tabs .ribbon-tab[data-tab]').map(t => ({
-      id:    t.dataset.tab,
-      label: t.textContent.trim(),
-    }));
-
-    const buttons = {};
-    $qa('#ribbon-body .ribbon-page[data-page]').forEach(page => {
-      $qa('button[id]', page).forEach(btn => {
-        if (!btn.id.startsWith('rb-')) return;
-        const clone = btn.cloneNode(true);
-        $qa('kbd', clone).forEach(k => k.remove());
-        const label = clone.textContent.replace(/\s+/g, ' ').trim() || btn.title || btn.id;
-        buttons[btn.id] = {
-          id:    btn.id, label,
-          defaultSize: btn.classList.contains('ribbon-btn-lg') ? 'lg' : 'sm',
-          page:  page.dataset.page,
-          group: btn.closest('.ribbon-group')
-                   ?.querySelector('.ribbon-group-label')
-                   ?.textContent?.trim() || '—',
-        };
-      });
-    });
-
-    _defs = { tabs, buttons };
-  }
-
-  // ══════════════════════════════════════════════════════════════════
-  // PREFS — init / apply / save
-  // ══════════════════════════════════════════════════════════════════
-  function _freshPrefs() {
-    if (!_defs) _snap();
-    return { tab_order: _defs.tabs.map(t => t.id), tab_hidden: {}, btn_hidden: {}, btn_size: {} };
-  }
-
-  async function rbcInit() {
+  // ── User context (bridged from app.js) ─────────────────────────────
+  function _uctx() {
     try {
-      _snap();
-      let raw = null;
-      try { const cfg = await window.electronAPI?.getConfig?.(); raw = cfg?.[PREFS_KEY] ?? null; } catch (_) {}
-
-      const def = _freshPrefs();
-      _saved = {
-        tab_order:  Array.isArray(raw?.tab_order)          ? raw.tab_order : [...def.tab_order],
-        tab_hidden: raw?.tab_hidden && typeof raw.tab_hidden === 'object' ? { ...raw.tab_hidden } : {},
-        btn_hidden: raw?.btn_hidden && typeof raw.btn_hidden === 'object' ? { ...raw.btn_hidden } : {},
-        btn_size:   raw?.btn_size   && typeof raw.btn_size   === 'object' ? { ...raw.btn_size   } : {},
-      };
-      def.tab_order.forEach(id => { if (!_saved.tab_order.includes(id)) _saved.tab_order.push(id); });
-      _applyPrefs(_saved);
-    } catch (e) { console.error('[RBC] init:', e); }
+      return window.getRibbonUserCtx?.() ?? { userKey: null, userName: null, role: null, isAdmin: false };
+    } catch (_) {
+      return { userKey: null, userName: null, role: null, isAdmin: false };
+    }
   }
 
-  function _applyPrefs(p) {
-    if (!p || !_defs) return;
+  // ── Snapshot ribbon DOM ────────────────────────────────────────────
+  // Only captures tabs/buttons that are currently enabled by feature flags.
+  // Tabs hidden by applyFeatureVisibility() carry data-rbc-feature="0" and
+  // are excluded. Buttons whose ribbon-group is display:none are also excluded.
+  function _snap() {
+    try {
+      // Skip tabs marked as feature-disabled by applyFeatureVisibility()
+      const tabs = $qa('#ribbon-tabs .ribbon-tab[data-tab]')
+        .filter(t => t.dataset.rbcFeature !== '0')
+        .map(t => ({ id: t.dataset.tab, label: t.textContent.trim() }));
+
+      const enabledTabIds = new Set(tabs.map(t => t.id));
+
+      const buttons = {};
+      $qa('#ribbon-body .ribbon-page[data-page]').forEach(page => {
+        // Only process pages whose tab is feature-enabled
+        if (!enabledTabIds.has(page.dataset.page)) return;
+        $qa('button[id]', page).forEach(btn => {
+          if (!btn.id.startsWith('rb-')) return;
+          // Skip buttons inside a ribbon-group that is hidden by feature flags
+          const grpEl = btn.closest('.ribbon-group');
+          if (grpEl && grpEl.style.display === 'none') return;
+          const clone = btn.cloneNode(true);
+          $qa('kbd', clone).forEach(k => k.remove());
+          const label = clone.textContent.replace(/\s+/g, ' ').trim() || btn.title || btn.id;
+          buttons[btn.id] = {
+            id: btn.id, label,
+            defaultSize: btn.classList.contains('ribbon-btn-lg') ? 'lg' : 'sm',
+            page: page.dataset.page,
+            group: grpEl?.querySelector('.ribbon-group-label')?.textContent?.trim() || '—',
+          };
+        });
+      });
+      _defs = { tabs, buttons };
+    } catch (e) {
+      console.error('[RBC] _snap error:', e);
+      _defs = { tabs: [], buttons: {} };
+    }
+  }
+
+  // ── Prefs helpers ──────────────────────────────────────────────────
+  function _factory() {
+    if (!_defs) _snap();
+    return { tab_order: (_defs.tabs || []).map(t => t.id), tab_hidden: {}, btn_hidden: {}, btn_size: {} };
+  }
+
+  function _norm(raw) {
+    const def = _factory();
+    if (!raw || typeof raw !== 'object') return { ...def };
+    return {
+      tab_order:  Array.isArray(raw.tab_order) ? [...raw.tab_order] : [...def.tab_order],
+      tab_hidden: (raw.tab_hidden && typeof raw.tab_hidden === 'object') ? { ...raw.tab_hidden } : {},
+      btn_hidden: (raw.btn_hidden && typeof raw.btn_hidden === 'object') ? { ...raw.btn_hidden } : {},
+      btn_size:   (raw.btn_size   && typeof raw.btn_size   === 'object') ? { ...raw.btn_size   } : {},
+    };
+  }
+
+  function _effective() {
+    if (!_defs) _snap();
+    if (!_raw)  _raw = { roles: {}, users: {} };
+    const uc   = _uctx();
+    const base = _factory();
+    const role = _norm(_raw.roles?.[uc.role]);
+    const user = _norm(_raw.users?.[uc.userKey]);
+    const known = new Set((_defs.tabs || []).map(t => t.id));
+    const order = (user.tab_order.length ? user.tab_order : role.tab_order.length ? role.tab_order : base.tab_order)
+                    .filter(id => known.has(id));
+    const extra = [...known].filter(id => !order.includes(id));
+    return {
+      tab_order:  [...order, ...extra],
+      tab_hidden: { ...role.tab_hidden, ...user.tab_hidden },
+      btn_hidden: { ...role.btn_hidden, ...user.btn_hidden },
+      btn_size:   { ...role.btn_size,   ...user.btn_size   },
+    };
+  }
+
+  function _scopePrefs() {
+    if (!_raw)  _raw = { roles: {}, users: {} };
+    if (!_scope) return _factory();
+    if (_scope.type === 'role') return _norm(_raw.roles?.[_scope.roleKey]);
+    return _norm(_raw.users?.[_uctx().userKey]);
+  }
+
+  function _commitEdit() {
+    if (!_raw) _raw = { roles: {}, users: {} };
+    if (_scope?.type === 'role') {
+      _raw.roles[_scope.roleKey] = { ..._edit };
+    } else {
+      const uk = _uctx().userKey;
+      if (uk) _raw.users[uk] = { ..._edit };
+    }
+  }
+
+  // ── Apply to ribbon ────────────────────────────────────────────────
+  function _apply(p) {
+    if (!p) return;
     try {
       const tabRow = $q('#ribbon-tabs');
-      if (!tabRow) return;
-
-      // order
-      p.tab_order.forEach(id => {
+      if (!tabRow || !_defs) return;
+      (p.tab_order || []).forEach(id => {
         const el = tabRow.querySelector(`.ribbon-tab[data-tab="${CSS.escape(id)}"]`);
         if (el) tabRow.appendChild(el);
       });
-      // visibility (tabs)
       $qa('.ribbon-tab[data-tab]', tabRow).forEach(t => {
+        // Never un-hide a tab that is feature-disabled by applyFeatureVisibility()
+        if (t.dataset.rbcFeature === '0') return;
         t.style.display = p.tab_hidden?.[t.dataset.tab] ? 'none' : '';
       });
-      // buttons
-      Object.values(_defs.buttons).forEach(def => {
+      Object.values(_defs.buttons || {}).forEach(def => {
         const btn = document.getElementById(def.id);
         if (!btn) return;
         btn.style.display = p.btn_hidden?.[def.id] ? 'none' : '';
@@ -103,46 +149,94 @@
         btn.classList.toggle('ribbon-btn-lg', sz === 'lg');
         btn.classList.toggle('ribbon-btn-sm', sz === 'sm');
       });
-    } catch (e) { console.error('[RBC] apply:', e); }
+    } catch (e) { console.error('[RBC] _apply error:', e); }
   }
 
-  async function _persist(p) {
-    _saved = { ...p };
-    try { await window.electronAPI?.setConfig?.({ [PREFS_KEY]: p }); }
-    catch (e) { console.error('[RBC] save:', e); }
+  async function _persist() {
+    try { await window.electronAPI?.setConfig?.({ [PREFS_KEY]: _raw }); }
+    catch (e) { console.error('[RBC] persist error:', e); }
   }
 
   // ══════════════════════════════════════════════════════════════════
-  // CONTEXT MENU  — tab-scoped when right-clicking a tab element
+  // INIT — called by showApp() after ribbon DOM exists
+  // ══════════════════════════════════════════════════════════════════
+  async function rbcInit() {
+    console.log('[RBC] rbcInit start');
+    try {
+      _snap();
+
+      // Load stored prefs
+      let stored = null;
+      try {
+        const cfg = await window.electronAPI?.getConfig?.();
+        stored = cfg?.[PREFS_KEY] ?? null;
+      } catch (e) {
+        console.warn('[RBC] getConfig failed:', e);
+      }
+
+      // Upgrade flat format → new role/user format
+      if (stored && !stored.roles && !stored.users) {
+        const uk = _uctx().userKey;
+        stored = { roles: {}, users: uk ? { [uk]: _norm(stored) } : {} };
+      }
+
+      _raw = {
+        roles: (stored?.roles && typeof stored.roles === 'object') ? { ...stored.roles } : {},
+        users: (stored?.users && typeof stored.users === 'object') ? { ...stored.users } : {},
+      };
+
+      console.log('[RBC] prefs loaded, applying...');
+    } catch (e) {
+      console.error('[RBC] init (load) error:', e);
+      _raw = { roles: {}, users: {} };
+    }
+
+    // Apply prefs — in its own try so DOM setup below always runs
+    try { _apply(_effective()); }
+    catch (e) { console.error('[RBC] init (apply) error:', e); }
+
+    // DOM setup — MUST run even if apply threw
+    try {
+      _buildCtx();
+      _injectCustomizeBtn();
+      console.log('[RBC] DOM setup done');
+    } catch (e) { console.error('[RBC] init (DOM) error:', e); }
+  }
+
+  // ══════════════════════════════════════════════════════════════════
+  // CONTEXT MENU
   // ══════════════════════════════════════════════════════════════════
   function _buildCtx() {
     if ($q('#rbc-ctx')) return;
     const el = document.createElement('div');
     el.id = 'rbc-ctx';
-    // items populated dynamically in _ctxShow()
+    el.style.cssText = 'display:none;position:fixed;z-index:99999;background:var(--surface);border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 28px rgba(0,0,0,.25);padding:4px;min-width:220px;user-select:none';
     document.body.appendChild(el);
 
-    // Close on outside pointerdown
-    document.addEventListener('pointerdown', e => {
-      if (el.classList.contains('open') && !el.contains(e.target)) _ctxHide();
-    }, true);
+    // Close on any non-right-click outside
+    document.addEventListener('mousedown', e => {
+      if (e.button === 2) return;
+      if (el.style.display === 'none') return;
+      if (!el.contains(e.target)) _ctxHide();
+    });
   }
 
-  function _ctxShow(x, y, tabEl) {
-    _ctxTab = tabEl;  // may be null if right-clicking ribbon body
-    const ctx = $q('#rbc-ctx');
-    if (!ctx) return;
+  function _ctxBuild(tabEl) {
+    const el = $q('#rbc-ctx');
+    if (!el) return;
 
-    // Build menu items based on context
+    if (!_defs) _snap();
+    if (!_raw)  _raw = { roles: {}, users: {} };
+
+    let eff;
+    try { eff = _effective(); }
+    catch (e) { console.error('[RBC] _ctxBuild effective() error:', e); eff = _factory(); }
+
     if (tabEl) {
-      // ── Tab-specific menu ──────────────────────────────────────
-      if (!_defs) _snap();
-      if (!_saved) _saved = _freshPrefs();
       const tabId    = tabEl.dataset.tab;
       const tabLabel = tabEl.textContent.trim();
-      const isHidden = !!_saved.tab_hidden[tabId];
-
-      ctx.innerHTML = `
+      const isHidden = !!eff.tab_hidden[tabId];
+      el.innerHTML = `
         <div class="rbc-ctx-head">${_esc(tabLabel)}</div>
         <div class="rbc-ctx-item" data-action="toggle-tab">
           <i class="fa ${isHidden ? 'fa-eye' : 'fa-eye-slash'}"></i>
@@ -156,89 +250,71 @@
           <i class="fa fa-grip-lines"></i> Reorder / manage all tabs…
         </div>`;
     } else {
-      // ── Generic ribbon menu ────────────────────────────────────
-      ctx.innerHTML = `
+      el.innerHTML = `
         <div class="rbc-ctx-item" data-action="customize-all">
           <i class="fa fa-sliders"></i> Customize Ribbon…
-        </div>
-        <div class="rbc-ctx-sep"></div>
-        <div class="rbc-ctx-item" data-action="collapse">
-          <i class="fa fa-chevron-up"></i> Collapse Ribbon
         </div>`;
     }
 
-    // Bind clicks on items
-    $qa('.rbc-ctx-item[data-action]', ctx).forEach(item => {
+    $qa('.rbc-ctx-item[data-action]', el).forEach(item => {
       item.addEventListener('mousedown', e => {
         e.stopPropagation();
         const action = item.dataset.action;
         _ctxHide();
-
         if (action === 'toggle-tab')    _quickToggleTab(_ctxTab);
         if (action === 'customize-tab') _openTabDialog(_ctxTab);
-        if (action === 'reorder')       rbcOpen();        // full editor
-        if (action === 'customize-all') rbcOpen();        // full editor
-        if (action === 'collapse')      $q('#ribbon-pin-btn')?.click();
+        if (action === 'reorder')       rbcOpen();
+        if (action === 'customize-all') rbcOpen();
       });
     });
-
-    // Position
-    ctx.classList.remove('open');
-    void ctx.offsetWidth;
-    ctx.style.left = '-9999px'; ctx.style.top = '-9999px';
-    ctx.classList.add('open');
-    const r = ctx.getBoundingClientRect();
-    ctx.style.left = Math.min(x, window.innerWidth  - r.width  - 8) + 'px';
-    ctx.style.top  = Math.min(y, window.innerHeight - r.height - 8) + 'px';
   }
 
-  function _ctxHide() { $q('#rbc-ctx')?.classList.remove('open'); }
+  function _ctxShow(x, y, tabEl) {
+    console.log('[RBC] _ctxShow called', x, y, tabEl?.dataset?.tab);
+    _ctxTab = tabEl;
+    _buildCtx();
+    _ctxBuild(tabEl);
 
-  // Quick toggle tab visibility without opening dialog
+    const el = $q('#rbc-ctx');
+    if (!el) { console.error('[RBC] #rbc-ctx not found after _buildCtx'); return; }
+
+    // Position (clamp to viewport using estimates)
+    const mw = 230, mh = 180;
+    el.style.left = Math.min(x, window.innerWidth  - mw - 8) + 'px';
+    el.style.top  = Math.min(y, window.innerHeight - mh - 8) + 'px';
+    el.style.display = 'block';
+    console.log('[RBC] context menu shown at', el.style.left, el.style.top);
+  }
+
+  function _ctxHide() {
+    const el = $q('#rbc-ctx');
+    if (el) el.style.display = 'none';
+  }
+
   async function _quickToggleTab(tabEl) {
     if (!tabEl) return;
-    if (!_defs)  _snap();
-    if (!_saved) _saved = _freshPrefs();
-    const id = tabEl.dataset.tab;
-    const newHidden = !_saved.tab_hidden[id];
-    _saved.tab_hidden[id] = newHidden;
-    if (!newHidden) delete _saved.tab_hidden[id];
-    tabEl.style.display = newHidden ? 'none' : '';
-    await _persist(_saved);
-  }
-
-  // ── Bind right-click listeners to every ribbon tab ────────────────
-  function _bindTabContextMenus() {
-    // Bind to existing tabs
-    $qa('#ribbon-tabs .ribbon-tab[data-tab]').forEach(_attachTabCtx);
-
-    // Observe future tabs added dynamically (e.g. features loaded late)
-    const observer = new MutationObserver(muts => {
-      muts.forEach(m => m.addedNodes.forEach(n => {
-        if (n.nodeType === 1 && n.classList?.contains('ribbon-tab')) _attachTabCtx(n);
-      }));
-    });
-    const tabsRow = $q('#ribbon-tabs');
-    if (tabsRow) observer.observe(tabsRow, { childList: true });
-  }
-
-  function _attachTabCtx(tabEl) {
-    if (tabEl._rbcCtxBound) return;
-    tabEl._rbcCtxBound = true;
-    tabEl.addEventListener('contextmenu', e => {
-      e.preventDefault();
-      e.stopPropagation();
-      _ctxShow(e.clientX, e.clientY, tabEl);
-    });
+    if (!_defs) _snap();
+    if (!_raw)  _raw = { roles: {}, users: {} };
+    const id  = tabEl.dataset.tab;
+    const eff = _effective();
+    const hide = !eff.tab_hidden[id];
+    const uk = _uctx().userKey;
+    if (uk) {
+      if (!_raw.users[uk]) _raw.users[uk] = _factory();
+      _raw.users[uk].tab_hidden[id] = hide;
+      if (!hide) delete _raw.users[uk].tab_hidden[id];
+    }
+    tabEl.style.display = hide ? 'none' : '';
+    await _persist();
   }
 
   // ══════════════════════════════════════════════════════════════════
-  // CUSTOMIZE BUTTON — ⚙ icon in the tab row (opens full editor)
+  // ⚙ BUTTON
   // ══════════════════════════════════════════════════════════════════
   function _injectCustomizeBtn() {
     if ($q('#rbc-open-btn')) return;
     const pinBtn = $q('#ribbon-pin-btn');
-    if (!pinBtn) return;
+    if (!pinBtn) { console.warn('[RBC] #ribbon-pin-btn not found'); return; }
     const btn = document.createElement('button');
     btn.id = 'rbc-open-btn';
     btn.title = 'Customize Ribbon';
@@ -248,10 +324,11 @@
     btn.addEventListener('mouseleave', () => btn.style.color = 'var(--text-muted)');
     btn.addEventListener('click', rbcOpen);
     pinBtn.parentNode.insertBefore(btn, pinBtn);
+    console.log('[RBC] ⚙ button injected');
   }
 
   // ══════════════════════════════════════════════════════════════════
-  // DIALOG — shared for both modes
+  // DIALOG
   // ══════════════════════════════════════════════════════════════════
   function _buildDialog() {
     if ($q('#rbc-overlay')) return;
@@ -261,32 +338,37 @@
     ov.setAttribute('aria-modal', 'true');
     ov.innerHTML = `
       <div id="rbc-dialog">
-
         <div class="rbc-head">
           <div class="rbc-head-icon"><i class="fa fa-sliders"></i></div>
           <div style="flex:1">
             <div class="rbc-head-title" id="rbc-head-title">Customize Ribbon</div>
-            <div class="rbc-head-sub"  id="rbc-head-sub">Drag tabs to reorder &middot; toggle visibility &middot; L / S for button size</div>
+            <div class="rbc-head-sub"   id="rbc-head-sub">Drag tabs to reorder · toggle visibility · L / S for button size</div>
           </div>
           <button class="rbc-head-close" id="rbc-close" aria-label="Close">&#x2715;</button>
         </div>
 
-        <div class="rbc-body">
+        <div class="rbc-scope-bar" id="rbc-scope-bar">
+          <span class="rbc-scope-for"><i class="fa fa-user-gear"></i> Editing for:</span>
+          <button class="rbc-scope-pill active" data-scope-type="user">
+            <i class="fa fa-user"></i>
+            <span id="rbc-scope-my-label">My Settings</span>
+          </button>
+          <div class="rbc-scope-div"   id="rbc-scope-div"   style="display:none"></div>
+          <div class="rbc-scope-roles" id="rbc-scope-roles" style="display:none"></div>
+        </div>
 
-          <!-- Left: tabs panel (hidden in single-tab mode) -->
+        <div class="rbc-body">
           <div class="rbc-tabs-panel" id="rbc-tabs-panel">
             <div class="rbc-panel-hd"><i class="fa fa-layer-group"></i>&ensp;Tabs</div>
-            <div class="rbc-tab-list" id="rbc-tab-list"></div>
+            <div class="rbc-tab-list"  id="rbc-tab-list"></div>
           </div>
-
-          <!-- Right: buttons panel -->
           <div class="rbc-btns-panel" id="rbc-btns-panel">
             <div class="rbc-btns-panel-hd" id="rbc-btns-hd" style="display:none">
               <div class="rbc-btns-panel-hd-top">
                 <i class="fa fa-grip" style="color:var(--text-muted)"></i>
                 <span class="rbc-btns-tab-name" id="rbc-btns-tab-name"></span>
               </div>
-              <div class="rbc-btns-hint">Check = show &nbsp;|&nbsp; Uncheck = hide &nbsp;|&nbsp; <b>L</b> = large button &nbsp;|&nbsp; <b>S</b> = small button</div>
+              <div class="rbc-btns-hint">Check = show &nbsp;|&nbsp; Uncheck = hide &nbsp;|&nbsp; <b>L</b> = large &nbsp;|&nbsp; <b>S</b> = small</div>
             </div>
             <div id="rbc-btns-empty" class="rbc-btns-empty">
               <i class="fa fa-hand-point-left" style="font-size:26px;opacity:.3"></i>
@@ -294,30 +376,32 @@
             </div>
             <div class="rbc-btns-scroll" id="rbc-btns-scroll" style="display:none"></div>
           </div>
-
         </div>
 
         <div class="rbc-foot">
-          <div class="rbc-foot-note" id="rbc-foot-note"><i class="fa fa-circle-info"></i>&ensp;Saved per user, restored on next launch.</div>
+          <div class="rbc-foot-note" id="rbc-foot-note">
+            <i class="fa fa-circle-info"></i>&ensp;Saved per user, restored on next launch.
+          </div>
           <button class="rbc-btn-reset" id="rbc-reset"><i class="fa fa-rotate-left"></i> Reset</button>
-          <button class="rbc-btn-save"  id="rbc-save"><i class="fa fa-floppy-disk"></i> Save</button>
+          <button class="rbc-btn-save"  id="rbc-save" ><i class="fa fa-floppy-disk"></i> Save</button>
         </div>
-
       </div>`;
     document.body.appendChild(ov);
 
+    // Bind fixed controls
     ov.addEventListener('pointerdown', e => { if (e.target === ov) rbcClose(); });
     $q('#rbc-close', ov).addEventListener('click', rbcClose);
     document.addEventListener('keydown', e => {
-      if (e.key === 'Escape' && $q('#rbc-overlay.open')) rbcClose();
+      if (e.key === 'Escape' && ov.classList.contains('open')) rbcClose();
     });
-    $q('#rbc-reset', ov).addEventListener('click', _resetCurrent);
+    $q('#rbc-reset', ov).addEventListener('click', _resetScope);
     $q('#rbc-save',  ov).addEventListener('click', _saveAndClose);
+    $q('[data-scope-type="user"]', ov).addEventListener('click', () => _switchScope('user', null));
   }
 
-  // ── Show overlay ───────────────────────────────────────────────────
   function _openOverlay() {
     const ov = $q('#rbc-overlay');
+    if (!ov) return;
     ov.style.display = 'flex';
     void ov.offsetWidth;
     ov.classList.add('open');
@@ -330,98 +414,138 @@
     setTimeout(() => { if (!ov.classList.contains('open')) ov.style.display = 'none'; }, 200);
   }
 
+  // ── Scope bar ──────────────────────────────────────────────────────
+  function _renderScopeBar() {
+    const uc = _uctx();
+    const myLabel = $q('#rbc-scope-my-label');
+    if (myLabel) myLabel.textContent = uc.userName || 'My Settings';
+
+    const divEl   = $q('#rbc-scope-div');
+    const rolesEl = $q('#rbc-scope-roles');
+    if (!divEl || !rolesEl) return;
+
+    if (!uc.isAdmin) {
+      divEl.style.display = rolesEl.style.display = 'none';
+      return;
+    }
+
+    divEl.style.display   = '';
+    rolesEl.style.display = '';
+    rolesEl.innerHTML = '';
+    ROLES.forEach(r => {
+      const btn = document.createElement('button');
+      btn.className = 'rbc-scope-pill';
+      btn.dataset.scopeType = 'role';
+      btn.dataset.scopeRole = r.key;
+      btn.innerHTML = `<i class="fa fa-users"></i> ${_esc(r.label)}`;
+      btn.addEventListener('click', () => _switchScope('role', r.key));
+      rolesEl.appendChild(btn);
+    });
+    _highlightScopePill();
+  }
+
+  function _highlightScopePill() {
+    $qa('.rbc-scope-pill').forEach(p => {
+      const ok = (_scope?.type === 'user' && p.dataset.scopeType === 'user')
+              || (_scope?.type === 'role' && p.dataset.scopeType === 'role' && p.dataset.scopeRole === _scope.roleKey);
+      p.classList.toggle('active', ok);
+    });
+  }
+
+  function _switchScope(type, roleKey) {
+    _scope = { type, roleKey };
+    _edit  = _scopePrefs();
+    _selTab = null;
+    _highlightScopePill();
+    _updateFootNote();
+    _renderTabList();
+    _renderBtnPanel(null);
+  }
+
+  function _updateFootNote() {
+    const el = $q('#rbc-foot-note');
+    if (!el) return;
+    if (_scope?.type === 'role') {
+      const lbl = ROLES.find(r => r.key === _scope.roleKey)?.label || _scope.roleKey;
+      el.innerHTML = `<i class="fa fa-circle-info"></i>&ensp;Editing defaults for <strong>${_esc(lbl)}</strong> role — applies to all users with that role.`;
+    } else {
+      const who = _uctx().userName ? `<strong>${_esc(_uctx().userName)}</strong>` : 'your account';
+      el.innerHTML = `<i class="fa fa-circle-info"></i>&ensp;Personal settings for ${who} — overrides role defaults.`;
+    }
+  }
+
   // ══════════════════════════════════════════════════════════════════
-  // OPEN — TAB-SCOPED (right-click on a specific tab)
-  // Only shows that tab's buttons; no left panel
+  // OPEN — tab-scoped dialog (right-click → Customize buttons)
   // ══════════════════════════════════════════════════════════════════
   function _openTabDialog(tabEl) {
     try {
       if (!tabEl) return;
-      _snap();
-      if (!_saved) _saved = _freshPrefs();
+      _snap(); // always re-snap to pick up current feature-flag state
+      if (!_raw)  _raw = { roles: {}, users: {} };
       _buildDialog();
 
-      const tabId    = tabEl.dataset.tab;
-      const tabLabel = tabEl.textContent.trim();
+      _scope  = { type: 'user', roleKey: null };
+      _edit   = _scopePrefs();
+      _selTab = tabEl.dataset.tab;
 
-      _edit = {
-        tab_order:  [..._saved.tab_order],
-        tab_hidden: { ..._saved.tab_hidden },
-        btn_hidden: { ..._saved.btn_hidden },
-        btn_size:   { ..._saved.btn_size   },
-      };
-
-      // Title
-      $q('#rbc-head-title').textContent = `Customize: ${tabLabel}`;
+      $q('#rbc-head-title').textContent = `Customize: ${tabEl.textContent.trim()}`;
       $q('#rbc-head-sub').textContent   = 'Toggle visibility and size for buttons on this tab.';
-      $q('#rbc-foot-note').innerHTML    = `<i class="fa fa-circle-info"></i>&ensp;Changes apply to the <strong>${_esc(tabLabel)}</strong> tab only.`;
-
-      // Hide left tabs panel — single-tab mode
       $q('#rbc-tabs-panel').style.display = 'none';
 
-      // Show button panel for this tab immediately
-      _selTab = tabId;
-      _renderBtnPanel(tabId);
-
+      _renderScopeBar();
+      _updateFootNote();
+      _renderBtnPanel(_selTab);
       _openOverlay();
-    } catch (e) { console.error('[RBC] _openTabDialog:', e); }
+    } catch (e) { console.error('[RBC] _openTabDialog error:', e); }
   }
 
   // ══════════════════════════════════════════════════════════════════
-  // OPEN — FULL EDITOR (⚙ button or "Reorder all tabs…" menu item)
-  // Shows left tabs panel + right buttons panel
+  // OPEN — full editor (⚙ button)
   // ══════════════════════════════════════════════════════════════════
   function rbcOpen() {
     try {
-      _snap();
-      if (!_saved) _saved = _freshPrefs();
+      _snap(); // always re-snap to pick up current feature-flag state
+      if (!_raw)  _raw = { roles: {}, users: {} };
       _buildDialog();
 
-      _edit = {
-        tab_order:  [..._saved.tab_order],
-        tab_hidden: { ..._saved.tab_hidden },
-        btn_hidden: { ..._saved.btn_hidden },
-        btn_size:   { ..._saved.btn_size   },
-      };
+      _scope  = { type: 'user', roleKey: null };
+      _edit   = _scopePrefs();
       _selTab = null;
 
-      // Full-editor titles
       $q('#rbc-head-title').textContent = 'Customize Ribbon';
       $q('#rbc-head-sub').textContent   = 'Drag tabs to reorder · toggle visibility · L / S for button size';
-      $q('#rbc-foot-note').innerHTML    = '<i class="fa fa-circle-info"></i>&ensp;Saved per user, restored on next launch.';
-
-      // Show left tabs panel
       $q('#rbc-tabs-panel').style.display = '';
 
+      _renderScopeBar();
+      _updateFootNote();
       _renderTabList();
       _renderBtnPanel(null);
       _openOverlay();
-    } catch (e) { console.error('[RBC] rbcOpen:', e); }
+      console.log('[RBC] full dialog opened');
+    } catch (e) { console.error('[RBC] rbcOpen error:', e); }
   }
 
-  // ══════════════════════════════════════════════════════════════════
-  // RENDER — left tabs panel
-  // ══════════════════════════════════════════════════════════════════
+  // ── Tab list ───────────────────────────────────────────────────────
   function _renderTabList() {
     const list = $q('#rbc-tab-list');
     if (!list || !_defs) return;
     list.innerHTML = '';
+    const known   = new Set((_defs.tabs || []).map(t => t.id));
+    const inOrder = (_edit?.tab_order || []).filter(id => known.has(id));
+    const missing = (_defs.tabs || []).filter(t => !inOrder.includes(t.id)).map(t => t.id);
 
-    const known    = new Set(_defs.tabs.map(t => t.id));
-    const inOrder  = _edit.tab_order.filter(id => known.has(id));
-    const missing  = _defs.tabs.filter(t => !inOrder.includes(t.id)).map(t => t.id);
     [...inOrder, ...missing].forEach(id => {
-      const def = _defs.tabs.find(t => t.id === id);
+      const def     = (_defs.tabs || []).find(t => t.id === id);
       if (!def) return;
-      const hidden   = !!_edit.tab_hidden[id];
+      const hidden   = !!_edit?.tab_hidden?.[id];
       const selected = id === _selTab;
       const row = document.createElement('div');
       row.className = 'rbc-tab-row' + (hidden ? ' tab-hidden' : '') + (selected ? ' selected' : '');
       row.dataset.tabId = id;
       row.draggable = true;
       row.innerHTML = `
-        <span class="rbc-drag-handle" title="Drag to reorder"><i class="fa fa-grip-lines"></i></span>
-        <input type="checkbox" class="rbc-tab-check" ${hidden ? '' : 'checked'} title="Show / hide tab">
+        <span class="rbc-drag-handle"><i class="fa fa-grip-lines"></i></span>
+        <input type="checkbox" class="rbc-tab-check" ${hidden ? '' : 'checked'}>
         <span class="rbc-tab-name">${_esc(def.label)}</span>`;
 
       row.addEventListener('click', e => {
@@ -431,13 +555,11 @@
         row.classList.add('selected');
         _renderBtnPanel(id);
       });
-
       row.querySelector('input').addEventListener('change', e => {
+        if (!_edit.tab_hidden) _edit.tab_hidden = {};
         _edit.tab_hidden[id] = !e.target.checked;
         row.classList.toggle('tab-hidden', !e.target.checked);
       });
-
-      // Drag-to-reorder
       row.addEventListener('dragstart', e => {
         _dragSrc = id;
         e.dataTransfer.effectAllowed = 'move';
@@ -451,7 +573,6 @@
       });
       row.addEventListener('dragover', e => {
         e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
         if (_dragSrc && _dragSrc !== id) {
           $qa('.drag-over', list).forEach(r => r.classList.remove('drag-over'));
           row.classList.add('drag-over');
@@ -462,7 +583,7 @@
         e.preventDefault();
         row.classList.remove('drag-over');
         if (!_dragSrc || _dragSrc === id) return;
-        const arr  = [..._edit.tab_order];
+        const arr  = [...(_edit.tab_order || [])];
         const from = arr.indexOf(_dragSrc);
         let   to   = arr.indexOf(id);
         if (from !== -1) arr.splice(from, 1);
@@ -472,14 +593,11 @@
         _dragSrc = null;
         _renderTabList();
       });
-
       list.appendChild(row);
     });
   }
 
-  // ══════════════════════════════════════════════════════════════════
-  // RENDER — right buttons panel
-  // ══════════════════════════════════════════════════════════════════
+  // ── Button panel ───────────────────────────────────────────────────
   function _renderBtnPanel(tabId) {
     const empty  = $q('#rbc-btns-empty');
     const scroll = $q('#rbc-btns-scroll');
@@ -494,49 +612,49 @@
       return;
     }
 
-    const tabDef = _defs.tabs.find(t => t.id === tabId);
-    title.textContent    = tabDef?.label || tabId;
+    const tabDef = (_defs.tabs || []).find(t => t.id === tabId);
+    if (title) title.textContent = tabDef?.label || tabId;
     empty.style.display  = 'none';
     hd.style.display     = '';
     scroll.style.display = '';
     scroll.innerHTML     = '';
 
-    const btns = Object.values(_defs.buttons).filter(b => b.page === tabId);
+    const btns = Object.values(_defs.buttons || {}).filter(b => b.page === tabId);
     if (!btns.length) {
       scroll.innerHTML = '<div style="padding:14px 6px;color:var(--text-muted);font-size:13px">No customisable buttons on this tab.</div>';
       return;
     }
 
-    // Group by ribbon-group label
     const groups = {};
     btns.forEach(b => (groups[b.group] ??= []).push(b));
 
-    Object.entries(groups).forEach(([groupLabel, groupBtns]) => {
+    Object.entries(groups).forEach(([grpLbl, grpBtns]) => {
       const sep = document.createElement('div');
       sep.className = 'rbc-btn-group-sep';
-      sep.innerHTML = `<span class="rbc-btn-group-sep-label">${_esc(groupLabel)}</span><span class="rbc-btn-group-sep-line"></span>`;
+      sep.innerHTML = `<span class="rbc-btn-group-sep-label">${_esc(grpLbl)}</span><span class="rbc-btn-group-sep-line"></span>`;
       scroll.appendChild(sep);
 
-      groupBtns.forEach(def => {
-        const hidden  = !!_edit.btn_hidden[def.id];
-        const curSize = _edit.btn_size[def.id] || def.defaultSize;
+      grpBtns.forEach(def => {
+        const hidden  = !!_edit?.btn_hidden?.[def.id];
+        const curSize = _edit?.btn_size?.[def.id] || def.defaultSize;
         const row = document.createElement('div');
         row.className = 'rbc-btn-row' + (hidden ? ' btn-hidden' : '');
         row.innerHTML = `
-          <input type="checkbox" class="rbc-btn-check" ${hidden ? '' : 'checked'} title="Show / hide button">
+          <input type="checkbox" class="rbc-btn-check" ${hidden ? '' : 'checked'}>
           <span class="rbc-btn-label">${_esc(def.label)}</span>
-          <div class="rbc-size-toggle" title="Button size">
+          <div class="rbc-size-toggle">
             <button class="rbc-size-opt ${curSize === 'lg' ? 'active' : ''}" data-size="lg" type="button">L</button>
             <button class="rbc-size-opt ${curSize === 'sm' ? 'active' : ''}" data-size="sm" type="button">S</button>
           </div>`;
-
         row.querySelector('input').addEventListener('change', e => {
+          if (!_edit.btn_hidden) _edit.btn_hidden = {};
           _edit.btn_hidden[def.id] = !e.target.checked;
           row.classList.toggle('btn-hidden', !e.target.checked);
         });
         $qa('.rbc-size-opt', row).forEach(opt => {
           opt.addEventListener('click', () => {
             const sz = opt.dataset.size;
+            if (!_edit.btn_size) _edit.btn_size = {};
             if (sz === def.defaultSize) delete _edit.btn_size[def.id];
             else _edit.btn_size[def.id] = sz;
             $qa('.rbc-size-opt', row).forEach(o => o.classList.toggle('active', o.dataset.size === sz));
@@ -547,37 +665,36 @@
     });
   }
 
-  // ── Reset ──────────────────────────────────────────────────────────
-  function _resetCurrent() {
+  // ── Reset / Save ───────────────────────────────────────────────────
+  function _resetScope() {
     if (!_defs) _snap();
-    const fresh = _freshPrefs();
-    // In single-tab mode reset only that tab's buttons
-    if ($q('#rbc-tabs-panel').style.display === 'none' && _selTab) {
-      Object.keys(_edit.btn_hidden).forEach(id => {
-        if (_defs.buttons[id]?.page === _selTab) delete _edit.btn_hidden[id];
-      });
-      Object.keys(_edit.btn_size).forEach(id => {
-        if (_defs.buttons[id]?.page === _selTab) delete _edit.btn_size[id];
-      });
+    const isSingle = $q('#rbc-tabs-panel')?.style.display === 'none' && _selTab;
+    if (isSingle) {
+      if (_edit.btn_hidden) Object.keys(_edit.btn_hidden).forEach(id => { if (_defs.buttons[id]?.page === _selTab) delete _edit.btn_hidden[id]; });
+      if (_edit.btn_size)   Object.keys(_edit.btn_size).forEach(id   => { if (_defs.buttons[id]?.page === _selTab) delete _edit.btn_size[id];   });
     } else {
-      _edit = fresh;
+      _edit = _factory();
       _selTab = null;
       _renderTabList();
     }
     _renderBtnPanel(_selTab);
   }
 
-  // ── Save ───────────────────────────────────────────────────────────
   async function _saveAndClose() {
     const saveBtn = $q('#rbc-save');
     if (saveBtn) { saveBtn.disabled = true; saveBtn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…'; }
-    await _persist(_edit);
-    _applyPrefs(_edit);
-    if (saveBtn) { saveBtn.disabled = false; saveBtn.innerHTML = '<i class="fa fa-floppy-disk"></i> Save'; }
-    rbcClose();
+    try {
+      _commitEdit();
+      await _persist();
+      _apply(_effective());
+      rbcClose();
+    } catch (e) {
+      console.error('[RBC] save error:', e);
+    } finally {
+      if (saveBtn) { saveBtn.disabled = false; saveBtn.innerHTML = '<i class="fa fa-floppy-disk"></i> Save'; }
+    }
   }
 
-  // ── Utility ────────────────────────────────────────────────────────
   function _esc(s) {
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
@@ -586,11 +703,24 @@
   // BOOTSTRAP
   // ══════════════════════════════════════════════════════════════════
   function _boot() {
-    try {
-      _buildCtx();
-      _bindTabContextMenus();
-      _injectCustomizeBtn();
-    } catch (e) { console.error('[RBC] boot:', e); }
+    document.addEventListener('contextmenu', e => {
+      try {
+        // Log every contextmenu so we can see what element is targeted
+        console.log('[RBC] contextmenu on:', e.target.tagName,
+          '| id:', e.target.id || '(none)',
+          '| class:', (e.target.className || '').toString().slice(0, 60));
+
+        // Use simple class selector — no ancestor requirement that might fail
+        const tabEl = e.target.closest('.ribbon-tab[data-tab]');
+        console.log('[RBC] tabEl:', tabEl ? tabEl.dataset.tab : 'null');
+
+        if (!tabEl) return;
+        e.preventDefault();
+        e.stopPropagation();
+        _ctxShow(e.clientX, e.clientY, tabEl);
+      } catch (err) { console.error('[RBC] contextmenu handler error:', err); }
+    }, true);
+    console.log('[RBC] ready — contextmenu delegation active');
   }
 
   window.rbcInit = rbcInit;

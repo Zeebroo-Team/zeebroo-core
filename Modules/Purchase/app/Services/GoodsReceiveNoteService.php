@@ -12,6 +12,7 @@ use Modules\Product\Models\Product;
 use Modules\Product\Services\ProductStockLayerService;
 use Modules\Purchase\Models\GoodsReceiveNote;
 use Modules\Purchase\Models\GoodsReceiveNoteItem;
+use Modules\Purchase\Models\GrnPermissionSetting;
 use Modules\Purchase\Models\Purchase;
 use Modules\Purchase\Models\PurchaseItem;
 
@@ -209,12 +210,15 @@ class GoodsReceiveNoteService
                 'received_date' => $data['received_date'],
                 'reference' => filled($data['reference'] ?? null) ? trim((string) $data['reference']) : null,
                 'notes' => filled($data['notes'] ?? null) ? trim((string) $data['notes']) : null,
-                'payment_method' => $data['payment_method'],
-                'payment_reference' => $this->normalizePaymentReference($data),
-                'cheque_due_date' => $this->normalizeChequeDueDate($data),
-                'subtotal' => 0,
-                'total' => 0,
-                'stock_applied' => false,
+                'expense_lines'      => $this->normalizeExpenseLines($data['expense_lines'] ?? null),
+                'payment_method'     => $data['payment_method'],
+                'payment_reference'  => $this->normalizePaymentReference($data),
+                'cheque_due_date'    => $this->normalizeChequeDueDate($data),
+                'payment_terms_days' => $this->normalizePaymentTermsDays($data),
+                'payment_due_date'   => $this->computePaymentDueDate($data),
+                'subtotal'           => 0,
+                'total'              => 0,
+                'stock_applied'      => false,
             ]);
 
             foreach ($lines as $index => $line) {
@@ -224,13 +228,22 @@ class GoodsReceiveNoteService
                     'quantity_received' => $line['quantity_received'],
                     'unit_cost' => $line['unit_cost'],
                     'selling_unit_price' => $line['selling_unit_price'] ?? null,
+                    'units_per_case' => $line['units_per_case'] ?? null,
+                    'uom' => $line['uom'] ?? null,
+                    'discount_percent' => $line['discount_percent'] ?? null,
                     'line_total' => $line['line_total'],
                     'sort_order' => $index,
                 ]);
             }
 
             $this->recalculateTotals($grn);
-            $this->stockLayers->applyFromGrn($grn);
+            $permSettings = GrnPermissionSetting::forBusiness((int) $purchase->business_id);
+            if ($permSettings->requiresApproval()) {
+                $grn->approval_status = 'pending';
+                $grn->save();
+            } else {
+                $this->stockLayers->applyFromGrn($grn);
+            }
             $this->syncPurchaseReceiptStatus($purchase);
             $this->maybeSettlePayment($grn, $purchase->business, $user, $data);
 
@@ -276,6 +289,135 @@ class GoodsReceiveNoteService
     /**
      * @param  array{payment_method?: string, payment_reference?: ?string, deduct_account_id?: int|string|null}  $paymentData
      */
+    /**
+     * Create a standalone GRN that is not linked to any purchase order.
+     *
+     * @param  array{received_date: string, reference?: ?string, notes?: ?string, supplier_id?: ?int, payment_method: string, payment_reference?: ?string, cheque_due_date?: ?string, deduct_account_id?: int|string|null, payment_option?: string, pay_amount?: float|string|null}  $data
+     * @param  list<array{product_id: int, quantity_received: float|string, unit_cost: float|string, discount_percent?: float|null, units_per_case?: int|null, uom?: string|null}>  $items
+     */
+    public function createDirect(Business $business, User $user, array $data, array $items): GoodsReceiveNote
+    {
+        if (empty($items)) {
+            throw ValidationException::withMessages(['items' => 'Add at least one item to receive.']);
+        }
+
+        $lines = [];
+        foreach ($items as $row) {
+            $productId      = (int) ($row['product_id'] ?? 0);
+            $qty            = (float) ($row['quantity_received'] ?? 0);
+            $unitCost       = (float) ($row['unit_cost'] ?? 0);
+            $discountPct    = isset($row['discount_percent']) && $row['discount_percent'] !== null
+                ? round((float) $row['discount_percent'], 3)
+                : null;
+            $unitsPerCase   = isset($row['units_per_case']) && $row['units_per_case'] !== null
+                ? (int) $row['units_per_case']
+                : null;
+            $uom            = filled($row['uom'] ?? null) ? trim((string) $row['uom']) : null;
+
+            if ($productId <= 0 || $qty <= 0) {
+                continue;
+            }
+
+            $product = Product::where('business_id', $business->id)->where('id', $productId)->first();
+            if (!$product) {
+                throw ValidationException::withMessages(['items' => "Product #{$productId} not found."]);
+            }
+
+            $sellingUnitPrice = $this->stockLayers->resolveSellingUnitPrice($business, $product, $unitCost, null);
+            $gross            = $qty * $unitCost;
+            $lineTotal        = $discountPct !== null ? round($gross * (1 - $discountPct / 100), 2) : round($gross, 2);
+
+            $lines[] = [
+                'product_id'         => $productId,
+                'quantity_received'  => $qty,
+                'unit_cost'          => $unitCost,
+                'selling_unit_price' => $sellingUnitPrice,
+                'units_per_case'     => $unitsPerCase,
+                'uom'                => $uom,
+                'discount_percent'   => $discountPct,
+                'line_total'         => $lineTotal,
+            ];
+        }
+
+        if (empty($lines)) {
+            throw ValidationException::withMessages(['items' => 'Add at least one valid item with quantity > 0.']);
+        }
+
+        $supplierId = isset($data['supplier_id']) && (int) $data['supplier_id'] > 0
+            ? (int) $data['supplier_id']
+            : null;
+
+        $grn = DB::transaction(function () use ($business, $user, $data, $lines, $supplierId) {
+            $grn = $business->goodsReceiveNotes()->create([
+                'business_id'       => $business->id,
+                'purchase_id'       => null,
+                'supplier_id'       => $supplierId,
+                'grn_number'        => $this->nextGrnNumber($business),
+                'received_date'     => $data['received_date'],
+                'reference'         => filled($data['reference'] ?? null) ? trim((string) $data['reference']) : null,
+                'notes'             => filled($data['notes'] ?? null) ? trim((string) $data['notes']) : null,
+                'expense_lines'     => $this->normalizeExpenseLines($data['expense_lines'] ?? null),
+                'payment_method'    => $data['payment_method'],
+                'payment_reference' => $this->normalizePaymentReference($data),
+                'cheque_due_date'   => $this->normalizeChequeDueDate($data),
+                'payment_terms_days'=> $this->normalizePaymentTermsDays($data),
+                'payment_due_date'  => $this->computePaymentDueDate($data),
+                'subtotal'          => 0,
+                'total'             => 0,
+                'stock_applied'     => false,
+            ]);
+
+            foreach ($lines as $index => $line) {
+                $grn->items()->create([
+                    'purchase_item_id'   => null,
+                    'product_id'         => $line['product_id'],
+                    'quantity_received'  => $line['quantity_received'],
+                    'unit_cost'          => $line['unit_cost'],
+                    'selling_unit_price' => $line['selling_unit_price'] ?? null,
+                    'units_per_case'     => $line['units_per_case'] ?? null,
+                    'uom'                => $line['uom'] ?? null,
+                    'discount_percent'   => $line['discount_percent'] ?? null,
+                    'line_total'         => $line['line_total'],
+                    'sort_order'         => $index,
+                ]);
+            }
+
+            $this->recalculateTotals($grn);
+            $permSettings = GrnPermissionSetting::forBusiness((int) $business->id);
+            if ($permSettings->requiresApproval()) {
+                $grn->approval_status = 'pending';
+                $grn->save();
+            } else {
+                $this->stockLayers->applyFromGrn($grn);
+            }
+            $this->maybeSettlePayment($grn, $business, $user, $data);
+
+            return $grn->load([
+                'supplier',
+                'items.product',
+                'ledgerTransactions.deductAccount',
+                'chequePayments',
+            ]);
+        });
+
+        try {
+            $runner = app(\Modules\AutomationEditor\Services\AutomationRunnerService::class);
+            $runner->dispatch('grn.created', $business, [
+                'event'    => 'grn.created',
+                'grn'      => [
+                    'id'          => $grn->id,
+                    'reference'   => $grn->grn_number,
+                    'total_value' => (float) $grn->total,
+                    'received_at' => $grn->received_date,
+                    'items'       => $grn->items->map(fn ($i) => ['product_id' => $i->product_id, 'name' => $i->product?->name, 'qty' => (float) $i->quantity_received, 'unit_cost' => (float) $i->unit_cost])->values()->all(),
+                ],
+                'supplier' => ['id' => $supplierId, 'name' => $grn->supplier?->name],
+            ]);
+        } catch (\Throwable) {}
+
+        return $grn;
+    }
+
     public function receiveAllRemaining(Purchase $purchase, User $user, ?string $receivedDate = null, array $paymentData = []): GoodsReceiveNote
     {
         $purchase->load('items');
@@ -427,8 +569,8 @@ class GoodsReceiveNoteService
     }
 
     /**
-     * @param  list<array{purchase_item_id: int, quantity_received: float|string}>  $items
-     * @return list<array{purchase_item_id: int, product_id: int, quantity_received: float, unit_cost: float, selling_unit_price: ?float, line_total: float}>
+     * @param  list<array{purchase_item_id: int, quantity_received: float|string, discount_percent?: float|null, units_per_case?: int|null, uom?: string|null}>  $items
+     * @return list<array{purchase_item_id: int, product_id: int, quantity_received: float, unit_cost: float, selling_unit_price: ?float, units_per_case: ?int, uom: ?string, discount_percent: ?float, line_total: float}>
      */
     private function normalizeReceiveLines(Purchase $purchase, array $items): array
     {
@@ -466,13 +608,26 @@ class GoodsReceiveNoteService
                 ? $this->stockLayers->resolveSellingUnitPrice($purchase->business, $product, $unitCost, $sellingProvided)
                 : $sellingProvided;
 
+            $discountPct  = isset($row['discount_percent']) && $row['discount_percent'] !== null
+                ? round((float) $row['discount_percent'], 3)
+                : null;
+            $unitsPerCase = isset($row['units_per_case']) && $row['units_per_case'] !== null
+                ? (int) $row['units_per_case']
+                : null;
+            $uom          = filled($row['uom'] ?? null) ? trim((string) $row['uom']) : null;
+            $gross        = $quantityReceived * $unitCost;
+            $lineTotal    = $discountPct !== null ? round($gross * (1 - $discountPct / 100), 2) : round($gross, 2);
+
             $normalized[] = [
                 'purchase_item_id' => $purchaseItemId,
                 'product_id' => (int) $purchaseItem->product_id,
                 'quantity_received' => $quantityReceived,
                 'unit_cost' => $unitCost,
                 'selling_unit_price' => $sellingUnitPrice,
-                'line_total' => round($quantityReceived * $unitCost, 2),
+                'units_per_case' => $unitsPerCase,
+                'uom' => $uom,
+                'discount_percent' => $discountPct,
+                'line_total' => $lineTotal,
             ];
         }
 
@@ -490,7 +645,20 @@ class GoodsReceiveNoteService
         $grn->load('items');
         $subtotal = $grn->items->sum(fn (GoodsReceiveNoteItem $item) => (float) $item->line_total);
         $grn->subtotal = round($subtotal, 2);
-        $grn->total = $grn->subtotal;
+
+        // Add configured expenses (flat amounts or % of subtotal)
+        $expenseTotal = 0.0;
+        foreach ((array) ($grn->expense_lines ?? []) as $exp) {
+            $val = (float) ($exp['value'] ?? 0);
+            if ($val <= 0) {
+                continue;
+            }
+            $expenseTotal += ($exp['type'] ?? '') === 'pct'
+                ? round($subtotal * $val / 100, 2)
+                : round($val, 2);
+        }
+
+        $grn->total = round($subtotal + $expenseTotal, 2);
         $grn->save();
     }
 
@@ -501,5 +669,116 @@ class GoodsReceiveNoteService
         }
 
         return (int) $value;
+    }
+
+    /**
+     * Returns the credit payment terms in days (null when not a credit payment or days not provided).
+     */
+    private function normalizePaymentTermsDays(array $data): ?int
+    {
+        if (($data['payment_method'] ?? '') !== 'credit') {
+            return null;
+        }
+        $days = isset($data['payment_terms_days']) ? (int) $data['payment_terms_days'] : 0;
+        return $days > 0 ? $days : null;
+    }
+
+    /**
+     * Computes payment_due_date = received_date + payment_terms_days (credit only).
+     * Returns null for non-credit payments or when days are absent.
+     */
+    private function computePaymentDueDate(array $data): ?string
+    {
+        if (($data['payment_method'] ?? '') !== 'credit') {
+            return null;
+        }
+        $days = isset($data['payment_terms_days']) ? (int) $data['payment_terms_days'] : 0;
+        if ($days <= 0) {
+            return null;
+        }
+        $base = $data['received_date'] ?? null;
+        if (!$base) {
+            return null;
+        }
+        try {
+            return \Carbon\Carbon::parse($base)->addDays($days)->toDateString();
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    /**
+     * Sanitise the expense_lines array coming from the request.
+     * Each element: { name: string, type: 'flat'|'pct', value: float }
+     * Returns null when there are no valid entries.
+     *
+     * @param  mixed  $raw
+     * @return list<array{name:string,type:string,value:float}>|null
+     */
+    private function normalizeExpenseLines(mixed $raw): ?array
+    {
+        if (!is_array($raw) || empty($raw)) {
+            return null;
+        }
+
+        $lines = [];
+        foreach ($raw as $exp) {
+            $name  = trim((string) ($exp['name']  ?? ''));
+            $type  = in_array($exp['type'] ?? '', ['flat', 'pct'], true) ? $exp['type'] : 'flat';
+            $value = round((float) ($exp['value'] ?? 0), 4);
+
+            if ($name === '' || $value <= 0) {
+                continue;
+            }
+
+            $lines[] = ['name' => $name, 'type' => $type, 'value' => $value];
+        }
+
+        return empty($lines) ? null : $lines;
+    }
+
+    /**
+     * Apply stock for a GRN that was held for approval.
+     * Called by the approve endpoint after confirming the approver's role permission.
+     */
+    public function approveGrn(GoodsReceiveNote $grn): GoodsReceiveNote
+    {
+        if ($grn->approval_status !== 'pending') {
+            throw ValidationException::withMessages([
+                'approval' => 'This GRN is not pending approval.',
+            ]);
+        }
+
+        DB::transaction(function () use ($grn) {
+            $this->stockLayers->applyFromGrn($grn);
+            $grn->approval_status = 'approved';
+            $grn->save();
+
+            if ($grn->purchase_id) {
+                $purchase = $grn->purchase ?? \Modules\Purchase\Models\Purchase::find($grn->purchase_id);
+                if ($purchase) {
+                    $this->syncPurchaseReceiptStatus($purchase);
+                }
+            }
+        });
+
+        return $grn;
+    }
+
+    /**
+     * Reject a pending GRN (does not apply stock).
+     */
+    public function rejectGrn(GoodsReceiveNote $grn): GoodsReceiveNote
+    {
+        if ($grn->approval_status !== 'pending') {
+            throw ValidationException::withMessages([
+                'approval' => 'This GRN is not pending approval.',
+            ]);
+        }
+
+        $grn->approval_status = 'rejected';
+        $grn->save();
+
+        return $grn;
     }
 }

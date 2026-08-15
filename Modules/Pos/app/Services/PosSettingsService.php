@@ -71,6 +71,13 @@ class PosSettingsService
 
     public const DELIVERY_METHOD_KEYS = ['dhl', 'fedex', 'uber', 'pickme', 'koobiyo', 'pronto'];
 
+    public const KEY_COURIER_SERVICES = 'courier.services';
+
+    public const COURIER_SERVICE_KEYS = ['courier', 'domex', 'koobiyo', 'pronto', 'citypak'];
+
+    /** When false, purchase orders are skipped; GRNs are created directly. */
+    public const KEY_PURCHASE_ORDER_ENABLED = 'pos.purchase_order_enabled';
+
     /**
      * @return array{
      *     default_deposit_account_id: ?int,
@@ -157,6 +164,19 @@ class PosSettingsService
                 $methods = is_array($raw) ? $raw : (is_string($raw) ? json_decode($raw, true) ?? [] : []);
                 return array_values(array_intersect($methods, self::DELIVERY_METHOD_KEYS));
             })(),
+            // Courier services
+            'courier_services' => (function () use ($business): array {
+                $raw   = $business->getSetting(self::KEY_COURIER_SERVICES, []);
+                $saved = is_array($raw) ? $raw : (is_string($raw) ? json_decode($raw, true) ?? [] : []);
+                $out   = [];
+                foreach (self::COURIER_SERVICE_KEYS as $key) {
+                    $svc = $saved[$key] ?? [];
+                    $out[$key] = ['enabled' => !empty($svc['enabled']), 'charge' => isset($svc['charge']) ? (float) $svc['charge'] : 0];
+                }
+                return $out;
+            })(),
+            // Purchasing
+            'purchase_order_enabled' => (bool) $business->getSetting(self::KEY_PURCHASE_ORDER_ENABLED, true),
         ];
     }
 
@@ -323,6 +343,21 @@ class PosSettingsService
                 self::KEY_DELIVERY_METHODS,
                 array_values(array_intersect($methods, self::DELIVERY_METHOD_KEYS)),
             );
+        }
+
+        // Courier services
+        if (array_key_exists('courier_services', $data) && is_array($data['courier_services'])) {
+            $services = [];
+            foreach (self::COURIER_SERVICE_KEYS as $key) {
+                $svc = $data['courier_services'][$key] ?? [];
+                $services[$key] = ['enabled' => !empty($svc['enabled']), 'charge' => isset($svc['charge']) ? max(0, (float) $svc['charge']) : 0];
+            }
+            $business->setSetting(self::KEY_COURIER_SERVICES, $services);
+        }
+
+        // Purchasing workflow
+        if (array_key_exists('purchase_order_enabled', $data)) {
+            $business->setSetting(self::KEY_PURCHASE_ORDER_ENABLED, filter_var($data['purchase_order_enabled'], FILTER_VALIDATE_BOOLEAN));
         }
 
         // Business profile

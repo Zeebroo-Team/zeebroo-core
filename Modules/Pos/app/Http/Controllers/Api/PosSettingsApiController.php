@@ -186,9 +186,15 @@ class PosSettingsApiController extends Controller
             'invoice_prefix'      => ['nullable', 'string', 'max:20'],
             'invoice_next_number' => ['nullable', 'integer', 'min:1'],
             // Delivery
-            'delivery_enabled'    => ['nullable', 'boolean'],
-            'delivery_methods'    => ['nullable', 'array'],
-            'delivery_methods.*'  => ['string', 'in:dhl,fedex,uber,pickme,koobiyo,pronto'],
+            'delivery_enabled'           => ['nullable', 'boolean'],
+            'delivery_methods'           => ['nullable', 'array'],
+            'delivery_methods.*'         => ['string', 'in:dhl,fedex,uber,pickme,koobiyo,pronto'],
+            // Courier services
+            'courier_services'           => ['nullable', 'array'],
+            'courier_services.*.enabled' => ['nullable', 'boolean'],
+            'courier_services.*.charge'  => ['nullable', 'numeric', 'min:0'],
+            // Purchasing workflow
+            'purchase_order_enabled'     => ['nullable', 'boolean'],
         ]);
 
         $this->posSettings->saveForBusiness($business, $validated);
