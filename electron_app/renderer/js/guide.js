@@ -3,6 +3,12 @@
  *
  * Reads walkthrough definitions from window.GUIDE_CONFIG (guide-config.js).
  * To add a new guided walkthrough, edit guide-config.js only — no changes here.
+ *
+ * Right-click context menu on the guide character exposes:
+ *   • Voice Listening Worker — Web Speech API continuous voice input
+ *   • Open Chat             — opens the chat bubble
+ *   • Reset Position        — returns character to home corner
+ *   • Dismiss Guide         — hides the character
  */
 (function () {
   'use strict';
@@ -392,6 +398,9 @@
     bubble.classList.remove('guide-pop-out');
     void bubble.offsetWidth;
     bubble.classList.add('guide-pop-in');
+    // Show voice listening bar if worker is active
+    const bar = document.getElementById('guide-voice-listening-bar');
+    if (bar) bar.classList.toggle('active', _voiceActive);
     if (resetToInput !== false) {
       _showInputState();
       setTimeout(() => document.getElementById('guide-chat-input')?.focus(), 120);
@@ -405,6 +414,9 @@
     bubble.classList.remove('guide-pop-in');
     bubble.classList.add('guide-pop-out');
     setTimeout(() => { if (!_bubbleOpen) bubble.style.display = 'none'; }, 200);
+    // Hide listening bar when bubble closes
+    const bar = document.getElementById('guide-voice-listening-bar');
+    if (bar) bar.classList.remove('active');
   }
 
   function _toggleBubble() {
@@ -541,6 +553,211 @@
   }
 
   /* ════════════════════════════════════════════════════════════════════════
+     VOICE LISTENING WORKER
+     Uses the Web Speech API to capture voice commands and route them to the
+     guide chat. Works as a persistent "node" — runs continuously until
+     explicitly stopped via the context menu or the mic badge.
+     ════════════════════════════════════════════════════════════════════════ */
+  let _voiceWorker     = null;   // SpeechRecognition instance
+  let _voiceActive     = false;
+  let _voiceRestarting = false;  // guard against double-restart loops
+
+  function _voiceSupported() {
+    return !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+  }
+
+  function _updateVoiceUI(active) {
+    _voiceActive = active;
+    const badge      = document.getElementById('guide-voice-badge');
+    const bar        = document.getElementById('guide-voice-listening-bar');
+    const voiceItem  = document.getElementById('guide-ctx-voice');
+    const voiceLabel = document.getElementById('guide-ctx-voice-label');
+
+    if (badge)      badge.classList.toggle('voice-active', active);
+    if (bar)        bar.classList.toggle('active', active && _bubbleOpen);
+    if (voiceItem)  voiceItem.classList.toggle('voice-on', active);
+    if (voiceLabel) voiceLabel.textContent = active ? 'Stop Voice Worker' : 'Start Voice Worker';
+    if (voiceItem)  voiceItem.querySelector('.guide-ctx-icon i').className =
+                      active ? 'fa fa-microphone-slash' : 'fa fa-microphone';
+  }
+
+  function _startVoiceWorker() {
+    if (!_voiceSupported()) {
+      alert('Voice input is not supported in this environment. Please type your question.');
+      return;
+    }
+    if (_voiceActive) return;
+
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    _voiceWorker          = new SR();
+    _voiceWorker.lang     = navigator.language || 'en-US';
+    _voiceWorker.continuous     = true;   // keep listening after each phrase
+    _voiceWorker.interimResults = true;   // show partial results while speaking
+
+    let _interimText = '';
+
+    _voiceWorker.onstart = () => {
+      _updateVoiceUI(true);
+      // Open the chat bubble so the user can see what was captured
+      if (!_bubbleOpen) _openBubble(false);
+      _showInputState();
+      const bar = document.getElementById('guide-voice-listening-bar');
+      if (bar) bar.classList.add('active');
+      const inp = document.getElementById('guide-chat-input');
+      if (inp) { inp.placeholder = 'Listening…'; inp.value = ''; }
+    };
+
+    _voiceWorker.onresult = e => {
+      let interim = '', final = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const t = e.results[i][0].transcript;
+        if (e.results[i].isFinal) { final += t; }
+        else                       { interim += t; }
+      }
+      const inp = document.getElementById('guide-chat-input');
+      if (inp) inp.value = (final || interim).trim();
+      // Auto-send when a final phrase is captured
+      if (final.trim()) {
+        // Small delay so the user sees the text before it sends
+        setTimeout(() => {
+          if (document.getElementById('guide-chat-input')?.value.trim()) {
+            _sendMessage();
+          }
+        }, 420);
+      }
+    };
+
+    _voiceWorker.onerror = e => {
+      // 'no-speech' and 'aborted' are not real errors — ignore them
+      if (e.error === 'no-speech' || e.error === 'aborted') return;
+      console.warn('[VoiceWorker] error:', e.error);
+      _stopVoiceWorker();
+    };
+
+    _voiceWorker.onend = () => {
+      // Auto-restart if still supposed to be active (browser stops after silence)
+      if (_voiceActive && !_voiceRestarting) {
+        _voiceRestarting = true;
+        setTimeout(() => {
+          _voiceRestarting = false;
+          if (_voiceActive && _voiceWorker) {
+            try { _voiceWorker.start(); } catch (_) { /* already running */ }
+          }
+        }, 300);
+      } else {
+        _updateVoiceUI(false);
+        const inp = document.getElementById('guide-chat-input');
+        if (inp) inp.placeholder = 'Ask me anything…';
+        const bar = document.getElementById('guide-voice-listening-bar');
+        if (bar) bar.classList.remove('active');
+      }
+    };
+
+    try {
+      _voiceWorker.start();
+    } catch (err) {
+      console.warn('[VoiceWorker] start failed:', err);
+      _voiceWorker = null;
+    }
+  }
+
+  function _stopVoiceWorker() {
+    _voiceActive = false;
+    if (_voiceWorker) {
+      try { _voiceWorker.stop(); } catch (_) {}
+      _voiceWorker = null;
+    }
+    _updateVoiceUI(false);
+    const inp = document.getElementById('guide-chat-input');
+    if (inp) inp.placeholder = 'Ask me anything…';
+    const bar = document.getElementById('guide-voice-listening-bar');
+    if (bar) bar.classList.remove('active');
+  }
+
+  function _toggleVoiceWorker() {
+    if (_voiceActive) { _stopVoiceWorker(); }
+    else              { _startVoiceWorker(); }
+  }
+
+  /* ════════════════════════════════════════════════════════════════════════
+     CONTEXT MENU
+     Right-click on the guide character image-wrap shows the context menu.
+     ════════════════════════════════════════════════════════════════════════ */
+  function _openCtxMenu(x, y) {
+    const menu = document.getElementById('guide-ctx-menu');
+    if (!menu) return;
+
+    // Position: keep inside viewport
+    menu.style.display = 'block';
+    const mw = menu.offsetWidth  || 210;
+    const mh = menu.offsetHeight || 160;
+    let cx = x, cy = y;
+    if (cx + mw > window.innerWidth  - 8) cx = window.innerWidth  - mw - 8;
+    if (cy + mh > window.innerHeight - 8) cy = window.innerHeight - mh - 8;
+    menu.style.left = cx + 'px';
+    menu.style.top  = cy + 'px';
+    menu.style.display = 'block';
+  }
+
+  function _closeCtxMenu() {
+    const menu = document.getElementById('guide-ctx-menu');
+    if (menu) menu.style.display = 'none';
+  }
+
+  function _initCtxMenu() {
+    const menu     = document.getElementById('guide-ctx-menu');
+    const imgWrap  = document.getElementById('guide-char-img-wrap');
+    const badge    = document.getElementById('guide-voice-badge');
+    if (!menu || !imgWrap) return;
+
+    // Right-click on the character
+    imgWrap.addEventListener('contextmenu', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      _openCtxMenu(e.clientX, e.clientY);
+    });
+
+    // Clicking the mic badge directly toggles the worker
+    badge?.addEventListener('click', e => {
+      e.stopPropagation();
+      _stopVoiceWorker();
+    });
+
+    // Context menu item: Voice Worker
+    document.getElementById('guide-ctx-voice')?.addEventListener('click', () => {
+      _closeCtxMenu();
+      _toggleVoiceWorker();
+    });
+
+    // Context menu item: Open Chat
+    document.getElementById('guide-ctx-chat')?.addEventListener('click', () => {
+      _closeCtxMenu();
+      if (!_bubbleOpen) _openBubble();
+    });
+
+    // Context menu item: Reset Position
+    document.getElementById('guide-ctx-reset')?.addEventListener('click', () => {
+      _closeCtxMenu();
+      _returnHome();
+    });
+
+    // Context menu item: Dismiss
+    document.getElementById('guide-ctx-dismiss')?.addEventListener('click', () => {
+      _closeCtxMenu();
+      _setGuideVisible(false);
+      _stopVoiceWorker();
+    });
+
+    // Close on outside click or Escape
+    document.addEventListener('click', e => {
+      if (!menu.contains(e.target)) _closeCtxMenu();
+    });
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') _closeCtxMenu();
+    });
+  }
+
+  /* ════════════════════════════════════════════════════════════════════════
      DRAGGABLE
      ════════════════════════════════════════════════════════════════════════ */
   function _makeDraggable(wrap, handle) {
@@ -548,6 +765,7 @@
 
     handle.addEventListener('mousedown', e => {
       if (e.target.closest('#guide-char-dismiss')) return;
+      if (e.target.closest('#guide-voice-badge'))  return;
       active = true;
       startX = e.clientX; startY = e.clientY;
       const r = wrap.getBoundingClientRect();
@@ -619,6 +837,7 @@
     });
 
     _makeDraggable(wrap, imgWrap);
+    _initCtxMenu();
   }
 
   /* ════════════════════════════════════════════════════════════════════════

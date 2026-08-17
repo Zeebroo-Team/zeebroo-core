@@ -14477,6 +14477,135 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
   75%       { transform: translateY(-5px) rotate(1.5deg); }
 }
 
+/* ── Guide right-click context menu ──────────────────────────────────────── */
+#guide-ctx-menu {
+  position: fixed;
+  background: #fff;
+  border: 1px solid #d0d5e8;
+  border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(0,0,0,0.16), 0 1px 4px rgba(0,0,0,0.08);
+  padding: 5px 0;
+  min-width: 200px;
+  z-index: 9600;
+  display: none;
+  animation: guide-ctx-appear 0.12s cubic-bezier(0.34,1.56,0.64,1) forwards;
+  transform-origin: top left;
+}
+@keyframes guide-ctx-appear {
+  from { opacity: 0; transform: scale(0.88); }
+  to   { opacity: 1; transform: scale(1); }
+}
+.guide-ctx-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 14px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: #2d3257;
+  cursor: pointer;
+  transition: background 0.1s;
+  user-select: none;
+  white-space: nowrap;
+}
+.guide-ctx-item:hover { background: #f0f3ff; }
+.guide-ctx-item .guide-ctx-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+.guide-ctx-sep {
+  height: 1px;
+  background: #e8ecf3;
+  margin: 4px 0;
+}
+.guide-ctx-item--voice   .guide-ctx-icon { background: #fee2e2; color: #dc2626; }
+.guide-ctx-item--voice.voice-on .guide-ctx-icon { background: #dcfce7; color: #16a34a; }
+.guide-ctx-item--voice.voice-on { color: #16a34a; }
+.guide-ctx-item--chat    .guide-ctx-icon { background: #ede9fe; color: #7c3aed; }
+.guide-ctx-item--reset   .guide-ctx-icon { background: #dbeafe; color: #1d4ed8; }
+.guide-ctx-item--dismiss .guide-ctx-icon { background: #fef2f2; color: #ef4444; }
+
+/* ── Voice Listening Worker — mic badge on character ─────────────────────── */
+#guide-voice-badge {
+  position: absolute;
+  bottom: 6px;
+  left: -6px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #dc2626;
+  border: 2px solid #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: #fff;
+  cursor: pointer;
+  z-index: 1;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s;
+  animation: guide-voice-pulse 1.4s ease-in-out infinite;
+}
+#guide-voice-badge.voice-active {
+  opacity: 1;
+  pointer-events: auto;
+}
+@keyframes guide-voice-pulse {
+  0%,  100% { box-shadow: 0 0 0 0   rgba(220,38,38,0.5); }
+  50%        { box-shadow: 0 0 0 7px rgba(220,38,38,0);   }
+}
+/* listening wave indicator inside the bubble */
+#guide-voice-listening-bar {
+  display: none;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 0 2px;
+  font-size: 11px;
+  color: #dc2626;
+  font-weight: 600;
+}
+#guide-voice-listening-bar.active { display: flex; }
+#guide-voice-listening-bar .guide-voice-waves {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 14px;
+}
+#guide-voice-listening-bar .guide-voice-waves span {
+  width: 3px;
+  border-radius: 2px;
+  background: #dc2626;
+  animation: guide-voice-wave 0.8s ease-in-out infinite;
+}
+#guide-voice-listening-bar .guide-voice-waves span:nth-child(2) { animation-delay: 0.1s; }
+#guide-voice-listening-bar .guide-voice-waves span:nth-child(3) { animation-delay: 0.2s; }
+#guide-voice-listening-bar .guide-voice-waves span:nth-child(4) { animation-delay: 0.3s; }
+@keyframes guide-voice-wave {
+  0%,  100% { height: 4px;  }
+  50%        { height: 13px; }
+}
+
+/* Dark mode context menu */
+@media (prefers-color-scheme: dark) {
+  #guide-ctx-menu     { background: #1e2135; border-color: #2d3257; box-shadow: 0 8px 28px rgba(0,0,0,0.45); }
+  .guide-ctx-item     { color: #c8cce8; }
+  .guide-ctx-item:hover { background: #272a47; }
+  .guide-ctx-sep      { background: #2d3257; }
+  #guide-voice-badge  { border-color: #1e2135; }
+}
+:root[data-theme="dark"] #guide-ctx-menu     { background: #1e2135; border-color: #2d3257; box-shadow: 0 8px 28px rgba(0,0,0,0.45); }
+:root[data-theme="dark"] .guide-ctx-item     { color: #c8cce8; }
+:root[data-theme="dark"] .guide-ctx-item:hover { background: #272a47; }
+:root[data-theme="dark"] .guide-ctx-sep      { background: #2d3257; }
+:root[data-theme="dark"] #guide-voice-badge  { border-color: #1e2135; }
+
 /* ── Customer type toggle ────────────────────────────── */
 .cm-type-toggle {
   display: flex; gap: 8px;

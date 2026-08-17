@@ -12945,6 +12945,13 @@
 <!-- ── Guide Assistant Character ─────────────────────────────────────── -->
 <div id="guide-char-wrap" style="display:none">
   <div id="guide-bubble" style="display:none">
+    <!-- Voice listening bar (shows while worker is active) -->
+    <div id="guide-voice-listening-bar">
+      <div class="guide-voice-waves">
+        <span></span><span></span><span></span><span></span>
+      </div>
+      Listening…
+    </div>
     <!-- Input state -->
     <div id="guide-chat-input-wrap">
       <textarea id="guide-chat-input" placeholder="Ask me anything…" rows="2"></textarea>
@@ -12959,6 +12966,29 @@
   <div id="guide-char-img-wrap">
     <img id="guide-char-img" src="img/animtors.gif" alt="Guide assistant" draggable="false">
     <button id="guide-char-dismiss" title="Hide guide"><i class="fa fa-xmark"></i></button>
+    <!-- Voice Listening Worker active badge -->
+    <div id="guide-voice-badge" title="Voice Listening Worker active — click to stop"><i class="fa fa-microphone"></i></div>
+  </div>
+</div>
+
+<!-- ── Guide character right-click context menu ──────────────────────── -->
+<div id="guide-ctx-menu" role="menu" aria-label="Guide assistant options">
+  <div class="guide-ctx-item guide-ctx-item--voice" id="guide-ctx-voice" role="menuitem">
+    <span class="guide-ctx-icon"><i class="fa fa-microphone"></i></span>
+    <span id="guide-ctx-voice-label">Start Voice Worker</span>
+  </div>
+  <div class="guide-ctx-item guide-ctx-item--chat" id="guide-ctx-chat" role="menuitem">
+    <span class="guide-ctx-icon"><i class="fa fa-comment-dots"></i></span>
+    Open Chat
+  </div>
+  <div class="guide-ctx-sep"></div>
+  <div class="guide-ctx-item guide-ctx-item--reset" id="guide-ctx-reset" role="menuitem">
+    <span class="guide-ctx-icon"><i class="fa fa-location-crosshairs"></i></span>
+    Reset Position
+  </div>
+  <div class="guide-ctx-item guide-ctx-item--dismiss" id="guide-ctx-dismiss" role="menuitem">
+    <span class="guide-ctx-icon"><i class="fa fa-eye-slash"></i></span>
+    Dismiss Guide
   </div>
 </div>
 
