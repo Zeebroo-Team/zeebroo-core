@@ -694,19 +694,57 @@
     try { _voiceWorker.start(); } catch (_) { /* already running */ }
   }
 
+  /* ── _voiceShowError: show an inline error in the bubble ── */
+  function _voiceShowError(msg) {
+    _stopVoiceWorker();
+    if (!_bubbleOpen) _openBubble(false);
+    _reopenWithReply(msg);
+  }
+
   /* ── Start the Voice Listening Worker ── */
-  function _startVoiceWorker() {
+  async function _startVoiceWorker() {
     if (!_voiceSupported()) {
-      alert('Voice input is not supported in this environment. Please type your question.');
+      _voiceShowError(
+        'Voice input is not supported in this browser. Please type your question instead.'
+      );
       return;
     }
     if (_voiceActive) return;
 
+    // ── Step 1: getUserMedia preflight ────────────────────────────────────
+    // This triggers the OS microphone permission dialog on first use.
+    // Without it, SpeechRecognition silently fails with 'not-allowed' in Electron.
+    let micStream = null;
+    try {
+      micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    } catch (err) {
+      const name = err?.name || '';
+      if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+        _voiceShowError(
+          'Microphone access was denied. Please allow microphone access in System Settings → Privacy → Microphone, then try again.'
+        );
+      } else if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+        _voiceShowError(
+          'No microphone found. Please connect a microphone and try again.'
+        );
+      } else {
+        _voiceShowError(
+          'Could not access the microphone (' + (err?.message || name || 'unknown error') + ').'
+        );
+      }
+      return;
+    }
+    // Release the getUserMedia stream — SpeechRecognition manages its own capture
+    micStream.getTracks().forEach(t => t.stop());
+    micStream = null;
+
+    // ── Step 2: set up SpeechRecognition ─────────────────────────────────
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     _voiceWorker              = new SR();
     _voiceWorker.lang         = navigator.language || 'en-US';
-    _voiceWorker.continuous     = false;  // single-phrase mode for cleaner Gemini dispatch
+    _voiceWorker.continuous     = false;  // single-phrase mode for clean Gemini dispatch
     _voiceWorker.interimResults = true;
+    _voiceWorker.maxAlternatives = 1;
 
     _voiceActive  = true;
     _voicePaused  = false;
@@ -734,7 +772,7 @@
       if (inp) inp.value = (final || interim).trim();
 
       if (final.trim()) {
-        // Pause the worker — _sendMessage will resume it after Gemini replies
+        // Pause the worker — _sendMessage will resume it after Gemini replies + TTS
         _voicePaused = true;
         setTimeout(() => {
           if (document.getElementById('guide-chat-input')?.value.trim()) {
@@ -746,11 +784,20 @@
       }
     };
 
-    /* onerror: ignore non-speech errors; stop on real errors */
+    /* onerror: surface useful messages; don't stop on non-fatal codes */
     _voiceWorker.onerror = e => {
-      if (e.error === 'no-speech' || e.error === 'aborted') return;
-      console.warn('[VoiceWorker] error:', e.error);
-      _stopVoiceWorker();
+      const err = e.error;
+      // These are non-fatal — silence gap or manual abort
+      if (err === 'no-speech' || err === 'aborted') return;
+
+      // Fatal — stop and show an explanation
+      console.warn('[VoiceWorker] error:', err);
+      let msg = 'Voice listening stopped unexpectedly. Please try again.';
+      if (err === 'not-allowed')          msg = 'Microphone permission denied. Allow microphone access in System Settings and try again.';
+      if (err === 'service-not-allowed')  msg = 'Speech recognition service unavailable in this build. Please type your question.';
+      if (err === 'network')              msg = 'Network error during speech recognition. Check your connection and try again.';
+      if (err === 'audio-capture')        msg = 'Could not capture audio. Check that your microphone is connected and not in use by another app.';
+      _voiceShowError(msg);
     };
 
     /* onend: auto-restart for silence gaps UNLESS paused (Gemini/TTS in progress) */
@@ -764,22 +811,23 @@
           }
         }, 250);
       } else if (!_voiceActive) {
-        // Fully stopped
+        // Fully stopped — reset UI
         _updateVoiceUI(false);
         const inp = document.getElementById('guide-chat-input');
         if (inp) inp.placeholder = 'Ask me anything…';
         const bar = document.getElementById('guide-voice-listening-bar');
         if (bar) bar.classList.remove('active');
       }
-      // If _voicePaused: do nothing — _voiceResumeAfterReply() will restart us
+      // _voicePaused = true: do nothing — _voiceResumeAfterReply() restarts us
     };
 
     try {
       _voiceWorker.start();
     } catch (err) {
       console.warn('[VoiceWorker] start failed:', err);
-      _voiceWorker  = null;
-      _voiceActive  = false;
+      _voiceShowError('Could not start voice recognition. Please try again.');
+      _voiceWorker = null;
+      _voiceActive = false;
     }
   }
 

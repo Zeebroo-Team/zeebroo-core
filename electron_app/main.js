@@ -64,6 +64,16 @@ function createWindow() {
     mainWindow.show();
   });
 
+  // Grant microphone permission for the Voice Listening Worker (Web Speech API).
+  // Without this handler Electron denies 'media' by default, causing SpeechRecognition
+  // to fire onerror:'not-allowed' and stop immediately.
+  mainWindow.webContents.session.setPermissionRequestHandler((_wc, permission, callback) => {
+    callback(permission === 'media');
+  });
+  mainWindow.webContents.session.setPermissionCheckHandler((_wc, permission) => {
+    return permission === 'media';
+  });
+
   mainWindow.webContents.on('console-message', (_e, level, msg) => {
     const prefix = ['VERBOSE','INFO','WARN','ERROR'][level] || level;
     console.log(`[renderer:${prefix}] ${msg}`);
