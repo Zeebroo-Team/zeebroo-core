@@ -21,6 +21,15 @@
   let _bubbleOpen  = false;
   let _busy        = false;
 
+  // Voice Listening Worker state
+  let _voiceWorker     = null;   // SpeechRecognition instance
+  let _voiceActive     = false;  // voice mode is enabled by user
+  let _voicePaused     = false;  // recognition temporarily paused (while Gemini API call or TTS)
+  let _voiceRestarting = false;  // guard against double-restart during silence
+
+  // Text-to-Speech state
+  let _ttsUtterance    = null;
+
   /* ════════════════════════════════════════════════════════════════════════
      TEMPLATE + CONFIG HELPERS
      ════════════════════════════════════════════════════════════════════════ */
@@ -469,8 +478,13 @@
 
   /* ════════════════════════════════════════════════════════════════════════
      SEND / RECEIVE
+     fromVoice=true means the message came from the Voice Listening Worker.
+     After Gemini replies the character will:
+       1. show the reply in the bubble
+       2. speak it aloud via TTS
+       3. resume the voice recognition loop
      ════════════════════════════════════════════════════════════════════════ */
-  async function _sendMessage() {
+  async function _sendMessage(fromVoice) {
     if (_busy) return;
     const input   = document.getElementById('guide-chat-input');
     const message = input?.value.trim();
@@ -480,10 +494,14 @@
     _busy = true;
     if (sendBtn) { sendBtn.disabled = true; sendBtn.innerHTML = '<i class="fa fa-spinner fa-spin"></i>'; }
 
+    // Hide the listening bar while we wait for Gemini
+    const bar = document.getElementById('guide-voice-listening-bar');
+    if (bar) bar.classList.remove('active');
+
     _closeBubble();
     await _sleep(200);
 
-    // Call Gemini — reply + optional walkthrough ID or dataQuery are both in the response
+    // ── Call Gemini via server (/guide/chat → Gemini API) ──
     let reply        = null;
     let match        = null;
     let geminiWorked = false;
@@ -496,10 +514,14 @@
         geminiWorked = reply.length > 0;
         isHtml       = !!res.body.isHtml;
 
-        // Data query reply — show immediately, no walkthrough
+        // Data-query HTML reply — show immediately, then handle voice resume
         if (isHtml) {
           _reopenWithReply(reply, true);
           _busy = false;
+          if (fromVoice && _voiceActive) {
+            await _ttsSpeak(_stripHtml(reply));
+            _voiceResumeAfterReply();
+          }
           return;
         }
 
@@ -524,10 +546,7 @@
     // If Gemini didn't identify a walkthrough, fall back to local pattern matching
     if (!match) match = _matchWalkthrough(message);
 
-    // Determine the reply text:
-    //  - Gemini worked → use its reply
-    //  - Gemini failed but local match found → use the config's hardcoded reply
-    //  - Gemini failed and no match → show a friendly error
+    // Determine the reply text
     if (!geminiWorked) {
       reply = match
         ? _t(match.wt.reply || 'Sure! Follow me — I\'ll show you!', match.vars)
@@ -537,50 +556,145 @@
     _reopenWithReply(reply);
     _busy = false;
 
-    // Run the walkthrough steps after the user has read the reply
+    // ── Voice mode: speak the Gemini reply, then resume listening ──
+    if (fromVoice && _voiceActive) {
+      if (!match) {
+        // Simple reply — speak it then immediately resume
+        await _ttsSpeak(reply);
+        _voiceResumeAfterReply();
+      }
+      // If there's a walkthrough, TTS + resume happens after it finishes (below)
+    }
+
+    // ── Run walkthrough steps ──────────────────────────────────────
     if (match) {
-      await _sleep(2000);
+      await _sleep(fromVoice ? 1000 : 2000); // shorter delay if voice already played reply
       _closeBubble();
       await _sleep(200);
-      _closeAllModals();   // clear any open dialogs before the character starts moving
+      _closeAllModals();
       await _sleep(150);
       _busy = true;
       await _runSteps(match.wt.steps, match.vars);
       await _returnHome();
-      _closeAllModals(); // close any modals the walkthrough left open
+      _closeAllModals();
       _busy = false;
+
+      // After walkthrough completes, resume voice if active
+      if (fromVoice && _voiceActive) {
+        _voiceResumeAfterReply();
+      }
     }
   }
 
   /* ════════════════════════════════════════════════════════════════════════
-     VOICE LISTENING WORKER
-     Uses the Web Speech API to capture voice commands and route them to the
-     guide chat. Works as a persistent "node" — runs continuously until
-     explicitly stopped via the context menu or the mic badge.
+     VOICE LISTENING WORKER  (Gemini-powered conversation loop)
+     ─────────────────────────────────────────────────────────────────────
+     Flow:
+       1.  User right-clicks guide → "Start Voice Worker"
+       2.  SpeechRecognition starts and listens continuously
+       3.  When a final phrase is captured → recognition PAUSED → message
+           sent to the server (Gemini API via /guide/chat)
+       4.  Gemini reply received → character shows it in bubble
+       5.  Web Speech Synthesis reads the reply aloud (TTS)
+       6.  TTS ends → recognition RESUMES → back to step 2
      ════════════════════════════════════════════════════════════════════════ */
-  let _voiceWorker     = null;   // SpeechRecognition instance
-  let _voiceActive     = false;
-  let _voiceRestarting = false;  // guard against double-restart loops
 
   function _voiceSupported() {
     return !!(window.SpeechRecognition || window.webkitSpeechRecognition);
   }
 
-  function _updateVoiceUI(active) {
-    _voiceActive = active;
+  /* ── Shared UI updater ── */
+  function _updateVoiceUI(listening) {
     const badge      = document.getElementById('guide-voice-badge');
     const bar        = document.getElementById('guide-voice-listening-bar');
     const voiceItem  = document.getElementById('guide-ctx-voice');
     const voiceLabel = document.getElementById('guide-ctx-voice-label');
 
-    if (badge)      badge.classList.toggle('voice-active', active);
-    if (bar)        bar.classList.toggle('active', active && _bubbleOpen);
-    if (voiceItem)  voiceItem.classList.toggle('voice-on', active);
-    if (voiceLabel) voiceLabel.textContent = active ? 'Stop Voice Worker' : 'Start Voice Worker';
+    if (badge)      badge.classList.toggle('voice-active', !!listening);
+    if (bar)        bar.classList.toggle('active', !!(listening && _bubbleOpen));
+    if (voiceItem)  voiceItem.classList.toggle('voice-on', !!listening);
+    if (voiceLabel) voiceLabel.textContent = _voiceActive ? 'Stop Voice Worker' : 'Start Voice Worker';
     if (voiceItem)  voiceItem.querySelector('.guide-ctx-icon i').className =
-                      active ? 'fa fa-microphone-slash' : 'fa fa-microphone';
+                      _voiceActive ? 'fa fa-microphone-slash' : 'fa fa-microphone';
   }
 
+  /* ── Text-to-Speech: speaks Gemini's reply, returns a Promise ── */
+  function _ttsSpeak(text) {
+    return new Promise(resolve => {
+      if (!window.speechSynthesis || !text) { resolve(); return; }
+
+      // Cancel any previous speech
+      window.speechSynthesis.cancel();
+
+      const utt = new SpeechSynthesisUtterance(text);
+      _ttsUtterance = utt;
+
+      // Pick a natural voice if available
+      const voices = window.speechSynthesis.getVoices();
+      const preferred = voices.find(v =>
+        /en[-_]US/i.test(v.lang) && v.localService
+      ) || voices.find(v => /en/i.test(v.lang)) || null;
+      if (preferred) utt.voice = preferred;
+
+      utt.rate   = 1.0;
+      utt.pitch  = 1.0;
+      utt.volume = 0.9;
+
+      // Visual: badge turns purple, bar says "Speaking…" while TTS plays
+      const badge      = document.getElementById('guide-voice-badge');
+      const bar        = document.getElementById('guide-voice-listening-bar');
+      const statusTxt  = document.getElementById('guide-voice-status-text');
+      if (badge)     badge.classList.add('voice-speaking');
+      if (bar)       bar.classList.add('speaking');
+      if (statusTxt) statusTxt.textContent = 'Speaking…';
+
+      const _done = () => {
+        _ttsUtterance = null;
+        if (badge)     badge.classList.remove('voice-speaking');
+        if (bar)       bar.classList.remove('speaking');
+        if (statusTxt) statusTxt.textContent = 'Listening…';
+        resolve();
+      };
+      utt.onend   = _done;
+      utt.onerror = _done;
+
+      window.speechSynthesis.speak(utt);
+    });
+  }
+
+  function _ttsCancelSpeak() {
+    if (window.speechSynthesis) window.speechSynthesis.cancel();
+    _ttsUtterance = null;
+    const badge     = document.getElementById('guide-voice-badge');
+    const bar       = document.getElementById('guide-voice-listening-bar');
+    const statusTxt = document.getElementById('guide-voice-status-text');
+    if (badge)     badge.classList.remove('voice-speaking');
+    if (bar)       bar.classList.remove('speaking');
+    if (statusTxt) statusTxt.textContent = 'Listening…';
+  }
+
+  /* ── Strip HTML tags to get plain text for TTS ── */
+  function _stripHtml(html) {
+    const div = document.createElement('div');
+    div.innerHTML = html;
+    return (div.textContent || div.innerText || '').replace(/\s+/g, ' ').trim();
+  }
+
+  /* ── Resume recognition after Gemini/TTS cycle ── */
+  function _voiceResumeAfterReply() {
+    if (!_voiceActive || !_voiceWorker) return;
+    _voicePaused = false;
+    // Reset bubble input to listening state
+    _showInputState();
+    const inp = document.getElementById('guide-chat-input');
+    if (inp) { inp.value = ''; inp.placeholder = 'Listening…'; }
+    const bar = document.getElementById('guide-voice-listening-bar');
+    if (bar && _bubbleOpen) bar.classList.add('active');
+    // (Re)start recognition
+    try { _voiceWorker.start(); } catch (_) { /* already running */ }
+  }
+
+  /* ── Start the Voice Listening Worker ── */
   function _startVoiceWorker() {
     if (!_voiceSupported()) {
       alert('Voice input is not supported in this environment. Please type your question.');
@@ -589,80 +703,91 @@
     if (_voiceActive) return;
 
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    _voiceWorker          = new SR();
-    _voiceWorker.lang     = navigator.language || 'en-US';
-    _voiceWorker.continuous     = true;   // keep listening after each phrase
-    _voiceWorker.interimResults = true;   // show partial results while speaking
+    _voiceWorker              = new SR();
+    _voiceWorker.lang         = navigator.language || 'en-US';
+    _voiceWorker.continuous     = false;  // single-phrase mode for cleaner Gemini dispatch
+    _voiceWorker.interimResults = true;
 
-    let _interimText = '';
+    _voiceActive  = true;
+    _voicePaused  = false;
 
+    /* onstart: show listening UI */
     _voiceWorker.onstart = () => {
-      _updateVoiceUI(true);
-      // Open the chat bubble so the user can see what was captured
       if (!_bubbleOpen) _openBubble(false);
       _showInputState();
+      _updateVoiceUI(true);
       const bar = document.getElementById('guide-voice-listening-bar');
       if (bar) bar.classList.add('active');
       const inp = document.getElementById('guide-chat-input');
-      if (inp) { inp.placeholder = 'Listening…'; inp.value = ''; }
+      if (inp) { inp.value = ''; inp.placeholder = 'Listening…'; }
     };
 
+    /* onresult: show interim text; on final phrase → pause → send to Gemini */
     _voiceWorker.onresult = e => {
       let interim = '', final = '';
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const t = e.results[i][0].transcript;
-        if (e.results[i].isFinal) { final += t; }
-        else                       { interim += t; }
+        if (e.results[i].isFinal) final += t;
+        else                       interim += t;
       }
       const inp = document.getElementById('guide-chat-input');
       if (inp) inp.value = (final || interim).trim();
-      // Auto-send when a final phrase is captured
+
       if (final.trim()) {
-        // Small delay so the user sees the text before it sends
+        // Pause the worker — _sendMessage will resume it after Gemini replies
+        _voicePaused = true;
         setTimeout(() => {
           if (document.getElementById('guide-chat-input')?.value.trim()) {
-            _sendMessage();
+            _sendMessage(/* fromVoice= */ true);
+          } else {
+            _voiceResumeAfterReply();
           }
-        }, 420);
+        }, 350);
       }
     };
 
+    /* onerror: ignore non-speech errors; stop on real errors */
     _voiceWorker.onerror = e => {
-      // 'no-speech' and 'aborted' are not real errors — ignore them
       if (e.error === 'no-speech' || e.error === 'aborted') return;
       console.warn('[VoiceWorker] error:', e.error);
       _stopVoiceWorker();
     };
 
+    /* onend: auto-restart for silence gaps UNLESS paused (Gemini/TTS in progress) */
     _voiceWorker.onend = () => {
-      // Auto-restart if still supposed to be active (browser stops after silence)
-      if (_voiceActive && !_voiceRestarting) {
+      if (_voiceActive && !_voicePaused && !_voiceRestarting) {
         _voiceRestarting = true;
         setTimeout(() => {
           _voiceRestarting = false;
-          if (_voiceActive && _voiceWorker) {
-            try { _voiceWorker.start(); } catch (_) { /* already running */ }
+          if (_voiceActive && !_voicePaused && _voiceWorker) {
+            try { _voiceWorker.start(); } catch (_) {}
           }
-        }, 300);
-      } else {
+        }, 250);
+      } else if (!_voiceActive) {
+        // Fully stopped
         _updateVoiceUI(false);
         const inp = document.getElementById('guide-chat-input');
         if (inp) inp.placeholder = 'Ask me anything…';
         const bar = document.getElementById('guide-voice-listening-bar');
         if (bar) bar.classList.remove('active');
       }
+      // If _voicePaused: do nothing — _voiceResumeAfterReply() will restart us
     };
 
     try {
       _voiceWorker.start();
     } catch (err) {
       console.warn('[VoiceWorker] start failed:', err);
-      _voiceWorker = null;
+      _voiceWorker  = null;
+      _voiceActive  = false;
     }
   }
 
+  /* ── Stop the Voice Listening Worker completely ── */
   function _stopVoiceWorker() {
-    _voiceActive = false;
+    _voiceActive  = false;
+    _voicePaused  = false;
+    _ttsCancelSpeak();
     if (_voiceWorker) {
       try { _voiceWorker.stop(); } catch (_) {}
       _voiceWorker = null;

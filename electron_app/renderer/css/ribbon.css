@@ -14592,6 +14592,19 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
   50%        { height: 13px; }
 }
 
+/* Speaking state — badge turns purple while TTS plays */
+#guide-voice-badge.voice-speaking {
+  background: #7c3aed;
+  animation: guide-voice-speak-pulse 0.6s ease-in-out infinite;
+}
+@keyframes guide-voice-speak-pulse {
+  0%,  100% { box-shadow: 0 0 0 0   rgba(124,58,237,0.55); }
+  50%        { box-shadow: 0 0 0 7px rgba(124,58,237,0);    }
+}
+/* Listening bar shows "Speaking…" text during TTS */
+#guide-voice-listening-bar.speaking { color: #7c3aed; }
+#guide-voice-listening-bar.speaking .guide-voice-waves span { background: #7c3aed; }
+
 /* Dark mode context menu */
 @media (prefers-color-scheme: dark) {
   #guide-ctx-menu     { background: #1e2135; border-color: #2d3257; box-shadow: 0 8px 28px rgba(0,0,0,0.45); }
