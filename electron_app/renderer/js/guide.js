@@ -1022,9 +1022,38 @@
      CONTEXT MENU
      Right-click on the guide character image-wrap shows the context menu.
      ════════════════════════════════════════════════════════════════════════ */
+  /* ── Run a walkthrough by its config ID (used by context menu shortcuts) ── */
+  function _runWalkthroughById(id) {
+    if (_busy) return;
+    const walkthroughs = (window.GUIDE_CONFIG || {}).walkthroughs || [];
+    const wt = walkthroughs.find(w => w.id === id);
+    if (!wt) return;
+    const reply = wt.reply || 'Sure! Follow me!';
+    if (!_bubbleOpen) _openBubble(false);
+    _showInputState();
+    _reopenWithReply(reply);
+    _busy = true;
+    _sleep(1400)
+      .then(() => { _closeBubble(); return _sleep(200); })
+      .then(() => { _closeAllModals(); return _sleep(150); })
+      .then(() => _runSteps(wt.steps, {}))
+      .then(() => _returnHome())
+      .then(() => { _closeAllModals(); _busy = false; });
+  }
+
   function _openCtxMenu(x, y) {
     const menu = document.getElementById('guide-ctx-menu');
     if (!menu) return;
+
+    // Show/hide Design Studio quick-action items based on the active panel
+    const activeTab = document.querySelector('.ribbon-tab.active')?.dataset.tab || '';
+    const onDs      = activeTab === 'design';
+    menu.querySelectorAll('.guide-ctx-ds-only').forEach(el => {
+      el.style.display = onDs ? '' : 'none';
+    });
+    menu.querySelectorAll('.guide-ctx-item--ds').forEach(el => {
+      el.style.display = onDs ? '' : 'none';
+    });
 
     // Position: keep inside viewport
     menu.style.display = 'block';
@@ -1085,6 +1114,26 @@
       _closeCtxMenu();
       _setGuideVisible(false);
       _stopVoiceWorker();
+    });
+
+    // ── Design Studio context menu shortcuts ──
+    document.getElementById('guide-ctx-ds-new')?.addEventListener('click', () => {
+      _closeCtxMenu(); _runWalkthroughById('ds_new_design');
+    });
+    document.getElementById('guide-ctx-ds-proposals')?.addEventListener('click', () => {
+      _closeCtxMenu(); _runWalkthroughById('ds_proposals');
+    });
+    document.getElementById('guide-ctx-ds-letterhead')?.addEventListener('click', () => {
+      _closeCtxMenu(); _runWalkthroughById('ds_letterhead');
+    });
+    document.getElementById('guide-ctx-ds-profile')?.addEventListener('click', () => {
+      _closeCtxMenu(); _runWalkthroughById('ds_business_profile');
+    });
+    document.getElementById('guide-ctx-ds-social')?.addEventListener('click', () => {
+      _closeCtxMenu(); _runWalkthroughById('ds_social_media');
+    });
+    document.getElementById('guide-ctx-ds-bizcard')?.addEventListener('click', () => {
+      _closeCtxMenu(); _runWalkthroughById('ds_business_card');
     });
 
     // Close on outside click or Escape

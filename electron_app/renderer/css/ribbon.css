@@ -14651,6 +14651,26 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
 .guide-ctx-item--chat    .guide-ctx-icon { background: #ede9fe; color: #7c3aed; }
 .guide-ctx-item--reset   .guide-ctx-icon { background: #dbeafe; color: #1d4ed8; }
 .guide-ctx-item--dismiss .guide-ctx-icon { background: #fef2f2; color: #ef4444; }
+.guide-ctx-item--ds      .guide-ctx-icon { background: #f3e8ff; color: #7c3aed; }
+.guide-ctx-group-label {
+  padding: 3px 14px 2px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  pointer-events: none;
+  user-select: none;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .guide-ctx-item--ds .guide-ctx-icon { background: #3b1f5e; color: #c084fc; }
+  :root:not([data-theme="light"]) .guide-ctx-group-label { color: #6b7280; }
+}
+:root[data-theme="dark"] .guide-ctx-item--ds .guide-ctx-icon { background: #3b1f5e; color: #c084fc; }
+:root[data-theme="dark"] .guide-ctx-group-label { color: #6b7280; }
 
 /* ── Voice Listening Worker — mic badge on character ─────────────────────── */
 #guide-voice-badge {
