@@ -11,6 +11,7 @@
 <link rel="apple-touch-icon" sizes="180x180"    href="favicons/apple-touch-icon.png">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 <link rel="stylesheet" href="css/ribbon.css">
+<link rel="stylesheet" href="css/ribbon-customize.css">
 <link rel="stylesheet" href="css/reactflow.css">
 <style>
 /* ── Mail: thread list ─────────────────────────────────────────────── */
@@ -614,6 +615,7 @@
         <div class="sb-nav-item has-sub" data-tab="crm"><i class="fa fa-handshake"></i><span>CRM</span><i class="fa fa-chevron-right sb-nav-chevron"></i></div>
         <div class="sb-nav-item" data-tab="automations"><i class="fa fa-bolt"></i><span>Automations</span></div>
         <div class="sb-nav-item has-sub" data-tab="projects"><i class="fa fa-diagram-project"></i><span>Projects</span><i class="fa fa-chevron-right sb-nav-chevron"></i></div>
+        <div class="sb-nav-item" data-tab="event-mgmt" title="Event"><i class="fa fa-tag"></i><span>Event</span></div>
       </nav>
       <div id="sidebar-bottom">
         <button id="sidebar-file-btn"><i class="fa fa-bars"></i><span>Menu</span></button>
@@ -643,6 +645,7 @@
         <div class="ribbon-tab" data-tab="crm">CRM</div>
         <div class="ribbon-tab" data-tab="automations">Automations</div>
         <div class="ribbon-tab" data-tab="projects">Projects</div>
+        <div class="ribbon-tab" data-tab="event-mgmt">Event</div>
       </div>
       <button id="guide-toggle-btn" title="Show / hide guide assistant">
         <i class="fa fa-user-tie"></i> Guide
@@ -873,6 +876,15 @@
             </button>
           </div>
           <div class="ribbon-group-label">Returns</div>
+        </div>
+
+        <div class="ribbon-group">
+          <div class="ribbon-group-content">
+            <button class="ribbon-btn-lg" id="rb-sal-invoice-setup">
+              <i class="fa fa-sliders"></i>Invoice Setup
+            </button>
+          </div>
+          <div class="ribbon-group-label">Configuration</div>
         </div>
 
         <div class="ribbon-group">
@@ -1497,6 +1509,102 @@
         </div>
 
       </div><!-- /projects page -->
+
+      <!-- ── Brand Management page ── -->
+      <div class="ribbon-page" data-page="event-mgmt">
+
+        <!-- Brands -->
+        <div class="ribbon-group">
+          <div class="ribbon-group-content">
+            <button class="ribbon-btn-lg" id="rb-brd-all">
+              <i class="fa fa-tag"></i>All<br>Brands
+            </button>
+            <div class="ribbon-small-stack">
+              <button class="ribbon-btn-sm primary" id="rb-brd-new"><i class="fa fa-plus"></i>New Brand</button>
+            </div>
+          </div>
+          <div class="ribbon-group-label">Brands</div>
+        </div>
+
+        <!-- Reporters + Officers combined -->
+        <div class="ribbon-group">
+          <div class="ribbon-group-content">
+            <button class="ribbon-btn-lg" id="rb-rpt-all">
+              <i class="fa fa-microphone"></i>All<br>Reporters
+            </button>
+            <div class="ribbon-small-stack">
+              <button class="ribbon-btn-sm primary" id="rb-rpt-new"><i class="fa fa-plus"></i>New Reporter</button>
+              <button class="ribbon-btn-sm" id="rb-ofc-all"><i class="fa fa-user-tie"></i>All Officers</button>
+              <button class="ribbon-btn-sm primary" id="rb-ofc-new"><i class="fa fa-plus"></i>New Officer</button>
+            </div>
+          </div>
+          <div class="ribbon-group-label">Reporters &amp; Officers</div>
+        </div>
+
+        <!-- Coordinators + Promoters combined -->
+        <div class="ribbon-group">
+          <div class="ribbon-group-content">
+            <button class="ribbon-btn-lg" id="rb-crd-all">
+              <i class="fa fa-headset"></i>All<br>Coordinators
+            </button>
+            <div class="ribbon-small-stack">
+              <button class="ribbon-btn-sm primary" id="rb-crd-new"><i class="fa fa-plus"></i>New Coordinator</button>
+              <button class="ribbon-btn-sm" id="rb-pmt-all"><i class="fa fa-person-walking"></i>All Promoters</button>
+              <button class="ribbon-btn-sm primary" id="rb-pmt-new"><i class="fa fa-plus"></i>New Promoter</button>
+            </div>
+          </div>
+          <div class="ribbon-group-label">Coordinators &amp; Promoters</div>
+        </div>
+
+        <!-- Promoter Positions -->
+        <div class="ribbon-group">
+          <div class="ribbon-group-content">
+            <button class="ribbon-btn-lg" id="rb-ppos-manage">
+              <i class="fa fa-list-ul"></i>Manage<br>Positions
+            </button>
+          </div>
+          <div class="ribbon-group-label">Positions</div>
+        </div>
+
+        <!-- Jobs + Agencies combined -->
+        <div class="ribbon-group">
+          <div class="ribbon-group-content">
+            <button class="ribbon-btn-lg" id="rb-job-all">
+              <i class="fa fa-briefcase"></i>All<br>Jobs
+            </button>
+            <div class="ribbon-small-stack">
+              <button class="ribbon-btn-sm primary" id="rb-job-new"><i class="fa fa-plus"></i>New Job</button>
+              <button class="ribbon-btn-sm" id="rb-agc-all"><i class="fa fa-building-user"></i>All Agencies</button>
+              <button class="ribbon-btn-sm primary" id="rb-agc-new"><i class="fa fa-plus"></i>New Agency</button>
+            </div>
+          </div>
+          <div class="ribbon-group-label">Jobs &amp; Agencies</div>
+        </div>
+
+        <!-- Salary Sheets -->
+        <div class="ribbon-group">
+          <div class="ribbon-group-content">
+            <button class="ribbon-btn-lg" id="rb-ss-all">
+              <i class="fa fa-table-cells"></i>All<br>Sheets
+            </button>
+            <div class="ribbon-small-stack">
+              <button class="ribbon-btn-sm primary" id="rb-ss-new"><i class="fa fa-plus"></i>New Sheet</button>
+            </div>
+          </div>
+          <div class="ribbon-group-label">Salary Sheets</div>
+        </div>
+
+        <!-- Actions -->
+        <div class="ribbon-group">
+          <div class="ribbon-group-content">
+            <button class="ribbon-btn-lg" id="rb-brd-refresh">
+              <i class="fa fa-rotate"></i>Refresh
+            </button>
+          </div>
+          <div class="ribbon-group-label">Actions</div>
+        </div>
+
+      </div><!-- /event-mgmt page -->
 
 
     </div><!-- /ribbon-body -->
@@ -2173,6 +2281,16 @@
                   <label class="qt-label">Due Date</label>
                   <input type="date" id="sinv-f-due" class="qt-input">
                 </div>
+                <div class="qt-field">
+                  <label class="qt-label">Payment Method</label>
+                  <select id="sinv-f-payment" class="qt-select">
+                    <option value="">— Select method —</option>
+                    <option value="cash">Cash</option>
+                    <option value="card">Card</option>
+                    <option value="bank_transfer">Bank Transfer</option>
+                    <option value="credit_payment">Credit Payment</option>
+                  </select>
+                </div>
               </div>
             </div>
 
@@ -2183,6 +2301,8 @@
                 <span style="flex:1">Description</span>
                 <span class="qt-col-qty">Qty</span>
                 <span class="qt-col-price">Unit Price</span>
+                <span class="qt-col-disc">Disc</span>
+                <span class="qt-col-tax">Tax</span>
                 <span class="qt-col-total">Total</span>
                 <span class="qt-col-del"></span>
               </div>
@@ -2234,6 +2354,7 @@
               <option value="cancelled">Cancelled</option>
             </select>
             <button class="qt-act-btn accent" id="so-new-btn" style="margin-left:auto"><i class="fa fa-plus"></i> New Order</button>
+            <button class="qt-act-btn" id="so-settings-btn" title="Sales Order Settings"><i class="fa fa-gear"></i></button>
           </div>
           <div id="so-list-loading" style="display:none;padding:40px;text-align:center;color:var(--muted)"><i class="fa fa-spinner fa-spin"></i> Loading…</div>
           <div id="so-list-body" style="flex:1;overflow-y:auto;padding:0 0 16px"></div>
@@ -2465,6 +2586,7 @@
           <div class="po-aim-header">
             <i class="fa fa-box" style="color:var(--accent)"></i>
             <span id="prod-modal-title">New Product</span>
+            <button id="prod-modal-settings-btn" title="Form settings"><i class="fa fa-gear"></i></button>
             <button class="psm-close" id="prod-modal-close"><i class="fa fa-xmark"></i></button>
           </div>
           <!-- Tab navigation -->
@@ -2859,6 +2981,7 @@
             <button class="grn-pf-btn" data-payment="pending">Payment pending</button>
             <button class="grn-pf-btn" data-payment="no_amount">No amount</button>
           </div>
+          <button class="po-add-btn" id="grn-add-direct-btn" style="display:none" title="Add Goods Receive Note without a Purchase Order"><i class="fa fa-plus"></i> Add GRN</button>
           <button class="po-add-btn" id="grn-refresh-btn"><i class="fa fa-arrows-rotate"></i></button>
         </div>
         <div class="po-body">
@@ -2879,23 +3002,33 @@
               <span>Select a GRN to view details</span>
             </div>
             <div id="grn-detail-view" style="display:none">
-              <div class="po-dv-header">
+              <div class="grn-dv-sticky-header">
                 <div>
                   <div class="po-dv-number" id="grn-dv-number"></div>
                   <div class="po-dv-meta"   id="grn-dv-meta"></div>
                 </div>
                 <div class="po-dv-actions" id="grn-dv-actions"></div>
               </div>
-              <div class="po-dv-summary" id="grn-dv-summary"></div>
-              <div class="po-dv-section-label">Items Received</div>
-              <table class="po-items-table">
-                <thead><tr><th>Product</th><th>SKU</th><th>Qty</th><th>Unit Cost</th><th>Total</th></tr></thead>
-                <tbody id="grn-dv-items"></tbody>
-              </table>
-              <div class="po-dv-section-label" style="margin-top:10px">Payments</div>
-              <div id="grn-dv-payments"></div>
-              <div class="po-dv-totals" id="grn-dv-totals"></div>
-              <div class="po-dv-notes" id="grn-dv-notes"></div>
+              <div class="grn-dv-body">
+                <!-- summary grid injected by JS — no class here, JS adds po-dv-summary wrapper -->
+                <div id="grn-dv-summary"></div>
+                <div class="grn-dv-parties" id="grn-dv-parties"></div>
+                <div class="grn-dv-section">
+                  <div class="grn-dv-section-label"><i class="fa fa-boxes-stacked"></i> Items Received</div>
+                  <div class="grn-dv-table-scroll">
+                    <table class="po-items-table" id="grn-dv-table">
+                      <thead id="grn-dv-thead"><tr><th>Product</th><th>SKU</th><th>Qty</th><th>Unit Cost</th><th>Total</th></tr></thead>
+                      <tbody id="grn-dv-items"></tbody>
+                    </table>
+                  </div>
+                </div>
+                <div class="grn-dv-section">
+                  <div class="grn-dv-section-label"><i class="fa fa-money-bill-transfer"></i> Payments</div>
+                  <div id="grn-dv-payments"></div>
+                </div>
+                <div class="grn-dv-totals-wrap" id="grn-dv-totals"></div>
+                <div id="grn-dv-notes"></div>
+              </div>
             </div>
           </div>
         </div>
@@ -3482,6 +3615,7 @@
             <div class="po-modal-title" id="grn-modal-title">Receive Goods</div>
             <div class="po-modal-subtitle" id="grn-modal-sub">Enter quantities received and payment details</div>
           </div>
+          <button class="grn-settings-btn" id="grn-modal-settings-btn" title="Form settings"><i class="fa fa-gear"></i></button>
           <button class="psm-close" id="grn-modal-close"><i class="fa fa-xmark"></i></button>
         </div>
         <div class="grn-modal-body">
@@ -3495,24 +3629,37 @@
                 <input type="date" id="grn-f-date" class="po-field-input po-field-with-icon">
               </div>
             </div>
-            <div class="po-field">
+            <div class="po-field" id="grn-field-reference">
               <label class="po-field-label">Reference</label>
               <div class="po-field-icon-wrap">
                 <i class="fa fa-tag po-fi"></i>
                 <input type="text" id="grn-f-reference" class="po-field-input po-field-with-icon" placeholder="Delivery note, invoice #…">
               </div>
             </div>
-            <div class="po-field">
+            <div class="po-field" id="grn-field-notes">
               <label class="po-field-label">Notes</label>
               <textarea id="grn-f-notes" class="po-field-textarea" placeholder="Optional notes…" rows="3"></textarea>
             </div>
-            <div class="po-section-title" style="margin-top:12px"><i class="fa fa-credit-card"></i> Payment</div>
-            <div class="po-field">
+            <div class="po-section-title" id="grn-payment-section-title" style="margin-top:12px"><i class="fa fa-credit-card"></i> Payment</div>
+            <div class="po-field" id="grn-field-payment-method">
               <label class="po-field-label">Payment Method</label>
               <div class="grn-method-btns" id="grn-method-btns">
                 <button class="grn-method-btn active" data-method="cash"><i class="fa fa-money-bill"></i> Cash</button>
                 <button class="grn-method-btn" data-method="cheque"><i class="fa fa-money-check"></i> Cheque</button>
                 <button class="grn-method-btn" data-method="credit"><i class="fa fa-clock"></i> Credit</button>
+              </div>
+            </div>
+            <div id="grn-credit-terms" style="display:none" class="grn-credit-terms-block">
+              <div class="po-field">
+                <label class="po-field-label"><i class="fa fa-calendar-days" style="margin-right:4px;opacity:.6"></i>Payment Terms</label>
+                <div class="grn-credit-terms-row">
+                  <input type="number" id="grn-f-credit-days" class="po-field-input" placeholder="30" min="1" max="3650" style="width:80px">
+                  <span class="grn-credit-days-lbl">days</span>
+                </div>
+              </div>
+              <div class="grn-credit-due-display" id="grn-credit-due-display" style="display:none">
+                <i class="fa fa-clock" style="color:var(--accent)"></i>
+                <span>Due: </span><strong id="grn-credit-due-text">—</strong>
               </div>
             </div>
             <div id="grn-payment-fields" style="">
@@ -3530,7 +3677,7 @@
                   <input type="date" id="grn-f-cheque-date" class="po-field-input">
                 </div>
               </div>
-              <div class="po-field">
+              <div class="po-field" id="grn-field-pay-options">
                 <label class="po-field-label">Pay</label>
                 <div class="grn-pay-opts">
                   <label class="grn-pay-opt"><input type="radio" name="grn-pay-opt" value="full" checked> Pay in full</label>
@@ -3545,6 +3692,9 @@
             <div class="po-order-summary" style="margin-top:auto">
               <div class="po-summary-row"><span>Items</span><span id="grn-summary-items">0</span></div>
               <div class="po-summary-divider"></div>
+              <div class="po-summary-row"><span>Subtotal</span><span id="grn-summary-subtotal">0.00</span></div>
+              <div id="grn-expense-lines"></div>
+              <div class="po-summary-divider"></div>
               <div class="po-summary-row po-summary-total"><span>Total</span><strong id="grn-summary-total">0.00</strong></div>
             </div>
           </div>
@@ -3555,9 +3705,15 @@
               <button class="po-item-add-btn" id="grn-receive-all-btn"><i class="fa fa-check-double"></i> Receive All</button>
             </div>
             <div class="grn-items-scroll">
-              <table class="grn-items-table">
+              <table class="grn-items-table" id="grn-items-table">
                 <thead><tr>
-                  <th>Product</th><th class="po-th-num">Ordered</th><th class="po-th-num">Received</th><th class="po-th-num">Remaining</th><th class="po-th-num">Qty Now</th><th class="po-th-num">Cost</th><th class="po-th-num">Total</th>
+                  <th>Product</th><th class="po-th-num">Ordered</th><th class="po-th-num">Received</th><th class="po-th-num">Remaining</th><th class="po-th-num">Qty Now</th><th class="po-th-num">Cost</th>
+                  <th class="po-th-num grn-col-uc">Unit/Case</th>
+                  <th class="po-th-num grn-col-uom">UOM</th>
+                  <th class="po-th-num grn-col-disc">Disc/Com %</th>
+                  <th class="po-th-num grn-col-gross">Gross</th>
+                  <th class="po-th-num grn-col-net">Net</th>
+                  <th class="po-th-num grn-th-total">Total</th>
                 </tr></thead>
                 <tbody id="grn-items-tbody"></tbody>
               </table>
@@ -3626,6 +3782,137 @@
         <div class="po-modal-footer" style="background:var(--surface2)">
           <button class="po-btn-ghost" id="grn-pay-cancel"><i class="fa fa-xmark"></i> Cancel</button>
           <button class="po-btn-primary" id="grn-pay-save"><i class="fa fa-check"></i> Record Payment</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Direct GRN Modal (no PO required) ──────────────────────────────────── -->
+    <div id="grn-direct-modal" class="modal-overlay" style="display:none">
+      <div class="grn-modal-shell grn-direct-shell">
+        <div class="grn-modal-header">
+          <div class="po-modal-header-icon"><i class="fa fa-truck-ramp-box"></i></div>
+          <div class="po-modal-header-text">
+            <div class="po-modal-title">New Goods Receipt</div>
+            <div class="po-modal-subtitle">Record goods received directly — no purchase order needed</div>
+          </div>
+          <button class="grn-settings-btn" id="grn-direct-settings-btn" title="Form settings"><i class="fa fa-gear"></i></button>
+          <button class="psm-close" id="grn-direct-close"><i class="fa fa-xmark"></i></button>
+        </div>
+        <div class="grn-modal-body">
+          <!-- Left: details + payment -->
+          <div class="grn-modal-left">
+            <div class="po-section-title"><i class="fa fa-circle-info"></i> Receipt Details</div>
+            <div class="po-field">
+              <label class="po-field-label">Supplier</label>
+              <select id="grn-direct-supplier" class="po-field-input">
+                <option value="">— None / Walk-in —</option>
+              </select>
+            </div>
+            <div class="po-field">
+              <label class="po-field-label">Received Date <span class="po-required">*</span></label>
+              <div class="po-field-icon-wrap">
+                <i class="fa fa-calendar po-fi"></i>
+                <input type="date" id="grn-direct-date" class="po-field-input po-field-with-icon">
+              </div>
+            </div>
+            <div class="po-field" id="grn-direct-field-reference">
+              <label class="po-field-label">Reference</label>
+              <div class="po-field-icon-wrap">
+                <i class="fa fa-tag po-fi"></i>
+                <input type="text" id="grn-direct-reference" class="po-field-input po-field-with-icon" placeholder="Delivery note, invoice #…">
+              </div>
+            </div>
+            <div class="po-field" id="grn-direct-field-notes">
+              <label class="po-field-label">Notes</label>
+              <textarea id="grn-direct-notes" class="po-field-textarea" placeholder="Optional notes…" rows="2"></textarea>
+            </div>
+            <div class="po-section-title" id="grn-direct-payment-section-title" style="margin-top:10px"><i class="fa fa-credit-card"></i> Payment</div>
+            <div class="po-field" id="grn-direct-field-payment-method">
+              <label class="po-field-label">Payment Method</label>
+              <div class="grn-method-btns" id="grn-direct-method-btns">
+                <button class="grn-method-btn active" data-method="cash"><i class="fa fa-money-bill"></i> Cash</button>
+                <button class="grn-method-btn" data-method="cheque"><i class="fa fa-money-check"></i> Cheque</button>
+                <button class="grn-method-btn" data-method="credit"><i class="fa fa-clock"></i> Credit</button>
+              </div>
+            </div>
+            <div id="grn-direct-credit-terms" style="display:none" class="grn-credit-terms-block">
+              <div class="po-field">
+                <label class="po-field-label"><i class="fa fa-calendar-days" style="margin-right:4px;opacity:.6"></i>Payment Terms</label>
+                <div class="grn-credit-terms-row">
+                  <input type="number" id="grn-direct-f-credit-days" class="po-field-input" placeholder="30" min="1" max="3650" style="width:80px">
+                  <span class="grn-credit-days-lbl">days</span>
+                </div>
+              </div>
+              <div class="grn-credit-due-display" id="grn-direct-credit-due-display" style="display:none">
+                <i class="fa fa-clock" style="color:var(--accent)"></i>
+                <span>Due: </span><strong id="grn-direct-credit-due-text">—</strong>
+              </div>
+            </div>
+            <div id="grn-direct-payment-fields">
+              <div class="po-field">
+                <label class="po-field-label">Account <span class="po-required">*</span></label>
+                <select id="grn-direct-account" class="po-field-input"></select>
+              </div>
+              <div id="grn-direct-cheque-fields" style="display:none;flex-direction:column;gap:8px">
+                <div class="po-field">
+                  <label class="po-field-label">Cheque Number</label>
+                  <input type="text" id="grn-direct-cheque-ref" class="po-field-input" placeholder="Cheque number…">
+                </div>
+                <div class="po-field">
+                  <label class="po-field-label">Cheque Due Date</label>
+                  <input type="date" id="grn-direct-cheque-date" class="po-field-input">
+                </div>
+              </div>
+              <div class="po-field" id="grn-direct-field-pay-options">
+                <label class="po-field-label">Pay</label>
+                <div class="grn-pay-opts">
+                  <label class="grn-pay-opt"><input type="radio" name="grn-direct-pay-opt" value="full" checked> Pay in full</label>
+                  <label class="grn-pay-opt"><input type="radio" name="grn-direct-pay-opt" value="partial"> Partial</label>
+                </div>
+              </div>
+              <div id="grn-direct-partial-row" style="display:none" class="po-field">
+                <label class="po-field-label">Amount</label>
+                <input type="number" id="grn-direct-amount" class="po-field-input" min="0.01" step="0.01" placeholder="0.00">
+              </div>
+            </div>
+            <div class="po-order-summary" style="margin-top:auto">
+              <div class="po-summary-row"><span>Items</span><span id="grn-direct-summary-items">0</span></div>
+              <div class="po-summary-divider"></div>
+              <div class="po-summary-row"><span>Subtotal</span><span id="grn-direct-summary-subtotal">0.00</span></div>
+              <div id="grn-direct-expense-lines"></div>
+              <div class="po-summary-divider"></div>
+              <div class="po-summary-row po-summary-total"><span>Total</span><strong id="grn-direct-summary-total">0.00</strong></div>
+            </div>
+          </div>
+          <!-- Right: items table -->
+          <div class="grn-modal-right">
+            <div class="po-items-header">
+              <div class="po-section-title"><i class="fa fa-boxes-stacked"></i> Items</div>
+              <button class="po-item-add-btn" id="grn-direct-add-item-btn"><i class="fa fa-plus"></i> Add Item</button>
+            </div>
+            <div class="grn-items-scroll">
+              <table class="grn-items-table grn-direct-items-table" id="grn-direct-items-table">
+                <thead><tr>
+                  <th>Product</th><th class="po-th-num">Qty</th><th class="po-th-num">Unit Cost</th>
+                  <th class="po-th-num grn-col-uc">Unit/Case</th>
+                  <th class="po-th-num grn-col-uom">UOM</th>
+                  <th class="po-th-num grn-col-disc">Disc/Com %</th>
+                  <th class="po-th-num grn-col-gross">Gross</th>
+                  <th class="po-th-num grn-col-net">Net</th>
+                  <th class="po-th-num grn-th-total">Total</th><th></th>
+                </tr></thead>
+                <tbody id="grn-direct-items-tbody"></tbody>
+              </table>
+              <div id="grn-direct-items-empty" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:36px;color:var(--text-muted);font-size:13px">
+                <i class="fa fa-box-open" style="font-size:28px;opacity:.35"></i>
+                <span>No items yet — click "Add Item" to search and add products</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="grn-modal-footer">
+          <button class="po-btn-ghost" id="grn-direct-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+          <button class="po-btn-primary" id="grn-direct-save"><i class="fa fa-truck-ramp-box"></i> Record Receipt</button>
         </div>
       </div>
     </div>
@@ -6300,12 +6587,1145 @@
 
     </div><!-- /panel-projects -->
 
+    <!-- ── Event Panel (Brands + Reporters) ─────────────────────────── -->
+    <div class="content-panel" id="panel-event-mgmt" style="flex-direction:column">
+
+      <!-- Sub-nav -->
+      <div class="fin-subnav">
+        <button class="fin-subnav-btn active" data-evtview="brands"><i class="fa fa-tag"></i> Brands</button>
+        <button class="fin-subnav-btn"         data-evtview="reporters"><i class="fa fa-microphone"></i> Reporters</button>
+        <button class="fin-subnav-btn"         data-evtview="officers"><i class="fa fa-user-tie"></i> Officers</button>
+        <button class="fin-subnav-btn"         data-evtview="coordinators"><i class="fa fa-headset"></i> Coordinators</button>
+        <button class="fin-subnav-btn"         data-evtview="promoters"><i class="fa fa-person-walking"></i> Promoters</button>
+        <button class="fin-subnav-btn"         data-evtview="agencies"><i class="fa fa-building-user"></i> Agencies</button>
+        <button class="fin-subnav-btn"         data-evtview="jobs"><i class="fa fa-briefcase"></i> Jobs</button>
+        <button class="fin-subnav-btn"         data-evtview="salary"><i class="fa fa-table-cells"></i> Salary Sheets</button>
+      </div>
+
+      <!-- ── Brands view ── -->
+      <div id="evt-brands-view" style="display:flex;flex-direction:column;flex:1;overflow:hidden">
+        <div class="finance-toolbar" style="gap:8px;flex-shrink:0">
+          <div class="finance-search-wrap">
+            <i class="fa fa-magnifying-glass"></i>
+            <input type="text" id="brd-search" placeholder="Search brands…" autocomplete="off">
+          </div>
+          <button class="svc-form-btn" id="brd-import-btn" style="margin-left:auto;padding:5px 12px;font-size:12px;flex-shrink:0">
+            <i class="fa fa-file-csv"></i> Import CSV
+          </button>
+          <button class="svc-form-btn svc-form-btn--primary" id="brd-new-btn" style="padding:5px 14px;font-size:12px;flex-shrink:0">
+            <i class="fa fa-plus"></i> New Brand
+          </button>
+          <div id="brd-alert" class="svc-form-alert" style="display:none;margin-left:8px"></div>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:0 10px 10px">
+          <table class="crm-table" id="brd-table">
+            <thead>
+              <tr>
+                <th>Brand Name</th>
+                <th>Short Code</th>
+                <th>Email</th>
+                <th>Phone</th>
+                <th>Company</th>
+                <th>Contact Person</th>
+                <th style="width:90px;text-align:right">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="brd-body">
+              <tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:28px">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ── Reporters view ── -->
+      <div id="evt-reporters-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+        <div class="finance-toolbar" style="gap:8px;flex-shrink:0">
+          <div class="finance-search-wrap">
+            <i class="fa fa-magnifying-glass"></i>
+            <input type="text" id="rpt-search" placeholder="Search reporters…" autocomplete="off">
+          </div>
+          <button class="svc-form-btn svc-form-btn--primary" id="rpt-new-btn" style="margin-left:auto;padding:5px 14px;font-size:12px;flex-shrink:0">
+            <i class="fa fa-plus"></i> New Reporter
+          </button>
+          <div id="rpt-alert" class="svc-form-alert" style="display:none;margin-left:8px"></div>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:0 10px 10px">
+          <table class="crm-table" id="rpt-table">
+            <thead>
+              <tr>
+                <th>Full Name</th>
+                <th>Email Address</th>
+                <th style="width:90px;text-align:right">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="rpt-body">
+              <tr><td colspan="3" style="text-align:center;color:var(--text-muted);padding:28px">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ── Officers view ── -->
+      <div id="evt-officers-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+        <div class="finance-toolbar" style="gap:8px;flex-shrink:0">
+          <div class="finance-search-wrap">
+            <i class="fa fa-magnifying-glass"></i>
+            <input type="text" id="ofc-search" placeholder="Search officers…" autocomplete="off">
+          </div>
+          <button class="svc-form-btn svc-form-btn--primary" id="ofc-new-btn" style="margin-left:auto;padding:5px 14px;font-size:12px;flex-shrink:0">
+            <i class="fa fa-plus"></i> New Officer
+          </button>
+          <div id="ofc-alert" class="svc-form-alert" style="display:none;margin-left:8px"></div>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:0 10px 10px">
+          <table class="crm-table" id="ofc-table">
+            <thead>
+              <tr>
+                <th>Full Name</th>
+                <th>Email Address</th>
+                <th style="width:90px;text-align:right">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="ofc-body">
+              <tr><td colspan="3" style="text-align:center;color:var(--text-muted);padding:28px">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ── Coordinators view ── -->
+      <div id="evt-coordinators-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+        <div class="finance-toolbar" style="gap:8px;flex-shrink:0">
+          <div class="finance-search-wrap">
+            <i class="fa fa-magnifying-glass"></i>
+            <input type="text" id="crd-search" placeholder="Search coordinators…" autocomplete="off">
+          </div>
+          <button class="svc-form-btn svc-form-btn--primary" id="crd-new-btn" style="margin-left:auto;padding:5px 14px;font-size:12px;flex-shrink:0">
+            <i class="fa fa-plus"></i> New Coordinator
+          </button>
+          <div id="crd-alert" class="svc-form-alert" style="display:none;margin-left:8px"></div>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:0 10px 10px">
+          <table class="crm-table" id="crd-table">
+            <thead>
+              <tr>
+                <th>Coordinator Name</th>
+                <th>NIC No.</th>
+                <th>Phone</th>
+                <th>Status</th>
+                <th>Bank Name</th>
+                <th>Account No.</th>
+                <th style="width:90px;text-align:right">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="crd-body">
+              <tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:28px">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ── Promoters view ── -->
+      <div id="evt-promoters-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+        <div class="finance-toolbar" style="gap:8px;flex-shrink:0">
+          <div class="finance-search-wrap">
+            <i class="fa fa-magnifying-glass"></i>
+            <input type="text" id="pmt-search" placeholder="Search promoters…" autocomplete="off">
+          </div>
+          <button class="svc-form-btn" id="pmt-positions-btn" style="margin-left:auto;padding:5px 12px;font-size:12px;flex-shrink:0">
+            <i class="fa fa-list-ul"></i> Positions
+          </button>
+          <button class="svc-form-btn svc-form-btn--primary" id="pmt-new-btn" style="padding:5px 14px;font-size:12px;flex-shrink:0">
+            <i class="fa fa-plus"></i> New Promoter
+          </button>
+          <div id="pmt-alert" class="svc-form-alert" style="display:none;margin-left:8px"></div>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:0 10px 10px">
+          <table class="crm-table" id="pmt-table">
+            <thead>
+              <tr>
+                <th>Full Name</th>
+                <th>Position</th>
+                <th>NIC No.</th>
+                <th>Phone</th>
+                <th>Bank Name</th>
+                <th>Account No.</th>
+                <th style="width:90px;text-align:right">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="pmt-body">
+              <tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:28px">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ── Agencies view ── -->
+      <div id="evt-agencies-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+        <div class="finance-toolbar" style="gap:8px;flex-shrink:0">
+          <div class="finance-search-wrap">
+            <i class="fa fa-magnifying-glass"></i>
+            <input type="text" id="agc-search" placeholder="Search agencies…" autocomplete="off">
+          </div>
+          <button class="svc-form-btn svc-form-btn--primary" id="agc-new-btn" style="margin-left:auto;padding:5px 14px;font-size:12px;flex-shrink:0">
+            <i class="fa fa-plus"></i> New Agency
+          </button>
+          <div id="agc-alert" class="svc-form-alert" style="display:none;margin-left:8px"></div>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:0 10px 10px">
+          <table class="crm-table" id="agc-table">
+            <thead>
+              <tr>
+                <th>Agency Name</th>
+                <th>Contact Person</th>
+                <th>Email</th>
+                <th>Phone</th>
+                <th>Status</th>
+                <th style="width:90px;text-align:right">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="agc-body">
+              <tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:28px">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ── Jobs view ── -->
+      <div id="evt-jobs-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+        <div class="finance-toolbar" style="gap:8px;flex-shrink:0">
+          <div class="finance-search-wrap">
+            <i class="fa fa-magnifying-glass"></i>
+            <input type="text" id="job-search" placeholder="Search jobs…" autocomplete="off">
+          </div>
+          <select id="job-status-filter" class="svc-form-input" style="max-width:140px;font-size:12px;padding:5px 8px;appearance:auto">
+            <option value="">All Statuses</option>
+            <option value="pending">Pending</option>
+            <option value="in_progress">In Progress</option>
+            <option value="completed">Completed</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+          <button class="svc-form-btn" id="job-import-btn" style="margin-left:auto;padding:5px 12px;font-size:12px;flex-shrink:0">
+            <i class="fa fa-file-csv"></i> Import CSV
+          </button>
+          <button class="svc-form-btn svc-form-btn--primary" id="job-new-btn" style="padding:5px 14px;font-size:12px;flex-shrink:0">
+            <i class="fa fa-plus"></i> New Job
+          </button>
+          <div id="job-alert" class="svc-form-alert" style="display:none;margin-left:8px"></div>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:0 10px 10px">
+          <table class="crm-table" id="job-table">
+            <thead>
+              <tr>
+                <th style="width:110px">Job Ref</th>
+                <th>Job Name</th>
+                <th>Client (Brand)</th>
+                <th>Officer</th>
+                <th>Reporter</th>
+                <th>Status</th>
+                <th>Start Date</th>
+                <th style="width:90px;text-align:right">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="job-body">
+              <tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:28px">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ── Salary Sheets view ── -->
+      <div id="evt-salary-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+
+        <!-- List sub-view -->
+        <div id="ss-list-view" style="display:flex;flex-direction:column;flex:1;overflow:hidden">
+          <div class="finance-toolbar" style="gap:8px;flex-shrink:0">
+            <div class="finance-search-wrap">
+              <i class="fa fa-magnifying-glass"></i>
+              <input type="text" id="ss-search" placeholder="Search salary sheets…" autocomplete="off">
+            </div>
+            <button class="svc-form-btn svc-form-btn--primary" id="ss-new-btn" style="margin-left:auto;padding:5px 14px;font-size:12px;flex-shrink:0">
+              <i class="fa fa-plus"></i> New Salary Sheet
+            </button>
+            <div id="ss-list-alert" class="svc-form-alert" style="display:none;margin-left:8px"></div>
+          </div>
+          <div style="flex:1;overflow-y:auto;padding:0 10px 10px">
+            <table class="crm-table" id="ss-table-list">
+              <thead>
+                <tr>
+                  <th>Sheet No.</th>
+                  <th>Location</th>
+                  <th>Date Range</th>
+                  <th>Rows</th>
+                  <th>Status</th>
+                  <th style="width:90px;text-align:right">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="ss-list-body">
+                <tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:28px">Loading…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Editor sub-view -->
+        <div id="ss-editor-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+          <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid var(--border-color);flex-shrink:0;flex-wrap:wrap">
+            <button class="svc-form-btn" id="ss-back-btn" style="padding:4px 12px;font-size:12px;flex-shrink:0">
+              <i class="fa fa-arrow-left"></i> Back
+            </button>
+            <div style="display:flex;flex-direction:column;line-height:1.3;margin-left:2px;min-width:0">
+              <span id="ss-editor-title" style="font-weight:700;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Sheet Title</span>
+              <span id="ss-editor-dates" style="font-size:11px;color:var(--text-muted)">—</span>
+            </div>
+            <div id="ss-editor-alert" style="display:none;font-size:12px;padding:3px 10px;border-radius:4px;margin-left:8px"></div>
+            <span id="ss-status-badge" style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px;margin-left:4px;display:none"></span>
+            <button class="svc-form-btn" id="ss-add-dates-btn" style="margin-left:auto;padding:5px 12px;font-size:12px;flex-shrink:0;display:none;background:#0ea5e9;color:#fff;border-color:#0ea5e9">
+              <i class="fa fa-calendar-plus"></i> Add Dates
+            </button>
+            <button class="svc-form-btn" id="ss-setup-btn" style="padding:5px 12px;font-size:12px;flex-shrink:0">
+              <i class="fa fa-gear"></i> Setup
+            </button>
+            <button class="svc-form-btn svc-form-btn--primary" id="ss-add-row-btn" style="padding:5px 14px;font-size:12px;flex-shrink:0">
+              <i class="fa fa-user-plus"></i> Add Row
+            </button>
+            <button class="svc-form-btn" id="ss-save-btn" style="padding:5px 14px;font-size:12px;flex-shrink:0;background:#059669;color:#fff;border:1px solid #059669;border-radius:5px;cursor:pointer">
+              <i class="fa fa-floppy-disk"></i> Save
+            </button>
+            <button class="svc-form-btn" id="ss-finish-btn" style="padding:5px 14px;font-size:12px;flex-shrink:0;background:#7c3aed;color:#fff;border:1px solid #7c3aed;border-radius:5px;cursor:pointer">
+              <i class="fa fa-flag-checkered"></i> Finish
+            </button>
+          </div>
+          <div id="ss-lock-notice" style="display:none;align-items:center;gap:8px;padding:6px 14px;background:#fef9c3;border-bottom:1px solid #fde047;font-size:12px;color:#854d0e;flex-shrink:0">
+            <i class="fa fa-lock"></i>
+            <span>This sheet is <strong id="ss-lock-status-label">locked</strong>. Editing is disabled. Use the <strong>Finish</strong> button to change the status.</span>
+          </div>
+          <div id="ss-table-wrap" style="flex:1;overflow:auto;padding:10px 10px 20px">
+            <!-- Dynamically rendered salary sheet table -->
+          </div>
+        </div>
+
+      </div>
+
+    </div><!-- /panel-event-mgmt -->
+
     <!-- ── Users Panel ────────────────────────────────────────────────── -->
 
   </div><!-- /content -->
 
     </div><!-- /app-right -->
   </div><!-- /app-main -->
+
+  <!-- ── Salary Sheet Setup Modal ── -->
+  <div class="modal-overlay" id="ss-setup-modal" style="display:none">
+    <div class="po-aim-shell" style="width:580px;max-height:82vh;display:flex;flex-direction:column">
+      <div class="po-aim-header" style="flex-shrink:0">
+        <i class="fa fa-gear" style="color:var(--accent)"></i>
+        <span id="ss-setup-modal-title">Salary Sheet Setup</span>
+        <button class="psm-close" id="ss-setup-modal-close"><i class="fa fa-xmark"></i></button>
+      </div>
+
+      <!-- Tab bar -->
+      <div id="ss-setup-tabs" style="display:flex;gap:0;border-bottom:1px solid var(--border-color);padding:0 16px;flex-shrink:0">
+        <button class="ss-setup-tab" data-tab="general" style="padding:8px 16px;font-size:12px;font-weight:600;border:none;border-bottom:2px solid transparent;background:none;cursor:pointer;color:var(--text-muted)">
+          <i class="fa fa-sliders" style="margin-right:5px"></i>General
+        </button>
+        <button class="ss-setup-tab" data-tab="allowances" style="padding:8px 16px;font-size:12px;font-weight:600;border:none;border-bottom:2px solid transparent;background:none;cursor:pointer;color:var(--text-muted)">
+          <i class="fa fa-coins" style="margin-right:5px"></i>Allowances
+        </button>
+        <button class="ss-setup-tab" data-tab="pos-rules" style="padding:8px 16px;font-size:12px;font-weight:600;border:none;border-bottom:2px solid transparent;background:none;cursor:pointer;color:var(--text-muted)">
+          <i class="fa fa-scale-balanced" style="margin-right:5px"></i>Position Rules
+        </button>
+      </div>
+
+      <div id="ss-setup-alert" class="svc-form-alert" style="display:none;margin:8px 16px 0;flex-shrink:0"></div>
+
+      <!-- ── General tab ── -->
+      <div id="ss-setup-tab-general" class="po-aim-body ss-setup-tab-panel" style="display:none;flex-direction:column;gap:14px;flex:1;overflow-y:auto">
+
+        <div class="po-field">
+          <label class="po-field-label">Job</label>
+          <select id="ss-setup-job-id" class="po-field-input">
+            <option value="">— No job linked —</option>
+          </select>
+        </div>
+
+        <div class="po-field">
+          <label class="po-field-label">Location</label>
+          <input type="text" id="ss-setup-location" class="po-field-input" placeholder="Enter location" maxlength="200">
+        </div>
+
+        <!-- Date range -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="po-field">
+            <label class="po-field-label">Start Date</label>
+            <input type="date" id="ss-setup-date-from" class="po-field-input">
+          </div>
+          <div class="po-field">
+            <label class="po-field-label">End Date</label>
+            <input type="date" id="ss-setup-date-to" class="po-field-input">
+          </div>
+        </div>
+
+        <div class="po-field">
+          <label class="po-field-label">Description / Notes</label>
+          <textarea id="ss-setup-notes" class="po-field-input" rows="3" placeholder="Optional notes or description…" style="resize:vertical;min-height:60px"></textarea>
+        </div>
+
+        <div class="po-field">
+          <label class="po-field-label">Default Coordinator Fee</label>
+          <input type="number" id="ss-setup-coord-fee" class="po-field-input" placeholder="0.00" min="0" step="0.01">
+        </div>
+
+      </div>
+
+      <!-- ── Allowances tab ── -->
+      <div id="ss-setup-tab-allowances" class="ss-setup-tab-panel" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px 6px;flex-shrink:0">
+          <span style="font-size:11px;color:var(--text-muted)">Add allowances that apply to this salary sheet.</span>
+          <button class="svc-form-btn svc-form-btn--primary" id="ss-allowance-add-btn" style="padding:4px 12px;font-size:12px;white-space:nowrap">
+            <i class="fa fa-plus"></i> Add Row
+          </button>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:0 16px 16px">
+          <table class="crm-table" style="width:100%">
+            <thead>
+              <tr>
+                <th style="min-width:150px">Allowance Type</th>
+                <th style="width:110px">Amount</th>
+                <th>Description</th>
+                <th style="width:38px"></th>
+              </tr>
+            </thead>
+            <tbody id="ss-allowance-body">
+              <tr id="ss-allowance-empty"><td colspan="4" style="text-align:center;color:var(--text-muted);padding:24px">No allowances yet. Click <strong>Add Row</strong> to add one.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ── Position Wise Salary Rules tab ── -->
+      <div id="ss-setup-tab-pos-rules" class="ss-setup-tab-panel" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px 6px;flex-shrink:0">
+          <span style="font-size:11px;color:var(--text-muted)">Define default daily rate and transport allowance per promoter position.</span>
+          <button class="svc-form-btn svc-form-btn--primary" id="ss-posrule-add-btn" style="padding:4px 12px;font-size:12px;white-space:nowrap">
+            <i class="fa fa-plus"></i> Add Rule
+          </button>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:0 16px 16px">
+          <table class="crm-table" style="width:100%">
+            <thead>
+              <tr>
+                <th>Position</th>
+                <th style="width:120px">Daily Rate</th>
+                <th style="width:130px">Transport Allow.</th>
+                <th style="width:38px"></th>
+              </tr>
+            </thead>
+            <tbody id="ss-posrule-body">
+              <tr><td colspan="4" style="text-align:center;color:var(--text-muted);padding:24px">No rules yet. Click <strong>Add Rule</strong> to define one.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="po-aim-footer" style="flex-shrink:0">
+        <button class="po-btn-ghost" id="ss-setup-modal-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+        <button class="po-btn-primary" id="ss-setup-modal-save"><i class="fa fa-floppy-disk"></i> Save Setup</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Brand Management Modal ── -->
+  <div class="modal-overlay" id="brd-modal" style="display:none">
+    <div class="po-aim-shell" style="width:520px">
+      <div class="po-aim-header">
+        <i class="fa fa-tag" style="color:var(--accent)"></i>
+        <span id="brd-modal-title">New Brand</span>
+        <button class="psm-close" id="brd-modal-close"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div class="po-aim-body" style="display:flex;flex-direction:column;gap:12px">
+        <div id="brd-modal-alert" class="svc-form-alert" style="display:none"></div>
+        <input type="hidden" id="brd-id">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div class="po-field" style="grid-column:1/-1">
+            <label class="po-field-label">Brand Name <span class="po-required">*</span></label>
+            <input type="text" id="brd-name" class="po-field-input" placeholder="e.g. Acme Corp" maxlength="150">
+          </div>
+          <div class="po-field">
+            <label class="po-field-label">Short Code <span class="po-required">*</span></label>
+            <input type="text" id="brd-short-code" class="po-field-input" placeholder="ACM" maxlength="3" style="text-transform:uppercase;letter-spacing:0.12em">
+          </div>
+          <div class="po-field">
+            <label class="po-field-label">Email Address <span class="po-required">*</span></label>
+            <input type="email" id="brd-email" class="po-field-input" placeholder="brand@example.com" maxlength="150">
+          </div>
+          <div class="po-field">
+            <label class="po-field-label">Phone Number</label>
+            <input type="text" id="brd-phone" class="po-field-input" placeholder="+1 234 567 8900" maxlength="40">
+          </div>
+          <div class="po-field">
+            <label class="po-field-label">Company Name</label>
+            <input type="text" id="brd-company-name" class="po-field-input" placeholder="Parent company" maxlength="150">
+          </div>
+          <div class="po-field">
+            <label class="po-field-label">Contact Person Full Name</label>
+            <input type="text" id="brd-contact-person" class="po-field-input" placeholder="Full name" maxlength="150">
+          </div>
+          <div class="po-field" style="grid-column:1/-1">
+            <label class="po-field-label">Company Address</label>
+            <textarea id="brd-address" class="po-field-input" rows="3" maxlength="500" placeholder="Street, City, Country…" style="resize:vertical"></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="po-aim-footer">
+        <button class="po-btn-ghost" id="brd-modal-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+        <button class="po-btn-primary" id="brd-modal-save"><i class="fa fa-floppy-disk"></i> Save Brand</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Brand CSV Import Modal ── -->
+  <div class="modal-overlay" id="brd-import-modal" style="display:none">
+    <div class="po-aim-shell" style="width:680px;max-height:90vh;display:flex;flex-direction:column">
+      <div class="po-aim-header">
+        <i class="fa fa-file-csv" style="color:#10b981"></i>
+        <span id="brd-import-modal-title">Import Brands from CSV</span>
+        <button class="psm-close" id="brd-import-close"><i class="fa fa-xmark"></i></button>
+      </div>
+
+      <!-- Step 1: pick file -->
+      <div id="brd-import-step-1" class="po-aim-body" style="gap:14px">
+        <div style="background:var(--bg-secondary,#f8fafc);border:1px solid var(--border-color,#e2e8f0);border-radius:6px;padding:12px 14px;font-size:12px;line-height:1.7">
+          <p style="margin:0 0 6px;font-weight:600;color:var(--text-primary)"><i class="fa fa-info-circle" style="color:#0ea5e9"></i> CSV format</p>
+          <p style="margin:0;color:var(--text-muted)">
+            First row must be the header. Columns (in any order):<br>
+            <code style="font-size:11px">name</code>&nbsp;(required) &nbsp;
+            <code style="font-size:11px">short_code</code>&nbsp;(3 letters, required) &nbsp;
+            <code style="font-size:11px">email</code>&nbsp;(required) &nbsp;
+            <code style="font-size:11px">phone</code> &nbsp;
+            <code style="font-size:11px">company_name</code> &nbsp;
+            <code style="font-size:11px">contact_person</code> &nbsp;
+            <code style="font-size:11px">address</code>
+          </p>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <button class="svc-form-btn" id="brd-import-pick-btn" style="padding:6px 16px;font-size:12px">
+            <i class="fa fa-folder-open"></i> Choose CSV File
+          </button>
+          <span id="brd-import-filename" style="font-size:12px;color:var(--text-muted)">No file chosen</span>
+        </div>
+        <div id="brd-import-step1-alert" class="svc-form-alert" style="display:none"></div>
+      </div>
+
+      <!-- Step 2: preview parsed rows -->
+      <div id="brd-import-step-2" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+        <div style="padding:10px 16px;flex-shrink:0;border-bottom:1px solid var(--border-color,#e2e8f0)">
+          <span id="brd-import-preview-info" style="font-size:12px;color:var(--text-muted)"></span>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:0 4px 4px">
+          <table style="width:100%;border-collapse:collapse;font-size:11px" id="brd-import-preview-table">
+            <thead>
+              <tr style="background:var(--bg-secondary,#f8fafc);position:sticky;top:0">
+                <th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--border-color,#e2e8f0)">#</th>
+                <th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--border-color,#e2e8f0)">Brand Name</th>
+                <th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--border-color,#e2e8f0)">Short Code</th>
+                <th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--border-color,#e2e8f0)">Email</th>
+                <th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--border-color,#e2e8f0)">Phone</th>
+                <th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--border-color,#e2e8f0)">Company</th>
+                <th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--border-color,#e2e8f0)">Status</th>
+              </tr>
+            </thead>
+            <tbody id="brd-import-preview-body"></tbody>
+          </table>
+        </div>
+        <div id="brd-import-step2-alert" class="svc-form-alert" style="display:none;margin:8px 16px"></div>
+      </div>
+
+      <!-- Step 3: results after import -->
+      <div id="brd-import-step-3" style="display:none;flex-direction:column;gap:10px" class="po-aim-body">
+        <div id="brd-import-result-summary" style="font-size:13px"></div>
+        <div style="flex:1;overflow-y:auto;max-height:320px">
+          <table style="width:100%;border-collapse:collapse;font-size:11px">
+            <thead>
+              <tr style="background:var(--bg-secondary,#f8fafc)">
+                <th style="padding:5px 8px;text-align:left;border-bottom:1px solid var(--border-color,#e2e8f0)">#</th>
+                <th style="padding:5px 8px;text-align:left;border-bottom:1px solid var(--border-color,#e2e8f0)">Name</th>
+                <th style="padding:5px 8px;text-align:left;border-bottom:1px solid var(--border-color,#e2e8f0)">Code</th>
+                <th style="padding:5px 8px;text-align:left;border-bottom:1px solid var(--border-color,#e2e8f0)">Result</th>
+              </tr>
+            </thead>
+            <tbody id="brd-import-result-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="po-aim-footer" id="brd-import-footer">
+        <button class="po-btn-ghost" id="brd-import-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+        <button class="po-btn-primary" id="brd-import-next" style="background:#10b981;border-color:#10b981" disabled>
+          <i class="fa fa-eye"></i> Preview
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Job CSV Import Modal ── -->
+  <div class="modal-overlay" id="job-import-modal" style="display:none">
+    <div class="po-aim-shell" style="width:700px;max-height:90vh;display:flex;flex-direction:column">
+      <div class="po-aim-header">
+        <i class="fa fa-file-csv" style="color:#10b981"></i>
+        <span id="job-import-modal-title">Import Jobs from CSV</span>
+        <button class="psm-close" id="job-import-close"><i class="fa fa-xmark"></i></button>
+      </div>
+
+      <!-- Step 1: pick file -->
+      <div id="job-import-step-1" class="po-aim-body" style="gap:14px">
+        <div style="background:var(--bg-secondary,#f8fafc);border:1px solid var(--border-color,#e2e8f0);border-radius:6px;padding:12px 14px;font-size:12px;line-height:1.7">
+          <p style="margin:0 0 6px;font-weight:600;color:var(--text-primary)"><i class="fa fa-info-circle" style="color:#0ea5e9"></i> CSV format</p>
+          <p style="margin:0;color:var(--text-muted)">
+            First row must be the header. Columns (in any order):<br>
+            <code style="font-size:11px">name</code>&nbsp;(required) &nbsp;
+            <code style="font-size:11px">brand_code</code>&nbsp;(3-letter short code) &nbsp;
+            <code style="font-size:11px">status</code>&nbsp;(pending / in_progress / completed / cancelled) &nbsp;
+            <code style="font-size:11px">start_date</code>&nbsp;(YYYY-MM-DD) &nbsp;
+            <code style="font-size:11px">description</code> &nbsp;
+            <code style="font-size:11px">officer</code> &nbsp;
+            <code style="font-size:11px">reporter</code>
+          </p>
+          <p style="margin:4px 0 0;color:var(--text-muted);font-size:11px">
+            <i class="fa fa-circle-info"></i> Brand, officer, and reporter are matched by name/code against existing records. Unmatched values are skipped with a note.
+          </p>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <button class="svc-form-btn" id="job-import-pick-btn" style="padding:6px 16px;font-size:12px">
+            <i class="fa fa-folder-open"></i> Choose CSV File
+          </button>
+          <span id="job-import-filename" style="font-size:12px;color:var(--text-muted)">No file chosen</span>
+        </div>
+        <div id="job-import-step1-alert" class="svc-form-alert" style="display:none"></div>
+      </div>
+
+      <!-- Step 2: preview parsed rows -->
+      <div id="job-import-step-2" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+        <div style="padding:10px 16px;flex-shrink:0;border-bottom:1px solid var(--border-color,#e2e8f0)">
+          <span id="job-import-preview-info" style="font-size:12px;color:var(--text-muted)"></span>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:0 4px 4px">
+          <table style="width:100%;border-collapse:collapse;font-size:11px" id="job-import-preview-table">
+            <thead>
+              <tr style="background:var(--bg-secondary,#f8fafc);position:sticky;top:0">
+                <th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--border-color,#e2e8f0)">#</th>
+                <th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--border-color,#e2e8f0)">Job Name</th>
+                <th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--border-color,#e2e8f0)">Brand</th>
+                <th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--border-color,#e2e8f0)">Status</th>
+                <th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--border-color,#e2e8f0)">Start Date</th>
+                <th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--border-color,#e2e8f0)">Officer</th>
+                <th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--border-color,#e2e8f0)">Reporter</th>
+                <th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--border-color,#e2e8f0)">Valid</th>
+              </tr>
+            </thead>
+            <tbody id="job-import-preview-body"></tbody>
+          </table>
+        </div>
+        <div id="job-import-step2-alert" class="svc-form-alert" style="display:none;margin:8px 16px"></div>
+      </div>
+
+      <!-- Step 3: results after import -->
+      <div id="job-import-step-3" style="display:none;flex-direction:column;gap:10px" class="po-aim-body">
+        <div id="job-import-result-summary" style="font-size:13px"></div>
+        <div style="flex:1;overflow-y:auto;max-height:320px">
+          <table style="width:100%;border-collapse:collapse;font-size:11px">
+            <thead>
+              <tr style="background:var(--bg-secondary,#f8fafc)">
+                <th style="padding:5px 8px;text-align:left;border-bottom:1px solid var(--border-color,#e2e8f0)">#</th>
+                <th style="padding:5px 8px;text-align:left;border-bottom:1px solid var(--border-color,#e2e8f0)">Job Name</th>
+                <th style="padding:5px 8px;text-align:left;border-bottom:1px solid var(--border-color,#e2e8f0)">Job Ref</th>
+                <th style="padding:5px 8px;text-align:left;border-bottom:1px solid var(--border-color,#e2e8f0)">Result</th>
+              </tr>
+            </thead>
+            <tbody id="job-import-result-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="po-aim-footer" id="job-import-footer">
+        <button class="po-btn-ghost" id="job-import-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+        <button class="po-btn-primary" id="job-import-next" style="background:#10b981;border-color:#10b981" disabled>
+          <i class="fa fa-eye"></i> Preview
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Reporter Modal ── -->
+  <div class="modal-overlay" id="rpt-modal" style="display:none">
+    <div class="po-aim-shell" style="width:460px">
+      <div class="po-aim-header">
+        <i class="fa fa-microphone" style="color:var(--accent)"></i>
+        <span id="rpt-modal-title">New Reporter</span>
+        <button class="psm-close" id="rpt-modal-close"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div class="po-aim-body" style="display:flex;flex-direction:column;gap:12px">
+        <div id="rpt-modal-alert" class="svc-form-alert" style="display:none"></div>
+        <input type="hidden" id="rpt-id">
+        <div class="po-field">
+          <label class="po-field-label">Full Name <span class="po-required">*</span></label>
+          <input type="text" id="rpt-name" class="po-field-input" placeholder="Reporter full name" maxlength="150">
+        </div>
+        <div class="po-field">
+          <label class="po-field-label">Email Address <span class="po-required">*</span></label>
+          <input type="email" id="rpt-email" class="po-field-input" placeholder="reporter@example.com" maxlength="150">
+        </div>
+        <div class="po-field" id="rpt-pw-field">
+          <label class="po-field-label">Password <span class="po-required">*</span></label>
+          <input type="password" id="rpt-password" class="po-field-input" placeholder="Min 8 characters" maxlength="100" autocomplete="new-password">
+        </div>
+        <div class="po-field" id="rpt-cpw-field">
+          <label class="po-field-label">Confirm Password <span class="po-required">*</span></label>
+          <input type="password" id="rpt-confirm-password" class="po-field-input" placeholder="Repeat password" maxlength="100" autocomplete="new-password">
+        </div>
+        <!-- Edit mode: toggle to change password -->
+        <div id="rpt-change-pw-row" style="display:none">
+          <label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer;color:var(--text-muted)">
+            <input type="checkbox" id="rpt-change-pw-chk"> Change password
+          </label>
+        </div>
+      </div>
+      <div class="po-aim-footer">
+        <button class="po-btn-ghost" id="rpt-modal-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+        <button class="po-btn-primary" id="rpt-modal-save"><i class="fa fa-floppy-disk"></i> Save Reporter</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Officer Modal ── -->
+  <div class="modal-overlay" id="ofc-modal" style="display:none">
+    <div class="po-aim-shell" style="width:460px">
+      <div class="po-aim-header">
+        <i class="fa fa-user-tie" style="color:var(--accent)"></i>
+        <span id="ofc-modal-title">New Officer</span>
+        <button class="psm-close" id="ofc-modal-close"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div class="po-aim-body" style="display:flex;flex-direction:column;gap:12px">
+        <div id="ofc-modal-alert" class="svc-form-alert" style="display:none"></div>
+        <input type="hidden" id="ofc-id">
+        <div class="po-field">
+          <label class="po-field-label">Full Name <span class="po-required">*</span></label>
+          <input type="text" id="ofc-name" class="po-field-input" placeholder="Officer full name" maxlength="150">
+        </div>
+        <div class="po-field">
+          <label class="po-field-label">Email Address <span class="po-required">*</span></label>
+          <input type="email" id="ofc-email" class="po-field-input" placeholder="john@example.com" maxlength="150">
+        </div>
+        <div class="po-field" id="ofc-pw-field">
+          <label class="po-field-label">Password <span class="po-required">*</span></label>
+          <input type="password" id="ofc-password" class="po-field-input" placeholder="Min 8 characters" maxlength="100" autocomplete="new-password">
+        </div>
+        <div class="po-field" id="ofc-cpw-field">
+          <label class="po-field-label">Confirm Password <span class="po-required">*</span></label>
+          <input type="password" id="ofc-confirm-password" class="po-field-input" placeholder="Repeat password" maxlength="100" autocomplete="new-password">
+        </div>
+        <div id="ofc-change-pw-row" style="display:none">
+          <label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer;color:var(--text-muted)">
+            <input type="checkbox" id="ofc-change-pw-chk"> Change password
+          </label>
+        </div>
+      </div>
+      <div class="po-aim-footer">
+        <button class="po-btn-ghost" id="ofc-modal-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+        <button class="po-btn-primary" id="ofc-modal-save"><i class="fa fa-floppy-disk"></i> Save Officer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Job Modal ── -->
+  <div class="modal-overlay" id="job-modal" style="display:none">
+    <div class="po-aim-shell" style="width:560px">
+      <div class="po-aim-header">
+        <i class="fa fa-briefcase" style="color:var(--accent)"></i>
+        <span id="job-modal-title">New Job</span>
+        <button class="psm-close" id="job-modal-close"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div class="po-aim-body" style="display:flex;flex-direction:column;gap:14px">
+        <div id="job-modal-alert" class="svc-form-alert" style="display:none"></div>
+        <input type="hidden" id="job-id">
+
+        <!-- Basic info -->
+        <div class="po-field">
+          <label class="po-field-label">Job Name <span class="po-required">*</span></label>
+          <input type="text" id="job-name" class="po-field-input" placeholder="e.g. Campaign shoot 01" maxlength="200">
+        </div>
+
+        <div class="po-field">
+          <label class="po-field-label">Client <span class="po-required">*</span></label>
+          <select id="job-client-brand-id" class="po-field-input" style="appearance:auto">
+            <option value="">— Select a Brand —</option>
+          </select>
+        </div>
+
+        <div class="po-field">
+          <label class="po-field-label">Description</label>
+          <textarea id="job-description" class="po-field-input" rows="3" maxlength="2000" placeholder="Optional notes or brief…" style="resize:vertical"></textarea>
+        </div>
+
+        <!-- Assignment -->
+        <div style="border-top:1px solid var(--border);padding-top:10px">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);margin-bottom:8px">Assignment</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div class="po-field">
+              <label class="po-field-label">Officer</label>
+              <select id="job-officer-id" class="po-field-input" style="appearance:auto">
+                <option value="">— Select officer —</option>
+              </select>
+            </div>
+            <div class="po-field">
+              <label class="po-field-label">Reporter</label>
+              <select id="job-reporter-id" class="po-field-input" style="appearance:auto">
+                <option value="">— Select reporter —</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Timeline & Status -->
+        <div style="border-top:1px solid var(--border);padding-top:10px">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);margin-bottom:8px">Timeline &amp; Status</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div class="po-field">
+              <label class="po-field-label">Status <span class="po-required">*</span></label>
+              <select id="job-status" class="po-field-input" style="appearance:auto">
+                <option value="pending">Pending</option>
+                <option value="in_progress">In Progress</option>
+                <option value="completed">Completed</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
+            </div>
+            <div class="po-field">
+              <label class="po-field-label">Start Date</label>
+              <input type="date" id="job-start-date" class="po-field-input">
+            </div>
+          </div>
+        </div>
+
+      </div>
+      <div class="po-aim-footer">
+        <button class="po-btn-ghost" id="job-modal-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+        <button class="po-btn-primary" id="job-modal-save"><i class="fa fa-floppy-disk"></i> Save Job</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Agency Modal ── -->
+  <div class="modal-overlay" id="agc-modal" style="display:none">
+    <div class="po-aim-shell" style="width:500px">
+      <div class="po-aim-header">
+        <i class="fa fa-building-user" style="color:var(--accent)"></i>
+        <span id="agc-modal-title">New Agency</span>
+        <button class="psm-close" id="agc-modal-close"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div class="po-aim-body" style="display:flex;flex-direction:column;gap:12px">
+        <div id="agc-modal-alert" class="svc-form-alert" style="display:none"></div>
+        <input type="hidden" id="agc-id">
+        <div class="po-field">
+          <label class="po-field-label">Agency Name <span class="po-required">*</span></label>
+          <input type="text" id="agc-name" class="po-field-input" placeholder="Advertising agency name" maxlength="200">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="po-field">
+            <label class="po-field-label">Contact Person</label>
+            <input type="text" id="agc-contact" class="po-field-input" placeholder="Full name" maxlength="150">
+          </div>
+          <div class="po-field">
+            <label class="po-field-label">Phone</label>
+            <input type="text" id="agc-phone" class="po-field-input" placeholder="Phone number" maxlength="30">
+          </div>
+        </div>
+        <div class="po-field">
+          <label class="po-field-label">Email</label>
+          <input type="email" id="agc-email" class="po-field-input" placeholder="agency@example.com" maxlength="150">
+        </div>
+        <div class="po-field">
+          <label class="po-field-label">Address</label>
+          <input type="text" id="agc-address" class="po-field-input" placeholder="Office address (optional)" maxlength="300">
+        </div>
+        <div class="po-field">
+          <label class="po-field-label">Status <span class="po-required">*</span></label>
+          <select id="agc-status" class="po-field-input" style="appearance:auto">
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+          </select>
+        </div>
+      </div>
+      <div class="po-aim-footer">
+        <button class="po-btn-ghost" id="agc-modal-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+        <button class="po-btn-primary" id="agc-modal-save"><i class="fa fa-floppy-disk"></i> Save Agency</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Salary Sheet: Create Modal ── -->
+  <!-- ── Salary Sheet Add Dates Modal ────────────────────────────────────── -->
+  <div class="modal-overlay" id="ss-add-dates-modal" style="display:none">
+    <div class="po-aim-shell" style="width:420px">
+      <div class="po-aim-header">
+        <i class="fa fa-calendar-plus" style="color:#0ea5e9"></i>
+        <span>Add Attendance Dates</span>
+        <button class="psm-close" id="ss-add-dates-close"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div class="po-aim-body" style="gap:12px">
+        <p style="font-size:12px;color:var(--text-muted);margin:0">Pick individual dates to add as attendance columns. Each date becomes its own column.</p>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="date" id="ss-add-date-single" class="po-field-input" style="flex:1;min-width:0">
+          <button class="po-btn-primary" id="ss-add-date-add-btn" style="padding:5px 14px;white-space:nowrap;flex-shrink:0">
+            <i class="fa fa-plus"></i> Add
+          </button>
+        </div>
+        <div id="ss-dates-chips" style="display:flex;flex-wrap:wrap;gap:6px;min-height:34px;padding:6px 8px;background:var(--bg-secondary,#f8fafc);border:1px solid var(--border-color,#e2e8f0);border-radius:6px">
+          <!-- date chips rendered here -->
+        </div>
+        <div id="ss-add-dates-alert" class="svc-form-alert" style="display:none"></div>
+      </div>
+      <div class="po-aim-footer">
+        <button class="po-btn-ghost" id="ss-add-dates-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+        <button class="po-btn-primary" id="ss-add-dates-save" style="background:#0ea5e9;border-color:#0ea5e9"><i class="fa fa-calendar-check"></i> Apply Dates</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Salary Sheet Status Modal ───────────────────────────────────────── -->
+  <div class="modal-overlay" id="ss-status-modal" style="display:none">
+    <div class="po-aim-shell" style="width:420px">
+      <div class="po-aim-header">
+        <i class="fa fa-flag-checkered" style="color:#7c3aed"></i>
+        <span>Update Sheet Status</span>
+        <button class="psm-close" id="ss-status-modal-close"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div class="po-aim-body" style="gap:10px">
+        <p style="font-size:12px;color:var(--text-muted);margin:0 0 4px">Select the new status for this salary sheet.</p>
+        <div id="ss-status-options" style="display:flex;flex-direction:column;gap:8px">
+          <!-- rendered by JS -->
+        </div>
+        <div id="ss-status-alert" class="svc-form-alert" style="display:none;margin-top:4px"></div>
+      </div>
+      <div class="po-aim-footer">
+        <button class="po-btn-ghost" id="ss-status-modal-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+        <button class="po-btn-primary" id="ss-status-modal-save" style="background:#7c3aed;border-color:#7c3aed"><i class="fa fa-flag-checkered"></i> Update Status</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="ss-create-modal" style="display:none">
+    <div class="po-aim-shell" style="width:460px">
+      <div class="po-aim-header">
+        <i class="fa fa-table-cells" style="color:var(--accent)"></i>
+        <span>New Salary Sheet</span>
+        <button class="psm-close" id="ss-create-close"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div class="po-aim-body" style="display:flex;flex-direction:column;gap:12px">
+        <div id="ss-create-alert" class="svc-form-alert" style="display:none"></div>
+        <!-- Sheet No preview -->
+        <div class="po-field">
+          <label class="po-field-label">Sheet No.</label>
+          <div style="display:flex;align-items:center;gap:8px">
+            <input type="text" id="ss-create-ref-preview" class="po-field-input"
+                   style="font-family:monospace;font-weight:700;color:var(--accent,#6366f1);background:var(--surface-alt,#f8f9fa);cursor:default"
+                   readonly placeholder="Generating…">
+            <i class="fa fa-rotate" id="ss-ref-spin" style="color:var(--text-muted);font-size:13px;display:none"></i>
+          </div>
+        </div>
+        <!-- Job dropdown -->
+        <div class="po-field">
+          <label class="po-field-label">Job</label>
+          <select id="ss-create-job-id" class="po-field-input" style="appearance:auto">
+            <option value="">— No Job —</option>
+          </select>
+        </div>
+        <!-- Location -->
+        <div class="po-field">
+          <label class="po-field-label">Location</label>
+          <input type="text" id="ss-create-location" class="po-field-input" placeholder="Enter location" maxlength="200">
+        </div>
+        <!-- Date range -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="po-field">
+            <label class="po-field-label">Start Date</label>
+            <input type="date" id="ss-create-date-from" class="po-field-input">
+          </div>
+          <div class="po-field">
+            <label class="po-field-label">End Date</label>
+            <input type="date" id="ss-create-date-to" class="po-field-input">
+          </div>
+        </div>
+      </div>
+      <div class="po-aim-footer">
+        <button class="po-btn-ghost" id="ss-create-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+        <button class="po-btn-primary" id="ss-create-save"><i class="fa fa-floppy-disk"></i> Create Sheet</button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ── Coordinator Modal ── -->
+  <div class="modal-overlay" id="crd-modal" style="display:none">
+    <div class="po-aim-shell" style="width:500px">
+      <div class="po-aim-header">
+        <i class="fa fa-headset" style="color:var(--accent)"></i>
+        <span id="crd-modal-title">New Coordinator</span>
+        <button class="psm-close" id="crd-modal-close"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div class="po-aim-body" style="display:flex;flex-direction:column;gap:12px">
+        <div id="crd-modal-alert" class="svc-form-alert" style="display:none"></div>
+        <input type="hidden" id="crd-id">
+
+        <div class="po-field">
+          <label class="po-field-label">Coordinator Name <span class="po-required">*</span></label>
+          <input type="text" id="crd-name" class="po-field-input" placeholder="Full name" maxlength="150">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="po-field">
+            <label class="po-field-label">NIC No. <span class="po-required">*</span></label>
+            <input type="text" id="crd-nic" class="po-field-input" placeholder="NIC number" maxlength="50">
+          </div>
+          <div class="po-field">
+            <label class="po-field-label">Phone No. <span class="po-required">*</span></label>
+            <input type="text" id="crd-phone" class="po-field-input" placeholder="Mobile number" maxlength="30">
+          </div>
+        </div>
+        <div class="po-field">
+          <label class="po-field-label">Status <span class="po-required">*</span></label>
+          <select id="crd-status" class="po-field-input" style="appearance:auto">
+            <option value="">— Select Status —</option>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+          </select>
+        </div>
+
+        <div style="border-top:1px solid var(--border-color);margin:4px 0 2px;padding-top:12px">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:10px">
+            <i class="fa fa-building-columns" style="margin-right:5px"></i>Bank Details
+          </div>
+          <div style="display:flex;flex-direction:column;gap:12px">
+            <div class="po-field">
+              <label class="po-field-label">Bank Name <span class="po-required">*</span></label>
+              <input type="text" id="crd-bank-name" class="po-field-input" placeholder="e.g. Bank of Ceylon" maxlength="100">
+            </div>
+            <div class="po-field">
+              <label class="po-field-label">Bank Branch Name <span class="po-required">*</span></label>
+              <input type="text" id="crd-bank-branch" class="po-field-input" placeholder="Branch name" maxlength="100">
+            </div>
+            <div class="po-field">
+              <label class="po-field-label">Account Number <span class="po-required">*</span></label>
+              <input type="text" id="crd-bank-account" class="po-field-input" placeholder="Account number" maxlength="50">
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="po-aim-footer">
+        <button class="po-btn-ghost" id="crd-modal-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+        <button class="po-btn-primary" id="crd-modal-save"><i class="fa fa-floppy-disk"></i> Save Coordinator</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Promoter Modal ── -->
+  <div class="modal-overlay" id="pmt-modal" style="display:none">
+    <div class="po-aim-shell" style="width:520px">
+      <div class="po-aim-header">
+        <i class="fa fa-person-walking" style="color:var(--accent)"></i>
+        <span id="pmt-modal-title">New Promoter</span>
+        <button class="psm-close" id="pmt-modal-close"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div class="po-aim-body" style="display:flex;flex-direction:column;gap:12px">
+        <div id="pmt-modal-alert" class="svc-form-alert" style="display:none"></div>
+        <input type="hidden" id="pmt-id">
+
+        <div class="po-field">
+          <label class="po-field-label">Promoter Name <span class="po-required">*</span></label>
+          <input type="text" id="pmt-name" class="po-field-input" placeholder="Full name" maxlength="150">
+        </div>
+        <div class="po-field">
+          <label class="po-field-label">Position</label>
+          <select id="pmt-position" class="po-field-input">
+            <option value="">— Select position (optional) —</option>
+          </select>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="po-field">
+            <label class="po-field-label">Identity Card No.</label>
+            <input type="text" id="pmt-nic" class="po-field-input" placeholder="NIC number (optional)" maxlength="50">
+          </div>
+          <div class="po-field">
+            <label class="po-field-label">Phone No.</label>
+            <input type="text" id="pmt-phone" class="po-field-input" placeholder="Mobile number (optional)" maxlength="30">
+          </div>
+        </div>
+
+        <div style="border-top:1px solid var(--border-color);margin:4px 0 2px;padding-top:12px">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:10px">
+            <i class="fa fa-building-columns" style="margin-right:5px"></i>Bank Details
+          </div>
+          <div style="display:flex;flex-direction:column;gap:12px">
+            <div class="po-field">
+              <label class="po-field-label">Bank Name <span class="po-required">*</span></label>
+              <input type="text" id="pmt-bank-name" class="po-field-input" placeholder="e.g. Bank of Ceylon" maxlength="100">
+            </div>
+            <div class="po-field">
+              <label class="po-field-label">Bank Branch Name <span class="po-required">*</span></label>
+              <input type="text" id="pmt-bank-branch" class="po-field-input" placeholder="Branch name" maxlength="100">
+            </div>
+            <div class="po-field">
+              <label class="po-field-label">Bank Account Number <span class="po-required">*</span></label>
+              <input type="text" id="pmt-bank-account" class="po-field-input" placeholder="Account number" maxlength="50">
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="po-aim-footer">
+        <button class="po-btn-ghost" id="pmt-modal-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+        <button class="po-btn-primary" id="pmt-modal-save"><i class="fa fa-floppy-disk"></i> Save Promoter</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Promoter Positions Modal ── -->
+  <div class="modal-overlay" id="ppos-modal" style="display:none">
+    <div class="po-aim-shell" style="width:620px;max-height:80vh;display:flex;flex-direction:column">
+      <div class="po-aim-header">
+        <i class="fa fa-list-ul" style="color:var(--accent)"></i>
+        <span>Manage Promoter Positions</span>
+        <button class="psm-close" id="ppos-modal-close"><i class="fa fa-xmark"></i></button>
+      </div>
+
+      <!-- Toolbar: search + add -->
+      <div style="display:flex;gap:8px;padding:10px 16px 0;flex-shrink:0">
+        <div class="finance-search-wrap" style="flex:1">
+          <i class="fa fa-magnifying-glass"></i>
+          <input type="text" id="ppos-search" placeholder="Search positions…" autocomplete="off">
+        </div>
+        <button class="svc-form-btn svc-form-btn--primary" id="ppos-add-btn" style="padding:5px 14px;font-size:12px;white-space:nowrap">
+          <i class="fa fa-plus"></i> Add Position
+        </button>
+      </div>
+
+      <div id="ppos-alert" class="svc-form-alert" style="display:none;margin:8px 16px 0"></div>
+
+      <!-- List -->
+      <div style="flex:1;overflow-y:auto;padding:10px 16px 16px">
+        <table class="crm-table" id="ppos-table" style="width:100%">
+          <thead>
+            <tr>
+              <th>Position Name</th>
+              <th>Description</th>
+              <th style="width:80px;text-align:right">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="ppos-body">
+            <tr><td colspan="3" style="text-align:center;color:var(--text-muted);padding:28px">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
 
   <!-- ── CRM: New Lead Modal ── -->
   <div class="modal-overlay" id="crm-lead-modal" style="display:none">
@@ -8293,6 +9713,162 @@
   </div>
 </div>
 
+<!-- ── Invoice Setup Modal ──────────────────────────────────────────── -->
+<div id="isetup-modal" style="display:none">
+  <div class="isetup-modal">
+
+    <!-- Header -->
+    <div class="isetup-hdr">
+      <div class="isetup-hdr-left">
+        <div class="isetup-hdr-icon"><i class="fa fa-file-invoice"></i></div>
+        <div>
+          <div class="isetup-hdr-title">Invoice Setup</div>
+          <div class="isetup-hdr-sub">Configure template, paper size and print layout</div>
+        </div>
+      </div>
+      <button class="isetup-close" id="isetup-close"><i class="fa fa-xmark"></i></button>
+    </div>
+
+    <!-- 3-column body -->
+    <div class="isetup-body">
+
+      <!-- LEFT: Print settings -->
+      <div class="isetup-left">
+
+        <div class="isetup-sec-title"><i class="fa fa-print"></i> Printer &amp; Paper</div>
+
+        <div class="isetup-field">
+          <label class="isetup-lbl">Printer Type</label>
+          <select id="isetup-printer" class="isetup-sel">
+            <option value="laser_a4">Laser / Inkjet — A4</option>
+            <option value="laser_a5">Laser / Inkjet — A5</option>
+            <option value="thermal_80">Thermal — 80 mm roll</option>
+            <option value="thermal_58">Thermal — 58 mm roll</option>
+          </select>
+        </div>
+
+        <div class="isetup-field">
+          <label class="isetup-lbl">Paper Size</label>
+          <select id="isetup-paper" class="isetup-sel">
+            <option value="a4">A4  (210 × 297 mm)</option>
+            <option value="a5">A5  (148 × 210 mm)</option>
+            <option value="letter">Letter (216 × 279 mm)</option>
+            <option value="legal">Legal  (216 × 356 mm)</option>
+          </select>
+        </div>
+
+        <div class="isetup-field">
+          <label class="isetup-lbl">Orientation</label>
+          <div class="isetup-radio-row">
+            <label class="isetup-radio"><input type="radio" name="isetup-orient" value="portrait" checked> <i class="fa fa-file"></i> Portrait</label>
+            <label class="isetup-radio"><input type="radio" name="isetup-orient" value="landscape"> <i class="fa fa-file" style="display:inline-block;rotate:90deg"></i> Landscape</label>
+          </div>
+        </div>
+
+        <div class="isetup-sec-title" style="margin-top:20px"><i class="fa fa-border-all"></i> Margins <span class="isetup-unit">(mm)</span></div>
+
+        <div class="isetup-margin-grid">
+          <div class="isetup-margin-field">
+            <label class="isetup-lbl">Top</label>
+            <input type="number" id="isetup-mg-top" class="isetup-num" value="20" min="0" max="80" step="1">
+          </div>
+          <div class="isetup-margin-field">
+            <label class="isetup-lbl">Bottom</label>
+            <input type="number" id="isetup-mg-bot" class="isetup-num" value="20" min="0" max="80" step="1">
+          </div>
+          <div class="isetup-margin-field">
+            <label class="isetup-lbl">Left</label>
+            <input type="number" id="isetup-mg-left" class="isetup-num" value="15" min="0" max="60" step="1">
+          </div>
+          <div class="isetup-margin-field">
+            <label class="isetup-lbl">Right</label>
+            <input type="number" id="isetup-mg-right" class="isetup-num" value="15" min="0" max="60" step="1">
+          </div>
+        </div>
+
+        <div class="isetup-sec-title" style="margin-top:20px"><i class="fa fa-table-columns"></i> Arrangement</div>
+
+        <div class="isetup-field">
+          <label class="isetup-lbl">Header layout</label>
+          <select id="isetup-hdr-layout" class="isetup-sel">
+            <option value="num-left">Number left, status right</option>
+            <option value="num-center">Centered number &amp; title</option>
+            <option value="num-right">Number right</option>
+          </select>
+        </div>
+
+        <div class="isetup-field">
+          <label class="isetup-lbl">Logo / letterhead position</label>
+          <select id="isetup-logo-pos" class="isetup-sel">
+            <option value="header">Inside letterhead header</option>
+            <option value="top-left">Top-left corner</option>
+            <option value="top-right">Top-right corner</option>
+          </select>
+        </div>
+
+      </div>
+
+      <!-- CENTER: Live preview -->
+      <div class="isetup-center">
+        <div class="isetup-prev-topbar">
+          <span class="isetup-prev-label"><i class="fa fa-eye"></i> Preview</span>
+          <div class="isetup-zoom-bar">
+            <button class="isetup-zoom-btn" id="isetup-zoom-out" title="Zoom out"><i class="fa fa-minus"></i></button>
+            <span id="isetup-zoom-label" class="isetup-zoom-label">100%</span>
+            <button class="isetup-zoom-btn" id="isetup-zoom-in" title="Zoom in"><i class="fa fa-plus"></i></button>
+            <button class="isetup-zoom-btn" id="isetup-zoom-fit" title="Fit to screen"><i class="fa fa-compress"></i></button>
+          </div>
+        </div>
+        <div class="isetup-prev-bg" id="isetup-prev-bg">
+          <div id="isetup-prev-scaler" class="isetup-prev-scaler">
+            <iframe id="isetup-prev-frame" class="isetup-prev-frame" scrolling="no"></iframe>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT: Template cards -->
+      <div class="isetup-right">
+        <div class="isetup-sec-title"><i class="fa fa-palette"></i> Templates</div>
+        <div id="isetup-tpl-list" class="isetup-tpl-list"></div>
+      </div>
+
+    </div>
+
+    <!-- Footer -->
+    <div class="isetup-footer">
+      <button class="isetup-btn-cancel" id="isetup-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+      <button class="isetup-btn-save" id="isetup-save"><i class="fa fa-floppy-disk"></i> Save Setup</button>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── Invoice Preview Modal (shown after sale saved in invoice mode) ────── -->
+<div id="inv-preview-modal" class="inv-preview-modal" style="display:none">
+  <div class="invp-hdr">
+    <div class="invp-hdr-left">
+      <i class="fa fa-file-invoice" style="color:#94a3b8;font-size:15px"></i>
+      <span id="invp-title" class="invp-title">Invoice</span>
+      <span id="invp-badge" class="invp-badge"></span>
+    </div>
+    <div class="invp-hdr-right">
+      <div class="invp-zoom-bar">
+        <button class="invp-zoom-btn" id="invp-zoom-out" title="Zoom out"><i class="fa fa-minus"></i></button>
+        <span id="invp-zoom-label" class="invp-zoom-label">100%</span>
+        <button class="invp-zoom-btn" id="invp-zoom-in" title="Zoom in"><i class="fa fa-plus"></i></button>
+        <button class="invp-zoom-btn" id="invp-zoom-fit" title="Fit"><i class="fa fa-compress"></i></button>
+      </div>
+      <button class="invp-btn-print" id="invp-print"><i class="fa fa-print"></i> Print</button>
+      <button class="invp-btn-close" id="invp-close" title="Close"><i class="fa fa-times"></i></button>
+    </div>
+  </div>
+  <div class="invp-bg" id="invp-bg">
+    <div id="invp-scaler" class="invp-scaler">
+      <iframe id="invp-frame" class="invp-frame" scrolling="no"></iframe>
+    </div>
+  </div>
+</div>
+
 <div id="checkout-modal" style="display:none">
   <div class="co-modal">
 
@@ -8307,6 +9883,9 @@
       </div>
       <button class="co-close" id="checkout-cancel"><i class="fa fa-xmark"></i></button>
     </div>
+
+    <!-- Alert bar (shown below header, full width) -->
+    <div id="checkout-alert" class="co-alert-bar" style="display:none"></div>
 
     <!-- Body: Left | Middle (items) | Right -->
     <div class="co-body">
@@ -8324,9 +9903,15 @@
           <div class="co-disc-row">
             <div class="co-disc-top">
               <span class="co-disc-tag"><i class="fa fa-tag"></i> Discount</span>
-              <div class="co-disc-input-wrap">
-                <input type="number" id="co-discount-pct" class="co-disc-input" value="0" min="0" max="100" step="1">
-                <span class="co-disc-pct">%</span>
+              <div class="co-disc-right">
+                <div class="co-disc-type-wrap">
+                  <button class="co-disc-type-btn active" data-type="pct" id="co-disc-btn-pct">%</button>
+                  <button class="co-disc-type-btn" data-type="flat" id="co-disc-btn-flat"><i class="fa fa-dollar-sign"></i></button>
+                </div>
+                <div class="co-disc-input-wrap">
+                  <input type="number" id="co-discount-pct" class="co-disc-input" value="0" min="0" max="100" step="1">
+                  <span class="co-disc-pct" id="co-disc-suffix">%</span>
+                </div>
               </div>
             </div>
           </div>
@@ -8334,6 +9919,7 @@
             <span style="color:var(--text-muted);font-size:12px">You save</span>
             <strong id="co-saved" style="color:#16a34a;font-size:12px">—</strong>
           </div>
+          <div id="co-tax-rows"></div>
         </div>
 
         <div class="co-grand-total">
@@ -8371,7 +9957,8 @@
           <span>Item</span>
           <span>Qty</span>
           <span>Price</span>
-          <span>Disc %</span>
+          <span>Disc</span>
+          <span class="co-th-tax">Tax</span>
           <span>Total</span>
         </div>
         <div class="co-items-list" id="co-items-list"></div>
@@ -8450,9 +10037,6 @@
         <div class="co-notes">
           <textarea id="co-notes" placeholder="Add a note…"></textarea>
         </div>
-
-        <!-- Error -->
-        <div id="checkout-alert" class="co-alert" style="display:none"></div>
 
         <!-- Complete -->
         <button id="checkout-confirm" class="co-complete-btn">
@@ -8978,6 +10562,20 @@
               <label class="psm-field-label" for="psm-biz-name">Business Name</label>
               <input type="text" id="psm-biz-name" class="psm-input" placeholder="Your business name">
             </div>
+            <div class="psm-field-row">
+              <label class="psm-field-label">Business Logo</label>
+              <div class="psm-logo-wrap" id="psm-logo-wrap">
+                <div class="psm-logo-ph" id="psm-logo-ph">
+                  <i class="fa fa-image"></i>
+                  <span>No logo set</span>
+                </div>
+                <img id="psm-logo-img" class="psm-logo-img" style="display:none" src="" alt="Logo">
+              </div>
+              <div class="psm-logo-btns">
+                <button class="psm-logo-btn" id="psm-logo-choose"><i class="fa fa-folder-open"></i> Choose image</button>
+                <button class="psm-logo-btn psm-logo-btn--rm" id="psm-logo-remove" title="Remove logo"><i class="fa fa-trash"></i></button>
+              </div>
+            </div>
             <div class="psm-field-2col">
               <div>
                 <label class="psm-field-label" for="psm-currency">Currency</label>
@@ -9111,6 +10709,17 @@
               <label class="psm-switch"><input type="checkbox" id="psm-service-products"><span class="psm-switch-track"></span></label>
             </div>
           </div>
+
+          <div class="psm-section">
+            <div class="psm-section-label"><i class="fa fa-file-invoice"></i> Purchasing</div>
+            <div class="psm-toggle-row">
+              <div class="psm-toggle-info">
+                <span class="psm-toggle-name">Purchase Order workflow</span>
+                <span class="psm-toggle-desc">When enabled, goods must be received against a purchase order. Disable to allow creating Goods Receive Notes directly without a purchase order.</span>
+              </div>
+              <label class="psm-switch"><input type="checkbox" id="psm-purchase-order-enabled" checked><span class="psm-switch-track"></span></label>
+            </div>
+          </div>
         </div>
 
         <!-- Accounts panel -->
@@ -9189,15 +10798,50 @@
             <div class="psm-section-label"><i class="fa fa-percent"></i> Tax Settings</div>
             <div class="psm-toggle-row">
               <div class="psm-toggle-info">
-                <span class="psm-toggle-name">Enable tax</span>
+                <span class="psm-toggle-name">Enable tax on sales</span>
                 <span class="psm-toggle-desc">Apply tax calculations on sales transactions</span>
               </div>
               <label class="psm-switch"><input type="checkbox" id="psm-tax-enabled"><span class="psm-switch-track"></span></label>
             </div>
-            <div class="psm-field-row" id="psm-tax-rate-row" style="display:none">
-              <label class="psm-field-label" for="psm-tax-rate">Tax Rate (%)</label>
-              <input type="number" id="psm-tax-rate" class="psm-input" min="0" max="100" step="0.01" placeholder="e.g. 15">
-              <span class="psm-hint">Percentage applied to taxable sales</span>
+
+            <div id="psm-tax-rules-section" style="display:none;margin-top:20px">
+              <div class="psm-trules-hdr">
+                <span class="psm-field-label" style="margin:0;font-size:12px;font-weight:700">Tax Rules</span>
+                <button type="button" class="psm-tr-add-btn" id="psm-tax-rule-add-btn">
+                  <i class="fa fa-plus"></i> Add Rule
+                </button>
+              </div>
+
+              <!-- inline add / edit form -->
+              <div id="psm-tax-rule-form" style="display:none" class="psm-tr-form-wrap">
+                <div class="psm-tr-form-grid">
+                  <div>
+                    <div class="psm-field-label" style="font-size:11px;margin-bottom:4px">Name</div>
+                    <input type="text" id="psm-tr-name" class="psm-input" maxlength="50" placeholder="e.g. VAT, GST">
+                  </div>
+                  <div>
+                    <div class="psm-field-label" style="font-size:11px;margin-bottom:4px">Amount Type</div>
+                    <select id="psm-tr-type" class="psm-input">
+                      <option value="percentage">Percentage (%)</option>
+                      <option value="flat">Flat amount</option>
+                    </select>
+                  </div>
+                  <div>
+                    <div class="psm-field-label" style="font-size:11px;margin-bottom:4px">Value</div>
+                    <input type="number" id="psm-tr-value" class="psm-input" min="0" step="0.01" placeholder="0">
+                  </div>
+                </div>
+                <div class="psm-tr-form-acts">
+                  <button type="button" id="psm-tr-save" class="psm-tr-btn-save"><i class="fa fa-check"></i> Save rule</button>
+                  <button type="button" id="psm-tr-cancel" class="psm-tr-btn-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+                </div>
+              </div>
+
+              <!-- rules list -->
+              <div id="psm-tax-rules-list"></div>
+              <div id="psm-tax-rules-empty" style="display:none;text-align:center;color:var(--text-muted);font-size:13px;padding:18px 0 6px">
+                <i class="fa fa-circle-info"></i> No tax rules yet — click <strong>Add Rule</strong> to get started.
+              </div>
             </div>
           </div>
         </div>
@@ -11310,6 +12954,13 @@
 <!-- ── Guide Assistant Character ─────────────────────────────────────── -->
 <div id="guide-char-wrap" style="display:none">
   <div id="guide-bubble" style="display:none">
+    <!-- Voice listening bar (shows while worker is active) -->
+    <div id="guide-voice-listening-bar">
+      <div class="guide-voice-waves">
+        <span></span><span></span><span></span><span></span>
+      </div>
+      <span id="guide-voice-status-text">Listening…</span>
+    </div>
     <!-- Input state -->
     <div id="guide-chat-input-wrap">
       <textarea id="guide-chat-input" placeholder="Ask me anything…" rows="2"></textarea>
@@ -11324,6 +12975,60 @@
   <div id="guide-char-img-wrap">
     <img id="guide-char-img" src="img/animtors.gif" alt="Guide assistant" draggable="false">
     <button id="guide-char-dismiss" title="Hide guide"><i class="fa fa-xmark"></i></button>
+    <!-- Voice Listening Worker active badge -->
+    <div id="guide-voice-badge" title="Voice Listening Worker active — click to stop"><i class="fa fa-microphone"></i></div>
+  </div>
+</div>
+
+<!-- ── Guide character right-click context menu ──────────────────────── -->
+<div id="guide-ctx-menu" role="menu" aria-label="Guide assistant options">
+  <div class="guide-ctx-item guide-ctx-item--voice" id="guide-ctx-voice" role="menuitem">
+    <span class="guide-ctx-icon"><i class="fa fa-microphone"></i></span>
+    <span id="guide-ctx-voice-label">Start Voice Worker</span>
+  </div>
+  <div class="guide-ctx-item guide-ctx-item--chat" id="guide-ctx-chat" role="menuitem">
+    <span class="guide-ctx-icon"><i class="fa fa-comment-dots"></i></span>
+    Open Chat
+  </div>
+
+  <!-- ── Design Studio quick actions (visible only on Design tab) ── -->
+  <div class="guide-ctx-sep guide-ctx-ds-only" style="display:none"></div>
+  <div class="guide-ctx-group-label guide-ctx-ds-only" style="display:none">
+    <i class="fa fa-palette"></i> Design Studio
+  </div>
+  <div class="guide-ctx-item guide-ctx-item--ds" id="guide-ctx-ds-new" role="menuitem" style="display:none">
+    <span class="guide-ctx-icon"><i class="fa fa-plus"></i></span>
+    New Design
+  </div>
+  <div class="guide-ctx-item guide-ctx-item--ds" id="guide-ctx-ds-proposals" role="menuitem" style="display:none">
+    <span class="guide-ctx-icon"><i class="fa fa-file-contract"></i></span>
+    View Proposals
+  </div>
+  <div class="guide-ctx-item guide-ctx-item--ds" id="guide-ctx-ds-letterhead" role="menuitem" style="display:none">
+    <span class="guide-ctx-icon"><i class="fa fa-file-lines"></i></span>
+    Create Letterhead
+  </div>
+  <div class="guide-ctx-item guide-ctx-item--ds" id="guide-ctx-ds-profile" role="menuitem" style="display:none">
+    <span class="guide-ctx-icon"><i class="fa fa-building"></i></span>
+    Business Profile
+  </div>
+  <div class="guide-ctx-item guide-ctx-item--ds" id="guide-ctx-ds-social" role="menuitem" style="display:none">
+    <span class="guide-ctx-icon"><i class="fa fa-share-nodes"></i></span>
+    Social Media
+  </div>
+  <div class="guide-ctx-item guide-ctx-item--ds" id="guide-ctx-ds-bizcard" role="menuitem" style="display:none">
+    <span class="guide-ctx-icon"><i class="fa fa-id-card"></i></span>
+    Business Cards
+  </div>
+
+  <div class="guide-ctx-sep"></div>
+  <div class="guide-ctx-item guide-ctx-item--reset" id="guide-ctx-reset" role="menuitem">
+    <span class="guide-ctx-icon"><i class="fa fa-location-crosshairs"></i></span>
+    Reset Position
+  </div>
+  <div class="guide-ctx-item guide-ctx-item--dismiss" id="guide-ctx-dismiss" role="menuitem">
+    <span class="guide-ctx-icon"><i class="fa fa-eye-slash"></i></span>
+    Dismiss Guide
   </div>
 </div>
 
@@ -11426,6 +13131,9 @@
         <div class="psw-field" id="psw-tax-rate-wrap" style="display:none;margin-top:16px">
           <label>Tax rate (%)</label>
           <input type="number" id="psw-tax-rate" min="0" max="100" step="0.01" placeholder="e.g. 10" style="max-width:180px">
+        </div>
+        <div class="psw-hint" id="psw-tax-rules-note" style="display:none;margin-top:8px;font-size:11px">
+          <i class="fa fa-circle-info"></i> You can add multiple tax rules from POS Settings after setup.
         </div>
         <div class="psw-field">
           <label>Invoice number prefix</label>
@@ -11697,6 +13405,7 @@
 <script src="js/jsbarcode.min.js"></script>
 <script src="js/api.js"></script>
 <script src="js/app.js"></script>
+<script src="js/ribbon-customize.js"></script>
 <script src="js/guide-config.js"></script>
 <script src="js/guide.js"></script>
 </body>

@@ -70,6 +70,7 @@ class InvoiceService
                 'due_date'        => filled($data['due_date'] ?? '') ? $data['due_date'] : null,
                 'status'          => Invoice::STATUS_DRAFT,
                 'notes'           => filled($data['notes'] ?? '') ? $data['notes'] : null,
+                'payment_method'  => filled($data['payment_method'] ?? '') ? $data['payment_method'] : null,
                 'subtotal'        => 0,
                 'discount_amount' => 0,
                 'tax_amount'      => 0,
@@ -100,8 +101,9 @@ class InvoiceService
                 'customer_id' => $this->nullableInt($data['customer_id'] ?? null),
                 'reference'   => filled($data['reference'] ?? '') ? $data['reference'] : null,
                 'issue_date'  => $data['issue_date'],
-                'due_date'    => filled($data['due_date'] ?? '') ? $data['due_date'] : null,
-                'notes'       => filled($data['notes'] ?? '') ? $data['notes'] : null,
+                'due_date'       => filled($data['due_date'] ?? '') ? $data['due_date'] : null,
+                'notes'          => filled($data['notes'] ?? '') ? $data['notes'] : null,
+                'payment_method' => filled($data['payment_method'] ?? '') ? $data['payment_method'] : null,
             ]);
 
             $this->syncItems($invoice, $items);
@@ -259,6 +261,10 @@ class InvoiceService
                 'description'     => $item['description'],
                 'quantity'        => $item['quantity'],
                 'unit_price'      => $item['unit_price'],
+                'discount_type'   => $item['discount_type'],
+                'discount_value'  => $item['discount_value'],
+                'tax_pct'         => $item['tax_pct'],
+                'tax_type'        => $item['tax_type'],
                 'line_total'      => $item['line_total'],
                 'sort_order'      => $i,
             ]);
@@ -274,14 +280,36 @@ class InvoiceService
             if ($qty <= 0 && $price <= 0 && empty($item['description'])) {
                 continue;
             }
-            $type = $item['item_type'] ?? null;
+            $type      = $item['item_type'] ?? null;
+            $discType  = in_array($item['discount_type'] ?? 'pct', ['pct', 'flat']) ? ($item['discount_type'] ?? 'pct') : 'pct';
+            $discValue = max(0, (float) ($item['discount_value'] ?? 0));
+            // Normalize 'percentage' (POS settings format) → 'pct'
+            $rawTaxType = $item['tax_type'] ?? 'pct';
+            $taxType    = $rawTaxType === 'percentage' ? 'pct' : (in_array($rawTaxType, ['pct', 'flat']) ? $rawTaxType : 'pct');
+            $taxValue  = max(0, (float) ($item['tax_pct'] ?? 0));
+
+            $lineGross = $qty * $price;
+            $discAmt   = $discType === 'flat'
+                ? min($discValue, $lineGross)
+                : ($lineGross * $discValue / 100);
+            $lineNet   = max(0, $lineGross - $discAmt);
+            // tax_pct stores the raw rule value; tax_type says whether it's % or flat
+            $taxAmt    = $taxType === 'flat'
+                ? $taxValue
+                : ($lineNet * $taxValue / 100);
+            $lineTotal = round($lineNet + $taxAmt, 2);
+
             $normalized[] = [
                 'product_id'      => $type === 'product' ? $this->nullableInt($item['product_id'] ?? null) : null,
                 'service_item_id' => $type === 'service' ? $this->nullableInt($item['service_item_id'] ?? null) : null,
                 'description'     => trim((string) ($item['description'] ?? '')),
                 'quantity'        => $qty,
                 'unit_price'      => $price,
-                'line_total'      => round($qty * $price, 2),
+                'discount_type'   => $discType,
+                'discount_value'  => round($discValue, 2),
+                'tax_pct'         => round($taxValue, 2),
+                'tax_type'        => $taxType,
+                'line_total'      => $lineTotal,
             ];
         }
 
@@ -291,7 +319,9 @@ class InvoiceService
     private function recalculateTotals(Invoice $invoice, array $data): void
     {
         $invoice->load('items');
-        $subtotal = $invoice->items->sum('line_total');
+        // Subtotal is the sum of line_totals; each line_total already includes
+        // per-line discount and tax, so we add any header-level adjustments on top.
+        $subtotal = (float) $invoice->items->sum('line_total');
 
         $discountAmount = max(0, (float) ($data['discount_amount'] ?? 0));
         $taxAmount      = max(0, (float) ($data['tax_amount'] ?? 0));

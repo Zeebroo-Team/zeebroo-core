@@ -62,6 +62,7 @@ const API = (() => {
     invoice:        (id)        => request('GET',    `/invoices/${id}`),
     createInvoice:  (body)      => request('POST',   '/invoices', body),
     updateInvoice:  (id, body)  => request('PATCH',  `/invoices/${id}`, body),
+    invoiceEnableShare: (id)    => request('POST',   `/invoices/${id}/enable-share`),
     invoiceSent:    (id)        => request('POST',   `/invoices/${id}/mark-sent`),
     invoicePaid:    (id)        => request('POST',   `/invoices/${id}/mark-paid`),
     invoiceOverdue: (id)        => request('POST',   `/invoices/${id}/mark-overdue`),
@@ -236,10 +237,10 @@ const API = (() => {
     fileManagerBrowse: (folderId, imagesOnly) => request('GET', `/online/file-manager?folder=${folderId||''}&images_only=${imagesOnly?1:0}`),
 
     // Product Brands
-    brands:        (q, status)    => request('GET',    `/brands?q=${encodeURIComponent(q||'')}&status=${status||''}`),
-    createBrand:   (body)         => request('POST',   '/brands', body),
-    updateBrand:   (id, body)     => request('PATCH',  `/brands/${id}`, body),
-    deleteBrand:   (id)           => request('DELETE', `/brands/${id}`),
+    productBrands:       (q, status)  => request('GET',    `/brands?q=${encodeURIComponent(q||'')}&status=${status||''}`),
+    productBrandCreate:  (body)       => request('POST',   '/brands', body),
+    productBrandUpdate:  (id, body)   => request('PATCH',  `/brands/${id}`, body),
+    productBrandDelete:  (id)         => request('DELETE', `/brands/${id}`),
 
     // Product Discounts
     discounts:             (q, status)     => request('GET',    `/discounts?q=${encodeURIComponent(q||'')}&status=${status||''}`),
@@ -268,11 +269,16 @@ const API = (() => {
     clearCheque:   (id, body)         => request('POST', `/cheques/${id}/clear`, body || {}),
 
     // Goods Receive Notes
-    grns:          (q, payment)       => request('GET',  `/grns?q=${encodeURIComponent(q||'')}&payment=${payment||'all'}`),
-    grn:           (id)               => request('GET',  `/grns/${id}`),
-    payGrn:        (id, body)         => request('POST', `/grns/${id}/pay`, body),
-    grnForm:       (purchaseId)       => request('GET',  `/purchase-orders/${purchaseId}/grn-form`),
-    createGrn:     (purchaseId, body) => request('POST', `/purchase-orders/${purchaseId}/grns`, body),
+    grns:              (q, payment)       => request('GET',  `/grns?q=${encodeURIComponent(q||'')}&payment=${payment||'all'}`),
+    grn:               (id)               => request('GET',  `/grns/${id}`),
+    payGrn:            (id, body)         => request('POST', `/grns/${id}/pay`, body),
+    approveGrn:        (id)               => request('POST', `/grns/${id}/approve`, {}),
+    rejectGrn:         (id)               => request('POST', `/grns/${id}/reject`,  {}),
+    grnForm:           (purchaseId)       => request('GET',  `/purchase-orders/${purchaseId}/grn-form`),
+    createGrn:         (purchaseId, body) => request('POST', `/purchase-orders/${purchaseId}/grns`, body),
+    createDirectGrn:   (body)             => request('POST', `/grns`, body),
+    grnPermissions:    ()                 => request('GET',  `/grn-permissions`),
+    saveGrnPermissions:(body)             => request('PUT',  `/grn-permissions`, body),
 
     purchaseOrders:(q, status)        => request('GET',  `/purchase-orders?q=${encodeURIComponent(q||'')}&status=${status||''}`),
     purchaseOrder: (id)               => request('GET',  `/purchase-orders/${id}`),
@@ -375,7 +381,8 @@ const API = (() => {
     serviceMgmtCategories:     ()          => request('GET',   '/service/categories'),
     createServiceCategory:     (body)      => request('POST',  '/service/categories', body),
 
-    guideChat: (message) => request('POST', '/guide/chat', { message }),
+    guideChat:  (message)             => request('POST', '/guide/chat',  { message }),
+    guideVoice: (audio, mime_type)    => request('POST', '/guide/voice', { audio, mime_type }),
 
     // CRM
     crmProjects:     ()                   => request('GET',    '/crm/projects'),
@@ -480,6 +487,65 @@ const API = (() => {
     pmMilestoneCreate:     (pid, body) => request('POST',   `/pm/projects/${pid}/milestones`, body),
     pmMilestoneComplete:   (id)        => request('POST',   `/pm/milestones/${id}/complete`, {}),
     pmMilestoneDelete:     (id)        => request('DELETE', `/pm/milestones/${id}`),
+
+    // Brand Management
+    brands:       (q)          => request('GET',    `/brand-mgmt/brands?q=${encodeURIComponent(q||'')}`),
+    brandCreate:  (body)       => request('POST',   '/brand-mgmt/brands', body),
+    brandImport:  (body)       => request('POST',   '/brand-mgmt/brands/import', body),
+    brandUpdate:  (id, body)   => request('PUT',    `/brand-mgmt/brands/${id}`, body),
+    brandDelete:  (id)         => request('DELETE', `/brand-mgmt/brands/${id}`),
+
+    // Reporters
+    reporters:      (q)          => request('GET',    `/brand-mgmt/reporters?q=${encodeURIComponent(q||'')}`),
+    reporterCreate: (body)       => request('POST',   '/brand-mgmt/reporters', body),
+    reporterUpdate: (id, body)   => request('PUT',    `/brand-mgmt/reporters/${id}`, body),
+    reporterDelete: (id)         => request('DELETE', `/brand-mgmt/reporters/${id}`),
+
+    // Officers
+    officers:      (q)          => request('GET',    `/brand-mgmt/officers?q=${encodeURIComponent(q||'')}`),
+    officerCreate: (body)       => request('POST',   '/brand-mgmt/officers', body),
+    officerUpdate: (id, body)   => request('PUT',    `/brand-mgmt/officers/${id}`, body),
+    officerDelete: (id)         => request('DELETE', `/brand-mgmt/officers/${id}`),
+
+    // Advertising Agencies
+    agencies:       (q)        => request('GET',    `/brand-mgmt/agencies?q=${encodeURIComponent(q||'')}`),
+    agencyCreate:   (body)     => request('POST',   '/brand-mgmt/agencies', body),
+    agencyUpdate:   (id, body) => request('PUT',    `/brand-mgmt/agencies/${id}`, body),
+    agencyDelete:   (id)       => request('DELETE', `/brand-mgmt/agencies/${id}`),
+
+    // Salary Sheets
+    salarySheetNextRef:  ()         => request('GET',    '/brand-mgmt/salary-sheets/next-ref'),
+    salarySheets:        (q)        => request('GET',    `/brand-mgmt/salary-sheets?q=${encodeURIComponent(q||'')}`),
+    salarySheetCreate:   (body)     => request('POST',   '/brand-mgmt/salary-sheets', body),
+    salarySheetGet:      (id)       => request('GET',    `/brand-mgmt/salary-sheets/${id}`),
+    salarySheetUpdate:   (id, body) => request('PUT',    `/brand-mgmt/salary-sheets/${id}`, body),
+    salarySheetDelete:   (id)       => request('DELETE', `/brand-mgmt/salary-sheets/${id}`),
+    salarySheetSaveRows: (id, body) => request('POST',   `/brand-mgmt/salary-sheets/${id}/save-rows`, body),
+
+    // Coordinators
+    coordinators:       (q)        => request('GET',    `/brand-mgmt/coordinators?q=${encodeURIComponent(q||'')}`),
+    coordinatorCreate:  (body)     => request('POST',   '/brand-mgmt/coordinators', body),
+    coordinatorUpdate:  (id, body) => request('PUT',    `/brand-mgmt/coordinators/${id}`, body),
+    coordinatorDelete:  (id)       => request('DELETE', `/brand-mgmt/coordinators/${id}`),
+
+    // Promoters
+    promoters:       (q)        => request('GET',    `/brand-mgmt/promoters?q=${encodeURIComponent(q||'')}`),
+    promoterCreate:  (body)     => request('POST',   '/brand-mgmt/promoters', body),
+    promoterUpdate:  (id, body) => request('PUT',    `/brand-mgmt/promoters/${id}`, body),
+    promoterDelete:  (id)       => request('DELETE', `/brand-mgmt/promoters/${id}`),
+
+    // Promoter Positions
+    promoterPositions:       (q)        => request('GET',    `/brand-mgmt/promoter-positions?q=${encodeURIComponent(q||'')}`),
+    promoterPositionCreate:  (body)     => request('POST',   '/brand-mgmt/promoter-positions', body),
+    promoterPositionUpdate:  (id, body) => request('PUT',    `/brand-mgmt/promoter-positions/${id}`, body),
+    promoterPositionDelete:  (id)       => request('DELETE', `/brand-mgmt/promoter-positions/${id}`),
+
+    // Jobs
+    jobs:        (q, status)  => request('GET',    `/brand-mgmt/jobs?q=${encodeURIComponent(q||'')}&status=${status||''}`),
+    jobCreate:   (body)       => request('POST',   '/brand-mgmt/jobs', body),
+    jobImport:   (body)       => request('POST',   '/brand-mgmt/jobs/import', body),
+    jobUpdate:   (id, body)   => request('PUT',    `/brand-mgmt/jobs/${id}`, body),
+    jobDelete:   (id)         => request('DELETE', `/brand-mgmt/jobs/${id}`),
 
     // Raw passthrough for ad-hoc requests
     _raw: (method, path, body = null) => request(method, path, body),

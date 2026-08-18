@@ -48,6 +48,8 @@ class PosSettingsService
 
     public const KEY_RECEIPT_LOGO_URL = 'pos.receipt_logo_url';
 
+    public const KEY_BUSINESS_LOGO_URL = 'business.logo_url';
+
     public const KEY_RECEIPT_ADDRESS = 'pos.receipt_address';
 
     /** @var string `en` | `si` | `ta` */
@@ -56,6 +58,8 @@ class PosSettingsService
     public const KEY_TAX_ENABLED = 'tax.enabled';
 
     public const KEY_TAX_RATE = 'tax.rate';
+
+    public const KEY_TAX_RULES = 'tax.rules';
 
     public const KEY_INVOICE_PREFIX = 'invoice.prefix';
 
@@ -66,6 +70,13 @@ class PosSettingsService
     public const KEY_DELIVERY_METHODS = 'delivery.methods';
 
     public const DELIVERY_METHOD_KEYS = ['dhl', 'fedex', 'uber', 'pickme', 'koobiyo', 'pronto'];
+
+    public const KEY_COURIER_SERVICES = 'courier.services';
+
+    public const COURIER_SERVICE_KEYS = ['courier', 'domex', 'koobiyo', 'pronto', 'citypak'];
+
+    /** When false, purchase orders are skipped; GRNs are created directly. */
+    public const KEY_PURCHASE_ORDER_ENABLED = 'pos.purchase_order_enabled';
 
     /**
      * @return array{
@@ -100,6 +111,7 @@ class PosSettingsService
             'slug'             => Str::slug($business->name),
             'currency'         => (string) ($business->getSetting('business.currency', '') ?: ''),
             'timezone'         => (string) ($business->getSetting('business.timezone', '') ?: ''),
+            'business_logo_url' => (string) ($business->getSetting(self::KEY_BUSINESS_LOGO_URL, '') ?: ''),
             // POS
             'default_deposit_account_id' => $accountId,
             'discount_field_enabled' => (bool) $business->getSetting(self::KEY_DISCOUNT_FIELD_ENABLED, false),
@@ -137,7 +149,11 @@ class PosSettingsService
             'branch_pos_separate'      => (bool) $business->getSetting('business.branch_pos_separate', false),
             // Tax
             'tax_enabled'   => (bool) $business->getSetting(self::KEY_TAX_ENABLED, false),
-            'tax_rate'      => round((float) $business->getSetting(self::KEY_TAX_RATE, 0), 4),
+            'tax_rules'     => (function () use ($business) {
+                $raw   = $business->getSetting(self::KEY_TAX_RULES, []);
+                $rules = is_array($raw) ? $raw : (is_string($raw) ? (json_decode($raw, true) ?? []) : []);
+                return array_values(array_filter($rules, fn ($r) => is_array($r) && isset($r['name'], $r['type'], $r['value'])));
+            })(),
             // Invoice
             'invoice_prefix'      => (string) ($business->getSetting(self::KEY_INVOICE_PREFIX, 'INV') ?: 'INV'),
             'invoice_next_number' => max(1, (int) $business->getSetting(self::KEY_INVOICE_NEXT_NUMBER, 1)),
@@ -148,6 +164,19 @@ class PosSettingsService
                 $methods = is_array($raw) ? $raw : (is_string($raw) ? json_decode($raw, true) ?? [] : []);
                 return array_values(array_intersect($methods, self::DELIVERY_METHOD_KEYS));
             })(),
+            // Courier services
+            'courier_services' => (function () use ($business): array {
+                $raw   = $business->getSetting(self::KEY_COURIER_SERVICES, []);
+                $saved = is_array($raw) ? $raw : (is_string($raw) ? json_decode($raw, true) ?? [] : []);
+                $out   = [];
+                foreach (self::COURIER_SERVICE_KEYS as $key) {
+                    $svc = $saved[$key] ?? [];
+                    $out[$key] = ['enabled' => !empty($svc['enabled']), 'charge' => isset($svc['charge']) ? (float) $svc['charge'] : 0];
+                }
+                return $out;
+            })(),
+            // Purchasing
+            'purchase_order_enabled' => (bool) $business->getSetting(self::KEY_PURCHASE_ORDER_ENABLED, true),
         ];
     }
 
@@ -256,6 +285,10 @@ class PosSettingsService
             $business->setSetting(self::KEY_RECEIPT_LOGO_URL, $data['receipt_logo_url'] ? trim((string) $data['receipt_logo_url']) : null);
         }
 
+        if (array_key_exists('business_logo_url', $data)) {
+            $business->setSetting(self::KEY_BUSINESS_LOGO_URL, $data['business_logo_url'] ? trim((string) $data['business_logo_url']) : null);
+        }
+
         // Branch / warehouse
         if (array_key_exists('multi_warehouse_branch', $data)) {
             $business->setSetting('business.multi_warehouse_branch', filter_var($data['multi_warehouse_branch'], FILTER_VALIDATE_BOOLEAN));
@@ -274,9 +307,20 @@ class PosSettingsService
         if (array_key_exists('tax_enabled', $data)) {
             $business->setSetting(self::KEY_TAX_ENABLED, filter_var($data['tax_enabled'], FILTER_VALIDATE_BOOLEAN));
         }
-        if (array_key_exists('tax_rate', $data)) {
-            $rate = max(0, min(100, round((float) ($data['tax_rate'] ?? 0), 4)));
-            $business->setSetting(self::KEY_TAX_RATE, $rate);
+        if (array_key_exists('tax_rules', $data)) {
+            $rules = is_array($data['tax_rules']) ? $data['tax_rules'] : [];
+            $sanitized = [];
+            foreach ($rules as $r) {
+                if (! is_array($r)) { continue; }
+                $name  = substr(trim((string) ($r['name'] ?? '')), 0, 50);
+                $type  = in_array($r['type'] ?? '', ['percentage', 'flat'], true) ? $r['type'] : 'percentage';
+                $value = max(0, (float) ($r['value'] ?? 0));
+                $id    = isset($r['id']) ? substr((string) $r['id'], 0, 36) : (string) \Illuminate\Support\Str::uuid();
+                if ($name !== '') {
+                    $sanitized[] = ['id' => $id, 'name' => $name, 'type' => $type, 'value' => $value];
+                }
+            }
+            $business->setSetting(self::KEY_TAX_RULES, $sanitized);
         }
 
         // Invoice
@@ -299,6 +343,21 @@ class PosSettingsService
                 self::KEY_DELIVERY_METHODS,
                 array_values(array_intersect($methods, self::DELIVERY_METHOD_KEYS)),
             );
+        }
+
+        // Courier services
+        if (array_key_exists('courier_services', $data) && is_array($data['courier_services'])) {
+            $services = [];
+            foreach (self::COURIER_SERVICE_KEYS as $key) {
+                $svc = $data['courier_services'][$key] ?? [];
+                $services[$key] = ['enabled' => !empty($svc['enabled']), 'charge' => isset($svc['charge']) ? max(0, (float) $svc['charge']) : 0];
+            }
+            $business->setSetting(self::KEY_COURIER_SERVICES, $services);
+        }
+
+        // Purchasing workflow
+        if (array_key_exists('purchase_order_enabled', $data)) {
+            $business->setSetting(self::KEY_PURCHASE_ORDER_ENABLED, filter_var($data['purchase_order_enabled'], FILTER_VALIDATE_BOOLEAN));
         }
 
         // Business profile

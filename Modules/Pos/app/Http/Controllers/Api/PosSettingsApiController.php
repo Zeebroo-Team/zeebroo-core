@@ -111,11 +111,13 @@ class PosSettingsApiController extends Controller
     public function features(Request $request): JsonResponse
     {
         $business = $this->businessOrAbort($request);
-        $all      = ['account_management','automation_editor','bill_management','crm','developers','human_resources','mail','point_of_sale','product_management','project_management','restaurant','service_management','social_media_campaign','stock_management'];
+        $all      = ['account_management','automation_editor','bill_management','crm','developers','event_management','human_resources','mail','point_of_sale','product_management','project_management','restaurant','service_management','social_media_campaign','stock_management'];
         $stored   = $business->getSetting('business.features') ?? [];
         $enabled  = array_values(array_filter($all, fn ($k) => ! empty($stored[$k])));
+
+        // account_management is always enabled; event_management is user-controlled.
         if (! in_array('account_management', $enabled, true)) {
-            array_unshift($enabled, 'account_management');
+            $enabled[] = 'account_management';
         }
         return response()->json(['data' => $enabled]);
     }
@@ -123,7 +125,7 @@ class PosSettingsApiController extends Controller
     public function updateFeatures(Request $request): JsonResponse
     {
         $business = $this->businessOrAbort($request);
-        $all      = ['account_management','automation_editor','bill_management','crm','developers','human_resources','mail','point_of_sale','product_management','project_management','restaurant','service_management','social_media_campaign','stock_management'];
+        $all      = ['account_management','automation_editor','bill_management','crm','developers','event_management','human_resources','mail','point_of_sale','product_management','project_management','restaurant','service_management','social_media_campaign','stock_management'];
         $validated = $request->validate([
             'features'   => ['required', 'array'],
             'features.*' => ['boolean'],
@@ -153,6 +155,7 @@ class PosSettingsApiController extends Controller
             'display_theme'               => ['nullable', 'string', 'in:light,dark,inherit'],
             'receipt_mode'                => ['nullable', 'string', 'in:bill,invoice'],
             'receipt_logo_url'            => ['nullable', 'string', 'max:1000'],
+            'business_logo_url'           => ['nullable', 'string', 'max:1000'],
             'receipt_header'              => ['nullable', 'string', 'max:200'],
             'receipt_footer'              => ['nullable', 'string', 'max:200'],
             'show_business_name'          => ['nullable', 'boolean'],
@@ -173,15 +176,25 @@ class PosSettingsApiController extends Controller
             'branch_stock_separate'   => ['nullable', 'boolean'],
             'branch_pos_separate'     => ['nullable', 'boolean'],
             // Tax
-            'tax_enabled' => ['nullable', 'boolean'],
-            'tax_rate'    => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'tax_enabled'          => ['nullable', 'boolean'],
+            'tax_rules'            => ['nullable', 'array', 'max:20'],
+            'tax_rules.*.id'       => ['nullable', 'string', 'max:36'],
+            'tax_rules.*.name'     => ['required_with:tax_rules', 'string', 'max:50'],
+            'tax_rules.*.type'     => ['required_with:tax_rules', 'string', 'in:percentage,flat'],
+            'tax_rules.*.value'    => ['required_with:tax_rules', 'numeric', 'min:0'],
             // Invoice
             'invoice_prefix'      => ['nullable', 'string', 'max:20'],
             'invoice_next_number' => ['nullable', 'integer', 'min:1'],
             // Delivery
-            'delivery_enabled'    => ['nullable', 'boolean'],
-            'delivery_methods'    => ['nullable', 'array'],
-            'delivery_methods.*'  => ['string', 'in:dhl,fedex,uber,pickme,koobiyo,pronto'],
+            'delivery_enabled'           => ['nullable', 'boolean'],
+            'delivery_methods'           => ['nullable', 'array'],
+            'delivery_methods.*'         => ['string', 'in:dhl,fedex,uber,pickme,koobiyo,pronto'],
+            // Courier services
+            'courier_services'           => ['nullable', 'array'],
+            'courier_services.*.enabled' => ['nullable', 'boolean'],
+            'courier_services.*.charge'  => ['nullable', 'numeric', 'min:0'],
+            // Purchasing workflow
+            'purchase_order_enabled'     => ['nullable', 'boolean'],
         ]);
 
         $this->posSettings->saveForBusiness($business, $validated);

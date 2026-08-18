@@ -384,7 +384,7 @@
         }
         .loan-show-modal__head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:11px 14px;border-bottom:1px solid var(--border);}
         .loan-show-modal__head h2{margin:0;font-size:14px;font-weight:800;color:var(--text);}
-        .loan-show-modal__close{width:31px;height:31px;display:grid;place-items:center;border-radius:9px;border:1px solid var(--border);background:color-mix(in srgb,var(--card) 88%,transparent);color:var(--text);cursor:pointer;font-size:18px;line-height:1;}
+        .loan-show-modal__close{width:31px;height:31px;display:grid;place-items:center;padding:0;border-radius:9px;border:1px solid var(--border);background:color-mix(in srgb,var(--card) 88%,transparent);color:var(--text);cursor:pointer;font-size:18px;line-height:1;}
         .loan-show-modal__body{padding:12px 14px 14px;font-size:12px;overflow:auto;line-height:1.45;}
         .loan-show-modal__lbl{display:block;margin:8px 0 4px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.055em;color:var(--muted);}
         .loan-show-modal__summ{padding:10px 11px;border-radius:10px;border:1px solid color-mix(in srgb,var(--border) 80%,transparent);background:color-mix(in srgb,var(--primary) 6%,transparent);margin-bottom:4px;font-variant-numeric:tabular-nums;}

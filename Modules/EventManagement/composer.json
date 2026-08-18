@@ -1,0 +1,18 @@
+{
+    "name": "socibiz/event-management",
+    "description": "Event Management module.",
+    "authors": [{"name": "Socibiz"}],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {}
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\EventManagement\\": "app/",
+            "Modules\\EventManagement\\Database\\Factories\\": "database/factories/",
+            "Modules\\EventManagement\\Database\\Seeders\\": "database/seeders/"
+        }
+    }
+}

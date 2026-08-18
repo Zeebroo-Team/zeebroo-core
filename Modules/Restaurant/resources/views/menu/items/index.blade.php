@@ -109,7 +109,7 @@
                         background:color-mix(in srgb,var(--primary) 12%,transparent);
                         color:var(--primary);display:flex;align-items:center;justify-content:center;font-size:15px; }
 .mn-modal__head h3 { margin:0;font-size:15px;font-weight:800;flex:1; }
-.mn-modal__close { width:32px;height:32px;border-radius:8px;border:1px solid var(--border);
+.mn-modal__close { width:32px;height:32px;padding:0;line-height:1;border-radius:8px;border:1px solid var(--border);
                     background:var(--bg);cursor:pointer;display:flex;align-items:center;
                     justify-content:center;color:var(--muted);font-size:13px; }
 .mn-modal__close:hover { border-color:#ef4444;color:#ef4444; }

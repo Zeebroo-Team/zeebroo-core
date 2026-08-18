@@ -154,8 +154,8 @@
 }
 .svc-qprod-modal__title{font-size:15px;font-weight:700;color:var(--text);}
 .svc-qprod-modal__close{
-    display:grid;place-items:center;width:30px;height:30px;border:none;border-radius:8px;
-    background:transparent;color:var(--muted);font-size:18px;cursor:pointer;
+    display:grid;place-items:center;width:30px;height:30px;padding:0;border:none;border-radius:8px;
+    background:transparent;color:var(--muted);font-size:18px;line-height:1;cursor:pointer;
 }
 .svc-qprod-modal__close:hover{background:color-mix(in srgb,var(--border) 60%,transparent);}
 .svc-qprod-modal__body{padding:20px;display:flex;flex-direction:column;gap:14px;}

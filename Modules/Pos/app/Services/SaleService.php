@@ -218,6 +218,7 @@ class SaleService
         ?string $scheduledAt = null,
         ?int $posCounterId = null,
         ?string $creditDueDate = null,
+        ?float $discountFlat = null,
     ): Sale {
         $rawProductItems = array_values(array_filter(
             $items,
@@ -247,7 +248,7 @@ class SaleService
         $cartProductIds = array_map(fn ($l) => (int) $l['product']->id, $productLines);
         $activeDiscounts = $this->discountService->activeForProducts($business, $cartProductIds);
 
-        $sale = DB::transaction(function () use ($business, $user, $productLines, $serviceLines, $paymentMethod, $creditAccountId, $amountPaid, $notes, $channel, $discountPercent, $amountTendered, $customerId, $deferSettlement, $branchId, $activeDiscounts, $scheduledAt, $posCounterId, $creditDueDate) {
+        $sale = DB::transaction(function () use ($business, $user, $productLines, $serviceLines, $paymentMethod, $creditAccountId, $amountPaid, $notes, $channel, $discountPercent, $discountFlat, $amountTendered, $customerId, $deferSettlement, $branchId, $activeDiscounts, $scheduledAt, $posCounterId, $creditDueDate) {
             $sale = $business->sales()->create([
                 'branch_id'       => $branchId,
                 'pos_counter_id'  => $posCounterId,
@@ -398,12 +399,17 @@ class SaleService
                 }
             }
 
-            $discountPercentValue = $discountPercent !== null
-                ? round(max(0, min(100, $discountPercent)), 2)
-                : null;
-            $discountAmount = $discountPercentValue !== null && $discountPercentValue > 0
-                ? round($subtotal * ($discountPercentValue / 100), 2)
-                : 0.0;
+            if ($discountFlat !== null && $discountFlat > 0) {
+                $discountAmount       = round(min($discountFlat, $subtotal), 2);
+                $discountPercentValue = null; // flat discount — don't store a derived percent
+            } else {
+                $discountPercentValue = $discountPercent !== null
+                    ? round(max(0, min(100, $discountPercent)), 2)
+                    : null;
+                $discountAmount = $discountPercentValue !== null && $discountPercentValue > 0
+                    ? round($subtotal * ($discountPercentValue / 100), 2)
+                    : 0.0;
+            }
             $total = round(max(0, $subtotal - $discountAmount), 2);
             $tendered = null;
             $change = null;

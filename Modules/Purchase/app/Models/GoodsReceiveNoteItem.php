@@ -19,6 +19,9 @@ class GoodsReceiveNoteItem extends Model
         'selling_unit_price',
         'line_total',
         'sort_order',
+        'units_per_case',
+        'uom',
+        'discount_percent',
     ];
 
     protected function casts(): array
@@ -29,6 +32,8 @@ class GoodsReceiveNoteItem extends Model
             'selling_unit_price' => 'decimal:2',
             'line_total' => 'decimal:2',
             'sort_order' => 'integer',
+            'units_per_case' => 'integer',
+            'discount_percent' => 'decimal:3',
         ];
     }
 

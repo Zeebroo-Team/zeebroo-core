@@ -579,6 +579,71 @@ input.dsp-slider { width: 100%; accent-color: var(--accent); cursor: pointer; }
 .dsai-quick-btn:hover { background: rgba(99,102,241,.1); border-color: #6366f1; color: #6366f1; }
 .dsai-quick-btn:active { transform: scale(.96); }
 /* ── End AI Assistant ────────────────────────────────────────────────────── */
+
+/* ── Design Studio Voice Worker UI ──────────────────────────────────────── */
+/* Mic badge on character (mirrors ribbon.css #guide-voice-badge) */
+#ds-voice-badge {
+  position: absolute;
+  bottom: 6px; left: -6px;
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  background: #dc2626;
+  border: 2px solid #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; color: #fff;
+  cursor: pointer; z-index: 1;
+  animation: ds-mic-pulse 1.4s ease-in-out infinite;
+}
+#ds-voice-badge.speaking   { background: #7c3aed; animation: none; }
+#ds-voice-badge.processing { background: #d97706; animation: none; }
+@keyframes ds-mic-pulse {
+  0%,100% { box-shadow: 0 0 0 0   rgba(220,38,38,0.55); }
+  50%      { box-shadow: 0 0 0 6px rgba(220,38,38,0);    }
+}
+/* Listening bar inside bubble */
+#ds-voice-bar {
+  display: none; align-items: center; gap: 8px;
+  padding: 6px 10px;
+  background: rgba(99,102,241,0.08);
+  border-radius: 8px;
+  margin-bottom: 6px;
+  font-size: 11px; color: #6366f1; font-weight: 600;
+}
+#ds-voice-bar.active   { display: flex; }
+#ds-voice-bar.speaking { background: rgba(124,58,237,0.08); color: #7c3aed; }
+#ds-voice-bar.processing { background: rgba(217,119,6,0.08); color: #d97706; }
+.guide-voice-waves { display: flex; align-items: center; gap: 2px; height: 18px; }
+.guide-voice-waves span {
+  display: block; width: 3px; border-radius: 2px;
+  background: currentColor;
+  height: 30%;
+  animation: ds-bar-wave 0.7s ease-in-out infinite alternate;
+}
+.guide-voice-waves span:nth-child(2) { animation-delay: .18s; }
+.guide-voice-waves span:nth-child(3) { animation-delay: .35s; }
+.guide-voice-waves span:nth-child(4) { animation-delay: .52s; }
+@keyframes ds-bar-wave { to { height: 90%; } }
+
+/* ── Design Studio guide character context menu ─────────────────────────── */
+#ds-guide-ctx-menu {
+  position: fixed;
+  background: #fff;
+  border: 1px solid #d0d5e8;
+  border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(0,0,0,0.16), 0 1px 4px rgba(0,0,0,0.08);
+  padding: 5px 0;
+  min-width: 210px;
+  z-index: 9900;
+  display: none;
+  animation: ds-ctx-appear 0.12s cubic-bezier(0.34,1.56,0.64,1) forwards;
+  transform-origin: top left;
+}
+@keyframes ds-ctx-appear {
+  from { opacity: 0; transform: scale(0.88); }
+  to   { opacity: 1; transform: scale(1); }
+}
+/* reuse ribbon.css .guide-ctx-item / .guide-ctx-icon / .guide-ctx-sep /
+   .guide-ctx-group-label — they are already loaded via ribbon.css */
 </style>
 </head>
 <body>
@@ -2796,6 +2861,92 @@ function dsaiExecuteCommand(cmd) {
             saveHist();
             return 'Applied shadow';
         }
+        case 'transform_text': {
+            // Bulk text transformation across all (or selected) text objects on the canvas.
+            var _scope   = cmd.scope     || 'all';
+            var _xform   = cmd.transform || 'capitalize';
+            var _targets = [];
+
+            if (_scope === 'selected') {
+                var _active = canvas.getActiveObject();
+                if (_active) {
+                    _targets = _active.type === 'activeSelection'
+                        ? _active.getObjects().filter(function(o) { return o.text !== undefined; })
+                        : (_active.text !== undefined ? [_active] : []);
+                }
+            } else {
+                _targets = canvas.getObjects().filter(function(o) { return o.text !== undefined; });
+            }
+
+            if (!_targets.length) return 'No text objects found on canvas';
+
+            function _applyXform(text, xf) {
+                if (!text) return text;
+                switch (xf) {
+                    case 'capitalize':    return text.charAt(0).toUpperCase() + text.slice(1);
+                    case 'title_case':   return text.replace(/\b\w/g, function(c) { return c.toUpperCase(); });
+                    case 'upper_first_2':return text.slice(0, 2).toUpperCase() + text.slice(2);
+                    case 'uppercase':    return text.toUpperCase();
+                    case 'lowercase':    return text.toLowerCase();
+                    case 'sentence_case':return text.charAt(0).toUpperCase() + text.slice(1).toLowerCase();
+                    default:             return text;
+                }
+            }
+
+            var _changed = 0;
+            _targets.forEach(function(obj) {
+                var orig    = obj.text || '';
+                var updated = _applyXform(orig, _xform);
+                if (updated !== orig) { obj.set('text', updated); _changed++; }
+            });
+
+            if (_changed) { canvas.renderAll(); saveHist(); }
+            return 'Renamed ' + _changed + ' text object' + (_changed === 1 ? '' : 's');
+        }
+        case 'add_image': {
+            // Synchronous-style handler — returns a sentinel; caller uses _drawAnimated for animation
+            if (!cmd.src) return null;
+            // Use design dimensions, NOT canvas.getWidth()/getHeight() — those return the
+            // display-pixel size (designW × zoomLevel) when the canvas is zoomed, which
+            // causes the image to be scaled to only ~zoomLevel fraction of the canvas.
+            var cw = designW, ch = designH;
+            fabric.Image.fromURL(cmd.src, function (img) {
+                var nw = (img._element && img._element.naturalWidth)  || img.width  || 1;
+                var nh = (img._element && img._element.naturalHeight) || img.height || 1;
+                if (cmd.role === 'background') {
+                    var sc = Math.max(cw / nw, ch / nh);
+                    img.set({
+                        originX:    'center',
+                        originY:    'center',
+                        left:       Math.round(cw / 2),
+                        top:        Math.round(ch / 2),
+                        scaleX:     sc,
+                        scaleY:     sc,
+                        selectable: false,
+                        evented:    false,
+                    });
+                    canvas.add(img);
+                    canvas.sendToBack(img);
+                } else {
+                    var targetH = ch * (cmd.height_pct || 0.5);
+                    var sc      = targetH / nh;
+                    // Clamp so image right edge stays within canvas
+                    var scaledW = nw * sc;
+                    var left    = Math.round(cw * (cmd.left_pct || 0));
+                    if (left + scaledW > cw) { sc = (cw - left) / nw; }
+                    img.set({
+                        left:   left,
+                        top:    Math.round(ch * (cmd.top_pct || 0)),
+                        scaleX: sc,
+                        scaleY: sc,
+                    });
+                    canvas.add(img);
+                }
+                canvas.renderAll();
+                saveHist();
+            }, { crossOrigin: 'anonymous' });
+            return 'Adding image';
+        }
         default:
             return null;
     }
@@ -2805,6 +2956,13 @@ function dsaiExecuteCommand(cmd) {
 <!-- ── AI Design Assistant Character ─────────────────────────────────────── -->
 <div id="guide-char-wrap" style="display:none">
   <div id="guide-bubble" style="display:none">
+    <!-- Voice listening bar (hidden until worker is active) -->
+    <div id="ds-voice-bar">
+      <div class="guide-voice-waves">
+        <span></span><span></span><span></span><span></span>
+      </div>
+      <span id="ds-voice-status-text">Listening…</span>
+    </div>
     <div id="guide-chat-input-wrap">
       <textarea id="guide-chat-input" placeholder="Describe what you want to design…" rows="2"></textarea>
       <button id="guide-chat-send"><i class="fa fa-paper-plane"></i> Ask</button>
@@ -2817,6 +2975,47 @@ function dsaiExecuteCommand(cmd) {
   <div id="guide-char-img-wrap">
     <img id="guide-char-img" src="img/animtors.gif" alt="AI design assistant" draggable="false">
     <button id="guide-char-dismiss" title="Hide assistant"><i class="fa fa-xmark"></i></button>
+    <!-- Voice Worker active mic badge -->
+    <div id="ds-voice-badge" title="Voice Worker active — click to stop" style="display:none"><i class="fa fa-microphone"></i></div>
+  </div>
+</div>
+
+<!-- ── Design Studio guide character context menu ──────────────────────── -->
+<div id="ds-guide-ctx-menu" role="menu" aria-label="AI design assistant options">
+  <div class="guide-ctx-item guide-ctx-item--voice" id="ds-ctx-voice" role="menuitem">
+    <span class="guide-ctx-icon"><i class="fa fa-microphone"></i></span>
+    <span id="ds-ctx-voice-label">Start Voice Worker</span>
+  </div>
+  <div class="guide-ctx-item guide-ctx-item--chat" id="ds-ctx-open-chat" role="menuitem">
+    <span class="guide-ctx-icon"><i class="fa fa-comment-dots"></i></span>
+    Ask AI Assistant
+  </div>
+  <div class="guide-ctx-sep"></div>
+  <div class="guide-ctx-group-label"><i class="fa fa-wand-magic-sparkles"></i> Quick Prompts</div>
+  <div class="guide-ctx-item guide-ctx-item--ds" id="ds-ctx-add-shape" role="menuitem">
+    <span class="guide-ctx-icon"><i class="fa fa-shapes"></i></span>
+    Add a Shape
+  </div>
+  <div class="guide-ctx-item guide-ctx-item--ds" id="ds-ctx-add-text" role="menuitem">
+    <span class="guide-ctx-icon"><i class="fa fa-font"></i></span>
+    Add Text
+  </div>
+  <div class="guide-ctx-item guide-ctx-item--ds" id="ds-ctx-add-image" role="menuitem">
+    <span class="guide-ctx-icon"><i class="fa fa-image"></i></span>
+    Add Image
+  </div>
+  <div class="guide-ctx-item guide-ctx-item--ds" id="ds-ctx-bg-color" role="menuitem">
+    <span class="guide-ctx-icon"><i class="fa fa-palette"></i></span>
+    Change Background
+  </div>
+  <div class="guide-ctx-item guide-ctx-item--ds" id="ds-ctx-make-pro" role="menuitem">
+    <span class="guide-ctx-icon"><i class="fa fa-star"></i></span>
+    Make it Professional
+  </div>
+  <div class="guide-ctx-sep"></div>
+  <div class="guide-ctx-item guide-ctx-item--dismiss" id="ds-ctx-dismiss" role="menuitem">
+    <span class="guide-ctx-icon"><i class="fa fa-eye-slash"></i></span>
+    Dismiss Assistant
   </div>
 </div>
 
@@ -2828,6 +3027,23 @@ function dsaiExecuteCommand(cmd) {
     var _dragging    = false;
     var _didDrag     = false;   // cleared on mouseup; read on click
     var _lastToolSel = null;    // tracks last tool panel visited to skip redundant walks
+
+    // ── Voice Worker state ─────────────────────────────────────────────────
+    var _voiceActive       = false;
+    var _voiceStream       = null;
+    var _voiceRecorder     = null;
+    var _voiceAudioCtx     = null;
+    var _voiceAnalyser     = null;
+    var _voiceChunks       = [];
+    var _voiceMimeType     = 'audio/webm';
+    var _voiceHasSpeech    = false;
+    var _voiceSilenceStart = null;
+    var _voiceRecordStart  = 0;
+    var _voiceRafId        = null;
+    var _ttsUtterance      = null;
+    var _VOICE_SILENCE_THRESH = 8;    // RMS below this = silence
+    var _VOICE_SILENCE_DELAY  = 1500; // ms of silence before stopping
+    var _VOICE_MAX_MS         = 14000;// max recording length
 
     function _el(id) { return document.getElementById(id); }
 
@@ -2942,7 +3158,7 @@ function dsaiExecuteCommand(cmd) {
             sendBtn.innerHTML = '<i class="fa fa-spinner fa-spin"></i>';
         }
 
-        var replyText = '', commands = [];
+        var replyText = '', commands = [], imageJobs = [];
         try {
             var res = await window.electronAPI.apiRequest(
                 'POST', '/design-studio/ai-chat', {
@@ -2951,10 +3167,13 @@ function dsaiExecuteCommand(cmd) {
                     canvas_height: (typeof designH !== 'undefined' ? designH : (canvas ? canvas.getHeight() : 1123)),
                 }
             );
-            console.log('[DS-AI] response status:', res && res.status, 'commands:', res && res.body && res.body.commands && res.body.commands.length);
+            console.log('[DS-AI] response status:', res && res.status,
+                        'commands:', res.body && res.body.commands && res.body.commands.length,
+                        'image_jobs:', res.body && res.body.image_jobs && res.body.image_jobs.length);
             if (res.status === 200 && res.body) {
-                replyText = res.body.reply    || 'Done!';
-                commands  = res.body.commands || [];
+                replyText  = res.body.reply      || 'Done!';
+                commands   = res.body.commands   || [];
+                imageJobs  = res.body.image_jobs || [];
             } else {
                 console.warn('[DS-AI] non-200 status:', res.status, res.body);
                 replyText = 'Something went wrong. Please try again.';
@@ -2970,15 +3189,214 @@ function dsaiExecuteCommand(cmd) {
             sendBtn.innerHTML = '<i class="fa fa-paper-plane"></i> Ask';
         }
 
-        // Close bubble, run animated sequence, then reopen with reply
+        // ── Phase 1: animate shape/text commands ──────────────────────────
         _closeBubble();
         if (commands.length > 0) {
             await _sleep(250);
             await _animateCommands(commands);
         }
+
+        // ── Phase 2: poll queued image jobs + place each as it arrives ────
+        if (imageJobs.length > 0) {
+            await _pollImageJobs(imageJobs);
+            await _sleep(200);
+        }
+
         await _sleep(180);
-        _openBubble();               // opens bubble (resets to input state internally)
-        _showReplyState(replyText, false);  // immediately override to show reply
+        _openBubble();
+        _showReplyState(replyText, false);
+    }
+
+    /* ── Polling: wait for queued image jobs, place each on canvas ─────────── */
+    /**
+     * Chroma-key background remover.
+     *
+     * Object images are generated with a solid lime-green (#00FF00) background so that
+     * Gemini returns an opaque JPEG we can process — asking for "transparent background"
+     * has no effect on JPEG output.
+     *
+     * Algorithm: HSV hue-based detection (tolerant of JPEG compression artefacts around
+     * edges) + spill suppression (desaturates residual green tint on soft edges).
+     *
+     * Returns a Promise<dataUrl> — a PNG data URL with the green replaced by transparency.
+     */
+    async function _removeChromaKey(dataUrl) {
+        return new Promise(function (resolve) {
+            var img = new Image();
+            img.onload = function () {
+                var W   = img.naturalWidth  || img.width  || 1;
+                var H   = img.naturalHeight || img.height || 1;
+                var oc  = document.createElement('canvas');
+                oc.width  = W;
+                oc.height = H;
+                var ctx = oc.getContext('2d');
+                ctx.drawImage(img, 0, 0);
+
+                var imageData = ctx.getImageData(0, 0, W, H);
+                var d   = imageData.data;
+                var len = d.length;
+
+                for (var i = 0; i < len; i += 4) {
+                    var r = d[i], g = d[i + 1], b = d[i + 2];
+
+                    // Only process pixels where green is the dominant channel.
+                    // When max is R or B the hue is outside the green family — skip cheaply.
+                    if (g <= r || g <= b) continue;
+
+                    // HSV (max === green branch):
+                    //   hue = 60 * ((b − r) / delta + 2)  →  120° for pure #00FF00
+                    //   NOTE: the formula is "+2" not "+4" — "+4" gives 240° (blue), which
+                    //   causes every green pixel to fail the hue check and be skipped.
+                    var delta = g - Math.min(r, b);
+                    if (delta === 0) continue;
+
+                    var s = delta / g;                         // saturation 0–1
+                    var v = g / 255;                           // brightness 0–1
+                    var h = 60 * ((b - r) / delta + 2);       // hue °, range 60–180 for max=G
+
+                    // Lime-green hue band: 85°–165°.
+                    // Higher saturation floor (0.42) keeps natural subject greens
+                    // (leaves ≈ 0.30–0.50, lime garnish ≈ 0.40–0.55) mostly intact
+                    // while still catching the chroma background (s > 0.80 for JPEG of #00FF00).
+                    if (h < 85 || h > 165 || s < 0.42 || v < 0.18) continue;
+
+                    // Greenness 0→1: starts at s=0.42, reaches 1 at s=0.90+
+                    var greenness = Math.min(1, (s - 0.42) / 0.48);
+
+                    // Blend alpha: strong chroma → fully transparent; soft edge → partial
+                    d[i + 3] = Math.round(d[i + 3] * (1 - greenness));
+
+                    // Spill suppression: neutralise residual green tint on edge pixels
+                    // so they don't look sickly when composited over the background.
+                    if (d[i + 3] > 0 && greenness > 0.08) {
+                        var spill   = greenness * 0.55;
+                        var neutral = Math.max(r, b);   // push green toward its stronger sibling
+                        d[i + 1]   = Math.round(d[i + 1] * (1 - spill) + neutral * spill);
+                    }
+                }
+
+                ctx.putImageData(imageData, 0, 0);
+                resolve(oc.toDataURL('image/png'));
+            };
+            img.onerror = function () { resolve(dataUrl); }; // graceful fallback
+            img.src = dataUrl;
+        });
+    }
+
+    async function _pollImageJobs(jobs) {
+        _busy = true;
+
+        var POLL_INTERVAL_MS = 2500;  // check every 2.5 seconds
+        var MAX_POLLS        = 60;    // give up after 2.5 min per job (Gemini can take ~40s)
+
+        // Track per-job state
+        var pending = jobs.slice().map(function (j) {
+            return { job: j, polls: 0, done: false };
+        });
+
+        function _showProgress() {
+            var waiting = pending.filter(function (p) { return !p.done; });
+            if (!waiting.length) return;
+            var labels = waiting.map(function (p) {
+                return p.job.role === 'background' ? 'background' : 'product image';
+            });
+            var uniqueLabels = labels.filter(function (v, i, a) { return a.indexOf(v) === i; });
+            if (!_bubbleOpen) _openBubble();
+            _showReplyState(
+                '<i class="fa fa-wand-magic-sparkles fa-spin" style="color:#6366f1;margin-right:7px"></i>' +
+                'Generating ' + uniqueLabels.join(' &amp; ') + '…',
+                true
+            );
+        }
+
+        // ── Main polling loop ──────────────────────────────────────────────
+        while (pending.some(function (p) { return !p.done; })) {
+
+            _showProgress();
+
+            // Check all pending jobs in parallel (one GET each, sequential await)
+            for (var i = 0; i < pending.length; i++) {
+                var state = pending[i];
+                if (state.done) continue;
+
+                state.polls++;
+                if (state.polls > MAX_POLLS) {
+                    state.done = true;
+                    console.warn('[DS-AI] polling timeout for job', state.job.job_id);
+                    continue;
+                }
+
+                try {
+                    var res = await window.electronAPI.apiRequest(
+                        'GET', '/design-studio/ai-image-job/' + state.job.job_id, null
+                    );
+
+                    if (!res || res.status === 404) {
+                        state.done = true;
+                        continue;
+                    }
+
+                    var body = res.body || {};
+
+                    if (body.status === 'completed' && body.data_url) {
+                        state.done = true;
+
+                        // For object images: strip the lime-green chroma-key background
+                        var finalSrc = body.data_url;
+                        if (state.job.chroma_key) {
+                            _showReplyState(
+                                '<i class="fa fa-wand-magic-sparkles fa-spin" style="color:#6366f1;margin-right:7px"></i>' +
+                                'Removing background…',
+                                true
+                            );
+                            finalSrc = await _removeChromaKey(finalSrc);
+                        }
+
+                        // Animate placement
+                        _closeBubble();
+                        await _sleep(80);
+
+                        var cw = canvas ? canvas.getWidth()  : 794;
+                        var ch = canvas ? canvas.getHeight() : 1123;
+                        await _charWalkToCanvas(
+                            state.job.role === 'background'
+                                ? cw * 0.5
+                                : cw * (state.job.left_pct  != null ? state.job.left_pct  : 0.5),
+                            state.job.role === 'background'
+                                ? ch * 0.5
+                                : ch * (state.job.top_pct   != null ? state.job.top_pct   : 0.1)
+                        );
+                        await _sleep(80);
+
+                        await _drawAnimated({
+                            type:       'add_image',
+                            src:        finalSrc,
+                            role:       state.job.role,
+                            left_pct:   state.job.left_pct,
+                            top_pct:    state.job.top_pct,
+                            height_pct: state.job.height_pct,
+                        });
+
+                        await _sleep(200);
+
+                    } else if (body.status === 'failed') {
+                        state.done = true;
+                        console.warn('[DS-AI] job failed:', state.job.job_id, body.error);
+                    }
+                    // status 'pending' | 'processing' → continue waiting
+
+                } catch (err) {
+                    console.error('[DS-AI] poll error for job', state.job.job_id, err);
+                }
+            }
+
+            // Wait before the next poll sweep (only if any jobs remain)
+            if (pending.some(function (p) { return !p.done; })) {
+                await _sleep(POLL_INTERVAL_MS);
+            }
+        }
+
+        _busy = false;
     }
 
     /* ═══════════════════════════════════════════════════════════════════════
@@ -3269,6 +3687,116 @@ function dsaiExecuteCommand(cmd) {
             saveHist(); return;
         }
 
+        // transform_text: walk to each text object, flash it, apply the rename
+        if (cmd.type === 'transform_text') {
+            var _scope   = cmd.scope     || 'all';
+            var _xform   = cmd.transform || 'capitalize';
+            var _targets = [];
+
+            if (_scope === 'selected') {
+                var _active = canvas.getActiveObject();
+                if (_active) {
+                    _targets = _active.type === 'activeSelection'
+                        ? _active.getObjects().filter(function(o) { return o.text !== undefined; })
+                        : (_active.text !== undefined ? [_active] : []);
+                }
+            } else {
+                _targets = canvas.getObjects().filter(function(o) { return o.text !== undefined; });
+            }
+
+            if (!_targets.length) return;
+
+            function _applyXformAnim(text, xf) {
+                if (!text) return text;
+                switch (xf) {
+                    case 'capitalize':    return text.charAt(0).toUpperCase() + text.slice(1);
+                    case 'title_case':   return text.replace(/\b\w/g, function(c) { return c.toUpperCase(); });
+                    case 'upper_first_2':return text.slice(0, 2).toUpperCase() + text.slice(2);
+                    case 'uppercase':    return text.toUpperCase();
+                    case 'lowercase':    return text.toLowerCase();
+                    case 'sentence_case':return text.charAt(0).toUpperCase() + text.slice(1).toLowerCase();
+                    default:             return text;
+                }
+            }
+
+            // Walk character to first text object, then flash-rename each in sequence
+            var _first = _targets[0];
+            var _zoom  = canvas.getZoom() || 1;
+            await _charWalkToCanvas(_first.left * _zoom, _first.top * _zoom);
+            await _sleep(80);
+
+            var _changed = 0;
+            for (var _ti = 0; _ti < _targets.length; _ti++) {
+                var _obj  = _targets[_ti];
+                var _orig = _obj.text || '';
+                var _upd  = _applyXformAnim(_orig, _xform);
+                if (_upd === _orig) continue;
+
+                // Flash: dim → update text → brighten
+                await _fabAnimate(_obj, 'opacity', 0.25, 100, null);
+                _obj.set('text', _upd);
+                canvas.renderAll();
+                await _fabAnimate(_obj, 'opacity', 1, 180, null);
+                await _sleep(55);
+                _changed++;
+            }
+
+            if (_changed) saveHist();
+            return;
+        }
+
+        // add_image: fade in from transparent
+        if (cmd.type === 'add_image') {
+            if (!cmd.src) return;
+            // Use design dimensions — canvas.getWidth()/getHeight() returns the display-pixel
+            // size (designW × zoomLevel) which causes images to be scaled too small when zoomed.
+            var cw = designW, ch = designH;
+            await new Promise(function (resolve) {
+                fabric.Image.fromURL(cmd.src, function (img) {
+                    var nw = (img._element && img._element.naturalWidth)  || img.width  || 1;
+                    var nh = (img._element && img._element.naturalHeight) || img.height || 1;
+                    img.set('opacity', 0);
+
+                    if (cmd.role === 'background') {
+                        var sc = Math.max(cw / nw, ch / nh);
+                        img.set({
+                            originX:    'center',
+                            originY:    'center',
+                            left:       Math.round(cw / 2),
+                            top:        Math.round(ch / 2),
+                            scaleX:     sc,
+                            scaleY:     sc,
+                            selectable: false,
+                            evented:    false,
+                        });
+                        canvas.add(img);
+                        canvas.sendToBack(img);
+                    } else {
+                        var targetH = ch * (cmd.height_pct || 0.5);
+                        var sc      = targetH / nh;
+                        // Clamp so image right edge stays within canvas
+                        var scaledW = nw * sc;
+                        var left    = Math.round(cw * (cmd.left_pct || 0));
+                        if (left + scaledW > cw) { sc = (cw - left) / nw; }
+                        img.set({
+                            left:   left,
+                            top:    Math.round(ch * (cmd.top_pct || 0)),
+                            scaleX: sc,
+                            scaleY: sc,
+                        });
+                        canvas.add(img);
+                    }
+
+                    canvas.renderAll();
+                    _fabAnimate(img, 'opacity', 1, 800, null).then(function () {
+                        saveHist();
+                        resolve();
+                    });
+                }, { crossOrigin: 'anonymous' });
+            });
+            return;
+        }
+
         // Non-animated commands execute instantly
         dsaiExecuteCommand(cmd);
     }
@@ -3329,6 +3857,283 @@ function dsaiExecuteCommand(cmd) {
         });
     }
 
+    /* ══════════════════════════════════════════════════════════════════════════
+       VOICE LISTENING WORKER
+       Flow: MediaRecorder → silence detection → POST /design-studio/voice
+             → Gemini transcribes + replies with commands → TTS + animate
+       ══════════════════════════════════════════════════════════════════════════ */
+
+    function _blobToBase64(blob) {
+        return new Promise(function (resolve, reject) {
+            var reader = new FileReader();
+            reader.onloadend = function () { resolve(reader.result.split(',')[1]); };
+            reader.onerror  = reject;
+            reader.readAsDataURL(blob);
+        });
+    }
+
+    function _stripHtml(html) {
+        var div = document.createElement('div');
+        div.innerHTML = html;
+        return (div.textContent || div.innerText || '').replace(/\s+/g, ' ').trim();
+    }
+
+    function _ttsCancelSpeak() {
+        if (window.speechSynthesis) window.speechSynthesis.cancel();
+        _ttsUtterance = null;
+    }
+
+    function _ttsSpeak(text, lang) {
+        return new Promise(function (resolve) {
+            if (!window.speechSynthesis || !text) { resolve(); return; }
+            _ttsCancelSpeak();
+            _ttsUtterance = new SpeechSynthesisUtterance(text);
+            _ttsUtterance.rate   = 1.0;
+            _ttsUtterance.pitch  = 1.0;
+            _ttsUtterance.volume = 1.0;
+            _ttsUtterance.lang   = lang || navigator.language || 'en-US';
+            _ttsUtterance.onend   = function () { resolve(); };
+            _ttsUtterance.onerror = function () { resolve(); };
+            _voiceSetStatus('speaking');
+            window.speechSynthesis.speak(_ttsUtterance);
+        });
+    }
+
+    // status: 'listening' | 'processing' | 'speaking' | 'off'
+    function _voiceSetStatus(status) {
+        var badge     = _el('ds-voice-badge');
+        var bar       = _el('ds-voice-bar');
+        var statusTxt = _el('ds-voice-status-text');
+        var voiceItem  = _el('ds-ctx-voice');
+        var voiceLabel = _el('ds-ctx-voice-label');
+
+        // Badge
+        if (badge) {
+            badge.style.display = (status === 'off') ? 'none' : 'flex';
+            badge.classList.toggle('speaking',   status === 'speaking');
+            badge.classList.toggle('processing', status === 'processing');
+        }
+        // Bar
+        if (bar) {
+            bar.classList.toggle('active',     status === 'listening' && _bubbleOpen);
+            bar.classList.toggle('speaking',   status === 'speaking');
+            bar.classList.toggle('processing', status === 'processing');
+        }
+        // Status text
+        var labels = { listening: 'Listening…', processing: 'Processing…', speaking: 'Speaking…', off: '' };
+        if (statusTxt) statusTxt.textContent = labels[status] || '';
+        // Context menu item
+        var isOn = status !== 'off';
+        if (voiceItem) {
+            voiceItem.classList.toggle('voice-on', isOn);
+            var ico = voiceItem.querySelector('.guide-ctx-icon i');
+            if (ico) ico.className = isOn ? 'fa fa-microphone-slash' : 'fa fa-microphone';
+        }
+        if (voiceLabel) voiceLabel.textContent = isOn ? 'Stop Voice Worker' : 'Start Voice Worker';
+    }
+
+    function _voiceShowError(msg) {
+        _stopVoiceWorker();
+        if (!_bubbleOpen) _openBubble();
+        _showReplyState(msg, false);
+    }
+
+    function _startSilenceDetection() {
+        if (!_voiceAnalyser) return;
+        var buf      = new Uint8Array(_voiceAnalyser.fftSize);
+        var bars     = document.querySelectorAll('#ds-voice-bar .guide-voice-waves span');
+        var barCount = bars.length || 4;
+
+        function tick() {
+            if (!_voiceActive || !_voiceRecorder || _voiceRecorder.state === 'inactive') return;
+            _voiceAnalyser.getByteTimeDomainData(buf);
+            var sum = 0;
+            for (var i = 0; i < buf.length; i++) { var v = buf[i] - 128; sum += v * v; }
+            var rms = Math.sqrt(sum / buf.length);
+
+            // Animate waveform bars
+            var norm = Math.min(rms / 40, 1);
+            bars.forEach(function (bar, idx) {
+                var phase = (idx / barCount) * Math.PI;
+                var h = 20 + Math.round(norm * 70 * Math.abs(Math.sin(Date.now() / 200 + phase)));
+                bar.style.height = h + '%';
+            });
+
+            var now = Date.now();
+            if (rms > _VOICE_SILENCE_THRESH) {
+                _voiceHasSpeech    = true;
+                _voiceSilenceStart = null;
+            } else if (_voiceHasSpeech) {
+                if (!_voiceSilenceStart) _voiceSilenceStart = now;
+                if (now - _voiceSilenceStart >= _VOICE_SILENCE_DELAY) {
+                    _stopAndProcess(); return;
+                }
+            }
+            if (now - _voiceRecordStart >= _VOICE_MAX_MS) { _stopAndProcess(); return; }
+            _voiceRafId = requestAnimationFrame(tick);
+        }
+        _voiceRafId = requestAnimationFrame(tick);
+    }
+
+    function _stopAndProcess() {
+        if (!_voiceRecorder || _voiceRecorder.state === 'inactive') return;
+        cancelAnimationFrame(_voiceRafId); _voiceRafId = null;
+        try { _voiceRecorder.stop(); } catch (_) {}
+    }
+
+    async function _onRecorderStop() {
+        if (!_voiceActive) return;
+        if (!_voiceHasSpeech || _voiceChunks.length === 0) { _beginRecording(); return; }
+
+        var blob = new Blob(_voiceChunks, { type: _voiceMimeType });
+        if (blob.size < 2000) { _beginRecording(); return; }
+
+        _voiceSetStatus('processing');
+        var inp = _el('guide-chat-input');
+        if (inp) { inp.value = ''; inp.placeholder = 'Processing…'; }
+
+        var b64;
+        try { b64 = await _blobToBase64(blob); }
+        catch (err) { _voiceShowError('Could not encode audio. Please try again.'); return; }
+
+        var res;
+        try {
+            // Pass canvas dimensions so Gemini uses the right coordinate space
+            var cw = (typeof designW !== 'undefined' ? designW : (canvas ? canvas.getWidth()  : 794));
+            var ch = (typeof designH !== 'undefined' ? designH : (canvas ? canvas.getHeight() : 1123));
+            res = await window.electronAPI.apiRequest('POST', '/design-studio/voice', {
+                audio: b64, mime_type: _voiceMimeType,
+                canvas_width: cw, canvas_height: ch,
+            });
+        } catch (err) {
+            _voiceShowError('Could not reach the server. Check your connection and try again.');
+            return;
+        }
+
+        if (!_voiceActive) return;
+
+        // 503 = API key not configured; 5xx = server fault → stop and surface error
+        if (!res || res.status === 503) {
+            _voiceShowError('AI service is not configured. Please check your Gemini API key.'); return;
+        }
+        if (res.status >= 500) {
+            _voiceShowError('The server could not process the audio. Please try again.'); return;
+        }
+
+        var body       = res.body || {};
+        var transcript = body.transcript || '';
+        var reply      = body.reply      || '';
+        var replyLang  = body.lang       || '';
+        var commands   = body.commands   || [];
+
+        if (inp) { inp.placeholder = 'Describe what you want to design…'; }
+        if (inp && transcript) inp.value = transcript;
+
+        // Null transcript = silence or inaudible — restart without error
+        if (!transcript) {
+            _voiceSetStatus('listening'); _beginRecording(); return;
+        }
+
+        if (!reply && !commands.length) {
+            _voiceSetStatus('listening'); _beginRecording(); return;
+        }
+
+        // Show reply in bubble
+        if (!_bubbleOpen) _openBubble();
+        _showReplyState(reply || 'Done!', false);
+
+        // Speak reply, then animate canvas commands
+        await _ttsSpeak(_stripHtml(reply), replyLang);
+
+        if (!_voiceActive) return;
+
+        if (commands.length > 0) {
+            await _sleep(250);
+            await _animateCommands(commands);
+        }
+        await _sleep(200);
+
+        // Resume next recording cycle
+        if (_voiceActive) { _voiceSetStatus('listening'); _beginRecording(); }
+    }
+
+    function _beginRecording() {
+        if (!_voiceActive || !_voiceStream) return;
+        _voiceChunks       = [];
+        _voiceHasSpeech    = false;
+        _voiceSilenceStart = null;
+        _voiceRecordStart  = Date.now();
+
+        var preferred = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'];
+        _voiceMimeType = preferred.find(function (m) { return MediaRecorder.isTypeSupported(m); }) || '';
+        var opts = _voiceMimeType ? { mimeType: _voiceMimeType } : {};
+        try { _voiceRecorder = new MediaRecorder(_voiceStream, opts); }
+        catch (err) { _voiceShowError('Could not start recording. Please try again.'); return; }
+
+        _voiceRecorder.ondataavailable = function (e) {
+            if (e.data && e.data.size > 0) _voiceChunks.push(e.data);
+        };
+        _voiceRecorder.onstop = _onRecorderStop;
+        _voiceRecorder.start(200);
+
+        _voiceSetStatus('listening');
+        var inp = _el('guide-chat-input');
+        if (inp) { inp.value = ''; inp.placeholder = 'Listening…'; }
+        if (!_bubbleOpen) _openBubble();
+        _startSilenceDetection();
+    }
+
+    async function _startVoiceWorker() {
+        if (_voiceActive) return;
+        var stream;
+        try {
+            stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        } catch (err) {
+            var name = (err && err.name) || '';
+            if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+                _voiceShowError('Microphone access was denied. Please allow microphone access in System Settings → Privacy → Microphone, then try again.');
+            } else if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+                _voiceShowError('No microphone found. Please connect a microphone and try again.');
+            } else {
+                _voiceShowError('Could not access the microphone (' + ((err && err.message) || name || 'unknown') + ').');
+            }
+            return;
+        }
+
+        _voiceStream = stream;
+        _voiceActive = true;
+
+        try {
+            _voiceAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            _voiceAnalyser = _voiceAudioCtx.createAnalyser();
+            _voiceAnalyser.fftSize = 256;
+            var src = _voiceAudioCtx.createMediaStreamSource(stream);
+            src.connect(_voiceAnalyser);
+        } catch (err) { /* non-fatal — record without amplitude analysis */ }
+
+        _beginRecording();
+    }
+
+    function _stopVoiceWorker() {
+        _voiceActive = false;
+        if (_voiceRafId) { cancelAnimationFrame(_voiceRafId); _voiceRafId = null; }
+        if (_voiceRecorder) { try { _voiceRecorder.stop(); } catch (_) {} _voiceRecorder = null; }
+        _voiceChunks = [];
+        if (_voiceAudioCtx) { try { _voiceAudioCtx.close(); } catch (_) {} _voiceAudioCtx = null; _voiceAnalyser = null; }
+        if (_voiceStream) { _voiceStream.getTracks().forEach(function (t) { t.stop(); }); _voiceStream = null; }
+        _ttsCancelSpeak();
+        _voiceSetStatus('off');
+        var inp = _el('guide-chat-input');
+        if (inp) inp.placeholder = 'Describe what you want to design…';
+        var bar = _el('ds-voice-bar');
+        if (bar) bar.classList.remove('active', 'speaking', 'processing');
+        document.querySelectorAll('#ds-voice-bar .guide-voice-waves span').forEach(function (b) { b.style.height = ''; });
+    }
+
+    function _toggleVoiceWorker() {
+        if (_voiceActive) { _stopVoiceWorker(); } else { _startVoiceWorker(); }
+    }
+
     /* ── Draggable (character + bubble move together) ─────────────────────── */
     function _makeDraggable(wrap, imgWrap) {
         var active = false, startX, startY, startL, startT;
@@ -3378,6 +4183,80 @@ function dsaiExecuteCommand(cmd) {
             document.body.style.cursor = '';
             wrap.style.transition = '';
             if (_didDrag) _positionBubble();   // re-check arrow direction after move
+        });
+    }
+
+    /* ── Context menu ─────────────────────────────────────────────────────── */
+    function _openCtxMenu(x, y) {
+        var menu = _el('ds-guide-ctx-menu');
+        if (!menu) return;
+        menu.style.display = 'block';
+        var mw = menu.offsetWidth  || 220;
+        var mh = menu.offsetHeight || 260;
+        var cx = x, cy = y;
+        if (cx + mw > window.innerWidth  - 8) cx = window.innerWidth  - mw - 8;
+        if (cy + mh > window.innerHeight - 8) cy = window.innerHeight - mh - 8;
+        menu.style.left = cx + 'px';
+        menu.style.top  = cy + 'px';
+        menu.style.display = 'block';
+    }
+    function _closeCtxMenu() {
+        var menu = _el('ds-guide-ctx-menu');
+        if (menu) menu.style.display = 'none';
+    }
+    function _quickSend(prompt) {
+        _closeCtxMenu();
+        _show();
+        if (_bubbleOpen) {
+            var inp = _el('guide-chat-input');
+            if (inp) inp.value = prompt;
+            _sendMessage();
+        } else {
+            _openBubble();
+            var inp = _el('guide-chat-input');
+            if (inp) inp.value = prompt;
+            setTimeout(_sendMessage, 320);
+        }
+    }
+    function _initCtxMenu(imgWrap) {
+        // Right-click on guide character
+        imgWrap.addEventListener('contextmenu', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            _openCtxMenu(e.clientX, e.clientY);
+        });
+        // Menu items
+        _el('ds-ctx-voice')?.addEventListener('click', function () {
+            _closeCtxMenu(); _toggleVoiceWorker();
+        });
+        _el('ds-ctx-open-chat')?.addEventListener('click', function () {
+            _closeCtxMenu(); _show(); _openBubble();
+        });
+        _el('ds-ctx-add-shape')?.addEventListener('click', function () {
+            _quickSend('Add a colorful decorative shape to my design');
+        });
+        _el('ds-ctx-add-text')?.addEventListener('click', function () {
+            _quickSend('Add a stylish heading text to my design');
+        });
+        _el('ds-ctx-add-image')?.addEventListener('click', function () {
+            _quickSend('Add a relevant background image to my design');
+        });
+        _el('ds-ctx-bg-color')?.addEventListener('click', function () {
+            _quickSend('Change the canvas background to a modern gradient or solid color that suits my design');
+        });
+        _el('ds-ctx-make-pro')?.addEventListener('click', function () {
+            _quickSend('Make this design look more professional and polished');
+        });
+        _el('ds-ctx-dismiss')?.addEventListener('click', function () {
+            _closeCtxMenu(); _hide();
+        });
+        // Close on outside click or Escape
+        document.addEventListener('click', function (e) {
+            var menu = _el('ds-guide-ctx-menu');
+            if (menu && !menu.contains(e.target)) _closeCtxMenu();
+        });
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') _closeCtxMenu();
         });
     }
 
@@ -3447,6 +4326,13 @@ function dsaiExecuteCommand(cmd) {
         });
 
         _makeDraggable(wrap, imgWrap);
+        _initCtxMenu(imgWrap);
+
+        // Mic badge click → stop voice worker
+        _el('ds-voice-badge')?.addEventListener('click', function (e) {
+            e.stopPropagation();
+            _stopVoiceWorker();
+        });
     }
 
     if (document.readyState === 'loading') {

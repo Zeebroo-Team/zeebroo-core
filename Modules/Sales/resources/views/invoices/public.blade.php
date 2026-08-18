@@ -9,19 +9,47 @@
 body{font-family:'Segoe UI',Arial,sans-serif;font-size:14px;color:#1e293b;background:#f1f5f9;min-height:100vh;padding:32px 16px 60px;}
 .pub-wrap{max-width:780px;margin:0 auto;}
 
+/* ── Topbar ─────────────────────────────────────────────────────────── */
 .pub-topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:20px;flex-wrap:wrap;}
 .pub-brand{font-size:13px;font-weight:700;color:#475569;}
 .pub-print-btn{padding:7px 16px;border-radius:8px;border:1px solid #e2e8f0;background:#fff;color:#475569;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:6px;text-decoration:none;}
 .pub-print-btn:hover{background:#f8fafc;border-color:#cbd5e1;}
 
+/* ── Letterhead zone ─────────────────────────────────────────────────── */
+.pub-lh-zone{
+    width:100%;border-radius:14px 14px 0 0;overflow:hidden;
+    background:#f8fafc;line-height:0;
+    /* hidden until the image loads */
+    display:none;
+}
+.pub-lh-zone.loaded{display:block;}
+.pub-lh-img{
+    width:100%;
+    /* Show the top portion of the A4 letterhead — the branding/header area */
+    max-height:220px;
+    object-fit:cover;
+    object-position:top center;
+    display:block;
+}
+/* When letterhead is present, merge it with the card below */
+.pub-lh-zone + .pub-card{border-radius:0 0 16px 16px;border-top:none;}
+
+/* ── Invoice card ────────────────────────────────────────────────────── */
 .pub-card{background:#fff;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.06);}
 
+/* ── Header ─────────────────────────────────────────────────────────── */
 .pub-header{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;padding:24px 28px 20px;border-bottom:1px solid #f1f5f9;flex-wrap:wrap;}
 .pub-biz-name{font-size:22px;font-weight:800;color:#0f172a;letter-spacing:-.02em;}
 .pub-biz-sub{font-size:12px;color:#64748b;margin-top:4px;line-height:1.5;}
 .pub-doc-label{display:inline-block;font-size:11px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;padding:4px 14px;border-radius:999px;background:#f1f5f9;border:1.5px solid #e2e8f0;color:#64748b;margin-bottom:8px;}
 .pub-inv-num{font-size:18px;font-weight:800;color:#0f172a;}
 .pub-inv-meta{font-size:12px;color:#64748b;margin-top:4px;line-height:1.6;}
+
+/* When letterhead is expected: hide biz name from FIRST PAINT (set server-side)
+   so it never flashes before the letterhead image loads.
+   On image error, JS removes pub-has-lh to restore visibility. */
+.pub-has-lh .pub-biz-name,
+.pub-has-lh .pub-biz-sub { display:none; }
 
 .pub-status{display:inline-block;font-size:11px;font-weight:700;padding:3px 10px;border-radius:999px;margin-top:8px;}
 .pub-status--draft     {background:#f1f5f9;color:#64748b;border:1px solid #e2e8f0;}
@@ -30,9 +58,19 @@ body{font-family:'Segoe UI',Arial,sans-serif;font-size:14px;color:#1e293b;backgr
 .pub-status--overdue   {background:#fef2f2;color:#ef4444;border:1px solid #fecaca;}
 .pub-status--cancelled {background:#f8fafc;color:#94a3b8;border:1px solid #e2e8f0;}
 
-.pub-body{padding:24px 28px;}
+/* ── Amount due pill ─────────────────────────────────────────────────── */
+.pub-amount-due{
+    background:linear-gradient(135deg,#2563eb 0%,#3b82f6 100%);
+    border-radius:12px;padding:14px 20px;margin:0 28px 20px;
+    display:flex;justify-content:space-between;align-items:center;
+}
+.pub-amount-due-lbl{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:rgba(255,255,255,.7);}
+.pub-amount-due-val{font-size:26px;font-weight:900;color:#fff;letter-spacing:-.03em;line-height:1;}
 
-.pub-parties{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px;}
+/* ── Body ────────────────────────────────────────────────────────────── */
+.pub-body{padding:4px 28px 24px;}
+
+.pub-parties{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px;padding-top:20px;border-top:1px solid #f1f5f9;}
 @media(max-width:480px){.pub-parties{grid-template-columns:1fr;}}
 .pub-party-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#94a3b8;margin-bottom:6px;}
 .pub-party-name{font-size:14px;font-weight:700;color:#0f172a;margin-bottom:2px;}
@@ -50,7 +88,8 @@ tbody td.muted{color:#64748b;font-size:12px;}
 .pub-totals{display:flex;justify-content:flex-end;margin-bottom:20px;}
 .pub-totals-inner{width:280px;font-size:13px;}
 .pub-totals-row{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f1f5f9;color:#475569;}
-.pub-totals-row.total-row{font-size:16px;font-weight:800;color:#0f172a;border-bottom:none;padding-top:10px;}
+.pub-totals-row:last-child{border-bottom:none;}
+.pub-totals-row.total-row{font-size:16px;font-weight:800;color:#0f172a;padding-top:10px;border-top:2px solid #e2e8f0;border-bottom:none;margin-top:4px;}
 
 .pub-notes{background:#f8fafc;border-left:3px solid #e2e8f0;padding:12px 16px;border-radius:0 8px 8px 0;margin-bottom:20px;}
 .pub-notes-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#94a3b8;margin-bottom:4px;}
@@ -62,22 +101,31 @@ tbody td.muted{color:#64748b;font-size:12px;}
     body{background:#fff;padding:0;}
     .pub-topbar{display:none!important;}
     .pub-card{border:none;box-shadow:none;border-radius:0;}
-    @page{margin:12mm 14mm;}
+    .pub-lh-zone{border-radius:0;}
+    .pub-amount-due{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+    @page{margin:0;}
 }
 </style>
 </head>
 <body>
-<div class="pub-wrap">
+<div class="pub-wrap{{ $letterheadCanvasJson ? ' pub-has-lh' : '' }}" id="pubWrap">
 
     <div class="pub-topbar">
         <span class="pub-brand">{{ $business->name }}</span>
         <button type="button" class="pub-print-btn" onclick="window.print()">
-            <i class="fa fa-print"></i> Print / Save PDF
+            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+            Print / Save PDF
         </button>
+    </div>
+
+    {{-- ── Letterhead zone (hidden; JS shows it if a letterhead image is found) ── --}}
+    <div class="pub-lh-zone" id="pubLhZone">
+        <img class="pub-lh-img" id="pubLhImg" src="" alt="">
     </div>
 
     <div class="pub-card">
 
+        {{-- ── Invoice header ── --}}
         <div class="pub-header">
             <div>
                 <div class="pub-biz-name">{{ $business->name }}</div>
@@ -100,8 +148,17 @@ tbody td.muted{color:#64748b;font-size:12px;}
             </div>
         </div>
 
+        {{-- ── Amount due pill ── --}}
+        <div class="pub-amount-due">
+            <div class="pub-amount-due-lbl">Amount Due</div>
+            <div class="pub-amount-due-val">
+                {{ number_format($invoice->total, 2) }}{{ $currency ? ' '.$currency : '' }}
+            </div>
+        </div>
+
         <div class="pub-body">
 
+            {{-- ── Bill to / From ── --}}
             <div class="pub-parties">
                 <div>
                     <div class="pub-party-label">Bill To</div>
@@ -114,7 +171,7 @@ tbody td.muted{color:#64748b;font-size:12px;}
                             @if($invoice->customer->address){{ $invoice->customer->address }}@endif
                         </div>
                     @else
-                        <div class="pub-party-detail" style="color:#94a3b8;">—</div>
+                        <div class="pub-party-detail" style="color:#94a3b8;">Walk-in Customer</div>
                     @endif
                 </div>
                 <div>
@@ -123,16 +180,20 @@ tbody td.muted{color:#64748b;font-size:12px;}
                     @if($mainBranch?->address)
                         <div class="pub-party-detail" style="white-space:pre-line;">{{ $mainBranch->address }}</div>
                     @endif
+                    @if($mainBranch?->phone)
+                        <div class="pub-party-detail">{{ $mainBranch->phone }}</div>
+                    @endif
                 </div>
             </div>
 
+            {{-- ── Line items ── --}}
             <table>
                 <thead>
                     <tr>
                         <th style="width:4%;">#</th>
                         <th>Item / Description</th>
                         <th class="right" style="width:10%;">Qty</th>
-                        <th class="right" style="width:18%;">Unit price{{ $currency ? ' ('.$currency.')' : '' }}</th>
+                        <th class="right" style="width:18%;">Unit Price{{ $currency ? ' ('.$currency.')' : '' }}</th>
                         <th class="right" style="width:18%;">Total{{ $currency ? ' ('.$currency.')' : '' }}</th>
                     </tr>
                 </thead>
@@ -177,6 +238,7 @@ tbody td.muted{color:#64748b;font-size:12px;}
                 </tbody>
             </table>
 
+            {{-- ── Totals ── --}}
             <div class="pub-totals">
                 <div class="pub-totals-inner">
                     <div class="pub-totals-row"><span>Subtotal</span><span>{{ number_format($invoice->subtotal, 2) }}</span></div>
@@ -193,6 +255,7 @@ tbody td.muted{color:#64748b;font-size:12px;}
                 </div>
             </div>
 
+            {{-- ── Notes ── --}}
             @if($invoice->notes)
             <div class="pub-notes">
                 <div class="pub-notes-label">Notes &amp; Payment Terms</div>
@@ -207,8 +270,42 @@ tbody td.muted{color:#64748b;font-size:12px;}
         </div>
 
     </div>
-
 </div>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+@if($letterheadCanvasJson)
+<script>
+(function () {
+    try {
+        var raw  = @json($letterheadCanvasJson);
+        var data = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        var objs = Array.isArray(data) ? [] : (data.objects || []);
+
+        // Find the first image object in the canvas and use its src
+        var src = null;
+        for (var i = 0; i < objs.length; i++) {
+            var t = (objs[i].type || '').toLowerCase();
+            if ((t === 'image') && objs[i].src) {
+                src = objs[i].src;
+                break;
+            }
+        }
+        if (!src) return;
+
+        var img  = document.getElementById('pubLhImg');
+        var zone = document.getElementById('pubLhZone');
+        var wrap = document.getElementById('pubWrap');
+        if (!img || !zone) return;
+
+        img.onload  = function () { zone.classList.add('loaded'); };
+        // If the image fails (data URL corrupt, network issue, etc.),
+        // restore the business name that was hidden server-side.
+        img.onerror = function () {
+            if (wrap) wrap.classList.remove('pub-has-lh');
+        };
+        img.src = src;
+    } catch (e) {}
+})();
+</script>
+@endif
 </body>
 </html>

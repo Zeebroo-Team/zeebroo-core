@@ -3,6 +3,12 @@
  *
  * Reads walkthrough definitions from window.GUIDE_CONFIG (guide-config.js).
  * To add a new guided walkthrough, edit guide-config.js only — no changes here.
+ *
+ * Right-click context menu on the guide character exposes:
+ *   • Voice Listening Worker — Web Speech API continuous voice input
+ *   • Open Chat             — opens the chat bubble
+ *   • Reset Position        — returns character to home corner
+ *   • Dismiss Guide         — hides the character
  */
 (function () {
   'use strict';
@@ -14,6 +20,29 @@
   let _initialized = false;
   let _bubbleOpen  = false;
   let _busy        = false;
+
+  // Voice Listening Worker state (MediaRecorder-based — no SpeechRecognition)
+  let _voiceStream      = null;   // MediaStream from getUserMedia
+  let _voiceRecorder    = null;   // MediaRecorder instance
+  let _voiceAudioCtx    = null;   // AudioContext for silence detection + waveform
+  let _voiceAnalyser    = null;   // AnalyserNode
+  let _voiceChunks      = [];     // collected audio chunks
+  let _voiceMimeType    = 'audio/webm';
+  let _voiceRecordStart = 0;
+  let _voiceSilenceStart = null;
+  let _voiceHasSpeech   = false;  // user has started speaking in this cycle
+  let _voiceRafId       = null;   // requestAnimationFrame handle
+  let _voiceActive      = false;
+  let _voicePaused      = false;
+
+  // Silence-detection thresholds
+  const _VOICE_SILENCE_THRESH  = 10;    // avg amplitude (0–255) below = silence
+  const _VOICE_SILENCE_DELAY   = 1500;  // ms of silence before auto-send
+  const _VOICE_MIN_BLOB        = 2500;  // bytes — blobs smaller than this are ignored
+  const _VOICE_MAX_MS          = 14000; // auto-send after this long regardless
+
+  // Text-to-Speech state
+  let _ttsUtterance    = null;
 
   /* ════════════════════════════════════════════════════════════════════════
      TEMPLATE + CONFIG HELPERS
@@ -392,6 +421,9 @@
     bubble.classList.remove('guide-pop-out');
     void bubble.offsetWidth;
     bubble.classList.add('guide-pop-in');
+    // Show voice listening bar if worker is active
+    const bar = document.getElementById('guide-voice-listening-bar');
+    if (bar) bar.classList.toggle('active', _voiceActive);
     if (resetToInput !== false) {
       _showInputState();
       setTimeout(() => document.getElementById('guide-chat-input')?.focus(), 120);
@@ -405,6 +437,9 @@
     bubble.classList.remove('guide-pop-in');
     bubble.classList.add('guide-pop-out');
     setTimeout(() => { if (!_bubbleOpen) bubble.style.display = 'none'; }, 200);
+    // Hide listening bar when bubble closes
+    const bar = document.getElementById('guide-voice-listening-bar');
+    if (bar) bar.classList.remove('active');
   }
 
   function _toggleBubble() {
@@ -457,8 +492,13 @@
 
   /* ════════════════════════════════════════════════════════════════════════
      SEND / RECEIVE
+     fromVoice=true means the message came from the Voice Listening Worker.
+     After Gemini replies the character will:
+       1. show the reply in the bubble
+       2. speak it aloud via TTS
+       3. resume the voice recognition loop
      ════════════════════════════════════════════════════════════════════════ */
-  async function _sendMessage() {
+  async function _sendMessage(fromVoice) {
     if (_busy) return;
     const input   = document.getElementById('guide-chat-input');
     const message = input?.value.trim();
@@ -468,10 +508,14 @@
     _busy = true;
     if (sendBtn) { sendBtn.disabled = true; sendBtn.innerHTML = '<i class="fa fa-spinner fa-spin"></i>'; }
 
+    // Hide the listening bar while we wait for Gemini
+    const bar = document.getElementById('guide-voice-listening-bar');
+    if (bar) bar.classList.remove('active');
+
     _closeBubble();
     await _sleep(200);
 
-    // Call Gemini — reply + optional walkthrough ID or dataQuery are both in the response
+    // ── Call Gemini via server (/guide/chat → Gemini API) ──
     let reply        = null;
     let match        = null;
     let geminiWorked = false;
@@ -484,10 +528,14 @@
         geminiWorked = reply.length > 0;
         isHtml       = !!res.body.isHtml;
 
-        // Data query reply — show immediately, no walkthrough
+        // Data-query HTML reply — show immediately, then handle voice resume
         if (isHtml) {
           _reopenWithReply(reply, true);
           _busy = false;
+          if (fromVoice && _voiceActive) {
+            await _ttsSpeak(_stripHtml(reply));
+            _voiceResumeAfterReply();
+          }
           return;
         }
 
@@ -512,10 +560,7 @@
     // If Gemini didn't identify a walkthrough, fall back to local pattern matching
     if (!match) match = _matchWalkthrough(message);
 
-    // Determine the reply text:
-    //  - Gemini worked → use its reply
-    //  - Gemini failed but local match found → use the config's hardcoded reply
-    //  - Gemini failed and no match → show a friendly error
+    // Determine the reply text
     if (!geminiWorked) {
       reply = match
         ? _t(match.wt.reply || 'Sure! Follow me — I\'ll show you!', match.vars)
@@ -525,19 +570,579 @@
     _reopenWithReply(reply);
     _busy = false;
 
-    // Run the walkthrough steps after the user has read the reply
+    // ── Voice mode: speak the Gemini reply, then resume listening ──
+    if (fromVoice && _voiceActive) {
+      if (!match) {
+        // Simple reply — speak it then immediately resume
+        await _ttsSpeak(reply);
+        _voiceResumeAfterReply();
+      }
+      // If there's a walkthrough, TTS + resume happens after it finishes (below)
+    }
+
+    // ── Run walkthrough steps ──────────────────────────────────────
     if (match) {
-      await _sleep(2000);
+      await _sleep(fromVoice ? 1000 : 2000); // shorter delay if voice already played reply
       _closeBubble();
       await _sleep(200);
-      _closeAllModals();   // clear any open dialogs before the character starts moving
+      _closeAllModals();
       await _sleep(150);
       _busy = true;
       await _runSteps(match.wt.steps, match.vars);
       await _returnHome();
-      _closeAllModals(); // close any modals the walkthrough left open
+      _closeAllModals();
+      _busy = false;
+
+      // After walkthrough completes, resume voice if active
+      if (fromVoice && _voiceActive) {
+        _voiceResumeAfterReply();
+      }
+    }
+  }
+
+  /* ════════════════════════════════════════════════════════════════════════
+     VOICE LISTENING WORKER  (MediaRecorder → Gemini multimodal audio)
+     ─────────────────────────────────────────────────────────────────────
+     Flow (avoids the "network" error that SpeechRecognition always throws
+     inside Electron because Chromium ships without Google's Speech API key):
+
+       1.  User right-clicks guide → "Start Voice Worker"
+       2.  getUserMedia obtains mic stream; AudioContext analyses amplitude
+       3.  MediaRecorder records chunks until silence (≥1.5 s below threshold)
+           or the 14 s safety ceiling
+       4.  Blob → base64 → POST /guide/voice (Gemini multimodal)
+       5.  Server returns { transcript, reply, walkthrough?, productName?, … }
+       6.  Transcript shown in chat input; reply shown in bubble + spoken via TTS
+       7.  After TTS finishes → _beginRecording() again → back to step 3
+     ════════════════════════════════════════════════════════════════════════ */
+
+  /* ── Convert a Blob to a base-64 string ── */
+  function _blobToBase64(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        // result is  "data:<mime>;base64,<data>"  — strip the prefix
+        const b64 = reader.result.split(',')[1];
+        resolve(b64);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  /* ── Unified status / UI setter ── */
+  // status: 'listening' | 'processing' | 'speaking' | 'off'
+  function _voiceSetStatus(status) {
+    const badge      = document.getElementById('guide-voice-badge');
+    const bar        = document.getElementById('guide-voice-listening-bar');
+    const statusTxt  = document.getElementById('guide-voice-status-text');
+    const voiceItem  = document.getElementById('guide-ctx-voice');
+    const voiceLabel = document.getElementById('guide-ctx-voice-label');
+
+    // Badge classes
+    if (badge) {
+      badge.classList.toggle('voice-active',    status !== 'off');
+      badge.classList.toggle('voice-speaking',  status === 'speaking');
+      badge.classList.toggle('voice-processing',status === 'processing');
+    }
+
+    // Listening bar (only visible when bubble is open)
+    if (bar) {
+      bar.classList.toggle('active',   status === 'listening' && _bubbleOpen);
+      bar.classList.toggle('speaking', status === 'speaking');
+      bar.classList.toggle('processing', status === 'processing');
+    }
+
+    // Status label
+    const labels = { listening: 'Listening…', processing: 'Processing…', speaking: 'Speaking…', off: '' };
+    if (statusTxt) statusTxt.textContent = labels[status] || '';
+
+    // Context-menu item
+    const isOn = status !== 'off';
+    if (voiceItem) {
+      voiceItem.classList.toggle('voice-on', isOn);
+      const ico = voiceItem.querySelector('.guide-ctx-icon i');
+      if (ico) ico.className = isOn ? 'fa fa-microphone-slash' : 'fa fa-microphone';
+    }
+    if (voiceLabel) voiceLabel.textContent = isOn ? 'Stop Voice Worker' : 'Start Voice Worker';
+  }
+
+  /* ── Text-to-Speech: speaks Gemini's reply, returns a Promise ── */
+  // lang: BCP-47 code (e.g. 'si-LK', 'en-US') — if omitted, uses system language
+  function _ttsSpeak(text, lang) {
+    return new Promise(resolve => {
+      if (!window.speechSynthesis || !text) { resolve(); return; }
+      _ttsCancelSpeak();
+      _ttsUtterance = new SpeechSynthesisUtterance(text);
+      _ttsUtterance.rate   = 1.0;
+      _ttsUtterance.pitch  = 1.0;
+      _ttsUtterance.volume = 1.0;
+      _ttsUtterance.lang   = lang || navigator.language || 'en-US';
+      _ttsUtterance.onend  = () => resolve();
+      _ttsUtterance.onerror = () => resolve();   // missing voice falls back silently
+      _voiceSetStatus('speaking');
+      window.speechSynthesis.speak(_ttsUtterance);
+    });
+  }
+
+  /* ── Cancel TTS ── */
+  function _ttsCancelSpeak() {
+    if (window.speechSynthesis) window.speechSynthesis.cancel();
+    _ttsUtterance = null;
+  }
+
+  /* ── Strip HTML for TTS ── */
+  function _stripHtml(html) {
+    const div = document.createElement('div');
+    div.innerHTML = html;
+    return (div.textContent || div.innerText || '').replace(/\s+/g, ' ').trim();
+  }
+
+  /* ── Show inline error then stop the worker ── */
+  function _voiceShowError(msg) {
+    _stopVoiceWorker();
+    if (!_bubbleOpen) _openBubble(false);
+    _reopenWithReply(msg);
+  }
+
+  /* ─────────────────────────────────────────────────────────────────────────
+     SILENCE DETECTION — rAF loop that monitors AnalyserNode byte-time data.
+     Waveform bars in the listening bar get their heights set from live audio.
+     ───────────────────────────────────────────────────────────────────────── */
+  function _startSilenceDetection() {
+    if (!_voiceAnalyser) return;
+    const buf       = new Uint8Array(_voiceAnalyser.fftSize);
+    const bars      = document.querySelectorAll('#guide-voice-listening-bar .guide-voice-waves span');
+    const barCount  = bars.length || 4;
+
+    function tick() {
+      if (!_voiceActive || !_voiceRecorder || _voiceRecorder.state === 'inactive') return;
+
+      _voiceAnalyser.getByteTimeDomainData(buf);
+
+      // RMS amplitude (0–128 range after subtracting 128 midpoint)
+      let sum = 0;
+      for (let i = 0; i < buf.length; i++) { const v = buf[i] - 128; sum += v * v; }
+      const rms = Math.sqrt(sum / buf.length); // 0–128
+
+      // Animate waveform bars with live audio level
+      const norm = Math.min(rms / 40, 1);          // normalise to 0–1
+      bars.forEach((bar, i) => {
+        const phase = (i / barCount) * Math.PI;
+        const h = 20 + Math.round(norm * 60 * Math.abs(Math.sin(Date.now() / 200 + phase)));
+        bar.style.height = h + '%';
+      });
+
+      const now = Date.now();
+
+      if (rms > _VOICE_SILENCE_THRESH) {
+        // Sound detected
+        _voiceHasSpeech    = true;
+        _voiceSilenceStart = null;
+      } else if (_voiceHasSpeech) {
+        // Below threshold after speech
+        if (!_voiceSilenceStart) _voiceSilenceStart = now;
+        if (now - _voiceSilenceStart >= _VOICE_SILENCE_DELAY) {
+          // Enough silence — finalize this utterance
+          _stopAndProcess();
+          return;
+        }
+      }
+
+      // Safety ceiling
+      if (now - _voiceRecordStart >= _VOICE_MAX_MS) {
+        _stopAndProcess();
+        return;
+      }
+
+      _voiceRafId = requestAnimationFrame(tick);
+    }
+
+    _voiceRafId = requestAnimationFrame(tick);
+  }
+
+  /* ── Trigger stop; onstop handler does the rest ── */
+  function _stopAndProcess() {
+    if (!_voiceRecorder || _voiceRecorder.state === 'inactive') return;
+    cancelAnimationFrame(_voiceRafId);
+    _voiceRafId = null;
+    try { _voiceRecorder.stop(); } catch (_) {}   // onstop fires asynchronously
+  }
+
+  /* ── Called when MediaRecorder fires onstop ── */
+  async function _onRecorderStop() {
+    if (!_voiceActive) return;          // worker was stopped mid-recording
+    if (!_voiceHasSpeech || _voiceChunks.length === 0) {
+      // Nothing meaningful recorded — restart immediately
+      _beginRecording();
+      return;
+    }
+
+    // Minimum blob guard (avoid sending a tiny click-noise fragment)
+    const blob = new Blob(_voiceChunks, { type: _voiceMimeType });
+    if (blob.size < 2000) {             // < 2 KB is almost certainly silence
+      _beginRecording();
+      return;
+    }
+
+    _voiceSetStatus('processing');
+    const inp = document.getElementById('guide-chat-input');
+    if (inp) { inp.value = ''; inp.placeholder = 'Processing…'; }
+
+    let b64;
+    try {
+      b64 = await _blobToBase64(blob);
+    } catch (err) {
+      console.warn('[VoiceWorker] base64 encode error:', err);
+      _voiceShowError('Could not encode audio. Please try again.');
+      return;
+    }
+
+    let res;
+    try {
+      res = await API.guideVoice(b64, _voiceMimeType);
+    } catch (err) {
+      console.warn('[VoiceWorker] API error:', err);
+      _voiceShowError('Could not reach the server. Check your connection and try again.');
+      return;
+    }
+
+    if (!_voiceActive) return;         // stopped while API was in-flight
+
+    // API.guideVoice returns { status, body } just like every other API call
+    if (!res || res.status >= 500) {
+      _voiceShowError('The server could not process the audio. Please try again.');
+      return;
+    }
+
+    const body       = res.body || {};
+    const transcript = body.transcript || '';
+    const reply      = body.reply      || '';
+    const replyLang  = body.lang       || '';   // BCP-47 from Gemini, e.g. 'si-LK'
+
+    // Show transcript in chat input
+    if (inp && transcript) inp.value = transcript;
+
+    if (!reply) {
+      // Nothing to say — loop back
+      _voiceSetStatus('listening');
+      _beginRecording();
+      return;
+    }
+
+    // Show reply in bubble
+    if (!_bubbleOpen) _openBubble(false);
+    _showInputState();
+    _reopenWithReply(reply);
+
+    // ── Resolve walkthrough — body.walkthrough is a string ID, not an object ──
+    let match = null;
+    const wtId = body.walkthrough;
+    if (wtId) {
+      const wt = (window.GUIDE_CONFIG?.walkthroughs || []).find(w => w.id === wtId);
+      if (wt) {
+        const vars = {};
+        if (body.productName) vars.productName = body.productName;
+        if (body.fieldName) {
+          vars.fieldName  = body.fieldName;
+          const fi        = _resolveField(body.fieldName);
+          vars.fieldLabel = fi ? fi.label : body.fieldName;
+        }
+        match = { wt, vars };
+      }
+    }
+    // Fall back to local pattern matching on the transcript if Gemini didn't resolve one
+    if (!match && transcript) match = _matchWalkthrough(transcript);
+
+    // TTS speaks the reply in the detected language first, then animate
+    await _ttsSpeak(_stripHtml(reply), replyLang);
+
+    if (!_voiceActive) return;         // stopped while TTS was playing
+
+    // ── Run the walkthrough steps (guide character moves + highlights UI) ──
+    if (match) {
+      await _sleep(600);
+      _closeBubble();
+      await _sleep(200);
+      _closeAllModals();
+      await _sleep(150);
+      _busy = true;
+      await _runSteps(match.wt.steps, match.vars);
+      await _returnHome();
+      _closeAllModals();
       _busy = false;
     }
+
+    if (!_voiceActive) return;
+
+    // Resume next recording cycle
+    _voiceResumeAfterReply();
+  }
+
+  /* ── Start one recording cycle ── */
+  function _beginRecording() {
+    if (!_voiceActive || !_voiceStream) return;
+
+    // Reset per-cycle state
+    _voiceChunks      = [];
+    _voiceHasSpeech   = false;
+    _voiceSilenceStart = null;
+    _voiceRecordStart  = Date.now();
+
+    // Pick best supported MIME
+    const preferred = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'];
+    _voiceMimeType = preferred.find(m => MediaRecorder.isTypeSupported(m)) || '';
+
+    const opts = _voiceMimeType ? { mimeType: _voiceMimeType } : {};
+    try {
+      _voiceRecorder = new MediaRecorder(_voiceStream, opts);
+    } catch (err) {
+      console.warn('[VoiceWorker] MediaRecorder init failed:', err);
+      _voiceShowError('Could not start recording. Please try again.');
+      return;
+    }
+
+    _voiceRecorder.ondataavailable = e => {
+      if (e.data && e.data.size > 0) _voiceChunks.push(e.data);
+    };
+    _voiceRecorder.onstop = _onRecorderStop;
+
+    _voiceRecorder.start(200);         // collect chunks every 200 ms
+    _voiceSetStatus('listening');
+
+    // Reset input
+    _showInputState();
+    const inp = document.getElementById('guide-chat-input');
+    if (inp) { inp.value = ''; inp.placeholder = 'Listening…'; }
+    if (!_bubbleOpen) _openBubble(false);
+
+    // Start silence/waveform monitor
+    _startSilenceDetection();
+  }
+
+  /* ── Start the Voice Listening Worker ── */
+  async function _startVoiceWorker() {
+    if (_voiceActive) return;
+
+    // ── Obtain mic stream (triggers OS permission dialog on first use) ──
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    } catch (err) {
+      const name = err?.name || '';
+      if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+        _voiceShowError(
+          'Microphone access was denied. Please allow microphone access in System Settings → Privacy → Microphone, then try again.'
+        );
+      } else if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+        _voiceShowError('No microphone found. Please connect a microphone and try again.');
+      } else {
+        _voiceShowError('Could not access the microphone (' + (err?.message || name || 'unknown error') + ').');
+      }
+      return;
+    }
+
+    _voiceStream = stream;
+    _voiceActive = true;
+    _voicePaused = false;
+
+    // ── Build AudioContext + AnalyserNode for silence detection ──
+    try {
+      _voiceAudioCtx  = new (window.AudioContext || window.webkitAudioContext)();
+      _voiceAnalyser  = _voiceAudioCtx.createAnalyser();
+      _voiceAnalyser.fftSize = 256;
+      const src = _voiceAudioCtx.createMediaStreamSource(stream);
+      src.connect(_voiceAnalyser);
+      // Don't connect to destination — we don't want mic playback
+    } catch (err) {
+      console.warn('[VoiceWorker] AudioContext setup failed:', err);
+      // Non-fatal — we can record without amplitude analysis
+    }
+
+    _beginRecording();
+  }
+
+  /* ── Stop the Voice Listening Worker completely ── */
+  function _stopVoiceWorker() {
+    _voiceActive = false;
+    _voicePaused = false;
+
+    // Cancel rAF loop
+    if (_voiceRafId) { cancelAnimationFrame(_voiceRafId); _voiceRafId = null; }
+
+    // Stop recorder
+    if (_voiceRecorder) {
+      try { _voiceRecorder.stop(); } catch (_) {}
+      _voiceRecorder = null;
+    }
+    _voiceChunks = [];
+
+    // Close AudioContext
+    if (_voiceAudioCtx) {
+      try { _voiceAudioCtx.close(); } catch (_) {}
+      _voiceAudioCtx = null;
+      _voiceAnalyser = null;
+    }
+
+    // Release mic stream
+    if (_voiceStream) {
+      _voiceStream.getTracks().forEach(t => t.stop());
+      _voiceStream = null;
+    }
+
+    // Cancel TTS
+    _ttsCancelSpeak();
+
+    // Reset UI
+    _voiceSetStatus('off');
+    const inp = document.getElementById('guide-chat-input');
+    if (inp) inp.placeholder = 'Ask me anything…';
+    const bar = document.getElementById('guide-voice-listening-bar');
+    if (bar) { bar.classList.remove('active', 'speaking', 'processing'); }
+
+    // Reset waveform bar heights
+    document.querySelectorAll('#guide-voice-listening-bar .guide-voice-waves span')
+      .forEach(b => (b.style.height = ''));
+  }
+
+  /* ── Resume a new recording cycle after Gemini/TTS cycle ── */
+  function _voiceResumeAfterReply() {
+    if (!_voiceActive) return;
+    _voicePaused = false;
+    _beginRecording();
+  }
+
+  function _toggleVoiceWorker() {
+    if (_voiceActive) { _stopVoiceWorker(); }
+    else              { _startVoiceWorker(); }
+  }
+
+
+  /* ════════════════════════════════════════════════════════════════════════
+     CONTEXT MENU
+     Right-click on the guide character image-wrap shows the context menu.
+     ════════════════════════════════════════════════════════════════════════ */
+  /* ── Run a walkthrough by its config ID (used by context menu shortcuts) ── */
+  function _runWalkthroughById(id) {
+    if (_busy) return;
+    const walkthroughs = (window.GUIDE_CONFIG || {}).walkthroughs || [];
+    const wt = walkthroughs.find(w => w.id === id);
+    if (!wt) return;
+    const reply = wt.reply || 'Sure! Follow me!';
+    if (!_bubbleOpen) _openBubble(false);
+    _showInputState();
+    _reopenWithReply(reply);
+    _busy = true;
+    _sleep(1400)
+      .then(() => { _closeBubble(); return _sleep(200); })
+      .then(() => { _closeAllModals(); return _sleep(150); })
+      .then(() => _runSteps(wt.steps, {}))
+      .then(() => _returnHome())
+      .then(() => { _closeAllModals(); _busy = false; });
+  }
+
+  function _openCtxMenu(x, y) {
+    const menu = document.getElementById('guide-ctx-menu');
+    if (!menu) return;
+
+    // Show/hide Design Studio quick-action items based on the active panel
+    const activeTab = document.querySelector('.ribbon-tab.active')?.dataset.tab || '';
+    const onDs      = activeTab === 'design';
+    menu.querySelectorAll('.guide-ctx-ds-only').forEach(el => {
+      el.style.display = onDs ? '' : 'none';
+    });
+    menu.querySelectorAll('.guide-ctx-item--ds').forEach(el => {
+      el.style.display = onDs ? '' : 'none';
+    });
+
+    // Position: keep inside viewport
+    menu.style.display = 'block';
+    const mw = menu.offsetWidth  || 210;
+    const mh = menu.offsetHeight || 160;
+    let cx = x, cy = y;
+    if (cx + mw > window.innerWidth  - 8) cx = window.innerWidth  - mw - 8;
+    if (cy + mh > window.innerHeight - 8) cy = window.innerHeight - mh - 8;
+    menu.style.left = cx + 'px';
+    menu.style.top  = cy + 'px';
+    menu.style.display = 'block';
+  }
+
+  function _closeCtxMenu() {
+    const menu = document.getElementById('guide-ctx-menu');
+    if (menu) menu.style.display = 'none';
+  }
+
+  function _initCtxMenu() {
+    const menu     = document.getElementById('guide-ctx-menu');
+    const imgWrap  = document.getElementById('guide-char-img-wrap');
+    const badge    = document.getElementById('guide-voice-badge');
+    if (!menu || !imgWrap) return;
+
+    // Right-click on the character
+    imgWrap.addEventListener('contextmenu', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      _openCtxMenu(e.clientX, e.clientY);
+    });
+
+    // Clicking the mic badge directly toggles the worker
+    badge?.addEventListener('click', e => {
+      e.stopPropagation();
+      _stopVoiceWorker();
+    });
+
+    // Context menu item: Voice Worker
+    document.getElementById('guide-ctx-voice')?.addEventListener('click', () => {
+      _closeCtxMenu();
+      _toggleVoiceWorker();
+    });
+
+    // Context menu item: Open Chat
+    document.getElementById('guide-ctx-chat')?.addEventListener('click', () => {
+      _closeCtxMenu();
+      if (!_bubbleOpen) _openBubble();
+    });
+
+    // Context menu item: Reset Position
+    document.getElementById('guide-ctx-reset')?.addEventListener('click', () => {
+      _closeCtxMenu();
+      _returnHome();
+    });
+
+    // Context menu item: Dismiss
+    document.getElementById('guide-ctx-dismiss')?.addEventListener('click', () => {
+      _closeCtxMenu();
+      _setGuideVisible(false);
+      _stopVoiceWorker();
+    });
+
+    // ── Design Studio context menu shortcuts ──
+    document.getElementById('guide-ctx-ds-new')?.addEventListener('click', () => {
+      _closeCtxMenu(); _runWalkthroughById('ds_new_design');
+    });
+    document.getElementById('guide-ctx-ds-proposals')?.addEventListener('click', () => {
+      _closeCtxMenu(); _runWalkthroughById('ds_proposals');
+    });
+    document.getElementById('guide-ctx-ds-letterhead')?.addEventListener('click', () => {
+      _closeCtxMenu(); _runWalkthroughById('ds_letterhead');
+    });
+    document.getElementById('guide-ctx-ds-profile')?.addEventListener('click', () => {
+      _closeCtxMenu(); _runWalkthroughById('ds_business_profile');
+    });
+    document.getElementById('guide-ctx-ds-social')?.addEventListener('click', () => {
+      _closeCtxMenu(); _runWalkthroughById('ds_social_media');
+    });
+    document.getElementById('guide-ctx-ds-bizcard')?.addEventListener('click', () => {
+      _closeCtxMenu(); _runWalkthroughById('ds_business_card');
+    });
+
+    // Close on outside click or Escape
+    document.addEventListener('click', e => {
+      if (!menu.contains(e.target)) _closeCtxMenu();
+    });
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') _closeCtxMenu();
+    });
   }
 
   /* ════════════════════════════════════════════════════════════════════════
@@ -548,6 +1153,7 @@
 
     handle.addEventListener('mousedown', e => {
       if (e.target.closest('#guide-char-dismiss')) return;
+      if (e.target.closest('#guide-voice-badge'))  return;
       active = true;
       startX = e.clientX; startY = e.clientY;
       const r = wrap.getBoundingClientRect();
@@ -619,6 +1225,7 @@
     });
 
     _makeDraggable(wrap, imgWrap);
+    _initCtxMenu();
   }
 
   /* ════════════════════════════════════════════════════════════════════════

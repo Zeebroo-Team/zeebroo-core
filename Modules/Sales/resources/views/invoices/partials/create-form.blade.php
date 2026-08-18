@@ -73,6 +73,19 @@
         @error('reference')<div style="color:#f87171;font-size:12px;margin-top:4px;">{{ $message }}</div>@enderror
     </div>
 
+    <div class="pcat-field">
+        <label for="inv-payment-method">Payment method</label>
+        <select id="inv-payment-method" name="payment_method">
+            <option value="">— Select method —</option>
+            @foreach(\Modules\Sales\Models\Invoice::PAYMENT_METHODS as $key => $label)
+                <option value="{{ $key }}" @selected(old('payment_method', $editing ? $invoice->payment_method : '') === $key)>
+                    {{ $label }}
+                </option>
+            @endforeach
+        </select>
+        @error('payment_method')<div style="color:#f87171;font-size:12px;margin-top:4px;">{{ $message }}</div>@enderror
+    </div>
+
     <div class="pcat-field" style="grid-column:1/-1;">
         <label for="inv-notes">Notes</label>
         <textarea id="inv-notes" name="notes" maxlength="5000"

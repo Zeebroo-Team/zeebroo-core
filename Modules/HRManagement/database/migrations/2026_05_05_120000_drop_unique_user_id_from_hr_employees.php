@@ -8,19 +8,8 @@ return new class extends Migration
 {
     public function up(): void
     {
-        $db = Schema::getConnection()->getDatabaseName();
-        $hasUnique = \DB::selectOne(
-            "SELECT 1 FROM information_schema.statistics
-             WHERE table_schema = ? AND table_name = 'hr_employees'
-               AND index_name = 'hr_employees_user_id_unique'",
-            [$db]
-        );
-        $hasIndex = \DB::selectOne(
-            "SELECT 1 FROM information_schema.statistics
-             WHERE table_schema = ? AND table_name = 'hr_employees'
-               AND index_name = 'hr_employees_user_id_index'",
-            [$db]
-        );
+        $hasUnique = Schema::hasIndex('hr_employees', 'hr_employees_user_id_unique');
+        $hasIndex = Schema::hasIndex('hr_employees', 'hr_employees_user_id_index');
 
         Schema::table('hr_employees', function (Blueprint $table) use ($hasUnique, $hasIndex): void {
             if ($hasUnique) {

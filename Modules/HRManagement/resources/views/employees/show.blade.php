@@ -383,8 +383,8 @@
     margin:0;font-size:15px;font-weight:800;letter-spacing:-.01em;color:var(--text);
 }
 .emp-leave-modal__close{
-    width:32px;height:32px;border-radius:8px;border:1px solid var(--border);
-    background:transparent;color:var(--muted);cursor:pointer;font-size:14px;
+    width:32px;height:32px;display:grid;place-items:center;padding:0;border-radius:8px;border:1px solid var(--border);
+    background:transparent;color:var(--muted);cursor:pointer;font-size:14px;line-height:1;
 }
 .emp-leave-modal__close:hover{
     color:var(--text);

@@ -135,6 +135,15 @@ WALKTHROUGH IDs (use when user wants to see, do, or learn something):
   mail_filters         – view mail filters / inbox rules
   mail_scheduled       – view scheduled / pending emails
   mail_schedule_send   – schedule an email to send later
+  ds_overview          – open / view the Design Studio panel overview
+  ds_new_design        – create / add a new design project
+  ds_proposals         – view project proposals list
+  ds_new_proposal      – create / add a new project proposal
+  ds_letterhead        – create / view / open the Letterhead design
+  ds_business_profile  – create / view / open the Business Profile design
+  ds_social_media      – filter / view Social Media designs
+  ds_business_card     – filter / view Business Card designs
+  ds_all_designs       – view all designs (no filter)
 
 Only set walkthrough when the user clearly wants a demonstration.
 Only set dataQuery when the user is asking for live numbers, lists, or status of their business data.
@@ -155,6 +164,91 @@ PROMPT;
         'gemini-2.0-flash',
         'gemini-1.5-flash',
     ];
+
+    /**
+     * Voice endpoint — accepts a base64-encoded audio blob (WebM/Opus from the
+     * Electron renderer's MediaRecorder). Sends the audio to Gemini's multimodal
+     * API which both transcribes the user's speech AND generates the guide reply
+     * in one round-trip, returning { transcript, reply, walkthrough, … }.
+     */
+    public function voice(Request $request): JsonResponse
+    {
+        $request->validate([
+            'audio'     => 'required|string|max:6000000',   // ~4.5 MB decoded
+            'mime_type' => 'nullable|string|max:100',
+        ]);
+
+        $apiKey = config('services.gemini.key');
+        if (!$apiKey) {
+            return response()->json(['transcript' => null, 'reply' => null], 503);
+        }
+
+        // Strip codec parameters from MIME type — Gemini only needs the base type
+        $rawMime    = $request->input('mime_type', 'audio/webm');
+        $geminiMime = trim(explode(';', $rawMime)[0]);   // e.g. "audio/webm"
+
+        // Build a combined transcribe-and-respond prompt using the full system context
+        $voiceSystemPrompt = self::SYSTEM_PROMPT . "\n\n"
+            . "The user has sent a voice message. Listen to the attached audio carefully.\n\n"
+            . "CRITICAL LANGUAGE RULE: Detect the language the user spoke. "
+            . "Your \"reply\" MUST be written in the EXACT SAME LANGUAGE the user spoke. "
+            . "If they spoke Sinhala (සිංහල), reply entirely in Sinhala script. "
+            . "If they spoke Tamil, reply in Tamil. If they spoke English, reply in English. "
+            . "Never translate the reply to a different language.\n\n"
+            . "Return ONLY valid JSON — no markdown, no code fences — with these fields:\n"
+            . '{"transcript":"exact words spoken (in original language)","reply":"your reply in the SAME language the user spoke","walkthrough":null,"lang":"BCP-47 language code e.g. si-LK or en-US or ta-LK"}' . "\n\n"
+            . "lang field examples: \"si-LK\" for Sinhala, \"en-US\" for English, \"ta-LK\" for Tamil, \"en-GB\" for British English.";
+
+        $models = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+
+        $payload = [
+            'systemInstruction' => ['parts' => [['text' => $voiceSystemPrompt]]],
+            'contents'          => [[
+                'role'  => 'user',
+                'parts' => [[
+                    'inline_data' => [
+                        'mime_type' => $geminiMime,
+                        'data'      => $request->input('audio'),
+                    ],
+                ]],
+            ]],
+            'generationConfig'  => ['maxOutputTokens' => 700, 'temperature' => 0.2],
+        ];
+
+        $data = null;
+        foreach ($models as $model) {
+            $response = Http::timeout(30)->post(
+                "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key={$apiKey}",
+                $payload
+            );
+            if ($response->status() === 429) continue;
+            if (!$response->successful()) break;
+
+            $raw = $response->json('candidates.0.content.parts.0.text');
+            if (!$raw) continue;
+
+            $cleaned = preg_replace('/^```(?:json)?\s*|\s*```$/s', '', trim($raw));
+            $parsed  = json_decode($cleaned, true);
+
+            if (json_last_error() === JSON_ERROR_NONE && isset($parsed['reply'])) {
+                $data = $parsed;
+                break;
+            }
+        }
+
+        if (!$data) {
+            return response()->json(['transcript' => null, 'reply' => null], 503);
+        }
+
+        return response()->json([
+            'transcript'  => trim($data['transcript'] ?? ''),
+            'reply'       => trim($data['reply']       ?? ''),
+            'walkthrough' => $data['walkthrough'] ?? null,
+            'productName' => $data['productName'] ?? null,
+            'fieldName'   => $data['fieldName']   ?? null,
+            'lang'        => trim($data['lang']        ?? ''),
+        ]);
+    }
 
     public function chat(Request $request): JsonResponse
     {

@@ -18,6 +18,7 @@ use Modules\Business\Models\Business;
 use Modules\HRManagement\Models\Employee;
 use Modules\HRManagement\Models\HrComplaint;
 use Modules\HRManagement\Models\LeaveRequest;
+use Modules\Auth\Services\GoogleAuthService;
 use Modules\HRManagement\Services\EmployeePortalService;
 use Modules\HRManagement\Services\HrPayrollSettingsService;
 use Modules\Pos\Models\Sale;
@@ -41,6 +42,7 @@ class HrEmployeePortalController extends Controller
         private readonly ProductCatalogOptionsService $productCatalogOptions,
         private readonly PosProductQuickCreateService $posProductQuickCreate,
         private readonly SaleReturnService $saleReturns,
+        private readonly GoogleAuthService $googleAuthService,
     ) {}
 
     public function showLogin(): View|RedirectResponse
@@ -58,6 +60,25 @@ class HrEmployeePortalController extends Controller
             'googleAuthConfigured' => $this->googleOAuthConfigured(),
             'hasAccountButNoEmployee' => $hasAccountButNoEmployee,
         ]);
+    }
+
+    /**
+     * Redirect the employee to Google OAuth, tagging the session so the callback
+     * knows this came from the HR portal (no auto-account creation, redirects back
+     * to portal on success/failure).
+     */
+    public function redirectToGoogle(Request $request): \Symfony\Component\HttpFoundation\Response|RedirectResponse
+    {
+        if (! $this->googleAuthService->isConfigured()) {
+            return redirect()->route('hr.portal.login')->withErrors([
+                'email' => __('Google sign-in is not configured. Please contact your administrator.'),
+            ]);
+        }
+
+        $request->session()->put('oauth_auth_fail_route', 'hr.portal.login');
+        $request->session()->put('oauth_origin_portal', true);
+
+        return $this->googleAuthService->redirectToGoogle();
     }
 
     public function login(Request $request): RedirectResponse

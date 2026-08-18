@@ -34,7 +34,7 @@
 .cat-modal__panel{position:relative;z-index:1;width:100%;max-width:480px;margin:auto;border-radius:14px;border:1px solid var(--border);background:var(--card);box-shadow:0 20px 48px rgba(0,0,0,.32);display:flex;flex-direction:column;max-height:min(94vh,calc(100dvh - 48px));}
 .cat-modal__head{display:flex;justify-content:space-between;align-items:center;padding:11px 14px;border-bottom:1px solid var(--border);}
 .cat-modal__head h2{margin:0;font-size:15px;font-weight:800;}
-.cat-modal__close{width:32px;height:32px;display:grid;place-items:center;border:1px solid var(--border);border-radius:9px;background:transparent;color:inherit;cursor:pointer;font-size:17px;line-height:1;}
+.cat-modal__close{width:32px;height:32px;display:grid;place-items:center;padding:0;border:1px solid var(--border);border-radius:9px;background:transparent;color:inherit;cursor:pointer;font-size:17px;line-height:1;}
 .cat-modal__body{padding:14px;}
 html.cat-modal-open-html,html.cat-modal-open-html body{overflow:hidden;}
 </style>

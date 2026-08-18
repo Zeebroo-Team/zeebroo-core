@@ -1,0 +1,11 @@
+{
+    "name": "AdvertisingAgency",
+    "alias": "advertising-agency",
+    "description": "Advertising Agency module — manages brands, reporters, officers, promoters, coordinators, jobs, salary sheets, and agencies.",
+    "keywords": ["advertising", "agency", "brand-management", "event-management"],
+    "priority": 0,
+    "providers": [
+        "Modules\\AdvertisingAgency\\Providers\\AdvertisingAgencyServiceProvider"
+    ],
+    "files": []
+}

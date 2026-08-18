@@ -1,6 +1,6 @@
 {
   "name": "zeebroo-pos-desktop",
-  "version": "4.5.0",
+  "version": "4.8.0",
   "description": "Zeebroo POS Desktop — Electron ribbon interface",
   "author": {
     "name": "Zeebroo",
@@ -9,7 +9,8 @@
   "homepage": "https://zeebroo.com",
   "main": "main.js",
   "scripts": {
-    "start": "env -u ELECTRON_RUN_AS_NODE electron .",
+    "start": "node scripts/start.js",
+    "dev": "node scripts/start.js",
     "prebuild": "node scripts/setApiUrl.js",
     "build": "electron-builder",
     "build:mac": "electron-builder --mac",

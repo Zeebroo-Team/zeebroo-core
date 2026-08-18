@@ -45,6 +45,10 @@ const state = {
   cashierInfo: null, // { id, name, username }
 };
 
+// Template-literal sentinels used by invoice template builders.
+// Defaults are empty; _invBuildActualDoc overrides them with const-shadowing.
+let bodyPos = '', pgStack = '', lhLayer = '';
+
 // ── DOM helpers ────────────────────────────────────────────────────────────
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => document.querySelectorAll(sel);
@@ -277,7 +281,7 @@ function activateTab(tabName) {
   $$('.ribbon-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tabName));
   $$('.ribbon-page').forEach(p => p.classList.toggle('active', p.dataset.page === tabName));
 
-  const panelMap = { home: 'panel-home', pos: 'panel-pos', sales: 'panel-sales', inventory: 'panel-inventory', finance: 'panel-finance', hr: 'panel-hr', services: 'panel-services', design: 'panel-design', restaurant: 'panel-restaurant', 'rst-pos': 'panel-rst-pos', mail: 'panel-mail', crm: 'panel-crm', automations: 'panel-automations', projects: 'panel-projects' };
+  const panelMap = { home: 'panel-home', pos: 'panel-pos', sales: 'panel-sales', inventory: 'panel-inventory', finance: 'panel-finance', hr: 'panel-hr', services: 'panel-services', design: 'panel-design', restaurant: 'panel-restaurant', 'rst-pos': 'panel-rst-pos', mail: 'panel-mail', crm: 'panel-crm', automations: 'panel-automations', projects: 'panel-projects', 'event-mgmt': 'panel-event-mgmt' };
   $$('.content-panel').forEach(p => p.classList.remove('active'));
   const target = $('#' + (panelMap[tabName] || 'panel-pos'));
   if (target) target.classList.add('active');
@@ -298,7 +302,8 @@ function activateTab(tabName) {
   if (tabName === 'mail')       { switchMailView('inbox'); }
   if (tabName === 'crm')        { switchCrmView('pipeline'); }
   if (tabName === 'automations'){ loadAutomations(); }
-  if (tabName === 'projects')   { switchPmView('projects'); }
+  if (tabName === 'projects')    { switchPmView('projects'); }
+  if (tabName === 'event-mgmt') { switchEvtView('brands'); }
   _syncSidebarActive(tabName);
   _sbNavExpand(tabName);
 }
@@ -2425,11 +2430,22 @@ async function _invOpenDetail(id) {
 
   const res = await API.invoice(id);
   if (res.status !== 200) {
-    $('#sinv-detail-body').innerHTML = '<div class="qt-empty"><i class="fa fa-circle-exclamation"></i> Failed to load.</div>';
+    const msg = res.body?.message || (res.status === 0 ? 'Cannot reach server' : 'Failed to load');
+    $('#sinv-detail-body').innerHTML = `<div class="qt-empty">
+      <i class="fa fa-circle-exclamation"></i>
+      <h4>Could not load invoice</h4>
+      <p style="font-size:12px;color:var(--text-muted)">${escHtml(msg)} (${res.status || 'network error'})</p>
+      <button class="qt-new-btn" id="invd-retry" style="margin-top:12px"><i class="fa fa-rotate-right"></i> Retry</button>
+    </div>`;
+    $('#invd-retry')?.addEventListener('click', () => _invOpenDetail(id));
     return;
   }
 
   const inv = res.body?.data;
+  if (!inv) {
+    $('#sinv-detail-body').innerHTML = '<div class="qt-empty"><i class="fa fa-circle-exclamation"></i> Invalid response from server.</div>';
+    return;
+  }
   const cur  = state.currency ? ' ' + state.currency : '';
   $('#sinv-detail-title').textContent = inv.invoice_number;
 
@@ -2459,63 +2475,191 @@ async function _invOpenDetail(id) {
   const dateStr = inv.issue_date ? new Date(inv.issue_date + 'T00:00:00').toLocaleDateString(undefined, { month:'long', day:'numeric', year:'numeric' }) : '—';
   const dueStr  = inv.due_date   ? new Date(inv.due_date   + 'T00:00:00').toLocaleDateString(undefined, { month:'long', day:'numeric', year:'numeric' }) : '—';
 
-  const itemRows = (inv.items || []).map((item, idx) => `<tr>
-    <td class="qt-item-n">${idx + 1}</td>
-    <td>${escHtml(item.description || '—')}</td>
-    <td class="td-r">${parseFloat(item.quantity) % 1 === 0 ? parseInt(item.quantity) : parseFloat(item.quantity).toFixed(2)}</td>
-    <td class="td-r">${parseFloat(item.unit_price).toFixed(2)}${cur}</td>
-    <td class="td-r qt-item-total">${parseFloat(item.line_total).toFixed(2)}${cur}</td>
-  </tr>`).join('');
+  // ── Per-line aggregates ───────────────────────────────────────────────────
+  const taxRulesForLookup = Array.isArray(state.receiptSettings?.tax_rules)
+    ? state.receiptSettings.tax_rules.filter(r => parseFloat(r.value || 0) > 0)
+    : [];
 
-  const body = `<div class="invd-layout">
+  let rawSubtotal = 0, perLineDiscTotal = 0, perLineTaxTotal = 0;
+  const hasAnyDisc = (inv.items || []).some(i => parseFloat(i.discount_value) > 0);
+  const hasAnyTax  = (inv.items || []).some(i => parseFloat(i.tax_pct) > 0);
+
+  (inv.items || []).forEach(item => {
+    const gross    = parseFloat(item.quantity) * parseFloat(item.unit_price);
+    const discType = item.discount_type || 'pct';
+    const discVal  = parseFloat(item.discount_value) || 0;
+    const discAmt  = discType === 'flat' ? Math.min(discVal, gross) : (gross * discVal / 100);
+    const net      = Math.max(0, gross - discAmt);
+    const taxType  = item.tax_type || 'pct';
+    const taxVal   = parseFloat(item.tax_pct) || 0;
+    const taxAmt   = taxType === 'flat' ? taxVal : (net * taxVal / 100);
+    rawSubtotal      += gross;
+    perLineDiscTotal += discAmt;
+    perLineTaxTotal  += taxAmt;
+  });
+
+  // ── Item table rows ───────────────────────────────────────────────────────
+  const itemRows = (inv.items || []).map((item, idx) => {
+    const qty      = parseFloat(item.quantity);
+    const price    = parseFloat(item.unit_price);
+    const gross    = qty * price;
+    const discType = item.discount_type || 'pct';
+    const discVal  = parseFloat(item.discount_value) || 0;
+    const discAmt  = discType === 'flat' ? Math.min(discVal, gross) : (gross * discVal / 100);
+    const net      = Math.max(0, gross - discAmt);
+    const taxType  = item.tax_type || 'pct';
+    const taxVal   = parseFloat(item.tax_pct) || 0;
+    const taxAmt   = taxType === 'flat' ? taxVal : (net * taxVal / 100);
+
+    // Disc cell
+    let discCell = '—';
+    if (discVal > 0) {
+      const discLabel = discType === 'flat'
+        ? `−${discAmt.toFixed(2)}${cur}`
+        : `${discVal}%`;
+      discCell = `<span class="invd-adj-badge invd-disc-badge">${discLabel}</span>`;
+    }
+
+    // Tax cell — try to match a rule name from settings
+    let taxCell = '—';
+    if (taxVal > 0) {
+      const matchRule = taxRulesForLookup.find(r =>
+        (r.type === taxType || (r.type === 'percentage' && taxType === 'pct')) &&
+        String(r.value) === String(taxVal)
+      );
+      const taxLabel = matchRule
+        ? escHtml(matchRule.name) + (taxType !== 'flat' ? ' ' + taxVal + '%' : '')
+        : (taxType === 'flat' ? taxAmt.toFixed(2) + cur : taxVal + '%');
+      taxCell = `<span class="invd-adj-badge invd-tax-badge">${taxLabel}</span>`;
+    }
+
+    return `<tr>
+      <td class="qt-item-n">${idx + 1}</td>
+      <td>${escHtml(item.description || '—')}</td>
+      <td class="td-r">${qty % 1 === 0 ? parseInt(qty) : qty.toFixed(2)}</td>
+      <td class="td-r">${price.toFixed(2)}${cur}</td>
+      <td class="td-r">${discCell}</td>
+      <td class="td-r">${taxCell}</td>
+      <td class="td-r qt-item-total">${parseFloat(item.line_total).toFixed(2)}${cur}</td>
+    </tr>`;
+  }).join('');
+
+  // ── Summary rows ──────────────────────────────────────────────────────────
+  const hasPerLineAdj  = perLineDiscTotal > 0.001 || perLineTaxTotal > 0.001;
+  const hasHeaderDisc  = parseFloat(inv.discount_amount) > 0;
+  const hasHeaderTax   = parseFloat(inv.tax_amount) > 0;
+
+  let summaryHtml = '';
+  if (hasPerLineAdj) {
+    summaryHtml += `<div class="qt-doc-total-line"><span>Gross Subtotal</span><span>${rawSubtotal.toFixed(2)}${cur}</span></div>`;
+    if (perLineDiscTotal > 0.001)
+      summaryHtml += `<div class="qt-doc-total-line invd-tot-disc"><span>Item Discounts</span><span>−${perLineDiscTotal.toFixed(2)}${cur}</span></div>`;
+    if (perLineTaxTotal > 0.001)
+      summaryHtml += `<div class="qt-doc-total-line invd-tot-tax"><span>Item Taxes</span><span>+${perLineTaxTotal.toFixed(2)}${cur}</span></div>`;
+    if (hasHeaderDisc || hasHeaderTax)
+      summaryHtml += `<div class="qt-doc-total-line invd-tot-sub"><span>Line Subtotal</span><span>${parseFloat(inv.subtotal).toFixed(2)}${cur}</span></div>`;
+  } else {
+    summaryHtml += `<div class="qt-doc-total-line"><span>Subtotal</span><span>${parseFloat(inv.subtotal).toFixed(2)}${cur}</span></div>`;
+  }
+  if (hasHeaderDisc)
+    summaryHtml += `<div class="qt-doc-total-line invd-tot-disc"><span>Discount</span><span>−${parseFloat(inv.discount_amount).toFixed(2)}${cur}</span></div>`;
+  if (hasHeaderTax)
+    summaryHtml += `<div class="qt-doc-total-line invd-tot-tax"><span>Tax</span><span>+${parseFloat(inv.tax_amount).toFixed(2)}${cur}</span></div>`;
+  summaryHtml += `<div class="qt-doc-total-line grand"><span>Total</span><span>${parseFloat(inv.total).toFixed(2)}${cur}</span></div>`;
+
+  let body;
+  try {
+  const bizName    = escHtml(state.receiptSettings?.business_name        || '');
+  const bizAddr    = escHtml(state.receiptSettings?.receipt_address_line || '');
+  const totalAmt   = parseFloat(inv.total).toFixed(2);
+
+  body = `<div class="invd-layout">
     <div class="invd-main">
       <div class="qt-doc">
-        <div class="qt-doc-banner">
-          <div class="qt-doc-banner-left">
-            <div class="qt-doc-banner-num">${escHtml(inv.invoice_number)}</div>
-            <div class="qt-doc-banner-type">Invoice</div>
+
+        <!-- ── Letterhead header (shown when a Design Studio letterhead exists) ── -->
+        <div class="invd-lh-hdr" id="invd-lh-hdr" style="display:none">
+          <div class="invd-lh-img-wrap">
+            <img class="invd-lh-img" id="invd-lh-img" src="" alt="">
           </div>
-          <span class="qt-badge qt-badge-${inv.status}">${escHtml(inv.status_label)}</span>
-        </div>
-        <div class="qt-doc-body">
-          <div class="qt-doc-info">
+          <div class="invd-lh-num-row">
             <div>
-              <div class="qt-doc-bill-label">Bill To</div>
-              <div class="qt-doc-bill-name">${escHtml(inv.customer_name || 'Walk-in Customer')}</div>
-              ${inv.reference ? `<div class="qt-doc-bill-ref"><i class="fa fa-hashtag" style="font-size:9px;opacity:.6"></i> ${escHtml(inv.reference)}</div>` : ''}
+              <div class="invd-lh-lbl">Invoice</div>
+              <div class="invd-lh-num">${escHtml(inv.invoice_number)}</div>
             </div>
-            <div class="qt-doc-meta">
-              <div class="qt-doc-meta-row"><span>Issue Date</span><strong>${dateStr}</strong></div>
-              <div class="qt-doc-meta-row"><span>Due Date</span><strong>${dueStr}</strong></div>
-            </div>
+            <span class="qt-badge qt-badge-${inv.status}">${escHtml(inv.status_label)}</span>
           </div>
-
-          <div class="qt-doc-items-wrap">
-            <table class="qt-doc-items">
-              <thead><tr>
-                <th style="width:32px">#</th>
-                <th>Description</th>
-                <th class="td-r" style="width:64px">Qty</th>
-                <th class="td-r" style="width:120px">Unit Price</th>
-                <th class="td-r" style="width:120px">Total</th>
-              </tr></thead>
-              <tbody>${itemRows}</tbody>
-            </table>
-          </div>
-
-          <div class="qt-doc-totals-wrap">
-            <div class="qt-doc-totals">
-              <div class="qt-doc-total-line"><span>Subtotal</span><span>${parseFloat(inv.subtotal).toFixed(2)}${cur}</span></div>
-              ${parseFloat(inv.discount_amount) > 0 ? `<div class="qt-doc-total-line"><span>Discount</span><span>-${parseFloat(inv.discount_amount).toFixed(2)}${cur}</span></div>` : ''}
-              ${parseFloat(inv.tax_amount) > 0      ? `<div class="qt-doc-total-line"><span>Tax</span><span>+${parseFloat(inv.tax_amount).toFixed(2)}${cur}</span></div>` : ''}
-              <div class="qt-doc-total-line grand"><span>Total</span><span>${parseFloat(inv.total).toFixed(2)}${cur}</span></div>
-            </div>
-          </div>
-
-          ${inv.notes ? `<hr class="qt-doc-divider">
-          <div class="qt-doc-notes-label"><i class="fa fa-note-sticky"></i> Notes</div>
-          <div class="qt-doc-notes-box">${escHtml(inv.notes)}</div>` : ''}
         </div>
+
+        <!-- ── Blue banner: shown when no letterhead ─────────────────── -->
+        <div class="qt-doc-banner invd-banner-pro" id="invd-blue-banner">
+          <div class="invd-bpro-left">
+            ${bizName ? `<div class="invd-bpro-biz">${bizName}</div>` : ''}
+            ${bizAddr ? `<div class="invd-bpro-addr">${bizAddr}</div>` : ''}
+          </div>
+          <div class="invd-bpro-right">
+            <div class="invd-bpro-lbl">Invoice</div>
+            <div class="invd-bpro-num">${escHtml(inv.invoice_number)}</div>
+            <span class="qt-badge qt-badge-${inv.status}">${escHtml(inv.status_label)}</span>
+          </div>
+        </div>
+
+        <!-- ── Meta strip: billed-to | dates | amount due ─────────── -->
+        <div class="invd-meta-strip">
+          <div class="invd-ms-cell">
+            <div class="invd-ms-lbl">Billed To</div>
+            <div class="invd-ms-val invd-ms-cust">${escHtml(inv.customer_name || 'Walk-in Customer')}</div>
+            ${inv.reference ? `<div class="invd-ms-ref"><i class="fa fa-hashtag"></i> ${escHtml(inv.reference)}</div>` : ''}
+          </div>
+          <div class="invd-ms-div"></div>
+          <div class="invd-ms-cell">
+            <div class="invd-ms-lbl">Issue Date</div>
+            <div class="invd-ms-val">${dateStr}</div>
+          </div>
+          <div class="invd-ms-div"></div>
+          <div class="invd-ms-cell">
+            <div class="invd-ms-lbl">Due Date</div>
+            <div class="invd-ms-val">${dueStr}</div>
+          </div>
+          ${inv.payment_method_label ? `<div class="invd-ms-div"></div>
+          <div class="invd-ms-cell">
+            <div class="invd-ms-lbl">Payment Method</div>
+            <div class="invd-ms-val">${escHtml(inv.payment_method_label)}</div>
+          </div>` : ''}
+          <div class="invd-ms-grow"></div>
+          <div class="invd-ms-cell invd-ms-amt-cell">
+            <div class="invd-ms-lbl">Amount Due</div>
+            <div class="invd-ms-amt">${totalAmt}${cur}</div>
+          </div>
+        </div>
+
+        <!-- ── Line items table ────────────────────────────────────── -->
+        <div class="invd-tbl-wrap">
+          <table class="qt-doc-items invd-items-full">
+            <thead><tr>
+              <th style="width:32px">#</th>
+              <th>Description</th>
+              <th class="td-r" style="width:52px">Qty</th>
+              <th class="td-r" style="width:105px">Unit Price</th>
+              <th class="td-r" style="width:90px">Disc</th>
+              <th class="td-r" style="width:115px">Tax</th>
+              <th class="td-r" style="width:105px">Total</th>
+            </tr></thead>
+            <tbody>${itemRows}</tbody>
+          </table>
+        </div>
+
+        <!-- ── Footer: notes + totals ─────────────────────────────── -->
+        <div class="invd-foot">
+          <div class="invd-foot-notes">
+            ${inv.notes ? `<div class="invd-foot-notes-lbl"><i class="fa fa-note-sticky"></i> Notes</div>
+            <div class="qt-doc-notes-box">${escHtml(inv.notes)}</div>` : ''}
+          </div>
+          <div class="invd-foot-totals">
+            <div class="qt-doc-totals">${summaryHtml}</div>
+          </div>
+        </div>
+
       </div>
     </div>
 
@@ -2550,16 +2694,43 @@ async function _invOpenDetail(id) {
       </button>
     </div>
   </div>`;
+  } catch (err) {
+    console.error('[_invOpenDetail] body build error:', err);
+    $('#sinv-detail-body').innerHTML = `<div class="qt-empty"><i class="fa fa-circle-exclamation"></i> Render error: ${escHtml(err.message)}</div>`;
+    return;
+  }
 
   $('#sinv-detail-body').innerHTML = body;
 
+  // ── Load letterhead asynchronously and swap banner ────────────────────────
+  // Capture the invoice id NOW so we can detect mid-flight navigation later.
+  const _lhForInvId = inv.id;
+  (async () => {
+    const lhFull = await _fetchLetterhead();
+    if (!lhFull?.canvas_json) return;
+    const lhDataUrl = await window.electronAPI.renderCanvasToDataUrl(
+      lhFull.canvas_json,
+      lhFull.width  || 794,
+      lhFull.height || 1123
+    );
+    if (!lhDataUrl) return;
+    // Guard 1: user navigated away from the invoices section entirely.
+    const img = document.getElementById('invd-lh-img');
+    const hdr = document.getElementById('invd-lh-hdr');
+    const blu = document.getElementById('invd-blue-banner');
+    if (!img || !hdr || !blu) return;
+    // Guard 2: user navigated to a DIFFERENT invoice — same IDs exist but
+    // belong to the new invoice; don't stamp the old letterhead onto it.
+    if (_inv.activeId !== _lhForInvId) return;
+    img.onload        = () => img.classList.add('loaded');
+    img.src           = lhDataUrl;
+    hdr.style.display = '';
+    blu.style.display = 'none';
+  })();
+
   // Wire actions
   $('#invd-edit')?.addEventListener('click', () => _invOpenForm(inv));
-  $('#invd-sent')?.addEventListener('click', async () => {
-    const r = await API.invoiceSent(inv.id);
-    if (r.status === 200) { toast('Marked as sent', 'success'); _invOpenDetail(inv.id); }
-    else toast(r.body?.message || 'Error', 'error');
-  });
+  $('#invd-sent')?.addEventListener('click', () => _invShowSendModal(inv));
   $('#invd-paid')?.addEventListener('click', async () => {
     const r = await API.invoicePaid(inv.id);
     if (r.status === 200) { toast('Invoice marked as paid', 'success'); _invOpenDetail(inv.id); }
@@ -2588,6 +2759,174 @@ async function _invOpenDetail(id) {
   $('#invd-qa-payment')?.addEventListener('click', () => _invdComingSoon('Payment'));
   $('#invd-qa-proposal')?.addEventListener('click', () => openInvProposalModal(inv));
   $('#invd-qa-pm')?.addEventListener('click', () => _invdComingSoon('Move to Project Manager'));
+}
+
+// ── Send Invoice modal (share link + social sharing) ─────────────────────────
+async function _invShowSendModal(inv) {
+  // Remove any existing instance
+  document.getElementById('invd-send-modal')?.remove();
+
+  const invNum = escHtml(inv.invoice_number || '');
+  const custName = escHtml(inv.customer_name || '');
+
+  // Build modal skeleton with loading state
+  const overlay = document.createElement('div');
+  overlay.id = 'invd-send-modal';
+  overlay.className = 'invd-send-overlay';
+  overlay.innerHTML = `
+    <div class="invd-send-box" role="dialog" aria-modal="true">
+      <div class="invd-send-hdr">
+        <div class="invd-send-hdr-left">
+          <span class="invd-send-hdr-icon"><i class="fa fa-paper-plane"></i></span>
+          <div>
+            <div class="invd-send-title">Send Invoice</div>
+            <div class="invd-send-sub">${invNum}${custName ? ' · ' + custName : ''}</div>
+          </div>
+        </div>
+        <button class="invd-send-close" id="invd-send-close"><i class="fa fa-xmark"></i></button>
+      </div>
+
+      <div class="invd-send-body">
+        <div class="invd-send-link-section">
+          <div class="invd-send-section-lbl"><i class="fa fa-link"></i> Shareable Link</div>
+          <div class="invd-send-link-row">
+            <div class="invd-send-link-box" id="invd-send-link-box">
+              <i class="fa fa-spinner fa-spin" style="color:var(--text-muted)"></i>
+              <span id="invd-send-link-txt" style="color:var(--text-muted)">Generating link…</span>
+            </div>
+            <button class="invd-send-copy-btn" id="invd-send-copy" disabled>
+              <i class="fa fa-copy"></i> Copy
+            </button>
+          </div>
+        </div>
+
+        <div class="invd-send-social-section">
+          <div class="invd-send-section-lbl"><i class="fa fa-share-nodes"></i> Share via</div>
+          <div class="invd-send-social-row">
+            <button class="invd-send-social-btn invd-social-wa" id="invd-send-wa" disabled>
+              <svg class="invd-social-ico" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.127.558 4.122 1.532 5.849L.057 23.57a.75.75 0 0 0 .918.919l5.709-1.47A11.944 11.944 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.75a9.724 9.724 0 0 1-4.966-1.362l-.357-.212-3.685.949.974-3.578-.232-.37A9.75 9.75 0 1 1 12 21.75z"/></svg>
+              WhatsApp
+            </button>
+            <button class="invd-send-social-btn invd-social-fb" id="invd-send-fb" disabled>
+              <svg class="invd-social-ico" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073C24 5.405 18.627 0 12 0S0 5.405 0 12.073C0 18.1 4.388 23.094 10.125 24v-8.437H7.078v-3.49h3.047V9.41c0-3.025 1.792-4.697 4.533-4.697 1.312 0 2.686.236 2.686.236v2.97h-1.513c-1.491 0-1.956.932-1.956 1.889v2.265h3.328l-.532 3.49h-2.796V24C19.612 23.094 24 18.1 24 12.073z"/></svg>
+              Facebook
+            </button>
+            <button class="invd-send-social-btn invd-social-email" id="invd-send-email" disabled>
+              <i class="fa fa-envelope invd-social-ico"></i>
+              Email
+            </button>
+          </div>
+        </div>
+
+        <div class="invd-send-info-note">
+          <i class="fa fa-circle-info"></i>
+          Anyone with this link can view the invoice without logging in.
+        </div>
+      </div>
+
+      <div class="invd-send-footer">
+        <button class="invd-send-btn-cancel" id="invd-send-cancel">Close</button>
+        <button class="invd-send-btn-send" id="invd-send-confirm">
+          <i class="fa fa-paper-plane"></i> Mark as Sent
+        </button>
+      </div>
+    </div>`;
+
+  document.body.appendChild(overlay);
+  requestAnimationFrame(() => overlay.classList.add('invd-send-in'));
+
+  let shareUrl = inv.share_url || null;
+
+  // Enable share link (generate token if needed)
+  const fetchShareLink = async () => {
+    const r = await API.invoiceEnableShare(inv.id);
+    if (r.status === 200 && r.body?.share_url) {
+      shareUrl = r.body.share_url;
+      const box  = document.getElementById('invd-send-link-box');
+      const txt  = document.getElementById('invd-send-link-txt');
+      const copy = document.getElementById('invd-send-copy');
+      const wa   = document.getElementById('invd-send-wa');
+      const fb   = document.getElementById('invd-send-fb');
+      const em   = document.getElementById('invd-send-email');
+      if (txt) { box.innerHTML = ''; box.textContent = shareUrl; }
+      if (copy) copy.disabled = false;
+      if (wa)   wa.disabled   = false;
+      if (fb)   fb.disabled   = false;
+      if (em)   em.disabled   = false;
+    } else {
+      const box = document.getElementById('invd-send-link-box');
+      if (box) box.innerHTML = '<span style="color:#ef4444"><i class="fa fa-triangle-exclamation"></i> Failed to generate link</span>';
+    }
+  };
+  fetchShareLink();
+
+  // Close helpers
+  let _closing = false;
+  const close = () => {
+    if (_closing) return;
+    _closing = true;
+    overlay.classList.remove('invd-send-in');
+    // Fallback: if transitionend never fires (prefers-reduced-motion, timing
+    // edge case), remove after the transition duration anyway.
+    const fallback = setTimeout(() => overlay.remove(), 350);
+    overlay.addEventListener('transitionend', () => { clearTimeout(fallback); overlay.remove(); }, { once: true });
+    document.removeEventListener('keydown', escClose);
+  };
+  // NOTE: no { once: true } — we want to check EVERY keydown while the modal
+  // is open, not just the first one (once:true removes the listener after any key).
+  function escClose(e) { if (e.key === 'Escape') close(); }
+  document.getElementById('invd-send-close')?.addEventListener('click', close);
+  document.getElementById('invd-send-cancel')?.addEventListener('click', close);
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+  document.addEventListener('keydown', escClose);
+
+  // Copy link
+  document.getElementById('invd-send-copy')?.addEventListener('click', async () => {
+    if (!shareUrl) return;
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      const btn = document.getElementById('invd-send-copy');
+      if (btn) { btn.innerHTML = '<i class="fa fa-check"></i> Copied!'; btn.classList.add('copied'); }
+      setTimeout(() => {
+        const b = document.getElementById('invd-send-copy');
+        if (b) { b.innerHTML = '<i class="fa fa-copy"></i> Copy'; b.classList.remove('copied'); }
+      }, 2000);
+    } catch { toast('Could not copy to clipboard', 'error'); }
+  });
+
+  // Social share handlers
+  document.getElementById('invd-send-wa')?.addEventListener('click', () => {
+    if (!shareUrl) return;
+    const msg = `Hi, please find your invoice ${inv.invoice_number} here: ${shareUrl}`;
+    window.electronAPI.openExternal(`https://wa.me/?text=${encodeURIComponent(msg)}`);
+  });
+
+  document.getElementById('invd-send-fb')?.addEventListener('click', () => {
+    if (!shareUrl) return;
+    window.electronAPI.openExternal(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`);
+  });
+
+  document.getElementById('invd-send-email')?.addEventListener('click', () => {
+    if (!shareUrl) return;
+    const subj = `Invoice ${inv.invoice_number}`;
+    const body  = `Hi${custName ? ' ' + inv.customer_name : ''},\n\nPlease find your invoice ${inv.invoice_number} at the link below:\n\n${shareUrl}\n\nThank you for your business.`;
+    window.electronAPI.openExternal(`mailto:?subject=${encodeURIComponent(subj)}&body=${encodeURIComponent(body)}`);
+  });
+
+  // Mark as Sent
+  document.getElementById('invd-send-confirm')?.addEventListener('click', async () => {
+    const btn = document.getElementById('invd-send-confirm');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Sending…'; }
+    const r = await API.invoiceSent(inv.id);
+    if (r.status === 200) {
+      close();
+      toast('Invoice marked as sent', 'success');
+      _invOpenDetail(inv.id);
+    } else {
+      if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa fa-paper-plane"></i> Mark as Sent'; }
+      toast(r.body?.message || 'Error', 'error');
+    }
+  });
 }
 
 function _invdComingSoon(feature) {
@@ -2771,50 +3110,357 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ── Invoice print (with optional letterhead) ──────────────────────────────
-async function _invPrint(inv) {
+// ── Invoice preview modal (shows the invoice before/instead of printing) ──────
+let _invpFitSc = 0.5, _invpZoom = 1, _invpPanX = 0, _invpPanY = 0;
+let _invpCurrentInv = null;
+
+function _invpApplyTransform() {
+  const sc = $('#invp-scaler');
+  if (!sc) return;
+  sc.style.transform = `translate(${_invpPanX}px,${_invpPanY}px) scale(${_invpFitSc * _invpZoom})`;
+}
+function _invpUpdateZoomLabel() {
+  const el = $('#invp-zoom-label');
+  if (el) el.textContent = Math.round(_invpZoom * 100) + '%';
+}
+function _invpResetView() {
+  const bg = $('#invp-bg');
+  if (!bg) return;
+  const w = bg.clientWidth, h = bg.clientHeight;
+  if (!w || !h) return;
+  _invpFitSc = Math.min((w - 40) / 794, (h - 40) / 1123);
+  _invpZoom  = 1;
+  _invpPanX  = (w - 794 * _invpFitSc) / 2;
+  _invpPanY  = (h - 1123 * _invpFitSc) / 2;
+  _invpApplyTransform();
+  _invpUpdateZoomLabel();
+}
+function _invpZoomAt(nz, px, py) {
+  const bg = $('#invp-bg');
+  nz = Math.max(0.25, Math.min(6, nz));
+  if (px === undefined) { px = (bg ? bg.clientWidth : 600) / 2; py = (bg ? bg.clientHeight : 500) / 2; }
+  const r = nz / _invpZoom;
+  _invpPanX = px - (px - _invpPanX) * r;
+  _invpPanY = py - (py - _invpPanY) * r;
+  _invpZoom = nz;
+  _invpApplyTransform();
+  _invpUpdateZoomLabel();
+}
+
+async function showInvoicePreviewModal(inv) {
+  _invpCurrentInv = inv;
+  const modal = $('#inv-preview-modal');
+  if (!modal) { _invPrint(inv); return; }
+
+  const title = document.getElementById('invp-title');
+  const badge = document.getElementById('invp-badge');
+  if (title) title.textContent = 'Invoice ' + (inv.invoice_number || '');
+  if (badge) {
+    const bgMap  = { paid: '#dcfce7', overdue: '#fee2e2', draft: '#f1f5f9', sent: '#dbeafe', cancelled: '#fee2e2' };
+    const txtMap = { paid: '#15803d', overdue: '#dc2626', draft: '#64748b', sent: '#1d4ed8', cancelled: '#dc2626' };
+    badge.textContent      = inv.status_label || inv.status || '';
+    badge.style.background = bgMap[inv.status]  || '#f1f5f9';
+    badge.style.color      = txtMap[inv.status] || '#64748b';
+  }
+
+  const ic    = _isetupGetCfg();
+  const tpl   = INV_TEMPLATES.find(t => t.id === ic.template) || INV_TEMPLATES[0];
+  const mg    = { top: ic.mgTop, bot: ic.mgBot, left: ic.mgLeft, right: ic.mgRight };
+  const frame = document.getElementById('invp-frame');
+
+  // Show immediately without letterhead so the modal opens instantly
+  if (frame) frame.srcdoc = _invBuildActualDoc(inv, tpl, mg, state.currency || '');
+  modal.style.display = 'flex';
+  setTimeout(_invpResetView, 50);
+
+  // Load letterhead asynchronously and update the preview once ready
   const lhFull = await _fetchLetterhead();
-  await window.electronAPI.openQuotePrint({
-    quote:      { ...inv, quote_number: inv.invoice_number, issue_date: inv.issue_date, due_date: inv.due_date, doc_type: 'Invoice' },
-    letterhead: lhFull,
-    currency:   state.currency,
+  if (lhFull && lhFull.canvas_json && frame) {
+    const lhDataUrl = await window.electronAPI.renderCanvasToDataUrl(
+      lhFull.canvas_json,
+      lhFull.width  || 794,
+      lhFull.height || 1123
+    );
+    if (lhDataUrl) frame.srcdoc = _invBuildActualDoc(inv, tpl, mg, state.currency || '', lhDataUrl);
+  }
+}
+
+async function _invPrint(inv) {
+  const ic     = _isetupGetCfg();
+  const tpl    = INV_TEMPLATES.find(t => t.id === ic.template) || INV_TEMPLATES[0];
+  const mg     = { top: ic.mgTop, bot: ic.mgBot, left: ic.mgLeft, right: ic.mgRight };
+  const lhFull = await _fetchLetterhead();
+  let   lhDataUrl = null;
+  if (lhFull && lhFull.canvas_json) {
+    lhDataUrl = await window.electronAPI.renderCanvasToDataUrl(
+      lhFull.canvas_json,
+      lhFull.width  || 794,
+      lhFull.height || 1123
+    );
+  }
+  const html = _invBuildActualDoc(inv, tpl, mg, state.currency || '', lhDataUrl);
+  await window.electronAPI.openInvoicePrint({
+    html,
+    number:      inv.invoice_number || '',
+    status:      inv.status         || '',
+    statusLabel: inv.status_label   || '',
   });
 }
 
 // ── Invoice form ──────────────────────────────────────────────────────────
 let _invLineSeq = 0;
 
-function _invAddLine(desc = '', qty = 1, price = 0) {
+function _invAddLine(desc = '', qty = 1, price = 0, discType = 'pct', discValue = 0, taxType = 'pct', taxValue = 0) {
   const id  = ++_invLineSeq;
   const row = document.createElement('div');
-  row.className      = 'qt-line-row';
-  row.dataset.lineId = id;
+  row.className        = 'qt-line-row';
+  row.dataset.lineId   = id;
+  row.dataset.discType = discType;
+
+  const cur = state.currency || '¤';
+  const s   = state.receiptSettings || {};
+  const taxRules = Array.isArray(s.tax_rules)
+    ? s.tax_rules.filter(r => parseFloat(r.value || 0) > 0)
+    : [];
+
+  // Build tax option list; pre-select rule that matches stored taxType+taxValue
+  const taxOpts = taxRules.map((r, ri) => {
+    const lbl = escHtml(r.name) + (r.type === 'flat'
+      ? ' (' + escHtml(cur) + parseFloat(r.value).toFixed(2) + ')'
+      : ' ' + parseFloat(r.value) + '%');
+    const sel = r.type === taxType && String(r.value) === String(taxValue) ? ' selected' : '';
+    return `<option value="${ri}"${sel}>${lbl}</option>`;
+  }).join('');
+
   row.innerHTML = `
     <div class="qt-line-desc">
-      <input type="text" class="qt-line-input" placeholder="Description" value="${escHtml(desc)}" data-role="desc">
+      <input type="text" class="qt-line-input qt-line-desc-input" placeholder="Description or search product…" value="${escHtml(desc)}" data-role="desc" data-lid="${id}">
     </div>
     <input type="number" class="qt-line-input qt-line-num"   value="${qty}" min="0.001" step="any" data-role="qty">
-    <input type="number" class="qt-line-input qt-line-price" value="${price.toFixed(2)}" min="0" step="any" data-role="price" placeholder="0.00">
+    <input type="number" class="qt-line-input qt-line-price" value="${price > 0 ? price.toFixed(2) : ''}" min="0" step="any" data-role="price" placeholder="0.00">
+    <div class="qt-line-disc-wrap">
+      <input type="number" class="qt-line-disc-inp${discValue > 0 ? ' has-val' : ''}"
+        value="${discValue > 0 ? discValue : ''}" min="0" ${discType === 'pct' ? 'max="100"' : ''} step="any" data-role="disc" placeholder="0">
+      <button class="qt-disc-toggle${discType === 'flat' ? ' is-flat' : ''}" data-role="disc-toggle" title="Toggle % / flat">${discType === 'flat' ? escHtml(cur) : '%'}</button>
+    </div>
+    <select class="qt-line-tax-sel${taxValue > 0 ? ' has-tax' : ''}" data-role="tax">
+      <option value="">– None</option>
+      ${taxOpts}
+    </select>
     <div class="qt-line-total" id="inv-lt-${id}">0.00</div>
     <button class="qt-line-del" title="Remove"><i class="fa fa-xmark"></i></button>`;
-  const recalc = () => {
-    const q = parseFloat(row.querySelector('[data-role="qty"]').value)   || 0;
-    const p = parseFloat(row.querySelector('[data-role="price"]').value) || 0;
-    const el = $(`#inv-lt-${id}`);
-    if (el) el.textContent = (q * p).toFixed(2);
+
+  const descInp  = row.querySelector('.qt-line-desc-input');
+  const priceInp = row.querySelector('[data-role="price"]');
+
+  // ── Suggestion portal — appended to body to escape overflow:hidden containers ──
+  const sug = document.createElement('div');
+  sug.className = 'qt-product-suggest';
+  // Override position to fixed so it escapes all scrollable/overflow containers
+  // CSS class has display:none + position:absolute + right:0 — all must be overridden inline
+  sug.style.cssText = 'position:fixed!important;z-index:9999;display:none;right:auto!important;';
+  document.body.appendChild(sug);
+
+  function _sugPosition() {
+    const r = descInp.getBoundingClientRect();
+    sug.style.top   = r.bottom + 2 + 'px';
+    sug.style.left  = r.left + 'px';
+    sug.style.width = r.width + 'px';
+    sug.style.right = 'auto';
+  }
+  // Must set display:'block' not '' — empty string falls back to CSS class's display:none
+  function _sugShow() { _sugPosition(); sug.style.display = 'block'; }
+  function _sugHide() { sug.style.display = 'none'; sug.innerHTML = ''; }
+
+  // Reposition on scroll (close is simpler and avoids stale coordinates)
+  const _onScroll = () => _sugHide();
+  window.addEventListener('scroll', _onScroll, { passive: true, capture: true });
+
+  let sugTimer;
+
+  // ── Full POS product-selection logic on suggestion click ─────────────────
+  async function _invHandleSugClick(el) {
+    _sugHide();
+    const isProduct = el.dataset.type === 'product';
+
+    if (!isProduct) {
+      // Service: simple fill — no layers or warranty
+      descInp.value  = el.dataset.name;
+      priceInp.value = parseFloat(el.dataset.price || 0).toFixed(2);
+      _invRecalc();
+      priceInp.focus();
+      return;
+    }
+
+    // Product: fetch full detail for layer-picker + warranty
+    const res = await API.product(el.dataset.id);
+    const p   = res.status === 200 ? (res.body?.data ?? res.body) : null;
+
+    if (!p) {
+      descInp.value  = el.dataset.name;
+      priceInp.value = parseFloat(el.dataset.price || 0).toFixed(2);
+      _invRecalc();
+      return;
+    }
+
+    const layers    = p.layers || [];
+    const inStock   = layers.filter(l => parseFloat(l.quantity_remaining) > 0);
+    const stockMode = state.receiptSettings?.stock_selection_mode ?? 'fifo';
+    let chosenPrice;
+
+    // ── Stock / batch picker (mirrors POS handleProductClick) ────────────
+    if (stockMode === 'choose' && layers.length > 1) {
+      const pickable = inStock.length > 0 ? inStock : layers;
+      const layer = await posPickStockLayer(p, pickable);
+      if (!layer) return; // cancelled
+      chosenPrice = parseFloat(layer.unit_sell_price);
+    } else if (posLayersDifferInPrice(layers)) {
+      const pickable = inStock.length > 0 ? inStock : layers;
+      if (pickable.length > 1) {
+        const layer = await posPickStockLayer(p, pickable);
+        if (!layer) return; // cancelled
+        chosenPrice = parseFloat(layer.unit_sell_price);
+      } else {
+        chosenPrice = parseFloat(pickable[0]?.unit_sell_price ?? p.unit_sell_price ?? 0);
+      }
+    } else if (inStock.length > 0) {
+      chosenPrice = parseFloat(inStock[0].unit_sell_price);
+    } else if (layers.length > 0) {
+      chosenPrice = parseFloat(layers[0].unit_sell_price);
+    } else {
+      chosenPrice = parseFloat(p.discounted_sell_price ?? p.unit_sell_price ?? el.dataset.price ?? 0);
+    }
+
+    // ── Warranty (mirrors POS handleProductClick) ─────────────────────────
+    if (p.has_warranty) {
+      if (p.warranty_duration) {
+        const wty = _resolveWarrantyFromDuration(p.warranty_duration);
+        row.dataset.warrantyType = wty.type;
+        row.dataset.warrantyDate = wty.date ?? '';
+      } else {
+        const wty = await _askWarranty(p.name);
+        if (wty === null) return; // cancelled
+        row.dataset.warrantyType = wty.type;
+        row.dataset.warrantyDate = wty.date ?? '';
+      }
+    }
+
+    descInp.value  = p.name;
+    priceInp.value = chosenPrice.toFixed(2);
     _invRecalc();
-  };
-  row.querySelector('[data-role="qty"]').addEventListener('input', recalc);
-  row.querySelector('[data-role="price"]').addEventListener('input', recalc);
-  row.querySelector('.qt-line-del').addEventListener('click', () => { row.remove(); _invRecalc(); });
+    priceInp.focus();
+  }
+
+  // ── Typeahead input listener ──────────────────────────────────────────────
+  descInp.addEventListener('input', () => {
+    clearTimeout(sugTimer);
+    const q = descInp.value.trim();
+    if (q.length < 2) { _sugHide(); return; }
+    sugTimer = setTimeout(async () => {
+      const [prodRes, svcRes] = await Promise.all([
+        API.productSearch(q, 6),
+        API.serviceMgmtCatalog(q),
+      ]);
+      const products = prodRes.body?.data || [];
+      const services = svcRes.body?.data  || [];
+      if (!products.length && !services.length) { _sugHide(); return; }
+      sug.innerHTML = [
+        ...products.map(p => `<div class="qt-suggest-item" data-type="product" data-id="${p.id}" data-name="${escHtml(p.name)}" data-price="${p.unit_sell_price ?? 0}">
+          <i class="fa fa-box" style="opacity:.45;margin-right:5px;font-size:11px"></i>${escHtml(p.name)}<span class="qt-suggest-sku">${p.sku ? escHtml(p.sku) : ''}</span>
+        </div>`),
+        ...services.map(s => `<div class="qt-suggest-item" data-type="service" data-id="${s.id}" data-name="${escHtml(s.name)}" data-price="${s.price ?? 0}">
+          <i class="fa fa-screwdriver-wrench" style="color:#10b981;margin-right:5px;font-size:11px"></i>${escHtml(s.name)}${s.duration_label ? `<span class="qt-suggest-sku">${escHtml(s.duration_label)}</span>` : ''}
+        </div>`),
+      ].join('');
+      _sugShow();
+      sug.querySelectorAll('.qt-suggest-item').forEach(el => {
+        el.addEventListener('mousedown', e => {
+          e.preventDefault(); // prevent blur firing before mousedown resolves
+          _invHandleSugClick(el);
+        });
+      });
+    }, 200);
+  });
+
+  descInp.addEventListener('blur', () => setTimeout(_sugHide, 150));
+
+  row.querySelector('[data-role="qty"]').addEventListener('input', _invRecalc);
+  priceInp.addEventListener('input', _invRecalc);
+
+  // Discount value input
+  const discInp = row.querySelector('[data-role="disc"]');
+  discInp.addEventListener('input', () => {
+    discInp.classList.toggle('has-val', (parseFloat(discInp.value) || 0) > 0);
+    _invRecalc();
+  });
+
+  // Discount type toggle: % ↔ flat
+  row.querySelector('[data-role="disc-toggle"]').addEventListener('click', () => {
+    const isFlat = row.dataset.discType === 'flat';
+    row.dataset.discType = isFlat ? 'pct' : 'flat';
+    const tog = row.querySelector('[data-role="disc-toggle"]');
+    tog.textContent = isFlat ? '%' : escHtml(state.currency || '¤');
+    tog.classList.toggle('is-flat', !isFlat);
+    discInp.removeAttribute('max');
+    if (!isFlat) discInp.setAttribute('max', '100');
+    _invRecalc();
+  });
+
+  // Tax rule select — read chosen rule from settings, store type+value on row dataset
+  const taxSel = row.querySelector('[data-role="tax"]');
+  // Seed initial dataset from params
+  if (taxValue > 0) {
+    row.dataset.taxType  = taxType;
+    row.dataset.taxValue = taxValue;
+  }
+  taxSel.addEventListener('change', () => {
+    const rules = Array.isArray(state.receiptSettings?.tax_rules)
+      ? state.receiptSettings.tax_rules.filter(r => parseFloat(r.value || 0) > 0)
+      : [];
+    const ri = taxSel.value === '' ? -1 : parseInt(taxSel.value);
+    const rule = ri >= 0 && rules[ri] ? rules[ri] : null;
+    taxSel.classList.toggle('has-tax', !!rule);
+    // Normalize 'percentage' (POS settings format) → 'pct'
+    const ruleType = rule ? (rule.type === 'percentage' ? 'pct' : rule.type) : 'pct';
+    row.dataset.taxType  = ruleType;
+    row.dataset.taxValue = rule ? rule.value : 0;
+    _invRecalc();
+  });
+
+  row.querySelector('.qt-line-del').addEventListener('click', () => {
+    _sugHide();
+    window.removeEventListener('scroll', _onScroll, { capture: true });
+    sug.remove();
+    row.remove();
+    _invRecalc();
+  });
+
   $('#sinv-items-body').appendChild(row);
-  recalc();
+  if (!desc) setTimeout(() => descInp.focus(), 40);
+  _invRecalc();
 }
 
 function _invRecalc() {
   let sub = 0;
   $$('#sinv-items-body .qt-line-row').forEach(row => {
-    sub += (parseFloat(row.querySelector('[data-role="qty"]').value)   || 0)
-         * (parseFloat(row.querySelector('[data-role="price"]').value) || 0);
+    const qty      = parseFloat(row.querySelector('[data-role="qty"]')?.value)   || 0;
+    const price    = parseFloat(row.querySelector('[data-role="price"]')?.value) || 0;
+    const discType = row.dataset.discType || 'pct';
+    const discVal  = parseFloat(row.querySelector('[data-role="disc"]')?.value)  || 0;
+    const taxType  = row.dataset.taxType  || 'pct';
+    const taxValue = parseFloat(row.dataset.taxValue) || 0;
+
+    const gross   = qty * price;
+    const discAmt = discType === 'flat'
+      ? Math.min(discVal, gross)
+      : (gross * discVal / 100);
+    const net     = Math.max(0, gross - discAmt);
+    const taxAmt  = taxType === 'flat' ? taxValue : (net * taxValue / 100);
+    const lt      = Math.round((net + taxAmt) * 100) / 100;
+
+    const ltEl = document.getElementById(`inv-lt-${row.dataset.lineId}`);
+    if (ltEl) ltEl.textContent = lt.toFixed(2);
+    sub += lt;
   });
   const disc = parseFloat($('#sinv-f-discount').value) || 0;
   const tax  = parseFloat($('#sinv-f-tax').value)      || 0;
@@ -2837,6 +3483,7 @@ async function _invOpenForm(existing, prefill = null) {
   $('#sinv-grand-total').textContent   = '0.00';
   $('#sinv-f-date').value              = existing?.issue_date || new Date().toISOString().slice(0, 10);
   $('#sinv-f-due').value               = existing?.due_date   || '';
+  $('#sinv-f-payment').value           = existing?.payment_method || '';
 
   if (existing?.discount_amount) $('#sinv-f-discount').value = existing.discount_amount;
   if (existing?.tax_amount)      $('#sinv-f-tax').value      = existing.tax_amount;
@@ -2857,46 +3504,23 @@ async function _invOpenForm(existing, prefill = null) {
   }
 
   if (existing?.items?.length) {
-    existing.items.forEach(i => _invAddLine(i.description, i.quantity, i.unit_price));
+    existing.items.forEach(i => _invAddLine(
+      i.description, i.quantity, i.unit_price,
+      i.discount_type || 'pct', i.discount_value || 0,
+      i.tax_type || 'pct', i.tax_pct || 0,
+    ));
   } else if (prefill?.items?.length) {
-    prefill.items.forEach(i => _invAddLine(i.description, i.quantity, i.unit_price));
+    prefill.items.forEach(i => _invAddLine(
+      i.description, i.quantity, i.unit_price,
+      i.discount_type || 'pct', i.discount_value || 0,
+      i.tax_type || 'pct', i.tax_pct || 0,
+    ));
   }
   _invRecalc();
 }
 
-// ── Invoice Add Product Modal (shares qt-add-overlay) ────────────────────
-function _invOpenAddModal() {
-  $('#qt-add-modal-q').value = '';
-  $('#qt-add-modal-list').innerHTML = '<div class="qt-add-modal-empty"><i class="fa fa-magnifying-glass"></i><p>Type to search products or services</p></div>';
-  $('#qt-add-modal-bottom').style.display = 'none';
-  $('#qt-add-modal-add').style.display    = 'none';
-  $('#qt-add-modal-qty').value   = '1';
-  $('#qt-add-modal-price').value = '';
-  $('#qt-add-modal-disc').value  = '0';
-  $('#qt-add-modal-total').textContent = '0.00';
-  _qtMod.product = null; // reset so quotation bubble handler won't fire in inv mode
-  $('#qt-add-overlay').dataset.invMode = '1';
-  $('#qt-add-overlay').style.display = '';
-  setTimeout(() => $('#qt-add-modal-q').focus(), 60);
-}
 
-// Capture-phase: fires before quotation bubble listener.
-// stopImmediatePropagation() prevents the quotation handler when in inv mode.
-$('#qt-add-modal-add').addEventListener('click', e => {
-  if ($('#qt-add-overlay').dataset.invMode !== '1') return;
-  e.stopImmediatePropagation();
-  if (!_qtMod.product) return;
-  const qty   = parseFloat($('#qt-add-modal-qty').value)   || 1;
-  const price = parseFloat($('#qt-add-modal-price').value) || 0;
-  const disc  = parseFloat($('#qt-add-modal-disc').value)  || 0;
-  const effectivePrice = qty > 0 ? Math.max(0, (qty * price - disc) / qty) : price;
-  _invAddLine(_qtMod.product.name, qty, effectivePrice);
-  $('#qt-add-overlay').dataset.invMode = '';
-  $('#qt-add-overlay').style.display = 'none';
-  _invRecalc();
-}, true);
-
-$('#sinv-add-line').addEventListener('click', () => _invOpenAddModal());
+$('#sinv-add-line').addEventListener('click', () => _invAddLine());
 $('#sinv-f-discount').addEventListener('input', _invRecalc);
 $('#sinv-f-tax').addEventListener('input', _invRecalc);
 
@@ -2904,11 +3528,30 @@ $('#sinv-form-save').addEventListener('click', async () => {
   const btn   = $('#sinv-form-save');
   const lines = [];
   $$('#sinv-items-body .qt-line-row').forEach(row => {
-    const qty   = parseFloat(row.querySelector('[data-role="qty"]').value)   || 0;
-    const price = parseFloat(row.querySelector('[data-role="price"]').value) || 0;
-    const desc  = (row.querySelector('[data-role="desc"]')?.value || '').trim();
+    const qty      = parseFloat(row.querySelector('[data-role="qty"]').value)   || 0;
+    const price    = parseFloat(row.querySelector('[data-role="price"]').value) || 0;
+    const discType = row.dataset.discType || 'pct';
+    const discVal  = parseFloat(row.querySelector('[data-role="disc"]')?.value) || 0;
+    const taxType  = row.dataset.taxType  || 'pct';
+    const taxValue = parseFloat(row.dataset.taxValue) || 0;
+    let   desc  = (row.querySelector('[data-role="desc"]')?.value || '').trim();
+    // Append warranty info to description if captured during product selection
+    if (row.dataset.warrantyType === 'lifetime') {
+      desc += (desc ? ' ' : '') + '(Warranty: Lifetime)';
+    } else if (row.dataset.warrantyType === 'date' && row.dataset.warrantyDate) {
+      desc += (desc ? ' ' : '') + `(Warranty expires: ${row.dataset.warrantyDate})`;
+    }
     if (qty > 0 || price > 0 || desc) {
-      lines.push({ item_type: 'custom', description: desc, quantity: qty, unit_price: price });
+      lines.push({
+        item_type:      'custom',
+        description:    desc,
+        quantity:       qty,
+        unit_price:     price,
+        discount_type:  discType,
+        discount_value: discVal,
+        tax_pct:        taxValue,
+        tax_type:       taxType,
+      });
     }
   });
 
@@ -2928,6 +3571,7 @@ $('#sinv-form-save').addEventListener('click', async () => {
     issue_date:      $('#sinv-f-date').value,
     due_date:        $('#sinv-f-due').value            || null,
     notes:           $('#sinv-f-notes').value.trim()   || null,
+    payment_method:  $('#sinv-f-payment').value        || null,
     discount_amount: parseFloat($('#sinv-f-discount').value) || 0,
     tax_amount:      parseFloat($('#sinv-f-tax').value)      || 0,
     items:           lines,
@@ -3232,6 +3876,7 @@ function _soCalcTotals() {
 
 async function _soOpenForm(order) {
   _soShowView('form');
+  _soApplySettings();   // re-apply field visibility each time the form opens
   $('#so-form-title').textContent = order ? `Edit ${order.order_number}` : 'New Sales Order';
   _so.editingId = order?.id ?? null;
 
@@ -3331,6 +3976,223 @@ $('#so-status-filter').addEventListener('change', () => {
 });
 $('#so-f-discount').addEventListener('input', _soCalcTotals);
 $('#so-f-tax').addEventListener('input', _soCalcTotals);
+$('#so-settings-btn').addEventListener('click', _soOpenSettings);
+
+// ── Sales Order Settings ───────────────────────────────────────────────────
+const _SO_SETTINGS_KEY = 'so_settings';
+
+// Live settings state (applied immediately)
+let _soSettings = {
+  defaultStatus: 'pending',     // 'pending' | 'confirmed'
+  fieldHide: {
+    reference:        false,
+    expected_delivery: false,
+    notes:            false,
+    discount:         false,
+    tax:              false,
+  },
+};
+
+// Staged (dialog) copies
+let _soPickedSettings = {};
+let _soPfsOuter       = 'general'; // 'general' | 'fields'
+
+const _SO_FIELD_MAP = [
+  { id: 'reference',         label: 'Reference No.',      desc: 'Internal or external PO reference for this order.',        icon: 'fa-tag' },
+  { id: 'expected_delivery', label: 'Expected Delivery',  desc: 'Expected delivery date field on the order form.',          icon: 'fa-calendar-check' },
+  { id: 'notes',             label: 'Notes',              desc: 'Internal notes textarea at the bottom of the form.',       icon: 'fa-note-sticky' },
+  { id: 'discount',          label: 'Discount',           desc: 'Order-level discount amount in the summary section.',      icon: 'fa-percent' },
+  { id: 'tax',               label: 'Tax',                desc: 'Order-level tax amount in the summary section.',           icon: 'fa-receipt' },
+];
+
+function _soApplySettings() {
+  // Show/hide form fields based on current settings
+  const hide = _soSettings.fieldHide;
+  _soFieldToggle('so-f-reference',     '.qt-field:has(#so-f-reference)',      hide.reference);
+  _soFieldToggle('so-f-delivery-date', '.qt-field:has(#so-f-delivery-date)',  hide.expected_delivery);
+  _soFieldToggle('so-f-notes',         '.qt-notes-card',                      hide.notes);
+  _soFieldToggle('so-f-discount',      '.qt-total-row:has(#so-f-discount)',   hide.discount);
+  _soFieldToggle('so-f-tax',           '.qt-total-row:has(#so-f-tax)',        hide.tax);
+}
+
+function _soFieldToggle(id, selector, hidden) {
+  // Try the scoped selector first (for rows/wrappers), fall back to the element itself
+  const el = document.querySelector(selector) || document.getElementById(id);
+  if (el) el.style.display = hidden ? 'none' : '';
+}
+
+function _soOpenSettings() {
+  let ov = document.getElementById('so-settings-overlay');
+
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id        = 'so-settings-overlay';
+    ov.className = 'modal-overlay';
+    ov.style.zIndex = '10003';
+
+    // ── General panel ─────────────────────────────────────────────────────
+    const genPanel = document.createElement('div');
+    genPanel.className = 'pfs-panel pfs-gen-body';
+    genPanel.id = 'sofs-panel-general';
+    genPanel.innerHTML = `
+      <div class="pfs-section-label">Default Status for New Orders</div>
+      <div class="pfs-view-rows">
+        <div class="pfs-view-row" data-so-status="pending">
+          <div class="pfs-view-row-icon" style="background:color-mix(in srgb,#f59e0b 14%,transparent);color:#f59e0b"><i class="fa fa-clock"></i></div>
+          <div class="pfs-view-row-body">
+            <div class="pfs-view-row-title">Pending</div>
+            <div class="pfs-view-row-desc">New orders start as Pending — awaiting confirmation from the customer.</div>
+          </div>
+          <i class="fa fa-circle-check pfs-view-row-chk"></i>
+        </div>
+        <div class="pfs-view-row" data-so-status="confirmed">
+          <div class="pfs-view-row-icon" style="background:color-mix(in srgb,#3b82f6 14%,transparent);color:#3b82f6"><i class="fa fa-circle-check"></i></div>
+          <div class="pfs-view-row-body">
+            <div class="pfs-view-row-title">Confirmed</div>
+            <div class="pfs-view-row-desc">New orders are immediately Confirmed and ready for processing.</div>
+          </div>
+          <i class="fa fa-circle-check pfs-view-row-chk"></i>
+        </div>
+      </div>`;
+
+    genPanel.addEventListener('click', e => {
+      const row = e.target.closest('.pfs-view-row[data-so-status]');
+      if (!row) return;
+      _soPickedSettings.defaultStatus = row.dataset.soStatus;
+      _soSyncGeneral(genPanel);
+    });
+
+    // ── Fields panel ──────────────────────────────────────────────────────
+    const fieldsPanel = document.createElement('div');
+    fieldsPanel.className = 'pfs-panel pfs-fields-body';
+    fieldsPanel.id = 'sofs-panel-fields';
+    fieldsPanel.style.display = 'none';
+
+    _SO_FIELD_MAP.forEach(f => {
+      const row = document.createElement('div');
+      row.className = 'pfs-field-row';
+      row.innerHTML = `
+        <div class="pfs-field-icon"><i class="fa ${f.icon}"></i></div>
+        <div class="pfs-field-body">
+          <div class="pfs-field-label">${escHtml(f.label)}</div>
+          <div class="pfs-field-desc">${escHtml(f.desc)}</div>
+        </div>
+        <label class="pfs-sw" title="Show / hide this field">
+          <input type="checkbox" class="pfs-sw-input sofs-field-inp" data-sof="${f.id}">
+          <span class="pfs-sw-track"><span class="pfs-sw-knob"></span></span>
+        </label>`;
+      row.querySelector('.sofs-field-inp').addEventListener('change', function () {
+        _soPickedSettings.fieldHide[this.dataset.sof] = !this.checked;
+        row.classList.toggle('pfs-field-hidden', !this.checked);
+      });
+      fieldsPanel.appendChild(row);
+    });
+
+    // ── Shell ─────────────────────────────────────────────────────────────
+    ov.innerHTML = `
+      <div class="po-aim-shell pfs-shell">
+        <div class="po-aim-header">
+          <i class="fa fa-gear" style="color:var(--accent)"></i>
+          <span>Sales Order Settings</span>
+          <button class="psm-close" id="sofs-close"><i class="fa fa-xmark"></i></button>
+        </div>
+        <nav class="pfs-tab-nav" id="sofs-outer-nav">
+          <button class="pfs-opt-tab active" data-sofs-outer="general"><i class="fa fa-sliders"></i>&ensp;General</button>
+          <button class="pfs-opt-tab"        data-sofs-outer="fields" ><i class="fa fa-list-check"></i>&ensp;Fields</button>
+        </nav>
+        <div id="sofs-panels"></div>
+        <div class="po-aim-footer">
+          <button class="po-btn-ghost"   id="sofs-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+          <button class="po-btn-primary" id="sofs-apply" ><i class="fa fa-check"></i> Apply</button>
+        </div>
+      </div>`;
+
+    const panelsHost = ov.querySelector('#sofs-panels');
+    panelsHost.appendChild(genPanel);
+    panelsHost.appendChild(fieldsPanel);
+    document.body.appendChild(ov);
+
+    // Nav tabs
+    ov.querySelector('#sofs-outer-nav').addEventListener('click', e => {
+      const btn = e.target.closest('.pfs-opt-tab[data-sofs-outer]');
+      if (!btn) return;
+      _soPfsOuter = btn.dataset.sofsOuter;
+      _soSyncOuter(ov);
+    });
+
+    ov.addEventListener('pointerdown', e => { if (e.target === ov) ov.style.display = 'none'; });
+    ov.querySelector('#sofs-close') .addEventListener('click', () => ov.style.display = 'none');
+    ov.querySelector('#sofs-cancel').addEventListener('click', () => ov.style.display = 'none');
+
+    ov.querySelector('#sofs-apply').addEventListener('click', async () => {
+      _soSettings = {
+        defaultStatus: _soPickedSettings.defaultStatus,
+        fieldHide:     Object.assign({}, _soPickedSettings.fieldHide),
+      };
+      ov.style.display = 'none';
+      _soApplySettings();
+      try {
+        await window.electronAPI?.setConfig?.({ [_SO_SETTINGS_KEY]: _soSettings });
+      } catch (_) {}
+    });
+  }
+
+  // Each open: stage current state and sync UI
+  _soPfsOuter        = 'general';
+  _soPickedSettings  = {
+    defaultStatus: _soSettings.defaultStatus,
+    fieldHide:     Object.assign({}, _soSettings.fieldHide),
+  };
+
+  _soSyncOuter(ov);
+  _soSyncGeneral(ov.querySelector('#sofs-panel-general'));
+  _soSyncFields(ov.querySelector('#sofs-panel-fields'));
+
+  ov.style.display = 'flex';
+}
+
+function _soSyncOuter(ov) {
+  ov.querySelectorAll('#sofs-outer-nav .pfs-opt-tab').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.sofsOuter === _soPfsOuter);
+  });
+  const panels = { general: '#sofs-panel-general', fields: '#sofs-panel-fields' };
+  Object.entries(panels).forEach(([key, sel]) => {
+    const el = ov.querySelector(sel);
+    if (el) el.style.display = _soPfsOuter === key ? '' : 'none';
+  });
+}
+
+function _soSyncGeneral(panel) {
+  if (!panel) return;
+  panel.querySelectorAll('.pfs-view-row[data-so-status]').forEach(row => {
+    row.classList.toggle('selected', row.dataset.soStatus === _soPickedSettings.defaultStatus);
+  });
+}
+
+function _soSyncFields(panel) {
+  if (!panel) return;
+  panel.querySelectorAll('.sofs-field-inp[data-sof]').forEach(inp => {
+    const hidden = !!_soPickedSettings.fieldHide[inp.dataset.sof];
+    inp.checked = !hidden;
+    inp.closest('.pfs-field-row')?.classList.toggle('pfs-field-hidden', hidden);
+  });
+}
+
+// Restore SO settings from Electron config at startup
+;(async () => {
+  try {
+    const cfg = await window.electronAPI?.getConfig?.();
+    const s   = cfg?.[_SO_SETTINGS_KEY];
+    if (s && typeof s === 'object') {
+      if (s.defaultStatus) _soSettings.defaultStatus = s.defaultStatus;
+      if (s.fieldHide && typeof s.fieldHide === 'object') {
+        _soSettings.fieldHide = Object.assign({}, _soSettings.fieldHide, s.fieldHide);
+      }
+    }
+  } catch (_) {}
+  _soApplySettings();
+})();
+
 // ── End Sales Orders ──────────────────────────────────────────────────────
 
 // ── Login flow ─────────────────────────────────────────────────────────────
@@ -3347,8 +4209,8 @@ async function init() {
 
 function showLogin() {
   window.electronAPI.narrowAuth?.();
-  state.cashierMode = false;
-  state.cashierInfo = null;
+  state.cashierMode  = false;
+  state.cashierInfo  = null;
   _ctbStopClock();
   $('#app-shell').classList.remove('cashier-mode');
   const body = $('#login-body');
@@ -3444,6 +4306,7 @@ const _obFeatureDefs = [
   { key: 'crm',                   img: 'img/features/social-media-campaign.png',       name: 'CRM',                  desc: 'Leads pipeline, contacts & follow-up tasks',    color: '#7c3aed' },
   { key: 'project_management',   img: 'img/features/account-management.png',          name: 'Projects',             desc: 'Projects, tasks, milestones & kanban boards',  color: '#0284c7' },
   { key: 'automation_editor',    img: 'img/features/automation-editor.svg',            name: 'Automation Editor',    desc: 'Trigger-based workflows & automated sequences', color: '#f59e0b' },
+  { key: 'event_management',     img: 'img/features/account-management.png',           name: 'Event Advertising Agency', desc: 'Brands, jobs, reporters, officers & salary sheets', color: '#0ea5e9' },
   { key: 'developers',           img: 'img/features/developers.svg',                  name: 'Developers',           desc: 'API keys, webhooks & third-party integrations', color: '#0f766e' },
 ];
 
@@ -3657,6 +4520,7 @@ function applyFeatureVisibility() {
   const dev_enabled  = bf('developers');
   const auto_enabled = bf('automation_editor');
   const pm_enabled   = bf('project_management');
+  const evt_enabled  = bf('event_management');
 
   // ── Cashier mode: POS-only ──
   if (state.cashierMode) {
@@ -3691,18 +4555,34 @@ function applyFeatureVisibility() {
     services:   svc_any,
     mail:       mail_any,
     crm:        crm_any,
-    automations:auto_enabled,
-    projects:   pm_enabled,
-    users:      isAdminOrOwner,
+    automations:  auto_enabled,
+    projects:     pm_enabled,
+    'event-mgmt': evt_enabled,
+    users:        isAdminOrOwner,
   };
   $$('.ribbon-tab[data-tab]').forEach(tab => {
     const show = tabFeatures[tab.dataset.tab];
-    tab.style.display = (show === undefined || show) ? '' : 'none';
+    const visible = (show === undefined || show);
+    tab.style.display = visible ? '' : 'none';
+    tab.dataset.rbcFeature = visible ? '1' : '0';
   });
   $$('.sb-nav-item[data-tab]').forEach(item => {
     const show = tabFeatures[item.dataset.tab];
     item.style.display = (show === undefined || show) ? '' : 'none';
   });
+
+  // ── Officer role: restrict to Event tab only ──
+  if (state.memberRole === 'officer') {
+    $$('.ribbon-tab[data-tab]').forEach(tab => {
+      const visible = tab.dataset.tab === 'event-mgmt';
+      tab.style.display = visible ? '' : 'none';
+      tab.dataset.rbcFeature = visible ? '1' : '0';
+    });
+    $$('.sb-nav-item[data-tab]').forEach(item => {
+      item.style.display = item.dataset.tab === 'event-mgmt' ? '' : 'none';
+    });
+    if (_activeTab() !== 'event-mgmt') activateTab('event-mgmt');
+  }
 
   // ── POS ribbon groups ──
   grp('#rb-new-session',    pos_session);                            // Session
@@ -3734,7 +4614,8 @@ function applyFeatureVisibility() {
   // ── If currently on a hidden tab, go home ──
   if (!svc_any  && _activeTab() === 'services') activateTab('home');
   if (!mail_any && _activeTab() === 'mail')     activateTab('home');
-  if (!crm_any  && _activeTab() === 'crm')      activateTab('home');
+  if (!crm_any   && _activeTab() === 'crm')        activateTab('home');
+  if (!evt_enabled && _activeTab() === 'event-mgmt') activateTab('home');
 
   // ── Developers (account dropdown entry) ──
   const tpmDev = $('#tpm-developers');
@@ -4093,6 +4974,34 @@ function applyFeatureVisibility() {
   grp('#rb-crm-refresh',   crm_any);                          // Actions group
   btn('#rb-crm-refresh',   crm_any);
 
+  // ── Event ribbon groups ──
+  grp('#rb-brd-all',     evt_enabled);
+  btn('#rb-brd-all',     evt_enabled);
+  btn('#rb-brd-new',     evt_enabled);
+  grp('#rb-rpt-all',     evt_enabled);
+  btn('#rb-rpt-all',     evt_enabled);
+  btn('#rb-rpt-new',     evt_enabled);
+  grp('#rb-ofc-all',     evt_enabled);
+  btn('#rb-ofc-all',     evt_enabled);
+  btn('#rb-ofc-new',     evt_enabled);
+  grp('#rb-agc-all',     evt_enabled);
+  btn('#rb-agc-all',     evt_enabled);
+  btn('#rb-agc-new',     evt_enabled);
+  grp('#rb-ss-all',      evt_enabled);
+  btn('#rb-ss-all',      evt_enabled);
+  btn('#rb-ss-new',      evt_enabled);
+  grp('#rb-crd-all',     evt_enabled);
+  btn('#rb-crd-all',     evt_enabled);
+  btn('#rb-crd-new',     evt_enabled);
+  grp('#rb-pmt-all',     evt_enabled);
+  btn('#rb-pmt-all',     evt_enabled);
+  btn('#rb-pmt-new',     evt_enabled);
+  grp('#rb-job-all',     evt_enabled);
+  btn('#rb-job-all',     evt_enabled);
+  btn('#rb-job-new',     evt_enabled);
+  grp('#rb-brd-refresh', evt_enabled);
+  btn('#rb-brd-refresh', evt_enabled);
+
   // ── Backstage sections ──
   const pos  = pos_any;
   const prod = inv_products || inv_audit || inv_discounts;
@@ -4255,6 +5164,8 @@ function showApp() {
   loadProducts();
   // Apply saved layout mode (ribbon vs sidebar)
   _applyLayoutMode(state.config?.layout_mode || 'ribbon');
+  // Apply saved ribbon customizations (tab order, visibility, button sizes)
+  if (typeof window.rbcInit === 'function') window.rbcInit();
   // Give one frame for layout + title update before activating Home
   requestAnimationFrame(() => activateTab('home'));
   // Check if bank account onboarding is needed
@@ -4421,6 +5332,7 @@ $('#login-password').addEventListener('keydown', e => { if (e.key === 'Enter') d
 // Cashier login
 $('#cashier-login-btn').addEventListener('click', doCashierLogin);
 $('#cashier-password').addEventListener('keydown', e => { if (e.key === 'Enter') doCashierLogin(); });
+
 
 function showCashierLogin() {
   $('#signin-card').style.display = 'none';
@@ -4740,8 +5652,9 @@ $('#select-biz-btn').addEventListener('click', async () => {
 });
 
 function showAlert(el, msg) {
+  if (!el) return;
   el.textContent = msg;
-  el.style.display = 'block';
+  el.style.display = el.classList.contains('co-alert-bar') ? 'flex' : 'block';
 }
 
 // ── Unauthorized auto-logout ───────────────────────────────────────────────
@@ -5020,6 +5933,7 @@ const _featDefs = [
   { key: 'developers',           name: 'Developers',            desc: 'API keys & webhooks for third-party integrations', icon: 'fa-code',    color: '#0f766e' },
   { key: 'automation_editor',    name: 'Automation Editor',     desc: 'Visual workflow builder — triggers, conditions & actions', icon: 'fa-bolt',           color: '#f59e0b' },
   { key: 'project_management',  name: 'Projects',              desc: 'Projects, tasks, milestones & kanban boards',             icon: 'fa-diagram-project', color: '#0284c7' },
+  { key: 'event_management',    name: 'Event Advertising Agency', desc: 'Brands, jobs, reporters, officers & salary sheets',    icon: 'fa-tag',            color: '#0ea5e9' },
 ];
 
 function openFeatureMgmtModal() {
@@ -7625,8 +8539,8 @@ function _poRenderTable() {
   }
   $('#po-count').textContent = `${_po.list.length} order${_po.list.length !== 1 ? 's' : ''}`;
   $('#po-tbody').innerHTML = _po.list.map(po => {
-    const active = po.id === _po.activePOId ? ' active' : '';
-    return `<tr data-id="${po.id}" class="${active}">
+    const activeClass = po.id === _po.activePOId ? ' po-row-active' : '';
+    return `<tr data-id="${po.id}" class="po-row${activeClass}">
       <td><strong>${po.po_number}</strong></td>
       <td>${po.supplier_name || '—'}</td>
       <td>${po.purchase_date || '—'}</td>
@@ -8115,6 +9029,17 @@ function _grnPayBadge(g) {
   return `<span class="grn-payment-badge ${cls}">${label}</span>`;
 }
 
+function _grnApprovalBadge(g) {
+  if (!g.approval_status) return '';
+  const map = {
+    pending:  ['grn-appr-badge-pending',  'Pending Approval'],
+    approved: ['grn-appr-badge-approved', 'Approved'],
+    rejected: ['grn-appr-badge-rejected', 'Rejected'],
+  };
+  const [cls, label] = map[g.approval_status] || ['grn-appr-badge-pending', g.approval_status];
+  return `<span class="grn-approval-badge ${cls}">${label}</span>`;
+}
+
 function _grnRenderList() {
   const tbody = $('#grn-tbody');
   const cur = window._activeSession?.currency || '';
@@ -8181,7 +9106,39 @@ function _grnRenderDetail(g) {
   // Actions
   const actDiv = $('#grn-dv-actions');
   actDiv.innerHTML = '';
-  if (g.payment_status !== 'paid_full' && g.payment_status !== 'no_amount') {
+
+  // Approval action buttons (shown when GRN is pending)
+  if (g.approval_status === 'pending') {
+    const approveBtn = document.createElement('button');
+    approveBtn.className = 'po-btn-primary grn-approve-btn';
+    approveBtn.innerHTML = '<i class="fa fa-circle-check"></i> Approve';
+    approveBtn.addEventListener('click', async () => {
+      approveBtn.disabled = true;
+      approveBtn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Approving…';
+      try {
+        const res = await API.approveGrn(g.id);
+        if (res.ok) _grnRenderDetail(res.body?.data ?? res.body);
+        else _showToast(res.body?.message || 'Approval failed', 'error');
+      } catch (_) { _showToast('Approval failed', 'error'); }
+    });
+    actDiv.appendChild(approveBtn);
+
+    const rejectBtn = document.createElement('button');
+    rejectBtn.className = 'po-dv-action-btn grn-reject-btn';
+    rejectBtn.innerHTML = '<i class="fa fa-circle-xmark"></i> Reject';
+    rejectBtn.addEventListener('click', async () => {
+      if (!confirm('Reject this GRN? Stock will not be applied.')) return;
+      rejectBtn.disabled = true;
+      try {
+        const res = await API.rejectGrn(g.id);
+        if (res.ok) _grnRenderDetail(res.body?.data ?? res.body);
+        else _showToast(res.body?.message || 'Rejection failed', 'error');
+      } catch (_) { _showToast('Rejection failed', 'error'); }
+    });
+    actDiv.appendChild(rejectBtn);
+  }
+
+  if (g.payment_status !== 'paid_full' && g.payment_status !== 'no_amount' && g.approval_status !== 'pending') {
     const payBtn = document.createElement('button');
     payBtn.className = 'po-btn-primary';
     payBtn.innerHTML = '<i class="fa fa-money-bill-wave"></i> Make Payment';
@@ -8194,43 +9151,128 @@ function _grnRenderDetail(g) {
   printBtn.addEventListener('click', () => _grnPrint(g));
   actDiv.appendChild(printBtn);
 
-  // Summary cards
+  // Summary cards — add approval status card if applicable
+  const approvalCard = g.approval_status
+    ? `<div><div class="po-dv-sf-label">Approval</div><div class="po-dv-sf-val">${_grnApprovalBadge(g)}</div></div>`
+    : '';
+  const creditTermsCard = g.payment_method === 'credit' && g.payment_terms_days
+    ? `<div><div class="po-dv-sf-label">Payment Terms</div><div class="po-dv-sf-val">${g.payment_terms_days} days</div></div>`
+    : '';
+  const creditDueCard = g.payment_method === 'credit' && g.payment_due_date
+    ? `<div><div class="po-dv-sf-label">Due Date</div><div class="po-dv-sf-val grn-due-date-val"><i class="fa fa-clock"></i> ${g.payment_due_date}</div></div>`
+    : '';
   $('#grn-dv-summary').innerHTML = `
     <div class="po-dv-summary">
       <div><div class="po-dv-sf-label">Status</div><div class="po-dv-sf-val">${_grnPayBadge(g)}</div></div>
+      ${approvalCard}
       <div><div class="po-dv-sf-label">Total</div><div class="po-dv-sf-val">${cur}${(g.total||0).toFixed(2)}</div></div>
       <div><div class="po-dv-sf-label">Paid</div><div class="po-dv-sf-val">${cur}${(g.amount_paid||0).toFixed(2)}</div></div>
       <div><div class="po-dv-sf-label">Outstanding</div><div class="po-dv-sf-val">${cur}${(g.amount_outstanding||0).toFixed(2)}</div></div>
       ${g.payment_method ? `<div><div class="po-dv-sf-label">Pay method</div><div class="po-dv-sf-val">${g.payment_method}</div></div>` : ''}
+      ${creditTermsCard}${creditDueCard}
       ${g.reference ? `<div><div class="po-dv-sf-label">Reference</div><div class="po-dv-sf-val">${g.reference}</div></div>` : ''}
     </div>`;
 
-  // Items
+  // Parties — supplier left, our business right
+  const biz        = state.receiptSettings || {};
+  const bizName    = escHtml(biz.business_name || '');
+  const bizAddr    = escHtml(biz.receipt_address_line || '');
+  const supName    = escHtml(g.supplier_name || '— No Supplier —');
+  const supContact = escHtml(g.supplier_contact_name || '');
+  const supEmail   = escHtml(g.supplier_email || '');
+  const supPhone   = escHtml(g.supplier_phone || '');
+  const partiesEl  = document.getElementById('grn-dv-parties');
+  if (partiesEl) {
+    partiesEl.innerHTML = `
+      <div class="grn-dv-parties-inner">
+        <div class="grn-dv-party">
+          <div class="grn-dv-party-label"><i class="fa fa-building-user"></i> Supplier</div>
+          <div class="grn-dv-party-name">${supName}</div>
+          ${supContact ? `<div class="grn-dv-party-row"><i class="fa fa-user"></i>${supContact}</div>` : ''}
+          ${supEmail   ? `<div class="grn-dv-party-row"><i class="fa fa-envelope"></i>${supEmail}</div>` : ''}
+          ${supPhone   ? `<div class="grn-dv-party-row"><i class="fa fa-phone"></i>${supPhone}</div>` : ''}
+        </div>
+        <div class="grn-dv-party grn-dv-party-biz">
+          <div class="grn-dv-party-label"><i class="fa fa-store"></i> Received By</div>
+          ${bizName ? `<div class="grn-dv-party-name">${bizName}</div>` : ''}
+          ${bizAddr ? `<div class="grn-dv-party-row"><i class="fa fa-location-dot"></i>${bizAddr}</div>` : ''}
+        </div>
+      </div>`;
+  }
+
+  // Items — build dynamic columns based on saved lineItems settings
+  const li         = _grnLineItems || {};
+  const showUc     = !!li['unit-in-case'];
+  const showUom    = !!li['uom'];
+  const showDisc   = !!li['discount'];
+  const showNgv    = !!li['net-gross'];   // show Gross + Net, hide Total
+  let colCount = 4; // Product, SKU, Qty, Unit Cost always present
+  if (showUc)  colCount++;
+  if (showUom) colCount++;
+  if (showDisc) colCount++;
+  if (showNgv) colCount += 2; else colCount++; // +2 Gross+Net or +1 Total
+
+  // Rebuild header
+  const theadTr = document.createElement('tr');
+  theadTr.innerHTML = '<th>Product</th><th>SKU</th><th>Qty</th><th>Unit Cost</th>'
+    + (showUc   ? '<th>Unit/Case</th>' : '')
+    + (showUom  ? '<th>UOM</th>'       : '')
+    + (showDisc ? '<th>Disc %</th>'    : '')
+    + (showNgv  ? '<th style="text-align:right">Gross</th><th style="text-align:right">Net</th>' : '<th style="text-align:right">Total</th>');
+  const thead = document.getElementById('grn-dv-thead');
+  if (thead) { thead.innerHTML = ''; thead.appendChild(theadTr); }
+
   const items = g.items || [];
+  const colSpan = colCount;
   $('#grn-dv-items').innerHTML = items.length
-    ? items.map(it => `
-        <tr>
-          <td>${it.product_name}</td>
-          <td>${it.sku || '—'}</td>
-          <td style="text-align:right">${(it.quantity_received||0)}</td>
-          <td style="text-align:right">${cur}${(it.unit_cost||0).toFixed(2)}</td>
-          <td style="text-align:right">${cur}${(it.line_total||0).toFixed(2)}</td>
-        </tr>`).join('')
-    : `<tr><td colspan="5" style="text-align:center;color:var(--text-muted)">No items</td></tr>`;
+    ? items.map(it => {
+        const qty   = (it.quantity_received || 0);
+        const cost  = (it.unit_cost || 0);
+        const gross = qty * cost;
+        const disc  = it.discount_percent || 0;
+        const net   = gross * (1 - disc / 100);
+        const qtyStr = qty % 1 === 0 ? String(Math.round(qty)) : qty.toFixed(3).replace(/\.?0+$/,'');
+        return '<tr>'
+          + `<td>${it.product_name || '—'}</td>`
+          + `<td>${it.sku || '—'}</td>`
+          + `<td style="text-align:right">${qtyStr}</td>`
+          + `<td style="text-align:right">${cur}${cost.toFixed(2)}</td>`
+          + (showUc   ? `<td style="text-align:right">${it.units_per_case ?? '—'}</td>` : '')
+          + (showUom  ? `<td>${it.uom || '—'}</td>` : '')
+          + (showDisc ? `<td style="text-align:right">${disc > 0 ? disc + '%' : '—'}</td>` : '')
+          + (showNgv
+              ? `<td style="text-align:right">${cur}${gross.toFixed(2)}</td><td style="text-align:right;color:var(--accent);font-weight:600">${cur}${net.toFixed(2)}</td>`
+              : `<td style="text-align:right">${cur}${(it.line_total||0).toFixed(2)}</td>`)
+          + '</tr>';
+      }).join('')
+    : `<tr><td colspan="${colSpan}" style="text-align:center;color:var(--text-muted)">No items</td></tr>`;
 
   // Payments
   const payments = g.payments || [];
   $('#grn-dv-payments').innerHTML = payments.length
-    ? `<table class="po-items-table"><thead><tr><th>Date</th><th>Account</th><th style="text-align:right">Amount</th></tr></thead><tbody>
+    ? `<div class="grn-dv-table-scroll"><table class="po-items-table"><thead><tr><th>Date</th><th>Account</th><th style="text-align:right">Amount</th></tr></thead><tbody>
         ${payments.map(p => `<tr><td>${p.date||'—'}</td><td>${p.account||'—'}</td><td style="text-align:right">${cur}${(p.amount||0).toFixed(2)}</td></tr>`).join('')}
-       </tbody></table>`
-    : `<div style="padding:8px 0;color:var(--text-muted);font-size:12px">No payments recorded</div>`;
+       </tbody></table></div>`
+    : `<div class="grn-dv-no-data"><i class="fa fa-money-bill-wave"></i> No payments recorded</div>`;
 
-  $('#grn-dv-totals').innerHTML = `
-    <div class="po-dv-totals">
-      <span>Subtotal: ${cur}${(g.subtotal||0).toFixed(2)}</span>
-      <strong>Total: ${cur}${(g.total||0).toFixed(2)}</strong>
-    </div>`;
+  // Totals breakdown (subtotal → expenses → grand total)
+  const expLines  = g.expense_lines || [];
+  const subtotalV = (g.subtotal || 0);
+  let totalsHtml = `<div class="grn-dv-br-row"><span>Subtotal</span><span>${cur}${subtotalV.toFixed(2)}</span></div>`;
+  if (expLines.length) {
+    totalsHtml += `<div class="grn-dv-br-divider"></div>`;
+    expLines.forEach(e => {
+      const val = parseFloat(e.value) || 0;
+      const amt = e.type === 'pct' ? subtotalV * val / 100 : val;
+      const lbl = e.type === 'pct' ? `${val}%` : 'Flat';
+      totalsHtml += `<div class="grn-dv-br-row grn-dv-br-exp">
+        <span><i class="fa fa-receipt" style="font-size:10px;margin-right:5px;opacity:.55"></i>${escHtml(e.name)}<em>${escHtml(lbl)}</em></span>
+        <span>+${cur}${amt.toFixed(2)}</span>
+      </div>`;
+    });
+  }
+  totalsHtml += `<div class="grn-dv-br-total"><span>Total</span><strong>${cur}${(g.total||0).toFixed(2)}</strong></div>`;
+  $('#grn-dv-totals').innerHTML = totalsHtml;
 
   $('#grn-dv-notes').innerHTML = g.notes
     ? `<div class="po-dv-notes">${g.notes}</div>`
@@ -8241,8 +9283,562 @@ function _grnRenderDetail(g) {
 
 async function _grnPrint(g) {
   const lhFull = await _fetchLetterhead();
-  await window.electronAPI.openGrnPrint({ grn: g, letterhead: lhFull, currency: state.currency });
+  const rs = state.receiptSettings || {};
+  await window.electronAPI.openGrnPrint({
+    grn:          g,
+    letterhead:   lhFull,
+    currency:     state.currency,
+    lineItemCols: Object.assign({}, _grnLineItems),
+    fieldHide:    Object.assign({}, _grnFieldHide),
+    bizSettings:  {
+      name:    rs.business_name         || '',
+      address: rs.receipt_address_line  || '',
+    },
+  });
 }
+
+// ── GRN Form Settings ─────────────────────────────────────────────────────
+const _GRN_FIELDS_KEY    = 'grn_modal_fields';
+const _GRN_SETTINGS_KEY  = 'grn_modal_settings';
+const _GRN_LINEITEMS_KEY = 'grn_lineitems_cols';
+const _GRN_EXPENSES_KEY  = 'grn_expenses';
+
+const _GRN_FIELD_MAP = [
+  // Receipt Details
+  { id: 'reference',      label: 'Reference',                    icon: 'fa-tag',         section: 'Receipt Details',
+    getEl()       { return document.getElementById('grn-field-reference'); },
+    getElDirect() { return document.getElementById('grn-direct-field-reference'); } },
+  { id: 'notes',          label: 'Notes',                        icon: 'fa-align-left',  section: 'Receipt Details',
+    getEl()       { return document.getElementById('grn-field-notes'); },
+    getElDirect() { return document.getElementById('grn-direct-field-notes'); } },
+  // Payment
+  { id: 'payment-method', label: 'Payment Method',               icon: 'fa-credit-card', section: 'Payment',
+    getEl()       { return document.getElementById('grn-field-payment-method'); },
+    getElDirect() { return document.getElementById('grn-direct-field-payment-method'); } },
+  { id: 'pay-options',    label: 'Pay Options (Full / Partial)', icon: 'fa-coins',       section: 'Payment',
+    getEl()       { return document.getElementById('grn-field-pay-options'); },
+    getElDirect() { return document.getElementById('grn-direct-field-pay-options'); } },
+];
+
+let _grnFieldHide      = {};         // {fieldId: true} — hidden fields
+let _grnDefaultMethod  = 'cash';     // default payment method: cash|cheque|credit
+let _grnLineItems      = { 'unit-in-case': false, 'uom': false, 'discount': false, 'net-gross': false };
+let _grnExpenses       = [];         // [{id, name, type:'flat'|'pct', value}]
+let _grnPermissions    = { approval_mode: 'without_permission', role_perms: {} }; // live permission config
+
+const _GRN_PERMISSIONS_KEY = 'grn_permissions';
+
+// ─ Dialog state (staging — applied only on "Apply") ──────────────────────
+let _grnPfsOuter          = 'general';  // 'general'|'fields'|'lineitems'|'expenses'|'permissions'
+let _grnPickedMethod      = 'cash';
+let _grnPickedHide        = {};
+let _grnPickedLineItems   = {};
+let _grnPickedExpenses    = [];  // staging copy of expense rules
+let _grnPickedPermissions = { approval_mode: 'without_permission', role_perms: {} };
+
+function _applyGrnPrefs() {
+  // Apply to both GRN modals (PO-based and direct)
+  _GRN_FIELD_MAP.forEach(f => {
+    const hidden = !!_grnFieldHide[f.id];
+    const el  = f.getEl?.();
+    const elD = f.getElDirect?.();
+    if (el)  el.style.display  = hidden ? 'none' : '';
+    if (elD) elD.style.display = hidden ? 'none' : '';
+  });
+  _applyGrnLineItems();
+}
+
+function _applyGrnLineItems() {
+  document.querySelectorAll('.grn-items-table').forEach(tbl => {
+    tbl.classList.toggle('grn-show-uc',   !!_grnLineItems['unit-in-case']);
+    tbl.classList.toggle('grn-show-uom',  !!_grnLineItems['uom']);
+    tbl.classList.toggle('grn-show-disc', !!_grnLineItems['discount']);
+    tbl.classList.toggle('grn-show-ngv',  !!_grnLineItems['net-gross']);
+  });
+}
+
+function _grnApplyDefaultMethod(method) {
+  $$('#grn-method-btns .grn-method-btn').forEach(b => b.classList.toggle('active', b.dataset.method === method));
+  const pf = document.getElementById('grn-payment-fields');
+  if (pf) pf.style.display = method === 'credit' ? 'none' : '';
+  const cf = document.getElementById('grn-cheque-fields');
+  if (cf) cf.style.display = method === 'cheque' ? 'flex' : 'none';
+  const ct = document.getElementById('grn-credit-terms');
+  if (ct) ct.style.display = method === 'credit' ? '' : 'none';
+}
+
+function _openGrnSettings() {
+  let ov = document.getElementById('grn-settings-overlay');
+
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'grn-settings-overlay';
+    ov.className = 'modal-overlay';
+    ov.style.zIndex = '10003';
+
+    // ── General panel: default payment method ────────────────────────────
+    const genPanel = document.createElement('div');
+    genPanel.className = 'pfs-panel pfs-gen-body';
+    genPanel.id = 'gfs-panel-general';
+    genPanel.innerHTML = `
+      <div class="pfs-section-label">Default Payment Method</div>
+      <div class="pfs-view-rows">
+        <div class="pfs-view-row" data-method="cash">
+          <div class="pfs-view-row-icon"><i class="fa fa-money-bill"></i></div>
+          <div class="pfs-view-row-body">
+            <div class="pfs-view-row-title">Cash</div>
+            <div class="pfs-view-row-desc">Payment method will default to Cash when the modal opens.</div>
+          </div>
+          <i class="fa fa-circle-check pfs-view-row-chk"></i>
+        </div>
+        <div class="pfs-view-row" data-method="cheque">
+          <div class="pfs-view-row-icon"><i class="fa fa-money-check"></i></div>
+          <div class="pfs-view-row-body">
+            <div class="pfs-view-row-title">Cheque</div>
+            <div class="pfs-view-row-desc">Payment method will default to Cheque when the modal opens.</div>
+          </div>
+          <i class="fa fa-circle-check pfs-view-row-chk"></i>
+        </div>
+        <div class="pfs-view-row" data-method="credit">
+          <div class="pfs-view-row-icon"><i class="fa fa-clock"></i></div>
+          <div class="pfs-view-row-body">
+            <div class="pfs-view-row-title">Credit</div>
+            <div class="pfs-view-row-desc">Payment will default to Credit (on account) — no upfront payment required.</div>
+          </div>
+          <i class="fa fa-circle-check pfs-view-row-chk"></i>
+        </div>
+      </div>`;
+
+    // ── Fields panel: per-field show/hide toggles ────────────────────────
+    const fieldsPanel = document.createElement('div');
+    fieldsPanel.className = 'pfs-panel pfs-fields-body';
+    fieldsPanel.id = 'gfs-panel-fields';
+    fieldsPanel.style.display = 'none';
+
+    const sectionOrder = [], sectionMap = {};
+    _GRN_FIELD_MAP.forEach(f => {
+      if (!sectionMap[f.section]) { sectionMap[f.section] = []; sectionOrder.push(f.section); }
+      sectionMap[f.section].push(f);
+    });
+    sectionOrder.forEach(sec => {
+      const hd = document.createElement('div');
+      hd.className = 'pfs-fields-sec-hd';
+      hd.textContent = sec;
+      fieldsPanel.appendChild(hd);
+      sectionMap[sec].forEach(f => {
+        const row = document.createElement('div');
+        row.className = 'pfs-field-row';
+        row.dataset.fieldId = f.id;
+        row.innerHTML = `
+          <div class="pfs-field-icon"><i class="fa ${f.icon}"></i></div>
+          <span class="pfs-field-label">${escHtml(f.label)}</span>
+          <label class="pfs-sw" title="Show / hide field">
+            <input type="checkbox" class="pfs-sw-input" data-field="${f.id}" checked>
+            <span class="pfs-sw-track"><span class="pfs-sw-knob"></span></span>
+          </label>`;
+        fieldsPanel.appendChild(row);
+        row.querySelector('.pfs-sw-input').addEventListener('change', function () {
+          if (this.checked) { delete _grnPickedHide[this.dataset.field]; }
+          else              { _grnPickedHide[this.dataset.field] = true; }
+          row.classList.toggle('pfs-field-hidden', !this.checked);
+        });
+      });
+    });
+
+    // ── Line Items panel: optional column toggles ────────────────────────
+    const lineItemDefs = [
+      { id: 'unit-in-case', label: 'Unit In Case',     icon: 'fa-layer-group',  desc: 'Show a "Units per case / carton" column so you can record how many units are in each case received.' },
+      { id: 'uom',          label: 'UOM',               icon: 'fa-weight-scale', desc: 'Show a Unit of Measure column (kg, pcs, box…) alongside each line item.' },
+      { id: 'discount',     label: 'Discount / Com %',  icon: 'fa-tag',          desc: 'Show a Discount / Commission % column on each item to record trade discounts or supplier commissions.' },
+      { id: 'net-gross',    label: 'Net & Gross Value', icon: 'fa-calculator',   desc: 'Show Gross Value (Qty × Cost) and Net Value (after Discount %) columns. Replaces the plain Total column.' },
+    ];
+    const linePanel = document.createElement('div');
+    linePanel.className = 'pfs-panel pfs-gen-body';
+    linePanel.id = 'gfs-panel-lineitems';
+    linePanel.style.display = 'none';
+    linePanel.innerHTML = `<div class="pfs-section-label">Optional Item Columns</div><div class="pfs-view-rows" id="gfs-li-rows"></div>`;
+
+    const liRows = linePanel.querySelector('#gfs-li-rows');
+    lineItemDefs.forEach(def => {
+      const card = document.createElement('div');
+      card.className = 'pfs-view-row pfs-view-row--toggle';
+      card.dataset.liId = def.id;
+      card.innerHTML = `
+        <div class="pfs-view-row-icon"><i class="fa ${def.icon}"></i></div>
+        <div class="pfs-view-row-body">
+          <div class="pfs-view-row-title">${escHtml(def.label)}</div>
+          <div class="pfs-view-row-desc">${escHtml(def.desc)}</div>
+        </div>
+        <label class="pfs-sw" title="Enable / disable column">
+          <input type="checkbox" class="pfs-sw-input gfs-li-inp" data-li="${def.id}">
+          <span class="pfs-sw-track"><span class="pfs-sw-knob"></span></span>
+        </label>`;
+      card.querySelector('.gfs-li-inp').addEventListener('change', function () {
+        _grnPickedLineItems[this.dataset.li] = this.checked;
+        card.classList.toggle('selected', this.checked);
+      });
+      liRows.appendChild(card);
+    });
+
+    // ── Expenses panel: custom expense rules ─────────────────────────────
+    const expPanel = document.createElement('div');
+    expPanel.className = 'pfs-panel pfs-gen-body';
+    expPanel.id = 'gfs-panel-expenses';
+    expPanel.style.display = 'none';
+    expPanel.innerHTML = `
+      <div class="pfs-section-label">Custom Expenses</div>
+      <div class="pfs-exp-desc">Add costs to the GRN grand total (shipping, customs, handling…). Each expense can be a flat amount or a % of the items subtotal.</div>
+      <div id="gfs-exp-rows"></div>
+      <button class="pfs-exp-add-btn" id="gfs-exp-add"><i class="fa fa-plus"></i> Add Expense</button>`;
+    expPanel.querySelector('#gfs-exp-add').addEventListener('click', () => {
+      const newExp = { id: Date.now(), name: '', type: 'flat', value: '' };
+      _grnPickedExpenses.push(newExp);
+      _grnRenderExpRow(expPanel.querySelector('#gfs-exp-rows'), newExp);
+    });
+
+    // ── Permissions panel: approval mode + role table ─────────────────────
+    const permPanel = document.createElement('div');
+    permPanel.className = 'pfs-panel pfs-gen-body';
+    permPanel.id = 'gfs-panel-permissions';
+    permPanel.style.display = 'none';
+    permPanel.innerHTML = `
+      <div class="pfs-section-label">GRN Approval Processing</div>
+      <div class="gfs-perm-mode-wrap">
+        <select id="gfs-perm-mode" class="gfs-perm-mode-select">
+          <option value="without_permission">GRN add to stock without permission</option>
+          <option value="approval_processing">GRN add to stock approval processing</option>
+        </select>
+        <div class="gfs-perm-mode-hint" id="gfs-perm-mode-hint"></div>
+      </div>
+      <div id="gfs-perm-role-section" style="display:none">
+        <div class="pfs-section-label" style="margin-top:18px">Role-wise GRN Permissions</div>
+        <div class="gfs-perm-loading" id="gfs-perm-loading"><i class="fa fa-spinner fa-spin"></i> Loading roles…</div>
+        <div id="gfs-perm-table-wrap" style="display:none">
+          <table class="gfs-perm-table" id="gfs-perm-table">
+            <thead><tr id="gfs-perm-thead"></tr></thead>
+            <tbody id="gfs-perm-tbody"></tbody>
+          </table>
+        </div>
+      </div>`;
+
+    // ── Shell ─────────────────────────────────────────────────────────────
+    ov.innerHTML = `
+      <div class="po-aim-shell pfs-shell">
+        <div class="po-aim-header">
+          <i class="fa fa-gear" style="color:var(--accent)"></i>
+          <span>GRN Form Settings</span>
+          <button class="psm-close" id="gfs-close"><i class="fa fa-xmark"></i></button>
+        </div>
+        <nav class="pfs-tab-nav" id="gfs-outer-nav">
+          <button class="pfs-opt-tab active" data-outer="general"    ><i class="fa fa-sliders"></i>&ensp;General</button>
+          <button class="pfs-opt-tab"        data-outer="fields"     ><i class="fa fa-list-check"></i>&ensp;Fields</button>
+          <button class="pfs-opt-tab"        data-outer="lineitems"  ><i class="fa fa-table-columns"></i>&ensp;Line Items</button>
+          <button class="pfs-opt-tab"        data-outer="expenses"   ><i class="fa fa-receipt"></i>&ensp;Expenses</button>
+          <button class="pfs-opt-tab"        data-outer="permissions"><i class="fa fa-shield-halved"></i>&ensp;Permissions</button>
+        </nav>
+        <div id="gfs-panels"></div>
+        <div class="po-aim-footer">
+          <button class="po-btn-ghost"   id="gfs-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+          <button class="po-btn-primary" id="gfs-apply" ><i class="fa fa-check"></i> Apply</button>
+        </div>
+      </div>`;
+
+    const panelsHost = ov.querySelector('#gfs-panels');
+    panelsHost.appendChild(genPanel);
+    panelsHost.appendChild(fieldsPanel);
+    panelsHost.appendChild(linePanel);
+    panelsHost.appendChild(expPanel);
+    panelsHost.appendChild(permPanel);
+    document.body.appendChild(ov);
+
+    // Events
+    ov.addEventListener('pointerdown', e => { if (e.target === ov) ov.style.display = 'none'; });
+    ov.querySelector('#gfs-close') .addEventListener('click', () => ov.style.display = 'none');
+    ov.querySelector('#gfs-cancel').addEventListener('click', () => ov.style.display = 'none');
+
+    ov.querySelector('#gfs-outer-nav').addEventListener('click', e => {
+      const btn = e.target.closest('.pfs-opt-tab[data-outer]');
+      if (!btn) return;
+      _grnPfsOuter = btn.dataset.outer;
+      _grnSyncOuter(ov);
+    });
+
+    genPanel.addEventListener('click', e => {
+      const row = e.target.closest('.pfs-view-row[data-method]');
+      if (!row) return;
+      _grnPickedMethod = row.dataset.method;
+      _grnSyncGeneral(genPanel);
+    });
+
+    ov.querySelector('#gfs-apply').addEventListener('click', async () => {
+      _grnDefaultMethod = _grnPickedMethod;
+      _grnFieldHide     = Object.assign({}, _grnPickedHide);
+      _grnLineItems     = Object.assign({}, _grnPickedLineItems);
+      _grnExpenses      = _grnPickedExpenses.filter(e => e.name.trim() && parseFloat(e.value) > 0)
+                            .map(e => ({ id: e.id, name: e.name.trim(), type: e.type, value: parseFloat(e.value) }));
+      _grnPermissions   = { approval_mode: _grnPickedPermissions.approval_mode, role_perms: Object.assign({}, _grnPickedPermissions.role_perms) };
+      ov.style.display  = 'none';
+      _applyGrnPrefs();
+      _grnCalcFormTotal();
+      _dgrnCalcTotal();
+      try {
+        await window.electronAPI?.setConfig?.({
+          [_GRN_SETTINGS_KEY]:     { defaultMethod: _grnDefaultMethod },
+          [_GRN_FIELDS_KEY]:       _grnFieldHide,
+          [_GRN_LINEITEMS_KEY]:    _grnLineItems,
+          [_GRN_EXPENSES_KEY]:     _grnExpenses,
+          [_GRN_PERMISSIONS_KEY]:  _grnPermissions,
+        });
+        // Persist permissions to server so the approval gate is enforced server-side
+        await API.saveGrnPermissions({
+          approval_mode:    _grnPermissions.approval_mode,
+          role_permissions: _grnPermissions.role_perms,
+        });
+      } catch (_) {}
+    });
+
+    // Permissions panel — mode dropdown wiring
+    permPanel.querySelector('#gfs-perm-mode').addEventListener('change', function () {
+      _grnPickedPermissions.approval_mode = this.value;
+      // Don't clear the cache — just re-render the table with current roles
+      // but wipe the tbody so the approval column shows/hides correctly
+      const tb = permPanel.querySelector('#gfs-perm-tbody');
+      if (tb) tb.innerHTML = '';
+      _grnSyncPermMode(permPanel);
+    });
+  }
+
+  // Each open: copy current state into staging, sync UI
+  _grnPfsOuter              = 'general';
+  _grnPickedMethod          = _grnDefaultMethod;
+  _grnPickedHide            = Object.assign({}, _grnFieldHide);
+  _grnPickedLineItems       = Object.assign({}, _grnLineItems);
+  _grnPickedExpenses        = _grnExpenses.map(e => Object.assign({}, e));
+  _grnPickedPermissions     = { approval_mode: _grnPermissions.approval_mode, role_perms: Object.assign({}, _grnPermissions.role_perms) };
+  _grnPermRolesCache        = null;  // clear cache so roles are always freshly fetched on open
+
+  _grnSyncOuter(ov);
+  _grnSyncGeneral(ov.querySelector('#gfs-panel-general'));
+  _grnSyncFields(ov.querySelector('#gfs-panel-fields'));
+  _grnSyncLineItems(ov.querySelector('#gfs-panel-lineitems'));
+  _grnSyncExpenses(ov.querySelector('#gfs-panel-expenses'));
+  _grnSyncPermissions(ov.querySelector('#gfs-panel-permissions'));
+
+  ov.style.display = 'flex';
+}
+
+function _grnSyncOuter(ov) {
+  ov.querySelectorAll('#gfs-outer-nav .pfs-opt-tab').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.outer === _grnPfsOuter);
+  });
+  const map = {
+    general:     '#gfs-panel-general',
+    fields:      '#gfs-panel-fields',
+    lineitems:   '#gfs-panel-lineitems',
+    expenses:    '#gfs-panel-expenses',
+    permissions: '#gfs-panel-permissions',
+  };
+  Object.entries(map).forEach(([key, sel]) => {
+    const el = ov.querySelector(sel);
+    if (el) el.style.display = _grnPfsOuter === key ? '' : 'none';
+  });
+}
+
+function _grnRenderExpRow(container, exp) {
+  const row = document.createElement('div');
+  row.className = 'gfs-exp-row';
+  row.dataset.expId = exp.id;
+  row.innerHTML = `
+    <input type="text"   class="gfs-exp-name"  placeholder="e.g. Shipping" value="${escHtml(exp.name || '')}">
+    <select class="gfs-exp-type">
+      <option value="flat" ${exp.type === 'flat' ? 'selected' : ''}>Flat</option>
+      <option value="pct"  ${exp.type === 'pct'  ? 'selected' : ''}>%</option>
+    </select>
+    <input type="number" class="gfs-exp-value" placeholder="0.00" min="0" step="0.01" value="${escHtml(String(exp.value || ''))}">
+    <button class="gfs-exp-remove" title="Remove"><i class="fa fa-trash"></i></button>`;
+  row.querySelector('.gfs-exp-name').addEventListener('input',  function () { exp.name  = this.value; });
+  row.querySelector('.gfs-exp-type').addEventListener('change', function () { exp.type  = this.value; });
+  row.querySelector('.gfs-exp-value').addEventListener('input', function () { exp.value = this.value; });
+  row.querySelector('.gfs-exp-remove').addEventListener('click', () => {
+    _grnPickedExpenses = _grnPickedExpenses.filter(e => e.id !== exp.id);
+    row.remove();
+  });
+  container.appendChild(row);
+}
+
+function _grnSyncExpenses(panel) {
+  if (!panel) return;
+  const container = panel.querySelector('#gfs-exp-rows');
+  if (!container) return;
+  container.innerHTML = '';
+  _grnPickedExpenses.forEach(exp => _grnRenderExpRow(container, exp));
+}
+
+// ── Permissions panel helpers ─────────────────────────────────────────────
+function _grnSyncPermissions(panel) {
+  if (!panel) return;
+  const sel = panel.querySelector('#gfs-perm-mode');
+  if (sel) sel.value = _grnPickedPermissions.approval_mode;
+  _grnSyncPermMode(panel);
+}
+
+function _grnSyncPermMode(panel) {
+  if (!panel) return;
+  const mode    = _grnPickedPermissions.approval_mode;
+  const hintEl  = panel.querySelector('#gfs-perm-mode-hint');
+  const section = panel.querySelector('#gfs-perm-role-section');
+  if (hintEl) {
+    hintEl.textContent = mode === 'approval_processing'
+      ? 'GRNs will be queued for approval before stock is applied. Assign which roles may Create, Read, and Approve GRNs.'
+      : 'Stock is applied immediately when a GRN is created. No approval step is required.';
+  }
+  if (section) section.style.display = '';   // always show role section
+  _grnLoadPermRoles(panel);
+}
+
+let _grnPermRolesCache = null;  // cached role list to avoid repeat fetches
+
+async function _grnLoadPermRoles(panel) {
+  if (!panel) return;
+  const loading  = panel.querySelector('#gfs-perm-loading');
+  const tableWrap = panel.querySelector('#gfs-perm-table-wrap');
+  const tbody    = panel.querySelector('#gfs-perm-tbody');
+  const thead    = panel.querySelector('#gfs-perm-thead');
+  if (!tbody || !thead) return;
+
+  if (loading)   loading.style.display   = '';
+  if (tableWrap) tableWrap.style.display = 'none';
+
+  if (!_grnPermRolesCache) {
+    try {
+      const res = await API.grnPermissions();
+      const d   = res.body?.data || {};
+      _grnPermRolesCache = d.roles || [];
+      // Merge server role_permissions into picked state (first load only)
+      if (d.role_permissions && Object.keys(_grnPickedPermissions.role_perms).length === 0) {
+        _grnPickedPermissions.role_perms = Object.assign({}, d.role_permissions);
+      }
+    } catch (_) {
+      _grnPermRolesCache = [];
+    }
+  }
+
+  const roles   = _grnPermRolesCache;
+  const mode    = _grnPickedPermissions.approval_mode;
+  const showApproval = mode === 'approval_processing';
+
+  // Rebuild header
+  thead.innerHTML = `
+    <th class="gfs-perm-th-role">Role</th>
+    <th class="gfs-perm-th-perm">GRN Create</th>
+    <th class="gfs-perm-th-perm">GRN Read</th>
+    ${showApproval ? '<th class="gfs-perm-th-perm gfs-perm-th-approval">GRN Approval</th>' : ''}`;
+
+  // Rebuild body
+  tbody.innerHTML = '';
+  roles.forEach(role => {
+    const perms = _grnPickedPermissions.role_perms[role.slug] || {};
+    const canCreate   = perms.create   !== false;   // default true
+    const canRead     = perms.read     !== false;   // default true
+    const canApprove  = !!perms.approval;           // default false
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="gfs-perm-td-role">
+        <span class="gfs-perm-role-dot" style="background:${escHtml(role.color||'#94a3b8')}"></span>
+        ${escHtml(role.name)}
+        ${role.is_system ? '<span class="gfs-perm-sys-badge">system</span>' : ''}
+      </td>
+      <td class="gfs-perm-td-chk">
+        <label class="gfs-perm-chk-label">
+          <input type="checkbox" class="gfs-perm-inp" data-slug="${escHtml(role.slug)}" data-perm="create" ${canCreate ? 'checked' : ''}>
+          <span class="gfs-perm-chk-box"></span>
+        </label>
+      </td>
+      <td class="gfs-perm-td-chk">
+        <label class="gfs-perm-chk-label">
+          <input type="checkbox" class="gfs-perm-inp" data-slug="${escHtml(role.slug)}" data-perm="read" ${canRead ? 'checked' : ''}>
+          <span class="gfs-perm-chk-box"></span>
+        </label>
+      </td>
+      ${showApproval ? `<td class="gfs-perm-td-chk gfs-perm-td-approval">
+        <label class="gfs-perm-chk-label">
+          <input type="checkbox" class="gfs-perm-inp" data-slug="${escHtml(role.slug)}" data-perm="approval" ${canApprove ? 'checked' : ''}>
+          <span class="gfs-perm-chk-box"></span>
+        </label>
+      </td>` : ''}`;
+
+    tbody.appendChild(tr);
+  });
+
+  // Checkbox change handler
+  tbody.querySelectorAll('.gfs-perm-inp').forEach(inp => {
+    inp.addEventListener('change', function () {
+      const slug = this.dataset.slug;
+      const perm = this.dataset.perm;
+      if (!_grnPickedPermissions.role_perms[slug]) {
+        _grnPickedPermissions.role_perms[slug] = { create: true, read: true, approval: false };
+      }
+      _grnPickedPermissions.role_perms[slug][perm] = this.checked;
+    });
+  });
+
+  if (loading)   loading.style.display   = 'none';
+  if (tableWrap) tableWrap.style.display = '';
+}
+
+function _grnSyncLineItems(panel) {
+  if (!panel) return;
+  panel.querySelectorAll('.gfs-li-inp[data-li]').forEach(inp => {
+    const on = !!_grnPickedLineItems[inp.dataset.li];
+    inp.checked = on;
+    inp.closest('.pfs-view-row')?.classList.toggle('selected', on);
+  });
+}
+
+function _grnSyncGeneral(panel) {
+  if (!panel) return;
+  panel.querySelectorAll('.pfs-view-row[data-method]').forEach(row => {
+    row.classList.toggle('selected', row.dataset.method === _grnPickedMethod);
+  });
+}
+
+function _grnSyncFields(panel) {
+  if (!panel) return;
+  panel.querySelectorAll('.pfs-sw-input[data-field]').forEach(inp => {
+    const hidden = !!_grnPickedHide[inp.dataset.field];
+    inp.checked = !hidden;
+    inp.closest('.pfs-field-row')?.classList.toggle('pfs-field-hidden', hidden);
+  });
+}
+
+document.getElementById('grn-modal-settings-btn')?.addEventListener('click', e => {
+  e.stopPropagation();
+  _openGrnSettings();
+});
+
+// Load saved GRN prefs on startup
+(async () => {
+  try {
+    const cfg = await window.electronAPI?.getConfig?.();
+    const sf  = cfg?.[_GRN_FIELDS_KEY];
+    if (sf && typeof sf === 'object') _grnFieldHide = sf;
+    const ss  = cfg?.[_GRN_SETTINGS_KEY];
+    if (ss?.defaultMethod) _grnDefaultMethod = ss.defaultMethod;
+    const sl  = cfg?.[_GRN_LINEITEMS_KEY];
+    if (sl && typeof sl === 'object') _grnLineItems = { ..._grnLineItems, ...sl };
+    const se  = cfg?.[_GRN_EXPENSES_KEY];
+    if (Array.isArray(se)) _grnExpenses = se;
+    const sp  = cfg?.[_GRN_PERMISSIONS_KEY];
+    if (sp && typeof sp === 'object') {
+      _grnPermissions = {
+        approval_mode: sp.approval_mode || 'without_permission',
+        role_perms:    sp.role_perms && typeof sp.role_perms === 'object' ? sp.role_perms : {},
+      };
+    }
+  } catch (_) {}
+  _applyGrnPrefs();
+})();
 
 // ── Create GRN Modal ──────────────────────────────────────────────────────
 async function _grnOpenCreateModal(purchaseId) {
@@ -8257,12 +9853,14 @@ async function _grnOpenCreateModal(purchaseId) {
   $('#grn-f-date').value = today;
   $('#grn-f-reference').value = '';
   $('#grn-f-notes').value = '';
-  // Reset payment method to cash
-  $$('#grn-method-btns .grn-method-btn').forEach(b => b.classList.toggle('active', b.dataset.method === 'cash'));
-  $('#grn-payment-fields').style.display = '';
-  const cf = $('#grn-cheque-fields'); if (cf) cf.style.display = 'none';
+  // Reset payment method to saved default
+  _grnApplyDefaultMethod(_grnDefaultMethod);
+  const cf = $('#grn-cheque-fields'); if (cf && _grnDefaultMethod !== 'cheque') cf.style.display = 'none';
   $('#grn-f-cheque-ref').value = '';
   $('#grn-f-cheque-date').value = '';
+  // Reset credit terms
+  const gcd = $('#grn-f-credit-days'); if (gcd) gcd.value = '';
+  const gdd = $('#grn-credit-due-display'); if (gdd) gdd.style.display = 'none';
   document.querySelectorAll('input[name="grn-pay-opt"]').forEach(r => { r.checked = r.value === 'full'; });
   $('#grn-partial-row').style.display = 'none';
 
@@ -8292,6 +9890,7 @@ async function _grnOpenCreateModal(purchaseId) {
 
   _grnRenderFormItems();
   _grnCalcFormTotal();
+  _applyGrnPrefs();
 }
 
 function _grnRenderFormItems() {
@@ -8301,7 +9900,9 @@ function _grnRenderFormItems() {
     tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:20px">No items on this PO</td></tr>`;
     return;
   }
-  tbody.innerHTML = _grn.formItems.map((it, idx) => `
+  tbody.innerHTML = _grn.formItems.map((it, idx) => {
+    const gross = ((it.quantity_remaining||0) * (it.unit_cost||0));
+    return `
     <tr class="grn-item-row" data-idx="${idx}">
       <td class="grn-td-product">${it.product_name}</td>
       <td class="grn-td-num">${(it.quantity_ordered||0)}</td>
@@ -8309,35 +9910,76 @@ function _grnRenderFormItems() {
       <td class="grn-td-num">${(it.quantity_remaining||0)}</td>
       <td class="grn-td-num"><input type="number" class="grn-item-qty po-item-num" data-idx="${idx}" value="${(it.quantity_remaining||0)}" min="0" step="0.001" max="${it.quantity_remaining||0}"></td>
       <td class="grn-td-num"><input type="number" class="grn-item-cost po-item-num" data-idx="${idx}" value="${(it.unit_cost||0).toFixed(2)}" min="0" step="0.01"></td>
-      <td class="grn-td-num grn-item-linetotal">${cur}${((it.quantity_remaining||0)*(it.unit_cost||0)).toFixed(2)}</td>
-    </tr>`).join('');
+      <td class="grn-td-num grn-col-uc"><input type="number" class="grn-item-uc" data-idx="${idx}" value="" min="0" step="1" placeholder="—"></td>
+      <td class="grn-col-uom"><input type="text" class="grn-item-uom" data-idx="${idx}" value="" placeholder="pcs"></td>
+      <td class="grn-td-num grn-col-disc"><input type="number" class="grn-item-disc" data-idx="${idx}" value="" min="0" max="100" step="0.01" placeholder="0"></td>
+      <td class="grn-td-num grn-col-gross grn-item-gross">${cur}${gross.toFixed(2)}</td>
+      <td class="grn-td-num grn-col-net grn-item-net">${cur}${gross.toFixed(2)}</td>
+      <td class="grn-td-num grn-item-linetotal grn-th-total">${cur}${gross.toFixed(2)}</td>
+    </tr>`;
+  }).join('');
 
-  tbody.querySelectorAll('.grn-item-qty,.grn-item-cost').forEach(inp => {
+  tbody.querySelectorAll('.grn-item-qty,.grn-item-cost,.grn-item-disc').forEach(inp => {
     inp.addEventListener('input', () => {
-      const idx = +inp.dataset.idx;
-      const row = tbody.querySelector(`.grn-item-row[data-idx="${idx}"]`);
+      const idx  = +inp.dataset.idx;
+      const row  = tbody.querySelector(`.grn-item-row[data-idx="${idx}"]`);
       const qty  = parseFloat(row.querySelector('.grn-item-qty').value)  || 0;
       const cost = parseFloat(row.querySelector('.grn-item-cost').value) || 0;
-      const cur  = window._activeSession?.currency || '';
-      row.querySelector('.grn-item-linetotal').textContent = `${cur}${(qty*cost).toFixed(2)}`;
+      const disc = parseFloat(row.querySelector('.grn-item-disc')?.value) || 0;
+      const cur2 = window._activeSession?.currency || '';
+      const gross = qty * cost;
+      const net   = gross * (1 - disc / 100);
+      row.querySelector('.grn-item-linetotal').textContent = `${cur2}${gross.toFixed(2)}`;
+      row.querySelector('.grn-item-gross').textContent     = `${cur2}${gross.toFixed(2)}`;
+      row.querySelector('.grn-item-net').textContent       = `${cur2}${net.toFixed(2)}`;
       _grnCalcFormTotal();
     });
   });
 }
 
+// ── Expense helper ────────────────────────────────────────────────────────
+// Returns { expHtml: string, grandTotal: number } given a subtotal + expense rules.
+function _calcExpenses(subtotal, cur, expenses) {
+  let expHtml = '';
+  let expTotal = 0;
+  (expenses || []).forEach(exp => {
+    const val = parseFloat(exp.value) || 0;
+    if (!exp.name || val <= 0) return;
+    const amt = exp.type === 'pct' ? subtotal * val / 100 : val;
+    expTotal += amt;
+    const typeLabel = exp.type === 'pct' ? `${val}%` : `Flat`;
+    expHtml += `<div class="po-summary-row grn-exp-row">
+      <span><i class="fa fa-receipt" style="font-size:10px;opacity:.6;margin-right:4px"></i>${escHtml(exp.name)}<span class="grn-exp-type">${escHtml(typeLabel)}</span></span>
+      <span>${cur}${amt.toFixed(2)}</span>
+    </div>`;
+  });
+  return { expHtml, grandTotal: subtotal + expTotal };
+}
+
 function _grnCalcFormTotal() {
-  const cur = window._activeSession?.currency || '';
-  const tbody = $('#grn-items-tbody');
-  let total = 0, items = 0;
+  const cur    = window._activeSession?.currency || '';
+  const useNgv = !!_grnLineItems['net-gross'];
+  const tbody  = $('#grn-items-tbody');
+  let subtotal = 0, items = 0;
   (tbody?.querySelectorAll('.grn-item-row') || []).forEach(row => {
     const qty  = parseFloat(row.querySelector('.grn-item-qty')?.value)  || 0;
     const cost = parseFloat(row.querySelector('.grn-item-cost')?.value) || 0;
-    if (qty > 0) { total += qty * cost; items++; }
+    const disc = parseFloat(row.querySelector('.grn-item-disc')?.value) || 0;
+    if (qty > 0) {
+      const gross = qty * cost;
+      subtotal += useNgv ? gross * (1 - disc / 100) : gross;
+      items++;
+    }
   });
-  const elItems = $('#grn-summary-items');
-  const elTotal = $('#grn-summary-total');
-  if (elItems) elItems.textContent = items;
-  if (elTotal) elTotal.textContent = `${cur}${total.toFixed(2)}`;
+  const { expHtml, grandTotal } = _calcExpenses(subtotal, cur, _grnExpenses);
+  const elItems    = $('#grn-summary-items');
+  const elSubtotal = $('#grn-summary-subtotal');
+  const elExpLines = $('#grn-expense-lines');
+  const elTotal    = $('#grn-summary-total');
+  if (elItems)    elItems.textContent    = items;
+  if (elSubtotal) elSubtotal.textContent = `${cur}${subtotal.toFixed(2)}`;
+  if (elExpLines) elExpLines.innerHTML   = expHtml;
+  if (elTotal)    elTotal.textContent    = `${cur}${grandTotal.toFixed(2)}`;
 }
 
 async function _grnSubmitCreate() {
@@ -8355,6 +9997,9 @@ async function _grnSubmitCreate() {
       purchase_item_id:   fi.id,
       quantity_received:  qty,
       unit_cost:          parseFloat(row.querySelector('.grn-item-cost')?.value) || fi.unit_cost || 0,
+      units_per_case:     parseFloat(row.querySelector('.grn-item-uc')?.value)   || null,
+      uom:                row.querySelector('.grn-item-uom')?.value.trim()       || null,
+      discount_percent:   parseFloat(row.querySelector('.grn-item-disc')?.value) || null,
     });
   });
 
@@ -8373,6 +10018,9 @@ async function _grnSubmitCreate() {
     pay_amount:          (isCash && payOption === 'partial') ? (parseFloat($('#grn-f-amount').value) || null) : null,
     payment_reference:   method === 'cheque' ? ($('#grn-f-cheque-ref').value.trim() || null) : null,
     cheque_due_date:     method === 'cheque' ? ($('#grn-f-cheque-date').value || null) : null,
+    payment_terms_days:  method === 'credit' ? (parseInt($('#grn-f-credit-days')?.value) || null) : null,
+    expense_lines:       _grnExpenses.filter(e => e.name && parseFloat(e.value) > 0)
+                           .map(e => ({ name: e.name, type: e.type, value: parseFloat(e.value) })),
     items,
   };
 
@@ -8472,6 +10120,43 @@ $('#grn-modal-cancel')?.addEventListener('click', () => { $('#grn-modal').style.
 $('#grn-modal-save')?.addEventListener('click',   _grnSubmitCreate);
 
 // Method toggle in create modal
+// ── Credit payment terms: live due-date calculation ───────────────────────
+function _grnCreditDueDate(receivedDateStr, days) {
+  const d = parseInt(days) || 0;
+  if (!receivedDateStr || d <= 0) return null;
+  const dt = new Date(receivedDateStr + 'T00:00:00');
+  if (isNaN(dt)) return null;
+  dt.setDate(dt.getDate() + d);
+  return dt.toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+function _grnUpdateCreditDue() {
+  const dateVal = $('#grn-f-date')?.value;
+  const days    = $('#grn-f-credit-days')?.value;
+  const label   = _grnCreditDueDate(dateVal, days);
+  const display = $('#grn-credit-due-display');
+  const text    = $('#grn-credit-due-text');
+  if (display) display.style.display = label ? '' : 'none';
+  if (text)    text.textContent      = label || '—';
+}
+
+function _dgrnUpdateCreditDue() {
+  const dateVal = $('#grn-direct-date')?.value;
+  const days    = $('#grn-direct-f-credit-days')?.value;
+  const label   = _grnCreditDueDate(dateVal, days);
+  const display = $('#grn-direct-credit-due-display');
+  const text    = $('#grn-direct-credit-due-text');
+  if (display) display.style.display = label ? '' : 'none';
+  if (text)    text.textContent      = label || '—';
+}
+
+// Wire: days input → update due date
+$('#grn-f-credit-days')?.addEventListener('input', _grnUpdateCreditDue);
+$('#grn-direct-f-credit-days')?.addEventListener('input', _dgrnUpdateCreditDue);
+// Wire: date input → update due date (both modals share the same date field)
+$('#grn-f-date')?.addEventListener('change', _grnUpdateCreditDue);
+$('#grn-direct-date')?.addEventListener('change', _dgrnUpdateCreditDue);
+
 $('#grn-method-btns')?.addEventListener('click', e => {
   const btn = e.target.closest('.grn-method-btn');
   if (!btn) return;
@@ -8480,7 +10165,10 @@ $('#grn-method-btns')?.addEventListener('click', e => {
   const method = btn.dataset.method;
   $('#grn-payment-fields').style.display = method === 'credit' ? 'none' : '';
   const cf = $('#grn-cheque-fields');
-  if (cf) { cf.style.display = method === 'cheque' ? 'flex' : 'none'; }
+  if (cf) cf.style.display = method === 'cheque' ? 'flex' : 'none';
+  const ct = $('#grn-credit-terms');
+  if (ct) ct.style.display = method === 'credit' ? '' : 'none';
+  if (method === 'credit') _grnUpdateCreditDue();
 });
 
 // Partial amount toggle in create modal
@@ -8516,6 +10204,355 @@ $('#grn-receive-all-btn')?.addEventListener('click', () => {
     inp.value = max;
     inp.dispatchEvent(new Event('input'));
   });
+});
+
+// ── Direct GRN (no Purchase Order) ───────────────────────────────────────
+const _dgrnState = {
+  items: [],    // [{id, rowEl, productId, productName, qty, unitCost}]
+  method: 'cash',
+};
+
+function _dgrnOpen() {
+  const modal = $('#grn-direct-modal');
+  if (!modal) return;
+
+  // Reset state
+  _dgrnState.items  = [];
+  _dgrnState.method = _grnDefaultMethod;
+
+  // Set today's date
+  const todayEl = $('#grn-direct-date');
+  if (todayEl) todayEl.value = new Date().toISOString().slice(0, 10);
+
+  // Clear fields
+  ['#grn-direct-reference','#grn-direct-notes','#grn-direct-cheque-ref','#grn-direct-cheque-date','#grn-direct-amount']
+    .forEach(sel => { const el = $(sel); if (el) el.value = ''; });
+
+  // Apply saved default payment method
+  $$('#grn-direct-method-btns .grn-method-btn').forEach(b => b.classList.toggle('active', b.dataset.method === _grnDefaultMethod));
+  const pf = $('#grn-direct-payment-fields');
+  if (pf) pf.style.display = _grnDefaultMethod === 'credit' ? 'none' : '';
+  const cf = $('#grn-direct-cheque-fields');
+  if (cf) cf.style.display = _grnDefaultMethod === 'cheque' ? 'flex' : 'none';
+  const ct = $('#grn-direct-credit-terms');
+  if (ct) ct.style.display = _grnDefaultMethod === 'credit' ? '' : 'none';
+  // Reset credit days + due date display
+  const dcd = $('#grn-direct-f-credit-days'); if (dcd) dcd.value = '';
+  const ddd = $('#grn-direct-credit-due-display'); if (ddd) ddd.style.display = 'none';
+  const pr = $('#grn-direct-partial-row');
+  if (pr) pr.style.display = 'none';
+  document.querySelectorAll('input[name="grn-direct-pay-opt"]').forEach(r => { r.checked = r.value === 'full'; });
+
+  // Clear items table
+  $('#grn-direct-items-tbody').innerHTML = '';
+  _dgrnRenderEmpty();
+  _dgrnCalcTotal();
+
+  // Load suppliers into dropdown
+  _dgrnLoadSuppliers();
+
+  // Load accounts into dropdown
+  _dgrnLoadAccounts();
+
+  // Apply field visibility prefs
+  _applyGrnPrefs();
+
+  modal.style.display = 'flex';
+}
+
+async function _dgrnLoadSuppliers() {
+  const sel = $('#grn-direct-supplier');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">— None / Walk-in —</option>';
+  try {
+    const res = await API.suppliers?.() ?? { status: 0 };
+    if (res.status === 200) {
+      (res.body?.data ?? []).forEach(s => {
+        const opt = document.createElement('option');
+        opt.value = s.id;
+        opt.textContent = s.name;
+        sel.appendChild(opt);
+      });
+    }
+  } catch (_) { /* suppliers endpoint may not exist yet */ }
+}
+
+async function _dgrnLoadAccounts() {
+  const sel = $('#grn-direct-account');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">— Select account —</option>';
+  const res = await API.accounts();
+  if (res.status === 200) {
+    (res.body?.data ?? []).forEach(a => {
+      const opt = document.createElement('option');
+      opt.value = a.id;
+      opt.textContent = a.account_name + (a.bank_name ? ' · ' + a.bank_name : '');
+      sel.appendChild(opt);
+    });
+  }
+}
+
+function _dgrnRenderEmpty() {
+  const tbody = $('#grn-direct-items-tbody');
+  const emptyDiv = $('#grn-direct-items-empty');
+  if (!tbody || !emptyDiv) return;
+  const hasItems = tbody.querySelectorAll('tr').length > 0;
+  emptyDiv.style.display = hasItems ? 'none' : 'flex';
+}
+
+function _dgrnCalcTotal() {
+  const cur    = window._activeSession?.currency || '';
+  const useNgv = !!_grnLineItems['net-gross'];
+  let subtotal = 0, count = 0;
+  _dgrnState.items.forEach(item => {
+    const gross = (parseFloat(item.qty) || 0) * (parseFloat(item.unitCost) || 0);
+    const disc  = parseFloat(item.discount) || 0;
+    subtotal += useNgv ? gross * (1 - disc / 100) : gross;
+    count++;
+  });
+  const { expHtml, grandTotal } = _calcExpenses(subtotal, cur, _grnExpenses);
+  const sumItems    = $('#grn-direct-summary-items');
+  const sumSubtotal = $('#grn-direct-summary-subtotal');
+  const sumExpLines = $('#grn-direct-expense-lines');
+  const sumTotal    = $('#grn-direct-summary-total');
+  if (sumItems)    sumItems.textContent    = count;
+  if (sumSubtotal) sumSubtotal.textContent = `${cur}${subtotal.toFixed(2)}`;
+  if (sumExpLines) sumExpLines.innerHTML   = expHtml;
+  if (sumTotal)    sumTotal.textContent    = `${cur}${grandTotal.toFixed(2)}`;
+}
+
+function _dgrnAddItemRow() {
+  const tbody = $('#grn-direct-items-tbody');
+  const emptyDiv = $('#grn-direct-items-empty');
+  if (!tbody) return;
+  if (emptyDiv) emptyDiv.style.display = 'none';
+
+  const itemId = Date.now() + Math.random();
+  const item = { id: itemId, productId: null, productName: '', qty: 1, unitCost: 0 };
+  _dgrnState.items.push(item);
+
+  const tr = document.createElement('tr');
+  tr.dataset.itemId = itemId;
+  tr.innerHTML = `
+    <td class="grn-td-product">
+      <div class="grn-item-product-wrap">
+        <input type="text" class="grn-item-search-inp" placeholder="Search product…" autocomplete="off">
+        <div class="grn-item-search-dd" style="display:none"></div>
+      </div>
+    </td>
+    <td class="grn-td-num">
+      <input type="number" class="grn-item-qty" value="1" min="0.001" step="any">
+    </td>
+    <td class="grn-td-num">
+      <input type="number" class="grn-item-cost" value="0" min="0" step="any">
+    </td>
+    <td class="grn-td-num grn-col-uc">
+      <input type="number" class="grn-item-uc" min="0" step="1" placeholder="—">
+    </td>
+    <td class="grn-col-uom">
+      <input type="text" class="grn-item-uom" placeholder="pcs">
+    </td>
+    <td class="grn-td-num grn-col-disc">
+      <input type="number" class="grn-item-disc" min="0" max="100" step="0.01" placeholder="0">
+    </td>
+    <td class="grn-td-num grn-col-gross grn-item-gross">0.00</td>
+    <td class="grn-td-num grn-col-net   grn-item-net">0.00</td>
+    <td class="grn-td-num grn-item-linetotal grn-th-total">0.00</td>
+    <td>
+      <button class="grn-item-remove-btn" title="Remove"><i class="fa fa-times"></i></button>
+    </td>
+  `;
+  tbody.appendChild(tr);
+
+  const searchInp  = tr.querySelector('.grn-item-search-inp');
+  const dd         = tr.querySelector('.grn-item-search-dd');
+  const qtyInp     = tr.querySelector('.grn-item-qty');
+  const costInp    = tr.querySelector('.grn-item-cost');
+  const discInp    = tr.querySelector('.grn-item-disc');
+  const grossCell  = tr.querySelector('.grn-item-gross');
+  const netCell    = tr.querySelector('.grn-item-net');
+  const lineTotal  = tr.querySelector('.grn-item-linetotal');
+  const removeBtn  = tr.querySelector('.grn-item-remove-btn');
+
+  function _updateLine() {
+    const qty  = parseFloat(qtyInp.value)  || 0;
+    const cost = parseFloat(costInp.value) || 0;
+    const disc = parseFloat(discInp?.value) || 0;
+    const gross = qty * cost;
+    const net   = gross * (1 - disc / 100);
+    if (lineTotal) lineTotal.textContent = gross.toFixed(2);
+    if (grossCell) grossCell.textContent = gross.toFixed(2);
+    if (netCell)   netCell.textContent   = net.toFixed(2);
+    item.qty      = qty;
+    item.unitCost = cost;
+    item.discount = disc;
+    _dgrnCalcTotal();
+  }
+  qtyInp.addEventListener('input',  _updateLine);
+  costInp.addEventListener('input', _updateLine);
+  discInp?.addEventListener('input', _updateLine);
+
+  removeBtn.addEventListener('click', () => {
+    _dgrnState.items = _dgrnState.items.filter(i => i.id !== itemId);
+    tr.remove();
+    _dgrnCalcTotal();
+    _dgrnRenderEmpty();
+  });
+
+  // Product search
+  let _searchTimer;
+  searchInp.addEventListener('input', () => {
+    clearTimeout(_searchTimer);
+    const q = searchInp.value.trim();
+    if (q.length < 2) { dd.style.display = 'none'; return; }
+    _searchTimer = setTimeout(async () => {
+      const res = await API.productSearch(q);
+      if (res.status !== 200) return;
+      const prods = res.body?.data ?? res.body?.products ?? [];
+      dd.innerHTML = '';
+      if (!prods.length) {
+        dd.innerHTML = '<div class="grn-item-search-dd-row" style="color:var(--text-muted)">No results</div>';
+      } else {
+        prods.slice(0, 10).forEach(p => {
+          const row = document.createElement('div');
+          row.className = 'grn-item-search-dd-row';
+          row.innerHTML = `<span class="grn-isddr-name">${escHtml(p.name)}</span><span class="grn-isddr-sku">${escHtml(p.sku || '')}</span>`;
+          row.addEventListener('mousedown', e => {
+            e.preventDefault();
+            item.productId   = p.id;
+            item.productName = p.name;
+            searchInp.value  = p.name;
+            dd.style.display = 'none';
+            // Pre-fill last cost if available
+            if (p.last_purchase_cost || p.cost_price) {
+              costInp.value = p.last_purchase_cost ?? p.cost_price ?? 0;
+              _updateLine();
+            }
+          });
+          dd.appendChild(row);
+        });
+      }
+      dd.style.display = 'block';
+    }, 220);
+  });
+  searchInp.addEventListener('blur', () => { setTimeout(() => { dd.style.display = 'none'; }, 150); });
+
+  searchInp.focus();
+  _dgrnCalcTotal();
+}
+
+async function _dgrnSubmit() {
+  const saveBtn = $('#grn-direct-save');
+  if (!saveBtn || saveBtn.disabled) return;
+
+  // Validate items
+  const validItems = _dgrnState.items.filter(i => i.productId && i.qty > 0);
+  if (!validItems.length) { toast('Add at least one product', 'warning'); return; }
+
+  const dateVal = $('#grn-direct-date')?.value;
+  if (!dateVal) { toast('Select received date', 'warning'); return; }
+
+  const method = _dgrnState.method;
+  let accountId = null;
+  let chequeRef = null;
+  let chequeDate = null;
+  let payAmount = null;
+
+  if (method !== 'credit') {
+    accountId = parseInt($('#grn-direct-account')?.value) || null;
+    if (!accountId) { toast('Select an account for payment', 'warning'); return; }
+    const payOpt = document.querySelector('input[name="grn-direct-pay-opt"]:checked')?.value ?? 'full';
+    if (payOpt === 'partial') {
+      payAmount = parseFloat($('#grn-direct-amount')?.value) || null;
+      if (!payAmount) { toast('Enter partial payment amount', 'warning'); return; }
+    }
+    if (method === 'cheque') {
+      chequeRef  = $('#grn-direct-cheque-ref')?.value.trim() || null;
+      chequeDate = $('#grn-direct-cheque-date')?.value || null;
+    }
+  }
+
+  const body = {
+    supplier_id:  parseInt($('#grn-direct-supplier')?.value) || null,
+    received_date: dateVal,
+    reference:    $('#grn-direct-reference')?.value.trim() || null,
+    notes:        $('#grn-direct-notes')?.value.trim()     || null,
+    payment_method:    method,
+    deduct_account_id: accountId,
+    payment_option:    document.querySelector('input[name="grn-direct-pay-opt"]:checked')?.value ?? 'full',
+    pay_amount:        payAmount,
+    payment_reference:  chequeRef,
+    cheque_due_date:    chequeDate,
+    payment_terms_days: method === 'credit' ? (parseInt($('#grn-direct-f-credit-days')?.value) || null) : null,
+    expense_lines:      _grnExpenses.filter(e => e.name && parseFloat(e.value) > 0)
+                          .map(e => ({ name: e.name, type: e.type, value: parseFloat(e.value) })),
+    items: (() => {
+      const tbody2 = $('#grn-direct-items-tbody');
+      return validItems.map(i => {
+        const row = tbody2?.querySelector(`tr[data-item-id="${i.id}"]`);
+        return {
+          product_id:        i.productId,
+          quantity_received: i.qty,
+          unit_cost:         i.unitCost,
+          discount_percent:  i.discount  || null,
+          units_per_case:    row ? (parseFloat(row.querySelector('.grn-item-uc')?.value)  || null) : null,
+          uom:               row ? (row.querySelector('.grn-item-uom')?.value.trim()      || null) : null,
+        };
+      });
+    })(),
+  };
+
+  saveBtn.disabled = true;
+  saveBtn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
+
+  const res = await API.createDirectGrn(body);
+
+  saveBtn.disabled = false;
+  saveBtn.innerHTML = '<i class="fa fa-truck-ramp-box"></i> Record Receipt';
+
+  if (res.status !== 200 && res.status !== 201) {
+    toast('Failed to save: ' + (res.body?.message ?? 'unknown error'), 'error');
+    return;
+  }
+
+  $('#grn-direct-modal').style.display = 'none';
+  toast('Goods received and stock updated', 'success');
+  // Refresh GRN list
+  _grnLoad?.();
+}
+
+// Wiring
+$('#grn-add-direct-btn')?.addEventListener('click', _dgrnOpen);
+$('#grn-direct-settings-btn')?.addEventListener('click', e => { e.stopPropagation(); _openGrnSettings(); });
+$('#grn-direct-close')?.addEventListener('click',  () => { $('#grn-direct-modal').style.display = 'none'; });
+$('#grn-direct-cancel')?.addEventListener('click', () => { $('#grn-direct-modal').style.display = 'none'; });
+$('#grn-direct-save')?.addEventListener('click',   _dgrnSubmit);
+$('#grn-direct-add-item-btn')?.addEventListener('click', _dgrnAddItemRow);
+
+$('#grn-direct-method-btns')?.addEventListener('click', e => {
+  const btn = e.target.closest('.grn-method-btn');
+  if (!btn) return;
+  $$('#grn-direct-method-btns .grn-method-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  _dgrnState.method = btn.dataset.method;
+  const pf = $('#grn-direct-payment-fields');
+  if (pf) pf.style.display = btn.dataset.method === 'credit' ? 'none' : '';
+  const cf = $('#grn-direct-cheque-fields');
+  if (cf) cf.style.display = btn.dataset.method === 'cheque' ? 'flex' : 'none';
+  const ct = $('#grn-direct-credit-terms');
+  if (ct) ct.style.display = btn.dataset.method === 'credit' ? '' : 'none';
+  if (btn.dataset.method === 'credit') _dgrnUpdateCreditDue();
+});
+
+document.querySelectorAll('input[name="grn-direct-pay-opt"]').forEach(r => {
+  r.addEventListener('change', () => {
+    const pr = $('#grn-direct-partial-row');
+    if (pr) pr.style.display = r.value === 'partial' && r.checked ? '' : 'none';
+  });
+});
+
+$('#grn-direct-modal')?.addEventListener('click', e => {
+  if (e.target === e.currentTarget) e.currentTarget.style.display = 'none';
 });
 
 // ── End Goods Receive Notes ────────────────────────────────────────────────
@@ -9517,7 +11554,7 @@ const _brand = { list: [], q: '', status: '', searchTimer: null, editingId: null
 async function _brandLoad() {
   const tbody = $('#brand-tbody');
   tbody.innerHTML = `<tr><td colspan="6" class="inv-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</td></tr>`;
-  const res = await API.brands(_brand.q, _brand.status);
+  const res = await API.productBrands(_brand.q, _brand.status);
   if (res.status !== 200) {
     tbody.innerHTML = `<tr><td colspan="6" class="inv-loading"><i class="fa fa-triangle-exclamation"></i> Failed to load</td></tr>`;
     return;
@@ -9594,8 +11631,8 @@ async function _brandSave() {
   btn.disabled = true;
 
   const res = _brand.editingId
-    ? await API.updateBrand(_brand.editingId, body)
-    : await API.createBrand(body);
+    ? await API.productBrandUpdate(_brand.editingId, body)
+    : await API.productBrandCreate(body);
 
   btn.disabled = false;
 
@@ -9614,7 +11651,7 @@ async function _brandDelete(id) {
   const b = _brand.list.find(x => x.id === id);
   if (!b) return;
   if (!confirm(`Delete brand "${b.name}"?`)) return;
-  const res = await API.deleteBrand(id);
+  const res = await API.productBrandDelete(id);
   if (res.status === 200) {
     toast('Brand deleted', 'success');
     _brandLoad();
@@ -10889,7 +12926,7 @@ async function _prodOpenModal(editId) {
     _prodBatchRender();
   }
 
-  // Reset to first tab
+  // Reset to Basic tab
   $$('#product-modal .prod-modal-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === 'basic'));
   $$('#product-modal .prod-modal-pane').forEach(p => p.classList.toggle('active', p.dataset.pane === 'basic'));
 
@@ -10912,7 +12949,7 @@ async function _prodLoadFormOptions() {
   const [unitRes, catRes, brandRes] = await Promise.all([
     API.units(),
     API.categoryParentOpts(),
-    API.brands('', ''),
+    API.productBrands('', ''),
   ]);
 
   // Units select
@@ -10995,7 +13032,7 @@ async function _prodSave(andNew = false) {
   const brandIds = [];
   for (const brand of _prod.selectedBrands) {
     if (brand._new) {
-      const res = await API.createBrand({ name: brand.name, is_active: true });
+      const res = await API.productBrandCreate({ name: brand.name, is_active: true });
       if (res.status !== 201) {
         const msg = res.body?.errors ? Object.values(res.body.errors)[0]?.[0] : null;
         toast(msg || `Failed to create brand "${brand.name}"`, 'error');
@@ -11123,6 +13160,270 @@ $$('#product-modal .prod-modal-tab').forEach(btn => {
     if (pane) pane.classList.add('active');
   });
 });
+
+// ── Product modal: view mode & field visibility settings ────────────────────
+const _PROD_VIEW_KEY   = 'prod_modal_view';
+const _PROD_FIELDS_KEY = 'prod_modal_fields';
+
+let _prodViewMode  = 'tab';  // 'tab' | 'single'
+let _prodFieldHide = {};     // { 'field-id': true } → true = hidden
+
+const _PROD_PANE_META = {
+  basic:    { label: 'Basic',           icon: 'fa-circle-info' },
+  pricing:  { label: 'Pricing & Stock', icon: 'fa-tag'         },
+  media:    { label: 'Media',           icon: 'fa-image'       },
+  advanced: { label: 'Advanced',        icon: 'fa-sliders'     },
+};
+
+// ─ Every hideable field in the product form ─────────────────────────────────
+const _PROD_FIELD_MAP = [
+  // Basic
+  { id: 'sku',         label: 'SKU / Barcode',  icon: 'fa-barcode',        section: 'Basic',           getEl() { return document.getElementById('prod-f-sku')?.closest('.po-field'); } },
+  { id: 'model-no',    label: 'Model No',        icon: 'fa-hashtag',        section: 'Basic',           getEl() { return document.getElementById('prod-f-model-no')?.closest('.po-field'); } },
+  { id: 'size',        label: 'Size',            icon: 'fa-ruler',          section: 'Basic',           getEl() { return document.getElementById('prod-f-size')?.closest('.po-field'); } },
+  { id: 'mfg-date',    label: 'Mfg Date',        icon: 'fa-calendar',       section: 'Basic',           getEl() { return document.getElementById('prod-f-mfg-date')?.closest('.po-field'); } },
+  { id: 'description', label: 'Description',     icon: 'fa-align-left',     section: 'Basic',           getEl() { return document.getElementById('prod-f-description')?.closest('.po-field'); } },
+  { id: 'active',      label: 'Active flag',     icon: 'fa-toggle-on',      section: 'Basic',           getEl() { return document.getElementById('prod-f-active')?.closest('.po-field'); } },
+  // Pricing & Stock
+  { id: 'cost-price',      label: 'Cost Price',      icon: 'fa-coins',          section: 'Pricing & Stock', getEl() { return document.getElementById('prod-f-cost-price')?.closest('.po-field'); } },
+  { id: 'wholesale-price', label: 'Wholesale Price', icon: 'fa-tags',           section: 'Pricing & Stock', getEl() { return document.getElementById('prod-f-wholesale-price')?.closest('.po-field'); } },
+  { id: 'unit',            label: 'Unit',            icon: 'fa-weight-scale',   section: 'Pricing & Stock', getEl() { return document.getElementById('prod-f-unit')?.closest('.po-field'); } },
+  { id: 'opening-stock',   label: 'Opening Stock',   icon: 'fa-layer-group',    section: 'Pricing & Stock', getEl() { return document.getElementById('prod-batch-section'); } },
+  // Media
+  { id: 'image',      label: 'Image',      icon: 'fa-image',     section: 'Media', getEl() { return document.getElementById('prod-img-thumb')?.closest('.po-field'); } },
+  { id: 'categories', label: 'Categories', icon: 'fa-folder',    section: 'Media', getEl() { return document.getElementById('prod-cat-wrap')?.closest('.po-field'); } },
+  { id: 'brands',     label: 'Brands',     icon: 'fa-trademark', section: 'Media', getEl() { return document.getElementById('prod-brand-wrap')?.closest('.po-field'); } },
+  // Advanced
+  { id: 'bundle',            label: 'Bundle Product',     icon: 'fa-cubes',          section: 'Advanced', getEl() { return document.querySelector('#product-modal .prod-bundle-toggle-row'); } },
+  { id: 'warranty',          label: 'Warranty',           icon: 'fa-shield-halved',  section: 'Advanced', getEl() { return document.getElementById('prod-f-warranty')?.closest('.prod-adv-card'); } },
+  { id: 'expiry',            label: 'Expiration',         icon: 'fa-calendar-xmark', section: 'Advanced', getEl() { return document.getElementById('prod-f-expiry')?.closest('.prod-adv-card'); } },
+  { id: 'courier',           label: 'Courier Delivery',   icon: 'fa-truck',          section: 'Advanced', getEl() { return document.getElementById('prod-f-courier')?.closest('.prod-adv-card'); } },
+  { id: 'loyalty',           label: 'Loyalty Redeemable', icon: 'fa-star',           section: 'Advanced', getEl() { return document.getElementById('prod-f-loyalty')?.closest('.prod-adv-card'); } },
+  { id: 'customer-required', label: 'Customer Required',  icon: 'fa-user-check',     section: 'Advanced', getEl() { return document.getElementById('prod-f-customer-required')?.closest('.prod-adv-card'); } },
+  { id: 'rental',            label: 'Rental',             icon: 'fa-key',            section: 'Advanced', getEl() { return document.getElementById('prod-f-rental')?.closest('.prod-adv-card'); } },
+  { id: 'subscription',      label: 'Subscription',       icon: 'fa-repeat',         section: 'Advanced', getEl() { return document.getElementById('prod-f-subscription')?.closest('.prod-adv-card'); } },
+  { id: 'item-tax',          label: 'Item Wise Tax',      icon: 'fa-percent',        section: 'Advanced', getEl() { return document.getElementById('prod-f-item-tax')?.closest('.prod-adv-card'); } },
+  { id: 'item-discount',     label: 'Item Wise Discount', icon: 'fa-tag',            section: 'Advanced', getEl() { return document.getElementById('prod-f-item-discount')?.closest('.prod-adv-card'); } },
+];
+
+function _applyProdTabPrefs() {
+  const modal = $('#product-modal');
+  if (!modal) return;
+
+  // ── View mode ──────────────────────────────────────────────────────────────
+  const isSingle = _prodViewMode === 'single';
+  modal.classList.toggle('prod-view-single', isSingle);
+  $$('#product-modal .prod-modal-pane[data-pane]').forEach(pane => {
+    const existing = pane.querySelector('.prod-pane-section-hd');
+    if (isSingle) {
+      if (!existing) {
+        const meta = _PROD_PANE_META[pane.dataset.pane] || {};
+        const hd   = document.createElement('div');
+        hd.className = 'prod-pane-section-hd';
+        hd.innerHTML = `<i class="fa ${meta.icon || 'fa-layer-group'}"></i>&ensp;${escHtml(meta.label || pane.dataset.pane)}`;
+        pane.insertBefore(hd, pane.firstChild);
+      }
+    } else {
+      existing?.remove();
+    }
+  });
+
+  // ── Field visibility ───────────────────────────────────────────────────────
+  _PROD_FIELD_MAP.forEach(f => {
+    const el = f.getEl();
+    if (!el) return;
+    el.style.display = _prodFieldHide[f.id] ? 'none' : '';
+  });
+}
+
+// ─ Dialog state ─────────────────────────────────────────────────────────────
+let _pfsActiveOuter = 'general'; // 'general' | 'fields'
+let _pfsPickedView  = 'tab';     // staging view mode (not applied until Apply)
+let _pfsPickedHide  = {};        // staging field-hide map
+
+function _openProdViewSettings() {
+  let ov = $('#prod-settings-overlay');
+
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'prod-settings-overlay';
+    ov.className = 'modal-overlay';
+    ov.style.zIndex = '10002';
+
+    // ── General panel: view mode chooser ────────────────────────────────────
+    const genPanel = document.createElement('div');
+    genPanel.className = 'pfs-panel pfs-gen-body';
+    genPanel.id = 'pfs-panel-general';
+    genPanel.innerHTML = `
+      <div class="pfs-section-label">Display Mode</div>
+      <div class="pfs-view-rows">
+        <div class="pfs-view-row" data-view="tab">
+          <div class="pfs-view-row-icon"><i class="fa fa-table-columns"></i></div>
+          <div class="pfs-view-row-body">
+            <div class="pfs-view-row-title">Tab View</div>
+            <div class="pfs-view-row-desc">Fields organized into sections — Basic, Pricing &amp; Stock, Media, and Advanced. Click the tabs to navigate.</div>
+          </div>
+          <i class="fa fa-circle-check pfs-view-row-chk"></i>
+        </div>
+        <div class="pfs-view-row" data-view="single">
+          <div class="pfs-view-row-icon"><i class="fa fa-bars"></i></div>
+          <div class="pfs-view-row-body">
+            <div class="pfs-view-row-title">Single View</div>
+            <div class="pfs-view-row-desc">All fields in one continuous scrollable form with section headings.</div>
+          </div>
+          <i class="fa fa-circle-check pfs-view-row-chk"></i>
+        </div>
+      </div>`;
+
+    // ── Fields panel: per-field show/hide toggles ────────────────────────────
+    const fieldsPanel = document.createElement('div');
+    fieldsPanel.className = 'pfs-panel pfs-fields-body';
+    fieldsPanel.id = 'pfs-panel-fields';
+    fieldsPanel.style.display = 'none';
+
+    const sectionOrder = [], sectionMap = {};
+    _PROD_FIELD_MAP.forEach(f => {
+      if (!sectionMap[f.section]) { sectionMap[f.section] = []; sectionOrder.push(f.section); }
+      sectionMap[f.section].push(f);
+    });
+    sectionOrder.forEach(sec => {
+      const hd = document.createElement('div');
+      hd.className = 'pfs-fields-sec-hd';
+      hd.textContent = sec;
+      fieldsPanel.appendChild(hd);
+
+      sectionMap[sec].forEach(f => {
+        const row = document.createElement('div');
+        row.className = 'pfs-field-row';
+        row.dataset.fieldId = f.id;
+        row.innerHTML = `
+          <div class="pfs-field-icon"><i class="fa ${f.icon}"></i></div>
+          <span class="pfs-field-label">${escHtml(f.label)}</span>
+          <label class="pfs-sw" title="Show / hide field">
+            <input type="checkbox" class="pfs-sw-input" data-field="${f.id}" checked>
+            <span class="pfs-sw-track"><span class="pfs-sw-knob"></span></span>
+          </label>`;
+        fieldsPanel.appendChild(row);
+
+        row.querySelector('.pfs-sw-input').addEventListener('change', function () {
+          if (this.checked) { delete _pfsPickedHide[this.dataset.field]; }
+          else              { _pfsPickedHide[this.dataset.field] = true; }
+          row.classList.toggle('pfs-field-hidden', !this.checked);
+        });
+      });
+    });
+
+    // ── Shell HTML ─────────────────────────────────────────────────────────
+    ov.innerHTML = `
+      <div class="po-aim-shell pfs-shell">
+        <div class="po-aim-header">
+          <i class="fa fa-gear" style="color:var(--accent)"></i>
+          <span>Product Form Settings</span>
+          <button class="psm-close" id="prod-settings-close"><i class="fa fa-xmark"></i></button>
+        </div>
+        <nav class="pfs-tab-nav" id="pfs-outer-nav">
+          <button class="pfs-opt-tab active" data-outer="general"><i class="fa fa-sliders"></i>&ensp;General</button>
+          <button class="pfs-opt-tab"        data-outer="fields" ><i class="fa fa-list-check"></i>&ensp;Fields</button>
+        </nav>
+        <div id="pfs-panels"></div>
+        <div class="po-aim-footer">
+          <button class="po-btn-ghost"   id="prod-settings-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+          <button class="po-btn-primary" id="prod-settings-apply" ><i class="fa fa-check"></i> Apply</button>
+        </div>
+      </div>`;
+
+    const panelsHost = ov.querySelector('#pfs-panels');
+    panelsHost.appendChild(genPanel);
+    panelsHost.appendChild(fieldsPanel);
+    document.body.appendChild(ov);
+
+    // Events ─────────────────────────────────────────────────────────────────
+    ov.addEventListener('pointerdown', e => { if (e.target === ov) ov.style.display = 'none'; });
+    ov.querySelector('#prod-settings-close') .addEventListener('click', () => ov.style.display = 'none');
+    ov.querySelector('#prod-settings-cancel').addEventListener('click', () => ov.style.display = 'none');
+
+    ov.querySelector('#pfs-outer-nav').addEventListener('click', e => {
+      const btn = e.target.closest('.pfs-opt-tab[data-outer]');
+      if (!btn) return;
+      _pfsActiveOuter = btn.dataset.outer;
+      _syncPfsOuter(ov);
+    });
+
+    genPanel.addEventListener('click', e => {
+      const row = e.target.closest('.pfs-view-row[data-view]');
+      if (!row) return;
+      _pfsPickedView = row.dataset.view;
+      _syncPfsGeneral(genPanel);
+    });
+
+    ov.querySelector('#prod-settings-apply').addEventListener('click', async () => {
+      _prodViewMode  = _pfsPickedView;
+      _prodFieldHide = Object.assign({}, _pfsPickedHide);
+      ov.style.display = 'none';
+      _applyProdTabPrefs();
+      try {
+        await window.electronAPI?.setConfig?.({
+          [_PROD_VIEW_KEY]:   _prodViewMode,
+          [_PROD_FIELDS_KEY]: _prodFieldHide,
+        });
+      } catch (_) {}
+    });
+  }
+
+  // Each open: copy current state into staging and sync UI
+  _pfsActiveOuter = 'general';
+  _pfsPickedView  = _prodViewMode;
+  _pfsPickedHide  = Object.assign({}, _prodFieldHide);
+
+  _syncPfsOuter(ov);
+  _syncPfsGeneral(ov.querySelector('#pfs-panel-general'));
+  _syncPfsFields(ov.querySelector('#pfs-panel-fields'));
+
+  ov.style.display = 'flex';
+}
+
+function _syncPfsOuter(ov) {
+  ov.querySelectorAll('#pfs-outer-nav .pfs-opt-tab').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.outer === _pfsActiveOuter);
+  });
+  const gp = ov.querySelector('#pfs-panel-general');
+  const fp = ov.querySelector('#pfs-panel-fields');
+  if (gp) gp.style.display = _pfsActiveOuter === 'general' ? '' : 'none';
+  if (fp) fp.style.display = _pfsActiveOuter === 'fields'  ? '' : 'none';
+}
+
+function _syncPfsGeneral(panel) {
+  if (!panel) return;
+  panel.querySelectorAll('.pfs-view-row[data-view]').forEach(row => {
+    row.classList.toggle('selected', row.dataset.view === _pfsPickedView);
+  });
+}
+
+function _syncPfsFields(panel) {
+  if (!panel) return;
+  panel.querySelectorAll('.pfs-sw-input[data-field]').forEach(inp => {
+    const hidden = !!_pfsPickedHide[inp.dataset.field];
+    inp.checked = !hidden;
+    inp.closest('.pfs-field-row')?.classList.toggle('pfs-field-hidden', hidden);
+  });
+}
+
+$('#prod-modal-settings-btn')?.addEventListener('click', e => {
+  e.stopPropagation();
+  _openProdViewSettings();
+});
+
+// Load saved prefs and apply on startup
+(async () => {
+  try {
+    const cfg = await window.electronAPI?.getConfig?.();
+    const sv  = cfg?.[_PROD_VIEW_KEY];
+    if (sv === 'tab' || sv === 'single') _prodViewMode = sv;
+    const sf = cfg?.[_PROD_FIELDS_KEY];
+    if (sf && typeof sf === 'object') _prodFieldHide = sf;
+  } catch (_) {}
+  _applyProdTabPrefs();
+})();
 
 // Warranty duration
 function _prodSyncWarrantyChips() {
@@ -12100,6 +14401,9 @@ async function loadProducts(search = '', catId = 0, page = 1) {
   if (currency)       state.currency = currency;
   if (business?.name) state._bizName = state._bizName || business.name;
 
+  // Apply purchase-order mode based on setting (default: enabled)
+  _applyPurchaseOrderMode(settings.purchase_order_enabled !== false);
+
   buildCategoryBar(categories, catId);
   buildProductGrid(products);
   buildPosPagination(products_meta);
@@ -12275,10 +14579,11 @@ async function _addToCartDirectly(p) {
   const layer  = layers.find(l => parseFloat(l.quantity_remaining) > 0) || null;
   let cartItem;
   if (layer) {
+    // FIFO: no layerId pinning — backend consumeFifo spans all layers if needed
     cartItem = {
-      id: p.id, layerId: layer.id, layerLabel: layer.label || null,
+      id: p.id, layerId: null, layerLabel: null,
       name: p.name, price: parseFloat(layer.unit_sell_price),
-      stock: parseFloat(layer.quantity_remaining),
+      stock: p.stock_quantity != null ? parseFloat(p.stock_quantity) : null,
     };
   } else {
     cartItem = {
@@ -13843,7 +16148,8 @@ async function openPosSetupWizard() {
     _chk('psw-show-biz-addr', s.show_business_address == '1' || s.show_business_address === true);
     _chk('psw-show-acct-info',s.show_account_info !== '0' && s.show_account_info !== false);
     _chk('psw-tax-enabled',   s.tax_enabled == '1' || s.tax_enabled === true);
-    _val('psw-tax-rate',      s.tax_rate ?? '');
+    const _pswFirstRule = Array.isArray(s.tax_rules) && s.tax_rules.find(r => r.type === 'percentage');
+    _val('psw-tax-rate', _pswFirstRule ? _pswFirstRule.value : '');
     _val('psw-inv-prefix',    s.invoice_prefix ?? 'INV');
     _val('psw-inv-next',      s.invoice_next_number ?? '1');
     _chk('psw-discount-field',s.discount_field_enabled !== '0');
@@ -13934,6 +16240,8 @@ function _pswToggleTaxRate() {
   const enabled = $('#psw-tax-enabled')?.checked;
   const wrap = $('#psw-tax-rate-wrap');
   if (wrap) wrap.style.display = enabled ? 'block' : 'none';
+  const note = $('#psw-tax-rules-note');
+  if (note) note.style.display = enabled ? '' : 'none';
 }
 
 async function _pswSave() {
@@ -13947,7 +16255,10 @@ async function _pswSave() {
     show_business_address:   $('#psw-show-biz-addr')?.checked ? '1' : '0',
     show_account_info:       $('#psw-show-acct-info')?.checked ? '1' : '0',
     tax_enabled:             $('#psw-tax-enabled')?.checked ? '1' : '0',
-    tax_rate:                $('#psw-tax-rate')?.value ?? '0',
+    tax_rules:               (() => {
+      const rate = parseFloat($('#psw-tax-rate')?.value);
+      return (rate > 0) ? [{ id: _uuid(), name: 'Tax', type: 'percentage', value: rate }] : [];
+    })(),
     invoice_prefix:          $('#psw-inv-prefix')?.value ?? 'INV',
     invoice_next_number:     $('#psw-inv-next')?.value ?? '1',
     discount_field_enabled:  $('#psw-discount-field')?.checked ? '1' : '0',
@@ -13981,7 +16292,1360 @@ $('#psw-skip-all')?.addEventListener('click', () => {
 });
 $('#psw-tax-enabled')?.addEventListener('change', _pswToggleTaxRate);
 
+// ── Invoice Setup ────────────────────────────────────────────────────────
+const INV_TEMPLATES = [
+  { id: 'classic',   name: 'Classic',     desc: 'Traditional bordered table with letterhead', swatch: '#1d4ed8', accent: '#1d4ed8' },
+  { id: 'sidebar',   name: 'Side Panel',  desc: 'Dark accent column left, content right',     swatch: '#0f172a', accent: '#0f172a' },
+  { id: 'bold',      name: 'Bold Banner', desc: 'Full-width colour header, large number',      swatch: '#e11d48', accent: '#e11d48' },
+  { id: 'minimal',   name: 'Minimal',     desc: 'Pure typography, no fills or colour blocks',  swatch: '#374151', accent: '#374151' },
+  { id: 'compact',   name: 'Compact',     desc: 'Card-style info grid with teal accent',       swatch: '#0891b2', accent: '#0891b2' },
+  { id: 'executive', name: 'Executive',   desc: 'Dark luxury header with gold accent trim',    swatch: '#1e1b4b', accent: '#c7a84f' },
+];
+
+let _isetupActiveTpl = 'classic';
+
+function _isetupGetCfg() {
+  const c = state.config || {};
+  return {
+    template:    c.invoice_template    || 'classic',
+    printer:     c.invoice_printer     || 'laser_a4',
+    paper:       c.invoice_paper       || 'a4',
+    orientation: c.invoice_orientation || 'portrait',
+    mgTop:       c.invoice_mg_top      ?? 20,
+    mgBot:       c.invoice_mg_bot      ?? 20,
+    mgLeft:      c.invoice_mg_left     ?? 15,
+    mgRight:     c.invoice_mg_right    ?? 15,
+    hdrLayout:   c.invoice_hdr_layout  || 'num-left',
+    logoPos:     c.invoice_logo_pos    || 'header',
+  };
+}
+
+function _isetupBuildPreviewDoc(tpl, mg, cur) {
+  const fn = { classic: _iTPLClassic, sidebar: _iTPLSidebar, bold: _iTPLBold, minimal: _iTPLMinimal, compact: _iTPLCompact, executive: _iTPLExecutive }[tpl.id] || _iTPLClassic;
+  return fn(tpl, mg, cur);
+}
+
+function _iTPLDummy(cur) {
+  return {
+    biz:  escHtml(state.receiptSettings?.business_name        || 'Your Business'),
+    addr: escHtml(state.receiptSettings?.receipt_address_line || '10 Innovation Way, Floor 4'),
+    c:    cur ? ' ' + cur : '',
+  };
+}
+
+// ── Template 1: Classic ── traditional bordered table, blue letterhead ──────
+function _iTPLClassic(tpl, mg, cur) {
+  const a = tpl.accent, { biz, addr, c } = _iTPLDummy(cur);
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Inter,Arial,sans-serif;font-size:12px;color:#0f172a;background:#fff;${bodyPos}}
+.pg{width:794px;padding:${mg.top}mm ${mg.right}mm ${mg.bot}mm ${mg.left}mm;${pgStack}}
+.top{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:20px;border-bottom:2.5px solid ${a};margin-bottom:24px}
+.bn{font-size:21px;font-weight:900;color:${a}}.bi{font-size:10px;color:#64748b;margin-top:5px;line-height:1.6}
+.it{font-size:30px;font-weight:900;text-transform:uppercase;color:${a};text-align:right}
+.in{font-size:12px;color:#64748b;text-align:right;margin-top:4px}
+.meta{display:grid;grid-template-columns:1fr auto;gap:24px;margin-bottom:22px}
+.btl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#94a3b8;margin-bottom:6px}
+.btn{font-size:14px;font-weight:800}.bti{font-size:11px;color:#64748b;margin-top:3px;line-height:1.5}
+.dts{min-width:205px}
+.dr{display:flex;justify-content:space-between;font-size:11px;padding:6px 0;border-bottom:1px dashed #e2e8f0}
+.dr:last-child{border-bottom:none}.dk{color:#94a3b8}.dv{font-weight:700}
+table{width:100%;border-collapse:collapse;margin-bottom:20px}
+thead th{background:${a};color:#fff;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:9px 10px}
+thead th.r{text-align:right}
+tbody td{font-size:11px;padding:8px 10px;border-bottom:1px solid #e2e8f0}
+tbody tr:nth-child(even) td{background:#f8fafc}
+td.n{color:#94a3b8;text-align:center;width:26px}td.r{text-align:right}td.b{font-weight:700}
+.ds{font-size:10px;color:#94a3b8;display:block;margin-top:1px}
+.bot{display:grid;grid-template-columns:1fr 248px;gap:20px}
+.nb{padding:13px;border:1px solid #e2e8f0;border-radius:6px;background:#f8fafc}
+.nl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#94a3b8;margin-bottom:5px}
+.nt{font-size:11px;color:#64748b;line-height:1.55}
+.tr{display:flex;justify-content:space-between;font-size:11px;padding:5px 0;border-bottom:1px solid #f1f5f9;color:#475569}
+.tr:last-child{border-bottom:none}.tr span:first-child{color:#64748b}
+.gr{font-size:15px;font-weight:900;border-top:2.5px solid ${a};margin-top:4px;padding-top:9px}
+.gr span:last-child{color:${a}}
+.ft{margin-top:22px;padding-top:12px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:10px;color:#94a3b8}
+</style></head><body>${lhLayer}<div class="pg">
+<div class="top">
+  <div><div class="bn">${biz}</div><div class="bi">${addr}<br>invoices@example.com · +1 555 000-0001</div></div>
+  <div><div class="it">Invoice</div><div class="in">INV-0024 · 01 Aug 2026</div></div>
+</div>
+<div class="meta">
+  <div><div class="btl">Billed To</div><div class="btn">Acme Corporation</div><div class="bti">Jennifer Walters<br>45 Commerce Drive, Suite 3, New York NY 10001</div></div>
+  <div class="dts">
+    <div class="dr"><span class="dk">Issue Date</span><span class="dv">01 Aug 2026</span></div>
+    <div class="dr"><span class="dk">Due Date</span><span class="dv">15 Aug 2026</span></div>
+    <div class="dr"><span class="dk">Status</span><span class="dv" style="color:#15803d">Paid</span></div>
+  </div>
+</div>
+<table>
+  <thead><tr><th style="width:26px;text-align:center">#</th><th>Description</th><th class="r" style="width:50px">Qty</th><th class="r" style="width:100px">Unit Price</th><th class="r" style="width:100px">Total</th></tr></thead>
+  <tbody>
+    <tr><td class="n">1</td><td><b>Brand Identity Design</b><span class="ds">Logo, colour palette, typography kit</span></td><td class="r">1</td><td class="r">1,800.00${c}</td><td class="r b">1,800.00${c}</td></tr>
+    <tr><td class="n">2</td><td><b>UI / UX Design</b><span class="ds">10 screens, mobile-first, Figma source files</span></td><td class="r">1</td><td class="r">3,500.00${c}</td><td class="r b">3,500.00${c}</td></tr>
+    <tr><td class="n">3</td><td><b>Frontend Development</b><span class="ds">React, Next.js, Tailwind CSS — 40 hrs</span></td><td class="r">40</td><td class="r">85.00${c}</td><td class="r b">3,400.00${c}</td></tr>
+    <tr><td class="n">4</td><td><b>SEO Optimisation</b><span class="ds">On-page audit + 3-month strategy</span></td><td class="r">1</td><td class="r">650.00${c}</td><td class="r b">650.00${c}</td></tr>
+    <tr><td class="n">5</td><td><b>Monthly Hosting &amp; Support</b><span class="ds">VPS, monitoring, daily backups</span></td><td class="r">3</td><td class="r">120.00${c}</td><td class="r b">360.00${c}</td></tr>
+  </tbody>
+</table>
+<div class="bot">
+  <div class="nb"><div class="nl">Notes &amp; Terms</div><div class="nt">Payment due within 14 days.<br>Bank transfer only — details on file.<br>Thank you for your business!</div></div>
+  <div>
+    <div class="tr"><span>Subtotal</span><span>9,710.00${c}</span></div>
+    <div class="tr"><span>Discount (5%)</span><span style="color:#ef4444">−485.50${c}</span></div>
+    <div class="tr"><span>Tax (15%)</span><span>+1,383.67${c}</span></div>
+    <div class="tr gr"><span>Total Due</span><span>10,608.17${c}</span></div>
+  </div>
+</div>
+<div class="ft"><span>INV-0024 · ${biz}</span><span>${biz}</span></div>
+</div></body></html>`;
+}
+
+// ── Template 2: Side Panel ── dark accent sidebar, content column right ───────
+function _iTPLSidebar(tpl, mg, cur) {
+  const a = tpl.accent, { biz, addr, c } = _iTPLDummy(cur);
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Inter,Arial,sans-serif;font-size:12px;color:#0f172a;background:#fff;${bodyPos}}
+.pg{width:794px;min-height:1123px;display:flex;${pgStack}}
+.sb{width:195px;background:${a};padding:30px 16px;flex-shrink:0;display:flex;flex-direction:column}
+.sb-biz{font-size:14px;font-weight:900;color:#fff;line-height:1.2;margin-bottom:4px}
+.sb-addr{font-size:9px;color:rgba(255,255,255,.55);line-height:1.6;margin-bottom:20px}
+.sb-hr{height:1px;background:rgba(255,255,255,.18);margin-bottom:16px}
+.sb-lbl{font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:rgba(255,255,255,.45);margin-bottom:3px}
+.sb-num{font-size:20px;font-weight:900;color:#fff;margin-bottom:14px}
+.sb-badge{display:inline-block;padding:3px 9px;background:rgba(255,255,255,.15);color:#fff;border-radius:20px;font-size:9px;font-weight:700;letter-spacing:.05em;margin-bottom:18px}
+.sb-row{margin-bottom:11px}
+.sb-dk{font-size:8px;color:rgba(255,255,255,.45);text-transform:uppercase;letter-spacing:.08em;font-weight:700;margin-bottom:2px}
+.sb-dv{font-size:11px;color:#fff;font-weight:600}
+.sb-amt{font-size:16px;font-weight:900;color:#fff;margin-top:4px}
+.ct{flex:1;padding:${mg.top}mm 18px ${mg.bot}mm 22px;min-width:0}
+.bt{margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid #e2e8f0}
+.btl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#94a3b8;margin-bottom:5px}
+.btn{font-size:14px;font-weight:800;margin-bottom:3px}
+.bti{font-size:11px;color:#64748b;line-height:1.5}
+table{width:100%;border-collapse:collapse;margin-bottom:18px}
+thead th{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#475569;padding:8px 8px;border-bottom:2px solid ${a}}
+thead th.r{text-align:right}
+tbody td{font-size:11px;padding:7px 8px;border-bottom:1px solid #f1f5f9}
+td.n{color:#94a3b8;text-align:center;width:22px}td.r{text-align:right}td.b{font-weight:700}
+.ds{font-size:10px;color:#94a3b8;display:block;margin-top:1px}
+.tot{display:flex;justify-content:flex-end}
+.ti{width:220px}
+.tr{display:flex;justify-content:space-between;font-size:11px;padding:5px 0;border-bottom:1px solid #f1f5f9;color:#475569}
+.tr:last-child{border-bottom:none}.tr span:first-child{color:#64748b}
+.gr{font-size:14px;font-weight:900;border-top:2.5px solid ${a};margin-top:4px;padding-top:9px}
+.gr span:last-child{color:${a}}
+</style></head><body>${lhLayer}<div class="pg">
+<div class="sb">
+  <div class="sb-biz">${biz}</div>
+  <div class="sb-addr">${addr}<br>invoices@example.com</div>
+  <div class="sb-hr"></div>
+  <div class="sb-lbl">Invoice</div>
+  <div class="sb-num">INV-0024</div>
+  <div class="sb-badge">● Paid</div>
+  <div class="sb-row"><div class="sb-dk">Issue Date</div><div class="sb-dv">01 Aug 2026</div></div>
+  <div class="sb-row"><div class="sb-dk">Due Date</div><div class="sb-dv">15 Aug 2026</div></div>
+  <div class="sb-hr" style="margin-top:12px"></div>
+  <div class="sb-row"><div class="sb-dk">Amount Due</div><div class="sb-amt">10,608.17${c}</div></div>
+</div>
+<div class="ct">
+  <div class="bt"><div class="btl">Billed To</div><div class="btn">Acme Corporation</div><div class="bti">Jennifer Walters · 45 Commerce Drive, Suite 3<br>New York, NY 10001</div></div>
+  <table>
+    <thead><tr><th style="width:22px;text-align:center">#</th><th>Description</th><th class="r" style="width:44px">Qty</th><th class="r" style="width:86px">Price</th><th class="r" style="width:88px">Total</th></tr></thead>
+    <tbody>
+      <tr><td class="n">1</td><td><b>Brand Identity Design</b><span class="ds">Logo, palette, typography</span></td><td class="r">1</td><td class="r">1,800.00${c}</td><td class="r b">1,800.00${c}</td></tr>
+      <tr><td class="n">2</td><td><b>UI / UX Design</b><span class="ds">10 screens, Figma files</span></td><td class="r">1</td><td class="r">3,500.00${c}</td><td class="r b">3,500.00${c}</td></tr>
+      <tr><td class="n">3</td><td><b>Frontend Development</b><span class="ds">React, Next.js — 40 hrs</span></td><td class="r">40</td><td class="r">85.00${c}</td><td class="r b">3,400.00${c}</td></tr>
+      <tr><td class="n">4</td><td><b>SEO Optimisation</b><span class="ds">Audit + 3-month strategy</span></td><td class="r">1</td><td class="r">650.00${c}</td><td class="r b">650.00${c}</td></tr>
+      <tr><td class="n">5</td><td><b>Monthly Hosting &amp; Support</b><span class="ds">VPS, monitoring, backups</span></td><td class="r">3</td><td class="r">120.00${c}</td><td class="r b">360.00${c}</td></tr>
+    </tbody>
+  </table>
+  <div class="tot"><div class="ti">
+    <div class="tr"><span>Subtotal</span><span>9,710.00${c}</span></div>
+    <div class="tr"><span>Discount (5%)</span><span style="color:#ef4444">−485.50${c}</span></div>
+    <div class="tr"><span>Tax (15%)</span><span>+1,383.67${c}</span></div>
+    <div class="tr gr"><span>Total Due</span><span>10,608.17${c}</span></div>
+  </div></div>
+</div>
+</div></body></html>`;
+}
+
+// ── Template 3: Bold Banner ── full-width colour header, borderless table ─────
+function _iTPLBold(tpl, mg, cur) {
+  const a = tpl.accent, { biz, addr, c } = _iTPLDummy(cur);
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Inter,Arial,sans-serif;font-size:12px;color:#0f172a;background:#fff;${bodyPos}}
+.pg{width:794px;min-height:1123px;display:flex;flex-direction:column;${pgStack}}
+.banner{background:${a};padding:28px ${mg.right}mm 26px ${mg.left}mm;display:flex;justify-content:space-between;align-items:flex-end}
+.b-biz{font-size:20px;font-weight:900;color:#fff}
+.b-addr{font-size:10px;color:rgba(255,255,255,.7);margin-top:4px;line-height:1.5}
+.b-num{font-size:38px;font-weight:900;color:#fff;letter-spacing:-.02em;line-height:1;text-align:right}
+.b-lbl{font-size:10px;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.15em;font-weight:700;margin-bottom:4px;text-align:right}
+.body{padding:22px ${mg.right}mm ${mg.bot}mm ${mg.left}mm;flex:1}
+.cards{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px}
+.card{padding:13px 15px;border:1.5px solid #e2e8f0;border-radius:7px}
+.cl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#94a3b8;margin-bottom:5px}
+.cn{font-size:14px;font-weight:800;margin-bottom:3px}
+.ci{font-size:11px;color:#64748b;line-height:1.5}
+table{width:100%;border-collapse:collapse;margin-bottom:20px}
+thead th{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#64748b;padding:8px 0;border-bottom:2px solid ${a}}
+thead th.r{text-align:right}
+tbody td{font-size:11px;padding:9px 0;border-bottom:1px solid #f1f5f9}
+td.n{color:#94a3b8;text-align:center;width:26px}td.r{text-align:right}td.b{font-weight:700}
+.ds{font-size:10px;color:#94a3b8;display:block;margin-top:1px}
+.bot{display:grid;grid-template-columns:1fr 255px;gap:18px}
+.nb{padding:13px;border:1.5px solid #e2e8f0;border-radius:7px;background:#f8fafc}
+.nl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#94a3b8;margin-bottom:5px}
+.nt{font-size:11px;color:#64748b;line-height:1.55}
+.tc{border:1.5px solid #e2e8f0;border-radius:7px;overflow:hidden}
+.tr{display:flex;justify-content:space-between;font-size:11px;padding:8px 13px;border-bottom:1px solid #f1f5f9;color:#475569}
+.tr:last-child{border-bottom:none}.tr span:first-child{color:#64748b}
+.gr{background:${a};color:#fff!important;font-weight:900;font-size:14px}
+.gr span{color:#fff!important}
+</style></head><body>${lhLayer}<div class="pg">
+<div class="banner">
+  <div><div class="b-biz">${biz}</div><div class="b-addr">${addr}<br>invoices@example.com</div></div>
+  <div><div class="b-lbl">Invoice</div><div class="b-num">INV-0024</div></div>
+</div>
+<div class="body">
+  <div class="cards">
+    <div class="card"><div class="cl">Billed To</div><div class="cn">Acme Corporation</div><div class="ci">Jennifer Walters<br>45 Commerce Drive, Suite 3, New York NY 10001</div></div>
+    <div class="card"><div class="cl">Invoice Details</div><div class="ci" style="line-height:1.9"><b>Issue Date</b> &nbsp; 01 Aug 2026<br><b>Due Date</b> &nbsp;&nbsp; 15 Aug 2026<br><b>Status</b> &nbsp;&nbsp;&nbsp;&nbsp; <span style="color:#15803d;font-weight:700">Paid</span></div></div>
+  </div>
+  <table>
+    <thead><tr><th style="width:26px;text-align:center">#</th><th>Description</th><th class="r" style="width:50px">Qty</th><th class="r" style="width:100px">Unit Price</th><th class="r" style="width:100px">Total</th></tr></thead>
+    <tbody>
+      <tr><td class="n">1</td><td><b>Brand Identity Design</b><span class="ds">Logo, colour palette, typography kit</span></td><td class="r">1</td><td class="r">1,800.00${c}</td><td class="r b">1,800.00${c}</td></tr>
+      <tr><td class="n">2</td><td><b>UI / UX Design</b><span class="ds">10 screens, mobile-first, Figma files</span></td><td class="r">1</td><td class="r">3,500.00${c}</td><td class="r b">3,500.00${c}</td></tr>
+      <tr><td class="n">3</td><td><b>Frontend Development</b><span class="ds">React, Next.js, Tailwind CSS — 40 hrs</span></td><td class="r">40</td><td class="r">85.00${c}</td><td class="r b">3,400.00${c}</td></tr>
+      <tr><td class="n">4</td><td><b>SEO Optimisation</b><span class="ds">On-page audit + 3-month strategy plan</span></td><td class="r">1</td><td class="r">650.00${c}</td><td class="r b">650.00${c}</td></tr>
+      <tr><td class="n">5</td><td><b>Monthly Hosting &amp; Support</b><span class="ds">VPS, monitoring, daily backups</span></td><td class="r">3</td><td class="r">120.00${c}</td><td class="r b">360.00${c}</td></tr>
+    </tbody>
+  </table>
+  <div class="bot">
+    <div class="nb"><div class="nl">Notes &amp; Terms</div><div class="nt">Payment due within 14 days.<br>Bank transfer only — details on file.<br>Thank you for your business!</div></div>
+    <div class="tc">
+      <div class="tr"><span>Subtotal</span><span>9,710.00${c}</span></div>
+      <div class="tr"><span>Discount (5%)</span><span style="color:#ef4444">−485.50${c}</span></div>
+      <div class="tr"><span>Tax (15%)</span><span>+1,383.67${c}</span></div>
+      <div class="tr gr"><span>Total Due</span><span>10,608.17${c}</span></div>
+    </div>
+  </div>
+</div>
+</div></body></html>`;
+}
+
+// ── Template 4: Minimal ── typography-only, serif, no fills ───────────────────
+function _iTPLMinimal(tpl, mg, cur) {
+  const a = tpl.accent, { biz, addr, c } = _iTPLDummy(cur);
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Georgia,'Times New Roman',serif;font-size:12px;color:#1a1a1a;background:#fff;${bodyPos}}
+.pg{width:794px;padding:${mg.top}mm ${mg.right}mm ${mg.bot}mm ${mg.left}mm;${pgStack}}
+.top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:30px}
+.bn{font-size:18px;font-weight:700;font-family:Georgia,serif}
+.bi{font-size:10px;color:#6b7280;margin-top:5px;line-height:1.7;font-family:Arial,sans-serif}
+.inv-word{font-size:46px;font-weight:700;font-family:Georgia,serif;color:#e5e7eb;line-height:1;text-align:right;letter-spacing:-.02em}
+.inv-ref{font-size:11px;color:#6b7280;text-align:right;margin-top:5px;font-family:Arial,sans-serif}
+.rule{height:1.5px;background:#1a1a1a;margin-bottom:20px}
+.meta{display:flex;justify-content:space-between;margin-bottom:28px}
+.btl{font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.16em;color:#9ca3af;margin-bottom:5px;font-family:Arial,sans-serif}
+.btn{font-size:15px;font-weight:700;font-family:Georgia,serif;margin-bottom:3px}
+.bti{font-size:10px;color:#6b7280;line-height:1.6;font-family:Arial,sans-serif}
+.dts{text-align:right}
+.dr{display:flex;gap:18px;justify-content:flex-end;font-size:11px;padding:3px 0;font-family:Arial,sans-serif}
+.dk{color:#9ca3af}.dv{font-weight:700;color:#1a1a1a}
+table{width:100%;border-collapse:collapse;margin-bottom:24px;font-family:Arial,sans-serif}
+thead th{font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.14em;color:#9ca3af;padding:0 0 8px;border-bottom:1.5px solid #1a1a1a}
+thead th.r{text-align:right}
+tbody td{font-size:11px;padding:9px 0;border-bottom:1px solid #e5e7eb;vertical-align:top}
+td.n{color:#d1d5db;text-align:center;width:26px;font-style:italic}td.r{text-align:right}td.b{font-weight:700}
+.ds{font-size:10px;color:#9ca3af;display:block;margin-top:1px}
+.bot{display:grid;grid-template-columns:1fr 215px;gap:24px}
+.nt{font-size:11px;color:#6b7280;line-height:1.65;font-family:Arial,sans-serif;border-top:1px solid #e5e7eb;padding-top:12px}
+.tr{display:flex;justify-content:space-between;font-size:11px;padding:5px 0;color:#6b7280;font-family:Arial,sans-serif}
+.rule2{height:1px;background:#e5e7eb;margin:4px 0}
+.gr{display:flex;justify-content:space-between;font-size:16px;font-weight:700;padding-top:8px;font-family:Georgia,serif;color:#1a1a1a;border-top:1.5px solid #1a1a1a;margin-top:4px}
+.ft{margin-top:28px;padding-top:12px;border-top:1px solid #e5e7eb;font-size:9px;color:#9ca3af;text-align:center;letter-spacing:.06em;font-family:Arial,sans-serif;text-transform:uppercase}
+</style></head><body>${lhLayer}<div class="pg">
+<div class="top">
+  <div><div class="bn">${biz}</div><div class="bi">${addr}<br>invoices@example.com · +1 555 000-0001</div></div>
+  <div><div class="inv-word">INVOICE</div><div class="inv-ref">INV-0024 / 01 Aug 2026</div></div>
+</div>
+<div class="rule"></div>
+<div class="meta">
+  <div><div class="btl">Billed To</div><div class="btn">Acme Corporation</div><div class="bti">Jennifer Walters<br>45 Commerce Drive, Suite 3<br>New York, NY 10001</div></div>
+  <div class="dts">
+    <div class="dr"><span class="dk">Issued</span><span class="dv">01 Aug 2026</span></div>
+    <div class="dr"><span class="dk">Due</span><span class="dv">15 Aug 2026</span></div>
+    <div class="dr"><span class="dk">Status</span><span class="dv">PAID</span></div>
+  </div>
+</div>
+<table>
+  <thead><tr><th style="width:26px;text-align:center">#</th><th>Description</th><th class="r" style="width:50px">Qty</th><th class="r" style="width:100px">Rate</th><th class="r" style="width:100px">Amount</th></tr></thead>
+  <tbody>
+    <tr><td class="n"><i>1</i></td><td><b>Brand Identity Design</b><span class="ds">Logo, colour palette, typography kit</span></td><td class="r">1</td><td class="r">1,800.00${c}</td><td class="r b">1,800.00${c}</td></tr>
+    <tr><td class="n"><i>2</i></td><td><b>UI / UX Design</b><span class="ds">10 screens, mobile-first, Figma source files</span></td><td class="r">1</td><td class="r">3,500.00${c}</td><td class="r b">3,500.00${c}</td></tr>
+    <tr><td class="n"><i>3</i></td><td><b>Frontend Development</b><span class="ds">React, Next.js, Tailwind CSS — 40 hrs</span></td><td class="r">40</td><td class="r">85.00${c}</td><td class="r b">3,400.00${c}</td></tr>
+    <tr><td class="n"><i>4</i></td><td><b>SEO Optimisation</b><span class="ds">On-page audit + 3-month strategy plan</span></td><td class="r">1</td><td class="r">650.00${c}</td><td class="r b">650.00${c}</td></tr>
+    <tr><td class="n"><i>5</i></td><td><b>Monthly Hosting &amp; Support</b><span class="ds">VPS, monitoring, daily backups</span></td><td class="r">3</td><td class="r">120.00${c}</td><td class="r b">360.00${c}</td></tr>
+  </tbody>
+</table>
+<div class="bot">
+  <div class="nt">Payment due within 14 days of invoice date.<br>Bank transfer only — account details on file.<br>Late payments may incur a 1.5% monthly fee.</div>
+  <div>
+    <div class="tr"><span>Subtotal</span><span>9,710.00${c}</span></div>
+    <div class="tr"><span>Discount (5%)</span><span>−485.50${c}</span></div>
+    <div class="tr"><span>Tax (15%)</span><span>+1,383.67${c}</span></div>
+    <div class="rule2"></div>
+    <div class="gr"><span>Total</span><span>10,608.17${c}</span></div>
+  </div>
+</div>
+<div class="ft">Invoice INV-0024 &nbsp;·&nbsp; ${biz} &nbsp;·&nbsp; 01 Aug 2026</div>
+</div></body></html>`;
+}
+
+// ── Template 5: Compact ── card info grid, teal accent chips ──────────────────
+function _iTPLCompact(tpl, mg, cur) {
+  const a = tpl.accent, { biz, addr, c } = _iTPLDummy(cur);
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Inter,Arial,sans-serif;font-size:12px;color:#0f172a;background:#fff;${bodyPos}}
+.pg{width:794px;padding:${mg.top}mm ${mg.right}mm ${mg.bot}mm ${mg.left}mm;${pgStack}}
+.topbar{background:${a};border-radius:9px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
+.tb-biz{font-size:18px;font-weight:900;color:#fff}
+.tb-addr{font-size:10px;color:rgba(255,255,255,.72);margin-top:3px}
+.tb-il{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:rgba(255,255,255,.65);margin-bottom:3px;text-align:right}
+.tb-in{font-size:22px;font-weight:900;color:#fff;text-align:right}
+.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px}
+.gc{padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:7px;border-left:3px solid ${a}}
+.gcl{font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:#94a3b8;margin-bottom:4px}
+.gcv{font-size:12px;font-weight:800;color:#0f172a}
+.bt-cell{grid-column:span 2;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:7px;border-left:3px solid ${a}}
+table{width:100%;border-collapse:collapse;margin-bottom:18px}
+thead th{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:${a};padding:8px 10px;border-bottom:2px solid ${a};background:${a}14}
+thead th.r{text-align:right}
+tbody td{font-size:11px;padding:8px 10px;border-bottom:1px solid #f1f5f9}
+tbody tr:nth-child(even) td{background:${a}08}
+td.n{color:#94a3b8;text-align:center;width:26px}td.r{text-align:right}td.b{font-weight:700}
+.ds{font-size:10px;color:#94a3b8;display:block;margin-top:1px}
+.bot{display:grid;grid-template-columns:1fr 255px;gap:16px}
+.nb{padding:12px;border:1.5px solid #e2e8f0;border-radius:7px;background:#f8fafc}
+.nl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#94a3b8;margin-bottom:5px}
+.nt{font-size:11px;color:#64748b;line-height:1.55}
+.tc{border:1.5px solid #e2e8f0;border-radius:7px;overflow:hidden}
+.tr{display:flex;justify-content:space-between;font-size:11px;padding:8px 12px;border-bottom:1px solid #f1f5f9;color:#475569}
+.tr:last-child{border-bottom:none}.tr span:first-child{color:#64748b}
+.gr{background:${a};font-weight:900;font-size:14px}
+.gr span{color:#fff!important}
+.ft{margin-top:16px;padding-top:10px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:10px;color:#94a3b8}
+</style></head><body>${lhLayer}<div class="pg">
+<div class="topbar">
+  <div><div class="tb-biz">${biz}</div><div class="tb-addr">${addr}</div></div>
+  <div><div class="tb-il">Invoice</div><div class="tb-in">INV-0024</div></div>
+</div>
+<div class="grid4">
+  <div class="bt-cell" style="grid-column:span 2">
+    <div class="gcl">Billed To</div>
+    <div style="font-size:14px;font-weight:800;margin-bottom:3px">Acme Corporation</div>
+    <div style="font-size:11px;color:#64748b">Jennifer Walters · 45 Commerce Drive, New York NY 10001</div>
+  </div>
+  <div class="gc"><div class="gcl">Issue Date</div><div class="gcv">01 Aug 2026</div></div>
+  <div class="gc"><div class="gcl">Due Date</div><div class="gcv">15 Aug 2026</div></div>
+  <div class="gc"><div class="gcl">Status</div><div class="gcv" style="color:#15803d">Paid ✓</div></div>
+  <div class="gc"><div class="gcl">Amount</div><div class="gcv" style="color:${a}">10,608.17${c}</div></div>
+</div>
+<table>
+  <thead><tr><th style="width:26px;text-align:center">#</th><th>Description</th><th class="r" style="width:50px">Qty</th><th class="r" style="width:100px">Unit Price</th><th class="r" style="width:100px">Total</th></tr></thead>
+  <tbody>
+    <tr><td class="n">1</td><td><b>Brand Identity Design</b><span class="ds">Logo, colour palette, typography kit</span></td><td class="r">1</td><td class="r">1,800.00${c}</td><td class="r b">1,800.00${c}</td></tr>
+    <tr><td class="n">2</td><td><b>UI / UX Design</b><span class="ds">10 screens, mobile-first, Figma source files</span></td><td class="r">1</td><td class="r">3,500.00${c}</td><td class="r b">3,500.00${c}</td></tr>
+    <tr><td class="n">3</td><td><b>Frontend Development</b><span class="ds">React, Next.js, Tailwind CSS — 40 hrs</span></td><td class="r">40</td><td class="r">85.00${c}</td><td class="r b">3,400.00${c}</td></tr>
+    <tr><td class="n">4</td><td><b>SEO Optimisation</b><span class="ds">On-page audit + 3-month strategy plan</span></td><td class="r">1</td><td class="r">650.00${c}</td><td class="r b">650.00${c}</td></tr>
+    <tr><td class="n">5</td><td><b>Monthly Hosting &amp; Support</b><span class="ds">VPS, monitoring, daily backups</span></td><td class="r">3</td><td class="r">120.00${c}</td><td class="r b">360.00${c}</td></tr>
+  </tbody>
+</table>
+<div class="bot">
+  <div class="nb"><div class="nl">Notes &amp; Terms</div><div class="nt">Payment due within 14 days.<br>Bank transfer only — details on file.<br>Thank you for your business!</div></div>
+  <div class="tc">
+    <div class="tr"><span>Subtotal</span><span>9,710.00${c}</span></div>
+    <div class="tr"><span>Discount (5%)</span><span style="color:#ef4444">−485.50${c}</span></div>
+    <div class="tr"><span>Tax (15%)</span><span>+1,383.67${c}</span></div>
+    <div class="tr gr"><span>Total Due</span><span>10,608.17${c}</span></div>
+  </div>
+</div>
+<div class="ft"><span>INV-0024 · ${biz}</span><span>01 Aug 2026</span></div>
+</div></body></html>`;
+}
+
+// ── Template 6: Executive ── dark navy header, gold accent, premium ───────────
+function _iTPLExecutive(tpl, mg, cur) {
+  const a = tpl.accent; // gold #c7a84f
+  const dk = '#0f172a'; // dark navy
+  const { biz, addr, c } = _iTPLDummy(cur);
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Inter,Arial,sans-serif;font-size:12px;color:#0f172a;background:#fff;${bodyPos}}
+.pg{width:794px;min-height:1123px;display:flex;flex-direction:column;${pgStack}}
+.hdr{background:${dk};padding:30px ${mg.right}mm 26px ${mg.left}mm}
+.hdr-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px}
+.biz-n{font-size:22px;font-weight:900;color:#fff;letter-spacing:-.01em}
+.biz-i{font-size:10px;color:rgba(255,255,255,.45);margin-top:5px;line-height:1.7}
+.il{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.15em;color:${a};margin-bottom:5px;text-align:right}
+.in{font-size:28px;font-weight:900;color:#fff;text-align:right;letter-spacing:-.01em}
+.hdr-rule{height:1px;background:${a};opacity:.45;margin-bottom:16px}
+.hdr-meta{display:flex;gap:0}
+.hm{border-left:2px solid ${a};padding:0 0 0 12px;margin-right:24px}
+.hml{font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:rgba(255,255,255,.4);margin-bottom:3px}
+.hmv{font-size:12px;font-weight:700;color:#fff}
+.body{flex:1;padding:22px ${mg.right}mm ${mg.bot}mm ${mg.left}mm}
+.bt{margin-bottom:20px;padding:13px 15px;border:1px solid #e2e8f0;border-radius:6px;border-left:3px solid ${a}}
+.btl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#94a3b8;margin-bottom:5px}
+.btn{font-size:14px;font-weight:800;margin-bottom:3px}
+.bti{font-size:11px;color:#64748b;line-height:1.5}
+table{width:100%;border-collapse:collapse;margin-bottom:20px}
+thead th{background:${dk};color:${a};font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:9px 10px}
+thead th.r{text-align:right}
+tbody td{font-size:11px;padding:9px 10px;border-bottom:1px solid #e2e8f0}
+tbody tr:nth-child(even) td{background:#f8fafc}
+td.n{color:#94a3b8;text-align:center;width:26px}td.r{text-align:right}td.b{font-weight:700}
+.ds{font-size:10px;color:#94a3b8;display:block;margin-top:1px}
+.bot{display:grid;grid-template-columns:1fr 248px;gap:20px}
+.nb{padding:13px;border:1px solid #e2e8f0;border-radius:6px;background:#f8fafc}
+.nl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#94a3b8;margin-bottom:5px}
+.nt{font-size:11px;color:#64748b;line-height:1.55}
+.tr{display:flex;justify-content:space-between;font-size:11px;padding:5px 0;border-bottom:1px solid #f1f5f9;color:#475569}
+.tr:last-child{border-bottom:none}.tr span:first-child{color:#64748b}
+.gr{font-size:15px;font-weight:900;border-top:2px solid ${a};margin-top:4px;padding-top:9px}
+.gr span:last-child{color:${a}}
+.ft{margin-top:22px;padding-top:12px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:10px;color:#94a3b8}
+</style></head><body>${lhLayer}<div class="pg">
+<div class="hdr">
+  <div class="hdr-top">
+    <div><div class="biz-n">${biz}</div><div class="biz-i">${addr}<br>invoices@example.com · +1 555 000-0001</div></div>
+    <div><div class="il">Invoice</div><div class="in">INV-0024</div></div>
+  </div>
+  <div class="hdr-rule"></div>
+  <div class="hdr-meta">
+    <div class="hm"><div class="hml">Issue Date</div><div class="hmv">01 Aug 2026</div></div>
+    <div class="hm"><div class="hml">Due Date</div><div class="hmv">15 Aug 2026</div></div>
+    <div class="hm"><div class="hml">Status</div><div class="hmv" style="color:#4ade80">Paid</div></div>
+  </div>
+</div>
+<div class="body">
+  <div class="bt"><div class="btl">Billed To</div><div class="btn">Acme Corporation</div><div class="bti">Jennifer Walters · 45 Commerce Drive, Suite 3 · New York, NY 10001 · jennifer@acme.com</div></div>
+  <table>
+    <thead><tr><th style="width:26px;text-align:center">#</th><th>Description</th><th class="r" style="width:50px">Qty</th><th class="r" style="width:100px">Unit Price</th><th class="r" style="width:100px">Total</th></tr></thead>
+    <tbody>
+      <tr><td class="n">1</td><td><b>Brand Identity Design</b><span class="ds">Logo, colour palette, typography kit</span></td><td class="r">1</td><td class="r">1,800.00${c}</td><td class="r b">1,800.00${c}</td></tr>
+      <tr><td class="n">2</td><td><b>UI / UX Design</b><span class="ds">10 screens, mobile-first, Figma source files</span></td><td class="r">1</td><td class="r">3,500.00${c}</td><td class="r b">3,500.00${c}</td></tr>
+      <tr><td class="n">3</td><td><b>Frontend Development</b><span class="ds">React, Next.js, Tailwind CSS — 40 hrs</span></td><td class="r">40</td><td class="r">85.00${c}</td><td class="r b">3,400.00${c}</td></tr>
+      <tr><td class="n">4</td><td><b>SEO Optimisation</b><span class="ds">On-page audit + 3-month strategy plan</span></td><td class="r">1</td><td class="r">650.00${c}</td><td class="r b">650.00${c}</td></tr>
+      <tr><td class="n">5</td><td><b>Monthly Hosting &amp; Support</b><span class="ds">VPS, monitoring, daily backups</span></td><td class="r">3</td><td class="r">120.00${c}</td><td class="r b">360.00${c}</td></tr>
+    </tbody>
+  </table>
+  <div class="bot">
+    <div class="nb"><div class="nl">Notes &amp; Terms</div><div class="nt">Payment due within 14 days.<br>Bank transfer only — details on file.<br>Thank you for your business!</div></div>
+    <div>
+      <div class="tr"><span>Subtotal</span><span>9,710.00${c}</span></div>
+      <div class="tr"><span>Discount (5%)</span><span style="color:#ef4444">−485.50${c}</span></div>
+      <div class="tr"><span>Tax (15%)</span><span>+1,383.67${c}</span></div>
+      <div class="tr gr"><span>Total Due</span><span>10,608.17${c}</span></div>
+    </div>
+  </div>
+  <div class="ft"><span>INV-0024 · ${biz}</span><span>${biz}</span></div>
+</div>
+</div></body></html>`;
+}
+
+// ── Invoice document builder with REAL invoice data ───────────────────────
+// Builds the same HTML as the 6 template builders but populated with actual
+// invoice fields (invoice_number, customer_name, items, totals, etc.)
+function _invBuildActualDoc(inv, tpl, mg, cur, lhDataUrl = null) {
+  const a    = tpl.accent;
+  const biz  = escHtml(state.receiptSettings?.business_name        || 'Your Business');
+  const addr = escHtml(state.receiptSettings?.receipt_address_line || '');
+  const c    = cur ? ' ' + cur : '';
+  const fmt  = n => parseFloat(n || 0).toFixed(2);
+
+  const invNum  = escHtml(inv.invoice_number || '');
+  const issDate = escHtml(inv.issue_date     || '');
+  const dueDate = escHtml(inv.due_date       || '—');
+  const cust    = escHtml(inv.customer_name  || 'Walk-in Customer');
+  const sLabel  = escHtml(inv.status_label   || inv.status || '');
+  const sColor  = ({ paid:'#15803d', overdue:'#ef4444', sent:'#0891b2', cancelled:'#ef4444' })[inv.status] || '#64748b';
+  const sColorDk= ({ paid:'#4ade80', overdue:'#f87171', sent:'#60a5fa', cancelled:'#f87171' })[inv.status] || '#94a3b8';
+  const notesText = escHtml(inv.notes || 'Thank you for your business!');
+  const sub  = fmt(inv.subtotal);
+  const disc = parseFloat(inv.discount_amount || 0);
+  const tax  = parseFloat(inv.tax_amount      || 0);
+  const tot  = fmt(inv.total);
+
+  // ── Per-line disc/tax aggregates (for print columns + summary) ────────────
+  const taxRulesPrint = Array.isArray(state.receiptSettings?.tax_rules)
+    ? state.receiptSettings.tax_rules.filter(r => parseFloat(r.value || 0) > 0)
+    : [];
+  // Always show Disc/Tax columns so the print layout is consistent regardless
+  // of whether this particular invoice has per-line adjustments.
+  const hasAnyDisc = true;
+  const hasAnyTax  = true;
+
+  let rawSub = 0, plDiscTot = 0, plTaxTot = 0;
+  (inv.items || []).forEach(it => {
+    const g   = parseFloat(it.quantity) * parseFloat(it.unit_price);
+    const dt  = it.discount_type || 'pct';
+    const dv  = parseFloat(it.discount_value) || 0;
+    const da  = dt === 'flat' ? Math.min(dv, g) : (g * dv / 100);
+    const net = Math.max(0, g - da);
+    const tt  = it.tax_type || 'pct';
+    const tv  = parseFloat(it.tax_pct) || 0;
+    const ta  = tt === 'flat' ? tv : (net * tv / 100);
+    rawSub   += g;
+    plDiscTot += da;
+    plTaxTot  += ta;
+  });
+
+  // Table header extra columns (always present — keeps layout consistent)
+  const thDisc  = `<th class="r" style="width:68px">Disc</th>`;
+  const thTax   = `<th class="r" style="width:86px">Tax</th>`;
+  const extraTh = thDisc + thTax;
+
+  const rows = (italic) => (inv.items || []).map((it, i) => {
+    const n    = italic ? `<i>${i + 1}</i>` : (i + 1);
+    const qty  = parseFloat(it.quantity) % 1 === 0 ? parseInt(it.quantity) : parseFloat(it.quantity).toFixed(2);
+    const up   = fmt(it.unit_price);
+    const lt   = fmt(it.line_total != null ? it.line_total : (parseFloat(it.unit_price || 0) * parseFloat(it.quantity || 1)));
+
+    let discTd = '';
+    if (hasAnyDisc) {
+      const dv = parseFloat(it.discount_value) || 0;
+      const dt = it.discount_type || 'pct';
+      const g  = parseFloat(it.quantity) * parseFloat(it.unit_price);
+      const da = dt === 'flat' ? Math.min(dv, g) : (g * dv / 100);
+      discTd = dv > 0
+        ? `<td class="r" style="color:#ef4444;font-size:10px">${dt === 'flat' ? `−${da.toFixed(2)}${c}` : `${dv}%`}</td>`
+        : `<td class="r" style="color:#94a3b8">—</td>`;
+    }
+
+    let taxTd = '';
+    if (hasAnyTax) {
+      const tv = parseFloat(it.tax_pct) || 0;
+      const tt = it.tax_type || 'pct';
+      if (tv > 0) {
+        const match = taxRulesPrint.find(r =>
+          (r.type === tt || (r.type === 'percentage' && tt === 'pct')) && String(r.value) === String(tv)
+        );
+        const lbl = match
+          ? escHtml(match.name) + (tt !== 'flat' ? ' ' + tv + '%' : '')
+          : (tt === 'flat' ? tv.toFixed(2) + c : tv + '%');
+        taxTd = `<td class="r" style="color:#10b981;font-size:10px">${lbl}</td>`;
+      } else {
+        taxTd = `<td class="r" style="color:#94a3b8">—</td>`;
+      }
+    }
+
+    return `<tr><td class="n">${n}</td><td><b>${escHtml(it.description || '')}</b></td><td class="r">${qty}</td><td class="r">${up}${c}</td>${discTd}${taxTd}<td class="r b">${lt}${c}</td></tr>`;
+  }).join('\n    ');
+
+  // ── Summary rows ──────────────────────────────────────────────────────────
+  const hasPlAdj = plDiscTot > 0.001 || plTaxTot > 0.001;
+  let totRows = '';
+  if (hasPlAdj) {
+    totRows += `<div class="tr"><span>Gross Subtotal</span><span>${rawSub.toFixed(2)}${c}</span></div>`;
+    if (plDiscTot > 0.001) totRows += `<div class="tr"><span>Item Discounts</span><span style="color:#ef4444">−${plDiscTot.toFixed(2)}${c}</span></div>`;
+    if (plTaxTot  > 0.001) totRows += `<div class="tr"><span>Item Taxes</span><span style="color:#10b981">+${plTaxTot.toFixed(2)}${c}</span></div>`;
+    if (disc > 0 || tax > 0) totRows += `<div class="tr" style="font-weight:700"><span>Line Subtotal</span><span>${fmt(inv.subtotal)}${c}</span></div>`;
+  } else {
+    totRows += `<div class="tr"><span>Subtotal</span><span>${sub}${c}</span></div>`;
+  }
+  if (disc > 0) totRows += `<div class="tr"><span>Discount</span><span style="color:#ef4444">−${disc.toFixed(2)}${c}</span></div>`;
+  if (tax  > 0) totRows += `<div class="tr"><span>Tax</span><span style="color:#10b981">+${tax.toFixed(2)}${c}</span></div>`;
+  // kept for backwards compatibility with callers that inject _taxBreakdown
+  const discRow = ''; const taxRow = '';
+
+  // Letterhead: absolute image layer behind content (embedded as data URL)
+  const lhLayer   = lhDataUrl
+    ? `<img src="${lhDataUrl}" style="position:absolute;top:0;left:0;width:794px;height:1123px;z-index:0;pointer-events:none;display:block;object-fit:fill;image-rendering:auto;" alt="">`
+    : '';
+  const bodyPos   = lhDataUrl ? 'position:relative;overflow:hidden;' : '';
+  const pgStack   = lhDataUrl ? 'position:relative;z-index:1;' : '';
+
+  if (tpl.id === 'sidebar') {
+    return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Inter,Arial,sans-serif;font-size:12px;color:#0f172a;background:#fff;${bodyPos}}
+.pg{width:794px;min-height:1123px;display:flex;${pgStack}}
+.sb{width:195px;background:${a};padding:30px 16px;flex-shrink:0;display:flex;flex-direction:column}
+.sb-biz{font-size:14px;font-weight:900;color:#fff;line-height:1.2;margin-bottom:4px}
+.sb-addr{font-size:9px;color:rgba(255,255,255,.55);line-height:1.6;margin-bottom:20px}
+.sb-hr{height:1px;background:rgba(255,255,255,.18);margin-bottom:16px}
+.sb-lbl{font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:rgba(255,255,255,.45);margin-bottom:3px}
+.sb-num{font-size:20px;font-weight:900;color:#fff;margin-bottom:14px}
+.sb-badge{display:inline-block;padding:3px 9px;background:rgba(255,255,255,.15);color:#fff;border-radius:20px;font-size:9px;font-weight:700;letter-spacing:.05em;margin-bottom:18px}
+.sb-row{margin-bottom:11px}.sb-dk{font-size:8px;color:rgba(255,255,255,.45);text-transform:uppercase;letter-spacing:.08em;font-weight:700;margin-bottom:2px}
+.sb-dv{font-size:11px;color:#fff;font-weight:600}.sb-amt{font-size:16px;font-weight:900;color:#fff;margin-top:4px}
+.ct{flex:1;padding:${mg.top}mm 18px ${mg.bot}mm 22px;min-width:0}
+.bt{margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid #e2e8f0}
+.btl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#94a3b8;margin-bottom:5px}
+.btn{font-size:14px;font-weight:800;margin-bottom:3px}.bti{font-size:11px;color:#64748b;line-height:1.5}
+table{width:100%;border-collapse:collapse;margin-bottom:18px}
+thead th{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#475569;padding:8px;border-bottom:2px solid ${a}}
+thead th.r{text-align:right}
+tbody td{font-size:11px;padding:7px 8px;border-bottom:1px solid #f1f5f9}
+td.n{color:#94a3b8;text-align:center;width:22px}td.r{text-align:right}td.b{font-weight:700}
+.tot{display:flex;justify-content:flex-end}.ti{width:220px}
+.tr{display:flex;justify-content:space-between;font-size:11px;padding:5px 0;border-bottom:1px solid #f1f5f9;color:#475569}
+.tr:last-child{border-bottom:none}.tr span:first-child{color:#64748b}
+.gr{font-size:14px;font-weight:900;border-top:2.5px solid ${a};margin-top:4px;padding-top:9px}
+.gr span:last-child{color:${a}}
+</style></head><body>${lhLayer}<div class="pg">
+<div class="sb">
+  <div class="sb-biz">${biz}</div><div class="sb-addr">${addr}</div>
+  <div class="sb-hr"></div>
+  <div class="sb-lbl">Invoice</div><div class="sb-num">${invNum}</div>
+  <div class="sb-badge">● ${sLabel}</div>
+  <div class="sb-row"><div class="sb-dk">Issue Date</div><div class="sb-dv">${issDate}</div></div>
+  <div class="sb-row"><div class="sb-dk">Due Date</div><div class="sb-dv">${dueDate}</div></div>
+  <div class="sb-hr" style="margin-top:12px"></div>
+  <div class="sb-row"><div class="sb-dk">Amount Due</div><div class="sb-amt">${tot}${c}</div></div>
+</div>
+<div class="ct">
+  <div class="bt"><div class="btl">Billed To</div><div class="btn">${cust}</div></div>
+  <table><thead><tr><th style="width:22px;text-align:center">#</th><th>Description</th><th class="r" style="width:44px">Qty</th><th class="r" style="width:86px">Price</th>${extraTh}<th class="r" style="width:88px">Total</th></tr></thead>
+  <tbody>${rows(false)}</tbody></table>
+  <div class="tot"><div class="ti">
+    ${totRows}
+    <div class="tr gr"><span>Total Due</span><span>${tot}${c}</span></div>
+  </div></div>
+</div></div></body></html>`;
+  }
+
+  if (tpl.id === 'bold') {
+    return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Inter,Arial,sans-serif;font-size:12px;color:#0f172a;background:#fff;${bodyPos}}
+.pg{width:794px;min-height:1123px;display:flex;flex-direction:column;${pgStack}}
+.banner{background:${a};padding:28px ${mg.right}mm 26px ${mg.left}mm;display:flex;justify-content:space-between;align-items:flex-end}
+.b-biz{font-size:20px;font-weight:900;color:#fff}.b-addr{font-size:10px;color:rgba(255,255,255,.7);margin-top:4px;line-height:1.5}
+.b-num{font-size:38px;font-weight:900;color:#fff;letter-spacing:-.02em;line-height:1;text-align:right}
+.b-lbl{font-size:10px;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.15em;font-weight:700;margin-bottom:4px;text-align:right}
+.body{padding:22px ${mg.right}mm ${mg.bot}mm ${mg.left}mm;flex:1}
+.cards{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px}
+.card{padding:13px 15px;border:1.5px solid #e2e8f0;border-radius:7px}
+.cl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#94a3b8;margin-bottom:5px}
+.cn{font-size:14px;font-weight:800;margin-bottom:3px}.ci{font-size:11px;color:#64748b;line-height:1.5}
+table{width:100%;border-collapse:collapse;margin-bottom:20px}
+thead th{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#64748b;padding:8px 0;border-bottom:2px solid ${a}}
+thead th.r{text-align:right}
+tbody td{font-size:11px;padding:9px 0;border-bottom:1px solid #f1f5f9}
+td.n{color:#94a3b8;text-align:center;width:26px}td.r{text-align:right}td.b{font-weight:700}
+.bot{display:grid;grid-template-columns:1fr 255px;gap:18px}
+.nb{padding:13px;border:1.5px solid #e2e8f0;border-radius:7px;background:#f8fafc}
+.nl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#94a3b8;margin-bottom:5px}
+.nt{font-size:11px;color:#64748b;line-height:1.55}
+.tc{border:1.5px solid #e2e8f0;border-radius:7px;overflow:hidden}
+.tr{display:flex;justify-content:space-between;font-size:11px;padding:8px 13px;border-bottom:1px solid #f1f5f9;color:#475569}
+.tr:last-child{border-bottom:none}.tr span:first-child{color:#64748b}
+.gr{background:${a};color:#fff!important;font-weight:900;font-size:14px}.gr span{color:#fff!important}
+</style></head><body>${lhLayer}<div class="pg">
+<div class="banner">
+  <div><div class="b-biz">${biz}</div><div class="b-addr">${addr}</div></div>
+  <div><div class="b-lbl">Invoice</div><div class="b-num">${invNum}</div></div>
+</div>
+<div class="body">
+  <div class="cards">
+    <div class="card"><div class="cl">Billed To</div><div class="cn">${cust}</div></div>
+    <div class="card"><div class="cl">Invoice Details</div><div class="ci" style="line-height:1.9"><b>Issue Date</b> &nbsp; ${issDate}<br><b>Due Date</b> &nbsp;&nbsp; ${dueDate}<br><b>Status</b> &nbsp;&nbsp;&nbsp;&nbsp; <span style="color:${sColor};font-weight:700">${sLabel}</span></div></div>
+  </div>
+  <table><thead><tr><th style="width:26px;text-align:center">#</th><th>Description</th><th class="r" style="width:50px">Qty</th><th class="r" style="width:100px">Unit Price</th>${extraTh}<th class="r" style="width:100px">Total</th></tr></thead>
+  <tbody>${rows(false)}</tbody></table>
+  <div class="bot">
+    <div class="nb"><div class="nl">Notes</div><div class="nt">${notesText}</div></div>
+    <div class="tc">
+      ${totRows}
+      <div class="tr gr"><span>Total Due</span><span>${tot}${c}</span></div>
+    </div>
+  </div>
+</div></div></body></html>`;
+  }
+
+  if (tpl.id === 'minimal') {
+    return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Georgia,'Times New Roman',serif;font-size:12px;color:#1a1a1a;background:#fff;${bodyPos}}
+.pg{width:794px;padding:${mg.top}mm ${mg.right}mm ${mg.bot}mm ${mg.left}mm;${pgStack}}
+.top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:30px}
+.bn{font-size:18px;font-weight:700;font-family:Georgia,serif}
+.bi{font-size:10px;color:#6b7280;margin-top:5px;line-height:1.7;font-family:Arial,sans-serif}
+.inv-word{font-size:46px;font-weight:700;font-family:Georgia,serif;color:#e5e7eb;line-height:1;text-align:right;letter-spacing:-.02em}
+.inv-ref{font-size:11px;color:#6b7280;text-align:right;margin-top:5px;font-family:Arial,sans-serif}
+.rule{height:1.5px;background:#1a1a1a;margin-bottom:20px}
+.meta{display:flex;justify-content:space-between;margin-bottom:28px}
+.btl{font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.16em;color:#9ca3af;margin-bottom:5px;font-family:Arial,sans-serif}
+.btn{font-size:15px;font-weight:700;font-family:Georgia,serif;margin-bottom:3px}
+.dts{text-align:right}
+.dr{display:flex;gap:18px;justify-content:flex-end;font-size:11px;padding:3px 0;font-family:Arial,sans-serif}
+.dk{color:#9ca3af}.dv{font-weight:700;color:#1a1a1a}
+table{width:100%;border-collapse:collapse;margin-bottom:24px;font-family:Arial,sans-serif}
+thead th{font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.14em;color:#9ca3af;padding:0 0 8px;border-bottom:1.5px solid #1a1a1a}
+thead th.r{text-align:right}
+tbody td{font-size:11px;padding:9px 0;border-bottom:1px solid #e5e7eb;vertical-align:top}
+td.n{color:#d1d5db;text-align:center;width:26px;font-style:italic}td.r{text-align:right}td.b{font-weight:700}
+.bot{display:grid;grid-template-columns:1fr 215px;gap:24px}
+.nt{font-size:11px;color:#6b7280;line-height:1.65;font-family:Arial,sans-serif;border-top:1px solid #e5e7eb;padding-top:12px}
+.tr{display:flex;justify-content:space-between;font-size:11px;padding:5px 0;color:#6b7280;font-family:Arial,sans-serif}
+.rule2{height:1px;background:#e5e7eb;margin:4px 0}
+.gr{display:flex;justify-content:space-between;font-size:16px;font-weight:700;padding-top:8px;font-family:Georgia,serif;color:#1a1a1a;border-top:1.5px solid #1a1a1a;margin-top:4px}
+.ft{margin-top:28px;padding-top:12px;border-top:1px solid #e5e7eb;font-size:9px;color:#9ca3af;text-align:center;letter-spacing:.06em;font-family:Arial,sans-serif;text-transform:uppercase}
+</style></head><body>${lhLayer}<div class="pg">
+<div class="top">
+  <div><div class="bn">${biz}</div><div class="bi">${addr}</div></div>
+  <div><div class="inv-word">INVOICE</div><div class="inv-ref">${invNum} / ${issDate}</div></div>
+</div>
+<div class="rule"></div>
+<div class="meta">
+  <div><div class="btl">Billed To</div><div class="btn">${cust}</div></div>
+  <div class="dts">
+    <div class="dr"><span class="dk">Issued</span><span class="dv">${issDate}</span></div>
+    <div class="dr"><span class="dk">Due</span><span class="dv">${dueDate}</span></div>
+    <div class="dr"><span class="dk">Status</span><span class="dv">${sLabel}</span></div>
+  </div>
+</div>
+<table><thead><tr><th style="width:26px;text-align:center">#</th><th>Description</th><th class="r" style="width:50px">Qty</th><th class="r" style="width:100px">Rate</th>${extraTh}<th class="r" style="width:100px">Amount</th></tr></thead>
+<tbody>${rows(true)}</tbody></table>
+<div class="bot">
+  <div class="nt">${notesText}</div>
+  <div>
+    ${totRows}
+    <div class="rule2"></div>
+    <div class="gr"><span>Total</span><span>${tot}${c}</span></div>
+  </div>
+</div>
+<div class="ft">Invoice ${invNum} &nbsp;·&nbsp; ${biz} &nbsp;·&nbsp; ${issDate}</div>
+</div></body></html>`;
+  }
+
+  if (tpl.id === 'compact') {
+    return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Inter,Arial,sans-serif;font-size:12px;color:#0f172a;background:#fff;${bodyPos}}
+.pg{width:794px;padding:${mg.top}mm ${mg.right}mm ${mg.bot}mm ${mg.left}mm;${pgStack}}
+.topbar{background:${a};border-radius:9px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
+.tb-biz{font-size:18px;font-weight:900;color:#fff}.tb-addr{font-size:10px;color:rgba(255,255,255,.72);margin-top:3px}
+.tb-il{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:rgba(255,255,255,.65);margin-bottom:3px;text-align:right}
+.tb-in{font-size:22px;font-weight:900;color:#fff;text-align:right}
+.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px}
+.gc{padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:7px;border-left:3px solid ${a}}
+.gcl{font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:#94a3b8;margin-bottom:4px}
+.gcv{font-size:12px;font-weight:800;color:#0f172a}
+.bt-cell{grid-column:span 2;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:7px;border-left:3px solid ${a}}
+table{width:100%;border-collapse:collapse;margin-bottom:18px}
+thead th{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:${a};padding:8px 10px;border-bottom:2px solid ${a};background:${a}14}
+thead th.r{text-align:right}
+tbody td{font-size:11px;padding:8px 10px;border-bottom:1px solid #f1f5f9}
+tbody tr:nth-child(even) td{background:${a}08}
+td.n{color:#94a3b8;text-align:center;width:26px}td.r{text-align:right}td.b{font-weight:700}
+.bot{display:grid;grid-template-columns:1fr 255px;gap:16px}
+.nb{padding:12px;border:1.5px solid #e2e8f0;border-radius:7px;background:#f8fafc}
+.nl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#94a3b8;margin-bottom:5px}
+.nt{font-size:11px;color:#64748b;line-height:1.55}
+.tc{border:1.5px solid #e2e8f0;border-radius:7px;overflow:hidden}
+.tr{display:flex;justify-content:space-between;font-size:11px;padding:8px 12px;border-bottom:1px solid #f1f5f9;color:#475569}
+.tr:last-child{border-bottom:none}.tr span:first-child{color:#64748b}
+.gr{background:${a};font-weight:900;font-size:14px}.gr span{color:#fff!important}
+.ft{margin-top:16px;padding-top:10px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:10px;color:#94a3b8}
+</style></head><body>${lhLayer}<div class="pg">
+<div class="topbar">
+  <div><div class="tb-biz">${biz}</div><div class="tb-addr">${addr}</div></div>
+  <div><div class="tb-il">Invoice</div><div class="tb-in">${invNum}</div></div>
+</div>
+<div class="grid4">
+  <div class="bt-cell"><div class="gcl">Billed To</div><div style="font-size:14px;font-weight:800;margin-bottom:3px">${cust}</div></div>
+  <div class="gc"><div class="gcl">Issue Date</div><div class="gcv">${issDate}</div></div>
+  <div class="gc"><div class="gcl">Due Date</div><div class="gcv">${dueDate}</div></div>
+  <div class="gc"><div class="gcl">Status</div><div class="gcv" style="color:${sColor}">${sLabel}</div></div>
+  <div class="gc"><div class="gcl">Amount</div><div class="gcv" style="color:${a}">${tot}${c}</div></div>
+</div>
+<table><thead><tr><th style="width:26px;text-align:center">#</th><th>Description</th><th class="r" style="width:50px">Qty</th><th class="r" style="width:100px">Unit Price</th>${extraTh}<th class="r" style="width:100px">Total</th></tr></thead>
+<tbody>${rows(false)}</tbody></table>
+<div class="bot">
+  <div class="nb"><div class="nl">Notes</div><div class="nt">${notesText}</div></div>
+  <div class="tc">
+    ${totRows}
+    <div class="tr gr"><span>Total Due</span><span>${tot}${c}</span></div>
+  </div>
+</div>
+<div class="ft"><span>${invNum} · ${biz}</span><span>${issDate}</span></div>
+</div></body></html>`;
+  }
+
+  if (tpl.id === 'executive') {
+    const dk = '#0f172a';
+    return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Inter,Arial,sans-serif;font-size:12px;color:#0f172a;background:#fff;${bodyPos}}
+.pg{width:794px;min-height:1123px;display:flex;flex-direction:column;${pgStack}}
+.hdr{background:${dk};padding:30px ${mg.right}mm 26px ${mg.left}mm}
+.hdr-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px}
+.biz-n{font-size:22px;font-weight:900;color:#fff;letter-spacing:-.01em}
+.biz-i{font-size:10px;color:rgba(255,255,255,.45);margin-top:5px;line-height:1.7}
+.il{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.15em;color:${a};margin-bottom:5px;text-align:right}
+.in{font-size:28px;font-weight:900;color:#fff;text-align:right;letter-spacing:-.01em}
+.hdr-rule{height:1px;background:${a};opacity:.45;margin-bottom:16px}
+.hdr-meta{display:flex;gap:0}
+.hm{border-left:2px solid ${a};padding:0 0 0 12px;margin-right:24px}
+.hml{font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:rgba(255,255,255,.4);margin-bottom:3px}
+.hmv{font-size:12px;font-weight:700;color:#fff}
+.body{flex:1;padding:22px ${mg.right}mm ${mg.bot}mm ${mg.left}mm}
+.bt{margin-bottom:20px;padding:13px 15px;border:1px solid #e2e8f0;border-radius:6px;border-left:3px solid ${a}}
+.btl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#94a3b8;margin-bottom:5px}
+.btn{font-size:14px;font-weight:800;margin-bottom:3px}.bti{font-size:11px;color:#64748b;line-height:1.5}
+table{width:100%;border-collapse:collapse;margin-bottom:20px}
+thead th{background:${dk};color:${a};font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:9px 10px}
+thead th.r{text-align:right}
+tbody td{font-size:11px;padding:9px 10px;border-bottom:1px solid #e2e8f0}
+tbody tr:nth-child(even) td{background:#f8fafc}
+td.n{color:#94a3b8;text-align:center;width:26px}td.r{text-align:right}td.b{font-weight:700}
+.bot{display:grid;grid-template-columns:1fr 248px;gap:20px}
+.nb{padding:13px;border:1px solid #e2e8f0;border-radius:6px;background:#f8fafc}
+.nl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#94a3b8;margin-bottom:5px}
+.nt{font-size:11px;color:#64748b;line-height:1.55}
+.tr{display:flex;justify-content:space-between;font-size:11px;padding:5px 0;border-bottom:1px solid #f1f5f9;color:#475569}
+.tr:last-child{border-bottom:none}.tr span:first-child{color:#64748b}
+.gr{font-size:15px;font-weight:900;border-top:2px solid ${a};margin-top:4px;padding-top:9px}
+.gr span:last-child{color:${a}}
+.ft{margin-top:22px;padding-top:12px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:10px;color:#94a3b8}
+</style></head><body>${lhLayer}<div class="pg">
+<div class="hdr">
+  <div class="hdr-top">
+    <div><div class="biz-n">${biz}</div><div class="biz-i">${addr}</div></div>
+    <div><div class="il">Invoice</div><div class="in">${invNum}</div></div>
+  </div>
+  <div class="hdr-rule"></div>
+  <div class="hdr-meta">
+    <div class="hm"><div class="hml">Issue Date</div><div class="hmv">${issDate}</div></div>
+    <div class="hm"><div class="hml">Due Date</div><div class="hmv">${dueDate}</div></div>
+    <div class="hm"><div class="hml">Status</div><div class="hmv" style="color:${sColorDk}">${sLabel}</div></div>
+  </div>
+</div>
+<div class="body">
+  <div class="bt"><div class="btl">Billed To</div><div class="btn">${cust}</div></div>
+  <table><thead><tr><th style="width:26px;text-align:center">#</th><th>Description</th><th class="r" style="width:50px">Qty</th><th class="r" style="width:100px">Unit Price</th>${extraTh}<th class="r" style="width:100px">Total</th></tr></thead>
+  <tbody>${rows(false)}</tbody></table>
+  <div class="bot">
+    <div class="nb"><div class="nl">Notes</div><div class="nt">${notesText}</div></div>
+    <div>
+      ${totRows}
+      <div class="tr gr"><span>Total Due</span><span>${tot}${c}</span></div>
+    </div>
+  </div>
+  <div class="ft"><span>${invNum} · ${biz}</span><span>${biz}</span></div>
+</div></div></body></html>`;
+  }
+
+  // Classic (default / fallback)
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Inter,Arial,sans-serif;font-size:12px;color:#0f172a;background:#fff;${bodyPos}}
+.pg{width:794px;padding:${mg.top}mm ${mg.right}mm ${mg.bot}mm ${mg.left}mm;${pgStack}}
+.top{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:20px;border-bottom:2.5px solid ${a};margin-bottom:24px}
+.bn{font-size:21px;font-weight:900;color:${a}}.bi{font-size:10px;color:#64748b;margin-top:5px;line-height:1.6}
+.it{font-size:30px;font-weight:900;text-transform:uppercase;color:${a};text-align:right}
+.in{font-size:12px;color:#64748b;text-align:right;margin-top:4px}
+.meta{display:grid;grid-template-columns:1fr auto;gap:24px;margin-bottom:22px}
+.btl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#94a3b8;margin-bottom:6px}
+.btn{font-size:14px;font-weight:800}.bti{font-size:11px;color:#64748b;margin-top:3px;line-height:1.5}
+.dts{min-width:205px}
+.dr{display:flex;justify-content:space-between;font-size:11px;padding:6px 0;border-bottom:1px dashed #e2e8f0}
+.dr:last-child{border-bottom:none}.dk{color:#94a3b8}.dv{font-weight:700}
+table{width:100%;border-collapse:collapse;margin-bottom:20px}
+thead th{background:${a};color:#fff;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:9px 10px}
+thead th.r{text-align:right}
+tbody td{font-size:11px;padding:8px 10px;border-bottom:1px solid #e2e8f0}
+tbody tr:nth-child(even) td{background:#f8fafc}
+td.n{color:#94a3b8;text-align:center;width:26px}td.r{text-align:right}td.b{font-weight:700}
+.bot{display:grid;grid-template-columns:1fr 248px;gap:20px}
+.nb{padding:13px;border:1px solid #e2e8f0;border-radius:6px;background:#f8fafc}
+.nl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#94a3b8;margin-bottom:5px}
+.nt{font-size:11px;color:#64748b;line-height:1.55}
+.tr{display:flex;justify-content:space-between;font-size:11px;padding:5px 0;border-bottom:1px solid #f1f5f9;color:#475569}
+.tr:last-child{border-bottom:none}.tr span:first-child{color:#64748b}
+.gr{font-size:15px;font-weight:900;border-top:2.5px solid ${a};margin-top:4px;padding-top:9px}
+.gr span:last-child{color:${a}}
+.ft{margin-top:22px;padding-top:12px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:10px;color:#94a3b8}
+</style></head><body>${lhLayer}<div class="pg">
+<div class="top">
+  <div><div class="bn">${biz}</div><div class="bi">${addr}</div></div>
+  <div><div class="it">Invoice</div><div class="in">${invNum} · ${issDate}</div></div>
+</div>
+<div class="meta">
+  <div><div class="btl">Billed To</div><div class="btn">${cust}</div></div>
+  <div class="dts">
+    <div class="dr"><span class="dk">Issue Date</span><span class="dv">${issDate}</span></div>
+    <div class="dr"><span class="dk">Due Date</span><span class="dv">${dueDate}</span></div>
+    <div class="dr"><span class="dk">Status</span><span class="dv" style="color:${sColor}">${sLabel}</span></div>
+  </div>
+</div>
+<table><thead><tr><th style="width:26px;text-align:center">#</th><th>Description</th><th class="r" style="width:50px">Qty</th><th class="r" style="width:100px">Unit Price</th>${extraTh}<th class="r" style="width:100px">Total</th></tr></thead>
+<tbody>${rows(false)}</tbody></table>
+<div class="bot">
+  <div class="nb"><div class="nl">Notes</div><div class="nt">${notesText}</div></div>
+  <div>
+    ${totRows}
+    <div class="tr gr"><span>Total Due</span><span>${tot}${c}</span></div>
+  </div>
+</div>
+<div class="ft"><span>${invNum} · ${biz}</span><span>${biz}</span></div>
+</div></body></html>`;
+}
+
+function _isetupReadMg() {
+  return {
+    top:   parseInt($('#isetup-mg-top')?.value)   ?? 20,
+    bot:   parseInt($('#isetup-mg-bot')?.value)   ?? 20,
+    left:  parseInt($('#isetup-mg-left')?.value)  ?? 15,
+    right: parseInt($('#isetup-mg-right')?.value) ?? 15,
+  };
+}
+
+// Pan / zoom state
+let _isetupFitSc = 0.5;
+let _isetupZoom  = 1.0;
+let _isetupPanX  = 0;
+let _isetupPanY  = 0;
+
+function _isetupApplyTransform() {
+  const sc = $('#isetup-prev-scaler');
+  if (!sc) return;
+  const s = _isetupFitSc * _isetupZoom;
+  sc.style.transform = `translate(${_isetupPanX}px,${_isetupPanY}px) scale(${s})`;
+}
+
+function _isetupUpdateZoomLabel() {
+  const el = $('#isetup-zoom-label');
+  if (el) el.textContent = Math.round(_isetupZoom * 100) + '%';
+}
+
+function _isetupResetView() {
+  const bg = $('#isetup-prev-bg');
+  if (!bg) return;
+  const w = bg.clientWidth, h = bg.clientHeight;
+  if (!w || !h) return;
+  _isetupFitSc = Math.min((w - 40) / 794, (h - 40) / 1123);
+  _isetupZoom  = 1;
+  _isetupPanX  = (w - 794 * _isetupFitSc) / 2;
+  _isetupPanY  = (h - 1123 * _isetupFitSc) / 2;
+  _isetupApplyTransform();
+  _isetupUpdateZoomLabel();
+}
+
+function _isetupZoomAt(newZoom, pivotX, pivotY) {
+  const bg = $('#isetup-prev-bg');
+  newZoom = Math.max(0.25, Math.min(6, newZoom));
+  if (pivotX === undefined) {
+    pivotX = (bg ? bg.clientWidth  : 600) / 2;
+    pivotY = (bg ? bg.clientHeight : 500) / 2;
+  }
+  const ratio = newZoom / _isetupZoom;
+  _isetupPanX = pivotX - (pivotX - _isetupPanX) * ratio;
+  _isetupPanY = pivotY - (pivotY - _isetupPanY) * ratio;
+  _isetupZoom = newZoom;
+  _isetupApplyTransform();
+  _isetupUpdateZoomLabel();
+}
+
+// Cached letterhead data URL for the invoice setup preview (reset on open)
+let _isetupLhDataUrl = null;
+
+function _isetupUpdatePreview() {
+  const tpl    = INV_TEMPLATES.find(t => t.id === _isetupActiveTpl) || INV_TEMPLATES[0];
+  const mg     = _isetupReadMg();
+  const iframe = $('#isetup-prev-frame');
+  if (!iframe) return;
+  // Temporarily borrow the module-level letterhead vars so _iTPL* functions render with letterhead
+  if (_isetupLhDataUrl) {
+    lhLayer = `<img src="${_isetupLhDataUrl}" style="position:absolute;top:0;left:0;width:794px;height:1123px;z-index:0;pointer-events:none;display:block;object-fit:fill;image-rendering:auto;" alt="">`;
+    bodyPos = 'position:relative;overflow:hidden;';
+    pgStack = 'position:relative;z-index:1;';
+  }
+  iframe.srcdoc = _isetupBuildPreviewDoc(tpl, mg, state.currency || '');
+  // Always reset so normal preview-builder calls remain unaffected
+  lhLayer = ''; bodyPos = ''; pgStack = '';
+  setTimeout(_isetupResetView, 40);
+}
+
+async function _isetupLoadLetterhead() {
+  const lhFull = await _fetchLetterhead();
+  if (lhFull && lhFull.canvas_json) {
+    _isetupLhDataUrl = await window.electronAPI.renderCanvasToDataUrl(
+      lhFull.canvas_json, lhFull.width || 794, lhFull.height || 1123
+    ) || null;
+  } else {
+    _isetupLhDataUrl = null;
+  }
+  _isetupUpdatePreview();
+}
+
+function _isetupRenderTpls() {
+  const list = $('#isetup-tpl-list');
+  if (!list) return;
+  list.innerHTML = INV_TEMPLATES.map(t => `
+    <div class="isetup-tpl-card${t.id === _isetupActiveTpl ? ' active' : ''}" data-tpl-id="${t.id}">
+      <div class="isetup-tpl-swatch" style="background:${t.swatch}"></div>
+      <div class="isetup-tpl-info">
+        <div class="isetup-tpl-name">${t.name}</div>
+        <div class="isetup-tpl-desc">${t.desc}</div>
+      </div>
+      ${t.id === _isetupActiveTpl ? '<i class="fa fa-circle-check isetup-tpl-check"></i>' : ''}
+    </div>`).join('');
+}
+
+async function openInvoiceSetup() {
+  const modal = $('#isetup-modal');
+  if (!modal) return;
+  const cfg = _isetupGetCfg();
+  _isetupActiveTpl = cfg.template;
+
+  // Populate left panel
+  if ($('#isetup-printer'))    $('#isetup-printer').value    = cfg.printer;
+  if ($('#isetup-paper'))      $('#isetup-paper').value      = cfg.paper;
+  if ($('#isetup-mg-top'))     $('#isetup-mg-top').value     = cfg.mgTop;
+  if ($('#isetup-mg-bot'))     $('#isetup-mg-bot').value     = cfg.mgBot;
+  if ($('#isetup-mg-left'))    $('#isetup-mg-left').value    = cfg.mgLeft;
+  if ($('#isetup-mg-right'))   $('#isetup-mg-right').value   = cfg.mgRight;
+  if ($('#isetup-hdr-layout')) $('#isetup-hdr-layout').value = cfg.hdrLayout;
+  if ($('#isetup-logo-pos'))   $('#isetup-logo-pos').value   = cfg.logoPos;
+  const orientEl = document.querySelector(`input[name="isetup-orient"][value="${cfg.orientation}"]`);
+  if (orientEl) orientEl.checked = true;
+
+  _isetupLhDataUrl = null; // clear stale cache from previous open
+  _isetupRenderTpls();
+  modal.style.display = 'flex';
+  // Show preview immediately (no letterhead), then fetch letterhead in background
+  setTimeout(_isetupUpdatePreview, 80);
+  _isetupLoadLetterhead();
+}
+
+async function _isetupSave() {
+  const tpl   = _isetupActiveTpl;
+  const orient = document.querySelector('input[name="isetup-orient"]:checked')?.value || 'portrait';
+  const update = {
+    invoice_template:    tpl,
+    invoice_printer:     $('#isetup-printer')?.value    || 'laser_a4',
+    invoice_paper:       $('#isetup-paper')?.value      || 'a4',
+    invoice_orientation: orient,
+    invoice_mg_top:      parseInt($('#isetup-mg-top')?.value)   ?? 20,
+    invoice_mg_bot:      parseInt($('#isetup-mg-bot')?.value)   ?? 20,
+    invoice_mg_left:     parseInt($('#isetup-mg-left')?.value)  ?? 15,
+    invoice_mg_right:    parseInt($('#isetup-mg-right')?.value) ?? 15,
+    invoice_hdr_layout:  $('#isetup-hdr-layout')?.value || 'num-left',
+    invoice_logo_pos:    $('#isetup-logo-pos')?.value   || 'header',
+  };
+  if (state.config) Object.assign(state.config, update);
+  await window.electronAPI.setConfig(update);
+  toast('Invoice setup saved', 'success');
+  $('#isetup-modal').style.display = 'none';
+}
+
+// Wire events
+$('#isetup-close')?.addEventListener('click',  () => { $('#isetup-modal').style.display = 'none'; });
+$('#isetup-cancel')?.addEventListener('click', () => { $('#isetup-modal').style.display = 'none'; });
+$('#isetup-save')?.addEventListener('click', _isetupSave);
+
+$('#isetup-tpl-list')?.addEventListener('click', e => {
+  const card = e.target.closest('[data-tpl-id]');
+  if (!card) return;
+  _isetupActiveTpl = card.dataset.tplId;
+  _isetupRenderTpls();
+  _isetupUpdatePreview();
+});
+
+['isetup-printer','isetup-paper','isetup-mg-top','isetup-mg-bot','isetup-mg-left','isetup-mg-right','isetup-hdr-layout','isetup-logo-pos'].forEach(id => {
+  const el = $('#' + id);
+  if (el) { el.addEventListener('change', _isetupUpdatePreview); el.addEventListener('input', _isetupUpdatePreview); }
+});
+document.querySelectorAll('input[name="isetup-orient"]').forEach(r => r.addEventListener('change', _isetupUpdatePreview));
+
+$('#rb-sal-invoice-setup')?.addEventListener('click', openInvoiceSetup);
+
+// Invoice preview modal controls
+$('#invp-zoom-in')?.addEventListener('click',  () => _invpZoomAt(_invpZoom * 1.25));
+$('#invp-zoom-out')?.addEventListener('click', () => _invpZoomAt(_invpZoom / 1.25));
+$('#invp-zoom-fit')?.addEventListener('click', _invpResetView);
+$('#invp-print')?.addEventListener('click',    () => _invpCurrentInv && _invPrint(_invpCurrentInv));
+$('#invp-close')?.addEventListener('click',    () => { const m = $('#inv-preview-modal'); if (m) m.style.display = 'none'; });
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && $('#inv-preview-modal')?.style.display !== 'none') {
+    $('#inv-preview-modal').style.display = 'none';
+  }
+});
+
+(function _invpBindPanZoom() {
+  const bg = $('#invp-bg');
+  if (!bg) return;
+
+  bg.addEventListener('wheel', e => {
+    e.preventDefault();
+    const rect = bg.getBoundingClientRect();
+    _invpZoomAt(_invpZoom * (e.deltaY < 0 ? 1.12 : 1 / 1.12), e.clientX - rect.left, e.clientY - rect.top);
+  }, { passive: false });
+
+  let dragging = false, dsx = 0, dsy = 0, dpx = 0, dpy = 0;
+  bg.addEventListener('mousedown', e => {
+    if (e.button !== 0) return;
+    dragging = true; dsx = e.clientX; dsy = e.clientY; dpx = _invpPanX; dpy = _invpPanY;
+    bg.classList.add('invp-dragging'); e.preventDefault();
+  });
+  document.addEventListener('mousemove', e => {
+    if (!dragging) return;
+    _invpPanX = dpx + (e.clientX - dsx); _invpPanY = dpy + (e.clientY - dsy);
+    _invpApplyTransform();
+  });
+  document.addEventListener('mouseup', () => {
+    if (dragging) { dragging = false; bg.classList.remove('invp-dragging'); }
+  });
+
+  let lastDist = 0, lastMidX = 0, lastMidY = 0;
+  bg.addEventListener('touchstart', e => {
+    e.preventDefault();
+    if (e.touches.length === 1) {
+      const t = e.touches[0]; dragging = true;
+      dsx = t.clientX; dsy = t.clientY; dpx = _invpPanX; dpy = _invpPanY;
+    } else if (e.touches.length === 2) {
+      dragging = false;
+      const [t1, t2] = e.touches;
+      lastDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+      lastMidX = (t1.clientX + t2.clientX) / 2; lastMidY = (t1.clientY + t2.clientY) / 2;
+    }
+  }, { passive: false });
+  bg.addEventListener('touchmove', e => {
+    e.preventDefault();
+    if (e.touches.length === 1 && dragging) {
+      const t = e.touches[0];
+      _invpPanX = dpx + (t.clientX - dsx); _invpPanY = dpy + (t.clientY - dsy);
+      _invpApplyTransform();
+    } else if (e.touches.length === 2) {
+      const [t1, t2] = e.touches;
+      const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+      const midX = (t1.clientX + t2.clientX) / 2, midY = (t1.clientY + t2.clientY) / 2;
+      const rect = bg.getBoundingClientRect();
+      const px = midX - rect.left, py = midY - rect.top;
+      const nz = Math.max(0.25, Math.min(6, _invpZoom * (dist / lastDist)));
+      const r  = nz / _invpZoom;
+      _invpPanX  = px - (px - _invpPanX) * r + (midX - lastMidX);
+      _invpPanY  = py - (py - _invpPanY) * r + (midY - lastMidY);
+      _invpZoom  = nz; _invpApplyTransform(); _invpUpdateZoomLabel();
+      lastDist = dist; lastMidX = midX; lastMidY = midY;
+    }
+  }, { passive: false });
+  bg.addEventListener('touchend', e => { if (e.touches.length < 1) dragging = false; });
+})();
+
+// Zoom buttons
+$('#isetup-zoom-in')?.addEventListener('click',  () => _isetupZoomAt(_isetupZoom * 1.25));
+$('#isetup-zoom-out')?.addEventListener('click', () => _isetupZoomAt(_isetupZoom / 1.25));
+$('#isetup-zoom-fit')?.addEventListener('click', _isetupResetView);
+
+// Pan / zoom interactions wired once on the preview container
+(function _isetupBindPanZoom() {
+  const bg = $('#isetup-prev-bg');
+  if (!bg) return;
+
+  // ── Mouse wheel zoom ─────────────────────────────────────────────────────
+  bg.addEventListener('wheel', e => {
+    e.preventDefault();
+    const rect   = bg.getBoundingClientRect();
+    const px     = e.clientX - rect.left;
+    const py     = e.clientY - rect.top;
+    const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+    _isetupZoomAt(_isetupZoom * factor, px, py);
+  }, { passive: false });
+
+  // ── Mouse drag pan ───────────────────────────────────────────────────────
+  let dragging = false, dsx = 0, dsy = 0, dpx = 0, dpy = 0;
+
+  bg.addEventListener('mousedown', e => {
+    if (e.button !== 0) return;
+    dragging = true; dsx = e.clientX; dsy = e.clientY;
+    dpx = _isetupPanX; dpy = _isetupPanY;
+    bg.classList.add('isetup-dragging');
+    e.preventDefault();
+  });
+  document.addEventListener('mousemove', e => {
+    if (!dragging) return;
+    _isetupPanX = dpx + (e.clientX - dsx);
+    _isetupPanY = dpy + (e.clientY - dsy);
+    _isetupApplyTransform();
+  });
+  document.addEventListener('mouseup', () => {
+    if (dragging) { dragging = false; bg.classList.remove('isetup-dragging'); }
+  });
+
+  // ── Touch: single-finger pan, two-finger pinch-zoom ──────────────────────
+  let lastDist = 0, lastMidX = 0, lastMidY = 0;
+
+  bg.addEventListener('touchstart', e => {
+    e.preventDefault();
+    if (e.touches.length === 1) {
+      const t = e.touches[0];
+      dragging = true; dsx = t.clientX; dsy = t.clientY;
+      dpx = _isetupPanX; dpy = _isetupPanY;
+    } else if (e.touches.length === 2) {
+      dragging = false;
+      const t1 = e.touches[0], t2 = e.touches[1];
+      lastDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+      lastMidX = (t1.clientX + t2.clientX) / 2;
+      lastMidY = (t1.clientY + t2.clientY) / 2;
+    }
+  }, { passive: false });
+
+  bg.addEventListener('touchmove', e => {
+    e.preventDefault();
+    if (e.touches.length === 1 && dragging) {
+      const t = e.touches[0];
+      _isetupPanX = dpx + (t.clientX - dsx);
+      _isetupPanY = dpy + (t.clientY - dsy);
+      _isetupApplyTransform();
+    } else if (e.touches.length === 2) {
+      const t1 = e.touches[0], t2 = e.touches[1];
+      const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+      const midX = (t1.clientX + t2.clientX) / 2;
+      const midY = (t1.clientY + t2.clientY) / 2;
+      const rect = bg.getBoundingClientRect();
+      const px   = midX - rect.left;
+      const py   = midY - rect.top;
+      // Zoom around the pinch midpoint
+      const oldZ = _isetupZoom;
+      const newZ = Math.max(0.25, Math.min(6, oldZ * (dist / lastDist)));
+      const ratio = newZ / oldZ;
+      _isetupPanX = px - (px - _isetupPanX) * ratio + (midX - lastMidX);
+      _isetupPanY = py - (py - _isetupPanY) * ratio + (midY - lastMidY);
+      _isetupZoom = newZ;
+      _isetupApplyTransform();
+      _isetupUpdateZoomLabel();
+      lastDist = dist; lastMidX = midX; lastMidY = midY;
+    }
+  }, { passive: false });
+
+  bg.addEventListener('touchend', e => {
+    if (e.touches.length < 1) dragging = false;
+  });
+})();
+
+// ── Tax rules manager (PSM) ────────────────────────────────────────────────
+let _psmTaxRules  = [];
+let _psmBizLogoUrl = '';
+let _psmTrEditIdx = -1; // -1 = new, >=0 = editing
+
+function _uuid() {
+  return typeof crypto?.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+        const r = Math.random() * 16 | 0;
+        return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+      });
+}
+
+function _psmRenderTaxRules() {
+  const list  = $('#psm-tax-rules-list');
+  const empty = $('#psm-tax-rules-empty');
+  if (!list) return;
+  if (!_psmTaxRules.length) {
+    list.innerHTML = '';
+    if (empty) empty.style.display = '';
+    return;
+  }
+  if (empty) empty.style.display = 'none';
+  const cur = state.currency ? ' ' + state.currency : '';
+  list.innerHTML = _psmTaxRules.map((r, i) => {
+    const valStr = r.type === 'flat'
+      ? parseFloat(r.value).toFixed(2) + cur
+      : parseFloat(r.value) + '%';
+    const badge  = r.type === 'flat' ? 'Flat' : 'Percentage';
+    return `<div class="psm-tax-rule-row">
+      <span class="psm-tr-rname">${escHtml(r.name || '—')}</span>
+      <span class="psm-tr-badge">${badge}</span>
+      <span class="psm-tr-rval">${valStr}</span>
+      <div class="psm-tr-racts">
+        <button class="psm-tr-act" data-tr-edit="${i}" title="Edit"><i class="fa fa-pen"></i></button>
+        <button class="psm-tr-act del" data-tr-del="${i}" title="Delete"><i class="fa fa-trash"></i></button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function _psmShowTrForm() { const f = $('#psm-tax-rule-form'); if (f) f.style.display = ''; }
+function _psmHideTrForm() { const f = $('#psm-tax-rule-form'); if (f) f.style.display = 'none'; }
+
+$('#psm-tax-rule-add-btn')?.addEventListener('click', () => {
+  _psmTrEditIdx = -1;
+  $('#psm-tr-name').value  = '';
+  $('#psm-tr-type').value  = 'percentage';
+  $('#psm-tr-value').value = '';
+  _psmShowTrForm();
+  setTimeout(() => $('#psm-tr-name')?.focus(), 50);
+});
+
+$('#psm-tax-rules-list')?.addEventListener('click', e => {
+  const editBtn = e.target.closest('[data-tr-edit]');
+  const delBtn  = e.target.closest('[data-tr-del]');
+  if (editBtn) {
+    _psmTrEditIdx = parseInt(editBtn.dataset.trEdit);
+    const r = _psmTaxRules[_psmTrEditIdx];
+    if (!r) return;
+    $('#psm-tr-name').value  = r.name || '';
+    $('#psm-tr-type').value  = r.type || 'percentage';
+    $('#psm-tr-value').value = r.value ?? '';
+    _psmShowTrForm();
+    setTimeout(() => $('#psm-tr-name')?.focus(), 50);
+  }
+  if (delBtn) {
+    const idx = parseInt(delBtn.dataset.trDel);
+    _psmTaxRules.splice(idx, 1);
+    _psmRenderTaxRules();
+  }
+});
+
+$('#psm-tr-save')?.addEventListener('click', () => {
+  const name  = ($('#psm-tr-name')?.value || '').trim();
+  const type  = $('#psm-tr-type')?.value || 'percentage';
+  const value = parseFloat($('#psm-tr-value')?.value);
+  if (!name)             { toast('Tax rule name is required', 'error'); return; }
+  if (isNaN(value) || value < 0) { toast('Enter a valid value', 'error'); return; }
+  const rule = {
+    id:    _psmTrEditIdx >= 0 ? (_psmTaxRules[_psmTrEditIdx]?.id || _uuid()) : _uuid(),
+    name, type, value,
+  };
+  if (_psmTrEditIdx >= 0) {
+    _psmTaxRules[_psmTrEditIdx] = rule;
+  } else {
+    _psmTaxRules.push(rule);
+  }
+  _psmHideTrForm();
+  _psmRenderTaxRules();
+});
+
+$('#psm-tr-cancel')?.addEventListener('click', _psmHideTrForm);
+
 // ── POS Settings Modal ─────────────────────────────────────────────────────
+function _psmBizLogoRender() {
+  const img = $('#psm-logo-img');
+  const ph  = $('#psm-logo-ph');
+  if (!img || !ph) return;
+  if (_psmBizLogoUrl) {
+    img.src = _psmBizLogoUrl;
+    img.style.display = '';
+    ph.style.display  = 'none';
+  } else {
+    img.style.display = 'none';
+    ph.style.display  = '';
+  }
+}
+
 async function openPosSettings() {
   const modal = $('#pos-settings-modal');
   modal.style.display = 'flex';
@@ -14013,6 +17677,8 @@ async function openPosSettings() {
     const slug = s.slug ?? '';
     slugEl.textContent = slug ? '@' + slug + '  ·  ' : '';
   }
+  _psmBizLogoUrl = s.business_logo_url || '';
+  _psmBizLogoRender();
   $('#psm-currency').value  = s.currency ?? '';
   $('#psm-timezone').value  = s.timezone ?? '';
 
@@ -14024,11 +17690,13 @@ async function openPosSettings() {
   $('#psm-branch-stock').checked   = !!s.branch_stock_separate;
   $('#psm-branch-pos').checked     = !!s.branch_pos_separate;
 
-  // Tax
+  // Tax rules
   const taxEnabled = !!s.tax_enabled;
   $('#psm-tax-enabled').checked = taxEnabled;
-  $('#psm-tax-rate-row').style.display = taxEnabled ? 'block' : 'none';
-  $('#psm-tax-rate').value = s.tax_rate ?? 0;
+  $('#psm-tax-rules-section').style.display = taxEnabled ? '' : 'none';
+  _psmTaxRules = Array.isArray(s.tax_rules) ? s.tax_rules.map(r => ({ ...r })) : [];
+  _psmHideTrForm();
+  _psmRenderTaxRules();
 
   // Invoice
   $('#psm-invoice-prefix').value = s.invoice_prefix ?? 'INV';
@@ -14074,6 +17742,28 @@ async function openPosSettings() {
     card.classList.toggle('dm-card--on', on);
     card.querySelector('.dm-card-status').textContent = on ? 'Enabled' : 'Disabled';
   });
+
+  // Courier services
+  const courierServices = (s.courier_services && typeof s.courier_services === 'object') ? s.courier_services : {};
+  const courKeys = ['courier', 'domex', 'koobiyo', 'pronto', 'citypak'];
+  courKeys.forEach(key => {
+    const svc    = courierServices[key] || {};
+    const input  = $(`#psm-cour-${key}`);
+    const card   = $(`#dm-cour-card-${key}`);
+    const charge = $(`#dm-cour-charge-${key}`);
+    if (!input || !card) return;
+    const on = !!svc.enabled;
+    input.checked = on;
+    card.classList.toggle('dm-card--on', on);
+    card.querySelector('.dm-card-status').textContent = on ? 'Enabled' : 'Disabled';
+    if (charge) charge.value = svc.charge ?? '';
+  });
+
+  // Purchasing workflow
+  const poEnabled = s.purchase_order_enabled !== false; // default true
+  const poToggle  = $('#psm-purchase-order-enabled');
+  if (poToggle) poToggle.checked = poEnabled;
+  _applyPurchaseOrderMode(poEnabled);
 }
 
 function psmShowTab(tab) {
@@ -14097,7 +17787,8 @@ $('#psm-multi-warehouse').addEventListener('change', (e) => {
   $('#psm-branch-rows').style.display = e.target.checked ? 'flex' : 'none';
 });
 $('#psm-tax-enabled').addEventListener('change', (e) => {
-  $('#psm-tax-rate-row').style.display = e.target.checked ? 'block' : 'none';
+  const sec = $('#psm-tax-rules-section');
+  if (sec) sec.style.display = e.target.checked ? '' : 'none';
 });
 $('#psm-dont-settle').addEventListener('change', (e) => {
   $('#psm-settlement-mode').disabled = e.target.checked;
@@ -14114,10 +17805,43 @@ $$('[data-dm]').forEach(input => {
   });
 });
 
+// Courier service toggles
+$$('[data-cour]').forEach(input => {
+  input.addEventListener('change', () => {
+    const card = $(`#dm-cour-card-${input.dataset.cour}`);
+    if (!card) return;
+    card.classList.toggle('dm-card--on', input.checked);
+    card.querySelector('.dm-card-status').textContent = input.checked ? 'Enabled' : 'Disabled';
+  });
+});
+
+// ── Purchase Order mode ────────────────────────────────────────────────────
+function _applyPurchaseOrderMode(enabled) {
+  // Ribbon: Purchase Orders button
+  const rbOrders = $('#rb-orders');
+  if (rbOrders) rbOrders.style.display = enabled ? '' : 'none';
+  // Purchasing sub-nav tab
+  $$('[data-inv-view="po"]').forEach(el => { el.style.display = enabled ? '' : 'none'; });
+  // Direct GRN add button (shown only when PO is disabled)
+  const grnDirectBtn = $('#grn-add-direct-btn');
+  if (grnDirectBtn) grnDirectBtn.style.display = enabled ? 'none' : '';
+}
+
 $('#psm-close').addEventListener('click',  () => { $('#pos-settings-modal').style.display = 'none'; });
 $('#psm-cancel').addEventListener('click', () => { $('#pos-settings-modal').style.display = 'none'; });
 $('#pos-settings-modal').addEventListener('click', (e) => {
   if (e.target === e.currentTarget) e.currentTarget.style.display = 'none';
+});
+
+$('#psm-logo-choose')?.addEventListener('click', () => {
+  openImgPicker((fileId, url) => {
+    _psmBizLogoUrl = url;
+    _psmBizLogoRender();
+  });
+});
+$('#psm-logo-remove')?.addEventListener('click', () => {
+  _psmBizLogoUrl = '';
+  _psmBizLogoRender();
 });
 
 $('#rb-pos-settings').addEventListener('click', openPosSettings);
@@ -14254,6 +17978,7 @@ $('#psm-save').addEventListener('click', async () => {
 
   const payload = {
     business_name:               $('#psm-biz-name').value.trim(),
+    business_logo_url:           _psmBizLogoUrl || null,
     currency:                    $('#psm-currency').value.trim(),
     timezone:                    $('#psm-timezone').value.trim(),
     display_theme:               $('#psm-theme').value,
@@ -14278,11 +18003,18 @@ $('#psm-save').addEventListener('click', async () => {
     branch_stock_separate:       $('#psm-branch-stock').checked,
     branch_pos_separate:         $('#psm-branch-pos').checked,
     tax_enabled:                 $('#psm-tax-enabled').checked,
-    tax_rate:                    parseFloat($('#psm-tax-rate').value) || 0,
+    tax_rules:                   _psmTaxRules,
     invoice_prefix:              $('#psm-invoice-prefix').value.trim(),
     invoice_next_number:         parseInt($('#psm-invoice-next').value) || 1,
     delivery_enabled:            $('#psm-delivery-enabled').checked,
     delivery_methods:            ['dhl','fedex','uber','pickme','koobiyo','pronto'].filter(k => $(`#psm-dm-${k}`)?.checked),
+    courier_services:            Object.fromEntries(
+      ['courier','domex','koobiyo','pronto','citypak'].map(k => [k, {
+        enabled: !!$(`#psm-cour-${k}`)?.checked,
+        charge:  parseFloat($(`#dm-cour-charge-${k}`)?.value) || 0,
+      }])
+    ),
+    purchase_order_enabled:      $('#psm-purchase-order-enabled')?.checked !== false,
   };
 
   const res = await API.settingsUpdate(payload);
@@ -14294,9 +18026,12 @@ $('#psm-save').addEventListener('click', async () => {
     return;
   }
 
+  // Apply purchase order mode immediately from the toggle
+  _applyPurchaseOrderMode(!!$('#psm-purchase-order-enabled')?.checked);
+
   // Sync relevant settings into state so in-session logic stays current
   const saved = res.body?.data || {};
-  const syncKeys = ['dont_settle_to_account', 'stock_selection_mode', 'choose_price', 'receipt_mode'];
+  const syncKeys = ['dont_settle_to_account', 'stock_selection_mode', 'choose_price', 'receipt_mode', 'tax_enabled', 'tax_rules'];
   syncKeys.forEach(k => {
     if (saved[k] !== undefined) state.receiptSettings = { ...state.receiptSettings, [k]: saved[k] };
   });
@@ -14670,10 +18405,19 @@ function buildReceiptHTML(sale, overrides = {}) {
   const discount = parseFloat(sale.discount_amount || 0);
   const change   = parseFloat(sale.change_amount || 0);
 
+  const afterDiscount = parseFloat(sale.subtotal) - discount;
+  const rcptTaxes = (Array.isArray(sale._taxBreakdown) && sale._taxBreakdown.length)
+    ? sale._taxBreakdown
+    : _coGetTaxBreakdown(afterDiscount);
+
   let totalsHTML = `<div class="rcpt-total-row"><span>${lbl.subtotal}</span><span>${parseFloat(sale.subtotal).toFixed(2)}${cur}</span></div>`;
   if (discount > 0) {
     totalsHTML += `<div class="rcpt-total-row"><span>${lbl.discount}${sale.discount_percent ? ' (' + sale.discount_percent + '%)' : ''}</span><span>-${discount.toFixed(2)}${cur}</span></div>`;
   }
+  rcptTaxes.forEach(t => {
+    const lx = escHtml(t.name) + (t.type === 'flat' ? '' : ' ' + t.value + '%');
+    totalsHTML += `<div class="rcpt-total-row"><span>${lx}</span><span>+${t.amount.toFixed(2)}${cur}</span></div>`;
+  });
   totalsHTML += `
     <hr class="rcpt-divider-solid">
     <div class="rcpt-total-row grand"><span>${lbl.grandTotal}</span><span>${parseFloat(sale.total).toFixed(2)}${cur}</span></div>`;
@@ -14751,6 +18495,15 @@ async function _posCreateInvoiceFromSale(sale, customerId) {
   ) / 100;
   const totalDiscount = Math.round(((parseFloat(sale.discount_amount) || 0) + itemDiscountsTotal) * 100) / 100;
 
+  // Compute tax amount for invoice using the same multi-rule breakdown
+  const _invAfterDisc    = parseFloat(sale.subtotal || 0) - (parseFloat(sale.discount_amount) || 0);
+  const _invTaxBreakdown = (Array.isArray(sale._taxBreakdown) && sale._taxBreakdown.length)
+    ? sale._taxBreakdown
+    : _coGetTaxBreakdown(_invAfterDisc);
+  const _invTaxAmt = Math.round(
+    _invTaxBreakdown.reduce((s, t) => s + t.amount, 0) * 100
+  ) / 100;
+
   const body = {
     customer_id:     customerId ?? null,
     reference:       sale.sale_number || null,
@@ -14758,7 +18511,7 @@ async function _posCreateInvoiceFromSale(sale, customerId) {
     due_date:        null,
     notes:           sale.notes || null,
     discount_amount: totalDiscount,
-    tax_amount:      0,
+    tax_amount:      _invTaxAmt,
     items:           lines,
   };
 
@@ -14766,6 +18519,12 @@ async function _posCreateInvoiceFromSale(sale, customerId) {
   if (res.status === 200 || res.status === 201) {
     const inv = res.body?.data;
     if (inv) {
+      // Mark paid immediately for cash/card; leave unpaid for credit
+      if (sale.payment_method !== 'credit') {
+        await API.invoicePaid(inv.id);
+        inv.status       = 'paid';
+        inv.status_label = 'Paid';
+      }
       toast(`Invoice ${inv.invoice_number} created`, 'success');
       // Stamp per-item discount onto each invoice line so the print template can render it
       if (Array.isArray(inv.items)) {
@@ -14773,7 +18532,9 @@ async function _posCreateInvoiceFromSale(sale, customerId) {
           invItem.item_discount_per_unit = parseFloat(sale.items?.[idx]?.discount_amount || 0);
         });
       }
-      _invPrint(inv);
+      // Stamp tax breakdown for per-rule rendering in the invoice template
+      if (_invTaxBreakdown.length > 0) inv._taxBreakdown = _invTaxBreakdown;
+      showInvoicePreviewModal(inv);
     }
   } else {
     toast(res.body?.message || 'Failed to create invoice', 'error');
@@ -15562,13 +19323,13 @@ async function handleProductClick(p) {
       _retailPrice: retailP, _wholesalePrice,
     };
   } else if (inStock.length > 0) {
-    // FIFO: first available in-stock layer
+    // FIFO: backend handles layer selection; no layerId pinned so consumeFifo runs server-side
     const layer = inStock[0];
     const retailP = parseFloat(layer.unit_sell_price);
     cartItem = {
-      id: p.id, layerId: layer.id, layerLabel: layer.label || `Batch #${layer.id}`,
+      id: p.id, layerId: null, layerLabel: null,
       name: p.name, price: (_isWholesale && _wholesalePrice != null) ? _wholesalePrice : retailP,
-      stock: parseFloat(layer.quantity_remaining),
+      stock: p.stock_quantity != null ? parseFloat(p.stock_quantity) : null,
       _retailPrice: retailP, _wholesalePrice,
     };
   } else if (layers.length >= 1) {
@@ -15897,14 +19658,31 @@ $('#pos-to-quote')?.addEventListener('click', () => {
 // ── Checkout ───────────────────────────────────────────────────────────────
 let _coSubtotal = 0; // base subtotal before order-level discount
 let _coAmount   = ''; // numpad string
+let _coDiscType = 'pct'; // 'pct' | 'flat'
+
+function _itemEffectivePct(item) {
+  const gross = item.price * item.qty;
+  if ((item.itemDiscType || 'pct') === 'flat') {
+    const flat = Math.max(0, parseFloat(item.itemDiscountFlat) || 0);
+    return gross > 0 ? Math.min(100, Math.round(flat / gross * 10000) / 100) : 0;
+  }
+  return Math.min(100, Math.max(0, parseFloat(item.itemDiscountPct) || 0));
+}
+
+function _itemLineNet(item) {
+  const gross = item.price * item.qty;
+  if ((item.itemDiscType || 'pct') === 'flat') {
+    const flat = Math.max(0, parseFloat(item.itemDiscountFlat) || 0);
+    return Math.max(0, Math.round((gross - flat) * 100) / 100);
+  }
+  const d = Math.min(100, Math.max(0, parseFloat(item.itemDiscountPct) || 0));
+  return Math.round(gross * (1 - d / 100) * 100) / 100;
+}
 
 function _coComputeSubtotal() {
   const tab = activeTab();
   if (!tab) return 0;
-  return Math.round(tab.cart.reduce((s, i) => {
-    const d = Math.min(100, Math.max(0, parseFloat(i.itemDiscountPct) || 0));
-    return s + i.price * i.qty * (1 - d / 100);
-  }, 0) * 100) / 100;
+  return Math.round(tab.cart.reduce((s, i) => s + _itemLineNet(i), 0) * 100) / 100;
 }
 
 function _coRenderItems() {
@@ -15916,12 +19694,36 @@ function _coRenderItems() {
   const cur = state.currency ? ' ' + state.currency : '';
   const items = tab.cart;
   if (badge) badge.textContent = items.length;
+
+  const s = state.receiptSettings || {};
+  const taxRules = Array.isArray(s.tax_rules)
+    ? s.tax_rules.filter(r => parseFloat(r.value || 0) > 0)
+    : [];
+  const midEl = list.closest('.co-mid');
+  if (midEl) midEl.classList.toggle('co-has-tax', taxRules.length > 0);
+
   list.innerHTML = items.map((i, idx) => {
-    const svc   = i._type === 'service';
-    const qty   = i.qty % 1 === 0 ? parseInt(i.qty) : parseFloat(i.qty).toFixed(2);
-    const price = parseFloat(i.price).toFixed(2);
-    const disc  = Math.min(100, Math.max(0, parseFloat(i.itemDiscountPct) || 0));
-    const line  = (i.price * i.qty * (1 - disc / 100)).toFixed(2);
+    const svc      = i._type === 'service';
+    const qty      = i.qty % 1 === 0 ? parseInt(i.qty) : parseFloat(i.qty).toFixed(2);
+    const price    = parseFloat(i.price).toFixed(2);
+    const discType = i.itemDiscType || 'pct';
+    const discVal  = discType === 'flat'
+      ? (parseFloat(i.itemDiscountFlat) || 0)
+      : (Math.min(100, Math.max(0, parseFloat(i.itemDiscountPct) || 0)));
+    const hasDisc  = discVal > 0;
+    const line     = _itemLineNet(i).toFixed(2);
+    const typeLbl  = discType === 'flat' ? escHtml(state.currency || '¤') : '%';
+    const taxOpts  = taxRules.map((r, ri) => {
+      const isSel = i.itemTaxRule
+        && i.itemTaxRule.name === r.name
+        && String(i.itemTaxRule.value) === String(r.value)
+        && i.itemTaxRule.type  === r.type;
+      const lbl = escHtml(r.name) + (r.type !== 'flat' ? ' ' + r.value + '%' : '');
+      return `<option value="${ri}"${isSel ? ' selected' : ''}>${lbl}</option>`;
+    }).join('');
+    const taxCell = taxRules.length > 0
+      ? `<div class="co-ir-tax"><select class="co-ir-tax-sel${i.itemTaxRule ? ' has-tax' : ''}" data-idx="${idx}"><option value="">–</option>${taxOpts}</select></div>`
+      : '<div class="co-ir-tax"></div>';
     return `<div class="co-ir" data-idx="${idx}">
       <div class="co-ir-icon ${svc ? 'is-service' : 'is-product'}">
         <i class="fa ${svc ? 'fa-screwdriver-wrench' : 'fa-box'}"></i>
@@ -15930,10 +19732,12 @@ function _coRenderItems() {
       <div class="co-ir-qty">${qty}</div>
       <div class="co-ir-price">${price}</div>
       <div class="co-ir-disc">
-        <input type="number" class="co-ir-disc-inp${disc > 0 ? ' has-discount' : ''}"
-               data-idx="${idx}" value="${disc || ''}" min="0" max="100" step="0.5" placeholder="0">
-        <span class="co-ir-disc-pct">%</span>
+        <input type="number" class="co-ir-disc-inp${hasDisc ? ' has-discount' : ''}"
+               data-idx="${idx}" value="${discVal || ''}"
+               min="0" ${discType === 'pct' ? 'max="100"' : ''} step="${discType === 'flat' ? '0.01' : '0.5'}" placeholder="0">
+        <button class="co-ir-disc-type${discType === 'flat' ? ' is-flat' : ''}" data-idx="${idx}" title="Toggle % / flat">${typeLbl}</button>
       </div>
+      ${taxCell}
       <div class="co-ir-total">${line}</div>
     </div>`;
   }).join('');
@@ -15941,9 +19745,54 @@ function _coRenderItems() {
   if (ftrTotal) ftrTotal.textContent = _coSubtotal.toFixed(2) + cur;
 }
 
-function _coGetTotal() {
-  const pct = Math.min(100, Math.max(0, parseFloat($('#co-discount-pct')?.value) || 0));
+function _coGetAfterDiscount() {
+  const raw = parseFloat($('#co-discount-pct')?.value) || 0;
+  if (_coDiscType === 'flat') {
+    return Math.max(0, Math.round((_coSubtotal - Math.max(0, raw)) * 100) / 100);
+  }
+  const pct = Math.min(100, Math.max(0, raw));
   return Math.max(0, Math.round(_coSubtotal * (1 - pct / 100) * 100) / 100);
+}
+
+function _coGetTaxBreakdown(afterDisc) {
+  const s    = state.receiptSettings || {};
+  const tab  = activeTab();
+  const cart = tab?.cart || [];
+  const hasItemTax = cart.some(i => i.itemTaxRule);
+  if (hasItemTax) {
+    const grouped = {};
+    cart.forEach(i => {
+      if (!i.itemTaxRule) return;
+      const base = _itemLineNet(i);
+      const r   = i.itemTaxRule;
+      const v   = parseFloat(r.value || 0);
+      const amt = r.type === 'flat'
+        ? Math.round(v * 100) / 100
+        : Math.round(base * v / 100 * 100) / 100;
+      const key = `${r.name}|${r.type}|${v}`;
+      if (!grouped[key]) grouped[key] = { name: r.name, type: r.type, value: v, amount: 0 };
+      grouped[key].amount = Math.round((grouped[key].amount + amt) * 100) / 100;
+    });
+    return Object.values(grouped).filter(t => t.amount > 0);
+  }
+  if (!s.tax_enabled) return [];
+  const rules = Array.isArray(s.tax_rules) ? s.tax_rules : [];
+  return rules
+    .filter(r => parseFloat(r.value || 0) > 0)
+    .map(r => {
+      const v   = parseFloat(r.value || 0);
+      const amt = r.type === 'flat'
+        ? Math.round(v * 100) / 100
+        : Math.round(afterDisc * v / 100 * 100) / 100;
+      return { name: r.name || 'Tax', type: r.type || 'percentage', value: v, amount: amt };
+    });
+}
+
+function _coGetTotal() {
+  const afterDisc = _coGetAfterDiscount();
+  const taxes     = _coGetTaxBreakdown(afterDisc);
+  const taxTotal  = Math.round(taxes.reduce((s, t) => s + t.amount, 0) * 100) / 100;
+  return Math.round((afterDisc + taxTotal) * 100) / 100;
 }
 
 function _coGetMethod() {
@@ -15951,15 +19800,29 @@ function _coGetMethod() {
 }
 
 function _coRefresh() {
-  const pct      = Math.min(100, Math.max(0, parseFloat($('#co-discount-pct')?.value) || 0));
-  const total    = _coGetTotal();
-  const saved    = Math.round((_coSubtotal - total) * 100) / 100;
-  const cur      = state.currency ? ' ' + state.currency : '';
-  const amount   = parseFloat(_coAmount) || 0;
-  const change   = Math.round((amount - total) * 100) / 100;
+  const afterDisc = _coGetAfterDiscount();
+  const taxes     = _coGetTaxBreakdown(afterDisc);
+  const taxTotal  = Math.round(taxes.reduce((s, t) => s + t.amount, 0) * 100) / 100;
+  const total     = Math.round((afterDisc + taxTotal) * 100) / 100;
+  const saved     = Math.round((_coSubtotal - afterDisc) * 100) / 100;
+  const cur       = state.currency ? ' ' + state.currency : '';
+  const amount    = parseFloat(_coAmount) || 0;
+  const change    = Math.round((amount - total) * 100) / 100;
 
   if ($('#co-subtotal')) $('#co-subtotal').textContent = _coSubtotal.toFixed(2) + cur;
   if ($('#co-saved'))    $('#co-saved').textContent    = saved > 0 ? saved.toFixed(2) + cur : '—';
+
+  const taxRowsEl = $('#co-tax-rows');
+  if (taxRowsEl) {
+    taxRowsEl.innerHTML = taxes.map(t => {
+      const lbl = escHtml(t.name) + (t.type === 'flat' ? '' : ' ' + t.value + '%');
+      return `<div class="co-sum-row">
+        <span style="color:var(--text-muted);font-size:12px">${lbl}</span>
+        <strong style="color:#f59e0b;font-size:12px">+${t.amount.toFixed(2)}${cur}</strong>
+      </div>`;
+    }).join('');
+  }
+
   if ($('#co-total'))    $('#co-total').textContent    = total.toFixed(2);
   if ($('#co-currency')) $('#co-currency').textContent = state.currency || '';
   const amountEl = $('#co-amount');
@@ -15995,11 +19858,16 @@ function openCheckout() {
   const tab = activeTab();
   if (!tab || !tab.cart.length) { toast('Cart is empty', 'error'); return; }
   _coSubtotal = _coComputeSubtotal();
-  _coAmount   = _coSubtotal.toFixed(2);
 
-  // Reset discount
+  // Reset discount first so _coGetTotal() computes at 0% discount
+  _coDiscType = 'pct';
+  $('#co-disc-btn-pct')?.classList.add('active');
+  $('#co-disc-btn-flat')?.classList.remove('active');
+  const discSuffix = $('#co-disc-suffix');
+  if (discSuffix) discSuffix.textContent = '%';
   const discEl = $('#co-discount-pct');
-  if (discEl) discEl.value = '0';
+  if (discEl) { discEl.value = '0'; discEl.max = '100'; discEl.step = '1'; }
+  _coAmount = _coGetTotal().toFixed(2);
 
   // Reset payment method to cash
   $$('.co-pay-method').forEach(b => b.classList.remove('active'));
@@ -16073,6 +19941,26 @@ $$('.co-pay-method').forEach(btn => {
 // Discount input (order-level)
 $('#co-discount-pct').addEventListener('input', _coRefresh);
 
+// Flat / percent toggle
+$$('#co-disc-btn-pct, #co-disc-btn-flat').forEach(btn => {
+  btn.addEventListener('click', () => {
+    _coDiscType = btn.dataset.type;
+    $$('.co-disc-type-btn').forEach(b => b.classList.toggle('active', b === btn));
+    const discEl = $('#co-discount-pct');
+    const suffix = $('#co-disc-suffix');
+    if (discEl) {
+      discEl.value = '0';
+      if (_coDiscType === 'flat') {
+        discEl.removeAttribute('max'); discEl.step = '0.01';
+      } else {
+        discEl.max = '100'; discEl.step = '1';
+      }
+    }
+    if (suffix) suffix.textContent = _coDiscType === 'flat' ? (state.currency || '—') : '%';
+    _coRefresh();
+  });
+});
+
 // Per-item discount inputs (event delegation on the list container)
 $('#co-items-list').addEventListener('input', e => {
   const inp = e.target.closest('.co-ir-disc-inp');
@@ -16080,17 +19968,53 @@ $('#co-items-list').addEventListener('input', e => {
   const idx = parseInt(inp.dataset.idx);
   const tab = activeTab();
   if (!tab?.cart[idx]) return;
-  const disc = Math.min(100, Math.max(0, parseFloat(inp.value) || 0));
-  tab.cart[idx].itemDiscountPct = disc;
-  inp.classList.toggle('has-discount', disc > 0);
-  const row = inp.closest('.co-ir');
-  const totalEl = row?.querySelector('.co-ir-total');
-  const i = tab.cart[idx];
-  if (totalEl) totalEl.textContent = (i.price * i.qty * (1 - disc / 100)).toFixed(2);
+  const item = tab.cart[idx];
+  const raw = Math.max(0, parseFloat(inp.value) || 0);
+  if ((item.itemDiscType || 'pct') === 'flat') {
+    item.itemDiscountFlat = raw;
+  } else {
+    item.itemDiscountPct = Math.min(100, raw);
+  }
+  inp.classList.toggle('has-discount', raw > 0);
+  const totalEl = inp.closest('.co-ir')?.querySelector('.co-ir-total');
+  if (totalEl) totalEl.textContent = _itemLineNet(item).toFixed(2);
   _coSubtotal = _coComputeSubtotal();
   const cur = state.currency ? ' ' + state.currency : '';
   const ftrEl = $('#co-items-ftr-total');
   if (ftrEl) ftrEl.textContent = _coSubtotal.toFixed(2) + cur;
+  _coRefresh();
+});
+
+// Per-item discount type toggle (% / flat)
+$('#co-items-list').addEventListener('click', e => {
+  const btn = e.target.closest('.co-ir-disc-type');
+  if (!btn) return;
+  const idx = parseInt(btn.dataset.idx);
+  const tab = activeTab();
+  if (!tab?.cart[idx]) return;
+  const item = tab.cart[idx];
+  const newType = (item.itemDiscType || 'pct') === 'pct' ? 'flat' : 'pct';
+  item.itemDiscType     = newType;
+  item.itemDiscountPct  = 0;
+  item.itemDiscountFlat = 0;
+  _coRenderItems();
+  _coRefresh();
+});
+
+// Per-item tax select (event delegation)
+$('#co-items-list').addEventListener('change', e => {
+  const sel = e.target.closest('.co-ir-tax-sel');
+  if (!sel) return;
+  const idx = parseInt(sel.dataset.idx);
+  const tab = activeTab();
+  if (!tab?.cart[idx]) return;
+  const s = state.receiptSettings || {};
+  const taxRules = Array.isArray(s.tax_rules)
+    ? s.tax_rules.filter(r => parseFloat(r.value || 0) > 0)
+    : [];
+  const ri = sel.value === '' ? -1 : parseInt(sel.value);
+  tab.cart[idx].itemTaxRule = ri >= 0 && taxRules[ri] ? taxRules[ri] : null;
+  sel.classList.toggle('has-tax', !!tab.cart[idx].itemTaxRule);
   _coRefresh();
 });
 
@@ -16266,7 +20190,9 @@ $('#checkout-confirm').addEventListener('click', async () => {
 
   const productItems = cart.filter(i => i._type !== 'service');
   const serviceItems = cart.filter(i => i._type === 'service');
-  const discountPct  = Math.min(100, Math.max(0, parseFloat($('#co-discount-pct')?.value) || 0));
+  const _discRaw    = parseFloat($('#co-discount-pct')?.value) || 0;
+  const discountPct  = _coDiscType === 'pct' ? Math.min(100, Math.max(0, _discRaw)) : 0;
+  const discountFlat = _coDiscType === 'flat' ? Math.max(0, _discRaw) : 0;
 
   // Single unified checkout — products and services in one Sale record
   const body = {
@@ -16274,7 +20200,8 @@ $('#checkout-confirm').addEventListener('click', async () => {
     amount_paid:      method === 'credit' ? total : amount,
     amount_tendered:  method === 'cash'   ? amount : undefined,
     notes:            notes || undefined,
-    discount_percent: discountPct > 0 ? discountPct : undefined,
+    discount_percent: discountPct  > 0 ? discountPct  : undefined,
+    discount_flat:    discountFlat > 0 ? discountFlat : undefined,
     pos_customer_id:  tab?._customer?.id ?? undefined,
     pos_counter_id:   state.posCounterId ?? undefined,
     credit_due_date:  method === 'credit' ? ($('#co-credit-due-date')?.value || undefined) : undefined,
@@ -16285,7 +20212,8 @@ $('#checkout-confirm').addEventListener('click', async () => {
         product_stock_layer_id: i.layerId ?? undefined,
         warranty_type:          i.warrantyType ?? undefined,
         warranty_date:          i.warrantyDate ?? undefined,
-        item_discount_percent:  (parseFloat(i.itemDiscountPct) || 0) > 0 ? parseFloat(i.itemDiscountPct) : undefined,
+        item_discount_percent:  _itemEffectivePct(i) > 0 ? _itemEffectivePct(i) : undefined,
+        item_tax_rule:          i.itemTaxRule ?? undefined,
       })),
       ...serviceItems.map(i => ({
         item_type:              'service',
@@ -16293,7 +20221,8 @@ $('#checkout-confirm').addEventListener('click', async () => {
         quantity:               i.qty,
         warranty_type:          i.warrantyType ?? undefined,
         warranty_date:          i.warrantyDate ?? undefined,
-        item_discount_percent:  (parseFloat(i.itemDiscountPct) || 0) > 0 ? parseFloat(i.itemDiscountPct) : undefined,
+        item_discount_percent:  _itemEffectivePct(i) > 0 ? _itemEffectivePct(i) : undefined,
+        item_tax_rule:          i.itemTaxRule ?? undefined,
       })),
     ],
   };
@@ -16309,6 +20238,8 @@ $('#checkout-confirm').addEventListener('click', async () => {
   }
 
   const postCustomerId = tab?._customer?.id ?? null;
+  // Snapshot tax breakdown before clearing the cart (per-item taxes live in cart items)
+  const _taxSnap = _coGetTaxBreakdown(_coGetAfterDiscount());
   $('#checkout-modal').style.display = 'none';
   if (tab) { tab.cart = []; tab._customer = null; }
   renderCart(); renderPosTabBar(); renderCartCustomer();
@@ -16319,6 +20250,7 @@ $('#checkout-confirm').addEventListener('click', async () => {
 
   const sale = res.body?.data;
   if (sale) {
+    if (_taxSnap.length > 0) sale._taxBreakdown = _taxSnap;
     if ((state.receiptSettings?.receipt_mode || 'bill') === 'invoice') {
       _posCreateInvoiceFromSale(sale, postCustomerId);
     } else {
@@ -19363,6 +23295,9 @@ async function submitLoanForm() {
 // ── Utilities ──────────────────────────────────────────────────────────────
 function escHtml(str) {
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function escAttr(str) {
+  return String(str ?? '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
 // ── Platform class ─────────────────────────────────────────────────────────
@@ -31162,6 +35097,2979 @@ async function submitDsCreate() {
   // ── Expose for debug ────────────────────────────────────────────────────────
   window._pm = pm;
 }());
+
+// ── Event Tab: Brands + Reporters ────────────────────────────────────────
+(function () {
+  'use strict';
+
+  // ── State ────────────────────────────────────────────────────────────────
+  let _brdQ  = '';
+  let _rptQ  = '';
+  let _ofcQ  = '';
+  let _jobQ  = '';
+  let _jobStatusFilter = '';
+  let _evtCurrentView = 'brands';   // 'brands'|'reporters'|'officers'|'coordinators'|'promoters'|'jobs'|'salary'
+
+  // ── Sub-view switch ───────────────────────────────────────────────────────
+  function switchEvtView(view) {
+    _evtCurrentView = view;
+    const views = { brands:'#evt-brands-view', reporters:'#evt-reporters-view', officers:'#evt-officers-view',
+                    coordinators:'#evt-coordinators-view', promoters:'#evt-promoters-view',
+                    agencies:'#evt-agencies-view', jobs:'#evt-jobs-view', salary:'#evt-salary-view' };
+    Object.entries(views).forEach(([k, sel]) => {
+      const el = $(sel);
+      if (el) el.style.display = k === view ? 'flex' : 'none';
+    });
+    $$('[data-evtview]').forEach(b =>
+      b.classList.toggle('active', b.dataset.evtview === view));
+    if (view === 'brands')       loadBrands();
+    if (view === 'reporters')    loadReporters();
+    if (view === 'officers')     loadOfficers();
+    if (view === 'coordinators') loadCoordinators();
+    if (view === 'promoters')    loadPromoters();
+    if (view === 'agencies')     loadAgencies();
+    if (view === 'jobs')         loadJobs();
+    if (view === 'salary')       loadSalarySheets();
+  }
+  window.switchEvtView = switchEvtView;
+
+  // ── Alert helpers ─────────────────────────────────────────────────────────
+  function _brdAlert(msg, ok) {
+    const el = $('#brd-modal-alert');
+    if (!el) return;
+    el.textContent   = msg;
+    el.style.display = msg ? '' : 'none';
+    el.style.color   = ok ? '#10b981' : '#ef4444';
+  }
+  function _brdPanelAlert(msg, ok) {
+    const el = $('#brd-alert');
+    if (!el) return;
+    el.textContent   = msg;
+    el.style.display = msg ? '' : 'none';
+    el.style.color   = ok ? '#10b981' : '#ef4444';
+  }
+  function _rptAlert(msg, ok) {
+    const el = $('#rpt-modal-alert');
+    if (!el) return;
+    el.textContent   = msg;
+    el.style.display = msg ? '' : 'none';
+    el.style.color   = ok ? '#10b981' : '#ef4444';
+  }
+  function _rptPanelAlert(msg, ok) {
+    const el = $('#rpt-alert');
+    if (!el) return;
+    el.textContent   = msg;
+    el.style.display = msg ? '' : 'none';
+    el.style.color   = ok ? '#10b981' : '#ef4444';
+  }
+
+  // ═══════════════════════════ BRANDS ═══════════════════════════════════════
+
+  async function loadBrands() {
+    const tbody = $('#brd-body');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:28px">Loading…</td></tr>';
+    _brdPanelAlert('', true);
+
+    const res = await API.brands(_brdQ);
+    if (res.status !== 200) {
+      tbody.innerHTML = `<tr><td colspan="7" style="color:#ef4444;text-align:center;padding:24px">${escHtml(res.body?.message || 'Failed to load brands')}</td></tr>`;
+      return;
+    }
+    const rows = res.body?.data || [];
+    if (rows.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:32px">No brands yet. Click <strong>New Brand</strong> to add one.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map(b => `
+      <tr>
+        <td style="font-size:12px;font-weight:600">${escHtml(b.name)}</td>
+        <td><span style="font-family:monospace;font-size:11px;font-weight:700;letter-spacing:0.1em;color:var(--accent)">${escHtml(b.short_code)}</span></td>
+        <td style="font-size:12px;color:var(--text-muted)">${escHtml(b.email ?? '—')}</td>
+        <td style="font-size:12px;color:var(--text-muted)">${escHtml(b.phone ?? '—')}</td>
+        <td style="font-size:12px">${escHtml(b.company_name ?? '—')}</td>
+        <td style="font-size:12px">${escHtml(b.contact_person ?? '—')}</td>
+        <td style="text-align:right;white-space:nowrap">
+          <button class="crm-card-btn" data-action="edit" data-id="${b.id}" title="Edit"><i class="fa fa-pencil"></i></button>
+          <button class="crm-card-btn" style="color:#ef4444" data-action="delete" data-id="${b.id}" title="Delete"><i class="fa fa-trash"></i></button>
+        </td>
+      </tr>
+    `).join('');
+
+    tbody.querySelectorAll('[data-action="edit"]').forEach(btn => {
+      btn.addEventListener('click', () => openBrandModal(rows.find(b => String(b.id) === btn.dataset.id)));
+    });
+    tbody.querySelectorAll('[data-action="delete"]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Delete this brand?')) return;
+        const r = await API.brandDelete(btn.dataset.id);
+        if (r.status === 200 || r.status === 204) { loadBrands(); }
+        else _brdPanelAlert(r.body?.message || 'Delete failed.', false);
+      });
+    });
+  }
+  window.loadBrands = loadBrands;
+
+  function openBrandModal(brand) {
+    const modal = $('#brd-modal');
+    if (!modal) return;
+    $('#brd-id').value             = brand?.id ?? '';
+    $('#brd-name').value           = brand?.name ?? '';
+    $('#brd-short-code').value     = brand?.short_code ?? '';
+    $('#brd-email').value          = brand?.email ?? '';
+    $('#brd-phone').value          = brand?.phone ?? '';
+    $('#brd-company-name').value   = brand?.company_name ?? '';
+    $('#brd-contact-person').value = brand?.contact_person ?? '';
+    $('#brd-address').value        = brand?.address ?? '';
+    $('#brd-modal-title').textContent = brand ? 'Edit Brand' : 'New Brand';
+    _brdAlert('', true);
+    modal.style.display = '';
+    setTimeout(() => $('#brd-name')?.focus(), 80);
+  }
+
+  function _closeBrandModal() {
+    const m = $('#brd-modal');
+    if (m) m.style.display = 'none';
+  }
+
+  async function _saveBrand() {
+    const id        = $('#brd-id').value;
+    const shortCode = ($('#brd-short-code').value || '').toUpperCase();
+    const body = {
+      name:           ($('#brd-name').value || '').trim(),
+      short_code:     shortCode,
+      email:          ($('#brd-email').value || '').trim(),
+      phone:          ($('#brd-phone').value || '').trim() || null,
+      company_name:   ($('#brd-company-name').value || '').trim() || null,
+      contact_person: ($('#brd-contact-person').value || '').trim() || null,
+      address:        ($('#brd-address').value || '').trim() || null,
+    };
+    if (!body.name)                           { _brdAlert('Brand name is required.', false); return; }
+    if (!/^[A-Z]{3}$/.test(body.short_code)) { _brdAlert('Short code must be exactly 3 uppercase letters (A–Z).', false); return; }
+    if (!body.email)                          { _brdAlert('Email address is required.', false); return; }
+
+    const saveBtn = $('#brd-modal-save');
+    if (saveBtn) saveBtn.disabled = true;
+    const res = id ? await API.brandUpdate(id, body) : await API.brandCreate(body);
+    if (saveBtn) saveBtn.disabled = false;
+
+    if (res.status === 200 || res.status === 201) {
+      _closeBrandModal();
+      loadBrands();
+    } else {
+      _brdAlert(res.body?.message || (id ? 'Update failed.' : 'Create failed.'), false);
+    }
+  }
+
+  // ════════════════���══════════ BRAND CSV IMPORT ═════════════════════���═══════
+
+  let _brdImportRows = [];   // valid parsed rows pending import
+  let _brdImportStep = 1;    // 1 = pick, 2 = preview, 3 = results
+
+  function _brdImportOpen() {
+    _brdImportRows = [];
+    _brdImportStep = 1;
+    _brdImportSetStep(1);
+    const fn = $('#brd-import-filename'); if (fn) fn.textContent = 'No file chosen';
+    const al = $('#brd-import-step1-alert'); if (al) al.style.display = 'none';
+    const m  = $('#brd-import-modal'); if (m) m.style.display = '';
+  }
+  function _brdImportClose() {
+    const m = $('#brd-import-modal'); if (m) m.style.display = 'none';
+  }
+  function _brdImportSetStep(step) {
+    _brdImportStep = step;
+    [$('#brd-import-step-1'), $('#brd-import-step-2'), $('#brd-import-step-3')].forEach((el, i) => {
+      if (el) el.style.display = (i + 1 === step) ? 'flex' : 'none';
+    });
+    // Footer buttons
+    const nextBtn   = $('#brd-import-next');
+    const cancelBtn = $('#brd-import-cancel');
+    if (step === 1) {
+      if (nextBtn)   { nextBtn.innerHTML = '<i class="fa fa-eye"></i> Preview';         nextBtn.disabled = true; nextBtn.style.background = '#10b981'; nextBtn.style.borderColor = '#10b981'; }
+      if (cancelBtn) { cancelBtn.style.display = ''; cancelBtn.textContent = ''; cancelBtn.innerHTML = '<i class="fa fa-xmark"></i> Cancel'; }
+    } else if (step === 2) {
+      if (nextBtn)   { nextBtn.innerHTML = '<i class="fa fa-upload"></i> Import ' + _brdImportRows.length + ' Brands'; nextBtn.disabled = (_brdImportRows.length === 0); nextBtn.style.background = '#10b981'; nextBtn.style.borderColor = '#10b981'; }
+      if (cancelBtn) { cancelBtn.innerHTML = '<i class="fa fa-arrow-left"></i> Back'; }
+    } else {
+      if (nextBtn)   { nextBtn.innerHTML = '<i class="fa fa-check"></i> Done'; nextBtn.disabled = false; nextBtn.style.background = 'var(--accent)'; nextBtn.style.borderColor = 'var(--accent)'; }
+      if (cancelBtn) { cancelBtn.style.display = 'none'; }
+    }
+  }
+
+  // Simple CSV parser — handles quoted fields, comma delimiter
+  function _parseCsv(text) {
+    const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').filter(l => l.trim());
+    if (lines.length < 2) return null;
+
+    function parseLine(line) {
+      const fields = [];
+      let cur = '', inQ = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (inQ) {
+          if (ch === '"' && line[i + 1] === '"') { cur += '"'; i++; }
+          else if (ch === '"') inQ = false;
+          else cur += ch;
+        } else {
+          if (ch === '"') inQ = true;
+          else if (ch === ',') { fields.push(cur.trim()); cur = ''; }
+          else cur += ch;
+        }
+      }
+      fields.push(cur.trim());
+      return fields;
+    }
+
+    const headers = parseLine(lines[0]).map(h => h.toLowerCase().replace(/\s+/g, '_'));
+    return lines.slice(1).map(line => {
+      const vals = parseLine(line);
+      const obj  = {};
+      headers.forEach((h, i) => { obj[h] = vals[i] ?? ''; });
+      return obj;
+    });
+  }
+
+  async function _brdImportPickFile() {
+    const result = await window.electronAPI.showOpenDialog({
+      title: 'Select CSV file',
+      filters: [{ name: 'CSV Files', extensions: ['csv'] }],
+      properties: ['openFile'],
+    });
+    if (result.canceled || !result.filePaths.length) return;
+
+    const filePath = result.filePaths[0];
+    const fileName = filePath.split(/[\\/]/).pop();
+    const read     = await window.electronAPI.readTextFile(filePath);
+    const al       = $('#brd-import-step1-alert');
+    const fn       = $('#brd-import-filename');
+    if (fn) fn.textContent = fileName;
+
+    if (!read.ok) {
+      if (al) { al.textContent = 'Could not read file: ' + read.error; al.style.display = ''; }
+      return;
+    }
+
+    const parsed = _parseCsv(read.content);
+    if (!parsed || !parsed.length) {
+      if (al) { al.textContent = 'File is empty or could not be parsed. Make sure it has a header row and at least one data row.'; al.style.display = ''; }
+      $('#brd-import-next').disabled = true;
+      return;
+    }
+
+    if (!('name' in parsed[0]) || !('short_code' in parsed[0]) || !('email' in parsed[0])) {
+      if (al) { al.textContent = 'Missing required columns: name, short_code, email must be in the header row.'; al.style.display = ''; }
+      $('#brd-import-next').disabled = true;
+      return;
+    }
+
+    if (al) al.style.display = 'none';
+
+    // Validate each row client-side (warn but still let valid ones through)
+    const validRows = [];
+    const previewBody = $('#brd-import-preview-body');
+    let previewHtml = '';
+
+    parsed.forEach((row, i) => {
+      const name      = (row.name          || '').trim();
+      const code      = (row.short_code    || '').trim().toUpperCase();
+      const email     = (row.email         || '').trim();
+      let   rowError  = null;
+
+      if (!name)                          rowError = 'Name is empty';
+      else if (!/^[A-Z]{3}$/.test(code)) rowError = 'Short code must be 3 letters';
+      else if (!email || !email.includes('@')) rowError = 'Invalid email';
+
+      const statusHtml = rowError
+        ? `<span style="color:#dc2626;font-size:10px"><i class="fa fa-xmark-circle"></i> ${escHtml(rowError)}</span>`
+        : `<span style="color:#059669;font-size:10px"><i class="fa fa-check-circle"></i> OK</span>`;
+
+      previewHtml += `<tr style="border-bottom:1px solid var(--border-color,#e2e8f0);${rowError ? 'background:#fff5f5' : ''}">
+        <td style="padding:5px 8px;color:var(--text-muted)">${i + 1}</td>
+        <td style="padding:5px 8px">${escHtml(name || '—')}</td>
+        <td style="padding:5px 8px;font-family:monospace;font-weight:600;color:var(--accent)">${escHtml(code || '—')}</td>
+        <td style="padding:5px 8px;color:var(--text-muted)">${escHtml(email || '—')}</td>
+        <td style="padding:5px 8px;color:var(--text-muted)">${escHtml((row.phone||'').trim() || '—')}</td>
+        <td style="padding:5px 8px;color:var(--text-muted)">${escHtml((row.company_name||'').trim() || '—')}</td>
+        <td style="padding:5px 8px">${statusHtml}</td>
+      </tr>`;
+
+      if (!rowError) {
+        validRows.push({
+          name,
+          short_code:     code,
+          email,
+          phone:          (row.phone          || '').trim() || null,
+          company_name:   (row.company_name   || '').trim() || null,
+          contact_person: (row.contact_person || '').trim() || null,
+          address:        (row.address        || '').trim() || null,
+        });
+      }
+    });
+
+    if (previewBody) previewBody.innerHTML = previewHtml;
+    const info = $('#brd-import-preview-info');
+    if (info) info.textContent = `${parsed.length} rows found — ${validRows.length} valid, ${parsed.length - validRows.length} with errors (errors will be skipped)`;
+
+    _brdImportRows = validRows;
+    _brdImportSetStep(2);
+  }
+
+  async function _brdImportNext() {
+    if (_brdImportStep === 1) {
+      // "Preview" clicked — trigger file picker (step advances inside _brdImportPickFile)
+      await _brdImportPickFile();
+    } else if (_brdImportStep === 2) {
+      // "Import" clicked
+      if (!_brdImportRows.length) return;
+      const nextBtn = $('#brd-import-next');
+      if (nextBtn) { nextBtn.disabled = true; nextBtn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Importing…'; }
+
+      const res = await API.brandImport({ rows: _brdImportRows });
+      if (nextBtn) { nextBtn.disabled = false; }
+
+      if (res.status !== 200) {
+        const al = $('#brd-import-step2-alert');
+        if (al) { al.textContent = res.body?.message || 'Import failed. Please try again.'; al.style.display = ''; }
+        _brdImportSetStep(2);
+        return;
+      }
+
+      // Show results
+      const { created, skipped, total, rows } = res.body;
+      const summary = $('#brd-import-result-summary');
+      if (summary) {
+        summary.innerHTML = `
+          <div style="display:flex;gap:16px;flex-wrap:wrap">
+            <span style="color:#059669"><i class="fa fa-check-circle"></i> <strong>${created}</strong> created</span>
+            <span style="color:#f59e0b"><i class="fa fa-skip-forward"></i> <strong>${skipped}</strong> skipped (duplicate code)</span>
+            <span style="color:var(--text-muted)">of <strong>${total}</strong> total rows</span>
+          </div>`;
+      }
+      const resultBody = $('#brd-import-result-body');
+      if (resultBody) {
+        resultBody.innerHTML = (rows || []).map(r => {
+          const isCreated = r.status === 'created';
+          return `<tr style="border-bottom:1px solid var(--border-color,#e2e8f0)">
+            <td style="padding:5px 8px;color:var(--text-muted)">${r.row}</td>
+            <td style="padding:5px 8px">${escHtml(r.name)}</td>
+            <td style="padding:5px 8px;font-family:monospace;font-weight:600;color:var(--accent)">${escHtml(r.short_code)}</td>
+            <td style="padding:5px 8px">
+              ${isCreated
+                ? '<span style="color:#059669"><i class="fa fa-check-circle"></i> Created</span>'
+                : `<span style="color:#f59e0b"><i class="fa fa-exclamation-circle"></i> Skipped — ${escHtml(r.reason || '')}</span>`}
+            </td>
+          </tr>`;
+        }).join('');
+      }
+      _brdImportSetStep(3);
+      if (created > 0) loadBrands();   // refresh list if anything was created
+    } else {
+      // "Done" — close
+      _brdImportClose();
+    }
+  }
+
+  function _brdImportCancelOrBack() {
+    if (_brdImportStep === 2) {
+      _brdImportSetStep(1);  // go back
+    } else {
+      _brdImportClose();
+    }
+  }
+
+  $('#brd-import-btn')?.addEventListener('click',   _brdImportOpen);
+  $('#brd-import-close')?.addEventListener('click', _brdImportClose);
+  $('#brd-import-pick-btn')?.addEventListener('click', _brdImportPickFile);
+  $('#brd-import-next')?.addEventListener('click',   _brdImportNext);
+  $('#brd-import-cancel')?.addEventListener('click', _brdImportCancelOrBack);
+  $('#brd-import-modal')?.addEventListener('click', e => { if (e.target === $('#brd-import-modal')) _brdImportClose(); });
+
+  // ─── Job CSV Import ───────────────────────────────────────────────────────
+
+  let _jbImportRows = [];   // valid parsed rows pending import
+  let _jbImportStep = 1;    // 1 = pick, 2 = preview, 3 = results
+
+  const VALID_JOB_STATUSES = ['pending', 'in_progress', 'completed', 'cancelled'];
+
+  function _jbImportOpen() {
+    _jbImportRows = [];
+    _jbImportStep = 1;
+    _jbImportSetStep(1);
+    const fn = $('#job-import-filename'); if (fn) fn.textContent = 'No file chosen';
+    const al = $('#job-import-step1-alert'); if (al) al.style.display = 'none';
+    const m  = $('#job-import-modal'); if (m) m.style.display = '';
+  }
+  function _jbImportClose() {
+    const m = $('#job-import-modal'); if (m) m.style.display = 'none';
+  }
+  function _jbImportSetStep(step) {
+    _jbImportStep = step;
+    [$('#job-import-step-1'), $('#job-import-step-2'), $('#job-import-step-3')].forEach((el, i) => {
+      if (el) el.style.display = (i + 1 === step) ? (step === 1 ? 'flex' : 'flex') : 'none';
+    });
+    const nextBtn   = $('#job-import-next');
+    const cancelBtn = $('#job-import-cancel');
+    if (step === 1) {
+      if (nextBtn)   { nextBtn.innerHTML = '<i class="fa fa-eye"></i> Preview'; nextBtn.disabled = true; nextBtn.style.background = ''; nextBtn.style.borderColor = ''; }
+      if (cancelBtn) cancelBtn.innerHTML = '<i class="fa fa-xmark"></i> Cancel';
+    } else if (step === 2) {
+      if (nextBtn)   { nextBtn.innerHTML = '<i class="fa fa-upload"></i> Import ' + _jbImportRows.length + ' Jobs'; nextBtn.disabled = (_jbImportRows.length === 0); nextBtn.style.background = '#10b981'; nextBtn.style.borderColor = '#10b981'; }
+      if (cancelBtn) cancelBtn.innerHTML = '<i class="fa fa-arrow-left"></i> Back';
+    } else {
+      if (nextBtn)   { nextBtn.innerHTML = '<i class="fa fa-check"></i> Done'; nextBtn.disabled = false; nextBtn.style.background = '#10b981'; nextBtn.style.borderColor = '#10b981'; }
+      if (cancelBtn) cancelBtn.style.display = 'none';
+    }
+  }
+
+  async function _jbImportPickFile() {
+    const result = await window.electronAPI.showOpenDialog({
+      title: 'Select CSV file',
+      filters: [{ name: 'CSV Files', extensions: ['csv'] }],
+      properties: ['openFile'],
+    });
+    if (result.canceled || !result.filePaths.length) return;
+
+    const filePath = result.filePaths[0];
+    const fileName = filePath.split(/[\\/]/).pop();
+    const read     = await window.electronAPI.readTextFile(filePath);
+    const al       = $('#job-import-step1-alert');
+    const fn       = $('#job-import-filename');
+    if (fn) fn.textContent = fileName;
+
+    if (!read.ok) {
+      if (al) { al.textContent = 'Could not read file: ' + read.error; al.style.display = ''; }
+      return;
+    }
+
+    const parsed = _parseCsv(read.content);
+    if (!parsed || !parsed.length) {
+      if (al) { al.textContent = 'File is empty or could not be parsed. Make sure it has a header row and at least one data row.'; al.style.display = ''; }
+      $('#job-import-next').disabled = true;
+      return;
+    }
+
+    if (!('name' in parsed[0])) {
+      if (al) { al.textContent = 'Missing required column: "name" must be in the header row.'; al.style.display = ''; }
+      $('#job-import-next').disabled = true;
+      return;
+    }
+
+    if (al) al.style.display = 'none';
+
+    const validRows   = [];
+    const previewBody = $('#job-import-preview-body');
+    let   previewHtml = '';
+
+    parsed.forEach((row, i) => {
+      const name       = (row.name        || '').trim();
+      const brandCode  = (row.brand_code  || '').trim().toUpperCase();
+      const status     = (row.status      || '').trim().toLowerCase() || 'pending';
+      const startDate  = (row.start_date  || '').trim();
+      const officer    = (row.officer     || '').trim();
+      const reporter   = (row.reporter    || '').trim();
+      let   rowError   = null;
+
+      if (!name)                                          rowError = 'Name is empty';
+      else if (brandCode && !/^[A-Z]{3}$/.test(brandCode)) rowError = 'Brand code must be 3 letters';
+      else if (!VALID_JOB_STATUSES.includes(status))    rowError = 'Invalid status: ' + status;
+      else if (startDate && isNaN(Date.parse(startDate)))rowError = 'Invalid start_date format (use YYYY-MM-DD)';
+
+      const statusHtml = rowError
+        ? `<span style="color:#dc2626;font-size:10px"><i class="fa fa-xmark-circle"></i> ${escHtml(rowError)}</span>`
+        : `<span style="color:#059669;font-size:10px"><i class="fa fa-check-circle"></i> OK</span>`;
+
+      previewHtml += `<tr style="border-bottom:1px solid var(--border-color,#e2e8f0);${rowError ? 'background:#fff5f5' : ''}">
+        <td style="padding:5px 8px;color:var(--text-muted)">${i + 1}</td>
+        <td style="padding:5px 8px">${escHtml(name || '—')}</td>
+        <td style="padding:5px 8px;font-family:monospace;font-weight:600;color:var(--accent)">${escHtml(brandCode || '—')}</td>
+        <td style="padding:5px 8px;color:var(--text-muted)">${escHtml(status)}</td>
+        <td style="padding:5px 8px;color:var(--text-muted)">${escHtml(startDate || '—')}</td>
+        <td style="padding:5px 8px;color:var(--text-muted)">${escHtml(officer || '—')}</td>
+        <td style="padding:5px 8px;color:var(--text-muted)">${escHtml(reporter || '—')}</td>
+        <td style="padding:5px 8px">${statusHtml}</td>
+      </tr>`;
+
+      if (!rowError) {
+        validRows.push({
+          name,
+          brand_code:  brandCode  || null,
+          status,
+          start_date:  startDate  || null,
+          description: (row.description || '').trim() || null,
+          officer:     officer    || null,
+          reporter:    reporter   || null,
+        });
+      }
+    });
+
+    if (previewBody) previewBody.innerHTML = previewHtml;
+    const info = $('#job-import-preview-info');
+    if (info) info.textContent = `${parsed.length} rows found — ${validRows.length} valid, ${parsed.length - validRows.length} with errors (errors will be skipped)`;
+
+    _jbImportRows = validRows;
+    _jbImportSetStep(2);
+  }
+
+  async function _jbImportNext() {
+    if (_jbImportStep === 1) {
+      await _jbImportPickFile();
+    } else if (_jbImportStep === 2) {
+      if (!_jbImportRows.length) return;
+      const nextBtn = $('#job-import-next');
+      const al      = $('#job-import-step2-alert');
+      if (al) al.style.display = 'none';
+
+      // Split into batches of 500 to stay within server validation limit
+      const BATCH_SIZE  = 500;
+      const allRows     = _jbImportRows;
+      const totalBatches = Math.ceil(allRows.length / BATCH_SIZE);
+      let allCreated    = 0;
+      let allTotal      = 0;
+      const allRowResults = [];
+      let rowOffset     = 0;
+
+      for (let b = 0; b < totalBatches; b++) {
+        const chunk = allRows.slice(b * BATCH_SIZE, (b + 1) * BATCH_SIZE);
+        if (nextBtn) {
+          nextBtn.disabled = true;
+          nextBtn.innerHTML = totalBatches > 1
+            ? `<i class="fa fa-spinner fa-spin"></i> Importing batch ${b + 1}/${totalBatches}…`
+            : '<i class="fa fa-spinner fa-spin"></i> Importing…';
+        }
+
+        const res = await API.jobImport({ rows: chunk });
+
+        if (res.status !== 200) {
+          if (nextBtn) { nextBtn.disabled = false; }
+          if (al) { al.textContent = res.body?.message || 'Import failed. Please try again.'; al.style.display = ''; }
+          _jbImportSetStep(2);
+          return;
+        }
+
+        const { created, total, rows } = res.body;
+        allCreated += created;
+        allTotal   += total;
+        // Re-number rows to be global (not per-batch)
+        (rows || []).forEach(r => allRowResults.push({ ...r, row: rowOffset + r.row }));
+        rowOffset += chunk.length;
+      }
+
+      if (nextBtn) { nextBtn.disabled = false; }
+
+      const summary = $('#job-import-result-summary');
+      if (summary) {
+        summary.innerHTML = `
+          <div style="display:flex;gap:16px;flex-wrap:wrap">
+            <span style="color:#059669"><i class="fa fa-check-circle"></i> <strong>${allCreated}</strong> created</span>
+            <span style="color:var(--text-muted)">of <strong>${allTotal}</strong> total rows</span>
+          </div>`;
+      }
+      const resultBody = $('#job-import-result-body');
+      if (resultBody) {
+        resultBody.innerHTML = allRowResults.map(r => {
+          const noteHtml = r.notes && r.notes.length
+            ? `<span style="color:#f59e0b;font-size:10px;display:block">${r.notes.map(n => escHtml(n)).join(' · ')}</span>`
+            : '';
+          return `<tr style="border-bottom:1px solid var(--border-color,#e2e8f0)">
+            <td style="padding:5px 8px;color:var(--text-muted)">${r.row}</td>
+            <td style="padding:5px 8px">${escHtml(r.name)}</td>
+            <td style="padding:5px 8px;font-family:monospace;font-weight:600;color:var(--accent)">${escHtml(r.job_ref || '')}</td>
+            <td style="padding:5px 8px">
+              <span style="color:#059669"><i class="fa fa-check-circle"></i> Created</span>
+              ${noteHtml}
+            </td>
+          </tr>`;
+        }).join('');
+      }
+      _jbImportSetStep(3);
+      if (allCreated > 0) loadJobs();   // refresh jobs list
+    } else {
+      _jbImportClose();
+    }
+  }
+
+  function _jbImportCancelOrBack() {
+    if (_jbImportStep === 2) {
+      _jbImportSetStep(1);
+    } else {
+      _jbImportClose();
+    }
+  }
+
+  $('#job-import-btn')?.addEventListener('click',       _jbImportOpen);
+  $('#job-import-close')?.addEventListener('click',     _jbImportClose);
+  $('#job-import-pick-btn')?.addEventListener('click',  _jbImportPickFile);
+  $('#job-import-next')?.addEventListener('click',      _jbImportNext);
+  $('#job-import-cancel')?.addEventListener('click',    _jbImportCancelOrBack);
+  $('#job-import-modal')?.addEventListener('click', e => { if (e.target === $('#job-import-modal')) _jbImportClose(); });
+
+  // ─── End Job CSV Import ───────────────────────────────────────────────────
+
+  // ═══════════════════════════ REPORTERS ════════════════════════════════════
+
+  async function loadReporters() {
+    const tbody = $('#rpt-body');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--text-muted);padding:28px">Loading…</td></tr>';
+    _rptPanelAlert('', true);
+
+    const res = await API.reporters(_rptQ);
+    if (res.status !== 200) {
+      tbody.innerHTML = `<tr><td colspan="3" style="color:#ef4444;text-align:center;padding:24px">${escHtml(res.body?.message || 'Failed to load reporters')}</td></tr>`;
+      return;
+    }
+    const rows = res.body?.data || [];
+    if (rows.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--text-muted);padding:32px">No reporters yet. Click <strong>New Reporter</strong> to add one.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map(r => `
+      <tr>
+        <td style="font-size:12px;font-weight:600">${escHtml(r.name)}</td>
+        <td style="font-size:12px;color:var(--text-muted)">${escHtml(r.email)}</td>
+        <td style="text-align:right;white-space:nowrap">
+          <button class="crm-card-btn" data-action="edit" data-id="${r.id}" title="Edit"><i class="fa fa-pencil"></i></button>
+          <button class="crm-card-btn" style="color:#ef4444" data-action="delete" data-id="${r.id}" title="Delete"><i class="fa fa-trash"></i></button>
+        </td>
+      </tr>
+    `).join('');
+
+    tbody.querySelectorAll('[data-action="edit"]').forEach(btn => {
+      btn.addEventListener('click', () => openReporterModal(rows.find(r => String(r.id) === btn.dataset.id)));
+    });
+    tbody.querySelectorAll('[data-action="delete"]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Delete this reporter?')) return;
+        const r = await API.reporterDelete(btn.dataset.id);
+        if (r.status === 200 || r.status === 204) { loadReporters(); }
+        else _rptPanelAlert(r.body?.message || 'Delete failed.', false);
+      });
+    });
+  }
+
+  function openReporterModal(reporter) {
+    const modal = $('#rpt-modal');
+    if (!modal) return;
+    const isEdit = !!reporter;
+    $('#rpt-id').value    = reporter?.id ?? '';
+    $('#rpt-name').value  = reporter?.name ?? '';
+    $('#rpt-email').value = reporter?.email ?? '';
+    $('#rpt-password').value         = '';
+    $('#rpt-confirm-password').value = '';
+    $('#rpt-modal-title').textContent = isEdit ? 'Edit Reporter' : 'New Reporter';
+
+    // Password field visibility
+    const pwField  = $('#rpt-pw-field');
+    const cpwField = $('#rpt-cpw-field');
+    const chkRow   = $('#rpt-change-pw-row');
+    const chk      = $('#rpt-change-pw-chk');
+    if (isEdit) {
+      if (chkRow) chkRow.style.display = '';
+      if (chk)    chk.checked = false;
+      if (pwField)  pwField.style.display  = 'none';
+      if (cpwField) cpwField.style.display = 'none';
+    } else {
+      if (chkRow) chkRow.style.display = 'none';
+      if (pwField)  pwField.style.display  = '';
+      if (cpwField) cpwField.style.display = '';
+    }
+
+    _rptAlert('', true);
+    modal.style.display = '';
+    setTimeout(() => $('#rpt-name')?.focus(), 80);
+  }
+
+  function _closeReporterModal() {
+    const m = $('#rpt-modal');
+    if (m) m.style.display = 'none';
+  }
+
+  async function _saveReporter() {
+    const id      = $('#rpt-id').value;
+    const isEdit  = !!id;
+    const chk     = $('#rpt-change-pw-chk');
+    const wantPw  = !isEdit || (chk && chk.checked);
+
+    const body = {
+      name:  ($('#rpt-name').value || '').trim(),
+      email: ($('#rpt-email').value || '').trim(),
+    };
+
+    if (!body.name)  { _rptAlert('Full name is required.', false); return; }
+    if (!body.email) { _rptAlert('Email address is required.', false); return; }
+
+    if (wantPw) {
+      const pw  = $('#rpt-password').value;
+      const cpw = $('#rpt-confirm-password').value;
+      if (!pw)          { _rptAlert('Password is required.', false); return; }
+      if (pw.length < 8){ _rptAlert('Password must be at least 8 characters.', false); return; }
+      if (pw !== cpw)   { _rptAlert('Passwords do not match.', false); return; }
+      body.password = pw;
+    }
+
+    const saveBtn = $('#rpt-modal-save');
+    if (saveBtn) saveBtn.disabled = true;
+    const res = isEdit ? await API.reporterUpdate(id, body) : await API.reporterCreate(body);
+    if (saveBtn) saveBtn.disabled = false;
+
+    if (res.status === 200 || res.status === 201) {
+      _closeReporterModal();
+      loadReporters();
+    } else {
+      _rptAlert(res.body?.message || (isEdit ? 'Update failed.' : 'Create failed.'), false);
+    }
+  }
+
+
+  // ═══════════════════════════ OFFICERS ═════════════════════════════════════
+
+  async function loadOfficers() {
+    const tbody = $('#ofc-body');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--text-muted);padding:28px">Loading…</td></tr>';
+    const el = $('#ofc-alert'); if (el) { el.textContent = ''; el.style.display = 'none'; }
+
+    const res = await API.officers(_ofcQ);
+    if (res.status !== 200) {
+      tbody.innerHTML = `<tr><td colspan="3" style="color:#ef4444;text-align:center;padding:24px">${escHtml(res.body?.message || 'Failed to load officers')}</td></tr>`;
+      return;
+    }
+    const rows = res.body?.data || [];
+    if (rows.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--text-muted);padding:32px">No officers yet. Click <strong>New Officer</strong> to add one.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map(o => `
+      <tr>
+        <td style="font-size:12px;font-weight:600">${escHtml(o.name)}</td>
+        <td style="font-size:12px;color:var(--text-muted)">${escHtml(o.email)}</td>
+        <td style="text-align:right;white-space:nowrap">
+          <button class="crm-card-btn" data-action="edit" data-id="${o.id}" title="Edit"><i class="fa fa-pencil"></i></button>
+          <button class="crm-card-btn" style="color:#ef4444" data-action="delete" data-id="${o.id}" title="Delete"><i class="fa fa-trash"></i></button>
+        </td>
+      </tr>
+    `).join('');
+
+    tbody.querySelectorAll('[data-action="edit"]').forEach(btn => {
+      btn.addEventListener('click', () => openOfficerModal(rows.find(o => String(o.id) === btn.dataset.id)));
+    });
+    tbody.querySelectorAll('[data-action="delete"]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Delete this officer?')) return;
+        const r = await API.officerDelete(btn.dataset.id);
+        if (r.status === 200 || r.status === 204) { loadOfficers(); }
+        else {
+          const pa = $('#ofc-alert');
+          if (pa) { pa.textContent = r.body?.message || 'Delete failed.'; pa.style.display = ''; pa.style.color = '#ef4444'; }
+        }
+      });
+    });
+  }
+
+  function openOfficerModal(officer) {
+    const modal = $('#ofc-modal');
+    if (!modal) return;
+    const isEdit = !!officer;
+    $('#ofc-id').value    = officer?.id ?? '';
+    $('#ofc-name').value  = officer?.name ?? '';
+    $('#ofc-email').value = officer?.email ?? '';
+    $('#ofc-password').value         = '';
+    $('#ofc-confirm-password').value = '';
+    $('#ofc-modal-title').textContent = isEdit ? 'Edit Officer' : 'New Officer';
+
+    const pwField  = $('#ofc-pw-field');
+    const cpwField = $('#ofc-cpw-field');
+    const chkRow   = $('#ofc-change-pw-row');
+    const chk      = $('#ofc-change-pw-chk');
+    if (isEdit) {
+      if (chkRow) chkRow.style.display = '';
+      if (chk)    chk.checked = false;
+      if (pwField)  pwField.style.display  = 'none';
+      if (cpwField) cpwField.style.display = 'none';
+    } else {
+      if (chkRow) chkRow.style.display = 'none';
+      if (pwField)  pwField.style.display  = '';
+      if (cpwField) cpwField.style.display = '';
+    }
+
+    const alertEl = $('#ofc-modal-alert');
+    if (alertEl) { alertEl.textContent = ''; alertEl.style.display = 'none'; }
+    modal.style.display = '';
+    setTimeout(() => $('#ofc-name')?.focus(), 80);
+  }
+
+  function _closeOfficerModal() {
+    const m = $('#ofc-modal'); if (m) m.style.display = 'none';
+  }
+
+  async function _saveOfficer() {
+    const id     = $('#ofc-id').value;
+    const isEdit = !!id;
+    const chk    = $('#ofc-change-pw-chk');
+    const wantPw = !isEdit || (chk && chk.checked);
+
+    const body = {
+      name:  ($('#ofc-name').value  || '').trim(),
+      email: ($('#ofc-email').value || '').trim(),
+    };
+
+    const alertEl = $('#ofc-modal-alert');
+    const showErr = msg => { if (alertEl) { alertEl.textContent = msg; alertEl.style.display = ''; alertEl.style.color = '#ef4444'; } };
+
+    if (!body.name)  { showErr('Full name is required.');     return; }
+    if (!body.email) { showErr('Email address is required.'); return; }
+
+    if (wantPw) {
+      const pw  = $('#ofc-password').value;
+      const cpw = $('#ofc-confirm-password').value;
+      if (!pw)           { showErr('Password is required.');                    return; }
+      if (pw.length < 8) { showErr('Password must be at least 8 characters.'); return; }
+      if (pw !== cpw)    { showErr('Passwords do not match.');                  return; }
+      body.password = pw;
+    }
+
+    const saveBtn = $('#ofc-modal-save');
+    if (saveBtn) saveBtn.disabled = true;
+    const res = isEdit ? await API.officerUpdate(id, body) : await API.officerCreate(body);
+    if (saveBtn) saveBtn.disabled = false;
+
+    if (res.status === 200 || res.status === 201) {
+      _closeOfficerModal();
+      loadOfficers();
+    } else {
+      showErr(res.body?.message || (isEdit ? 'Update failed.' : 'Create failed.'));
+    }
+  }
+
+
+  // ═══════════════════════════ JOBS ════════════════════════════════════════
+
+  const JOB_STATUS_LABEL = {
+    pending:     'Pending',
+    in_progress: 'In Progress',
+    completed:   'Completed',
+    cancelled:   'Cancelled',
+  };
+  const JOB_STATUS_COLOR = {
+    pending:     '#f59e0b',
+    in_progress: '#3b82f6',
+    completed:   '#10b981',
+    cancelled:   '#ef4444',
+  };
+
+  async function loadJobs() {
+    const tbody = $('#job-body');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:28px">Loading…</td></tr>';
+    const pa = $('#job-alert'); if (pa) { pa.textContent = ''; pa.style.display = 'none'; }
+
+    const res = await API.jobs(_jobQ, _jobStatusFilter);
+    if (res.status !== 200) {
+      tbody.innerHTML = `<tr><td colspan="8" style="color:#ef4444;text-align:center;padding:24px">${escHtml(res.body?.message || 'Failed to load jobs')}</td></tr>`;
+      return;
+    }
+    const rows = res.body?.data || [];
+    if (rows.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:32px">No jobs yet. Click <strong>New Job</strong> to add one.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map(j => {
+      const sc = JOB_STATUS_COLOR[j.status] || '#94a3b8';
+      const sl = JOB_STATUS_LABEL[j.status] || j.status;
+      return `
+      <tr>
+        <td style="font-size:11px;font-weight:700;font-family:monospace;color:var(--accent, #6366f1);white-space:nowrap">${escHtml(j.job_ref || '—')}</td>
+        <td style="font-size:12px;font-weight:600">${escHtml(j.name)}</td>
+        <td style="font-size:12px">${escHtml(j.client_brand_name || '—')}</td>
+        <td style="font-size:12px;color:var(--text-muted)">${escHtml(j.officer_name || '—')}</td>
+        <td style="font-size:12px;color:var(--text-muted)">${escHtml(j.reporter_name || '—')}</td>
+        <td><span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px;background:${sc}20;color:${sc}">${escHtml(sl)}</span></td>
+        <td style="font-size:12px;color:var(--text-muted)">${j.start_date ? new Date(j.start_date).toLocaleDateString(undefined, {day:'2-digit',month:'short',year:'numeric'}) : '—'}</td>
+        <td style="text-align:right;white-space:nowrap">
+          <button class="crm-card-btn" data-action="edit"   data-id="${j.id}" title="Edit"><i class="fa fa-pencil"></i></button>
+          <button class="crm-card-btn" style="color:#ef4444" data-action="delete" data-id="${j.id}" title="Delete"><i class="fa fa-trash"></i></button>
+        </td>
+      </tr>`;
+    }).join('');
+
+    tbody.querySelectorAll('[data-action="edit"]').forEach(btn => {
+      btn.addEventListener('click', () => openJobModal(rows.find(j => String(j.id) === btn.dataset.id)));
+    });
+    tbody.querySelectorAll('[data-action="delete"]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Delete this job?')) return;
+        const r = await API.jobDelete(btn.dataset.id);
+        if (r.status === 200 || r.status === 204) { loadJobs(); }
+        else { if (pa) { pa.textContent = r.body?.message || 'Delete failed.'; pa.style.display = ''; pa.style.color = '#ef4444'; } }
+      });
+    });
+  }
+
+  // ═══════════════════════════ SALARY SHEETS ═══════════════════════════════
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
+  const _fmtRs  = n => `Rs. ${(+n || 0).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+
+  function _ssDatesInRange(from, to) {
+    const dates = [];
+    if (!from || !to) return dates;
+    const cur = new Date(from + 'T00:00:00');
+    const end = new Date(to   + 'T00:00:00');
+    while (cur <= end) { dates.push(cur.toISOString().slice(0, 10)); cur.setDate(cur.getDate() + 1); }
+    return dates;
+  }
+
+  function _ssDateLabel(d) {
+    const dt = new Date(d + 'T00:00:00');
+    return ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'][dt.getMonth()]
+      + ' ' + String(dt.getDate()).padStart(2, '0');
+  }
+
+  function _ssItemNum(sheet, idx) {
+    if (!sheet) return '';
+    const base = sheet.date_from
+      ? (() => { const d = new Date(sheet.date_from + 'T00:00:00'); return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}`; })()
+      : (() => { const d = new Date(); return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}`; })();
+    return `ITM/${base}/${String(idx+1).padStart(3,'0')}`;
+  }
+
+  // Recalculate monetary amounts from row.total_days (does NOT re-count attendance)
+  function _ssCalcAmounts(row) {
+    row.attendance_amount = (row.total_days || 0) * (row.daily_rate || 0);
+    row.base_amount       = row.attendance_amount;
+    row.net_amount        = row.base_amount
+                          + (row.transport_allowance || 0)
+                          - (row.expenses            || 0)
+                          - (row.hold_amount         || 0);
+  }
+
+  // Re-count 'P' marks from attendance → update total_days → recalculate amounts
+  function _ssRecalcRow(row, dateRange) {
+    row.total_days = dateRange.filter(d => row.attendance[d] === 'P').length;
+    _ssCalcAmounts(row);
+  }
+
+  // ── State ──────────────────────────────────────────────────────────────────
+  let _ssQ             = '';
+  let _ssCurrentSheet  = null;
+  let _ssRows          = [];
+  let _ssDateRange     = [];
+  let _ssPromoterCache = [];
+
+  // ── List ───────────────────────────────────────────────────────────────────
+  async function loadSalarySheets() {
+    const lv = $('#ss-list-view'), ev = $('#ss-editor-view');
+    if (lv) lv.style.display = 'flex';
+    if (ev) ev.style.display = 'none';
+    const tbody = $('#ss-list-body');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:28px">Loading…</td></tr>';
+
+    const res = await API.salarySheets(_ssQ);
+    if (res.status !== 200) {
+      tbody.innerHTML = `<tr><td colspan="6" style="color:#ef4444;text-align:center;padding:24px">${escHtml(res.body?.message || 'Failed to load')}</td></tr>`;
+      return;
+    }
+    const sheets = res.body?.data || [];
+    if (sheets.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:32px">No salary sheets yet. Click <strong>New Salary Sheet</strong> to create one.</td></tr>';
+      return;
+    }
+
+    // Group by job (null job_id → "No Job Linked")
+    const groups = [];
+    const groupMap = {};
+    for (const s of sheets) {
+      const key = s.job_id ?? '__none__';
+      if (!groupMap[key]) {
+        groupMap[key] = { label: s.job_name || 'No Job Linked', ref: s.job_ref || null, sheets: [] };
+        groups.push(groupMap[key]);
+      }
+      groupMap[key].sheets.push(s);
+    }
+
+    const rows = [];
+    for (const g of groups) {
+      const jobLabel = escHtml(g.label) + (g.ref ? ` <span style="font-weight:400;opacity:.7">(${escHtml(g.ref)})</span>` : '');
+      rows.push(`<tr>
+        <td colspan="6" style="background:var(--sidebar-bg,#f1f5f9);padding:5px 12px;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--accent,#6366f1);border-top:2px solid var(--accent,#6366f1);border-bottom:1px solid var(--border-color)">
+          <i class="fa fa-briefcase" style="margin-right:6px;opacity:.7"></i>${jobLabel}
+          <span style="font-weight:400;color:var(--text-muted);margin-left:6px">${g.sheets.length} sheet${g.sheets.length !== 1 ? 's' : ''}</span>
+        </td>
+      </tr>`);
+
+      for (const s of g.sheets) {
+        const sc = s.status === 'finalized' ? '#10b981' : '#f59e0b';
+        const sl = s.status === 'finalized' ? 'Finalized' : 'Draft';
+        rows.push(`<tr>
+          <td style="font-size:11px;font-weight:700;font-family:monospace;color:var(--accent,#6366f1);padding-left:22px">${escHtml(s.sheet_ref)}</td>
+          <td style="font-size:12px;color:var(--text-muted)">${escHtml(s.location || '—')}</td>
+          <td style="font-size:12px;color:var(--text-muted)">${s.date_from && s.date_to ? escHtml(s.date_from) + ' → ' + escHtml(s.date_to) : '—'}</td>
+          <td style="font-size:12px;text-align:center">${s.rows_count}</td>
+          <td><span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px;background:${sc}20;color:${sc}">${sl}</span></td>
+          <td style="text-align:right;white-space:nowrap">
+            <button class="crm-card-btn" data-action="open" data-id="${s.id}" title="Open Sheet"><i class="fa fa-table-cells"></i></button>
+            <button class="crm-card-btn" style="color:#ef4444" data-action="delete" data-id="${s.id}" title="Delete"><i class="fa fa-trash"></i></button>
+          </td>
+        </tr>`);
+      }
+    }
+    tbody.innerHTML = rows.join('');
+
+    tbody.querySelectorAll('[data-action="open"]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const r = await API.salarySheetGet(btn.dataset.id);
+        if (r.status === 200) _ssOpenEditor(r.body.data);
+        else alert('Failed to load sheet.');
+      });
+    });
+    tbody.querySelectorAll('[data-action="delete"]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Delete this salary sheet and all its data?')) return;
+        const r = await API.salarySheetDelete(btn.dataset.id);
+        if (r.status === 200 || r.status === 204) loadSalarySheets();
+        else alert(r.body?.message || 'Delete failed.');
+      });
+    });
+  }
+
+  // ── Editor ─────────────────────────────────────────────────────────────────
+  const _ssLockedStatuses = new Set(['completed', 'paid', 'approved']);
+  function _ssIsLocked() { return _ssLockedStatuses.has(_ssCurrentSheet?.status); }
+
+  function _ssApplyLockState() {
+    const locked   = _ssIsLocked();
+    const hasDates = _ssDateRange.length > 0;
+    const show     = (id, visible) => { const el = $(id); if (el) el.style.display = visible ? '' : 'none'; };
+    show('#ss-add-row-btn',   !locked);
+    show('#ss-save-btn',      !locked);
+    show('#ss-setup-btn',     !locked);
+    show('#ss-add-dates-btn', !locked && !hasDates);
+
+    const notice = $('#ss-lock-notice');
+    if (notice) {
+      notice.style.display = locked ? 'flex' : 'none';
+      const lbl = $('#ss-lock-status-label');
+      if (lbl && _ssCurrentSheet) lbl.textContent = _ssCurrentSheet.status;
+    }
+  }
+
+  function _ssOpenEditor(sheetData) {
+    _ssCurrentSheet = sheetData;
+    // custom_dates (individual specific dates) takes priority over date_from/date_to range
+    const cd = sheetData.custom_dates;
+    _ssDateRange = (Array.isArray(cd) && cd.length > 0)
+      ? [...cd].sort()
+      : _ssDatesInRange(sheetData.date_from, sheetData.date_to);
+
+    _ssRows = (sheetData.rows || []).map(r => {
+      const att = {};
+      _ssDateRange.forEach(d => { att[d] = 'A'; });
+      (r.attendances || []).forEach(a => { att[a.attendance_date] = a.attendance_status; });
+      const row = {
+        id:                      r.id,
+        location:                r.location                || 'N/A',
+        position:                r.position                || '',
+        promoter_id:             r.promoter_id             || null,
+        promoter_name:           r.promoter_name           || '',
+        bank_name:               r.bank_name               || '',
+        bank_branch:             r.bank_branch             || '',
+        bank_account:            r.bank_account            || '',
+        daily_rate:              parseFloat(r.daily_rate)  || 0,
+        attendance:              att,
+        transport_allowance:     parseFloat(r.transport_allowance)  || 0,
+        expenses:                parseFloat(r.expenses)             || 0,
+        hold_amount:             parseFloat(r.hold_amount)          || 0,
+        coordinator_id:          r.coordinator_id          || null,
+        coordinator_name:        r.coordinator_name        || 'N/A',
+        coordination_fee:        parseFloat(r.coordination_fee)     || 0,
+        coordinator_bank_details:r.coordinator_bank_details|| 'N/A',
+        total_days:        0,
+        attendance_amount: 0,
+        base_amount:       0,
+        net_amount:        0,
+      };
+      // If the server sent a saved total_days (> 0), honour it (manual edit was saved).
+      // Otherwise count P marks from attendance (new row or pre-migration row).
+      if (r.total_days > 0) {
+        row.total_days = r.total_days;
+        _ssCalcAmounts(row);
+      } else {
+        _ssRecalcRow(row, _ssDateRange);
+      }
+      return row;
+    });
+
+    const lv = $('#ss-list-view'), ev = $('#ss-editor-view');
+    if (lv) lv.style.display = 'none';
+    if (ev) ev.style.display = 'flex';
+    const titleEl = $('#ss-editor-title'), datesEl = $('#ss-editor-dates');
+    if (titleEl) titleEl.textContent = sheetData.sheet_ref || sheetData.title;
+    if (datesEl) datesEl.textContent = sheetData.date_from && sheetData.date_to
+      ? `${sheetData.date_from}  →  ${sheetData.date_to}` : '';
+    const alertEl = $('#ss-editor-alert');
+    if (alertEl) alertEl.style.display = 'none';
+    _ssUpdateStatusBadge(sheetData.status || 'draft');
+    _ssApplyLockState();
+
+    _ssRenderTable();
+  }
+
+  // ── Table renderer ─────────────────────────────────────────────────────────
+  function _ssRenderTable() {
+    const wrap = $('#ss-table-wrap');
+    if (!wrap) return;
+
+    const TH1 = 'background:#1e3a5f;color:#fff;padding:6px 10px;border:1px solid #2d4f7a;font-size:9px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap;text-align:center;position:sticky;top:0;z-index:5';
+    const TH2 = 'background:#2d4f7a;color:#fff;padding:5px 8px;border:1px solid #3a5e8a;font-size:9px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap;text-align:center;position:sticky;top:32px;z-index:4';
+    const n   = _ssDateRange.length;
+
+    // When no date range: single-row header (no DAILY ATTENDANCE group).
+    // When dates present: two-row header with DAILY ATTENDANCE spanning all date columns.
+    const fixedLeft  = `
+      <th style="${n > 0 ? TH1 : TH1.replace('position:sticky;top:0', 'position:sticky;top:0')}" ${n > 0 ? 'rowspan="2"' : ''}>ITEM #</th>
+      <th style="${TH1}" ${n > 0 ? 'rowspan="2"' : ''}>LOCATION</th>
+      <th style="${TH1}" ${n > 0 ? 'rowspan="2"' : ''}>POSITION</th>
+      <th style="${TH1}" ${n > 0 ? 'rowspan="2"' : ''}>PROMOTER</th>
+      <th style="${TH1}" ${n > 0 ? 'rowspan="2"' : ''}>BANK NAME</th>
+      <th style="${TH1}" ${n > 0 ? 'rowspan="2"' : ''}>BANK BRANCH</th>
+      <th style="${TH1}" ${n > 0 ? 'rowspan="2"' : ''}>ACCOUNT NO.</th>`;
+    const fixedRight = `
+      <th style="${TH1}" ${n > 0 ? 'rowspan="2"' : ''}>TOTAL<br>DAYS</th>
+      <th style="${TH1}" ${n > 0 ? 'rowspan="2"' : ''}>ATTENDANCE<br>AMOUNT</th>
+      <th style="${TH1}" ${n > 0 ? 'rowspan="2"' : ''}>BASE<br>AMOUNT</th>
+      ${n > 0 ? `<th style="${TH1}" colspan="1">DYNAMIC ALLOWANCES</th>` : `<th style="${TH1}">TRANSPORT<br>ALLOWANCE</th>`}
+      <th style="${TH1}" ${n > 0 ? 'rowspan="2"' : ''}>EXPENSES</th>
+      <th style="${TH1}" ${n > 0 ? 'rowspan="2"' : ''}>HOLD FOR<br>WEEKS</th>
+      <th style="${TH1}" ${n > 0 ? 'rowspan="2"' : ''}>NET<br>AMOUNT</th>
+      <th style="${TH1}" ${n > 0 ? 'rowspan="2"' : ''}>COORDINATOR</th>
+      <th style="${TH1}" ${n > 0 ? 'rowspan="2"' : ''}>COORDINATION<br>FEE</th>
+      <th style="${TH1}" ${n > 0 ? 'rowspan="2"' : ''}>COORDINATOR<br>BANK DETAILS</th>
+      <th style="${TH1}" ${n > 0 ? 'rowspan="2"' : ''}></th>`;
+
+    const h1 = n > 0
+      ? `<tr>${fixedLeft}<th style="${TH1}" colspan="${n}">DAILY ATTENDANCE</th>${fixedRight}</tr>`
+      : `<tr>${fixedLeft}${fixedRight}</tr>`;
+    const h2 = n > 0
+      ? '<tr>' + _ssDateRange.map(d => `<th style="${TH2}">${_ssDateLabel(d)}</th>`).join('') + `<th style="${TH2}">TRANSPORT<br>ALLOWANCE</th></tr>`
+      : '';
+
+    const totalCols = 7 + n + 11; // all columns: 7 fixed-left + n dates + 11 fixed-right
+    const rowsHtml = _ssRows.length > 0
+      ? _ssRows.map((row, idx) => _ssBuildRowHtml(row, idx)).join('')
+      : `<tr><td colspan="${totalCols}" style="text-align:center;color:var(--text-muted);padding:48px 20px;font-size:13px">No rows yet — click <strong>Add Row</strong> to begin.</td></tr>`;
+    const totalNet = _ssRows.reduce((s, r) => s + r.net_amount, 0);
+    const foot = `<tr style="background:#e0f2fe">
+      <td colspan="${7 + n + 7}" style="text-align:right;padding:5px 10px;border:1px solid #bfdbfe;font-size:10px;font-weight:700;color:#1e40af">TOTAL NET</td>
+      <td id="ss-total-net" style="padding:5px 10px;border:1px solid #bfdbfe;font-size:12px;font-weight:700;color:#059669;text-align:right">${_fmtRs(totalNet)}</td>
+      <td colspan="3" style="border:1px solid #bfdbfe"></td>
+    </tr>`;
+
+    wrap.innerHTML = `<table style="border-collapse:collapse;white-space:nowrap;font-size:11px;min-width:max-content">
+      <thead>${h1}${h2}</thead>
+      <tbody id="ss-tbody">${rowsHtml}</tbody>
+      <tfoot>${foot}</tfoot>
+    </table>`;
+
+    _ssAttachTableListeners();
+  }
+
+  function _ssBuildRowHtml(row, idx) {
+    const locked = _ssIsLocked();
+    const TD  = 'padding:5px 8px;border:1px solid #d1d5db;text-align:center';
+    const TDE = locked ? `${TD};min-width:90px` : `${TD};cursor:pointer;min-width:90px`;
+    const ec  = (cls) => locked ? '' : cls;          // editable class — stripped when locked
+    const ed  = (attrs) => locked ? '' : attrs;      // editable data attrs — stripped when locked
+    const amtStyle = (v, alwaysGreen) => {
+      const c = alwaysGreen ? '#059669' : (v < 0 ? '#dc2626' : v > 0 ? '#059669' : '#6b7280');
+      return `${TD};text-align:right;min-width:110px;color:${c}`;
+    };
+    let html = `<tr data-ss-row="${idx}" style="background:${idx%2===0?'#fff':'#f9fafb'}">`;
+    html += `<td style="${TD};font-weight:700;font-size:10px;min-width:115px">${escHtml(_ssItemNum(_ssCurrentSheet, idx))}</td>`;
+    html += `<td style="${TDE}" ${ec('class="ss-editable"')} ${ed(`data-ss-row="${idx}" data-ss-field="location" data-ss-type="text"`)}>${escHtml(row.location||'N/A')}</td>`;
+    html += `<td style="${TDE}" ${ec('class="ss-editable"')} ${ed(`data-ss-row="${idx}" data-ss-field="position" data-ss-type="text"`)}>${escHtml(row.position||'')}</td>`;
+    html += `<td style="${TDE};min-width:130px" ${ec('class="ss-editable"')} ${ed(`data-ss-row="${idx}" data-ss-field="promoter_name" data-ss-type="text"`)}>${escHtml(row.promoter_name||'')}</td>`;
+    html += `<td style="${TDE};min-width:120px" ${ec('class="ss-editable"')} ${ed(`data-ss-row="${idx}" data-ss-field="bank_name" data-ss-type="text"`)}>${escHtml(row.bank_name||'')}</td>`;
+    html += `<td style="${TDE};min-width:120px" ${ec('class="ss-editable"')} ${ed(`data-ss-row="${idx}" data-ss-field="bank_branch" data-ss-type="text"`)}>${escHtml(row.bank_branch||'')}</td>`;
+    html += `<td style="${TDE};min-width:110px" ${ec('class="ss-editable"')} ${ed(`data-ss-row="${idx}" data-ss-field="bank_account" data-ss-type="text"`)}>${escHtml(row.bank_account||'')}</td>`;
+
+    _ssDateRange.forEach(d => {
+      const st  = row.attendance[d] || 'A';
+      const bg  = st === 'P' ? '#dcfce7' : '#fee2e2';
+      const clr = st === 'P' ? '#16a34a' : '#dc2626';
+      const cur = locked ? '' : 'cursor:pointer;';
+      html += `<td ${locked ? '' : `data-ss-att="${d}"`} style="padding:4px 8px;border:1px solid #d1d5db;text-align:center;background:${bg};color:${clr};font-weight:700;${cur}min-width:48px;user-select:none">${st}</td>`;
+    });
+
+    html += `<td style="${TDE};font-weight:700;min-width:55px;text-align:center" ${ec('class="ss-editable"')} ${ed(`data-ss-row="${idx}" data-ss-field="total_days" data-ss-type="number"`)}>${row.total_days}</td>`;
+    html += `<td data-ss-field="attendance_amount"  style="${amtStyle(row.attendance_amount, true)}">${_fmtRs(row.attendance_amount)}</td>`;
+    html += `<td data-ss-field="base_amount"        style="${amtStyle(row.base_amount, true)};font-weight:700">${_fmtRs(row.base_amount)}</td>`;
+    html += `<td style="${TDE};text-align:right" ${ec('class="ss-editable"')} ${ed(`data-ss-row="${idx}" data-ss-field="transport_allowance" data-ss-type="number"`)}>${_fmtRs(row.transport_allowance)}</td>`;
+    html += `<td style="${TDE};text-align:right" ${ec('class="ss-editable"')} ${ed(`data-ss-row="${idx}" data-ss-field="expenses" data-ss-type="number"`)}>${_fmtRs(row.expenses)}</td>`;
+    html += `<td style="${TDE};text-align:right" ${ec('class="ss-editable"')} ${ed(`data-ss-row="${idx}" data-ss-field="hold_amount" data-ss-type="number"`)}>${_fmtRs(row.hold_amount)}</td>`;
+    html += `<td data-ss-field="net_amount"         style="${TD};text-align:right;font-weight:700;font-size:12px;min-width:110px;color:${row.net_amount<0?'#dc2626':'inherit'}">${_fmtRs(row.net_amount)}</td>`;
+    html += `<td style="${TDE};min-width:110px" ${ec('class="ss-editable"')} ${ed(`data-ss-row="${idx}" data-ss-field="coordinator_name" data-ss-type="text"`)}>${escHtml(row.coordinator_name||'N/A')}</td>`;
+    html += `<td style="${TDE};text-align:right" ${ec('class="ss-editable"')} ${ed(`data-ss-row="${idx}" data-ss-field="coordination_fee" data-ss-type="number"`)}>${_fmtRs(row.coordination_fee)}</td>`;
+    html += `<td style="${TD};min-width:140px;font-size:10px;color:var(--text-muted)">${escHtml(row.coordinator_bank_details||'N/A')}</td>`;
+    html += locked
+      ? `<td style="${TD};padding:3px 6px"></td>`
+      : `<td style="${TD};padding:3px 6px">
+          <button class="crm-card-btn ss-del-row" style="color:#ef4444" data-ss-row="${idx}" title="Remove row"><i class="fa fa-trash"></i></button>
+        </td>`;
+    html += '</tr>';
+    return html;
+  }
+
+  function _ssAttachTableListeners() {
+    const wrap = $('#ss-table-wrap');
+    if (!wrap) return;
+    if (_ssIsLocked()) return; // sheet is read-only — no interactive listeners
+
+    // Attendance toggle
+    wrap.querySelectorAll('[data-ss-att]').forEach(cell => {
+      const tr     = cell.closest('[data-ss-row]');
+      const rowIdx = tr ? parseInt(tr.dataset.ssRow) : -1;
+      if (rowIdx < 0) return;
+      cell.addEventListener('click', () => {
+        const row = _ssRows[rowIdx]; if (!row) return;
+        const d   = cell.dataset.ssAtt;
+        row.attendance[d] = row.attendance[d] === 'P' ? 'A' : 'P';
+        _ssRecalcRow(row, _ssDateRange);
+        _ssUpdateRowCells(rowIdx);
+      });
+    });
+
+    // Inline-editable cells
+    // These fields trigger a monetary recalculation on commit (using current total_days)
+    const numFields = ['total_days','daily_rate','transport_allowance','expenses','hold_amount','coordination_fee'];
+    wrap.querySelectorAll('.ss-editable').forEach(cell => {
+      const rowIdx = parseInt(cell.dataset.ssRow ?? '-1');
+      const field  = cell.dataset.ssField;
+      const isNum  = cell.dataset.ssType === 'number';
+      if (rowIdx < 0 || !field) return;
+
+      // ── Promoter name: autocomplete with bank-details auto-fill ─────────────
+      if (field === 'promoter_name') {
+        cell.addEventListener('click', async function () {
+          if (this.querySelector('input')) return;
+
+          // Lazy-load promoter list once
+          if (_ssPromoterCache.length === 0) {
+            const res = await API.promoters('');
+            _ssPromoterCache = res.body?.data || [];
+          }
+
+          const row = _ssRows[rowIdx];
+          const inp = document.createElement('input');
+          inp.type  = 'text';
+          inp.value = row.promoter_name || '';
+          inp.style.cssText = 'width:100%;box-sizing:border-box;border:none;outline:2px solid var(--accent);border-radius:2px;background:var(--bg-base,#fff);color:inherit;font-size:11px;padding:2px 4px';
+          this.textContent = '';
+          this.appendChild(inp);
+          inp.focus(); inp.select();
+
+          // Show suggestions immediately then on each keystroke
+          _ssShowPromoterDrop(this, inp, rowIdx);
+          inp.addEventListener('input', () => _ssShowPromoterDrop(this, inp, rowIdx));
+
+          const commit = () => {
+            document.querySelector('#ss-promo-dd')?.remove();
+            const nv = inp.value.trim();
+            row.promoter_name = nv;
+            this.textContent  = escHtml(nv || '');
+          };
+          inp.addEventListener('blur',    commit);
+          inp.addEventListener('keydown', e => {
+            if (e.key === 'Enter')  { commit(); inp.blur(); }
+            if (e.key === 'Escape') {
+              document.querySelector('#ss-promo-dd')?.remove();
+              this.textContent = escHtml(row.promoter_name || '');
+            }
+          });
+        });
+        return; // skip generic handler below
+      }
+
+      // ── Position: dropdown from sheet position rules + daily rate auto-fill ──
+      if (field === 'position') {
+        cell.addEventListener('click', function () {
+          if (this.querySelector('input')) return;
+
+          const row = _ssRows[rowIdx];
+          const inp = document.createElement('input');
+          inp.type  = 'text';
+          inp.value = row.position || '';
+          inp.style.cssText = 'width:100%;box-sizing:border-box;border:none;outline:2px solid var(--accent);border-radius:2px;background:var(--bg-base,#fff);color:inherit;font-size:11px;padding:2px 4px';
+          this.textContent = '';
+          this.appendChild(inp);
+          inp.focus(); inp.select();
+
+          // Show position rules immediately + filter on each keystroke
+          _ssShowPositionDrop(this, inp, rowIdx);
+          inp.addEventListener('input', () => _ssShowPositionDrop(this, inp, rowIdx));
+
+          const commit = () => {
+            document.querySelector('#ss-pos-dd')?.remove();
+            const nv = inp.value.trim();
+            row.position     = nv;
+            this.textContent = escHtml(nv || '');
+          };
+          inp.addEventListener('blur',    commit);
+          inp.addEventListener('keydown', e => {
+            if (e.key === 'Enter')  { commit(); inp.blur(); }
+            if (e.key === 'Escape') {
+              document.querySelector('#ss-pos-dd')?.remove();
+              this.textContent = escHtml(row.position || '');
+            }
+          });
+        });
+        return; // skip generic handler below
+      }
+
+      // ── Generic editable cells ───────────────────────────────────────────────
+      cell.addEventListener('click', function () {
+        if (this.querySelector('input')) return;
+        const row    = _ssRows[rowIdx];
+        const curVal = row[field] ?? (isNum ? 0 : '');
+        const inp    = document.createElement('input');
+        inp.type     = isNum ? 'number' : 'text';
+        inp.value    = isNum ? (curVal || 0) : (curVal || '');
+        inp.style.cssText = `width:100%;box-sizing:border-box;border:none;outline:2px solid var(--accent);border-radius:2px;background:var(--bg-base,#fff);color:inherit;font-size:11px;padding:2px 4px;text-align:${isNum?'right':'left'}`;
+        if (isNum) { inp.step = '0.01'; inp.min = '0'; }
+        this.textContent = '';
+        this.appendChild(inp);
+        inp.focus(); inp.select();
+
+        const commit = () => {
+          const nv = isNum ? (parseFloat(inp.value) || 0) : inp.value.trim();
+          row[field] = nv;
+          if (numFields.includes(field)) { _ssCalcAmounts(row); _ssUpdateRowCells(rowIdx); }
+          else { cell.textContent = escHtml(nv || (field.includes('coordinator') ? 'N/A' : '')); }
+        };
+        inp.addEventListener('blur', commit);
+        inp.addEventListener('keydown', e => {
+          if (e.key === 'Enter')  { commit(); inp.blur(); }
+          if (e.key === 'Escape') { cell.textContent = isNum ? (field === 'total_days' ? (row[field] || 0) : _fmtRs(row[field])) : escHtml(row[field] || ''); }
+        });
+      });
+    });
+
+    // Delete row
+    wrap.querySelectorAll('.ss-del-row').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const rowIdx = parseInt(btn.dataset.ssRow ?? '-1');
+        if (rowIdx < 0 || !confirm('Remove this row?')) return;
+        _ssRows.splice(rowIdx, 1);
+        _ssRenderTable();
+      });
+    });
+  }
+
+  function _ssUpdateRowCells(rowIdx) {
+    const row = _ssRows[rowIdx];
+    const tr  = document.querySelector(`[data-ss-row="${rowIdx}"]`);
+    if (!tr || !row) return;
+
+    _ssDateRange.forEach(d => {
+      const cell = tr.querySelector(`[data-ss-att="${d}"]`); if (!cell) return;
+      const st   = row.attendance[d] || 'A';
+      cell.textContent    = st;
+      cell.style.background = st === 'P' ? '#dcfce7' : '#fee2e2';
+      cell.style.color      = st === 'P' ? '#16a34a' : '#dc2626';
+    });
+
+    const f = field => tr.querySelector(`[data-ss-field="${field}"]`);
+    const tdEl = f('total_days');
+    if (tdEl && !tdEl.querySelector('input')) tdEl.textContent = row.total_days;
+    if (f('attendance_amount'))f('attendance_amount').textContent = _fmtRs(row.attendance_amount);
+    if (f('base_amount'))      f('base_amount').textContent       = _fmtRs(row.base_amount);
+
+    const numericCells = ['daily_rate','transport_allowance','expenses','hold_amount','coordination_fee'];
+    numericCells.forEach(field => {
+      const el = f(field);
+      if (el && !el.querySelector('input')) el.textContent = _fmtRs(row[field]);
+    });
+
+    if (f('net_amount')) {
+      f('net_amount').textContent = _fmtRs(row.net_amount);
+      f('net_amount').style.color = row.net_amount < 0 ? '#dc2626' : 'inherit';
+    }
+
+    const totEl = $('#ss-total-net');
+    if (totEl) totEl.textContent = _fmtRs(_ssRows.reduce((s, r) => s + r.net_amount, 0));
+  }
+
+  // ── Promoter autocomplete dropdown ─────────────────────────────────────────
+  function _ssShowPromoterDrop(cell, inp, rowIdx) {
+    document.querySelector('#ss-promo-dd')?.remove();
+
+    const q       = (inp.value || '').toLowerCase();
+    const matches = _ssPromoterCache
+      .filter(p => !q || p.name.toLowerCase().includes(q) || (p.position||'').toLowerCase().includes(q))
+      .slice(0, 8);
+    if (matches.length === 0) return;
+
+    const rect = cell.getBoundingClientRect();
+    const dd   = document.createElement('div');
+    dd.id = 'ss-promo-dd';
+    dd.style.cssText = [
+      'position:fixed',
+      `top:${rect.bottom + 2}px`,
+      `left:${rect.left}px`,
+      `min-width:${Math.max(rect.width, 240)}px`,
+      'z-index:9999',
+      'background:var(--bg-card,#fff)',
+      'border:1px solid var(--border-color,#d1d5db)',
+      'border-radius:6px',
+      'box-shadow:0 4px 20px rgba(0,0,0,.18)',
+      'max-height:220px',
+      'overflow-y:auto',
+    ].join(';');
+
+    dd.innerHTML = matches.map((p, i) => `
+      <div class="ss-promo-item" data-pi="${i}"
+           style="padding:7px 12px;cursor:pointer;border-bottom:1px solid var(--border-color,#f0f0f0)">
+        <div style="font-size:12px;font-weight:600;color:var(--text-base)">${escHtml(p.name)}</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:1px">
+          ${[p.position, p.bank_name].filter(Boolean).map(escHtml).join(' · ')}
+        </div>
+      </div>`).join('');
+
+    document.body.appendChild(dd);
+
+    dd.querySelectorAll('.ss-promo-item').forEach(item => {
+      item.addEventListener('mouseenter', () => {
+        dd.querySelectorAll('.ss-promo-item').forEach(el => el.style.background = '');
+        item.style.background = 'var(--accent-bg,#eff6ff)';
+      });
+      item.addEventListener('mouseleave', () => { item.style.background = ''; });
+
+      // mousedown so it fires before the input's blur
+      item.addEventListener('mousedown', e => {
+        e.preventDefault();
+        const promo = matches[parseInt(item.dataset.pi, 10)];
+        if (!promo) return;
+
+        const row         = _ssRows[rowIdx];
+        row.promoter_id   = promo.id;
+        row.promoter_name = promo.name;
+        row.bank_name     = promo.bank_name    || '';
+        row.bank_branch   = promo.bank_branch  || '';
+        row.bank_account  = promo.bank_account || '';
+
+        // Auto-fill position from the promoter's position field
+        if (promo.position) {
+          row.position = promo.position;
+
+          // If a matching position rule exists, also apply its daily rate & transport
+          const rule = (_ssCurrentSheet?.position_rules || [])
+            .find(r => r.position_name.toLowerCase() === promo.position.toLowerCase());
+          if (rule) {
+            row.daily_rate          = parseFloat(rule.daily_rate)          || 0;
+            row.transport_allowance = parseFloat(rule.transport_allowance)  || 0;
+          }
+        }
+
+        inp.value = promo.name;
+
+        // Patch text cells and recalculate
+        const tr = document.querySelector(`[data-ss-row="${rowIdx}"]`);
+        if (tr) {
+          const patch = (f, v) => {
+            const el = tr.querySelector(`[data-ss-field="${f}"]`);
+            if (el && !el.querySelector('input')) el.textContent = escHtml(v || '');
+          };
+          patch('bank_name',    row.bank_name);
+          patch('bank_branch',  row.bank_branch);
+          patch('bank_account', row.bank_account);
+          if (promo.position) patch('position', row.position);
+        }
+
+        // Recalculate if daily_rate or transport changed
+        _ssRecalcRow(row, _ssDateRange);
+        _ssUpdateRowCells(rowIdx);
+
+        dd.remove();
+      });
+    });
+  }
+
+  // ── Position dropdown (from sheet's position rules) ─────────────────────────
+  function _ssShowPositionDrop(cell, inp, rowIdx) {
+    document.querySelector('#ss-pos-dd')?.remove();
+
+    const rules   = _ssCurrentSheet?.position_rules || [];
+    const q       = (inp.value || '').toLowerCase();
+    const matches = rules.filter(r => !q || r.position_name.toLowerCase().includes(q));
+    if (matches.length === 0) return;
+
+    const rect = cell.getBoundingClientRect();
+    const dd   = document.createElement('div');
+    dd.id = 'ss-pos-dd';
+    dd.style.cssText = [
+      'position:fixed',
+      `top:${rect.bottom + 2}px`,
+      `left:${rect.left}px`,
+      `min-width:${Math.max(rect.width, 220)}px`,
+      'z-index:9999',
+      'background:var(--bg-card,#fff)',
+      'border:1px solid var(--border-color,#d1d5db)',
+      'border-radius:6px',
+      'box-shadow:0 4px 20px rgba(0,0,0,.18)',
+      'max-height:200px',
+      'overflow-y:auto',
+    ].join(';');
+
+    dd.innerHTML = matches.map((r, i) => `
+      <div class="ss-pos-item" data-pi="${i}"
+           style="padding:7px 12px;cursor:pointer;border-bottom:1px solid var(--border-color,#f0f0f0)">
+        <div style="font-size:12px;font-weight:600;color:var(--text-base)">${escHtml(r.position_name)}</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:1px">
+          Daily: ${_fmtRs(r.daily_rate)} &nbsp;·&nbsp; Transport: ${_fmtRs(r.transport_allowance)}
+        </div>
+      </div>`).join('');
+
+    document.body.appendChild(dd);
+
+    dd.querySelectorAll('.ss-pos-item').forEach(item => {
+      item.addEventListener('mouseenter', () => {
+        dd.querySelectorAll('.ss-pos-item').forEach(el => el.style.background = '');
+        item.style.background = 'var(--accent-bg,#eff6ff)';
+      });
+      item.addEventListener('mouseleave', () => { item.style.background = ''; });
+
+      item.addEventListener('mousedown', e => {
+        e.preventDefault();
+        const rule = matches[parseInt(item.dataset.pi, 10)];
+        if (!rule) return;
+
+        const row              = _ssRows[rowIdx];
+        row.position           = rule.position_name;
+        row.daily_rate         = parseFloat(rule.daily_rate)          || 0;
+        row.transport_allowance= parseFloat(rule.transport_allowance)  || 0;
+
+        inp.value = rule.position_name;
+
+        // Recalculate totals and refresh all numeric cells
+        _ssRecalcRow(row, _ssDateRange);
+        _ssUpdateRowCells(rowIdx);
+
+        dd.remove();
+      });
+    });
+  }
+
+  // ── Create sheet modal ──────────────────────────────────────────────────────
+  async function _ssOpenCreateModal() {
+    const m = $('#ss-create-modal'); if (!m) return;
+    const al = $('#ss-create-alert'); if (al) { al.textContent = ''; al.style.display = 'none'; }
+
+    // Reset fields
+    if ($('#ss-create-ref-preview')) $('#ss-create-ref-preview').value = 'Generating…';
+    if ($('#ss-create-job-id'))      $('#ss-create-job-id').innerHTML  = '<option value="">— No Job —</option>';
+    if ($('#ss-create-location'))    $('#ss-create-location').value    = '';
+    if ($('#ss-create-date-from'))   $('#ss-create-date-from').value   = '';
+    if ($('#ss-create-date-to'))     $('#ss-create-date-to').value     = '';
+
+    m.style.display = '';
+    setTimeout(() => $('#ss-create-location')?.focus(), 80);
+
+    // Fetch next ref preview and jobs list in parallel
+    const [refRes, jobsRes] = await Promise.all([
+      API.salarySheetNextRef(),
+      API.jobs('', ''),
+    ]);
+
+    if (refRes.status === 200 && $('#ss-create-ref-preview')) {
+      $('#ss-create-ref-preview').value = refRes.body?.ref || '—';
+    }
+    if (jobsRes.status === 200) {
+      const jobs = jobsRes.body?.data || [];
+      const sel  = $('#ss-create-job-id');
+      if (sel) {
+        sel.innerHTML = '<option value="">— No Job —</option>'
+          + jobs.map(j => `<option value="${j.id}">${escHtml(j.job_ref ? j.job_ref + ' — ' : '')}${escHtml(j.name)}</option>`).join('');
+      }
+    }
+  }
+  function _ssCloseCreateModal() { const m = $('#ss-create-modal'); if (m) m.style.display = 'none'; }
+
+  async function _ssConfirmCreate() {
+    const jobId    = $('#ss-create-job-id')?.value    || null;
+    const location = ($('#ss-create-location')?.value  || '').trim() || null;
+    const dateFrom = $('#ss-create-date-from')?.value  || '';
+    const dateTo   = $('#ss-create-date-to')?.value    || '';
+    const al = $('#ss-create-alert');
+    const err = msg => { if (al) { al.textContent = msg; al.style.display = ''; al.style.color = '#ef4444'; } };
+
+    if (dateFrom && dateTo && dateFrom > dateTo) { err('Start date must be before end date.'); return; }
+
+    const btn = $('#ss-create-save'); if (btn) btn.disabled = true;
+    const res = await API.salarySheetCreate({
+      job_id:    jobId   || null,
+      location:  location,
+      date_from: dateFrom,
+      date_to:   dateTo,
+    });
+    if (btn) btn.disabled = false;
+
+    if (res.status === 201) {
+      _ssCloseCreateModal();
+      const r2 = await API.salarySheetGet(res.body.data.id);
+      if (r2.status === 200) _ssOpenEditor(r2.body.data);
+    } else {
+      err(res.body?.message || 'Create failed.');
+    }
+  }
+
+  // ── Add row modal ───────────────────────────────────────────────────────────
+  function _ssAddEmptyRow() {
+    const att = {};
+    _ssDateRange.forEach(d => { att[d] = 'A'; });
+
+    _ssRows.push({
+      id: null,
+      location: _ssCurrentSheet?.location || '', position: '',
+      promoter_id: null, promoter_name: '',
+      bank_name: '', bank_branch: '', bank_account: '',
+      daily_rate: 0, attendance: att,
+      transport_allowance: 0, expenses: 0, hold_amount: 0,
+      coordinator_id: null, coordinator_name: '',
+      coordination_fee: 0, coordinator_bank_details: '',
+      total_days: 0, attendance_amount: 0, base_amount: 0, net_amount: 0,
+    });
+
+    _ssRenderTable();
+
+    // Scroll the new row into view and auto-activate the first editable cell (Location)
+    const newIdx  = _ssRows.length - 1;
+    const wrap    = $('#ss-table-wrap');
+    if (wrap) wrap.scrollTop = wrap.scrollHeight;
+
+    setTimeout(() => {
+      const newRow  = document.querySelector(`[data-ss-row="${newIdx}"]`);
+      const firstCell = newRow?.querySelector('.ss-editable[data-ss-field="location"]');
+      if (firstCell) firstCell.click();
+    }, 40);
+  }
+
+  // ── Save ────────────────────────────────────────────────────────────────────
+  async function _ssSaveSheet() {
+    const btn = $('#ss-save-btn'); if (btn) btn.disabled = true;
+
+    const payload = _ssRows.map((row, idx) => ({
+      id:                      typeof row.id === 'number' ? row.id : null,
+      item_number:             _ssItemNum(_ssCurrentSheet, idx),
+      location:                row.location                || 'N/A',
+      position:                row.position                || '',
+      promoter_id:             row.promoter_id             || null,
+      promoter_name:           row.promoter_name           || '',
+      bank_name:               row.bank_name               || null,
+      bank_branch:             row.bank_branch             || null,
+      bank_account:            row.bank_account            || null,
+      daily_rate:              row.daily_rate              || 0,
+      transport_allowance:     row.transport_allowance     || 0,
+      expenses:                row.expenses                || 0,
+      hold_amount:             row.hold_amount             || 0,
+      total_days:              row.total_days              || 0,
+      attendance_amount:       row.attendance_amount       || 0,
+      base_amount:             row.base_amount             || 0,
+      net_amount:              row.net_amount              || 0,
+      coordinator_id:          row.coordinator_id          || null,
+      coordinator_name:        row.coordinator_name        || 'N/A',
+      coordination_fee:        row.coordination_fee        || 0,
+      coordinator_bank_details:row.coordinator_bank_details|| 'N/A',
+      attendances:             Object.entries(row.attendance).map(([date, status]) => ({ date, status })),
+    }));
+
+    const res = await API.salarySheetSaveRows(_ssCurrentSheet.id, { rows: payload });
+    if (btn) btn.disabled = false;
+
+    const al = $('#ss-editor-alert');
+    if (res.status === 200) {
+      _ssOpenEditor(res.body.data);
+      if (al) { al.textContent = 'Saved successfully.'; al.style.display = ''; al.style.color = '#059669'; al.style.background = '#dcfce7'; al.style.padding = '3px 10px'; al.style.borderRadius = '4px'; setTimeout(() => { al.style.display = 'none'; }, 3000); }
+    } else {
+      if (al) { al.textContent = res.body?.message || 'Save failed.'; al.style.display = ''; al.style.color = '#dc2626'; al.style.background = '#fee2e2'; al.style.padding = '3px 10px'; al.style.borderRadius = '4px'; }
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  //  Salary Sheet Setup Modal
+  // ─────────────────────────────────────────────────────────────────────────
+
+  let _ssSetupActiveTab  = 'general';
+  let _ssAllowances      = [];   // working copy while modal is open
+  let _ssPosRules        = [];   // position-wise salary rules, working copy
+  let _ssPosCache        = [];   // promoter positions for the select dropdown
+
+  // ── Tab switching ──────────────────────────────────────────────
+  function _ssSetupSwitchTab(tab) {
+    _ssSetupActiveTab = tab;
+    document.querySelectorAll('.ss-setup-tab').forEach(btn => {
+      const active = btn.dataset.tab === tab;
+      btn.style.color       = active ? 'var(--accent)' : 'var(--text-muted)';
+      btn.style.borderBottomColor = active ? 'var(--accent)' : 'transparent';
+    });
+    document.querySelectorAll('.ss-setup-tab-panel').forEach(panel => {
+      panel.style.display = panel.id === `ss-setup-tab-${tab}` ? 'flex' : 'none';
+    });
+  }
+
+  // ── Allowance rows ─────────────────────────────────────────────
+  function _ssRenderAllowances() {
+    const tbody = $('#ss-allowance-body');
+    if (!tbody) return;
+    if (_ssAllowances.length === 0) {
+      tbody.innerHTML = '<tr id="ss-allowance-empty"><td colspan="4" style="text-align:center;color:var(--text-muted);padding:24px">No allowances yet. Click <strong>Add Row</strong> to add one.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = _ssAllowances.map((a, i) => `
+      <tr data-idx="${i}">
+        <td style="padding:4px 6px">
+          <input type="text" class="po-field-input sa-type" value="${escAttr(a.allowance_type)}"
+            placeholder="e.g. Transport" maxlength="150"
+            style="width:100%;font-size:12px;padding:3px 6px">
+        </td>
+        <td style="padding:4px 6px">
+          <input type="number" class="po-field-input sa-amount" value="${escAttr(a.amount ?? 0)}"
+            min="0" step="0.01"
+            style="width:100%;font-size:12px;padding:3px 6px;text-align:right">
+        </td>
+        <td style="padding:4px 6px">
+          <input type="text" class="po-field-input sa-desc" value="${escAttr(a.description ?? '')}"
+            placeholder="Optional description" maxlength="200"
+            style="width:100%;font-size:12px;padding:3px 6px">
+        </td>
+        <td style="padding:4px 6px;text-align:center">
+          <button class="crm-card-btn sa-del" data-idx="${i}" style="color:#ef4444" title="Remove">
+            <i class="fa fa-trash"></i>
+          </button>
+        </td>
+      </tr>`).join('');
+
+    // Sync input changes back to _ssAllowances in real-time
+    tbody.querySelectorAll('tr[data-idx]').forEach(tr => {
+      const idx = parseInt(tr.dataset.idx, 10);
+      tr.querySelector('.sa-type')?.addEventListener('input',   e => { _ssAllowances[idx].allowance_type = e.target.value; });
+      tr.querySelector('.sa-amount')?.addEventListener('input', e => { _ssAllowances[idx].amount         = parseFloat(e.target.value) || 0; });
+      tr.querySelector('.sa-desc')?.addEventListener('input',   e => { _ssAllowances[idx].description    = e.target.value; });
+      tr.querySelector('.sa-del')?.addEventListener('click',    () => {
+        _ssAllowances.splice(idx, 1);
+        _ssRenderAllowances();
+      });
+    });
+  }
+
+  // ── Position Rules rows ────────────────────────────────────────
+  function _ssRenderPosRules() {
+    const tbody = $('#ss-posrule-body');
+    if (!tbody) return;
+
+    // Build position options HTML once
+    const posOpts = _ssPosCache.map(p =>
+      `<option value="${escAttr(p.name)}">${escHtml(p.name)}</option>`
+    ).join('');
+
+    if (_ssPosRules.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--text-muted);padding:24px">No rules yet. Click <strong>Add Rule</strong> to define one.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = _ssPosRules.map((r, i) => `
+      <tr data-ridx="${i}">
+        <td style="padding:4px 6px">
+          <select class="po-field-input spr-pos" style="width:100%;font-size:12px;padding:3px 6px">
+            <option value="">— Select position —</option>
+            ${posOpts}
+          </select>
+        </td>
+        <td style="padding:4px 6px">
+          <input type="number" class="po-field-input spr-rate" value="${escAttr(r.daily_rate ?? 0)}"
+            min="0" step="0.01"
+            style="width:100%;font-size:12px;padding:3px 6px;text-align:right">
+        </td>
+        <td style="padding:4px 6px">
+          <input type="number" class="po-field-input spr-transport" value="${escAttr(r.transport_allowance ?? 0)}"
+            min="0" step="0.01"
+            style="width:100%;font-size:12px;padding:3px 6px;text-align:right">
+        </td>
+        <td style="padding:4px 6px;text-align:center">
+          <button class="crm-card-btn spr-del" data-ridx="${i}" style="color:#ef4444" title="Remove">
+            <i class="fa fa-trash"></i>
+          </button>
+        </td>
+      </tr>`).join('');
+
+    // Set select values and wire listeners
+    tbody.querySelectorAll('tr[data-ridx]').forEach(tr => {
+      const idx = parseInt(tr.dataset.ridx, 10);
+      const sel = tr.querySelector('.spr-pos');
+      if (sel) {
+        sel.value = _ssPosRules[idx].position_name ?? '';
+        sel.addEventListener('change', e => { _ssPosRules[idx].position_name = e.target.value; });
+      }
+      tr.querySelector('.spr-rate')?.addEventListener('input',      e => { _ssPosRules[idx].daily_rate          = parseFloat(e.target.value) || 0; });
+      tr.querySelector('.spr-transport')?.addEventListener('input',  e => { _ssPosRules[idx].transport_allowance = parseFloat(e.target.value) || 0; });
+      tr.querySelector('.spr-del')?.addEventListener('click', () => {
+        _ssPosRules.splice(idx, 1);
+        _ssRenderPosRules();
+      });
+    });
+  }
+
+  // ── Open ────────────────────────────────────────────────────────
+  async function _ssOpenSetupModal() {
+    if (!_ssCurrentSheet) return;
+    const modal = $('#ss-setup-modal');
+    if (!modal) return;
+
+    const alertEl = $('#ss-setup-alert');
+    if (alertEl) { alertEl.textContent = ''; alertEl.style.display = 'none'; }
+
+    // Load jobs + positions in parallel
+    const [jRes, pRes] = await Promise.all([API.jobs('', ''), API.promoterPositions('')]);
+
+    const jobSel = $('#ss-setup-job-id');
+    if (jobSel) {
+      const opts = (jRes.body?.data || []).map(j =>
+        `<option value="${j.id}">${escHtml(j.name)}${j.job_ref ? ' (' + escHtml(j.job_ref) + ')' : ''}</option>`
+      ).join('');
+      jobSel.innerHTML = '<option value="">— No job linked —</option>' + opts;
+      jobSel.value = _ssCurrentSheet.job_id ?? '';
+    }
+
+    const locEl      = $('#ss-setup-location');
+    const notesEl    = $('#ss-setup-notes');
+    const feeEl      = $('#ss-setup-coord-fee');
+    const dateFromEl = $('#ss-setup-date-from');
+    const dateToEl   = $('#ss-setup-date-to');
+    if (locEl)      locEl.value      = _ssCurrentSheet.location ?? '';
+    if (dateFromEl) dateFromEl.value = _ssCurrentSheet.date_from ?? '';
+    if (dateToEl)   dateToEl.value   = _ssCurrentSheet.date_to   ?? '';
+    if (notesEl)    notesEl.value    = _ssCurrentSheet.notes    ?? '';
+    if (feeEl)      feeEl.value      = _ssCurrentSheet.default_coordinator_fee ?? 0;
+
+    // Seed allowances
+    _ssAllowances = (_ssCurrentSheet.allowances || []).map(a => ({ ...a }));
+    _ssRenderAllowances();
+
+    // Seed position rules
+    _ssPosCache = pRes.body?.data || [];
+    _ssPosRules = (_ssCurrentSheet.position_rules || []).map(r => ({ ...r }));
+    _ssRenderPosRules();
+
+    // Always open on General tab
+    _ssSetupSwitchTab('general');
+    modal.style.display = '';
+    setTimeout(() => jobSel?.focus(), 80);
+  }
+
+  // ── Close ───────────────────────────────────────────────────────
+  function _ssCloseSetupModal() {
+    const m = $('#ss-setup-modal'); if (m) m.style.display = 'none';
+    _ssAllowances = [];
+    _ssPosRules   = [];
+  }
+
+  // ── Save ────────────────────────────────────────────────────────
+  async function _ssSaveSetup() {
+    if (!_ssCurrentSheet) return;
+    const alertEl = $('#ss-setup-alert');
+    const showErr = msg => {
+      if (alertEl) {
+        alertEl.textContent = msg;
+        alertEl.style.display = '';
+        alertEl.style.color      = '#dc2626';
+        alertEl.style.background = '#fee2e2';
+        alertEl.style.padding    = '3px 10px';
+        alertEl.style.borderRadius = '4px';
+        alertEl.style.border     = '1px solid #fca5a5';
+      }
+    };
+
+    // Validate allowances: type required
+    for (const a of _ssAllowances) {
+      if (!(a.allowance_type || '').trim()) {
+        _ssSetupSwitchTab('allowances');
+        showErr('Each allowance must have a type name.');
+        return;
+      }
+    }
+
+    // Validate position rules: position name required
+    for (const r of _ssPosRules) {
+      if (!(r.position_name || '').trim()) {
+        _ssSetupSwitchTab('pos-rules');
+        showErr('Each position rule must have a position selected.');
+        return;
+      }
+    }
+
+    const dateFrom = $('#ss-setup-date-from')?.value || null;
+    const dateTo   = $('#ss-setup-date-to')?.value   || null;
+    if (dateFrom && dateTo && dateFrom > dateTo) {
+      showErr('Start date must be before end date.');
+      return;
+    }
+
+    const body = {
+      job_id:                  $('#ss-setup-job-id').value || null,
+      location:                ($('#ss-setup-location').value  || '').trim() || null,
+      date_from:               dateFrom,
+      date_to:                 dateTo,
+      notes:                   ($('#ss-setup-notes').value     || '').trim() || null,
+      default_coordinator_fee: parseFloat($('#ss-setup-coord-fee').value) || 0,
+      allowances: _ssAllowances.map(a => ({
+        id:             a.id   || null,
+        allowance_type: (a.allowance_type || '').trim(),
+        amount:         parseFloat(a.amount) || 0,
+        description:    (a.description || '').trim() || null,
+      })),
+      position_rules: _ssPosRules.map(r => ({
+        id:                  r.id   || null,
+        position_name:       (r.position_name || '').trim(),
+        daily_rate:          parseFloat(r.daily_rate) || 0,
+        transport_allowance: parseFloat(r.transport_allowance) || 0,
+      })),
+    };
+
+    const saveBtn = $('#ss-setup-modal-save');
+    if (saveBtn) saveBtn.disabled = true;
+    const res = await API.salarySheetUpdate(_ssCurrentSheet.id, body);
+    if (saveBtn) saveBtn.disabled = false;
+
+    if (res.status === 200) {
+      // Response is the full show() payload — includes fresh allowance IDs
+      _ssCurrentSheet = res.body?.data || _ssCurrentSheet;
+
+      // Update editor header
+      const titleEl = $('#ss-editor-title');
+      if (titleEl) titleEl.textContent = _ssCurrentSheet.sheet_ref || _ssCurrentSheet.title;
+      const datesEl = $('#ss-editor-dates');
+      if (datesEl) datesEl.textContent = _ssCurrentSheet.date_from && _ssCurrentSheet.date_to
+        ? `${_ssCurrentSheet.date_from}  →  ${_ssCurrentSheet.date_to}` : '';
+
+      // Recompute date range; preserve existing attendance where dates overlap
+      const newRange = _ssDatesInRange(_ssCurrentSheet.date_from, _ssCurrentSheet.date_to);
+      _ssRows.forEach(row => {
+        const merged = {};
+        newRange.forEach(d => { merged[d] = row.attendance[d] || 'A'; });
+        row.attendance = merged;
+        _ssRecalcRow(row, newRange);
+      });
+      _ssDateRange = newRange;
+
+      _ssCloseSetupModal();
+      _ssRenderTable(); // re-render with updated date columns
+    } else {
+      showErr(res.body?.message || 'Failed to save setup.');
+    }
+  }
+
+  // ── Listeners ───────────────────────────────────────────────────
+  $('#ss-setup-btn')?.addEventListener('click',          _ssOpenSetupModal);
+  $('#ss-setup-modal-close')?.addEventListener('click',  _ssCloseSetupModal);
+  $('#ss-setup-modal-cancel')?.addEventListener('click', _ssCloseSetupModal);
+  $('#ss-setup-modal-save')?.addEventListener('click',   _ssSaveSetup);
+  $('#ss-setup-modal')?.addEventListener('click', e => { if (e.target === $('#ss-setup-modal')) _ssCloseSetupModal(); });
+
+  // Tab buttons
+  document.querySelectorAll('.ss-setup-tab').forEach(btn => {
+    btn.addEventListener('click', () => _ssSetupSwitchTab(btn.dataset.tab));
+  });
+
+  // Add allowance row
+  $('#ss-allowance-add-btn')?.addEventListener('click', () => {
+    _ssAllowances.push({ id: null, allowance_type: '', amount: 0, description: '' });
+    _ssRenderAllowances();
+    const rows = $('#ss-allowance-body')?.querySelectorAll('tr[data-idx]');
+    rows?.[rows.length - 1]?.querySelector('.sa-type')?.focus();
+  });
+
+  // Add position rule row
+  $('#ss-posrule-add-btn')?.addEventListener('click', () => {
+    _ssPosRules.push({ id: null, position_name: '', daily_rate: 0, transport_allowance: 0 });
+    _ssRenderPosRules();
+    // Focus the position select of the new last row
+    const rows = $('#ss-posrule-body')?.querySelectorAll('tr[data-ridx]');
+    rows?.[rows.length - 1]?.querySelector('.spr-pos')?.focus();
+  });
+
+  // ═══════════════════════════ AGENCIES ════════════════════════════════════
+
+  const AGC_STATUS_LABEL = { active: 'Active', inactive: 'Inactive' };
+  const AGC_STATUS_COLOR = { active: '#10b981', inactive: '#94a3b8' };
+
+  let _agcQ = '';
+
+  async function loadAgencies() {
+    const tbody = $('#agc-body');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:28px">Loading…</td></tr>';
+    const pa = $('#agc-alert'); if (pa) { pa.textContent = ''; pa.style.display = 'none'; }
+
+    const res = await API.agencies(_agcQ);
+    if (res.status !== 200) {
+      tbody.innerHTML = `<tr><td colspan="6" style="color:#ef4444;text-align:center;padding:24px">${escHtml(res.body?.message || 'Failed to load agencies')}</td></tr>`;
+      return;
+    }
+    const rows = res.body?.data || [];
+    if (rows.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:32px">No agencies yet. Click <strong>New Agency</strong> to add one.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map(a => {
+      const sc = AGC_STATUS_COLOR[a.status] || '#94a3b8';
+      const sl = AGC_STATUS_LABEL[a.status] || a.status;
+      return `<tr>
+        <td style="font-size:12px;font-weight:600">${escHtml(a.name)}</td>
+        <td style="font-size:12px;color:var(--text-muted)">${escHtml(a.contact_person || '—')}</td>
+        <td style="font-size:12px;color:var(--text-muted)">${escHtml(a.email || '—')}</td>
+        <td style="font-size:12px;color:var(--text-muted)">${escHtml(a.phone || '—')}</td>
+        <td><span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px;background:${sc}20;color:${sc}">${escHtml(sl)}</span></td>
+        <td style="text-align:right;white-space:nowrap">
+          <button class="crm-card-btn" data-action="edit"   data-id="${a.id}" title="Edit"><i class="fa fa-pencil"></i></button>
+          <button class="crm-card-btn" style="color:#ef4444" data-action="delete" data-id="${a.id}" title="Delete"><i class="fa fa-trash"></i></button>
+        </td>
+      </tr>`;
+    }).join('');
+
+    tbody.querySelectorAll('[data-action="edit"]').forEach(btn => {
+      btn.addEventListener('click', () => openAgencyModal(rows.find(a => String(a.id) === btn.dataset.id)));
+    });
+    tbody.querySelectorAll('[data-action="delete"]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Delete this agency?')) return;
+        const r = await API.agencyDelete(btn.dataset.id);
+        if (r.status === 200 || r.status === 204) { loadAgencies(); }
+        else { if (pa) { pa.textContent = r.body?.message || 'Delete failed.'; pa.style.display = ''; pa.style.color = '#ef4444'; } }
+      });
+    });
+  }
+
+  function openAgencyModal(agency) {
+    const modal = $('#agc-modal');
+    if (!modal) return;
+    const alertEl = $('#agc-modal-alert');
+    if (alertEl) { alertEl.textContent = ''; alertEl.style.display = 'none'; }
+
+    $('#agc-id').value      = agency?.id      ?? '';
+    $('#agc-name').value    = agency?.name    ?? '';
+    $('#agc-contact').value = agency?.contact_person ?? '';
+    $('#agc-phone').value   = agency?.phone   ?? '';
+    $('#agc-email').value   = agency?.email   ?? '';
+    $('#agc-address').value = agency?.address ?? '';
+    $('#agc-status').value  = agency?.status  ?? 'active';
+    $('#agc-modal-title').textContent = agency ? 'Edit Agency' : 'New Agency';
+
+    modal.style.display = '';
+    setTimeout(() => $('#agc-name')?.focus(), 80);
+  }
+
+  function _closeAgencyModal() {
+    const m = $('#agc-modal'); if (m) m.style.display = 'none';
+  }
+
+  async function _saveAgency() {
+    const id   = $('#agc-id').value;
+    const body = {
+      name:           ($('#agc-name').value    || '').trim(),
+      contact_person: ($('#agc-contact').value || '').trim() || null,
+      phone:          ($('#agc-phone').value   || '').trim() || null,
+      email:          ($('#agc-email').value   || '').trim() || null,
+      address:        ($('#agc-address').value || '').trim() || null,
+      status:         $('#agc-status').value   || 'active',
+    };
+
+    const alertEl = $('#agc-modal-alert');
+    const showErr = msg => { if (alertEl) { alertEl.textContent = msg; alertEl.style.display = ''; alertEl.style.color = '#ef4444'; } };
+
+    if (!body.name) { showErr('Agency name is required.'); return; }
+
+    const saveBtn = $('#agc-modal-save');
+    if (saveBtn) saveBtn.disabled = true;
+    const res = id ? await API.agencyUpdate(id, body) : await API.agencyCreate(body);
+    if (saveBtn) saveBtn.disabled = false;
+
+    if (res.status === 200 || res.status === 201) {
+      _closeAgencyModal();
+      loadAgencies();
+    } else {
+      showErr(res.body?.message || (id ? 'Update failed.' : 'Create failed.'));
+    }
+  }
+
+  // ═══════════════════════════ COORDINATORS ════════════════════════════════
+
+  const CRD_STATUS_LABEL = { active: 'Active', inactive: 'Inactive' };
+  const CRD_STATUS_COLOR = { active: '#10b981', inactive: '#94a3b8' };
+
+  let _crdQ = '';
+
+  async function loadCoordinators() {
+    const tbody = $('#crd-body');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:28px">Loading…</td></tr>';
+    const pa = $('#crd-alert'); if (pa) { pa.textContent = ''; pa.style.display = 'none'; }
+
+    const res = await API.coordinators(_crdQ);
+    if (res.status !== 200) {
+      tbody.innerHTML = `<tr><td colspan="7" style="color:#ef4444;text-align:center;padding:24px">${escHtml(res.body?.message || 'Failed to load coordinators')}</td></tr>`;
+      return;
+    }
+    const rows = res.body?.data || [];
+    if (rows.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:32px">No coordinators yet. Click <strong>New Coordinator</strong> to add one.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map(c => {
+      const sc = CRD_STATUS_COLOR[c.status] || '#94a3b8';
+      const sl = CRD_STATUS_LABEL[c.status] || c.status;
+      return `
+      <tr>
+        <td style="font-size:12px;font-weight:600">${escHtml(c.name)}</td>
+        <td style="font-size:12px;color:var(--text-muted)">${escHtml(c.nic || '—')}</td>
+        <td style="font-size:12px;color:var(--text-muted)">${escHtml(c.phone || '—')}</td>
+        <td><span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px;background:${sc}20;color:${sc}">${escHtml(sl)}</span></td>
+        <td style="font-size:12px;color:var(--text-muted)">${escHtml(c.bank_name || '—')}</td>
+        <td style="font-size:12px;color:var(--text-muted)">${escHtml(c.bank_account || '—')}</td>
+        <td style="text-align:right;white-space:nowrap">
+          <button class="crm-card-btn" data-action="edit"   data-id="${c.id}" title="Edit"><i class="fa fa-pencil"></i></button>
+          <button class="crm-card-btn" style="color:#ef4444" data-action="delete" data-id="${c.id}" title="Delete"><i class="fa fa-trash"></i></button>
+        </td>
+      </tr>`;
+    }).join('');
+
+    tbody.querySelectorAll('[data-action="edit"]').forEach(btn => {
+      btn.addEventListener('click', () => openCoordinatorModal(rows.find(c => String(c.id) === btn.dataset.id)));
+    });
+    tbody.querySelectorAll('[data-action="delete"]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Delete this coordinator?')) return;
+        const r = await API.coordinatorDelete(btn.dataset.id);
+        if (r.status === 200 || r.status === 204) { loadCoordinators(); }
+        else { if (pa) { pa.textContent = r.body?.message || 'Delete failed.'; pa.style.display = ''; pa.style.color = '#ef4444'; } }
+      });
+    });
+  }
+
+  function openCoordinatorModal(coordinator) {
+    const modal = $('#crd-modal');
+    if (!modal) return;
+    const alertEl = $('#crd-modal-alert');
+    if (alertEl) { alertEl.textContent = ''; alertEl.style.display = 'none'; }
+
+    $('#crd-id').value          = coordinator?.id ?? '';
+    $('#crd-name').value        = coordinator?.name ?? '';
+    $('#crd-nic').value         = coordinator?.nic ?? '';
+    $('#crd-phone').value       = coordinator?.phone ?? '';
+    $('#crd-status').value      = coordinator?.status ?? '';
+    $('#crd-bank-name').value   = coordinator?.bank_name ?? '';
+    $('#crd-bank-branch').value = coordinator?.bank_branch ?? '';
+    $('#crd-bank-account').value= coordinator?.bank_account ?? '';
+    $('#crd-modal-title').textContent = coordinator ? 'Edit Coordinator' : 'New Coordinator';
+
+    modal.style.display = '';
+    setTimeout(() => $('#crd-name')?.focus(), 80);
+  }
+
+  function _closeCoordinatorModal() {
+    const m = $('#crd-modal'); if (m) m.style.display = 'none';
+  }
+
+  async function _saveCoordinator() {
+    const id   = $('#crd-id').value;
+    const body = {
+      name:        ($('#crd-name').value        || '').trim(),
+      nic:         ($('#crd-nic').value         || '').trim(),
+      phone:       ($('#crd-phone').value       || '').trim(),
+      status:      $('#crd-status').value       || '',
+      bank_name:   ($('#crd-bank-name').value   || '').trim(),
+      bank_branch: ($('#crd-bank-branch').value || '').trim(),
+      bank_account:($('#crd-bank-account').value|| '').trim(),
+    };
+
+    const alertEl = $('#crd-modal-alert');
+    const showErr = msg => { if (alertEl) { alertEl.textContent = msg; alertEl.style.display = ''; alertEl.style.color = '#ef4444'; } };
+
+    if (!body.name)         { showErr('Coordinator name is required.');     return; }
+    if (!body.nic)          { showErr('NIC number is required.');           return; }
+    if (!body.phone)        { showErr('Phone number is required.');         return; }
+    if (!body.status)       { showErr('Status is required.');               return; }
+    if (!body.bank_name)    { showErr('Bank name is required.');            return; }
+    if (!body.bank_branch)  { showErr('Bank branch name is required.');     return; }
+    if (!body.bank_account) { showErr('Account number is required.');       return; }
+
+    const saveBtn = $('#crd-modal-save');
+    if (saveBtn) saveBtn.disabled = true;
+    const res = id ? await API.coordinatorUpdate(id, body) : await API.coordinatorCreate(body);
+    if (saveBtn) saveBtn.disabled = false;
+
+    if (res.status === 200 || res.status === 201) {
+      _closeCoordinatorModal();
+      loadCoordinators();
+    } else {
+      showErr(res.body?.message || (id ? 'Update failed.' : 'Create failed.'));
+    }
+  }
+
+  // ═══════════════════════════ PROMOTERS ════════════════════════════════════
+
+  let _pmtQ = '';
+
+  async function loadPromoters() {
+    const tbody = $('#pmt-body');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:28px">Loading…</td></tr>';
+    const pa = $('#pmt-alert'); if (pa) { pa.textContent = ''; pa.style.display = 'none'; }
+
+    const res = await API.promoters(_pmtQ);
+    if (res.status !== 200) {
+      tbody.innerHTML = `<tr><td colspan="7" style="color:#ef4444;text-align:center;padding:24px">${escHtml(res.body?.message || 'Failed to load promoters')}</td></tr>`;
+      return;
+    }
+    const rows = res.body?.data || [];
+    if (rows.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:32px">No promoters yet. Click <strong>New Promoter</strong> to add one.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map(p => `
+      <tr>
+        <td style="font-size:12px;font-weight:600">${escHtml(p.name)}</td>
+        <td style="font-size:12px;color:var(--text-muted)">${escHtml(p.position || '—')}</td>
+        <td style="font-size:12px;color:var(--text-muted)">${escHtml(p.nic || '—')}</td>
+        <td style="font-size:12px;color:var(--text-muted)">${escHtml(p.phone || '—')}</td>
+        <td style="font-size:12px;color:var(--text-muted)">${escHtml(p.bank_name || '—')}</td>
+        <td style="font-size:12px;color:var(--text-muted)">${escHtml(p.bank_account || '—')}</td>
+        <td style="text-align:right;white-space:nowrap">
+          <button class="crm-card-btn" data-action="edit"   data-id="${p.id}" title="Edit"><i class="fa fa-pencil"></i></button>
+          <button class="crm-card-btn" style="color:#ef4444" data-action="delete" data-id="${p.id}" title="Delete"><i class="fa fa-trash"></i></button>
+        </td>
+      </tr>`).join('');
+
+    tbody.querySelectorAll('[data-action="edit"]').forEach(btn => {
+      btn.addEventListener('click', () => openPromoterModal(rows.find(p => String(p.id) === btn.dataset.id)));
+    });
+    tbody.querySelectorAll('[data-action="delete"]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Delete this promoter?')) return;
+        const r = await API.promoterDelete(btn.dataset.id);
+        if (r.status === 200 || r.status === 204) { loadPromoters(); }
+        else { if (pa) { pa.textContent = r.body?.message || 'Delete failed.'; pa.style.display = ''; pa.style.color = '#ef4444'; } }
+      });
+    });
+  }
+
+  async function openPromoterModal(promoter) {
+    const modal = $('#pmt-modal');
+    if (!modal) return;
+    const alertEl = $('#pmt-modal-alert');
+    if (alertEl) { alertEl.textContent = ''; alertEl.style.display = 'none'; }
+
+    $('#pmt-id').value          = promoter?.id ?? '';
+    $('#pmt-name').value        = promoter?.name ?? '';
+    $('#pmt-nic').value         = promoter?.nic ?? '';
+    $('#pmt-phone').value       = promoter?.phone ?? '';
+    $('#pmt-bank-name').value   = promoter?.bank_name ?? '';
+    $('#pmt-bank-branch').value = promoter?.bank_branch ?? '';
+    $('#pmt-bank-account').value= promoter?.bank_account ?? '';
+    $('#pmt-modal-title').textContent = promoter ? 'Edit Promoter' : 'New Promoter';
+
+    // Populate position dropdown
+    const posSel = $('#pmt-position');
+    if (posSel) {
+      const pRes = await API.promoterPositions('');
+      const posOpts = (pRes.body?.data || []).map(p => `<option value="${escHtml(p.name)}">${escHtml(p.name)}</option>`).join('');
+      posSel.innerHTML = '<option value="">— Select position (optional) —</option>' + posOpts;
+      posSel.value = promoter?.position ?? '';
+    }
+
+    modal.style.display = '';
+    setTimeout(() => $('#pmt-name')?.focus(), 80);
+  }
+
+  function _closePromoterModal() {
+    const m = $('#pmt-modal'); if (m) m.style.display = 'none';
+  }
+
+  async function _savePromoter() {
+    const id   = $('#pmt-id').value;
+    const body = {
+      name:        ($('#pmt-name').value        || '').trim(),
+      position:    ($('#pmt-position').value    || '').trim() || null,
+      nic:         ($('#pmt-nic').value         || '').trim() || null,
+      phone:       ($('#pmt-phone').value       || '').trim() || null,
+      bank_name:   ($('#pmt-bank-name').value   || '').trim(),
+      bank_branch: ($('#pmt-bank-branch').value || '').trim(),
+      bank_account:($('#pmt-bank-account').value|| '').trim(),
+    };
+
+    const alertEl = $('#pmt-modal-alert');
+    const showErr = msg => { if (alertEl) { alertEl.textContent = msg; alertEl.style.display = ''; alertEl.style.color = '#ef4444'; } };
+
+    if (!body.name)         { showErr('Promoter name is required.');        return; }
+    if (!body.bank_name)    { showErr('Bank name is required.');            return; }
+    if (!body.bank_branch)  { showErr('Bank branch name is required.');     return; }
+    if (!body.bank_account) { showErr('Bank account number is required.');  return; }
+
+    const saveBtn = $('#pmt-modal-save');
+    if (saveBtn) saveBtn.disabled = true;
+    const res = id ? await API.promoterUpdate(id, body) : await API.promoterCreate(body);
+    if (saveBtn) saveBtn.disabled = false;
+
+    if (res.status === 200 || res.status === 201) {
+      _closePromoterModal();
+      loadPromoters();
+    } else {
+      showErr(res.body?.message || (id ? 'Update failed.' : 'Create failed.'));
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  Promoter Positions modal
+  // ═══════════════════════════════════════════════════════════════
+  let _pposQ = '';
+  let _pposEditId = null; // id of the row currently being inline-edited
+
+  function openPposModal() {
+    const modal = $('#ppos-modal');
+    if (!modal) return;
+    const alertEl = $('#ppos-alert');
+    if (alertEl) { alertEl.textContent = ''; alertEl.style.display = 'none'; }
+    $('#ppos-search').value = '';
+    _pposQ = '';
+    _pposEditId = null;
+    modal.style.display = '';
+    loadPposRows();
+  }
+
+  function closePposModal() {
+    const m = $('#ppos-modal'); if (m) m.style.display = 'none';
+    _pposEditId = null;
+  }
+
+  async function loadPposRows() {
+    const tbody = $('#ppos-body');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--text-muted);padding:28px">Loading…</td></tr>';
+
+    const res = await API.promoterPositions(_pposQ);
+    if (res.status !== 200) {
+      tbody.innerHTML = `<tr><td colspan="3" style="color:#ef4444;text-align:center;padding:24px">${escHtml(res.body?.message || 'Failed to load positions')}</td></tr>`;
+      return;
+    }
+    const items = res.body?.data || [];
+    _renderPposRows(items);
+  }
+
+  function _renderPposRows(items) {
+    const tbody = $('#ppos-body');
+    if (!tbody) return;
+    if (items.length === 0 && _pposEditId !== 'new') {
+      tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--text-muted);padding:32px">No positions yet. Click <strong>Add Position</strong> to create one.</td></tr>';
+    } else {
+      tbody.innerHTML = items.map(p => {
+        if (_pposEditId === p.id) {
+          return `<tr data-ppos-id="${p.id}">
+            <td><input type="text" class="po-field-input ppos-name-input" value="${escAttr(p.name)}" maxlength="150" style="width:100%;font-size:12px;padding:3px 6px"></td>
+            <td><input type="text" class="po-field-input ppos-desc-input" value="${escAttr(p.description||'')}" maxlength="300" style="width:100%;font-size:12px;padding:3px 6px"></td>
+            <td style="text-align:right;white-space:nowrap">
+              <button class="crm-card-btn" style="color:#22c55e" data-action="save-edit" data-id="${p.id}" title="Save"><i class="fa fa-check"></i></button>
+              <button class="crm-card-btn" data-action="cancel-edit" title="Cancel"><i class="fa fa-xmark"></i></button>
+            </td>
+          </tr>`;
+        }
+        return `<tr data-ppos-id="${p.id}">
+          <td style="font-size:12px;font-weight:600">${escHtml(p.name)}</td>
+          <td style="font-size:12px;color:var(--text-muted)">${escHtml(p.description || '—')}</td>
+          <td style="text-align:right;white-space:nowrap">
+            <button class="crm-card-btn" data-action="edit" data-id="${p.id}" title="Edit"><i class="fa fa-pencil"></i></button>
+            <button class="crm-card-btn" style="color:#ef4444" data-action="delete" data-id="${p.id}" title="Delete"><i class="fa fa-trash"></i></button>
+          </td>
+        </tr>`;
+      }).join('');
+    }
+
+    // Append new-row if in add mode
+    if (_pposEditId === 'new') {
+      const tr = document.createElement('tr');
+      tr.dataset.pposId = 'new';
+      tr.innerHTML = `
+        <td><input type="text" class="po-field-input ppos-name-input" placeholder="Position name" maxlength="150" style="width:100%;font-size:12px;padding:3px 6px"></td>
+        <td><input type="text" class="po-field-input ppos-desc-input" placeholder="Description (optional)" maxlength="300" style="width:100%;font-size:12px;padding:3px 6px"></td>
+        <td style="text-align:right;white-space:nowrap">
+          <button class="crm-card-btn" style="color:#22c55e" data-action="save-new" title="Save"><i class="fa fa-check"></i></button>
+          <button class="crm-card-btn" data-action="cancel-new" title="Cancel"><i class="fa fa-xmark"></i></button>
+        </td>`;
+      tbody.appendChild(tr);
+      tr.querySelector('.ppos-name-input')?.focus();
+    }
+
+    // Wire buttons
+    tbody.querySelectorAll('[data-action="edit"]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        _pposEditId = parseInt(btn.dataset.id, 10);
+        loadPposRows();
+      });
+    });
+    tbody.querySelectorAll('[data-action="delete"]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Delete this position?')) return;
+        const alertEl = $('#ppos-alert');
+        const r = await API.promoterPositionDelete(btn.dataset.id);
+        if (r.status === 200 || r.status === 204) { loadPposRows(); }
+        else { if (alertEl) { alertEl.textContent = r.body?.message || 'Delete failed.'; alertEl.style.display = ''; alertEl.style.color = '#ef4444'; } }
+      });
+    });
+    tbody.querySelectorAll('[data-action="save-edit"]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const row   = btn.closest('tr');
+        const name  = (row.querySelector('.ppos-name-input')?.value || '').trim();
+        const desc  = (row.querySelector('.ppos-desc-input')?.value || '').trim() || null;
+        const alertEl = $('#ppos-alert');
+        if (!name) { if (alertEl) { alertEl.textContent = 'Position name is required.'; alertEl.style.display = ''; alertEl.style.color = '#ef4444'; } return; }
+        const r = await API.promoterPositionUpdate(btn.dataset.id, { name, description: desc });
+        if (r.status === 200) { _pposEditId = null; loadPposRows(); }
+        else { if (alertEl) { alertEl.textContent = r.body?.message || 'Update failed.'; alertEl.style.display = ''; alertEl.style.color = '#ef4444'; } }
+      });
+    });
+    tbody.querySelectorAll('[data-action="cancel-edit"]').forEach(btn => {
+      btn.addEventListener('click', () => { _pposEditId = null; loadPposRows(); });
+    });
+    tbody.querySelector('[data-action="save-new"]')?.addEventListener('click', async () => {
+      const row   = tbody.querySelector('[data-ppos-id="new"]');
+      const name  = (row?.querySelector('.ppos-name-input')?.value || '').trim();
+      const desc  = (row?.querySelector('.ppos-desc-input')?.value || '').trim() || null;
+      const alertEl = $('#ppos-alert');
+      if (!name) { if (alertEl) { alertEl.textContent = 'Position name is required.'; alertEl.style.display = ''; alertEl.style.color = '#ef4444'; } return; }
+      const r = await API.promoterPositionCreate({ name, description: desc });
+      if (r.status === 201) { _pposEditId = null; loadPposRows(); }
+      else { if (alertEl) { alertEl.textContent = r.body?.message || 'Create failed.'; alertEl.style.display = ''; alertEl.style.color = '#ef4444'; } }
+    });
+    tbody.querySelector('[data-action="cancel-new"]')?.addEventListener('click', () => {
+      _pposEditId = null; loadPposRows();
+    });
+  }
+
+  // ── Listeners for positions modal ─────────────────────────────
+  $('#ppos-modal-close')?.addEventListener('click', closePposModal);
+  $('#ppos-modal')?.addEventListener('click', e => { if (e.target === $('#ppos-modal')) closePposModal(); });
+  $('#ppos-add-btn')?.addEventListener('click', () => {
+    _pposEditId = 'new';
+    loadPposRows();
+  });
+
+  let _pposSearchTimer = null;
+  $('#ppos-search')?.addEventListener('input', e => {
+    _pposQ = e.target.value.trim();
+    clearTimeout(_pposSearchTimer);
+    _pposSearchTimer = setTimeout(loadPposRows, 350);
+  });
+
+  // Ribbon + promoters-view button
+  $('#rb-ppos-manage')?.addEventListener('click', openPposModal);
+  $('#pmt-positions-btn')?.addEventListener('click', openPposModal);
+
+  // ═══════════════════════════════════════════════════════════════
+
+  async function _populateJobDropdowns() {
+    // Client Brand
+    const cbSel = $('#job-client-brand-id');
+    if (cbSel) {
+      const r = await API.brands('');
+      const opts = (r.body?.data || []).map(b => `<option value="${b.id}">${escHtml(b.name)} (${escHtml(b.short_code)})</option>`).join('');
+      cbSel.innerHTML = '<option value="">— Select a Brand —</option>' + opts;
+    }
+    // Officers
+    const oSel = $('#job-officer-id');
+    if (oSel) {
+      const r = await API.officers('');
+      const opts = (r.body?.data || []).map(o => `<option value="${o.id}">${escHtml(o.name)}</option>`).join('');
+      oSel.innerHTML = '<option value="">— Select officer —</option>' + opts;
+    }
+    // Reporters
+    const rSel = $('#job-reporter-id');
+    if (rSel) {
+      const r = await API.reporters('');
+      const opts = (r.body?.data || []).map(r2 => `<option value="${r2.id}">${escHtml(r2.name)}</option>`).join('');
+      rSel.innerHTML = '<option value="">— Select reporter —</option>' + opts;
+    }
+  }
+
+  async function openJobModal(job) {
+    const modal = $('#job-modal');
+    if (!modal) return;
+    const alertEl = $('#job-modal-alert');
+    if (alertEl) { alertEl.textContent = ''; alertEl.style.display = 'none'; }
+
+    $('#job-id').value          = job?.id ?? '';
+    $('#job-name').value        = job?.name ?? '';
+    $('#job-description').value = job?.description ?? '';
+    $('#job-status').value      = job?.status ?? 'pending';
+    $('#job-start-date').value  = job?.start_date ?? '';
+    $('#job-modal-title').textContent = job ? 'Edit Job' : 'New Job';
+
+    modal.style.display = '';
+    await _populateJobDropdowns();
+
+    // Set dropdown values after populating
+    if (job?.client_brand_id) { const s = $('#job-client-brand-id'); if (s) s.value = job.client_brand_id; }
+    if (job?.officer_id)      { const s = $('#job-officer-id');       if (s) s.value = job.officer_id; }
+    if (job?.reporter_id)     { const s = $('#job-reporter-id');      if (s) s.value = job.reporter_id; }
+
+    setTimeout(() => $('#job-name')?.focus(), 80);
+  }
+
+  function _closeJobModal() {
+    const m = $('#job-modal'); if (m) m.style.display = 'none';
+  }
+
+  async function _saveJob() {
+    const id   = $('#job-id').value;
+    const body = {
+      name:             ($('#job-name').value        || '').trim(),
+      client_brand_id:  $('#job-client-brand-id').value || null,
+      officer_id:       $('#job-officer-id').value  || null,
+      reporter_id:      $('#job-reporter-id').value || null,
+      description:      ($('#job-description').value || '').trim() || null,
+      status:           $('#job-status').value || 'pending',
+      start_date:       $('#job-start-date').value  || null,
+    };
+
+    const alertEl = $('#job-modal-alert');
+    const showErr = msg => { if (alertEl) { alertEl.textContent = msg; alertEl.style.display = ''; alertEl.style.color = '#ef4444'; } };
+
+    if (!body.name)             { showErr('Job name is required.');  return; }
+    if (!body.client_brand_id)  { showErr('Client (Brand) is required.'); return; }
+
+    const saveBtn = $('#job-modal-save');
+    if (saveBtn) saveBtn.disabled = true;
+    const res = id ? await API.jobUpdate(id, body) : await API.jobCreate(body);
+    if (saveBtn) saveBtn.disabled = false;
+
+    if (res.status === 200 || res.status === 201) {
+      _closeJobModal();
+      loadJobs();
+    } else {
+      showErr(res.body?.message || (id ? 'Update failed.' : 'Create failed.'));
+    }
+  }
+
+  // ═══════════════════════════ LISTENERS ════════════════════════════════════
+
+  // Sub-nav
+  $$('[data-evtview]').forEach(btn =>
+    btn.addEventListener('click', () => switchEvtView(btn.dataset.evtview)));
+
+  // Ribbon — Brands
+  $('#rb-brd-all')?.addEventListener('click', () => { activateTab('event-mgmt'); switchEvtView('brands'); });
+  $('#rb-brd-new')?.addEventListener('click', () => { activateTab('event-mgmt'); switchEvtView('brands'); openBrandModal(null); });
+
+  // Ribbon — Reporters
+  $('#rb-rpt-all')?.addEventListener('click', () => { activateTab('event-mgmt'); switchEvtView('reporters'); });
+  $('#rb-rpt-new')?.addEventListener('click', () => { activateTab('event-mgmt'); switchEvtView('reporters'); openReporterModal(null); });
+
+  // Ribbon — Officers
+  $('#rb-ofc-all')?.addEventListener('click', () => { activateTab('event-mgmt'); switchEvtView('officers'); });
+  $('#rb-ofc-new')?.addEventListener('click', () => { activateTab('event-mgmt'); switchEvtView('officers'); openOfficerModal(null); });
+
+  // Ribbon — Agencies
+  $('#rb-agc-all')?.addEventListener('click', () => { activateTab('event-mgmt'); switchEvtView('agencies'); });
+  $('#rb-agc-new')?.addEventListener('click', () => { activateTab('event-mgmt'); switchEvtView('agencies'); openAgencyModal(null); });
+
+  // Ribbon — Salary Sheets
+  $('#rb-ss-all')?.addEventListener('click', () => { activateTab('event-mgmt'); switchEvtView('salary'); });
+  $('#rb-ss-new')?.addEventListener('click', () => { activateTab('event-mgmt'); switchEvtView('salary'); _ssOpenCreateModal(); });
+
+  // Ribbon — Coordinators
+  $('#rb-crd-all')?.addEventListener('click', () => { activateTab('event-mgmt'); switchEvtView('coordinators'); });
+  $('#rb-crd-new')?.addEventListener('click', () => { activateTab('event-mgmt'); switchEvtView('coordinators'); openCoordinatorModal(null); });
+
+  // Ribbon — Promoters
+  $('#rb-pmt-all')?.addEventListener('click', () => { activateTab('event-mgmt'); switchEvtView('promoters'); });
+  $('#rb-pmt-new')?.addEventListener('click', () => { activateTab('event-mgmt'); switchEvtView('promoters'); openPromoterModal(null); });
+
+  // Ribbon — Jobs
+  $('#rb-job-all')?.addEventListener('click', () => { activateTab('event-mgmt'); switchEvtView('jobs'); });
+  $('#rb-job-new')?.addEventListener('click', () => { activateTab('event-mgmt'); switchEvtView('jobs'); openJobModal(null); });
+
+  // Ribbon — Refresh
+  $('#rb-brd-refresh')?.addEventListener('click', () => {
+    if      (_evtCurrentView === 'reporters')    loadReporters();
+    else if (_evtCurrentView === 'officers')     loadOfficers();
+    else if (_evtCurrentView === 'coordinators') loadCoordinators();
+    else if (_evtCurrentView === 'promoters')    loadPromoters();
+    else if (_evtCurrentView === 'agencies')     loadAgencies();
+    else if (_evtCurrentView === 'jobs')         loadJobs();
+    else if (_evtCurrentView === 'salary')       loadSalarySheets();
+    else loadBrands();
+  });
+
+  // Panel toolbars
+  $('#brd-new-btn')?.addEventListener('click', () => openBrandModal(null));
+  $('#rpt-new-btn')?.addEventListener('click', () => openReporterModal(null));
+  $('#ofc-new-btn')?.addEventListener('click', () => openOfficerModal(null));
+  $('#agc-new-btn')?.addEventListener('click', () => openAgencyModal(null));
+  $('#agc-modal-close')?.addEventListener('click',  _closeAgencyModal);
+  $('#agc-modal-cancel')?.addEventListener('click', _closeAgencyModal);
+  $('#agc-modal-save')?.addEventListener('click',   _saveAgency);
+  $('#agc-modal')?.addEventListener('click', e => { if (e.target === $('#agc-modal')) _closeAgencyModal(); });
+  $('#ss-new-btn')?.addEventListener('click',  _ssOpenCreateModal);
+  // ── Status modal ────────────────────────────────────────────────────────
+  const _ssStatuses = [
+    { value: 'draft',     label: 'Draft',     color: '#6b7280', icon: 'fa-pencil'         },
+    { value: 'completed', label: 'Completed', color: '#3b82f6', icon: 'fa-circle-check'   },
+    { value: 'approved',  label: 'Approved',  color: '#10b981', icon: 'fa-thumbs-up'      },
+    { value: 'rejected',  label: 'Rejected',  color: '#ef4444', icon: 'fa-circle-xmark'   },
+    { value: 'paid',      label: 'Paid',      color: '#8b5cf6', icon: 'fa-money-bill-wave' },
+  ];
+
+  function _ssStatusMeta(value) {
+    return _ssStatuses.find(s => s.value === value) || _ssStatuses[0];
+  }
+
+  function _ssUpdateStatusBadge(status) {
+    const badge = $('#ss-status-badge');
+    if (!badge) return;
+    const m = _ssStatusMeta(status);
+    badge.textContent    = m.label;
+    badge.style.background = m.color + '20';
+    badge.style.color      = m.color;
+    badge.style.border     = `1px solid ${m.color}60`;
+    badge.style.display    = '';
+  }
+
+  let _ssSelectedStatus = '';
+
+  function _ssOpenStatusModal() {
+    if (!_ssCurrentSheet) return;
+    _ssSelectedStatus = _ssCurrentSheet.status || 'draft';
+
+    const opts = $('#ss-status-options');
+    if (opts) {
+      opts.innerHTML = _ssStatuses.map(s => {
+        const active = s.value === _ssSelectedStatus;
+        return `<label data-ss-status-opt="${s.value}" style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:8px;border:2px solid ${active ? s.color : 'var(--border-color)'};background:${active ? s.color + '12' : 'transparent'};cursor:pointer;transition:border .15s,background .15s">
+          <input type="radio" name="ss_status" value="${s.value}" ${active ? 'checked' : ''} style="accent-color:${s.color};width:16px;height:16px;flex-shrink:0">
+          <i class="fa ${s.icon}" style="color:${s.color};width:18px;text-align:center"></i>
+          <span style="font-weight:700;font-size:13px;color:${s.color}">${s.label}</span>
+        </label>`;
+      }).join('');
+
+      // Highlight selected on click
+      opts.querySelectorAll('[data-ss-status-opt]').forEach(lbl => {
+        lbl.addEventListener('click', () => {
+          _ssSelectedStatus = lbl.dataset.ssStatusOpt;
+          opts.querySelectorAll('[data-ss-status-opt]').forEach(l => {
+            const m = _ssStatusMeta(l.dataset.ssStatusOpt);
+            const sel = l.dataset.ssStatusOpt === _ssSelectedStatus;
+            l.style.border     = `2px solid ${sel ? m.color : 'var(--border-color)'}`;
+            l.style.background = sel ? m.color + '12' : 'transparent';
+          });
+        });
+      });
+    }
+
+    const al = $('#ss-status-alert');
+    if (al) { al.textContent = ''; al.style.display = 'none'; }
+    const m = $('#ss-status-modal'); if (m) m.style.display = '';
+  }
+
+  function _ssCloseStatusModal() {
+    const m = $('#ss-status-modal'); if (m) m.style.display = 'none';
+  }
+
+  async function _ssSaveStatus() {
+    if (!_ssCurrentSheet || !_ssSelectedStatus) return;
+    const al  = $('#ss-status-alert');
+    const btn = $('#ss-status-modal-save');
+    if (btn) btn.disabled = true;
+
+    const res = await API.salarySheetUpdate(_ssCurrentSheet.id, { status: _ssSelectedStatus });
+    if (btn) btn.disabled = false;
+
+    if (res.status === 200) {
+      _ssCurrentSheet.status = _ssSelectedStatus;
+      _ssUpdateStatusBadge(_ssSelectedStatus);
+      _ssApplyLockState();  // show/hide buttons + lock notice
+      _ssRenderTable();     // re-render rows without editable attrs when locked
+      _ssCloseStatusModal();
+    } else {
+      if (al) {
+        al.textContent    = res.body?.message || 'Failed to update status.';
+        al.style.display  = '';
+        al.style.color    = '#dc2626';
+        al.style.background = '#fee2e2';
+        al.style.padding  = '4px 10px';
+        al.style.border   = '1px solid #fca5a5';
+        al.style.borderRadius = '4px';
+      }
+    }
+  }
+
+  $('#ss-finish-btn')?.addEventListener('click',         _ssOpenStatusModal);
+  $('#ss-status-modal-close')?.addEventListener('click',  _ssCloseStatusModal);
+  $('#ss-status-modal-cancel')?.addEventListener('click', _ssCloseStatusModal);
+  $('#ss-status-modal-save')?.addEventListener('click',   _ssSaveStatus);
+  $('#ss-status-modal')?.addEventListener('click', e => { if (e.target === $('#ss-status-modal')) _ssCloseStatusModal(); });
+
+  // ── Add Dates modal (individual date picker) ─────────────────────────────────
+  let _ssAddDatesSelected = [];   // working list while modal is open
+
+  function _ssAddDatesRenderChips() {
+    const wrap = $('#ss-dates-chips'); if (!wrap) return;
+    if (!_ssAddDatesSelected.length) {
+      wrap.innerHTML = '<span style="font-size:11px;color:var(--text-muted);line-height:22px">No dates added yet</span>';
+      return;
+    }
+    wrap.innerHTML = _ssAddDatesSelected.map(d => `
+      <span class="ss-date-chip" data-d="${d}" style="
+        display:inline-flex;align-items:center;gap:5px;
+        padding:2px 8px;border-radius:12px;font-size:11px;font-weight:500;
+        background:#e0f2fe;color:#0369a1;border:1px solid #bae6fd;cursor:default">
+        ${d}
+        <i class="fa fa-xmark ss-chip-remove" data-d="${d}"
+           style="cursor:pointer;opacity:.7;font-size:10px"></i>
+      </span>`).join('');
+    // Remove listeners
+    wrap.querySelectorAll('.ss-chip-remove').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const date = btn.dataset.d;
+        _ssAddDatesSelected = _ssAddDatesSelected.filter(x => x !== date);
+        _ssAddDatesRenderChips();
+      });
+    });
+  }
+
+  function _ssOpenAddDatesModal() {
+    const m = $('#ss-add-dates-modal'); if (!m) return;
+    // Pre-load existing custom_dates (or empty)
+    const cd = _ssCurrentSheet?.custom_dates;
+    _ssAddDatesSelected = (Array.isArray(cd) && cd.length) ? [...cd].sort() : [..._ssDateRange];
+    const inp = $('#ss-add-date-single'); if (inp) inp.value = '';
+    const al  = $('#ss-add-dates-alert'); if (al) al.style.display = 'none';
+    _ssAddDatesRenderChips();
+    m.style.display = '';
+  }
+  function _ssCloseAddDatesModal() {
+    const m = $('#ss-add-dates-modal'); if (m) m.style.display = 'none';
+  }
+
+  // "Add" button inside modal — push date into working list
+  $('#ss-add-date-add-btn')?.addEventListener('click', () => {
+    const inp = $('#ss-add-date-single');
+    const al  = $('#ss-add-dates-alert');
+    const val = inp?.value?.trim();
+    if (!val) {
+      if (al) { al.textContent = 'Please pick a date first.'; al.style.display = ''; }
+      return;
+    }
+    if (al) al.style.display = 'none';
+    if (_ssAddDatesSelected.includes(val)) {
+      if (al) { al.textContent = `${val} is already added.`; al.style.display = ''; }
+      return;
+    }
+    _ssAddDatesSelected.push(val);
+    _ssAddDatesSelected.sort();
+    _ssAddDatesRenderChips();
+    if (inp) inp.value = '';
+  });
+
+  async function _ssSaveAddDates() {
+    const al = $('#ss-add-dates-alert');
+    const showErr = msg => { if (al) { al.textContent = msg; al.style.display = ''; } };
+    if (!_ssAddDatesSelected.length) return showErr('Add at least one date before applying.');
+
+    const saveBtn = $('#ss-add-dates-save');
+    if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
+    try {
+      const dates = [..._ssAddDatesSelected].sort();
+      const res   = await API.salarySheetUpdate(_ssCurrentSheet.id, { custom_dates: dates });
+      if (res.status !== 200) throw new Error(res.body?.message || 'Save failed');
+
+      // Update in-memory sheet from fresh server data
+      _ssCurrentSheet = res.body?.data || { ..._ssCurrentSheet, custom_dates: dates };
+
+      // Merge attendance: keep existing marks, default new dates to 'A'
+      const newRange = (Array.isArray(_ssCurrentSheet.custom_dates) && _ssCurrentSheet.custom_dates.length)
+        ? [..._ssCurrentSheet.custom_dates].sort()
+        : _ssDatesInRange(_ssCurrentSheet.date_from, _ssCurrentSheet.date_to);
+
+      _ssRows.forEach(row => {
+        const merged = {};
+        newRange.forEach(d => { merged[d] = row.attendance[d] || 'A'; });
+        row.attendance = merged;
+        _ssRecalcRow(row, newRange);
+      });
+      _ssDateRange = newRange;
+
+      _ssApplyLockState();   // hides "Add Dates" button now that dates exist
+      _ssCloseAddDatesModal();
+      _ssRenderTable();
+    } catch (e) {
+      showErr(e.message || 'An error occurred.');
+    } finally {
+      if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Apply Dates'; }
+    }
+  }
+
+  $('#ss-add-dates-btn')?.addEventListener('click',    _ssOpenAddDatesModal);
+  $('#ss-add-dates-close')?.addEventListener('click',  _ssCloseAddDatesModal);
+  $('#ss-add-dates-cancel')?.addEventListener('click', _ssCloseAddDatesModal);
+  $('#ss-add-dates-save')?.addEventListener('click',   _ssSaveAddDates);
+  $('#ss-add-dates-modal')?.addEventListener('click', e => { if (e.target === $('#ss-add-dates-modal')) _ssCloseAddDatesModal(); });
+
+  // ── Editor navigation ────────────────────────────────────────────────────
+  $('#ss-back-btn')?.addEventListener('click', () => {
+    document.querySelector('#ss-promo-dd')?.remove();
+    document.querySelector('#ss-pos-dd')?.remove();
+    loadSalarySheets();
+  });
+  $('#ss-add-row-btn')?.addEventListener('click', _ssAddEmptyRow);
+  $('#ss-save-btn')?.addEventListener('click',    _ssSaveSheet);
+  $('#ss-create-close')?.addEventListener('click',  _ssCloseCreateModal);
+  $('#ss-create-cancel')?.addEventListener('click', _ssCloseCreateModal);
+  $('#ss-create-save')?.addEventListener('click',   _ssConfirmCreate);
+  $('#ss-create-modal')?.addEventListener('click', e => { if (e.target === $('#ss-create-modal')) _ssCloseCreateModal(); });
+  // (ss-addrow modal removed — Add Row now inserts an empty row directly)
+  $('#crd-new-btn')?.addEventListener('click', () => openCoordinatorModal(null));
+  $('#pmt-new-btn')?.addEventListener('click', () => openPromoterModal(null));
+  $('#job-new-btn')?.addEventListener('click', () => openJobModal(null));
+
+  // Search
+  let _brdSearchTimer, _rptSearchTimer, _ofcSearchTimer, _crdSearchTimer, _pmtSearchTimer, _agcSearchTimer, _ssSearchTimer;
+  $('#brd-search')?.addEventListener('input', e => {
+    clearTimeout(_brdSearchTimer);
+    _brdQ = e.target.value;
+    _brdSearchTimer = setTimeout(loadBrands, 350);
+  });
+  $('#rpt-search')?.addEventListener('input', e => {
+    clearTimeout(_rptSearchTimer);
+    _rptQ = e.target.value;
+    _rptSearchTimer = setTimeout(loadReporters, 350);
+  });
+  $('#ofc-search')?.addEventListener('input', e => {
+    clearTimeout(_ofcSearchTimer);
+    _ofcQ = e.target.value;
+    _ofcSearchTimer = setTimeout(loadOfficers, 350);
+  });
+  $('#agc-search')?.addEventListener('input', e => {
+    clearTimeout(_agcSearchTimer);
+    _agcQ = e.target.value;
+    _agcSearchTimer = setTimeout(loadAgencies, 350);
+  });
+  $('#ss-search')?.addEventListener('input', e => {
+    clearTimeout(_ssSearchTimer);
+    _ssQ = e.target.value;
+    _ssSearchTimer = setTimeout(loadSalarySheets, 350);
+  });
+  $('#crd-search')?.addEventListener('input', e => {
+    clearTimeout(_crdSearchTimer);
+    _crdQ = e.target.value;
+    _crdSearchTimer = setTimeout(loadCoordinators, 350);
+  });
+  $('#pmt-search')?.addEventListener('input', e => {
+    clearTimeout(_pmtSearchTimer);
+    _pmtQ = e.target.value;
+    _pmtSearchTimer = setTimeout(loadPromoters, 350);
+  });
+  let _jobSearchTimer;
+  $('#job-search')?.addEventListener('input', e => {
+    clearTimeout(_jobSearchTimer);
+    _jobQ = e.target.value;
+    _jobSearchTimer = setTimeout(loadJobs, 350);
+  });
+  $('#job-status-filter')?.addEventListener('change', function () {
+    _jobStatusFilter = this.value;
+    loadJobs();
+  });
+
+  // Short-code auto-uppercase
+  $('#brd-short-code')?.addEventListener('input', function () {
+    const pos = this.selectionStart;
+    this.value = this.value.toUpperCase();
+    this.setSelectionRange(pos, pos);
+  });
+
+  // Brand modal
+  $('#brd-modal-close')?.addEventListener('click',  _closeBrandModal);
+  $('#brd-modal-cancel')?.addEventListener('click', _closeBrandModal);
+  $('#brd-modal-save')?.addEventListener('click',   _saveBrand);
+  $('#brd-modal')?.addEventListener('click', e => { if (e.target === $('#brd-modal')) _closeBrandModal(); });
+
+  // Reporter modal
+  $('#rpt-modal-close')?.addEventListener('click',  _closeReporterModal);
+  $('#rpt-modal-cancel')?.addEventListener('click', _closeReporterModal);
+  $('#rpt-modal-save')?.addEventListener('click',   _saveReporter);
+  $('#rpt-modal')?.addEventListener('click', e => { if (e.target === $('#rpt-modal')) _closeReporterModal(); });
+
+  // "Change password" checkbox toggle — reporter
+  $('#rpt-change-pw-chk')?.addEventListener('change', function () {
+    const show = this.checked;
+    const pwField  = $('#rpt-pw-field');
+    const cpwField = $('#rpt-cpw-field');
+    if (pwField)  pwField.style.display  = show ? '' : 'none';
+    if (cpwField) cpwField.style.display = show ? '' : 'none';
+    if (!show) { $('#rpt-password').value = ''; $('#rpt-confirm-password').value = ''; }
+  });
+
+  // Officer modal
+  $('#ofc-modal-close')?.addEventListener('click',  _closeOfficerModal);
+  $('#ofc-modal-cancel')?.addEventListener('click', _closeOfficerModal);
+  $('#ofc-modal-save')?.addEventListener('click',   _saveOfficer);
+  $('#ofc-modal')?.addEventListener('click', e => { if (e.target === $('#ofc-modal')) _closeOfficerModal(); });
+
+  // Coordinator modal
+  $('#crd-modal-close')?.addEventListener('click',  _closeCoordinatorModal);
+  $('#crd-modal-cancel')?.addEventListener('click', _closeCoordinatorModal);
+  $('#crd-modal-save')?.addEventListener('click',   _saveCoordinator);
+  $('#crd-modal')?.addEventListener('click', e => { if (e.target === $('#crd-modal')) _closeCoordinatorModal(); });
+
+  // Promoter modal
+  $('#pmt-modal-close')?.addEventListener('click',  _closePromoterModal);
+  $('#pmt-modal-cancel')?.addEventListener('click', _closePromoterModal);
+  $('#pmt-modal-save')?.addEventListener('click',   _savePromoter);
+  $('#pmt-modal')?.addEventListener('click', e => { if (e.target === $('#pmt-modal')) _closePromoterModal(); });
+
+  // Job modal
+  $('#job-modal-close')?.addEventListener('click',  _closeJobModal);
+  $('#job-modal-cancel')?.addEventListener('click', _closeJobModal);
+  $('#job-modal-save')?.addEventListener('click',   _saveJob);
+  $('#job-modal')?.addEventListener('click', e => { if (e.target === $('#job-modal')) _closeJobModal(); });
+
+  // "Change password" checkbox toggle — officer
+  $('#ofc-change-pw-chk')?.addEventListener('change', function () {
+    const show = this.checked;
+    const pwField  = $('#ofc-pw-field');
+    const cpwField = $('#ofc-cpw-field');
+    if (pwField)  pwField.style.display  = show ? '' : 'none';
+    if (cpwField) cpwField.style.display = show ? '' : 'none';
+    if (!show) { $('#ofc-password').value = ''; $('#ofc-confirm-password').value = ''; }
+  });
+
+}());
+
+// ── Ribbon user-context bridge ─────────────────────────────────────────────
+// Exposes the minimum state ribbon-customize.js needs without coupling the
+// two files together via module imports.
+window.getRibbonUserCtx = function () {
+  return {
+    /** Stable key for storing per-user prefs. Email for members, 'cashier_N' for cashiers. */
+    userKey:  state.cashierMode
+                ? ('cashier_' + (state.cashierInfo?.id ?? '0'))
+                : (state._userEmail || null),
+    userName: state._userName || state.cashierInfo?.name || null,
+    /** Effective role string: 'owner' | 'admin' | 'officer' | 'cashier' | null */
+    role:     state.cashierMode  ? 'cashier'
+              : state.memberRole ? state.memberRole
+              : state.memberIsOwner ? 'owner'
+              : null,
+    /** True if this user may edit role-level defaults */
+    isAdmin:  !state.cashierMode && (state.memberIsOwner || state.memberRole === 'admin'),
+  };
+};
 
 // ── Boot ───────────────────────────────────────────────────────────────────
 init();

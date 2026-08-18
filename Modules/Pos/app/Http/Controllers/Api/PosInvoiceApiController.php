@@ -94,6 +94,19 @@ class PosInvoiceApiController extends Controller
         ]);
     }
 
+    public function enableShare(Request $request, Invoice $invoice): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        abort_unless((int) $invoice->business_id === (int) $business->id, 404);
+
+        $invoice = $this->invoices->enableShare($invoice);
+
+        return response()->json([
+            'share_token' => $invoice->share_token,
+            'share_url'   => url('/invoice/share/' . $invoice->share_token),
+        ]);
+    }
+
     public function markSent(Request $request, Invoice $invoice): JsonResponse
     {
         $business = $this->businessOrAbort($request);
@@ -158,18 +171,20 @@ class PosInvoiceApiController extends Controller
     private function formatListItem(Invoice $i): array
     {
         return [
-            'id'             => (int) $i->id,
-            'invoice_number' => $i->invoice_number,
-            'status'         => $i->status,
-            'status_label'   => $i->statusLabel(),
-            'status_color'   => $i->statusColor(),
-            'customer_name'  => $i->customer?->name,
-            'reference'      => $i->reference,
-            'issue_date'     => $i->issue_date?->toDateString(),
-            'due_date'       => $i->due_date?->toDateString(),
-            'is_overdue'     => $i->isPaymentDue(),
-            'total'          => round((float) $i->total, 2),
-            'proposal_count' => (int) ($i->proposal_count ?? 0),
+            'id'                   => (int) $i->id,
+            'invoice_number'       => $i->invoice_number,
+            'status'               => $i->status,
+            'status_label'         => $i->statusLabel(),
+            'status_color'         => $i->statusColor(),
+            'customer_name'        => $i->customer?->name,
+            'reference'            => $i->reference,
+            'issue_date'           => $i->issue_date?->toDateString(),
+            'due_date'             => $i->due_date?->toDateString(),
+            'is_overdue'           => $i->isPaymentDue(),
+            'total'                => round((float) $i->total, 2),
+            'payment_method'       => $i->payment_method,
+            'payment_method_label' => $i->paymentMethodLabel(),
+            'proposal_count'       => (int) ($i->proposal_count ?? 0),
         ];
     }
 
@@ -181,16 +196,23 @@ class PosInvoiceApiController extends Controller
             'discount_amount' => round((float) $i->discount_amount, 2),
             'tax_amount'      => round((float) $i->tax_amount, 2),
             'notes'           => $i->notes,
+            'payment_method'  => $i->payment_method,
             'customer_id'     => $i->customer_id,
             'is_editable'     => $i->isEditable(),
+            'share_token'     => $i->share_token,
+            'share_url'       => $i->share_token ? url('/invoice/share/' . $i->share_token) : null,
             'items'           => $i->items->map(fn ($item) => [
-                'id'          => (int) $item->id,
-                'product_id'  => $item->product_id,
-                'item_type'   => $item->product_id ? 'product' : ($item->service_item_id ? 'service' : 'custom'),
-                'description' => $item->description,
-                'quantity'    => round((float) $item->quantity, 3),
-                'unit_price'  => round((float) $item->unit_price, 2),
-                'line_total'  => round((float) $item->line_total, 2),
+                'id'             => (int) $item->id,
+                'product_id'     => $item->product_id,
+                'item_type'      => $item->product_id ? 'product' : ($item->service_item_id ? 'service' : 'custom'),
+                'description'    => $item->description,
+                'quantity'       => round((float) $item->quantity, 3),
+                'unit_price'     => round((float) $item->unit_price, 2),
+                'discount_type'  => $item->discount_type ?? 'pct',
+                'discount_value' => round((float) ($item->discount_value ?? 0), 2),
+                'tax_pct'        => round((float) ($item->tax_pct ?? 0), 2),
+                'tax_type'       => $item->tax_type ?? 'pct',
+                'line_total'     => round((float) $item->line_total, 2),
             ])->values()->all(),
         ];
     }
@@ -203,6 +225,7 @@ class PosInvoiceApiController extends Controller
             'issue_date'              => ['required', 'date'],
             'due_date'                => ['nullable', 'date'],
             'notes'                   => ['nullable', 'string', 'max:5000'],
+            'payment_method'          => ['nullable', 'string', Rule::in(array_keys(Invoice::PAYMENT_METHODS))],
             'discount_amount'         => ['nullable', 'numeric', 'min:0'],
             'tax_amount'              => ['nullable', 'numeric', 'min:0'],
             'items'                   => ['required', 'array', 'min:1'],
@@ -212,6 +235,10 @@ class PosInvoiceApiController extends Controller
             'items.*.description'     => ['nullable', 'string', 'max:255'],
             'items.*.quantity'        => ['required', 'numeric', 'min:0.001'],
             'items.*.unit_price'      => ['required', 'numeric', 'min:0'],
+            'items.*.discount_type'   => ['nullable', 'string', 'in:pct,flat'],
+            'items.*.discount_value'  => ['nullable', 'numeric', 'min:0'],
+            'items.*.tax_pct'         => ['nullable', 'numeric', 'min:0'],
+            'items.*.tax_type'        => ['nullable', 'string', 'in:pct,flat,percentage'],
         ]);
     }
 }

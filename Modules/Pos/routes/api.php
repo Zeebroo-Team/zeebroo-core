@@ -30,6 +30,7 @@ use Modules\Pos\Http\Controllers\Api\PosCustomerApiController;
 use Modules\Pos\Http\Controllers\Api\PosSupplierApiController;
 use Modules\Pos\Http\Controllers\Api\PosReturnReasonsApiController;
 use Modules\Pos\Http\Controllers\Api\PosGoodsReceiveNoteApiController;
+use Modules\Pos\Http\Controllers\Api\PosGrnPermissionApiController;
 use Modules\Pos\Http\Controllers\Api\PosGrnChequeApiController;
 use Modules\Pos\Http\Controllers\Api\PosProductCategoryApiController;
 use Modules\Pos\Http\Controllers\Api\PosProductUnitApiController;
@@ -51,7 +52,6 @@ Route::prefix('v1/pos')->group(function (): void {
     Route::post('auth/register',          [PosAuthApiController::class, 'register'])->name('auth.register');
     Route::get ('auth/business-categories',[PosAuthApiController::class, 'businessCategories'])->name('auth.business-categories');
     Route::post('cashier/login',          [PosCashierApiController::class, 'login'])->name('cashier.login');
-
     Route::get('docs', [PosApiDocsController::class, 'index'])->name('pos.docs');
     Route::get('docs/openapi.yaml', [PosApiDocsController::class, 'openapi'])->name('pos.docs.openapi');
     Route::get('docs/openapi.json', [PosApiDocsController::class, 'openapiJson'])->name('pos.docs.openapi.json');
@@ -97,6 +97,7 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
     Route::post  ('invoices',                          [PosInvoiceApiController::class, 'store']          )->name('invoices.store');
     Route::get   ('invoices/{invoice}',                [PosInvoiceApiController::class, 'show']           )->name('invoices.show');
     Route::patch ('invoices/{invoice}',                [PosInvoiceApiController::class, 'update']         )->name('invoices.update');
+    Route::post  ('invoices/{invoice}/enable-share',    [PosInvoiceApiController::class, 'enableShare']    )->name('invoices.enable-share');
     Route::post  ('invoices/{invoice}/mark-sent',      [PosInvoiceApiController::class, 'markSent']       )->name('invoices.mark-sent');
     Route::post  ('invoices/{invoice}/mark-paid',      [PosInvoiceApiController::class, 'markPaid']       )->name('invoices.mark-paid');
     Route::post  ('invoices/{invoice}/mark-overdue',   [PosInvoiceApiController::class, 'markOverdue']    )->name('invoices.mark-overdue');
@@ -172,9 +173,15 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
     Route::get('cheques', [PosGrnChequeApiController::class, 'index'])->name('cheques.index');
     Route::post('cheques/{cheque}/clear', [PosGrnChequeApiController::class, 'clear'])->name('cheques.clear');
 
+    Route::get ('grn-permissions',     [PosGrnPermissionApiController::class, 'show'])  ->name('grn-permissions.show');
+    Route::put ('grn-permissions',     [PosGrnPermissionApiController::class, 'update'])->name('grn-permissions.update');
+
     Route::get('grns', [PosGoodsReceiveNoteApiController::class, 'index'])->name('grns.index');
+    Route::post('grns', [PosGoodsReceiveNoteApiController::class, 'storeDirect'])->name('grns.store-direct');
     Route::get('grns/{grn}', [PosGoodsReceiveNoteApiController::class, 'show'])->name('grns.show');
-    Route::post('grns/{grn}/pay', [PosGoodsReceiveNoteApiController::class, 'pay'])->name('grns.pay');
+    Route::post('grns/{grn}/pay',     [PosGoodsReceiveNoteApiController::class, 'pay'])    ->name('grns.pay');
+    Route::post('grns/{grn}/approve', [PosGoodsReceiveNoteApiController::class, 'approve'])->name('grns.approve');
+    Route::post('grns/{grn}/reject',  [PosGoodsReceiveNoteApiController::class, 'reject']) ->name('grns.reject');
     Route::get('purchase-orders/{purchase}/grn-form', [PosGoodsReceiveNoteApiController::class, 'createForm'])->name('grns.create-form');
     Route::post('purchase-orders/{purchase}/grns', [PosGoodsReceiveNoteApiController::class, 'store'])->name('grns.store');
 
@@ -273,7 +280,9 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
     Route::get('design-studio/proposals/{group}/pages',           [\Modules\Pos\Http\Controllers\Api\PosDesignStudioApiController::class, 'proposalPages'])->name('design-studio.proposals.pages');
     Route::delete('design-studio/proposals/{group}',              [\Modules\Pos\Http\Controllers\Api\PosDesignStudioApiController::class, 'destroyProposal'])->name('design-studio.proposals.destroy');
     Route::post('design-studio/proposals/{group}/link-invoice',   [\Modules\Pos\Http\Controllers\Api\PosDesignStudioApiController::class, 'linkProposalToInvoice'])->name('design-studio.proposals.link-invoice');
-    Route::post('design-studio/ai-chat',             [\Modules\Pos\Http\Controllers\Api\DesignAiChatApiController::class, 'chat'])->name('design-studio.ai-chat');
+    Route::post('design-studio/ai-chat',                                  [\Modules\Pos\Http\Controllers\Api\DesignAiChatApiController::class, 'chat'])->name('design-studio.ai-chat');
+    Route::post('design-studio/voice',                                    [\Modules\Pos\Http\Controllers\Api\DesignAiChatApiController::class, 'voice'])->name('design-studio.voice');
+    Route::get ('design-studio/ai-image-job/{jobId}',                    [\Modules\Pos\Http\Controllers\Api\DesignAiChatApiController::class, 'imageJobStatus'])->name('design-studio.ai-image-job');
 
     Route::get  ('service/requests',                           [\Modules\Pos\Http\Controllers\Api\PosServiceApiController::class, 'requests'])->name('service.requests.index');
     Route::post ('service/requests',                           [\Modules\Pos\Http\Controllers\Api\PosServiceApiController::class, 'storeRequest'])->name('service.requests.store');
@@ -324,7 +333,8 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
     Route::delete('cashiers/{cashier}', [PosCashierApiController::class, 'destroy'])->name('cashiers.destroy');
 
     // Guide AI Chat
-    Route::post('guide/chat', [\Modules\Pos\Http\Controllers\Api\PosGuideChatApiController::class, 'chat'])->name('guide.chat');
+    Route::post('guide/chat',  [\Modules\Pos\Http\Controllers\Api\PosGuideChatApiController::class, 'chat'])->name('guide.chat');
+    Route::post('guide/voice', [\Modules\Pos\Http\Controllers\Api\PosGuideChatApiController::class, 'voice'])->name('guide.voice');
 
     // CRM
     Route::get   ('crm/projects',                      [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'projects'])    ->name('crm.projects.index');
@@ -391,4 +401,56 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
     Route::patch ('developers/webhooks/{id}',                  [\Modules\Developers\Http\Controllers\Api\DeveloperWebhookApiController::class, 'update'])->where('id', '[0-9]+')->name('developers.webhooks.update');
     Route::post  ('developers/webhooks/{id}/regenerate-secret',[\Modules\Developers\Http\Controllers\Api\DeveloperWebhookApiController::class, 'regenerateSecret'])->where('id', '[0-9]+')->name('developers.webhooks.regenerate-secret');
     Route::delete('developers/webhooks/{id}',                  [\Modules\Developers\Http\Controllers\Api\DeveloperWebhookApiController::class, 'destroy'])->where('id', '[0-9]+')->name('developers.webhooks.destroy');
+
+    // Advertising Agency — Brand Management + Event Management
+    // ── Brands ──────────────────────────────────────────────────────────────
+    Route::get   ('brand-mgmt/brands',              [\Modules\AdvertisingAgency\Http\Controllers\Api\BrandApiController::class,    'index'])   ->name('brand-mgmt.brands.index');
+    Route::post  ('brand-mgmt/brands',              [\Modules\AdvertisingAgency\Http\Controllers\Api\BrandApiController::class,    'store'])   ->name('brand-mgmt.brands.store');
+    Route::post  ('brand-mgmt/brands/import',       [\Modules\AdvertisingAgency\Http\Controllers\Api\BrandApiController::class,    'import'])  ->name('brand-mgmt.brands.import');
+    Route::put   ('brand-mgmt/brands/{brand}',      [\Modules\AdvertisingAgency\Http\Controllers\Api\BrandApiController::class,    'update'])  ->name('brand-mgmt.brands.update');
+    Route::delete('brand-mgmt/brands/{brand}',      [\Modules\AdvertisingAgency\Http\Controllers\Api\BrandApiController::class,    'destroy']) ->name('brand-mgmt.brands.destroy');
+    // ── Reporters ────────────────────────────────────────────────────────────
+    Route::get   ('brand-mgmt/reporters',           [\Modules\AdvertisingAgency\Http\Controllers\Api\ReporterApiController::class, 'index'])   ->name('brand-mgmt.reporters.index');
+    Route::post  ('brand-mgmt/reporters',           [\Modules\AdvertisingAgency\Http\Controllers\Api\ReporterApiController::class, 'store'])   ->name('brand-mgmt.reporters.store');
+    Route::put   ('brand-mgmt/reporters/{reporter}',[\Modules\AdvertisingAgency\Http\Controllers\Api\ReporterApiController::class, 'update'])  ->name('brand-mgmt.reporters.update');
+    Route::delete('brand-mgmt/reporters/{reporter}',[\Modules\AdvertisingAgency\Http\Controllers\Api\ReporterApiController::class, 'destroy']) ->name('brand-mgmt.reporters.destroy');
+    // ── Officers ─────────────────────────────────────────────────────────────
+    Route::get   ('brand-mgmt/officers',            [\Modules\AdvertisingAgency\Http\Controllers\Api\OfficerApiController::class,  'index'])   ->name('brand-mgmt.officers.index');
+    Route::post  ('brand-mgmt/officers',            [\Modules\AdvertisingAgency\Http\Controllers\Api\OfficerApiController::class,  'store'])   ->name('brand-mgmt.officers.store');
+    Route::put   ('brand-mgmt/officers/{officer}',  [\Modules\AdvertisingAgency\Http\Controllers\Api\OfficerApiController::class,  'update'])  ->name('brand-mgmt.officers.update');
+    Route::delete('brand-mgmt/officers/{officer}',  [\Modules\AdvertisingAgency\Http\Controllers\Api\OfficerApiController::class,  'destroy']) ->name('brand-mgmt.officers.destroy');
+    // ── Jobs ─────────────────────────────────────────────────────────────────
+    Route::get   ('brand-mgmt/jobs',                [\Modules\AdvertisingAgency\Http\Controllers\Api\JobApiController::class,      'index'])   ->name('brand-mgmt.jobs.index');
+    Route::post  ('brand-mgmt/jobs',                [\Modules\AdvertisingAgency\Http\Controllers\Api\JobApiController::class,      'store'])   ->name('brand-mgmt.jobs.store');
+    Route::post  ('brand-mgmt/jobs/import',         [\Modules\AdvertisingAgency\Http\Controllers\Api\JobApiController::class,      'import'])  ->name('brand-mgmt.jobs.import');
+    Route::put   ('brand-mgmt/jobs/{job}',          [\Modules\AdvertisingAgency\Http\Controllers\Api\JobApiController::class,      'update'])  ->name('brand-mgmt.jobs.update');
+    Route::delete('brand-mgmt/jobs/{job}',          [\Modules\AdvertisingAgency\Http\Controllers\Api\JobApiController::class,      'destroy']) ->name('brand-mgmt.jobs.destroy');
+    // ── Agencies ─────────────────────────────────────────────────────────────
+    Route::get   ('brand-mgmt/agencies',            [\Modules\AdvertisingAgency\Http\Controllers\Api\AgencyApiController::class,   'index'])   ->name('brand-mgmt.agencies.index');
+    Route::post  ('brand-mgmt/agencies',            [\Modules\AdvertisingAgency\Http\Controllers\Api\AgencyApiController::class,   'store'])   ->name('brand-mgmt.agencies.store');
+    Route::put   ('brand-mgmt/agencies/{agency}',   [\Modules\AdvertisingAgency\Http\Controllers\Api\AgencyApiController::class,   'update'])  ->name('brand-mgmt.agencies.update');
+    Route::delete('brand-mgmt/agencies/{agency}',   [\Modules\AdvertisingAgency\Http\Controllers\Api\AgencyApiController::class,   'destroy']) ->name('brand-mgmt.agencies.destroy');
+    // ── Salary Sheets ─────────────────────────────────────────────────────────
+    Route::get   ('brand-mgmt/salary-sheets/next-ref',       [\Modules\AdvertisingAgency\Http\Controllers\Api\SalarySheetApiController::class, 'nextRef'])  ->name('brand-mgmt.salary-sheets.next-ref');
+    Route::get   ('brand-mgmt/salary-sheets',                [\Modules\AdvertisingAgency\Http\Controllers\Api\SalarySheetApiController::class, 'index'])    ->name('brand-mgmt.salary-sheets.index');
+    Route::post  ('brand-mgmt/salary-sheets',                [\Modules\AdvertisingAgency\Http\Controllers\Api\SalarySheetApiController::class, 'store'])    ->name('brand-mgmt.salary-sheets.store');
+    Route::get   ('brand-mgmt/salary-sheets/{id}',           [\Modules\AdvertisingAgency\Http\Controllers\Api\SalarySheetApiController::class, 'show'])     ->name('brand-mgmt.salary-sheets.show');
+    Route::put   ('brand-mgmt/salary-sheets/{id}',           [\Modules\AdvertisingAgency\Http\Controllers\Api\SalarySheetApiController::class, 'update'])   ->name('brand-mgmt.salary-sheets.update');
+    Route::delete('brand-mgmt/salary-sheets/{id}',           [\Modules\AdvertisingAgency\Http\Controllers\Api\SalarySheetApiController::class, 'destroy'])  ->name('brand-mgmt.salary-sheets.destroy');
+    Route::post  ('brand-mgmt/salary-sheets/{id}/save-rows', [\Modules\AdvertisingAgency\Http\Controllers\Api\SalarySheetApiController::class, 'saveRows']) ->name('brand-mgmt.salary-sheets.save-rows');
+    // ── Coordinators ─────────────────────────────────────────────────────────
+    Route::get   ('brand-mgmt/coordinators',               [\Modules\AdvertisingAgency\Http\Controllers\Api\CoordinatorApiController::class, 'index'])   ->name('brand-mgmt.coordinators.index');
+    Route::post  ('brand-mgmt/coordinators',               [\Modules\AdvertisingAgency\Http\Controllers\Api\CoordinatorApiController::class, 'store'])   ->name('brand-mgmt.coordinators.store');
+    Route::put   ('brand-mgmt/coordinators/{coordinator}', [\Modules\AdvertisingAgency\Http\Controllers\Api\CoordinatorApiController::class, 'update'])  ->name('brand-mgmt.coordinators.update');
+    Route::delete('brand-mgmt/coordinators/{coordinator}', [\Modules\AdvertisingAgency\Http\Controllers\Api\CoordinatorApiController::class, 'destroy']) ->name('brand-mgmt.coordinators.destroy');
+    // ── Promoters ─────────────────────────────────────────────────────────────
+    Route::get   ('brand-mgmt/promoters',              [\Modules\AdvertisingAgency\Http\Controllers\Api\PromoterApiController::class, 'index'])   ->name('brand-mgmt.promoters.index');
+    Route::post  ('brand-mgmt/promoters',              [\Modules\AdvertisingAgency\Http\Controllers\Api\PromoterApiController::class, 'store'])   ->name('brand-mgmt.promoters.store');
+    Route::put   ('brand-mgmt/promoters/{promoter}',   [\Modules\AdvertisingAgency\Http\Controllers\Api\PromoterApiController::class, 'update'])  ->name('brand-mgmt.promoters.update');
+    Route::delete('brand-mgmt/promoters/{promoter}',   [\Modules\AdvertisingAgency\Http\Controllers\Api\PromoterApiController::class, 'destroy']) ->name('brand-mgmt.promoters.destroy');
+    // ── Promoter Positions ────────────────────────────────────────────────────
+    Route::get   ('brand-mgmt/promoter-positions',       [\Modules\AdvertisingAgency\Http\Controllers\Api\PromoterPositionApiController::class, 'index'])   ->name('brand-mgmt.promoter-positions.index');
+    Route::post  ('brand-mgmt/promoter-positions',       [\Modules\AdvertisingAgency\Http\Controllers\Api\PromoterPositionApiController::class, 'store'])   ->name('brand-mgmt.promoter-positions.store');
+    Route::put   ('brand-mgmt/promoter-positions/{id}',  [\Modules\AdvertisingAgency\Http\Controllers\Api\PromoterPositionApiController::class, 'update'])  ->name('brand-mgmt.promoter-positions.update');
+    Route::delete('brand-mgmt/promoter-positions/{id}',  [\Modules\AdvertisingAgency\Http\Controllers\Api\PromoterPositionApiController::class, 'destroy']) ->name('brand-mgmt.promoter-positions.destroy');
 });
