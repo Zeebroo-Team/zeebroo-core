@@ -55,6 +55,10 @@ class AuthController extends Controller
                 ->onlyInput('email');
         }
 
+        if ($user !== null && $user->hasRole('admin')) {
+            return redirect()->intended(route('admin.panel'));
+        }
+
         return redirect()->intended(route('dashboard'));
     }
 

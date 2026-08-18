@@ -564,7 +564,9 @@
         </div>
         <nav class="menu">
             <div class="menu-section">Main</div>
-            <a href="{{ route('dashboard') }}" class="{{ request()->routeIs('dashboard') ? 'active' : '' }}"><i class="fa fa-gauge-high"></i><span>Overview</span></a>
+            @unless(auth()->user()?->hasRole('admin'))
+                <a href="{{ route('dashboard') }}" class="{{ request()->routeIs('dashboard') ? 'active' : '' }}"><i class="fa fa-gauge-high"></i><span>Overview</span></a>
+            @endunless
             <a href="{{ route('aibot.index') }}" class="{{ request()->routeIs('aibot.*') ? 'active' : '' }}"><i class="fa fa-robot"></i><span>AI Agent</span></a>
             @if($showSidebarModificationsLink)
                 <a href="{{ route('modification.index') }}" class="{{ request()->routeIs('modification.*') ? 'active' : '' }}"><i class="fa fa-screwdriver-wrench"></i><span>Modification</span></a>
