@@ -381,7 +381,8 @@ const API = (() => {
     serviceMgmtCategories:     ()          => request('GET',   '/service/categories'),
     createServiceCategory:     (body)      => request('POST',  '/service/categories', body),
 
-    guideChat: (message) => request('POST', '/guide/chat', { message }),
+    guideChat:  (message)             => request('POST', '/guide/chat',  { message }),
+    guideVoice: (audio, mime_type)    => request('POST', '/guide/voice', { audio, mime_type }),
 
     // CRM
     crmProjects:     ()                   => request('GET',    '/crm/projects'),

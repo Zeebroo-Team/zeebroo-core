@@ -332,7 +332,8 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
     Route::delete('cashiers/{cashier}', [PosCashierApiController::class, 'destroy'])->name('cashiers.destroy');
 
     // Guide AI Chat
-    Route::post('guide/chat', [\Modules\Pos\Http\Controllers\Api\PosGuideChatApiController::class, 'chat'])->name('guide.chat');
+    Route::post('guide/chat',  [\Modules\Pos\Http\Controllers\Api\PosGuideChatApiController::class, 'chat'])->name('guide.chat');
+    Route::post('guide/voice', [\Modules\Pos\Http\Controllers\Api\PosGuideChatApiController::class, 'voice'])->name('guide.voice');
 
     // CRM
     Route::get   ('crm/projects',                      [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'projects'])    ->name('crm.projects.index');

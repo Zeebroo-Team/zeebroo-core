@@ -8539,8 +8539,8 @@ function _poRenderTable() {
   }
   $('#po-count').textContent = `${_po.list.length} order${_po.list.length !== 1 ? 's' : ''}`;
   $('#po-tbody').innerHTML = _po.list.map(po => {
-    const active = po.id === _po.activePOId ? ' active' : '';
-    return `<tr data-id="${po.id}" class="${active}">
+    const activeClass = po.id === _po.activePOId ? ' po-row-active' : '';
+    return `<tr data-id="${po.id}" class="po-row${activeClass}">
       <td><strong>${po.po_number}</strong></td>
       <td>${po.supplier_name || '—'}</td>
       <td>${po.purchase_date || '—'}</td>
@@ -9250,10 +9250,10 @@ function _grnRenderDetail(g) {
   // Payments
   const payments = g.payments || [];
   $('#grn-dv-payments').innerHTML = payments.length
-    ? `<table class="po-items-table"><thead><tr><th>Date</th><th>Account</th><th style="text-align:right">Amount</th></tr></thead><tbody>
+    ? `<div class="grn-dv-table-scroll"><table class="po-items-table"><thead><tr><th>Date</th><th>Account</th><th style="text-align:right">Amount</th></tr></thead><tbody>
         ${payments.map(p => `<tr><td>${p.date||'—'}</td><td>${p.account||'—'}</td><td style="text-align:right">${cur}${(p.amount||0).toFixed(2)}</td></tr>`).join('')}
-       </tbody></table>`
-    : `<div style="padding:8px 0;color:var(--text-muted);font-size:12px">No payments recorded</div>`;
+       </tbody></table></div>`
+    : `<div class="grn-dv-no-data"><i class="fa fa-money-bill-wave"></i> No payments recorded</div>`;
 
   // Totals breakdown (subtotal → expenses → grand total)
   const expLines  = g.expense_lines || [];

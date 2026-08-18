@@ -3002,24 +3002,33 @@
               <span>Select a GRN to view details</span>
             </div>
             <div id="grn-detail-view" style="display:none">
-              <div class="po-dv-header">
+              <div class="grn-dv-sticky-header">
                 <div>
                   <div class="po-dv-number" id="grn-dv-number"></div>
                   <div class="po-dv-meta"   id="grn-dv-meta"></div>
                 </div>
                 <div class="po-dv-actions" id="grn-dv-actions"></div>
               </div>
-              <div class="po-dv-summary" id="grn-dv-summary"></div>
-              <div class="grn-dv-parties" id="grn-dv-parties"></div>
-              <div class="po-dv-section-label">Items Received</div>
-              <table class="po-items-table" id="grn-dv-table">
-                <thead id="grn-dv-thead"><tr><th>Product</th><th>SKU</th><th>Qty</th><th>Unit Cost</th><th>Total</th></tr></thead>
-                <tbody id="grn-dv-items"></tbody>
-              </table>
-              <div class="po-dv-section-label" style="margin-top:10px">Payments</div>
-              <div id="grn-dv-payments"></div>
-              <div class="grn-dv-totals-wrap" id="grn-dv-totals"></div>
-              <div class="po-dv-notes" id="grn-dv-notes"></div>
+              <div class="grn-dv-body">
+                <!-- summary grid injected by JS — no class here, JS adds po-dv-summary wrapper -->
+                <div id="grn-dv-summary"></div>
+                <div class="grn-dv-parties" id="grn-dv-parties"></div>
+                <div class="grn-dv-section">
+                  <div class="grn-dv-section-label"><i class="fa fa-boxes-stacked"></i> Items Received</div>
+                  <div class="grn-dv-table-scroll">
+                    <table class="po-items-table" id="grn-dv-table">
+                      <thead id="grn-dv-thead"><tr><th>Product</th><th>SKU</th><th>Qty</th><th>Unit Cost</th><th>Total</th></tr></thead>
+                      <tbody id="grn-dv-items"></tbody>
+                    </table>
+                  </div>
+                </div>
+                <div class="grn-dv-section">
+                  <div class="grn-dv-section-label"><i class="fa fa-money-bill-transfer"></i> Payments</div>
+                  <div id="grn-dv-payments"></div>
+                </div>
+                <div class="grn-dv-totals-wrap" id="grn-dv-totals"></div>
+                <div id="grn-dv-notes"></div>
+              </div>
             </div>
           </div>
         </div>

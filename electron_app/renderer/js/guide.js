@@ -21,11 +21,25 @@
   let _bubbleOpen  = false;
   let _busy        = false;
 
-  // Voice Listening Worker state
-  let _voiceWorker     = null;   // SpeechRecognition instance
-  let _voiceActive     = false;  // voice mode is enabled by user
-  let _voicePaused     = false;  // recognition temporarily paused (while Gemini API call or TTS)
-  let _voiceRestarting = false;  // guard against double-restart during silence
+  // Voice Listening Worker state (MediaRecorder-based — no SpeechRecognition)
+  let _voiceStream      = null;   // MediaStream from getUserMedia
+  let _voiceRecorder    = null;   // MediaRecorder instance
+  let _voiceAudioCtx    = null;   // AudioContext for silence detection + waveform
+  let _voiceAnalyser    = null;   // AnalyserNode
+  let _voiceChunks      = [];     // collected audio chunks
+  let _voiceMimeType    = 'audio/webm';
+  let _voiceRecordStart = 0;
+  let _voiceSilenceStart = null;
+  let _voiceHasSpeech   = false;  // user has started speaking in this cycle
+  let _voiceRafId       = null;   // requestAnimationFrame handle
+  let _voiceActive      = false;
+  let _voicePaused      = false;
+
+  // Silence-detection thresholds
+  const _VOICE_SILENCE_THRESH  = 10;    // avg amplitude (0–255) below = silence
+  const _VOICE_SILENCE_DELAY   = 1500;  // ms of silence before auto-send
+  const _VOICE_MIN_BLOB        = 2500;  // bytes — blobs smaller than this are ignored
+  const _VOICE_MAX_MS          = 14000; // auto-send after this long regardless
 
   // Text-to-Speech state
   let _ttsUtterance    = null;
@@ -587,136 +601,333 @@
   }
 
   /* ════════════════════════════════════════════════════════════════════════
-     VOICE LISTENING WORKER  (Gemini-powered conversation loop)
+     VOICE LISTENING WORKER  (MediaRecorder → Gemini multimodal audio)
      ─────────────────────────────────────────────────────────────────────
-     Flow:
+     Flow (avoids the "network" error that SpeechRecognition always throws
+     inside Electron because Chromium ships without Google's Speech API key):
+
        1.  User right-clicks guide → "Start Voice Worker"
-       2.  SpeechRecognition starts and listens continuously
-       3.  When a final phrase is captured → recognition PAUSED → message
-           sent to the server (Gemini API via /guide/chat)
-       4.  Gemini reply received → character shows it in bubble
-       5.  Web Speech Synthesis reads the reply aloud (TTS)
-       6.  TTS ends → recognition RESUMES → back to step 2
+       2.  getUserMedia obtains mic stream; AudioContext analyses amplitude
+       3.  MediaRecorder records chunks until silence (≥1.5 s below threshold)
+           or the 14 s safety ceiling
+       4.  Blob → base64 → POST /guide/voice (Gemini multimodal)
+       5.  Server returns { transcript, reply, walkthrough?, productName?, … }
+       6.  Transcript shown in chat input; reply shown in bubble + spoken via TTS
+       7.  After TTS finishes → _beginRecording() again → back to step 3
      ════════════════════════════════════════════════════════════════════════ */
 
-  function _voiceSupported() {
-    return !!(window.SpeechRecognition || window.webkitSpeechRecognition);
-  }
-
-  /* ── Shared UI updater ── */
-  function _updateVoiceUI(listening) {
-    const badge      = document.getElementById('guide-voice-badge');
-    const bar        = document.getElementById('guide-voice-listening-bar');
-    const voiceItem  = document.getElementById('guide-ctx-voice');
-    const voiceLabel = document.getElementById('guide-ctx-voice-label');
-
-    if (badge)      badge.classList.toggle('voice-active', !!listening);
-    if (bar)        bar.classList.toggle('active', !!(listening && _bubbleOpen));
-    if (voiceItem)  voiceItem.classList.toggle('voice-on', !!listening);
-    if (voiceLabel) voiceLabel.textContent = _voiceActive ? 'Stop Voice Worker' : 'Start Voice Worker';
-    if (voiceItem)  voiceItem.querySelector('.guide-ctx-icon i').className =
-                      _voiceActive ? 'fa fa-microphone-slash' : 'fa fa-microphone';
-  }
-
-  /* ── Text-to-Speech: speaks Gemini's reply, returns a Promise ── */
-  function _ttsSpeak(text) {
-    return new Promise(resolve => {
-      if (!window.speechSynthesis || !text) { resolve(); return; }
-
-      // Cancel any previous speech
-      window.speechSynthesis.cancel();
-
-      const utt = new SpeechSynthesisUtterance(text);
-      _ttsUtterance = utt;
-
-      // Pick a natural voice if available
-      const voices = window.speechSynthesis.getVoices();
-      const preferred = voices.find(v =>
-        /en[-_]US/i.test(v.lang) && v.localService
-      ) || voices.find(v => /en/i.test(v.lang)) || null;
-      if (preferred) utt.voice = preferred;
-
-      utt.rate   = 1.0;
-      utt.pitch  = 1.0;
-      utt.volume = 0.9;
-
-      // Visual: badge turns purple, bar says "Speaking…" while TTS plays
-      const badge      = document.getElementById('guide-voice-badge');
-      const bar        = document.getElementById('guide-voice-listening-bar');
-      const statusTxt  = document.getElementById('guide-voice-status-text');
-      if (badge)     badge.classList.add('voice-speaking');
-      if (bar)       bar.classList.add('speaking');
-      if (statusTxt) statusTxt.textContent = 'Speaking…';
-
-      const _done = () => {
-        _ttsUtterance = null;
-        if (badge)     badge.classList.remove('voice-speaking');
-        if (bar)       bar.classList.remove('speaking');
-        if (statusTxt) statusTxt.textContent = 'Listening…';
-        resolve();
+  /* ── Convert a Blob to a base-64 string ── */
+  function _blobToBase64(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        // result is  "data:<mime>;base64,<data>"  — strip the prefix
+        const b64 = reader.result.split(',')[1];
+        resolve(b64);
       };
-      utt.onend   = _done;
-      utt.onerror = _done;
-
-      window.speechSynthesis.speak(utt);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
     });
   }
 
+  /* ── Unified status / UI setter ── */
+  // status: 'listening' | 'processing' | 'speaking' | 'off'
+  function _voiceSetStatus(status) {
+    const badge      = document.getElementById('guide-voice-badge');
+    const bar        = document.getElementById('guide-voice-listening-bar');
+    const statusTxt  = document.getElementById('guide-voice-status-text');
+    const voiceItem  = document.getElementById('guide-ctx-voice');
+    const voiceLabel = document.getElementById('guide-ctx-voice-label');
+
+    // Badge classes
+    if (badge) {
+      badge.classList.toggle('voice-active',    status !== 'off');
+      badge.classList.toggle('voice-speaking',  status === 'speaking');
+      badge.classList.toggle('voice-processing',status === 'processing');
+    }
+
+    // Listening bar (only visible when bubble is open)
+    if (bar) {
+      bar.classList.toggle('active',   status === 'listening' && _bubbleOpen);
+      bar.classList.toggle('speaking', status === 'speaking');
+      bar.classList.toggle('processing', status === 'processing');
+    }
+
+    // Status label
+    const labels = { listening: 'Listening…', processing: 'Processing…', speaking: 'Speaking…', off: '' };
+    if (statusTxt) statusTxt.textContent = labels[status] || '';
+
+    // Context-menu item
+    const isOn = status !== 'off';
+    if (voiceItem) {
+      voiceItem.classList.toggle('voice-on', isOn);
+      const ico = voiceItem.querySelector('.guide-ctx-icon i');
+      if (ico) ico.className = isOn ? 'fa fa-microphone-slash' : 'fa fa-microphone';
+    }
+    if (voiceLabel) voiceLabel.textContent = isOn ? 'Stop Voice Worker' : 'Start Voice Worker';
+  }
+
+  /* ── Text-to-Speech: speaks Gemini's reply, returns a Promise ── */
+  // lang: BCP-47 code (e.g. 'si-LK', 'en-US') — if omitted, uses system language
+  function _ttsSpeak(text, lang) {
+    return new Promise(resolve => {
+      if (!window.speechSynthesis || !text) { resolve(); return; }
+      _ttsCancelSpeak();
+      _ttsUtterance = new SpeechSynthesisUtterance(text);
+      _ttsUtterance.rate   = 1.0;
+      _ttsUtterance.pitch  = 1.0;
+      _ttsUtterance.volume = 1.0;
+      _ttsUtterance.lang   = lang || navigator.language || 'en-US';
+      _ttsUtterance.onend  = () => resolve();
+      _ttsUtterance.onerror = () => resolve();   // missing voice falls back silently
+      _voiceSetStatus('speaking');
+      window.speechSynthesis.speak(_ttsUtterance);
+    });
+  }
+
+  /* ── Cancel TTS ── */
   function _ttsCancelSpeak() {
     if (window.speechSynthesis) window.speechSynthesis.cancel();
     _ttsUtterance = null;
-    const badge     = document.getElementById('guide-voice-badge');
-    const bar       = document.getElementById('guide-voice-listening-bar');
-    const statusTxt = document.getElementById('guide-voice-status-text');
-    if (badge)     badge.classList.remove('voice-speaking');
-    if (bar)       bar.classList.remove('speaking');
-    if (statusTxt) statusTxt.textContent = 'Listening…';
   }
 
-  /* ── Strip HTML tags to get plain text for TTS ── */
+  /* ── Strip HTML for TTS ── */
   function _stripHtml(html) {
     const div = document.createElement('div');
     div.innerHTML = html;
     return (div.textContent || div.innerText || '').replace(/\s+/g, ' ').trim();
   }
 
-  /* ── Resume recognition after Gemini/TTS cycle ── */
-  function _voiceResumeAfterReply() {
-    if (!_voiceActive || !_voiceWorker) return;
-    _voicePaused = false;
-    // Reset bubble input to listening state
-    _showInputState();
-    const inp = document.getElementById('guide-chat-input');
-    if (inp) { inp.value = ''; inp.placeholder = 'Listening…'; }
-    const bar = document.getElementById('guide-voice-listening-bar');
-    if (bar && _bubbleOpen) bar.classList.add('active');
-    // (Re)start recognition
-    try { _voiceWorker.start(); } catch (_) { /* already running */ }
-  }
-
-  /* ── _voiceShowError: show an inline error in the bubble ── */
+  /* ── Show inline error then stop the worker ── */
   function _voiceShowError(msg) {
     _stopVoiceWorker();
     if (!_bubbleOpen) _openBubble(false);
     _reopenWithReply(msg);
   }
 
-  /* ── Start the Voice Listening Worker ── */
-  async function _startVoiceWorker() {
-    if (!_voiceSupported()) {
-      _voiceShowError(
-        'Voice input is not supported in this browser. Please type your question instead.'
-      );
+  /* ─────────────────────────────────────────────────────────────────────────
+     SILENCE DETECTION — rAF loop that monitors AnalyserNode byte-time data.
+     Waveform bars in the listening bar get their heights set from live audio.
+     ───────────────────────────────────────────────────────────────────────── */
+  function _startSilenceDetection() {
+    if (!_voiceAnalyser) return;
+    const buf       = new Uint8Array(_voiceAnalyser.fftSize);
+    const bars      = document.querySelectorAll('#guide-voice-listening-bar .guide-voice-waves span');
+    const barCount  = bars.length || 4;
+
+    function tick() {
+      if (!_voiceActive || !_voiceRecorder || _voiceRecorder.state === 'inactive') return;
+
+      _voiceAnalyser.getByteTimeDomainData(buf);
+
+      // RMS amplitude (0–128 range after subtracting 128 midpoint)
+      let sum = 0;
+      for (let i = 0; i < buf.length; i++) { const v = buf[i] - 128; sum += v * v; }
+      const rms = Math.sqrt(sum / buf.length); // 0–128
+
+      // Animate waveform bars with live audio level
+      const norm = Math.min(rms / 40, 1);          // normalise to 0–1
+      bars.forEach((bar, i) => {
+        const phase = (i / barCount) * Math.PI;
+        const h = 20 + Math.round(norm * 60 * Math.abs(Math.sin(Date.now() / 200 + phase)));
+        bar.style.height = h + '%';
+      });
+
+      const now = Date.now();
+
+      if (rms > _VOICE_SILENCE_THRESH) {
+        // Sound detected
+        _voiceHasSpeech    = true;
+        _voiceSilenceStart = null;
+      } else if (_voiceHasSpeech) {
+        // Below threshold after speech
+        if (!_voiceSilenceStart) _voiceSilenceStart = now;
+        if (now - _voiceSilenceStart >= _VOICE_SILENCE_DELAY) {
+          // Enough silence — finalize this utterance
+          _stopAndProcess();
+          return;
+        }
+      }
+
+      // Safety ceiling
+      if (now - _voiceRecordStart >= _VOICE_MAX_MS) {
+        _stopAndProcess();
+        return;
+      }
+
+      _voiceRafId = requestAnimationFrame(tick);
+    }
+
+    _voiceRafId = requestAnimationFrame(tick);
+  }
+
+  /* ── Trigger stop; onstop handler does the rest ── */
+  function _stopAndProcess() {
+    if (!_voiceRecorder || _voiceRecorder.state === 'inactive') return;
+    cancelAnimationFrame(_voiceRafId);
+    _voiceRafId = null;
+    try { _voiceRecorder.stop(); } catch (_) {}   // onstop fires asynchronously
+  }
+
+  /* ── Called when MediaRecorder fires onstop ── */
+  async function _onRecorderStop() {
+    if (!_voiceActive) return;          // worker was stopped mid-recording
+    if (!_voiceHasSpeech || _voiceChunks.length === 0) {
+      // Nothing meaningful recorded — restart immediately
+      _beginRecording();
       return;
     }
+
+    // Minimum blob guard (avoid sending a tiny click-noise fragment)
+    const blob = new Blob(_voiceChunks, { type: _voiceMimeType });
+    if (blob.size < 2000) {             // < 2 KB is almost certainly silence
+      _beginRecording();
+      return;
+    }
+
+    _voiceSetStatus('processing');
+    const inp = document.getElementById('guide-chat-input');
+    if (inp) { inp.value = ''; inp.placeholder = 'Processing…'; }
+
+    let b64;
+    try {
+      b64 = await _blobToBase64(blob);
+    } catch (err) {
+      console.warn('[VoiceWorker] base64 encode error:', err);
+      _voiceShowError('Could not encode audio. Please try again.');
+      return;
+    }
+
+    let res;
+    try {
+      res = await API.guideVoice(b64, _voiceMimeType);
+    } catch (err) {
+      console.warn('[VoiceWorker] API error:', err);
+      _voiceShowError('Could not reach the server. Check your connection and try again.');
+      return;
+    }
+
+    if (!_voiceActive) return;         // stopped while API was in-flight
+
+    // API.guideVoice returns { status, body } just like every other API call
+    if (!res || res.status >= 500) {
+      _voiceShowError('The server could not process the audio. Please try again.');
+      return;
+    }
+
+    const body       = res.body || {};
+    const transcript = body.transcript || '';
+    const reply      = body.reply      || '';
+    const replyLang  = body.lang       || '';   // BCP-47 from Gemini, e.g. 'si-LK'
+
+    // Show transcript in chat input
+    if (inp && transcript) inp.value = transcript;
+
+    if (!reply) {
+      // Nothing to say — loop back
+      _voiceSetStatus('listening');
+      _beginRecording();
+      return;
+    }
+
+    // Show reply in bubble
+    if (!_bubbleOpen) _openBubble(false);
+    _showInputState();
+    _reopenWithReply(reply);
+
+    // ── Resolve walkthrough — body.walkthrough is a string ID, not an object ──
+    let match = null;
+    const wtId = body.walkthrough;
+    if (wtId) {
+      const wt = (window.GUIDE_CONFIG?.walkthroughs || []).find(w => w.id === wtId);
+      if (wt) {
+        const vars = {};
+        if (body.productName) vars.productName = body.productName;
+        if (body.fieldName) {
+          vars.fieldName  = body.fieldName;
+          const fi        = _resolveField(body.fieldName);
+          vars.fieldLabel = fi ? fi.label : body.fieldName;
+        }
+        match = { wt, vars };
+      }
+    }
+    // Fall back to local pattern matching on the transcript if Gemini didn't resolve one
+    if (!match && transcript) match = _matchWalkthrough(transcript);
+
+    // TTS speaks the reply in the detected language first, then animate
+    await _ttsSpeak(_stripHtml(reply), replyLang);
+
+    if (!_voiceActive) return;         // stopped while TTS was playing
+
+    // ── Run the walkthrough steps (guide character moves + highlights UI) ──
+    if (match) {
+      await _sleep(600);
+      _closeBubble();
+      await _sleep(200);
+      _closeAllModals();
+      await _sleep(150);
+      _busy = true;
+      await _runSteps(match.wt.steps, match.vars);
+      await _returnHome();
+      _closeAllModals();
+      _busy = false;
+    }
+
+    if (!_voiceActive) return;
+
+    // Resume next recording cycle
+    _voiceResumeAfterReply();
+  }
+
+  /* ── Start one recording cycle ── */
+  function _beginRecording() {
+    if (!_voiceActive || !_voiceStream) return;
+
+    // Reset per-cycle state
+    _voiceChunks      = [];
+    _voiceHasSpeech   = false;
+    _voiceSilenceStart = null;
+    _voiceRecordStart  = Date.now();
+
+    // Pick best supported MIME
+    const preferred = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'];
+    _voiceMimeType = preferred.find(m => MediaRecorder.isTypeSupported(m)) || '';
+
+    const opts = _voiceMimeType ? { mimeType: _voiceMimeType } : {};
+    try {
+      _voiceRecorder = new MediaRecorder(_voiceStream, opts);
+    } catch (err) {
+      console.warn('[VoiceWorker] MediaRecorder init failed:', err);
+      _voiceShowError('Could not start recording. Please try again.');
+      return;
+    }
+
+    _voiceRecorder.ondataavailable = e => {
+      if (e.data && e.data.size > 0) _voiceChunks.push(e.data);
+    };
+    _voiceRecorder.onstop = _onRecorderStop;
+
+    _voiceRecorder.start(200);         // collect chunks every 200 ms
+    _voiceSetStatus('listening');
+
+    // Reset input
+    _showInputState();
+    const inp = document.getElementById('guide-chat-input');
+    if (inp) { inp.value = ''; inp.placeholder = 'Listening…'; }
+    if (!_bubbleOpen) _openBubble(false);
+
+    // Start silence/waveform monitor
+    _startSilenceDetection();
+  }
+
+  /* ── Start the Voice Listening Worker ── */
+  async function _startVoiceWorker() {
     if (_voiceActive) return;
 
-    // ── Step 1: getUserMedia preflight ────────────────────────────────────
-    // This triggers the OS microphone permission dialog on first use.
-    // Without it, SpeechRecognition silently fails with 'not-allowed' in Electron.
-    let micStream = null;
+    // ── Obtain mic stream (triggers OS permission dialog on first use) ──
+    let stream;
     try {
-      micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
     } catch (err) {
       const name = err?.name || '';
       if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
@@ -724,133 +935,88 @@
           'Microphone access was denied. Please allow microphone access in System Settings → Privacy → Microphone, then try again.'
         );
       } else if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
-        _voiceShowError(
-          'No microphone found. Please connect a microphone and try again.'
-        );
+        _voiceShowError('No microphone found. Please connect a microphone and try again.');
       } else {
-        _voiceShowError(
-          'Could not access the microphone (' + (err?.message || name || 'unknown error') + ').'
-        );
+        _voiceShowError('Could not access the microphone (' + (err?.message || name || 'unknown error') + ').');
       }
       return;
     }
-    // Release the getUserMedia stream — SpeechRecognition manages its own capture
-    micStream.getTracks().forEach(t => t.stop());
-    micStream = null;
 
-    // ── Step 2: set up SpeechRecognition ─────────────────────────────────
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    _voiceWorker              = new SR();
-    _voiceWorker.lang         = navigator.language || 'en-US';
-    _voiceWorker.continuous     = false;  // single-phrase mode for clean Gemini dispatch
-    _voiceWorker.interimResults = true;
-    _voiceWorker.maxAlternatives = 1;
+    _voiceStream = stream;
+    _voiceActive = true;
+    _voicePaused = false;
 
-    _voiceActive  = true;
-    _voicePaused  = false;
-
-    /* onstart: show listening UI */
-    _voiceWorker.onstart = () => {
-      if (!_bubbleOpen) _openBubble(false);
-      _showInputState();
-      _updateVoiceUI(true);
-      const bar = document.getElementById('guide-voice-listening-bar');
-      if (bar) bar.classList.add('active');
-      const inp = document.getElementById('guide-chat-input');
-      if (inp) { inp.value = ''; inp.placeholder = 'Listening…'; }
-    };
-
-    /* onresult: show interim text; on final phrase → pause → send to Gemini */
-    _voiceWorker.onresult = e => {
-      let interim = '', final = '';
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        const t = e.results[i][0].transcript;
-        if (e.results[i].isFinal) final += t;
-        else                       interim += t;
-      }
-      const inp = document.getElementById('guide-chat-input');
-      if (inp) inp.value = (final || interim).trim();
-
-      if (final.trim()) {
-        // Pause the worker — _sendMessage will resume it after Gemini replies + TTS
-        _voicePaused = true;
-        setTimeout(() => {
-          if (document.getElementById('guide-chat-input')?.value.trim()) {
-            _sendMessage(/* fromVoice= */ true);
-          } else {
-            _voiceResumeAfterReply();
-          }
-        }, 350);
-      }
-    };
-
-    /* onerror: surface useful messages; don't stop on non-fatal codes */
-    _voiceWorker.onerror = e => {
-      const err = e.error;
-      // These are non-fatal — silence gap or manual abort
-      if (err === 'no-speech' || err === 'aborted') return;
-
-      // Fatal — stop and show an explanation
-      console.warn('[VoiceWorker] error:', err);
-      let msg = 'Voice listening stopped unexpectedly. Please try again.';
-      if (err === 'not-allowed')          msg = 'Microphone permission denied. Allow microphone access in System Settings and try again.';
-      if (err === 'service-not-allowed')  msg = 'Speech recognition service unavailable in this build. Please type your question.';
-      if (err === 'network')              msg = 'Network error during speech recognition. Check your connection and try again.';
-      if (err === 'audio-capture')        msg = 'Could not capture audio. Check that your microphone is connected and not in use by another app.';
-      _voiceShowError(msg);
-    };
-
-    /* onend: auto-restart for silence gaps UNLESS paused (Gemini/TTS in progress) */
-    _voiceWorker.onend = () => {
-      if (_voiceActive && !_voicePaused && !_voiceRestarting) {
-        _voiceRestarting = true;
-        setTimeout(() => {
-          _voiceRestarting = false;
-          if (_voiceActive && !_voicePaused && _voiceWorker) {
-            try { _voiceWorker.start(); } catch (_) {}
-          }
-        }, 250);
-      } else if (!_voiceActive) {
-        // Fully stopped — reset UI
-        _updateVoiceUI(false);
-        const inp = document.getElementById('guide-chat-input');
-        if (inp) inp.placeholder = 'Ask me anything…';
-        const bar = document.getElementById('guide-voice-listening-bar');
-        if (bar) bar.classList.remove('active');
-      }
-      // _voicePaused = true: do nothing — _voiceResumeAfterReply() restarts us
-    };
-
+    // ── Build AudioContext + AnalyserNode for silence detection ──
     try {
-      _voiceWorker.start();
+      _voiceAudioCtx  = new (window.AudioContext || window.webkitAudioContext)();
+      _voiceAnalyser  = _voiceAudioCtx.createAnalyser();
+      _voiceAnalyser.fftSize = 256;
+      const src = _voiceAudioCtx.createMediaStreamSource(stream);
+      src.connect(_voiceAnalyser);
+      // Don't connect to destination — we don't want mic playback
     } catch (err) {
-      console.warn('[VoiceWorker] start failed:', err);
-      _voiceShowError('Could not start voice recognition. Please try again.');
-      _voiceWorker = null;
-      _voiceActive = false;
+      console.warn('[VoiceWorker] AudioContext setup failed:', err);
+      // Non-fatal — we can record without amplitude analysis
     }
+
+    _beginRecording();
   }
 
   /* ── Stop the Voice Listening Worker completely ── */
   function _stopVoiceWorker() {
-    _voiceActive  = false;
-    _voicePaused  = false;
-    _ttsCancelSpeak();
-    if (_voiceWorker) {
-      try { _voiceWorker.stop(); } catch (_) {}
-      _voiceWorker = null;
+    _voiceActive = false;
+    _voicePaused = false;
+
+    // Cancel rAF loop
+    if (_voiceRafId) { cancelAnimationFrame(_voiceRafId); _voiceRafId = null; }
+
+    // Stop recorder
+    if (_voiceRecorder) {
+      try { _voiceRecorder.stop(); } catch (_) {}
+      _voiceRecorder = null;
     }
-    _updateVoiceUI(false);
+    _voiceChunks = [];
+
+    // Close AudioContext
+    if (_voiceAudioCtx) {
+      try { _voiceAudioCtx.close(); } catch (_) {}
+      _voiceAudioCtx = null;
+      _voiceAnalyser = null;
+    }
+
+    // Release mic stream
+    if (_voiceStream) {
+      _voiceStream.getTracks().forEach(t => t.stop());
+      _voiceStream = null;
+    }
+
+    // Cancel TTS
+    _ttsCancelSpeak();
+
+    // Reset UI
+    _voiceSetStatus('off');
     const inp = document.getElementById('guide-chat-input');
     if (inp) inp.placeholder = 'Ask me anything…';
     const bar = document.getElementById('guide-voice-listening-bar');
-    if (bar) bar.classList.remove('active');
+    if (bar) { bar.classList.remove('active', 'speaking', 'processing'); }
+
+    // Reset waveform bar heights
+    document.querySelectorAll('#guide-voice-listening-bar .guide-voice-waves span')
+      .forEach(b => (b.style.height = ''));
+  }
+
+  /* ── Resume a new recording cycle after Gemini/TTS cycle ── */
+  function _voiceResumeAfterReply() {
+    if (!_voiceActive) return;
+    _voicePaused = false;
+    _beginRecording();
   }
 
   function _toggleVoiceWorker() {
     if (_voiceActive) { _stopVoiceWorker(); }
     else              { _startVoiceWorker(); }
   }
+
 
   /* ════════════════════════════════════════════════════════════════════════
      CONTEXT MENU

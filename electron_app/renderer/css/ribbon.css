@@ -5852,6 +5852,7 @@ body.dark .han-icon-amber  { color: #fbbf24; }
   flex-direction: column;
   height: 100%;
   overflow: hidden;
+  background: var(--bg);
 }
 
 /* Suppliers view */
@@ -5871,7 +5872,7 @@ body.dark .han-icon-amber  { color: #fbbf24; }
   transition: opacity .12s; white-space: nowrap;
 }
 .sup-add-btn:hover { opacity: .88; }
-.sup-table-wrap { flex: 1; overflow: auto; }
+.sup-table-wrap { flex: 1; overflow: auto; background: var(--bg); padding: 4px 12px 8px; }
 .sup-table td, .sup-table th { white-space: nowrap; }
 .sup-status-badge {
   display: inline-flex; align-items: center; gap: 4px;
@@ -6118,22 +6119,72 @@ body.dark .han-icon-amber  { color: #fbbf24; }
 
 .po-body { display: flex; flex: 1; min-height: 0; }
 
-/* List pane */
+/* List pane — grey background so white card rows pop */
 .po-list-pane {
   display: flex; flex-direction: column; flex: 1; min-width: 0;
   border-right: 1px solid var(--border);
+  background: var(--bg);
+  overflow-y: auto;
+  padding: 4px 12px 8px;   /* gutters here, NOT on the table element */
 }
-.po-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+/* All shared inventory tables: card-row layout */
+.po-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0 5px;
+  font-size: 12px;
+  padding: 0;              /* padding lives on the container, not the table */
+}
 .po-table thead th {
-  padding: 8px 10px; text-align: left; font-size: 10px; font-weight: 700;
+  padding: 6px 10px 8px; text-align: left; font-size: 10px; font-weight: 700;
   text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted);
-  background: var(--surface2); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 1;
+  background: var(--bg); position: sticky; top: 0; z-index: 1;
 }
-.po-table tbody td { padding: 9px 10px; border-bottom: 1px solid var(--border-light); vertical-align: middle; }
-.po-table tbody tr { cursor: pointer; transition: background .1s; }
-.po-table tbody tr:hover   { background: var(--surface2); }
-.po-table tbody tr.active  { background: var(--accent-light); }
-.po-table tbody tr.active td { border-bottom-color: rgba(0,0,0,.04); }
+/* ── Card rows: .po-row (PO list, GRN list, Audit list) ──
+   Border via td (guaranteed) + subtle drop-shadow via tr (depth).
+   background-collapse:separate required on parent table.              */
+.po-row { box-shadow: 0 1px 3px rgba(0,0,0,.07); transition: box-shadow .15s; cursor: pointer; }
+.po-row td {
+  background: var(--surface);
+  border-top:    1px solid var(--border-light);
+  border-bottom: 1px solid var(--border-light);
+  transition: background .12s, border-color .12s;
+}
+.po-row td:first-child { border-left: 1px solid var(--border-light); border-radius: var(--radius) 0 0 var(--radius); }
+.po-row td:last-child  { border-right: 1px solid var(--border-light); border-radius: 0 var(--radius) var(--radius) 0; }
+.po-row:hover { box-shadow: 0 3px 10px rgba(0,0,0,.12); }
+.po-row:hover td { background: var(--surface2); border-color: var(--border); }
+.po-row.po-row-active { box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+.po-row.po-row-active td { background: color-mix(in srgb, var(--accent) 8%, var(--surface)); border-color: var(--accent); }
+
+/* ── Card rows: cheques, categories, units, discounts, brands (plain <tr>) ── */
+#chq-tbody tr, #cat-tbody tr, #unit-tbody tr, #disc-tbody tr, #brand-tbody tr {
+  box-shadow: 0 1px 3px rgba(0,0,0,.07); transition: box-shadow .15s; cursor: pointer;
+}
+#chq-tbody tr td, #cat-tbody tr td, #unit-tbody tr td, #disc-tbody tr td, #brand-tbody tr td {
+  background: var(--surface);
+  border-top: 1px solid var(--border-light); border-bottom: 1px solid var(--border-light);
+  transition: background .12s, border-color .12s;
+}
+#chq-tbody tr td:first-child, #cat-tbody tr td:first-child,
+#unit-tbody tr td:first-child, #disc-tbody tr td:first-child,
+#brand-tbody tr td:first-child {
+  border-left: 1px solid var(--border-light); border-radius: var(--radius) 0 0 var(--radius);
+}
+#chq-tbody tr td:last-child, #cat-tbody tr td:last-child,
+#unit-tbody tr td:last-child, #disc-tbody tr td:last-child,
+#brand-tbody tr td:last-child {
+  border-right: 1px solid var(--border-light); border-radius: 0 var(--radius) var(--radius) 0;
+}
+#chq-tbody tr:hover, #cat-tbody tr:hover, #unit-tbody tr:hover,
+#disc-tbody tr:hover, #brand-tbody tr:hover { box-shadow: 0 3px 10px rgba(0,0,0,.12); }
+#chq-tbody tr:hover td, #cat-tbody tr:hover td, #unit-tbody tr:hover td,
+#disc-tbody tr:hover td, #brand-tbody tr:hover td {
+  background: var(--surface2); border-color: var(--border);
+}
+
+/* shared td padding for all po-table rows */
+.po-table tbody td { padding: 10px 10px; vertical-align: middle; }
 .po-status-badge {
   display: inline-flex; align-items: center; gap: 4px;
   padding: 2px 8px; border-radius: 20px; font-size: 10px; font-weight: 700;
@@ -6153,17 +6204,63 @@ body.dark .han-icon-amber  { color: #fbbf24; }
 
 /* Detail pane */
 .po-detail-pane {
-  width: 380px; flex-shrink: 0; display: flex; flex-direction: column; overflow-y: auto;
+  width: 40%; flex-shrink: 0;
+  display: flex; flex-direction: column;
+  overflow-y: auto;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
 }
 .po-detail-empty {
   flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
   color: var(--text-muted); gap: 10px;
 }
-.po-detail-empty > i { font-size: 40px; opacity: .15; }
+.po-detail-empty > i { font-size: 44px; opacity: .12; }
 .po-detail-empty > span { font-size: 12px; }
 
-#po-detail-view  { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
-#grn-detail-view { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+/* PO detail view */
+#po-detail-view { padding: 16px; display: flex; flex-direction: column; gap: 12px; background: var(--surface); }
+
+/* GRN detail view — new layout */
+#grn-detail-view {
+  display: flex; flex-direction: column;
+  height: 100%; min-height: 0;
+}
+
+/* Sticky header bar at top of GRN detail */
+.grn-dv-sticky-header {
+  display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;
+  padding: 14px 16px 12px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  position: sticky; top: 0; z-index: 3;
+}
+
+/* Scrollable content body below the sticky header */
+.grn-dv-body {
+  flex: 1; overflow-y: auto;
+  display: flex; flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px 20px;
+  background: var(--surface2);   /* very light tint so section cards stand out on white pane */
+}
+
+/* Section card — items, payments */
+.grn-dv-section {
+  background: var(--surface);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.grn-dv-section-label {
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--text-muted); padding: 9px 12px 7px;
+  border-bottom: 1px solid var(--border-light);
+  display: flex; align-items: center; gap: 6px;
+  background: var(--surface2);
+}
+/* Items table scrollable container */
+.grn-dv-table-scroll { overflow-x: auto; }
 .po-dv-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
 .po-dv-number { font-size: 16px; font-weight: 800; }
 .po-dv-meta   { font-size: 11px; color: var(--text-muted); margin-top: 3px; }
@@ -6190,13 +6287,18 @@ body.dark .han-icon-amber  { color: #fbbf24; }
 
 .po-dv-section-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); }
 
-.po-items-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.po-items-table { width: 100%; border-collapse: collapse; font-size: 11.5px; min-width: 320px; }
 .po-items-table th {
-  padding: 5px 6px; text-align: left; font-size: 9px; font-weight: 700;
+  padding: 7px 10px; text-align: left; font-size: 10px; font-weight: 700;
   text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted);
   background: var(--surface2); border-bottom: 1px solid var(--border-light);
+  white-space: nowrap;
 }
-.po-items-table td { padding: 7px 6px; border-bottom: 1px solid var(--border-light); vertical-align: top; }
+.po-items-table td {
+  padding: 8px 10px; border-bottom: 1px solid var(--border-light); vertical-align: middle;
+}
+.po-items-table tbody tr:last-child td { border-bottom: none; }
+.po-items-table tbody tr:hover td { background: var(--surface2); }
 
 .po-dv-totals {
   display: flex; justify-content: flex-end; gap: 16px;
@@ -6729,42 +6831,54 @@ body.dark .han-icon-amber  { color: #fbbf24; }
   accent-color: var(--accent);
   cursor: pointer;
 }
-.inv-row-selected {
-  background: color-mix(in srgb, var(--accent) 10%, transparent) !important;
+.inv-row-selected td {
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface)) !important;
+  border-color: var(--accent) !important;
 }
-.inv-row-selected:hover {
-  background: color-mix(in srgb, var(--accent) 16%, transparent) !important;
+.inv-row-selected { box-shadow: 0 2px 8px rgba(0,0,0,.08) !important; }
+.inv-row-selected:hover td {
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface)) !important;
 }
+.inv-row-selected:hover { box-shadow: 0 3px 10px rgba(0,0,0,.12) !important; }
 
 /* table */
 .inv-table-wrap {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
+  padding: 4px 16px 8px;
 }
 .inv-table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0 5px;     /* vertical gap between rows */
   font-size: 12.5px;
 }
 .inv-table thead th {
   position: sticky;
   top: 0;
-  background: var(--surface);
-  padding: 9px 12px;
+  background: var(--bg);
+  padding: 6px 12px 8px;
   text-align: left;
   font-weight: 600;
-  font-size: 11.5px;
+  font-size: 11px;
   color: var(--text-muted);
-  border-bottom: 1px solid var(--border);
+  letter-spacing: .03em;
+  text-transform: uppercase;
   z-index: 2;
 }
-.inv-row {
-  border-bottom: 1px solid var(--border-light);
-  transition: background .12s;
+/* card rows — border via td (guaranteed), drop-shadow via tr (depth) */
+.inv-row { box-shadow: 0 1px 3px rgba(0,0,0,.07); transition: box-shadow .15s; cursor: pointer; }
+.inv-row td {
+  background: var(--surface);
+  border-top: 1px solid var(--border-light); border-bottom: 1px solid var(--border-light);
+  transition: background .12s, border-color .12s;
+  padding: 10px 12px; vertical-align: middle;
 }
-.inv-row:hover { background: var(--surface2); }
-.inv-row td { padding: 8px 12px; vertical-align: middle; }
+.inv-row td:first-child { border-left: 1px solid var(--border-light); border-radius: var(--radius) 0 0 var(--radius); }
+.inv-row td:last-child  { border-right: 1px solid var(--border-light); border-radius: 0 var(--radius) var(--radius) 0; }
+.inv-row:hover { box-shadow: 0 3px 10px rgba(0,0,0,.12); }
+.inv-row:hover td { background: var(--surface2); border-color: var(--border); }
 
 .inv-thumb {
   width: 36px;
@@ -6786,18 +6900,20 @@ body.dark .han-icon-amber  { color: #fbbf24; }
   color: var(--text-light);
   font-size: 14px;
 }
-.inv-name { font-weight: 600; color: var(--text); }
-.inv-sku  { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
-.inv-cat  { color: var(--text-muted); }
-.inv-price { text-align: right; font-weight: 700; color: var(--accent); }
-.inv-stock-cell { text-align: center; font-weight: 600; color: var(--text); }
+.inv-name { font-weight: 600; font-size: 13px; color: var(--text); line-height: 1.3; }
+.inv-sku  { font-size: 11px; color: var(--text-muted); margin-top: 2px; font-variant-numeric: tabular-nums; }
+.inv-cat  { font-size: 12.5px; color: var(--text-muted); }
+.inv-price { text-align: right; font-weight: 700; font-size: 13px; color: var(--accent); font-variant-numeric: tabular-nums; }
+.inv-stock-cell { text-align: center; font-weight: 700; font-size: 13px; color: var(--text); font-variant-numeric: tabular-nums; }
 
 .inv-status {
-  display: inline-block;
-  padding: 3px 9px;
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
   border-radius: 20px;
   font-size: 11px;
   font-weight: 600;
+  letter-spacing: .02em;
 }
 .inv-status-ok  { background: #d1fae5; color: #065f46; }
 .inv-status-low { background: #fef3c7; color: #92400e; }
@@ -7674,20 +7790,20 @@ body.dark .inv-badge-purple { background: #2e1065; color: #c4b5fd; }
 
 /* ── Product detail: GRN stock-receive history table ────────────────────── */
 .inv-grn-table {
-  width: 100%; border-collapse: collapse; font-size: 12px;
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0 5px;
+  font-size: 12px;
+  padding: 0 12px;
 }
 .inv-grn-table thead th {
-  padding: 7px 10px; text-align: left;
+  padding: 6px 10px 8px; text-align: left;
   font-size: 10px; font-weight: 600; letter-spacing: .04em;
   text-transform: uppercase; color: var(--text-muted);
-  border-bottom: 1px solid var(--border); white-space: nowrap;
+  background: var(--bg); white-space: nowrap;
+  position: sticky; top: 0; z-index: 1;
 }
-.inv-grn-table tbody tr {
-  border-bottom: 1px solid var(--border-light);
-  transition: background .1s;
-}
-.inv-grn-table tbody tr:last-child { border-bottom: none; }
-.inv-grn-table tbody tr:hover { background: var(--surface2); }
+/* rows use .po-row — card styles already applied above */
 .inv-grn-td-date {
   padding: 8px 10px; white-space: nowrap;
   color: var(--text-muted); font-size: 11px;
@@ -9916,25 +10032,30 @@ body.dark .pc-modal-head {
 /* ── End Goods Receive Notes ──────────────────────────── */
 
 /* ── Cheques View ─────────────────────────────────────── */
-#inv-cheques-view { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+#inv-cheques-view { display: flex; flex-direction: column; flex: 1; min-height: 0; background: var(--bg); }
 
 .chq-summary {
-  display: flex; gap: 12px; padding: 14px 16px 0; flex-shrink: 0; flex-wrap: wrap;
+  display: flex; gap: 12px; padding: 14px 16px 12px; flex-shrink: 0; flex-wrap: wrap;
 }
 .chq-stat-card {
-  flex: 1; min-width: 120px; padding: 12px 16px;
-  background: var(--surface2); border: 1px solid var(--border-light);
+  flex: 1; min-width: 130px; padding: 14px 18px;
+  background: var(--surface);
+  border: 1px solid var(--border-light);
+  border-left: 3px solid var(--accent);
   border-radius: 10px;
+  box-shadow: 0 1px 4px rgba(0,0,0,.07);
 }
-.chq-stat-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); margin-bottom: 4px; }
-.chq-stat-value { font-size: 20px; font-weight: 800; color: var(--text); }
-.chq-stat-danger { color: #dc2626; }
+.chq-stat-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); margin-bottom: 6px; }
+.chq-stat-value { font-size: 22px; font-weight: 800; color: var(--text); }
+.chq-stat-danger  { color: #dc2626; }
 .chq-stat-success { color: #16a34a; }
 
 .chq-table-wrap {
   flex: 1; min-height: 0; display: flex; flex-direction: column; overflow-y: auto;
+  background: var(--bg);
+  padding: 4px 12px 8px;        /* gutters so card borders/shadows aren't edge-clipped */
 }
-.chq-table { width: 100%; }
+.chq-table { width: 100%; padding: 0; }  /* padding lives on the wrap, not the table */
 
 /* Cheque status badges */
 .chq-badge {
@@ -10009,10 +10130,10 @@ body.dark .pc-modal-head {
 /* ── End Stock Audit View ─────────────────────────────── */
 
 /* ── Categories View ──────────────────────────────────── */
-#inv-categories-view { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+#inv-categories-view { display: flex; flex-direction: column; flex: 1; min-height: 0; background: var(--bg); }
 
-.cat-body { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow-y: auto; }
-.cat-table { width: 100%; }
+.cat-body { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow-y: auto; background: var(--bg); padding: 4px 12px 8px; }
+.cat-table { width: 100%; padding: 0; }
 .cat-add-btn {
   padding: 6px 14px; gap: 6px; font-size: 12px; font-weight: 700;
   background: var(--accent); color: #fff; border-color: var(--accent);
@@ -10036,11 +10157,11 @@ body.dark .pc-modal-head {
 /* ── End Categories View ──────────────────────────────── */
 
 /* ── Units View ───────────────────────────────────────── */
-#inv-units-view { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+#inv-units-view { display: flex; flex-direction: column; flex: 1; min-height: 0; background: var(--bg); }
 /* ── End Units View ───────────────────────────────────── */
 
 /* ── Discounts View ───────────────────────────────────── */
-#inv-discounts-view { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+#inv-discounts-view { display: flex; flex-direction: column; flex: 1; min-height: 0; background: var(--bg); }
 
 .disc-filter-tabs { display: flex; gap: 4px; }
 .disc-ft-btn {
@@ -10067,7 +10188,7 @@ body.dark .pc-modal-head {
 /* ── End Discounts View ───────────────────────────────── */
 
 /* ── Brands View ──────────────────────────────────────── */
-#inv-brands-view { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+#inv-brands-view { display: flex; flex-direction: column; flex: 1; min-height: 0; background: var(--bg); }
 /* ── End Brands View ──────────────────────────────────── */
 
 /* ── Barcode Sheets View ──────────────────────────────── */
@@ -14605,6 +14726,29 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
 #guide-voice-listening-bar.speaking { color: #7c3aed; }
 #guide-voice-listening-bar.speaking .guide-voice-waves span { background: #7c3aed; }
 
+/* Processing state — orange spinner badge; suppress CSS wave animation so JS height wins */
+#guide-voice-badge.voice-processing {
+  background: #d97706;
+  animation: guide-voice-proc-spin 1s linear infinite;
+}
+@keyframes guide-voice-proc-spin {
+  0%   { box-shadow: 0 0 0 0   rgba(217,119,6,0.6); }
+  50%  { box-shadow: 0 0 0 6px rgba(217,119,6,0);   }
+  100% { box-shadow: 0 0 0 0   rgba(217,119,6,0.6); }
+}
+#guide-voice-listening-bar.processing { color: #d97706; }
+#guide-voice-listening-bar.processing .guide-voice-waves span {
+  background: #d97706;
+  /* Keep bars at uniform mid-height during processing (JS sets height: '') */
+  height: 50% !important;
+  animation: none;
+}
+
+/* When JS is controlling bar heights (live audio), disable CSS animation */
+#guide-voice-listening-bar.live-audio .guide-voice-waves span {
+  animation: none;
+}
+
 /* Dark mode context menu */
 @media (prefers-color-scheme: dark) {
   #guide-ctx-menu     { background: #1e2135; border-color: #2d3257; box-shadow: 0 8px 28px rgba(0,0,0,0.45); }
@@ -15917,11 +16061,12 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
 
 /* ── GRN detail view: totals breakdown ─────────────────────────────────────── */
 .grn-dv-totals-wrap {
+  background: var(--surface);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius);
+  padding: 12px 14px;
   display: flex;
   justify-content: flex-end;
-  padding: 10px 0 4px;
-  border-top: 2px solid var(--border);
-  margin-top: 6px;
 }
 .grn-dv-br-row {
   display: flex;
@@ -16009,17 +16154,23 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
 }
 
 /* ── GRN detail view: parties panel (Supplier ↔ Business) ──────────────────── */
-.grn-dv-parties { margin: 10px 0 12px; }
+.grn-dv-parties { margin: 0; }   /* gap from parent flex */
 .grn-dv-parties-inner {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  gap: 8px;
 }
 .grn-dv-party {
-  background: var(--surface, #f9fafb);
-  border: 1px solid var(--border);
-  border-radius: 7px;
+  background: var(--surface);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius);
   padding: 10px 12px;
+  min-width: 0;                  /* prevent grid cell overflow */
+}
+/* empty no-data row */
+.grn-dv-no-data {
+  padding: 10px 12px; color: var(--text-muted); font-size: 12px;
+  display: flex; align-items: center; gap: 8px;
 }
 .grn-dv-party-biz { text-align: right; }
 .grn-dv-party-label {
