@@ -135,6 +135,15 @@ WALKTHROUGH IDs (use when user wants to see, do, or learn something):
   mail_filters         – view mail filters / inbox rules
   mail_scheduled       – view scheduled / pending emails
   mail_schedule_send   – schedule an email to send later
+  ds_overview          – open / view the Design Studio panel overview
+  ds_new_design        – create / add a new design project
+  ds_proposals         – view project proposals list
+  ds_new_proposal      – create / add a new project proposal
+  ds_letterhead        – create / view / open the Letterhead design
+  ds_business_profile  – create / view / open the Business Profile design
+  ds_social_media      – filter / view Social Media designs
+  ds_business_card     – filter / view Business Card designs
+  ds_all_designs       – view all designs (no filter)
 
 Only set walkthrough when the user clearly wants a demonstration.
 Only set dataQuery when the user is asking for live numbers, lists, or status of their business data.

@@ -2131,6 +2131,171 @@ window.GUIDE_CONFIG = {
         { "type": "bubble",       "text": "Fill in the To, Subject, and Message, then click Schedule (the clock button). You can pick any future date and time. The email will be held and sent automatically at the scheduled time. View or cancel pending scheduled emails in the Scheduled tab.", "wait": 7000 },
         { "type": "unhighlight",  "selector": "#mail-compose-schedule" }
       ]
+    },
+
+
+    /* ════════════════════════════════════════════════════════════════════
+       DESIGN STUDIO
+       ════════════════════════════════════════════════════════════════════ */
+
+    /* ── Design Studio Overview ──────────────────────────────────────── */
+    {
+      "id": "ds_overview",
+      "intent_patterns": ["design studio", "open design", "go to design", "view design",
+                          "design panel", "designs", "show design", "design section",
+                          "how to use design studio", "what is design studio"],
+      "reply": "Let me take you to the Design Studio!",
+      "steps": [
+        { "type": "walk_click",   "selector": "[data-tab='design']",      "wait": 700 },
+        { "type": "walk_to",      "selector": "#panel-design" },
+        { "type": "highlight",    "selector": "#ds-new-btn" },
+        { "type": "bubble",       "text": "Welcome to Design Studio! Here you can create Social Media graphics, Business Cards, Custom designs, and manage Project Proposals. You also have quick access to your Letterhead and Business Profile from the cards at the top.", "wait": 7000 },
+        { "type": "unhighlight",  "selector": "#ds-new-btn" }
+      ]
+    },
+
+    /* ── New Design ──────────────────────────────────────────────────── */
+    {
+      "id": "ds_new_design",
+      "intent_patterns": ["new design", "create design", "add design", "create a new design",
+                          "make design", "make a design", "how to create design",
+                          "want to create design", "how to add design", "design create",
+                          "create new design", "need to create design"],
+      "reply": "Sure! Let me show you how to create a new design!",
+      "steps": [
+        { "type": "walk_click",   "selector": "[data-tab='design']",      "wait": 700 },
+        { "type": "walk_click",   "selector": "#rb-design-new",           "wait": 600 },
+        { "type": "walk_to",      "selector": "#ds-new-btn" },
+        { "type": "highlight",    "selector": "#ds-new-btn" },
+        { "type": "bubble",       "text": "Click <b>New Design</b> to start a new design project. You can choose the design type — Social Media, Business Card, or Custom — and give it a name. Your designs will appear in the cards area below.", "wait": 6000 },
+        { "type": "unhighlight",  "selector": "#ds-new-btn" }
+      ]
+    },
+
+    /* ── Project Proposals ───────────────────────────────────────────── */
+    {
+      "id": "ds_proposals",
+      "intent_patterns": ["proposals", "project proposals", "view proposals", "show proposals",
+                          "design proposals", "how to view proposals", "manage proposals",
+                          "proposal list", "see proposals"],
+      "reply": "Opening Project Proposals!",
+      "steps": [
+        { "type": "walk_click",   "selector": "[data-tab='design']",      "wait": 700 },
+        { "type": "walk_click",   "selector": "#rb-design-proposals",     "wait": 600 },
+        { "type": "wait_visible", "selector": "#ds-proposals-view" },
+        { "type": "walk_to",      "selector": "#ds-prop-new-btn" },
+        { "type": "highlight",    "selector": "#ds-prop-new-btn" },
+        { "type": "bubble",       "text": "This is your <b>Project Proposals</b> area. You can create professional proposals for clients here — each proposal can include a title, description, pricing breakdown, and can be shared or printed. Click <b>New Proposal</b> to get started.", "wait": 7000 },
+        { "type": "unhighlight",  "selector": "#ds-prop-new-btn" }
+      ]
+    },
+
+    /* ── New Proposal ────────────────────────────────────────────────── */
+    {
+      "id": "ds_new_proposal",
+      "intent_patterns": ["new proposal", "create proposal", "add proposal", "make proposal",
+                          "create new proposal", "how to create proposal", "how to add proposal",
+                          "want to create proposal", "design proposal create"],
+      "reply": "Let me show you how to create a new project proposal!",
+      "steps": [
+        { "type": "walk_click",   "selector": "[data-tab='design']",      "wait": 700 },
+        { "type": "walk_click",   "selector": "#rb-design-new-proposal",  "wait": 600 },
+        { "type": "wait_visible", "selector": "#ds-proposals-view" },
+        { "type": "walk_click",   "selector": "#ds-prop-new-btn",         "wait": 500 },
+        { "type": "wait_visible", "selector": "#ds-prop-modal" },
+        { "type": "walk_to",      "selector": "#ds-prop-modal" },
+        { "type": "highlight",    "selector": "#ds-prop-modal" },
+        { "type": "bubble",       "text": "Fill in the proposal details — client name, project title, and description. Once saved, the proposal will appear in your proposals list and can be shared with clients. Click Save when you're done!", "wait": 6000 },
+        { "type": "unhighlight",  "selector": "#ds-prop-modal" }
+      ]
+    },
+
+    /* ── Letterhead ──────────────────────────────────────────────────── */
+    {
+      "id": "ds_letterhead",
+      "intent_patterns": ["letterhead", "create letterhead", "open letterhead",
+                          "view letterhead", "letterhead design", "how to create letterhead",
+                          "make letterhead", "business letterhead", "letter head"],
+      "reply": "Opening the Letterhead designer!",
+      "steps": [
+        { "type": "walk_click",   "selector": "[data-tab='design']",      "wait": 700 },
+        { "type": "walk_click",   "selector": "#rb-design-letterhead",    "wait": 600 },
+        { "type": "walk_to",      "selector": "#ds-singleton-letterhead" },
+        { "type": "highlight",    "selector": "#ds-singleton-letterhead" },
+        { "type": "bubble",       "text": "<b>Letterhead</b> is your official document template — it includes your business logo, name, contact details, and address in a professional layout. Click the Letterhead card to create or edit it. It can be printed and attached to formal correspondence.", "wait": 7000 },
+        { "type": "unhighlight",  "selector": "#ds-singleton-letterhead" }
+      ]
+    },
+
+    /* ── Business Profile ────────────────────────────────────────────── */
+    {
+      "id": "ds_business_profile",
+      "intent_patterns": ["business profile", "company profile", "business card profile",
+                          "create business profile", "open business profile",
+                          "view business profile", "company brochure", "business brochure",
+                          "how to create business profile"],
+      "reply": "Opening the Business Profile designer!",
+      "steps": [
+        { "type": "walk_click",   "selector": "[data-tab='design']",          "wait": 700 },
+        { "type": "walk_click",   "selector": "#rb-design-company-profile",   "wait": 600 },
+        { "type": "walk_to",      "selector": "#ds-singleton-company-profile" },
+        { "type": "highlight",    "selector": "#ds-singleton-company-profile" },
+        { "type": "bubble",       "text": "<b>Business Profile</b> is a professional showcase document for your company — includes your logo, mission, key services, and contact information. It is perfect for sharing with new clients or printing for events. Click the card to create or edit it.", "wait": 7000 },
+        { "type": "unhighlight",  "selector": "#ds-singleton-company-profile" }
+      ]
+    },
+
+    /* ── Social Media Designs ────────────────────────────────────────── */
+    {
+      "id": "ds_social_media",
+      "intent_patterns": ["social media designs", "social media", "social designs",
+                          "instagram designs", "facebook designs", "view social media",
+                          "filter social media", "social media graphics", "social posts",
+                          "view social designs", "how to view social media designs"],
+      "reply": "Filtering to Social Media designs!",
+      "steps": [
+        { "type": "walk_click",   "selector": "[data-tab='design']",      "wait": 700 },
+        { "type": "walk_click",   "selector": "#rb-design-social-media",  "wait": 600 },
+        { "type": "walk_to",      "selector": "#ds-cards-area" },
+        { "type": "highlight",    "selector": "#ds-cards-area" },
+        { "type": "bubble",       "text": "These are your <b>Social Media</b> designs — banners, posts, stories, and graphics sized for platforms like Instagram, Facebook, and WhatsApp. Click any card to open and edit it, or click <b>New Design</b> to add a new one.", "wait": 6000 },
+        { "type": "unhighlight",  "selector": "#ds-cards-area" }
+      ]
+    },
+
+    /* ── Business Card Designs ───────────────────────────────────────── */
+    {
+      "id": "ds_business_card",
+      "intent_patterns": ["business cards", "business card designs", "view business cards",
+                          "filter business cards", "business card design", "card designs",
+                          "how to view business cards", "manage business cards",
+                          "create business card"],
+      "reply": "Filtering to Business Card designs!",
+      "steps": [
+        { "type": "walk_click",   "selector": "[data-tab='design']",       "wait": 700 },
+        { "type": "walk_click",   "selector": "#rb-design-business-card",  "wait": 600 },
+        { "type": "walk_to",      "selector": "#ds-cards-area" },
+        { "type": "highlight",    "selector": "#ds-cards-area" },
+        { "type": "bubble",       "text": "These are your <b>Business Card</b> designs. Each card shows your name, title, contact details, and branding. You can have multiple variants — for different staff or events. Click any card to edit, or click <b>New Design</b> to add one.", "wait": 6000 },
+        { "type": "unhighlight",  "selector": "#ds-cards-area" }
+      ]
+    },
+
+    /* ── All Designs ─────────────────────────────────────────────────── */
+    {
+      "id": "ds_all_designs",
+      "intent_patterns": ["all designs", "view all designs", "show all designs",
+                          "design list", "list of designs", "my designs",
+                          "all my designs", "how to see all designs"],
+      "reply": "Showing all your designs!",
+      "steps": [
+        { "type": "walk_click",   "selector": "[data-tab='design']",   "wait": 700 },
+        { "type": "walk_click",   "selector": "#rb-design-all",        "wait": 600 },
+        { "type": "walk_to",      "selector": "#ds-cards-area" },
+        { "type": "highlight",    "selector": "#ds-cards-area" },
+        { "type": "bubble",       "text": "Here are <b>All Designs</b> — Social Media, Business Cards, and Custom projects together. Use the filter buttons at the top to narrow down by type. Click any design card to open it, or use <b>New Design</b> to create a fresh one.", "wait": 6000 },
+        { "type": "unhighlight",  "selector": "#ds-cards-area" }
+      ]
     }
 
   ]
