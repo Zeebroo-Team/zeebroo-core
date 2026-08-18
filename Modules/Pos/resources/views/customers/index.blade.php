@@ -33,7 +33,7 @@
 .cust-modal.is-open .cust-modal__panel{transform:none;}
 .cust-modal__head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 18px;border-bottom:1px solid var(--border);background:color-mix(in srgb,var(--card) 93%,var(--border));}
 .cust-modal__head h3{margin:0;font-size:15px;font-weight:800;color:var(--text);}
-.cust-modal__close{width:30px;height:30px;display:flex;align-items:center;justify-content:center;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;font-size:13px;transition:all .15s;}
+.cust-modal__close{width:30px;height:30px;display:flex;align-items:center;justify-content:center;padding:0;line-height:1;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;font-size:13px;transition:all .15s;}
 .cust-modal__close:hover{border-color:var(--text);color:var(--text);}
 .cust-modal__body{padding:18px;display:grid;gap:12px;}
 .cust-modal__grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}

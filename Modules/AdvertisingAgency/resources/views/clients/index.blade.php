@@ -86,10 +86,10 @@
 
         {{-- Create modal --}}
         <div id="cl-modal" class="pcat-modal {{ $modalOpen ? 'pcat-modal--open' : '' }}">
-            <div class="pcat-modal-box">
-                <div class="pcat-modal-head">
+            <div class="pcat-modal__panel">
+                <div class="pcat-modal__head">
                     <span>New client</span>
-                    <button type="button" class="pcat-modal-close" id="cl-modal-close">&times;</button>
+                    <button type="button" class="pcat-modal__close" id="cl-modal-close">&times;</button>
                 </div>
                 @include('advertising-agency::clients.partials.form')
             </div>

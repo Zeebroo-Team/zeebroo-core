@@ -8,7 +8,7 @@
 .pos-kbd-modal__panel{position:relative;z-index:1;width:min(100%,520px);max-height:min(88vh,640px);overflow:auto;border-radius:14px;border:1px solid var(--border);background:var(--card);box-shadow:0 20px 50px rgba(0,0,0,.28);padding:16px 18px;}
 .pos-kbd-modal__head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;}
 .pos-kbd-modal__head h2{margin:0;font-size:16px;font-weight:800;}
-.pos-kbd-modal__close{width:34px;height:34px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;font-size:18px;line-height:1;}
+.pos-kbd-modal__close{width:34px;height:34px;display:grid;place-items:center;padding:0;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;font-size:18px;line-height:1;}
 .pos-kbd-modal__intro{margin:0 0 12px;font-size:12px;color:var(--muted);line-height:1.45;}
 .pos-kbd-table{width:100%;border-collapse:collapse;font-size:12px;}
 .pos-kbd-table th,.pos-kbd-table td{padding:7px 8px;text-align:left;border-bottom:1px solid var(--border);vertical-align:top;}

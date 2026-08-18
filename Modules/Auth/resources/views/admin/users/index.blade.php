@@ -44,7 +44,7 @@
 .adu-modal-head{padding:20px 22px 16px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;justify-content:space-between;gap:12px;}
 .adu-modal-title{margin:0 0 3px;font-size:18px;font-weight:800;letter-spacing:-.02em;}
 .adu-modal-sub{margin:0;font-size:13px;color:var(--muted);}
-.adu-modal-close{width:34px;height:34px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;display:grid;place-items:center;font-size:18px;flex-shrink:0;}
+.adu-modal-close{width:34px;height:34px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;display:grid;place-items:center;font-size:18px;line-height:1;padding:0;font-family:inherit;flex-shrink:0;}
 .adu-modal-close:hover{background:color-mix(in srgb,#ef4444 8%,transparent);border-color:color-mix(in srgb,#ef4444 35%,var(--border));}
 .adu-modal-body{padding:20px 22px;overflow-y:auto;flex:1;min-height:0;}
 .adu-modal-foot{padding:14px 22px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:10px;flex-shrink:0;}

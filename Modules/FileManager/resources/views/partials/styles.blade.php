@@ -40,7 +40,7 @@ a.fm-card--folder:hover{border-color:color-mix(in srgb,var(--primary) 40%,var(--
 .fm-modal__panel{position:relative;z-index:1;width:100%;max-width:480px;margin:auto;border-radius:14px;border:1px solid var(--border);background:var(--card);box-shadow:0 20px 48px rgba(0,0,0,.32);}
 .fm-modal__head{display:flex;justify-content:space-between;align-items:center;padding:11px 14px;border-bottom:1px solid var(--border);}
 .fm-modal__head h2{margin:0;font-size:15px;font-weight:800;}
-.fm-modal__close{width:32px;height:32px;display:grid;place-items:center;border:1px solid var(--border);border-radius:9px;background:transparent;color:inherit;cursor:pointer;font-size:17px;line-height:1;}
+.fm-modal__close{width:32px;height:32px;display:grid;place-items:center;padding:0;border:1px solid var(--border);border-radius:9px;background:transparent;color:inherit;cursor:pointer;font-size:17px;line-height:1;}
 .fm-modal__body{padding:14px 14px 16px;}
 html.fm-modal-open-html,html.fm-modal-open-html body{overflow:hidden;}
 .fm-upload-zone{

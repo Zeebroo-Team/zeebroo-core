@@ -11,7 +11,7 @@
 .pos-add-product-modal__panel{position:relative;z-index:1;width:min(100%,480px);max-height:min(90vh,640px);display:flex;flex-direction:column;border-radius:12px;border:1px solid var(--border);background:var(--card);box-shadow:0 16px 40px rgba(0,0,0,.28);}
 .pos-add-product-modal__head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border-bottom:1px solid var(--border);flex-shrink:0;}
 .pos-add-product-modal__head h2{margin:0;font-size:15px;font-weight:800;}
-.pos-add-product-modal__close{width:32px;height:32px;border:1px solid var(--border);border-radius:8px;background:transparent;color:var(--text);cursor:pointer;font-size:16px;line-height:1;}
+.pos-add-product-modal__close{width:32px;height:32px;display:grid;place-items:center;padding:0;border:1px solid var(--border);border-radius:8px;background:transparent;color:var(--text);cursor:pointer;font-size:16px;line-height:1;}
 .pos-add-product-modal__body{flex:1;min-height:0;overflow:auto;padding:14px;}
 .pos-add-product-modal__foot{flex-shrink:0;padding:12px 14px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;}
 .pos-add-product-form{display:grid;gap:12px;}

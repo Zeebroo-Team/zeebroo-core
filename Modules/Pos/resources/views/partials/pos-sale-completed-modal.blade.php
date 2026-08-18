@@ -470,6 +470,7 @@
     width: 32px;
     height: 32px;
     padding: 0;
+    line-height: 1;
     border: 1px solid var(--border);
     border-radius: 8px;
     background: transparent;

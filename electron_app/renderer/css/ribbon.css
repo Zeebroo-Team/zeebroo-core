@@ -9130,7 +9130,7 @@ body.dark .pf-modal-head {
 .pf-modal-head-title { font-size: 16px; font-weight: 800; color: var(--text); line-height: 1.2; }
 .pf-modal-head-sub   { font-size: 12px; color: var(--text-muted); margin-top: 2px; line-height: 1.4; }
 .pf-modal-close {
-  width: 32px; height: 32px; border-radius: 8px; flex-shrink: 0;
+  width: 32px; height: 32px; padding: 0; line-height: 1; border-radius: 8px; flex-shrink: 0;
   border: 1px solid var(--border); background: var(--surface);
   color: var(--text-muted); font-size: 14px; cursor: pointer;
   display: flex; align-items: center; justify-content: center;
@@ -11535,7 +11535,7 @@ body.dark .bc-main-preview-body { background: #1a1a1a; }
 .qt-add-modal-hd { display:flex; align-items:center; gap:10px; padding:13px 16px; border-bottom:1px solid var(--border); flex-shrink:0; }
 .qt-add-modal-title { font-size:14px; font-weight:700; color:var(--text); flex:1; display:flex; align-items:center; gap:8px; }
 .qt-add-modal-title i { color:var(--accent); }
-.qt-add-modal-close { width:28px; height:28px; border:none; background:none; cursor:pointer; color:var(--text-muted); border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:14px; flex-shrink:0; }
+.qt-add-modal-close { width:28px; height:28px; padding:0; line-height:1; border:none; background:none; cursor:pointer; color:var(--text-muted); border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:14px; flex-shrink:0; }
 .qt-add-modal-close:hover { background:var(--surface2); }
 .qt-add-modal-search { display:flex; align-items:center; gap:9px; padding:10px 14px; border-bottom:1px solid var(--border-light); flex-shrink:0; }
 .qt-add-modal-search i { color:var(--text-muted); font-size:13px; flex-shrink:0; }
@@ -13183,7 +13183,7 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
 }
 .svc-new-modal-title i { color: var(--accent); }
 .svc-new-modal-close {
-  width: 28px; height: 28px; border-radius: 7px;
+  width: 28px; height: 28px; padding: 0; line-height: 1; border-radius: 7px;
   border: none; background: var(--surface2); cursor: pointer;
   color: var(--text-muted); font-size: 14px;
   display: flex; align-items: center; justify-content: center;
