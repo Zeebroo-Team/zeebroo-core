@@ -112,7 +112,11 @@
                                 <span class="adu-owns">—</span>
                             @endif
                         </td>
-                        <td style="font-size:12px;color:var(--muted);">{{ $u->created_at?->format('d M Y') }}</td>
+                        <td style="font-size:12px;color:var(--muted);white-space:nowrap;"
+                            title="{{ $u->created_at?->format('d M Y, H:i:s') }}">
+                            {{ $u->created_at?->diffForHumans() }}
+                            <div style="font-size:11px;color:var(--muted);margin-top:2px;">{{ $u->created_at?->format('d M Y · H:i') }}</div>
+                        </td>
                         <td>
                             <div style="display:flex;gap:6px;justify-content:flex-end;">
                                 <button type="button" class="adu-act-btn adu-edit-btn"

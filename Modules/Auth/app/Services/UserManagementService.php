@@ -12,7 +12,7 @@ class UserManagementService
         return User::query()
             ->with('roles')
             ->withCount(['businesses', 'accounts'])
-            ->orderBy('name')
+            ->orderByDesc('created_at')
             ->paginate($perPage);
     }
 

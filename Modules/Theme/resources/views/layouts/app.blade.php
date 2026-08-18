@@ -563,10 +563,13 @@
             <div class="sidebar-suggestions" id="sidebarSuggestions" role="listbox"></div>
         </div>
         <nav class="menu">
+            @if(auth()->user()?->hasRole('admin'))
+                <div class="menu-section">Administration</div>
+                <a href="{{ route('admin.panel') }}" class="{{ request()->routeIs('admin.panel') ? 'active' : '' }}"><i class="fa fa-gauge-high"></i><span>Dashboard</span></a>
+                <a href="{{ route('admin.users.index') }}" class="{{ request()->routeIs('admin.users.*') ? 'active' : '' }}"><i class="fa fa-users-gear"></i><span>User Management</span></a>
+            @else
             <div class="menu-section">Main</div>
-            @unless(auth()->user()?->hasRole('admin'))
                 <a href="{{ route('dashboard') }}" class="{{ request()->routeIs('dashboard') ? 'active' : '' }}"><i class="fa fa-gauge-high"></i><span>Overview</span></a>
-            @endunless
             <a href="{{ route('aibot.index') }}" class="{{ request()->routeIs('aibot.*') ? 'active' : '' }}"><i class="fa fa-robot"></i><span>AI Agent</span></a>
             @if($showSidebarModificationsLink)
                 <a href="{{ route('modification.index') }}" class="{{ request()->routeIs('modification.*') ? 'active' : '' }}"><i class="fa fa-screwdriver-wrench"></i><span>Modification</span></a>
@@ -892,9 +895,6 @@
                     @endif
                 </div>
             @endif
-            @if(auth()->user()?->hasRole('admin'))
-                <a href="{{ route('admin.panel') }}" class="{{ request()->routeIs('admin.panel') ? 'active' : '' }}"><i class="fa fa-user-shield"></i><span>Admin Panel</span></a>
-                <a href="{{ route('admin.users.index') }}" class="{{ request()->routeIs('admin.users.*') ? 'active' : '' }}"><i class="fa fa-users-gear"></i><span>User Accounts</span></a>
             @endif
         </nav>
         @endif
@@ -965,12 +965,13 @@
                     </button>
                 @endif
                 <div class="navchip">{{ now()->format('d M Y') }}</div>
-                @if($navBusiness)
+                @if($navBusiness && !auth()->user()?->hasRole('admin'))
                     <a href="{{ route('business.profile') }}" class="user-trigger nav-business-profile @if(request()->routeIs('business.profile')) nav-business-profile--active @endif" title="Business profile">
                         <i class="fa fa-id-card"></i>
                         <span>Business profile</span>
                     </a>
                 @endif
+                @unless(auth()->user()?->hasRole('admin'))
                 <div class="user-dropdown">
                     <button type="button" class="user-trigger" id="businessDropdownBtn">
                         <i class="fa fa-briefcase"></i>
@@ -1117,6 +1118,15 @@
                         @endif
                     </div>
                 </div>
+                @endunless
+                @if(auth()->user()?->hasRole('admin'))
+                    <form method="post" action="{{ route('logout') }}">
+                        @csrf
+                        <button type="submit" class="user-trigger" style="gap:8px;">
+                            <i class="fa fa-right-from-bracket"></i><span>Logout</span>
+                        </button>
+                    </form>
+                @else
                 <div class="user-dropdown">
                     <button type="button" class="user-trigger" id="userDropdownBtn">
                         <span class="avatar">{{ strtoupper(substr(auth()->user()->name ?? 'U', 0, 1)) }}</span>
@@ -1171,6 +1181,7 @@
                         </form>
                     </div>
                 </div>
+                @endif
                 @endif
             </div>
         </div>
