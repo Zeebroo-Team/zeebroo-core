@@ -62,7 +62,7 @@
 .business-pro-avatar-modal-close{
     width:40px;height:40px;border-radius:12px;flex-shrink:0;
     border:1px solid var(--border);background:color-mix(in srgb,var(--card) 88%,var(--border));color:var(--text);
-    cursor:pointer;display:grid;place-items:center;font-size:20px;line-height:1;transition:background .15s ease,border-color .15s ease;
+    cursor:pointer;display:grid;place-items:center;padding:0;font-size:20px;line-height:1;transition:background .15s ease,border-color .15s ease;
 }
 .business-pro-avatar-modal-close:hover{background:color-mix(in srgb,var(--primary) 12%,var(--card));border-color:color-mix(in srgb,var(--primary) 35%,var(--border));}
 .business-pro-logo-modal-head{

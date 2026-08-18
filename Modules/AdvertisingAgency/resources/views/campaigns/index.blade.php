@@ -129,10 +129,10 @@
         </div>
 
         <div id="cp-modal" class="pcat-modal {{ $modalOpen ? 'pcat-modal--open' : '' }}">
-            <div class="pcat-modal-box">
-                <div class="pcat-modal-head">
+            <div class="pcat-modal__panel">
+                <div class="pcat-modal__head">
                     <span>New campaign</span>
-                    <button type="button" class="pcat-modal-close" id="cp-modal-close">&times;</button>
+                    <button type="button" class="pcat-modal__close" id="cp-modal-close">&times;</button>
                 </div>
                 @include('advertising-agency::campaigns.partials.form', ['clients' => $clients, 'statuses' => $statuses, 'channels' => $channels])
             </div>

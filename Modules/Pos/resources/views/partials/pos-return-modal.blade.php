@@ -20,7 +20,7 @@
 .pos-ret-modal__head-right{display:flex;align-items:center;gap:8px;}
 .pos-ret-modal__view-all{font-size:11px;font-weight:700;padding:5px 10px;border-radius:7px;border:1px solid var(--border);background:transparent;color:var(--muted);text-decoration:none;display:inline-flex;align-items:center;gap:5px;}
 .pos-ret-modal__view-all:hover{color:var(--text);border-color:color-mix(in srgb,var(--primary) 40%,var(--border));}
-.pos-ret-modal__close{width:32px;height:32px;border:1px solid var(--border);border-radius:8px;background:transparent;color:var(--text);cursor:pointer;font-size:17px;line-height:1;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.pos-ret-modal__close{width:32px;height:32px;padding:0;border:1px solid var(--border);border-radius:8px;background:transparent;color:var(--text);cursor:pointer;font-size:17px;line-height:1;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
 .pos-ret-modal__close:hover{background:color-mix(in srgb,var(--border) 50%,transparent);}
 /* ── Mode tabs ──────────────────────────────────────────────────── */
 .pos-ret-tabs{display:flex;border-bottom:1px solid var(--border);background:color-mix(in srgb,var(--card) 97%,transparent);flex-shrink:0;}

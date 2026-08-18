@@ -105,6 +105,10 @@ final class GoogleAuthService
             return redirect()->route('hr.portal.dashboard');
         }
 
+        if ($user->hasRole('admin')) {
+            return redirect()->intended(route('admin.panel'));
+        }
+
         return redirect()->intended(route('dashboard'));
     }
 

@@ -142,7 +142,7 @@
     .property-modal__head{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-bottom:1px solid var(--border)}
     .property-modal__head h2{font-size:15px}
     .property-modal__body{padding:14px;overflow:auto}
-    .property-modal__close{width:30px;height:30px;border:1px solid var(--border);border-radius:8px;background:transparent;color:var(--text);cursor:pointer;font-size:18px;line-height:1}
+    .property-modal__close{width:30px;height:30px;display:grid;place-items:center;padding:0;border:1px solid var(--border);border-radius:8px;background:transparent;color:var(--text);cursor:pointer;font-size:18px;line-height:1}
     html.property-modal-open-html,html.property-modal-open-html body{overflow:hidden}
 </style>
 

@@ -29,7 +29,7 @@
 .pos-bill-modal__head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:14px 16px;border-bottom:1px solid var(--border);background:color-mix(in srgb,var(--card) 94%,transparent);}
 .pos-bill-modal__head h2{margin:0;font-size:16px;font-weight:800;line-height:1.3;}
 .pos-bill-modal__head p{margin:4px 0 0;font-size:12px;color:var(--muted);line-height:1.4;}
-.pos-bill-modal__close{width:34px;height:34px;flex-shrink:0;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;font-size:18px;line-height:1;}
+.pos-bill-modal__close{width:34px;height:34px;flex-shrink:0;display:grid;place-items:center;padding:0;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;font-size:18px;line-height:1;}
 .pos-bill-modal__body{flex:1;min-height:0;overflow:auto;padding:14px 16px;}
 .pos-bill-modal__meta{display:grid;gap:8px;margin-bottom:12px;font-size:12px;}
 .pos-bill-modal__meta-row{display:flex;justify-content:space-between;gap:12px;color:var(--muted);}
