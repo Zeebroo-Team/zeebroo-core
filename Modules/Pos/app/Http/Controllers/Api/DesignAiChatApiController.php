@@ -876,6 +876,122 @@ PROMPT;
         ], 200);
     }
 
+    // ── Voice endpoint ────────────────────────────────────────────────────────
+
+    /**
+     * Design Studio Voice Worker endpoint.
+     *
+     * POST /pos-api/design-studio/voice
+     *
+     * Accepts a base64-encoded audio blob (WebM/Opus from MediaRecorder).
+     * Sends the audio to Gemini multimodal which transcribes the voice AND
+     * generates a design-command reply in one round-trip.
+     *
+     * Returns:
+     *   { transcript, lang, reply, commands, image_jobs? }
+     */
+    public function voice(Request $request): JsonResponse
+    {
+        $request->validate([
+            'audio'         => 'required|string|max:6000000',
+            'mime_type'     => 'nullable|string|max:100',
+            'canvas_width'  => 'nullable|integer|min:1|max:8000',
+            'canvas_height' => 'nullable|integer|min:1|max:8000',
+        ]);
+
+        $apiKey = config('services.gemini.key');
+        if (!$apiKey) {
+            return response()->json(['transcript' => null, 'reply' => null, 'commands' => []], 503);
+        }
+
+        $rawMime    = $request->input('mime_type', 'audio/webm');
+        $geminiMime = trim(explode(';', $rawMime)[0]);
+
+        $cw = (int) ($request->input('canvas_width',  794) ?: 794);
+        $ch = (int) ($request->input('canvas_height', 1123) ?: 1123);
+
+        $canvasHeader = "CANVAS: {$cw}px wide × {$ch}px tall. Use these exact values — do not output symbolic expressions.\n\n";
+
+        $voiceSystemPrompt = $canvasHeader . self::BASE_SYSTEM_PROMPT . "\n\n"
+            . "═══ VOICE MODE ═══\n"
+            . "The user has sent a voice message. Listen to the attached audio carefully.\n\n"
+            . "CRITICAL LANGUAGE RULE: Detect the language the user spoke. "
+            . "Your \"reply\" field MUST be written in the EXACT SAME LANGUAGE the user spoke. "
+            . "If they spoke Sinhala (සිංහල), reply entirely in Sinhala script. "
+            . "If they spoke Tamil, reply in Tamil. If they spoke English, reply in English.\n\n"
+            . "Return ONLY valid JSON — no markdown, no code fences — with this shape:\n"
+            . '{"transcript":"exact words spoken","lang":"BCP-47 e.g. en-US or si-LK","reply":"your reply in user language","commands":[]}' . "\n"
+            . "Include canvas commands exactly as in text mode whenever the user asks for design work.\n"
+            . "lang examples: \"si-LK\" Sinhala · \"en-US\" English · \"ta-LK\" Tamil · \"en-GB\" British English.";
+
+        $models = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+
+        $payload = [
+            'systemInstruction' => ['parts' => [['text' => $voiceSystemPrompt]]],
+            'contents'          => [[
+                'role'  => 'user',
+                'parts' => [[
+                    'inline_data' => [
+                        'mime_type' => $geminiMime,
+                        'data'      => $request->input('audio'),
+                    ],
+                ]],
+            ]],
+            'generationConfig'  => ['maxOutputTokens' => 2000, 'temperature' => 0.55],
+        ];
+
+        foreach ($models as $model) {
+            $response = Http::timeout(45)->post(
+                "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key={$apiKey}",
+                $payload
+            );
+            if ($response->status() === 429) continue;
+            if (!$response->successful()) break;
+
+            $raw = $response->json('candidates.0.content.parts.0.text');
+            if (!$raw) continue;
+
+            // Strip code fences
+            $jsonStr = $raw;
+            if (preg_match('/```(?:json)?\s*(\{[\s\S]*?\})\s*```/s', $raw, $m)) {
+                $jsonStr = $m[1];
+            } else {
+                $jsonStr = preg_replace('/^```(?:json)?\s*|\s*```$/s', '', trim($raw));
+                $jsonStr = ltrim($jsonStr, "\xEF\xBB\xBF");
+            }
+
+            $jsonStr = $this->sanitizeJsonStrings($jsonStr);
+            $parsed  = json_decode($jsonStr, true);
+
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                $start = strpos($jsonStr, '{');
+                if ($start !== false) {
+                    $parsed = json_decode(substr($jsonStr, $start), true);
+                }
+            }
+
+            if (json_last_error() === JSON_ERROR_NONE && isset($parsed['reply'])) {
+                $safeCommands = [];
+                foreach (($parsed['commands'] ?? []) as $cmd) {
+                    if (!isset($cmd['type']) || !is_string($cmd['type'])) continue;
+                    foreach (['left', 'top', 'width', 'height', 'radius', 'fontSize'] as $f) {
+                        if (isset($cmd[$f]) && !is_numeric($cmd[$f])) continue 2;
+                    }
+                    $safeCommands[] = $cmd;
+                }
+
+                return response()->json([
+                    'transcript' => $parsed['transcript'] ?? '',
+                    'lang'       => $parsed['lang']       ?? 'en-US',
+                    'reply'      => trim($parsed['reply']),
+                    'commands'   => $safeCommands,
+                ]);
+            }
+        }
+
+        return response()->json(['transcript' => null, 'reply' => null, 'commands' => []], 500);
+    }
+
     // ── Image job polling endpoint ─────────────────────────────────────────────
 
     /**
