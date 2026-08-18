@@ -3892,7 +3892,7 @@ function dsaiExecuteCommand(cmd) {
             _ttsUtterance.pitch  = 1.0;
             _ttsUtterance.volume = 1.0;
             _ttsUtterance.lang   = lang || navigator.language || 'en-US';
-            _ttsUtterance.onend  = function () { _voiceSetStatus('listening'); resolve(); };
+            _ttsUtterance.onend   = function () { resolve(); };
             _ttsUtterance.onerror = function () { resolve(); };
             _voiceSetStatus('speaking');
             window.speechSynthesis.speak(_ttsUtterance);
@@ -4012,9 +4012,12 @@ function dsaiExecuteCommand(cmd) {
 
         if (!_voiceActive) return;
 
-        if (!res || res.status >= 500) {
-            _voiceShowError('The server could not process the audio. Please try again.');
-            return;
+        // 503 = API key not configured; 5xx = server fault → stop and surface error
+        if (!res || res.status === 503) {
+            _voiceShowError('AI service is not configured. Please check your Gemini API key.'); return;
+        }
+        if (res.status >= 500) {
+            _voiceShowError('The server could not process the audio. Please try again.'); return;
         }
 
         var body       = res.body || {};
@@ -4023,7 +4026,13 @@ function dsaiExecuteCommand(cmd) {
         var replyLang  = body.lang       || '';
         var commands   = body.commands   || [];
 
-        if (inp && transcript) { inp.value = transcript; inp.placeholder = 'Describe what you want to design…'; }
+        if (inp) { inp.placeholder = 'Describe what you want to design…'; }
+        if (inp && transcript) inp.value = transcript;
+
+        // Null transcript = silence or inaudible — restart without error
+        if (!transcript) {
+            _voiceSetStatus('listening'); _beginRecording(); return;
+        }
 
         if (!reply && !commands.length) {
             _voiceSetStatus('listening'); _beginRecording(); return;

@@ -906,28 +906,21 @@ PROMPT;
 
         $rawMime    = $request->input('mime_type', 'audio/webm');
         $geminiMime = trim(explode(';', $rawMime)[0]);
+        $models     = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
 
-        $cw = (int) ($request->input('canvas_width',  794) ?: 794);
-        $ch = (int) ($request->input('canvas_height', 1123) ?: 1123);
+        /* ── Phase 1: Transcribe audio (tiny prompt, multimodal) ─────────────
+           Only task: listen to the audio and return { transcript, lang }.
+           Keeping the prompt minimal avoids the model getting distracted by
+           design-command rules and produces much more reliable transcription.
+        ──────────────────────────────────────────────────────────────────── */
+        $transcribePrompt =
+            "You are a transcription service. Listen to the attached audio carefully.\n"
+            . "Detect the spoken language and transcribe it exactly as heard.\n"
+            . "Return ONLY valid JSON — no markdown, no code fences, no extra text:\n"
+            . '{"transcript":"exact words spoken in original language","lang":"BCP-47 code e.g. en-US or si-LK or ta-LK"}';
 
-        $canvasHeader = "CANVAS: {$cw}px wide × {$ch}px tall. Use these exact values — do not output symbolic expressions.\n\n";
-
-        $voiceSystemPrompt = $canvasHeader . self::BASE_SYSTEM_PROMPT . "\n\n"
-            . "═══ VOICE MODE ═══\n"
-            . "The user has sent a voice message. Listen to the attached audio carefully.\n\n"
-            . "CRITICAL LANGUAGE RULE: Detect the language the user spoke. "
-            . "Your \"reply\" field MUST be written in the EXACT SAME LANGUAGE the user spoke. "
-            . "If they spoke Sinhala (සිංහල), reply entirely in Sinhala script. "
-            . "If they spoke Tamil, reply in Tamil. If they spoke English, reply in English.\n\n"
-            . "Return ONLY valid JSON — no markdown, no code fences — with this shape:\n"
-            . '{"transcript":"exact words spoken","lang":"BCP-47 e.g. en-US or si-LK","reply":"your reply in user language","commands":[]}' . "\n"
-            . "Include canvas commands exactly as in text mode whenever the user asks for design work.\n"
-            . "lang examples: \"si-LK\" Sinhala · \"en-US\" English · \"ta-LK\" Tamil · \"en-GB\" British English.";
-
-        $models = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
-
-        $payload = [
-            'systemInstruction' => ['parts' => [['text' => $voiceSystemPrompt]]],
+        $transcribePayload = [
+            'systemInstruction' => ['parts' => [['text' => $transcribePrompt]]],
             'contents'          => [[
                 'role'  => 'user',
                 'parts' => [[
@@ -937,21 +930,26 @@ PROMPT;
                     ],
                 ]],
             ]],
-            'generationConfig'  => ['maxOutputTokens' => 2000, 'temperature' => 0.55],
+            'generationConfig'  => ['maxOutputTokens' => 300, 'temperature' => 0.1],
         ];
 
+        $transcript = null;
+        $lang       = 'en-US';
+
         foreach ($models as $model) {
-            $response = Http::timeout(45)->post(
-                "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key={$apiKey}",
-                $payload
-            );
+            try {
+                $response = Http::timeout(30)->post(
+                    "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key={$apiKey}",
+                    $transcribePayload
+                );
+            } catch (\Exception $e) { continue; }
+
             if ($response->status() === 429) continue;
-            if (!$response->successful()) break;
+            if (!$response->successful())    continue;   // try next model, not break
 
             $raw = $response->json('candidates.0.content.parts.0.text');
             if (!$raw) continue;
 
-            // Strip code fences
             $jsonStr = $raw;
             if (preg_match('/```(?:json)?\s*(\{[\s\S]*?\})\s*```/s', $raw, $m)) {
                 $jsonStr = $m[1];
@@ -960,36 +958,44 @@ PROMPT;
                 $jsonStr = ltrim($jsonStr, "\xEF\xBB\xBF");
             }
 
-            $jsonStr = $this->sanitizeJsonStrings($jsonStr);
-            $parsed  = json_decode($jsonStr, true);
-
+            $parsed = json_decode($jsonStr, true);
             if (json_last_error() !== JSON_ERROR_NONE) {
                 $start = strpos($jsonStr, '{');
-                if ($start !== false) {
-                    $parsed = json_decode(substr($jsonStr, $start), true);
-                }
+                if ($start !== false) $parsed = json_decode(substr($jsonStr, $start), true);
             }
 
-            if (json_last_error() === JSON_ERROR_NONE && isset($parsed['reply'])) {
-                $safeCommands = [];
-                foreach (($parsed['commands'] ?? []) as $cmd) {
-                    if (!isset($cmd['type']) || !is_string($cmd['type'])) continue;
-                    foreach (['left', 'top', 'width', 'height', 'radius', 'fontSize'] as $f) {
-                        if (isset($cmd[$f]) && !is_numeric($cmd[$f])) continue 2;
-                    }
-                    $safeCommands[] = $cmd;
-                }
-
-                return response()->json([
-                    'transcript' => $parsed['transcript'] ?? '',
-                    'lang'       => $parsed['lang']       ?? 'en-US',
-                    'reply'      => trim($parsed['reply']),
-                    'commands'   => $safeCommands,
-                ]);
+            if (json_last_error() === JSON_ERROR_NONE && !empty($parsed['transcript'])) {
+                $transcript = trim($parsed['transcript']);
+                $lang       = $parsed['lang'] ?? 'en-US';
+                break;
             }
         }
 
-        return response()->json(['transcript' => null, 'reply' => null, 'commands' => []], 500);
+        // Nothing transcribed — probably silence or very short clip
+        if (!$transcript) {
+            return response()->json(['transcript' => null, 'reply' => null, 'commands' => []], 200);
+        }
+
+        /* ── Phase 2: Run transcript through the existing chat logic ─────────
+           Build a synthetic Request so we reuse chat() without duplication.
+           This guarantees voice and text produce identical output formats.
+        ──────────────────────────────────────────────────────────────────── */
+        $syntheticRequest = new \Illuminate\Http\Request();
+        $syntheticRequest->merge([
+            'message'       => $transcript,
+            'canvas_width'  => $request->input('canvas_width',  794),
+            'canvas_height' => $request->input('canvas_height', 1123),
+        ]);
+
+        /** @var \Illuminate\Http\JsonResponse $chatResponse */
+        $chatResponse = $this->chat($syntheticRequest);
+        $chatData     = json_decode($chatResponse->getContent(), true) ?? [];
+
+        // Merge transcript + lang into the chat payload
+        return response()->json(array_merge($chatData, [
+            'transcript' => $transcript,
+            'lang'       => $lang,
+        ]));
     }
 
     // ── Image job polling endpoint ─────────────────────────────────────────────
