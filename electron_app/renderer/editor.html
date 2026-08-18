@@ -579,6 +579,27 @@ input.dsp-slider { width: 100%; accent-color: var(--accent); cursor: pointer; }
 .dsai-quick-btn:hover { background: rgba(99,102,241,.1); border-color: #6366f1; color: #6366f1; }
 .dsai-quick-btn:active { transform: scale(.96); }
 /* ── End AI Assistant ────────────────────────────────────────────────────── */
+
+/* ── Design Studio guide character context menu ─────────────────────────── */
+#ds-guide-ctx-menu {
+  position: fixed;
+  background: #fff;
+  border: 1px solid #d0d5e8;
+  border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(0,0,0,0.16), 0 1px 4px rgba(0,0,0,0.08);
+  padding: 5px 0;
+  min-width: 210px;
+  z-index: 9900;
+  display: none;
+  animation: ds-ctx-appear 0.12s cubic-bezier(0.34,1.56,0.64,1) forwards;
+  transform-origin: top left;
+}
+@keyframes ds-ctx-appear {
+  from { opacity: 0; transform: scale(0.88); }
+  to   { opacity: 1; transform: scale(1); }
+}
+/* reuse ribbon.css .guide-ctx-item / .guide-ctx-icon / .guide-ctx-sep /
+   .guide-ctx-group-label — they are already loaded via ribbon.css */
 </style>
 </head>
 <body>
@@ -2906,6 +2927,41 @@ function dsaiExecuteCommand(cmd) {
   </div>
 </div>
 
+<!-- ── Design Studio guide character context menu ──────────────────────── -->
+<div id="ds-guide-ctx-menu" role="menu" aria-label="AI design assistant options">
+  <div class="guide-ctx-item guide-ctx-item--chat" id="ds-ctx-open-chat" role="menuitem">
+    <span class="guide-ctx-icon"><i class="fa fa-comment-dots"></i></span>
+    Ask AI Assistant
+  </div>
+  <div class="guide-ctx-sep"></div>
+  <div class="guide-ctx-group-label"><i class="fa fa-wand-magic-sparkles"></i> Quick Prompts</div>
+  <div class="guide-ctx-item guide-ctx-item--ds" id="ds-ctx-add-shape" role="menuitem">
+    <span class="guide-ctx-icon"><i class="fa fa-shapes"></i></span>
+    Add a Shape
+  </div>
+  <div class="guide-ctx-item guide-ctx-item--ds" id="ds-ctx-add-text" role="menuitem">
+    <span class="guide-ctx-icon"><i class="fa fa-font"></i></span>
+    Add Text
+  </div>
+  <div class="guide-ctx-item guide-ctx-item--ds" id="ds-ctx-add-image" role="menuitem">
+    <span class="guide-ctx-icon"><i class="fa fa-image"></i></span>
+    Add Image
+  </div>
+  <div class="guide-ctx-item guide-ctx-item--ds" id="ds-ctx-bg-color" role="menuitem">
+    <span class="guide-ctx-icon"><i class="fa fa-palette"></i></span>
+    Change Background
+  </div>
+  <div class="guide-ctx-item guide-ctx-item--ds" id="ds-ctx-make-pro" role="menuitem">
+    <span class="guide-ctx-icon"><i class="fa fa-star"></i></span>
+    Make it Professional
+  </div>
+  <div class="guide-ctx-sep"></div>
+  <div class="guide-ctx-item guide-ctx-item--dismiss" id="ds-ctx-dismiss" role="menuitem">
+    <span class="guide-ctx-icon"><i class="fa fa-eye-slash"></i></span>
+    Dismiss Assistant
+  </div>
+</div>
+
 <script>
 /* ── Design Studio AI Character (mirrors main guide.js pattern exactly) ── */
 (function () {
@@ -3779,6 +3835,77 @@ function dsaiExecuteCommand(cmd) {
         });
     }
 
+    /* ── Context menu ─────────────────────────────────────────────────────── */
+    function _openCtxMenu(x, y) {
+        var menu = _el('ds-guide-ctx-menu');
+        if (!menu) return;
+        menu.style.display = 'block';
+        var mw = menu.offsetWidth  || 220;
+        var mh = menu.offsetHeight || 260;
+        var cx = x, cy = y;
+        if (cx + mw > window.innerWidth  - 8) cx = window.innerWidth  - mw - 8;
+        if (cy + mh > window.innerHeight - 8) cy = window.innerHeight - mh - 8;
+        menu.style.left = cx + 'px';
+        menu.style.top  = cy + 'px';
+        menu.style.display = 'block';
+    }
+    function _closeCtxMenu() {
+        var menu = _el('ds-guide-ctx-menu');
+        if (menu) menu.style.display = 'none';
+    }
+    function _quickSend(prompt) {
+        _closeCtxMenu();
+        _show();
+        if (_bubbleOpen) {
+            var inp = _el('guide-chat-input');
+            if (inp) inp.value = prompt;
+            _sendMessage();
+        } else {
+            _openBubble();
+            var inp = _el('guide-chat-input');
+            if (inp) inp.value = prompt;
+            setTimeout(_sendMessage, 320);
+        }
+    }
+    function _initCtxMenu(imgWrap) {
+        // Right-click on guide character
+        imgWrap.addEventListener('contextmenu', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            _openCtxMenu(e.clientX, e.clientY);
+        });
+        // Menu items
+        _el('ds-ctx-open-chat')?.addEventListener('click', function () {
+            _closeCtxMenu(); _show(); _openBubble();
+        });
+        _el('ds-ctx-add-shape')?.addEventListener('click', function () {
+            _quickSend('Add a colorful decorative shape to my design');
+        });
+        _el('ds-ctx-add-text')?.addEventListener('click', function () {
+            _quickSend('Add a stylish heading text to my design');
+        });
+        _el('ds-ctx-add-image')?.addEventListener('click', function () {
+            _quickSend('Add a relevant background image to my design');
+        });
+        _el('ds-ctx-bg-color')?.addEventListener('click', function () {
+            _quickSend('Change the canvas background to a modern gradient or solid color that suits my design');
+        });
+        _el('ds-ctx-make-pro')?.addEventListener('click', function () {
+            _quickSend('Make this design look more professional and polished');
+        });
+        _el('ds-ctx-dismiss')?.addEventListener('click', function () {
+            _closeCtxMenu(); _hide();
+        });
+        // Close on outside click or Escape
+        document.addEventListener('click', function (e) {
+            var menu = _el('ds-guide-ctx-menu');
+            if (menu && !menu.contains(e.target)) _closeCtxMenu();
+        });
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') _closeCtxMenu();
+        });
+    }
+
     /* ── Expose hooks for the right-panel AI tab ──────────────────────────── */
     window._dsGuideOpenBubble = function () { _show(); _openBubble(); };
     window._dsGuideSendDirect = function (message) {
@@ -3845,6 +3972,7 @@ function dsaiExecuteCommand(cmd) {
         });
 
         _makeDraggable(wrap, imgWrap);
+        _initCtxMenu(imgWrap);
     }
 
     if (document.readyState === 'loading') {

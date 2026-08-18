@@ -14771,13 +14771,13 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
 
 /* Dark mode context menu */
 @media (prefers-color-scheme: dark) {
-  #guide-ctx-menu     { background: #1e2135; border-color: #2d3257; box-shadow: 0 8px 28px rgba(0,0,0,0.45); }
+  #guide-ctx-menu, #ds-guide-ctx-menu { background: #1e2135; border-color: #2d3257; box-shadow: 0 8px 28px rgba(0,0,0,0.45); }
   .guide-ctx-item     { color: #c8cce8; }
   .guide-ctx-item:hover { background: #272a47; }
   .guide-ctx-sep      { background: #2d3257; }
   #guide-voice-badge  { border-color: #1e2135; }
 }
-:root[data-theme="dark"] #guide-ctx-menu     { background: #1e2135; border-color: #2d3257; box-shadow: 0 8px 28px rgba(0,0,0,0.45); }
+:root[data-theme="dark"] #guide-ctx-menu, :root[data-theme="dark"] #ds-guide-ctx-menu { background: #1e2135; border-color: #2d3257; box-shadow: 0 8px 28px rgba(0,0,0,0.45); }
 :root[data-theme="dark"] .guide-ctx-item     { color: #c8cce8; }
 :root[data-theme="dark"] .guide-ctx-item:hover { background: #272a47; }
 :root[data-theme="dark"] .guide-ctx-sep      { background: #2d3257; }
