@@ -9,7 +9,8 @@
   "homepage": "https://zeebroo.com",
   "main": "main.js",
   "scripts": {
-    "start": "env -u ELECTRON_RUN_AS_NODE electron .",
+    "start": "node scripts/start.js",
+    "dev": "node scripts/start.js",
     "prebuild": "node scripts/setApiUrl.js",
     "build": "electron-builder",
     "build:mac": "electron-builder --mac",
