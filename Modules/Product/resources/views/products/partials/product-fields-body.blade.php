@@ -193,7 +193,7 @@
 <div class="product-field-row product-field-row--prices" style="grid-column:1/-1;">
     <div class="product-field">
         <label for="{{ $idCostPrice }}">
-            Cost price@if(filled($currency ?? null)) ({{ $currency }})@endif
+            Cost price @if(filled($currency ?? null))({{ $currency }})@endif
         </label>
         <input id="{{ $idCostPrice }}" type="number" name="cost_price"
                value="{{ old('cost_price', $productModel?->cost_price) }}"
@@ -202,7 +202,7 @@
     </div>
     <div class="product-field">
         <label for="{{ $idPrice }}">
-            Selling price@if(filled($currency ?? null)) ({{ $currency }})@endif
+            Selling price @if(filled($currency ?? null))({{ $currency }})@endif
         </label>
         <input id="{{ $idPrice }}" type="number" name="unit_price"
                value="{{ old('unit_price', $productModel?->unit_price) }}"
@@ -211,7 +211,7 @@
     </div>
     <div class="product-field">
         <label for="{{ $idWholesalePrice }}">
-            Wholesale price@if(filled($currency ?? null)) ({{ $currency }})@endif
+            Wholesale price @if(filled($currency ?? null))({{ $currency }})@endif
         </label>
         <input id="{{ $idWholesalePrice }}" type="number" name="wholesale_price"
                value="{{ old('wholesale_price', $productModel?->wholesale_price) }}"
