@@ -178,6 +178,10 @@
                                     <p class="ads-mini-stat-value">{{ $stats['overview']['suppliers_count'] }}</p>
                                 </div>
                                 <div class="ads-mini-stat">
+                                    <p class="ads-mini-stat-label">Customers</p>
+                                    <p class="ads-mini-stat-value">{{ $stats['overview']['customers_count'] }}</p>
+                                </div>
+                                <div class="ads-mini-stat">
                                     <p class="ads-mini-stat-label">Branches</p>
                                     <p class="ads-mini-stat-value">{{ $stats['overview']['branches_count'] }}</p>
                                 </div>

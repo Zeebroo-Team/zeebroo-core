@@ -14,6 +14,7 @@ use Illuminate\View\View;
 use Modules\Auth\Services\UserManagementService;
 use Modules\Business\Models\Business;
 use Modules\CRM\Models\Project as CrmProject;
+use Modules\Pos\Models\Customer;
 use Modules\Pos\Models\Sale;
 use Modules\Purchase\Models\Purchase;
 use Modules\Sales\Models\Invoice;
@@ -135,6 +136,7 @@ class AdminUserController extends Controller
                 'products_active' => $business->products()->where('is_active', true)->count(),
                 'stock_value' => $stockValue,
                 'suppliers_count' => $business->suppliers()->count(),
+                'customers_count' => Customer::where('business_id', $business->id)->count(),
                 'branches_count' => $business->branches->count(),
             ],
             'sales_purchases' => [
