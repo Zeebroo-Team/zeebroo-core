@@ -69,6 +69,14 @@
 .ads-conn-item{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:10px 12px;border-radius:10px;background:color-mix(in srgb,var(--primary) 4%,transparent);border:1px solid color-mix(in srgb,var(--border) 60%,transparent);flex-wrap:wrap;}
 .ads-conn-provider{font-size:13px;font-weight:650;}
 .ads-conn-meta{font-size:11.5px;color:var(--muted);margin-top:1px;}
+@media(max-width:640px){
+    .ads-table thead{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;}
+    .ads-table, .ads-table tbody, .ads-table tr, .ads-table td{display:block;width:100%;}
+    .ads-table tr{padding:12px 16px;border-bottom:1px solid color-mix(in srgb,var(--border) 60%,transparent);}
+    .ads-table tr:last-child{border-bottom:none;}
+    .ads-table td{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:4px 0;border-bottom:none;text-align:right;}
+    .ads-table td::before{content:attr(data-label);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);text-align:left;flex-shrink:0;}
+}
 </style>
 
 <div class="ads-wrap">
@@ -295,10 +303,10 @@
                     <tbody>
                         @foreach($memberships as $membership)
                             <tr>
-                                <td>{{ $membership->business?->name ?: '—' }}</td>
-                                <td><span class="ads-role" style="background:color-mix(in srgb,{{ $membership->roleBadgeColor() }} 15%,transparent);color:{{ $membership->roleBadgeColor() }};">{{ $membership->roleLabel() }}</span></td>
-                                <td style="text-transform:capitalize;">{{ $membership->status }}</td>
-                                <td>{{ $membership->created_at?->format('d M Y') }}</td>
+                                <td data-label="Business">{{ $membership->business?->name ?: '—' }}</td>
+                                <td data-label="Role"><span class="ads-role" style="background:color-mix(in srgb,{{ $membership->roleBadgeColor() }} 15%,transparent);color:{{ $membership->roleBadgeColor() }};">{{ $membership->roleLabel() }}</span></td>
+                                <td data-label="Status" style="text-transform:capitalize;">{{ $membership->status }}</td>
+                                <td data-label="Since">{{ $membership->created_at?->format('d M Y') }}</td>
                             </tr>
                         @endforeach
                     </tbody>
@@ -357,14 +365,14 @@
                                     : 'LKR';
                             @endphp
                             <tr>
-                                <td>{{ $account->account_name }}</td>
-                                <td style="text-transform:capitalize;">{{ str_replace('_', ' ', $account->category) }}</td>
-                                <td>{{ $account->bank?->name ?: $account->bank_name ?: '—' }}</td>
-                                <td>
+                                <td data-label="Account">{{ $account->account_name }}</td>
+                                <td data-label="Category" style="text-transform:capitalize;">{{ str_replace('_', ' ', $account->category) }}</td>
+                                <td data-label="Bank">{{ $account->bank?->name ?: $account->bank_name ?: '—' }}</td>
+                                <td data-label="Business / Branch">
                                     {{ $account->business?->name ?: '—' }}
                                     @if($account->warehouse)<div style="font-size:11.5px;color:var(--muted);">{{ $account->warehouse->name }}</div>@endif
                                 </td>
-                                <td>{{ $acctCurrency }} {{ number_format((float) $account->current_balance, 2) }}</td>
+                                <td data-label="Balance">{{ $acctCurrency }} {{ number_format((float) $account->current_balance, 2) }}</td>
                             </tr>
                         @endforeach
                     </tbody>
@@ -422,8 +430,8 @@
                     <tbody>
                         @foreach($user->hrEmployees as $employee)
                             <tr>
-                                <td>{{ $employee->business?->name ?: '—' }}</td>
-                                <td>{{ $employee->full_name }}</td>
+                                <td data-label="Business">{{ $employee->business?->name ?: '—' }}</td>
+                                <td data-label="Full name">{{ $employee->full_name }}</td>
                             </tr>
                         @endforeach
                     </tbody>
