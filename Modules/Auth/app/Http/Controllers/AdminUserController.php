@@ -13,7 +13,9 @@ use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 use Modules\Auth\Services\UserManagementService;
 use Modules\Business\Models\Business;
+use Modules\Business\Models\BusinessMember;
 use Modules\CRM\Models\Project as CrmProject;
+use Modules\FileManager\Models\FileManagerFile;
 use Modules\Pos\Models\Customer;
 use Modules\Pos\Models\Sale;
 use Modules\Purchase\Models\Purchase;
@@ -54,11 +56,18 @@ class AdminUserController extends Controller
 
         $lastSeenAt = DB::table('sessions')->where('user_id', $user->id)->max('last_activity');
 
+        $memberships = BusinessMember::query()
+            ->where('user_id', $user->id)
+            ->with('business')
+            ->orderByDesc('created_at')
+            ->get();
+
         return view('auth::admin.users.show', [
             'user' => $user,
             'businessStats' => $businessStats,
             'recentActivity' => $this->recentActivity($user, $businessStats),
             'lastSeenAt' => $lastSeenAt ? Carbon::createFromTimestamp($lastSeenAt) : null,
+            'memberships' => $memberships,
         ]);
     }
 
@@ -138,6 +147,9 @@ class AdminUserController extends Controller
                 'suppliers_count' => $business->suppliers()->count(),
                 'customers_count' => Customer::where('business_id', $business->id)->count(),
                 'branches_count' => $business->branches->count(),
+                'storage_human' => $this->formatBytes(
+                    (int) FileManagerFile::where('business_id', $business->id)->sum('size_bytes')
+                ),
             ],
             'sales_purchases' => [
                 'sales_count' => $business->sales()->where('status', Sale::STATUS_COMPLETED)->count(),
@@ -167,6 +179,21 @@ class AdminUserController extends Controller
                     ->sum('total'),
             ],
         ];
+    }
+
+    private function formatBytes(int $bytes): string
+    {
+        if ($bytes < 1024) {
+            return $bytes.' B';
+        }
+        if ($bytes < 1024 * 1024) {
+            return number_format($bytes / 1024, 1).' KB';
+        }
+        if ($bytes < 1024 * 1024 * 1024) {
+            return number_format($bytes / (1024 * 1024), 1).' MB';
+        }
+
+        return number_format($bytes / (1024 * 1024 * 1024), 2).' GB';
     }
 
     public function store(Request $request): RedirectResponse

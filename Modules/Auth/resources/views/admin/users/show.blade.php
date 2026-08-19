@@ -91,6 +91,9 @@
                 @else
                     <span><i class="fa fa-circle-exclamation" style="color:#f59e0b;"></i> Email not verified</span>
                 @endif
+                @if($user->google_id)
+                    <span><i class="fa fa-google" style="color:#ea4335;"></i> Google-linked account</span>
+                @endif
             </p>
         </div>
     </div>
@@ -185,6 +188,10 @@
                                     <p class="ads-mini-stat-label">Branches</p>
                                     <p class="ads-mini-stat-value">{{ $stats['overview']['branches_count'] }}</p>
                                 </div>
+                                <div class="ads-mini-stat">
+                                    <p class="ads-mini-stat-label">Storage used</p>
+                                    <p class="ads-mini-stat-value">{{ $stats['overview']['storage_human'] }}</p>
+                                </div>
                             </div>
                         </div>
 
@@ -265,6 +272,37 @@
                         </div>
                     </div>
                 @endforeach
+            </div>
+        @endif
+    </div>
+
+    <div class="ads-section">
+        <h2 class="ads-section-title"><i class="fa fa-user-tag" style="color:var(--primary);"></i> Staff access at other businesses <span class="count">{{ $memberships->count() }}</span></h2>
+
+        @if($memberships->isEmpty())
+            <div class="ads-card"><div class="ads-empty">Not a staff member of any other business.</div></div>
+        @else
+            <div class="ads-card" style="overflow-x:auto;">
+                <table class="ads-table">
+                    <thead>
+                        <tr>
+                            <th>Business</th>
+                            <th>Role</th>
+                            <th>Status</th>
+                            <th>Since</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach($memberships as $membership)
+                            <tr>
+                                <td>{{ $membership->business?->name ?: '—' }}</td>
+                                <td><span class="ads-role" style="background:color-mix(in srgb,{{ $membership->roleBadgeColor() }} 15%,transparent);color:{{ $membership->roleBadgeColor() }};">{{ $membership->roleLabel() }}</span></td>
+                                <td style="text-transform:capitalize;">{{ $membership->status }}</td>
+                                <td>{{ $membership->created_at?->format('d M Y') }}</td>
+                            </tr>
+                        @endforeach
+                    </tbody>
+                </table>
             </div>
         @endif
     </div>
