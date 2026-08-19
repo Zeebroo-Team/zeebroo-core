@@ -19,6 +19,8 @@
 .adu-avatar{width:36px;height:36px;border-radius:50%;background:color-mix(in srgb,var(--primary) 14%,transparent);
     display:grid;place-items:center;font-size:14px;font-weight:700;color:var(--primary);flex-shrink:0;}
 .adu-user-cell{display:flex;align-items:center;gap:10px;}
+.adu-user-link{text-decoration:none;color:inherit;}
+.adu-user-link:hover .adu-user-name{color:var(--primary);text-decoration:underline;}
 .adu-user-name{font-weight:650;color:var(--text);}
 .adu-user-email{font-size:12px;color:var(--muted);margin-top:1px;}
 .adu-role{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;}
@@ -96,13 +98,13 @@
                     @endphp
                     <tr>
                         <td>
-                            <div class="adu-user-cell">
+                            <a href="{{ route('admin.users.show', $u) }}" class="adu-user-cell adu-user-link">
                                 <div class="adu-avatar">{{ strtoupper(substr($u->name ?: '?', 0, 1)) }}</div>
                                 <div>
                                     <div class="adu-user-name">{{ $u->name }} @if($isSelf)<span class="adu-protected">(you)</span>@endif</div>
                                     <div class="adu-user-email">{{ $u->email }}</div>
                                 </div>
-                            </div>
+                            </a>
                         </td>
                         <td><span class="adu-role adu-role--{{ $roleName }}">{{ ucfirst($roleName) }}</span></td>
                         <td>
@@ -127,6 +129,9 @@
                                     data-is-self="{{ $isSelf ? '1' : '0' }}">
                                     <i class="fa fa-pen"></i> Edit
                                 </button>
+                                <a href="{{ route('admin.users.show', $u) }}" class="adu-act-btn" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;">
+                                    <i class="fa fa-eye"></i> View
+                                </a>
                                 @if($deletable)
                                     <form method="POST" action="{{ route('admin.users.destroy', $u) }}" style="margin:0;" onsubmit="return confirm('Delete {{ $u->name }}? This cannot be undone.');">
                                         @csrf
