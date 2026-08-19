@@ -2,7 +2,7 @@
 
 @section('content')
 <style>
-.ads-wrap{max-width:1000px;margin:0 auto;}
+.ads-wrap{max-width:1280px;margin:0 auto;}
 .ads-back{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);text-decoration:none;margin-bottom:10px;}
 .ads-back:hover{color:var(--primary);}
 .ads-header{display:flex;align-items:center;gap:16px;margin-bottom:22px;flex-wrap:wrap;}
