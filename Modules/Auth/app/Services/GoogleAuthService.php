@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Modules\Auth\Services;
 
 use App\Models\User;
+use App\Models\UserActivityLog;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -65,6 +66,7 @@ final class GoogleAuthService
 
         // ── Main workspace flow ────────────────────────────────────────────────────
         $user = User::query()->where('google_id', $gid)->first();
+        $isNewUser = false;
 
         if ($user === null) {
             $existing = User::query()->where('email', $email)->first();
@@ -91,6 +93,7 @@ final class GoogleAuthService
                 ]);
                 Role::firstOrCreate(['name' => 'user', 'guard_name' => 'web']);
                 $user->assignRole('user');
+                $isNewUser = true;
             }
         }
 
@@ -100,6 +103,12 @@ final class GoogleAuthService
 
         Auth::login($user, true);
         $request->session()->regenerate();
+        UserActivityLog::record(
+            $user,
+            UserActivityLog::PLATFORM_WEB,
+            $isNewUser ? UserActivityLog::EVENT_REGISTER : UserActivityLog::EVENT_LOGIN,
+            $request,
+        );
 
         if ($user->isHrPortalOnlyUser()) {
             return redirect()->route('hr.portal.dashboard');
@@ -148,6 +157,7 @@ final class GoogleAuthService
 
         Auth::login($user, true);
         $request->session()->regenerate();
+        UserActivityLog::record($user, UserActivityLog::PLATFORM_WEB, UserActivityLog::EVENT_LOGIN, $request);
 
         return redirect()->route('hr.portal.dashboard');
     }

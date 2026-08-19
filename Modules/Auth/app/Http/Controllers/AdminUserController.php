@@ -4,6 +4,7 @@ namespace Modules\Auth\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Models\UserActivityLog;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -62,12 +63,46 @@ class AdminUserController extends Controller
             ->orderByDesc('created_at')
             ->get();
 
+        $platformActivity = UserActivityLog::query()
+            ->where('user_id', $user->id)
+            ->latest('created_at')
+            ->limit(30)
+            ->get();
+
+        $registeredPlatform = UserActivityLog::query()
+            ->where('user_id', $user->id)
+            ->where('event', UserActivityLog::EVENT_REGISTER)
+            ->orderBy('created_at')
+            ->value('platform');
+
+        $webLastActive = UserActivityLog::query()
+            ->where('user_id', $user->id)
+            ->where('platform', UserActivityLog::PLATFORM_WEB)
+            ->max('created_at');
+        $desktopLastActive = UserActivityLog::query()
+            ->where('user_id', $user->id)
+            ->where('platform', UserActivityLog::PLATFORM_DESKTOP)
+            ->max('created_at');
+
+        $lastActiveByPlatform = [
+            UserActivityLog::PLATFORM_WEB => $webLastActive ? Carbon::parse($webLastActive) : null,
+            UserActivityLog::PLATFORM_DESKTOP => $desktopLastActive ? Carbon::parse($desktopLastActive) : null,
+        ];
+        // Web sessions also update on every request (not just login), so it's a more
+        // current signal than the login log alone — take whichever is more recent.
+        if ($lastSeenAt && (! $lastActiveByPlatform[UserActivityLog::PLATFORM_WEB] || Carbon::createFromTimestamp($lastSeenAt)->gt($lastActiveByPlatform[UserActivityLog::PLATFORM_WEB]))) {
+            $lastActiveByPlatform[UserActivityLog::PLATFORM_WEB] = Carbon::createFromTimestamp($lastSeenAt);
+        }
+
         return view('auth::admin.users.show', [
             'user' => $user,
             'businessStats' => $businessStats,
             'recentActivity' => $this->recentActivity($user, $businessStats),
             'lastSeenAt' => $lastSeenAt ? Carbon::createFromTimestamp($lastSeenAt) : null,
             'memberships' => $memberships,
+            'platformActivity' => $platformActivity,
+            'registeredPlatform' => $registeredPlatform,
+            'lastActiveByPlatform' => $lastActiveByPlatform,
         ]);
     }
 

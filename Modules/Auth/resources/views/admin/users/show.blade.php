@@ -382,14 +382,78 @@
     </div>
 
     <div class="ads-section">
-        <h2 class="ads-section-title"><i class="fa fa-plug" style="color:var(--primary);"></i> App connections &amp; login</h2>
+        <h2 class="ads-section-title"><i class="fa fa-display" style="color:var(--primary);"></i> Platform activity</h2>
         <div class="ads-card" style="padding:16px 18px;">
             <p class="ads-conn-lastseen">
+                <i class="fa fa-flag"></i>
+                Registered via
+                @if($registeredPlatform === \App\Models\UserActivityLog::PLATFORM_DESKTOP)
+                    <strong>pos-desktop software</strong>
+                @elseif($registeredPlatform === \App\Models\UserActivityLog::PLATFORM_WEB)
+                    <strong>online platform</strong>
+                @else
+                    <strong>online platform</strong> <span style="color:var(--muted);">(assumed — before activity tracking)</span>
+                @endif
+            </p>
+            <div class="ads-stat-grid" style="margin-top:10px;">
+                <div class="ads-mini-stat">
+                    <p class="ads-mini-stat-label"><i class="fa fa-globe"></i> Online platform</p>
+                    <p class="ads-stat-value" style="font-size:14px;">
+                        @if($lastActiveByPlatform[\App\Models\UserActivityLog::PLATFORM_WEB] ?? null)
+                            {{ $lastActiveByPlatform[\App\Models\UserActivityLog::PLATFORM_WEB]->diffForHumans() }}
+                        @else
+                            Never used
+                        @endif
+                    </p>
+                </div>
+                <div class="ads-mini-stat">
+                    <p class="ads-mini-stat-label"><i class="fa fa-desktop"></i> Desktop software</p>
+                    <p class="ads-stat-value" style="font-size:14px;">
+                        @if($lastActiveByPlatform[\App\Models\UserActivityLog::PLATFORM_DESKTOP] ?? null)
+                            {{ $lastActiveByPlatform[\App\Models\UserActivityLog::PLATFORM_DESKTOP]->diffForHumans() }}
+                        @else
+                            Never used
+                        @endif
+                    </p>
+                </div>
+            </div>
+
+            @if($platformActivity->isNotEmpty())
+                <div style="overflow-x:auto;margin-top:14px;">
+                    <table class="ads-table">
+                        <thead>
+                            <tr>
+                                <th>Platform</th>
+                                <th>Event</th>
+                                <th>Device</th>
+                                <th>IP address</th>
+                                <th>When</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach($platformActivity as $log)
+                                <tr>
+                                    <td data-label="Platform" style="text-transform:capitalize;">
+                                        <i class="fa {{ $log->platform === \App\Models\UserActivityLog::PLATFORM_DESKTOP ? 'fa-desktop' : 'fa-globe' }}"></i>
+                                        {{ $log->platform === \App\Models\UserActivityLog::PLATFORM_DESKTOP ? 'Desktop' : 'Online' }}
+                                    </td>
+                                    <td data-label="Event" style="text-transform:capitalize;">{{ $log->event }}</td>
+                                    <td data-label="Device">{{ $log->device_name ?: '—' }}</td>
+                                    <td data-label="IP address">{{ $log->ip_address ?: '—' }}</td>
+                                    <td data-label="When">{{ $log->created_at?->format('d M Y, H:i') }}</td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+            @endif
+
+            <p class="ads-conn-lastseen" style="margin-top:14px;">
                 <i class="fa fa-signal"></i>
                 @if($lastSeenAt)
-                    Last seen {{ $lastSeenAt->diffForHumans() }} <span style="color:var(--muted);">({{ $lastSeenAt->format('d M Y, H:i') }})</span>
+                    Last web session seen {{ $lastSeenAt->diffForHumans() }} <span style="color:var(--muted);">({{ $lastSeenAt->format('d M Y, H:i') }})</span>
                 @else
-                    No recent session activity on record.
+                    No recent web session activity on record.
                 @endif
             </p>
 

@@ -4,6 +4,7 @@ namespace Modules\Pos\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Models\UserActivityLog;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -35,6 +36,7 @@ class PosAuthApiController extends Controller
 
         $deviceName = $validated['device_name'] ?? 'pos-api-client';
         $token = $user->createToken($deviceName);
+        UserActivityLog::record($user, UserActivityLog::PLATFORM_DESKTOP, UserActivityLog::EVENT_LOGIN, $request, $deviceName);
 
         return response()->json([
             'token_type' => 'Bearer',
@@ -89,6 +91,7 @@ class PosAuthApiController extends Controller
 
         $deviceName = $validated['device_name'] ?? 'pos-api-client';
         $token = $user->createToken($deviceName);
+        UserActivityLog::record($user, UserActivityLog::PLATFORM_DESKTOP, UserActivityLog::EVENT_REGISTER, $request, $deviceName);
 
         return response()->json([
             'token_type'   => 'Bearer',

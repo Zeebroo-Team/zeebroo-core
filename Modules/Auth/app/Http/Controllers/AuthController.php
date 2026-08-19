@@ -3,6 +3,7 @@
 namespace Modules\Auth\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Models\UserActivityLog;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rules\Password;
@@ -45,6 +46,10 @@ class AuthController extends Controller
         $request->session()->regenerate();
 
         $user = $request->user();
+        if ($user !== null) {
+            UserActivityLog::record($user, UserActivityLog::PLATFORM_WEB, UserActivityLog::EVENT_LOGIN, $request);
+        }
+
         if ($user !== null && $user->isHrPortalOnlyUser()) {
             $this->authService->logout();
             $request->session()->invalidate();
@@ -79,6 +84,7 @@ class AuthController extends Controller
         ]);
 
         $user = $this->authService->register($data);
+        UserActivityLog::record($user, UserActivityLog::PLATFORM_WEB, UserActivityLog::EVENT_REGISTER, $request);
         $this->authService->loginUser($user);
         $request->session()->regenerate();
 
