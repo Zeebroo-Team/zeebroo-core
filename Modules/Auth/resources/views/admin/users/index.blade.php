@@ -2,7 +2,7 @@
 
 @section('content')
 <style>
-.adu-wrap{max-width:1000px;margin:0 auto;}
+.adu-wrap{max-width:1280px;margin:0 auto;}
 .adu-header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:24px;flex-wrap:wrap;}
 .adu-title{margin:0;font-size:22px;font-weight:800;letter-spacing:-.025em;}
 .adu-sub{margin:4px 0 0;font-size:13px;color:var(--muted);}
@@ -19,6 +19,8 @@
 .adu-avatar{width:36px;height:36px;border-radius:50%;background:color-mix(in srgb,var(--primary) 14%,transparent);
     display:grid;place-items:center;font-size:14px;font-weight:700;color:var(--primary);flex-shrink:0;}
 .adu-user-cell{display:flex;align-items:center;gap:10px;}
+.adu-user-link{text-decoration:none;color:inherit;}
+.adu-user-link:hover .adu-user-name{color:var(--primary);text-decoration:underline;}
 .adu-user-name{font-weight:650;color:var(--text);}
 .adu-user-email{font-size:12px;color:var(--muted);margin-top:1px;}
 .adu-role{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;}
@@ -57,6 +59,26 @@
 .adu-field-err{margin:5px 0 0;font-size:12px;font-weight:600;color:#ef4444;}
 .adu-cancel-btn{padding:9px 18px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;}
 .adu-cancel-btn:hover{border-color:var(--primary);}
+@media(max-width:640px){
+    .adu-wrap{overflow-x:hidden;}
+    .adu-header{margin-bottom:18px;}
+    .adu-add-btn{width:100%;justify-content:center;}
+    .adu-table thead{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;}
+    .adu-table, .adu-table tbody, .adu-table tr, .adu-table td{display:block;width:100%;box-sizing:border-box;}
+    .adu-table{border-collapse:separate;}
+    .adu-table tr{padding:14px 16px;border-bottom:1px solid color-mix(in srgb,var(--border) 60%,transparent);}
+    .adu-table tr:last-child{border-bottom:none;}
+    .adu-table td{padding:6px 0;border-bottom:none;min-width:0;}
+    .adu-table td:first-child{padding-top:0;}
+    .adu-table td .adu-user-cell{min-width:0;}
+    .adu-table td .adu-user-email{overflow-wrap:anywhere;}
+    .adu-table td[data-label]{display:flex;flex-direction:column;align-items:flex-start;gap:3px;text-align:left;}
+    .adu-table td[data-label]::before{content:attr(data-label);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);}
+    .adu-table td[data-label] > *{overflow-wrap:anywhere;}
+    .adu-table td:last-child{padding-top:10px;}
+    .adu-table td:last-child > div{justify-content:flex-start;flex-wrap:wrap;}
+    .adu-table td[style*="white-space:nowrap"]{white-space:normal !important;}
+}
 </style>
 
 <div class="adu-wrap">
@@ -96,23 +118,23 @@
                     @endphp
                     <tr>
                         <td>
-                            <div class="adu-user-cell">
+                            <a href="{{ route('admin.users.show', $u) }}" class="adu-user-cell adu-user-link">
                                 <div class="adu-avatar">{{ strtoupper(substr($u->name ?: '?', 0, 1)) }}</div>
                                 <div>
                                     <div class="adu-user-name">{{ $u->name }} @if($isSelf)<span class="adu-protected">(you)</span>@endif</div>
                                     <div class="adu-user-email">{{ $u->email }}</div>
                                 </div>
-                            </div>
+                            </a>
                         </td>
-                        <td><span class="adu-role adu-role--{{ $roleName }}">{{ ucfirst($roleName) }}</span></td>
-                        <td>
+                        <td data-label="Role"><span class="adu-role adu-role--{{ $roleName }}">{{ ucfirst($roleName) }}</span></td>
+                        <td data-label="Owns">
                             @if($u->businesses_count || $u->accounts_count)
                                 <span class="adu-owns">{{ $u->businesses_count }} business{{ $u->businesses_count === 1 ? '' : 'es' }}, {{ $u->accounts_count }} account{{ $u->accounts_count === 1 ? '' : 's' }}</span>
                             @else
                                 <span class="adu-owns">—</span>
                             @endif
                         </td>
-                        <td style="font-size:12px;color:var(--muted);white-space:nowrap;"
+                        <td data-label="Joined" style="font-size:12px;color:var(--muted);white-space:nowrap;"
                             title="{{ $u->created_at?->format('d M Y, H:i:s') }}">
                             {{ $u->created_at?->diffForHumans() }}
                             <div style="font-size:11px;color:var(--muted);margin-top:2px;">{{ $u->created_at?->format('d M Y · H:i') }}</div>
@@ -127,6 +149,9 @@
                                     data-is-self="{{ $isSelf ? '1' : '0' }}">
                                     <i class="fa fa-pen"></i> Edit
                                 </button>
+                                <a href="{{ route('admin.users.show', $u) }}" class="adu-act-btn" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;">
+                                    <i class="fa fa-eye"></i> View
+                                </a>
                                 @if($deletable)
                                     <form method="POST" action="{{ route('admin.users.destroy', $u) }}" style="margin:0;" onsubmit="return confirm('Delete {{ $u->name }}? This cannot be undone.');">
                                         @csrf

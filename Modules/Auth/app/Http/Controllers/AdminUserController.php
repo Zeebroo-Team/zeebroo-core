@@ -4,11 +4,24 @@ namespace Modules\Auth\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Models\UserActivityLog;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 use Modules\Auth\Services\UserManagementService;
+use Modules\Business\Models\Business;
+use Modules\Business\Models\BusinessMember;
+use Modules\CRM\Models\Project as CrmProject;
+use Modules\FileManager\Models\FileManagerFile;
+use Modules\Pos\Models\Customer;
+use Modules\Pos\Models\Sale;
+use Modules\Purchase\Models\Purchase;
+use Modules\Sales\Models\Invoice;
+use Modules\Sales\Models\Quotation;
 use Spatie\Permission\Models\Role;
 
 class AdminUserController extends Controller
@@ -21,6 +34,201 @@ class AdminUserController extends Controller
             'users' => $this->users->paginate(),
             'roles' => Role::orderBy('name')->pluck('name'),
         ]);
+    }
+
+    public function show(User $user): View
+    {
+        $user->load([
+            'roles',
+            'businesses' => fn ($query) => $query->orderByDesc('created_at'),
+            'businesses.branches',
+            'accounts' => fn ($query) => $query->orderByDesc('created_at'),
+            'accounts.business',
+            'accounts.warehouse',
+            'accounts.bank',
+            'accounts.bankType',
+            'hrEmployees.business',
+            'appConnections' => fn ($query) => $query->orderByDesc('created_at'),
+        ]);
+
+        $businessStats = $user->businesses->mapWithKeys(
+            fn (Business $business) => [$business->id => $this->businessStats($business)]
+        );
+
+        $lastSeenAt = DB::table('sessions')->where('user_id', $user->id)->max('last_activity');
+
+        $memberships = BusinessMember::query()
+            ->where('user_id', $user->id)
+            ->with('business')
+            ->orderByDesc('created_at')
+            ->get();
+
+        $platformActivity = UserActivityLog::query()
+            ->where('user_id', $user->id)
+            ->latest('created_at')
+            ->limit(30)
+            ->get();
+
+        $registeredPlatform = UserActivityLog::query()
+            ->where('user_id', $user->id)
+            ->where('event', UserActivityLog::EVENT_REGISTER)
+            ->orderBy('created_at')
+            ->value('platform');
+
+        $webLastActive = UserActivityLog::query()
+            ->where('user_id', $user->id)
+            ->where('platform', UserActivityLog::PLATFORM_WEB)
+            ->max('created_at');
+        $desktopLastActive = UserActivityLog::query()
+            ->where('user_id', $user->id)
+            ->where('platform', UserActivityLog::PLATFORM_DESKTOP)
+            ->max('created_at');
+
+        $lastActiveByPlatform = [
+            UserActivityLog::PLATFORM_WEB => $webLastActive ? Carbon::parse($webLastActive) : null,
+            UserActivityLog::PLATFORM_DESKTOP => $desktopLastActive ? Carbon::parse($desktopLastActive) : null,
+        ];
+        // Web sessions also update on every request (not just login), so it's a more
+        // current signal than the login log alone — take whichever is more recent.
+        if ($lastSeenAt && (! $lastActiveByPlatform[UserActivityLog::PLATFORM_WEB] || Carbon::createFromTimestamp($lastSeenAt)->gt($lastActiveByPlatform[UserActivityLog::PLATFORM_WEB]))) {
+            $lastActiveByPlatform[UserActivityLog::PLATFORM_WEB] = Carbon::createFromTimestamp($lastSeenAt);
+        }
+
+        return view('auth::admin.users.show', [
+            'user' => $user,
+            'businessStats' => $businessStats,
+            'recentActivity' => $this->recentActivity($user, $businessStats),
+            'lastSeenAt' => $lastSeenAt ? Carbon::createFromTimestamp($lastSeenAt) : null,
+            'memberships' => $memberships,
+            'platformActivity' => $platformActivity,
+            'registeredPlatform' => $registeredPlatform,
+            'lastActiveByPlatform' => $lastActiveByPlatform,
+        ]);
+    }
+
+    /**
+     * Most recent completed sales and received purchases across all of the user's
+     * businesses, merged and sorted by date, for a quick "what have they been doing" glance.
+     */
+    private function recentActivity(User $user, Collection $businessStats): Collection
+    {
+        $businessIds = $user->businesses->pluck('id');
+        $businessNames = $user->businesses->pluck('name', 'id');
+
+        if ($businessIds->isEmpty()) {
+            return collect();
+        }
+
+        $recentSales = Sale::query()
+            ->whereIn('business_id', $businessIds)
+            ->where('status', Sale::STATUS_COMPLETED)
+            ->latest('sold_at')
+            ->limit(5)
+            ->get(['id', 'business_id', 'sale_number', 'total', 'sold_at']);
+
+        $recentPurchases = Purchase::query()
+            ->whereIn('business_id', $businessIds)
+            ->where('status', Purchase::STATUS_RECEIVED)
+            ->latest('purchase_date')
+            ->limit(5)
+            ->get(['id', 'business_id', 'po_number', 'total', 'purchase_date']);
+
+        $activity = collect();
+
+        foreach ($recentSales as $sale) {
+            $activity->push([
+                'type' => 'sale',
+                'label' => 'Sale '.$sale->sale_number,
+                'business' => $businessNames[$sale->business_id] ?? '—',
+                'currency' => $businessStats[$sale->business_id]['currency'] ?? 'LKR',
+                'amount' => (float) $sale->total,
+                'date' => $sale->sold_at,
+            ]);
+        }
+
+        foreach ($recentPurchases as $purchase) {
+            $activity->push([
+                'type' => 'purchase',
+                'label' => 'Purchase '.$purchase->po_number,
+                'business' => $businessNames[$purchase->business_id] ?? '—',
+                'currency' => $businessStats[$purchase->business_id]['currency'] ?? 'LKR',
+                'amount' => (float) $purchase->total,
+                'date' => $purchase->purchase_date,
+            ]);
+        }
+
+        return $activity->sortByDesc('date')->take(8)->values();
+    }
+
+    /**
+     * Overview / sales-purchases / HR / CRM analysis for one business, computed via
+     * aggregate queries so we never load a business's full product/sale/etc. tables.
+     */
+    private function businessStats(Business $business): array
+    {
+        $stockValue = (float) ($business->products()
+            ->where('is_active', true)
+            ->selectRaw('COALESCE(SUM(stock_quantity * cost_price), 0) as total')
+            ->value('total') ?? 0);
+
+        $leads = $business->crmLeads();
+
+        return [
+            'currency' => (string) (get_settings('business.currency', '', $business) ?: 'LKR'),
+            'overview' => [
+                'products_total' => $business->products()->count(),
+                'products_active' => $business->products()->where('is_active', true)->count(),
+                'stock_value' => $stockValue,
+                'suppliers_count' => $business->suppliers()->count(),
+                'customers_count' => Customer::where('business_id', $business->id)->count(),
+                'branches_count' => $business->branches->count(),
+                'storage_human' => $this->formatBytes(
+                    (int) FileManagerFile::where('business_id', $business->id)->sum('size_bytes')
+                ),
+            ],
+            'sales_purchases' => [
+                'sales_count' => $business->sales()->where('status', Sale::STATUS_COMPLETED)->count(),
+                'sales_total' => (float) $business->sales()->where('status', Sale::STATUS_COMPLETED)->sum('total'),
+                'purchases_count' => $business->purchases()->where('status', Purchase::STATUS_RECEIVED)->count(),
+                'purchases_total' => (float) $business->purchases()->where('status', Purchase::STATUS_RECEIVED)->sum('total'),
+            ],
+            'hr' => [
+                'employees_count' => $business->employees()->count(),
+                'departments_count' => $business->departments()->count(),
+            ],
+            'crm' => [
+                'leads_count' => (clone $leads)->count(),
+                'leads_won' => (clone $leads)->whereHas('stage', fn ($q) => $q->where('is_won', true))->count(),
+                'leads_lost' => (clone $leads)->whereHas('stage', fn ($q) => $q->where('is_lost', true))->count(),
+                'leads_value' => (float) (clone $leads)->sum('estimated_value'),
+                'projects_count' => $business->crmProjects()->count(),
+                'projects_active' => $business->crmProjects()->where('status', CrmProject::STATUS_ACTIVE)->count(),
+            ],
+            'quotes_invoices' => [
+                'quotations_count' => $business->quotations()->count(),
+                'quotations_accepted' => $business->quotations()->where('status', Quotation::STATUS_ACCEPTED)->count(),
+                'invoices_count' => Invoice::where('business_id', $business->id)->count(),
+                'invoices_paid_total' => (float) Invoice::where('business_id', $business->id)->where('status', Invoice::STATUS_PAID)->sum('total'),
+                'invoices_outstanding_total' => (float) Invoice::where('business_id', $business->id)
+                    ->whereIn('status', [Invoice::STATUS_SENT, Invoice::STATUS_OVERDUE])
+                    ->sum('total'),
+            ],
+        ];
+    }
+
+    private function formatBytes(int $bytes): string
+    {
+        if ($bytes < 1024) {
+            return $bytes.' B';
+        }
+        if ($bytes < 1024 * 1024) {
+            return number_format($bytes / 1024, 1).' KB';
+        }
+        if ($bytes < 1024 * 1024 * 1024) {
+            return number_format($bytes / (1024 * 1024), 1).' MB';
+        }
+
+        return number_format($bytes / (1024 * 1024 * 1024), 2).' GB';
     }
 
     public function store(Request $request): RedirectResponse

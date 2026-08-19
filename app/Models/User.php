@@ -64,6 +64,12 @@ class User extends Authenticatable
         return $this->hasMany(Employee::class);
     }
 
+    /** Register/login history across the web platform and the pos-desktop software. */
+    public function activityLogs(): HasMany
+    {
+        return $this->hasMany(UserActivityLog::class);
+    }
+
     /**
      * Employee-only account: has a linked HR employee row and does not own any business (admins always get full app access).
      */

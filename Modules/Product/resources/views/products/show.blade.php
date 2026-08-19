@@ -234,7 +234,7 @@
 
         {{-- Cost Price --}}
         <div class="ps-stat">
-            <span class="ps-stat__lbl">Cost price@if(filled($currency??'')) ({{ $currency }})@endif</span>
+            <span class="ps-stat__lbl">Cost price @if(filled($currency??''))({{ $currency }})@endif</span>
             @if($statCostPrice !== null)
                 <span class="ps-stat__val">{{ number_format($statCostPrice, 2) }}</span>
             @else
@@ -272,7 +272,7 @@
 
         {{-- Wholesale Price --}}
         <div class="ps-stat">
-            <span class="ps-stat__lbl">Wholesale price@if(filled($currency??'')) ({{ $currency }})@endif</span>
+            <span class="ps-stat__lbl">Wholesale price @if(filled($currency??''))({{ $currency }})@endif</span>
             @if($statWholesalePrice !== null)
                 <span class="ps-stat__val">{{ number_format($statWholesalePrice, 2) }}</span>
             @else
@@ -282,7 +282,7 @@
 
         {{-- Profit / Margin --}}
         <div class="ps-stat ps-stat--profit @if($statProfit !== null && $statProfit < 0) ps-stat--loss @elseif($statProfit !== null) ps-stat--gain @endif">
-            <span class="ps-stat__lbl">Profit@if(filled($currency??'')) ({{ $currency }})@endif</span>
+            <span class="ps-stat__lbl">Profit @if(filled($currency??''))({{ $currency }})@endif</span>
             @if($statProfit !== null)
                 <span class="ps-stat__val">
                     @if($statProfit >= 0)+@endif{{ number_format($statProfit, 2) }}
@@ -362,7 +362,7 @@
         ])
 
         {{-- Pricing section --}}
-        <p class="ps-label"><i class="fa fa-tag"></i> Pricing@if(filled($currency??'')) <span style="font-weight:400;font-size:10px;color:var(--muted);">({{ $currency }})</span>@endif</p>
+        <p class="ps-label"><i class="fa fa-tag"></i> Pricing @if(filled($currency??''))<span style="font-weight:400;font-size:10px;color:var(--muted);">({{ $currency }})</span>@endif</p>
         <div class="ps-pricing-grid">
             <div class="ps-pricing-cell">
                 <span class="ps-pricing-cell__lbl">Cost price</span>
