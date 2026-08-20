@@ -5,8 +5,11 @@ namespace Modules\Pos\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
+use Modules\Business\Models\Business;
 use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesPosBusinessForApi;
 use Modules\Pos\Models\Customer;
+use Modules\Pos\Services\PosSettingsService;
 
 class PosCustomerApiController extends Controller
 {
@@ -25,6 +28,7 @@ class PosCustomerApiController extends Controller
                     ->orWhere('email', 'like', "%{$q}%");
             }))
             ->withCount('sales')
+            ->with('category:id,name')
             ->orderBy('name')
             ->paginate(50);
 
@@ -44,7 +48,10 @@ class PosCustomerApiController extends Controller
         if ((int) $customer->business_id !== (int) $business->id) abort(403);
 
         $customer->loadCount('sales');
-        $customer->load(['sales' => fn ($q) => $q->latest('sold_at')->limit(5)->select('id', 'pos_customer_id', 'sale_number', 'total', 'sold_at', 'payment_method')]);
+        $customer->load([
+            'sales' => fn ($q) => $q->latest('sold_at')->limit(5)->select('id', 'pos_customer_id', 'sale_number', 'total', 'sold_at', 'payment_method'),
+            'category:id,name',
+        ]);
 
         return response()->json(['data' => $this->format($customer, full: true)]);
     }
@@ -54,17 +61,11 @@ class PosCustomerApiController extends Controller
         $business = $this->businessOrAbort($request);
         $this->abortUnlessPerm($request, $business, 'pos_customers');
 
-        $validated = $request->validate([
-            'name'          => ['required', 'string', 'max:255'],
-            'phone'         => ['nullable', 'string', 'max:50'],
-            'email'         => ['nullable', 'email', 'max:255'],
-            'address'       => ['nullable', 'string', 'max:500'],
-            'notes'         => ['nullable', 'string', 'max:1000'],
-            'customer_type' => ['nullable', 'string', 'in:retail,wholesale'],
-        ]);
+        $validated = $request->validate($this->rules($business));
 
         $customer = Customer::create(array_merge($validated, ['business_id' => $business->id]));
         $customer->loadCount('sales');
+        $customer->load('category:id,name');
 
         try {
             app(\Modules\AutomationEditor\Services\AutomationRunnerService::class)->dispatch('customer.created', $business, [
@@ -82,17 +83,14 @@ class PosCustomerApiController extends Controller
         if ((int) $customer->business_id !== (int) $business->id) abort(403);
         $this->abortUnlessPerm($request, $business, 'pos_customers');
 
-        $validated = $request->validate([
-            'name'          => ['sometimes', 'required', 'string', 'max:255'],
-            'phone'         => ['nullable', 'string', 'max:50'],
-            'email'         => ['nullable', 'email', 'max:255'],
-            'address'       => ['nullable', 'string', 'max:500'],
-            'notes'         => ['nullable', 'string', 'max:1000'],
-            'customer_type' => ['nullable', 'string', 'in:retail,wholesale'],
-        ]);
+        $rules = $this->rules($business);
+        $rules['name'] = ['sometimes', 'required', 'string', 'max:255'];
+
+        $validated = $request->validate($rules);
 
         $customer->update($validated);
         $customer->loadCount('sales');
+        $customer->load('category:id,name');
 
         return response()->json(['data' => $this->format($customer)]);
     }
@@ -108,17 +106,40 @@ class PosCustomerApiController extends Controller
         return response()->json(['message' => 'Customer deleted.']);
     }
 
+    /**
+     * @return array<string, array<int, string>>
+     */
+    private function rules(Business $business): array
+    {
+        $settings = app(PosSettingsService::class)->forBusiness($business);
+
+        return [
+            'name'                 => ['required', 'string', 'max:255'],
+            'phone'                => [!empty($settings['customer_require_phone']) ? 'required' : 'nullable', 'string', 'max:50'],
+            'email'                => [!empty($settings['customer_require_email']) ? 'required' : 'nullable', 'email', 'max:255'],
+            'address'              => [!empty($settings['customer_require_address']) ? 'required' : 'nullable', 'string', 'max:500'],
+            'notes'                => ['nullable', 'string', 'max:1000'],
+            'customer_type'        => ['nullable', 'string', 'in:retail,wholesale'],
+            'customer_category_id' => [
+                'nullable', 'integer',
+                Rule::exists('pos_customer_categories', 'id')->where('business_id', $business->id),
+            ],
+        ];
+    }
+
     private function format(Customer $c, bool $full = false): array
     {
         $data = [
-            'id'            => $c->id,
-            'name'          => $c->name,
-            'phone'         => $c->phone,
-            'email'         => $c->email,
-            'address'       => $c->address,
-            'notes'         => $c->notes,
-            'customer_type' => $c->customer_type ?? 'retail',
-            'sales_count'   => $c->sales_count ?? 0,
+            'id'                   => $c->id,
+            'name'                 => $c->name,
+            'phone'                => $c->phone,
+            'email'                => $c->email,
+            'address'              => $c->address,
+            'notes'                => $c->notes,
+            'customer_type'        => $c->customer_type ?? 'retail',
+            'customer_category_id' => $c->customer_category_id,
+            'category_name'        => $c->relationLoaded('category') ? $c->category?->name : null,
+            'sales_count'          => $c->sales_count ?? 0,
         ];
 
         if ($full && $c->relationLoaded('sales')) {

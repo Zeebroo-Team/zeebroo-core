@@ -78,6 +78,12 @@ class PosSettingsService
     /** When false, purchase orders are skipped; GRNs are created directly. */
     public const KEY_PURCHASE_ORDER_ENABLED = 'pos.purchase_order_enabled';
 
+    public const KEY_CUSTOMER_REQUIRE_PHONE = 'pos.customer_require_phone';
+
+    public const KEY_CUSTOMER_REQUIRE_EMAIL = 'pos.customer_require_email';
+
+    public const KEY_CUSTOMER_REQUIRE_ADDRESS = 'pos.customer_require_address';
+
     /**
      * @return array{
      *     default_deposit_account_id: ?int,
@@ -177,6 +183,10 @@ class PosSettingsService
             })(),
             // Purchasing
             'purchase_order_enabled' => (bool) $business->getSetting(self::KEY_PURCHASE_ORDER_ENABLED, true),
+            // Customers
+            'customer_require_phone'   => (bool) $business->getSetting(self::KEY_CUSTOMER_REQUIRE_PHONE, false),
+            'customer_require_email'   => (bool) $business->getSetting(self::KEY_CUSTOMER_REQUIRE_EMAIL, false),
+            'customer_require_address' => (bool) $business->getSetting(self::KEY_CUSTOMER_REQUIRE_ADDRESS, false),
         ];
     }
 
@@ -358,6 +368,17 @@ class PosSettingsService
         // Purchasing workflow
         if (array_key_exists('purchase_order_enabled', $data)) {
             $business->setSetting(self::KEY_PURCHASE_ORDER_ENABLED, filter_var($data['purchase_order_enabled'], FILTER_VALIDATE_BOOLEAN));
+        }
+
+        // Customers
+        if (array_key_exists('customer_require_phone', $data)) {
+            $business->setSetting(self::KEY_CUSTOMER_REQUIRE_PHONE, filter_var($data['customer_require_phone'], FILTER_VALIDATE_BOOLEAN));
+        }
+        if (array_key_exists('customer_require_email', $data)) {
+            $business->setSetting(self::KEY_CUSTOMER_REQUIRE_EMAIL, filter_var($data['customer_require_email'], FILTER_VALIDATE_BOOLEAN));
+        }
+        if (array_key_exists('customer_require_address', $data)) {
+            $business->setSetting(self::KEY_CUSTOMER_REQUIRE_ADDRESS, filter_var($data['customer_require_address'], FILTER_VALIDATE_BOOLEAN));
         }
 
         // Business profile

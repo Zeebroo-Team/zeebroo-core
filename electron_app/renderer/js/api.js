@@ -221,6 +221,12 @@ const API = (() => {
     updateCustomer: (id, body) => request('PATCH',  `/customers/${id}`, body),
     deleteCustomer: (id)   => request('DELETE', `/customers/${id}`),
 
+    // Customer Categories
+    customerCategories:      () => request('GET',    '/customer-categories'),
+    createCustomerCategory:  (body) => request('POST',   '/customer-categories', body),
+    updateCustomerCategory:  (id, body) => request('PATCH',  `/customer-categories/${id}`, body),
+    deleteCustomerCategory:  (id)   => request('DELETE', `/customer-categories/${id}`),
+
     // Suppliers
     suppliers:      (q, page)  => request('GET',    `/suppliers?q=${encodeURIComponent(q||'')}&page=${page||1}`),
     supplier:       (id)       => request('GET',    `/suppliers/${id}`),
