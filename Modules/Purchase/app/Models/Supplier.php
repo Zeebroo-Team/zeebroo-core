@@ -12,10 +12,12 @@ class Supplier extends Model
 {
     protected $fillable = [
         'business_id',
+        'supplier_category_id',
         'name',
         'contact_name',
         'email',
         'phone',
+        'address',
         'notes',
         'is_active',
     ];
@@ -30,6 +32,11 @@ class Supplier extends Model
     public function business(): BelongsTo
     {
         return $this->belongsTo(Business::class);
+    }
+
+    public function category(): BelongsTo
+    {
+        return $this->belongsTo(SupplierCategory::class, 'supplier_category_id');
     }
 
     public function purchases(): HasMany

@@ -199,6 +199,10 @@ class PosSettingsApiController extends Controller
             'customer_require_phone'     => ['nullable', 'boolean'],
             'customer_require_email'     => ['nullable', 'boolean'],
             'customer_require_address'   => ['nullable', 'boolean'],
+            // Suppliers
+            'supplier_require_phone'     => ['nullable', 'boolean'],
+            'supplier_require_email'     => ['nullable', 'boolean'],
+            'supplier_require_address'   => ['nullable', 'boolean'],
         ]);
 
         $this->posSettings->saveForBusiness($business, $validated);

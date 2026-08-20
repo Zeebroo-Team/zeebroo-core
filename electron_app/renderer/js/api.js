@@ -232,8 +232,15 @@ const API = (() => {
     suppliers:      (q, page)  => request('GET',    `/suppliers?q=${encodeURIComponent(q||'')}&page=${page||1}`),
     supplier:       (id)       => request('GET',    `/suppliers/${id}`),
     createSupplier: (body)     => request('POST',   '/suppliers', body),
+    importSuppliers:(rows)     => request('POST',   '/suppliers/import', { rows }),
     updateSupplier: (id, body) => request('PATCH',  `/suppliers/${id}`, body),
     deleteSupplier: (id)       => request('DELETE', `/suppliers/${id}`),
+
+    // Supplier Categories
+    supplierCategories:      () => request('GET',    '/supplier-categories'),
+    createSupplierCategory:  (body) => request('POST',   '/supplier-categories', body),
+    updateSupplierCategory:  (id, body) => request('PATCH',  `/supplier-categories/${id}`, body),
+    deleteSupplierCategory:  (id)   => request('DELETE', `/supplier-categories/${id}`),
     // Product Units
     units:          ()              => request('GET',    '/units'),
     createUnit:     (body)          => request('POST',   '/units', body),
