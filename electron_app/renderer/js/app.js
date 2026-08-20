@@ -15334,6 +15334,9 @@ function _showCustomerCreateForm(prefill) {
   $('#cust-new-phone').value   = '';
   $('#cust-new-email').value   = '';
   $('#cust-new-address').value = '';
+  $('#cust-new-phone').placeholder   = _custCfg.requirePhone   ? 'Phone *'   : 'Phone (optional)';
+  $('#cust-new-email').placeholder   = _custCfg.requireEmail   ? 'Email *'   : 'Email (optional)';
+  $('#cust-new-address').placeholder = _custCfg.requireAddress ? 'Address *' : 'Address (optional)';
   _setCategoryComboValue('#cust-new-category-input', '#cust-new-category', '');
   form.style.display = '';
   $('#cust-new-name').focus();
