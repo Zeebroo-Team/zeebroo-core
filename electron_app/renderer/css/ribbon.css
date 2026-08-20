@@ -11089,7 +11089,7 @@ body.dark .bc-main-preview-body { background: #1a1a1a; }
 
 /* Empty / loading */
 .qt-empty { text-align: center; padding: 64px 24px; color: var(--text-muted); }
-.qt-empty i { font-size: 40px; display: block; margin-bottom: 14px; opacity: .25; }
+.qt-empty > i { font-size: 40px; display: block; margin-bottom: 14px; opacity: .25; }
 .qt-empty h4 { font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 5px; }
 .qt-empty p { font-size: 12px; }
 .qt-loading { text-align: center; padding: 48px; color: var(--text-muted); font-size: 13px; }
