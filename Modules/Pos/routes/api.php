@@ -188,6 +188,7 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
 
     Route::get('customers', [PosCustomerApiController::class, 'index'])->name('customers.index');
     Route::post('customers', [PosCustomerApiController::class, 'store'])->name('customers.store');
+    Route::post('customers/import', [PosCustomerApiController::class, 'import'])->name('customers.import');
     Route::get('customers/{customer}', [PosCustomerApiController::class, 'show'])->name('customers.show');
     Route::patch('customers/{customer}', [PosCustomerApiController::class, 'update'])->name('customers.update');
     Route::delete('customers/{customer}', [PosCustomerApiController::class, 'destroy'])->name('customers.destroy');

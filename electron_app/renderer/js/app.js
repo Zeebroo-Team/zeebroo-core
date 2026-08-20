@@ -15482,11 +15482,12 @@ async function _cmSelectCustomer(id) {
     ? '<span class="cart-cust-wholesale"><i class="fa fa-boxes-stacked"></i> Wholesale</span>'
     : '<span style="color:var(--text-muted)">Retail</span>';
   const fields = [
-    { label: 'Type',    val: typeVal, raw: true },
-    { label: 'Phone',   val: c.phone },
-    { label: 'Email',   val: c.email },
-    { label: 'Address', val: c.address },
-    { label: 'Notes',   val: c.notes },
+    { label: 'Type',     val: typeVal, raw: true },
+    { label: 'Category', val: c.category_name },
+    { label: 'Phone',    val: c.phone },
+    { label: 'Email',    val: c.email },
+    { label: 'Address',  val: c.address },
+    { label: 'Notes',    val: c.notes },
   ];
   $('#cm-dv-fields').innerHTML = fields.map(f => `
     <div class="cm-dv-field">
@@ -15875,6 +15876,227 @@ $('#cust-settings-save')?.addEventListener('click', async () => {
   $('#cust-settings-modal').style.display = 'none';
   toast('Customer settings saved', 'success');
 });
+
+// ── CSV Customer Import ──────────────────────────────────────────────────────
+const _CUST_CSV_SAMPLE = [
+  'name,phone,email,address,notes,category,customer_type',
+  'John Silva,0771234567,john.silva@example.com,"123 Main St, Colombo",Prefers SMS updates,VIP,retail',
+  'Nimal Perera,0719876543,nimal.perera@example.com,"45 Galle Rd, Kandy",,Regular,retail',
+  'Priya Fernando,0765555555,,,"Wholesale buyer",Wholesale,wholesale',
+].join('\n');
+
+// Column name aliases → canonical key
+const _CUST_CSV_COL_MAP = {
+  'name': 'name', 'customer name': 'name', 'customer': 'name', 'full name': 'name',
+  'phone': 'phone', 'phone number': 'phone', 'mobile': 'phone', 'contact': 'phone', 'contact number': 'phone',
+  'email': 'email', 'email address': 'email',
+  'address': 'address',
+  'notes': 'notes', 'note': 'notes', 'remarks': 'notes',
+  'category': 'category', 'customer category': 'category',
+  'customer_type': 'customer_type', 'type': 'customer_type', 'customer type': 'customer_type',
+};
+
+let _custCsvParsedRows = [];
+let _custCsvValidRows  = [];
+
+function _custCsvParseFile(text) {
+  const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').filter(l => l.trim());
+  if (lines.length < 2) return { headers: [], rows: [], error: 'File must have a header row and at least one data row.' };
+
+  const headers = _csvParseLine(lines[0]).map(h => h.trim().toLowerCase());
+  const colMap  = {};
+  headers.forEach((h, i) => { if (_CUST_CSV_COL_MAP[h]) colMap[_CUST_CSV_COL_MAP[h]] = i; });
+
+  if (colMap['name'] === undefined) {
+    return { headers, rows: [], error: 'Missing required column: "name" (or "customer", "full name").' };
+  }
+
+  const rows = [];
+  for (let i = 1; i < lines.length; i++) {
+    const cells = _csvParseLine(lines[i]);
+    const row   = {};
+    Object.entries(colMap).forEach(([key, ci]) => { row[key] = (cells[ci] || '').trim(); });
+    row._rowNum = i + 1;
+
+    // Validate
+    row._errors = [];
+    if (!row.name) row._errors.push('Name is required');
+    if (_custCfg.requirePhone   && !row.phone)   row._errors.push('Phone number is required');
+    if (_custCfg.requireEmail   && !row.email)   row._errors.push('Email is required');
+    if (_custCfg.requireAddress && !row.address) row._errors.push('Address is required');
+    if (row.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email)) row._errors.push('Invalid email');
+    if (row.customer_type && !['retail', 'wholesale'].includes(row.customer_type.toLowerCase())) {
+      row._errors.push('customer_type must be "retail" or "wholesale"');
+    } else {
+      row.customer_type = (row.customer_type || 'retail').toLowerCase();
+    }
+
+    rows.push(row);
+  }
+  return { headers: Object.keys(colMap), rows };
+}
+
+function _custCsvSetStep(n) {
+  [1, 2, 3].forEach(i => {
+    const body = $(`#cust-csv-step-${i}`);
+    const ind  = $(`#cust-csv-step-ind-${i}`);
+    if (body) body.style.display = i === n ? 'flex' : 'none';
+    if (ind)  {
+      ind.classList.toggle('active', i === n);
+      ind.classList.toggle('done',   i < n);
+    }
+  });
+}
+
+function _custCsvShowPreview(rows) {
+  const valid = rows.filter(r => !r._errors.length);
+  const bad   = rows.filter(r => r._errors.length);
+  _custCsvValidRows = valid;
+
+  // Summary badges
+  const sumEl = $('#cust-csv-preview-summary');
+  sumEl.innerHTML = `
+    <b>${rows.length} row${rows.length !== 1 ? 's' : ''} found</b>
+    <span class="csv-preview-badge ok"><i class="fa fa-circle-check"></i> ${valid.length} valid</span>
+    ${bad.length ? `<span class="csv-preview-badge error"><i class="fa fa-triangle-exclamation"></i> ${bad.length} with errors</span>` : ''}
+    ${rows.length > 100 ? `<span class="csv-preview-badge warn"><i class="fa fa-eye"></i> Showing first 100 rows</span>` : ''}`;
+
+  // Table
+  const display = rows.slice(0, 100);
+  $('#cust-csv-preview-thead').innerHTML = `<tr>
+    <th>#</th><th>Name</th><th>Phone</th><th>Email</th><th>Address</th>
+    <th>Category</th><th>Type</th><th>Status</th>
+  </tr>`;
+  $('#cust-csv-preview-tbody').innerHTML = display.map(r => {
+    const isErr = r._errors.length > 0;
+    const status = isErr
+      ? `<span class="csv-row-error-msg"><i class="fa fa-triangle-exclamation"></i> ${escHtml(r._errors.join('; '))}</span>`
+      : `<span style="color:#10b981;font-size:11px"><i class="fa fa-circle-check"></i> OK</span>`;
+    return `<tr class="${isErr ? 'csv-row-error' : ''}">
+      <td style="color:var(--text-muted)">${r._rowNum}</td>
+      <td><strong>${escHtml(r.name || '—')}</strong></td>
+      <td style="color:var(--text-muted)">${escHtml(r.phone || '—')}</td>
+      <td style="color:var(--text-muted)">${escHtml(r.email || '—')}</td>
+      <td style="color:var(--text-muted)">${escHtml(r.address || '—')}</td>
+      <td>${escHtml(r.category || '—')}</td>
+      <td>${escHtml(r.customer_type || 'retail')}</td>
+      <td>${status}</td>
+    </tr>`;
+  }).join('');
+
+  $('#cust-csv-import-count').textContent = valid.length;
+  $('#cust-csv-import-btn').disabled = valid.length === 0;
+  _custCsvSetStep(2);
+}
+
+function _custCsvReset() {
+  _custCsvParsedRows = [];
+  _custCsvValidRows  = [];
+  $('#cust-csv-file-input').value = '';
+  _custCsvSetStep(1);
+}
+
+async function _custCsvOpenModal() {
+  await _loadCustomerConfig();
+  _custCsvReset();
+  $('#cust-csv-import-modal').style.display = 'flex';
+}
+
+function _custCsvCloseModal() {
+  $('#cust-csv-import-modal').style.display = 'none';
+  _custCsvReset();
+}
+
+function _custCsvDownloadSample() {
+  const blob = new Blob([_CUST_CSV_SAMPLE], { type: 'text/csv' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = 'customers-sample.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function _custCsvHandleFile(file) {
+  if (!file || !file.name.match(/\.csv$/i)) { toast('Please select a .csv file', 'error'); return; }
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const { rows, error } = _custCsvParseFile(e.target.result);
+    if (error) { toast(error, 'error'); return; }
+    if (rows.length > 500) { toast(`CSV has ${rows.length} rows. Only the first 500 will be imported.`, 'error'); }
+    _custCsvParsedRows = rows.slice(0, 500);
+    _custCsvShowPreview(_custCsvParsedRows);
+  };
+  reader.readAsText(file);
+}
+
+// Drag & drop
+const _custCsvDz = $('#cust-csv-dropzone');
+if (_custCsvDz) {
+  _custCsvDz.addEventListener('dragover',  e => { e.preventDefault(); _custCsvDz.classList.add('drag-over'); });
+  _custCsvDz.addEventListener('dragleave', () => _custCsvDz.classList.remove('drag-over'));
+  _custCsvDz.addEventListener('drop', e => {
+    e.preventDefault(); _custCsvDz.classList.remove('drag-over');
+    _custCsvHandleFile(e.dataTransfer.files[0]);
+  });
+}
+$('#cust-csv-file-input')?.addEventListener('change', e => _custCsvHandleFile(e.target.files[0]));
+$('#cust-csv-download-sample')?.addEventListener('click', _custCsvDownloadSample);
+$('#cust-csv-import-close')?.addEventListener('click',  _custCsvCloseModal);
+$('#cust-csv-import-modal')?.addEventListener('click',  e => { if (e.target === e.currentTarget) _custCsvCloseModal(); });
+$('#cust-csv-back-btn')?.addEventListener('click',      _custCsvReset);
+$('#cust-csv-done-btn')?.addEventListener('click',      _custCsvCloseModal);
+$('#cust-csv-import-more-btn')?.addEventListener('click', _custCsvReset);
+$('#cst-import-csv-btn')?.addEventListener('click', _custCsvOpenModal);
+
+$('#cust-csv-import-btn')?.addEventListener('click', async () => {
+  if (!_custCsvValidRows.length) return;
+  const btn = $('#cust-csv-import-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Importing…';
+
+  const payload = _custCsvValidRows.map(r => ({
+    name:          r.name,
+    phone:         r.phone   || undefined,
+    email:         r.email   || undefined,
+    address:       r.address || undefined,
+    notes:         r.notes   || undefined,
+    category:      r.category || undefined,
+    customer_type: r.customer_type || 'retail',
+  }));
+
+  const res = await API.importCustomers(payload);
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fa fa-file-import"></i> Import Customers';
+
+  if (res.status !== 200) { toast(res.body?.message || 'Import failed', 'error'); return; }
+
+  const { imported, skipped, errors } = res.body;
+  const resSum = $('#cust-csv-result-summary');
+  resSum.innerHTML = `
+    <div class="csv-result-stat">
+      <div class="csv-result-stat-num green">${imported}</div>
+      <div class="csv-result-stat-label"><i class="fa fa-circle-check"></i> Customers imported</div>
+    </div>
+    <div class="csv-result-stat">
+      <div class="csv-result-stat-num ${skipped > 0 ? 'red' : ''}">${skipped}</div>
+      <div class="csv-result-stat-label"><i class="fa fa-triangle-exclamation"></i> Rows skipped</div>
+    </div>`;
+
+  const errWrap = $('#cust-csv-result-errors');
+  if (errors && errors.length) {
+    errWrap.style.display = '';
+    $('#cust-csv-result-errors-list').innerHTML = errors.map(e =>
+      `<div class="csv-result-error-row"><b>Row ${e.row}${e.name ? ' — ' + escHtml(e.name) : ''}:</b><span>${escHtml(e.message)}</span></div>`
+    ).join('');
+  } else {
+    errWrap.style.display = 'none';
+  }
+
+  _custCsvSetStep(3);
+  if (imported > 0) _cmLoadList();
+});
+// ── End CSV Customer Import ──────────────────────────────────────────────────
 
 // ── End cart keyboard navigation ────────────────────────────────────────────
 

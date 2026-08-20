@@ -9,6 +9,7 @@ use Illuminate\Validation\Rule;
 use Modules\Business\Models\Business;
 use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesPosBusinessForApi;
 use Modules\Pos\Models\Customer;
+use Modules\Pos\Models\CustomerCategory;
 use Modules\Pos\Services\PosSettingsService;
 
 class PosCustomerApiController extends Controller
@@ -104,6 +105,82 @@ class PosCustomerApiController extends Controller
         $customer->delete();
 
         return response()->json(['message' => 'Customer deleted.']);
+    }
+
+    public function import(Request $request): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'pos_customers');
+
+        $request->validate([
+            'rows'                => ['required', 'array', 'min:1', 'max:500'],
+            'rows.*.name'         => ['required', 'string', 'max:255'],
+            'rows.*.phone'        => ['nullable', 'string', 'max:50'],
+            'rows.*.email'        => ['nullable', 'email', 'max:255'],
+            'rows.*.address'      => ['nullable', 'string', 'max:500'],
+            'rows.*.notes'        => ['nullable', 'string', 'max:1000'],
+            'rows.*.category'     => ['nullable', 'string', 'max:120'],
+            'rows.*.customer_type' => ['nullable', 'string', 'in:retail,wholesale'],
+        ]);
+
+        $settings = app(PosSettingsService::class)->forBusiness($business);
+        $rows     = $request->input('rows');
+        $imported = 0;
+        $skipped  = 0;
+        $errors   = [];
+        $catCache = [];
+
+        foreach ($rows as $idx => $row) {
+            try {
+                if (!empty($settings['customer_require_phone']) && empty($row['phone'])) {
+                    throw new \RuntimeException('Phone number is required.');
+                }
+                if (!empty($settings['customer_require_email']) && empty($row['email'])) {
+                    throw new \RuntimeException('Email is required.');
+                }
+                if (!empty($settings['customer_require_address']) && empty($row['address'])) {
+                    throw new \RuntimeException('Address is required.');
+                }
+
+                $categoryId = null;
+                if (!empty($row['category'])) {
+                    $catName = trim($row['category']);
+                    if (!isset($catCache[$catName])) {
+                        $cat = CustomerCategory::firstOrCreate(
+                            ['business_id' => $business->id, 'name' => $catName],
+                        );
+                        $catCache[$catName] = $cat->id;
+                    }
+                    $categoryId = $catCache[$catName];
+                }
+
+                Customer::create([
+                    'business_id'           => $business->id,
+                    'name'                  => $row['name'],
+                    'phone'                 => $row['phone'] ?? null,
+                    'email'                 => $row['email'] ?? null,
+                    'address'               => $row['address'] ?? null,
+                    'notes'                 => $row['notes'] ?? null,
+                    'customer_type'         => $row['customer_type'] ?? 'retail',
+                    'customer_category_id'  => $categoryId,
+                ]);
+
+                $imported++;
+            } catch (\Throwable $e) {
+                $skipped++;
+                $errors[] = [
+                    'row'     => $idx + 1,
+                    'name'    => $row['name'] ?? '',
+                    'message' => $e->getMessage(),
+                ];
+            }
+        }
+
+        return response()->json([
+            'imported' => $imported,
+            'skipped'  => $skipped,
+            'errors'   => $errors,
+        ]);
     }
 
     /**

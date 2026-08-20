@@ -218,6 +218,7 @@ const API = (() => {
     customers:      (q, page) => request('GET',  `/customers?q=${encodeURIComponent(q || '')}&page=${page || 1}`),
     customer:       (id)   => request('GET',  `/customers/${id}`),
     createCustomer: (body) => request('POST', '/customers', body),
+    importCustomers:(rows) => request('POST', '/customers/import', { rows }),
     updateCustomer: (id, body) => request('PATCH',  `/customers/${id}`, body),
     deleteCustomer: (id)   => request('DELETE', `/customers/${id}`),
 

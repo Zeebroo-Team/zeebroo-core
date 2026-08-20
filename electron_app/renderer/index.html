@@ -10433,6 +10433,73 @@
   </div>
 </div>
 
+<!-- ── CSV Customer Import modal ─────────────────────────────────────── -->
+<div id="cust-csv-import-modal" class="bwz-overlay" style="display:none" role="dialog" aria-modal="true">
+  <div class="csv-import-card">
+    <!-- Header -->
+    <div class="csv-import-header">
+      <div class="csv-import-title"><i class="fa fa-file-arrow-up"></i> Import Customers from CSV</div>
+      <button class="csv-import-close" id="cust-csv-import-close"><i class="fa fa-xmark"></i></button>
+    </div>
+
+    <!-- Step indicator -->
+    <div class="csv-step-track">
+      <div class="csv-step active" id="cust-csv-step-ind-1"><span class="csv-step-num">1</span><span class="csv-step-label">Upload</span></div>
+      <div class="csv-step-line"></div>
+      <div class="csv-step" id="cust-csv-step-ind-2"><span class="csv-step-num">2</span><span class="csv-step-label">Preview</span></div>
+      <div class="csv-step-line"></div>
+      <div class="csv-step" id="cust-csv-step-ind-3"><span class="csv-step-num">3</span><span class="csv-step-label">Result</span></div>
+    </div>
+
+    <!-- Step 1: Upload -->
+    <div class="csv-import-body" id="cust-csv-step-1">
+      <div class="csv-dropzone" id="cust-csv-dropzone">
+        <i class="fa fa-cloud-arrow-up csv-dropzone-icon"></i>
+        <p class="csv-dropzone-text">Drag &amp; drop your CSV file here</p>
+        <p class="csv-dropzone-sub">or click to browse</p>
+        <input type="file" id="cust-csv-file-input" accept=".csv,text/csv" style="position:absolute;inset:0;opacity:0;cursor:pointer">
+      </div>
+      <div class="csv-upload-info">
+        <div class="csv-info-item"><i class="fa fa-circle-check"></i> First row must be column headers</div>
+        <div class="csv-info-item"><i class="fa fa-circle-check"></i> Required column: <strong>name</strong></div>
+        <div class="csv-info-item"><i class="fa fa-circle-check"></i> Optional: phone, email, address, notes, category, customer_type</div>
+        <div class="csv-info-item"><i class="fa fa-circle-check"></i> Max 500 rows per import</div>
+      </div>
+      <div class="csv-import-footer">
+        <button class="csv-sample-btn" id="cust-csv-download-sample"><i class="fa fa-download"></i> Download Sample CSV</button>
+      </div>
+    </div>
+
+    <!-- Step 2: Preview -->
+    <div class="csv-import-body" id="cust-csv-step-2" style="display:none">
+      <div class="csv-preview-summary" id="cust-csv-preview-summary"></div>
+      <div class="csv-preview-wrap">
+        <table class="csv-preview-tbl" id="cust-csv-preview-tbl">
+          <thead id="cust-csv-preview-thead"></thead>
+          <tbody id="cust-csv-preview-tbody"></tbody>
+        </table>
+      </div>
+      <div class="csv-import-footer">
+        <button class="psm-btn-cancel" id="cust-csv-back-btn"><i class="fa fa-arrow-left"></i> Back</button>
+        <button class="eod-settle-btn" id="cust-csv-import-btn"><i class="fa fa-file-import"></i> Import <span id="cust-csv-import-count"></span> Customers</button>
+      </div>
+    </div>
+
+    <!-- Step 3: Result -->
+    <div class="csv-import-body" id="cust-csv-step-3" style="display:none">
+      <div class="csv-result-summary" id="cust-csv-result-summary"></div>
+      <div class="csv-result-errors" id="cust-csv-result-errors" style="display:none">
+        <div class="csv-result-errors-title"><i class="fa fa-triangle-exclamation"></i> Rows with errors</div>
+        <div class="csv-result-errors-list" id="cust-csv-result-errors-list"></div>
+      </div>
+      <div class="csv-import-footer">
+        <button class="psm-btn-cancel" id="cust-csv-done-btn">Done</button>
+        <button class="eod-settle-btn" id="cust-csv-import-more-btn"><i class="fa fa-plus"></i> Import More</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ── Warranty prompt modal ─────────────────────────────────────────── -->
 <div id="pos-warranty-overlay" class="bwz-overlay" style="display:none" role="dialog" aria-modal="true">
   <div class="eod-modal" style="width:370px">
@@ -11412,6 +11479,14 @@
             <span class="pfs-sw-track"><span class="pfs-sw-knob"></span></span>
           </label>
         </div>
+        <div class="pfs-field-row">
+          <div class="pfs-field-icon"><i class="fa fa-file-csv"></i></div>
+          <div class="pfs-field-body">
+            <div class="pfs-field-label">Import Customers</div>
+            <div class="pfs-field-desc">Bulk-add customers from a CSV file.</div>
+          </div>
+          <button class="psm-btn-cancel" id="cst-import-csv-btn"><i class="fa fa-file-arrow-up"></i> Import CSV</button>
+        </div>
       </div>
 
       <!-- Customer Category panel -->
@@ -11426,7 +11501,7 @@
           </div>
         </div>
         <div class="pfs-section-label">Existing Categories</div>
-        <div id="cst-cat-list" style="margin-top:6px"></div>
+        <div id="cst-cat-list" style="margin-top:6px;max-height:260px;overflow-y:auto"></div>
       </div>
     </div>
     <div class="po-aim-footer">
