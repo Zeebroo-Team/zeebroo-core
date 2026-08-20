@@ -15293,6 +15293,7 @@ function openCustomerModal() {
   if (input) { input.value = ''; input.focus(); }
   $('#cust-results').innerHTML = '';
   $('#cust-new-form').style.display = 'none';
+  _loadCustomerConfig();
 }
 
 async function _searchCustomers(q) {
@@ -15329,8 +15330,14 @@ async function _searchCustomers(q) {
 function _showCustomerCreateForm(prefill) {
   const form = $('#cust-new-form');
   if (!form) return;
-  $('#cust-new-name').value  = prefill || '';
-  $('#cust-new-phone').value = '';
+  $('#cust-new-name').value    = prefill || '';
+  $('#cust-new-phone').value   = '';
+  $('#cust-new-email').value   = '';
+  $('#cust-new-address').value = '';
+  $('#cust-new-phone').placeholder   = _custCfg.requirePhone   ? 'Phone *'   : 'Phone (optional)';
+  $('#cust-new-email').placeholder   = _custCfg.requireEmail   ? 'Email *'   : 'Email (optional)';
+  $('#cust-new-address').placeholder = _custCfg.requireAddress ? 'Address *' : 'Address (optional)';
+  _setCategoryComboValue('#cust-new-category-input', '#cust-new-category', '');
   form.style.display = '';
   $('#cust-new-name').focus();
 }
@@ -15359,9 +15366,15 @@ $('#cust-new-cancel')?.addEventListener('click', () => { $('#cust-new-form').sty
 $('#cust-new-save')?.addEventListener('click', async () => {
   const name          = $('#cust-new-name')?.value.trim();
   const phone         = $('#cust-new-phone')?.value.trim();
+  const email         = $('#cust-new-email')?.value.trim();
+  const address       = $('#cust-new-address')?.value.trim();
   const customer_type = $('input[name="cust-new-type"]:checked')?.value || 'retail';
+  const customer_category_id = $('#cust-new-category')?.value || null;
   if (!name) { toast('Name is required', 'error'); return; }
-  const res = await API.createCustomer({ name, phone: phone || null, customer_type });
+  if (_custCfg.requirePhone && !phone) { toast('Phone number is required', 'error'); $('#cust-new-phone').focus(); return; }
+  if (_custCfg.requireEmail && !email) { toast('Email is required', 'error'); $('#cust-new-email').focus(); return; }
+  if (_custCfg.requireAddress && !address) { toast('Address is required', 'error'); $('#cust-new-address').focus(); return; }
+  const res = await API.createCustomer({ name, phone: phone || null, email: email || null, address: address || null, customer_type, customer_category_id });
   if (res.status !== 201) { toast('Failed to create customer', 'error'); return; }
   const c = res.body?.data;
   if (!c) return;
@@ -15391,6 +15404,7 @@ function openCustomersModal() {
   $('#cm-search').value = '';
   _cmShowDetail(false); _cmShowForm(false);
   _cmLoadList();
+  _loadCustomerConfig();
   requestAnimationFrame(() => $('#cm-search').focus());
 }
 
@@ -15471,11 +15485,12 @@ async function _cmSelectCustomer(id) {
     ? '<span class="cart-cust-wholesale"><i class="fa fa-boxes-stacked"></i> Wholesale</span>'
     : '<span style="color:var(--text-muted)">Retail</span>';
   const fields = [
-    { label: 'Type',    val: typeVal, raw: true },
-    { label: 'Phone',   val: c.phone },
-    { label: 'Email',   val: c.email },
-    { label: 'Address', val: c.address },
-    { label: 'Notes',   val: c.notes },
+    { label: 'Type',     val: typeVal, raw: true },
+    { label: 'Category', val: c.category_name },
+    { label: 'Phone',    val: c.phone },
+    { label: 'Email',    val: c.email },
+    { label: 'Address',  val: c.address },
+    { label: 'Notes',    val: c.notes },
   ];
   $('#cm-dv-fields').innerHTML = fields.map(f => `
     <div class="cm-dv-field">
@@ -15518,6 +15533,8 @@ function _cmShowForm(show, customer = null) {
     const custType = customer?.customer_type ?? 'retail';
     const typeRadio = $(`input[name="cm-customer-type"][value="${custType}"]`);
     if (typeRadio) typeRadio.checked = true;
+    _setCategoryComboValue('#cm-f-category-input', '#cm-f-category', customer?.customer_category_id ?? '');
+    _applyCustomerFieldRequirements();
     requestAnimationFrame(() => $('#cm-f-name').focus());
   }
 }
@@ -15529,17 +15546,22 @@ async function _cmSave() {
   const address       = $('#cm-f-address').value.trim() || null;
   const notes         = $('#cm-f-notes').value.trim() || null;
   const customer_type = $('input[name="cm-customer-type"]:checked')?.value || 'retail';
+  const customer_category_id = $('#cm-f-category')?.value || null;
 
   if (!name) { toast('Name is required', 'error'); $('#cm-f-name').focus(); return; }
+  if (_custCfg.requirePhone && !phone) { toast('Phone number is required', 'error'); $('#cm-f-phone').focus(); return; }
+  if (_custCfg.requireEmail && !email) { toast('Email is required', 'error'); $('#cm-f-email').focus(); return; }
+  if (_custCfg.requireAddress && !address) { toast('Address is required', 'error'); $('#cm-f-address').focus(); return; }
 
   const btn = $('#cm-form-save');
   btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
 
+  const payload = { name, phone, email, address, notes, customer_type, customer_category_id };
   let res;
   if (_cm.editingId) {
-    res = await API.updateCustomer(_cm.editingId, { name, phone, email, address, notes, customer_type });
+    res = await API.updateCustomer(_cm.editingId, payload);
   } else {
-    res = await API.createCustomer({ name, phone, email, address, notes, customer_type });
+    res = await API.createCustomer(payload);
   }
 
   btn.disabled = false; btn.innerHTML = '<i class="fa fa-check"></i> Save';
@@ -15625,6 +15647,459 @@ $('#cm-search')?.addEventListener('keydown', e => {
 ['#cm-f-name','#cm-f-phone','#cm-f-email','#cm-f-address','#cm-f-notes'].forEach(sel => {
   $(sel)?.addEventListener('keydown', e => { if (e.key === 'Enter' && sel !== '#cm-f-notes') _cmSave(); if (e.key === 'Escape') $('#cm-form-cancel')?.click(); });
 });
+
+// ── Customer required-field settings + Customer Categories ─────────────────
+const _custCfg = { requirePhone: false, requireEmail: false, requireAddress: false, categories: [] };
+
+async function _loadCustomerConfig() {
+  try {
+    const [sRes, cRes] = await Promise.all([API.settingsGet(), API.customerCategories()]);
+    const s = sRes.body?.data ?? {};
+    _custCfg.requirePhone   = !!s.customer_require_phone;
+    _custCfg.requireEmail   = !!s.customer_require_email;
+    _custCfg.requireAddress = !!s.customer_require_address;
+    _custCfg.categories     = cRes.body?.data ?? [];
+  } catch (_) {}
+  _applyCustomerFieldRequirements();
+}
+
+function _applyCustomerFieldRequirements() {
+  const map = { '#cm-req-phone': _custCfg.requirePhone, '#cm-req-email': _custCfg.requireEmail, '#cm-req-address': _custCfg.requireAddress };
+  Object.entries(map).forEach(([sel, required]) => {
+    const el = $(sel);
+    if (el) el.style.display = required ? '' : 'none';
+  });
+}
+
+// ── Category combobox: searchable, scrollable replacement for a plain <select> ──
+function _setCategoryComboValue(inputSel, hiddenSel, id) {
+  const cat = id ? _custCfg.categories.find(c => c.id === Number(id)) : null;
+  const hidden = $(hiddenSel), input = $(inputSel);
+  if (hidden) hidden.value = cat ? cat.id : '';
+  if (input)  input.value  = cat ? cat.name : '';
+}
+
+function _catComboRender(listEl, inputSel, hiddenSel, filter) {
+  const q = (filter || '').trim().toLowerCase();
+  const items = _custCfg.categories.filter(c => c.name.toLowerCase().includes(q));
+  let html = `<div class="cat-combo-item" data-id="" data-name="">No category</div>`;
+  html += items.map(c => `<div class="cat-combo-item" data-id="${c.id}" data-name="${escHtml(c.name)}">${escHtml(c.name)}</div>`).join('');
+  if (!items.length && q) html += '<div class="cat-combo-empty">No matching categories</div>';
+  listEl.innerHTML = html;
+  listEl.querySelectorAll('.cat-combo-item[data-id]').forEach(el => {
+    el.addEventListener('mousedown', ev => {
+      ev.preventDefault();
+      $(hiddenSel).value = el.dataset.id;
+      $(inputSel).value  = el.dataset.name || '';
+      listEl.style.display = 'none';
+    });
+  });
+}
+
+function _wireCategoryCombo(inputSel, hiddenSel, listSel) {
+  const input = $(inputSel), list = $(listSel);
+  if (!input || !list) return;
+  input.addEventListener('focus', () => { _catComboRender(list, inputSel, hiddenSel, ''); list.style.display = ''; });
+  input.addEventListener('input', () => {
+    $(hiddenSel).value = '';
+    _catComboRender(list, inputSel, hiddenSel, input.value);
+    list.style.display = '';
+  });
+  input.addEventListener('blur', () => { setTimeout(() => { list.style.display = 'none'; }, 150); });
+  input.addEventListener('keydown', e => { if (e.key === 'Escape') { list.style.display = 'none'; input.blur(); } });
+}
+
+_wireCategoryCombo('#cm-f-category-input',     '#cm-f-category',     '#cm-f-category-list');
+_wireCategoryCombo('#cust-new-category-input', '#cust-new-category', '#cust-new-category-list');
+
+function _cstRenderCategoryList() {
+  const el = $('#cst-cat-list');
+  if (!el) return;
+  if (!_custCfg.categories.length) {
+    el.innerHTML = '<div class="cm-list-empty"><i class="fa fa-tags"></i><span>No categories yet</span></div>';
+    return;
+  }
+  el.innerHTML = _custCfg.categories.map(c => `
+    <div class="pfs-field-row" data-cat-id="${c.id}">
+      <div class="pfs-field-icon"><i class="fa fa-tag"></i></div>
+      <div class="pfs-field-body">
+        <div class="pfs-field-label">${escHtml(c.name)}</div>
+        ${c.description ? `<div class="pfs-field-desc">${escHtml(c.description)}</div>` : ''}
+      </div>
+      <button class="prod-batch-del" data-edit-cat="${c.id}" title="Edit category" style="color:var(--text-muted)"><i class="fa fa-pen"></i></button>
+      <button class="prod-batch-del" data-del-cat="${c.id}" title="Delete category"><i class="fa fa-trash"></i></button>
+    </div>`).join('');
+  el.querySelectorAll('[data-edit-cat]').forEach(btn => {
+    btn.addEventListener('click', () => _cstStartEditCategory(Number(btn.dataset.editCat)));
+  });
+  el.querySelectorAll('[data-del-cat]').forEach(btn => {
+    btn.addEventListener('click', () => _cstDeleteCategory(Number(btn.dataset.delCat)));
+  });
+}
+
+let _cstEditingCatId = null;
+
+function _cstStartEditCategory(id) {
+  const cat = _custCfg.categories.find(c => c.id === id);
+  if (!cat) return;
+  _cstEditingCatId = id;
+  $('#cst-cat-name').value = cat.name;
+  $('#cst-cat-desc').value = cat.description || '';
+  $('#cst-cat-add').innerHTML = '<i class="fa fa-check"></i> Update Category';
+  $('#cst-cat-cancel-edit').style.display = '';
+  $('#cst-cat-name').focus();
+}
+
+function _cstCancelEditCategory() {
+  _cstEditingCatId = null;
+  $('#cst-cat-name').value = '';
+  $('#cst-cat-desc').value = '';
+  $('#cst-cat-add').innerHTML = '<i class="fa fa-plus"></i> Add Category';
+  $('#cst-cat-cancel-edit').style.display = 'none';
+}
+
+// ── Generic confirm dialog (custom, replaces window.confirm) ───────────────
+let _cstConfirmResolve = null;
+
+function _cstConfirm(message, title = 'Are you sure?') {
+  return new Promise(resolve => {
+    _cstConfirmResolve = resolve;
+    $('#cst-confirm-title').textContent = title;
+    $('#cst-confirm-msg').textContent   = message;
+    $('#cst-confirm-modal').style.display = 'flex';
+  });
+}
+
+function _cstConfirmClose(result) {
+  $('#cst-confirm-modal').style.display = 'none';
+  if (_cstConfirmResolve) { _cstConfirmResolve(result); _cstConfirmResolve = null; }
+}
+
+$('#cst-confirm-ok')?.addEventListener('click',     () => _cstConfirmClose(true));
+$('#cst-confirm-cancel')?.addEventListener('click', () => _cstConfirmClose(false));
+$('#cst-confirm-close')?.addEventListener('click',  () => _cstConfirmClose(false));
+$('#cst-confirm-modal')?.addEventListener('click', e => { if (e.target === e.currentTarget) _cstConfirmClose(false); });
+
+async function _cstDeleteCategory(id) {
+  const cat = _custCfg.categories.find(c => c.id === id);
+  const ok = await _cstConfirm(`Delete category "${cat?.name ?? ''}"? This cannot be undone.`, 'Delete Category');
+  if (!ok) return;
+  const res = await API.deleteCustomerCategory(id);
+  if (res.status !== 200 && res.status !== 204) {
+    toast(res.body?.message || 'Failed to delete category', 'error');
+    return;
+  }
+  _custCfg.categories = _custCfg.categories.filter(c => c.id !== id);
+  if (_cstEditingCatId === id) _cstCancelEditCategory();
+  _cstRenderCategoryList();
+  toast('Category deleted', 'success');
+}
+
+function _cstSyncTabs() {
+  const active = $('#cust-settings-nav .pfs-opt-tab.active')?.dataset.cstTab || 'general';
+  $('#cst-panel-general').style.display  = active === 'general'  ? '' : 'none';
+  $('#cst-panel-category').style.display = active === 'category' ? '' : 'none';
+}
+
+async function _openCustomerSettingsModal() {
+  const modal = $('#cust-settings-modal');
+  if (!modal) return;
+  await _loadCustomerConfig();
+  $('#cst-req-phone').checked   = _custCfg.requirePhone;
+  $('#cst-req-email').checked   = _custCfg.requireEmail;
+  $('#cst-req-address').checked = _custCfg.requireAddress;
+  _cstCancelEditCategory();
+  _cstRenderCategoryList();
+  $$('#cust-settings-nav .pfs-opt-tab').forEach(b => b.classList.toggle('active', b.dataset.cstTab === 'general'));
+  _cstSyncTabs();
+  modal.style.display = 'flex';
+}
+
+$('#cm-settings-btn')?.addEventListener('click', _openCustomerSettingsModal);
+
+$('#cust-settings-nav')?.addEventListener('click', e => {
+  const btn = e.target.closest('.pfs-opt-tab[data-cst-tab]');
+  if (!btn) return;
+  $$('#cust-settings-nav .pfs-opt-tab').forEach(b => b.classList.toggle('active', b === btn));
+  _cstSyncTabs();
+});
+
+$('#cust-settings-modal')?.addEventListener('click', e => { if (e.target === e.currentTarget) $('#cust-settings-modal').style.display = 'none'; });
+$('#cust-settings-close')?.addEventListener('click', () => { $('#cust-settings-modal').style.display = 'none'; });
+$('#cust-settings-cancel')?.addEventListener('click', () => { $('#cust-settings-modal').style.display = 'none'; });
+
+$('#cst-cat-add')?.addEventListener('click', async () => {
+  const name = $('#cst-cat-name')?.value.trim();
+  const description = $('#cst-cat-desc')?.value.trim() || null;
+  if (!name) { toast('Category name is required', 'error'); $('#cst-cat-name')?.focus(); return; }
+
+  const isEdit = !!_cstEditingCatId;
+  const btn = $('#cst-cat-add');
+  btn.disabled = true; btn.innerHTML = `<i class="fa fa-spinner fa-spin"></i> ${isEdit ? 'Updating…' : 'Adding…'}`;
+  const res = isEdit
+    ? await API.updateCustomerCategory(_cstEditingCatId, { name, description })
+    : await API.createCustomerCategory({ name, description });
+  btn.disabled = false;
+
+  if ((isEdit && res.status !== 200) || (!isEdit && res.status !== 201)) {
+    btn.innerHTML = isEdit ? '<i class="fa fa-check"></i> Update Category' : '<i class="fa fa-plus"></i> Add Category';
+    toast(res.body?.errors?.name?.[0] || res.body?.message || `Failed to ${isEdit ? 'update' : 'add'} category`, 'error');
+    return;
+  }
+
+  const c = res.body?.data;
+  if (isEdit) {
+    const idx = _custCfg.categories.findIndex(x => x.id === _cstEditingCatId);
+    if (idx !== -1 && c) _custCfg.categories[idx] = c;
+  } else if (c) {
+    _custCfg.categories.push(c);
+  }
+  _custCfg.categories.sort((a, b) => a.name.localeCompare(b.name));
+  _cstRenderCategoryList();
+  toast(`Category "${c?.name ?? name}" ${isEdit ? 'updated' : 'added'}`, 'success');
+  _cstCancelEditCategory();
+});
+
+$('#cst-cat-cancel-edit')?.addEventListener('click', _cstCancelEditCategory);
+
+$('#cust-settings-save')?.addEventListener('click', async () => {
+  const btn = $('#cust-settings-save');
+  btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
+  const res = await API.settingsUpdate({
+    customer_require_phone:   $('#cst-req-phone').checked,
+    customer_require_email:   $('#cst-req-email').checked,
+    customer_require_address: $('#cst-req-address').checked,
+  });
+  btn.disabled = false; btn.innerHTML = '<i class="fa fa-check"></i> Save';
+  if (res.status !== 200) { toast('Failed to save settings', 'error'); return; }
+  _custCfg.requirePhone   = $('#cst-req-phone').checked;
+  _custCfg.requireEmail   = $('#cst-req-email').checked;
+  _custCfg.requireAddress = $('#cst-req-address').checked;
+  _applyCustomerFieldRequirements();
+  $('#cust-settings-modal').style.display = 'none';
+  toast('Customer settings saved', 'success');
+});
+
+// ── CSV Customer Import ──────────────────────────────────────────────────────
+const _CUST_CSV_SAMPLE = [
+  'name,phone,email,address,notes,category,customer_type',
+  'John Silva,0771234567,john.silva@example.com,"123 Main St, Colombo",Prefers SMS updates,VIP,retail',
+  'Nimal Perera,0719876543,nimal.perera@example.com,"45 Galle Rd, Kandy",,Regular,retail',
+  'Priya Fernando,0765555555,,,"Wholesale buyer",Wholesale,wholesale',
+].join('\n');
+
+// Column name aliases → canonical key
+const _CUST_CSV_COL_MAP = {
+  'name': 'name', 'customer name': 'name', 'customer': 'name', 'full name': 'name',
+  'phone': 'phone', 'phone number': 'phone', 'mobile': 'phone', 'contact': 'phone', 'contact number': 'phone',
+  'email': 'email', 'email address': 'email',
+  'address': 'address',
+  'notes': 'notes', 'note': 'notes', 'remarks': 'notes',
+  'category': 'category', 'customer category': 'category',
+  'customer_type': 'customer_type', 'type': 'customer_type', 'customer type': 'customer_type',
+};
+
+let _custCsvParsedRows = [];
+let _custCsvValidRows  = [];
+
+function _custCsvParseFile(text) {
+  const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').filter(l => l.trim());
+  if (lines.length < 2) return { headers: [], rows: [], error: 'File must have a header row and at least one data row.' };
+
+  const headers = _csvParseLine(lines[0]).map(h => h.trim().toLowerCase());
+  const colMap  = {};
+  headers.forEach((h, i) => { if (_CUST_CSV_COL_MAP[h]) colMap[_CUST_CSV_COL_MAP[h]] = i; });
+
+  if (colMap['name'] === undefined) {
+    return { headers, rows: [], error: 'Missing required column: "name" (or "customer", "full name").' };
+  }
+
+  const rows = [];
+  for (let i = 1; i < lines.length; i++) {
+    const cells = _csvParseLine(lines[i]);
+    const row   = {};
+    Object.entries(colMap).forEach(([key, ci]) => { row[key] = (cells[ci] || '').trim(); });
+    row._rowNum = i + 1;
+
+    // Validate
+    row._errors = [];
+    if (!row.name) row._errors.push('Name is required');
+    if (_custCfg.requirePhone   && !row.phone)   row._errors.push('Phone number is required');
+    if (_custCfg.requireEmail   && !row.email)   row._errors.push('Email is required');
+    if (_custCfg.requireAddress && !row.address) row._errors.push('Address is required');
+    if (row.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email)) row._errors.push('Invalid email');
+    if (row.customer_type && !['retail', 'wholesale'].includes(row.customer_type.toLowerCase())) {
+      row._errors.push('customer_type must be "retail" or "wholesale"');
+    } else {
+      row.customer_type = (row.customer_type || 'retail').toLowerCase();
+    }
+
+    rows.push(row);
+  }
+  return { headers: Object.keys(colMap), rows };
+}
+
+function _custCsvSetStep(n) {
+  [1, 2, 3].forEach(i => {
+    const body = $(`#cust-csv-step-${i}`);
+    const ind  = $(`#cust-csv-step-ind-${i}`);
+    if (body) body.style.display = i === n ? 'flex' : 'none';
+    if (ind)  {
+      ind.classList.toggle('active', i === n);
+      ind.classList.toggle('done',   i < n);
+    }
+  });
+}
+
+function _custCsvShowPreview(rows) {
+  const valid = rows.filter(r => !r._errors.length);
+  const bad   = rows.filter(r => r._errors.length);
+  _custCsvValidRows = valid;
+
+  // Summary badges
+  const sumEl = $('#cust-csv-preview-summary');
+  sumEl.innerHTML = `
+    <b>${rows.length} row${rows.length !== 1 ? 's' : ''} found</b>
+    <span class="csv-preview-badge ok"><i class="fa fa-circle-check"></i> ${valid.length} valid</span>
+    ${bad.length ? `<span class="csv-preview-badge error"><i class="fa fa-triangle-exclamation"></i> ${bad.length} with errors</span>` : ''}
+    ${rows.length > 100 ? `<span class="csv-preview-badge warn"><i class="fa fa-eye"></i> Showing first 100 rows</span>` : ''}`;
+
+  // Table
+  const display = rows.slice(0, 100);
+  $('#cust-csv-preview-thead').innerHTML = `<tr>
+    <th>#</th><th>Name</th><th>Phone</th><th>Email</th><th>Address</th>
+    <th>Category</th><th>Type</th><th>Status</th>
+  </tr>`;
+  $('#cust-csv-preview-tbody').innerHTML = display.map(r => {
+    const isErr = r._errors.length > 0;
+    const status = isErr
+      ? `<span class="csv-row-error-msg"><i class="fa fa-triangle-exclamation"></i> ${escHtml(r._errors.join('; '))}</span>`
+      : `<span style="color:#10b981;font-size:11px"><i class="fa fa-circle-check"></i> OK</span>`;
+    return `<tr class="${isErr ? 'csv-row-error' : ''}">
+      <td style="color:var(--text-muted)">${r._rowNum}</td>
+      <td><strong>${escHtml(r.name || '—')}</strong></td>
+      <td style="color:var(--text-muted)">${escHtml(r.phone || '—')}</td>
+      <td style="color:var(--text-muted)">${escHtml(r.email || '—')}</td>
+      <td style="color:var(--text-muted)">${escHtml(r.address || '—')}</td>
+      <td>${escHtml(r.category || '—')}</td>
+      <td>${escHtml(r.customer_type || 'retail')}</td>
+      <td>${status}</td>
+    </tr>`;
+  }).join('');
+
+  $('#cust-csv-import-count').textContent = valid.length;
+  $('#cust-csv-import-btn').disabled = valid.length === 0;
+  _custCsvSetStep(2);
+}
+
+function _custCsvReset() {
+  _custCsvParsedRows = [];
+  _custCsvValidRows  = [];
+  $('#cust-csv-file-input').value = '';
+  _custCsvSetStep(1);
+}
+
+async function _custCsvOpenModal() {
+  await _loadCustomerConfig();
+  _custCsvReset();
+  $('#cust-csv-import-modal').style.display = 'flex';
+}
+
+function _custCsvCloseModal() {
+  $('#cust-csv-import-modal').style.display = 'none';
+  _custCsvReset();
+}
+
+function _custCsvDownloadSample() {
+  const blob = new Blob([_CUST_CSV_SAMPLE], { type: 'text/csv' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = 'customers-sample.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function _custCsvHandleFile(file) {
+  if (!file || !file.name.match(/\.csv$/i)) { toast('Please select a .csv file', 'error'); return; }
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const { rows, error } = _custCsvParseFile(e.target.result);
+    if (error) { toast(error, 'error'); return; }
+    if (rows.length > 500) { toast(`CSV has ${rows.length} rows. Only the first 500 will be imported.`, 'error'); }
+    _custCsvParsedRows = rows.slice(0, 500);
+    _custCsvShowPreview(_custCsvParsedRows);
+  };
+  reader.readAsText(file);
+}
+
+// Drag & drop
+const _custCsvDz = $('#cust-csv-dropzone');
+if (_custCsvDz) {
+  _custCsvDz.addEventListener('dragover',  e => { e.preventDefault(); _custCsvDz.classList.add('drag-over'); });
+  _custCsvDz.addEventListener('dragleave', () => _custCsvDz.classList.remove('drag-over'));
+  _custCsvDz.addEventListener('drop', e => {
+    e.preventDefault(); _custCsvDz.classList.remove('drag-over');
+    _custCsvHandleFile(e.dataTransfer.files[0]);
+  });
+}
+$('#cust-csv-file-input')?.addEventListener('change', e => _custCsvHandleFile(e.target.files[0]));
+$('#cust-csv-download-sample')?.addEventListener('click', _custCsvDownloadSample);
+$('#cust-csv-import-close')?.addEventListener('click',  _custCsvCloseModal);
+$('#cust-csv-import-modal')?.addEventListener('click',  e => { if (e.target === e.currentTarget) _custCsvCloseModal(); });
+$('#cust-csv-back-btn')?.addEventListener('click',      _custCsvReset);
+$('#cust-csv-done-btn')?.addEventListener('click',      _custCsvCloseModal);
+$('#cust-csv-import-more-btn')?.addEventListener('click', _custCsvReset);
+$('#cst-import-csv-btn')?.addEventListener('click', _custCsvOpenModal);
+
+$('#cust-csv-import-btn')?.addEventListener('click', async () => {
+  if (!_custCsvValidRows.length) return;
+  const btn = $('#cust-csv-import-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Importing…';
+
+  const payload = _custCsvValidRows.map(r => ({
+    name:          r.name,
+    phone:         r.phone   || undefined,
+    email:         r.email   || undefined,
+    address:       r.address || undefined,
+    notes:         r.notes   || undefined,
+    category:      r.category || undefined,
+    customer_type: r.customer_type || 'retail',
+  }));
+
+  const res = await API.importCustomers(payload);
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fa fa-file-import"></i> Import Customers';
+
+  if (res.status !== 200) { toast(res.body?.message || 'Import failed', 'error'); return; }
+
+  const { imported, skipped, errors } = res.body;
+  const resSum = $('#cust-csv-result-summary');
+  resSum.innerHTML = `
+    <div class="csv-result-stat">
+      <div class="csv-result-stat-num green">${imported}</div>
+      <div class="csv-result-stat-label"><i class="fa fa-circle-check"></i> Customers imported</div>
+    </div>
+    <div class="csv-result-stat">
+      <div class="csv-result-stat-num ${skipped > 0 ? 'red' : ''}">${skipped}</div>
+      <div class="csv-result-stat-label"><i class="fa fa-triangle-exclamation"></i> Rows skipped</div>
+    </div>`;
+
+  const errWrap = $('#cust-csv-result-errors');
+  if (errors && errors.length) {
+    errWrap.style.display = '';
+    $('#cust-csv-result-errors-list').innerHTML = errors.map(e =>
+      `<div class="csv-result-error-row"><b>Row ${e.row}${e.name ? ' — ' + escHtml(e.name) : ''}:</b><span>${escHtml(e.message)}</span></div>`
+    ).join('');
+  } else {
+    errWrap.style.display = 'none';
+  }
+
+  _custCsvSetStep(3);
+  if (imported > 0) _cmLoadList();
+});
+// ── End CSV Customer Import ──────────────────────────────────────────────────
 
 // ── End cart keyboard navigation ────────────────────────────────────────────
 
