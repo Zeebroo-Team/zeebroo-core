@@ -6254,7 +6254,7 @@ body.dark .han-icon-amber  { color: #fbbf24; }
   display: flex; flex-direction: column;
   gap: 10px;
   padding: 12px 14px 20px;
-  background: var(--surface2);   /* very light tint so section cards stand out on white pane */
+  background: var(--surface);
 }
 
 /* Section card — items, payments */
