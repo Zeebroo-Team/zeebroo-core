@@ -2566,6 +2566,7 @@
           <button class="inv-tab" data-tab="stock">Stock</button>
           <button class="inv-tab" data-tab="images">Images</button>
           <button class="inv-tab" data-tab="variants">Variants</button>
+          <button class="inv-tab" data-tab="rental" id="inv-tab-rental" style="display:none">Rental</button>
         </div>
 
         <!-- Tab bodies -->
@@ -2575,6 +2576,7 @@
           <div class="inv-tab-pane"        id="inv-pane-stock"></div>
           <div class="inv-tab-pane"        id="inv-pane-images"></div>
           <div class="inv-tab-pane"        id="inv-pane-variants"></div>
+          <div class="inv-tab-pane"        id="inv-pane-rental"></div>
         </div>
 
       </div><!-- /inv-detail-view -->
@@ -2824,6 +2826,27 @@
                     </div>
                     <div class="prod-adv-card-sw"><div class="prod-adv-card-knob"></div></div>
                   </label>
+                  <div class="prod-adv-card-fields" id="prod-rental-terms-row">
+                    <div class="po-field-label" style="margin-bottom:6px"><i class="fa fa-sack-dollar" style="color:var(--accent);margin-right:4px"></i> Rental Terms</div>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+                      <div style="flex:1;min-width:110px">
+                        <label style="display:block;font-size:11px;color:var(--text-muted);margin-bottom:4px">Daily Rate</label>
+                        <input type="number" id="prod-f-rental-daily-rate" class="po-field-input" min="0" step="0.01" placeholder="0.00">
+                      </div>
+                      <div style="flex:1;min-width:110px">
+                        <label style="display:block;font-size:11px;color:var(--text-muted);margin-bottom:4px">Max Rental Days</label>
+                        <input type="number" id="prod-f-rental-max-days" class="po-field-input" min="1" step="1" placeholder="e.g. 4">
+                      </div>
+                      <div style="flex:1;min-width:150px">
+                        <label style="display:block;font-size:11px;color:var(--text-muted);margin-bottom:4px">Late Fee (× daily rate/day)</label>
+                        <input type="number" id="prod-f-rental-late-fee-multiplier" class="po-field-input" min="0" step="0.1" placeholder="e.g. 1.5">
+                      </div>
+                    </div>
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-xs);background:var(--surface)">
+                      <input type="checkbox" id="prod-f-rental-needs-cleaning" style="accent-color:var(--accent);cursor:pointer">
+                      <span style="font-size:12px;color:var(--text)"><i class="fa fa-broom" style="color:var(--accent);margin-right:4px"></i> Requires cleaning/inspection before next rental</span>
+                    </label>
+                  </div>
                 </div>
                 <!-- Subscription -->
                 <div class="prod-adv-card">

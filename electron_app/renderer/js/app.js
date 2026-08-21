@@ -13070,6 +13070,10 @@ async function _prodOpenModal(editId) {
   $('#prod-f-mfg-date').value             = '';
   $('#prod-f-customer-required').checked  = false;
   $('#prod-f-rental').checked             = false;
+  $('#prod-f-rental-daily-rate').value    = '';
+  $('#prod-f-rental-max-days').value      = '';
+  $('#prod-f-rental-late-fee-multiplier').value = '';
+  $('#prod-f-rental-needs-cleaning').checked    = false;
   $('#prod-f-subscription').checked       = false;
   $('#prod-f-item-tax').checked           = false;
   $('#prod-f-item-discount').checked      = false;
@@ -13123,6 +13127,10 @@ async function _prodOpenModal(editId) {
     $('#prod-f-mfg-date').value             = p.mfg_date  || '';
     $('#prod-f-customer-required').checked  = !!p.is_customer_required;
     $('#prod-f-rental').checked             = !!p.is_rental;
+    $('#prod-f-rental-daily-rate').value    = p.rental_daily_rate != null ? p.rental_daily_rate : '';
+    $('#prod-f-rental-max-days').value      = p.rental_max_days != null ? p.rental_max_days : '';
+    $('#prod-f-rental-late-fee-multiplier').value = p.rental_late_fee_multiplier != null ? p.rental_late_fee_multiplier : '';
+    $('#prod-f-rental-needs-cleaning').checked    = !!p.rental_needs_cleaning;
     $('#prod-f-subscription').checked       = !!p.is_subscription;
     $('#prod-f-item-tax').checked           = !!p.item_wise_tax;
     $('#prod-f-item-discount').checked      = !!p.item_wise_discount;
@@ -13317,6 +13325,10 @@ async function _prodSave(andNew = false) {
     exp_date:              $('#prod-f-exp-date').value         || null,
     is_customer_required:  $('#prod-f-customer-required').checked,
     is_rental:             $('#prod-f-rental').checked,
+    rental_daily_rate:          $('#prod-f-rental').checked ? (parseFloat($('#prod-f-rental-daily-rate').value) || null) : null,
+    rental_max_days:            $('#prod-f-rental').checked ? (parseInt($('#prod-f-rental-max-days').value, 10) || null) : null,
+    rental_late_fee_multiplier: $('#prod-f-rental').checked ? (parseFloat($('#prod-f-rental-late-fee-multiplier').value) || null) : null,
+    rental_needs_cleaning:      $('#prod-f-rental').checked ? $('#prod-f-rental-needs-cleaning').checked : false,
     is_subscription:       $('#prod-f-subscription').checked,
     item_wise_tax:         $('#prod-f-item-tax').checked,
     item_wise_discount:    $('#prod-f-item-discount').checked,
@@ -13679,6 +13691,14 @@ $('#prod-f-warranty')?.addEventListener('change', function () {
 });
 $('#prod-f-expiry')?.addEventListener('change', function () {
   if (!this.checked) $('#prod-f-exp-date').value = '';
+});
+$('#prod-f-rental')?.addEventListener('change', function () {
+  if (!this.checked) {
+    $('#prod-f-rental-daily-rate').value = '';
+    $('#prod-f-rental-max-days').value = '';
+    $('#prod-f-rental-late-fee-multiplier').value = '';
+    $('#prod-f-rental-needs-cleaning').checked = false;
+  }
 });
 $('#prod-f-warranty-duration')?.addEventListener('input', _prodSyncWarrantyChips);
 $$('#prod-warranty-duration-row .warranty-chip').forEach(chip => {
@@ -14191,6 +14211,7 @@ function renderProductDetail(p, stockHistory = []) {
   if (p.track_expiry)       badges.push(`<span class="inv-badge inv-badge-amber"><i class="fa fa-calendar-xmark"></i> Expiry</span>`);
   if (p.courier_delivery)   badges.push(`<span class="inv-badge inv-badge-purple"><i class="fa fa-truck"></i> Courier</span>`);
   if (p.loyalty_redeemable) badges.push(`<span class="inv-badge inv-badge-green"><i class="fa fa-star"></i> Loyalty</span>`);
+  if (p.is_rental)          badges.push(`<span class="inv-badge inv-badge-blue"><i class="fa fa-key"></i> Rental</span>`);
   $('#inv-hero-badges').innerHTML = badges.join('');
 
   // ── Overview tab ──
@@ -14502,6 +14523,41 @@ function renderProductDetail(p, stockHistory = []) {
       </div>`;
   } else {
     $('#inv-pane-variants').innerHTML = `<div class="inv-pane-empty"><i class="fa fa-layer-group"></i><p>No variants for this product</p></div>`;
+  }
+
+  // ── Rental tab (only shown when this product is rentable) ──
+  const rentalTabBtn = $('#inv-tab-rental');
+  if (p.is_rental) {
+    rentalTabBtn.style.display = '';
+    const dailyRate  = p.rental_daily_rate != null ? parseFloat(p.rental_daily_rate) : null;
+    const maxDays    = p.rental_max_days ?? null;
+    const lateFeeMul = p.rental_late_fee_multiplier != null ? parseFloat(p.rental_late_fee_multiplier) : null;
+    const needsClean = !!p.rental_needs_cleaning;
+
+    let lateFeeVal = '<span class="inv-detail-none">—</span>';
+    if (lateFeeMul != null) {
+      lateFeeVal = `${lateFeeMul}× daily rate`;
+      if (dailyRate != null) lateFeeVal += ` <span style="color:var(--text-muted);font-size:12px">(${(dailyRate * lateFeeMul).toFixed(2)} per late day)</span>`;
+    }
+
+    const rentalRows = [
+      ['Daily Rate',        dailyRate != null ? dailyRate.toFixed(2) : '<span class="inv-detail-none">—</span>'],
+      ['Max Rental Days',   maxDays != null ? maxDays : '<span class="inv-detail-none">—</span>'],
+      ['Late Fee',          lateFeeVal],
+      ['Cleaning Required', needsClean
+        ? '<span class="inv-badge inv-badge-amber"><i class="fa fa-broom"></i> Required before next rental</span>'
+        : '<span class="inv-badge inv-badge-green">Not required</span>'],
+    ];
+
+    $('#inv-pane-rental').innerHTML = `
+      <div class="inv-section">
+        <div class="inv-section-title"><i class="fa fa-key"></i> Rental Terms</div>
+        <table class="inv-detail-table">
+          ${rentalRows.map(([label, val]) => `<tr><td class="inv-dt-label">${escHtml(label)}</td><td class="inv-dt-val">${val}</td></tr>`).join('')}
+        </table>
+      </div>`;
+  } else {
+    rentalTabBtn.style.display = 'none';
   }
 }
 
