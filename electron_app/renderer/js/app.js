@@ -4743,6 +4743,7 @@ function applyFeatureVisibility() {
       const v = tabBtn.dataset.homeView;
       const show = !!_hTabPerms[v];
       tabBtn.style.display = show ? '' : 'none';
+      tabBtn.dataset.hscPerm = show ? '1' : '0';
       if (show) {
         if (!_hFirstVisible) _hFirstVisible = v;
         if (tabBtn.classList.contains('active')) _hActiveOk = true;
@@ -4758,6 +4759,8 @@ function applyFeatureVisibility() {
       const fp = $(`#home-view-${fallback}`);
       if (fp) fp.style.display = 'flex';
     }
+    // Re-apply the user's personal tab visibility on top of the permission gate
+    window.hscApply?.();
   }
 
   // ── Home right panel sections ───────────────────────────────────────────────
@@ -5166,6 +5169,8 @@ function showApp() {
   _applyLayoutMode(state.config?.layout_mode || 'ribbon');
   // Apply saved ribbon customizations (tab order, visibility, button sizes)
   if (typeof window.rbcInit === 'function') window.rbcInit();
+  // Apply saved Home sub-nav tab visibility (user-customizable tabs)
+  if (typeof window.hscInit === 'function') window.hscInit();
   // Give one frame for layout + title update before activating Home
   requestAnimationFrame(() => activateTab('home'));
   // Check if bank account onboarding is needed
