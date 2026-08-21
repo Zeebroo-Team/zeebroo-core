@@ -13041,6 +13041,62 @@ function _tagWireInput(inputId, ddId, getOptions, getSelected, onSelect, onCreat
 }
 
 // ── Product CRUD ──────────────────────────────────────────────────────────
+const _DELIVERY_PARTNERS_META = {
+  dhl:     { name: 'DHL Express',  icon: 'fa-globe',     desc: 'International express courier with time-definite delivery worldwide.' },
+  fedex:   { name: 'FedEx',        icon: 'fa-box-open',  desc: 'Fast and reliable global shipping with real-time package tracking.' },
+  uber:    { name: 'Uber',         icon: 'fa-car-side',  desc: 'On-demand local delivery via the Uber courier network.' },
+  pickme:  { name: 'PickMe',       icon: 'fa-motorcycle', desc: 'Sri Lanka\'s leading ride-hailing platform with parcel delivery.' },
+  koobiyo: { name: 'Koobiyo',      icon: 'fa-bicycle',   desc: 'Last-mile e-commerce delivery built for Sri Lanka businesses.' },
+  pronto:  { name: 'Pronto Lanka', icon: 'fa-truck-fast', desc: 'Scheduled and same-day delivery across Sri Lanka.' },
+};
+
+function _prodRenderDeliveryTab(deliveryEnabled, enabledKeys, selectedMethods) {
+  const disabledBox = $('#prod-delivery-disabled-msg');
+  const partnersBox = $('#prod-delivery-partners');
+  const titleEl      = $('#prod-delivery-disabled-title');
+  const textEl       = $('#prod-delivery-disabled-text');
+  const selectedByKey = {};
+  (Array.isArray(selectedMethods) ? selectedMethods : []).forEach(m => { if (m && m.key) selectedByKey[m.key] = m; });
+
+  if (!deliveryEnabled || !enabledKeys.length) {
+    disabledBox.style.display = 'flex';
+    partnersBox.style.display = 'none';
+    partnersBox.innerHTML = '';
+    if (!deliveryEnabled) {
+      titleEl.textContent = 'Delivery methods are turned off';
+      textEl.textContent  = 'Enable delivery methods in Settings to offer courier delivery for this product.';
+    } else {
+      titleEl.textContent = 'No delivery partners enabled';
+      textEl.textContent  = 'Enable at least one delivery partner in Settings to offer courier delivery for this product.';
+    }
+    return;
+  }
+
+  disabledBox.style.display = 'none';
+  partnersBox.style.display = 'flex';
+  partnersBox.innerHTML = enabledKeys.map(key => {
+    const meta = _DELIVERY_PARTNERS_META[key] || { name: key, icon: 'fa-truck', desc: '' };
+    const sel  = selectedByKey[key];
+    const price = sel && sel.price != null ? sel.price : '';
+    return `
+      <div class="prod-adv-card">
+        <input type="checkbox" id="prod-delivery-chk-${key}" class="prod-adv-card-chk" data-delivery-key="${key}"${sel ? ' checked' : ''}>
+        <label class="prod-adv-card-top" for="prod-delivery-chk-${key}">
+          <div class="prod-adv-card-icon"><i class="fa ${meta.icon}"></i></div>
+          <div class="prod-adv-card-text">
+            <span class="prod-adv-card-name">${meta.name}</span>
+            <span class="prod-adv-card-desc">${meta.desc}</span>
+          </div>
+          <div class="prod-adv-card-sw"><div class="prod-adv-card-knob"></div></div>
+        </label>
+        <div class="prod-adv-card-fields">
+          <div class="po-field-label" style="margin-bottom:6px"><i class="fa fa-money-bill-wave" style="color:var(--accent);margin-right:4px"></i> Island Wide Delivery Price</div>
+          <input type="number" min="0" step="0.01" id="prod-delivery-price-${key}" class="po-field-input" style="max-width:220px" placeholder="0.00" value="${price}">
+        </div>
+      </div>`;
+  }).join('');
+}
+
 async function _prodOpenModal(editId) {
   _prod.editingId = editId || null;
   const isEdit = !!editId;
@@ -13063,7 +13119,6 @@ async function _prodOpenModal(editId) {
   $$('#prod-warranty-duration-row .warranty-chip').forEach(c => c.classList.remove('active'));
   $('#prod-f-expiry').checked             = false;
   $('#prod-f-exp-date').value             = '';
-  $('#prod-f-courier').checked            = false;
   $('#prod-f-loyalty').checked            = false;
   $('#prod-f-model-no').value             = '';
   $('#prod-f-size').value                 = '';
@@ -13100,6 +13155,19 @@ async function _prodOpenModal(editId) {
   // Load options once
   await _prodLoadFormOptions();
 
+  // Load business delivery settings (global enable + enabled partner keys)
+  let _deliveryEnabled = false;
+  let _deliveryEnabledKeys = [];
+  try {
+    const sRes = await API.settingsGet();
+    if (sRes.status === 200) {
+      const s = sRes.body?.data ?? {};
+      _deliveryEnabled = !!s.delivery_enabled;
+      _deliveryEnabledKeys = Array.isArray(s.delivery_methods) ? s.delivery_methods : [];
+    }
+  } catch (e) { /* leave delivery tab in the disabled state */ }
+  _prodRenderDeliveryTab(_deliveryEnabled, _deliveryEnabledKeys, isEdit && _prodActiveData ? _prodActiveData.delivery_methods : []);
+
   if (isEdit && _prodActiveData) {
     const p = _prodActiveData;
     $('#prod-f-name').value              = p.name        || '';
@@ -13116,7 +13184,6 @@ async function _prodOpenModal(editId) {
     _prodSyncWarrantyChips();
     $('#prod-f-expiry').checked             = !!p.track_expiry;
     $('#prod-f-exp-date').value             = p.exp_date  || '';
-    $('#prod-f-courier').checked            = !!p.courier_delivery;
     $('#prod-f-loyalty').checked            = !!p.loyalty_redeemable;
     $('#prod-f-model-no').value             = p.model_no  || '';
     $('#prod-f-size').value                 = p.size      || '';
@@ -13309,7 +13376,12 @@ async function _prodSave(andNew = false) {
     has_warranty:          $('#prod-f-warranty').checked,
     warranty_duration:     $('#prod-f-warranty').checked ? ($('#prod-f-warranty-duration').value.trim() || null) : null,
     track_expiry:          $('#prod-f-expiry').checked,
-    courier_delivery:      $('#prod-f-courier').checked,
+    delivery_methods:      Array.from($$('#prod-delivery-partners [data-delivery-key]'))
+      .filter(chk => chk.checked)
+      .map(chk => ({
+        key:   chk.dataset.deliveryKey,
+        price: parseFloat($(`#prod-delivery-price-${chk.dataset.deliveryKey}`).value) || 0,
+      })),
     loyalty_redeemable:    $('#prod-f-loyalty').checked,
     model_no:              $('#prod-f-model-no').value.trim()  || null,
     size:                  $('#prod-f-size').value.trim()      || null,
@@ -13388,6 +13460,11 @@ $('#prod-modal-close')?.addEventListener('click',   () => { $('#product-modal').
 $('#prod-modal-cancel')?.addEventListener('click',  () => { $('#product-modal').style.display = 'none'; });
 $('#prod-modal-save')?.addEventListener('click',     () => _prodSave(false));
 $('#prod-modal-save-new')?.addEventListener('click', () => _prodSave(true));
+$('#prod-delivery-goto-settings')?.addEventListener('click', () => {
+  $('#product-modal').style.display = 'none';
+  openPosSettings();
+  psmShowTab('delivery');
+});
 
 // ── Product modal tab switching ───────────────────────────────────────────
 $$('#product-modal .prod-modal-tab').forEach(btn => {
@@ -13412,6 +13489,7 @@ const _PROD_PANE_META = {
   pricing:  { label: 'Pricing & Stock', icon: 'fa-tag'         },
   media:    { label: 'Media',           icon: 'fa-image'       },
   advanced: { label: 'Advanced',        icon: 'fa-sliders'     },
+  delivery: { label: 'Delivery',        icon: 'fa-truck'       },
 };
 
 // ─ Every hideable field in the product form ─────────────────────────────────
@@ -13436,7 +13514,6 @@ const _PROD_FIELD_MAP = [
   { id: 'bundle',            label: 'Bundle Product',     icon: 'fa-cubes',          section: 'Advanced', getEl() { return document.querySelector('#product-modal .prod-bundle-toggle-row'); } },
   { id: 'warranty',          label: 'Warranty',           icon: 'fa-shield-halved',  section: 'Advanced', getEl() { return document.getElementById('prod-f-warranty')?.closest('.prod-adv-card'); } },
   { id: 'expiry',            label: 'Expiration',         icon: 'fa-calendar-xmark', section: 'Advanced', getEl() { return document.getElementById('prod-f-expiry')?.closest('.prod-adv-card'); } },
-  { id: 'courier',           label: 'Courier Delivery',   icon: 'fa-truck',          section: 'Advanced', getEl() { return document.getElementById('prod-f-courier')?.closest('.prod-adv-card'); } },
   { id: 'loyalty',           label: 'Loyalty Redeemable', icon: 'fa-star',           section: 'Advanced', getEl() { return document.getElementById('prod-f-loyalty')?.closest('.prod-adv-card'); } },
   { id: 'customer-required', label: 'Customer Required',  icon: 'fa-user-check',     section: 'Advanced', getEl() { return document.getElementById('prod-f-customer-required')?.closest('.prod-adv-card'); } },
   { id: 'rental',            label: 'Rental',             icon: 'fa-key',            section: 'Advanced', getEl() { return document.getElementById('prod-f-rental')?.closest('.prod-adv-card'); } },
@@ -14141,7 +14218,8 @@ async function openProductDetail(productId, productName) {
   $('#inv-hero-meta').innerHTML   = '<i class="fa fa-spinner fa-spin"></i>';
   $('#inv-hero-badges').innerHTML = '';
   $('#inv-hero-img').innerHTML    = '<div class="inv-thumb-ph inv-thumb-lg"><i class="fa fa-box"></i></div>';
-  ['overview','pricing','stock','images','variants'].forEach(t => {
+  $('#inv-tab-delivery').style.display = 'none';
+  ['overview','pricing','stock','images','variants','delivery'].forEach(t => {
     $(`#inv-pane-${t}`).innerHTML = `<div class="inv-pane-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</div>`;
   });
 
@@ -14502,6 +14580,37 @@ function renderProductDetail(p, stockHistory = []) {
       </div>`;
   } else {
     $('#inv-pane-variants').innerHTML = `<div class="inv-pane-empty"><i class="fa fa-layer-group"></i><p>No variants for this product</p></div>`;
+  }
+
+  // ── Delivery tab (only visible when this product has courier delivery enabled) ──
+  const deliveryMethods = Array.isArray(p.delivery_methods) ? p.delivery_methods : [];
+  const deliveryTabBtn = $('#inv-tab-delivery');
+  if (deliveryTabBtn) deliveryTabBtn.style.display = deliveryMethods.length ? '' : 'none';
+  if (deliveryMethods.length) {
+    const deliveryCur = state.currency ? ' ' + state.currency : '';
+    $('#inv-pane-delivery').innerHTML = `
+      <div class="inv-section">
+        <div class="inv-section-title"><i class="fa fa-truck"></i> Delivery Partners (${deliveryMethods.length})</div>
+        <div class="inv-delivery-list">
+          ${deliveryMethods.map(m => {
+            const meta = _DELIVERY_PARTNERS_META[m.key] || { name: m.key, icon: 'fa-truck' };
+            return `
+            <div class="inv-delivery-row">
+              <div class="inv-delivery-row-icon"><i class="fa ${meta.icon}"></i></div>
+              <div class="inv-delivery-row-name">${escHtml(meta.name)}</div>
+              <div class="inv-delivery-row-price">${m.price != null ? parseFloat(m.price).toFixed(2) + deliveryCur : '—'}</div>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>`;
+  } else {
+    $('#inv-pane-delivery').innerHTML = `<div class="inv-pane-empty"><i class="fa fa-truck"></i><p>Courier delivery is not enabled for this product</p></div>`;
+    if (deliveryTabBtn && deliveryTabBtn.classList.contains('active')) {
+      deliveryTabBtn.classList.remove('active');
+      $('#inv-tabs .inv-tab[data-tab="overview"]')?.classList.add('active');
+      $$('.inv-tab-pane').forEach(pane => pane.classList.remove('active'));
+      $('#inv-pane-overview')?.classList.add('active');
+    }
   }
 }
 
