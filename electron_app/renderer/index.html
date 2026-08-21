@@ -2568,6 +2568,7 @@
           <button class="inv-tab" data-tab="stock">Stock</button>
           <button class="inv-tab" data-tab="images">Images</button>
           <button class="inv-tab" data-tab="variants">Variants</button>
+          <button class="inv-tab" data-tab="delivery" id="inv-tab-delivery" style="display:none"><i class="fa fa-truck"></i> Delivery</button>
         </div>
 
         <!-- Tab bodies -->
@@ -2577,6 +2578,7 @@
           <div class="inv-tab-pane"        id="inv-pane-stock"></div>
           <div class="inv-tab-pane"        id="inv-pane-images"></div>
           <div class="inv-tab-pane"        id="inv-pane-variants"></div>
+          <div class="inv-tab-pane"        id="inv-pane-delivery"></div>
         </div>
 
       </div><!-- /inv-detail-view -->
@@ -2597,6 +2599,7 @@
             <button class="prod-modal-tab" data-tab="pricing"><i class="fa fa-tag"></i> Pricing &amp; Stock</button>
             <button class="prod-modal-tab" data-tab="media"><i class="fa fa-image"></i> Media</button>
             <button class="prod-modal-tab" data-tab="advanced"><i class="fa fa-sliders"></i> Advanced</button>
+            <button class="prod-modal-tab" data-tab="delivery"><i class="fa fa-truck"></i> Delivery</button>
           </div>
           <div class="prod-modal-body">
 
@@ -2779,18 +2782,6 @@
                     <input type="date" id="prod-f-exp-date" class="po-field-input" style="max-width:100%">
                   </div>
                 </div>
-                <!-- Courier Delivery -->
-                <div class="prod-adv-card">
-                  <input type="checkbox" id="prod-f-courier" class="prod-adv-card-chk">
-                  <label class="prod-adv-card-top" for="prod-f-courier">
-                    <div class="prod-adv-card-icon"><i class="fa fa-truck"></i></div>
-                    <div class="prod-adv-card-text">
-                      <span class="prod-adv-card-name">Courier Delivery</span>
-                      <span class="prod-adv-card-desc">Available for delivery and courier orders</span>
-                    </div>
-                    <div class="prod-adv-card-sw"><div class="prod-adv-card-knob"></div></div>
-                  </label>
-                </div>
                 <!-- Loyalty Redeemable -->
                 <div class="prod-adv-card">
                   <input type="checkbox" id="prod-f-loyalty" class="prod-adv-card-chk">
@@ -2864,6 +2855,17 @@
                   </label>
                 </div>
               </div>
+            </div>
+
+            <!-- Pane 5: Delivery -->
+            <div class="prod-modal-pane" data-pane="delivery">
+              <div id="prod-delivery-disabled-msg" class="prod-delivery-disabled" style="display:none">
+                <i class="fa fa-truck"></i>
+                <strong id="prod-delivery-disabled-title">Delivery methods are turned off</strong>
+                <span id="prod-delivery-disabled-text">Enable delivery methods in Settings to offer courier delivery for this product.</span>
+                <button type="button" class="po-btn-ghost" id="prod-delivery-goto-settings"><i class="fa fa-gear"></i> Go to Delivery Settings</button>
+              </div>
+              <div id="prod-delivery-partners" class="prod-delivery-partners"></div>
             </div>
 
           </div><!-- /prod-modal-body -->

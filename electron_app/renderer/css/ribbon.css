@@ -7299,6 +7299,17 @@ body.dark .inv-status-out { background: #450a0a; color: #fca5a5; }
 .prod-adv-card:has(.prod-adv-card-chk:checked) .prod-adv-card-fields { display: block; }
 .prod-adv-card:has(.prod-adv-card-chk:checked) .prod-adv-card-fields { border-top-color: color-mix(in srgb, var(--accent) 25%, var(--border)); }
 
+/* Delivery tab */
+.prod-delivery-disabled {
+  display: flex; flex-direction: column; align-items: center; text-align: center;
+  gap: 10px; padding: 40px 24px; border: 1.5px dashed var(--border);
+  border-radius: var(--radius-sm); background: var(--surface2); color: var(--text-muted);
+}
+.prod-delivery-disabled i { font-size: 26px; color: var(--text-muted); }
+.prod-delivery-disabled strong { display: block; font-size: 13px; color: var(--text); }
+.prod-delivery-disabled span { font-size: 11.5px; line-height: 1.5; max-width: 360px; }
+.prod-delivery-partners { display: flex; flex-direction: column; gap: 10px; }
+
 /* Keep old pill classes available (used in other contexts) */
 .prod-flags-row { display: flex; flex-wrap: wrap; gap: 8px; }
 .prod-flag-cb { display: none; }
@@ -7659,6 +7670,22 @@ body.dark .inv-badge-purple { background: #2e1065; color: #c4b5fd; }
 }
 .inv-variants-table thead tr { background: var(--surface2); }
 .inv-variants-table th { padding: 8px 14px; font-weight: 600; font-size: 12px; color: var(--text-muted); text-align: left; }
+
+/* Delivery partners list (product detail view) */
+.inv-delivery-list { display: flex; flex-direction: column; }
+.inv-delivery-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 14px; border-bottom: 1px solid var(--border-light);
+}
+.inv-delivery-row:last-child { border-bottom: none; }
+.inv-delivery-row-icon {
+  width: 30px; height: 30px; border-radius: 8px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--surface2); border: 1px solid var(--border);
+  font-size: 13px; color: var(--text-muted);
+}
+.inv-delivery-row-name { flex: 1; min-width: 0; font-size: 13px; font-weight: 600; color: var(--text); }
+.inv-delivery-row-price { font-size: 14px; font-weight: 700; color: var(--accent); white-space: nowrap; }
 
 /* Payroll rules table */
 .pr-rules-table {

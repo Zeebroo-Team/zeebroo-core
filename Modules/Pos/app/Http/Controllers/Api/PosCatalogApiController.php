@@ -164,6 +164,7 @@ class PosCatalogApiController extends Controller
                 'has_warranty'       => (bool) $product->has_warranty,
                 'track_expiry'       => (bool) $product->track_expiry,
                 'courier_delivery'   => (bool) $product->courier_delivery,
+                'delivery_methods'   => $product->delivery_methods ?? [],
                 'loyalty_redeemable' => (bool) $product->loyalty_redeemable,
                 'unit_price'   => (float) $product->unit_price,
                 'cost_price'   => $product->cost_price !== null

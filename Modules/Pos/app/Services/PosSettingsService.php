@@ -201,6 +201,24 @@ class PosSettingsService
     }
 
     /**
+     * Partner keys the business has individually enabled under Settings → Delivery.
+     * Empty when delivery is not enabled at all.
+     *
+     * @return list<string>
+     */
+    public function enabledDeliveryMethodKeys(Business $business): array
+    {
+        if (! (bool) $business->getSetting(self::KEY_DELIVERY_ENABLED, false)) {
+            return [];
+        }
+
+        $raw = $business->getSetting(self::KEY_DELIVERY_METHODS, []);
+        $methods = is_array($raw) ? $raw : (is_string($raw) ? json_decode($raw, true) ?? [] : []);
+
+        return array_values(array_intersect($methods, self::DELIVERY_METHOD_KEYS));
+    }
+
+    /**
      * @param  array{
      *     default_deposit_account_id?: int|string|null,
      *     discount_field_enabled?: bool|string|null,
