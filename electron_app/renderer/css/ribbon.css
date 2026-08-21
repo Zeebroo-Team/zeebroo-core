@@ -1133,6 +1133,7 @@ body.dark .tpm-item-danger:hover { background: #3b1515; }
 .content-panel        { display: none; width: 100%; height: 100%; overflow: auto; }
 .content-panel.active { display: flex; }
 #panel-finance.active { flex-direction: column; overflow: hidden; }
+#panel-services.active { background: var(--surface); }
 .fin-view             { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 
 /* Finance sub-nav (Bills / Loans toggle) */
