@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Modules\Business\Models\Business;
+use Modules\FileManager\Models\FileManagerFile;
 use Modules\HRManagement\Models\Employee;
 use Modules\Product\Models\Product;
 
@@ -23,6 +24,7 @@ class ServiceItem extends Model
         'is_active',
         'is_featured',
         'has_warranty',
+        'file_manager_file_id',
     ];
 
     protected $casts = [
@@ -36,6 +38,11 @@ class ServiceItem extends Model
     public function business(): BelongsTo
     {
         return $this->belongsTo(Business::class);
+    }
+
+    public function imageFile(): BelongsTo
+    {
+        return $this->belongsTo(FileManagerFile::class, 'file_manager_file_id');
     }
 
     public function categories(): BelongsToMany

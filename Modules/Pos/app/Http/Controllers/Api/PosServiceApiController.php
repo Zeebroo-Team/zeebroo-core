@@ -153,7 +153,7 @@ class PosServiceApiController extends Controller
             });
         }
 
-        $items = $query->orderBy('name')->get();
+        $items = $query->with('imageFile')->orderBy('name')->get();
 
         return response()->json([
             'data' => $items->map(fn (ServiceItem $i) => [
@@ -165,6 +165,7 @@ class PosServiceApiController extends Controller
                 'is_active'      => $i->is_active,
                 'has_warranty'   => (bool) $i->has_warranty,
                 'categories'     => $i->categories->pluck('name'),
+                'image_url'      => $i->imageFile?->publicUrl(),
             ]),
         ]);
     }
@@ -189,6 +190,7 @@ class PosServiceApiController extends Controller
             'product_lines'              => ['nullable', 'array'],
             'product_lines.*.product_id' => ['required_with:product_lines', 'integer', 'min:1'],
             'product_lines.*.qty'        => ['required_with:product_lines', 'numeric', 'min:0.001'],
+            'file_manager_file_id'       => ['nullable', 'integer', 'exists:file_manager_files,id'],
         ]);
 
         $productLinesSync = [];
@@ -197,17 +199,20 @@ class PosServiceApiController extends Controller
         }
 
         $item = $this->itemService->create($business, [
-            'name'                 => $validated['name'],
-            'description'          => $validated['description'] ?? null,
-            'price'                => $validated['price'],
-            'duration_minutes'     => $validated['duration_minutes'] ?? null,
-            'is_active'            => $validated['is_active'] ?? true,
-            'is_featured'          => $validated['is_featured'] ?? false,
-            'has_warranty'         => $validated['has_warranty'] ?? false,
-            'service_category_ids' => $validated['service_category_ids'] ?? [],
-            'employee_ids'         => $validated['employee_ids'] ?? [],
-            'product_lines'        => $productLinesSync,
+            'name'                  => $validated['name'],
+            'description'           => $validated['description'] ?? null,
+            'price'                 => $validated['price'],
+            'duration_minutes'      => $validated['duration_minutes'] ?? null,
+            'is_active'             => $validated['is_active'] ?? true,
+            'is_featured'           => $validated['is_featured'] ?? false,
+            'has_warranty'          => $validated['has_warranty'] ?? false,
+            'service_category_ids'  => $validated['service_category_ids'] ?? [],
+            'employee_ids'          => $validated['employee_ids'] ?? [],
+            'product_lines'         => $productLinesSync,
+            'file_manager_file_id'  => $validated['file_manager_file_id'] ?? null,
         ]);
+
+        $item->load('imageFile');
 
         return response()->json([
             'data'    => $this->formatItem($item),
@@ -239,6 +244,7 @@ class PosServiceApiController extends Controller
             'product_lines'              => ['nullable', 'array'],
             'product_lines.*.product_id' => ['required_with:product_lines', 'integer', 'min:1'],
             'product_lines.*.qty'        => ['required_with:product_lines', 'numeric', 'min:0.001'],
+            'file_manager_file_id'       => ['nullable', 'integer', 'exists:file_manager_files,id'],
         ]);
 
         $productLinesSync = [];
@@ -246,20 +252,25 @@ class PosServiceApiController extends Controller
             $productLinesSync[$line['product_id']] = ['qty' => $line['qty']];
         }
 
-        $item = $this->itemService->update($serviceItem, [
-            'name'                 => $validated['name'],
-            'description'          => $validated['description'] ?? null,
-            'price'                => $validated['price'],
-            'duration_minutes'     => $validated['duration_minutes'] ?? null,
-            'is_active'            => $validated['is_active'] ?? $serviceItem->is_active,
-            'is_featured'          => $validated['is_featured'] ?? $serviceItem->is_featured,
-            'has_warranty'         => $validated['has_warranty'] ?? $serviceItem->has_warranty,
-            'service_category_ids' => $validated['service_category_ids'] ?? [],
-            'employee_ids'         => $validated['employee_ids'] ?? [],
-            'product_lines'        => $productLinesSync,
-        ]);
+        $updateData = [
+            'name'                  => $validated['name'],
+            'description'           => $validated['description'] ?? null,
+            'price'                 => $validated['price'],
+            'duration_minutes'      => $validated['duration_minutes'] ?? null,
+            'is_active'             => $validated['is_active'] ?? $serviceItem->is_active,
+            'is_featured'           => $validated['is_featured'] ?? $serviceItem->is_featured,
+            'has_warranty'          => $validated['has_warranty'] ?? $serviceItem->has_warranty,
+            'service_category_ids'  => $validated['service_category_ids'] ?? [],
+            'employee_ids'          => $validated['employee_ids'] ?? [],
+            'product_lines'         => $productLinesSync,
+        ];
+        if (array_key_exists('file_manager_file_id', $validated)) {
+            $updateData['file_manager_file_id'] = $validated['file_manager_file_id'];
+        }
 
-        $item->load(['categories', 'employees', 'products']);
+        $item = $this->itemService->update($serviceItem, $updateData);
+
+        $item->load(['categories', 'employees', 'products', 'imageFile']);
 
         return response()->json([
             'data'    => $this->formatItem($item),
@@ -341,20 +352,22 @@ class PosServiceApiController extends Controller
             abort(404);
         }
 
-        $serviceItem->load(['categories', 'employees', 'products']);
+        $serviceItem->load(['categories', 'employees', 'products', 'imageFile']);
 
         return response()->json([
             'data' => [
-                'id'               => $serviceItem->id,
-                'name'             => $serviceItem->name,
-                'description'      => $serviceItem->description,
-                'price'            => (float) $serviceItem->price,
-                'duration_minutes' => $serviceItem->duration_minutes,
-                'duration_label'   => $serviceItem->durationLabel(),
-                'is_active'        => $serviceItem->is_active,
-                'is_featured'      => (bool) $serviceItem->is_featured,
-                'has_warranty'     => (bool) $serviceItem->has_warranty,
-                'categories'       => $serviceItem->categories->map(fn ($c) => [
+                'id'                    => $serviceItem->id,
+                'name'                  => $serviceItem->name,
+                'description'           => $serviceItem->description,
+                'price'                 => (float) $serviceItem->price,
+                'duration_minutes'      => $serviceItem->duration_minutes,
+                'duration_label'        => $serviceItem->durationLabel(),
+                'is_active'             => $serviceItem->is_active,
+                'is_featured'           => (bool) $serviceItem->is_featured,
+                'has_warranty'          => (bool) $serviceItem->has_warranty,
+                'file_manager_file_id'  => $serviceItem->file_manager_file_id,
+                'image_url'             => $serviceItem->imageFile?->publicUrl(),
+                'categories'            => $serviceItem->categories->map(fn ($c) => [
                     'id'   => $c->id,
                     'name' => $c->name,
                 ]),
@@ -444,15 +457,17 @@ class PosServiceApiController extends Controller
     private function formatItem(ServiceItem $i): array
     {
         return [
-            'id'             => $i->id,
-            'name'           => $i->name,
-            'description'    => $i->description,
-            'price'          => (float) $i->price,
-            'duration_label' => $i->durationLabel(),
-            'is_active'      => $i->is_active,
-            'is_featured'    => (bool) $i->is_featured,
-            'has_warranty'   => (bool) $i->has_warranty,
-            'categories'     => $i->categories->pluck('name'),
+            'id'                   => $i->id,
+            'name'                 => $i->name,
+            'description'          => $i->description,
+            'price'                => (float) $i->price,
+            'duration_label'       => $i->durationLabel(),
+            'is_active'            => $i->is_active,
+            'is_featured'          => (bool) $i->is_featured,
+            'has_warranty'         => (bool) $i->has_warranty,
+            'categories'           => $i->categories->pluck('name'),
+            'file_manager_file_id' => $i->file_manager_file_id,
+            'image_url'            => $i->imageFile?->publicUrl(),
         ];
     }
 

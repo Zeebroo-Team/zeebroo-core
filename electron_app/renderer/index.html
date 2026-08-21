@@ -5286,6 +5286,19 @@
               <textarea id="svc-form-desc" class="svc-form-input svc-form-textarea" rows="3" placeholder="Short description of the service…"></textarea>
             </div>
 
+            <div class="svc-form-group">
+              <label class="svc-form-label">Image</label>
+              <div class="prod-img-row">
+                <div class="prod-img-thumb" id="svc-img-thumb">
+                  <i class="fa fa-image" style="font-size:22px;color:var(--text-muted)"></i>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:6px">
+                  <button type="button" id="svc-img-choose" class="po-btn-ghost" style="width:fit-content"><i class="fa fa-folder-open"></i> Choose Image</button>
+                  <button type="button" id="svc-img-remove" class="po-btn-ghost" style="display:none;width:fit-content;color:var(--danger,#e74c3c)"><i class="fa fa-trash"></i> Remove</button>
+                </div>
+              </div>
+            </div>
+
             <div class="svc-form-row">
               <div class="svc-form-group" style="flex:1">
                 <label class="svc-form-label">Price <span class="svc-form-req">*</span></label>
@@ -5301,7 +5314,10 @@
             </div>
 
             <div class="svc-form-group">
-              <label class="svc-form-label">Categories</label>
+              <div class="svc-form-label-row">
+                <label class="svc-form-label" style="margin-bottom:0">Categories</label>
+                <button type="button" class="svc-form-inline-add" id="svc-form-cat-add-btn"><i class="fa fa-plus"></i> Add Category</button>
+              </div>
               <div class="svc-form-cat-list" id="svc-form-cat-list">
                 <span style="color:var(--text-muted);font-size:12px"><i class="fa fa-spinner fa-spin"></i> Loading categories…</span>
               </div>
@@ -13248,7 +13264,6 @@
         <i class="fa fa-cloud-arrow-up" style="font-size:32px;color:var(--text-muted)"></i>
         <p style="margin:8px 0 0;color:var(--text-muted);font-size:13px">Click to select an image file</p>
         <p style="margin:4px 0 0;font-size:11px;color:var(--text-muted)">JPG, PNG, WebP, GIF — max 20 MB</p>
-        <button type="button" id="img-upload-btn" class="po-btn-primary" style="margin-top:12px"><i class="fa fa-folder-open"></i> Browse Files</button>
       </div>
       <div id="img-upload-preview" style="display:none;text-align:center">
         <img id="img-upload-preview-img" src="" alt="" style="max-width:100%;max-height:240px;border-radius:var(--radius-sm);border:1px solid var(--border)">
