@@ -13537,6 +13537,15 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
   max-height: 200px;
   overflow-y: auto;
 }
+.svc-tab-result-list {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.14);
+  max-height: 200px;
+  overflow-y: auto;
+  margin-top: 4px;
+}
 .svc-tab-result-item {
   padding: 9px 14px;
   font-size: 13px;
