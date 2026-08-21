@@ -2569,6 +2569,7 @@
           <button class="inv-tab" data-tab="images">Images</button>
           <button class="inv-tab" data-tab="variants">Variants</button>
           <button class="inv-tab" data-tab="delivery" id="inv-tab-delivery" style="display:none"><i class="fa fa-truck"></i> Delivery</button>
+          <button class="inv-tab" data-tab="rental" id="inv-tab-rental" style="display:none">Rental</button>
         </div>
 
         <!-- Tab bodies -->
@@ -2579,6 +2580,7 @@
           <div class="inv-tab-pane"        id="inv-pane-images"></div>
           <div class="inv-tab-pane"        id="inv-pane-variants"></div>
           <div class="inv-tab-pane"        id="inv-pane-delivery"></div>
+          <div class="inv-tab-pane"        id="inv-pane-rental"></div>
         </div>
 
       </div><!-- /inv-detail-view -->
@@ -2817,6 +2819,27 @@
                     </div>
                     <div class="prod-adv-card-sw"><div class="prod-adv-card-knob"></div></div>
                   </label>
+                  <div class="prod-adv-card-fields" id="prod-rental-terms-row">
+                    <div class="po-field-label" style="margin-bottom:6px"><i class="fa fa-sack-dollar" style="color:var(--accent);margin-right:4px"></i> Rental Terms</div>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+                      <div style="flex:1;min-width:110px">
+                        <label style="display:block;font-size:11px;color:var(--text-muted);margin-bottom:4px">Daily Rate</label>
+                        <input type="number" id="prod-f-rental-daily-rate" class="po-field-input" min="0" step="0.01" placeholder="0.00">
+                      </div>
+                      <div style="flex:1;min-width:110px">
+                        <label style="display:block;font-size:11px;color:var(--text-muted);margin-bottom:4px">Max Rental Days</label>
+                        <input type="number" id="prod-f-rental-max-days" class="po-field-input" min="1" step="1" placeholder="e.g. 4">
+                      </div>
+                      <div style="flex:1;min-width:150px">
+                        <label style="display:block;font-size:11px;color:var(--text-muted);margin-bottom:4px">Late Fee (× daily rate/day)</label>
+                        <input type="number" id="prod-f-rental-late-fee-multiplier" class="po-field-input" min="0" step="0.1" placeholder="e.g. 1.5">
+                      </div>
+                    </div>
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-xs);background:var(--surface)">
+                      <input type="checkbox" id="prod-f-rental-needs-cleaning" style="accent-color:var(--accent);cursor:pointer">
+                      <span style="font-size:12px;color:var(--text)"><i class="fa fa-broom" style="color:var(--accent);margin-right:4px"></i> Requires cleaning/inspection before next rental</span>
+                    </label>
+                  </div>
                 </div>
                 <!-- Subscription -->
                 <div class="prod-adv-card">
@@ -5267,6 +5290,19 @@
               <textarea id="svc-form-desc" class="svc-form-input svc-form-textarea" rows="3" placeholder="Short description of the service…"></textarea>
             </div>
 
+            <div class="svc-form-group">
+              <label class="svc-form-label">Image</label>
+              <div class="prod-img-row">
+                <div class="prod-img-thumb" id="svc-img-thumb">
+                  <i class="fa fa-image" style="font-size:22px;color:var(--text-muted)"></i>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:6px">
+                  <button type="button" id="svc-img-choose" class="po-btn-ghost" style="width:fit-content"><i class="fa fa-folder-open"></i> Choose Image</button>
+                  <button type="button" id="svc-img-remove" class="po-btn-ghost" style="display:none;width:fit-content;color:var(--danger,#e74c3c)"><i class="fa fa-trash"></i> Remove</button>
+                </div>
+              </div>
+            </div>
+
             <div class="svc-form-row">
               <div class="svc-form-group" style="flex:1">
                 <label class="svc-form-label">Price <span class="svc-form-req">*</span></label>
@@ -5282,7 +5318,10 @@
             </div>
 
             <div class="svc-form-group">
-              <label class="svc-form-label">Categories</label>
+              <div class="svc-form-label-row">
+                <label class="svc-form-label" style="margin-bottom:0">Categories</label>
+                <button type="button" class="svc-form-inline-add" id="svc-form-cat-add-btn"><i class="fa fa-plus"></i> Add Category</button>
+              </div>
               <div class="svc-form-cat-list" id="svc-form-cat-list">
                 <span style="color:var(--text-muted);font-size:12px"><i class="fa fa-spinner fa-spin"></i> Loading categories…</span>
               </div>
@@ -13229,7 +13268,6 @@
         <i class="fa fa-cloud-arrow-up" style="font-size:32px;color:var(--text-muted)"></i>
         <p style="margin:8px 0 0;color:var(--text-muted);font-size:13px">Click to select an image file</p>
         <p style="margin:4px 0 0;font-size:11px;color:var(--text-muted)">JPG, PNG, WebP, GIF — max 20 MB</p>
-        <button type="button" id="img-upload-btn" class="po-btn-primary" style="margin-top:12px"><i class="fa fa-folder-open"></i> Browse Files</button>
       </div>
       <div id="img-upload-preview" style="display:none;text-align:center">
         <img id="img-upload-preview-img" src="" alt="" style="max-width:100%;max-height:240px;border-radius:var(--radius-sm);border:1px solid var(--border)">

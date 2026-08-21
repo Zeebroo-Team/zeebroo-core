@@ -43,14 +43,15 @@ class ServiceItemService
         $productLines = $data['product_lines'] ?? [];
 
         $item = ServiceItem::create([
-            'business_id'      => $business->id,
-            'name'             => $data['name'],
-            'description'      => filled($data['description'] ?? '') ? $data['description'] : null,
-            'price'            => isset($data['price']) && $data['price'] !== '' ? (float) $data['price'] : null,
-            'duration_minutes' => isset($data['duration_minutes']) && $data['duration_minutes'] !== '' ? (int) $data['duration_minutes'] : null,
-            'is_active'        => (bool) ($data['is_active'] ?? true),
-            'is_featured'      => (bool) ($data['is_featured'] ?? false),
-            'has_warranty'     => (bool) ($data['has_warranty'] ?? false),
+            'business_id'           => $business->id,
+            'name'                  => $data['name'],
+            'description'           => filled($data['description'] ?? '') ? $data['description'] : null,
+            'price'                 => isset($data['price']) && $data['price'] !== '' ? (float) $data['price'] : null,
+            'duration_minutes'      => isset($data['duration_minutes']) && $data['duration_minutes'] !== '' ? (int) $data['duration_minutes'] : null,
+            'is_active'             => (bool) ($data['is_active'] ?? true),
+            'is_featured'           => (bool) ($data['is_featured'] ?? false),
+            'has_warranty'          => (bool) ($data['has_warranty'] ?? false),
+            'file_manager_file_id'  => $data['file_manager_file_id'] ?? null,
         ]);
 
         $item->categories()->sync($categoryIds);
@@ -67,13 +68,14 @@ class ServiceItemService
         $productLines = $data['product_lines'] ?? null;
 
         $item->update([
-            'name'             => $data['name'],
-            'description'      => filled($data['description'] ?? '') ? $data['description'] : null,
-            'price'            => isset($data['price']) && $data['price'] !== '' ? (float) $data['price'] : null,
-            'duration_minutes' => isset($data['duration_minutes']) && $data['duration_minutes'] !== '' ? (int) $data['duration_minutes'] : null,
-            'is_active'        => (bool) ($data['is_active'] ?? true),
-            'is_featured'      => (bool) ($data['is_featured'] ?? $item->is_featured),
-            'has_warranty'     => (bool) ($data['has_warranty'] ?? $item->has_warranty),
+            'name'                  => $data['name'],
+            'description'           => filled($data['description'] ?? '') ? $data['description'] : null,
+            'price'                 => isset($data['price']) && $data['price'] !== '' ? (float) $data['price'] : null,
+            'duration_minutes'      => isset($data['duration_minutes']) && $data['duration_minutes'] !== '' ? (int) $data['duration_minutes'] : null,
+            'is_active'             => (bool) ($data['is_active'] ?? true),
+            'is_featured'           => (bool) ($data['is_featured'] ?? $item->is_featured),
+            'has_warranty'          => (bool) ($data['has_warranty'] ?? $item->has_warranty),
+            'file_manager_file_id'  => array_key_exists('file_manager_file_id', $data) ? $data['file_manager_file_id'] : $item->file_manager_file_id,
         ]);
 
         if ($categoryIds !== null)  $item->categories()->sync($categoryIds);

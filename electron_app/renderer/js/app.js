@@ -13130,6 +13130,10 @@ async function _prodOpenModal(editId) {
   $('#prod-f-mfg-date').value             = '';
   $('#prod-f-customer-required').checked  = false;
   $('#prod-f-rental').checked             = false;
+  $('#prod-f-rental-daily-rate').value    = '';
+  $('#prod-f-rental-max-days').value      = '';
+  $('#prod-f-rental-late-fee-multiplier').value = '';
+  $('#prod-f-rental-needs-cleaning').checked    = false;
   $('#prod-f-subscription').checked       = false;
   $('#prod-f-item-tax').checked           = false;
   $('#prod-f-item-discount').checked      = false;
@@ -13195,6 +13199,10 @@ async function _prodOpenModal(editId) {
     $('#prod-f-mfg-date').value             = p.mfg_date  || '';
     $('#prod-f-customer-required').checked  = !!p.is_customer_required;
     $('#prod-f-rental').checked             = !!p.is_rental;
+    $('#prod-f-rental-daily-rate').value    = p.rental_daily_rate != null ? p.rental_daily_rate : '';
+    $('#prod-f-rental-max-days').value      = p.rental_max_days != null ? p.rental_max_days : '';
+    $('#prod-f-rental-late-fee-multiplier').value = p.rental_late_fee_multiplier != null ? p.rental_late_fee_multiplier : '';
+    $('#prod-f-rental-needs-cleaning').checked    = !!p.rental_needs_cleaning;
     $('#prod-f-subscription').checked       = !!p.is_subscription;
     $('#prod-f-item-tax').checked           = !!p.item_wise_tax;
     $('#prod-f-item-discount').checked      = !!p.item_wise_discount;
@@ -13394,6 +13402,10 @@ async function _prodSave(andNew = false) {
     exp_date:              $('#prod-f-exp-date').value         || null,
     is_customer_required:  $('#prod-f-customer-required').checked,
     is_rental:             $('#prod-f-rental').checked,
+    rental_daily_rate:          $('#prod-f-rental').checked ? (parseFloat($('#prod-f-rental-daily-rate').value) || null) : null,
+    rental_max_days:            $('#prod-f-rental').checked ? (parseInt($('#prod-f-rental-max-days').value, 10) || null) : null,
+    rental_late_fee_multiplier: $('#prod-f-rental').checked ? (parseFloat($('#prod-f-rental-late-fee-multiplier').value) || null) : null,
+    rental_needs_cleaning:      $('#prod-f-rental').checked ? $('#prod-f-rental-needs-cleaning').checked : false,
     is_subscription:       $('#prod-f-subscription').checked,
     item_wise_tax:         $('#prod-f-item-tax').checked,
     item_wise_discount:    $('#prod-f-item-discount').checked,
@@ -13762,6 +13774,14 @@ $('#prod-f-warranty')?.addEventListener('change', function () {
 $('#prod-f-expiry')?.addEventListener('change', function () {
   if (!this.checked) $('#prod-f-exp-date').value = '';
 });
+$('#prod-f-rental')?.addEventListener('change', function () {
+  if (!this.checked) {
+    $('#prod-f-rental-daily-rate').value = '';
+    $('#prod-f-rental-max-days').value = '';
+    $('#prod-f-rental-late-fee-multiplier').value = '';
+    $('#prod-f-rental-needs-cleaning').checked = false;
+  }
+});
 $('#prod-f-warranty-duration')?.addEventListener('input', _prodSyncWarrantyChips);
 $$('#prod-warranty-duration-row .warranty-chip').forEach(chip => {
   chip.addEventListener('click', () => {
@@ -14042,7 +14062,7 @@ $('#csv-import-btn')?.addEventListener('click', async () => {
 $('#prod-img-choose')?.addEventListener('click', () => openImgPicker(null));
 $('#prod-img-remove')?.addEventListener('click', () => _prodSetImage(null, null));
 $('#img-picker-close')?.addEventListener('click', _imgPickerClose);
-$('#img-upload-btn')?.addEventListener('click',    _imgPickerBrowseFile);
+$('#img-upload-drop')?.addEventListener('click',   _imgPickerBrowseFile);
 $('#img-upload-change')?.addEventListener('click', _imgPickerBrowseFile);
 $('#img-upload-confirm')?.addEventListener('click', _imgPickerUploadAndUse);
 $$('.img-tab-btn').forEach(btn => btn.addEventListener('click', () => _imgPickerTabSwitch(btn.dataset.tab)));
@@ -14274,6 +14294,7 @@ function renderProductDetail(p, stockHistory = []) {
   if (p.track_expiry)       badges.push(`<span class="inv-badge inv-badge-amber"><i class="fa fa-calendar-xmark"></i> Expiry</span>`);
   if (p.courier_delivery)   badges.push(`<span class="inv-badge inv-badge-purple"><i class="fa fa-truck"></i> Courier</span>`);
   if (p.loyalty_redeemable) badges.push(`<span class="inv-badge inv-badge-green"><i class="fa fa-star"></i> Loyalty</span>`);
+  if (p.is_rental)          badges.push(`<span class="inv-badge inv-badge-blue"><i class="fa fa-key"></i> Rental</span>`);
   $('#inv-hero-badges').innerHTML = badges.join('');
 
   // ── Overview tab ──
@@ -14616,6 +14637,41 @@ function renderProductDetail(p, stockHistory = []) {
       $$('.inv-tab-pane').forEach(pane => pane.classList.remove('active'));
       $('#inv-pane-overview')?.classList.add('active');
     }
+  }
+
+  // ── Rental tab (only shown when this product is rentable) ──
+  const rentalTabBtn = $('#inv-tab-rental');
+  if (p.is_rental) {
+    rentalTabBtn.style.display = '';
+    const dailyRate  = p.rental_daily_rate != null ? parseFloat(p.rental_daily_rate) : null;
+    const maxDays    = p.rental_max_days ?? null;
+    const lateFeeMul = p.rental_late_fee_multiplier != null ? parseFloat(p.rental_late_fee_multiplier) : null;
+    const needsClean = !!p.rental_needs_cleaning;
+
+    let lateFeeVal = '<span class="inv-detail-none">—</span>';
+    if (lateFeeMul != null) {
+      lateFeeVal = `${lateFeeMul}× daily rate`;
+      if (dailyRate != null) lateFeeVal += ` <span style="color:var(--text-muted);font-size:12px">(${(dailyRate * lateFeeMul).toFixed(2)} per late day)</span>`;
+    }
+
+    const rentalRows = [
+      ['Daily Rate',        dailyRate != null ? dailyRate.toFixed(2) : '<span class="inv-detail-none">—</span>'],
+      ['Max Rental Days',   maxDays != null ? maxDays : '<span class="inv-detail-none">—</span>'],
+      ['Late Fee',          lateFeeVal],
+      ['Cleaning Required', needsClean
+        ? '<span class="inv-badge inv-badge-amber"><i class="fa fa-broom"></i> Required before next rental</span>'
+        : '<span class="inv-badge inv-badge-green">Not required</span>'],
+    ];
+
+    $('#inv-pane-rental').innerHTML = `
+      <div class="inv-section">
+        <div class="inv-section-title"><i class="fa fa-key"></i> Rental Terms</div>
+        <table class="inv-detail-table">
+          ${rentalRows.map(([label, val]) => `<tr><td class="inv-dt-label">${escHtml(label)}</td><td class="inv-dt-val">${val}</td></tr>`).join('')}
+        </table>
+      </div>`;
+  } else {
+    rentalTabBtn.style.display = 'none';
   }
 }
 
@@ -30006,8 +30062,11 @@ async function loadSvcCatalog() {
     const featuredStar = i.is_featured
       ? `<span title="Featured" style="color:#f59e0b;margin-left:5px"><i class="fa fa-star" style="font-size:11px"></i></span>`
       : '';
+    const avatar = i.image_url
+      ? `<div class="svc-list-avatar" style="--itm-c:${color}"><img src="${escHtml(i.image_url)}" alt=""></div>`
+      : `<div class="svc-list-avatar" style="--itm-c:${color}">${escHtml(initial)}</div>`;
     return `<tr class="inv-row svc-itm-row" data-id="${i.id}" style="cursor:pointer">
-      <td><div class="svc-list-avatar" style="--itm-c:${color}">${escHtml(initial)}</div></td>
+      <td>${avatar}</td>
       <td><div style="font-weight:500;font-size:13px;display:flex;align-items:center">${escHtml(i.name)}${featuredStar}</div></td>
       <td class="svc-list-desc">${desc}</td>
       <td><div style="display:flex;flex-wrap:wrap;gap:4px">${cats}</div></td>
@@ -30064,7 +30123,7 @@ function _svcOpenItemDetail(id) {
 
     // Header
     const avatarEl = $('#svc-detail-avatar');
-    avatarEl.textContent = initial;
+    avatarEl.innerHTML = d.image_url ? `<img src="${escHtml(d.image_url)}" alt="">` : escHtml(initial);
     avatarEl.style.cssText = `--itm-c:${color}`;
     $('#svc-detail-name').textContent = d.name;
     $('#svc-detail-badge').innerHTML  = d.is_active
@@ -30333,6 +30392,14 @@ let _svcAvailCats    = [];
 let _svcAvailEmps    = [];
 let _svcProdLines    = []; // [{product_id, name, qty}]
 let _svcEditingId    = null; // null = create mode, number = edit mode
+let _svcFormImageFileId = null;
+
+function _svcSetImage(fileId, url) {
+  _svcFormImageFileId = fileId;
+  const thumb = $('#svc-img-thumb');
+  thumb.innerHTML = url ? `<img src="${escHtml(url)}" alt="">` : '<i class="fa fa-image" style="font-size:22px;color:var(--text-muted)"></i>';
+  $('#svc-img-remove').style.display = url ? 'inline-flex' : 'none';
+}
 
 function _svcResetModal() {
   _svcFormCatIds   = new Set();
@@ -30353,6 +30420,7 @@ function _svcResetModal() {
   $('#svc-toggle-ui')?.classList.add('on');
   $('#svc-featured-toggle-ui')?.classList.remove('on');
   $('#svc-warranty-toggle-ui')?.classList.remove('on');
+  _svcSetImage(null, null);
 }
 
 function openNewServiceModal() {
@@ -30397,6 +30465,7 @@ async function openEditServiceModal(id) {
   _svcFormActive   = d.is_active;
   _svcFormFeatured = d.is_featured;
   _svcFormWarranty = !!d.has_warranty;
+  _svcSetImage(d.file_manager_file_id || null, d.image_url || null);
   $('#svc-toggle-ui')?.classList.toggle('on', d.is_active);
   $('#svc-featured-toggle-ui')?.classList.toggle('on', d.is_featured);
   $('#svc-warranty-toggle-ui')?.classList.toggle('on', !!d.has_warranty);
@@ -30433,7 +30502,7 @@ async function _svcLoadFormCategories() {
     return;
   }
   list.innerHTML = _svcAvailCats.map(c =>
-    `<div class="svc-form-cat-chip" data-cat-id="${c.id}"><i class="fa fa-check"></i>${escHtml(c.name)}</div>`
+    `<div class="svc-form-cat-chip${_svcFormCatIds.has(c.id) ? ' selected' : ''}" data-cat-id="${c.id}"><i class="fa fa-check"></i>${escHtml(c.name)}</div>`
   ).join('');
   list.querySelectorAll('.svc-form-cat-chip').forEach(chip => {
     chip.addEventListener('click', () => {
@@ -30542,6 +30611,9 @@ $('#svc-warranty-toggle-ui')?.addEventListener('click', () => {
   $('#svc-warranty-toggle-ui').classList.toggle('on', _svcFormWarranty);
 });
 
+$('#svc-img-choose')?.addEventListener('click', () => openImgPicker(_svcSetImage));
+$('#svc-img-remove')?.addEventListener('click', () => _svcSetImage(null, null));
+
 $('#svc-new-modal-close')?.addEventListener('click', closeNewServiceModal);
 $('#svc-new-modal-cancel')?.addEventListener('click', closeNewServiceModal);
 $('#svc-new-modal')?.addEventListener('click', e => { if (e.target === e.currentTarget) closeNewServiceModal(); });
@@ -30571,6 +30643,7 @@ $('#svc-form-submit')?.addEventListener('click', async () => {
     service_category_ids: [..._svcFormCatIds],
     employee_ids:         [..._svcFormEmpIds],
     product_lines:        _svcProdLines.map(l => ({ product_id: l.product_id, qty: l.qty })),
+    file_manager_file_id: _svcFormImageFileId,
   };
 
   const res = isEdit
@@ -30691,9 +30764,11 @@ async function _svcDeleteCategory(id, name) {
 
 // ── New Category Modal ────────────────────────────────────────────────────────
 let _svcCatFormActive = true;
+let _svcCatFormFromServiceModal = false;
 
-function openNewCategoryModal() {
+function openNewCategoryModal(fromServiceModal = false) {
   _svcCatFormActive = true;
+  _svcCatFormFromServiceModal = fromServiceModal;
   $('#svc-cat-form-name').value = '';
   $('#svc-cat-form-desc').value = '';
   $('#svc-cat-form-alert').style.display = 'none';
@@ -30715,7 +30790,8 @@ $('#svc-new-cat-modal-close')?.addEventListener('click',  closeNewCategoryModal)
 $('#svc-new-cat-modal-cancel')?.addEventListener('click', closeNewCategoryModal);
 $('#svc-new-cat-modal')?.addEventListener('click', e => { if (e.target === e.currentTarget) closeNewCategoryModal(); });
 
-$('#btn-new-category')?.addEventListener('click', openNewCategoryModal);
+$('#btn-new-category')?.addEventListener('click', () => openNewCategoryModal(false));
+$('#svc-form-cat-add-btn')?.addEventListener('click', () => openNewCategoryModal(true));
 
 $('#svc-cat-form-submit')?.addEventListener('click', async () => {
   const btn     = $('#svc-cat-form-submit');
@@ -30740,7 +30816,16 @@ $('#svc-cat-form-submit')?.addEventListener('click', async () => {
   if (res.status === 201) {
     closeNewCategoryModal();
     toast('Category created', 'success');
-    loadSvcCategories();
+    if (_svcCatFormFromServiceModal) {
+      const newId = res.body?.data?.id != null ? Number(res.body.data.id) : null;
+      await _svcLoadFormCategories();
+      if (newId != null) {
+        _svcFormCatIds.add(newId);
+        $(`#svc-form-cat-list [data-cat-id="${newId}"]`)?.classList.add('selected');
+      }
+    } else {
+      loadSvcCategories();
+    }
   } else {
     const msg = Object.values(res.body?.errors || {}).flat()[0] || res.body?.message || 'Failed to create category.';
     alertEl.textContent = msg;

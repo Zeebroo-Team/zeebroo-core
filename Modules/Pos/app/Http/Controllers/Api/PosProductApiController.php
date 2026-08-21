@@ -89,6 +89,10 @@ class PosProductApiController extends Controller
                 if ($request->has('loyalty_redeemable'))     $fill['loyalty_redeemable']   = $request->boolean('loyalty_redeemable');
                 if ($request->has('is_customer_required'))   $fill['is_customer_required'] = $request->boolean('is_customer_required');
                 if ($request->has('is_rental'))              $fill['is_rental']            = $request->boolean('is_rental');
+                if ($request->has('rental_daily_rate'))      $fill['rental_daily_rate']     = $request->input('rental_daily_rate') !== null ? (float) $request->input('rental_daily_rate') : null;
+                if ($request->has('rental_max_days'))        $fill['rental_max_days']       = $request->input('rental_max_days') !== null ? (int) $request->input('rental_max_days') : null;
+                if ($request->has('rental_late_fee_multiplier')) $fill['rental_late_fee_multiplier'] = $request->input('rental_late_fee_multiplier') !== null ? (float) $request->input('rental_late_fee_multiplier') : null;
+                if ($request->has('rental_needs_cleaning'))  $fill['rental_needs_cleaning'] = $request->boolean('rental_needs_cleaning');
                 if ($request->has('is_subscription'))        $fill['is_subscription']      = $request->boolean('is_subscription');
                 if ($request->has('item_wise_tax'))          $fill['item_wise_tax']        = $request->boolean('item_wise_tax');
                 if ($request->has('item_wise_discount'))     $fill['item_wise_discount']   = $request->boolean('item_wise_discount');
@@ -167,6 +171,10 @@ class PosProductApiController extends Controller
             'loyalty_redeemable'        => 'boolean',
             'is_customer_required'      => 'boolean',
             'is_rental'                 => 'boolean',
+            'rental_daily_rate'         => 'nullable|numeric|min:0',
+            'rental_max_days'           => 'nullable|integer|min:1',
+            'rental_late_fee_multiplier' => 'nullable|numeric|min:0',
+            'rental_needs_cleaning'     => 'boolean',
             'is_subscription'           => 'boolean',
             'item_wise_tax'             => 'boolean',
             'item_wise_discount'        => 'boolean',
@@ -194,6 +202,10 @@ class PosProductApiController extends Controller
         if ($request->has('loyalty_redeemable'))     $data['loyalty_redeemable']   = $request->boolean('loyalty_redeemable');
         if ($request->has('is_customer_required'))   $data['is_customer_required'] = $request->boolean('is_customer_required');
         if ($request->has('is_rental'))              $data['is_rental']            = $request->boolean('is_rental');
+        if ($request->has('rental_daily_rate'))      $data['rental_daily_rate']     = $request->input('rental_daily_rate') !== null ? (float) $request->input('rental_daily_rate') : null;
+        if ($request->has('rental_max_days'))        $data['rental_max_days']       = $request->input('rental_max_days') !== null ? (int) $request->input('rental_max_days') : null;
+        if ($request->has('rental_late_fee_multiplier')) $data['rental_late_fee_multiplier'] = $request->input('rental_late_fee_multiplier') !== null ? (float) $request->input('rental_late_fee_multiplier') : null;
+        if ($request->has('rental_needs_cleaning'))  $data['rental_needs_cleaning'] = $request->boolean('rental_needs_cleaning');
         if ($request->has('is_subscription'))        $data['is_subscription']      = $request->boolean('is_subscription');
         if ($request->has('item_wise_tax'))          $data['item_wise_tax']        = $request->boolean('item_wise_tax');
         if ($request->has('item_wise_discount'))     $data['item_wise_discount']   = $request->boolean('item_wise_discount');
