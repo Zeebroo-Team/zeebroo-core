@@ -8439,6 +8439,9 @@ async function _supOpenModal(id = null) {
   $('#sup-f-email').value   = '';
   $('#sup-f-address').value = '';
   $('#sup-f-notes').value   = '';
+  _setSupplierCategoryComboValue('#sup-f-category-input', '#sup-f-category', '');
+
+  await _loadSupplierConfig();
 
   if (id) {
     const res = await API.supplier(id);
@@ -8451,6 +8454,7 @@ async function _supOpenModal(id = null) {
       $('#sup-f-email').value   = s.email ?? '';
       $('#sup-f-address').value = s.address ?? '';
       $('#sup-f-notes').value   = s.notes ?? '';
+      _setSupplierCategoryComboValue('#sup-f-category-input', '#sup-f-category', s.supplier_category_id ?? '');
     }
   }
 
@@ -8459,19 +8463,23 @@ async function _supOpenModal(id = null) {
 }
 
 async function _supSave() {
-  const name    = $('#sup-f-name').value.trim();
-  const contact = $('#sup-f-contact').value.trim() || null;
-  const phone   = $('#sup-f-phone').value.trim() || null;
-  const email   = $('#sup-f-email').value.trim() || null;
-  const address = $('#sup-f-address').value.trim() || null;
-  const notes   = $('#sup-f-notes').value.trim() || null;
+  const name       = $('#sup-f-name').value.trim();
+  const contact    = $('#sup-f-contact').value.trim() || null;
+  const phone      = $('#sup-f-phone').value.trim() || null;
+  const email      = $('#sup-f-email').value.trim() || null;
+  const address    = $('#sup-f-address').value.trim() || null;
+  const notes      = $('#sup-f-notes').value.trim() || null;
+  const categoryId = $('#sup-f-category').value || null;
 
   if (!name) { toast('Supplier name is required', 'error'); $('#sup-f-name').focus(); return; }
+  if (_supCfg.requirePhone && !phone) { toast('Phone number is required', 'error'); $('#sup-f-phone').focus(); return; }
+  if (_supCfg.requireEmail && !email) { toast('Email is required', 'error'); $('#sup-f-email').focus(); return; }
+  if (_supCfg.requireAddress && !address) { toast('Address is required', 'error'); $('#sup-f-address').focus(); return; }
 
   const btn = $('#sup-form-save');
   btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
 
-  const body = { name, contact_name: contact, phone, email, address, notes };
+  const body = { name, contact_name: contact, phone, email, address, notes, supplier_category_id: categoryId };
   const res  = _sup.editingId
     ? await API.updateSupplier(_sup.editingId, body)
     : await API.createSupplier(body);
@@ -8512,6 +8520,237 @@ $('#sup-search')?.addEventListener('keydown', e => {
     if (e.key === 'Enter') _supSave();
     if (e.key === 'Escape') $('#sup-modal').style.display = 'none';
   });
+});
+
+// ── Supplier required-field settings + Supplier Categories ─────────────────
+const _supCfg = { requirePhone: false, requireEmail: false, requireAddress: false, categories: [] };
+
+async function _loadSupplierConfig() {
+  try {
+    const [sRes, cRes] = await Promise.all([API.settingsGet(), API.supplierCategories()]);
+    const s = sRes.body?.data ?? {};
+    _supCfg.requirePhone   = !!s.supplier_require_phone;
+    _supCfg.requireEmail   = !!s.supplier_require_email;
+    _supCfg.requireAddress = !!s.supplier_require_address;
+    _supCfg.categories     = cRes.body?.data ?? [];
+  } catch (_) {}
+  _applySupplierFieldRequirements();
+}
+
+function _applySupplierFieldRequirements() {
+  const map = { '#sup-req-phone': _supCfg.requirePhone, '#sup-req-email': _supCfg.requireEmail, '#sup-req-address': _supCfg.requireAddress };
+  Object.entries(map).forEach(([sel, required]) => {
+    const el = $(sel);
+    if (el) el.style.display = required ? '' : 'none';
+  });
+}
+
+// ── Supplier category combobox: searchable, scrollable replacement for a plain <select> ──
+function _setSupplierCategoryComboValue(inputSel, hiddenSel, id) {
+  const cat = id ? _supCfg.categories.find(c => c.id === Number(id)) : null;
+  const hidden = $(hiddenSel), input = $(inputSel);
+  if (hidden) hidden.value = cat ? cat.id : '';
+  if (input)  input.value  = cat ? cat.name : '';
+}
+
+function _supCatComboRender(listEl, inputSel, hiddenSel, filter) {
+  const q = (filter || '').trim().toLowerCase();
+  const items = _supCfg.categories.filter(c => c.name.toLowerCase().includes(q));
+  let html = `<div class="cat-combo-item" data-id="" data-name="">No category</div>`;
+  html += items.map(c => `<div class="cat-combo-item" data-id="${c.id}" data-name="${escHtml(c.name)}">${escHtml(c.name)}</div>`).join('');
+  if (!items.length && q) html += '<div class="cat-combo-empty">No matching categories</div>';
+  listEl.innerHTML = html;
+  listEl.querySelectorAll('.cat-combo-item[data-id]').forEach(el => {
+    el.addEventListener('mousedown', ev => {
+      ev.preventDefault();
+      $(hiddenSel).value = el.dataset.id;
+      $(inputSel).value  = el.dataset.name || '';
+      listEl.style.display = 'none';
+    });
+  });
+}
+
+function _wireSupplierCategoryCombo(inputSel, hiddenSel, listSel) {
+  const input = $(inputSel), list = $(listSel);
+  if (!input || !list) return;
+  input.addEventListener('focus', () => { _supCatComboRender(list, inputSel, hiddenSel, ''); list.style.display = ''; });
+  input.addEventListener('input', () => {
+    $(hiddenSel).value = '';
+    _supCatComboRender(list, inputSel, hiddenSel, input.value);
+    list.style.display = '';
+  });
+  input.addEventListener('blur', () => { setTimeout(() => { list.style.display = 'none'; }, 150); });
+  input.addEventListener('keydown', e => { if (e.key === 'Escape') { list.style.display = 'none'; input.blur(); } });
+}
+
+_wireSupplierCategoryCombo('#sup-f-category-input', '#sup-f-category', '#sup-f-category-list');
+
+function _sstRenderCategoryList() {
+  const el = $('#sst-cat-list');
+  if (!el) return;
+  if (!_supCfg.categories.length) {
+    el.innerHTML = '<div class="cm-list-empty"><i class="fa fa-tags"></i><span>No categories yet</span></div>';
+    return;
+  }
+  el.innerHTML = _supCfg.categories.map(c => `
+    <div class="pfs-field-row" data-cat-id="${c.id}">
+      <div class="pfs-field-icon"><i class="fa fa-tag"></i></div>
+      <div class="pfs-field-body">
+        <div class="pfs-field-label">${escHtml(c.name)}</div>
+        ${c.description ? `<div class="pfs-field-desc">${escHtml(c.description)}</div>` : ''}
+      </div>
+      <button class="prod-batch-del" data-edit-cat="${c.id}" title="Edit category" style="color:var(--text-muted)"><i class="fa fa-pen"></i></button>
+      <button class="prod-batch-del" data-del-cat="${c.id}" title="Delete category"><i class="fa fa-trash"></i></button>
+    </div>`).join('');
+  el.querySelectorAll('[data-edit-cat]').forEach(btn => {
+    btn.addEventListener('click', () => _sstStartEditCategory(Number(btn.dataset.editCat)));
+  });
+  el.querySelectorAll('[data-del-cat]').forEach(btn => {
+    btn.addEventListener('click', () => _sstDeleteCategory(Number(btn.dataset.delCat)));
+  });
+}
+
+let _sstEditingCatId = null;
+
+function _sstStartEditCategory(id) {
+  const cat = _supCfg.categories.find(c => c.id === id);
+  if (!cat) return;
+  _sstEditingCatId = id;
+  $('#sst-cat-name').value = cat.name;
+  $('#sst-cat-desc').value = cat.description || '';
+  $('#sst-cat-add').innerHTML = '<i class="fa fa-check"></i> Update Category';
+  $('#sst-cat-cancel-edit').style.display = '';
+  $('#sst-cat-name').focus();
+}
+
+function _sstCancelEditCategory() {
+  _sstEditingCatId = null;
+  $('#sst-cat-name').value = '';
+  $('#sst-cat-desc').value = '';
+  $('#sst-cat-add').innerHTML = '<i class="fa fa-plus"></i> Add Category';
+  $('#sst-cat-cancel-edit').style.display = 'none';
+}
+
+// ── Generic confirm dialog (custom, replaces window.confirm) ───────────────
+let _sstConfirmResolve = null;
+
+function _sstConfirm(message, title = 'Are you sure?') {
+  return new Promise(resolve => {
+    _sstConfirmResolve = resolve;
+    $('#sst-confirm-title').textContent = title;
+    $('#sst-confirm-msg').textContent   = message;
+    $('#sst-confirm-modal').style.display = 'flex';
+  });
+}
+
+function _sstConfirmClose(result) {
+  $('#sst-confirm-modal').style.display = 'none';
+  if (_sstConfirmResolve) { _sstConfirmResolve(result); _sstConfirmResolve = null; }
+}
+
+$('#sst-confirm-ok')?.addEventListener('click',     () => _sstConfirmClose(true));
+$('#sst-confirm-cancel')?.addEventListener('click', () => _sstConfirmClose(false));
+$('#sst-confirm-close')?.addEventListener('click',  () => _sstConfirmClose(false));
+$('#sst-confirm-modal')?.addEventListener('click', e => { if (e.target === e.currentTarget) _sstConfirmClose(false); });
+
+async function _sstDeleteCategory(id) {
+  const cat = _supCfg.categories.find(c => c.id === id);
+  const ok = await _sstConfirm(`Delete category "${cat?.name ?? ''}"? This cannot be undone.`, 'Delete Category');
+  if (!ok) return;
+  const res = await API.deleteSupplierCategory(id);
+  if (res.status !== 200 && res.status !== 204) {
+    toast(res.body?.message || 'Failed to delete category', 'error');
+    return;
+  }
+  _supCfg.categories = _supCfg.categories.filter(c => c.id !== id);
+  if (_sstEditingCatId === id) _sstCancelEditCategory();
+  _sstRenderCategoryList();
+  toast('Category deleted', 'success');
+}
+
+function _sstSyncTabs() {
+  const active = $('#sup-settings-nav .pfs-opt-tab.active')?.dataset.sstTab || 'general';
+  $('#sst-panel-general').style.display  = active === 'general'  ? '' : 'none';
+  $('#sst-panel-category').style.display = active === 'category' ? '' : 'none';
+}
+
+async function _openSupplierSettingsModal() {
+  const modal = $('#sup-settings-modal');
+  if (!modal) return;
+  await _loadSupplierConfig();
+  $('#sst-req-phone').checked   = _supCfg.requirePhone;
+  $('#sst-req-email').checked   = _supCfg.requireEmail;
+  $('#sst-req-address').checked = _supCfg.requireAddress;
+  _sstCancelEditCategory();
+  _sstRenderCategoryList();
+  $$('#sup-settings-nav .pfs-opt-tab').forEach(b => b.classList.toggle('active', b.dataset.sstTab === 'general'));
+  _sstSyncTabs();
+  modal.style.display = 'flex';
+}
+
+$('#sup-settings-btn')?.addEventListener('click', _openSupplierSettingsModal);
+
+$('#sup-settings-nav')?.addEventListener('click', e => {
+  const btn = e.target.closest('.pfs-opt-tab[data-sst-tab]');
+  if (!btn) return;
+  $$('#sup-settings-nav .pfs-opt-tab').forEach(b => b.classList.toggle('active', b === btn));
+  _sstSyncTabs();
+});
+
+$('#sup-settings-modal')?.addEventListener('click', e => { if (e.target === e.currentTarget) $('#sup-settings-modal').style.display = 'none'; });
+$('#sup-settings-close')?.addEventListener('click', () => { $('#sup-settings-modal').style.display = 'none'; });
+$('#sup-settings-cancel')?.addEventListener('click', () => { $('#sup-settings-modal').style.display = 'none'; });
+
+$('#sst-cat-add')?.addEventListener('click', async () => {
+  const name = $('#sst-cat-name')?.value.trim();
+  const description = $('#sst-cat-desc')?.value.trim() || null;
+  if (!name) { toast('Category name is required', 'error'); $('#sst-cat-name')?.focus(); return; }
+
+  const isEdit = !!_sstEditingCatId;
+  const btn = $('#sst-cat-add');
+  btn.disabled = true; btn.innerHTML = `<i class="fa fa-spinner fa-spin"></i> ${isEdit ? 'Updating…' : 'Adding…'}`;
+  const res = isEdit
+    ? await API.updateSupplierCategory(_sstEditingCatId, { name, description })
+    : await API.createSupplierCategory({ name, description });
+  btn.disabled = false;
+
+  if ((isEdit && res.status !== 200) || (!isEdit && res.status !== 201)) {
+    btn.innerHTML = isEdit ? '<i class="fa fa-check"></i> Update Category' : '<i class="fa fa-plus"></i> Add Category';
+    toast(res.body?.errors?.name?.[0] || res.body?.message || `Failed to ${isEdit ? 'update' : 'add'} category`, 'error');
+    return;
+  }
+
+  const c = res.body?.data;
+  if (isEdit) {
+    const idx = _supCfg.categories.findIndex(x => x.id === _sstEditingCatId);
+    if (idx !== -1 && c) _supCfg.categories[idx] = c;
+  } else if (c) {
+    _supCfg.categories.push(c);
+  }
+  _supCfg.categories.sort((a, b) => a.name.localeCompare(b.name));
+  _sstRenderCategoryList();
+  toast(`Category "${c?.name ?? name}" ${isEdit ? 'updated' : 'added'}`, 'success');
+  _sstCancelEditCategory();
+});
+
+$('#sst-cat-cancel-edit')?.addEventListener('click', _sstCancelEditCategory);
+
+$('#sup-settings-save')?.addEventListener('click', async () => {
+  const btn = $('#sup-settings-save');
+  btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
+  const res = await API.settingsUpdate({
+    supplier_require_phone:   $('#sst-req-phone').checked,
+    supplier_require_email:   $('#sst-req-email').checked,
+    supplier_require_address: $('#sst-req-address').checked,
+  });
+  btn.disabled = false; btn.innerHTML = '<i class="fa fa-check"></i> Save';
+  if (res.status !== 200) { toast('Failed to save settings', 'error'); return; }
+  _supCfg.requirePhone   = $('#sst-req-phone').checked;
+  _supCfg.requireEmail   = $('#sst-req-email').checked;
+  _supCfg.requireAddress = $('#sst-req-address').checked;
+  _applySupplierFieldRequirements();
+  $('#sup-settings-modal').style.display = 'none';
+  toast('Supplier settings saved', 'success');
 });
 
 // ── Purchase Orders ───────────────────────────────────────────────────────
@@ -16100,6 +16339,222 @@ $('#cust-csv-import-btn')?.addEventListener('click', async () => {
   if (imported > 0) _cmLoadList();
 });
 // ── End CSV Customer Import ──────────────────────────────────────────────────
+
+// ── CSV Supplier Import ──────────────────────────────────────────────────────
+const _SUP_CSV_SAMPLE = [
+  'name,contact_name,phone,email,address,notes,category',
+  'Acme Distributors,John Silva,0771234567,john@acme.com,"123 Main St, Colombo",Preferred vendor,Wholesale',
+  'Global Traders,Nimal Perera,0719876543,nimal@globaltraders.com,"45 Galle Rd, Kandy",,Local',
+  'Sunrise Imports,,0765555555,,,"Pays on 30-day terms",Import',
+].join('\n');
+
+// Column name aliases → canonical key
+const _SUP_CSV_COL_MAP = {
+  'name': 'name', 'supplier name': 'name', 'supplier': 'name', 'company': 'name', 'company name': 'name',
+  'contact_name': 'contact_name', 'contact': 'contact_name', 'contact name': 'contact_name', 'contact person': 'contact_name',
+  'phone': 'phone', 'phone number': 'phone', 'mobile': 'phone', 'contact number': 'phone',
+  'email': 'email', 'email address': 'email',
+  'address': 'address',
+  'notes': 'notes', 'note': 'notes', 'remarks': 'notes',
+  'category': 'category', 'supplier category': 'category',
+};
+
+let _supCsvParsedRows = [];
+let _supCsvValidRows  = [];
+
+function _supCsvParseFile(text) {
+  const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').filter(l => l.trim());
+  if (lines.length < 2) return { headers: [], rows: [], error: 'File must have a header row and at least one data row.' };
+
+  const headers = _csvParseLine(lines[0]).map(h => h.trim().toLowerCase());
+  const colMap  = {};
+  headers.forEach((h, i) => { if (_SUP_CSV_COL_MAP[h]) colMap[_SUP_CSV_COL_MAP[h]] = i; });
+
+  if (colMap['name'] === undefined) {
+    return { headers, rows: [], error: 'Missing required column: "name" (or "supplier", "company").' };
+  }
+
+  const rows = [];
+  for (let i = 1; i < lines.length; i++) {
+    const cells = _csvParseLine(lines[i]);
+    const row   = {};
+    Object.entries(colMap).forEach(([key, ci]) => { row[key] = (cells[ci] || '').trim(); });
+    row._rowNum = i + 1;
+
+    // Validate
+    row._errors = [];
+    if (!row.name) row._errors.push('Name is required');
+    if (_supCfg.requirePhone   && !row.phone)   row._errors.push('Phone number is required');
+    if (_supCfg.requireEmail   && !row.email)   row._errors.push('Email is required');
+    if (_supCfg.requireAddress && !row.address) row._errors.push('Address is required');
+    if (row.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email)) row._errors.push('Invalid email');
+
+    rows.push(row);
+  }
+  return { headers: Object.keys(colMap), rows };
+}
+
+function _supCsvSetStep(n) {
+  [1, 2, 3].forEach(i => {
+    const body = $(`#sup-csv-step-${i}`);
+    const ind  = $(`#sup-csv-step-ind-${i}`);
+    if (body) body.style.display = i === n ? 'flex' : 'none';
+    if (ind)  {
+      ind.classList.toggle('active', i === n);
+      ind.classList.toggle('done',   i < n);
+    }
+  });
+}
+
+function _supCsvShowPreview(rows) {
+  const valid = rows.filter(r => !r._errors.length);
+  const bad   = rows.filter(r => r._errors.length);
+  _supCsvValidRows = valid;
+
+  // Summary badges
+  const sumEl = $('#sup-csv-preview-summary');
+  sumEl.innerHTML = `
+    <b>${rows.length} row${rows.length !== 1 ? 's' : ''} found</b>
+    <span class="csv-preview-badge ok"><i class="fa fa-circle-check"></i> ${valid.length} valid</span>
+    ${bad.length ? `<span class="csv-preview-badge error"><i class="fa fa-triangle-exclamation"></i> ${bad.length} with errors</span>` : ''}
+    ${rows.length > 100 ? `<span class="csv-preview-badge warn"><i class="fa fa-eye"></i> Showing first 100 rows</span>` : ''}`;
+
+  // Table
+  const display = rows.slice(0, 100);
+  $('#sup-csv-preview-thead').innerHTML = `<tr>
+    <th>#</th><th>Name</th><th>Contact</th><th>Phone</th><th>Email</th><th>Address</th>
+    <th>Category</th><th>Status</th>
+  </tr>`;
+  $('#sup-csv-preview-tbody').innerHTML = display.map(r => {
+    const isErr = r._errors.length > 0;
+    const status = isErr
+      ? `<span class="csv-row-error-msg"><i class="fa fa-triangle-exclamation"></i> ${escHtml(r._errors.join('; '))}</span>`
+      : `<span style="color:#10b981;font-size:11px"><i class="fa fa-circle-check"></i> OK</span>`;
+    return `<tr class="${isErr ? 'csv-row-error' : ''}">
+      <td style="color:var(--text-muted)">${r._rowNum}</td>
+      <td><strong>${escHtml(r.name || '—')}</strong></td>
+      <td style="color:var(--text-muted)">${escHtml(r.contact_name || '—')}</td>
+      <td style="color:var(--text-muted)">${escHtml(r.phone || '—')}</td>
+      <td style="color:var(--text-muted)">${escHtml(r.email || '—')}</td>
+      <td style="color:var(--text-muted)">${escHtml(r.address || '—')}</td>
+      <td>${escHtml(r.category || '—')}</td>
+      <td>${status}</td>
+    </tr>`;
+  }).join('');
+
+  $('#sup-csv-import-count').textContent = valid.length;
+  $('#sup-csv-import-btn').disabled = valid.length === 0;
+  _supCsvSetStep(2);
+}
+
+function _supCsvReset() {
+  _supCsvParsedRows = [];
+  _supCsvValidRows  = [];
+  $('#sup-csv-file-input').value = '';
+  _supCsvSetStep(1);
+}
+
+async function _supCsvOpenModal() {
+  await _loadSupplierConfig();
+  _supCsvReset();
+  $('#sup-csv-import-modal').style.display = 'flex';
+}
+
+function _supCsvCloseModal() {
+  $('#sup-csv-import-modal').style.display = 'none';
+  _supCsvReset();
+}
+
+function _supCsvDownloadSample() {
+  const blob = new Blob([_SUP_CSV_SAMPLE], { type: 'text/csv' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = 'suppliers-sample.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function _supCsvHandleFile(file) {
+  if (!file || !file.name.match(/\.csv$/i)) { toast('Please select a .csv file', 'error'); return; }
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const { rows, error } = _supCsvParseFile(e.target.result);
+    if (error) { toast(error, 'error'); return; }
+    if (rows.length > 500) { toast(`CSV has ${rows.length} rows. Only the first 500 will be imported.`, 'error'); }
+    _supCsvParsedRows = rows.slice(0, 500);
+    _supCsvShowPreview(_supCsvParsedRows);
+  };
+  reader.readAsText(file);
+}
+
+// Drag & drop
+const _supCsvDz = $('#sup-csv-dropzone');
+if (_supCsvDz) {
+  _supCsvDz.addEventListener('dragover',  e => { e.preventDefault(); _supCsvDz.classList.add('drag-over'); });
+  _supCsvDz.addEventListener('dragleave', () => _supCsvDz.classList.remove('drag-over'));
+  _supCsvDz.addEventListener('drop', e => {
+    e.preventDefault(); _supCsvDz.classList.remove('drag-over');
+    _supCsvHandleFile(e.dataTransfer.files[0]);
+  });
+}
+$('#sup-csv-file-input')?.addEventListener('change', e => _supCsvHandleFile(e.target.files[0]));
+$('#sup-csv-download-sample')?.addEventListener('click', _supCsvDownloadSample);
+$('#sup-csv-import-close')?.addEventListener('click',  _supCsvCloseModal);
+$('#sup-csv-import-modal')?.addEventListener('click',  e => { if (e.target === e.currentTarget) _supCsvCloseModal(); });
+$('#sup-csv-back-btn')?.addEventListener('click',      _supCsvReset);
+$('#sup-csv-done-btn')?.addEventListener('click',      _supCsvCloseModal);
+$('#sup-csv-import-more-btn')?.addEventListener('click', _supCsvReset);
+$('#sst-import-csv-btn')?.addEventListener('click', _supCsvOpenModal);
+
+$('#sup-csv-import-btn')?.addEventListener('click', async () => {
+  if (!_supCsvValidRows.length) return;
+  const btn = $('#sup-csv-import-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Importing…';
+
+  const payload = _supCsvValidRows.map(r => ({
+    name:         r.name,
+    contact_name: r.contact_name || undefined,
+    phone:        r.phone   || undefined,
+    email:        r.email   || undefined,
+    address:      r.address || undefined,
+    notes:        r.notes   || undefined,
+    category:     r.category || undefined,
+  }));
+
+  const res = await API.importSuppliers(payload);
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fa fa-file-import"></i> Import Suppliers';
+
+  if (res.status !== 200) { toast(res.body?.message || 'Import failed', 'error'); return; }
+
+  const { imported, skipped, errors } = res.body;
+  const resSum = $('#sup-csv-result-summary');
+  resSum.innerHTML = `
+    <div class="csv-result-stat">
+      <div class="csv-result-stat-num green">${imported}</div>
+      <div class="csv-result-stat-label"><i class="fa fa-circle-check"></i> Suppliers imported</div>
+    </div>
+    <div class="csv-result-stat">
+      <div class="csv-result-stat-num ${skipped > 0 ? 'red' : ''}">${skipped}</div>
+      <div class="csv-result-stat-label"><i class="fa fa-triangle-exclamation"></i> Rows skipped</div>
+    </div>`;
+
+  const errWrap = $('#sup-csv-result-errors');
+  if (errors && errors.length) {
+    errWrap.style.display = '';
+    $('#sup-csv-result-errors-list').innerHTML = errors.map(e =>
+      `<div class="csv-result-error-row"><b>Row ${e.row}${e.name ? ' — ' + escHtml(e.name) : ''}:</b><span>${escHtml(e.message)}</span></div>`
+    ).join('');
+  } else {
+    errWrap.style.display = 'none';
+  }
+
+  _supCsvSetStep(3);
+  if (imported > 0) _supLoad();
+});
+// ── End CSV Supplier Import ──────────────────────────────────────────────────
 
 // ── End cart keyboard navigation ────────────────────────────────────────────
 

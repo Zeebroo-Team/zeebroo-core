@@ -29,6 +29,7 @@ use Modules\Pos\Http\Controllers\Api\PosSettingsApiController;
 use Modules\Pos\Http\Controllers\Api\PosCustomerApiController;
 use Modules\Pos\Http\Controllers\Api\PosCustomerCategoryApiController;
 use Modules\Pos\Http\Controllers\Api\PosSupplierApiController;
+use Modules\Pos\Http\Controllers\Api\PosSupplierCategoryApiController;
 use Modules\Pos\Http\Controllers\Api\PosReturnReasonsApiController;
 use Modules\Pos\Http\Controllers\Api\PosGoodsReceiveNoteApiController;
 use Modules\Pos\Http\Controllers\Api\PosGrnPermissionApiController;
@@ -200,9 +201,15 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
 
     Route::get('suppliers', [PosSupplierApiController::class, 'index'])->name('suppliers.index');
     Route::post('suppliers', [PosSupplierApiController::class, 'store'])->name('suppliers.store');
+    Route::post('suppliers/import', [PosSupplierApiController::class, 'import'])->name('suppliers.import');
     Route::get('suppliers/{supplier}', [PosSupplierApiController::class, 'show'])->name('suppliers.show');
     Route::patch('suppliers/{supplier}', [PosSupplierApiController::class, 'update'])->name('suppliers.update');
     Route::delete('suppliers/{supplier}', [PosSupplierApiController::class, 'destroy'])->name('suppliers.destroy');
+
+    Route::get('supplier-categories', [PosSupplierCategoryApiController::class, 'index'])->name('supplier-categories.index');
+    Route::post('supplier-categories', [PosSupplierCategoryApiController::class, 'store'])->name('supplier-categories.store');
+    Route::patch('supplier-categories/{category}', [PosSupplierCategoryApiController::class, 'update'])->name('supplier-categories.update');
+    Route::delete('supplier-categories/{category}', [PosSupplierCategoryApiController::class, 'destroy'])->name('supplier-categories.destroy');
 
     Route::get('purchase-orders', [PosPurchaseOrderApiController::class, 'index'])->name('purchase-orders.index');
     Route::post('purchase-orders', [PosPurchaseOrderApiController::class, 'store'])->name('purchase-orders.store');
