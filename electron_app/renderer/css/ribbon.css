@@ -4403,12 +4403,26 @@ body.dark .sal-void-notice { color: #f87171; background: rgba(239,68,68,.12); bo
 .dm-card:not(.dm-card--on) .dm-card-status { color: var(--text-muted); }
 /* ── End POS Settings Modal ───────────────────────────── */
 
+.cat-filter-wrap {
+  display: flex; align-items: stretch; gap: 0;
+  border-bottom: 1px solid var(--border); flex-shrink: 0; background: var(--surface);
+}
+.cat-scroll-btn {
+  flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+  width: 26px; border: none; background: var(--surface); color: var(--text-muted);
+  cursor: pointer; font-size: 11px; transition: color .12s;
+}
+.cat-scroll-btn:hover:not(:disabled) { color: var(--accent); }
+.cat-scroll-btn:disabled { opacity: .25; cursor: default; }
+
 #category-filter {
   display: flex; gap: 4px; overflow-x: auto; padding: 7px 12px;
-  border-bottom: 1px solid var(--border); flex-shrink: 0; background: var(--surface);
-  scrollbar-width: none;
+  flex: 1; min-width: 0; background: var(--surface);
+  scrollbar-width: thin;
 }
-#category-filter::-webkit-scrollbar { display: none; }
+#category-filter::-webkit-scrollbar { height: 6px; }
+#category-filter::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+#category-filter::-webkit-scrollbar-track { background: transparent; }
 
 .cat-chip {
   padding: 3px 12px; border-radius: 20px; border: 1px solid var(--border);
@@ -12869,10 +12883,12 @@ textarea.rt-form-input { resize: vertical; }
 #service-search-bar input:focus { border-color: var(--accent); }
 #service-category-filter {
   display: flex; gap: 4px; overflow-x: auto; padding: 7px 12px;
-  border-bottom: 1px solid var(--border); flex-shrink: 0; background: var(--surface);
-  scrollbar-width: none;
+  flex: 1; min-width: 0; background: var(--surface);
+  scrollbar-width: thin;
 }
-#service-category-filter::-webkit-scrollbar { display: none; }
+#service-category-filter::-webkit-scrollbar { height: 6px; }
+#service-category-filter::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+#service-category-filter::-webkit-scrollbar-track { background: transparent; }
 #service-grid {
   flex: 1; overflow-y: auto; padding: 12px;
   display: grid; grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); gap: 10px;
