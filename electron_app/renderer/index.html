@@ -2044,9 +2044,11 @@
             <input type="text" id="sal-search" placeholder="Search sales, customers…">
           </div>
         </div>
-        <div class="sal-kpi-bar" id="sal-kpi-bar" style="display:none"></div>
-        <div class="sal-table-wrap" id="sal-table-wrap">
-          <div class="finance-loading"><i class="fa fa-spinner fa-spin"></i> Loading sales…</div>
+        <div class="sal-content-card">
+          <div class="sal-kpi-bar" id="sal-kpi-bar" style="display:none"></div>
+          <div class="sal-table-wrap" id="sal-table-wrap">
+            <div class="finance-loading"><i class="fa fa-spinner fa-spin"></i> Loading sales…</div>
+          </div>
         </div>
         <div class="finance-footer"><span id="sal-count">—</span></div>
       </div>
@@ -2077,8 +2079,10 @@
           <button class="po-btn-ghost" id="sal-credits-refresh" style="margin-left:auto"><i class="fa fa-arrows-rotate"></i> Refresh</button>
         </div>
         <div id="sal-credits-kpi" class="pc-kpi-bar" style="display:none"></div>
-        <div id="sal-credits-body" style="flex:1;overflow-y:auto;padding:16px 20px">
-          <div class="finance-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</div>
+        <div class="sal-content-card">
+          <div id="sal-credits-body" style="flex:1;overflow-y:auto;padding:16px 20px">
+            <div class="finance-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</div>
+          </div>
         </div>
       </div>
 
@@ -2113,20 +2117,22 @@
           </div>
         </div>
 
-        <!-- KPI summary -->
-        <div class="sal-kpi-bar" id="sal-hist-kpi" style="display:none"></div>
+        <div class="sal-content-card">
+          <!-- KPI summary -->
+          <div class="sal-kpi-bar" id="sal-hist-kpi" style="display:none"></div>
 
-        <!-- Revenue chart -->
-        <div class="sal-chart-section">
-          <div class="sal-chart-header">
-            <span class="sal-chart-label" id="sal-hist-chart-label">Revenue trend</span>
+          <!-- Revenue chart -->
+          <div class="sal-chart-section">
+            <div class="sal-chart-header">
+              <span class="sal-chart-label" id="sal-hist-chart-label">Revenue trend</span>
+            </div>
+            <div id="sal-hist-chart" class="sal-chart-area"></div>
           </div>
-          <div id="sal-hist-chart" class="sal-chart-area"></div>
-        </div>
 
-        <!-- Paginated table -->
-        <div class="sal-hist-table-wrap" id="sal-hist-table-wrap">
-          <div class="finance-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</div>
+          <!-- Paginated table -->
+          <div class="sal-hist-table-wrap" id="sal-hist-table-wrap">
+            <div class="finance-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</div>
+          </div>
         </div>
         <div class="sal-pagination" id="sal-hist-pagination" style="display:none">
           <button class="sal-page-btn" id="sal-hist-prev"><i class="fa fa-chevron-left"></i> Prev</button>
@@ -2156,9 +2162,11 @@
         </div>
 
         <!-- List -->
-        <div id="qt-list-view" style="flex:1;overflow-y:auto">
-          <div class="qt-loading" id="qt-list-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</div>
-          <div id="qt-list-body" style="padding:16px"></div>
+        <div id="qt-list-view" class="sal-content-card">
+          <div class="qt-list-scroll" style="flex:1;overflow-y:auto">
+            <div class="qt-loading" id="qt-list-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</div>
+            <div id="qt-list-body" style="padding:16px"></div>
+          </div>
         </div>
 
         <!-- Detail -->
@@ -2262,9 +2270,11 @@
         </div>
 
         <!-- List -->
-        <div id="sinv-list-view" style="flex:1;overflow-y:auto">
-          <div class="qt-loading" id="sinv-list-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</div>
-          <div id="sinv-list-body" style="padding:16px 20px"></div>
+        <div id="sinv-list-view" class="sal-content-card">
+          <div class="sinv-list-scroll" style="flex:1;overflow-y:auto">
+            <div class="qt-loading" id="sinv-list-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</div>
+            <div id="sinv-list-body" style="padding:16px 20px"></div>
+          </div>
         </div>
 
         <!-- Detail -->
@@ -2380,8 +2390,10 @@
             <button class="qt-act-btn accent" id="so-new-btn" style="margin-left:auto"><i class="fa fa-plus"></i> New Order</button>
             <button class="qt-act-btn" id="so-settings-btn" title="Sales Order Settings"><i class="fa fa-gear"></i></button>
           </div>
-          <div id="so-list-loading" style="display:none;padding:40px;text-align:center;color:var(--muted)"><i class="fa fa-spinner fa-spin"></i> Loading…</div>
-          <div id="so-list-body" style="flex:1;overflow-y:auto;padding:0 0 16px"></div>
+          <div class="sal-content-card">
+            <div id="so-list-loading" style="display:none;padding:40px;text-align:center;color:var(--muted)"><i class="fa fa-spinner fa-spin"></i> Loading…</div>
+            <div id="so-list-body" style="flex:1;overflow-y:auto;padding:16px 20px"></div>
+          </div>
         </div>
 
         <!-- Detail view -->
