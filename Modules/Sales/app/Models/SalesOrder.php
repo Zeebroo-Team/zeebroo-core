@@ -25,6 +25,7 @@ class SalesOrder extends Model
         'order_date',
         'expected_delivery_date',
         'status',
+        'invoice_id',
         'notes',
         'subtotal',
         'discount_amount',
@@ -54,6 +55,11 @@ class SalesOrder extends Model
     public function items(): HasMany
     {
         return $this->hasMany(SalesOrderItem::class)->orderBy('sort_order');
+    }
+
+    public function invoice(): BelongsTo
+    {
+        return $this->belongsTo(Invoice::class);
     }
 
     public function isEditable(): bool

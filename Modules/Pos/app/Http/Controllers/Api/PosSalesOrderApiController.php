@@ -79,10 +79,17 @@ class PosSalesOrderApiController extends Controller
     {
         $business = $this->businessOrAbort($request);
         abort_unless((int) $salesOrder->business_id === (int) $business->id, 404);
+        abort_unless($salesOrder->status === SalesOrder::STATUS_PENDING, 422, 'Only pending orders can be confirmed.');
 
-        $this->orders->confirm($salesOrder);
+        $order = $this->orders->confirm($salesOrder);
+        $order->load('invoice');
 
-        return response()->json(['message' => 'Order confirmed.', 'status' => $salesOrder->fresh()->status]);
+        return response()->json([
+            'message'        => 'Order confirmed and converted to invoice ' . ($order->invoice?->invoice_number ?? '') . '.',
+            'status'         => $order->status,
+            'invoice_id'     => $order->invoice_id,
+            'invoice_number' => $order->invoice?->invoice_number,
+        ]);
     }
 
     public function process(Request $request, SalesOrder $salesOrder): JsonResponse
@@ -159,6 +166,8 @@ class PosSalesOrderApiController extends Controller
             'tax_amount'      => round((float) $o->tax_amount, 2),
             'notes'           => $o->notes,
             'is_editable'     => $o->isEditable(),
+            'invoice_id'      => $o->invoice_id,
+            'invoice_number'  => $o->invoice?->invoice_number,
             'items'           => $o->items->map(fn ($i) => [
                 'id'          => (int) $i->id,
                 'product_id'  => $i->product_id,
