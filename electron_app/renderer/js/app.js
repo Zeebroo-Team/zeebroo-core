@@ -17395,7 +17395,6 @@ $('#psw-tax-enabled')?.addEventListener('change', _pswToggleTaxRate);
 // ── Invoice Setup ────────────────────────────────────────────────────────
 const INV_TEMPLATES = [
   { id: 'classic',   name: 'Classic',     desc: 'Traditional bordered table with letterhead', swatch: '#1d4ed8', accent: '#1d4ed8' },
-  { id: 'sidebar',   name: 'Side Panel',  desc: 'Dark accent column left, content right',     swatch: '#0f172a', accent: '#0f172a' },
   { id: 'bold',      name: 'Bold Banner', desc: 'Full-width colour header, large number',      swatch: '#e11d48', accent: '#e11d48' },
   { id: 'minimal',   name: 'Minimal',     desc: 'Pure typography, no fills or colour blocks',  swatch: '#374151', accent: '#374151' },
   { id: 'compact',   name: 'Compact',     desc: 'Card-style info grid with teal accent',       swatch: '#0891b2', accent: '#0891b2' },
