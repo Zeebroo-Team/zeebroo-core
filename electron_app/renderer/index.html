@@ -5313,6 +5313,10 @@
                 <input type="text" id="svc-form-name" class="po-field-input" placeholder="e.g. Deep Cleaning, Hair Cut…" autocomplete="off" maxlength="255">
               </div>
               <div class="po-field">
+                <label class="po-field-label">Service Barcode</label>
+                <input type="text" id="svc-form-barcode" class="po-field-input" placeholder="Scan or enter barcode…" autocomplete="off" maxlength="120">
+              </div>
+              <div class="po-field">
                 <label class="po-field-label">Description</label>
                 <textarea id="svc-form-desc" class="po-field-input" rows="4" placeholder="Short description of the service…" style="resize:vertical;min-height:80px"></textarea>
               </div>
@@ -5331,6 +5335,20 @@
                 <div class="po-field">
                   <label class="po-field-label">Duration (minutes)</label>
                   <input type="number" id="svc-form-duration" class="po-field-input" placeholder="e.g. 60" min="0" step="1">
+                </div>
+                <div class="po-field">
+                  <label class="po-field-label">Cost Price</label>
+                  <div class="svc-form-prefix-wrap">
+                    <span class="svc-form-prefix" id="svc-form-currency-cost">—</span>
+                    <input type="number" id="svc-form-cost-price" class="po-field-input svc-form-input--prefix" placeholder="0.00" min="0" step="0.01">
+                  </div>
+                </div>
+                <div class="po-field">
+                  <label class="po-field-label">Wholesale Price</label>
+                  <div class="svc-form-prefix-wrap">
+                    <span class="svc-form-prefix" id="svc-form-currency-wholesale">—</span>
+                    <input type="number" id="svc-form-wholesale-price" class="po-field-input svc-form-input--prefix" placeholder="0.00" min="0" step="0.01">
+                  </div>
                 </div>
               </div>
             </div>

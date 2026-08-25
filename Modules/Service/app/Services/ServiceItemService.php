@@ -45,8 +45,11 @@ class ServiceItemService
         $item = ServiceItem::create([
             'business_id'           => $business->id,
             'name'                  => $data['name'],
+            'barcode'               => filled($data['barcode'] ?? '') ? $data['barcode'] : null,
             'description'           => filled($data['description'] ?? '') ? $data['description'] : null,
             'price'                 => isset($data['price']) && $data['price'] !== '' ? (float) $data['price'] : null,
+            'cost_price'            => isset($data['cost_price']) && $data['cost_price'] !== '' ? (float) $data['cost_price'] : null,
+            'wholesale_price'       => isset($data['wholesale_price']) && $data['wholesale_price'] !== '' ? (float) $data['wholesale_price'] : null,
             'duration_minutes'      => isset($data['duration_minutes']) && $data['duration_minutes'] !== '' ? (int) $data['duration_minutes'] : null,
             'is_active'             => (bool) ($data['is_active'] ?? true),
             'is_featured'           => (bool) ($data['is_featured'] ?? false),
@@ -69,8 +72,11 @@ class ServiceItemService
 
         $item->update([
             'name'                  => $data['name'],
+            'barcode'               => filled($data['barcode'] ?? '') ? $data['barcode'] : null,
             'description'           => filled($data['description'] ?? '') ? $data['description'] : null,
             'price'                 => isset($data['price']) && $data['price'] !== '' ? (float) $data['price'] : null,
+            'cost_price'            => isset($data['cost_price']) && $data['cost_price'] !== '' ? (float) $data['cost_price'] : null,
+            'wholesale_price'       => isset($data['wholesale_price']) && $data['wholesale_price'] !== '' ? (float) $data['wholesale_price'] : null,
             'duration_minutes'      => isset($data['duration_minutes']) && $data['duration_minutes'] !== '' ? (int) $data['duration_minutes'] : null,
             'is_active'             => (bool) ($data['is_active'] ?? true),
             'is_featured'           => (bool) ($data['is_featured'] ?? $item->is_featured),

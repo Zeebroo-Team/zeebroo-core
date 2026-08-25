@@ -177,8 +177,11 @@ class PosServiceApiController extends Controller
 
         $validated = $request->validate([
             'name'                       => ['required', 'string', 'max:255'],
+            'barcode'                    => ['nullable', 'string', 'max:120'],
             'description'                => ['nullable', 'string', 'max:2000'],
             'price'                      => ['required', 'numeric', 'min:0'],
+            'cost_price'                 => ['nullable', 'numeric', 'min:0'],
+            'wholesale_price'            => ['nullable', 'numeric', 'min:0'],
             'duration_minutes'           => ['nullable', 'integer', 'min:0'],
             'is_active'                  => ['boolean'],
             'is_featured'                => ['boolean'],
@@ -200,8 +203,11 @@ class PosServiceApiController extends Controller
 
         $item = $this->itemService->create($business, [
             'name'                  => $validated['name'],
+            'barcode'               => $validated['barcode'] ?? null,
             'description'           => $validated['description'] ?? null,
             'price'                 => $validated['price'],
+            'cost_price'            => $validated['cost_price'] ?? null,
+            'wholesale_price'       => $validated['wholesale_price'] ?? null,
             'duration_minutes'      => $validated['duration_minutes'] ?? null,
             'is_active'             => $validated['is_active'] ?? true,
             'is_featured'           => $validated['is_featured'] ?? false,
@@ -231,8 +237,11 @@ class PosServiceApiController extends Controller
 
         $validated = $request->validate([
             'name'                       => ['required', 'string', 'max:255'],
+            'barcode'                    => ['nullable', 'string', 'max:120'],
             'description'                => ['nullable', 'string', 'max:2000'],
             'price'                      => ['required', 'numeric', 'min:0'],
+            'cost_price'                 => ['nullable', 'numeric', 'min:0'],
+            'wholesale_price'            => ['nullable', 'numeric', 'min:0'],
             'duration_minutes'           => ['nullable', 'integer', 'min:0'],
             'is_active'                  => ['boolean'],
             'is_featured'                => ['boolean'],
@@ -254,8 +263,11 @@ class PosServiceApiController extends Controller
 
         $updateData = [
             'name'                  => $validated['name'],
+            'barcode'               => $validated['barcode'] ?? null,
             'description'           => $validated['description'] ?? null,
             'price'                 => $validated['price'],
+            'cost_price'            => $validated['cost_price'] ?? null,
+            'wholesale_price'       => $validated['wholesale_price'] ?? null,
             'duration_minutes'      => $validated['duration_minutes'] ?? null,
             'is_active'             => $validated['is_active'] ?? $serviceItem->is_active,
             'is_featured'           => $validated['is_featured'] ?? $serviceItem->is_featured,
@@ -358,8 +370,11 @@ class PosServiceApiController extends Controller
             'data' => [
                 'id'                    => $serviceItem->id,
                 'name'                  => $serviceItem->name,
+                'barcode'               => $serviceItem->barcode,
                 'description'           => $serviceItem->description,
                 'price'                 => (float) $serviceItem->price,
+                'cost_price'            => $serviceItem->cost_price !== null ? (float) $serviceItem->cost_price : null,
+                'wholesale_price'       => $serviceItem->wholesale_price !== null ? (float) $serviceItem->wholesale_price : null,
                 'duration_minutes'      => $serviceItem->duration_minutes,
                 'duration_label'        => $serviceItem->durationLabel(),
                 'is_active'             => $serviceItem->is_active,
@@ -459,8 +474,11 @@ class PosServiceApiController extends Controller
         return [
             'id'                   => $i->id,
             'name'                 => $i->name,
+            'barcode'              => $i->barcode,
             'description'          => $i->description,
             'price'                => (float) $i->price,
+            'cost_price'           => $i->cost_price !== null ? (float) $i->cost_price : null,
+            'wholesale_price'      => $i->wholesale_price !== null ? (float) $i->wholesale_price : null,
             'duration_label'       => $i->durationLabel(),
             'is_active'            => $i->is_active,
             'is_featured'          => (bool) $i->is_featured,

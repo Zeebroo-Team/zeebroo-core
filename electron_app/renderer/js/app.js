@@ -30478,13 +30478,18 @@ function _svcResetModal() {
   $('#svc-cat-input').value = '';
   $('#svc-emp-input').value = '';
   $('#svc-form-name').value     = '';
+  $('#svc-form-barcode').value  = '';
   $('#svc-form-desc').value     = '';
   $('#svc-form-price').value    = '';
+  $('#svc-form-cost-price').value      = '';
+  $('#svc-form-wholesale-price').value = '';
   $('#svc-form-duration').value = '';
   $('#svc-form-prod-q').value   = '';
   $('#svc-form-prod-results').style.display = 'none';
   $('#svc-form-prod-lines').innerHTML = '';
   $('#svc-form-currency').textContent = state.currency || '';
+  $('#svc-form-currency-cost').textContent = state.currency || '';
+  $('#svc-form-currency-wholesale').textContent = state.currency || '';
   $('#svc-form-active').checked    = true;
   $('#svc-form-featured').checked  = false;
   $('#svc-form-warranty').checked  = false;
@@ -30528,8 +30533,11 @@ async function openEditServiceModal(id) {
 
   const d = detailRes.body.data;
   $('#svc-form-name').value     = d.name || '';
+  $('#svc-form-barcode').value  = d.barcode || '';
   $('#svc-form-desc').value     = d.description || '';
   $('#svc-form-price').value    = d.price != null ? d.price : '';
+  $('#svc-form-cost-price').value      = d.cost_price != null ? d.cost_price : '';
+  $('#svc-form-wholesale-price').value = d.wholesale_price != null ? d.wholesale_price : '';
   $('#svc-form-duration').value = d.duration_minutes || '';
   $('#svc-form-active').checked   = !!d.is_active;
   $('#svc-form-featured').checked = !!d.is_featured;
@@ -30688,10 +30696,16 @@ $('#svc-form-submit')?.addEventListener('click', async () => {
   btn.disabled = true;
   btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
 
+  const costPrice      = $('#svc-form-cost-price').value.trim();
+  const wholesalePrice = $('#svc-form-wholesale-price').value.trim();
+
   const body = {
     name,
+    barcode:              $('#svc-form-barcode').value.trim() || null,
     description:          $('#svc-form-desc').value.trim() || null,
     price:                parseFloat(price),
+    cost_price:           costPrice ? parseFloat(costPrice) : null,
+    wholesale_price:      wholesalePrice ? parseFloat(wholesalePrice) : null,
     duration_minutes:     parseInt($('#svc-form-duration').value) || null,
     is_active:            $('#svc-form-active').checked,
     is_featured:          $('#svc-form-featured').checked,

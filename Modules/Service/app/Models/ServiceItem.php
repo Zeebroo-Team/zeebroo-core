@@ -18,8 +18,11 @@ class ServiceItem extends Model
     protected $fillable = [
         'business_id',
         'name',
+        'barcode',
         'description',
         'price',
+        'cost_price',
+        'wholesale_price',
         'duration_minutes',
         'is_active',
         'is_featured',
@@ -29,6 +32,8 @@ class ServiceItem extends Model
 
     protected $casts = [
         'price'            => 'decimal:2',
+        'cost_price'       => 'decimal:2',
+        'wholesale_price'  => 'decimal:2',
         'duration_minutes' => 'integer',
         'is_active'        => 'boolean',
         'is_featured'      => 'boolean',
