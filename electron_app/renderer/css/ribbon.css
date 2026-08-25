@@ -4863,6 +4863,7 @@ body.dark .product-card .p-icon { background: rgba(255,255,255,.07); }
 .ci-badge--discount { background: rgba(16,185,129,.12); color: #059669; border: 1px solid rgba(16,185,129,.25); }
 .ci-badge--note     { background: rgba(245,158,11,.11); color: #b45309; border: 1px solid rgba(245,158,11,.2); }
 .ci-badge--service  { background: rgba(99,102,241,.12);  color: #4f46e5; border: 1px solid rgba(99,102,241,.25); }
+.ci-badge--creq     { background: rgba(79,70,229,.12);   color: #4338ca; border: 1px solid rgba(79,70,229,.25); }
 
 /* ── Cart item discount / note popup ── */
 .ci-popup-shell {
@@ -12990,6 +12991,12 @@ textarea.rt-form-input { resize: vertical; }
   border-radius: 5px; padding: 2px 5px;
   font-size: 10px; font-weight: 700; line-height: 1;
 }
+.svc-creq-badge {
+  align-self: flex-start;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; border-radius: 5px;
+  background: rgba(79,70,229,.14); color: #4338ca; font-size: 10px;
+}
 .svc-section-label {
   font-size: 11px; font-weight: 700; letter-spacing: .06em;
   text-transform: uppercase; color: var(--text-muted);
@@ -13487,6 +13494,32 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
   line-height: 1;
 }
 .svc-prod-line-remove:hover { background: rgba(239,68,68,.12); color: #ef4444; }
+
+/* ── Custom Requirement form builder (Service modal) ── */
+.svc-creq-fields { display: flex; flex-direction: column; }
+.svc-creq-row {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 8px 10px;
+  margin-top: 6px;
+}
+.svc-creq-row-main { display: flex; align-items: center; gap: 8px; }
+.svc-creq-row-main .svc-creq-type   { width: 110px !important; flex: none; }
+.svc-creq-row-main .svc-creq-label  { flex: 1.2; }
+.svc-creq-row-main .svc-creq-key    { flex: 1; }
+.svc-creq-empty {
+  font-size: 12px; color: var(--text-muted);
+  padding: 14px 0; text-align: center;
+}
+
+/* ── Custom Requirement details (Sale detail) ── */
+.sal-creq-item { padding: 10px 0; border-bottom: 1px solid var(--border); }
+.sal-creq-item:last-child { border-bottom: none; }
+.sal-creq-item-name { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 6px; }
+.sal-creq-row { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; padding: 3px 0; }
+.sal-creq-label { color: var(--text-muted); }
+.sal-creq-value { color: var(--text); font-weight: 600; text-align: right; }
 
 /* ── Service Item Detail Panel ── */
 .svc-detail-header {

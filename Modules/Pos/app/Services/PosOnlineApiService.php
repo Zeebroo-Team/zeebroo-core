@@ -235,6 +235,7 @@ class PosOnlineApiService
                 'warranty_type'       => $item->warranty_type,
                 'warranty_days'       => $item->warranty_days,
                 'warranty_expires_at' => $item->warranty_expires_at?->toDateString(),
+                'custom_requirement_values' => $item->custom_requirement_values ?? [],
             ])->values()->all(),
         ];
     }
