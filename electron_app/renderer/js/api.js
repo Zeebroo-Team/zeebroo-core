@@ -376,6 +376,12 @@ const API = (() => {
     rolesUpdate: (id, body)       => request('PUT',    `/roles/${id}`, body),
     rolesDelete: (id)             => request('DELETE', `/roles/${id}`),
 
+    // Branch Management
+    branchesList: ()         => request('GET',    '/branches'),
+    branchAdd:    (body)     => request('POST',   '/branches', body),
+    branchUpdate: (id, body) => request('PUT',    `/branches/${id}`, body),
+    branchRemove: (id)       => request('DELETE', `/branches/${id}`),
+
     // Service POS
     servicePosCatalog:  (q, catId) => request('GET',  `/service/pos/catalog?q=${encodeURIComponent(q || '')}&category=${catId || ''}`),
     servicePosCheckout: (body)     => request('POST', '/service/pos/checkout', body),

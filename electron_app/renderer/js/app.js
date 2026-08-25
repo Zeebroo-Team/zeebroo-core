@@ -18843,6 +18843,8 @@ async function openPosSettings() {
   $('#psm-branch-product').checked = !!s.branch_product_separate;
   $('#psm-branch-stock').checked   = !!s.branch_stock_separate;
   $('#psm-branch-pos').checked     = !!s.branch_pos_separate;
+  const branchNavItem = $('.psm-nav-item--multi-branch');
+  if (branchNavItem) branchNavItem.style.display = multiWh ? '' : 'none';
 
   // Tax rules
   const taxEnabled = !!s.tax_enabled;
@@ -18932,6 +18934,7 @@ $$('.psm-nav-item').forEach(btn => btn.addEventListener('click', () => {
   psmShowTab(btn.dataset.tab);
   if (btn.dataset.tab === 'roles'     && window.loadRolesForSettings) window.loadRolesForSettings();
   if (btn.dataset.tab === 'users'     && window.loadUsersForSettings) window.loadUsersForSettings();
+  if (btn.dataset.tab === 'branches'  && window.loadBranchesForSettings) window.loadBranchesForSettings();
   if (btn.dataset.tab === 'mail')     loadMailSettings();
   if (btn.dataset.tab === 'counters') loadPsmCounters();
   if (btn.dataset.tab === 'cashiers') { _psmCashierResetForm(); loadPsmCashiers(); }
@@ -18939,6 +18942,8 @@ $$('.psm-nav-item').forEach(btn => btn.addEventListener('click', () => {
 
 $('#psm-multi-warehouse').addEventListener('change', (e) => {
   $('#psm-branch-rows').style.display = e.target.checked ? 'flex' : 'none';
+  const branchNavItem = $('.psm-nav-item--multi-branch');
+  if (branchNavItem) branchNavItem.style.display = e.target.checked ? '' : 'none';
 });
 $('#psm-tax-enabled').addEventListener('change', (e) => {
   const sec = $('#psm-tax-rules-section');
@@ -33228,6 +33233,256 @@ async function submitDsCreate() {
   };
 
   window.openCreateRoleModal = openCreateRoleModal;
+}());
+
+// ── Branch Management ───────────────────────────────────────────────────────
+(function () {
+  let _branches      = [];
+  let _branchSelected  = null;
+  let _branchEditTarget = null;
+
+  function _showModalErr(el, msg) {
+    if (!el) return;
+    el.textContent = msg;
+    el.style.display = 'block';
+  }
+
+  // ── Load + render list ──────────────────────────────────────────────────
+
+  function renderBranchList() {
+    const list = $('#psm-branches-list');
+    if (!list) return;
+    if (_branches.length === 0) {
+      list.innerHTML = '<div class="um-loading">No branches found.</div>';
+      return;
+    }
+
+    list.innerHTML = _branches.map(b => {
+      const isActive = _branchSelected && _branchSelected.id === b.id;
+      return `
+        <div class="um-user-card${isActive ? ' active' : ''}" data-id="${b.id}">
+          <div class="um-avatar branch"><i class="fa fa-code-branch"></i></div>
+          <div class="um-card-info">
+            <div class="um-card-name">${escHtml(b.name)}</div>
+            <div class="um-card-email">${escHtml(b.address || b.phone || b.email || 'No details set')}</div>
+            <div class="um-card-badges">
+              <span class="um-status-badge um-status-${b.is_active ? 'active' : 'inactive'}">${b.is_active ? 'active' : 'inactive'}</span>
+            </div>
+          </div>
+        </div>`;
+    }).join('');
+
+    list.querySelectorAll('.um-user-card').forEach(card => {
+      card.addEventListener('click', () => {
+        const id = parseInt(card.dataset.id);
+        const branch = _branches.find(b => b.id === id);
+        if (branch) selectBranch(branch, card);
+      });
+    });
+  }
+
+  function selectBranch(branch, cardEl) {
+    _branchSelected = branch;
+    $('#psm-branches-list')?.querySelectorAll('.um-user-card').forEach(c => c.classList.remove('active'));
+    if (cardEl) cardEl.classList.add('active');
+    renderBranchDetail(branch);
+  }
+
+  // ── Detail panel ────────────────────────────────────────────────────────
+
+  function renderBranchDetail(branch) {
+    const detail = $('#psm-branches-detail');
+    if (!detail) return;
+
+    const created = branch.created_at ? new Date(branch.created_at).toLocaleDateString() : '—';
+
+    detail.innerHTML = `
+      <div class="um-detail-header">
+        <div class="um-detail-avatar branch"><i class="fa fa-code-branch"></i></div>
+        <div class="um-detail-meta">
+          <div class="um-detail-name">${escHtml(branch.name)}</div>
+          <div class="um-detail-email">${escHtml(branch.address || 'No address set')}</div>
+          <div class="um-detail-joined"><i class="fa fa-calendar-days"></i> Added ${created}</div>
+        </div>
+        <div><span class="um-status-badge um-status-${branch.is_active ? 'active' : 'inactive'}">${branch.is_active ? 'active' : 'inactive'}</span></div>
+      </div>
+
+      <div class="um-detail-section">
+        <div class="um-detail-section-title">Contact</div>
+        <div style="font-size:13px;color:var(--text)">Phone: ${escHtml(branch.phone || '—')}</div>
+        <div style="font-size:13px;color:var(--text);margin-top:4px">Email: ${escHtml(branch.email || '—')}</div>
+      </div>
+
+      ${branch.description ? `
+      <div class="um-detail-section">
+        <div class="um-detail-section-title">Description</div>
+        <div style="font-size:13px;color:var(--text)">${escHtml(branch.description)}</div>
+      </div>` : ''}
+
+      <div class="um-detail-actions">
+        <button class="btn-primary" id="branch-open-edit"><i class="fa fa-pen"></i> Edit Branch</button>
+        <button class="um-remove-btn" id="branch-open-remove"><i class="fa fa-trash"></i> Delete</button>
+      </div>
+    `;
+
+    detail.querySelector('#branch-open-edit')?.addEventListener('click', () => openEditBranchModal(branch));
+    detail.querySelector('#branch-open-remove')?.addEventListener('click', () => removeBranch(branch));
+  }
+
+  // ── Add Branch Modal ────────────────────────────────────────────────────
+
+  function openAddBranchModal() {
+    const modal = $('#branch-add-modal');
+    if (!modal) return;
+    $('#branch-add-name').value = '';
+    $('#branch-add-description').value = '';
+    $('#branch-add-address').value = '';
+    $('#branch-add-phone').value = '';
+    $('#branch-add-email').value = '';
+    $('#branch-add-active').checked = true;
+    $('#branch-add-error').style.display = 'none';
+    modal.style.display = 'flex';
+    setTimeout(() => $('#branch-add-name')?.focus(), 80);
+  }
+
+  function closeAddBranchModal() { const m = $('#branch-add-modal'); if (m) m.style.display = 'none'; }
+
+  async function submitAddBranch() {
+    const name = $('#branch-add-name')?.value?.trim();
+    const errEl = $('#branch-add-error');
+
+    if (!name) { _showModalErr(errEl, 'Please enter a branch name.'); return; }
+    errEl.style.display = 'none';
+    const btn = $('#branch-add-save');
+    btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Adding…';
+
+    const res = await API.branchAdd({
+      name,
+      description: $('#branch-add-description')?.value?.trim() || null,
+      address:     $('#branch-add-address')?.value?.trim() || null,
+      phone:       $('#branch-add-phone')?.value?.trim() || null,
+      email:       $('#branch-add-email')?.value?.trim() || null,
+      is_active:   !!$('#branch-add-active')?.checked,
+    });
+    btn.disabled = false; btn.innerHTML = '<i class="fa fa-check"></i> Add Branch';
+
+    if (res.status === 201) {
+      closeAddBranchModal();
+      await window.loadBranchesForSettings();
+      const newBranch = _branches.find(b => b.id === res.body.data.id);
+      if (newBranch) {
+        const card = $(`#psm-branches-list [data-id="${newBranch.id}"]`);
+        selectBranch(newBranch, card);
+      }
+    } else {
+      _showModalErr(errEl, res.body?.message || 'Failed to add branch.');
+    }
+  }
+
+  // ── Edit Branch Modal ───────────────────────────────────────────────────
+
+  function openEditBranchModal(branch) {
+    _branchEditTarget = branch;
+    const modal = $('#branch-edit-modal');
+    if (!modal) return;
+
+    $('#branch-edit-name').value = branch.name || '';
+    $('#branch-edit-description').value = branch.description || '';
+    $('#branch-edit-address').value = branch.address || '';
+    $('#branch-edit-phone').value = branch.phone || '';
+    $('#branch-edit-email').value = branch.email || '';
+    $('#branch-edit-active').checked = !!branch.is_active;
+    $('#branch-edit-error').style.display = 'none';
+
+    modal.style.display = 'flex';
+  }
+
+  function closeEditBranchModal() { const m = $('#branch-edit-modal'); if (m) m.style.display = 'none'; }
+
+  async function submitEditBranch() {
+    if (!_branchEditTarget) return;
+    const name = $('#branch-edit-name')?.value?.trim();
+    const errEl = $('#branch-edit-error');
+
+    if (!name) { _showModalErr(errEl, 'Please enter a branch name.'); return; }
+    errEl.style.display = 'none';
+    const btn = $('#branch-edit-save');
+    btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
+
+    const res = await API.branchUpdate(_branchEditTarget.id, {
+      name,
+      description: $('#branch-edit-description')?.value?.trim() || null,
+      address:     $('#branch-edit-address')?.value?.trim() || null,
+      phone:       $('#branch-edit-phone')?.value?.trim() || null,
+      email:       $('#branch-edit-email')?.value?.trim() || null,
+      is_active:   !!$('#branch-edit-active')?.checked,
+    });
+    btn.disabled = false; btn.innerHTML = '<i class="fa fa-check"></i> Save Changes';
+
+    if (res.status === 200) {
+      closeEditBranchModal();
+      await window.loadBranchesForSettings();
+      const updated = _branches.find(b => b.id === _branchEditTarget.id);
+      if (updated) {
+        const card = $(`#psm-branches-list [data-id="${updated.id}"]`);
+        selectBranch(updated, card);
+      }
+    } else {
+      _showModalErr(errEl, res.body?.message || 'Failed to save changes.');
+    }
+  }
+
+  // ── Remove ──────────────────────────────────────────────────────────────
+
+  async function removeBranch(branch) {
+    if (!confirm(`Delete the "${branch.name}" branch? This cannot be undone.`)) return;
+
+    const res = await API.branchRemove(branch.id);
+    if (res.status === 200) {
+      await window.loadBranchesForSettings();
+      const detail = $('#psm-branches-detail');
+      if (detail) detail.innerHTML = '<div class="um-detail-empty"><i class="fa fa-code-branch"></i><p>Select a branch to view its details</p></div>';
+    } else {
+      alert(res.body?.message || 'Failed to delete branch.');
+    }
+  }
+
+  // ── Event listeners ─────────────────────────────────────────────────────
+
+  $('#psm-add-branch-btn')?.addEventListener('click', openAddBranchModal);
+
+  $('#branch-add-save')?.addEventListener('click',   submitAddBranch);
+  $('#branch-add-cancel')?.addEventListener('click', closeAddBranchModal);
+  $('#branch-add-close')?.addEventListener('click',  closeAddBranchModal);
+  $('#branch-add-modal')?.addEventListener('click',  e => { if (e.target === e.currentTarget) closeAddBranchModal(); });
+
+  $('#branch-edit-save')?.addEventListener('click',   submitEditBranch);
+  $('#branch-edit-cancel')?.addEventListener('click', closeEditBranchModal);
+  $('#branch-edit-close')?.addEventListener('click',  closeEditBranchModal);
+  $('#branch-edit-modal')?.addEventListener('click',  e => { if (e.target === e.currentTarget) closeEditBranchModal(); });
+
+  // Expose for Settings modal Branches tab
+  window.loadBranchesForSettings = async function() {
+    const list   = $('#psm-branches-list');
+    const detail = $('#psm-branches-detail');
+    if (!list) return;
+    list.innerHTML = '<div class="um-loading"><i class="fa fa-spinner fa-spin"></i> Loading branches…</div>';
+    if (detail) detail.innerHTML = '<div class="um-detail-empty"><i class="fa fa-code-branch"></i><p>Select a branch to view its details</p></div>';
+    _branchSelected = null;
+
+    const res = await API.branchesList();
+    if (res.status !== 200) {
+      list.innerHTML = `<div class="um-loading" style="color:#dc2626"><i class="fa fa-triangle-exclamation"></i> ${res.body?.message || 'Failed to load branches.'}</div>`;
+      return;
+    }
+    _branches = res.body.data || [];
+
+    const count = _branches.length;
+    const badge = $('#psm-branches-count');
+    if (badge) badge.textContent = `${count} branch${count !== 1 ? 'es' : ''}`;
+
+    renderBranchList();
+  };
 }());
 
 // ── Mail ───────────────────────────────────────────────────────────────────

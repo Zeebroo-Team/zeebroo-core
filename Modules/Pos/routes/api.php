@@ -44,6 +44,7 @@ use Modules\Pos\Http\Controllers\Api\PosExpensesOverviewApiController;
 use Modules\Pos\Http\Controllers\Api\PosProfitReportApiController;
 use Modules\Pos\Http\Controllers\Api\PosPayrollOverviewApiController;
 use Modules\Pos\Http\Controllers\Api\PosUserManagementApiController;
+use Modules\Pos\Http\Controllers\Api\PosBranchManagementApiController;
 use Modules\Pos\Http\Controllers\Api\PosRoleManagementApiController;
 use Modules\Pos\Http\Controllers\Api\PosCounterApiController;
 use Modules\Pos\Http\Controllers\Api\PosRegisterLockApiController;
@@ -331,6 +332,12 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
     Route::post  ('roles',        [PosRoleManagementApiController::class, 'store'])  ->name('roles.store');
     Route::put   ('roles/{role}', [PosRoleManagementApiController::class, 'update']) ->name('roles.update');
     Route::delete('roles/{role}', [PosRoleManagementApiController::class, 'destroy'])->name('roles.destroy');
+
+    // Branch Management
+    Route::get   ('branches',          [PosBranchManagementApiController::class, 'index'])  ->name('branches.index');
+    Route::post  ('branches',          [PosBranchManagementApiController::class, 'store'])  ->name('branches.store');
+    Route::put   ('branches/{branch}', [PosBranchManagementApiController::class, 'update']) ->name('branches.update');
+    Route::delete('branches/{branch}', [PosBranchManagementApiController::class, 'destroy'])->name('branches.destroy');
 
     // Counters
     Route::post  ('verify-password',   [PosRegisterLockApiController::class, 'verifyPassword'])->name('verify-password');
