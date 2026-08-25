@@ -2045,6 +2045,7 @@
           </button>
           <div class="inv-detail-breadcrumb" id="sal-detail-title">Sale</div>
           <div class="inv-detail-actions">
+            <button class="sal-action-btn" id="sal-custom-req-btn" style="display:none"><i class="fa fa-list-check"></i> Details</button>
             <button class="sal-action-btn" id="sal-print-btn"><i class="fa fa-print"></i> Receipt</button>
             <button class="sal-action-btn" id="sal-return-btn"><i class="fa fa-rotate-left"></i> Return</button>
             <button class="sal-action-btn sal-action-danger" id="sal-void-btn"><i class="fa fa-ban"></i> Void</button>
@@ -5303,6 +5304,7 @@
             <button class="prod-modal-tab" data-tab="media"><i class="fa fa-image"></i> Media</button>
             <button class="prod-modal-tab" data-tab="assign"><i class="fa fa-users"></i> Assignments</button>
             <button class="prod-modal-tab" data-tab="advanced"><i class="fa fa-sliders"></i> Advanced</button>
+            <button class="prod-modal-tab" data-tab="custom_req"><i class="fa fa-list-check"></i> Custom Requirement</button>
           </div>
           <div class="prod-modal-body">
 
@@ -5311,6 +5313,10 @@
               <div class="po-field">
                 <label class="po-field-label">Service Name <span class="po-required">*</span></label>
                 <input type="text" id="svc-form-name" class="po-field-input" placeholder="e.g. Deep Cleaning, Hair Cut…" autocomplete="off" maxlength="255">
+              </div>
+              <div class="po-field">
+                <label class="po-field-label">Service Barcode</label>
+                <input type="text" id="svc-form-barcode" class="po-field-input" placeholder="Scan or enter barcode…" autocomplete="off" maxlength="120">
               </div>
               <div class="po-field">
                 <label class="po-field-label">Description</label>
@@ -5331,6 +5337,20 @@
                 <div class="po-field">
                   <label class="po-field-label">Duration (minutes)</label>
                   <input type="number" id="svc-form-duration" class="po-field-input" placeholder="e.g. 60" min="0" step="1">
+                </div>
+                <div class="po-field">
+                  <label class="po-field-label">Cost Price</label>
+                  <div class="svc-form-prefix-wrap">
+                    <span class="svc-form-prefix" id="svc-form-currency-cost">—</span>
+                    <input type="number" id="svc-form-cost-price" class="po-field-input svc-form-input--prefix" placeholder="0.00" min="0" step="0.01">
+                  </div>
+                </div>
+                <div class="po-field">
+                  <label class="po-field-label">Wholesale Price</label>
+                  <div class="svc-form-prefix-wrap">
+                    <span class="svc-form-prefix" id="svc-form-currency-wholesale">—</span>
+                    <input type="number" id="svc-form-wholesale-price" class="po-field-input svc-form-input--prefix" placeholder="0.00" min="0" step="0.01">
+                  </div>
                 </div>
               </div>
             </div>
@@ -5354,9 +5374,11 @@
                   <label class="po-field-label" style="margin-bottom:0">Categories</label>
                   <button type="button" class="svc-form-inline-add" id="svc-form-cat-add-btn"><i class="fa fa-plus"></i> Add Category</button>
                 </div>
-                <div class="svc-form-cat-list" id="svc-form-cat-list">
-                  <span style="color:var(--text-muted);font-size:12px"><i class="fa fa-spinner fa-spin"></i> Loading categories…</span>
+                <div class="tag-input-wrap" id="svc-cat-wrap">
+                  <div id="svc-cat-tags" class="tag-input-tags"></div>
+                  <input type="text" id="svc-cat-input" class="tag-input-field" placeholder="Search categories…" autocomplete="off">
                 </div>
+                <div class="tag-input-dd" id="svc-cat-dd" style="display:none"></div>
               </div>
             </div>
 
@@ -5364,9 +5386,11 @@
             <div class="prod-modal-pane" data-pane="assign">
               <div class="po-field">
                 <label class="po-field-label">Assign Employees</label>
-                <div class="svc-form-cat-list" id="svc-form-emp-list">
-                  <span style="color:var(--text-muted);font-size:12px"><i class="fa fa-spinner fa-spin"></i> Loading…</span>
+                <div class="tag-input-wrap" id="svc-emp-wrap">
+                  <div id="svc-emp-tags" class="tag-input-tags"></div>
+                  <input type="text" id="svc-emp-input" class="tag-input-field" placeholder="Search employees…" autocomplete="off">
                 </div>
+                <div class="tag-input-dd" id="svc-emp-dd" style="display:none"></div>
               </div>
               <div class="po-field">
                 <label class="po-field-label">Assign Products</label>
@@ -5414,6 +5438,32 @@
                     <div class="prod-adv-card-sw"><div class="prod-adv-card-knob"></div></div>
                   </label>
                 </div>
+              </div>
+            </div>
+
+            <!-- Pane 6: Custom Requirement -->
+            <div class="prod-modal-pane" data-pane="custom_req">
+              <div class="prod-adv-cards">
+                <div class="prod-adv-card">
+                  <input type="checkbox" id="svc-form-creq-enabled" class="prod-adv-card-chk">
+                  <label class="prod-adv-card-top" for="svc-form-creq-enabled">
+                    <div class="prod-adv-card-icon"><i class="fa fa-list-check"></i></div>
+                    <div class="prod-adv-card-text">
+                      <span class="prod-adv-card-name">Enable Custom Requirement Form</span>
+                      <span class="prod-adv-card-desc">Ask the cashier to fill a custom form when this service is added to the cart</span>
+                    </div>
+                    <div class="prod-adv-card-sw"><div class="prod-adv-card-knob"></div></div>
+                  </label>
+                </div>
+              </div>
+
+              <div id="svc-creq-section" style="display:none;margin-top:14px">
+                <div class="svc-form-label-row">
+                  <label class="po-field-label" style="margin-bottom:0">Form Fields</label>
+                  <button type="button" class="svc-form-inline-add" id="svc-creq-add-field"><i class="fa fa-plus"></i> Add Field</button>
+                </div>
+                <div id="svc-creq-fields" class="svc-creq-fields"></div>
+                <div id="svc-creq-empty" class="svc-creq-empty">No fields yet. Click "Add Field" to build the form.</div>
               </div>
             </div>
 
@@ -10880,6 +10930,38 @@
     <div class="eod-modal-footer">
       <button class="psm-btn-cancel" id="pos-warranty-cancel">Cancel</button>
       <button class="eod-settle-btn" id="pos-warranty-confirm"><i class="fa fa-check"></i> Add to Cart</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Custom requirement form prompt (services) ───────────────────────── -->
+<div id="pos-custom-req-overlay" class="bwz-overlay" style="display:none" role="dialog" aria-modal="true">
+  <div class="eod-modal" style="width:400px">
+    <div class="eod-modal-header">
+      <span><i class="fa fa-list-check"></i> <span id="pos-custom-req-title">Service Details</span></span>
+    </div>
+    <div class="eod-modal-body">
+      <p id="pos-custom-req-service-name" style="font-size:13px;font-weight:700;color:var(--text);margin:0 0 14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></p>
+      <div id="pos-custom-req-fields" class="pos-custom-req-fields"></div>
+    </div>
+    <div class="eod-modal-footer">
+      <button class="psm-btn-cancel" id="pos-custom-req-cancel">Cancel</button>
+      <button class="eod-settle-btn" id="pos-custom-req-confirm"><i class="fa fa-check"></i> Add to Cart</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Custom requirement details viewer (Sale detail) ─────────────────── -->
+<div id="sal-custom-req-overlay" class="bwz-overlay" style="display:none" role="dialog" aria-modal="true">
+  <div class="eod-modal" style="width:420px">
+    <div class="eod-modal-header">
+      <span><i class="fa fa-list-check"></i> Service Details</span>
+    </div>
+    <div class="eod-modal-body">
+      <div id="sal-custom-req-body" class="sal-custom-req-body"></div>
+    </div>
+    <div class="eod-modal-footer">
+      <button class="psm-btn-cancel" id="sal-custom-req-close">Close</button>
     </div>
   </div>
 </div>

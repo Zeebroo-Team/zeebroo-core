@@ -3,6 +3,7 @@
 namespace Modules\Service\Services;
 
 use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 use Modules\Business\Models\Business;
 use Modules\Service\Models\ServiceItem;
 
@@ -43,15 +44,20 @@ class ServiceItemService
         $productLines = $data['product_lines'] ?? [];
 
         $item = ServiceItem::create([
-            'business_id'           => $business->id,
-            'name'                  => $data['name'],
-            'description'           => filled($data['description'] ?? '') ? $data['description'] : null,
-            'price'                 => isset($data['price']) && $data['price'] !== '' ? (float) $data['price'] : null,
-            'duration_minutes'      => isset($data['duration_minutes']) && $data['duration_minutes'] !== '' ? (int) $data['duration_minutes'] : null,
-            'is_active'             => (bool) ($data['is_active'] ?? true),
-            'is_featured'           => (bool) ($data['is_featured'] ?? false),
-            'has_warranty'          => (bool) ($data['has_warranty'] ?? false),
-            'file_manager_file_id'  => $data['file_manager_file_id'] ?? null,
+            'business_id'                 => $business->id,
+            'name'                        => $data['name'],
+            'barcode'                     => filled($data['barcode'] ?? '') ? $data['barcode'] : null,
+            'description'                 => filled($data['description'] ?? '') ? $data['description'] : null,
+            'price'                       => isset($data['price']) && $data['price'] !== '' ? (float) $data['price'] : null,
+            'cost_price'                  => isset($data['cost_price']) && $data['cost_price'] !== '' ? (float) $data['cost_price'] : null,
+            'wholesale_price'             => isset($data['wholesale_price']) && $data['wholesale_price'] !== '' ? (float) $data['wholesale_price'] : null,
+            'duration_minutes'            => isset($data['duration_minutes']) && $data['duration_minutes'] !== '' ? (int) $data['duration_minutes'] : null,
+            'is_active'                   => (bool) ($data['is_active'] ?? true),
+            'is_featured'                 => (bool) ($data['is_featured'] ?? false),
+            'has_warranty'                => (bool) ($data['has_warranty'] ?? false),
+            'custom_requirement_enabled'  => (bool) ($data['custom_requirement_enabled'] ?? false),
+            'custom_requirement_fields'   => $this->sanitizeCustomRequirementFields($data['custom_requirement_fields'] ?? []),
+            'file_manager_file_id'        => $data['file_manager_file_id'] ?? null,
         ]);
 
         $item->categories()->sync($categoryIds);
@@ -68,14 +74,21 @@ class ServiceItemService
         $productLines = $data['product_lines'] ?? null;
 
         $item->update([
-            'name'                  => $data['name'],
-            'description'           => filled($data['description'] ?? '') ? $data['description'] : null,
-            'price'                 => isset($data['price']) && $data['price'] !== '' ? (float) $data['price'] : null,
-            'duration_minutes'      => isset($data['duration_minutes']) && $data['duration_minutes'] !== '' ? (int) $data['duration_minutes'] : null,
-            'is_active'             => (bool) ($data['is_active'] ?? true),
-            'is_featured'           => (bool) ($data['is_featured'] ?? $item->is_featured),
-            'has_warranty'          => (bool) ($data['has_warranty'] ?? $item->has_warranty),
-            'file_manager_file_id'  => array_key_exists('file_manager_file_id', $data) ? $data['file_manager_file_id'] : $item->file_manager_file_id,
+            'name'                        => $data['name'],
+            'barcode'                     => filled($data['barcode'] ?? '') ? $data['barcode'] : null,
+            'description'                 => filled($data['description'] ?? '') ? $data['description'] : null,
+            'price'                       => isset($data['price']) && $data['price'] !== '' ? (float) $data['price'] : null,
+            'cost_price'                  => isset($data['cost_price']) && $data['cost_price'] !== '' ? (float) $data['cost_price'] : null,
+            'wholesale_price'             => isset($data['wholesale_price']) && $data['wholesale_price'] !== '' ? (float) $data['wholesale_price'] : null,
+            'duration_minutes'            => isset($data['duration_minutes']) && $data['duration_minutes'] !== '' ? (int) $data['duration_minutes'] : null,
+            'is_active'                   => (bool) ($data['is_active'] ?? true),
+            'is_featured'                 => (bool) ($data['is_featured'] ?? $item->is_featured),
+            'has_warranty'                => (bool) ($data['has_warranty'] ?? $item->has_warranty),
+            'custom_requirement_enabled'  => (bool) ($data['custom_requirement_enabled'] ?? $item->custom_requirement_enabled),
+            'custom_requirement_fields'   => array_key_exists('custom_requirement_fields', $data)
+                ? $this->sanitizeCustomRequirementFields($data['custom_requirement_fields'] ?? [])
+                : $item->custom_requirement_fields,
+            'file_manager_file_id'        => array_key_exists('file_manager_file_id', $data) ? $data['file_manager_file_id'] : $item->file_manager_file_id,
         ]);
 
         if ($categoryIds !== null)  $item->categories()->sync($categoryIds);
@@ -93,5 +106,54 @@ class ServiceItemService
     public function itemForBusiness(Business $business, ServiceItem $item): ?ServiceItem
     {
         return $item->business_id === $business->id ? $item : null;
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $fields
+     * @return list<array{key: string, label: string, type: string, options: list<string>}>
+     */
+    private function sanitizeCustomRequirementFields(array $fields): array
+    {
+        $allowedTypes = ['text', 'textarea', 'select', 'number', 'date', 'checkbox', 'radio'];
+        $usedKeys     = [];
+        $sanitized    = [];
+
+        foreach (array_slice($fields, 0, 20) as $field) {
+            $label = trim((string) ($field['label'] ?? ''));
+            if ($label === '') {
+                continue;
+            }
+
+            $type = in_array($field['type'] ?? null, $allowedTypes, true) ? $field['type'] : 'text';
+
+            $key = trim((string) ($field['key'] ?? ''));
+            $key = $key !== '' ? Str::slug($key, '_') : Str::slug($label, '_');
+            $key = $key !== '' ? $key : 'field_' . (count($sanitized) + 1);
+            $baseKey = $key;
+            $suffix  = 1;
+            while (in_array($key, $usedKeys, true)) {
+                $key = $baseKey . '_' . (++$suffix);
+            }
+            $usedKeys[] = $key;
+
+            $options = [];
+            if ($type === 'select' || $type === 'radio') {
+                foreach ((array) ($field['options'] ?? []) as $opt) {
+                    $opt = trim((string) $opt);
+                    if ($opt !== '') {
+                        $options[] = mb_substr($opt, 0, 120);
+                    }
+                }
+            }
+
+            $sanitized[] = [
+                'key'     => mb_substr($key, 0, 100),
+                'label'   => mb_substr($label, 0, 255),
+                'type'    => $type,
+                'options' => $options,
+            ];
+        }
+
+        return $sanitized;
     }
 }

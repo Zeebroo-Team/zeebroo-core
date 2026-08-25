@@ -898,6 +898,8 @@ async function _salSelectSale(id) {
   $('#sal-detail-title').textContent = `Sale #${num}`;
   $('#sal-void-btn').style.display   = isVoided ? 'none' : '';
   $('#sal-return-btn').style.display = isVoided ? 'none' : '';
+  const hasCreqDetails = (sale.items || []).some(i => (i.custom_requirement_values || []).length);
+  $('#sal-custom-req-btn').style.display = hasCreqDetails ? '' : 'none';
 
   const dateStr = sale.sold_at
     ? new Date(sale.sold_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })
@@ -1009,6 +1011,25 @@ $('#sal-search').addEventListener('input', e => {
 $('#sal-detail-back').addEventListener('click', _salCloseDetail);
 $('#sal-print-btn').addEventListener('click', () => { if (_sal.activeSale) showReceiptModal(_sal.activeSale); });
 $('#sal-return-btn').addEventListener('click', () => { _salCloseDetail(); openRefundModal(); });
+$('#sal-custom-req-btn').addEventListener('click', () => {
+  const sale = _sal.activeSale;
+  if (!sale) return;
+  const itemsWithDetails = (sale.items || []).filter(i => (i.custom_requirement_values || []).length);
+  $('#sal-custom-req-body').innerHTML = itemsWithDetails.map(i => `
+    <div class="sal-creq-item">
+      <div class="sal-creq-item-name">${escHtml(i.product_name || 'Service')}</div>
+      ${i.custom_requirement_values.map(v => `
+        <div class="sal-creq-row">
+          <span class="sal-creq-label">${escHtml(v.label)}</span>
+          <span class="sal-creq-value">${escHtml(v.value) || '—'}</span>
+        </div>`).join('')}
+    </div>`).join('');
+  $('#sal-custom-req-overlay').style.display = 'flex';
+});
+$('#sal-custom-req-close').addEventListener('click', () => { $('#sal-custom-req-overlay').style.display = 'none'; });
+$('#sal-custom-req-overlay').addEventListener('click', e => {
+  if (e.target === e.currentTarget) $('#sal-custom-req-overlay').style.display = 'none';
+});
 $('#sal-void-btn').addEventListener('click', async () => {
   const sale = _sal.activeSale;
   if (!sale) return;
@@ -15358,6 +15379,7 @@ function buildServiceGrid(services) {
       ${s.duration_label && s.duration_label !== '—' ? `<div class="svc-dur"><i class="fa fa-clock"></i> ${escHtml(s.duration_label)}</div>` : ''}
       <div class="svc-price">${s.price > 0 ? parseFloat(s.price).toFixed(2) + cur : 'Free'}</div>
       ${s.has_warranty ? '<div class="svc-wty-badge"><i class="fa fa-shield-halved"></i></div>' : ''}
+      ${s.custom_requirement_enabled ? '<div class="svc-creq-badge"><i class="fa fa-list-check"></i></div>' : ''}
     </div>`;
 
   let html = '';
@@ -15395,12 +15417,18 @@ async function addServiceToCart(service) {
       _type: 'service',
       layerId: null, layerLabel: null, stock: null,
       warrantyType: null, warrantyDate: null,
+      customRequirementValues: null,
     };
     if (service.has_warranty) {
       const wty = await _askWarranty(service.name);
       if (wty === null) return; // cancelled
       cartItem.warrantyType = wty.type;
       cartItem.warrantyDate = wty.date ?? null;
+    }
+    if (service.custom_requirement_enabled && (service.custom_requirement_fields || []).length) {
+      const values = await _askCustomRequirement(service);
+      if (values === null) return; // cancelled
+      cartItem.customRequirementValues = values;
     }
     tab.cart.push(cartItem);
   }
@@ -20329,6 +20357,102 @@ $('#pos-warranty-overlay').addEventListener('click', e => {
 });
 // ── End Warranty prompt ────────────────────────────────────────────────────
 
+// ── Custom Requirement prompt (services) ────────────────────────────────────
+let _askCreqResolve  = null;
+let _creqActiveFields = [];
+
+function _askCustomRequirement(service) {
+  return new Promise(resolve => {
+    _askCreqResolve   = resolve;
+    _creqActiveFields = service.custom_requirement_fields || [];
+    $('#pos-custom-req-service-name').textContent = service.name;
+
+    const body = $('#pos-custom-req-fields');
+    body.innerHTML = _creqActiveFields.map(f => {
+      const key = escHtml(f.key);
+      if (f.type === 'textarea') {
+        return `<div class="psm-field-row" style="margin:0 0 12px">
+          <label class="psm-field-label">${escHtml(f.label)}</label>
+          <textarea class="psm-input pos-creq-input" data-key="${key}" rows="3" style="resize:vertical"></textarea>
+        </div>`;
+      }
+      if (f.type === 'select') {
+        const opts = (f.options || []).map(o => `<option value="${escHtml(o)}">${escHtml(o)}</option>`).join('');
+        return `<div class="psm-field-row" style="margin:0 0 12px">
+          <label class="psm-field-label">${escHtml(f.label)}</label>
+          <select class="psm-input pos-creq-input" data-key="${key}">
+            <option value="">— Select —</option>${opts}
+          </select>
+        </div>`;
+      }
+      if (f.type === 'radio') {
+        const opts = (f.options || []).map(o => `
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text);margin-top:6px;cursor:pointer">
+            <input type="radio" name="creq_${key}" class="pos-creq-radio" data-key="${key}" value="${escHtml(o)}"> ${escHtml(o)}
+          </label>`).join('');
+        return `<div class="psm-field-row" style="margin:0 0 12px">
+          <label class="psm-field-label">${escHtml(f.label)}</label>
+          ${opts || '<span style="font-size:12px;color:var(--text-muted)">No options configured.</span>'}
+        </div>`;
+      }
+      if (f.type === 'checkbox') {
+        return `<div class="psm-field-row" style="margin:0 0 12px">
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);cursor:pointer">
+            <input type="checkbox" class="pos-creq-checkbox" data-key="${key}"> ${escHtml(f.label)}
+          </label>
+        </div>`;
+      }
+      if (f.type === 'number') {
+        return `<div class="psm-field-row" style="margin:0 0 12px">
+          <label class="psm-field-label">${escHtml(f.label)}</label>
+          <input type="number" class="psm-input pos-creq-input" data-key="${key}">
+        </div>`;
+      }
+      if (f.type === 'date') {
+        return `<div class="psm-field-row" style="margin:0 0 12px">
+          <label class="psm-field-label">${escHtml(f.label)}</label>
+          <input type="date" class="psm-input pos-creq-input" data-key="${key}">
+        </div>`;
+      }
+      return `<div class="psm-field-row" style="margin:0 0 12px">
+        <label class="psm-field-label">${escHtml(f.label)}</label>
+        <input type="text" class="psm-input pos-creq-input" data-key="${key}">
+      </div>`;
+    }).join('');
+
+    $('#pos-custom-req-overlay').style.display = 'flex';
+    setTimeout(() => body.querySelector('.pos-creq-input')?.focus(), 60);
+  });
+}
+
+function _creqResolve(result) {
+  $('#pos-custom-req-overlay').style.display = 'none';
+  if (_askCreqResolve) { const r = _askCreqResolve; _askCreqResolve = null; r(result); }
+}
+
+$('#pos-custom-req-confirm').addEventListener('click', () => {
+  const values = _creqActiveFields.map(f => {
+    let value = '';
+    if (f.type === 'checkbox') {
+      const cb = $(`#pos-custom-req-fields .pos-creq-checkbox[data-key="${CSS.escape(f.key)}"]`);
+      value = cb && cb.checked ? 'Yes' : 'No';
+    } else if (f.type === 'radio') {
+      const checked = $(`#pos-custom-req-fields input[name="creq_${CSS.escape(f.key)}"]:checked`);
+      value = checked ? checked.value : '';
+    } else {
+      const input = $(`#pos-custom-req-fields .pos-creq-input[data-key="${CSS.escape(f.key)}"]`);
+      value = input ? input.value.trim() : '';
+    }
+    return { key: f.key, label: f.label, type: f.type, value };
+  });
+  _creqResolve(values);
+});
+$('#pos-custom-req-cancel').addEventListener('click', () => _creqResolve(null));
+$('#pos-custom-req-overlay').addEventListener('click', e => {
+  if (e.target === e.currentTarget) _creqResolve(null);
+});
+// ── End Custom Requirement prompt ───────────────────────────────────────────
+
 // ── Stock layer picker ─────────────────────────────────────────────────────
 let _layerPickerResolve = null;
 
@@ -20597,8 +20721,10 @@ function renderCart() {
       ? `<span class="ci-badge ci-badge--service"><i class="fa fa-screwdriver-wrench"></i> Service</span>` : '';
     const warrantyBadge = item.warrantyType
       ? `<span class="warranty-badge"><i class="fa fa-shield-halved"></i> ${item.warrantyType === 'lifetime' ? 'Lifetime warranty' : `Warranty until ${item.warrantyDate ?? ''}`}</span>` : '';
-    const extras = (discountBadge || noteBadge || typeBadge || warrantyBadge)
-      ? `<div class="ci-badges">${typeBadge}${discountBadge}${noteBadge}${warrantyBadge}</div>` : '';
+    const creqBadge = (item.customRequirementValues && item.customRequirementValues.length)
+      ? `<span class="ci-badge ci-badge--creq"><i class="fa fa-list-check"></i> Details saved</span>` : '';
+    const extras = (discountBadge || noteBadge || typeBadge || warrantyBadge || creqBadge)
+      ? `<div class="ci-badges">${typeBadge}${discountBadge}${noteBadge}${warrantyBadge}${creqBadge}</div>` : '';
     return `
     <div class="cart-item" data-key="${escHtml(item._key)}">
       <div class="ci-name">
@@ -21382,6 +21508,7 @@ $('#checkout-confirm').addEventListener('click', async () => {
         warranty_date:          i.warrantyDate ?? undefined,
         item_discount_percent:  _itemEffectivePct(i) > 0 ? _itemEffectivePct(i) : undefined,
         item_tax_rule:          i.itemTaxRule ?? undefined,
+        custom_requirement_values: (i.customRequirementValues && i.customRequirementValues.length) ? i.customRequirementValues : undefined,
       })),
     ],
   };
@@ -30443,13 +30570,26 @@ $$('.svc-detail-tab').forEach(tab => {
 });
 
 // ── New / Edit Service Modal ──────────────────────────────────────────────────
-let _svcFormCatIds   = new Set();
-let _svcFormEmpIds   = new Set();
+let _svcSelectedCats = []; // [{id, name}]
+let _svcSelectedEmps = []; // [{id, name}]
 let _svcAvailCats    = [];
 let _svcAvailEmps    = [];
+let _svcCatInputWired = false;
+let _svcEmpInputWired = false;
 let _svcProdLines    = []; // [{product_id, name, qty}]
 let _svcEditingId    = null; // null = create mode, number = edit mode
 let _svcFormImageFileId = null;
+let _svcCustomReqFields = []; // [{_id, key, keyEdited, label, type, options}]
+let _svcCreqIdSeq = 0;
+
+function _svcRemoveCat(id) {
+  _svcSelectedCats = _svcSelectedCats.filter(x => x.id !== id);
+  _tagRender('svc-cat-tags', _svcSelectedCats, _svcRemoveCat);
+}
+function _svcRemoveEmp(id) {
+  _svcSelectedEmps = _svcSelectedEmps.filter(x => x.id !== id);
+  _tagRender('svc-emp-tags', _svcSelectedEmps, _svcRemoveEmp);
+}
 
 function _svcSetImage(fileId, url) {
   _svcFormImageFileId = fileId;
@@ -30459,20 +30599,33 @@ function _svcSetImage(fileId, url) {
 }
 
 function _svcResetModal() {
-  _svcFormCatIds   = new Set();
-  _svcFormEmpIds   = new Set();
+  _svcSelectedCats = [];
+  _svcSelectedEmps = [];
   _svcProdLines    = [];
+  _tagRender('svc-cat-tags', [], _svcRemoveCat);
+  _tagRender('svc-emp-tags', [], _svcRemoveEmp);
+  $('#svc-cat-input').value = '';
+  $('#svc-emp-input').value = '';
   $('#svc-form-name').value     = '';
+  $('#svc-form-barcode').value  = '';
   $('#svc-form-desc').value     = '';
   $('#svc-form-price').value    = '';
+  $('#svc-form-cost-price').value      = '';
+  $('#svc-form-wholesale-price').value = '';
   $('#svc-form-duration').value = '';
   $('#svc-form-prod-q').value   = '';
   $('#svc-form-prod-results').style.display = 'none';
   $('#svc-form-prod-lines').innerHTML = '';
   $('#svc-form-currency').textContent = state.currency || '';
+  $('#svc-form-currency-cost').textContent = state.currency || '';
+  $('#svc-form-currency-wholesale').textContent = state.currency || '';
   $('#svc-form-active').checked    = true;
   $('#svc-form-featured').checked  = false;
   $('#svc-form-warranty').checked  = false;
+  _svcCustomReqFields = [];
+  $('#svc-form-creq-enabled').checked = false;
+  $('#svc-creq-section').style.display = 'none';
+  _svcRenderCreqFields();
   $$('#svc-new-modal .prod-modal-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === 'basic'));
   $$('#svc-new-modal .prod-modal-pane').forEach(p => p.classList.toggle('active', p.dataset.pane === 'basic'));
   _svcSetImage(null, null);
@@ -30513,25 +30666,37 @@ async function openEditServiceModal(id) {
 
   const d = detailRes.body.data;
   $('#svc-form-name').value     = d.name || '';
+  $('#svc-form-barcode').value  = d.barcode || '';
   $('#svc-form-desc').value     = d.description || '';
   $('#svc-form-price').value    = d.price != null ? d.price : '';
+  $('#svc-form-cost-price').value      = d.cost_price != null ? d.cost_price : '';
+  $('#svc-form-wholesale-price').value = d.wholesale_price != null ? d.wholesale_price : '';
   $('#svc-form-duration').value = d.duration_minutes || '';
   $('#svc-form-active').checked   = !!d.is_active;
   $('#svc-form-featured').checked = !!d.is_featured;
   $('#svc-form-warranty').checked = !!d.has_warranty;
   _svcSetImage(d.file_manager_file_id || null, d.image_url || null);
 
+  // Pre-fill custom requirement form
+  $('#svc-form-creq-enabled').checked = !!d.custom_requirement_enabled;
+  $('#svc-creq-section').style.display = d.custom_requirement_enabled ? '' : 'none';
+  _svcCustomReqFields = (d.custom_requirement_fields || []).map(f => ({
+    _id: ++_svcCreqIdSeq,
+    key: f.key || '',
+    keyEdited: true,
+    label: f.label || '',
+    type: ['text', 'textarea', 'select', 'number', 'date', 'checkbox', 'radio'].includes(f.type) ? f.type : 'text',
+    options: Array.isArray(f.options) ? f.options.join(', ') : '',
+  }));
+  _svcRenderCreqFields();
+
   // Pre-select categories
-  _svcFormCatIds = new Set((d.categories || []).map(c => c.id));
-  $('#svc-form-cat-list').querySelectorAll('[data-cat-id]').forEach(chip => {
-    if (_svcFormCatIds.has(Number(chip.dataset.catId))) chip.classList.add('selected');
-  });
+  _svcSelectedCats = (d.categories || []).map(c => ({ id: c.id, name: c.name }));
+  _tagRender('svc-cat-tags', _svcSelectedCats, _svcRemoveCat);
 
   // Pre-select employees
-  _svcFormEmpIds = new Set((d.employees || []).map(e => e.id));
-  $('#svc-form-emp-list').querySelectorAll('[data-emp-id]').forEach(chip => {
-    if (_svcFormEmpIds.has(Number(chip.dataset.empId))) chip.classList.add('selected');
-  });
+  _svcSelectedEmps = (d.employees || []).map(e => ({ id: e.id, name: e.name || e.full_name || '' }));
+  _tagRender('svc-emp-tags', _svcSelectedEmps, _svcRemoveEmp);
 
   // Pre-fill product lines
   _svcProdLines = (d.products || []).map(p => ({ product_id: p.id, name: p.name, qty: p.qty }));
@@ -30544,45 +30709,45 @@ function closeNewServiceModal() {
 }
 
 async function _svcLoadFormCategories() {
-  const list = $('#svc-form-cat-list');
-  list.innerHTML = `<span style="color:var(--text-muted);font-size:12px"><i class="fa fa-spinner fa-spin"></i> Loading…</span>`;
   const res = await API.serviceMgmtCategories();
-  _svcAvailCats = (res.body?.data || []).filter(c => c.is_active);
-  if (!_svcAvailCats.length) {
-    list.innerHTML = `<span style="color:var(--text-muted);font-size:12px">No categories available</span>`;
-    return;
+  _svcAvailCats = (res.body?.data || [])
+    .filter(c => c.is_active)
+    .map(c => ({ id: c.id, name: c.name }));
+
+  if (!_svcCatInputWired) {
+    _tagWireInput(
+      'svc-cat-input', 'svc-cat-dd',
+      () => _svcAvailCats,
+      () => _svcSelectedCats,
+      item => {
+        if (!_svcSelectedCats.find(x => x.id === item.id)) {
+          _svcSelectedCats.push(item);
+          _tagRender('svc-cat-tags', _svcSelectedCats, _svcRemoveCat);
+        }
+      },
+    );
+    _svcCatInputWired = true;
   }
-  list.innerHTML = _svcAvailCats.map(c =>
-    `<div class="svc-form-cat-chip${_svcFormCatIds.has(c.id) ? ' selected' : ''}" data-cat-id="${c.id}"><i class="fa fa-check"></i>${escHtml(c.name)}</div>`
-  ).join('');
-  list.querySelectorAll('.svc-form-cat-chip').forEach(chip => {
-    chip.addEventListener('click', () => {
-      const id = Number(chip.dataset.catId);
-      if (_svcFormCatIds.has(id)) { _svcFormCatIds.delete(id); chip.classList.remove('selected'); }
-      else                         { _svcFormCatIds.add(id);    chip.classList.add('selected'); }
-    });
-  });
 }
 
 async function _svcLoadFormEmployees() {
-  const list = $('#svc-form-emp-list');
-  list.innerHTML = `<span style="color:var(--text-muted);font-size:12px"><i class="fa fa-spinner fa-spin"></i> Loading…</span>`;
   const res = await API.employees();
-  _svcAvailEmps = (res.body?.data || []);
-  if (!_svcAvailEmps.length) {
-    list.innerHTML = `<span style="color:var(--text-muted);font-size:12px">No employees found</span>`;
-    return;
+  _svcAvailEmps = (res.body?.data || []).map(e => ({ id: e.id, name: e.name || e.full_name || '' }));
+
+  if (!_svcEmpInputWired) {
+    _tagWireInput(
+      'svc-emp-input', 'svc-emp-dd',
+      () => _svcAvailEmps,
+      () => _svcSelectedEmps,
+      item => {
+        if (!_svcSelectedEmps.find(x => x.id === item.id)) {
+          _svcSelectedEmps.push(item);
+          _tagRender('svc-emp-tags', _svcSelectedEmps, _svcRemoveEmp);
+        }
+      },
+    );
+    _svcEmpInputWired = true;
   }
-  list.innerHTML = _svcAvailEmps.map(e =>
-    `<div class="svc-form-cat-chip" data-emp-id="${e.id}"><i class="fa fa-check"></i>${escHtml(e.name || e.full_name || '')}</div>`
-  ).join('');
-  list.querySelectorAll('[data-emp-id]').forEach(chip => {
-    chip.addEventListener('click', () => {
-      const id = Number(chip.dataset.empId);
-      if (_svcFormEmpIds.has(id)) { _svcFormEmpIds.delete(id); chip.classList.remove('selected'); }
-      else                         { _svcFormEmpIds.add(id);    chip.classList.add('selected'); }
-    });
-  });
 }
 
 // ── Product lines for service ─────────────────────────────────────────────
@@ -30647,6 +30812,91 @@ function _svcRenderProdLines() {
   });
 }
 
+// ── Custom Requirement form builder (Service modal) ───────────────────────
+function _svcCreqSlug(label) {
+  return String(label || '').trim().toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'field';
+}
+
+function _svcCreqAddField() {
+  _svcCustomReqFields.push({
+    _id: ++_svcCreqIdSeq, key: '', keyEdited: false,
+    label: '', type: 'text', options: '',
+  });
+  _svcRenderCreqFields();
+}
+
+function _svcRenderCreqFields() {
+  const el    = $('#svc-creq-fields');
+  const empty = $('#svc-creq-empty');
+  if (!el) return;
+  empty.style.display = _svcCustomReqFields.length ? 'none' : '';
+  el.innerHTML = _svcCustomReqFields.map(f => `
+    <div class="svc-creq-row" data-id="${f._id}">
+      <div class="svc-creq-row-main">
+        <select class="po-field-input svc-creq-type" data-id="${f._id}">
+          <option value="text"${f.type === 'text' ? ' selected' : ''}>Text</option>
+          <option value="textarea"${f.type === 'textarea' ? ' selected' : ''}>Textarea</option>
+          <option value="select"${f.type === 'select' ? ' selected' : ''}>Dropdown</option>
+          <option value="number"${f.type === 'number' ? ' selected' : ''}>Number</option>
+          <option value="date"${f.type === 'date' ? ' selected' : ''}>Date</option>
+          <option value="checkbox"${f.type === 'checkbox' ? ' selected' : ''}>Checkbox (Yes/No)</option>
+          <option value="radio"${f.type === 'radio' ? ' selected' : ''}>Radio buttons</option>
+        </select>
+        <input type="text" class="po-field-input svc-creq-label" data-id="${f._id}" placeholder="Label, e.g. Installed OS" value="${escHtml(f.label)}">
+        <input type="text" class="po-field-input svc-creq-key" data-id="${f._id}" placeholder="Name" value="${escHtml(f.key)}">
+        <button type="button" class="svc-prod-line-remove svc-creq-remove" data-id="${f._id}" title="Remove"><i class="fa fa-xmark"></i></button>
+      </div>
+      <input type="text" class="po-field-input svc-creq-options" data-id="${f._id}" placeholder="Options, comma separated (e.g. 1 Year, 2 Years)"
+        style="margin-top:6px;display:${(f.type === 'select' || f.type === 'radio') ? '' : 'none'}" value="${escHtml(f.options)}">
+    </div>`
+  ).join('');
+
+  el.querySelectorAll('.svc-creq-type').forEach(sel => {
+    sel.addEventListener('change', () => {
+      const f = _svcCustomReqFields.find(x => x._id === Number(sel.dataset.id));
+      if (f) { f.type = sel.value; _svcRenderCreqFields(); }
+    });
+  });
+  el.querySelectorAll('.svc-creq-label').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const f = _svcCustomReqFields.find(x => x._id === Number(inp.dataset.id));
+      if (!f) return;
+      f.label = inp.value;
+      if (!f.keyEdited) {
+        f.key = _svcCreqSlug(inp.value);
+        const keyInput = el.querySelector(`.svc-creq-key[data-id="${f._id}"]`);
+        if (keyInput) keyInput.value = f.key;
+      }
+    });
+  });
+  el.querySelectorAll('.svc-creq-key').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const f = _svcCustomReqFields.find(x => x._id === Number(inp.dataset.id));
+      if (!f) return;
+      f.keyEdited = true;
+      f.key = inp.value;
+    });
+  });
+  el.querySelectorAll('.svc-creq-options').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const f = _svcCustomReqFields.find(x => x._id === Number(inp.dataset.id));
+      if (f) f.options = inp.value;
+    });
+  });
+  el.querySelectorAll('.svc-creq-remove').forEach(btn => {
+    btn.addEventListener('click', () => {
+      _svcCustomReqFields = _svcCustomReqFields.filter(x => x._id !== Number(btn.dataset.id));
+      _svcRenderCreqFields();
+    });
+  });
+}
+
+$('#svc-creq-add-field')?.addEventListener('click', _svcCreqAddField);
+$('#svc-form-creq-enabled')?.addEventListener('change', () => {
+  $('#svc-creq-section').style.display = $('#svc-form-creq-enabled').checked ? '' : 'none';
+});
+
 // ── Service modal tab switching ───────────────────────────────────────────
 $$('#svc-new-modal .prod-modal-tab').forEach(btn => {
   btn.addEventListener('click', () => {
@@ -30677,16 +30927,31 @@ $('#svc-form-submit')?.addEventListener('click', async () => {
   btn.disabled = true;
   btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
 
+  const costPrice      = $('#svc-form-cost-price').value.trim();
+  const wholesalePrice = $('#svc-form-wholesale-price').value.trim();
+
   const body = {
     name,
+    barcode:              $('#svc-form-barcode').value.trim() || null,
     description:          $('#svc-form-desc').value.trim() || null,
     price:                parseFloat(price),
+    cost_price:           costPrice ? parseFloat(costPrice) : null,
+    wholesale_price:      wholesalePrice ? parseFloat(wholesalePrice) : null,
     duration_minutes:     parseInt($('#svc-form-duration').value) || null,
     is_active:            $('#svc-form-active').checked,
     is_featured:          $('#svc-form-featured').checked,
     has_warranty:         $('#svc-form-warranty').checked,
-    service_category_ids: [..._svcFormCatIds],
-    employee_ids:         [..._svcFormEmpIds],
+    custom_requirement_enabled: $('#svc-form-creq-enabled').checked,
+    custom_requirement_fields: _svcCustomReqFields
+      .filter(f => f.label.trim())
+      .map(f => ({
+        key:     f.key.trim() || undefined,
+        label:   f.label.trim(),
+        type:    f.type,
+        options: (f.type === 'select' || f.type === 'radio') ? f.options.split(',').map(s => s.trim()).filter(Boolean) : [],
+      })),
+    service_category_ids: _svcSelectedCats.map(c => c.id),
+    employee_ids:         _svcSelectedEmps.map(e => e.id),
     product_lines:        _svcProdLines.map(l => ({ product_id: l.product_id, qty: l.qty })),
     file_manager_file_id: _svcFormImageFileId,
   };
@@ -30861,11 +31126,12 @@ $('#svc-cat-form-submit')?.addEventListener('click', async () => {
     closeNewCategoryModal();
     toast('Category created', 'success');
     if (_svcCatFormFromServiceModal) {
-      const newId = res.body?.data?.id != null ? Number(res.body.data.id) : null;
+      const newId   = res.body?.data?.id != null ? Number(res.body.data.id) : null;
+      const newName = res.body?.data?.name || name;
       await _svcLoadFormCategories();
-      if (newId != null) {
-        _svcFormCatIds.add(newId);
-        $(`#svc-form-cat-list [data-cat-id="${newId}"]`)?.classList.add('selected');
+      if (newId != null && !_svcSelectedCats.find(x => x.id === newId)) {
+        _svcSelectedCats.push({ id: newId, name: newName });
+        _tagRender('svc-cat-tags', _svcSelectedCats, _svcRemoveCat);
       }
     } else {
       loadSvcCategories();

@@ -373,6 +373,7 @@ class SaleService
                     'warranty_type'       => $svcWarrantyType,
                     'warranty_days'       => null,
                     'warranty_expires_at' => $svcWarrantyExpiresAt,
+                    'custom_requirement_values' => $svcLine['custom_requirement_values'] ?? null,
                 ]);
 
                 // One ServiceRequest per unit so each appointment is tracked individually
@@ -671,6 +672,7 @@ class SaleService
                     'warranty_date'        => $warrantyDate,
                     'item_discount_percent' => isset($row['item_discount_percent']) && (float) $row['item_discount_percent'] > 0
                         ? (float) $row['item_discount_percent'] : null,
+                    'custom_requirement_values' => $this->sanitizeCustomRequirementValues($row['custom_requirement_values'] ?? null),
                 ];
             }
             $merged[$svcId]['quantity'] = round($merged[$svcId]['quantity'] + $qty, 3);
@@ -696,10 +698,40 @@ class SaleService
                 'warranty_type'        => $row['warranty_type'],
                 'warranty_date'        => $row['warranty_date'],
                 'item_discount_percent' => $row['item_discount_percent'] ?? null,
+                'custom_requirement_values' => $row['custom_requirement_values'],
             ];
         }
 
         return $normalized;
+    }
+
+    /**
+     * @return list<array{key: string, label: string, type: string, value: string}>|null
+     */
+    private function sanitizeCustomRequirementValues(mixed $values): ?array
+    {
+        if (!is_array($values) || $values === []) {
+            return null;
+        }
+
+        $sanitized = [];
+        foreach (array_slice($values, 0, 20) as $entry) {
+            if (!is_array($entry)) {
+                continue;
+            }
+            $label = trim((string) ($entry['label'] ?? ''));
+            if ($label === '') {
+                continue;
+            }
+            $sanitized[] = [
+                'key'   => mb_substr(trim((string) ($entry['key'] ?? '')), 0, 100),
+                'label' => mb_substr($label, 0, 255),
+                'type'  => in_array($entry['type'] ?? null, ['text', 'textarea', 'select', 'number', 'date', 'checkbox', 'radio'], true) ? $entry['type'] : 'text',
+                'value' => mb_substr(trim((string) ($entry['value'] ?? '')), 0, 1000),
+            ];
+        }
+
+        return $sanitized !== [] ? $sanitized : null;
     }
 
     private function normalizePaymentMethod(string $method): string
