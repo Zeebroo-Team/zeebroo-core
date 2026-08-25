@@ -849,15 +849,23 @@
             <button class="ribbon-btn-lg" id="rb-sal-new-quotation">
               <i class="fa fa-file-circle-plus"></i>New Quotation
             </button>
+            <button class="ribbon-btn-lg primary" id="rb-so-new">
+              <i class="fa fa-box"></i>New Sales Order
+            </button>
           </div>
           <div class="ribbon-group-label">Create</div>
         </div>
 
         <div class="ribbon-group">
           <div class="ribbon-group-content">
-            <button class="ribbon-btn-lg" id="rb-sal-refresh">
-              <i class="fa fa-rotate"></i>Refresh
-            </button>
+            <div class="ribbon-small-stack">
+              <button class="ribbon-btn-sm" id="rb-sal-refresh">
+                <i class="fa fa-rotate"></i> Refresh
+              </button>
+              <button class="ribbon-btn-sm" id="rb-sal-invoice-setup">
+                <i class="fa fa-sliders"></i> Invoice Setup
+              </button>
+            </div>
             <div class="ribbon-small-stack">
               <button class="ribbon-btn-sm" id="rb-sal-all">
                 <i class="fa fa-list"></i> All Sales
@@ -881,15 +889,6 @@
 
         <div class="ribbon-group">
           <div class="ribbon-group-content">
-            <button class="ribbon-btn-lg" id="rb-sal-invoice-setup">
-              <i class="fa fa-sliders"></i>Invoice Setup
-            </button>
-          </div>
-          <div class="ribbon-group-label">Configuration</div>
-        </div>
-
-        <div class="ribbon-group">
-          <div class="ribbon-group-content">
             <button class="ribbon-btn-lg" id="rb-eod-open">
               <i class="fa fa-building-columns"></i>End of Day
             </button>
@@ -899,26 +898,11 @@
 
         <div class="ribbon-group">
           <div class="ribbon-group-content">
-            <button class="ribbon-btn-lg" id="rb-qt-new">
-              <i class="fa fa-file-circle-plus"></i>New Quote
-            </button>
-            <button class="ribbon-btn-lg" id="rb-qt-refresh">
-              <i class="fa fa-rotate"></i>Refresh
+            <button class="ribbon-btn-lg" id="rb-sal-customers">
+              <i class="fa fa-users"></i>Customers
             </button>
           </div>
-          <div class="ribbon-group-label">Quotations</div>
-        </div>
-
-        <div class="ribbon-group">
-          <div class="ribbon-group-content">
-            <button class="ribbon-btn-lg primary" id="rb-so-new">
-              <i class="fa fa-box"></i>New Order
-            </button>
-            <button class="ribbon-btn-lg" id="rb-so-refresh">
-              <i class="fa fa-rotate"></i>Refresh
-            </button>
-          </div>
-          <div class="ribbon-group-label">Sales Orders</div>
+          <div class="ribbon-group-label">Customers</div>
         </div>
 
       </div><!-- /sales ribbon page -->
