@@ -33304,7 +33304,10 @@ async function submitDsCreate() {
           <div class="um-detail-email">${escHtml(branch.address || 'No address set')}</div>
           <div class="um-detail-joined"><i class="fa fa-calendar-days"></i> Added ${created}</div>
         </div>
-        <div><span class="um-status-badge um-status-${branch.is_active ? 'active' : 'inactive'}">${branch.is_active ? 'active' : 'inactive'}</span></div>
+        <span class="um-status-badge um-status-${branch.is_active ? 'active' : 'inactive'}">${branch.is_active ? 'active' : 'inactive'}</span>
+        <button class="um-role-edit-btn" id="branch-open-edit">
+          <i class="fa fa-pen"></i> Edit Branch
+        </button>
       </div>
 
       <div class="um-detail-section">
@@ -33320,7 +33323,6 @@ async function submitDsCreate() {
       </div>` : ''}
 
       <div class="um-detail-actions">
-        <button class="btn-primary" id="branch-open-edit"><i class="fa fa-pen"></i> Edit Branch</button>
         <button class="um-remove-btn" id="branch-open-remove"><i class="fa fa-trash"></i> Delete</button>
       </div>
     `;
