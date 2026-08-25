@@ -30440,9 +30440,6 @@ $$('.svc-detail-tab').forEach(tab => {
 // ── New / Edit Service Modal ──────────────────────────────────────────────────
 let _svcFormCatIds   = new Set();
 let _svcFormEmpIds   = new Set();
-let _svcFormActive   = true;
-let _svcFormFeatured = false;
-let _svcFormWarranty = false;
 let _svcAvailCats    = [];
 let _svcAvailEmps    = [];
 let _svcProdLines    = []; // [{product_id, name, qty}]
@@ -30459,9 +30456,6 @@ function _svcSetImage(fileId, url) {
 function _svcResetModal() {
   _svcFormCatIds   = new Set();
   _svcFormEmpIds   = new Set();
-  _svcFormActive   = true;
-  _svcFormFeatured = false;
-  _svcFormWarranty = false;
   _svcProdLines    = [];
   $('#svc-form-name').value     = '';
   $('#svc-form-desc').value     = '';
@@ -30470,11 +30464,12 @@ function _svcResetModal() {
   $('#svc-form-prod-q').value   = '';
   $('#svc-form-prod-results').style.display = 'none';
   $('#svc-form-prod-lines').innerHTML = '';
-  $('#svc-form-alert').style.display  = 'none';
   $('#svc-form-currency').textContent = state.currency || '';
-  $('#svc-toggle-ui')?.classList.add('on');
-  $('#svc-featured-toggle-ui')?.classList.remove('on');
-  $('#svc-warranty-toggle-ui')?.classList.remove('on');
+  $('#svc-form-active').checked    = true;
+  $('#svc-form-featured').checked  = false;
+  $('#svc-form-warranty').checked  = false;
+  $$('#svc-new-modal .prod-modal-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === 'basic'));
+  $$('#svc-new-modal .prod-modal-pane').forEach(p => p.classList.toggle('active', p.dataset.pane === 'basic'));
   _svcSetImage(null, null);
 }
 
@@ -30507,8 +30502,7 @@ async function openEditServiceModal(id) {
   $('#svc-form-submit').disabled  = false;
 
   if (detailRes.status !== 200) {
-    $('#svc-form-alert').textContent = 'Failed to load service data.';
-    $('#svc-form-alert').style.display = 'block';
+    toast('Failed to load service data.', 'error');
     return;
   }
 
@@ -30517,13 +30511,10 @@ async function openEditServiceModal(id) {
   $('#svc-form-desc').value     = d.description || '';
   $('#svc-form-price').value    = d.price != null ? d.price : '';
   $('#svc-form-duration').value = d.duration_minutes || '';
-  _svcFormActive   = d.is_active;
-  _svcFormFeatured = d.is_featured;
-  _svcFormWarranty = !!d.has_warranty;
+  $('#svc-form-active').checked   = !!d.is_active;
+  $('#svc-form-featured').checked = !!d.is_featured;
+  $('#svc-form-warranty').checked = !!d.has_warranty;
   _svcSetImage(d.file_manager_file_id || null, d.image_url || null);
-  $('#svc-toggle-ui')?.classList.toggle('on', d.is_active);
-  $('#svc-featured-toggle-ui')?.classList.toggle('on', d.is_featured);
-  $('#svc-warranty-toggle-ui')?.classList.toggle('on', !!d.has_warranty);
 
   // Pre-select categories
   _svcFormCatIds = new Set((d.categories || []).map(c => c.id));
@@ -30651,19 +30642,15 @@ function _svcRenderProdLines() {
   });
 }
 
-$('#svc-toggle-ui')?.addEventListener('click', () => {
-  _svcFormActive = !_svcFormActive;
-  $('#svc-toggle-ui').classList.toggle('on', _svcFormActive);
-});
-
-$('#svc-featured-toggle-ui')?.addEventListener('click', () => {
-  _svcFormFeatured = !_svcFormFeatured;
-  $('#svc-featured-toggle-ui').classList.toggle('on', _svcFormFeatured);
-});
-
-$('#svc-warranty-toggle-ui')?.addEventListener('click', () => {
-  _svcFormWarranty = !_svcFormWarranty;
-  $('#svc-warranty-toggle-ui').classList.toggle('on', _svcFormWarranty);
+// ── Service modal tab switching ───────────────────────────────────────────
+$$('#svc-new-modal .prod-modal-tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    $$('#svc-new-modal .prod-modal-tab').forEach(b => b.classList.remove('active'));
+    $$('#svc-new-modal .prod-modal-pane').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    const pane = $('#svc-new-modal .prod-modal-pane[data-pane="' + btn.dataset.tab + '"]');
+    if (pane) pane.classList.add('active');
+  });
 });
 
 $('#svc-img-choose')?.addEventListener('click', () => openImgPicker(_svcSetImage));
@@ -30675,14 +30662,12 @@ $('#svc-new-modal')?.addEventListener('click', e => { if (e.target === e.current
 
 $('#svc-form-submit')?.addEventListener('click', async () => {
   const btn     = $('#svc-form-submit');
-  const alertEl = $('#svc-form-alert');
   const name    = $('#svc-form-name').value.trim();
   const price   = $('#svc-form-price').value.trim();
   const isEdit  = _svcEditingId !== null;
 
-  alertEl.style.display = 'none';
-  if (!name)  { alertEl.textContent = 'Service name is required.';  alertEl.style.display = 'block'; return; }
-  if (!price) { alertEl.textContent = 'Price is required.';         alertEl.style.display = 'block'; return; }
+  if (!name)  { toast('Service name is required.', 'error'); return; }
+  if (!price) { toast('Price is required.', 'error');         return; }
 
   btn.disabled = true;
   btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
@@ -30692,9 +30677,9 @@ $('#svc-form-submit')?.addEventListener('click', async () => {
     description:          $('#svc-form-desc').value.trim() || null,
     price:                parseFloat(price),
     duration_minutes:     parseInt($('#svc-form-duration').value) || null,
-    is_active:            _svcFormActive,
-    is_featured:          _svcFormFeatured,
-    has_warranty:         _svcFormWarranty,
+    is_active:            $('#svc-form-active').checked,
+    is_featured:          $('#svc-form-featured').checked,
+    has_warranty:         $('#svc-form-warranty').checked,
     service_category_ids: [..._svcFormCatIds],
     employee_ids:         [..._svcFormEmpIds],
     product_lines:        _svcProdLines.map(l => ({ product_id: l.product_id, qty: l.qty })),
@@ -30718,8 +30703,7 @@ $('#svc-form-submit')?.addEventListener('click', async () => {
     if (isEdit) _svcOpenItemDetail(_svcEditingId);
   } else {
     const msg = Object.values(res.body?.errors || {}).flat()[0] || res.body?.message || 'Failed to save service.';
-    alertEl.textContent = msg;
-    alertEl.style.display = 'block';
+    toast(msg, 'error');
   }
 });
 
