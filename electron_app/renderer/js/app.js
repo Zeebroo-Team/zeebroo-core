@@ -4806,7 +4806,7 @@ function applyFeatureVisibility() {
   { const el = $('.pos-mode-btn[data-mode="services"]');
     if (el) el.style.display = mp('pos_panel_mode_services') ? '' : 'none'; }
   { const el = $('#product-search-bar'); if (el) el.style.display = mp('pos_panel_search') ? '' : 'none'; }
-  { const el = $('#category-filter'); if (el) el.style.display = mp('pos_panel_categories') ? '' : 'none'; }
+  { const el = $('#category-filter-wrap'); if (el) el.style.display = mp('pos_panel_categories') ? '' : 'none'; }
   { const el = $('#product-grid'); if (el) el.style.display = mp('pos_panel_product_grid') ? '' : 'none'; }
   btn('#btn-park',     mp('pos_cart_park'));
   btn('#btn-recall',   mp('pos_cart_recall'));
@@ -14845,6 +14845,7 @@ function buildCategoryBar(categories, active) {
       loadProducts(state.searchQuery, state.activeCategory);
     });
   });
+  updateScrollArrows('category-filter', 'cat-scroll-left', 'cat-scroll-right');
 }
 
 function buildProductGrid(products) {
@@ -15217,6 +15218,32 @@ $('#product-search').addEventListener('keydown', async (e) => {
 $('#btn-refresh-products').addEventListener('click', () => loadProducts(state.searchQuery, state.activeCategory));
 $('#rb-refresh').addEventListener('click', () => loadProducts(state.searchQuery, state.activeCategory));
 
+// ── Category chip bar: left/right scroll arrows ─────────────────────────────
+function updateScrollArrows(trackId, leftId, rightId) {
+  const track = $('#' + trackId), left = $('#' + leftId), right = $('#' + rightId);
+  if (!track || !left || !right) return;
+  const max = track.scrollWidth - track.clientWidth;
+  left.disabled  = track.scrollLeft <= 1;
+  right.disabled = max <= 1 || track.scrollLeft >= max - 1;
+}
+function wireCategoryScroll(trackId, leftId, rightId) {
+  const track = $('#' + trackId), left = $('#' + leftId), right = $('#' + rightId);
+  if (!track || !left || !right) return;
+  left.addEventListener('click', () => track.scrollBy({ left: -160, behavior: 'smooth' }));
+  right.addEventListener('click', () => track.scrollBy({ left: 160, behavior: 'smooth' }));
+  track.addEventListener('scroll', () => updateScrollArrows(trackId, leftId, rightId));
+  window.addEventListener('resize', () => updateScrollArrows(trackId, leftId, rightId));
+  // The bar can be built/measured while its tab/panel is still display:none
+  // (clientWidth/scrollWidth both read 0 then), so re-check whenever the
+  // track's actual rendered size changes — e.g. when its panel becomes visible.
+  if (window.ResizeObserver) {
+    new ResizeObserver(() => updateScrollArrows(trackId, leftId, rightId)).observe(track);
+  }
+  updateScrollArrows(trackId, leftId, rightId);
+}
+wireCategoryScroll('category-filter', 'cat-scroll-left', 'cat-scroll-right');
+wireCategoryScroll('service-category-filter', 'svc-cat-scroll-left', 'svc-cat-scroll-right');
+
 // ── POS Mode Switcher ──────────────────────────────────────────────────────
 function switchPosMode(mode) {
   if (state.posMode === mode) return;
@@ -15224,7 +15251,7 @@ function switchPosMode(mode) {
   $$('.pos-mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
 
   const productEls = [
-    $('#product-search-bar'), $('#category-filter'),
+    $('#product-search-bar'), $('#category-filter-wrap'),
     $('#product-grid'), $('#pos-pagination'),
   ];
   const svcSection = $('#pos-service-section');
@@ -15282,6 +15309,7 @@ function buildServiceCategoryBar(categories, active) {
       loadServices(state.serviceSearchQuery, state.serviceActiveCategory);
     });
   });
+  updateScrollArrows('service-category-filter', 'svc-cat-scroll-left', 'svc-cat-scroll-right');
 }
 
 function buildServiceGrid(services) {
