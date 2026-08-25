@@ -5354,9 +5354,11 @@
                   <label class="po-field-label" style="margin-bottom:0">Categories</label>
                   <button type="button" class="svc-form-inline-add" id="svc-form-cat-add-btn"><i class="fa fa-plus"></i> Add Category</button>
                 </div>
-                <div class="svc-form-cat-list" id="svc-form-cat-list">
-                  <span style="color:var(--text-muted);font-size:12px"><i class="fa fa-spinner fa-spin"></i> Loading categories…</span>
+                <div class="tag-input-wrap" id="svc-cat-wrap">
+                  <div id="svc-cat-tags" class="tag-input-tags"></div>
+                  <input type="text" id="svc-cat-input" class="tag-input-field" placeholder="Search categories…" autocomplete="off">
                 </div>
+                <div class="tag-input-dd" id="svc-cat-dd" style="display:none"></div>
               </div>
             </div>
 
@@ -5364,9 +5366,11 @@
             <div class="prod-modal-pane" data-pane="assign">
               <div class="po-field">
                 <label class="po-field-label">Assign Employees</label>
-                <div class="svc-form-cat-list" id="svc-form-emp-list">
-                  <span style="color:var(--text-muted);font-size:12px"><i class="fa fa-spinner fa-spin"></i> Loading…</span>
+                <div class="tag-input-wrap" id="svc-emp-wrap">
+                  <div id="svc-emp-tags" class="tag-input-tags"></div>
+                  <input type="text" id="svc-emp-input" class="tag-input-field" placeholder="Search employees…" autocomplete="off">
                 </div>
+                <div class="tag-input-dd" id="svc-emp-dd" style="display:none"></div>
               </div>
               <div class="po-field">
                 <label class="po-field-label">Assign Products</label>

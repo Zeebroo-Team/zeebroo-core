@@ -30443,13 +30443,24 @@ $$('.svc-detail-tab').forEach(tab => {
 });
 
 // ── New / Edit Service Modal ──────────────────────────────────────────────────
-let _svcFormCatIds   = new Set();
-let _svcFormEmpIds   = new Set();
+let _svcSelectedCats = []; // [{id, name}]
+let _svcSelectedEmps = []; // [{id, name}]
 let _svcAvailCats    = [];
 let _svcAvailEmps    = [];
+let _svcCatInputWired = false;
+let _svcEmpInputWired = false;
 let _svcProdLines    = []; // [{product_id, name, qty}]
 let _svcEditingId    = null; // null = create mode, number = edit mode
 let _svcFormImageFileId = null;
+
+function _svcRemoveCat(id) {
+  _svcSelectedCats = _svcSelectedCats.filter(x => x.id !== id);
+  _tagRender('svc-cat-tags', _svcSelectedCats, _svcRemoveCat);
+}
+function _svcRemoveEmp(id) {
+  _svcSelectedEmps = _svcSelectedEmps.filter(x => x.id !== id);
+  _tagRender('svc-emp-tags', _svcSelectedEmps, _svcRemoveEmp);
+}
 
 function _svcSetImage(fileId, url) {
   _svcFormImageFileId = fileId;
@@ -30459,9 +30470,13 @@ function _svcSetImage(fileId, url) {
 }
 
 function _svcResetModal() {
-  _svcFormCatIds   = new Set();
-  _svcFormEmpIds   = new Set();
+  _svcSelectedCats = [];
+  _svcSelectedEmps = [];
   _svcProdLines    = [];
+  _tagRender('svc-cat-tags', [], _svcRemoveCat);
+  _tagRender('svc-emp-tags', [], _svcRemoveEmp);
+  $('#svc-cat-input').value = '';
+  $('#svc-emp-input').value = '';
   $('#svc-form-name').value     = '';
   $('#svc-form-desc').value     = '';
   $('#svc-form-price').value    = '';
@@ -30522,16 +30537,12 @@ async function openEditServiceModal(id) {
   _svcSetImage(d.file_manager_file_id || null, d.image_url || null);
 
   // Pre-select categories
-  _svcFormCatIds = new Set((d.categories || []).map(c => c.id));
-  $('#svc-form-cat-list').querySelectorAll('[data-cat-id]').forEach(chip => {
-    if (_svcFormCatIds.has(Number(chip.dataset.catId))) chip.classList.add('selected');
-  });
+  _svcSelectedCats = (d.categories || []).map(c => ({ id: c.id, name: c.name }));
+  _tagRender('svc-cat-tags', _svcSelectedCats, _svcRemoveCat);
 
   // Pre-select employees
-  _svcFormEmpIds = new Set((d.employees || []).map(e => e.id));
-  $('#svc-form-emp-list').querySelectorAll('[data-emp-id]').forEach(chip => {
-    if (_svcFormEmpIds.has(Number(chip.dataset.empId))) chip.classList.add('selected');
-  });
+  _svcSelectedEmps = (d.employees || []).map(e => ({ id: e.id, name: e.name || e.full_name || '' }));
+  _tagRender('svc-emp-tags', _svcSelectedEmps, _svcRemoveEmp);
 
   // Pre-fill product lines
   _svcProdLines = (d.products || []).map(p => ({ product_id: p.id, name: p.name, qty: p.qty }));
@@ -30544,45 +30555,45 @@ function closeNewServiceModal() {
 }
 
 async function _svcLoadFormCategories() {
-  const list = $('#svc-form-cat-list');
-  list.innerHTML = `<span style="color:var(--text-muted);font-size:12px"><i class="fa fa-spinner fa-spin"></i> Loading…</span>`;
   const res = await API.serviceMgmtCategories();
-  _svcAvailCats = (res.body?.data || []).filter(c => c.is_active);
-  if (!_svcAvailCats.length) {
-    list.innerHTML = `<span style="color:var(--text-muted);font-size:12px">No categories available</span>`;
-    return;
+  _svcAvailCats = (res.body?.data || [])
+    .filter(c => c.is_active)
+    .map(c => ({ id: c.id, name: c.name }));
+
+  if (!_svcCatInputWired) {
+    _tagWireInput(
+      'svc-cat-input', 'svc-cat-dd',
+      () => _svcAvailCats,
+      () => _svcSelectedCats,
+      item => {
+        if (!_svcSelectedCats.find(x => x.id === item.id)) {
+          _svcSelectedCats.push(item);
+          _tagRender('svc-cat-tags', _svcSelectedCats, _svcRemoveCat);
+        }
+      },
+    );
+    _svcCatInputWired = true;
   }
-  list.innerHTML = _svcAvailCats.map(c =>
-    `<div class="svc-form-cat-chip${_svcFormCatIds.has(c.id) ? ' selected' : ''}" data-cat-id="${c.id}"><i class="fa fa-check"></i>${escHtml(c.name)}</div>`
-  ).join('');
-  list.querySelectorAll('.svc-form-cat-chip').forEach(chip => {
-    chip.addEventListener('click', () => {
-      const id = Number(chip.dataset.catId);
-      if (_svcFormCatIds.has(id)) { _svcFormCatIds.delete(id); chip.classList.remove('selected'); }
-      else                         { _svcFormCatIds.add(id);    chip.classList.add('selected'); }
-    });
-  });
 }
 
 async function _svcLoadFormEmployees() {
-  const list = $('#svc-form-emp-list');
-  list.innerHTML = `<span style="color:var(--text-muted);font-size:12px"><i class="fa fa-spinner fa-spin"></i> Loading…</span>`;
   const res = await API.employees();
-  _svcAvailEmps = (res.body?.data || []);
-  if (!_svcAvailEmps.length) {
-    list.innerHTML = `<span style="color:var(--text-muted);font-size:12px">No employees found</span>`;
-    return;
+  _svcAvailEmps = (res.body?.data || []).map(e => ({ id: e.id, name: e.name || e.full_name || '' }));
+
+  if (!_svcEmpInputWired) {
+    _tagWireInput(
+      'svc-emp-input', 'svc-emp-dd',
+      () => _svcAvailEmps,
+      () => _svcSelectedEmps,
+      item => {
+        if (!_svcSelectedEmps.find(x => x.id === item.id)) {
+          _svcSelectedEmps.push(item);
+          _tagRender('svc-emp-tags', _svcSelectedEmps, _svcRemoveEmp);
+        }
+      },
+    );
+    _svcEmpInputWired = true;
   }
-  list.innerHTML = _svcAvailEmps.map(e =>
-    `<div class="svc-form-cat-chip" data-emp-id="${e.id}"><i class="fa fa-check"></i>${escHtml(e.name || e.full_name || '')}</div>`
-  ).join('');
-  list.querySelectorAll('[data-emp-id]').forEach(chip => {
-    chip.addEventListener('click', () => {
-      const id = Number(chip.dataset.empId);
-      if (_svcFormEmpIds.has(id)) { _svcFormEmpIds.delete(id); chip.classList.remove('selected'); }
-      else                         { _svcFormEmpIds.add(id);    chip.classList.add('selected'); }
-    });
-  });
 }
 
 // ── Product lines for service ─────────────────────────────────────────────
@@ -30685,8 +30696,8 @@ $('#svc-form-submit')?.addEventListener('click', async () => {
     is_active:            $('#svc-form-active').checked,
     is_featured:          $('#svc-form-featured').checked,
     has_warranty:         $('#svc-form-warranty').checked,
-    service_category_ids: [..._svcFormCatIds],
-    employee_ids:         [..._svcFormEmpIds],
+    service_category_ids: _svcSelectedCats.map(c => c.id),
+    employee_ids:         _svcSelectedEmps.map(e => e.id),
     product_lines:        _svcProdLines.map(l => ({ product_id: l.product_id, qty: l.qty })),
     file_manager_file_id: _svcFormImageFileId,
   };
@@ -30861,11 +30872,12 @@ $('#svc-cat-form-submit')?.addEventListener('click', async () => {
     closeNewCategoryModal();
     toast('Category created', 'success');
     if (_svcCatFormFromServiceModal) {
-      const newId = res.body?.data?.id != null ? Number(res.body.data.id) : null;
+      const newId   = res.body?.data?.id != null ? Number(res.body.data.id) : null;
+      const newName = res.body?.data?.name || name;
       await _svcLoadFormCategories();
-      if (newId != null) {
-        _svcFormCatIds.add(newId);
-        $(`#svc-form-cat-list [data-cat-id="${newId}"]`)?.classList.add('selected');
+      if (newId != null && !_svcSelectedCats.find(x => x.id === newId)) {
+        _svcSelectedCats.push({ id: newId, name: newName });
+        _tagRender('svc-cat-tags', _svcSelectedCats, _svcRemoveCat);
       }
     } else {
       loadSvcCategories();
