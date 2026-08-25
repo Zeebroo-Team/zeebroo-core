@@ -21799,6 +21799,7 @@ function _qapUnitRenderDd() {
 $('#rb-add-product').addEventListener('click', () => { activateTab('pos'); openAddProductModal(); });
 $('#rb-customers').addEventListener('click', openCustomersModal);
 $('#rb-home-customers').addEventListener('click', openCustomersModal);
+$('#rb-sal-customers')?.addEventListener('click', openCustomersModal);
 $('#rb-accounts').addEventListener('click', () => toast('Accounts panel coming soon', 'info'));
 // ── Inventory ribbon buttons ───────────────────────────────────────────────
 $('#rb-inv-products')?.addEventListener('click',  () => { activateTab('inventory'); switchInvView('products'); });
