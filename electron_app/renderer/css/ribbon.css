@@ -11481,9 +11481,12 @@ body.dark .bc-main-preview-body { background: #1a1a1a; }
 }
 .qt-card-hd i { color: var(--accent); font-size: 11px; }
 .qt-fields-grid { display: grid; grid-template-columns: repeat(4, 1fr); }
-.qt-field { padding: 14px 16px; border-right: 1px solid var(--border-light); }
+.qt-field { padding: 14px 16px; border-right: 1px solid var(--border-light); border-bottom: 1px solid var(--border-light); }
 .qt-field:last-child { border-right: none; }
+.qt-fields-grid .qt-field:nth-child(4n) { border-right: none; }
 .qt-label { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted); margin-bottom: 6px; display: block; }
+.invd-view-val { font-size: 13.5px; font-weight: 600; color: var(--text); }
+.invd-view-amt { font-size: 16px; font-weight: 800; color: var(--accent); }
 .qt-input, .qt-select {
   width: 100%; padding: 8px 10px; font-size: 13px;
   border: 1px solid var(--border); border-radius: 7px;
