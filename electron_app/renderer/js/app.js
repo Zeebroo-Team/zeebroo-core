@@ -3775,6 +3775,7 @@ async function _soOpenDetail(id) {
         <div class="qt-doc-meta-val">${deliveryStr}</div>
       </div>
       ${o.reference ? `<div class="qt-doc-meta-block"><div class="qt-doc-meta-lbl">Reference</div><div class="qt-doc-meta-val">${escHtml(o.reference)}</div></div>` : ''}
+      ${o.invoice_number ? `<div class="qt-doc-meta-block"><div class="qt-doc-meta-lbl">Invoice</div><div class="qt-doc-meta-val">${escHtml(o.invoice_number)}</div></div>` : ''}
     </div>
     <table class="qt-item-table">
       <thead><tr><th style="width:32px">#</th><th>Description</th><th class="td-r">Qty</th><th class="td-r">Unit Price</th><th class="td-r">Line Total</th></tr></thead>
@@ -3794,7 +3795,10 @@ async function _soAction(id, action) {
   const fnMap = { confirm: API.confirmSalesOrder, process: API.processSalesOrder, complete: API.completeSalesOrder, cancel: API.cancelSalesOrder };
   const res = await fnMap[action](id);
   if (res.status === 200) {
-    toast({ confirm: 'Order confirmed', process: 'Marked as processing', complete: 'Order completed', cancel: 'Order cancelled' }[action], 'success');
+    const msg = action === 'confirm' && res.body?.invoice_number
+      ? `Order confirmed → Invoice ${res.body.invoice_number} created`
+      : { confirm: 'Order confirmed', process: 'Marked as processing', complete: 'Order completed', cancel: 'Order cancelled' }[action];
+    toast(msg, 'success');
     _soOpenDetail(id);
     loadSalesOrderList();
   } else {
@@ -3816,6 +3820,71 @@ function _soResetForm() {
   _soCalcTotals();
 }
 
+// ── Sales Order line-item product typeahead ────────────────────────────────
+// Single shared suggestion portal (only one row can be focused/typed into at
+// a time), appended to <body> so it escapes overflow:hidden containers.
+let _soSugEl    = null;
+let _soSugTimer = null;
+
+function _soGetSugEl() {
+  if (_soSugEl) return _soSugEl;
+  const el = document.createElement('div');
+  el.className = 'qt-product-suggest';
+  el.style.cssText = 'position:fixed!important;z-index:9999;display:none;right:auto!important;';
+  document.body.appendChild(el);
+  _soSugEl = el;
+  return el;
+}
+
+function _soHideSug() {
+  if (_soSugEl) { _soSugEl.style.display = 'none'; _soSugEl.innerHTML = ''; }
+}
+
+function _soSearchProducts(inputEl, idx) {
+  clearTimeout(_soSugTimer);
+  const q = inputEl.value.trim();
+  if (q.length < 2) { _soHideSug(); return; }
+  _soSugTimer = setTimeout(async () => {
+    const res = await API.productSearch(q, 6);
+    const products = res.body?.data || [];
+    if (!products.length) { _soHideSug(); return; }
+
+    const sug = _soGetSugEl();
+    sug.innerHTML = products.map(p => `<div class="qt-suggest-item" data-id="${p.id}" data-name="${escHtml(p.name)}" data-price="${p.unit_sell_price ?? 0}">
+      <i class="fa fa-box" style="opacity:.45;margin-right:5px;font-size:11px"></i>${escHtml(p.name)}<span class="qt-suggest-sku">${p.sku ? escHtml(p.sku) : ''}</span>
+    </div>`).join('');
+
+    const r = inputEl.getBoundingClientRect();
+    sug.style.top     = r.bottom + 2 + 'px';
+    sug.style.left    = r.left + 'px';
+    sug.style.width   = r.width + 'px';
+    sug.style.display = 'block';
+
+    sug.querySelectorAll('.qt-suggest-item').forEach(item => {
+      item.addEventListener('mousedown', e => {
+        e.preventDefault(); // prevent blur firing before mousedown resolves
+        _soHideSug();
+        if (!_so.items[idx]) return;
+        _so.items[idx].description = item.dataset.name;
+        _so.items[idx].unit_price  = parseFloat(item.dataset.price || 0);
+        _so.items[idx].product_id  = parseInt(item.dataset.id, 10);
+        // _soRenderItems() snapshots live DOM values before rebuilding, so the
+        // row's inputs must reflect the pick *before* that rebuild runs, or the
+        // stale typed-in text/price would overwrite what we just set above.
+        const row = inputEl.closest('.qt-line-row');
+        if (row) {
+          const descEl  = row.querySelector('.so-item-desc');
+          const priceEl = row.querySelector('.so-item-price');
+          if (descEl)  descEl.value  = item.dataset.name;
+          if (priceEl) priceEl.value = _so.items[idx].unit_price;
+        }
+        _soRenderItems();
+        _soCalcTotals();
+      });
+    });
+  }, 200);
+}
+
 function _soRenderItems() {
   const body = $('#so-items-body');
   // Snapshot values from any existing inputs before re-render
@@ -3833,7 +3902,7 @@ function _soRenderItems() {
     return `<div class="qt-line-row" data-idx="${idx}">
       <div class="qt-line-desc">
         <input type="text" class="qt-line-input qt-line-desc-input so-item-desc" data-idx="${idx}"
-          value="${escHtml(item.description || '')}" placeholder="Description…">
+          value="${escHtml(item.description || '')}" placeholder="Description or search product…">
       </div>
       <input type="number" class="qt-line-input qt-line-num so-item-qty" data-idx="${idx}"
         min="0.001" step="any" value="${item.quantity || 1}">
@@ -3845,7 +3914,13 @@ function _soRenderItems() {
   }).join('');
 
   $$('#so-items-body .so-item-desc').forEach(el => {
-    el.addEventListener('input', () => { _so.items[+el.dataset.idx].description = el.value; });
+    el.addEventListener('input', () => {
+      const idx = +el.dataset.idx;
+      _so.items[idx].description = el.value;
+      _so.items[idx].product_id  = null; // free-text edit unlinks any previously picked product
+      _soSearchProducts(el, idx);
+    });
+    el.addEventListener('blur', () => setTimeout(_soHideSug, 150));
   });
   $$('#so-items-body .so-item-qty').forEach(el => {
     el.addEventListener('input', () => {
@@ -3896,7 +3971,7 @@ async function _soOpenForm(order) {
     $('#so-f-discount').value      = parseFloat(order.discount_amount || 0).toFixed(2);
     $('#so-f-tax').value           = parseFloat(order.tax_amount || 0).toFixed(2);
     $('#so-f-notes').value         = order.notes || '';
-    _so.items = (order.items || []).map(i => ({ description: i.description || '', quantity: parseFloat(i.quantity), unit_price: parseFloat(i.unit_price) }));
+    _so.items = (order.items || []).map(i => ({ description: i.description || '', quantity: parseFloat(i.quantity), unit_price: parseFloat(i.unit_price), product_id: i.product_id || null }));
   } else {
     _soResetForm();
     return;
@@ -3928,7 +4003,7 @@ async function _soSave() {
     discount_amount:         parseFloat($('#so-f-discount').value) || 0,
     tax_amount:              parseFloat($('#so-f-tax').value) || 0,
     notes:                   $('#so-f-notes').value || null,
-    items: _so.items.map(i => ({ description: i.description, quantity: i.quantity, unit_price: i.unit_price })),
+    items: _so.items.map(i => ({ description: i.description, quantity: i.quantity, unit_price: i.unit_price, product_id: i.product_id || null })),
   };
 
   const saveBtn = $('#so-save-btn');
@@ -3959,7 +4034,7 @@ $('#so-cancel-form-btn').addEventListener('click', () => { _so.editingId ? _soOp
 $('#so-new-btn').addEventListener('click', () => _soOpenForm(null));
 $('#so-save-btn').addEventListener('click', _soSave);
 $('#so-add-item-btn').addEventListener('click', () => {
-  _so.items.push({ description: '', quantity: 1, unit_price: 0 });
+  _so.items.push({ description: '', quantity: 1, unit_price: 0, product_id: null });
   _soRenderItems();
   _soCalcTotals();
   const inputs = $$('#so-items-body .so-item-desc');
