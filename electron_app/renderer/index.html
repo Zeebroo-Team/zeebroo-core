@@ -5290,117 +5290,137 @@
       </div>
 
       <div class="modal-overlay" id="svc-new-modal" style="display:none">
-        <div class="svc-new-modal-box">
-          <div class="svc-new-modal-header">
-            <div class="svc-new-modal-title"><i class="fa fa-screwdriver-wrench"></i> <span id="svc-new-modal-title-text">New Service</span></div>
-            <button class="svc-new-modal-close" id="svc-new-modal-close"><i class="fa fa-xmark"></i></button>
+        <div class="po-aim-shell prod-modal-shell">
+          <div class="po-aim-header">
+            <i class="fa fa-screwdriver-wrench" style="color:var(--accent)"></i>
+            <span id="svc-new-modal-title-text">New Service</span>
+            <button class="psm-close" id="svc-new-modal-close"><i class="fa fa-xmark"></i></button>
           </div>
-          <div class="svc-new-modal-body">
-            <div class="svc-form-alert" id="svc-form-alert" style="display:none"></div>
-
-            <div class="svc-form-group">
-              <label class="svc-form-label">Service Name <span class="svc-form-req">*</span></label>
-              <input type="text" id="svc-form-name" class="svc-form-input" placeholder="e.g. Deep Cleaning, Hair Cut…" autocomplete="off">
-            </div>
-
-            <div class="svc-form-group">
-              <label class="svc-form-label">Description</label>
-              <textarea id="svc-form-desc" class="svc-form-input svc-form-textarea" rows="3" placeholder="Short description of the service…"></textarea>
-            </div>
-
-            <div class="svc-form-group">
-              <label class="svc-form-label">Image</label>
-              <div class="prod-img-row">
-                <div class="prod-img-thumb" id="svc-img-thumb">
-                  <i class="fa fa-image" style="font-size:22px;color:var(--text-muted)"></i>
-                </div>
-                <div style="display:flex;flex-direction:column;gap:6px">
-                  <button type="button" id="svc-img-choose" class="po-btn-ghost" style="width:fit-content"><i class="fa fa-folder-open"></i> Choose Image</button>
-                  <button type="button" id="svc-img-remove" class="po-btn-ghost" style="display:none;width:fit-content;color:var(--danger,#e74c3c)"><i class="fa fa-trash"></i> Remove</button>
-                </div>
-              </div>
-            </div>
-
-            <div class="svc-form-row">
-              <div class="svc-form-group" style="flex:1">
-                <label class="svc-form-label">Price <span class="svc-form-req">*</span></label>
-                <div class="svc-form-prefix-wrap">
-                  <span class="svc-form-prefix" id="svc-form-currency">—</span>
-                  <input type="number" id="svc-form-price" class="svc-form-input svc-form-input--prefix" placeholder="0.00" min="0" step="0.01">
-                </div>
-              </div>
-              <div class="svc-form-group" style="flex:1">
-                <label class="svc-form-label">Duration (minutes)</label>
-                <input type="number" id="svc-form-duration" class="svc-form-input" placeholder="e.g. 60" min="0" step="1">
-              </div>
-            </div>
-
-            <div class="svc-form-group">
-              <div class="svc-form-label-row">
-                <label class="svc-form-label" style="margin-bottom:0">Categories</label>
-                <button type="button" class="svc-form-inline-add" id="svc-form-cat-add-btn"><i class="fa fa-plus"></i> Add Category</button>
-              </div>
-              <div class="svc-form-cat-list" id="svc-form-cat-list">
-                <span style="color:var(--text-muted);font-size:12px"><i class="fa fa-spinner fa-spin"></i> Loading categories…</span>
-              </div>
-            </div>
-
-            <div class="svc-form-group">
-              <label class="svc-form-label">Assign Employees</label>
-              <div class="svc-form-cat-list" id="svc-form-emp-list">
-                <span style="color:var(--text-muted);font-size:12px"><i class="fa fa-spinner fa-spin"></i> Loading…</span>
-              </div>
-            </div>
-
-            <div class="svc-form-group">
-              <label class="svc-form-label">Assign Products</label>
-              <div class="svc-form-prod-search-wrap">
-                <input type="text" id="svc-form-prod-q" class="svc-form-input" placeholder="Search product to add…" autocomplete="off">
-                <div class="svc-form-prod-results" id="svc-form-prod-results" style="display:none"></div>
-              </div>
-              <div id="svc-form-prod-lines"></div>
-            </div>
-
-            <div class="svc-form-group">
-              <label class="svc-form-toggle-row">
-                <span class="svc-form-label" style="margin-bottom:0">Active</span>
-                <div class="svc-toggle-wrap">
-                  <input type="checkbox" id="svc-form-active" checked style="display:none">
-                  <div class="svc-toggle" id="svc-toggle-ui"><div class="svc-toggle-knob"></div></div>
-                </div>
-              </label>
-            </div>
-
-            <div class="svc-form-group">
-              <label class="svc-form-toggle-row">
-                <div>
-                  <span class="svc-form-label" style="margin-bottom:0">Featured</span>
-                  <div style="font-size:11px;color:var(--text-muted);margin-top:2px">Show at the top of the POS service grid</div>
-                </div>
-                <div class="svc-toggle-wrap">
-                  <input type="checkbox" id="svc-form-featured" style="display:none">
-                  <div class="svc-toggle" id="svc-featured-toggle-ui"><div class="svc-toggle-knob"></div></div>
-                </div>
-              </label>
-            </div>
-
-            <div class="svc-form-group">
-              <label class="svc-form-toggle-row">
-                <div>
-                  <span class="svc-form-label" style="margin-bottom:0">Warranty</span>
-                  <div style="font-size:11px;color:var(--text-muted);margin-top:2px">Customer must be assigned when this service is added to a sale</div>
-                </div>
-                <div class="svc-toggle-wrap">
-                  <input type="checkbox" id="svc-form-warranty" style="display:none">
-                  <div class="svc-toggle" id="svc-warranty-toggle-ui"><div class="svc-toggle-knob"></div></div>
-                </div>
-              </label>
-            </div>
+          <!-- Tab navigation -->
+          <div class="prod-modal-tabs">
+            <button class="prod-modal-tab active" data-tab="basic"><i class="fa fa-circle-info"></i> Basic</button>
+            <button class="prod-modal-tab" data-tab="pricing"><i class="fa fa-tag"></i> Pricing</button>
+            <button class="prod-modal-tab" data-tab="media"><i class="fa fa-image"></i> Media</button>
+            <button class="prod-modal-tab" data-tab="assign"><i class="fa fa-users"></i> Assignments</button>
+            <button class="prod-modal-tab" data-tab="advanced"><i class="fa fa-sliders"></i> Advanced</button>
           </div>
+          <div class="prod-modal-body">
 
-          <div class="svc-new-modal-footer">
-            <button class="svc-form-btn svc-form-btn--ghost" id="svc-new-modal-cancel">Cancel</button>
-            <button class="svc-form-btn svc-form-btn--primary" id="svc-form-submit">
+            <!-- Pane 1: Basic -->
+            <div class="prod-modal-pane active" data-pane="basic">
+              <div class="po-field">
+                <label class="po-field-label">Service Name <span class="po-required">*</span></label>
+                <input type="text" id="svc-form-name" class="po-field-input" placeholder="e.g. Deep Cleaning, Hair Cut…" autocomplete="off" maxlength="255">
+              </div>
+              <div class="po-field">
+                <label class="po-field-label">Description</label>
+                <textarea id="svc-form-desc" class="po-field-input" rows="4" placeholder="Short description of the service…" style="resize:vertical;min-height:80px"></textarea>
+              </div>
+            </div>
+
+            <!-- Pane 2: Pricing -->
+            <div class="prod-modal-pane" data-pane="pricing">
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                <div class="po-field">
+                  <label class="po-field-label">Price <span class="po-required">*</span></label>
+                  <div class="svc-form-prefix-wrap">
+                    <span class="svc-form-prefix" id="svc-form-currency">—</span>
+                    <input type="number" id="svc-form-price" class="po-field-input svc-form-input--prefix" placeholder="0.00" min="0" step="0.01">
+                  </div>
+                </div>
+                <div class="po-field">
+                  <label class="po-field-label">Duration (minutes)</label>
+                  <input type="number" id="svc-form-duration" class="po-field-input" placeholder="e.g. 60" min="0" step="1">
+                </div>
+              </div>
+            </div>
+
+            <!-- Pane 3: Media -->
+            <div class="prod-modal-pane" data-pane="media">
+              <div class="po-field">
+                <label class="po-field-label">Image</label>
+                <div class="prod-img-row">
+                  <div class="prod-img-thumb" id="svc-img-thumb">
+                    <i class="fa fa-image" style="font-size:22px;color:var(--text-muted)"></i>
+                  </div>
+                  <div style="display:flex;flex-direction:column;gap:6px">
+                    <button type="button" id="svc-img-choose" class="po-btn-ghost" style="width:fit-content"><i class="fa fa-folder-open"></i> Choose Image</button>
+                    <button type="button" id="svc-img-remove" class="po-btn-ghost" style="display:none;width:fit-content;color:var(--danger,#e74c3c)"><i class="fa fa-trash"></i> Remove</button>
+                  </div>
+                </div>
+              </div>
+              <div class="po-field">
+                <div class="svc-form-label-row">
+                  <label class="po-field-label" style="margin-bottom:0">Categories</label>
+                  <button type="button" class="svc-form-inline-add" id="svc-form-cat-add-btn"><i class="fa fa-plus"></i> Add Category</button>
+                </div>
+                <div class="svc-form-cat-list" id="svc-form-cat-list">
+                  <span style="color:var(--text-muted);font-size:12px"><i class="fa fa-spinner fa-spin"></i> Loading categories…</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Pane 4: Assignments -->
+            <div class="prod-modal-pane" data-pane="assign">
+              <div class="po-field">
+                <label class="po-field-label">Assign Employees</label>
+                <div class="svc-form-cat-list" id="svc-form-emp-list">
+                  <span style="color:var(--text-muted);font-size:12px"><i class="fa fa-spinner fa-spin"></i> Loading…</span>
+                </div>
+              </div>
+              <div class="po-field">
+                <label class="po-field-label">Assign Products</label>
+                <div class="svc-form-prod-search-wrap">
+                  <input type="text" id="svc-form-prod-q" class="po-field-input" placeholder="Search product to add…" autocomplete="off">
+                  <div class="svc-form-prod-results" id="svc-form-prod-results" style="display:none"></div>
+                </div>
+                <div id="svc-form-prod-lines"></div>
+              </div>
+            </div>
+
+            <!-- Pane 5: Advanced -->
+            <div class="prod-modal-pane" data-pane="advanced">
+              <div class="prod-adv-cards">
+                <div class="prod-adv-card">
+                  <input type="checkbox" id="svc-form-active" class="prod-adv-card-chk" checked>
+                  <label class="prod-adv-card-top" for="svc-form-active">
+                    <div class="prod-adv-card-icon"><i class="fa fa-power-off"></i></div>
+                    <div class="prod-adv-card-text">
+                      <span class="prod-adv-card-name">Active</span>
+                      <span class="prod-adv-card-desc">Service is available for sale in POS</span>
+                    </div>
+                    <div class="prod-adv-card-sw"><div class="prod-adv-card-knob"></div></div>
+                  </label>
+                </div>
+                <div class="prod-adv-card">
+                  <input type="checkbox" id="svc-form-featured" class="prod-adv-card-chk">
+                  <label class="prod-adv-card-top" for="svc-form-featured">
+                    <div class="prod-adv-card-icon"><i class="fa fa-star"></i></div>
+                    <div class="prod-adv-card-text">
+                      <span class="prod-adv-card-name">Featured</span>
+                      <span class="prod-adv-card-desc">Show at the top of the POS service grid</span>
+                    </div>
+                    <div class="prod-adv-card-sw"><div class="prod-adv-card-knob"></div></div>
+                  </label>
+                </div>
+                <div class="prod-adv-card">
+                  <input type="checkbox" id="svc-form-warranty" class="prod-adv-card-chk">
+                  <label class="prod-adv-card-top" for="svc-form-warranty">
+                    <div class="prod-adv-card-icon"><i class="fa fa-shield-halved"></i></div>
+                    <div class="prod-adv-card-text">
+                      <span class="prod-adv-card-name">Warranty</span>
+                      <span class="prod-adv-card-desc">Customer must be assigned when this service is added to a sale</span>
+                    </div>
+                    <div class="prod-adv-card-sw"><div class="prod-adv-card-knob"></div></div>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+          </div><!-- /prod-modal-body -->
+          <div class="po-aim-footer">
+            <button class="po-btn-ghost" id="svc-new-modal-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+            <button class="po-btn-primary" id="svc-form-submit" style="margin-left:auto">
               <i class="fa fa-plus"></i> Create Service
             </button>
           </div>
