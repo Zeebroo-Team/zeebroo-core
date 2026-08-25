@@ -2569,98 +2569,76 @@ async function _invOpenDetail(id) {
 
   let body;
   try {
-  const bizName    = escHtml(state.receiptSettings?.business_name        || '');
-  const bizAddr    = escHtml(state.receiptSettings?.receipt_address_line || '');
   const totalAmt   = parseFloat(inv.total).toFixed(2);
 
   body = `<div class="invd-layout">
     <div class="invd-main">
-      <div class="qt-doc">
 
-        <!-- ── Letterhead header (shown when a Design Studio letterhead exists) ── -->
-        <div class="invd-lh-hdr" id="invd-lh-hdr" style="display:none">
-          <div class="invd-lh-img-wrap">
-            <img class="invd-lh-img" id="invd-lh-img" src="" alt="">
+      <!-- ── Invoice details ─────────────────────────────────────────── -->
+      <div class="qt-card" style="margin-bottom:16px">
+        <div class="qt-card-hd"><i class="fa fa-circle-info"></i> Invoice Details</div>
+        <div class="qt-fields-grid">
+          <div class="qt-field">
+            <span class="qt-label">Customer</span>
+            <div class="invd-view-val">${escHtml(inv.customer_name || 'Walk-in Customer')}</div>
           </div>
-          <div class="invd-lh-num-row">
-            <div>
-              <div class="invd-lh-lbl">Invoice</div>
-              <div class="invd-lh-num">${escHtml(inv.invoice_number)}</div>
-            </div>
-            <span class="qt-badge qt-badge-${inv.status}">${escHtml(inv.status_label)}</span>
+          <div class="qt-field">
+            <span class="qt-label">Status</span>
+            <div><span class="qt-badge qt-badge-${inv.status}">${escHtml(inv.status_label)}</span></div>
           </div>
-        </div>
-
-        <!-- ── Blue banner: shown when no letterhead ─────────────────── -->
-        <div class="qt-doc-banner invd-banner-pro" id="invd-blue-banner">
-          <div class="invd-bpro-left">
-            ${bizName ? `<div class="invd-bpro-biz">${bizName}</div>` : ''}
-            ${bizAddr ? `<div class="invd-bpro-addr">${bizAddr}</div>` : ''}
+          <div class="qt-field">
+            <span class="qt-label">Issue Date</span>
+            <div class="invd-view-val">${dateStr}</div>
           </div>
-          <div class="invd-bpro-right">
-            <div class="invd-bpro-lbl">Invoice</div>
-            <div class="invd-bpro-num">${escHtml(inv.invoice_number)}</div>
-            <span class="qt-badge qt-badge-${inv.status}">${escHtml(inv.status_label)}</span>
+          <div class="qt-field">
+            <span class="qt-label">Due Date</span>
+            <div class="invd-view-val">${dueStr}</div>
           </div>
-        </div>
-
-        <!-- ── Meta strip: billed-to | dates | amount due ─────────── -->
-        <div class="invd-meta-strip">
-          <div class="invd-ms-cell">
-            <div class="invd-ms-lbl">Billed To</div>
-            <div class="invd-ms-val invd-ms-cust">${escHtml(inv.customer_name || 'Walk-in Customer')}</div>
-            ${inv.reference ? `<div class="invd-ms-ref"><i class="fa fa-hashtag"></i> ${escHtml(inv.reference)}</div>` : ''}
-          </div>
-          <div class="invd-ms-div"></div>
-          <div class="invd-ms-cell">
-            <div class="invd-ms-lbl">Issue Date</div>
-            <div class="invd-ms-val">${dateStr}</div>
-          </div>
-          <div class="invd-ms-div"></div>
-          <div class="invd-ms-cell">
-            <div class="invd-ms-lbl">Due Date</div>
-            <div class="invd-ms-val">${dueStr}</div>
-          </div>
-          ${inv.payment_method_label ? `<div class="invd-ms-div"></div>
-          <div class="invd-ms-cell">
-            <div class="invd-ms-lbl">Payment Method</div>
-            <div class="invd-ms-val">${escHtml(inv.payment_method_label)}</div>
+          ${inv.payment_method_label ? `<div class="qt-field">
+            <span class="qt-label">Payment Method</span>
+            <div class="invd-view-val">${escHtml(inv.payment_method_label)}</div>
           </div>` : ''}
-          <div class="invd-ms-grow"></div>
-          <div class="invd-ms-cell invd-ms-amt-cell">
-            <div class="invd-ms-lbl">Amount Due</div>
-            <div class="invd-ms-amt">${totalAmt}${cur}</div>
+          ${inv.reference ? `<div class="qt-field">
+            <span class="qt-label">Reference</span>
+            <div class="invd-view-val">${escHtml(inv.reference)}</div>
+          </div>` : ''}
+          <div class="qt-field">
+            <span class="qt-label">Amount Due</span>
+            <div class="invd-view-val invd-view-amt">${totalAmt}${cur}</div>
           </div>
         </div>
+      </div>
 
-        <!-- ── Line items table ────────────────────────────────────── -->
-        <div class="invd-tbl-wrap">
-          <table class="qt-doc-items invd-items-full">
-            <thead><tr>
-              <th style="width:32px">#</th>
-              <th>Description</th>
-              <th class="td-r" style="width:52px">Qty</th>
-              <th class="td-r" style="width:105px">Unit Price</th>
-              <th class="td-r" style="width:90px">Disc</th>
-              <th class="td-r" style="width:115px">Tax</th>
-              <th class="td-r" style="width:105px">Total</th>
-            </tr></thead>
-            <tbody>${itemRows}</tbody>
-          </table>
-        </div>
+      <!-- ── Line items ───────────────────────────────────────────────── -->
+      <div class="qt-card" style="margin-bottom:16px">
+        <div class="qt-card-hd"><i class="fa fa-list"></i> Items</div>
+        <table class="qt-doc-items">
+          <thead><tr>
+            <th style="width:32px">#</th>
+            <th>Description</th>
+            <th class="td-r" style="width:52px">Qty</th>
+            <th class="td-r" style="width:105px">Unit Price</th>
+            <th class="td-r" style="width:90px">Disc</th>
+            <th class="td-r" style="width:115px">Tax</th>
+            <th class="td-r" style="width:105px">Total</th>
+          </tr></thead>
+          <tbody>${itemRows}</tbody>
+        </table>
+      </div>
 
-        <!-- ── Footer: notes + totals ─────────────────────────────── -->
-        <div class="invd-foot">
-          <div class="invd-foot-notes">
-            ${inv.notes ? `<div class="invd-foot-notes-lbl"><i class="fa fa-note-sticky"></i> Notes</div>
-            <div class="qt-doc-notes-box">${escHtml(inv.notes)}</div>` : ''}
-          </div>
-          <div class="invd-foot-totals">
+      <!-- ── Summary + notes ─────────────────────────────────────────── -->
+      <div class="qt-card">
+        <div class="qt-card-hd"><i class="fa fa-calculator"></i> Summary</div>
+        <div style="padding:16px">
+          <div class="qt-doc-totals-wrap">
             <div class="qt-doc-totals">${summaryHtml}</div>
           </div>
+          ${inv.notes ? `<hr class="qt-doc-divider">
+          <div class="qt-doc-notes-label"><i class="fa fa-note-sticky"></i> Notes</div>
+          <div class="qt-doc-notes-box">${escHtml(inv.notes)}</div>` : ''}
         </div>
-
       </div>
+
     </div>
 
     <div class="invd-sidebar">
@@ -2701,32 +2679,6 @@ async function _invOpenDetail(id) {
   }
 
   $('#sinv-detail-body').innerHTML = body;
-
-  // ── Load letterhead asynchronously and swap banner ────────────────────────
-  // Capture the invoice id NOW so we can detect mid-flight navigation later.
-  const _lhForInvId = inv.id;
-  (async () => {
-    const lhFull = await _fetchLetterhead();
-    if (!lhFull?.canvas_json) return;
-    const lhDataUrl = await window.electronAPI.renderCanvasToDataUrl(
-      lhFull.canvas_json,
-      lhFull.width  || 794,
-      lhFull.height || 1123
-    );
-    if (!lhDataUrl) return;
-    // Guard 1: user navigated away from the invoices section entirely.
-    const img = document.getElementById('invd-lh-img');
-    const hdr = document.getElementById('invd-lh-hdr');
-    const blu = document.getElementById('invd-blue-banner');
-    if (!img || !hdr || !blu) return;
-    // Guard 2: user navigated to a DIFFERENT invoice — same IDs exist but
-    // belong to the new invoice; don't stamp the old letterhead onto it.
-    if (_inv.activeId !== _lhForInvId) return;
-    img.onload        = () => img.classList.add('loaded');
-    img.src           = lhDataUrl;
-    hdr.style.display = '';
-    blu.style.display = 'none';
-  })();
 
   // Wire actions
   $('#invd-edit')?.addEventListener('click', () => _invOpenForm(inv));
