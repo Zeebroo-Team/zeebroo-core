@@ -5781,6 +5781,8 @@ body.dark .han-icon-amber  { color: #fbbf24; }
   display: flex; align-items: center; justify-content: center;
   animation: fadeIn .15s ease;
 }
+/* Opened from inside the Settings modal — must paint above it regardless of DOM order */
+#branch-add-modal, #branch-edit-modal { z-index: 850; }
 
 /* Generic modal shell */
 .modal-box {
@@ -14031,6 +14033,7 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
 .um-avatar.admin { background:#0ea5e9; }
 .um-avatar.manager { background:#f59e0b; }
 .um-avatar.staff { background:#64748b; }
+.um-avatar.branch { background:#0891b2; }
 
 .um-card-info  { flex:1; min-width:0; }
 .um-card-name  { font-size:12.5px; font-weight:600; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -14050,8 +14053,9 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
   font-size:9px; font-weight:700; padding:2px 7px; border-radius:10px;
   text-transform:uppercase; letter-spacing:.04em;
 }
-.um-status-active  { background:rgba(34,197,94,.12); color:#16a34a; }
-.um-status-pending { background:rgba(234,179,8,.12);  color:#a16207; }
+.um-status-active   { background:rgba(34,197,94,.12); color:#16a34a; }
+.um-status-pending  { background:rgba(234,179,8,.12);  color:#a16207; }
+.um-status-inactive { background:var(--surface3); color:var(--text-muted); }
 
 /* Right column — detail */
 .um-detail-col { flex:1; overflow-y:auto; padding:24px; }

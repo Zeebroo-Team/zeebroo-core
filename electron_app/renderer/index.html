@@ -8357,6 +8357,96 @@
     </div>
   </div>
 
+  <!-- ── Add Branch Modal ── -->
+  <div class="modal-overlay" id="branch-add-modal" style="display:none">
+    <div class="po-aim-shell" style="width:min(500px,96vw);max-height:88vh;overflow-y:auto">
+      <div class="po-aim-header">
+        <i class="fa fa-code-branch" style="color:var(--accent)"></i>
+        <span>Add Branch</span>
+        <button class="psm-close" id="branch-add-close"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div class="po-aim-body">
+        <div class="po-field">
+          <label class="po-field-label">Branch Name <span class="po-required">*</span></label>
+          <input type="text" id="branch-add-name" class="po-field-input" placeholder="e.g. Colombo Branch" autocomplete="off">
+        </div>
+        <div class="po-field">
+          <label class="po-field-label">Description</label>
+          <textarea id="branch-add-description" class="po-field-textarea" placeholder="Optional notes about this branch"></textarea>
+        </div>
+        <div class="po-field">
+          <label class="po-field-label">Address</label>
+          <textarea id="branch-add-address" class="po-field-textarea" placeholder="Branch address"></textarea>
+        </div>
+        <div class="po-field">
+          <label class="po-field-label">Phone</label>
+          <input type="text" id="branch-add-phone" class="po-field-input" placeholder="Phone number" autocomplete="off">
+        </div>
+        <div class="po-field">
+          <label class="po-field-label">Email</label>
+          <input type="email" id="branch-add-email" class="po-field-input" placeholder="branch@example.com" autocomplete="off">
+        </div>
+        <div class="psm-toggle-row" style="padding:8px 0 0;border-bottom:none">
+          <div class="psm-toggle-info">
+            <span class="psm-toggle-name">Active</span>
+            <span class="psm-toggle-desc">Inactive branches are hidden from branch pickers</span>
+          </div>
+          <label class="psm-switch"><input type="checkbox" id="branch-add-active" checked><span class="psm-switch-track"></span></label>
+        </div>
+        <div id="branch-add-error" class="um-error-msg" style="display:none"></div>
+      </div>
+      <div class="po-aim-footer">
+        <button class="po-btn-ghost" id="branch-add-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+        <button class="po-btn-primary" id="branch-add-save"><i class="fa fa-check"></i> Add Branch</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Edit Branch Modal ── -->
+  <div class="modal-overlay" id="branch-edit-modal" style="display:none">
+    <div class="po-aim-shell" style="width:min(500px,96vw);max-height:88vh;overflow-y:auto">
+      <div class="po-aim-header">
+        <i class="fa fa-code-branch" style="color:var(--accent)"></i>
+        <span>Edit Branch</span>
+        <button class="psm-close" id="branch-edit-close"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div class="po-aim-body">
+        <div class="po-field">
+          <label class="po-field-label">Branch Name <span class="po-required">*</span></label>
+          <input type="text" id="branch-edit-name" class="po-field-input" placeholder="e.g. Colombo Branch" autocomplete="off">
+        </div>
+        <div class="po-field">
+          <label class="po-field-label">Description</label>
+          <textarea id="branch-edit-description" class="po-field-textarea" placeholder="Optional notes about this branch"></textarea>
+        </div>
+        <div class="po-field">
+          <label class="po-field-label">Address</label>
+          <textarea id="branch-edit-address" class="po-field-textarea" placeholder="Branch address"></textarea>
+        </div>
+        <div class="po-field">
+          <label class="po-field-label">Phone</label>
+          <input type="text" id="branch-edit-phone" class="po-field-input" placeholder="Phone number" autocomplete="off">
+        </div>
+        <div class="po-field">
+          <label class="po-field-label">Email</label>
+          <input type="email" id="branch-edit-email" class="po-field-input" placeholder="branch@example.com" autocomplete="off">
+        </div>
+        <div class="psm-toggle-row" style="padding:8px 0 0;border-bottom:none">
+          <div class="psm-toggle-info">
+            <span class="psm-toggle-name">Active</span>
+            <span class="psm-toggle-desc">Inactive branches are hidden from branch pickers</span>
+          </div>
+          <label class="psm-switch"><input type="checkbox" id="branch-edit-active"><span class="psm-switch-track"></span></label>
+        </div>
+        <div id="branch-edit-error" class="um-error-msg" style="display:none"></div>
+      </div>
+      <div class="po-aim-footer">
+        <button class="po-btn-ghost" id="branch-edit-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+        <button class="po-btn-primary" id="branch-edit-save"><i class="fa fa-check"></i> Save Changes</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ── New Role Modal ── -->
   <div class="modal-overlay" id="um-role-create-modal" style="display:none">
     <div class="po-aim-shell" style="width:75vw;max-height:88vh;overflow:hidden;display:flex;flex-direction:column">
@@ -10868,6 +10958,9 @@
         <button class="psm-nav-item psm-nav-item--pos-only" data-tab="cashiers" style="display:none">
           <i class="fa fa-id-badge"></i><span>Cashiers</span>
         </button>
+        <button class="psm-nav-item psm-nav-item--multi-branch" data-tab="branches" style="display:none">
+          <i class="fa fa-code-branch"></i><span>Branches</span>
+        </button>
         <button class="psm-nav-item" data-tab="delivery">
           <i class="fa fa-truck"></i><span>Delivery</span>
         </button>
@@ -11232,6 +11325,31 @@
               <div class="um-detail-empty">
                 <i class="fa fa-shield-halved"></i>
                 <p>Select a role to view and edit its permissions</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Branches panel -->
+        <div class="psm-panel psm-panel--roles" id="psm-tab-branches" style="display:none">
+          <div class="psm-roles-toolbar">
+            <div class="psm-roles-toolbar-left">
+              <i class="fa fa-code-branch" style="color:var(--accent)"></i>
+              <span class="psm-roles-title">Branches</span>
+              <span class="um-count-badge" id="psm-branches-count"></span>
+            </div>
+            <button class="um-add-btn" id="psm-add-branch-btn">
+              <i class="fa fa-plus"></i> Add Branch
+            </button>
+          </div>
+          <div class="psm-roles-body">
+            <div class="um-list-col" id="psm-branches-list">
+              <div class="um-loading"><i class="fa fa-spinner fa-spin"></i> Loading branches…</div>
+            </div>
+            <div class="um-detail-col" id="psm-branches-detail">
+              <div class="um-detail-empty">
+                <i class="fa fa-code-branch"></i>
+                <p>Select a branch to view its details</p>
               </div>
             </div>
           </div>
