@@ -5095,6 +5095,7 @@ body.dark .kpi-pill-purple { background: #3b0764; color: #c4b5fd; border-color: 
 #home-chart svg { display: block; }
 
 /* Activity tab */
+#home-view-activity { background: var(--bg); padding: 10px; }
 .home-act-toolbar {
   display: flex; align-items: center; justify-content: space-between;
   padding: 10px 14px; border-bottom: 1px solid var(--border);
@@ -5107,7 +5108,7 @@ body.dark .kpi-pill-purple { background: #3b0764; color: #c4b5fd; border-color: 
   cursor: pointer; display: flex; align-items: center; gap: 5px; transition: all .13s;
 }
 .home-act-refresh:hover { background: var(--surface3, var(--surface)); color: var(--accent); border-color: var(--accent); }
-.home-act-list { flex: 1; overflow-y: auto; }
+.home-act-list { flex: 1; overflow-y: auto; background: var(--surface); }
 .home-act-row {
   display: flex; align-items: center; gap: 10px;
   padding: 9px 14px; border-bottom: 1px solid var(--border);
@@ -5127,6 +5128,7 @@ body.dark .kpi-pill-purple { background: #3b0764; color: #c4b5fd; border-color: 
 .home-act-amt   { font-size: 12px; font-weight: 700; color: var(--text); flex-shrink: 0; }
 
 /* ── Home Orders View (hov) ─────────────────────────────────────────────── */
+#home-view-orders { background: var(--bg); padding: 10px; }
 .hov-kpis          { display:flex; gap:12px; flex:1; }
 .hov-kpi           { display:flex; flex-direction:column; align-items:center;
                      background:var(--surface2); border-radius:8px; padding:5px 14px;
@@ -5225,6 +5227,7 @@ body.dark .hrp-amber { color: #fbbf24 !important; }
 .hrp-action-btn i { width: 14px; text-align: center; }
 
 /* ── Analytics Tab ──────────────────────────────────────────────────────── */
+#home-view-analytics { background: var(--bg); padding: 10px; }
 .han-toolbar {
   display: flex; align-items: center; gap: 10px;
   padding: 8px 14px; border-bottom: 1px solid var(--border);
@@ -13805,11 +13808,17 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
 .svc-cat-card--inactive  { opacity: .7; }
 
 /* ── Today Summary ────────────────────────────────────────────────────────── */
-.tds-toolbar { display:flex; align-items:center; gap:10px; padding:10px 16px 8px; border-bottom:1px solid var(--border); flex-shrink:0; }
+#home-view-today { background: var(--bg); padding: 10px; }
+.han-container {
+  flex: 1; min-height: 0; min-width: 0; display: flex; flex-direction: column;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; overflow: hidden;
+}
+.tds-toolbar { display:flex; align-items:center; gap:10px; padding:10px 16px 8px; border-bottom:1px solid var(--border); flex-shrink:0; background:var(--surface); }
 .tds-title   { font-size:13px; font-weight:700; color:var(--text); display:flex; align-items:center; gap:6px; }
 .tds-date    { font-size:12px; color:var(--text-muted); flex:1; }
 
-#tds-body    { flex:1; overflow-y:auto; padding:14px 16px; display:flex; flex-direction:column; gap:14px; }
+#tds-body    { flex:1; overflow-y:auto; padding:14px 16px; display:flex; flex-direction:column; gap:14px; background:var(--surface); }
 
 .tds-kpi-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:10px; }
 .tds-kpi-card { display:flex; align-items:center; gap:12px; background:var(--surface2); border:1px solid var(--border-light); border-radius:10px; padding:14px; }
@@ -13857,6 +13866,7 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
 .tds-empty-hint { font-size:12px; color:var(--text-muted); padding:8px 0; text-align:center; }
 
 /* ── Expenses View ──────────────────────────────────────────────────────── */
+#home-view-expenses { background: var(--bg); padding: 10px; }
 #exp-body { display:flex; flex-direction:column; gap:10px; padding:12px 14px; overflow-y:auto; flex:1; }
 
 .exp-two-col      { display:grid; grid-template-columns:1fr 340px; gap:10px; align-items:start; }
@@ -13916,6 +13926,10 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
 .exp-pay-amount{ font-size:12px; font-weight:700; font-variant-numeric:tabular-nums; color:var(--text); flex-shrink:0; }
 
 /* Profit Report */
+#home-view-profit { background: var(--bg); padding: 10px; }
+#prf-body { display:flex; flex-direction:column; gap:10px; padding:12px 14px; overflow-y:auto; flex:1; }
+#home-view-payroll { background: var(--bg); padding: 10px; }
+#prl-body { display:flex; flex-direction:column; gap:10px; padding:12px 14px; overflow-y:auto; flex:1; }
 .prf-period-select { font-size:11px; padding:4px 8px; border-radius:5px; border:1px solid var(--border); background:var(--surface); color:var(--text); cursor:pointer; }
 .prf-product-row   { display:flex; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--border-light); }
 .prf-product-row:last-child { border-bottom:none; }
