@@ -44,7 +44,7 @@
             position: sticky; top: 0; z-index: 50;
             background: var(--card);
             border-bottom: 1px solid var(--border);
-            padding: 0 clamp(20px,5vw,60px);
+            padding: 0 clamp(16px,3vw,32px);
             display: flex; align-items: center; justify-content: space-between;
             height: 60px;
             backdrop-filter: blur(8px);
@@ -73,7 +73,7 @@
         .pp-hero {
             background: var(--card);
             border-bottom: 1px solid var(--border);
-            padding: clamp(40px,6vw,72px) clamp(20px,5vw,60px) clamp(32px,4vw,52px);
+            padding: clamp(32px,4vw,56px) clamp(16px,3vw,32px) clamp(24px,3vw,40px);
             text-align: center;
         }
         .pp-hero-badge {
@@ -98,8 +98,8 @@
 
         /* ── Layout ── */
         .pp-layout {
-            max-width: 900px; margin: 0 auto;
-            padding: clamp(32px,5vw,60px) clamp(20px,5vw,40px);
+            max-width: 1200px; margin: 0 auto;
+            padding: clamp(24px,3vw,40px) clamp(16px,3vw,28px);
             display: grid;
             grid-template-columns: 220px 1fr;
             gap: 40px;
