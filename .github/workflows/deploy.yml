@@ -49,6 +49,10 @@ jobs:
             set -euo pipefail
             cd "${{ secrets.DEPLOY_PATH }}"
 
+            # Deploy user is root; let Composer run its plugins (e.g. the
+            # composer-merge-plugin that wires up Modules/* autoloading).
+            export COMPOSER_ALLOW_SUPERUSER=1
+
             echo "==> Deploying commit ${DEPLOY_SHA}"
             php artisan down --retry=15 --render="errors::503" || true
 
