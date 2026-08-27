@@ -240,6 +240,7 @@
             <footer class="auth-footer">
                 <span>&copy; {{ now()->year }} {{ config('app.name') }}</span>
                 <a href="{{ route('privacy-policy') }}" target="_blank">Privacy Policy</a>
+                <a href="{{ route('terms-of-service') }}" target="_blank">Terms of Service</a>
             </footer>
         </main>
     </div>
