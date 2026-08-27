@@ -127,170 +127,106 @@ body {
 #sidebar::-webkit-scrollbar-track { background: transparent; }
 #sidebar::-webkit-scrollbar-thumb { background: var(--sidebar-scrollbar); border-radius: 2px; }
 
-.sb-brand {
-  padding: 18px 20px 14px;
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  text-decoration: none;
-  color: var(--text);
-}
-.sb-brand-mark {
-  width: 30px; height: 30px;
-  border-radius: 7px;
-  background: var(--accent-bright);
-  color: #111;
-  font-size: 13px;
-  font-weight: 800;
-  display: grid;
-  place-items: center;
-  flex-shrink: 0;
-}
-.sb-brand-name {
-  font-size: 13.5px;
-  font-weight: 700;
-  color: var(--text);
-  letter-spacing: -.01em;
-}
+/* Brand — mirrors tutorial exactly */
+.sb-brand { padding: 18px 20px 14px; border-bottom: 1px solid var(--border); }
+.sb-logo { display: block; width: 100%; max-width: 160px; height: auto; margin-bottom: 6px; }
+.sb-brand-name-text { font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: 4px; display: none; }
 .sb-brand-sub {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--text-faint);
-  font-family: ui-monospace, monospace;
+  font-family: ui-monospace, 'Cascadia Code', monospace;
   letter-spacing: .04em;
-  margin-top: 1px;
 }
 
 .sb-nav { padding: 8px 0 24px; flex: 1; }
 
-.sb-section-label {
-  padding: 12px 16px 4px;
-  font-size: 10px;
+/* ── Tree group (level 1) ── */
+.tree-group { margin: 1px 0; }
+.tree-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 14px 8px 12px;
+  background: none;
+  border: none;
+  border-left: 3px solid transparent;
+  cursor: pointer;
+  color: var(--text);
+  font-size: 11.5px;
   font-weight: 700;
-  letter-spacing: .09em;
+  letter-spacing: .06em;
   text-transform: uppercase;
-  color: var(--text-faint);
+  text-align: left;
+  transition: background .12s, border-color .12s;
+  font-family: inherit;
 }
+.tree-header:hover { background: var(--sidebar-hover); }
+.tree-group.open > .tree-header { border-left-color: var(--accent-bright); }
+.tree-chevron {
+  width: 10px; height: 10px;
+  flex-shrink: 0;
+  color: var(--text-faint);
+  transition: transform .22s ease;
+  margin-left: auto;
+}
+.tree-group.open > .tree-header .tree-chevron { transform: rotate(90deg); }
+.tree-icon {
+  width: 15px; height: 15px;
+  flex-shrink: 0;
+  color: var(--accent);
+  opacity: .85;
+}
+.tree-group.open > .tree-header .tree-icon { opacity: 1; }
+.tree-label { flex: 1; }
 
-/* Top-level link (Overview) */
+/* ── Tree children (level-1 container) ── */
+.tree-children {
+  overflow: hidden;
+  max-height: 0;
+  transition: max-height .28s cubic-bezier(.4,0,.2,1);
+  position: relative;
+}
+.tree-children::before {
+  content: '';
+  position: absolute;
+  left: 25px; top: 6px; bottom: 6px;
+  width: 1px;
+  background: var(--border);
+}
+.tree-group.open .tree-children { max-height: 600px; }
+
+/* ── Leaf links (level 2) ── */
 .sb-link {
   display: flex;
   align-items: center;
-  gap: 9px;
-  padding: 7px 16px;
-  color: var(--sidebar-text);
-  text-decoration: none;
-  font-size: 13px;
-  transition: background .12s, color .12s;
-  cursor: pointer;
-  border-left: 2px solid transparent;
-}
-.sb-link:hover { background: var(--sidebar-hover); color: var(--text); }
-.sb-link.active {
-  color: var(--text);
-  font-weight: 600;
-  border-left-color: var(--accent-bright);
-  background: var(--accent-light);
-}
-.sb-link svg { width: 14px; height: 14px; flex-shrink: 0; color: var(--text-faint); }
-.sb-link.active svg { color: var(--accent); }
-
-/* ── Group (collapsible) ── */
-.sb-group { }
-.sb-group-hdr {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 7px 14px 7px 16px;
-  cursor: pointer;
-  user-select: none;
-  gap: 8px;
-  border-left: 2px solid transparent;
-  transition: background .12s, color .12s;
-}
-.sb-group-hdr:hover { background: var(--sidebar-hover); }
-.sb-group-hdr-left {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  font-size: 12px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: .07em;
-  color: var(--text-faint);
-}
-.sb-group-hdr-left svg { width: 13px; height: 13px; color: var(--text-faint); }
-/* Chevron */
-.sb-chevron {
-  width: 14px; height: 14px;
-  color: var(--text-faint);
-  transition: transform .2s ease;
-  flex-shrink: 0;
-}
-.sb-group.open .sb-chevron { transform: rotate(90deg); }
-/* active group header tint */
-.sb-group.has-active .sb-group-hdr {
-  color: var(--accent);
-  border-left-color: color-mix(in srgb, var(--accent-bright) 40%, transparent);
-}
-.sb-group.has-active .sb-group-hdr-left { color: var(--accent); }
-.sb-group.has-active .sb-group-hdr-left svg { color: var(--accent); }
-
-/* Sub-links */
-.sb-children {
-  overflow: hidden;
-  max-height: 0;
-  transition: max-height .22s ease;
-}
-.sb-group.open .sb-children { max-height: 400px; }
-
-.sb-sub {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 14px 6px 34px;
+  padding: 6px 14px 6px 40px;
   color: var(--sidebar-text);
   text-decoration: none;
   font-size: 12.5px;
   transition: background .12s, color .12s;
-  border-left: 2px solid transparent;
+  cursor: pointer;
+  border-left: 3px solid transparent;
   position: relative;
 }
-.sb-sub::before {
+.sb-link::before {
   content: '';
   position: absolute;
-  left: 24px;
-  top: 50%; transform: translateY(-50%);
-  width: 4px; height: 4px;
-  border-radius: 50%;
-  background: var(--border-strong);
-  transition: background .15s;
+  left: 25px; top: 50%;
+  width: 10px; height: 1px;
+  background: var(--border);
+  transform: translateY(-50%);
 }
-.sb-sub:hover { background: var(--sidebar-hover); color: var(--text); }
-.sb-sub:hover::before { background: var(--accent-bright); }
-.sb-sub.active {
-  color: var(--text);
+.sb-link:hover { background: var(--sidebar-hover); color: var(--text); text-decoration: none; }
+.sb-link:hover::before { background: var(--border-strong); }
+.sb-link.active {
+  color: #111111;
   font-weight: 600;
   border-left-color: var(--accent-bright);
   background: var(--accent-light);
 }
-.sb-sub.active::before { background: var(--accent-bright); }
-.sb-sub svg { width: 13px; height: 13px; flex-shrink: 0; color: var(--text-faint); }
-.sb-sub.active svg { color: var(--accent); }
+.sb-link.active::before { background: var(--accent-bright); }
 
-.sb-divider { height: 1px; background: var(--border); margin: 8px 0; }
-
-.sb-back {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 8px 16px;
-  font-size: 12px;
-  color: var(--text-faint);
-  text-decoration: none;
-  transition: color .12s;
-}
-.sb-back:hover { color: var(--text); }
 
 /* ── Main ── */
 #main { margin-left: 258px; flex: 1; min-width: 0; }
@@ -596,12 +532,24 @@ body {
 .pp-footer a { color: var(--text-faint); text-decoration: none; }
 .pp-footer a:hover { color: var(--accent); }
 
+/* ── Progress bar ── */
+#progress-bar {
+  position: fixed;
+  top: 0; left: 0;
+  height: 2px;
+  background: var(--accent);
+  z-index: 200;
+  transition: width .15s;
+  width: 0%;
+}
+
 /* ── Mobile ── */
-@media (max-width: 720px) {
-  #sidebar { display: none; }
+@media (max-width: 860px) {
+  #sidebar { transform: translateX(-258px); transition: transform .2s; }
   #main { margin-left: 0; }
   #topbar { padding: 0 16px; }
   #content { padding: 0 16px 60px; }
+  .toc-grid { grid-template-columns: 1fr; }
 }
 </style>
 </head>
@@ -609,126 +557,84 @@ body {
 
 <!-- ── Sidebar ── -->
 <nav id="sidebar">
-  <a href="{{ url('/') }}" class="sb-brand">
-    <span class="sb-brand-mark">Z</span>
-    <div>
-      <div class="sb-brand-name">{{ config('app.name') }}</div>
-      <div class="sb-brand-sub">Privacy Policy</div>
-    </div>
-  </a>
+  <div class="sb-brand">
+    <div class="sb-brand-name-text" style="display:block">{{ config('app.name') }}</div>
+    <div class="sb-brand-sub">PRIVACY POLICY · {{ now()->format('Y') }}</div>
+  </div>
 
   <div class="sb-nav">
-    <div class="sb-section-label">Contents</div>
 
-    <!-- Overview (top-level) -->
-    <a class="sb-link active" href="#overview" data-section="overview">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-      Overview
-    </a>
-
-    <!-- Group 1: Your Data -->
-    <div class="sb-group open" id="grp-data">
-      <div class="sb-group-hdr" onclick="toggleGroup('grp-data')">
-        <div class="sb-group-hdr-left">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
-          Your Data
-        </div>
-        <svg class="sb-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-      </div>
-      <div class="sb-children">
-        <a class="sb-sub" href="#data-collected" data-section="data-collected">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
-          Data We Collect
-        </a>
-        <a class="sb-sub" href="#how-we-use" data-section="how-we-use">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-          How We Use It
-        </a>
-        <a class="sb-sub" href="#data-sharing" data-section="data-sharing">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
-          Data Sharing
-        </a>
+    <!-- Introduction -->
+    <div class="tree-group open">
+      <button class="tree-header" onclick="treeToggle(this)">
+        <svg class="tree-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.5"/><line x1="8" y1="5.5" x2="8" y2="8"/><circle cx="8" cy="10.5" r=".5" fill="currentColor"/></svg>
+        <span class="tree-label">Introduction</span>
+        <svg class="tree-chevron" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2l4 3-4 3"/></svg>
+      </button>
+      <div class="tree-children">
+        <a class="sb-link" href="#overview">Overview</a>
       </div>
     </div>
 
-    <!-- Group 2: Authentication -->
-    <div class="sb-group open" id="grp-auth">
-      <div class="sb-group-hdr" onclick="toggleGroup('grp-auth')">
-        <div class="sb-group-hdr-left">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-          Authentication
-        </div>
-        <svg class="sb-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-      </div>
-      <div class="sb-children">
-        <a class="sb-sub" href="#google-oauth" data-section="google-oauth">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22C6.477 22 2 17.523 2 12S6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/><path d="M17.5 12H12V8"/></svg>
-          Google Sign-In
-        </a>
-        <a class="sb-sub" href="#cookies" data-section="cookies">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10 4 4 0 0 1-5-5 4 4 0 0 1-5-5"/><path d="M8.5 8.5v.01"/><path d="M16 15.5v.01"/><path d="M12 12v.01"/></svg>
-          Cookies &amp; Sessions
-        </a>
+    <!-- Your Data -->
+    <div class="tree-group open">
+      <button class="tree-header" onclick="treeToggle(this)">
+        <svg class="tree-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="8" cy="4" rx="6" ry="2"/><path d="M14 8c0 1.1-2.69 2-6 2S2 9.1 2 8"/><path d="M2 4v8c0 1.1 2.69 2 6 2s6-.9 6-2V4"/></svg>
+        <span class="tree-label">Your Data</span>
+        <svg class="tree-chevron" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2l4 3-4 3"/></svg>
+      </button>
+      <div class="tree-children">
+        <a class="sb-link" href="#data-collected">Data We Collect</a>
+        <a class="sb-link" href="#how-we-use">How We Use It</a>
+        <a class="sb-link" href="#data-sharing">Data Sharing</a>
       </div>
     </div>
 
-    <!-- Group 3: Privacy Rights -->
-    <div class="sb-group open" id="grp-rights">
-      <div class="sb-group-hdr" onclick="toggleGroup('grp-rights')">
-        <div class="sb-group-hdr-left">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-          Privacy Rights
-        </div>
-        <svg class="sb-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-      </div>
-      <div class="sb-children">
-        <a class="sb-sub" href="#data-retention" data-section="data-retention">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-          Data Retention
-        </a>
-        <a class="sb-sub" href="#security" data-section="security">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-          Security
-        </a>
-        <a class="sb-sub" href="#your-rights" data-section="your-rights">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-          Your Rights
-        </a>
+    <!-- Authentication -->
+    <div class="tree-group open">
+      <button class="tree-header" onclick="treeToggle(this)">
+        <svg class="tree-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="12" height="8" rx="1"/><path d="M5 7V5a3 3 0 016 0v2"/></svg>
+        <span class="tree-label">Authentication</span>
+        <svg class="tree-chevron" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2l4 3-4 3"/></svg>
+      </button>
+      <div class="tree-children">
+        <a class="sb-link" href="#google-oauth">Google Sign-In</a>
+        <a class="sb-link" href="#cookies">Cookies &amp; Sessions</a>
       </div>
     </div>
 
-    <!-- Group 4: Additional -->
-    <div class="sb-group open" id="grp-extra">
-      <div class="sb-group-hdr" onclick="toggleGroup('grp-extra')">
-        <div class="sb-group-hdr-left">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
-          Additional
-        </div>
-        <svg class="sb-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-      </div>
-      <div class="sb-children">
-        <a class="sb-sub" href="#children" data-section="children">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-          Children's Privacy
-        </a>
-        <a class="sb-sub" href="#changes" data-section="changes">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-          Policy Changes
-        </a>
-        <a class="sb-sub" href="#contact" data-section="contact">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-          Contact Us
-        </a>
+    <!-- Privacy Rights -->
+    <div class="tree-group open">
+      <button class="tree-header" onclick="treeToggle(this)">
+        <svg class="tree-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.5L2 4v4.5c0 3.5 2.5 6.2 6 7 3.5-.8 6-3.5 6-7V4L8 1.5z"/></svg>
+        <span class="tree-label">Privacy Rights</span>
+        <svg class="tree-chevron" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2l4 3-4 3"/></svg>
+      </button>
+      <div class="tree-children">
+        <a class="sb-link" href="#data-retention">Data Retention</a>
+        <a class="sb-link" href="#security">Security</a>
+        <a class="sb-link" href="#your-rights">Your Rights</a>
       </div>
     </div>
 
-    <div class="sb-divider"></div>
-    <a href="{{ url('/') }}" class="sb-back">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
-      Back to {{ config('app.name') }}
-    </a>
+    <!-- Additional -->
+    <div class="tree-group open">
+      <button class="tree-header" onclick="treeToggle(this)">
+        <svg class="tree-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="1" fill="currentColor"/><circle cx="13" cy="8" r="1" fill="currentColor"/><circle cx="3" cy="8" r="1" fill="currentColor"/></svg>
+        <span class="tree-label">Additional</span>
+        <svg class="tree-chevron" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2l4 3-4 3"/></svg>
+      </button>
+      <div class="tree-children">
+        <a class="sb-link" href="#children">Children's Privacy</a>
+        <a class="sb-link" href="#changes">Policy Changes</a>
+        <a class="sb-link" href="#contact">Contact Us</a>
+      </div>
+    </div>
+
   </div>
 </nav>
+
+<div id="progress-bar"></div>
 
 <!-- ── Main ── -->
 <div id="main">
@@ -740,7 +646,7 @@ body {
     </div>
     <div class="tb-actions">
       <span class="version-badge">{{ now()->format('M Y') }}</span>
-      <button class="theme-toggle" id="themeToggle">Dark</button>
+      <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()">Toggle Theme</button>
     </div>
   </div>
 
@@ -1079,106 +985,58 @@ body {
 </div><!-- /#main -->
 
 <script>
-// ── Theme toggle ──────────────────────────────────────────────────────────────
-(function () {
-  var btn = document.getElementById('themeToggle');
-  var root = document.documentElement;
-  try {
-    var stored = localStorage.getItem('pp-theme') || '';
-    if (stored) { root.setAttribute('data-theme', stored); btn.textContent = stored === 'dark' ? 'Light' : 'Dark'; }
-  } catch (_) {}
-  btn.addEventListener('click', function () {
-    var cur = root.getAttribute('data-theme');
-    var next = cur === 'dark' ? 'light' : 'dark';
-    root.setAttribute('data-theme', next);
-    btn.textContent = next === 'dark' ? 'Light' : 'Dark';
-    try { localStorage.setItem('pp-theme', next); } catch (_) {}
-  });
-})();
-
-// ── Group collapse / expand ───────────────────────────────────────────────────
-var groupState = {};
-try { groupState = JSON.parse(localStorage.getItem('pp-groups') || '{}'); } catch (_) {}
-
-function toggleGroup(id) {
-  var el = document.getElementById(id);
-  if (!el) return;
-  var isOpen = el.classList.toggle('open');
-  groupState[id] = isOpen;
-  try { localStorage.setItem('pp-groups', JSON.stringify(groupState)); } catch (_) {}
+// ── Tree group toggle (mirrors tutorial) ──────────────────────────────────────
+function treeToggle(btn) {
+  btn.closest('.tree-group').classList.toggle('open');
 }
 
-// Restore saved group states (default all open, so only collapse if explicitly false)
-(function () {
-  ['grp-data', 'grp-auth', 'grp-rights', 'grp-extra'].forEach(function (id) {
-    var el = document.getElementById(id);
-    if (!el) return;
-    if (groupState[id] === false) el.classList.remove('open');
-    else el.classList.add('open');
+// ── Active link tracking via IntersectionObserver (mirrors tutorial) ──────────
+const chapters = document.querySelectorAll('.chapter');
+const chLinks  = document.querySelectorAll('.sb-link');
+
+function setActive(id) {
+  chLinks.forEach(function(l) {
+    const active = l.getAttribute('href') === '#' + id;
+    l.classList.toggle('active', active);
+    if (active) l.closest('.tree-group')?.classList.add('open');
   });
-})();
+}
 
-// ── Active link on scroll ─────────────────────────────────────────────────────
-(function () {
-  // All sections in document order
-  var sectionIds = [
-    'overview',
-    'data-collected', 'how-we-use', 'data-sharing',
-    'google-oauth', 'cookies',
-    'data-retention', 'security', 'your-rights',
-    'children', 'changes', 'contact'
-  ];
+const obs = new IntersectionObserver(function(entries) {
+  entries.forEach(function(e) {
+    if (e.isIntersecting) setActive(e.target.id);
+  });
+}, { rootMargin: '-10% 0px -75% 0px', threshold: 0 });
 
-  // Map section id → group id (null = top-level)
-  var sectionGroup = {
-    'overview':       null,
-    'data-collected': 'grp-data',
-    'how-we-use':     'grp-data',
-    'data-sharing':   'grp-data',
-    'google-oauth':   'grp-auth',
-    'cookies':        'grp-auth',
-    'data-retention': 'grp-rights',
-    'security':       'grp-rights',
-    'your-rights':    'grp-rights',
-    'children':       'grp-extra',
-    'changes':        'grp-extra',
-    'contact':        'grp-extra'
-  };
+chapters.forEach(function(s) { obs.observe(s); });
 
-  function setActiveSection(id) {
-    // Clear all
-    document.querySelectorAll('.sb-link, .sb-sub').forEach(function (a) {
-      a.classList.remove('active');
-    });
-    document.querySelectorAll('.sb-group').forEach(function (g) {
-      g.classList.remove('has-active');
-    });
+// ── Reading progress bar ──────────────────────────────────────────────────────
+const bar = document.getElementById('progress-bar');
+window.addEventListener('scroll', function() {
+  const h = document.documentElement.scrollHeight - window.innerHeight;
+  bar.style.width = (h > 0 ? (window.scrollY / h) * 100 : 0) + '%';
+}, { passive: true });
 
-    // Mark active link
-    var link = document.querySelector('[data-section="' + id + '"]');
-    if (link) link.classList.add('active');
+// ── Theme toggle ──────────────────────────────────────────────────────────────
+function toggleTheme() {
+  const root = document.documentElement;
+  const cur  = root.getAttribute('data-theme');
+  const next = cur === 'dark' ? 'light' : 'dark';
+  root.setAttribute('data-theme', next);
+  const btn = document.getElementById('themeToggle');
+  if (btn) btn.textContent = next === 'dark' ? 'Light' : 'Dark';
+  try { localStorage.setItem('pp-theme', next); } catch(_) {}
+}
 
-    // Mark parent group
-    var grpId = sectionGroup[id];
-    if (grpId) {
-      var grpEl = document.getElementById(grpId);
-      if (grpEl) grpEl.classList.add('has-active');
-    }
+// Restore saved theme
+try {
+  const saved = localStorage.getItem('pp-theme');
+  if (saved) {
+    document.documentElement.setAttribute('data-theme', saved);
+    const btn = document.getElementById('themeToggle');
+    if (btn) btn.textContent = saved === 'dark' ? 'Light' : 'Dark';
   }
-
-  function onScroll() {
-    var scrollY = window.scrollY + 72;
-    var current = sectionIds[0];
-    sectionIds.forEach(function (sid) {
-      var el = document.getElementById(sid);
-      if (el && el.offsetTop <= scrollY) current = sid;
-    });
-    setActiveSection(current);
-  }
-
-  window.addEventListener('scroll', onScroll, { passive: true });
-  onScroll();
-})();
+} catch(_) {}
 </script>
 </body>
 </html>
