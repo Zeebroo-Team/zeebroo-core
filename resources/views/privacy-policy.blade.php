@@ -558,7 +558,8 @@ body {
 <!-- ── Sidebar ── -->
 <nav id="sidebar">
   <div class="sb-brand">
-    <div class="sb-brand-name-text" style="display:block">{{ config('app.name') }}</div>
+    <img class="sb-logo" src="https://zeebroo.com/images/tutorial/logo.png" alt="{{ config('app.name') }}" onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+    <div class="sb-brand-name-text">{{ config('app.name') }}</div>
     <div class="sb-brand-sub">PRIVACY POLICY · {{ now()->format('Y') }}</div>
   </div>
 
