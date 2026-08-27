@@ -14042,5 +14042,211 @@
 <script src="js/home-subnav-customize.js"></script>
 <script src="js/guide-config.js"></script>
 <script src="js/guide.js"></script>
+
+<!-- ── Auto-Update UI ──────────────────────────────────────────────────── -->
+<style>
+/* Floating toast banner */
+#upd-toast {
+  position: fixed; bottom: 24px; right: 24px; z-index: 9900;
+  background: #1e293b; border: 1px solid #6366f1;
+  border-radius: 16px; padding: 16px 20px;
+  box-shadow: 0 12px 40px rgba(0,0,0,.55);
+  display: flex; align-items: center; gap: 14px;
+  max-width: 360px; transform: translateY(120%);
+  transition: transform .4s cubic-bezier(.34,1.56,.64,1);
+  pointer-events: none;
+}
+#upd-toast.show { transform: translateY(0); pointer-events: auto; }
+.upd-toast-icon {
+  width: 38px; height: 38px; border-radius: 10px; flex-shrink: 0;
+  background: color-mix(in srgb,#6366f1 18%,transparent);
+  display: grid; place-items: center; font-size: 18px; color: #818cf8;
+}
+.upd-toast-body { flex: 1; min-width: 0; }
+.upd-toast-title { font-size: 13px; font-weight: 700; color: #f1f5f9; margin-bottom: 2px; }
+.upd-toast-sub   { font-size: 11.5px; color: #94a3b8; }
+.upd-toast-btns  { display: flex; gap: 8px; margin-top: 10px; }
+.upd-btn-primary {
+  padding: 6px 14px; border-radius: 8px; border: none;
+  background: #6366f1; color: #fff; font-size: 12px; font-weight: 700;
+  cursor: pointer; font-family: inherit; transition: background .15s;
+}
+.upd-btn-primary:hover { background: #4f46e5; }
+.upd-btn-dismiss {
+  padding: 6px 12px; border-radius: 8px;
+  border: 1px solid #334155; background: transparent;
+  color: #94a3b8; font-size: 12px; font-weight: 600;
+  cursor: pointer; font-family: inherit;
+}
+.upd-btn-dismiss:hover { border-color: #475569; }
+
+/* Download progress modal */
+#upd-modal-overlay {
+  position: fixed; inset: 0; z-index: 9950;
+  background: rgba(2,6,23,.65); backdrop-filter: blur(5px);
+  display: none; align-items: center; justify-content: center;
+}
+#upd-modal-overlay.open { display: flex; }
+#upd-modal {
+  background: #1e293b; border: 1px solid #334155;
+  border-radius: 20px; padding: 32px 28px; width: 100%;
+  max-width: 400px; text-align: center;
+  box-shadow: 0 24px 64px rgba(0,0,0,.5);
+}
+.upd-modal-icon  { font-size: 44px; margin-bottom: 16px; }
+.upd-modal-title { font-size: 18px; font-weight: 800; color: #f1f5f9; margin-bottom: 8px; letter-spacing: -.02em; }
+.upd-modal-sub   { font-size: 13px; color: #94a3b8; line-height: 1.6; margin-bottom: 22px; }
+/* progress bar */
+.upd-bar-wrap {
+  background: #0f172a; border-radius: 999px;
+  height: 8px; overflow: hidden; margin-bottom: 10px;
+}
+.upd-bar-fill {
+  height: 100%; border-radius: 999px;
+  background: linear-gradient(90deg,#6366f1,#8b5cf6);
+  width: 0%; transition: width .3s linear;
+}
+.upd-bar-label { font-size: 12px; color: #64748b; margin-bottom: 22px; }
+.upd-ready-actions { display: flex; flex-direction: column; gap: 10px; }
+</style>
+
+<!-- Toast notification -->
+<div id="upd-toast">
+  <div class="upd-toast-icon"><i class="fa fa-arrow-up-from-bracket"></i></div>
+  <div class="upd-toast-body">
+    <div class="upd-toast-title">Update available — v<span id="upd-new-ver"></span></div>
+    <div class="upd-toast-sub">Current: v<span id="upd-cur-ver"></span></div>
+    <div class="upd-toast-btns">
+      <button class="upd-btn-primary" id="updDownloadBtn">Download &amp; Install</button>
+      <button class="upd-btn-dismiss" id="updDismissBtn">Later</button>
+    </div>
+  </div>
+</div>
+
+<!-- Download / ready modal -->
+<div id="upd-modal-overlay">
+  <div id="upd-modal">
+    <!-- downloading state -->
+    <div id="upd-state-downloading">
+      <div class="upd-modal-icon">&#8987;</div>
+      <div class="upd-modal-title">Downloading update…</div>
+      <div class="upd-modal-sub" id="updDownloadingSub">Preparing download</div>
+      <div class="upd-bar-wrap"><div class="upd-bar-fill" id="updBarFill"></div></div>
+      <div class="upd-bar-label" id="updBarLabel">0%</div>
+    </div>
+    <!-- ready to install state -->
+    <div id="upd-state-ready" style="display:none;">
+      <div class="upd-modal-icon">&#9989;</div>
+      <div class="upd-modal-title">Ready to install!</div>
+      <div class="upd-modal-sub">The update has been downloaded. Restart now to apply it.</div>
+      <div class="upd-ready-actions">
+        <button class="upd-btn-primary" id="updInstallBtn" style="width:100%;padding:12px;">
+          <i class="fa fa-rotate-right" style="margin-right:7px;"></i>Restart &amp; Install
+        </button>
+        <button class="upd-btn-dismiss" id="updLaterBtn" style="width:100%;padding:11px;">
+          Install on next quit
+        </button>
+      </div>
+    </div>
+    <!-- error state -->
+    <div id="upd-state-error" style="display:none;">
+      <div class="upd-modal-icon">&#9888;</div>
+      <div class="upd-modal-title">Update failed</div>
+      <div class="upd-modal-sub" id="updErrorMsg">Could not download the update. Check your connection and try again.</div>
+      <button class="upd-btn-dismiss" id="updErrorClose" style="width:100%;padding:11px;">Close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var api = window.electronAPI;
+  if (!api) return;
+
+  var toast        = document.getElementById('upd-toast');
+  var overlay      = document.getElementById('upd-modal-overlay');
+  var newVerEl     = document.getElementById('upd-new-ver');
+  var curVerEl     = document.getElementById('upd-cur-ver');
+  var barFill      = document.getElementById('updBarFill');
+  var barLabel     = document.getElementById('updBarLabel');
+  var dlSub        = document.getElementById('updDownloadingSub');
+  var stDownload   = document.getElementById('upd-state-downloading');
+  var stReady      = document.getElementById('upd-state-ready');
+  var stError      = document.getElementById('upd-state-error');
+  var errMsg       = document.getElementById('updErrorMsg');
+
+  // Populate current version
+  if (api.appVersion) {
+    api.appVersion().then(function (v) { if (curVerEl) curVerEl.textContent = v; });
+  }
+
+  function showToast()  { toast.classList.add('show'); }
+  function hideToast()  { toast.classList.remove('show'); }
+  function showModal()  { overlay.classList.add('open'); }
+  function hideModal()  { overlay.classList.remove('open'); }
+
+  function showState(state) {
+    stDownload.style.display = state === 'downloading' ? '' : 'none';
+    stReady.style.display    = state === 'ready'       ? '' : 'none';
+    stError.style.display    = state === 'error'       ? '' : 'none';
+  }
+
+  // ── Update available ──
+  api.onUpdateAvailable && api.onUpdateAvailable(function (info) {
+    if (newVerEl) newVerEl.textContent = info.version;
+    showToast();
+  });
+
+  // ── Download button (from toast) ──
+  document.getElementById('updDownloadBtn').addEventListener('click', function () {
+    hideToast();
+    showState('downloading');
+    barFill.style.width = '0%';
+    barLabel.textContent = '0%';
+    dlSub.textContent = 'Starting download…';
+    showModal();
+    api.updateStartDownload && api.updateStartDownload();
+  });
+
+  // ── Dismiss toast ──
+  document.getElementById('updDismissBtn').addEventListener('click', hideToast);
+
+  // ── Download progress ──
+  api.onUpdateDownloadProgress && api.onUpdateDownloadProgress(function (p) {
+    var pct = p.percent || 0;
+    barFill.style.width = pct + '%';
+    barLabel.textContent = pct + '%';
+    var mb = function (b) { return (b / 1048576).toFixed(1) + ' MB'; };
+    dlSub.textContent = mb(p.transferred) + ' of ' + mb(p.total);
+  });
+
+  // ── Downloaded — show install prompt ──
+  api.onUpdateDownloaded && api.onUpdateDownloaded(function (info) {
+    showState('ready');
+    showModal();
+    hideToast();
+  });
+
+  // ── Error ──
+  api.onUpdateError && api.onUpdateError(function (err) {
+    errMsg.textContent = err.message || 'Unknown error.';
+    showState('error');
+    showModal();
+  });
+
+  // ── Install & restart ──
+  document.getElementById('updInstallBtn').addEventListener('click', function () {
+    api.updateInstallAndRestart && api.updateInstallAndRestart();
+  });
+
+  // ── Later (install on quit) ──
+  document.getElementById('updLaterBtn').addEventListener('click', function () {
+    hideModal();
+  });
+
+  // ── Error close ──
+  document.getElementById('updErrorClose').addEventListener('click', hideModal);
+})();
+</script>
 </body>
 </html>
