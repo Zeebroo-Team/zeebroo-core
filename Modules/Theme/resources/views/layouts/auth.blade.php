@@ -177,6 +177,10 @@
         .auth-oauth:hover{background:#f8f9fa;box-shadow:0 2px 8px rgba(0,0,0,.14);border-color:#c6c6c6;}
         .auth-oauth:active{background:#f1f3f4;box-shadow:0 1px 2px rgba(0,0,0,.1);}
         .auth-oauth svg{flex-shrink:0;width:20px;height:20px;}
+        .auth-footer{display:flex;align-items:center;justify-content:center;gap:16px;padding:16px 24px;
+            font-size:12px;color:var(--muted);flex-shrink:0;}
+        .auth-footer a{color:var(--muted);text-decoration:none;font-weight:600;}
+        .auth-footer a:hover{color:var(--text);}
         @media (prefers-reduced-motion:reduce){
             .auth-split__visual:hover{box-shadow:none;}
         }
@@ -232,6 +236,10 @@
                     @yield('content')
                 </div>
             </div>
+            <footer class="auth-footer">
+                <span>&copy; {{ now()->year }} {{ config('app.name') }}</span>
+                <a href="{{ route('privacy-policy') }}" target="_blank">Privacy Policy</a>
+            </footer>
         </main>
     </div>
     @stack('auth-scripts')
