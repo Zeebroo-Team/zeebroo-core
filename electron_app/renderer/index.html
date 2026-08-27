@@ -12886,6 +12886,117 @@
   </div>
 </div>
 
+<!-- ── About Zeebroo POS Modal ──────────────────────────────────────────── -->
+<div id="about-modal-overlay" class="modal-overlay" style="display:none">
+  <div class="po-aim-shell" style="width:min(420px,94vw)">
+    <div class="po-aim-header">
+      <i class="fa fa-circle-info" style="color:var(--accent)"></i>
+      <span>About Zeebroo POS</span>
+      <button class="psm-close" id="about-modal-close"><i class="fa fa-xmark"></i></button>
+    </div>
+    <div class="po-aim-body" style="padding:0">
+
+      <!-- Logo + name band -->
+      <div style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:28px 24px 20px;border-bottom:1px solid var(--border)">
+        <div style="width:64px;height:64px;border-radius:16px;background:var(--accent);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px color-mix(in srgb,var(--accent) 35%,transparent)">
+          <i class="fa fa-cash-register" style="font-size:28px;color:#fff"></i>
+        </div>
+        <div style="text-align:center;margin-top:4px">
+          <div style="font-size:17px;font-weight:700;color:var(--text)">Zeebroo POS</div>
+          <div style="font-size:13px;color:var(--text-muted);margin-top:2px">Point of Sale &amp; Business Management</div>
+        </div>
+      </div>
+
+      <!-- Info rows -->
+      <div style="padding:16px 24px;display:flex;flex-direction:column;gap:0;border-bottom:1px solid var(--border)">
+        <div class="about-row">
+          <span class="about-label"><i class="fa fa-tag"></i> Version</span>
+          <span class="about-val" id="about-version">—</span>
+        </div>
+        <div class="about-row">
+          <span class="about-label"><i class="fa fa-desktop"></i> Platform</span>
+          <span class="about-val" id="about-platform">—</span>
+        </div>
+        <div class="about-row">
+          <span class="about-label"><i class="fa fa-globe"></i> Website</span>
+          <a href="#" class="about-link" id="about-website">zeebroo.com</a>
+        </div>
+        <div class="about-row">
+          <span class="about-label"><i class="fa fa-copyright"></i> Copyright</span>
+          <span class="about-val">© 2024–2026 Zeebroo</span>
+        </div>
+        <div class="about-row" style="border:none">
+          <span class="about-label"><i class="fa fa-scale-balanced"></i> License</span>
+          <span class="about-val">Proprietary</span>
+        </div>
+      </div>
+
+      <!-- Action buttons -->
+      <div style="padding:16px 24px;display:flex;gap:10px">
+        <button class="about-btn" id="about-check-updates">
+          <i class="fa fa-rotate"></i> Check for Updates
+        </button>
+        <button class="about-btn about-btn-outline" id="about-modal-close-btn">
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+.about-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.about-label {
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.about-label i { width: 14px; text-align: center; }
+.about-val {
+  color: var(--text);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.about-link {
+  color: var(--accent);
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+}
+.about-link:hover { text-decoration: underline; }
+.about-btn {
+  flex: 1;
+  padding: 9px 14px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  background: var(--accent);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  transition: opacity .15s;
+}
+.about-btn:hover { opacity: .88; }
+.about-btn.about-btn-outline {
+  background: transparent;
+  border: 1.5px solid var(--border);
+  color: var(--text-muted);
+}
+.about-btn.about-btn-outline:hover { border-color: var(--accent); color: var(--accent); }
+</style>
+
 <!-- ── Restaurant: Create Order Modal ───────────────────────────────────── -->
 <div id="rst-order-modal" class="modal-overlay" style="display:none">
   <div class="rst-om-inner">

@@ -5781,7 +5781,58 @@ $('#tpm-keyboard-shortcuts').addEventListener('click', () => {
 });
 $('#tpm-about').addEventListener('click', () => {
   closeProfileMenu();
-  toast('Zeebroo POS v1.0.0 — © 2024 Zeebroo', 'info');
+  openAboutModal();
+});
+
+async function openAboutModal() {
+  const overlay = $('#about-modal-overlay');
+  overlay.style.display = 'flex';
+
+  // Version
+  const verEl = $('#about-version');
+  if (window.electronAPI && window.electronAPI.appVersion) {
+    try {
+      const v = await window.electronAPI.appVersion();
+      verEl.textContent = 'v' + v;
+    } catch (_) { verEl.textContent = 'Unknown'; }
+  } else {
+    verEl.textContent = 'Unknown';
+  }
+
+  // Platform
+  const platEl = $('#about-platform');
+  const plat = (window.electronAPI && window.electronAPI.platform) || navigator.platform || '';
+  if (plat === 'darwin') platEl.textContent = 'macOS';
+  else if (plat === 'win32') platEl.textContent = 'Windows';
+  else if (plat === 'linux') platEl.textContent = 'Linux';
+  else platEl.textContent = plat || 'Desktop';
+
+  // Website link
+  const webEl = $('#about-website');
+  if (webEl) {
+    webEl.addEventListener('click', e => {
+      e.preventDefault();
+      if (window.electronAPI && window.electronAPI.openExternal) {
+        window.electronAPI.openExternal('https://zeebroo.com');
+      } else {
+        window.open('https://zeebroo.com', '_blank');
+      }
+    }, { once: true });
+  }
+}
+
+function _closeAboutModal() {
+  $('#about-modal-overlay').style.display = 'none';
+}
+
+$('#about-modal-close').addEventListener('click', _closeAboutModal);
+$('#about-modal-close-btn').addEventListener('click', _closeAboutModal);
+$('#about-modal-overlay').addEventListener('click', e => {
+  if (e.target === $('#about-modal-overlay')) _closeAboutModal();
+});
+$('#about-check-updates').addEventListener('click', () => {
+  _closeAboutModal();
+  openUpdateModal();
 });
 $('#tpm-check-updates').addEventListener('click', () => {
   closeProfileMenu();

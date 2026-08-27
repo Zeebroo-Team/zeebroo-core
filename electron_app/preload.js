@@ -83,4 +83,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onUpdateDownloadProgress:(cb)=> ipcRenderer.on('update-download-progress', (_e, progress) => cb(progress)),
   onUpdateDownloaded:     (cb) => ipcRenderer.on('update-downloaded',        (_e, info)     => cb(info)),
   onUpdateError:          (cb) => ipcRenderer.on('update-error',             (_e, err)      => cb(err)),
+
+  // Dev-only: simulate update popup states
+  updateSimulate: (state) => ipcRenderer.send('update-simulate', state),
 });

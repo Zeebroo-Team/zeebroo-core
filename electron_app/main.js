@@ -227,6 +227,48 @@ ipcMain.handle('update-check-now', async () => {
 // IPC: renderer requests current app version
 ipcMain.handle('app-version', () => app.getVersion());
 
+// ── DEV ONLY: simulate update states for UI testing ───────────────────────
+// Trigger from DevTools console:
+//   window.electronAPI.updateSimulate('available')
+//   window.electronAPI.updateSimulate('progress')
+//   window.electronAPI.updateSimulate('downloaded')
+//   window.electronAPI.updateSimulate('error')
+ipcMain.on('update-simulate', (_e, state) => {
+  if (!mainWindow) return;
+  switch (state) {
+    case 'available':
+      mainWindow.webContents.send('update-available', {
+        version:     '4.10.0',
+        releaseDate: new Date().toISOString(),
+        releaseNotes: 'Test release — auto-updater simulation',
+      });
+      break;
+    case 'progress':
+      // Simulate a download progressing from 0 → 100% over 5 seconds
+      let pct = 0;
+      const iv = setInterval(() => {
+        pct += 10;
+        const total = 52428800; // 50 MB fake
+        mainWindow.webContents.send('update-download-progress', {
+          percent:        pct,
+          transferred:    Math.round(total * pct / 100),
+          total:          total,
+          bytesPerSecond: 5242880, // 5 MB/s fake
+        });
+        if (pct >= 100) clearInterval(iv);
+      }, 500);
+      break;
+    case 'downloaded':
+      mainWindow.webContents.send('update-downloaded', { version: '4.10.0' });
+      break;
+    case 'error':
+      mainWindow.webContents.send('update-error', {
+        message: 'Simulated error: could not reach update server.',
+      });
+      break;
+  }
+});
+
 // ── Window controls ───────────────────────────────────────────────────────
 ipcMain.on('window-minimize',  () => mainWindow?.minimize());
 ipcMain.on('window-maximize',  () => mainWindow?.isMaximized() ? mainWindow.unmaximize() : mainWindow.maximize());
