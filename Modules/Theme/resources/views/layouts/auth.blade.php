@@ -101,11 +101,12 @@
             margin-top:36px;font-size:13px;line-height:1.5;color:#64748b;max-width:36ch;
         }
         .auth-split__main{
-            flex:1;min-width:0;display:flex;align-items:center;justify-content:center;
+            flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
             padding:clamp(16px,4vmin,48px);
             background:rgba(245,245,244,.94);
         }
-        .auth-shell{width:100%;max-width:420px;position:relative;z-index:1;}
+        .auth-shell{width:100%;max-width:420px;position:relative;z-index:1;flex-shrink:0;}
+        .auth-footer{flex-shrink:0;}
         /* Right column: form sits flush on the page — no card chrome */
         .auth-panel{width:100%;background:transparent;border:none;box-shadow:none;border-radius:0;padding:0;}
         .auth-brand{display:flex;align-items:center;gap:14px;margin-bottom:clamp(20px,3vmin,28px);}
