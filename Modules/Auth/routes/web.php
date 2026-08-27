@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Modules\AppConnection\Http\Controllers\Admin\AppReleaseController;
 use Modules\Auth\Http\Controllers\AdminUserController;
 use Modules\Auth\Http\Controllers\AuthController;
 use Modules\Auth\Http\Controllers\EmployeeVerifyController;
@@ -32,4 +33,10 @@ Route::middleware(['auth', 'role:admin'])->prefix('admin')->name('admin.')->grou
     Route::post('/users', [AdminUserController::class, 'store'])->name('users.store');
     Route::put('/users/{user}', [AdminUserController::class, 'update'])->name('users.update');
     Route::delete('/users/{user}', [AdminUserController::class, 'destroy'])->name('users.destroy');
+
+    // App Releases
+    Route::get('/releases', [AppReleaseController::class, 'index'])->name('releases.index');
+    Route::post('/releases', [AppReleaseController::class, 'store'])->name('releases.store');
+    Route::post('/releases/{release}/set-latest', [AppReleaseController::class, 'setLatest'])->name('releases.set-latest');
+    Route::delete('/releases/{release}', [AppReleaseController::class, 'destroy'])->name('releases.destroy');
 });
