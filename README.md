@@ -53,7 +53,7 @@ For the **Qt POS desktop client**, see the [`pos-desktop`](#pos-desktop-git-subm
 
 ## Installation
 
-### 1. Clone
+### 1. Clone repo
 
 ```bash
 git clone --recurse-submodules git@github.com:Zeebroo-Team/zeebroo-core.git zeebroo-core
