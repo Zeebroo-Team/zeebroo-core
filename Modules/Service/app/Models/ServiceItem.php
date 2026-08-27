@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Modules\Business\Models\Business;
+use Modules\FileManager\Models\FileManagerFile;
 use Modules\HRManagement\Models\Employee;
 use Modules\Product\Models\Product;
 
@@ -17,25 +18,40 @@ class ServiceItem extends Model
     protected $fillable = [
         'business_id',
         'name',
+        'barcode',
         'description',
         'price',
+        'cost_price',
+        'wholesale_price',
         'duration_minutes',
         'is_active',
         'is_featured',
         'has_warranty',
+        'custom_requirement_enabled',
+        'custom_requirement_fields',
+        'file_manager_file_id',
     ];
 
     protected $casts = [
-        'price'            => 'decimal:2',
-        'duration_minutes' => 'integer',
-        'is_active'        => 'boolean',
-        'is_featured'      => 'boolean',
-        'has_warranty'     => 'boolean',
+        'price'                      => 'decimal:2',
+        'cost_price'                 => 'decimal:2',
+        'wholesale_price'            => 'decimal:2',
+        'duration_minutes'           => 'integer',
+        'is_active'                  => 'boolean',
+        'is_featured'                => 'boolean',
+        'has_warranty'               => 'boolean',
+        'custom_requirement_enabled' => 'boolean',
+        'custom_requirement_fields'  => 'array',
     ];
 
     public function business(): BelongsTo
     {
         return $this->belongsTo(Business::class);
+    }
+
+    public function imageFile(): BelongsTo
+    {
+        return $this->belongsTo(FileManagerFile::class, 'file_manager_file_id');
     }
 
     public function categories(): BelongsToMany

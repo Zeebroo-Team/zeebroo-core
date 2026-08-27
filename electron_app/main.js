@@ -3,6 +3,7 @@
 const path = require('path');
 const fs   = require('fs');
 const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
+const { autoUpdater } = require('electron-updater');
 const { API_BASE_URL } = require('./config');
 
 let CONFIG_PATH;
@@ -84,9 +85,189 @@ function createWindow() {
   mainWindow.on('closed', () => { mainWindow = null; });
 }
 
-app.whenReady().then(() => { config = loadConfig(); createWindow(); });
+// ── Deep-link: socibiz://auth?token=…&business_id=… ─────────────────────
+app.setAsDefaultProtocolClient('socibiz');
+
+function handleDeepLink(url) {
+  try {
+    const parsed     = new URL(url);
+    if (parsed.host !== 'auth') return;
+    const token      = parsed.searchParams.get('token');
+    const businessId = parsed.searchParams.get('business_id');
+    if (!token) return;
+    config = loadConfig();
+    config.token       = token;
+    config.business_id = businessId ? Number(businessId) : (config.business_id ?? null);
+    config.branch_id   = config.branch_id ?? null;
+    saveConfig(config);
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+      mainWindow.webContents.reload();
+    } else {
+      createWindow();
+    }
+  } catch (e) { console.error('[deep-link]', e); }
+}
+
+app.on('open-url', (event, url) => { event.preventDefault(); handleDeepLink(url); });
+
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) {
+  app.quit();
+} else {
+  app.on('second-instance', (_event, argv) => {
+    const deepUrl = argv.find(a => a.startsWith('socibiz://'));
+    if (deepUrl) handleDeepLink(deepUrl);
+    if (mainWindow) { if (mainWindow.isMinimized()) mainWindow.restore(); mainWindow.focus(); }
+  });
+}
+
+app.whenReady().then(() => {
+  config = loadConfig();
+  // Cold-launch deep link (Windows/Linux passes URL as argv)
+  if (process.platform !== 'darwin') {
+    const deepUrl = process.argv.find(a => a.startsWith('socibiz://'));
+    if (deepUrl) {
+      try {
+        const p = new URL(deepUrl);
+        const token = p.searchParams.get('token');
+        if (token) {
+          config.token       = token;
+          config.business_id = p.searchParams.get('business_id') ? Number(p.searchParams.get('business_id')) : (config.business_id ?? null);
+          saveConfig(config);
+        }
+      } catch (_) {}
+    }
+  }
+  createWindow();
+  scheduleUpdateChecks();
+});
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 app.on('activate', () => { if (!mainWindow) createWindow(); });
+
+// ── Auto-updater ─────────────────────────────────────────────────────────
+// Uses electron-updater with a generic provider pointing at SourceForge.
+// Upload latest.yml + installer files to the SourceForge release folder
+// after every new build so users get notified automatically.
+
+autoUpdater.autoDownload    = false; // we ask the user first
+autoUpdater.autoInstallOnAppQuit = true;
+
+// Silence updater logs in production; enable in dev for debugging
+autoUpdater.logger = null;
+
+let updateDownloaded = false;
+
+function notifyUpdateAvailable(info) {
+  if (!mainWindow) return;
+  mainWindow.webContents.send('update-available', {
+    version:      info.version,
+    releaseNotes: info.releaseNotes || '',
+    releaseDate:  info.releaseDate  || '',
+  });
+}
+
+function notifyDownloadProgress(progress) {
+  if (!mainWindow) return;
+  mainWindow.webContents.send('update-download-progress', {
+    percent:          Math.round(progress.percent),
+    transferred:      progress.transferred,
+    total:            progress.total,
+    bytesPerSecond:   progress.bytesPerSecond,
+  });
+}
+
+function notifyUpdateReady(info) {
+  if (!mainWindow) return;
+  updateDownloaded = true;
+  mainWindow.webContents.send('update-downloaded', { version: info.version });
+}
+
+autoUpdater.on('update-available',      notifyUpdateAvailable);
+autoUpdater.on('download-progress',     notifyDownloadProgress);
+autoUpdater.on('update-downloaded',     notifyUpdateReady);
+autoUpdater.on('error', (err) => {
+  // Swallow silently in production — don't alarm the user for network issues
+  console.error('[updater] error:', err?.message ?? err);
+  if (mainWindow) mainWindow.webContents.send('update-error', { message: err?.message ?? String(err) });
+});
+
+// Check once 10 s after launch (avoids slowing startup) and then every 4 hours
+function scheduleUpdateChecks() {
+  setTimeout(() => {
+    autoUpdater.checkForUpdates().catch(() => {});
+    setInterval(() => autoUpdater.checkForUpdates().catch(() => {}), 4 * 60 * 60 * 1000);
+  }, 10_000);
+}
+
+// IPC: renderer triggers download
+ipcMain.on('update-start-download', () => {
+  autoUpdater.downloadUpdate().catch(err => {
+    console.error('[updater] download error:', err?.message);
+    if (mainWindow) mainWindow.webContents.send('update-error', { message: err?.message ?? String(err) });
+  });
+});
+
+// IPC: renderer asks to install and restart
+ipcMain.on('update-install-and-restart', () => {
+  autoUpdater.quitAndInstall(false, true);
+});
+
+// IPC: renderer requests a manual check
+ipcMain.handle('update-check-now', async () => {
+  try {
+    const result = await autoUpdater.checkForUpdates();
+    return { hasUpdate: !!result?.updateInfo?.version && result.updateInfo.version !== app.getVersion() };
+  } catch (e) {
+    return { hasUpdate: false, error: e?.message };
+  }
+});
+
+// IPC: renderer requests current app version
+ipcMain.handle('app-version', () => app.getVersion());
+
+// ── DEV ONLY: simulate update states for UI testing ───────────────────────
+// Trigger from DevTools console:
+//   window.electronAPI.updateSimulate('available')
+//   window.electronAPI.updateSimulate('progress')
+//   window.electronAPI.updateSimulate('downloaded')
+//   window.electronAPI.updateSimulate('error')
+ipcMain.on('update-simulate', (_e, state) => {
+  if (!mainWindow) return;
+  switch (state) {
+    case 'available':
+      mainWindow.webContents.send('update-available', {
+        version:     '4.10.0',
+        releaseDate: new Date().toISOString(),
+        releaseNotes: 'Test release — auto-updater simulation',
+      });
+      break;
+    case 'progress':
+      // Simulate a download progressing from 0 → 100% over 5 seconds
+      let pct = 0;
+      const iv = setInterval(() => {
+        pct += 10;
+        const total = 52428800; // 50 MB fake
+        mainWindow.webContents.send('update-download-progress', {
+          percent:        pct,
+          transferred:    Math.round(total * pct / 100),
+          total:          total,
+          bytesPerSecond: 5242880, // 5 MB/s fake
+        });
+        if (pct >= 100) clearInterval(iv);
+      }, 500);
+      break;
+    case 'downloaded':
+      mainWindow.webContents.send('update-downloaded', { version: '4.10.0' });
+      break;
+    case 'error':
+      mainWindow.webContents.send('update-error', {
+        message: 'Simulated error: could not reach update server.',
+      });
+      break;
+  }
+});
 
 // ── Window controls ───────────────────────────────────────────────────────
 ipcMain.on('window-minimize',  () => mainWindow?.minimize());

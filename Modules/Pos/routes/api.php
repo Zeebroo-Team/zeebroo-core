@@ -27,7 +27,9 @@ use Modules\Pos\Http\Controllers\Api\PosInvoiceApiController;
 use Modules\Pos\Http\Controllers\Api\PosSalesOrderApiController;
 use Modules\Pos\Http\Controllers\Api\PosSettingsApiController;
 use Modules\Pos\Http\Controllers\Api\PosCustomerApiController;
+use Modules\Pos\Http\Controllers\Api\PosCustomerCategoryApiController;
 use Modules\Pos\Http\Controllers\Api\PosSupplierApiController;
+use Modules\Pos\Http\Controllers\Api\PosSupplierCategoryApiController;
 use Modules\Pos\Http\Controllers\Api\PosReturnReasonsApiController;
 use Modules\Pos\Http\Controllers\Api\PosGoodsReceiveNoteApiController;
 use Modules\Pos\Http\Controllers\Api\PosGrnPermissionApiController;
@@ -42,6 +44,7 @@ use Modules\Pos\Http\Controllers\Api\PosExpensesOverviewApiController;
 use Modules\Pos\Http\Controllers\Api\PosProfitReportApiController;
 use Modules\Pos\Http\Controllers\Api\PosPayrollOverviewApiController;
 use Modules\Pos\Http\Controllers\Api\PosUserManagementApiController;
+use Modules\Pos\Http\Controllers\Api\PosBranchManagementApiController;
 use Modules\Pos\Http\Controllers\Api\PosRoleManagementApiController;
 use Modules\Pos\Http\Controllers\Api\PosCounterApiController;
 use Modules\Pos\Http\Controllers\Api\PosRegisterLockApiController;
@@ -187,15 +190,27 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
 
     Route::get('customers', [PosCustomerApiController::class, 'index'])->name('customers.index');
     Route::post('customers', [PosCustomerApiController::class, 'store'])->name('customers.store');
+    Route::post('customers/import', [PosCustomerApiController::class, 'import'])->name('customers.import');
     Route::get('customers/{customer}', [PosCustomerApiController::class, 'show'])->name('customers.show');
     Route::patch('customers/{customer}', [PosCustomerApiController::class, 'update'])->name('customers.update');
     Route::delete('customers/{customer}', [PosCustomerApiController::class, 'destroy'])->name('customers.destroy');
 
+    Route::get('customer-categories', [PosCustomerCategoryApiController::class, 'index'])->name('customer-categories.index');
+    Route::post('customer-categories', [PosCustomerCategoryApiController::class, 'store'])->name('customer-categories.store');
+    Route::patch('customer-categories/{category}', [PosCustomerCategoryApiController::class, 'update'])->name('customer-categories.update');
+    Route::delete('customer-categories/{category}', [PosCustomerCategoryApiController::class, 'destroy'])->name('customer-categories.destroy');
+
     Route::get('suppliers', [PosSupplierApiController::class, 'index'])->name('suppliers.index');
     Route::post('suppliers', [PosSupplierApiController::class, 'store'])->name('suppliers.store');
+    Route::post('suppliers/import', [PosSupplierApiController::class, 'import'])->name('suppliers.import');
     Route::get('suppliers/{supplier}', [PosSupplierApiController::class, 'show'])->name('suppliers.show');
     Route::patch('suppliers/{supplier}', [PosSupplierApiController::class, 'update'])->name('suppliers.update');
     Route::delete('suppliers/{supplier}', [PosSupplierApiController::class, 'destroy'])->name('suppliers.destroy');
+
+    Route::get('supplier-categories', [PosSupplierCategoryApiController::class, 'index'])->name('supplier-categories.index');
+    Route::post('supplier-categories', [PosSupplierCategoryApiController::class, 'store'])->name('supplier-categories.store');
+    Route::patch('supplier-categories/{category}', [PosSupplierCategoryApiController::class, 'update'])->name('supplier-categories.update');
+    Route::delete('supplier-categories/{category}', [PosSupplierCategoryApiController::class, 'destroy'])->name('supplier-categories.destroy');
 
     Route::get('purchase-orders', [PosPurchaseOrderApiController::class, 'index'])->name('purchase-orders.index');
     Route::post('purchase-orders', [PosPurchaseOrderApiController::class, 'store'])->name('purchase-orders.store');
@@ -317,6 +332,12 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
     Route::post  ('roles',        [PosRoleManagementApiController::class, 'store'])  ->name('roles.store');
     Route::put   ('roles/{role}', [PosRoleManagementApiController::class, 'update']) ->name('roles.update');
     Route::delete('roles/{role}', [PosRoleManagementApiController::class, 'destroy'])->name('roles.destroy');
+
+    // Branch Management
+    Route::get   ('branches',          [PosBranchManagementApiController::class, 'index'])  ->name('branches.index');
+    Route::post  ('branches',          [PosBranchManagementApiController::class, 'store'])  ->name('branches.store');
+    Route::put   ('branches/{branch}', [PosBranchManagementApiController::class, 'update']) ->name('branches.update');
+    Route::delete('branches/{branch}', [PosBranchManagementApiController::class, 'destroy'])->name('branches.destroy');
 
     // Counters
     Route::post  ('verify-password',   [PosRegisterLockApiController::class, 'verifyPassword'])->name('verify-password');

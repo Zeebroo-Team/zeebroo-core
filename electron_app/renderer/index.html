@@ -12,6 +12,7 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 <link rel="stylesheet" href="css/ribbon.css">
 <link rel="stylesheet" href="css/ribbon-customize.css">
+<link rel="stylesheet" href="css/home-subnav-customize.css">
 <link rel="stylesheet" href="css/reactflow.css">
 <style>
 /* ── Mail: thread list ─────────────────────────────────────────────── */
@@ -848,15 +849,23 @@
             <button class="ribbon-btn-lg" id="rb-sal-new-quotation">
               <i class="fa fa-file-circle-plus"></i>New Quotation
             </button>
+            <button class="ribbon-btn-lg primary" id="rb-so-new">
+              <i class="fa fa-box"></i>New Sales Order
+            </button>
           </div>
           <div class="ribbon-group-label">Create</div>
         </div>
 
         <div class="ribbon-group">
           <div class="ribbon-group-content">
-            <button class="ribbon-btn-lg" id="rb-sal-refresh">
-              <i class="fa fa-rotate"></i>Refresh
-            </button>
+            <div class="ribbon-small-stack">
+              <button class="ribbon-btn-sm" id="rb-sal-refresh">
+                <i class="fa fa-rotate"></i> Refresh
+              </button>
+              <button class="ribbon-btn-sm" id="rb-sal-invoice-setup">
+                <i class="fa fa-sliders"></i> Invoice Setup
+              </button>
+            </div>
             <div class="ribbon-small-stack">
               <button class="ribbon-btn-sm" id="rb-sal-all">
                 <i class="fa fa-list"></i> All Sales
@@ -880,15 +889,6 @@
 
         <div class="ribbon-group">
           <div class="ribbon-group-content">
-            <button class="ribbon-btn-lg" id="rb-sal-invoice-setup">
-              <i class="fa fa-sliders"></i>Invoice Setup
-            </button>
-          </div>
-          <div class="ribbon-group-label">Configuration</div>
-        </div>
-
-        <div class="ribbon-group">
-          <div class="ribbon-group-content">
             <button class="ribbon-btn-lg" id="rb-eod-open">
               <i class="fa fa-building-columns"></i>End of Day
             </button>
@@ -898,26 +898,11 @@
 
         <div class="ribbon-group">
           <div class="ribbon-group-content">
-            <button class="ribbon-btn-lg" id="rb-qt-new">
-              <i class="fa fa-file-circle-plus"></i>New Quote
-            </button>
-            <button class="ribbon-btn-lg" id="rb-qt-refresh">
-              <i class="fa fa-rotate"></i>Refresh
+            <button class="ribbon-btn-lg" id="rb-sal-customers">
+              <i class="fa fa-users"></i>Customers
             </button>
           </div>
-          <div class="ribbon-group-label">Quotations</div>
-        </div>
-
-        <div class="ribbon-group">
-          <div class="ribbon-group-content">
-            <button class="ribbon-btn-lg primary" id="rb-so-new">
-              <i class="fa fa-box"></i>New Order
-            </button>
-            <button class="ribbon-btn-lg" id="rb-so-refresh">
-              <i class="fa fa-rotate"></i>Refresh
-            </button>
-          </div>
-          <div class="ribbon-group-label">Sales Orders</div>
+          <div class="ribbon-group-label">Customers</div>
         </div>
 
       </div><!-- /sales ribbon page -->
@@ -1660,6 +1645,7 @@
         <button class="home-tab-btn" data-home-view="profit"><i class="fa fa-sack-dollar"></i> Profit</button>
         <button class="home-tab-btn" data-home-view="payroll"><i class="fa fa-user-tie"></i> Payroll</button>
         <button class="home-tab-btn" data-home-view="orders"><i class="fa fa-receipt"></i> Orders</button>
+        <button id="home-subnav-gear" class="home-subnav-gear-btn" title="Customize tabs"><i class="fa fa-gear"></i></button>
       </div>
 
       <!-- Body: main view + right panel -->
@@ -1673,6 +1659,7 @@
           </div>
           <!-- Today Summary view -->
           <div id="home-view-today" class="home-view" style="display:none;flex-direction:column">
+          <div class="han-container">
             <div class="tds-toolbar">
               <span class="tds-title"><i class="fa fa-sun"></i> Today's Summary</span>
               <span class="tds-date" id="tds-date"></span>
@@ -1682,9 +1669,11 @@
               <div class="inv-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</div>
             </div>
           </div>
+          </div>
 
           <!-- Activity view -->
           <div id="home-view-activity" class="home-view" style="display:none;flex-direction:column">
+          <div class="han-container">
             <div class="home-act-toolbar">
               <span class="home-act-title"><i class="fa fa-clock-rotate-left"></i> Recent Transactions</span>
               <button class="home-act-refresh" id="home-act-refresh"><i class="fa fa-arrows-rotate"></i> Refresh</button>
@@ -1693,8 +1682,10 @@
               <div class="inv-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</div>
             </div>
           </div>
+          </div>
           <!-- Analytics view -->
           <div id="home-view-analytics" class="home-view" style="display:none;flex-direction:column">
+          <div class="han-container">
             <!-- Toolbar -->
             <div class="han-toolbar">
               <span class="han-title"><i class="fa fa-chart-line"></i> Analytics Overview</span>
@@ -1764,8 +1755,10 @@
               </div>
             </div>
           </div>
+          </div>
           <!-- Expenses view -->
           <div id="home-view-expenses" class="home-view" style="display:none;flex-direction:column">
+          <div class="han-container">
             <div class="tds-toolbar">
               <span class="tds-title"><i class="fa fa-file-invoice-dollar"></i> Expenses</span>
               <button class="home-act-refresh" id="exp-refresh"><i class="fa fa-arrows-rotate"></i> Refresh</button>
@@ -1774,8 +1767,10 @@
               <div class="inv-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</div>
             </div>
           </div>
+          </div>
           <!-- Profit Report view -->
           <div id="home-view-profit" class="home-view" style="display:none;flex-direction:column">
+          <div class="han-container">
             <div class="tds-toolbar">
               <span class="tds-title"><i class="fa fa-sack-dollar"></i> Profit Report</span>
               <div style="display:flex;gap:6px;align-items:center">
@@ -1792,8 +1787,10 @@
               <div class="inv-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</div>
             </div>
           </div>
+          </div>
           <!-- Payroll view -->
           <div id="home-view-payroll" class="home-view" style="display:none;flex-direction:column">
+          <div class="han-container">
             <div class="tds-toolbar">
               <span class="tds-title"><i class="fa fa-user-tie"></i> Payroll</span>
               <button class="home-act-refresh" id="prl-refresh"><i class="fa fa-arrows-rotate"></i> Refresh</button>
@@ -1802,9 +1799,11 @@
               <div class="inv-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</div>
             </div>
           </div>
+          </div>
 
           <!-- Orders view -->
           <div id="home-view-orders" class="home-view" style="display:none;flex-direction:column">
+          <div class="han-container">
             <div class="tds-toolbar">
               <span class="tds-title"><i class="fa fa-receipt"></i> Orders</span>
               <div class="hov-kpis">
@@ -1876,6 +1875,7 @@
               </div>
 
             </div><!-- /hov-body -->
+          </div>
           </div><!-- /home-view-orders -->
         </div>
 
@@ -1938,8 +1938,12 @@
             </div>
             <button class="sb-icon-btn" id="btn-refresh-products" title="Refresh"><i class="fa fa-arrows-rotate"></i></button>
           </div>
-          <div id="category-filter">
-            <div class="cat-chip active" data-cat="0">All</div>
+          <div id="category-filter-wrap">
+            <button class="cat-scroll-arrow cat-scroll-left" id="cat-scroll-left" type="button" title="Scroll left"><i class="fa fa-chevron-left"></i></button>
+            <div id="category-filter">
+              <div class="cat-chip active" data-cat="0">All</div>
+            </div>
+            <button class="cat-scroll-arrow cat-scroll-right" id="cat-scroll-right" type="button" title="Scroll right"><i class="fa fa-chevron-right"></i></button>
           </div>
           <div id="product-grid">
             <div style="grid-column:1/-1;text-align:center;padding:60px;color:var(--text-muted)">
@@ -1955,8 +1959,12 @@
               <input type="text" id="service-search" placeholder="Search services…" autocomplete="off">
               <button class="sb-icon-btn" id="btn-refresh-services" title="Refresh"><i class="fa fa-arrows-rotate"></i></button>
             </div>
-            <div id="service-category-filter">
-              <div class="cat-chip active" data-cat="0">All</div>
+            <div id="service-category-filter-wrap">
+              <button class="cat-scroll-arrow cat-scroll-left" id="svc-cat-scroll-left" type="button" title="Scroll left"><i class="fa fa-chevron-left"></i></button>
+              <div id="service-category-filter">
+                <div class="cat-chip active" data-cat="0">All</div>
+              </div>
+              <button class="cat-scroll-arrow cat-scroll-right" id="svc-cat-scroll-right" type="button" title="Scroll right"><i class="fa fa-chevron-right"></i></button>
             </div>
             <div id="service-grid">
               <div style="grid-column:1/-1;text-align:center;padding:60px;color:var(--text-muted)">
@@ -2020,9 +2028,11 @@
             <input type="text" id="sal-search" placeholder="Search sales, customers…">
           </div>
         </div>
-        <div class="sal-kpi-bar" id="sal-kpi-bar" style="display:none"></div>
-        <div class="sal-table-wrap" id="sal-table-wrap">
-          <div class="finance-loading"><i class="fa fa-spinner fa-spin"></i> Loading sales…</div>
+        <div class="sal-content-card">
+          <div class="sal-kpi-bar" id="sal-kpi-bar" style="display:none"></div>
+          <div class="sal-table-wrap" id="sal-table-wrap">
+            <div class="finance-loading"><i class="fa fa-spinner fa-spin"></i> Loading sales…</div>
+          </div>
         </div>
         <div class="finance-footer"><span id="sal-count">—</span></div>
       </div>
@@ -2035,6 +2045,7 @@
           </button>
           <div class="inv-detail-breadcrumb" id="sal-detail-title">Sale</div>
           <div class="inv-detail-actions">
+            <button class="sal-action-btn" id="sal-custom-req-btn" style="display:none"><i class="fa fa-list-check"></i> Details</button>
             <button class="sal-action-btn" id="sal-print-btn"><i class="fa fa-print"></i> Receipt</button>
             <button class="sal-action-btn" id="sal-return-btn"><i class="fa fa-rotate-left"></i> Return</button>
             <button class="sal-action-btn sal-action-danger" id="sal-void-btn"><i class="fa fa-ban"></i> Void</button>
@@ -2053,8 +2064,10 @@
           <button class="po-btn-ghost" id="sal-credits-refresh" style="margin-left:auto"><i class="fa fa-arrows-rotate"></i> Refresh</button>
         </div>
         <div id="sal-credits-kpi" class="pc-kpi-bar" style="display:none"></div>
-        <div id="sal-credits-body" style="flex:1;overflow-y:auto;padding:16px 20px">
-          <div class="finance-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</div>
+        <div class="sal-content-card">
+          <div id="sal-credits-body" style="flex:1;overflow-y:auto;padding:16px 20px">
+            <div class="finance-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</div>
+          </div>
         </div>
       </div>
 
@@ -2089,20 +2102,22 @@
           </div>
         </div>
 
-        <!-- KPI summary -->
-        <div class="sal-kpi-bar" id="sal-hist-kpi" style="display:none"></div>
+        <div class="sal-content-card">
+          <!-- KPI summary -->
+          <div class="sal-kpi-bar" id="sal-hist-kpi" style="display:none"></div>
 
-        <!-- Revenue chart -->
-        <div class="sal-chart-section">
-          <div class="sal-chart-header">
-            <span class="sal-chart-label" id="sal-hist-chart-label">Revenue trend</span>
+          <!-- Revenue chart -->
+          <div class="sal-chart-section">
+            <div class="sal-chart-header">
+              <span class="sal-chart-label" id="sal-hist-chart-label">Revenue trend</span>
+            </div>
+            <div id="sal-hist-chart" class="sal-chart-area"></div>
           </div>
-          <div id="sal-hist-chart" class="sal-chart-area"></div>
-        </div>
 
-        <!-- Paginated table -->
-        <div class="sal-hist-table-wrap" id="sal-hist-table-wrap">
-          <div class="finance-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</div>
+          <!-- Paginated table -->
+          <div class="sal-hist-table-wrap" id="sal-hist-table-wrap">
+            <div class="finance-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</div>
+          </div>
         </div>
         <div class="sal-pagination" id="sal-hist-pagination" style="display:none">
           <button class="sal-page-btn" id="sal-hist-prev"><i class="fa fa-chevron-left"></i> Prev</button>
@@ -2132,9 +2147,11 @@
         </div>
 
         <!-- List -->
-        <div id="qt-list-view" style="flex:1;overflow-y:auto">
-          <div class="qt-loading" id="qt-list-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</div>
-          <div id="qt-list-body" style="padding:16px"></div>
+        <div id="qt-list-view" class="sal-content-card">
+          <div class="qt-list-scroll" style="flex:1;overflow-y:auto">
+            <div class="qt-loading" id="qt-list-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</div>
+            <div id="qt-list-body" style="padding:16px"></div>
+          </div>
         </div>
 
         <!-- Detail -->
@@ -2238,9 +2255,11 @@
         </div>
 
         <!-- List -->
-        <div id="sinv-list-view" style="flex:1;overflow-y:auto">
-          <div class="qt-loading" id="sinv-list-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</div>
-          <div id="sinv-list-body" style="padding:16px 20px"></div>
+        <div id="sinv-list-view" class="sal-content-card">
+          <div class="sinv-list-scroll" style="flex:1;overflow-y:auto">
+            <div class="qt-loading" id="sinv-list-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</div>
+            <div id="sinv-list-body" style="padding:16px 20px"></div>
+          </div>
         </div>
 
         <!-- Detail -->
@@ -2356,8 +2375,10 @@
             <button class="qt-act-btn accent" id="so-new-btn" style="margin-left:auto"><i class="fa fa-plus"></i> New Order</button>
             <button class="qt-act-btn" id="so-settings-btn" title="Sales Order Settings"><i class="fa fa-gear"></i></button>
           </div>
-          <div id="so-list-loading" style="display:none;padding:40px;text-align:center;color:var(--muted)"><i class="fa fa-spinner fa-spin"></i> Loading…</div>
-          <div id="so-list-body" style="flex:1;overflow-y:auto;padding:0 0 16px"></div>
+          <div class="sal-content-card">
+            <div id="so-list-loading" style="display:none;padding:40px;text-align:center;color:var(--muted)"><i class="fa fa-spinner fa-spin"></i> Loading…</div>
+            <div id="so-list-body" style="flex:1;overflow-y:auto;padding:16px 20px"></div>
+          </div>
         </div>
 
         <!-- Detail view -->
@@ -2566,6 +2587,8 @@
           <button class="inv-tab" data-tab="stock">Stock</button>
           <button class="inv-tab" data-tab="images">Images</button>
           <button class="inv-tab" data-tab="variants">Variants</button>
+          <button class="inv-tab" data-tab="delivery" id="inv-tab-delivery" style="display:none"><i class="fa fa-truck"></i> Delivery</button>
+          <button class="inv-tab" data-tab="rental" id="inv-tab-rental" style="display:none">Rental</button>
         </div>
 
         <!-- Tab bodies -->
@@ -2575,6 +2598,8 @@
           <div class="inv-tab-pane"        id="inv-pane-stock"></div>
           <div class="inv-tab-pane"        id="inv-pane-images"></div>
           <div class="inv-tab-pane"        id="inv-pane-variants"></div>
+          <div class="inv-tab-pane"        id="inv-pane-delivery"></div>
+          <div class="inv-tab-pane"        id="inv-pane-rental"></div>
         </div>
 
       </div><!-- /inv-detail-view -->
@@ -2595,6 +2620,7 @@
             <button class="prod-modal-tab" data-tab="pricing"><i class="fa fa-tag"></i> Pricing &amp; Stock</button>
             <button class="prod-modal-tab" data-tab="media"><i class="fa fa-image"></i> Media</button>
             <button class="prod-modal-tab" data-tab="advanced"><i class="fa fa-sliders"></i> Advanced</button>
+            <button class="prod-modal-tab" data-tab="delivery"><i class="fa fa-truck"></i> Delivery</button>
           </div>
           <div class="prod-modal-body">
 
@@ -2777,18 +2803,6 @@
                     <input type="date" id="prod-f-exp-date" class="po-field-input" style="max-width:100%">
                   </div>
                 </div>
-                <!-- Courier Delivery -->
-                <div class="prod-adv-card">
-                  <input type="checkbox" id="prod-f-courier" class="prod-adv-card-chk">
-                  <label class="prod-adv-card-top" for="prod-f-courier">
-                    <div class="prod-adv-card-icon"><i class="fa fa-truck"></i></div>
-                    <div class="prod-adv-card-text">
-                      <span class="prod-adv-card-name">Courier Delivery</span>
-                      <span class="prod-adv-card-desc">Available for delivery and courier orders</span>
-                    </div>
-                    <div class="prod-adv-card-sw"><div class="prod-adv-card-knob"></div></div>
-                  </label>
-                </div>
                 <!-- Loyalty Redeemable -->
                 <div class="prod-adv-card">
                   <input type="checkbox" id="prod-f-loyalty" class="prod-adv-card-chk">
@@ -2824,6 +2838,27 @@
                     </div>
                     <div class="prod-adv-card-sw"><div class="prod-adv-card-knob"></div></div>
                   </label>
+                  <div class="prod-adv-card-fields" id="prod-rental-terms-row">
+                    <div class="po-field-label" style="margin-bottom:6px"><i class="fa fa-sack-dollar" style="color:var(--accent);margin-right:4px"></i> Rental Terms</div>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+                      <div style="flex:1;min-width:110px">
+                        <label style="display:block;font-size:11px;color:var(--text-muted);margin-bottom:4px">Daily Rate</label>
+                        <input type="number" id="prod-f-rental-daily-rate" class="po-field-input" min="0" step="0.01" placeholder="0.00">
+                      </div>
+                      <div style="flex:1;min-width:110px">
+                        <label style="display:block;font-size:11px;color:var(--text-muted);margin-bottom:4px">Max Rental Days</label>
+                        <input type="number" id="prod-f-rental-max-days" class="po-field-input" min="1" step="1" placeholder="e.g. 4">
+                      </div>
+                      <div style="flex:1;min-width:150px">
+                        <label style="display:block;font-size:11px;color:var(--text-muted);margin-bottom:4px">Late Fee (× daily rate/day)</label>
+                        <input type="number" id="prod-f-rental-late-fee-multiplier" class="po-field-input" min="0" step="0.1" placeholder="e.g. 1.5">
+                      </div>
+                    </div>
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-xs);background:var(--surface)">
+                      <input type="checkbox" id="prod-f-rental-needs-cleaning" style="accent-color:var(--accent);cursor:pointer">
+                      <span style="font-size:12px;color:var(--text)"><i class="fa fa-broom" style="color:var(--accent);margin-right:4px"></i> Requires cleaning/inspection before next rental</span>
+                    </label>
+                  </div>
                 </div>
                 <!-- Subscription -->
                 <div class="prod-adv-card">
@@ -2862,6 +2897,17 @@
                   </label>
                 </div>
               </div>
+            </div>
+
+            <!-- Pane 5: Delivery -->
+            <div class="prod-modal-pane" data-pane="delivery">
+              <div id="prod-delivery-disabled-msg" class="prod-delivery-disabled" style="display:none">
+                <i class="fa fa-truck"></i>
+                <strong id="prod-delivery-disabled-title">Delivery methods are turned off</strong>
+                <span id="prod-delivery-disabled-text">Enable delivery methods in Settings to offer courier delivery for this product.</span>
+                <button type="button" class="po-btn-ghost" id="prod-delivery-goto-settings"><i class="fa fa-gear"></i> Go to Delivery Settings</button>
+              </div>
+              <div id="prod-delivery-partners" class="prod-delivery-partners"></div>
             </div>
 
           </div><!-- /prod-modal-body -->
@@ -4104,6 +4150,7 @@
         <div class="sup-modal-header">
           <i class="fa fa-building-user" style="color:var(--accent)"></i>
           <span id="sup-modal-title">New Supplier</span>
+          <button class="psm-close" id="sup-settings-btn" title="Supplier Settings"><i class="fa fa-gear"></i></button>
           <button class="psm-close" id="sup-modal-close"><i class="fa fa-xmark"></i></button>
         </div>
         <div class="sup-modal-body">
@@ -4117,16 +4164,24 @@
               <input type="text" id="sup-f-contact" class="cm-input" placeholder="Full name">
             </div>
             <div class="sup-field">
-              <label class="cm-label">Phone</label>
+              <label class="cm-label">Phone <span id="sup-req-phone" style="color:#ef4444;display:none">*</span></label>
               <input type="text" id="sup-f-phone" class="cm-input" placeholder="+1 234 567 8900">
             </div>
             <div class="sup-field">
-              <label class="cm-label">Email</label>
+              <label class="cm-label">Email <span id="sup-req-email" style="color:#ef4444;display:none">*</span></label>
               <input type="email" id="sup-f-email" class="cm-input" placeholder="supplier@example.com">
             </div>
             <div class="sup-field">
-              <label class="cm-label">Address</label>
+              <label class="cm-label">Address <span id="sup-req-address" style="color:#ef4444;display:none">*</span></label>
               <input type="text" id="sup-f-address" class="cm-input" placeholder="Street, City, Country">
+            </div>
+            <div class="sup-field">
+              <label class="cm-label">Category</label>
+              <div class="cat-combo">
+                <input type="text" id="sup-f-category-input" class="cm-input" placeholder="No category" autocomplete="off">
+                <input type="hidden" id="sup-f-category">
+                <div class="cat-combo-list" id="sup-f-category-list" style="display:none"></div>
+              </div>
             </div>
             <div class="sup-field sup-field--full">
               <label class="cm-label">Notes</label>
@@ -4137,6 +4192,104 @@
         <div class="sup-modal-footer">
           <button class="psm-btn-cancel" id="sup-form-cancel"><i class="fa fa-xmark"></i> Cancel</button>
           <button class="qap-btn-save"   id="sup-form-save"><i class="fa fa-check"></i> Save Supplier</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Supplier Settings Modal ────────────────────────────────────────────── -->
+    <div id="sup-settings-modal" class="modal-overlay" style="display:none">
+      <div class="po-aim-shell pfs-shell" style="width:min(560px,94vw)">
+        <div class="po-aim-header">
+          <i class="fa fa-gear" style="color:var(--accent)"></i>
+          <span>Supplier Settings</span>
+          <button class="psm-close" id="sup-settings-close"><i class="fa fa-xmark"></i></button>
+        </div>
+        <nav class="pfs-tab-nav" id="sup-settings-nav">
+          <button class="pfs-opt-tab active" data-sst-tab="general"><i class="fa fa-sliders"></i>&ensp;General</button>
+          <button class="pfs-opt-tab"        data-sst-tab="category"><i class="fa fa-tags"></i>&ensp;Supplier Category</button>
+        </nav>
+        <div id="sup-settings-panels" class="pfs-panels">
+          <!-- General panel -->
+          <div class="pfs-panel pfs-fields-body" id="sst-panel-general">
+            <div class="pfs-field-row">
+              <div class="pfs-field-icon"><i class="fa fa-phone"></i></div>
+              <div class="pfs-field-body">
+                <div class="pfs-field-label">Require Phone Number</div>
+                <div class="pfs-field-desc">Staff must enter a phone number when adding a supplier.</div>
+              </div>
+              <label class="pfs-sw" title="Require phone number">
+                <input type="checkbox" class="pfs-sw-input" id="sst-req-phone">
+                <span class="pfs-sw-track"><span class="pfs-sw-knob"></span></span>
+              </label>
+            </div>
+            <div class="pfs-field-row">
+              <div class="pfs-field-icon"><i class="fa fa-envelope"></i></div>
+              <div class="pfs-field-body">
+                <div class="pfs-field-label">Require Email</div>
+                <div class="pfs-field-desc">Staff must enter an email address when adding a supplier.</div>
+              </div>
+              <label class="pfs-sw" title="Require email">
+                <input type="checkbox" class="pfs-sw-input" id="sst-req-email">
+                <span class="pfs-sw-track"><span class="pfs-sw-knob"></span></span>
+              </label>
+            </div>
+            <div class="pfs-field-row">
+              <div class="pfs-field-icon"><i class="fa fa-location-dot"></i></div>
+              <div class="pfs-field-body">
+                <div class="pfs-field-label">Require Address</div>
+                <div class="pfs-field-desc">Staff must enter an address when adding a supplier.</div>
+              </div>
+              <label class="pfs-sw" title="Require address">
+                <input type="checkbox" class="pfs-sw-input" id="sst-req-address">
+                <span class="pfs-sw-track"><span class="pfs-sw-knob"></span></span>
+              </label>
+            </div>
+            <div class="pfs-field-row">
+              <div class="pfs-field-icon"><i class="fa fa-file-csv"></i></div>
+              <div class="pfs-field-body">
+                <div class="pfs-field-label">Import Suppliers</div>
+                <div class="pfs-field-desc">Bulk-add suppliers from a CSV file.</div>
+              </div>
+              <button class="psm-btn-cancel" id="sst-import-csv-btn"><i class="fa fa-file-arrow-up"></i> Import CSV</button>
+            </div>
+          </div>
+
+          <!-- Supplier Category panel -->
+          <div class="pfs-panel pfs-gen-body" id="sst-panel-category" style="display:none;padding:18px 22px 16px">
+            <div class="pfs-section-label">Add Category</div>
+            <div style="display:flex;flex-direction:column;gap:8px;margin:8px 0 18px">
+              <input type="text" id="sst-cat-name" class="cm-input" placeholder="Category name, e.g. Wholesale" maxlength="120">
+              <textarea id="sst-cat-desc" class="cm-input cm-textarea" placeholder="Description (optional)" rows="2" style="min-height:44px"></textarea>
+              <div style="display:flex;gap:8px">
+                <button class="qap-btn-save" id="sst-cat-add"><i class="fa fa-plus"></i> Add Category</button>
+                <button class="psm-btn-cancel" id="sst-cat-cancel-edit" style="display:none">Cancel</button>
+              </div>
+            </div>
+            <div class="pfs-section-label">Existing Categories</div>
+            <div id="sst-cat-list" style="margin-top:6px;max-height:260px;overflow-y:auto"></div>
+          </div>
+        </div>
+        <div class="po-aim-footer">
+          <button class="po-btn-ghost"   id="sup-settings-cancel">Close</button>
+          <button class="po-btn-primary" id="sup-settings-save"><i class="fa fa-check"></i> Save</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Confirm Dialog (Supplier Category delete) ──────────────────────────── -->
+    <div id="sst-confirm-modal" class="modal-overlay" style="display:none">
+      <div class="ci-popup-shell">
+        <div class="ci-popup-header">
+          <i class="fa fa-triangle-exclamation" style="color:#ef4444"></i>
+          <span id="sst-confirm-title">Delete category?</span>
+          <button class="psm-close" id="sst-confirm-close"><i class="fa fa-xmark"></i></button>
+        </div>
+        <div class="ci-popup-body">
+          <p id="sst-confirm-msg" style="margin:0;font-size:13px;color:var(--text-muted);line-height:1.5"></p>
+        </div>
+        <div class="ci-popup-footer">
+          <button class="psm-btn-cancel" id="sst-confirm-cancel">Cancel</button>
+          <button class="rt-btn rt-btn-danger" id="sst-confirm-ok"><i class="fa fa-trash"></i> Delete</button>
         </div>
       </div>
     </div>
@@ -5138,101 +5291,186 @@
       </div>
 
       <div class="modal-overlay" id="svc-new-modal" style="display:none">
-        <div class="svc-new-modal-box">
-          <div class="svc-new-modal-header">
-            <div class="svc-new-modal-title"><i class="fa fa-screwdriver-wrench"></i> <span id="svc-new-modal-title-text">New Service</span></div>
-            <button class="svc-new-modal-close" id="svc-new-modal-close"><i class="fa fa-xmark"></i></button>
+        <div class="po-aim-shell prod-modal-shell">
+          <div class="po-aim-header">
+            <i class="fa fa-screwdriver-wrench" style="color:var(--accent)"></i>
+            <span id="svc-new-modal-title-text">New Service</span>
+            <button class="psm-close" id="svc-new-modal-close"><i class="fa fa-xmark"></i></button>
           </div>
-          <div class="svc-new-modal-body">
-            <div class="svc-form-alert" id="svc-form-alert" style="display:none"></div>
-
-            <div class="svc-form-group">
-              <label class="svc-form-label">Service Name <span class="svc-form-req">*</span></label>
-              <input type="text" id="svc-form-name" class="svc-form-input" placeholder="e.g. Deep Cleaning, Hair Cut…" autocomplete="off">
-            </div>
-
-            <div class="svc-form-group">
-              <label class="svc-form-label">Description</label>
-              <textarea id="svc-form-desc" class="svc-form-input svc-form-textarea" rows="3" placeholder="Short description of the service…"></textarea>
-            </div>
-
-            <div class="svc-form-row">
-              <div class="svc-form-group" style="flex:1">
-                <label class="svc-form-label">Price <span class="svc-form-req">*</span></label>
-                <div class="svc-form-prefix-wrap">
-                  <span class="svc-form-prefix" id="svc-form-currency">—</span>
-                  <input type="number" id="svc-form-price" class="svc-form-input svc-form-input--prefix" placeholder="0.00" min="0" step="0.01">
-                </div>
-              </div>
-              <div class="svc-form-group" style="flex:1">
-                <label class="svc-form-label">Duration (minutes)</label>
-                <input type="number" id="svc-form-duration" class="svc-form-input" placeholder="e.g. 60" min="0" step="1">
-              </div>
-            </div>
-
-            <div class="svc-form-group">
-              <label class="svc-form-label">Categories</label>
-              <div class="svc-form-cat-list" id="svc-form-cat-list">
-                <span style="color:var(--text-muted);font-size:12px"><i class="fa fa-spinner fa-spin"></i> Loading categories…</span>
-              </div>
-            </div>
-
-            <div class="svc-form-group">
-              <label class="svc-form-label">Assign Employees</label>
-              <div class="svc-form-cat-list" id="svc-form-emp-list">
-                <span style="color:var(--text-muted);font-size:12px"><i class="fa fa-spinner fa-spin"></i> Loading…</span>
-              </div>
-            </div>
-
-            <div class="svc-form-group">
-              <label class="svc-form-label">Assign Products</label>
-              <div class="svc-form-prod-search-wrap">
-                <input type="text" id="svc-form-prod-q" class="svc-form-input" placeholder="Search product to add…" autocomplete="off">
-                <div class="svc-form-prod-results" id="svc-form-prod-results" style="display:none"></div>
-              </div>
-              <div id="svc-form-prod-lines"></div>
-            </div>
-
-            <div class="svc-form-group">
-              <label class="svc-form-toggle-row">
-                <span class="svc-form-label" style="margin-bottom:0">Active</span>
-                <div class="svc-toggle-wrap">
-                  <input type="checkbox" id="svc-form-active" checked style="display:none">
-                  <div class="svc-toggle" id="svc-toggle-ui"><div class="svc-toggle-knob"></div></div>
-                </div>
-              </label>
-            </div>
-
-            <div class="svc-form-group">
-              <label class="svc-form-toggle-row">
-                <div>
-                  <span class="svc-form-label" style="margin-bottom:0">Featured</span>
-                  <div style="font-size:11px;color:var(--text-muted);margin-top:2px">Show at the top of the POS service grid</div>
-                </div>
-                <div class="svc-toggle-wrap">
-                  <input type="checkbox" id="svc-form-featured" style="display:none">
-                  <div class="svc-toggle" id="svc-featured-toggle-ui"><div class="svc-toggle-knob"></div></div>
-                </div>
-              </label>
-            </div>
-
-            <div class="svc-form-group">
-              <label class="svc-form-toggle-row">
-                <div>
-                  <span class="svc-form-label" style="margin-bottom:0">Warranty</span>
-                  <div style="font-size:11px;color:var(--text-muted);margin-top:2px">Customer must be assigned when this service is added to a sale</div>
-                </div>
-                <div class="svc-toggle-wrap">
-                  <input type="checkbox" id="svc-form-warranty" style="display:none">
-                  <div class="svc-toggle" id="svc-warranty-toggle-ui"><div class="svc-toggle-knob"></div></div>
-                </div>
-              </label>
-            </div>
+          <!-- Tab navigation -->
+          <div class="prod-modal-tabs">
+            <button class="prod-modal-tab active" data-tab="basic"><i class="fa fa-circle-info"></i> Basic</button>
+            <button class="prod-modal-tab" data-tab="pricing"><i class="fa fa-tag"></i> Pricing</button>
+            <button class="prod-modal-tab" data-tab="media"><i class="fa fa-image"></i> Media</button>
+            <button class="prod-modal-tab" data-tab="assign"><i class="fa fa-users"></i> Assignments</button>
+            <button class="prod-modal-tab" data-tab="advanced"><i class="fa fa-sliders"></i> Advanced</button>
+            <button class="prod-modal-tab" data-tab="custom_req"><i class="fa fa-list-check"></i> Custom Requirement</button>
           </div>
+          <div class="prod-modal-body">
 
-          <div class="svc-new-modal-footer">
-            <button class="svc-form-btn svc-form-btn--ghost" id="svc-new-modal-cancel">Cancel</button>
-            <button class="svc-form-btn svc-form-btn--primary" id="svc-form-submit">
+            <!-- Pane 1: Basic -->
+            <div class="prod-modal-pane active" data-pane="basic">
+              <div class="po-field">
+                <label class="po-field-label">Service Name <span class="po-required">*</span></label>
+                <input type="text" id="svc-form-name" class="po-field-input" placeholder="e.g. Deep Cleaning, Hair Cut…" autocomplete="off" maxlength="255">
+              </div>
+              <div class="po-field">
+                <label class="po-field-label">Service Barcode</label>
+                <input type="text" id="svc-form-barcode" class="po-field-input" placeholder="Scan or enter barcode…" autocomplete="off" maxlength="120">
+              </div>
+              <div class="po-field">
+                <label class="po-field-label">Description</label>
+                <textarea id="svc-form-desc" class="po-field-input" rows="4" placeholder="Short description of the service…" style="resize:vertical;min-height:80px"></textarea>
+              </div>
+            </div>
+
+            <!-- Pane 2: Pricing -->
+            <div class="prod-modal-pane" data-pane="pricing">
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                <div class="po-field">
+                  <label class="po-field-label">Price <span class="po-required">*</span></label>
+                  <div class="svc-form-prefix-wrap">
+                    <span class="svc-form-prefix" id="svc-form-currency">—</span>
+                    <input type="number" id="svc-form-price" class="po-field-input svc-form-input--prefix" placeholder="0.00" min="0" step="0.01">
+                  </div>
+                </div>
+                <div class="po-field">
+                  <label class="po-field-label">Duration (minutes)</label>
+                  <input type="number" id="svc-form-duration" class="po-field-input" placeholder="e.g. 60" min="0" step="1">
+                </div>
+                <div class="po-field">
+                  <label class="po-field-label">Cost Price</label>
+                  <div class="svc-form-prefix-wrap">
+                    <span class="svc-form-prefix" id="svc-form-currency-cost">—</span>
+                    <input type="number" id="svc-form-cost-price" class="po-field-input svc-form-input--prefix" placeholder="0.00" min="0" step="0.01">
+                  </div>
+                </div>
+                <div class="po-field">
+                  <label class="po-field-label">Wholesale Price</label>
+                  <div class="svc-form-prefix-wrap">
+                    <span class="svc-form-prefix" id="svc-form-currency-wholesale">—</span>
+                    <input type="number" id="svc-form-wholesale-price" class="po-field-input svc-form-input--prefix" placeholder="0.00" min="0" step="0.01">
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Pane 3: Media -->
+            <div class="prod-modal-pane" data-pane="media">
+              <div class="po-field">
+                <label class="po-field-label">Image</label>
+                <div class="prod-img-row">
+                  <div class="prod-img-thumb" id="svc-img-thumb">
+                    <i class="fa fa-image" style="font-size:22px;color:var(--text-muted)"></i>
+                  </div>
+                  <div style="display:flex;flex-direction:column;gap:6px">
+                    <button type="button" id="svc-img-choose" class="po-btn-ghost" style="width:fit-content"><i class="fa fa-folder-open"></i> Choose Image</button>
+                    <button type="button" id="svc-img-remove" class="po-btn-ghost" style="display:none;width:fit-content;color:var(--danger,#e74c3c)"><i class="fa fa-trash"></i> Remove</button>
+                  </div>
+                </div>
+              </div>
+              <div class="po-field">
+                <div class="svc-form-label-row">
+                  <label class="po-field-label" style="margin-bottom:0">Categories</label>
+                  <button type="button" class="svc-form-inline-add" id="svc-form-cat-add-btn"><i class="fa fa-plus"></i> Add Category</button>
+                </div>
+                <div class="tag-input-wrap" id="svc-cat-wrap">
+                  <div id="svc-cat-tags" class="tag-input-tags"></div>
+                  <input type="text" id="svc-cat-input" class="tag-input-field" placeholder="Search categories…" autocomplete="off">
+                </div>
+                <div class="tag-input-dd" id="svc-cat-dd" style="display:none"></div>
+              </div>
+            </div>
+
+            <!-- Pane 4: Assignments -->
+            <div class="prod-modal-pane" data-pane="assign">
+              <div class="po-field">
+                <label class="po-field-label">Assign Employees</label>
+                <div class="tag-input-wrap" id="svc-emp-wrap">
+                  <div id="svc-emp-tags" class="tag-input-tags"></div>
+                  <input type="text" id="svc-emp-input" class="tag-input-field" placeholder="Search employees…" autocomplete="off">
+                </div>
+                <div class="tag-input-dd" id="svc-emp-dd" style="display:none"></div>
+              </div>
+              <div class="po-field">
+                <label class="po-field-label">Assign Products</label>
+                <div class="svc-form-prod-search-wrap">
+                  <input type="text" id="svc-form-prod-q" class="po-field-input" placeholder="Search product to add…" autocomplete="off">
+                  <div class="svc-form-prod-results" id="svc-form-prod-results" style="display:none"></div>
+                </div>
+                <div id="svc-form-prod-lines"></div>
+              </div>
+            </div>
+
+            <!-- Pane 5: Advanced -->
+            <div class="prod-modal-pane" data-pane="advanced">
+              <div class="prod-adv-cards">
+                <div class="prod-adv-card">
+                  <input type="checkbox" id="svc-form-active" class="prod-adv-card-chk" checked>
+                  <label class="prod-adv-card-top" for="svc-form-active">
+                    <div class="prod-adv-card-icon"><i class="fa fa-power-off"></i></div>
+                    <div class="prod-adv-card-text">
+                      <span class="prod-adv-card-name">Active</span>
+                      <span class="prod-adv-card-desc">Service is available for sale in POS</span>
+                    </div>
+                    <div class="prod-adv-card-sw"><div class="prod-adv-card-knob"></div></div>
+                  </label>
+                </div>
+                <div class="prod-adv-card">
+                  <input type="checkbox" id="svc-form-featured" class="prod-adv-card-chk">
+                  <label class="prod-adv-card-top" for="svc-form-featured">
+                    <div class="prod-adv-card-icon"><i class="fa fa-star"></i></div>
+                    <div class="prod-adv-card-text">
+                      <span class="prod-adv-card-name">Featured</span>
+                      <span class="prod-adv-card-desc">Show at the top of the POS service grid</span>
+                    </div>
+                    <div class="prod-adv-card-sw"><div class="prod-adv-card-knob"></div></div>
+                  </label>
+                </div>
+                <div class="prod-adv-card">
+                  <input type="checkbox" id="svc-form-warranty" class="prod-adv-card-chk">
+                  <label class="prod-adv-card-top" for="svc-form-warranty">
+                    <div class="prod-adv-card-icon"><i class="fa fa-shield-halved"></i></div>
+                    <div class="prod-adv-card-text">
+                      <span class="prod-adv-card-name">Warranty</span>
+                      <span class="prod-adv-card-desc">Customer must be assigned when this service is added to a sale</span>
+                    </div>
+                    <div class="prod-adv-card-sw"><div class="prod-adv-card-knob"></div></div>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <!-- Pane 6: Custom Requirement -->
+            <div class="prod-modal-pane" data-pane="custom_req">
+              <div class="prod-adv-cards">
+                <div class="prod-adv-card">
+                  <input type="checkbox" id="svc-form-creq-enabled" class="prod-adv-card-chk">
+                  <label class="prod-adv-card-top" for="svc-form-creq-enabled">
+                    <div class="prod-adv-card-icon"><i class="fa fa-list-check"></i></div>
+                    <div class="prod-adv-card-text">
+                      <span class="prod-adv-card-name">Enable Custom Requirement Form</span>
+                      <span class="prod-adv-card-desc">Ask the cashier to fill a custom form when this service is added to the cart</span>
+                    </div>
+                    <div class="prod-adv-card-sw"><div class="prod-adv-card-knob"></div></div>
+                  </label>
+                </div>
+              </div>
+
+              <div id="svc-creq-section" style="display:none;margin-top:14px">
+                <div class="svc-form-label-row">
+                  <label class="po-field-label" style="margin-bottom:0">Form Fields</label>
+                  <button type="button" class="svc-form-inline-add" id="svc-creq-add-field"><i class="fa fa-plus"></i> Add Field</button>
+                </div>
+                <div id="svc-creq-fields" class="svc-creq-fields"></div>
+                <div id="svc-creq-empty" class="svc-creq-empty">No fields yet. Click "Add Field" to build the form.</div>
+              </div>
+            </div>
+
+          </div><!-- /prod-modal-body -->
+          <div class="po-aim-footer">
+            <button class="po-btn-ghost" id="svc-new-modal-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+            <button class="po-btn-primary" id="svc-form-submit" style="margin-left:auto">
               <i class="fa fa-plus"></i> Create Service
             </button>
           </div>
@@ -8169,6 +8407,96 @@
     </div>
   </div>
 
+  <!-- ── Add Branch Modal ── -->
+  <div class="modal-overlay" id="branch-add-modal" style="display:none">
+    <div class="po-aim-shell" style="width:min(500px,96vw);max-height:88vh;overflow-y:auto">
+      <div class="po-aim-header">
+        <i class="fa fa-code-branch" style="color:var(--accent)"></i>
+        <span>Add Branch</span>
+        <button class="psm-close" id="branch-add-close"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div class="po-aim-body">
+        <div class="po-field">
+          <label class="po-field-label">Branch Name <span class="po-required">*</span></label>
+          <input type="text" id="branch-add-name" class="po-field-input" placeholder="e.g. Colombo Branch" autocomplete="off">
+        </div>
+        <div class="po-field">
+          <label class="po-field-label">Description</label>
+          <textarea id="branch-add-description" class="po-field-textarea" placeholder="Optional notes about this branch"></textarea>
+        </div>
+        <div class="po-field">
+          <label class="po-field-label">Address</label>
+          <textarea id="branch-add-address" class="po-field-textarea" placeholder="Branch address"></textarea>
+        </div>
+        <div class="po-field">
+          <label class="po-field-label">Phone</label>
+          <input type="text" id="branch-add-phone" class="po-field-input" placeholder="Phone number" autocomplete="off">
+        </div>
+        <div class="po-field">
+          <label class="po-field-label">Email</label>
+          <input type="email" id="branch-add-email" class="po-field-input" placeholder="branch@example.com" autocomplete="off">
+        </div>
+        <div class="psm-toggle-row" style="padding:8px 0 0;border-bottom:none">
+          <div class="psm-toggle-info">
+            <span class="psm-toggle-name">Active</span>
+            <span class="psm-toggle-desc">Inactive branches are hidden from branch pickers</span>
+          </div>
+          <label class="psm-switch"><input type="checkbox" id="branch-add-active" checked><span class="psm-switch-track"></span></label>
+        </div>
+        <div id="branch-add-error" class="um-error-msg" style="display:none"></div>
+      </div>
+      <div class="po-aim-footer">
+        <button class="po-btn-ghost" id="branch-add-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+        <button class="po-btn-primary" id="branch-add-save"><i class="fa fa-check"></i> Add Branch</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Edit Branch Modal ── -->
+  <div class="modal-overlay" id="branch-edit-modal" style="display:none">
+    <div class="po-aim-shell" style="width:min(500px,96vw);max-height:88vh;overflow-y:auto">
+      <div class="po-aim-header">
+        <i class="fa fa-code-branch" style="color:var(--accent)"></i>
+        <span>Edit Branch</span>
+        <button class="psm-close" id="branch-edit-close"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div class="po-aim-body">
+        <div class="po-field">
+          <label class="po-field-label">Branch Name <span class="po-required">*</span></label>
+          <input type="text" id="branch-edit-name" class="po-field-input" placeholder="e.g. Colombo Branch" autocomplete="off">
+        </div>
+        <div class="po-field">
+          <label class="po-field-label">Description</label>
+          <textarea id="branch-edit-description" class="po-field-textarea" placeholder="Optional notes about this branch"></textarea>
+        </div>
+        <div class="po-field">
+          <label class="po-field-label">Address</label>
+          <textarea id="branch-edit-address" class="po-field-textarea" placeholder="Branch address"></textarea>
+        </div>
+        <div class="po-field">
+          <label class="po-field-label">Phone</label>
+          <input type="text" id="branch-edit-phone" class="po-field-input" placeholder="Phone number" autocomplete="off">
+        </div>
+        <div class="po-field">
+          <label class="po-field-label">Email</label>
+          <input type="email" id="branch-edit-email" class="po-field-input" placeholder="branch@example.com" autocomplete="off">
+        </div>
+        <div class="psm-toggle-row" style="padding:8px 0 0;border-bottom:none">
+          <div class="psm-toggle-info">
+            <span class="psm-toggle-name">Active</span>
+            <span class="psm-toggle-desc">Inactive branches are hidden from branch pickers</span>
+          </div>
+          <label class="psm-switch"><input type="checkbox" id="branch-edit-active"><span class="psm-switch-track"></span></label>
+        </div>
+        <div id="branch-edit-error" class="um-error-msg" style="display:none"></div>
+      </div>
+      <div class="po-aim-footer">
+        <button class="po-btn-ghost" id="branch-edit-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+        <button class="po-btn-primary" id="branch-edit-save"><i class="fa fa-check"></i> Save Changes</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ── New Role Modal ── -->
   <div class="modal-overlay" id="um-role-create-modal" style="display:none">
     <div class="po-aim-shell" style="width:75vw;max-height:88vh;overflow:hidden;display:flex;flex-direction:column">
@@ -10433,6 +10761,140 @@
   </div>
 </div>
 
+<!-- ── CSV Customer Import modal ─────────────────────────────────────── -->
+<div id="cust-csv-import-modal" class="bwz-overlay" style="display:none" role="dialog" aria-modal="true">
+  <div class="csv-import-card">
+    <!-- Header -->
+    <div class="csv-import-header">
+      <div class="csv-import-title"><i class="fa fa-file-arrow-up"></i> Import Customers from CSV</div>
+      <button class="csv-import-close" id="cust-csv-import-close"><i class="fa fa-xmark"></i></button>
+    </div>
+
+    <!-- Step indicator -->
+    <div class="csv-step-track">
+      <div class="csv-step active" id="cust-csv-step-ind-1"><span class="csv-step-num">1</span><span class="csv-step-label">Upload</span></div>
+      <div class="csv-step-line"></div>
+      <div class="csv-step" id="cust-csv-step-ind-2"><span class="csv-step-num">2</span><span class="csv-step-label">Preview</span></div>
+      <div class="csv-step-line"></div>
+      <div class="csv-step" id="cust-csv-step-ind-3"><span class="csv-step-num">3</span><span class="csv-step-label">Result</span></div>
+    </div>
+
+    <!-- Step 1: Upload -->
+    <div class="csv-import-body" id="cust-csv-step-1">
+      <div class="csv-dropzone" id="cust-csv-dropzone">
+        <i class="fa fa-cloud-arrow-up csv-dropzone-icon"></i>
+        <p class="csv-dropzone-text">Drag &amp; drop your CSV file here</p>
+        <p class="csv-dropzone-sub">or click to browse</p>
+        <input type="file" id="cust-csv-file-input" accept=".csv,text/csv" style="position:absolute;inset:0;opacity:0;cursor:pointer">
+      </div>
+      <div class="csv-upload-info">
+        <div class="csv-info-item"><i class="fa fa-circle-check"></i> First row must be column headers</div>
+        <div class="csv-info-item"><i class="fa fa-circle-check"></i> Required column: <strong>name</strong></div>
+        <div class="csv-info-item"><i class="fa fa-circle-check"></i> Optional: phone, email, address, notes, category, customer_type</div>
+        <div class="csv-info-item"><i class="fa fa-circle-check"></i> Max 500 rows per import</div>
+      </div>
+      <div class="csv-import-footer">
+        <button class="csv-sample-btn" id="cust-csv-download-sample"><i class="fa fa-download"></i> Download Sample CSV</button>
+      </div>
+    </div>
+
+    <!-- Step 2: Preview -->
+    <div class="csv-import-body" id="cust-csv-step-2" style="display:none">
+      <div class="csv-preview-summary" id="cust-csv-preview-summary"></div>
+      <div class="csv-preview-wrap">
+        <table class="csv-preview-tbl" id="cust-csv-preview-tbl">
+          <thead id="cust-csv-preview-thead"></thead>
+          <tbody id="cust-csv-preview-tbody"></tbody>
+        </table>
+      </div>
+      <div class="csv-import-footer">
+        <button class="psm-btn-cancel" id="cust-csv-back-btn"><i class="fa fa-arrow-left"></i> Back</button>
+        <button class="eod-settle-btn" id="cust-csv-import-btn"><i class="fa fa-file-import"></i> Import <span id="cust-csv-import-count"></span> Customers</button>
+      </div>
+    </div>
+
+    <!-- Step 3: Result -->
+    <div class="csv-import-body" id="cust-csv-step-3" style="display:none">
+      <div class="csv-result-summary" id="cust-csv-result-summary"></div>
+      <div class="csv-result-errors" id="cust-csv-result-errors" style="display:none">
+        <div class="csv-result-errors-title"><i class="fa fa-triangle-exclamation"></i> Rows with errors</div>
+        <div class="csv-result-errors-list" id="cust-csv-result-errors-list"></div>
+      </div>
+      <div class="csv-import-footer">
+        <button class="psm-btn-cancel" id="cust-csv-done-btn">Done</button>
+        <button class="eod-settle-btn" id="cust-csv-import-more-btn"><i class="fa fa-plus"></i> Import More</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Supplier CSV import modal ─────────────────────────────────────────── -->
+<div id="sup-csv-import-modal" class="bwz-overlay" style="display:none" role="dialog" aria-modal="true">
+  <div class="csv-import-card">
+    <!-- Header -->
+    <div class="csv-import-header">
+      <div class="csv-import-title"><i class="fa fa-file-arrow-up"></i> Import Suppliers from CSV</div>
+      <button class="csv-import-close" id="sup-csv-import-close"><i class="fa fa-xmark"></i></button>
+    </div>
+
+    <!-- Step indicator -->
+    <div class="csv-step-track">
+      <div class="csv-step active" id="sup-csv-step-ind-1"><span class="csv-step-num">1</span><span class="csv-step-label">Upload</span></div>
+      <div class="csv-step-line"></div>
+      <div class="csv-step" id="sup-csv-step-ind-2"><span class="csv-step-num">2</span><span class="csv-step-label">Preview</span></div>
+      <div class="csv-step-line"></div>
+      <div class="csv-step" id="sup-csv-step-ind-3"><span class="csv-step-num">3</span><span class="csv-step-label">Result</span></div>
+    </div>
+
+    <!-- Step 1: Upload -->
+    <div class="csv-import-body" id="sup-csv-step-1">
+      <div class="csv-dropzone" id="sup-csv-dropzone">
+        <i class="fa fa-cloud-arrow-up csv-dropzone-icon"></i>
+        <p class="csv-dropzone-text">Drag &amp; drop your CSV file here</p>
+        <p class="csv-dropzone-sub">or click to browse</p>
+        <input type="file" id="sup-csv-file-input" accept=".csv,text/csv" style="position:absolute;inset:0;opacity:0;cursor:pointer">
+      </div>
+      <div class="csv-upload-info">
+        <div class="csv-info-item"><i class="fa fa-circle-check"></i> First row must be column headers</div>
+        <div class="csv-info-item"><i class="fa fa-circle-check"></i> Required column: <strong>name</strong></div>
+        <div class="csv-info-item"><i class="fa fa-circle-check"></i> Optional: contact_name, phone, email, address, notes, category</div>
+        <div class="csv-info-item"><i class="fa fa-circle-check"></i> Max 500 rows per import</div>
+      </div>
+      <div class="csv-import-footer">
+        <button class="csv-sample-btn" id="sup-csv-download-sample"><i class="fa fa-download"></i> Download Sample CSV</button>
+      </div>
+    </div>
+
+    <!-- Step 2: Preview -->
+    <div class="csv-import-body" id="sup-csv-step-2" style="display:none">
+      <div class="csv-preview-summary" id="sup-csv-preview-summary"></div>
+      <div class="csv-preview-wrap">
+        <table class="csv-preview-tbl" id="sup-csv-preview-tbl">
+          <thead id="sup-csv-preview-thead"></thead>
+          <tbody id="sup-csv-preview-tbody"></tbody>
+        </table>
+      </div>
+      <div class="csv-import-footer">
+        <button class="psm-btn-cancel" id="sup-csv-back-btn"><i class="fa fa-arrow-left"></i> Back</button>
+        <button class="eod-settle-btn" id="sup-csv-import-btn"><i class="fa fa-file-import"></i> Import <span id="sup-csv-import-count"></span> Suppliers</button>
+      </div>
+    </div>
+
+    <!-- Step 3: Result -->
+    <div class="csv-import-body" id="sup-csv-step-3" style="display:none">
+      <div class="csv-result-summary" id="sup-csv-result-summary"></div>
+      <div class="csv-result-errors" id="sup-csv-result-errors" style="display:none">
+        <div class="csv-result-errors-title"><i class="fa fa-triangle-exclamation"></i> Rows with errors</div>
+        <div class="csv-result-errors-list" id="sup-csv-result-errors-list"></div>
+      </div>
+      <div class="csv-import-footer">
+        <button class="psm-btn-cancel" id="sup-csv-done-btn">Done</button>
+        <button class="eod-settle-btn" id="sup-csv-import-more-btn"><i class="fa fa-plus"></i> Import More</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ── Warranty prompt modal ─────────────────────────────────────────── -->
 <div id="pos-warranty-overlay" class="bwz-overlay" style="display:none" role="dialog" aria-modal="true">
   <div class="eod-modal" style="width:370px">
@@ -10468,6 +10930,38 @@
     <div class="eod-modal-footer">
       <button class="psm-btn-cancel" id="pos-warranty-cancel">Cancel</button>
       <button class="eod-settle-btn" id="pos-warranty-confirm"><i class="fa fa-check"></i> Add to Cart</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Custom requirement form prompt (services) ───────────────────────── -->
+<div id="pos-custom-req-overlay" class="bwz-overlay" style="display:none" role="dialog" aria-modal="true">
+  <div class="eod-modal" style="width:400px">
+    <div class="eod-modal-header">
+      <span><i class="fa fa-list-check"></i> <span id="pos-custom-req-title">Service Details</span></span>
+    </div>
+    <div class="eod-modal-body">
+      <p id="pos-custom-req-service-name" style="font-size:13px;font-weight:700;color:var(--text);margin:0 0 14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></p>
+      <div id="pos-custom-req-fields" class="pos-custom-req-fields"></div>
+    </div>
+    <div class="eod-modal-footer">
+      <button class="psm-btn-cancel" id="pos-custom-req-cancel">Cancel</button>
+      <button class="eod-settle-btn" id="pos-custom-req-confirm"><i class="fa fa-check"></i> Add to Cart</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Custom requirement details viewer (Sale detail) ─────────────────── -->
+<div id="sal-custom-req-overlay" class="bwz-overlay" style="display:none" role="dialog" aria-modal="true">
+  <div class="eod-modal" style="width:420px">
+    <div class="eod-modal-header">
+      <span><i class="fa fa-list-check"></i> Service Details</span>
+    </div>
+    <div class="eod-modal-body">
+      <div id="sal-custom-req-body" class="sal-custom-req-body"></div>
+    </div>
+    <div class="eod-modal-footer">
+      <button class="psm-btn-cancel" id="sal-custom-req-close">Close</button>
     </div>
   </div>
 </div>
@@ -10546,6 +11040,9 @@
         <button class="psm-nav-item psm-nav-item--pos-only" data-tab="cashiers" style="display:none">
           <i class="fa fa-id-badge"></i><span>Cashiers</span>
         </button>
+        <button class="psm-nav-item psm-nav-item--multi-branch" data-tab="branches" style="display:none">
+          <i class="fa fa-code-branch"></i><span>Branches</span>
+        </button>
         <button class="psm-nav-item" data-tab="delivery">
           <i class="fa fa-truck"></i><span>Delivery</span>
         </button>
@@ -10598,22 +11095,22 @@
               </div>
               <label class="psm-switch"><input type="checkbox" id="psm-multi-warehouse"><span class="psm-switch-track"></span></label>
             </div>
-            <div class="psm-toggle-row" id="psm-branch-rows" style="display:none;flex-direction:column;gap:0">
-              <div class="psm-toggle-row" style="border-top:none">
+            <div class="psm-toggle-subrows" id="psm-branch-rows" style="display:none">
+              <div class="psm-toggle-row">
                 <div class="psm-toggle-info">
                   <span class="psm-toggle-name">Manage products per branch</span>
                   <span class="psm-toggle-desc">Products are managed independently per branch</span>
                 </div>
                 <label class="psm-switch"><input type="checkbox" id="psm-branch-product"><span class="psm-switch-track"></span></label>
               </div>
-              <div class="psm-toggle-row" style="border-top:none">
+              <div class="psm-toggle-row">
                 <div class="psm-toggle-info">
                   <span class="psm-toggle-name">Manage stock per branch</span>
                   <span class="psm-toggle-desc">Stock levels are tracked independently per branch</span>
                 </div>
                 <label class="psm-switch"><input type="checkbox" id="psm-branch-stock"><span class="psm-switch-track"></span></label>
               </div>
-              <div class="psm-toggle-row" style="border-top:none">
+              <div class="psm-toggle-row">
                 <div class="psm-toggle-info">
                   <span class="psm-toggle-name">Manage POS per branch</span>
                   <span class="psm-toggle-desc">POS sessions and sales are tracked independently per branch</span>
@@ -10910,6 +11407,31 @@
               <div class="um-detail-empty">
                 <i class="fa fa-shield-halved"></i>
                 <p>Select a role to view and edit its permissions</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Branches panel -->
+        <div class="psm-panel psm-panel--roles" id="psm-tab-branches" style="display:none">
+          <div class="psm-roles-toolbar">
+            <div class="psm-roles-toolbar-left">
+              <i class="fa fa-code-branch" style="color:var(--accent)"></i>
+              <span class="psm-roles-title">Branches</span>
+              <span class="um-count-badge" id="psm-branches-count"></span>
+            </div>
+            <button class="um-add-btn" id="psm-add-branch-btn">
+              <i class="fa fa-plus"></i> Add Branch
+            </button>
+          </div>
+          <div class="psm-roles-body">
+            <div class="um-list-col" id="psm-branches-list">
+              <div class="um-loading"><i class="fa fa-spinner fa-spin"></i> Loading branches…</div>
+            </div>
+            <div class="um-detail-col" id="psm-branches-detail">
+              <div class="um-detail-empty">
+                <i class="fa fa-code-branch"></i>
+                <p>Select a branch to view its details</p>
               </div>
             </div>
           </div>
@@ -11284,6 +11806,7 @@
       <i class="fa fa-users" style="color:var(--accent)"></i>
       <span>Customers</span>
       <button class="cm-new-btn" id="cm-new-btn"><i class="fa fa-user-plus"></i> New Customer</button>
+      <button class="psm-close" id="cm-settings-btn" title="Customer Settings"><i class="fa fa-gear"></i></button>
       <button class="psm-close" id="cm-close"><i class="fa fa-xmark"></i></button>
     </div>
 
@@ -11333,12 +11856,18 @@
           <div class="cm-form-body">
             <label class="cm-label">Full Name <span style="color:#ef4444">*</span></label>
             <input type="text" id="cm-f-name"    class="cm-input" placeholder="e.g. John Doe">
-            <label class="cm-label">Phone</label>
+            <label class="cm-label">Phone <span id="cm-req-phone" style="color:#ef4444;display:none">*</span></label>
             <input type="text" id="cm-f-phone"   class="cm-input" placeholder="+1 234 567 8900">
-            <label class="cm-label">Email</label>
+            <label class="cm-label">Email <span id="cm-req-email" style="color:#ef4444;display:none">*</span></label>
             <input type="email" id="cm-f-email"  class="cm-input" placeholder="john@example.com">
-            <label class="cm-label">Address</label>
+            <label class="cm-label">Address <span id="cm-req-address" style="color:#ef4444;display:none">*</span></label>
             <input type="text" id="cm-f-address" class="cm-input" placeholder="Street, City">
+            <label class="cm-label" style="margin-top:4px">Category</label>
+            <div class="cat-combo">
+              <input type="text" id="cm-f-category-input" class="cm-input" placeholder="No category" autocomplete="off">
+              <input type="hidden" id="cm-f-category">
+              <div class="cat-combo-list" id="cm-f-category-list" style="display:none"></div>
+            </div>
             <label class="cm-label">Notes</label>
             <textarea id="cm-f-notes" class="cm-input cm-textarea" placeholder="Any notes about this customer…" rows="3"></textarea>
             <label class="cm-label" style="margin-top:4px">Customer Type</label>
@@ -11353,6 +11882,104 @@
           </div>
         </div>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Customer Settings Modal ────────────────────────────────────────────── -->
+<div id="cust-settings-modal" class="modal-overlay" style="display:none">
+  <div class="po-aim-shell pfs-shell" style="width:min(560px,94vw)">
+    <div class="po-aim-header">
+      <i class="fa fa-gear" style="color:var(--accent)"></i>
+      <span>Customer Settings</span>
+      <button class="psm-close" id="cust-settings-close"><i class="fa fa-xmark"></i></button>
+    </div>
+    <nav class="pfs-tab-nav" id="cust-settings-nav">
+      <button class="pfs-opt-tab active" data-cst-tab="general"><i class="fa fa-sliders"></i>&ensp;General</button>
+      <button class="pfs-opt-tab"        data-cst-tab="category"><i class="fa fa-tags"></i>&ensp;Customer Category</button>
+    </nav>
+    <div id="cust-settings-panels" class="pfs-panels">
+      <!-- General panel -->
+      <div class="pfs-panel pfs-fields-body" id="cst-panel-general">
+        <div class="pfs-field-row">
+          <div class="pfs-field-icon"><i class="fa fa-phone"></i></div>
+          <div class="pfs-field-body">
+            <div class="pfs-field-label">Require Phone Number</div>
+            <div class="pfs-field-desc">Cashiers must enter a phone number when adding a customer.</div>
+          </div>
+          <label class="pfs-sw" title="Require phone number">
+            <input type="checkbox" class="pfs-sw-input" id="cst-req-phone">
+            <span class="pfs-sw-track"><span class="pfs-sw-knob"></span></span>
+          </label>
+        </div>
+        <div class="pfs-field-row">
+          <div class="pfs-field-icon"><i class="fa fa-envelope"></i></div>
+          <div class="pfs-field-body">
+            <div class="pfs-field-label">Require Email</div>
+            <div class="pfs-field-desc">Cashiers must enter an email address when adding a customer.</div>
+          </div>
+          <label class="pfs-sw" title="Require email">
+            <input type="checkbox" class="pfs-sw-input" id="cst-req-email">
+            <span class="pfs-sw-track"><span class="pfs-sw-knob"></span></span>
+          </label>
+        </div>
+        <div class="pfs-field-row">
+          <div class="pfs-field-icon"><i class="fa fa-location-dot"></i></div>
+          <div class="pfs-field-body">
+            <div class="pfs-field-label">Require Address</div>
+            <div class="pfs-field-desc">Cashiers must enter an address when adding a customer.</div>
+          </div>
+          <label class="pfs-sw" title="Require address">
+            <input type="checkbox" class="pfs-sw-input" id="cst-req-address">
+            <span class="pfs-sw-track"><span class="pfs-sw-knob"></span></span>
+          </label>
+        </div>
+        <div class="pfs-field-row">
+          <div class="pfs-field-icon"><i class="fa fa-file-csv"></i></div>
+          <div class="pfs-field-body">
+            <div class="pfs-field-label">Import Customers</div>
+            <div class="pfs-field-desc">Bulk-add customers from a CSV file.</div>
+          </div>
+          <button class="psm-btn-cancel" id="cst-import-csv-btn"><i class="fa fa-file-arrow-up"></i> Import CSV</button>
+        </div>
+      </div>
+
+      <!-- Customer Category panel -->
+      <div class="pfs-panel pfs-gen-body" id="cst-panel-category" style="display:none;padding:18px 22px 16px">
+        <div class="pfs-section-label">Add Category</div>
+        <div style="display:flex;flex-direction:column;gap:8px;margin:8px 0 18px">
+          <input type="text" id="cst-cat-name" class="cm-input" placeholder="Category name, e.g. VIP" maxlength="120">
+          <textarea id="cst-cat-desc" class="cm-input cm-textarea" placeholder="Description (optional)" rows="2" style="min-height:44px"></textarea>
+          <div style="display:flex;gap:8px">
+            <button class="qap-btn-save" id="cst-cat-add"><i class="fa fa-plus"></i> Add Category</button>
+            <button class="psm-btn-cancel" id="cst-cat-cancel-edit" style="display:none">Cancel</button>
+          </div>
+        </div>
+        <div class="pfs-section-label">Existing Categories</div>
+        <div id="cst-cat-list" style="margin-top:6px;max-height:260px;overflow-y:auto"></div>
+      </div>
+    </div>
+    <div class="po-aim-footer">
+      <button class="po-btn-ghost"   id="cust-settings-cancel">Close</button>
+      <button class="po-btn-primary" id="cust-settings-save"><i class="fa fa-check"></i> Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Confirm Dialog (Customer Category delete) ──────────────────────────── -->
+<div id="cst-confirm-modal" class="modal-overlay" style="display:none">
+  <div class="ci-popup-shell">
+    <div class="ci-popup-header">
+      <i class="fa fa-triangle-exclamation" style="color:#ef4444"></i>
+      <span id="cst-confirm-title">Delete category?</span>
+      <button class="psm-close" id="cst-confirm-close"><i class="fa fa-xmark"></i></button>
+    </div>
+    <div class="ci-popup-body">
+      <p id="cst-confirm-msg" style="margin:0;font-size:13px;color:var(--text-muted);line-height:1.5"></p>
+    </div>
+    <div class="ci-popup-footer">
+      <button class="psm-btn-cancel" id="cst-confirm-cancel">Cancel</button>
+      <button class="rt-btn rt-btn-danger" id="cst-confirm-ok"><i class="fa fa-trash"></i> Delete</button>
     </div>
   </div>
 </div>
@@ -11392,6 +12019,13 @@
     <div id="cust-new-form" style="display:none" class="cust-new-form">
       <input type="text" id="cust-new-name"  class="ci-popup-input" placeholder="Full name *" style="margin-bottom:8px">
       <input type="text" id="cust-new-phone" class="ci-popup-input" placeholder="Phone (optional)" style="margin-bottom:8px">
+      <input type="email" id="cust-new-email" class="ci-popup-input" placeholder="Email (optional)" style="margin-bottom:8px">
+      <input type="text" id="cust-new-address" class="ci-popup-input" placeholder="Address (optional)" style="margin-bottom:8px">
+      <div class="cat-combo" style="margin-bottom:8px">
+        <input type="text" id="cust-new-category-input" class="ci-popup-input" placeholder="Category (optional)" autocomplete="off">
+        <input type="hidden" id="cust-new-category">
+        <div class="cat-combo-list" id="cust-new-category-list" style="display:none"></div>
+      </div>
       <div class="cm-type-toggle" style="margin-bottom:8px">
         <label class="cm-type-opt"><input type="radio" name="cust-new-type" value="retail" checked> <i class="fa fa-user"></i> Retail</label>
         <label class="cm-type-opt"><input type="radio" name="cust-new-type" value="wholesale"> <i class="fa fa-boxes-stacked"></i> Wholesale</label>
@@ -12252,6 +12886,117 @@
   </div>
 </div>
 
+<!-- ── About Zeebroo POS Modal ──────────────────────────────────────────── -->
+<div id="about-modal-overlay" class="modal-overlay" style="display:none">
+  <div class="po-aim-shell" style="width:min(420px,94vw)">
+    <div class="po-aim-header">
+      <i class="fa fa-circle-info" style="color:var(--accent)"></i>
+      <span>About Zeebroo POS</span>
+      <button class="psm-close" id="about-modal-close"><i class="fa fa-xmark"></i></button>
+    </div>
+    <div class="po-aim-body" style="padding:0">
+
+      <!-- Logo + name band -->
+      <div style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:28px 24px 20px;border-bottom:1px solid var(--border)">
+        <div style="width:64px;height:64px;border-radius:16px;background:var(--accent);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px color-mix(in srgb,var(--accent) 35%,transparent)">
+          <i class="fa fa-cash-register" style="font-size:28px;color:#fff"></i>
+        </div>
+        <div style="text-align:center;margin-top:4px">
+          <div style="font-size:17px;font-weight:700;color:var(--text)">Zeebroo POS</div>
+          <div style="font-size:13px;color:var(--text-muted);margin-top:2px">Point of Sale &amp; Business Management</div>
+        </div>
+      </div>
+
+      <!-- Info rows -->
+      <div style="padding:16px 24px;display:flex;flex-direction:column;gap:0;border-bottom:1px solid var(--border)">
+        <div class="about-row">
+          <span class="about-label"><i class="fa fa-tag"></i> Version</span>
+          <span class="about-val" id="about-version">—</span>
+        </div>
+        <div class="about-row">
+          <span class="about-label"><i class="fa fa-desktop"></i> Platform</span>
+          <span class="about-val" id="about-platform">—</span>
+        </div>
+        <div class="about-row">
+          <span class="about-label"><i class="fa fa-globe"></i> Website</span>
+          <a href="#" class="about-link" id="about-website">zeebroo.com</a>
+        </div>
+        <div class="about-row">
+          <span class="about-label"><i class="fa fa-copyright"></i> Copyright</span>
+          <span class="about-val">© 2024–2026 Zeebroo</span>
+        </div>
+        <div class="about-row" style="border:none">
+          <span class="about-label"><i class="fa fa-scale-balanced"></i> License</span>
+          <span class="about-val">Proprietary</span>
+        </div>
+      </div>
+
+      <!-- Action buttons -->
+      <div style="padding:16px 24px;display:flex;gap:10px">
+        <button class="about-btn" id="about-check-updates">
+          <i class="fa fa-rotate"></i> Check for Updates
+        </button>
+        <button class="about-btn about-btn-outline" id="about-modal-close-btn">
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+.about-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.about-label {
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.about-label i { width: 14px; text-align: center; }
+.about-val {
+  color: var(--text);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.about-link {
+  color: var(--accent);
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+}
+.about-link:hover { text-decoration: underline; }
+.about-btn {
+  flex: 1;
+  padding: 9px 14px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  background: var(--accent);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  transition: opacity .15s;
+}
+.about-btn:hover { opacity: .88; }
+.about-btn.about-btn-outline {
+  background: transparent;
+  border: 1.5px solid var(--border);
+  color: var(--text-muted);
+}
+.about-btn.about-btn-outline:hover { border-color: var(--accent); color: var(--accent); }
+</style>
+
 <!-- ── Restaurant: Create Order Modal ───────────────────────────────────── -->
 <div id="rst-order-modal" class="modal-overlay" style="display:none">
   <div class="rst-om-inner">
@@ -12872,7 +13617,6 @@
         <i class="fa fa-cloud-arrow-up" style="font-size:32px;color:var(--text-muted)"></i>
         <p style="margin:8px 0 0;color:var(--text-muted);font-size:13px">Click to select an image file</p>
         <p style="margin:4px 0 0;font-size:11px;color:var(--text-muted)">JPG, PNG, WebP, GIF — max 20 MB</p>
-        <button type="button" id="img-upload-btn" class="po-btn-primary" style="margin-top:12px"><i class="fa fa-folder-open"></i> Browse Files</button>
       </div>
       <div id="img-upload-preview" style="display:none;text-align:center">
         <img id="img-upload-preview-img" src="" alt="" style="max-width:100%;max-height:240px;border-radius:var(--radius-sm);border:1px solid var(--border)">
@@ -13406,7 +14150,214 @@
 <script src="js/api.js"></script>
 <script src="js/app.js"></script>
 <script src="js/ribbon-customize.js"></script>
+<script src="js/home-subnav-customize.js"></script>
 <script src="js/guide-config.js"></script>
 <script src="js/guide.js"></script>
+
+<!-- ── Auto-Update UI ──────────────────────────────────────────────────── -->
+<style>
+/* Floating toast banner */
+#upd-toast {
+  position: fixed; bottom: 24px; right: 24px; z-index: 9900;
+  background: #1e293b; border: 1px solid #6366f1;
+  border-radius: 16px; padding: 16px 20px;
+  box-shadow: 0 12px 40px rgba(0,0,0,.55);
+  display: flex; align-items: center; gap: 14px;
+  max-width: 360px; transform: translateY(120%);
+  transition: transform .4s cubic-bezier(.34,1.56,.64,1);
+  pointer-events: none;
+}
+#upd-toast.show { transform: translateY(0); pointer-events: auto; }
+.upd-toast-icon {
+  width: 38px; height: 38px; border-radius: 10px; flex-shrink: 0;
+  background: color-mix(in srgb,#6366f1 18%,transparent);
+  display: grid; place-items: center; font-size: 18px; color: #818cf8;
+}
+.upd-toast-body { flex: 1; min-width: 0; }
+.upd-toast-title { font-size: 13px; font-weight: 700; color: #f1f5f9; margin-bottom: 2px; }
+.upd-toast-sub   { font-size: 11.5px; color: #94a3b8; }
+.upd-toast-btns  { display: flex; gap: 8px; margin-top: 10px; }
+.upd-btn-primary {
+  padding: 6px 14px; border-radius: 8px; border: none;
+  background: #6366f1; color: #fff; font-size: 12px; font-weight: 700;
+  cursor: pointer; font-family: inherit; transition: background .15s;
+}
+.upd-btn-primary:hover { background: #4f46e5; }
+.upd-btn-dismiss {
+  padding: 6px 12px; border-radius: 8px;
+  border: 1px solid #334155; background: transparent;
+  color: #94a3b8; font-size: 12px; font-weight: 600;
+  cursor: pointer; font-family: inherit;
+}
+.upd-btn-dismiss:hover { border-color: #475569; }
+
+/* Download progress modal */
+#upd-modal-overlay {
+  position: fixed; inset: 0; z-index: 9950;
+  background: rgba(2,6,23,.65); backdrop-filter: blur(5px);
+  display: none; align-items: center; justify-content: center;
+}
+#upd-modal-overlay.open { display: flex; }
+#upd-modal {
+  background: #1e293b; border: 1px solid #334155;
+  border-radius: 20px; padding: 32px 28px; width: 100%;
+  max-width: 400px; text-align: center;
+  box-shadow: 0 24px 64px rgba(0,0,0,.5);
+}
+.upd-modal-icon  { font-size: 44px; margin-bottom: 16px; }
+.upd-modal-title { font-size: 18px; font-weight: 800; color: #f1f5f9; margin-bottom: 8px; letter-spacing: -.02em; }
+.upd-modal-sub   { font-size: 13px; color: #94a3b8; line-height: 1.6; margin-bottom: 22px; }
+/* progress bar */
+.upd-bar-wrap {
+  background: #0f172a; border-radius: 999px;
+  height: 8px; overflow: hidden; margin-bottom: 10px;
+}
+.upd-bar-fill {
+  height: 100%; border-radius: 999px;
+  background: linear-gradient(90deg,#6366f1,#8b5cf6);
+  width: 0%; transition: width .3s linear;
+}
+.upd-bar-label { font-size: 12px; color: #64748b; margin-bottom: 22px; }
+.upd-ready-actions { display: flex; flex-direction: column; gap: 10px; }
+</style>
+
+<!-- Toast notification -->
+<div id="upd-toast">
+  <div class="upd-toast-icon"><i class="fa fa-arrow-up-from-bracket"></i></div>
+  <div class="upd-toast-body">
+    <div class="upd-toast-title">Update available — v<span id="upd-new-ver"></span></div>
+    <div class="upd-toast-sub">Current: v<span id="upd-cur-ver"></span></div>
+    <div class="upd-toast-btns">
+      <button class="upd-btn-primary" id="updDownloadBtn">Download &amp; Install</button>
+      <button class="upd-btn-dismiss" id="updDismissBtn">Later</button>
+    </div>
+  </div>
+</div>
+
+<!-- Download / ready modal -->
+<div id="upd-modal-overlay">
+  <div id="upd-modal">
+    <!-- downloading state -->
+    <div id="upd-state-downloading">
+      <div class="upd-modal-icon">&#8987;</div>
+      <div class="upd-modal-title">Downloading update…</div>
+      <div class="upd-modal-sub" id="updDownloadingSub">Preparing download</div>
+      <div class="upd-bar-wrap"><div class="upd-bar-fill" id="updBarFill"></div></div>
+      <div class="upd-bar-label" id="updBarLabel">0%</div>
+    </div>
+    <!-- ready to install state -->
+    <div id="upd-state-ready" style="display:none;">
+      <div class="upd-modal-icon">&#9989;</div>
+      <div class="upd-modal-title">Ready to install!</div>
+      <div class="upd-modal-sub">The update has been downloaded. Restart now to apply it.</div>
+      <div class="upd-ready-actions">
+        <button class="upd-btn-primary" id="updInstallBtn" style="width:100%;padding:12px;">
+          <i class="fa fa-rotate-right" style="margin-right:7px;"></i>Restart &amp; Install
+        </button>
+        <button class="upd-btn-dismiss" id="updLaterBtn" style="width:100%;padding:11px;">
+          Install on next quit
+        </button>
+      </div>
+    </div>
+    <!-- error state -->
+    <div id="upd-state-error" style="display:none;">
+      <div class="upd-modal-icon">&#9888;</div>
+      <div class="upd-modal-title">Update failed</div>
+      <div class="upd-modal-sub" id="updErrorMsg">Could not download the update. Check your connection and try again.</div>
+      <button class="upd-btn-dismiss" id="updErrorClose" style="width:100%;padding:11px;">Close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var api = window.electronAPI;
+  if (!api) return;
+
+  var toast        = document.getElementById('upd-toast');
+  var overlay      = document.getElementById('upd-modal-overlay');
+  var newVerEl     = document.getElementById('upd-new-ver');
+  var curVerEl     = document.getElementById('upd-cur-ver');
+  var barFill      = document.getElementById('updBarFill');
+  var barLabel     = document.getElementById('updBarLabel');
+  var dlSub        = document.getElementById('updDownloadingSub');
+  var stDownload   = document.getElementById('upd-state-downloading');
+  var stReady      = document.getElementById('upd-state-ready');
+  var stError      = document.getElementById('upd-state-error');
+  var errMsg       = document.getElementById('updErrorMsg');
+
+  // Populate current version
+  if (api.appVersion) {
+    api.appVersion().then(function (v) { if (curVerEl) curVerEl.textContent = v; });
+  }
+
+  function showToast()  { toast.classList.add('show'); }
+  function hideToast()  { toast.classList.remove('show'); }
+  function showModal()  { overlay.classList.add('open'); }
+  function hideModal()  { overlay.classList.remove('open'); }
+
+  function showState(state) {
+    stDownload.style.display = state === 'downloading' ? '' : 'none';
+    stReady.style.display    = state === 'ready'       ? '' : 'none';
+    stError.style.display    = state === 'error'       ? '' : 'none';
+  }
+
+  // ── Update available ──
+  api.onUpdateAvailable && api.onUpdateAvailable(function (info) {
+    if (newVerEl) newVerEl.textContent = info.version;
+    showToast();
+  });
+
+  // ── Download button (from toast) ──
+  document.getElementById('updDownloadBtn').addEventListener('click', function () {
+    hideToast();
+    showState('downloading');
+    barFill.style.width = '0%';
+    barLabel.textContent = '0%';
+    dlSub.textContent = 'Starting download…';
+    showModal();
+    api.updateStartDownload && api.updateStartDownload();
+  });
+
+  // ── Dismiss toast ──
+  document.getElementById('updDismissBtn').addEventListener('click', hideToast);
+
+  // ── Download progress ──
+  api.onUpdateDownloadProgress && api.onUpdateDownloadProgress(function (p) {
+    var pct = p.percent || 0;
+    barFill.style.width = pct + '%';
+    barLabel.textContent = pct + '%';
+    var mb = function (b) { return (b / 1048576).toFixed(1) + ' MB'; };
+    dlSub.textContent = mb(p.transferred) + ' of ' + mb(p.total);
+  });
+
+  // ── Downloaded — show install prompt ──
+  api.onUpdateDownloaded && api.onUpdateDownloaded(function (info) {
+    showState('ready');
+    showModal();
+    hideToast();
+  });
+
+  // ── Error ──
+  api.onUpdateError && api.onUpdateError(function (err) {
+    errMsg.textContent = err.message || 'Unknown error.';
+    showState('error');
+    showModal();
+  });
+
+  // ── Install & restart ──
+  document.getElementById('updInstallBtn').addEventListener('click', function () {
+    api.updateInstallAndRestart && api.updateInstallAndRestart();
+  });
+
+  // ── Later (install on quit) ──
+  document.getElementById('updLaterBtn').addEventListener('click', function () {
+    hideModal();
+  });
+
+  // ── Error close ──
+  document.getElementById('updErrorClose').addEventListener('click', hideModal);
+})();
+</script>
 </body>
 </html>

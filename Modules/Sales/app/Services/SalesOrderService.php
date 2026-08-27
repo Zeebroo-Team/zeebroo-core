@@ -4,12 +4,19 @@ namespace Modules\Sales\Services;
 
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Modules\Business\Models\Business;
+use Modules\Pos\Services\SaleStockConsumptionService;
 use Modules\Sales\Models\SalesOrder;
 use Modules\Sales\Models\SalesOrderItem;
 
 class SalesOrderService
 {
+    public function __construct(
+        private readonly InvoiceService $invoices,
+        private readonly SaleStockConsumptionService $stockConsumption,
+    ) {}
+
     public function listForBusiness(
         Business $business,
         ?string $search = null,
@@ -78,10 +85,59 @@ class SalesOrderService
         });
     }
 
+    /**
+     * Confirming a sales order locks it in: it is converted into an Invoice
+     * (unpaid — payment is collected separately) and stock is decremented
+     * immediately, since the order is now committed against inventory.
+     */
     public function confirm(SalesOrder $order): SalesOrder
     {
-        $order->update(['status' => SalesOrder::STATUS_CONFIRMED]);
-        return $order;
+        if ($order->status !== SalesOrder::STATUS_PENDING) {
+            throw ValidationException::withMessages(['status' => 'Only pending orders can be confirmed.']);
+        }
+
+        return DB::transaction(function () use ($order) {
+            $order->load('items');
+
+            $items = $order->items->map(fn (SalesOrderItem $item) => [
+                'item_type'   => $item->product_id ? 'product' : null,
+                'product_id'  => $item->product_id,
+                'description' => $item->description,
+                'quantity'    => (float) $item->quantity,
+                'unit_price'  => (float) $item->unit_price,
+            ])->all();
+
+            $invoice = $this->invoices->create($order->business, [
+                'branch_id'       => $order->branch_id,
+                'customer_id'     => $order->customer_id,
+                'reference'       => $order->order_number,
+                'issue_date'      => now()->toDateString(),
+                'notes'           => $order->notes,
+                'discount_amount' => $order->discount_amount,
+                'tax_amount'      => $order->tax_amount,
+            ], $items);
+
+            $invoice->load('items.product');
+            foreach ($invoice->items as $item) {
+                if (!$item->product_id || !$item->product) {
+                    continue;
+                }
+
+                $qty = max(0.0, (float) $item->quantity);
+                if ($qty <= 0) {
+                    continue;
+                }
+
+                $this->stockConsumption->consumeFifo($item->product, $qty);
+            }
+
+            $order->update([
+                'status'     => SalesOrder::STATUS_CONFIRMED,
+                'invoice_id' => $invoice->id,
+            ]);
+
+            return $order->fresh();
+        });
     }
 
     public function process(SalesOrder $order): SalesOrder

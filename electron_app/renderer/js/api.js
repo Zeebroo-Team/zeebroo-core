@@ -218,15 +218,29 @@ const API = (() => {
     customers:      (q, page) => request('GET',  `/customers?q=${encodeURIComponent(q || '')}&page=${page || 1}`),
     customer:       (id)   => request('GET',  `/customers/${id}`),
     createCustomer: (body) => request('POST', '/customers', body),
+    importCustomers:(rows) => request('POST', '/customers/import', { rows }),
     updateCustomer: (id, body) => request('PATCH',  `/customers/${id}`, body),
     deleteCustomer: (id)   => request('DELETE', `/customers/${id}`),
+
+    // Customer Categories
+    customerCategories:      () => request('GET',    '/customer-categories'),
+    createCustomerCategory:  (body) => request('POST',   '/customer-categories', body),
+    updateCustomerCategory:  (id, body) => request('PATCH',  `/customer-categories/${id}`, body),
+    deleteCustomerCategory:  (id)   => request('DELETE', `/customer-categories/${id}`),
 
     // Suppliers
     suppliers:      (q, page)  => request('GET',    `/suppliers?q=${encodeURIComponent(q||'')}&page=${page||1}`),
     supplier:       (id)       => request('GET',    `/suppliers/${id}`),
     createSupplier: (body)     => request('POST',   '/suppliers', body),
+    importSuppliers:(rows)     => request('POST',   '/suppliers/import', { rows }),
     updateSupplier: (id, body) => request('PATCH',  `/suppliers/${id}`, body),
     deleteSupplier: (id)       => request('DELETE', `/suppliers/${id}`),
+
+    // Supplier Categories
+    supplierCategories:      () => request('GET',    '/supplier-categories'),
+    createSupplierCategory:  (body) => request('POST',   '/supplier-categories', body),
+    updateSupplierCategory:  (id, body) => request('PATCH',  `/supplier-categories/${id}`, body),
+    deleteSupplierCategory:  (id)   => request('DELETE', `/supplier-categories/${id}`),
     // Product Units
     units:          ()              => request('GET',    '/units'),
     createUnit:     (body)          => request('POST',   '/units', body),
@@ -361,6 +375,12 @@ const API = (() => {
     rolesCreate: (body)           => request('POST',   '/roles', body),
     rolesUpdate: (id, body)       => request('PUT',    `/roles/${id}`, body),
     rolesDelete: (id)             => request('DELETE', `/roles/${id}`),
+
+    // Branch Management
+    branchesList: ()         => request('GET',    '/branches'),
+    branchAdd:    (body)     => request('POST',   '/branches', body),
+    branchUpdate: (id, body) => request('PUT',    `/branches/${id}`, body),
+    branchRemove: (id)       => request('DELETE', `/branches/${id}`),
 
     // Service POS
     servicePosCatalog:  (q, catId) => request('GET',  `/service/pos/catalog?q=${encodeURIComponent(q || '')}&category=${catId || ''}`),

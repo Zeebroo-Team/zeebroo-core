@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesPosBusinessForApi;
 use Modules\Pos\Services\PosProductQuickCreateService;
+use Modules\Pos\Services\PosSettingsService;
 use Modules\Product\Models\Product;
 use Modules\Product\Models\ProductBrand;
 use Modules\Product\Models\ProductCategory;
@@ -22,7 +23,30 @@ class PosProductApiController extends Controller
         private readonly PosProductQuickCreateService $quickCreate,
         private readonly ProductService $productService,
         private readonly ProductStockLayerService $stockLayers,
+        private readonly PosSettingsService $posSettings,
     ) {
+    }
+
+    /**
+     * Filter a client-submitted delivery_methods payload down to partners the
+     * business currently has enabled, and dedupe by key.
+     *
+     * @param  array<int, array{key?: string, price?: mixed}>  $submitted
+     * @return list<array{key: string, price: float}>
+     */
+    private function filterDeliveryMethods(\Modules\Business\Models\Business $business, array $submitted): array
+    {
+        $enabledKeys = $this->posSettings->enabledDeliveryMethodKeys($business);
+        $out = [];
+        foreach ($submitted as $row) {
+            $key = $row['key'] ?? null;
+            if (! is_string($key) || ! in_array($key, $enabledKeys, true) || isset($out[$key])) {
+                continue;
+            }
+            $out[$key] = ['key' => $key, 'price' => isset($row['price']) ? (float) $row['price'] : 0.0];
+        }
+
+        return array_values($out);
     }
 
     public function store(Request $request): JsonResponse
@@ -56,10 +80,19 @@ class PosProductApiController extends Controller
                 if ($request->filled('warranty_duration'))   $fill['warranty_duration']    = $request->input('warranty_duration');
                 if ($request->has('warranty_duration') && !$request->filled('warranty_duration')) $fill['warranty_duration'] = null;
                 if ($request->has('track_expiry'))           $fill['track_expiry']         = $request->boolean('track_expiry');
-                if ($request->has('courier_delivery'))       $fill['courier_delivery']     = $request->boolean('courier_delivery');
+                if ($request->has('delivery_methods')) {
+                    $fill['delivery_methods'] = $this->filterDeliveryMethods($business, (array) $request->input('delivery_methods', []));
+                    $fill['courier_delivery'] = ! empty($fill['delivery_methods']);
+                } elseif ($request->has('courier_delivery')) {
+                    $fill['courier_delivery'] = $request->boolean('courier_delivery');
+                }
                 if ($request->has('loyalty_redeemable'))     $fill['loyalty_redeemable']   = $request->boolean('loyalty_redeemable');
                 if ($request->has('is_customer_required'))   $fill['is_customer_required'] = $request->boolean('is_customer_required');
                 if ($request->has('is_rental'))              $fill['is_rental']            = $request->boolean('is_rental');
+                if ($request->has('rental_daily_rate'))      $fill['rental_daily_rate']     = $request->input('rental_daily_rate') !== null ? (float) $request->input('rental_daily_rate') : null;
+                if ($request->has('rental_max_days'))        $fill['rental_max_days']       = $request->input('rental_max_days') !== null ? (int) $request->input('rental_max_days') : null;
+                if ($request->has('rental_late_fee_multiplier')) $fill['rental_late_fee_multiplier'] = $request->input('rental_late_fee_multiplier') !== null ? (float) $request->input('rental_late_fee_multiplier') : null;
+                if ($request->has('rental_needs_cleaning'))  $fill['rental_needs_cleaning'] = $request->boolean('rental_needs_cleaning');
                 if ($request->has('is_subscription'))        $fill['is_subscription']      = $request->boolean('is_subscription');
                 if ($request->has('item_wise_tax'))          $fill['item_wise_tax']        = $request->boolean('item_wise_tax');
                 if ($request->has('item_wise_discount'))     $fill['item_wise_discount']   = $request->boolean('item_wise_discount');
@@ -132,9 +165,16 @@ class PosProductApiController extends Controller
             'warranty_duration'         => 'nullable|string|max:120',
             'track_expiry'              => 'boolean',
             'courier_delivery'          => 'boolean',
+            'delivery_methods'          => 'nullable|array',
+            'delivery_methods.*.key'    => 'required_with:delivery_methods|string|in:' . implode(',', PosSettingsService::DELIVERY_METHOD_KEYS),
+            'delivery_methods.*.price'  => 'nullable|numeric|min:0',
             'loyalty_redeemable'        => 'boolean',
             'is_customer_required'      => 'boolean',
             'is_rental'                 => 'boolean',
+            'rental_daily_rate'         => 'nullable|numeric|min:0',
+            'rental_max_days'           => 'nullable|integer|min:1',
+            'rental_late_fee_multiplier' => 'nullable|numeric|min:0',
+            'rental_needs_cleaning'     => 'boolean',
             'is_subscription'           => 'boolean',
             'item_wise_tax'             => 'boolean',
             'item_wise_discount'        => 'boolean',
@@ -153,10 +193,19 @@ class PosProductApiController extends Controller
         if ($request->has('is_bundle'))              $data['is_bundle']            = $request->boolean('is_bundle');
         if ($request->has('has_warranty'))           $data['has_warranty']         = $request->boolean('has_warranty');
         if ($request->has('track_expiry'))           $data['track_expiry']         = $request->boolean('track_expiry');
-        if ($request->has('courier_delivery'))       $data['courier_delivery']     = $request->boolean('courier_delivery');
+        if ($request->has('delivery_methods')) {
+            $data['delivery_methods'] = $this->filterDeliveryMethods($business, (array) $request->input('delivery_methods', []));
+            $data['courier_delivery'] = ! empty($data['delivery_methods']);
+        } elseif ($request->has('courier_delivery')) {
+            $data['courier_delivery'] = $request->boolean('courier_delivery');
+        }
         if ($request->has('loyalty_redeemable'))     $data['loyalty_redeemable']   = $request->boolean('loyalty_redeemable');
         if ($request->has('is_customer_required'))   $data['is_customer_required'] = $request->boolean('is_customer_required');
         if ($request->has('is_rental'))              $data['is_rental']            = $request->boolean('is_rental');
+        if ($request->has('rental_daily_rate'))      $data['rental_daily_rate']     = $request->input('rental_daily_rate') !== null ? (float) $request->input('rental_daily_rate') : null;
+        if ($request->has('rental_max_days'))        $data['rental_max_days']       = $request->input('rental_max_days') !== null ? (int) $request->input('rental_max_days') : null;
+        if ($request->has('rental_late_fee_multiplier')) $data['rental_late_fee_multiplier'] = $request->input('rental_late_fee_multiplier') !== null ? (float) $request->input('rental_late_fee_multiplier') : null;
+        if ($request->has('rental_needs_cleaning'))  $data['rental_needs_cleaning'] = $request->boolean('rental_needs_cleaning');
         if ($request->has('is_subscription'))        $data['is_subscription']      = $request->boolean('is_subscription');
         if ($request->has('item_wise_tax'))          $data['item_wise_tax']        = $request->boolean('item_wise_tax');
         if ($request->has('item_wise_discount'))     $data['item_wise_discount']   = $request->boolean('item_wise_discount');

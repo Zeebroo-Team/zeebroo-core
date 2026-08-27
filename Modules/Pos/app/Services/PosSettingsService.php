@@ -78,6 +78,18 @@ class PosSettingsService
     /** When false, purchase orders are skipped; GRNs are created directly. */
     public const KEY_PURCHASE_ORDER_ENABLED = 'pos.purchase_order_enabled';
 
+    public const KEY_CUSTOMER_REQUIRE_PHONE = 'pos.customer_require_phone';
+
+    public const KEY_CUSTOMER_REQUIRE_EMAIL = 'pos.customer_require_email';
+
+    public const KEY_CUSTOMER_REQUIRE_ADDRESS = 'pos.customer_require_address';
+
+    public const KEY_SUPPLIER_REQUIRE_PHONE = 'pos.supplier_require_phone';
+
+    public const KEY_SUPPLIER_REQUIRE_EMAIL = 'pos.supplier_require_email';
+
+    public const KEY_SUPPLIER_REQUIRE_ADDRESS = 'pos.supplier_require_address';
+
     /**
      * @return array{
      *     default_deposit_account_id: ?int,
@@ -177,7 +189,33 @@ class PosSettingsService
             })(),
             // Purchasing
             'purchase_order_enabled' => (bool) $business->getSetting(self::KEY_PURCHASE_ORDER_ENABLED, true),
+            // Customers
+            'customer_require_phone'   => (bool) $business->getSetting(self::KEY_CUSTOMER_REQUIRE_PHONE, false),
+            'customer_require_email'   => (bool) $business->getSetting(self::KEY_CUSTOMER_REQUIRE_EMAIL, false),
+            'customer_require_address' => (bool) $business->getSetting(self::KEY_CUSTOMER_REQUIRE_ADDRESS, false),
+            // Suppliers
+            'supplier_require_phone'   => (bool) $business->getSetting(self::KEY_SUPPLIER_REQUIRE_PHONE, false),
+            'supplier_require_email'   => (bool) $business->getSetting(self::KEY_SUPPLIER_REQUIRE_EMAIL, false),
+            'supplier_require_address' => (bool) $business->getSetting(self::KEY_SUPPLIER_REQUIRE_ADDRESS, false),
         ];
+    }
+
+    /**
+     * Partner keys the business has individually enabled under Settings → Delivery.
+     * Empty when delivery is not enabled at all.
+     *
+     * @return list<string>
+     */
+    public function enabledDeliveryMethodKeys(Business $business): array
+    {
+        if (! (bool) $business->getSetting(self::KEY_DELIVERY_ENABLED, false)) {
+            return [];
+        }
+
+        $raw = $business->getSetting(self::KEY_DELIVERY_METHODS, []);
+        $methods = is_array($raw) ? $raw : (is_string($raw) ? json_decode($raw, true) ?? [] : []);
+
+        return array_values(array_intersect($methods, self::DELIVERY_METHOD_KEYS));
     }
 
     /**
@@ -358,6 +396,28 @@ class PosSettingsService
         // Purchasing workflow
         if (array_key_exists('purchase_order_enabled', $data)) {
             $business->setSetting(self::KEY_PURCHASE_ORDER_ENABLED, filter_var($data['purchase_order_enabled'], FILTER_VALIDATE_BOOLEAN));
+        }
+
+        // Customers
+        if (array_key_exists('customer_require_phone', $data)) {
+            $business->setSetting(self::KEY_CUSTOMER_REQUIRE_PHONE, filter_var($data['customer_require_phone'], FILTER_VALIDATE_BOOLEAN));
+        }
+        if (array_key_exists('customer_require_email', $data)) {
+            $business->setSetting(self::KEY_CUSTOMER_REQUIRE_EMAIL, filter_var($data['customer_require_email'], FILTER_VALIDATE_BOOLEAN));
+        }
+        if (array_key_exists('customer_require_address', $data)) {
+            $business->setSetting(self::KEY_CUSTOMER_REQUIRE_ADDRESS, filter_var($data['customer_require_address'], FILTER_VALIDATE_BOOLEAN));
+        }
+
+        // Suppliers
+        if (array_key_exists('supplier_require_phone', $data)) {
+            $business->setSetting(self::KEY_SUPPLIER_REQUIRE_PHONE, filter_var($data['supplier_require_phone'], FILTER_VALIDATE_BOOLEAN));
+        }
+        if (array_key_exists('supplier_require_email', $data)) {
+            $business->setSetting(self::KEY_SUPPLIER_REQUIRE_EMAIL, filter_var($data['supplier_require_email'], FILTER_VALIDATE_BOOLEAN));
+        }
+        if (array_key_exists('supplier_require_address', $data)) {
+            $business->setSetting(self::KEY_SUPPLIER_REQUIRE_ADDRESS, filter_var($data['supplier_require_address'], FILTER_VALIDATE_BOOLEAN));
         }
 
         // Business profile

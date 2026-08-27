@@ -11,7 +11,7 @@ class Customer extends Model
 {
     protected $table = 'pos_customers';
 
-    protected $fillable = ['business_id', 'name', 'phone', 'email', 'address', 'notes', 'customer_type'];
+    protected $fillable = ['business_id', 'name', 'phone', 'email', 'address', 'notes', 'customer_type', 'customer_category_id'];
 
     public function business(): BelongsTo
     {
@@ -21,6 +21,11 @@ class Customer extends Model
     public function sales(): HasMany
     {
         return $this->hasMany(Sale::class, 'pos_customer_id');
+    }
+
+    public function category(): BelongsTo
+    {
+        return $this->belongsTo(CustomerCategory::class, 'customer_category_id');
     }
 
     public function displayLabel(): string

@@ -898,6 +898,8 @@ async function _salSelectSale(id) {
   $('#sal-detail-title').textContent = `Sale #${num}`;
   $('#sal-void-btn').style.display   = isVoided ? 'none' : '';
   $('#sal-return-btn').style.display = isVoided ? 'none' : '';
+  const hasCreqDetails = (sale.items || []).some(i => (i.custom_requirement_values || []).length);
+  $('#sal-custom-req-btn').style.display = hasCreqDetails ? '' : 'none';
 
   const dateStr = sale.sold_at
     ? new Date(sale.sold_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })
@@ -1009,6 +1011,25 @@ $('#sal-search').addEventListener('input', e => {
 $('#sal-detail-back').addEventListener('click', _salCloseDetail);
 $('#sal-print-btn').addEventListener('click', () => { if (_sal.activeSale) showReceiptModal(_sal.activeSale); });
 $('#sal-return-btn').addEventListener('click', () => { _salCloseDetail(); openRefundModal(); });
+$('#sal-custom-req-btn').addEventListener('click', () => {
+  const sale = _sal.activeSale;
+  if (!sale) return;
+  const itemsWithDetails = (sale.items || []).filter(i => (i.custom_requirement_values || []).length);
+  $('#sal-custom-req-body').innerHTML = itemsWithDetails.map(i => `
+    <div class="sal-creq-item">
+      <div class="sal-creq-item-name">${escHtml(i.product_name || 'Service')}</div>
+      ${i.custom_requirement_values.map(v => `
+        <div class="sal-creq-row">
+          <span class="sal-creq-label">${escHtml(v.label)}</span>
+          <span class="sal-creq-value">${escHtml(v.value) || '—'}</span>
+        </div>`).join('')}
+    </div>`).join('');
+  $('#sal-custom-req-overlay').style.display = 'flex';
+});
+$('#sal-custom-req-close').addEventListener('click', () => { $('#sal-custom-req-overlay').style.display = 'none'; });
+$('#sal-custom-req-overlay').addEventListener('click', e => {
+  if (e.target === e.currentTarget) $('#sal-custom-req-overlay').style.display = 'none';
+});
 $('#sal-void-btn').addEventListener('click', async () => {
   const sale = _sal.activeSale;
   if (!sale) return;
@@ -2569,98 +2590,76 @@ async function _invOpenDetail(id) {
 
   let body;
   try {
-  const bizName    = escHtml(state.receiptSettings?.business_name        || '');
-  const bizAddr    = escHtml(state.receiptSettings?.receipt_address_line || '');
   const totalAmt   = parseFloat(inv.total).toFixed(2);
 
   body = `<div class="invd-layout">
     <div class="invd-main">
-      <div class="qt-doc">
 
-        <!-- ── Letterhead header (shown when a Design Studio letterhead exists) ── -->
-        <div class="invd-lh-hdr" id="invd-lh-hdr" style="display:none">
-          <div class="invd-lh-img-wrap">
-            <img class="invd-lh-img" id="invd-lh-img" src="" alt="">
+      <!-- ── Invoice details ─────────────────────────────────────────── -->
+      <div class="qt-card" style="margin-bottom:16px">
+        <div class="qt-card-hd"><i class="fa fa-circle-info"></i> Invoice Details</div>
+        <div class="qt-fields-grid">
+          <div class="qt-field">
+            <span class="qt-label">Customer</span>
+            <div class="invd-view-val">${escHtml(inv.customer_name || 'Walk-in Customer')}</div>
           </div>
-          <div class="invd-lh-num-row">
-            <div>
-              <div class="invd-lh-lbl">Invoice</div>
-              <div class="invd-lh-num">${escHtml(inv.invoice_number)}</div>
-            </div>
-            <span class="qt-badge qt-badge-${inv.status}">${escHtml(inv.status_label)}</span>
+          <div class="qt-field">
+            <span class="qt-label">Status</span>
+            <div><span class="qt-badge qt-badge-${inv.status}">${escHtml(inv.status_label)}</span></div>
           </div>
-        </div>
-
-        <!-- ── Blue banner: shown when no letterhead ─────────────────── -->
-        <div class="qt-doc-banner invd-banner-pro" id="invd-blue-banner">
-          <div class="invd-bpro-left">
-            ${bizName ? `<div class="invd-bpro-biz">${bizName}</div>` : ''}
-            ${bizAddr ? `<div class="invd-bpro-addr">${bizAddr}</div>` : ''}
+          <div class="qt-field">
+            <span class="qt-label">Issue Date</span>
+            <div class="invd-view-val">${dateStr}</div>
           </div>
-          <div class="invd-bpro-right">
-            <div class="invd-bpro-lbl">Invoice</div>
-            <div class="invd-bpro-num">${escHtml(inv.invoice_number)}</div>
-            <span class="qt-badge qt-badge-${inv.status}">${escHtml(inv.status_label)}</span>
+          <div class="qt-field">
+            <span class="qt-label">Due Date</span>
+            <div class="invd-view-val">${dueStr}</div>
           </div>
-        </div>
-
-        <!-- ── Meta strip: billed-to | dates | amount due ─────────── -->
-        <div class="invd-meta-strip">
-          <div class="invd-ms-cell">
-            <div class="invd-ms-lbl">Billed To</div>
-            <div class="invd-ms-val invd-ms-cust">${escHtml(inv.customer_name || 'Walk-in Customer')}</div>
-            ${inv.reference ? `<div class="invd-ms-ref"><i class="fa fa-hashtag"></i> ${escHtml(inv.reference)}</div>` : ''}
-          </div>
-          <div class="invd-ms-div"></div>
-          <div class="invd-ms-cell">
-            <div class="invd-ms-lbl">Issue Date</div>
-            <div class="invd-ms-val">${dateStr}</div>
-          </div>
-          <div class="invd-ms-div"></div>
-          <div class="invd-ms-cell">
-            <div class="invd-ms-lbl">Due Date</div>
-            <div class="invd-ms-val">${dueStr}</div>
-          </div>
-          ${inv.payment_method_label ? `<div class="invd-ms-div"></div>
-          <div class="invd-ms-cell">
-            <div class="invd-ms-lbl">Payment Method</div>
-            <div class="invd-ms-val">${escHtml(inv.payment_method_label)}</div>
+          ${inv.payment_method_label ? `<div class="qt-field">
+            <span class="qt-label">Payment Method</span>
+            <div class="invd-view-val">${escHtml(inv.payment_method_label)}</div>
           </div>` : ''}
-          <div class="invd-ms-grow"></div>
-          <div class="invd-ms-cell invd-ms-amt-cell">
-            <div class="invd-ms-lbl">Amount Due</div>
-            <div class="invd-ms-amt">${totalAmt}${cur}</div>
+          ${inv.reference ? `<div class="qt-field">
+            <span class="qt-label">Reference</span>
+            <div class="invd-view-val">${escHtml(inv.reference)}</div>
+          </div>` : ''}
+          <div class="qt-field">
+            <span class="qt-label">Amount Due</span>
+            <div class="invd-view-val invd-view-amt">${totalAmt}${cur}</div>
           </div>
         </div>
+      </div>
 
-        <!-- ── Line items table ────────────────────────────────────── -->
-        <div class="invd-tbl-wrap">
-          <table class="qt-doc-items invd-items-full">
-            <thead><tr>
-              <th style="width:32px">#</th>
-              <th>Description</th>
-              <th class="td-r" style="width:52px">Qty</th>
-              <th class="td-r" style="width:105px">Unit Price</th>
-              <th class="td-r" style="width:90px">Disc</th>
-              <th class="td-r" style="width:115px">Tax</th>
-              <th class="td-r" style="width:105px">Total</th>
-            </tr></thead>
-            <tbody>${itemRows}</tbody>
-          </table>
-        </div>
+      <!-- ── Line items ───────────────────────────────────────────────── -->
+      <div class="qt-card" style="margin-bottom:16px">
+        <div class="qt-card-hd"><i class="fa fa-list"></i> Items</div>
+        <table class="qt-doc-items">
+          <thead><tr>
+            <th style="width:32px">#</th>
+            <th>Description</th>
+            <th class="td-r" style="width:52px">Qty</th>
+            <th class="td-r" style="width:105px">Unit Price</th>
+            <th class="td-r" style="width:90px">Disc</th>
+            <th class="td-r" style="width:115px">Tax</th>
+            <th class="td-r" style="width:105px">Total</th>
+          </tr></thead>
+          <tbody>${itemRows}</tbody>
+        </table>
+      </div>
 
-        <!-- ── Footer: notes + totals ─────────────────────────────── -->
-        <div class="invd-foot">
-          <div class="invd-foot-notes">
-            ${inv.notes ? `<div class="invd-foot-notes-lbl"><i class="fa fa-note-sticky"></i> Notes</div>
-            <div class="qt-doc-notes-box">${escHtml(inv.notes)}</div>` : ''}
-          </div>
-          <div class="invd-foot-totals">
+      <!-- ── Summary + notes ─────────────────────────────────────────── -->
+      <div class="qt-card">
+        <div class="qt-card-hd"><i class="fa fa-calculator"></i> Summary</div>
+        <div style="padding:16px">
+          <div class="qt-doc-totals-wrap">
             <div class="qt-doc-totals">${summaryHtml}</div>
           </div>
+          ${inv.notes ? `<hr class="qt-doc-divider">
+          <div class="qt-doc-notes-label"><i class="fa fa-note-sticky"></i> Notes</div>
+          <div class="qt-doc-notes-box">${escHtml(inv.notes)}</div>` : ''}
         </div>
-
       </div>
+
     </div>
 
     <div class="invd-sidebar">
@@ -2701,32 +2700,6 @@ async function _invOpenDetail(id) {
   }
 
   $('#sinv-detail-body').innerHTML = body;
-
-  // ── Load letterhead asynchronously and swap banner ────────────────────────
-  // Capture the invoice id NOW so we can detect mid-flight navigation later.
-  const _lhForInvId = inv.id;
-  (async () => {
-    const lhFull = await _fetchLetterhead();
-    if (!lhFull?.canvas_json) return;
-    const lhDataUrl = await window.electronAPI.renderCanvasToDataUrl(
-      lhFull.canvas_json,
-      lhFull.width  || 794,
-      lhFull.height || 1123
-    );
-    if (!lhDataUrl) return;
-    // Guard 1: user navigated away from the invoices section entirely.
-    const img = document.getElementById('invd-lh-img');
-    const hdr = document.getElementById('invd-lh-hdr');
-    const blu = document.getElementById('invd-blue-banner');
-    if (!img || !hdr || !blu) return;
-    // Guard 2: user navigated to a DIFFERENT invoice — same IDs exist but
-    // belong to the new invoice; don't stamp the old letterhead onto it.
-    if (_inv.activeId !== _lhForInvId) return;
-    img.onload        = () => img.classList.add('loaded');
-    img.src           = lhDataUrl;
-    hdr.style.display = '';
-    blu.style.display = 'none';
-  })();
 
   // Wire actions
   $('#invd-edit')?.addEventListener('click', () => _invOpenForm(inv));
@@ -3775,6 +3748,7 @@ async function _soOpenDetail(id) {
         <div class="qt-doc-meta-val">${deliveryStr}</div>
       </div>
       ${o.reference ? `<div class="qt-doc-meta-block"><div class="qt-doc-meta-lbl">Reference</div><div class="qt-doc-meta-val">${escHtml(o.reference)}</div></div>` : ''}
+      ${o.invoice_number ? `<div class="qt-doc-meta-block"><div class="qt-doc-meta-lbl">Invoice</div><div class="qt-doc-meta-val">${escHtml(o.invoice_number)}</div></div>` : ''}
     </div>
     <table class="qt-item-table">
       <thead><tr><th style="width:32px">#</th><th>Description</th><th class="td-r">Qty</th><th class="td-r">Unit Price</th><th class="td-r">Line Total</th></tr></thead>
@@ -3794,7 +3768,10 @@ async function _soAction(id, action) {
   const fnMap = { confirm: API.confirmSalesOrder, process: API.processSalesOrder, complete: API.completeSalesOrder, cancel: API.cancelSalesOrder };
   const res = await fnMap[action](id);
   if (res.status === 200) {
-    toast({ confirm: 'Order confirmed', process: 'Marked as processing', complete: 'Order completed', cancel: 'Order cancelled' }[action], 'success');
+    const msg = action === 'confirm' && res.body?.invoice_number
+      ? `Order confirmed → Invoice ${res.body.invoice_number} created`
+      : { confirm: 'Order confirmed', process: 'Marked as processing', complete: 'Order completed', cancel: 'Order cancelled' }[action];
+    toast(msg, 'success');
     _soOpenDetail(id);
     loadSalesOrderList();
   } else {
@@ -3816,6 +3793,71 @@ function _soResetForm() {
   _soCalcTotals();
 }
 
+// ── Sales Order line-item product typeahead ────────────────────────────────
+// Single shared suggestion portal (only one row can be focused/typed into at
+// a time), appended to <body> so it escapes overflow:hidden containers.
+let _soSugEl    = null;
+let _soSugTimer = null;
+
+function _soGetSugEl() {
+  if (_soSugEl) return _soSugEl;
+  const el = document.createElement('div');
+  el.className = 'qt-product-suggest';
+  el.style.cssText = 'position:fixed!important;z-index:9999;display:none;right:auto!important;';
+  document.body.appendChild(el);
+  _soSugEl = el;
+  return el;
+}
+
+function _soHideSug() {
+  if (_soSugEl) { _soSugEl.style.display = 'none'; _soSugEl.innerHTML = ''; }
+}
+
+function _soSearchProducts(inputEl, idx) {
+  clearTimeout(_soSugTimer);
+  const q = inputEl.value.trim();
+  if (q.length < 2) { _soHideSug(); return; }
+  _soSugTimer = setTimeout(async () => {
+    const res = await API.productSearch(q, 6);
+    const products = res.body?.data || [];
+    if (!products.length) { _soHideSug(); return; }
+
+    const sug = _soGetSugEl();
+    sug.innerHTML = products.map(p => `<div class="qt-suggest-item" data-id="${p.id}" data-name="${escHtml(p.name)}" data-price="${p.unit_sell_price ?? 0}">
+      <i class="fa fa-box" style="opacity:.45;margin-right:5px;font-size:11px"></i>${escHtml(p.name)}<span class="qt-suggest-sku">${p.sku ? escHtml(p.sku) : ''}</span>
+    </div>`).join('');
+
+    const r = inputEl.getBoundingClientRect();
+    sug.style.top     = r.bottom + 2 + 'px';
+    sug.style.left    = r.left + 'px';
+    sug.style.width   = r.width + 'px';
+    sug.style.display = 'block';
+
+    sug.querySelectorAll('.qt-suggest-item').forEach(item => {
+      item.addEventListener('mousedown', e => {
+        e.preventDefault(); // prevent blur firing before mousedown resolves
+        _soHideSug();
+        if (!_so.items[idx]) return;
+        _so.items[idx].description = item.dataset.name;
+        _so.items[idx].unit_price  = parseFloat(item.dataset.price || 0);
+        _so.items[idx].product_id  = parseInt(item.dataset.id, 10);
+        // _soRenderItems() snapshots live DOM values before rebuilding, so the
+        // row's inputs must reflect the pick *before* that rebuild runs, or the
+        // stale typed-in text/price would overwrite what we just set above.
+        const row = inputEl.closest('.qt-line-row');
+        if (row) {
+          const descEl  = row.querySelector('.so-item-desc');
+          const priceEl = row.querySelector('.so-item-price');
+          if (descEl)  descEl.value  = item.dataset.name;
+          if (priceEl) priceEl.value = _so.items[idx].unit_price;
+        }
+        _soRenderItems();
+        _soCalcTotals();
+      });
+    });
+  }, 200);
+}
+
 function _soRenderItems() {
   const body = $('#so-items-body');
   // Snapshot values from any existing inputs before re-render
@@ -3833,7 +3875,7 @@ function _soRenderItems() {
     return `<div class="qt-line-row" data-idx="${idx}">
       <div class="qt-line-desc">
         <input type="text" class="qt-line-input qt-line-desc-input so-item-desc" data-idx="${idx}"
-          value="${escHtml(item.description || '')}" placeholder="Description…">
+          value="${escHtml(item.description || '')}" placeholder="Description or search product…">
       </div>
       <input type="number" class="qt-line-input qt-line-num so-item-qty" data-idx="${idx}"
         min="0.001" step="any" value="${item.quantity || 1}">
@@ -3845,7 +3887,13 @@ function _soRenderItems() {
   }).join('');
 
   $$('#so-items-body .so-item-desc').forEach(el => {
-    el.addEventListener('input', () => { _so.items[+el.dataset.idx].description = el.value; });
+    el.addEventListener('input', () => {
+      const idx = +el.dataset.idx;
+      _so.items[idx].description = el.value;
+      _so.items[idx].product_id  = null; // free-text edit unlinks any previously picked product
+      _soSearchProducts(el, idx);
+    });
+    el.addEventListener('blur', () => setTimeout(_soHideSug, 150));
   });
   $$('#so-items-body .so-item-qty').forEach(el => {
     el.addEventListener('input', () => {
@@ -3896,7 +3944,7 @@ async function _soOpenForm(order) {
     $('#so-f-discount').value      = parseFloat(order.discount_amount || 0).toFixed(2);
     $('#so-f-tax').value           = parseFloat(order.tax_amount || 0).toFixed(2);
     $('#so-f-notes').value         = order.notes || '';
-    _so.items = (order.items || []).map(i => ({ description: i.description || '', quantity: parseFloat(i.quantity), unit_price: parseFloat(i.unit_price) }));
+    _so.items = (order.items || []).map(i => ({ description: i.description || '', quantity: parseFloat(i.quantity), unit_price: parseFloat(i.unit_price), product_id: i.product_id || null }));
   } else {
     _soResetForm();
     return;
@@ -3928,7 +3976,7 @@ async function _soSave() {
     discount_amount:         parseFloat($('#so-f-discount').value) || 0,
     tax_amount:              parseFloat($('#so-f-tax').value) || 0,
     notes:                   $('#so-f-notes').value || null,
-    items: _so.items.map(i => ({ description: i.description, quantity: i.quantity, unit_price: i.unit_price })),
+    items: _so.items.map(i => ({ description: i.description, quantity: i.quantity, unit_price: i.unit_price, product_id: i.product_id || null })),
   };
 
   const saveBtn = $('#so-save-btn');
@@ -3959,7 +4007,7 @@ $('#so-cancel-form-btn').addEventListener('click', () => { _so.editingId ? _soOp
 $('#so-new-btn').addEventListener('click', () => _soOpenForm(null));
 $('#so-save-btn').addEventListener('click', _soSave);
 $('#so-add-item-btn').addEventListener('click', () => {
-  _so.items.push({ description: '', quantity: 1, unit_price: 0 });
+  _so.items.push({ description: '', quantity: 1, unit_price: 0, product_id: null });
   _soRenderItems();
   _soCalcTotals();
   const inputs = $$('#so-items-body .so-item-desc');
@@ -4743,6 +4791,7 @@ function applyFeatureVisibility() {
       const v = tabBtn.dataset.homeView;
       const show = !!_hTabPerms[v];
       tabBtn.style.display = show ? '' : 'none';
+      tabBtn.dataset.hscPerm = show ? '1' : '0';
       if (show) {
         if (!_hFirstVisible) _hFirstVisible = v;
         if (tabBtn.classList.contains('active')) _hActiveOk = true;
@@ -4758,6 +4807,8 @@ function applyFeatureVisibility() {
       const fp = $(`#home-view-${fallback}`);
       if (fp) fp.style.display = 'flex';
     }
+    // Re-apply the user's personal tab visibility on top of the permission gate
+    window.hscApply?.();
   }
 
   // ── Home right panel sections ───────────────────────────────────────────────
@@ -4803,7 +4854,7 @@ function applyFeatureVisibility() {
   { const el = $('.pos-mode-btn[data-mode="services"]');
     if (el) el.style.display = mp('pos_panel_mode_services') ? '' : 'none'; }
   { const el = $('#product-search-bar'); if (el) el.style.display = mp('pos_panel_search') ? '' : 'none'; }
-  { const el = $('#category-filter'); if (el) el.style.display = mp('pos_panel_categories') ? '' : 'none'; }
+  { const el = $('#category-filter-wrap'); if (el) el.style.display = mp('pos_panel_categories') ? '' : 'none'; }
   { const el = $('#product-grid'); if (el) el.style.display = mp('pos_panel_product_grid') ? '' : 'none'; }
   btn('#btn-park',     mp('pos_cart_park'));
   btn('#btn-recall',   mp('pos_cart_recall'));
@@ -5166,6 +5217,8 @@ function showApp() {
   _applyLayoutMode(state.config?.layout_mode || 'ribbon');
   // Apply saved ribbon customizations (tab order, visibility, button sizes)
   if (typeof window.rbcInit === 'function') window.rbcInit();
+  // Apply saved Home sub-nav tab visibility (user-customizable tabs)
+  if (typeof window.hscInit === 'function') window.hscInit();
   // Give one frame for layout + title update before activating Home
   requestAnimationFrame(() => activateTab('home'));
   // Check if bank account onboarding is needed
@@ -5728,7 +5781,58 @@ $('#tpm-keyboard-shortcuts').addEventListener('click', () => {
 });
 $('#tpm-about').addEventListener('click', () => {
   closeProfileMenu();
-  toast('Zeebroo POS v1.0.0 — © 2024 Zeebroo', 'info');
+  openAboutModal();
+});
+
+async function openAboutModal() {
+  const overlay = $('#about-modal-overlay');
+  overlay.style.display = 'flex';
+
+  // Version
+  const verEl = $('#about-version');
+  if (window.electronAPI && window.electronAPI.appVersion) {
+    try {
+      const v = await window.electronAPI.appVersion();
+      verEl.textContent = 'v' + v;
+    } catch (_) { verEl.textContent = 'Unknown'; }
+  } else {
+    verEl.textContent = 'Unknown';
+  }
+
+  // Platform
+  const platEl = $('#about-platform');
+  const plat = (window.electronAPI && window.electronAPI.platform) || navigator.platform || '';
+  if (plat === 'darwin') platEl.textContent = 'macOS';
+  else if (plat === 'win32') platEl.textContent = 'Windows';
+  else if (plat === 'linux') platEl.textContent = 'Linux';
+  else platEl.textContent = plat || 'Desktop';
+
+  // Website link
+  const webEl = $('#about-website');
+  if (webEl) {
+    webEl.addEventListener('click', e => {
+      e.preventDefault();
+      if (window.electronAPI && window.electronAPI.openExternal) {
+        window.electronAPI.openExternal('https://zeebroo.com');
+      } else {
+        window.open('https://zeebroo.com', '_blank');
+      }
+    }, { once: true });
+  }
+}
+
+function _closeAboutModal() {
+  $('#about-modal-overlay').style.display = 'none';
+}
+
+$('#about-modal-close').addEventListener('click', _closeAboutModal);
+$('#about-modal-close-btn').addEventListener('click', _closeAboutModal);
+$('#about-modal-overlay').addEventListener('click', e => {
+  if (e.target === $('#about-modal-overlay')) _closeAboutModal();
+});
+$('#about-check-updates').addEventListener('click', () => {
+  _closeAboutModal();
+  openUpdateModal();
 });
 $('#tpm-check-updates').addEventListener('click', () => {
   closeProfileMenu();
@@ -8439,6 +8543,9 @@ async function _supOpenModal(id = null) {
   $('#sup-f-email').value   = '';
   $('#sup-f-address').value = '';
   $('#sup-f-notes').value   = '';
+  _setSupplierCategoryComboValue('#sup-f-category-input', '#sup-f-category', '');
+
+  await _loadSupplierConfig();
 
   if (id) {
     const res = await API.supplier(id);
@@ -8451,6 +8558,7 @@ async function _supOpenModal(id = null) {
       $('#sup-f-email').value   = s.email ?? '';
       $('#sup-f-address').value = s.address ?? '';
       $('#sup-f-notes').value   = s.notes ?? '';
+      _setSupplierCategoryComboValue('#sup-f-category-input', '#sup-f-category', s.supplier_category_id ?? '');
     }
   }
 
@@ -8459,19 +8567,23 @@ async function _supOpenModal(id = null) {
 }
 
 async function _supSave() {
-  const name    = $('#sup-f-name').value.trim();
-  const contact = $('#sup-f-contact').value.trim() || null;
-  const phone   = $('#sup-f-phone').value.trim() || null;
-  const email   = $('#sup-f-email').value.trim() || null;
-  const address = $('#sup-f-address').value.trim() || null;
-  const notes   = $('#sup-f-notes').value.trim() || null;
+  const name       = $('#sup-f-name').value.trim();
+  const contact    = $('#sup-f-contact').value.trim() || null;
+  const phone      = $('#sup-f-phone').value.trim() || null;
+  const email      = $('#sup-f-email').value.trim() || null;
+  const address    = $('#sup-f-address').value.trim() || null;
+  const notes      = $('#sup-f-notes').value.trim() || null;
+  const categoryId = $('#sup-f-category').value || null;
 
   if (!name) { toast('Supplier name is required', 'error'); $('#sup-f-name').focus(); return; }
+  if (_supCfg.requirePhone && !phone) { toast('Phone number is required', 'error'); $('#sup-f-phone').focus(); return; }
+  if (_supCfg.requireEmail && !email) { toast('Email is required', 'error'); $('#sup-f-email').focus(); return; }
+  if (_supCfg.requireAddress && !address) { toast('Address is required', 'error'); $('#sup-f-address').focus(); return; }
 
   const btn = $('#sup-form-save');
   btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
 
-  const body = { name, contact_name: contact, phone, email, address, notes };
+  const body = { name, contact_name: contact, phone, email, address, notes, supplier_category_id: categoryId };
   const res  = _sup.editingId
     ? await API.updateSupplier(_sup.editingId, body)
     : await API.createSupplier(body);
@@ -8512,6 +8624,237 @@ $('#sup-search')?.addEventListener('keydown', e => {
     if (e.key === 'Enter') _supSave();
     if (e.key === 'Escape') $('#sup-modal').style.display = 'none';
   });
+});
+
+// ── Supplier required-field settings + Supplier Categories ─────────────────
+const _supCfg = { requirePhone: false, requireEmail: false, requireAddress: false, categories: [] };
+
+async function _loadSupplierConfig() {
+  try {
+    const [sRes, cRes] = await Promise.all([API.settingsGet(), API.supplierCategories()]);
+    const s = sRes.body?.data ?? {};
+    _supCfg.requirePhone   = !!s.supplier_require_phone;
+    _supCfg.requireEmail   = !!s.supplier_require_email;
+    _supCfg.requireAddress = !!s.supplier_require_address;
+    _supCfg.categories     = cRes.body?.data ?? [];
+  } catch (_) {}
+  _applySupplierFieldRequirements();
+}
+
+function _applySupplierFieldRequirements() {
+  const map = { '#sup-req-phone': _supCfg.requirePhone, '#sup-req-email': _supCfg.requireEmail, '#sup-req-address': _supCfg.requireAddress };
+  Object.entries(map).forEach(([sel, required]) => {
+    const el = $(sel);
+    if (el) el.style.display = required ? '' : 'none';
+  });
+}
+
+// ── Supplier category combobox: searchable, scrollable replacement for a plain <select> ──
+function _setSupplierCategoryComboValue(inputSel, hiddenSel, id) {
+  const cat = id ? _supCfg.categories.find(c => c.id === Number(id)) : null;
+  const hidden = $(hiddenSel), input = $(inputSel);
+  if (hidden) hidden.value = cat ? cat.id : '';
+  if (input)  input.value  = cat ? cat.name : '';
+}
+
+function _supCatComboRender(listEl, inputSel, hiddenSel, filter) {
+  const q = (filter || '').trim().toLowerCase();
+  const items = _supCfg.categories.filter(c => c.name.toLowerCase().includes(q));
+  let html = `<div class="cat-combo-item" data-id="" data-name="">No category</div>`;
+  html += items.map(c => `<div class="cat-combo-item" data-id="${c.id}" data-name="${escHtml(c.name)}">${escHtml(c.name)}</div>`).join('');
+  if (!items.length && q) html += '<div class="cat-combo-empty">No matching categories</div>';
+  listEl.innerHTML = html;
+  listEl.querySelectorAll('.cat-combo-item[data-id]').forEach(el => {
+    el.addEventListener('mousedown', ev => {
+      ev.preventDefault();
+      $(hiddenSel).value = el.dataset.id;
+      $(inputSel).value  = el.dataset.name || '';
+      listEl.style.display = 'none';
+    });
+  });
+}
+
+function _wireSupplierCategoryCombo(inputSel, hiddenSel, listSel) {
+  const input = $(inputSel), list = $(listSel);
+  if (!input || !list) return;
+  input.addEventListener('focus', () => { _supCatComboRender(list, inputSel, hiddenSel, ''); list.style.display = ''; });
+  input.addEventListener('input', () => {
+    $(hiddenSel).value = '';
+    _supCatComboRender(list, inputSel, hiddenSel, input.value);
+    list.style.display = '';
+  });
+  input.addEventListener('blur', () => { setTimeout(() => { list.style.display = 'none'; }, 150); });
+  input.addEventListener('keydown', e => { if (e.key === 'Escape') { list.style.display = 'none'; input.blur(); } });
+}
+
+_wireSupplierCategoryCombo('#sup-f-category-input', '#sup-f-category', '#sup-f-category-list');
+
+function _sstRenderCategoryList() {
+  const el = $('#sst-cat-list');
+  if (!el) return;
+  if (!_supCfg.categories.length) {
+    el.innerHTML = '<div class="cm-list-empty"><i class="fa fa-tags"></i><span>No categories yet</span></div>';
+    return;
+  }
+  el.innerHTML = _supCfg.categories.map(c => `
+    <div class="pfs-field-row" data-cat-id="${c.id}">
+      <div class="pfs-field-icon"><i class="fa fa-tag"></i></div>
+      <div class="pfs-field-body">
+        <div class="pfs-field-label">${escHtml(c.name)}</div>
+        ${c.description ? `<div class="pfs-field-desc">${escHtml(c.description)}</div>` : ''}
+      </div>
+      <button class="prod-batch-del" data-edit-cat="${c.id}" title="Edit category" style="color:var(--text-muted)"><i class="fa fa-pen"></i></button>
+      <button class="prod-batch-del" data-del-cat="${c.id}" title="Delete category"><i class="fa fa-trash"></i></button>
+    </div>`).join('');
+  el.querySelectorAll('[data-edit-cat]').forEach(btn => {
+    btn.addEventListener('click', () => _sstStartEditCategory(Number(btn.dataset.editCat)));
+  });
+  el.querySelectorAll('[data-del-cat]').forEach(btn => {
+    btn.addEventListener('click', () => _sstDeleteCategory(Number(btn.dataset.delCat)));
+  });
+}
+
+let _sstEditingCatId = null;
+
+function _sstStartEditCategory(id) {
+  const cat = _supCfg.categories.find(c => c.id === id);
+  if (!cat) return;
+  _sstEditingCatId = id;
+  $('#sst-cat-name').value = cat.name;
+  $('#sst-cat-desc').value = cat.description || '';
+  $('#sst-cat-add').innerHTML = '<i class="fa fa-check"></i> Update Category';
+  $('#sst-cat-cancel-edit').style.display = '';
+  $('#sst-cat-name').focus();
+}
+
+function _sstCancelEditCategory() {
+  _sstEditingCatId = null;
+  $('#sst-cat-name').value = '';
+  $('#sst-cat-desc').value = '';
+  $('#sst-cat-add').innerHTML = '<i class="fa fa-plus"></i> Add Category';
+  $('#sst-cat-cancel-edit').style.display = 'none';
+}
+
+// ── Generic confirm dialog (custom, replaces window.confirm) ───────────────
+let _sstConfirmResolve = null;
+
+function _sstConfirm(message, title = 'Are you sure?') {
+  return new Promise(resolve => {
+    _sstConfirmResolve = resolve;
+    $('#sst-confirm-title').textContent = title;
+    $('#sst-confirm-msg').textContent   = message;
+    $('#sst-confirm-modal').style.display = 'flex';
+  });
+}
+
+function _sstConfirmClose(result) {
+  $('#sst-confirm-modal').style.display = 'none';
+  if (_sstConfirmResolve) { _sstConfirmResolve(result); _sstConfirmResolve = null; }
+}
+
+$('#sst-confirm-ok')?.addEventListener('click',     () => _sstConfirmClose(true));
+$('#sst-confirm-cancel')?.addEventListener('click', () => _sstConfirmClose(false));
+$('#sst-confirm-close')?.addEventListener('click',  () => _sstConfirmClose(false));
+$('#sst-confirm-modal')?.addEventListener('click', e => { if (e.target === e.currentTarget) _sstConfirmClose(false); });
+
+async function _sstDeleteCategory(id) {
+  const cat = _supCfg.categories.find(c => c.id === id);
+  const ok = await _sstConfirm(`Delete category "${cat?.name ?? ''}"? This cannot be undone.`, 'Delete Category');
+  if (!ok) return;
+  const res = await API.deleteSupplierCategory(id);
+  if (res.status !== 200 && res.status !== 204) {
+    toast(res.body?.message || 'Failed to delete category', 'error');
+    return;
+  }
+  _supCfg.categories = _supCfg.categories.filter(c => c.id !== id);
+  if (_sstEditingCatId === id) _sstCancelEditCategory();
+  _sstRenderCategoryList();
+  toast('Category deleted', 'success');
+}
+
+function _sstSyncTabs() {
+  const active = $('#sup-settings-nav .pfs-opt-tab.active')?.dataset.sstTab || 'general';
+  $('#sst-panel-general').style.display  = active === 'general'  ? '' : 'none';
+  $('#sst-panel-category').style.display = active === 'category' ? '' : 'none';
+}
+
+async function _openSupplierSettingsModal() {
+  const modal = $('#sup-settings-modal');
+  if (!modal) return;
+  await _loadSupplierConfig();
+  $('#sst-req-phone').checked   = _supCfg.requirePhone;
+  $('#sst-req-email').checked   = _supCfg.requireEmail;
+  $('#sst-req-address').checked = _supCfg.requireAddress;
+  _sstCancelEditCategory();
+  _sstRenderCategoryList();
+  $$('#sup-settings-nav .pfs-opt-tab').forEach(b => b.classList.toggle('active', b.dataset.sstTab === 'general'));
+  _sstSyncTabs();
+  modal.style.display = 'flex';
+}
+
+$('#sup-settings-btn')?.addEventListener('click', _openSupplierSettingsModal);
+
+$('#sup-settings-nav')?.addEventListener('click', e => {
+  const btn = e.target.closest('.pfs-opt-tab[data-sst-tab]');
+  if (!btn) return;
+  $$('#sup-settings-nav .pfs-opt-tab').forEach(b => b.classList.toggle('active', b === btn));
+  _sstSyncTabs();
+});
+
+$('#sup-settings-modal')?.addEventListener('click', e => { if (e.target === e.currentTarget) $('#sup-settings-modal').style.display = 'none'; });
+$('#sup-settings-close')?.addEventListener('click', () => { $('#sup-settings-modal').style.display = 'none'; });
+$('#sup-settings-cancel')?.addEventListener('click', () => { $('#sup-settings-modal').style.display = 'none'; });
+
+$('#sst-cat-add')?.addEventListener('click', async () => {
+  const name = $('#sst-cat-name')?.value.trim();
+  const description = $('#sst-cat-desc')?.value.trim() || null;
+  if (!name) { toast('Category name is required', 'error'); $('#sst-cat-name')?.focus(); return; }
+
+  const isEdit = !!_sstEditingCatId;
+  const btn = $('#sst-cat-add');
+  btn.disabled = true; btn.innerHTML = `<i class="fa fa-spinner fa-spin"></i> ${isEdit ? 'Updating…' : 'Adding…'}`;
+  const res = isEdit
+    ? await API.updateSupplierCategory(_sstEditingCatId, { name, description })
+    : await API.createSupplierCategory({ name, description });
+  btn.disabled = false;
+
+  if ((isEdit && res.status !== 200) || (!isEdit && res.status !== 201)) {
+    btn.innerHTML = isEdit ? '<i class="fa fa-check"></i> Update Category' : '<i class="fa fa-plus"></i> Add Category';
+    toast(res.body?.errors?.name?.[0] || res.body?.message || `Failed to ${isEdit ? 'update' : 'add'} category`, 'error');
+    return;
+  }
+
+  const c = res.body?.data;
+  if (isEdit) {
+    const idx = _supCfg.categories.findIndex(x => x.id === _sstEditingCatId);
+    if (idx !== -1 && c) _supCfg.categories[idx] = c;
+  } else if (c) {
+    _supCfg.categories.push(c);
+  }
+  _supCfg.categories.sort((a, b) => a.name.localeCompare(b.name));
+  _sstRenderCategoryList();
+  toast(`Category "${c?.name ?? name}" ${isEdit ? 'updated' : 'added'}`, 'success');
+  _sstCancelEditCategory();
+});
+
+$('#sst-cat-cancel-edit')?.addEventListener('click', _sstCancelEditCategory);
+
+$('#sup-settings-save')?.addEventListener('click', async () => {
+  const btn = $('#sup-settings-save');
+  btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
+  const res = await API.settingsUpdate({
+    supplier_require_phone:   $('#sst-req-phone').checked,
+    supplier_require_email:   $('#sst-req-email').checked,
+    supplier_require_address: $('#sst-req-address').checked,
+  });
+  btn.disabled = false; btn.innerHTML = '<i class="fa fa-check"></i> Save';
+  if (res.status !== 200) { toast('Failed to save settings', 'error'); return; }
+  _supCfg.requirePhone   = $('#sst-req-phone').checked;
+  _supCfg.requireEmail   = $('#sst-req-email').checked;
+  _supCfg.requireAddress = $('#sst-req-address').checked;
+  _applySupplierFieldRequirements();
+  $('#sup-settings-modal').style.display = 'none';
+  toast('Supplier settings saved', 'success');
 });
 
 // ── Purchase Orders ───────────────────────────────────────────────────────
@@ -12802,6 +13145,62 @@ function _tagWireInput(inputId, ddId, getOptions, getSelected, onSelect, onCreat
 }
 
 // ── Product CRUD ──────────────────────────────────────────────────────────
+const _DELIVERY_PARTNERS_META = {
+  dhl:     { name: 'DHL Express',  icon: 'fa-globe',     desc: 'International express courier with time-definite delivery worldwide.' },
+  fedex:   { name: 'FedEx',        icon: 'fa-box-open',  desc: 'Fast and reliable global shipping with real-time package tracking.' },
+  uber:    { name: 'Uber',         icon: 'fa-car-side',  desc: 'On-demand local delivery via the Uber courier network.' },
+  pickme:  { name: 'PickMe',       icon: 'fa-motorcycle', desc: 'Sri Lanka\'s leading ride-hailing platform with parcel delivery.' },
+  koobiyo: { name: 'Koobiyo',      icon: 'fa-bicycle',   desc: 'Last-mile e-commerce delivery built for Sri Lanka businesses.' },
+  pronto:  { name: 'Pronto Lanka', icon: 'fa-truck-fast', desc: 'Scheduled and same-day delivery across Sri Lanka.' },
+};
+
+function _prodRenderDeliveryTab(deliveryEnabled, enabledKeys, selectedMethods) {
+  const disabledBox = $('#prod-delivery-disabled-msg');
+  const partnersBox = $('#prod-delivery-partners');
+  const titleEl      = $('#prod-delivery-disabled-title');
+  const textEl       = $('#prod-delivery-disabled-text');
+  const selectedByKey = {};
+  (Array.isArray(selectedMethods) ? selectedMethods : []).forEach(m => { if (m && m.key) selectedByKey[m.key] = m; });
+
+  if (!deliveryEnabled || !enabledKeys.length) {
+    disabledBox.style.display = 'flex';
+    partnersBox.style.display = 'none';
+    partnersBox.innerHTML = '';
+    if (!deliveryEnabled) {
+      titleEl.textContent = 'Delivery methods are turned off';
+      textEl.textContent  = 'Enable delivery methods in Settings to offer courier delivery for this product.';
+    } else {
+      titleEl.textContent = 'No delivery partners enabled';
+      textEl.textContent  = 'Enable at least one delivery partner in Settings to offer courier delivery for this product.';
+    }
+    return;
+  }
+
+  disabledBox.style.display = 'none';
+  partnersBox.style.display = 'flex';
+  partnersBox.innerHTML = enabledKeys.map(key => {
+    const meta = _DELIVERY_PARTNERS_META[key] || { name: key, icon: 'fa-truck', desc: '' };
+    const sel  = selectedByKey[key];
+    const price = sel && sel.price != null ? sel.price : '';
+    return `
+      <div class="prod-adv-card">
+        <input type="checkbox" id="prod-delivery-chk-${key}" class="prod-adv-card-chk" data-delivery-key="${key}"${sel ? ' checked' : ''}>
+        <label class="prod-adv-card-top" for="prod-delivery-chk-${key}">
+          <div class="prod-adv-card-icon"><i class="fa ${meta.icon}"></i></div>
+          <div class="prod-adv-card-text">
+            <span class="prod-adv-card-name">${meta.name}</span>
+            <span class="prod-adv-card-desc">${meta.desc}</span>
+          </div>
+          <div class="prod-adv-card-sw"><div class="prod-adv-card-knob"></div></div>
+        </label>
+        <div class="prod-adv-card-fields">
+          <div class="po-field-label" style="margin-bottom:6px"><i class="fa fa-money-bill-wave" style="color:var(--accent);margin-right:4px"></i> Island Wide Delivery Price</div>
+          <input type="number" min="0" step="0.01" id="prod-delivery-price-${key}" class="po-field-input" style="max-width:220px" placeholder="0.00" value="${price}">
+        </div>
+      </div>`;
+  }).join('');
+}
+
 async function _prodOpenModal(editId) {
   _prod.editingId = editId || null;
   const isEdit = !!editId;
@@ -12824,13 +13223,16 @@ async function _prodOpenModal(editId) {
   $$('#prod-warranty-duration-row .warranty-chip').forEach(c => c.classList.remove('active'));
   $('#prod-f-expiry').checked             = false;
   $('#prod-f-exp-date').value             = '';
-  $('#prod-f-courier').checked            = false;
   $('#prod-f-loyalty').checked            = false;
   $('#prod-f-model-no').value             = '';
   $('#prod-f-size').value                 = '';
   $('#prod-f-mfg-date').value             = '';
   $('#prod-f-customer-required').checked  = false;
   $('#prod-f-rental').checked             = false;
+  $('#prod-f-rental-daily-rate').value    = '';
+  $('#prod-f-rental-max-days').value      = '';
+  $('#prod-f-rental-late-fee-multiplier').value = '';
+  $('#prod-f-rental-needs-cleaning').checked    = false;
   $('#prod-f-subscription').checked       = false;
   $('#prod-f-item-tax').checked           = false;
   $('#prod-f-item-discount').checked      = false;
@@ -12861,6 +13263,19 @@ async function _prodOpenModal(editId) {
   // Load options once
   await _prodLoadFormOptions();
 
+  // Load business delivery settings (global enable + enabled partner keys)
+  let _deliveryEnabled = false;
+  let _deliveryEnabledKeys = [];
+  try {
+    const sRes = await API.settingsGet();
+    if (sRes.status === 200) {
+      const s = sRes.body?.data ?? {};
+      _deliveryEnabled = !!s.delivery_enabled;
+      _deliveryEnabledKeys = Array.isArray(s.delivery_methods) ? s.delivery_methods : [];
+    }
+  } catch (e) { /* leave delivery tab in the disabled state */ }
+  _prodRenderDeliveryTab(_deliveryEnabled, _deliveryEnabledKeys, isEdit && _prodActiveData ? _prodActiveData.delivery_methods : []);
+
   if (isEdit && _prodActiveData) {
     const p = _prodActiveData;
     $('#prod-f-name').value              = p.name        || '';
@@ -12877,13 +13292,16 @@ async function _prodOpenModal(editId) {
     _prodSyncWarrantyChips();
     $('#prod-f-expiry').checked             = !!p.track_expiry;
     $('#prod-f-exp-date').value             = p.exp_date  || '';
-    $('#prod-f-courier').checked            = !!p.courier_delivery;
     $('#prod-f-loyalty').checked            = !!p.loyalty_redeemable;
     $('#prod-f-model-no').value             = p.model_no  || '';
     $('#prod-f-size').value                 = p.size      || '';
     $('#prod-f-mfg-date').value             = p.mfg_date  || '';
     $('#prod-f-customer-required').checked  = !!p.is_customer_required;
     $('#prod-f-rental').checked             = !!p.is_rental;
+    $('#prod-f-rental-daily-rate').value    = p.rental_daily_rate != null ? p.rental_daily_rate : '';
+    $('#prod-f-rental-max-days').value      = p.rental_max_days != null ? p.rental_max_days : '';
+    $('#prod-f-rental-late-fee-multiplier').value = p.rental_late_fee_multiplier != null ? p.rental_late_fee_multiplier : '';
+    $('#prod-f-rental-needs-cleaning').checked    = !!p.rental_needs_cleaning;
     $('#prod-f-subscription').checked       = !!p.is_subscription;
     $('#prod-f-item-tax').checked           = !!p.item_wise_tax;
     $('#prod-f-item-discount').checked      = !!p.item_wise_discount;
@@ -13070,7 +13488,12 @@ async function _prodSave(andNew = false) {
     has_warranty:          $('#prod-f-warranty').checked,
     warranty_duration:     $('#prod-f-warranty').checked ? ($('#prod-f-warranty-duration').value.trim() || null) : null,
     track_expiry:          $('#prod-f-expiry').checked,
-    courier_delivery:      $('#prod-f-courier').checked,
+    delivery_methods:      Array.from($$('#prod-delivery-partners [data-delivery-key]'))
+      .filter(chk => chk.checked)
+      .map(chk => ({
+        key:   chk.dataset.deliveryKey,
+        price: parseFloat($(`#prod-delivery-price-${chk.dataset.deliveryKey}`).value) || 0,
+      })),
     loyalty_redeemable:    $('#prod-f-loyalty').checked,
     model_no:              $('#prod-f-model-no').value.trim()  || null,
     size:                  $('#prod-f-size').value.trim()      || null,
@@ -13078,6 +13501,10 @@ async function _prodSave(andNew = false) {
     exp_date:              $('#prod-f-exp-date').value         || null,
     is_customer_required:  $('#prod-f-customer-required').checked,
     is_rental:             $('#prod-f-rental').checked,
+    rental_daily_rate:          $('#prod-f-rental').checked ? (parseFloat($('#prod-f-rental-daily-rate').value) || null) : null,
+    rental_max_days:            $('#prod-f-rental').checked ? (parseInt($('#prod-f-rental-max-days').value, 10) || null) : null,
+    rental_late_fee_multiplier: $('#prod-f-rental').checked ? (parseFloat($('#prod-f-rental-late-fee-multiplier').value) || null) : null,
+    rental_needs_cleaning:      $('#prod-f-rental').checked ? $('#prod-f-rental-needs-cleaning').checked : false,
     is_subscription:       $('#prod-f-subscription').checked,
     item_wise_tax:         $('#prod-f-item-tax').checked,
     item_wise_discount:    $('#prod-f-item-discount').checked,
@@ -13149,6 +13576,11 @@ $('#prod-modal-close')?.addEventListener('click',   () => { $('#product-modal').
 $('#prod-modal-cancel')?.addEventListener('click',  () => { $('#product-modal').style.display = 'none'; });
 $('#prod-modal-save')?.addEventListener('click',     () => _prodSave(false));
 $('#prod-modal-save-new')?.addEventListener('click', () => _prodSave(true));
+$('#prod-delivery-goto-settings')?.addEventListener('click', () => {
+  $('#product-modal').style.display = 'none';
+  openPosSettings();
+  psmShowTab('delivery');
+});
 
 // ── Product modal tab switching ───────────────────────────────────────────
 $$('#product-modal .prod-modal-tab').forEach(btn => {
@@ -13173,6 +13605,7 @@ const _PROD_PANE_META = {
   pricing:  { label: 'Pricing & Stock', icon: 'fa-tag'         },
   media:    { label: 'Media',           icon: 'fa-image'       },
   advanced: { label: 'Advanced',        icon: 'fa-sliders'     },
+  delivery: { label: 'Delivery',        icon: 'fa-truck'       },
 };
 
 // ─ Every hideable field in the product form ─────────────────────────────────
@@ -13197,7 +13630,6 @@ const _PROD_FIELD_MAP = [
   { id: 'bundle',            label: 'Bundle Product',     icon: 'fa-cubes',          section: 'Advanced', getEl() { return document.querySelector('#product-modal .prod-bundle-toggle-row'); } },
   { id: 'warranty',          label: 'Warranty',           icon: 'fa-shield-halved',  section: 'Advanced', getEl() { return document.getElementById('prod-f-warranty')?.closest('.prod-adv-card'); } },
   { id: 'expiry',            label: 'Expiration',         icon: 'fa-calendar-xmark', section: 'Advanced', getEl() { return document.getElementById('prod-f-expiry')?.closest('.prod-adv-card'); } },
-  { id: 'courier',           label: 'Courier Delivery',   icon: 'fa-truck',          section: 'Advanced', getEl() { return document.getElementById('prod-f-courier')?.closest('.prod-adv-card'); } },
   { id: 'loyalty',           label: 'Loyalty Redeemable', icon: 'fa-star',           section: 'Advanced', getEl() { return document.getElementById('prod-f-loyalty')?.closest('.prod-adv-card'); } },
   { id: 'customer-required', label: 'Customer Required',  icon: 'fa-user-check',     section: 'Advanced', getEl() { return document.getElementById('prod-f-customer-required')?.closest('.prod-adv-card'); } },
   { id: 'rental',            label: 'Rental',             icon: 'fa-key',            section: 'Advanced', getEl() { return document.getElementById('prod-f-rental')?.closest('.prod-adv-card'); } },
@@ -13440,6 +13872,14 @@ $('#prod-f-warranty')?.addEventListener('change', function () {
 });
 $('#prod-f-expiry')?.addEventListener('change', function () {
   if (!this.checked) $('#prod-f-exp-date').value = '';
+});
+$('#prod-f-rental')?.addEventListener('change', function () {
+  if (!this.checked) {
+    $('#prod-f-rental-daily-rate').value = '';
+    $('#prod-f-rental-max-days').value = '';
+    $('#prod-f-rental-late-fee-multiplier').value = '';
+    $('#prod-f-rental-needs-cleaning').checked = false;
+  }
 });
 $('#prod-f-warranty-duration')?.addEventListener('input', _prodSyncWarrantyChips);
 $$('#prod-warranty-duration-row .warranty-chip').forEach(chip => {
@@ -13721,7 +14161,7 @@ $('#csv-import-btn')?.addEventListener('click', async () => {
 $('#prod-img-choose')?.addEventListener('click', () => openImgPicker(null));
 $('#prod-img-remove')?.addEventListener('click', () => _prodSetImage(null, null));
 $('#img-picker-close')?.addEventListener('click', _imgPickerClose);
-$('#img-upload-btn')?.addEventListener('click',    _imgPickerBrowseFile);
+$('#img-upload-drop')?.addEventListener('click',   _imgPickerBrowseFile);
 $('#img-upload-change')?.addEventListener('click', _imgPickerBrowseFile);
 $('#img-upload-confirm')?.addEventListener('click', _imgPickerUploadAndUse);
 $$('.img-tab-btn').forEach(btn => btn.addEventListener('click', () => _imgPickerTabSwitch(btn.dataset.tab)));
@@ -13902,7 +14342,8 @@ async function openProductDetail(productId, productName) {
   $('#inv-hero-meta').innerHTML   = '<i class="fa fa-spinner fa-spin"></i>';
   $('#inv-hero-badges').innerHTML = '';
   $('#inv-hero-img').innerHTML    = '<div class="inv-thumb-ph inv-thumb-lg"><i class="fa fa-box"></i></div>';
-  ['overview','pricing','stock','images','variants'].forEach(t => {
+  $('#inv-tab-delivery').style.display = 'none';
+  ['overview','pricing','stock','images','variants','delivery'].forEach(t => {
     $(`#inv-pane-${t}`).innerHTML = `<div class="inv-pane-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</div>`;
   });
 
@@ -13952,6 +14393,7 @@ function renderProductDetail(p, stockHistory = []) {
   if (p.track_expiry)       badges.push(`<span class="inv-badge inv-badge-amber"><i class="fa fa-calendar-xmark"></i> Expiry</span>`);
   if (p.courier_delivery)   badges.push(`<span class="inv-badge inv-badge-purple"><i class="fa fa-truck"></i> Courier</span>`);
   if (p.loyalty_redeemable) badges.push(`<span class="inv-badge inv-badge-green"><i class="fa fa-star"></i> Loyalty</span>`);
+  if (p.is_rental)          badges.push(`<span class="inv-badge inv-badge-blue"><i class="fa fa-key"></i> Rental</span>`);
   $('#inv-hero-badges').innerHTML = badges.join('');
 
   // ── Overview tab ──
@@ -14264,6 +14706,72 @@ function renderProductDetail(p, stockHistory = []) {
   } else {
     $('#inv-pane-variants').innerHTML = `<div class="inv-pane-empty"><i class="fa fa-layer-group"></i><p>No variants for this product</p></div>`;
   }
+
+  // ── Delivery tab (only visible when this product has courier delivery enabled) ──
+  const deliveryMethods = Array.isArray(p.delivery_methods) ? p.delivery_methods : [];
+  const deliveryTabBtn = $('#inv-tab-delivery');
+  if (deliveryTabBtn) deliveryTabBtn.style.display = deliveryMethods.length ? '' : 'none';
+  if (deliveryMethods.length) {
+    const deliveryCur = state.currency ? ' ' + state.currency : '';
+    $('#inv-pane-delivery').innerHTML = `
+      <div class="inv-section">
+        <div class="inv-section-title"><i class="fa fa-truck"></i> Delivery Partners (${deliveryMethods.length})</div>
+        <div class="inv-delivery-list">
+          ${deliveryMethods.map(m => {
+            const meta = _DELIVERY_PARTNERS_META[m.key] || { name: m.key, icon: 'fa-truck' };
+            return `
+            <div class="inv-delivery-row">
+              <div class="inv-delivery-row-icon"><i class="fa ${meta.icon}"></i></div>
+              <div class="inv-delivery-row-name">${escHtml(meta.name)}</div>
+              <div class="inv-delivery-row-price">${m.price != null ? parseFloat(m.price).toFixed(2) + deliveryCur : '—'}</div>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>`;
+  } else {
+    $('#inv-pane-delivery').innerHTML = `<div class="inv-pane-empty"><i class="fa fa-truck"></i><p>Courier delivery is not enabled for this product</p></div>`;
+    if (deliveryTabBtn && deliveryTabBtn.classList.contains('active')) {
+      deliveryTabBtn.classList.remove('active');
+      $('#inv-tabs .inv-tab[data-tab="overview"]')?.classList.add('active');
+      $$('.inv-tab-pane').forEach(pane => pane.classList.remove('active'));
+      $('#inv-pane-overview')?.classList.add('active');
+    }
+  }
+
+  // ── Rental tab (only shown when this product is rentable) ──
+  const rentalTabBtn = $('#inv-tab-rental');
+  if (p.is_rental) {
+    rentalTabBtn.style.display = '';
+    const dailyRate  = p.rental_daily_rate != null ? parseFloat(p.rental_daily_rate) : null;
+    const maxDays    = p.rental_max_days ?? null;
+    const lateFeeMul = p.rental_late_fee_multiplier != null ? parseFloat(p.rental_late_fee_multiplier) : null;
+    const needsClean = !!p.rental_needs_cleaning;
+
+    let lateFeeVal = '<span class="inv-detail-none">—</span>';
+    if (lateFeeMul != null) {
+      lateFeeVal = `${lateFeeMul}× daily rate`;
+      if (dailyRate != null) lateFeeVal += ` <span style="color:var(--text-muted);font-size:12px">(${(dailyRate * lateFeeMul).toFixed(2)} per late day)</span>`;
+    }
+
+    const rentalRows = [
+      ['Daily Rate',        dailyRate != null ? dailyRate.toFixed(2) : '<span class="inv-detail-none">—</span>'],
+      ['Max Rental Days',   maxDays != null ? maxDays : '<span class="inv-detail-none">—</span>'],
+      ['Late Fee',          lateFeeVal],
+      ['Cleaning Required', needsClean
+        ? '<span class="inv-badge inv-badge-amber"><i class="fa fa-broom"></i> Required before next rental</span>'
+        : '<span class="inv-badge inv-badge-green">Not required</span>'],
+    ];
+
+    $('#inv-pane-rental').innerHTML = `
+      <div class="inv-section">
+        <div class="inv-section-title"><i class="fa fa-key"></i> Rental Terms</div>
+        <table class="inv-detail-table">
+          ${rentalRows.map(([label, val]) => `<tr><td class="inv-dt-label">${escHtml(label)}</td><td class="inv-dt-val">${val}</td></tr>`).join('')}
+        </table>
+      </div>`;
+  } else {
+    rentalTabBtn.style.display = 'none';
+  }
 }
 
 // ── Sales chart (Canvas) ─────────────────────────────────────────────────
@@ -14436,6 +14944,7 @@ function buildCategoryBar(categories, active) {
       loadProducts(state.searchQuery, state.activeCategory);
     });
   });
+  updateScrollArrows('category-filter', 'cat-scroll-left', 'cat-scroll-right');
 }
 
 function buildProductGrid(products) {
@@ -14808,6 +15317,32 @@ $('#product-search').addEventListener('keydown', async (e) => {
 $('#btn-refresh-products').addEventListener('click', () => loadProducts(state.searchQuery, state.activeCategory));
 $('#rb-refresh').addEventListener('click', () => loadProducts(state.searchQuery, state.activeCategory));
 
+// ── Category chip bar: left/right scroll arrows ─────────────────────────────
+function updateScrollArrows(trackId, leftId, rightId) {
+  const track = $('#' + trackId), left = $('#' + leftId), right = $('#' + rightId);
+  if (!track || !left || !right) return;
+  const max = track.scrollWidth - track.clientWidth;
+  left.disabled  = track.scrollLeft <= 1;
+  right.disabled = max <= 1 || track.scrollLeft >= max - 1;
+}
+function wireCategoryScroll(trackId, leftId, rightId) {
+  const track = $('#' + trackId), left = $('#' + leftId), right = $('#' + rightId);
+  if (!track || !left || !right) return;
+  left.addEventListener('click', () => track.scrollBy({ left: -160, behavior: 'smooth' }));
+  right.addEventListener('click', () => track.scrollBy({ left: 160, behavior: 'smooth' }));
+  track.addEventListener('scroll', () => updateScrollArrows(trackId, leftId, rightId));
+  window.addEventListener('resize', () => updateScrollArrows(trackId, leftId, rightId));
+  // The bar can be built/measured while its tab/panel is still display:none
+  // (clientWidth/scrollWidth both read 0 then), so re-check whenever the
+  // track's actual rendered size changes — e.g. when its panel becomes visible.
+  if (window.ResizeObserver) {
+    new ResizeObserver(() => updateScrollArrows(trackId, leftId, rightId)).observe(track);
+  }
+  updateScrollArrows(trackId, leftId, rightId);
+}
+wireCategoryScroll('category-filter', 'cat-scroll-left', 'cat-scroll-right');
+wireCategoryScroll('service-category-filter', 'svc-cat-scroll-left', 'svc-cat-scroll-right');
+
 // ── POS Mode Switcher ──────────────────────────────────────────────────────
 function switchPosMode(mode) {
   if (state.posMode === mode) return;
@@ -14815,7 +15350,7 @@ function switchPosMode(mode) {
   $$('.pos-mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
 
   const productEls = [
-    $('#product-search-bar'), $('#category-filter'),
+    $('#product-search-bar'), $('#category-filter-wrap'),
     $('#product-grid'), $('#pos-pagination'),
   ];
   const svcSection = $('#pos-service-section');
@@ -14873,6 +15408,7 @@ function buildServiceCategoryBar(categories, active) {
       loadServices(state.serviceSearchQuery, state.serviceActiveCategory);
     });
   });
+  updateScrollArrows('service-category-filter', 'svc-cat-scroll-left', 'svc-cat-scroll-right');
 }
 
 function buildServiceGrid(services) {
@@ -14894,6 +15430,7 @@ function buildServiceGrid(services) {
       ${s.duration_label && s.duration_label !== '—' ? `<div class="svc-dur"><i class="fa fa-clock"></i> ${escHtml(s.duration_label)}</div>` : ''}
       <div class="svc-price">${s.price > 0 ? parseFloat(s.price).toFixed(2) + cur : 'Free'}</div>
       ${s.has_warranty ? '<div class="svc-wty-badge"><i class="fa fa-shield-halved"></i></div>' : ''}
+      ${s.custom_requirement_enabled ? '<div class="svc-creq-badge"><i class="fa fa-list-check"></i></div>' : ''}
     </div>`;
 
   let html = '';
@@ -14931,12 +15468,18 @@ async function addServiceToCart(service) {
       _type: 'service',
       layerId: null, layerLabel: null, stock: null,
       warrantyType: null, warrantyDate: null,
+      customRequirementValues: null,
     };
     if (service.has_warranty) {
       const wty = await _askWarranty(service.name);
       if (wty === null) return; // cancelled
       cartItem.warrantyType = wty.type;
       cartItem.warrantyDate = wty.date ?? null;
+    }
+    if (service.custom_requirement_enabled && (service.custom_requirement_fields || []).length) {
+      const values = await _askCustomRequirement(service);
+      if (values === null) return; // cancelled
+      cartItem.customRequirementValues = values;
     }
     tab.cart.push(cartItem);
   }
@@ -15293,6 +15836,7 @@ function openCustomerModal() {
   if (input) { input.value = ''; input.focus(); }
   $('#cust-results').innerHTML = '';
   $('#cust-new-form').style.display = 'none';
+  _loadCustomerConfig();
 }
 
 async function _searchCustomers(q) {
@@ -15329,8 +15873,14 @@ async function _searchCustomers(q) {
 function _showCustomerCreateForm(prefill) {
   const form = $('#cust-new-form');
   if (!form) return;
-  $('#cust-new-name').value  = prefill || '';
-  $('#cust-new-phone').value = '';
+  $('#cust-new-name').value    = prefill || '';
+  $('#cust-new-phone').value   = '';
+  $('#cust-new-email').value   = '';
+  $('#cust-new-address').value = '';
+  $('#cust-new-phone').placeholder   = _custCfg.requirePhone   ? 'Phone *'   : 'Phone (optional)';
+  $('#cust-new-email').placeholder   = _custCfg.requireEmail   ? 'Email *'   : 'Email (optional)';
+  $('#cust-new-address').placeholder = _custCfg.requireAddress ? 'Address *' : 'Address (optional)';
+  _setCategoryComboValue('#cust-new-category-input', '#cust-new-category', '');
   form.style.display = '';
   $('#cust-new-name').focus();
 }
@@ -15359,9 +15909,15 @@ $('#cust-new-cancel')?.addEventListener('click', () => { $('#cust-new-form').sty
 $('#cust-new-save')?.addEventListener('click', async () => {
   const name          = $('#cust-new-name')?.value.trim();
   const phone         = $('#cust-new-phone')?.value.trim();
+  const email         = $('#cust-new-email')?.value.trim();
+  const address       = $('#cust-new-address')?.value.trim();
   const customer_type = $('input[name="cust-new-type"]:checked')?.value || 'retail';
+  const customer_category_id = $('#cust-new-category')?.value || null;
   if (!name) { toast('Name is required', 'error'); return; }
-  const res = await API.createCustomer({ name, phone: phone || null, customer_type });
+  if (_custCfg.requirePhone && !phone) { toast('Phone number is required', 'error'); $('#cust-new-phone').focus(); return; }
+  if (_custCfg.requireEmail && !email) { toast('Email is required', 'error'); $('#cust-new-email').focus(); return; }
+  if (_custCfg.requireAddress && !address) { toast('Address is required', 'error'); $('#cust-new-address').focus(); return; }
+  const res = await API.createCustomer({ name, phone: phone || null, email: email || null, address: address || null, customer_type, customer_category_id });
   if (res.status !== 201) { toast('Failed to create customer', 'error'); return; }
   const c = res.body?.data;
   if (!c) return;
@@ -15391,6 +15947,7 @@ function openCustomersModal() {
   $('#cm-search').value = '';
   _cmShowDetail(false); _cmShowForm(false);
   _cmLoadList();
+  _loadCustomerConfig();
   requestAnimationFrame(() => $('#cm-search').focus());
 }
 
@@ -15471,11 +16028,12 @@ async function _cmSelectCustomer(id) {
     ? '<span class="cart-cust-wholesale"><i class="fa fa-boxes-stacked"></i> Wholesale</span>'
     : '<span style="color:var(--text-muted)">Retail</span>';
   const fields = [
-    { label: 'Type',    val: typeVal, raw: true },
-    { label: 'Phone',   val: c.phone },
-    { label: 'Email',   val: c.email },
-    { label: 'Address', val: c.address },
-    { label: 'Notes',   val: c.notes },
+    { label: 'Type',     val: typeVal, raw: true },
+    { label: 'Category', val: c.category_name },
+    { label: 'Phone',    val: c.phone },
+    { label: 'Email',    val: c.email },
+    { label: 'Address',  val: c.address },
+    { label: 'Notes',    val: c.notes },
   ];
   $('#cm-dv-fields').innerHTML = fields.map(f => `
     <div class="cm-dv-field">
@@ -15518,6 +16076,8 @@ function _cmShowForm(show, customer = null) {
     const custType = customer?.customer_type ?? 'retail';
     const typeRadio = $(`input[name="cm-customer-type"][value="${custType}"]`);
     if (typeRadio) typeRadio.checked = true;
+    _setCategoryComboValue('#cm-f-category-input', '#cm-f-category', customer?.customer_category_id ?? '');
+    _applyCustomerFieldRequirements();
     requestAnimationFrame(() => $('#cm-f-name').focus());
   }
 }
@@ -15529,17 +16089,22 @@ async function _cmSave() {
   const address       = $('#cm-f-address').value.trim() || null;
   const notes         = $('#cm-f-notes').value.trim() || null;
   const customer_type = $('input[name="cm-customer-type"]:checked')?.value || 'retail';
+  const customer_category_id = $('#cm-f-category')?.value || null;
 
   if (!name) { toast('Name is required', 'error'); $('#cm-f-name').focus(); return; }
+  if (_custCfg.requirePhone && !phone) { toast('Phone number is required', 'error'); $('#cm-f-phone').focus(); return; }
+  if (_custCfg.requireEmail && !email) { toast('Email is required', 'error'); $('#cm-f-email').focus(); return; }
+  if (_custCfg.requireAddress && !address) { toast('Address is required', 'error'); $('#cm-f-address').focus(); return; }
 
   const btn = $('#cm-form-save');
   btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
 
+  const payload = { name, phone, email, address, notes, customer_type, customer_category_id };
   let res;
   if (_cm.editingId) {
-    res = await API.updateCustomer(_cm.editingId, { name, phone, email, address, notes, customer_type });
+    res = await API.updateCustomer(_cm.editingId, payload);
   } else {
-    res = await API.createCustomer({ name, phone, email, address, notes, customer_type });
+    res = await API.createCustomer(payload);
   }
 
   btn.disabled = false; btn.innerHTML = '<i class="fa fa-check"></i> Save';
@@ -15625,6 +16190,675 @@ $('#cm-search')?.addEventListener('keydown', e => {
 ['#cm-f-name','#cm-f-phone','#cm-f-email','#cm-f-address','#cm-f-notes'].forEach(sel => {
   $(sel)?.addEventListener('keydown', e => { if (e.key === 'Enter' && sel !== '#cm-f-notes') _cmSave(); if (e.key === 'Escape') $('#cm-form-cancel')?.click(); });
 });
+
+// ── Customer required-field settings + Customer Categories ─────────────────
+const _custCfg = { requirePhone: false, requireEmail: false, requireAddress: false, categories: [] };
+
+async function _loadCustomerConfig() {
+  try {
+    const [sRes, cRes] = await Promise.all([API.settingsGet(), API.customerCategories()]);
+    const s = sRes.body?.data ?? {};
+    _custCfg.requirePhone   = !!s.customer_require_phone;
+    _custCfg.requireEmail   = !!s.customer_require_email;
+    _custCfg.requireAddress = !!s.customer_require_address;
+    _custCfg.categories     = cRes.body?.data ?? [];
+  } catch (_) {}
+  _applyCustomerFieldRequirements();
+}
+
+function _applyCustomerFieldRequirements() {
+  const map = { '#cm-req-phone': _custCfg.requirePhone, '#cm-req-email': _custCfg.requireEmail, '#cm-req-address': _custCfg.requireAddress };
+  Object.entries(map).forEach(([sel, required]) => {
+    const el = $(sel);
+    if (el) el.style.display = required ? '' : 'none';
+  });
+}
+
+// ── Category combobox: searchable, scrollable replacement for a plain <select> ──
+function _setCategoryComboValue(inputSel, hiddenSel, id) {
+  const cat = id ? _custCfg.categories.find(c => c.id === Number(id)) : null;
+  const hidden = $(hiddenSel), input = $(inputSel);
+  if (hidden) hidden.value = cat ? cat.id : '';
+  if (input)  input.value  = cat ? cat.name : '';
+}
+
+function _catComboRender(listEl, inputSel, hiddenSel, filter) {
+  const q = (filter || '').trim().toLowerCase();
+  const items = _custCfg.categories.filter(c => c.name.toLowerCase().includes(q));
+  let html = `<div class="cat-combo-item" data-id="" data-name="">No category</div>`;
+  html += items.map(c => `<div class="cat-combo-item" data-id="${c.id}" data-name="${escHtml(c.name)}">${escHtml(c.name)}</div>`).join('');
+  if (!items.length && q) html += '<div class="cat-combo-empty">No matching categories</div>';
+  listEl.innerHTML = html;
+  listEl.querySelectorAll('.cat-combo-item[data-id]').forEach(el => {
+    el.addEventListener('mousedown', ev => {
+      ev.preventDefault();
+      $(hiddenSel).value = el.dataset.id;
+      $(inputSel).value  = el.dataset.name || '';
+      listEl.style.display = 'none';
+    });
+  });
+}
+
+function _wireCategoryCombo(inputSel, hiddenSel, listSel) {
+  const input = $(inputSel), list = $(listSel);
+  if (!input || !list) return;
+  input.addEventListener('focus', () => { _catComboRender(list, inputSel, hiddenSel, ''); list.style.display = ''; });
+  input.addEventListener('input', () => {
+    $(hiddenSel).value = '';
+    _catComboRender(list, inputSel, hiddenSel, input.value);
+    list.style.display = '';
+  });
+  input.addEventListener('blur', () => { setTimeout(() => { list.style.display = 'none'; }, 150); });
+  input.addEventListener('keydown', e => { if (e.key === 'Escape') { list.style.display = 'none'; input.blur(); } });
+}
+
+_wireCategoryCombo('#cm-f-category-input',     '#cm-f-category',     '#cm-f-category-list');
+_wireCategoryCombo('#cust-new-category-input', '#cust-new-category', '#cust-new-category-list');
+
+function _cstRenderCategoryList() {
+  const el = $('#cst-cat-list');
+  if (!el) return;
+  if (!_custCfg.categories.length) {
+    el.innerHTML = '<div class="cm-list-empty"><i class="fa fa-tags"></i><span>No categories yet</span></div>';
+    return;
+  }
+  el.innerHTML = _custCfg.categories.map(c => `
+    <div class="pfs-field-row" data-cat-id="${c.id}">
+      <div class="pfs-field-icon"><i class="fa fa-tag"></i></div>
+      <div class="pfs-field-body">
+        <div class="pfs-field-label">${escHtml(c.name)}</div>
+        ${c.description ? `<div class="pfs-field-desc">${escHtml(c.description)}</div>` : ''}
+      </div>
+      <button class="prod-batch-del" data-edit-cat="${c.id}" title="Edit category" style="color:var(--text-muted)"><i class="fa fa-pen"></i></button>
+      <button class="prod-batch-del" data-del-cat="${c.id}" title="Delete category"><i class="fa fa-trash"></i></button>
+    </div>`).join('');
+  el.querySelectorAll('[data-edit-cat]').forEach(btn => {
+    btn.addEventListener('click', () => _cstStartEditCategory(Number(btn.dataset.editCat)));
+  });
+  el.querySelectorAll('[data-del-cat]').forEach(btn => {
+    btn.addEventListener('click', () => _cstDeleteCategory(Number(btn.dataset.delCat)));
+  });
+}
+
+let _cstEditingCatId = null;
+
+function _cstStartEditCategory(id) {
+  const cat = _custCfg.categories.find(c => c.id === id);
+  if (!cat) return;
+  _cstEditingCatId = id;
+  $('#cst-cat-name').value = cat.name;
+  $('#cst-cat-desc').value = cat.description || '';
+  $('#cst-cat-add').innerHTML = '<i class="fa fa-check"></i> Update Category';
+  $('#cst-cat-cancel-edit').style.display = '';
+  $('#cst-cat-name').focus();
+}
+
+function _cstCancelEditCategory() {
+  _cstEditingCatId = null;
+  $('#cst-cat-name').value = '';
+  $('#cst-cat-desc').value = '';
+  $('#cst-cat-add').innerHTML = '<i class="fa fa-plus"></i> Add Category';
+  $('#cst-cat-cancel-edit').style.display = 'none';
+}
+
+// ── Generic confirm dialog (custom, replaces window.confirm) ───────────────
+let _cstConfirmResolve = null;
+
+function _cstConfirm(message, title = 'Are you sure?') {
+  return new Promise(resolve => {
+    _cstConfirmResolve = resolve;
+    $('#cst-confirm-title').textContent = title;
+    $('#cst-confirm-msg').textContent   = message;
+    $('#cst-confirm-modal').style.display = 'flex';
+  });
+}
+
+function _cstConfirmClose(result) {
+  $('#cst-confirm-modal').style.display = 'none';
+  if (_cstConfirmResolve) { _cstConfirmResolve(result); _cstConfirmResolve = null; }
+}
+
+$('#cst-confirm-ok')?.addEventListener('click',     () => _cstConfirmClose(true));
+$('#cst-confirm-cancel')?.addEventListener('click', () => _cstConfirmClose(false));
+$('#cst-confirm-close')?.addEventListener('click',  () => _cstConfirmClose(false));
+$('#cst-confirm-modal')?.addEventListener('click', e => { if (e.target === e.currentTarget) _cstConfirmClose(false); });
+
+async function _cstDeleteCategory(id) {
+  const cat = _custCfg.categories.find(c => c.id === id);
+  const ok = await _cstConfirm(`Delete category "${cat?.name ?? ''}"? This cannot be undone.`, 'Delete Category');
+  if (!ok) return;
+  const res = await API.deleteCustomerCategory(id);
+  if (res.status !== 200 && res.status !== 204) {
+    toast(res.body?.message || 'Failed to delete category', 'error');
+    return;
+  }
+  _custCfg.categories = _custCfg.categories.filter(c => c.id !== id);
+  if (_cstEditingCatId === id) _cstCancelEditCategory();
+  _cstRenderCategoryList();
+  toast('Category deleted', 'success');
+}
+
+function _cstSyncTabs() {
+  const active = $('#cust-settings-nav .pfs-opt-tab.active')?.dataset.cstTab || 'general';
+  $('#cst-panel-general').style.display  = active === 'general'  ? '' : 'none';
+  $('#cst-panel-category').style.display = active === 'category' ? '' : 'none';
+}
+
+async function _openCustomerSettingsModal() {
+  const modal = $('#cust-settings-modal');
+  if (!modal) return;
+  await _loadCustomerConfig();
+  $('#cst-req-phone').checked   = _custCfg.requirePhone;
+  $('#cst-req-email').checked   = _custCfg.requireEmail;
+  $('#cst-req-address').checked = _custCfg.requireAddress;
+  _cstCancelEditCategory();
+  _cstRenderCategoryList();
+  $$('#cust-settings-nav .pfs-opt-tab').forEach(b => b.classList.toggle('active', b.dataset.cstTab === 'general'));
+  _cstSyncTabs();
+  modal.style.display = 'flex';
+}
+
+$('#cm-settings-btn')?.addEventListener('click', _openCustomerSettingsModal);
+
+$('#cust-settings-nav')?.addEventListener('click', e => {
+  const btn = e.target.closest('.pfs-opt-tab[data-cst-tab]');
+  if (!btn) return;
+  $$('#cust-settings-nav .pfs-opt-tab').forEach(b => b.classList.toggle('active', b === btn));
+  _cstSyncTabs();
+});
+
+$('#cust-settings-modal')?.addEventListener('click', e => { if (e.target === e.currentTarget) $('#cust-settings-modal').style.display = 'none'; });
+$('#cust-settings-close')?.addEventListener('click', () => { $('#cust-settings-modal').style.display = 'none'; });
+$('#cust-settings-cancel')?.addEventListener('click', () => { $('#cust-settings-modal').style.display = 'none'; });
+
+$('#cst-cat-add')?.addEventListener('click', async () => {
+  const name = $('#cst-cat-name')?.value.trim();
+  const description = $('#cst-cat-desc')?.value.trim() || null;
+  if (!name) { toast('Category name is required', 'error'); $('#cst-cat-name')?.focus(); return; }
+
+  const isEdit = !!_cstEditingCatId;
+  const btn = $('#cst-cat-add');
+  btn.disabled = true; btn.innerHTML = `<i class="fa fa-spinner fa-spin"></i> ${isEdit ? 'Updating…' : 'Adding…'}`;
+  const res = isEdit
+    ? await API.updateCustomerCategory(_cstEditingCatId, { name, description })
+    : await API.createCustomerCategory({ name, description });
+  btn.disabled = false;
+
+  if ((isEdit && res.status !== 200) || (!isEdit && res.status !== 201)) {
+    btn.innerHTML = isEdit ? '<i class="fa fa-check"></i> Update Category' : '<i class="fa fa-plus"></i> Add Category';
+    toast(res.body?.errors?.name?.[0] || res.body?.message || `Failed to ${isEdit ? 'update' : 'add'} category`, 'error');
+    return;
+  }
+
+  const c = res.body?.data;
+  if (isEdit) {
+    const idx = _custCfg.categories.findIndex(x => x.id === _cstEditingCatId);
+    if (idx !== -1 && c) _custCfg.categories[idx] = c;
+  } else if (c) {
+    _custCfg.categories.push(c);
+  }
+  _custCfg.categories.sort((a, b) => a.name.localeCompare(b.name));
+  _cstRenderCategoryList();
+  toast(`Category "${c?.name ?? name}" ${isEdit ? 'updated' : 'added'}`, 'success');
+  _cstCancelEditCategory();
+});
+
+$('#cst-cat-cancel-edit')?.addEventListener('click', _cstCancelEditCategory);
+
+$('#cust-settings-save')?.addEventListener('click', async () => {
+  const btn = $('#cust-settings-save');
+  btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
+  const res = await API.settingsUpdate({
+    customer_require_phone:   $('#cst-req-phone').checked,
+    customer_require_email:   $('#cst-req-email').checked,
+    customer_require_address: $('#cst-req-address').checked,
+  });
+  btn.disabled = false; btn.innerHTML = '<i class="fa fa-check"></i> Save';
+  if (res.status !== 200) { toast('Failed to save settings', 'error'); return; }
+  _custCfg.requirePhone   = $('#cst-req-phone').checked;
+  _custCfg.requireEmail   = $('#cst-req-email').checked;
+  _custCfg.requireAddress = $('#cst-req-address').checked;
+  _applyCustomerFieldRequirements();
+  $('#cust-settings-modal').style.display = 'none';
+  toast('Customer settings saved', 'success');
+});
+
+// ── CSV Customer Import ──────────────────────────────────────────────────────
+const _CUST_CSV_SAMPLE = [
+  'name,phone,email,address,notes,category,customer_type',
+  'John Silva,0771234567,john.silva@example.com,"123 Main St, Colombo",Prefers SMS updates,VIP,retail',
+  'Nimal Perera,0719876543,nimal.perera@example.com,"45 Galle Rd, Kandy",,Regular,retail',
+  'Priya Fernando,0765555555,,,"Wholesale buyer",Wholesale,wholesale',
+].join('\n');
+
+// Column name aliases → canonical key
+const _CUST_CSV_COL_MAP = {
+  'name': 'name', 'customer name': 'name', 'customer': 'name', 'full name': 'name',
+  'phone': 'phone', 'phone number': 'phone', 'mobile': 'phone', 'contact': 'phone', 'contact number': 'phone',
+  'email': 'email', 'email address': 'email',
+  'address': 'address',
+  'notes': 'notes', 'note': 'notes', 'remarks': 'notes',
+  'category': 'category', 'customer category': 'category',
+  'customer_type': 'customer_type', 'type': 'customer_type', 'customer type': 'customer_type',
+};
+
+let _custCsvParsedRows = [];
+let _custCsvValidRows  = [];
+
+function _custCsvParseFile(text) {
+  const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').filter(l => l.trim());
+  if (lines.length < 2) return { headers: [], rows: [], error: 'File must have a header row and at least one data row.' };
+
+  const headers = _csvParseLine(lines[0]).map(h => h.trim().toLowerCase());
+  const colMap  = {};
+  headers.forEach((h, i) => { if (_CUST_CSV_COL_MAP[h]) colMap[_CUST_CSV_COL_MAP[h]] = i; });
+
+  if (colMap['name'] === undefined) {
+    return { headers, rows: [], error: 'Missing required column: "name" (or "customer", "full name").' };
+  }
+
+  const rows = [];
+  for (let i = 1; i < lines.length; i++) {
+    const cells = _csvParseLine(lines[i]);
+    const row   = {};
+    Object.entries(colMap).forEach(([key, ci]) => { row[key] = (cells[ci] || '').trim(); });
+    row._rowNum = i + 1;
+
+    // Validate
+    row._errors = [];
+    if (!row.name) row._errors.push('Name is required');
+    if (_custCfg.requirePhone   && !row.phone)   row._errors.push('Phone number is required');
+    if (_custCfg.requireEmail   && !row.email)   row._errors.push('Email is required');
+    if (_custCfg.requireAddress && !row.address) row._errors.push('Address is required');
+    if (row.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email)) row._errors.push('Invalid email');
+    if (row.customer_type && !['retail', 'wholesale'].includes(row.customer_type.toLowerCase())) {
+      row._errors.push('customer_type must be "retail" or "wholesale"');
+    } else {
+      row.customer_type = (row.customer_type || 'retail').toLowerCase();
+    }
+
+    rows.push(row);
+  }
+  return { headers: Object.keys(colMap), rows };
+}
+
+function _custCsvSetStep(n) {
+  [1, 2, 3].forEach(i => {
+    const body = $(`#cust-csv-step-${i}`);
+    const ind  = $(`#cust-csv-step-ind-${i}`);
+    if (body) body.style.display = i === n ? 'flex' : 'none';
+    if (ind)  {
+      ind.classList.toggle('active', i === n);
+      ind.classList.toggle('done',   i < n);
+    }
+  });
+}
+
+function _custCsvShowPreview(rows) {
+  const valid = rows.filter(r => !r._errors.length);
+  const bad   = rows.filter(r => r._errors.length);
+  _custCsvValidRows = valid;
+
+  // Summary badges
+  const sumEl = $('#cust-csv-preview-summary');
+  sumEl.innerHTML = `
+    <b>${rows.length} row${rows.length !== 1 ? 's' : ''} found</b>
+    <span class="csv-preview-badge ok"><i class="fa fa-circle-check"></i> ${valid.length} valid</span>
+    ${bad.length ? `<span class="csv-preview-badge error"><i class="fa fa-triangle-exclamation"></i> ${bad.length} with errors</span>` : ''}
+    ${rows.length > 100 ? `<span class="csv-preview-badge warn"><i class="fa fa-eye"></i> Showing first 100 rows</span>` : ''}`;
+
+  // Table
+  const display = rows.slice(0, 100);
+  $('#cust-csv-preview-thead').innerHTML = `<tr>
+    <th>#</th><th>Name</th><th>Phone</th><th>Email</th><th>Address</th>
+    <th>Category</th><th>Type</th><th>Status</th>
+  </tr>`;
+  $('#cust-csv-preview-tbody').innerHTML = display.map(r => {
+    const isErr = r._errors.length > 0;
+    const status = isErr
+      ? `<span class="csv-row-error-msg"><i class="fa fa-triangle-exclamation"></i> ${escHtml(r._errors.join('; '))}</span>`
+      : `<span style="color:#10b981;font-size:11px"><i class="fa fa-circle-check"></i> OK</span>`;
+    return `<tr class="${isErr ? 'csv-row-error' : ''}">
+      <td style="color:var(--text-muted)">${r._rowNum}</td>
+      <td><strong>${escHtml(r.name || '—')}</strong></td>
+      <td style="color:var(--text-muted)">${escHtml(r.phone || '—')}</td>
+      <td style="color:var(--text-muted)">${escHtml(r.email || '—')}</td>
+      <td style="color:var(--text-muted)">${escHtml(r.address || '—')}</td>
+      <td>${escHtml(r.category || '—')}</td>
+      <td>${escHtml(r.customer_type || 'retail')}</td>
+      <td>${status}</td>
+    </tr>`;
+  }).join('');
+
+  $('#cust-csv-import-count').textContent = valid.length;
+  $('#cust-csv-import-btn').disabled = valid.length === 0;
+  _custCsvSetStep(2);
+}
+
+function _custCsvReset() {
+  _custCsvParsedRows = [];
+  _custCsvValidRows  = [];
+  $('#cust-csv-file-input').value = '';
+  _custCsvSetStep(1);
+}
+
+async function _custCsvOpenModal() {
+  await _loadCustomerConfig();
+  _custCsvReset();
+  $('#cust-csv-import-modal').style.display = 'flex';
+}
+
+function _custCsvCloseModal() {
+  $('#cust-csv-import-modal').style.display = 'none';
+  _custCsvReset();
+}
+
+function _custCsvDownloadSample() {
+  const blob = new Blob([_CUST_CSV_SAMPLE], { type: 'text/csv' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = 'customers-sample.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function _custCsvHandleFile(file) {
+  if (!file || !file.name.match(/\.csv$/i)) { toast('Please select a .csv file', 'error'); return; }
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const { rows, error } = _custCsvParseFile(e.target.result);
+    if (error) { toast(error, 'error'); return; }
+    if (rows.length > 500) { toast(`CSV has ${rows.length} rows. Only the first 500 will be imported.`, 'error'); }
+    _custCsvParsedRows = rows.slice(0, 500);
+    _custCsvShowPreview(_custCsvParsedRows);
+  };
+  reader.readAsText(file);
+}
+
+// Drag & drop
+const _custCsvDz = $('#cust-csv-dropzone');
+if (_custCsvDz) {
+  _custCsvDz.addEventListener('dragover',  e => { e.preventDefault(); _custCsvDz.classList.add('drag-over'); });
+  _custCsvDz.addEventListener('dragleave', () => _custCsvDz.classList.remove('drag-over'));
+  _custCsvDz.addEventListener('drop', e => {
+    e.preventDefault(); _custCsvDz.classList.remove('drag-over');
+    _custCsvHandleFile(e.dataTransfer.files[0]);
+  });
+}
+$('#cust-csv-file-input')?.addEventListener('change', e => _custCsvHandleFile(e.target.files[0]));
+$('#cust-csv-download-sample')?.addEventListener('click', _custCsvDownloadSample);
+$('#cust-csv-import-close')?.addEventListener('click',  _custCsvCloseModal);
+$('#cust-csv-import-modal')?.addEventListener('click',  e => { if (e.target === e.currentTarget) _custCsvCloseModal(); });
+$('#cust-csv-back-btn')?.addEventListener('click',      _custCsvReset);
+$('#cust-csv-done-btn')?.addEventListener('click',      _custCsvCloseModal);
+$('#cust-csv-import-more-btn')?.addEventListener('click', _custCsvReset);
+$('#cst-import-csv-btn')?.addEventListener('click', _custCsvOpenModal);
+
+$('#cust-csv-import-btn')?.addEventListener('click', async () => {
+  if (!_custCsvValidRows.length) return;
+  const btn = $('#cust-csv-import-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Importing…';
+
+  const payload = _custCsvValidRows.map(r => ({
+    name:          r.name,
+    phone:         r.phone   || undefined,
+    email:         r.email   || undefined,
+    address:       r.address || undefined,
+    notes:         r.notes   || undefined,
+    category:      r.category || undefined,
+    customer_type: r.customer_type || 'retail',
+  }));
+
+  const res = await API.importCustomers(payload);
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fa fa-file-import"></i> Import Customers';
+
+  if (res.status !== 200) { toast(res.body?.message || 'Import failed', 'error'); return; }
+
+  const { imported, skipped, errors } = res.body;
+  const resSum = $('#cust-csv-result-summary');
+  resSum.innerHTML = `
+    <div class="csv-result-stat">
+      <div class="csv-result-stat-num green">${imported}</div>
+      <div class="csv-result-stat-label"><i class="fa fa-circle-check"></i> Customers imported</div>
+    </div>
+    <div class="csv-result-stat">
+      <div class="csv-result-stat-num ${skipped > 0 ? 'red' : ''}">${skipped}</div>
+      <div class="csv-result-stat-label"><i class="fa fa-triangle-exclamation"></i> Rows skipped</div>
+    </div>`;
+
+  const errWrap = $('#cust-csv-result-errors');
+  if (errors && errors.length) {
+    errWrap.style.display = '';
+    $('#cust-csv-result-errors-list').innerHTML = errors.map(e =>
+      `<div class="csv-result-error-row"><b>Row ${e.row}${e.name ? ' — ' + escHtml(e.name) : ''}:</b><span>${escHtml(e.message)}</span></div>`
+    ).join('');
+  } else {
+    errWrap.style.display = 'none';
+  }
+
+  _custCsvSetStep(3);
+  if (imported > 0) _cmLoadList();
+});
+// ── End CSV Customer Import ──────────────────────────────────────────────────
+
+// ── CSV Supplier Import ──────────────────────────────────────────────────────
+const _SUP_CSV_SAMPLE = [
+  'name,contact_name,phone,email,address,notes,category',
+  'Acme Distributors,John Silva,0771234567,john@acme.com,"123 Main St, Colombo",Preferred vendor,Wholesale',
+  'Global Traders,Nimal Perera,0719876543,nimal@globaltraders.com,"45 Galle Rd, Kandy",,Local',
+  'Sunrise Imports,,0765555555,,,"Pays on 30-day terms",Import',
+].join('\n');
+
+// Column name aliases → canonical key
+const _SUP_CSV_COL_MAP = {
+  'name': 'name', 'supplier name': 'name', 'supplier': 'name', 'company': 'name', 'company name': 'name',
+  'contact_name': 'contact_name', 'contact': 'contact_name', 'contact name': 'contact_name', 'contact person': 'contact_name',
+  'phone': 'phone', 'phone number': 'phone', 'mobile': 'phone', 'contact number': 'phone',
+  'email': 'email', 'email address': 'email',
+  'address': 'address',
+  'notes': 'notes', 'note': 'notes', 'remarks': 'notes',
+  'category': 'category', 'supplier category': 'category',
+};
+
+let _supCsvParsedRows = [];
+let _supCsvValidRows  = [];
+
+function _supCsvParseFile(text) {
+  const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').filter(l => l.trim());
+  if (lines.length < 2) return { headers: [], rows: [], error: 'File must have a header row and at least one data row.' };
+
+  const headers = _csvParseLine(lines[0]).map(h => h.trim().toLowerCase());
+  const colMap  = {};
+  headers.forEach((h, i) => { if (_SUP_CSV_COL_MAP[h]) colMap[_SUP_CSV_COL_MAP[h]] = i; });
+
+  if (colMap['name'] === undefined) {
+    return { headers, rows: [], error: 'Missing required column: "name" (or "supplier", "company").' };
+  }
+
+  const rows = [];
+  for (let i = 1; i < lines.length; i++) {
+    const cells = _csvParseLine(lines[i]);
+    const row   = {};
+    Object.entries(colMap).forEach(([key, ci]) => { row[key] = (cells[ci] || '').trim(); });
+    row._rowNum = i + 1;
+
+    // Validate
+    row._errors = [];
+    if (!row.name) row._errors.push('Name is required');
+    if (_supCfg.requirePhone   && !row.phone)   row._errors.push('Phone number is required');
+    if (_supCfg.requireEmail   && !row.email)   row._errors.push('Email is required');
+    if (_supCfg.requireAddress && !row.address) row._errors.push('Address is required');
+    if (row.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email)) row._errors.push('Invalid email');
+
+    rows.push(row);
+  }
+  return { headers: Object.keys(colMap), rows };
+}
+
+function _supCsvSetStep(n) {
+  [1, 2, 3].forEach(i => {
+    const body = $(`#sup-csv-step-${i}`);
+    const ind  = $(`#sup-csv-step-ind-${i}`);
+    if (body) body.style.display = i === n ? 'flex' : 'none';
+    if (ind)  {
+      ind.classList.toggle('active', i === n);
+      ind.classList.toggle('done',   i < n);
+    }
+  });
+}
+
+function _supCsvShowPreview(rows) {
+  const valid = rows.filter(r => !r._errors.length);
+  const bad   = rows.filter(r => r._errors.length);
+  _supCsvValidRows = valid;
+
+  // Summary badges
+  const sumEl = $('#sup-csv-preview-summary');
+  sumEl.innerHTML = `
+    <b>${rows.length} row${rows.length !== 1 ? 's' : ''} found</b>
+    <span class="csv-preview-badge ok"><i class="fa fa-circle-check"></i> ${valid.length} valid</span>
+    ${bad.length ? `<span class="csv-preview-badge error"><i class="fa fa-triangle-exclamation"></i> ${bad.length} with errors</span>` : ''}
+    ${rows.length > 100 ? `<span class="csv-preview-badge warn"><i class="fa fa-eye"></i> Showing first 100 rows</span>` : ''}`;
+
+  // Table
+  const display = rows.slice(0, 100);
+  $('#sup-csv-preview-thead').innerHTML = `<tr>
+    <th>#</th><th>Name</th><th>Contact</th><th>Phone</th><th>Email</th><th>Address</th>
+    <th>Category</th><th>Status</th>
+  </tr>`;
+  $('#sup-csv-preview-tbody').innerHTML = display.map(r => {
+    const isErr = r._errors.length > 0;
+    const status = isErr
+      ? `<span class="csv-row-error-msg"><i class="fa fa-triangle-exclamation"></i> ${escHtml(r._errors.join('; '))}</span>`
+      : `<span style="color:#10b981;font-size:11px"><i class="fa fa-circle-check"></i> OK</span>`;
+    return `<tr class="${isErr ? 'csv-row-error' : ''}">
+      <td style="color:var(--text-muted)">${r._rowNum}</td>
+      <td><strong>${escHtml(r.name || '—')}</strong></td>
+      <td style="color:var(--text-muted)">${escHtml(r.contact_name || '—')}</td>
+      <td style="color:var(--text-muted)">${escHtml(r.phone || '—')}</td>
+      <td style="color:var(--text-muted)">${escHtml(r.email || '—')}</td>
+      <td style="color:var(--text-muted)">${escHtml(r.address || '—')}</td>
+      <td>${escHtml(r.category || '—')}</td>
+      <td>${status}</td>
+    </tr>`;
+  }).join('');
+
+  $('#sup-csv-import-count').textContent = valid.length;
+  $('#sup-csv-import-btn').disabled = valid.length === 0;
+  _supCsvSetStep(2);
+}
+
+function _supCsvReset() {
+  _supCsvParsedRows = [];
+  _supCsvValidRows  = [];
+  $('#sup-csv-file-input').value = '';
+  _supCsvSetStep(1);
+}
+
+async function _supCsvOpenModal() {
+  await _loadSupplierConfig();
+  _supCsvReset();
+  $('#sup-csv-import-modal').style.display = 'flex';
+}
+
+function _supCsvCloseModal() {
+  $('#sup-csv-import-modal').style.display = 'none';
+  _supCsvReset();
+}
+
+function _supCsvDownloadSample() {
+  const blob = new Blob([_SUP_CSV_SAMPLE], { type: 'text/csv' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = 'suppliers-sample.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function _supCsvHandleFile(file) {
+  if (!file || !file.name.match(/\.csv$/i)) { toast('Please select a .csv file', 'error'); return; }
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const { rows, error } = _supCsvParseFile(e.target.result);
+    if (error) { toast(error, 'error'); return; }
+    if (rows.length > 500) { toast(`CSV has ${rows.length} rows. Only the first 500 will be imported.`, 'error'); }
+    _supCsvParsedRows = rows.slice(0, 500);
+    _supCsvShowPreview(_supCsvParsedRows);
+  };
+  reader.readAsText(file);
+}
+
+// Drag & drop
+const _supCsvDz = $('#sup-csv-dropzone');
+if (_supCsvDz) {
+  _supCsvDz.addEventListener('dragover',  e => { e.preventDefault(); _supCsvDz.classList.add('drag-over'); });
+  _supCsvDz.addEventListener('dragleave', () => _supCsvDz.classList.remove('drag-over'));
+  _supCsvDz.addEventListener('drop', e => {
+    e.preventDefault(); _supCsvDz.classList.remove('drag-over');
+    _supCsvHandleFile(e.dataTransfer.files[0]);
+  });
+}
+$('#sup-csv-file-input')?.addEventListener('change', e => _supCsvHandleFile(e.target.files[0]));
+$('#sup-csv-download-sample')?.addEventListener('click', _supCsvDownloadSample);
+$('#sup-csv-import-close')?.addEventListener('click',  _supCsvCloseModal);
+$('#sup-csv-import-modal')?.addEventListener('click',  e => { if (e.target === e.currentTarget) _supCsvCloseModal(); });
+$('#sup-csv-back-btn')?.addEventListener('click',      _supCsvReset);
+$('#sup-csv-done-btn')?.addEventListener('click',      _supCsvCloseModal);
+$('#sup-csv-import-more-btn')?.addEventListener('click', _supCsvReset);
+$('#sst-import-csv-btn')?.addEventListener('click', _supCsvOpenModal);
+
+$('#sup-csv-import-btn')?.addEventListener('click', async () => {
+  if (!_supCsvValidRows.length) return;
+  const btn = $('#sup-csv-import-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Importing…';
+
+  const payload = _supCsvValidRows.map(r => ({
+    name:         r.name,
+    contact_name: r.contact_name || undefined,
+    phone:        r.phone   || undefined,
+    email:        r.email   || undefined,
+    address:      r.address || undefined,
+    notes:        r.notes   || undefined,
+    category:     r.category || undefined,
+  }));
+
+  const res = await API.importSuppliers(payload);
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fa fa-file-import"></i> Import Suppliers';
+
+  if (res.status !== 200) { toast(res.body?.message || 'Import failed', 'error'); return; }
+
+  const { imported, skipped, errors } = res.body;
+  const resSum = $('#sup-csv-result-summary');
+  resSum.innerHTML = `
+    <div class="csv-result-stat">
+      <div class="csv-result-stat-num green">${imported}</div>
+      <div class="csv-result-stat-label"><i class="fa fa-circle-check"></i> Suppliers imported</div>
+    </div>
+    <div class="csv-result-stat">
+      <div class="csv-result-stat-num ${skipped > 0 ? 'red' : ''}">${skipped}</div>
+      <div class="csv-result-stat-label"><i class="fa fa-triangle-exclamation"></i> Rows skipped</div>
+    </div>`;
+
+  const errWrap = $('#sup-csv-result-errors');
+  if (errors && errors.length) {
+    errWrap.style.display = '';
+    $('#sup-csv-result-errors-list').innerHTML = errors.map(e =>
+      `<div class="csv-result-error-row"><b>Row ${e.row}${e.name ? ' — ' + escHtml(e.name) : ''}:</b><span>${escHtml(e.message)}</span></div>`
+    ).join('');
+  } else {
+    errWrap.style.display = 'none';
+  }
+
+  _supCsvSetStep(3);
+  if (imported > 0) _supLoad();
+});
+// ── End CSV Supplier Import ──────────────────────────────────────────────────
 
 // ── End cart keyboard navigation ────────────────────────────────────────────
 
@@ -16295,7 +17529,6 @@ $('#psw-tax-enabled')?.addEventListener('change', _pswToggleTaxRate);
 // ── Invoice Setup ────────────────────────────────────────────────────────
 const INV_TEMPLATES = [
   { id: 'classic',   name: 'Classic',     desc: 'Traditional bordered table with letterhead', swatch: '#1d4ed8', accent: '#1d4ed8' },
-  { id: 'sidebar',   name: 'Side Panel',  desc: 'Dark accent column left, content right',     swatch: '#0f172a', accent: '#0f172a' },
   { id: 'bold',      name: 'Bold Banner', desc: 'Full-width colour header, large number',      swatch: '#e11d48', accent: '#e11d48' },
   { id: 'minimal',   name: 'Minimal',     desc: 'Pure typography, no fills or colour blocks',  swatch: '#374151', accent: '#374151' },
   { id: 'compact',   name: 'Compact',     desc: 'Card-style info grid with teal accent',       swatch: '#0891b2', accent: '#0891b2' },
@@ -17689,6 +18922,8 @@ async function openPosSettings() {
   $('#psm-branch-product').checked = !!s.branch_product_separate;
   $('#psm-branch-stock').checked   = !!s.branch_stock_separate;
   $('#psm-branch-pos').checked     = !!s.branch_pos_separate;
+  const branchNavItem = $('.psm-nav-item--multi-branch');
+  if (branchNavItem) branchNavItem.style.display = multiWh ? '' : 'none';
 
   // Tax rules
   const taxEnabled = !!s.tax_enabled;
@@ -17778,6 +19013,7 @@ $$('.psm-nav-item').forEach(btn => btn.addEventListener('click', () => {
   psmShowTab(btn.dataset.tab);
   if (btn.dataset.tab === 'roles'     && window.loadRolesForSettings) window.loadRolesForSettings();
   if (btn.dataset.tab === 'users'     && window.loadUsersForSettings) window.loadUsersForSettings();
+  if (btn.dataset.tab === 'branches'  && window.loadBranchesForSettings) window.loadBranchesForSettings();
   if (btn.dataset.tab === 'mail')     loadMailSettings();
   if (btn.dataset.tab === 'counters') loadPsmCounters();
   if (btn.dataset.tab === 'cashiers') { _psmCashierResetForm(); loadPsmCashiers(); }
@@ -17785,6 +19021,8 @@ $$('.psm-nav-item').forEach(btn => btn.addEventListener('click', () => {
 
 $('#psm-multi-warehouse').addEventListener('change', (e) => {
   $('#psm-branch-rows').style.display = e.target.checked ? 'flex' : 'none';
+  const branchNavItem = $('.psm-nav-item--multi-branch');
+  if (branchNavItem) branchNavItem.style.display = e.target.checked ? '' : 'none';
 });
 $('#psm-tax-enabled').addEventListener('change', (e) => {
   const sec = $('#psm-tax-rules-section');
@@ -19170,6 +20408,102 @@ $('#pos-warranty-overlay').addEventListener('click', e => {
 });
 // ── End Warranty prompt ────────────────────────────────────────────────────
 
+// ── Custom Requirement prompt (services) ────────────────────────────────────
+let _askCreqResolve  = null;
+let _creqActiveFields = [];
+
+function _askCustomRequirement(service) {
+  return new Promise(resolve => {
+    _askCreqResolve   = resolve;
+    _creqActiveFields = service.custom_requirement_fields || [];
+    $('#pos-custom-req-service-name').textContent = service.name;
+
+    const body = $('#pos-custom-req-fields');
+    body.innerHTML = _creqActiveFields.map(f => {
+      const key = escHtml(f.key);
+      if (f.type === 'textarea') {
+        return `<div class="psm-field-row" style="margin:0 0 12px">
+          <label class="psm-field-label">${escHtml(f.label)}</label>
+          <textarea class="psm-input pos-creq-input" data-key="${key}" rows="3" style="resize:vertical"></textarea>
+        </div>`;
+      }
+      if (f.type === 'select') {
+        const opts = (f.options || []).map(o => `<option value="${escHtml(o)}">${escHtml(o)}</option>`).join('');
+        return `<div class="psm-field-row" style="margin:0 0 12px">
+          <label class="psm-field-label">${escHtml(f.label)}</label>
+          <select class="psm-input pos-creq-input" data-key="${key}">
+            <option value="">— Select —</option>${opts}
+          </select>
+        </div>`;
+      }
+      if (f.type === 'radio') {
+        const opts = (f.options || []).map(o => `
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text);margin-top:6px;cursor:pointer">
+            <input type="radio" name="creq_${key}" class="pos-creq-radio" data-key="${key}" value="${escHtml(o)}"> ${escHtml(o)}
+          </label>`).join('');
+        return `<div class="psm-field-row" style="margin:0 0 12px">
+          <label class="psm-field-label">${escHtml(f.label)}</label>
+          ${opts || '<span style="font-size:12px;color:var(--text-muted)">No options configured.</span>'}
+        </div>`;
+      }
+      if (f.type === 'checkbox') {
+        return `<div class="psm-field-row" style="margin:0 0 12px">
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);cursor:pointer">
+            <input type="checkbox" class="pos-creq-checkbox" data-key="${key}"> ${escHtml(f.label)}
+          </label>
+        </div>`;
+      }
+      if (f.type === 'number') {
+        return `<div class="psm-field-row" style="margin:0 0 12px">
+          <label class="psm-field-label">${escHtml(f.label)}</label>
+          <input type="number" class="psm-input pos-creq-input" data-key="${key}">
+        </div>`;
+      }
+      if (f.type === 'date') {
+        return `<div class="psm-field-row" style="margin:0 0 12px">
+          <label class="psm-field-label">${escHtml(f.label)}</label>
+          <input type="date" class="psm-input pos-creq-input" data-key="${key}">
+        </div>`;
+      }
+      return `<div class="psm-field-row" style="margin:0 0 12px">
+        <label class="psm-field-label">${escHtml(f.label)}</label>
+        <input type="text" class="psm-input pos-creq-input" data-key="${key}">
+      </div>`;
+    }).join('');
+
+    $('#pos-custom-req-overlay').style.display = 'flex';
+    setTimeout(() => body.querySelector('.pos-creq-input')?.focus(), 60);
+  });
+}
+
+function _creqResolve(result) {
+  $('#pos-custom-req-overlay').style.display = 'none';
+  if (_askCreqResolve) { const r = _askCreqResolve; _askCreqResolve = null; r(result); }
+}
+
+$('#pos-custom-req-confirm').addEventListener('click', () => {
+  const values = _creqActiveFields.map(f => {
+    let value = '';
+    if (f.type === 'checkbox') {
+      const cb = $(`#pos-custom-req-fields .pos-creq-checkbox[data-key="${CSS.escape(f.key)}"]`);
+      value = cb && cb.checked ? 'Yes' : 'No';
+    } else if (f.type === 'radio') {
+      const checked = $(`#pos-custom-req-fields input[name="creq_${CSS.escape(f.key)}"]:checked`);
+      value = checked ? checked.value : '';
+    } else {
+      const input = $(`#pos-custom-req-fields .pos-creq-input[data-key="${CSS.escape(f.key)}"]`);
+      value = input ? input.value.trim() : '';
+    }
+    return { key: f.key, label: f.label, type: f.type, value };
+  });
+  _creqResolve(values);
+});
+$('#pos-custom-req-cancel').addEventListener('click', () => _creqResolve(null));
+$('#pos-custom-req-overlay').addEventListener('click', e => {
+  if (e.target === e.currentTarget) _creqResolve(null);
+});
+// ── End Custom Requirement prompt ───────────────────────────────────────────
+
 // ── Stock layer picker ─────────────────────────────────────────────────────
 let _layerPickerResolve = null;
 
@@ -19438,8 +20772,10 @@ function renderCart() {
       ? `<span class="ci-badge ci-badge--service"><i class="fa fa-screwdriver-wrench"></i> Service</span>` : '';
     const warrantyBadge = item.warrantyType
       ? `<span class="warranty-badge"><i class="fa fa-shield-halved"></i> ${item.warrantyType === 'lifetime' ? 'Lifetime warranty' : `Warranty until ${item.warrantyDate ?? ''}`}</span>` : '';
-    const extras = (discountBadge || noteBadge || typeBadge || warrantyBadge)
-      ? `<div class="ci-badges">${typeBadge}${discountBadge}${noteBadge}${warrantyBadge}</div>` : '';
+    const creqBadge = (item.customRequirementValues && item.customRequirementValues.length)
+      ? `<span class="ci-badge ci-badge--creq"><i class="fa fa-list-check"></i> Details saved</span>` : '';
+    const extras = (discountBadge || noteBadge || typeBadge || warrantyBadge || creqBadge)
+      ? `<div class="ci-badges">${typeBadge}${discountBadge}${noteBadge}${warrantyBadge}${creqBadge}</div>` : '';
     return `
     <div class="cart-item" data-key="${escHtml(item._key)}">
       <div class="ci-name">
@@ -20223,6 +21559,7 @@ $('#checkout-confirm').addEventListener('click', async () => {
         warranty_date:          i.warrantyDate ?? undefined,
         item_discount_percent:  _itemEffectivePct(i) > 0 ? _itemEffectivePct(i) : undefined,
         item_tax_rule:          i.itemTaxRule ?? undefined,
+        custom_requirement_values: (i.customRequirementValues && i.customRequirementValues.length) ? i.customRequirementValues : undefined,
       })),
     ],
   };
@@ -20645,6 +21982,7 @@ function _qapUnitRenderDd() {
 $('#rb-add-product').addEventListener('click', () => { activateTab('pos'); openAddProductModal(); });
 $('#rb-customers').addEventListener('click', openCustomersModal);
 $('#rb-home-customers').addEventListener('click', openCustomersModal);
+$('#rb-sal-customers')?.addEventListener('click', openCustomersModal);
 $('#rb-accounts').addEventListener('click', () => toast('Accounts panel coming soon', 'info'));
 // ── Inventory ribbon buttons ───────────────────────────────────────────────
 $('#rb-inv-products')?.addEventListener('click',  () => { activateTab('inventory'); switchInvView('products'); });
@@ -28962,8 +30300,11 @@ async function loadSvcCatalog() {
     const featuredStar = i.is_featured
       ? `<span title="Featured" style="color:#f59e0b;margin-left:5px"><i class="fa fa-star" style="font-size:11px"></i></span>`
       : '';
+    const avatar = i.image_url
+      ? `<div class="svc-list-avatar" style="--itm-c:${color}"><img src="${escHtml(i.image_url)}" alt=""></div>`
+      : `<div class="svc-list-avatar" style="--itm-c:${color}">${escHtml(initial)}</div>`;
     return `<tr class="inv-row svc-itm-row" data-id="${i.id}" style="cursor:pointer">
-      <td><div class="svc-list-avatar" style="--itm-c:${color}">${escHtml(initial)}</div></td>
+      <td>${avatar}</td>
       <td><div style="font-weight:500;font-size:13px;display:flex;align-items:center">${escHtml(i.name)}${featuredStar}</div></td>
       <td class="svc-list-desc">${desc}</td>
       <td><div style="display:flex;flex-wrap:wrap;gap:4px">${cats}</div></td>
@@ -29020,7 +30361,7 @@ function _svcOpenItemDetail(id) {
 
     // Header
     const avatarEl = $('#svc-detail-avatar');
-    avatarEl.textContent = initial;
+    avatarEl.innerHTML = d.image_url ? `<img src="${escHtml(d.image_url)}" alt="">` : escHtml(initial);
     avatarEl.style.cssText = `--itm-c:${color}`;
     $('#svc-detail-name').textContent = d.name;
     $('#svc-detail-badge').innerHTML  = d.is_active
@@ -29280,35 +30621,65 @@ $$('.svc-detail-tab').forEach(tab => {
 });
 
 // ── New / Edit Service Modal ──────────────────────────────────────────────────
-let _svcFormCatIds   = new Set();
-let _svcFormEmpIds   = new Set();
-let _svcFormActive   = true;
-let _svcFormFeatured = false;
-let _svcFormWarranty = false;
+let _svcSelectedCats = []; // [{id, name}]
+let _svcSelectedEmps = []; // [{id, name}]
 let _svcAvailCats    = [];
 let _svcAvailEmps    = [];
+let _svcCatInputWired = false;
+let _svcEmpInputWired = false;
 let _svcProdLines    = []; // [{product_id, name, qty}]
 let _svcEditingId    = null; // null = create mode, number = edit mode
+let _svcFormImageFileId = null;
+let _svcCustomReqFields = []; // [{_id, key, keyEdited, label, type, options}]
+let _svcCreqIdSeq = 0;
+
+function _svcRemoveCat(id) {
+  _svcSelectedCats = _svcSelectedCats.filter(x => x.id !== id);
+  _tagRender('svc-cat-tags', _svcSelectedCats, _svcRemoveCat);
+}
+function _svcRemoveEmp(id) {
+  _svcSelectedEmps = _svcSelectedEmps.filter(x => x.id !== id);
+  _tagRender('svc-emp-tags', _svcSelectedEmps, _svcRemoveEmp);
+}
+
+function _svcSetImage(fileId, url) {
+  _svcFormImageFileId = fileId;
+  const thumb = $('#svc-img-thumb');
+  thumb.innerHTML = url ? `<img src="${escHtml(url)}" alt="">` : '<i class="fa fa-image" style="font-size:22px;color:var(--text-muted)"></i>';
+  $('#svc-img-remove').style.display = url ? 'inline-flex' : 'none';
+}
 
 function _svcResetModal() {
-  _svcFormCatIds   = new Set();
-  _svcFormEmpIds   = new Set();
-  _svcFormActive   = true;
-  _svcFormFeatured = false;
-  _svcFormWarranty = false;
+  _svcSelectedCats = [];
+  _svcSelectedEmps = [];
   _svcProdLines    = [];
+  _tagRender('svc-cat-tags', [], _svcRemoveCat);
+  _tagRender('svc-emp-tags', [], _svcRemoveEmp);
+  $('#svc-cat-input').value = '';
+  $('#svc-emp-input').value = '';
   $('#svc-form-name').value     = '';
+  $('#svc-form-barcode').value  = '';
   $('#svc-form-desc').value     = '';
   $('#svc-form-price').value    = '';
+  $('#svc-form-cost-price').value      = '';
+  $('#svc-form-wholesale-price').value = '';
   $('#svc-form-duration').value = '';
   $('#svc-form-prod-q').value   = '';
   $('#svc-form-prod-results').style.display = 'none';
   $('#svc-form-prod-lines').innerHTML = '';
-  $('#svc-form-alert').style.display  = 'none';
   $('#svc-form-currency').textContent = state.currency || '';
-  $('#svc-toggle-ui')?.classList.add('on');
-  $('#svc-featured-toggle-ui')?.classList.remove('on');
-  $('#svc-warranty-toggle-ui')?.classList.remove('on');
+  $('#svc-form-currency-cost').textContent = state.currency || '';
+  $('#svc-form-currency-wholesale').textContent = state.currency || '';
+  $('#svc-form-active').checked    = true;
+  $('#svc-form-featured').checked  = false;
+  $('#svc-form-warranty').checked  = false;
+  _svcCustomReqFields = [];
+  $('#svc-form-creq-enabled').checked = false;
+  $('#svc-creq-section').style.display = 'none';
+  _svcRenderCreqFields();
+  $$('#svc-new-modal .prod-modal-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === 'basic'));
+  $$('#svc-new-modal .prod-modal-pane').forEach(p => p.classList.toggle('active', p.dataset.pane === 'basic'));
+  _svcSetImage(null, null);
 }
 
 function openNewServiceModal() {
@@ -29340,34 +30711,43 @@ async function openEditServiceModal(id) {
   $('#svc-form-submit').disabled  = false;
 
   if (detailRes.status !== 200) {
-    $('#svc-form-alert').textContent = 'Failed to load service data.';
-    $('#svc-form-alert').style.display = 'block';
+    toast('Failed to load service data.', 'error');
     return;
   }
 
   const d = detailRes.body.data;
   $('#svc-form-name').value     = d.name || '';
+  $('#svc-form-barcode').value  = d.barcode || '';
   $('#svc-form-desc').value     = d.description || '';
   $('#svc-form-price').value    = d.price != null ? d.price : '';
+  $('#svc-form-cost-price').value      = d.cost_price != null ? d.cost_price : '';
+  $('#svc-form-wholesale-price').value = d.wholesale_price != null ? d.wholesale_price : '';
   $('#svc-form-duration').value = d.duration_minutes || '';
-  _svcFormActive   = d.is_active;
-  _svcFormFeatured = d.is_featured;
-  _svcFormWarranty = !!d.has_warranty;
-  $('#svc-toggle-ui')?.classList.toggle('on', d.is_active);
-  $('#svc-featured-toggle-ui')?.classList.toggle('on', d.is_featured);
-  $('#svc-warranty-toggle-ui')?.classList.toggle('on', !!d.has_warranty);
+  $('#svc-form-active').checked   = !!d.is_active;
+  $('#svc-form-featured').checked = !!d.is_featured;
+  $('#svc-form-warranty').checked = !!d.has_warranty;
+  _svcSetImage(d.file_manager_file_id || null, d.image_url || null);
+
+  // Pre-fill custom requirement form
+  $('#svc-form-creq-enabled').checked = !!d.custom_requirement_enabled;
+  $('#svc-creq-section').style.display = d.custom_requirement_enabled ? '' : 'none';
+  _svcCustomReqFields = (d.custom_requirement_fields || []).map(f => ({
+    _id: ++_svcCreqIdSeq,
+    key: f.key || '',
+    keyEdited: true,
+    label: f.label || '',
+    type: ['text', 'textarea', 'select', 'number', 'date', 'checkbox', 'radio'].includes(f.type) ? f.type : 'text',
+    options: Array.isArray(f.options) ? f.options.join(', ') : '',
+  }));
+  _svcRenderCreqFields();
 
   // Pre-select categories
-  _svcFormCatIds = new Set((d.categories || []).map(c => c.id));
-  $('#svc-form-cat-list').querySelectorAll('[data-cat-id]').forEach(chip => {
-    if (_svcFormCatIds.has(Number(chip.dataset.catId))) chip.classList.add('selected');
-  });
+  _svcSelectedCats = (d.categories || []).map(c => ({ id: c.id, name: c.name }));
+  _tagRender('svc-cat-tags', _svcSelectedCats, _svcRemoveCat);
 
   // Pre-select employees
-  _svcFormEmpIds = new Set((d.employees || []).map(e => e.id));
-  $('#svc-form-emp-list').querySelectorAll('[data-emp-id]').forEach(chip => {
-    if (_svcFormEmpIds.has(Number(chip.dataset.empId))) chip.classList.add('selected');
-  });
+  _svcSelectedEmps = (d.employees || []).map(e => ({ id: e.id, name: e.name || e.full_name || '' }));
+  _tagRender('svc-emp-tags', _svcSelectedEmps, _svcRemoveEmp);
 
   // Pre-fill product lines
   _svcProdLines = (d.products || []).map(p => ({ product_id: p.id, name: p.name, qty: p.qty }));
@@ -29380,45 +30760,45 @@ function closeNewServiceModal() {
 }
 
 async function _svcLoadFormCategories() {
-  const list = $('#svc-form-cat-list');
-  list.innerHTML = `<span style="color:var(--text-muted);font-size:12px"><i class="fa fa-spinner fa-spin"></i> Loading…</span>`;
   const res = await API.serviceMgmtCategories();
-  _svcAvailCats = (res.body?.data || []).filter(c => c.is_active);
-  if (!_svcAvailCats.length) {
-    list.innerHTML = `<span style="color:var(--text-muted);font-size:12px">No categories available</span>`;
-    return;
+  _svcAvailCats = (res.body?.data || [])
+    .filter(c => c.is_active)
+    .map(c => ({ id: c.id, name: c.name }));
+
+  if (!_svcCatInputWired) {
+    _tagWireInput(
+      'svc-cat-input', 'svc-cat-dd',
+      () => _svcAvailCats,
+      () => _svcSelectedCats,
+      item => {
+        if (!_svcSelectedCats.find(x => x.id === item.id)) {
+          _svcSelectedCats.push(item);
+          _tagRender('svc-cat-tags', _svcSelectedCats, _svcRemoveCat);
+        }
+      },
+    );
+    _svcCatInputWired = true;
   }
-  list.innerHTML = _svcAvailCats.map(c =>
-    `<div class="svc-form-cat-chip" data-cat-id="${c.id}"><i class="fa fa-check"></i>${escHtml(c.name)}</div>`
-  ).join('');
-  list.querySelectorAll('.svc-form-cat-chip').forEach(chip => {
-    chip.addEventListener('click', () => {
-      const id = Number(chip.dataset.catId);
-      if (_svcFormCatIds.has(id)) { _svcFormCatIds.delete(id); chip.classList.remove('selected'); }
-      else                         { _svcFormCatIds.add(id);    chip.classList.add('selected'); }
-    });
-  });
 }
 
 async function _svcLoadFormEmployees() {
-  const list = $('#svc-form-emp-list');
-  list.innerHTML = `<span style="color:var(--text-muted);font-size:12px"><i class="fa fa-spinner fa-spin"></i> Loading…</span>`;
   const res = await API.employees();
-  _svcAvailEmps = (res.body?.data || []);
-  if (!_svcAvailEmps.length) {
-    list.innerHTML = `<span style="color:var(--text-muted);font-size:12px">No employees found</span>`;
-    return;
+  _svcAvailEmps = (res.body?.data || []).map(e => ({ id: e.id, name: e.name || e.full_name || '' }));
+
+  if (!_svcEmpInputWired) {
+    _tagWireInput(
+      'svc-emp-input', 'svc-emp-dd',
+      () => _svcAvailEmps,
+      () => _svcSelectedEmps,
+      item => {
+        if (!_svcSelectedEmps.find(x => x.id === item.id)) {
+          _svcSelectedEmps.push(item);
+          _tagRender('svc-emp-tags', _svcSelectedEmps, _svcRemoveEmp);
+        }
+      },
+    );
+    _svcEmpInputWired = true;
   }
-  list.innerHTML = _svcAvailEmps.map(e =>
-    `<div class="svc-form-cat-chip" data-emp-id="${e.id}"><i class="fa fa-check"></i>${escHtml(e.name || e.full_name || '')}</div>`
-  ).join('');
-  list.querySelectorAll('[data-emp-id]').forEach(chip => {
-    chip.addEventListener('click', () => {
-      const id = Number(chip.dataset.empId);
-      if (_svcFormEmpIds.has(id)) { _svcFormEmpIds.delete(id); chip.classList.remove('selected'); }
-      else                         { _svcFormEmpIds.add(id);    chip.classList.add('selected'); }
-    });
-  });
 }
 
 // ── Product lines for service ─────────────────────────────────────────────
@@ -29483,20 +30863,104 @@ function _svcRenderProdLines() {
   });
 }
 
-$('#svc-toggle-ui')?.addEventListener('click', () => {
-  _svcFormActive = !_svcFormActive;
-  $('#svc-toggle-ui').classList.toggle('on', _svcFormActive);
+// ── Custom Requirement form builder (Service modal) ───────────────────────
+function _svcCreqSlug(label) {
+  return String(label || '').trim().toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'field';
+}
+
+function _svcCreqAddField() {
+  _svcCustomReqFields.push({
+    _id: ++_svcCreqIdSeq, key: '', keyEdited: false,
+    label: '', type: 'text', options: '',
+  });
+  _svcRenderCreqFields();
+}
+
+function _svcRenderCreqFields() {
+  const el    = $('#svc-creq-fields');
+  const empty = $('#svc-creq-empty');
+  if (!el) return;
+  empty.style.display = _svcCustomReqFields.length ? 'none' : '';
+  el.innerHTML = _svcCustomReqFields.map(f => `
+    <div class="svc-creq-row" data-id="${f._id}">
+      <div class="svc-creq-row-main">
+        <select class="po-field-input svc-creq-type" data-id="${f._id}">
+          <option value="text"${f.type === 'text' ? ' selected' : ''}>Text</option>
+          <option value="textarea"${f.type === 'textarea' ? ' selected' : ''}>Textarea</option>
+          <option value="select"${f.type === 'select' ? ' selected' : ''}>Dropdown</option>
+          <option value="number"${f.type === 'number' ? ' selected' : ''}>Number</option>
+          <option value="date"${f.type === 'date' ? ' selected' : ''}>Date</option>
+          <option value="checkbox"${f.type === 'checkbox' ? ' selected' : ''}>Checkbox (Yes/No)</option>
+          <option value="radio"${f.type === 'radio' ? ' selected' : ''}>Radio buttons</option>
+        </select>
+        <input type="text" class="po-field-input svc-creq-label" data-id="${f._id}" placeholder="Label, e.g. Installed OS" value="${escHtml(f.label)}">
+        <input type="text" class="po-field-input svc-creq-key" data-id="${f._id}" placeholder="Name" value="${escHtml(f.key)}">
+        <button type="button" class="svc-prod-line-remove svc-creq-remove" data-id="${f._id}" title="Remove"><i class="fa fa-xmark"></i></button>
+      </div>
+      <input type="text" class="po-field-input svc-creq-options" data-id="${f._id}" placeholder="Options, comma separated (e.g. 1 Year, 2 Years)"
+        style="margin-top:6px;display:${(f.type === 'select' || f.type === 'radio') ? '' : 'none'}" value="${escHtml(f.options)}">
+    </div>`
+  ).join('');
+
+  el.querySelectorAll('.svc-creq-type').forEach(sel => {
+    sel.addEventListener('change', () => {
+      const f = _svcCustomReqFields.find(x => x._id === Number(sel.dataset.id));
+      if (f) { f.type = sel.value; _svcRenderCreqFields(); }
+    });
+  });
+  el.querySelectorAll('.svc-creq-label').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const f = _svcCustomReqFields.find(x => x._id === Number(inp.dataset.id));
+      if (!f) return;
+      f.label = inp.value;
+      if (!f.keyEdited) {
+        f.key = _svcCreqSlug(inp.value);
+        const keyInput = el.querySelector(`.svc-creq-key[data-id="${f._id}"]`);
+        if (keyInput) keyInput.value = f.key;
+      }
+    });
+  });
+  el.querySelectorAll('.svc-creq-key').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const f = _svcCustomReqFields.find(x => x._id === Number(inp.dataset.id));
+      if (!f) return;
+      f.keyEdited = true;
+      f.key = inp.value;
+    });
+  });
+  el.querySelectorAll('.svc-creq-options').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const f = _svcCustomReqFields.find(x => x._id === Number(inp.dataset.id));
+      if (f) f.options = inp.value;
+    });
+  });
+  el.querySelectorAll('.svc-creq-remove').forEach(btn => {
+    btn.addEventListener('click', () => {
+      _svcCustomReqFields = _svcCustomReqFields.filter(x => x._id !== Number(btn.dataset.id));
+      _svcRenderCreqFields();
+    });
+  });
+}
+
+$('#svc-creq-add-field')?.addEventListener('click', _svcCreqAddField);
+$('#svc-form-creq-enabled')?.addEventListener('change', () => {
+  $('#svc-creq-section').style.display = $('#svc-form-creq-enabled').checked ? '' : 'none';
 });
 
-$('#svc-featured-toggle-ui')?.addEventListener('click', () => {
-  _svcFormFeatured = !_svcFormFeatured;
-  $('#svc-featured-toggle-ui').classList.toggle('on', _svcFormFeatured);
+// ── Service modal tab switching ───────────────────────────────────────────
+$$('#svc-new-modal .prod-modal-tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    $$('#svc-new-modal .prod-modal-tab').forEach(b => b.classList.remove('active'));
+    $$('#svc-new-modal .prod-modal-pane').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    const pane = $('#svc-new-modal .prod-modal-pane[data-pane="' + btn.dataset.tab + '"]');
+    if (pane) pane.classList.add('active');
+  });
 });
 
-$('#svc-warranty-toggle-ui')?.addEventListener('click', () => {
-  _svcFormWarranty = !_svcFormWarranty;
-  $('#svc-warranty-toggle-ui').classList.toggle('on', _svcFormWarranty);
-});
+$('#svc-img-choose')?.addEventListener('click', () => openImgPicker(_svcSetImage));
+$('#svc-img-remove')?.addEventListener('click', () => _svcSetImage(null, null));
 
 $('#svc-new-modal-close')?.addEventListener('click', closeNewServiceModal);
 $('#svc-new-modal-cancel')?.addEventListener('click', closeNewServiceModal);
@@ -29504,29 +30968,43 @@ $('#svc-new-modal')?.addEventListener('click', e => { if (e.target === e.current
 
 $('#svc-form-submit')?.addEventListener('click', async () => {
   const btn     = $('#svc-form-submit');
-  const alertEl = $('#svc-form-alert');
   const name    = $('#svc-form-name').value.trim();
   const price   = $('#svc-form-price').value.trim();
   const isEdit  = _svcEditingId !== null;
 
-  alertEl.style.display = 'none';
-  if (!name)  { alertEl.textContent = 'Service name is required.';  alertEl.style.display = 'block'; return; }
-  if (!price) { alertEl.textContent = 'Price is required.';         alertEl.style.display = 'block'; return; }
+  if (!name)  { toast('Service name is required.', 'error'); return; }
+  if (!price) { toast('Price is required.', 'error');         return; }
 
   btn.disabled = true;
   btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
 
+  const costPrice      = $('#svc-form-cost-price').value.trim();
+  const wholesalePrice = $('#svc-form-wholesale-price').value.trim();
+
   const body = {
     name,
+    barcode:              $('#svc-form-barcode').value.trim() || null,
     description:          $('#svc-form-desc').value.trim() || null,
     price:                parseFloat(price),
+    cost_price:           costPrice ? parseFloat(costPrice) : null,
+    wholesale_price:      wholesalePrice ? parseFloat(wholesalePrice) : null,
     duration_minutes:     parseInt($('#svc-form-duration').value) || null,
-    is_active:            _svcFormActive,
-    is_featured:          _svcFormFeatured,
-    has_warranty:         _svcFormWarranty,
-    service_category_ids: [..._svcFormCatIds],
-    employee_ids:         [..._svcFormEmpIds],
+    is_active:            $('#svc-form-active').checked,
+    is_featured:          $('#svc-form-featured').checked,
+    has_warranty:         $('#svc-form-warranty').checked,
+    custom_requirement_enabled: $('#svc-form-creq-enabled').checked,
+    custom_requirement_fields: _svcCustomReqFields
+      .filter(f => f.label.trim())
+      .map(f => ({
+        key:     f.key.trim() || undefined,
+        label:   f.label.trim(),
+        type:    f.type,
+        options: (f.type === 'select' || f.type === 'radio') ? f.options.split(',').map(s => s.trim()).filter(Boolean) : [],
+      })),
+    service_category_ids: _svcSelectedCats.map(c => c.id),
+    employee_ids:         _svcSelectedEmps.map(e => e.id),
     product_lines:        _svcProdLines.map(l => ({ product_id: l.product_id, qty: l.qty })),
+    file_manager_file_id: _svcFormImageFileId,
   };
 
   const res = isEdit
@@ -29546,8 +31024,7 @@ $('#svc-form-submit')?.addEventListener('click', async () => {
     if (isEdit) _svcOpenItemDetail(_svcEditingId);
   } else {
     const msg = Object.values(res.body?.errors || {}).flat()[0] || res.body?.message || 'Failed to save service.';
-    alertEl.textContent = msg;
-    alertEl.style.display = 'block';
+    toast(msg, 'error');
   }
 });
 
@@ -29647,9 +31124,11 @@ async function _svcDeleteCategory(id, name) {
 
 // ── New Category Modal ────────────────────────────────────────────────────────
 let _svcCatFormActive = true;
+let _svcCatFormFromServiceModal = false;
 
-function openNewCategoryModal() {
+function openNewCategoryModal(fromServiceModal = false) {
   _svcCatFormActive = true;
+  _svcCatFormFromServiceModal = fromServiceModal;
   $('#svc-cat-form-name').value = '';
   $('#svc-cat-form-desc').value = '';
   $('#svc-cat-form-alert').style.display = 'none';
@@ -29671,7 +31150,8 @@ $('#svc-new-cat-modal-close')?.addEventListener('click',  closeNewCategoryModal)
 $('#svc-new-cat-modal-cancel')?.addEventListener('click', closeNewCategoryModal);
 $('#svc-new-cat-modal')?.addEventListener('click', e => { if (e.target === e.currentTarget) closeNewCategoryModal(); });
 
-$('#btn-new-category')?.addEventListener('click', openNewCategoryModal);
+$('#btn-new-category')?.addEventListener('click', () => openNewCategoryModal(false));
+$('#svc-form-cat-add-btn')?.addEventListener('click', () => openNewCategoryModal(true));
 
 $('#svc-cat-form-submit')?.addEventListener('click', async () => {
   const btn     = $('#svc-cat-form-submit');
@@ -29696,7 +31176,17 @@ $('#svc-cat-form-submit')?.addEventListener('click', async () => {
   if (res.status === 201) {
     closeNewCategoryModal();
     toast('Category created', 'success');
-    loadSvcCategories();
+    if (_svcCatFormFromServiceModal) {
+      const newId   = res.body?.data?.id != null ? Number(res.body.data.id) : null;
+      const newName = res.body?.data?.name || name;
+      await _svcLoadFormCategories();
+      if (newId != null && !_svcSelectedCats.find(x => x.id === newId)) {
+        _svcSelectedCats.push({ id: newId, name: newName });
+        _tagRender('svc-cat-tags', _svcSelectedCats, _svcRemoveCat);
+      }
+    } else {
+      loadSvcCategories();
+    }
   } else {
     const msg = Object.values(res.body?.errors || {}).flat()[0] || res.body?.message || 'Failed to create category.';
     alertEl.textContent = msg;
@@ -32060,6 +33550,258 @@ async function submitDsCreate() {
   };
 
   window.openCreateRoleModal = openCreateRoleModal;
+}());
+
+// ── Branch Management ───────────────────────────────────────────────────────
+(function () {
+  let _branches      = [];
+  let _branchSelected  = null;
+  let _branchEditTarget = null;
+
+  function _showModalErr(el, msg) {
+    if (!el) return;
+    el.textContent = msg;
+    el.style.display = 'block';
+  }
+
+  // ── Load + render list ──────────────────────────────────────────────────
+
+  function renderBranchList() {
+    const list = $('#psm-branches-list');
+    if (!list) return;
+    if (_branches.length === 0) {
+      list.innerHTML = '<div class="um-loading">No branches found.</div>';
+      return;
+    }
+
+    list.innerHTML = _branches.map(b => {
+      const isActive = _branchSelected && _branchSelected.id === b.id;
+      return `
+        <div class="um-user-card${isActive ? ' active' : ''}" data-id="${b.id}">
+          <div class="um-avatar branch"><i class="fa fa-code-branch"></i></div>
+          <div class="um-card-info">
+            <div class="um-card-name">${escHtml(b.name)}</div>
+            <div class="um-card-email">${escHtml(b.address || b.phone || b.email || 'No details set')}</div>
+            <div class="um-card-badges">
+              <span class="um-status-badge um-status-${b.is_active ? 'active' : 'inactive'}">${b.is_active ? 'active' : 'inactive'}</span>
+            </div>
+          </div>
+        </div>`;
+    }).join('');
+
+    list.querySelectorAll('.um-user-card').forEach(card => {
+      card.addEventListener('click', () => {
+        const id = parseInt(card.dataset.id);
+        const branch = _branches.find(b => b.id === id);
+        if (branch) selectBranch(branch, card);
+      });
+    });
+  }
+
+  function selectBranch(branch, cardEl) {
+    _branchSelected = branch;
+    $('#psm-branches-list')?.querySelectorAll('.um-user-card').forEach(c => c.classList.remove('active'));
+    if (cardEl) cardEl.classList.add('active');
+    renderBranchDetail(branch);
+  }
+
+  // ── Detail panel ────────────────────────────────────────────────────────
+
+  function renderBranchDetail(branch) {
+    const detail = $('#psm-branches-detail');
+    if (!detail) return;
+
+    const created = branch.created_at ? new Date(branch.created_at).toLocaleDateString() : '—';
+
+    detail.innerHTML = `
+      <div class="um-detail-header">
+        <div class="um-detail-avatar branch"><i class="fa fa-code-branch"></i></div>
+        <div class="um-detail-meta">
+          <div class="um-detail-name">${escHtml(branch.name)}</div>
+          <div class="um-detail-email">${escHtml(branch.address || 'No address set')}</div>
+          <div class="um-detail-joined"><i class="fa fa-calendar-days"></i> Added ${created}</div>
+        </div>
+        <span class="um-status-badge um-status-${branch.is_active ? 'active' : 'inactive'}">${branch.is_active ? 'active' : 'inactive'}</span>
+        <button class="um-role-edit-btn" id="branch-open-edit">
+          <i class="fa fa-pen"></i> Edit Branch
+        </button>
+      </div>
+
+      <div class="um-detail-section">
+        <div class="um-detail-section-title">Contact</div>
+        <div style="font-size:13px;color:var(--text)">Phone: ${escHtml(branch.phone || '—')}</div>
+        <div style="font-size:13px;color:var(--text);margin-top:4px">Email: ${escHtml(branch.email || '—')}</div>
+      </div>
+
+      ${branch.description ? `
+      <div class="um-detail-section">
+        <div class="um-detail-section-title">Description</div>
+        <div style="font-size:13px;color:var(--text)">${escHtml(branch.description)}</div>
+      </div>` : ''}
+
+      <div class="um-detail-actions">
+        <button class="um-remove-btn" id="branch-open-remove"><i class="fa fa-trash"></i> Delete</button>
+      </div>
+    `;
+
+    detail.querySelector('#branch-open-edit')?.addEventListener('click', () => openEditBranchModal(branch));
+    detail.querySelector('#branch-open-remove')?.addEventListener('click', () => removeBranch(branch));
+  }
+
+  // ── Add Branch Modal ────────────────────────────────────────────────────
+
+  function openAddBranchModal() {
+    const modal = $('#branch-add-modal');
+    if (!modal) return;
+    $('#branch-add-name').value = '';
+    $('#branch-add-description').value = '';
+    $('#branch-add-address').value = '';
+    $('#branch-add-phone').value = '';
+    $('#branch-add-email').value = '';
+    $('#branch-add-active').checked = true;
+    $('#branch-add-error').style.display = 'none';
+    modal.style.display = 'flex';
+    setTimeout(() => $('#branch-add-name')?.focus(), 80);
+  }
+
+  function closeAddBranchModal() { const m = $('#branch-add-modal'); if (m) m.style.display = 'none'; }
+
+  async function submitAddBranch() {
+    const name = $('#branch-add-name')?.value?.trim();
+    const errEl = $('#branch-add-error');
+
+    if (!name) { _showModalErr(errEl, 'Please enter a branch name.'); return; }
+    errEl.style.display = 'none';
+    const btn = $('#branch-add-save');
+    btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Adding…';
+
+    const res = await API.branchAdd({
+      name,
+      description: $('#branch-add-description')?.value?.trim() || null,
+      address:     $('#branch-add-address')?.value?.trim() || null,
+      phone:       $('#branch-add-phone')?.value?.trim() || null,
+      email:       $('#branch-add-email')?.value?.trim() || null,
+      is_active:   !!$('#branch-add-active')?.checked,
+    });
+    btn.disabled = false; btn.innerHTML = '<i class="fa fa-check"></i> Add Branch';
+
+    if (res.status === 201) {
+      closeAddBranchModal();
+      await window.loadBranchesForSettings();
+      const newBranch = _branches.find(b => b.id === res.body.data.id);
+      if (newBranch) {
+        const card = $(`#psm-branches-list [data-id="${newBranch.id}"]`);
+        selectBranch(newBranch, card);
+      }
+    } else {
+      _showModalErr(errEl, res.body?.message || 'Failed to add branch.');
+    }
+  }
+
+  // ── Edit Branch Modal ───────────────────────────────────────────────────
+
+  function openEditBranchModal(branch) {
+    _branchEditTarget = branch;
+    const modal = $('#branch-edit-modal');
+    if (!modal) return;
+
+    $('#branch-edit-name').value = branch.name || '';
+    $('#branch-edit-description').value = branch.description || '';
+    $('#branch-edit-address').value = branch.address || '';
+    $('#branch-edit-phone').value = branch.phone || '';
+    $('#branch-edit-email').value = branch.email || '';
+    $('#branch-edit-active').checked = !!branch.is_active;
+    $('#branch-edit-error').style.display = 'none';
+
+    modal.style.display = 'flex';
+  }
+
+  function closeEditBranchModal() { const m = $('#branch-edit-modal'); if (m) m.style.display = 'none'; }
+
+  async function submitEditBranch() {
+    if (!_branchEditTarget) return;
+    const name = $('#branch-edit-name')?.value?.trim();
+    const errEl = $('#branch-edit-error');
+
+    if (!name) { _showModalErr(errEl, 'Please enter a branch name.'); return; }
+    errEl.style.display = 'none';
+    const btn = $('#branch-edit-save');
+    btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
+
+    const res = await API.branchUpdate(_branchEditTarget.id, {
+      name,
+      description: $('#branch-edit-description')?.value?.trim() || null,
+      address:     $('#branch-edit-address')?.value?.trim() || null,
+      phone:       $('#branch-edit-phone')?.value?.trim() || null,
+      email:       $('#branch-edit-email')?.value?.trim() || null,
+      is_active:   !!$('#branch-edit-active')?.checked,
+    });
+    btn.disabled = false; btn.innerHTML = '<i class="fa fa-check"></i> Save Changes';
+
+    if (res.status === 200) {
+      closeEditBranchModal();
+      await window.loadBranchesForSettings();
+      const updated = _branches.find(b => b.id === _branchEditTarget.id);
+      if (updated) {
+        const card = $(`#psm-branches-list [data-id="${updated.id}"]`);
+        selectBranch(updated, card);
+      }
+    } else {
+      _showModalErr(errEl, res.body?.message || 'Failed to save changes.');
+    }
+  }
+
+  // ── Remove ──────────────────────────────────────────────────────────────
+
+  async function removeBranch(branch) {
+    if (!confirm(`Delete the "${branch.name}" branch? This cannot be undone.`)) return;
+
+    const res = await API.branchRemove(branch.id);
+    if (res.status === 200) {
+      await window.loadBranchesForSettings();
+      const detail = $('#psm-branches-detail');
+      if (detail) detail.innerHTML = '<div class="um-detail-empty"><i class="fa fa-code-branch"></i><p>Select a branch to view its details</p></div>';
+    } else {
+      alert(res.body?.message || 'Failed to delete branch.');
+    }
+  }
+
+  // ── Event listeners ─────────────────────────────────────────────────────
+
+  $('#psm-add-branch-btn')?.addEventListener('click', openAddBranchModal);
+
+  $('#branch-add-save')?.addEventListener('click',   submitAddBranch);
+  $('#branch-add-cancel')?.addEventListener('click', closeAddBranchModal);
+  $('#branch-add-close')?.addEventListener('click',  closeAddBranchModal);
+  $('#branch-add-modal')?.addEventListener('click',  e => { if (e.target === e.currentTarget) closeAddBranchModal(); });
+
+  $('#branch-edit-save')?.addEventListener('click',   submitEditBranch);
+  $('#branch-edit-cancel')?.addEventListener('click', closeEditBranchModal);
+  $('#branch-edit-close')?.addEventListener('click',  closeEditBranchModal);
+  $('#branch-edit-modal')?.addEventListener('click',  e => { if (e.target === e.currentTarget) closeEditBranchModal(); });
+
+  // Expose for Settings modal Branches tab
+  window.loadBranchesForSettings = async function() {
+    const list   = $('#psm-branches-list');
+    const detail = $('#psm-branches-detail');
+    if (!list) return;
+    list.innerHTML = '<div class="um-loading"><i class="fa fa-spinner fa-spin"></i> Loading branches…</div>';
+    if (detail) detail.innerHTML = '<div class="um-detail-empty"><i class="fa fa-code-branch"></i><p>Select a branch to view its details</p></div>';
+    _branchSelected = null;
+
+    const res = await API.branchesList();
+    if (res.status !== 200) {
+      list.innerHTML = `<div class="um-loading" style="color:#dc2626"><i class="fa fa-triangle-exclamation"></i> ${res.body?.message || 'Failed to load branches.'}</div>`;
+      return;
+    }
+    _branches = res.body.data || [];
+
+    const count = _branches.length;
+    const badge = $('#psm-branches-count');
+    if (badge) badge.textContent = `${count} branch${count !== 1 ? 'es' : ''}`;
+
+    renderBranchList();
+  };
 }());
 
 // ── Mail ───────────────────────────────────────────────────────────────────

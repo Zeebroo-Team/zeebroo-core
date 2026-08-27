@@ -177,6 +177,29 @@ components:
         id:   { type: integer }
         name: { type: string }
 
+    Branch:
+      type: object
+      properties:
+        id:          { type: integer }
+        name:        { type: string }
+        description: { type: string, nullable: true }
+        address:     { type: string, nullable: true }
+        phone:       { type: string, nullable: true }
+        email:       { type: string, nullable: true }
+        is_active:   { type: boolean }
+        created_at:  { type: string, format: date-time, nullable: true }
+
+    BranchInput:
+      type: object
+      required: [name]
+      properties:
+        name:        { type: string }
+        description: { type: string, nullable: true }
+        address:     { type: string, nullable: true }
+        phone:       { type: string, nullable: true }
+        email:       { type: string, nullable: true }
+        is_active:   { type: boolean }
+
     ProductCard:
       type: object
       properties:
@@ -523,6 +546,74 @@ paths:
                           properties:
                             id:   { type: integer }
                             name: { type: string }
+
+  /branches:
+    get:
+      tags: [Branch management]
+      summary: List branches for the current business
+      responses:
+        '200':
+          description: Branch list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Branch' }
+    post:
+      tags: [Branch management]
+      summary: Create a branch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BranchInput' }
+      responses:
+        '201':
+          description: Branch created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Branch' }
+
+  /branches/{branch}:
+    put:
+      tags: [Branch management]
+      summary: Update a branch
+      parameters:
+        - { name: branch, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BranchInput' }
+      responses:
+        '200':
+          description: Branch updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Branch' }
+    delete:
+      tags: [Branch management]
+      summary: Delete a branch
+      parameters:
+        - { name: branch, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Branch deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
 
   # ─────────────────────────── CATALOG ───────────────────────────
 
