@@ -21,8 +21,8 @@ const API = (() => {
     cashierLogin: (slug, username, password) =>
       publicRequest('POST', '/cashier/login', { slug, username, password }),
     register:           (name, businessName, businessCategory, features, email, password, deviceName) =>
-      request('POST', '/auth/register', { name, business_name: businessName, business_category: businessCategory, features, email, password, password_confirmation: password, device_name: deviceName }),
-    businessCategories: () => request('GET', '/auth/business-categories'),
+      publicRequest('POST', '/auth/register', { name, business_name: businessName, business_category: businessCategory, features, email, password, password_confirmation: password, device_name: deviceName }),
+    businessCategories: () => publicRequest('GET', '/auth/business-categories'),
     me:                 () => request('GET', '/auth/me'),
 
     // Business selection
