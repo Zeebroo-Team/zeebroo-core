@@ -15,6 +15,10 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // Trust all reverse proxies (nginx/Apache) so HTTPS is detected correctly
+        // and session cookies are set with the right Secure/SameSite flags.
+        $middleware->trustProxies(at: '*');
+
         $middleware->web(append: [
             RedirectHrPortalOnlyUsers::class,
         ]);
