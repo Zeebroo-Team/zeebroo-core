@@ -2,8 +2,6 @@
   <img src="public/logo.png" alt="Zeebroo" width="220" />
 </p>
 
-<h1 align="center">Zeebroo</h1>
-
 <p align="center">
   Multi-business operations platform built on <strong>Laravel</strong> with modular domains for POS, products, accounting, HR, and more.
 </p>
