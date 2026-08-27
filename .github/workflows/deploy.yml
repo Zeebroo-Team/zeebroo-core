@@ -1,0 +1,78 @@
+name: Deploy
+
+# Runs after the "Tests" workflow finishes. The deploy job only proceeds when
+# that run was on `main` and went green. Can also be triggered manually.
+on:
+  workflow_run:
+    workflows: ["Tests"]
+    types: [completed]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy to production
+    runs-on: ubuntu-latest
+    environment: production
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main')
+
+    steps:
+      - name: Resolve commit to deploy
+        id: sha
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            echo "sha=${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "sha=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          script_stop: true
+          command_timeout: 20m
+          envs: DEPLOY_SHA
+          script: |
+            set -euo pipefail
+            cd "${{ secrets.DEPLOY_PATH }}"
+
+            echo "==> Deploying commit ${DEPLOY_SHA}"
+            php artisan down --retry=15 --render="errors::503" || true
+
+            # Update code
+            git fetch --all --prune
+            git reset --hard "${DEPLOY_SHA}"
+            git submodule update --init --recursive || true
+
+            # PHP dependencies
+            composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
+
+            # Database
+            php artisan migrate --force
+
+            # Rebuild caches
+            php artisan config:clear
+            php artisan config:cache
+            php artisan route:cache
+            php artisan view:cache
+
+            # Restart workers so they pick up new code
+            php artisan queue:restart || true
+
+            php artisan up
+            echo "==> Deploy complete"
+        env:
+          DEPLOY_SHA: ${{ steps.sha.outputs.sha }}
