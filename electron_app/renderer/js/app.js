@@ -5763,9 +5763,9 @@ $('#bwz-ps-cat-import')?.addEventListener('click', () => {
   activateTab('inventory'); switchInvView('categories');
   setTimeout(() => _catCsvOpen(), 80);
 });
-// Choice: Add manually
+// Choice: Add manually — stay on categories step if modal is closed; advance only on save
 $('#bwz-ps-cat-add')?.addEventListener('click', () => {
-  _bwz.billingActive = true; _bwz.billingNextStep = 'ps:2';
+  _bwz.billingActive = true; _bwz.billingNextStep = 'ps:1';
   $('#bwz-overlay').style.display = 'none';
   activateTab('inventory'); switchInvView('categories');
   setTimeout(() => $('#cat-add-btn')?.click(), 80);
@@ -11927,7 +11927,7 @@ async function _catSave() {
     toast(_cat.editingId ? 'Category updated' : 'Category created', 'success');
     $('#cat-modal').style.display = 'none';
     _catLoad();
-    if (_bwz.billingActive) { _bwz.billingActive = false; _bwzResumeWizard(_bwz.billingNextStep); }
+    if (_bwz.billingActive) { _bwz.billingActive = false; _bwzResumeWizard('ps:2'); } // always advance to Products step after save
   } else {
     const msg = Object.values(res.body?.errors || {}).flat().join(', ') || res.body?.message || 'Failed to save';
     toast(msg, 'error');
