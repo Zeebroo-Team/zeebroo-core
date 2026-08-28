@@ -12809,6 +12809,7 @@
         <div class="bwz-ss-actions" id="bwz-ps-cat-actions">
           <button class="bwz-ss-yes" id="bwz-ps-cat-yes">Yes</button>
           <button class="bwz-ss-no"  id="bwz-ps-cat-skip">No</button>
+          <button class="bwz-ps-ai-btn" id="bwz-ps-cat-ai"><i class="fa fa-wand-magic-sparkles"></i> Generate Using AI</button>
         </div>
         <!-- Choice cards (shown when Yes is clicked) -->
         <div class="bwz-ps-choice" id="bwz-ps-cat-choice" style="display:none">
@@ -14656,5 +14657,62 @@
   document.getElementById('updErrorClose').addEventListener('click', hideModal);
 })();
 </script>
+
+<!-- ── AI Category Generator Modal ──────────────────────────────────────── -->
+<div id="bwz-ai-cat-modal" class="bwz-overlay" style="display:none" role="dialog" aria-modal="true">
+  <div class="bwz-ai-cat-card">
+
+    <!-- Header -->
+    <div class="bwz-ai-cat-head">
+      <div class="bwz-ai-cat-head-icon"><i class="fa fa-wand-magic-sparkles"></i></div>
+      <div>
+        <div class="bwz-ai-cat-head-title">Generate Categories with AI</div>
+        <div class="bwz-ai-cat-head-sub">Describe your products and AI will suggest categories</div>
+      </div>
+      <button class="bwz-ai-cat-close" id="bwz-ai-cat-close"><i class="fa fa-xmark"></i></button>
+    </div>
+
+    <!-- Step indicators -->
+    <div class="bwz-ai-cat-steps">
+      <div class="bwz-ai-step active" id="bwz-ai-step-ind-1"><span class="bwz-ai-step-num">1</span><span class="bwz-ai-step-lbl">Describe</span></div>
+      <div class="bwz-ai-step-conn" id="bwz-ai-step-conn-1"></div>
+      <div class="bwz-ai-step" id="bwz-ai-step-ind-2"><span class="bwz-ai-step-num">2</span><span class="bwz-ai-step-lbl">Preview</span></div>
+      <div class="bwz-ai-step-conn" id="bwz-ai-step-conn-2"></div>
+      <div class="bwz-ai-step" id="bwz-ai-step-ind-3"><span class="bwz-ai-step-num">3</span><span class="bwz-ai-step-lbl">Done</span></div>
+    </div>
+
+    <!-- Step 1: Describe -->
+    <div class="bwz-ai-cat-body" id="bwz-ai-body-1">
+      <label class="bwz-ai-cat-label" for="bwz-ai-cat-desc">What kind of products do you sell?</label>
+      <textarea id="bwz-ai-cat-desc" class="bwz-ai-cat-textarea" rows="4"
+        placeholder="e.g. I sell electronics including mobile phones, laptops, tablets, cables and accessories. I also sell smart home devices and wearables."></textarea>
+      <p class="bwz-ai-cat-hint">Be as specific as you like — the more detail, the better the suggestions.</p>
+      <div class="bwz-ai-cat-foot">
+        <button class="bwz-ai-cat-btn-generate" id="bwz-ai-cat-generate">
+          <i class="fa fa-wand-magic-sparkles"></i> Generate Categories
+        </button>
+      </div>
+    </div>
+
+    <!-- Step 2: Preview (editable list) -->
+    <div class="bwz-ai-cat-body" id="bwz-ai-body-2" style="display:none">
+      <p class="bwz-ai-cat-preview-intro" id="bwz-ai-preview-intro">AI generated <b id="bwz-ai-preview-count">0</b> categories. Review them below — you can remove any you don't need.</p>
+      <div class="bwz-ai-cat-list" id="bwz-ai-cat-list"></div>
+      <div class="bwz-ai-cat-foot">
+        <button class="bwz-ai-cat-btn-back" id="bwz-ai-cat-back"><i class="fa fa-arrow-left"></i> Back</button>
+        <button class="bwz-ai-cat-btn-done" id="bwz-ai-cat-done"><i class="fa fa-check"></i> Add <span id="bwz-ai-done-count">0</span> Categories</button>
+      </div>
+    </div>
+
+    <!-- Step 3: Result -->
+    <div class="bwz-ai-cat-body" id="bwz-ai-body-3" style="display:none">
+      <div class="bwz-ai-cat-result" id="bwz-ai-cat-result"></div>
+      <div class="bwz-ai-cat-foot">
+        <button class="bwz-ai-cat-btn-done" id="bwz-ai-cat-finish"><i class="fa fa-check"></i> Done</button>
+      </div>
+    </div>
+
+  </div>
+</div>
 </body>
 </html>

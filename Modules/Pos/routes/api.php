@@ -167,11 +167,12 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
     Route::delete('discounts/{discount}', [PosProductDiscountApiController::class, 'destroy'])->name('discounts.destroy');
 
     // Product Categories
-    Route::get('categories', [PosProductCategoryApiController::class, 'index'])->name('categories.index');
-    Route::get('categories/parent-options', [PosProductCategoryApiController::class, 'parentOptions'])->name('categories.parent-options');
-    Route::post('categories', [PosProductCategoryApiController::class, 'store'])->name('categories.store');
+    Route::get ('categories',              [PosProductCategoryApiController::class, 'index'])->name('categories.index');
+    Route::get ('categories/parent-options',[PosProductCategoryApiController::class, 'parentOptions'])->name('categories.parent-options');
+    Route::post('categories/generate-ai', [PosProductCategoryApiController::class, 'generateAi'])->name('categories.generate-ai');
+    Route::post('categories',             [PosProductCategoryApiController::class, 'store'])->name('categories.store');
     Route::patch('categories/{category}', [PosProductCategoryApiController::class, 'update'])->name('categories.update');
-    Route::delete('categories/{category}', [PosProductCategoryApiController::class, 'destroy'])->name('categories.destroy');
+    Route::delete('categories/{category}',[PosProductCategoryApiController::class, 'destroy'])->name('categories.destroy');
 
     Route::get('cheques', [PosGrnChequeApiController::class, 'index'])->name('cheques.index');
     Route::post('cheques/{cheque}/clear', [PosGrnChequeApiController::class, 'clear'])->name('cheques.clear');

@@ -5,6 +5,7 @@ namespace Modules\Pos\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Modules\AIBot\Services\GeminiGenerateContentClient;
 use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesPosBusinessForApi;
 use Modules\Product\Models\ProductCategory;
 use Modules\Product\Services\ProductCategoryService;
@@ -13,7 +14,10 @@ class PosProductCategoryApiController extends Controller
 {
     use ResolvesPosBusinessForApi;
 
-    public function __construct(private readonly ProductCategoryService $service) {}
+    public function __construct(
+        private readonly ProductCategoryService $service,
+        private readonly GeminiGenerateContentClient $gemini,
+    ) {}
 
     public function index(Request $request): JsonResponse
     {
@@ -105,6 +109,70 @@ class PosProductCategoryApiController extends Controller
         }
 
         return response()->json(['message' => 'Category deleted.']);
+    }
+
+    public function generateAi(Request $request): JsonResponse
+    {
+        $this->businessOrAbort($request);
+
+        $data = $request->validate([
+            'description' => ['required', 'string', 'max:800'],
+        ]);
+
+        $prompt = <<<PROMPT
+You are a product categorisation expert for a retail/POS system.
+
+Based on the following business or product description, generate a list of relevant product categories that the business should use to organise its inventory.
+
+Business / product description:
+"{$data['description']}"
+
+Rules:
+- Generate between 5 and 12 categories — no more, no less.
+- Category names must be concise: 1–4 words each.
+- Include a short one-sentence description for each category.
+- Return ONLY a valid JSON array — no markdown, no code fences, no extra text.
+- Use this exact structure:
+[
+  {"name": "Category Name", "description": "One-sentence description."},
+  ...
+]
+PROMPT;
+
+        try {
+            $response = $this->gemini->generate([
+                'contents' => [
+                    ['role' => 'user', 'parts' => [['text' => $prompt]]],
+                ],
+                'generationConfig' => ['responseMimeType' => 'application/json'],
+            ]);
+
+            if (! $response->successful()) {
+                $err = $response->json('error.message') ?? ('Gemini HTTP '.$response->status());
+                return response()->json(['message' => $err], 502);
+            }
+
+            $text       = $response->json('candidates.0.content.parts.0.text') ?? '';
+            $categories = json_decode($text, true);
+
+            if (! is_array($categories)) {
+                return response()->json(['message' => 'AI returned an unexpected format. Please try again.'], 500);
+            }
+
+            // Normalise and filter
+            $categories = collect($categories)
+                ->filter(fn ($c) => is_array($c) && ! empty($c['name']))
+                ->map(fn ($c) => [
+                    'name'        => trim((string) ($c['name'] ?? '')),
+                    'description' => trim((string) ($c['description'] ?? '')),
+                ])
+                ->values()
+                ->all();
+
+            return response()->json(['data' => $categories]);
+        } catch (\Exception $e) {
+            return response()->json(['message' => $e->getMessage()], 500);
+        }
     }
 
     private function format(ProductCategory $c): array

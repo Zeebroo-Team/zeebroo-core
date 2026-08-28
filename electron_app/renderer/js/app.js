@@ -5813,6 +5813,153 @@ $('#bwz-ps-product-skip')?.addEventListener('click', () => {
   _bwzClose();
 });
 
+// ── AI Category Generator ──────────────────────────────────────────────────
+let _aiCatRows = [];
+
+function _aiCatSetStep(n) {
+  [1, 2, 3].forEach(i => {
+    const body = $(`#bwz-ai-body-${i}`);
+    const ind  = $(`#bwz-ai-step-ind-${i}`);
+    if (body) body.style.display = i === n ? '' : 'none';
+    if (ind) {
+      ind.className = i < n ? 'bwz-ai-step done' : i === n ? 'bwz-ai-step active' : 'bwz-ai-step';
+    }
+  });
+  [1, 2].forEach(i => {
+    const conn = $(`#bwz-ai-step-conn-${i}`);
+    if (conn) conn.classList.toggle('filled', n > i);
+  });
+}
+
+function _aiCatOpen() {
+  _aiCatRows = [];
+  $('#bwz-ai-cat-desc').value = '';
+  _aiCatSetStep(1);
+  $('#bwz-ai-cat-modal').style.display = 'flex';
+}
+
+function _aiCatClose() {
+  $('#bwz-ai-cat-modal').style.display = 'none';
+  _bwzCheckResume();
+}
+
+function _aiCatUpdateDoneCount() {
+  const n = _aiCatRows.filter(r => !r.removed).length;
+  $('#bwz-ai-done-count').textContent = n;
+  $('#bwz-ai-cat-done').disabled = n === 0;
+}
+
+function _aiCatRenderList() {
+  const list = $('#bwz-ai-cat-list');
+  list.innerHTML = _aiCatRows.map((row, i) => `
+    <div class="bwz-ai-cat-row ${row.removed ? 'removed' : ''}" id="bwz-ai-row-${i}">
+      <div class="bwz-ai-cat-row-body">
+        <div class="bwz-ai-cat-row-name" contenteditable="${row.removed ? 'false' : 'true'}"
+             data-idx="${i}" id="bwz-ai-row-name-${i}">${escHtml(row.name)}</div>
+        <div class="bwz-ai-cat-row-desc" contenteditable="${row.removed ? 'false' : 'true'}"
+             data-idx="${i}" id="bwz-ai-row-desc-${i}">${escHtml(row.description || '')}</div>
+      </div>
+      <button class="bwz-ai-cat-row-remove" data-idx="${i}" title="${row.removed ? 'Restore' : 'Remove'}">
+        <i class="fa ${row.removed ? 'fa-rotate-left' : 'fa-xmark'}"></i>
+      </button>
+    </div>
+  `).join('');
+
+  // Contenteditable sync
+  list.querySelectorAll('[contenteditable]').forEach(el => {
+    el.addEventListener('input', () => {
+      const idx  = +el.dataset.idx;
+      const field = el.id.includes('-name-') ? 'name' : 'description';
+      _aiCatRows[idx][field] = el.textContent.trim();
+    });
+  });
+  // Remove / restore buttons
+  list.querySelectorAll('.bwz-ai-cat-row-remove').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = +btn.dataset.idx;
+      _aiCatRows[idx].removed = !_aiCatRows[idx].removed;
+      _aiCatRenderList();
+      _aiCatUpdateDoneCount();
+    });
+  });
+}
+
+$('#bwz-ps-cat-ai')?.addEventListener('click', () => {
+  _bwz.billingActive    = true;
+  _bwz.billingNextStep  = 'ps:1';
+  _aiCatOpen();
+});
+
+$('#bwz-ai-cat-close')?.addEventListener('click', _aiCatClose);
+$('#bwz-ai-cat-modal')?.addEventListener('click', e => { if (e.target === e.currentTarget) _aiCatClose(); });
+
+$('#bwz-ai-cat-generate')?.addEventListener('click', async () => {
+  const desc = ($('#bwz-ai-cat-desc').value || '').trim();
+  if (!desc) { toast('Please describe your products first', 'error'); return; }
+
+  const btn = $('#bwz-ai-cat-generate');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Generating…';
+
+  const res = await API.generateAiCategories(desc);
+
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fa fa-wand-magic-sparkles"></i> Generate Categories';
+
+  if (res.status !== 200 || !Array.isArray(res.body?.data)) {
+    toast(res.body?.message || 'AI generation failed. Please try again.', 'error');
+    return;
+  }
+
+  _aiCatRows = res.body.data.map(c => ({ name: c.name, description: c.description, removed: false }));
+  $('#bwz-ai-preview-count').textContent = _aiCatRows.length;
+  _aiCatRenderList();
+  _aiCatUpdateDoneCount();
+  _aiCatSetStep(2);
+});
+
+$('#bwz-ai-cat-back')?.addEventListener('click', () => _aiCatSetStep(1));
+
+$('#bwz-ai-cat-done')?.addEventListener('click', async () => {
+  const toCreate = _aiCatRows.filter(r => !r.removed && r.name.trim());
+  if (!toCreate.length) return;
+
+  const btn = $('#bwz-ai-cat-done');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
+
+  let imported = 0, failed = 0;
+  for (const row of toCreate) {
+    const res = await API.createCategory({ name: row.name.trim(), description: row.description || null, is_active: true });
+    if (res.status === 200 || res.status === 201) imported++;
+    else failed++;
+  }
+
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fa fa-check"></i> Done';
+
+  $('#bwz-ai-cat-result').innerHTML = `
+    <div class="bwz-ai-result-icon ${imported ? 'ok' : 'err'}">
+      <i class="fa ${imported ? 'fa-circle-check' : 'fa-triangle-exclamation'}"></i>
+    </div>
+    <div class="bwz-ai-result-title">${imported} ${imported === 1 ? 'category' : 'categories'} added</div>
+    ${failed ? `<div class="bwz-ai-result-sub">${failed} could not be saved</div>` : ''}
+  `;
+  _aiCatSetStep(3);
+  if (imported > 0) {
+    _catLoad();
+    // Advance wizard to Products sub-step on success
+    _bwz.billingActive = false;
+    setTimeout(() => _bwzResumeWizard('ps:2'), 900);
+  }
+});
+
+$('#bwz-ai-cat-finish')?.addEventListener('click', () => {
+  $('#bwz-ai-cat-modal').style.display = 'none';
+  // billingActive already cleared in done handler if import succeeded; call checkResume for cancel path
+  _bwzCheckResume();
+});
+
 // ── Billing Setup standalone check (when bank account already exists) ──────
 async function _checkBillingOnboarding() {
   if (!hasFeature('bill_management')) return;

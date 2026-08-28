@@ -264,11 +264,12 @@ const API = (() => {
     deleteDiscount:        (id)            => request('DELETE', `/discounts/${id}`),
 
     // Product Categories
-    categories:          (q, status, page) => request('GET',    `/categories?q=${encodeURIComponent(q||'')}&status=${status||''}&page=${page||1}`),
-    categoryParentOpts:  (excludeId)       => request('GET',    `/categories/parent-options${excludeId ? '?exclude='+excludeId : ''}`),
-    createCategory:      (body)            => request('POST',   '/categories', body),
-    updateCategory:      (id, body)        => request('PATCH',  `/categories/${id}`, body),
-    deleteCategory:      (id)              => request('DELETE', `/categories/${id}`),
+    categories:             (q, status, page) => request('GET',    `/categories?q=${encodeURIComponent(q||'')}&status=${status||''}&page=${page||1}`),
+    categoryParentOpts:     (excludeId)       => request('GET',    `/categories/parent-options${excludeId ? '?exclude='+excludeId : ''}`),
+    generateAiCategories:   (description)     => request('POST',   '/categories/generate-ai', { description }),
+    createCategory:         (body)            => request('POST',   '/categories', body),
+    updateCategory:         (id, body)        => request('PATCH',  `/categories/${id}`, body),
+    deleteCategory:         (id)              => request('DELETE', `/categories/${id}`),
 
     // Stock Audits
     stockAudits:      (page)          => request('GET',    `/stock-audits?page=${page||1}`),
