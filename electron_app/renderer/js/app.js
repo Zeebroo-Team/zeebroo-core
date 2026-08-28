@@ -5667,6 +5667,17 @@ async function _bwzLoadProductsExisting() {
   renderPsRows('bwz-ps-existing-products', prods, '#10b981');
 }
 
+// Call at the top of any modal close handler that may have been opened from the wizard.
+// If billingActive is true the wizard was waiting — clear the flag and reopen.
+// Returns true when the wizard was resumed so the caller can skip its normal teardown if needed.
+function _bwzCheckResume() {
+  if (!_bwz.billingActive) return false;
+  const next = _bwz.billingNextStep;
+  _bwz.billingActive = false;
+  _bwzResumeWizard(next);
+  return true;
+}
+
 function _bwzResumeWizard(nextStep) {
   if (nextStep === null) { _bwzClose(); return; }
   // String tokens for products sub-steps: 'ps:1', 'ps:2'
@@ -11941,8 +11952,8 @@ async function _catDelete(id, name, childrenCount) {
 
 // Category event listeners
 $('#cat-add-btn')?.addEventListener('click', () => _catOpenModal(null));
-$('#cat-modal-close')?.addEventListener('click',  () => { $('#cat-modal').style.display = 'none'; });
-$('#cat-modal-cancel')?.addEventListener('click', () => { $('#cat-modal').style.display = 'none'; });
+$('#cat-modal-close')?.addEventListener('click',  () => { $('#cat-modal').style.display = 'none'; _bwzCheckResume(); });
+$('#cat-modal-cancel')?.addEventListener('click', () => { $('#cat-modal').style.display = 'none'; _bwzCheckResume(); });
 $('#cat-modal-save')?.addEventListener('click',   _catSave);
 $('#cat-f-name')?.addEventListener('keydown', e => { if (e.key === 'Enter') _catSave(); });
 
@@ -14028,8 +14039,8 @@ async function _prodDelete() {
 $('#inv-new-product-btn')?.addEventListener('click', () => _prodOpenModal(null));
 $('#prod-edit-btn')?.addEventListener('click',        () => _prodOpenModal(_prodActiveId));
 $('#prod-delete-btn')?.addEventListener('click',      _prodDelete);
-$('#prod-modal-close')?.addEventListener('click',   () => { $('#product-modal').style.display = 'none'; });
-$('#prod-modal-cancel')?.addEventListener('click',  () => { $('#product-modal').style.display = 'none'; });
+$('#prod-modal-close')?.addEventListener('click',   () => { $('#product-modal').style.display = 'none'; _bwzCheckResume(); });
+$('#prod-modal-cancel')?.addEventListener('click',  () => { $('#product-modal').style.display = 'none'; _bwzCheckResume(); });
 $('#prod-modal-save')?.addEventListener('click',     () => _prodSave(false));
 $('#prod-modal-save-new')?.addEventListener('click', () => _prodSave(true));
 $('#prod-delivery-goto-settings')?.addEventListener('click', () => {
@@ -14519,6 +14530,7 @@ function _csvOpenModal() {
 function _csvCloseModal() {
   $('#csv-import-modal').style.display = 'none';
   _csvReset();
+  _bwzCheckResume();
 }
 
 function _csvDownloadSample() {
@@ -14691,7 +14703,7 @@ function _catCsvReset() {
 }
 
 function _catCsvOpen() { _catCsvReset(); $('#cat-csv-import-modal').style.display = 'flex'; }
-function _catCsvClose() { $('#cat-csv-import-modal').style.display = 'none'; _catCsvReset(); }
+function _catCsvClose() { $('#cat-csv-import-modal').style.display = 'none'; _catCsvReset(); _bwzCheckResume(); }
 
 function _catCsvHandleFile(file) {
   if (!file || !file.name.match(/\.csv$/i)) { toast('Please select a .csv file', 'error'); return; }
