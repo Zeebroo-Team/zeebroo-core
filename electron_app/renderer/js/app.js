@@ -5695,8 +5695,11 @@ function _bwzResumeWizard(nextStep) {
   // String tokens for products sub-steps: 'ps:1', 'ps:2'
   if (typeof nextStep === 'string' && nextStep.startsWith('ps:')) {
     const n = parseInt(nextStep.split(':')[1]);
+    // _bwzShowProductsPanel() makes the products panel visible, hides others,
+    // sets step indicators, calls _bwzPsGoto(1) and _bwzLoadProductsExisting().
+    // Then override to the correct sub-step.
+    _bwzShowProductsPanel();
     _bwzPsGoto(n);
-    _bwzLoadProductsExisting();
     $('#bwz-overlay').style.display = 'flex';
     return;
   }
