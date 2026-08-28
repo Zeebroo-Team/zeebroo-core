@@ -12071,12 +12071,17 @@ async function _catOpenModal(editId) {
   setTimeout(() => $('#cat-f-name')?.focus(), 60);
 }
 
-async function _catSave() {
-  const btn  = $('#cat-modal-save');
+async function _catSave(andAnother = false) {
+  const btn        = andAnother ? $('#cat-modal-save-another') : $('#cat-modal-save');
+  const saveBtn    = $('#cat-modal-save');
+  const anotherBtn = $('#cat-modal-save-another');
   const name = $('#cat-f-name').value.trim();
   if (!name) { toast('Category name is required', 'error'); return; }
 
-  btn.disabled = true;
+  if (btn) btn.disabled = true;
+  if (saveBtn) saveBtn.disabled = true;
+  if (anotherBtn) anotherBtn.disabled = true;
+
   const body = {
     name,
     description: $('#cat-f-description').value.trim() || null,
@@ -12087,13 +12092,24 @@ async function _catSave() {
   const res = _cat.editingId
     ? await API.updateCategory(_cat.editingId, body)
     : await API.createCategory(body);
-  btn.disabled = false;
+
+  if (saveBtn) saveBtn.disabled = false;
+  if (anotherBtn) anotherBtn.disabled = false;
 
   if (res.status === 200 || res.status === 201) {
     toast(_cat.editingId ? 'Category updated' : 'Category created', 'success');
-    $('#cat-modal').style.display = 'none';
     _catLoad();
-    if (_bwz.billingActive) { _bwz.billingActive = false; _bwzResumeWizard('ps:2'); } // always advance to Products step after save
+
+    if (andAnother && !_cat.editingId) {
+      // Stay open — reset the form for the next category
+      $('#cat-f-name').value = '';
+      $('#cat-f-description').value = '';
+      // Keep parent and active state so user can add siblings quickly
+      setTimeout(() => $('#cat-f-name')?.focus(), 60);
+    } else {
+      $('#cat-modal').style.display = 'none';
+      if (_bwz.billingActive) { _bwz.billingActive = false; _bwzResumeWizard('ps:2'); }
+    }
   } else {
     const msg = Object.values(res.body?.errors || {}).flat().join(', ') || res.body?.message || 'Failed to save';
     toast(msg, 'error');
@@ -12118,10 +12134,11 @@ async function _catDelete(id, name, childrenCount) {
 
 // Category event listeners
 $('#cat-add-btn')?.addEventListener('click', () => _catOpenModal(null));
-$('#cat-modal-close')?.addEventListener('click',  () => { $('#cat-modal').style.display = 'none'; _bwzCheckResume(); });
-$('#cat-modal-cancel')?.addEventListener('click', () => { $('#cat-modal').style.display = 'none'; _bwzCheckResume(); });
-$('#cat-modal-save')?.addEventListener('click',   _catSave);
-$('#cat-f-name')?.addEventListener('keydown', e => { if (e.key === 'Enter') _catSave(); });
+$('#cat-modal-close')?.addEventListener('click',        () => { $('#cat-modal').style.display = 'none'; _bwzCheckResume(); });
+$('#cat-modal-cancel')?.addEventListener('click',       () => { $('#cat-modal').style.display = 'none'; _bwzCheckResume(); });
+$('#cat-modal-save')?.addEventListener('click',         () => _catSave(false));
+$('#cat-modal-save-another')?.addEventListener('click', () => _catSave(true));
+$('#cat-f-name')?.addEventListener('keydown', e => { if (e.key === 'Enter') _catSave(false); });
 
 $('#cat-search')?.addEventListener('input', e => {
   clearTimeout(_catSearchTimer);
