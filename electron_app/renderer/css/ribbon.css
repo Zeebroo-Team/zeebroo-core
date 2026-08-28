@@ -17396,3 +17396,8 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
 #bwz-ss-bill-skip.bwz-ss-bill-skip-done:hover {
   filter: brightness(1.08);
 }
+
+/* ── 3-column variant for choice grids ──────────────────────────────────── */
+.bwz-ps-choice-grid-3 {
+  grid-template-columns: 1fr 1fr 1fr;
+}

@@ -5814,6 +5814,13 @@ $('#bwz-ps-product-import')?.addEventListener('click', () => {
   activateTab('inventory'); switchInvView('products');
   setTimeout(() => _csvOpenModal(), 80);
 });
+// Choice: SQL Dump Import
+$('#bwz-ps-product-dump')?.addEventListener('click', () => {
+  _bwz.billingActive = true; _bwz.billingNextStep = 'ps:2';
+  $('#bwz-overlay').style.display = 'none';
+  activateTab('inventory'); switchInvView('products');
+  setTimeout(() => $('#inv-dump-import-btn')?.click(), 80);
+});
 // Choice: Add manually
 $('#bwz-ps-product-add')?.addEventListener('click', () => {
   _bwz.billingActive = true; _bwz.billingNextStep = 'ps:2';
@@ -41046,5 +41053,13 @@ init();
 
     // Click outside card to close
     ov()?.addEventListener('click', e => { if (e.target === ov()) dimClose(); });
+
+    // Return to wizard when SQL dump modal is closed (if wizard was waiting)
+    ['dim-close', 'dim-btn-done'].forEach(id => {
+      D(id)?.addEventListener('click', () => { setTimeout(_bwzCheckResume, 60); });
+    });
+    ov()?.addEventListener('click', e => {
+      if (e.target === ov()) setTimeout(_bwzCheckResume, 60);
+    });
   });
 })();
