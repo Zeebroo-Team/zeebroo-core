@@ -14179,7 +14179,8 @@ async function _prodSave(andNew = false) {
 
   if (res.status === 200 || res.status === 201) {
     toast(_prod.editingId ? 'Product updated' : 'Product created', 'success');
-    if (andNew && !_prod.editingId) {
+    if (andNew && !_prod.editingId && !_bwz.billingActive) {
+      // Stay in create-another flow only when wizard is not waiting
       invState.loaded = false;
       loadInventory('', 0, 1);
       _prodOpenModal(null);
