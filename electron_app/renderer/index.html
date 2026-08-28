@@ -1645,7 +1645,10 @@
         <button class="home-tab-btn" data-home-view="profit"><i class="fa fa-sack-dollar"></i> Profit</button>
         <button class="home-tab-btn" data-home-view="payroll"><i class="fa fa-user-tie"></i> Payroll</button>
         <button class="home-tab-btn" data-home-view="orders"><i class="fa fa-receipt"></i> Orders</button>
-        <button id="home-subnav-gear" class="home-subnav-gear-btn" title="Customize tabs"><i class="fa fa-gear"></i></button>
+        <div class="home-subnav-right">
+          <button id="home-subnav-setup-wizard" class="home-subnav-action-btn" title="Business setup wizard"><i class="fa fa-wand-magic-sparkles"></i></button>
+          <button id="home-subnav-gear" class="home-subnav-gear-btn" title="Customize tabs"><i class="fa fa-gear"></i></button>
+        </div>
       </div>
 
       <!-- Body: main view + right panel -->
@@ -2492,6 +2495,7 @@
           <div id="inv-cat-filter" class="inv-cat-filter"></div>
           <button class="inv-refresh-btn" id="inv-refresh" title="Refresh"><i class="fa fa-arrows-rotate"></i></button>
           <button class="inv-import-btn" id="inv-import-csv-btn" title="Import products from CSV"><i class="fa fa-file-arrow-up"></i> Import CSV</button>
+          <button class="inv-import-btn" id="inv-dump-import-btn" title="Import products from MySQL backup dump"><i class="fa fa-database"></i> Import from SQL Dump</button>
           <button class="po-add-btn cat-add-btn" id="inv-new-product-btn"><i class="fa fa-plus"></i> New Product</button>
         </div>
         <div class="inv-filter-bar" id="inv-filter-bar">
@@ -3267,6 +3271,7 @@
             <button class="grn-pf-btn" data-cat-status="active">Active</button>
             <button class="grn-pf-btn" data-cat-status="inactive">Inactive</button>
           </div>
+          <button class="inv-import-btn" id="cat-import-csv-btn" title="Import categories from CSV"><i class="fa fa-file-arrow-up"></i> Import CSV</button>
           <button class="po-add-btn cat-add-btn" id="cat-add-btn">
             <i class="fa fa-plus"></i> New Category
           </button>
@@ -10761,6 +10766,71 @@
   </div>
 </div>
 
+<!-- ── CSV Category Import modal ──────────────────────────────────────── -->
+<div id="cat-csv-import-modal" class="bwz-overlay" style="display:none" role="dialog" aria-modal="true">
+  <div class="csv-import-card">
+    <div class="csv-import-header">
+      <div class="csv-import-title"><i class="fa fa-file-arrow-up"></i> Import Categories from CSV</div>
+      <button class="csv-import-close" id="cat-csv-close"><i class="fa fa-xmark"></i></button>
+    </div>
+
+    <div class="csv-step-track">
+      <div class="csv-step active" id="cat-csv-ind-1"><span class="csv-step-num">1</span><span class="csv-step-label">Upload</span></div>
+      <div class="csv-step-line"></div>
+      <div class="csv-step" id="cat-csv-ind-2"><span class="csv-step-num">2</span><span class="csv-step-label">Preview</span></div>
+      <div class="csv-step-line"></div>
+      <div class="csv-step" id="cat-csv-ind-3"><span class="csv-step-num">3</span><span class="csv-step-label">Result</span></div>
+    </div>
+
+    <!-- Step 1: Upload -->
+    <div class="csv-import-body" id="cat-csv-step-1">
+      <div class="csv-dropzone" id="cat-csv-dropzone">
+        <i class="fa fa-cloud-arrow-up csv-dropzone-icon"></i>
+        <p class="csv-dropzone-text">Drag &amp; drop your CSV file here</p>
+        <p class="csv-dropzone-sub">or click to browse</p>
+        <input type="file" id="cat-csv-file-input" accept=".csv,text/csv" style="position:absolute;inset:0;opacity:0;cursor:pointer">
+      </div>
+      <div class="csv-upload-info">
+        <div class="csv-info-item"><i class="fa fa-circle-check"></i> First row must be column headers</div>
+        <div class="csv-info-item"><i class="fa fa-circle-check"></i> Required column: <strong>name</strong></div>
+        <div class="csv-info-item"><i class="fa fa-circle-check"></i> Optional: <strong>description</strong>, <strong>parent_name</strong></div>
+        <div class="csv-info-item"><i class="fa fa-circle-check"></i> Max 500 rows per import</div>
+      </div>
+      <div class="csv-import-footer">
+        <button class="csv-sample-btn" id="cat-csv-download-sample"><i class="fa fa-download"></i> Download Sample CSV</button>
+      </div>
+    </div>
+
+    <!-- Step 2: Preview -->
+    <div class="csv-import-body" id="cat-csv-step-2" style="display:none">
+      <div class="csv-preview-summary" id="cat-csv-preview-summary"></div>
+      <div class="csv-preview-wrap">
+        <table class="csv-preview-tbl" id="cat-csv-preview-tbl">
+          <thead id="cat-csv-preview-thead"></thead>
+          <tbody id="cat-csv-preview-tbody"></tbody>
+        </table>
+      </div>
+      <div class="csv-import-footer">
+        <button class="psm-btn-cancel" id="cat-csv-back-btn"><i class="fa fa-arrow-left"></i> Back</button>
+        <button class="eod-settle-btn" id="cat-csv-import-btn"><i class="fa fa-file-import"></i> Import <span id="cat-csv-import-count"></span> Categories</button>
+      </div>
+    </div>
+
+    <!-- Step 3: Result -->
+    <div class="csv-import-body" id="cat-csv-step-3" style="display:none">
+      <div class="csv-result-summary" id="cat-csv-result-summary"></div>
+      <div class="csv-result-errors" id="cat-csv-result-errors" style="display:none">
+        <div class="csv-result-errors-title"><i class="fa fa-triangle-exclamation"></i> Rows with errors</div>
+        <div class="csv-result-errors-list" id="cat-csv-result-errors-list"></div>
+      </div>
+      <div class="csv-import-footer">
+        <button class="psm-btn-cancel" id="cat-csv-done-btn">Done</button>
+        <button class="eod-settle-btn" id="cat-csv-more-btn"><i class="fa fa-plus"></i> Import More</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ── CSV Customer Import modal ─────────────────────────────────────── -->
 <div id="cust-csv-import-modal" class="bwz-overlay" style="display:none" role="dialog" aria-modal="true">
   <div class="csv-import-card">
@@ -12577,62 +12647,63 @@
 <div id="bwz-overlay" class="bwz-overlay" style="display:none">
   <div class="bwz-card">
 
-    <!-- Step track -->
-    <div class="bwz-track">
-      <div class="bwz-track-step active" data-bwz-dot="1">
-        <div class="bwz-track-circle"><span>1</span></div>
-        <span class="bwz-track-lbl">Account</span>
+    <!-- Step indicator -->
+    <div class="bwz-steps">
+      <div class="bwz-step active" id="bwz-step-1">
+        <div class="bwz-step-circle">1</div>
+        <span class="bwz-step-label">Bank Account</span>
       </div>
-      <div class="bwz-track-line" data-bwz-line="1"></div>
-      <div class="bwz-track-step" data-bwz-dot="2">
-        <div class="bwz-track-circle"><span>2</span></div>
-        <span class="bwz-track-lbl">Bank</span>
+      <div class="bwz-step-connector" id="bwz-step-conn-1"></div>
+      <div class="bwz-step" id="bwz-step-2">
+        <div class="bwz-step-circle">2</div>
+        <span class="bwz-step-label">Billing Setup</span>
       </div>
-      <div class="bwz-track-line" data-bwz-line="2"></div>
-      <div class="bwz-track-step" data-bwz-dot="3">
-        <div class="bwz-track-circle"><span>3</span></div>
-        <span class="bwz-track-lbl">Balance</span>
+      <div class="bwz-step-connector" id="bwz-step-conn-2" style="display:none"></div>
+      <div class="bwz-step" id="bwz-step-3" style="display:none">
+        <div class="bwz-step-circle">3</div>
+        <span class="bwz-step-label">Products</span>
       </div>
     </div>
 
-    <!-- Step 1: Account name & category -->
+    <!-- Panel 1: Bank account form -->
     <div class="bwz-panel" id="bwz-panel-1">
       <div class="bwz-panel-icon"><i class="fa fa-building-columns"></i></div>
       <h2 class="bwz-panel-title">Set up your bank account</h2>
-      <p class="bwz-panel-sub">Every transaction needs a home. Let's add your first account.</p>
-      <div class="bwz-field">
-        <label class="bwz-label">Account Name <span class="bwz-req">*</span></label>
-        <input type="text" id="bwz-f-name" class="bwz-input" placeholder="e.g. Main Business Account" autocomplete="off">
-      </div>
-      <div class="bwz-field">
-        <label class="bwz-label">Account Category <span class="bwz-req">*</span></label>
-        <select id="bwz-f-category" class="bwz-input bwz-select">
-          <option value="operating">Operating Account</option>
-          <option value="savings">Savings Account</option>
-          <option value="petty_cash">Petty Cash</option>
-          <option value="credit_card">Credit Card</option>
-          <option value="payroll">Payroll Account</option>
-          <option value="investment">Investment Account</option>
-        </select>
-      </div>
-    </div>
+      <p class="bwz-panel-sub">Add your account details, banking information, and opening balance.</p>
 
-    <!-- Step 2: Bank details -->
-    <div class="bwz-panel" id="bwz-panel-2" style="display:none">
-      <div class="bwz-panel-icon bwz-panel-icon--purple"><i class="fa fa-landmark"></i></div>
-      <h2 class="bwz-panel-title">Bank information</h2>
-      <p class="bwz-panel-sub">Add your banking details for record keeping and reconciliation.</p>
-      <div class="bwz-field">
-        <label class="bwz-label">Account Type <span class="bwz-req">*</span></label>
-        <select id="bwz-f-bank-type" class="bwz-input bwz-select">
-          <option value="">Loading…</option>
-        </select>
+      <!-- Account info -->
+      <div class="bwz-row">
+        <div class="bwz-field">
+          <label class="bwz-label">Account Name <span class="bwz-req">*</span></label>
+          <input type="text" id="bwz-f-name" class="bwz-input" placeholder="e.g. Main Business Account" autocomplete="off">
+        </div>
+        <div class="bwz-field">
+          <label class="bwz-label">Account Category <span class="bwz-req">*</span></label>
+          <select id="bwz-f-category" class="bwz-input bwz-select">
+            <option value="operating">Operating Account</option>
+            <option value="savings">Savings Account</option>
+            <option value="petty_cash">Petty Cash</option>
+            <option value="credit_card">Credit Card</option>
+            <option value="payroll">Payroll Account</option>
+            <option value="investment">Investment Account</option>
+          </select>
+        </div>
       </div>
-      <div class="bwz-field">
-        <label class="bwz-label">Bank <span class="bwz-opt">(optional)</span></label>
-        <select id="bwz-f-bank" class="bwz-input bwz-select">
-          <option value="">Select a bank…</option>
-        </select>
+
+      <!-- Bank details -->
+      <div class="bwz-row">
+        <div class="bwz-field">
+          <label class="bwz-label">Account Type <span class="bwz-req">*</span></label>
+          <select id="bwz-f-bank-type" class="bwz-input bwz-select">
+            <option value="">Loading…</option>
+          </select>
+        </div>
+        <div class="bwz-field">
+          <label class="bwz-label">Bank <span class="bwz-opt">(optional)</span></label>
+          <select id="bwz-f-bank" class="bwz-input bwz-select">
+            <option value="">Select a bank…</option>
+          </select>
+        </div>
       </div>
       <div class="bwz-row">
         <div class="bwz-field">
@@ -12644,34 +12715,220 @@
           <input type="text" id="bwz-f-branch" class="bwz-input" placeholder="e.g. Colombo City" autocomplete="off">
         </div>
       </div>
-    </div>
 
-    <!-- Step 3: Opening balance -->
-    <div class="bwz-panel" id="bwz-panel-3" style="display:none">
-      <div class="bwz-panel-icon bwz-panel-icon--green"><i class="fa fa-coins"></i></div>
-      <h2 class="bwz-panel-title">Opening balance</h2>
-      <p class="bwz-panel-sub">What is the current balance in this account? You can update this later.</p>
-      <div class="bwz-field">
-        <label class="bwz-label">Current Balance <span class="bwz-req">*</span></label>
-        <div class="bwz-amount-wrap">
-          <span class="bwz-amount-prefix" id="bwz-currency-prefix">0.00</span>
-          <input type="number" id="bwz-f-balance" class="bwz-input bwz-input--amount" value="0" min="0" step="0.01">
+      <!-- Opening balance -->
+      <div class="bwz-row">
+        <div class="bwz-field">
+          <label class="bwz-label">Current Balance <span class="bwz-req">*</span></label>
+          <div class="bwz-amount-wrap">
+            <span class="bwz-amount-prefix" id="bwz-currency-prefix">0.00</span>
+            <input type="number" id="bwz-f-balance" class="bwz-input bwz-input--amount" value="0" min="0" step="0.01">
+          </div>
+        </div>
+        <div class="bwz-field">
+          <label class="bwz-label">Notes <span class="bwz-opt">(optional)</span></label>
+          <textarea id="bwz-f-notes" class="bwz-input bwz-textarea" rows="2" placeholder="Any notes about this account…"></textarea>
         </div>
       </div>
-      <div class="bwz-field">
-        <label class="bwz-label">Notes <span class="bwz-opt">(optional)</span></label>
-        <textarea id="bwz-f-notes" class="bwz-input bwz-textarea" rows="2" placeholder="Any notes about this account…"></textarea>
+    </div>
+
+    <!-- Panel 2: Billing setup — 3 sub-steps -->
+    <div id="bwz-panel-billing" style="display:none">
+
+      <!-- Sub-step indicator -->
+      <div class="bwz-ss-track">
+        <div class="bwz-ss-dot active" id="bwz-ss-dot-1"><span>1</span></div>
+        <div class="bwz-ss-line" id="bwz-ss-line-1"></div>
+        <div class="bwz-ss-dot" id="bwz-ss-dot-2"><span>2</span></div>
+        <div class="bwz-ss-line" id="bwz-ss-line-2"></div>
+        <div class="bwz-ss-dot" id="bwz-ss-dot-3"><span>3</span></div>
+        <div class="bwz-ss-line" id="bwz-ss-line-3"></div>
+        <div class="bwz-ss-dot" id="bwz-ss-dot-4"><span>4</span></div>
       </div>
+
+      <!-- Sub-step 1: Loans -->
+      <div class="bwz-panel bwz-ss-panel" id="bwz-ss-panel-1">
+        <h2 class="bwz-ss-title">Do you have any business loans?</h2>
+        <p class="bwz-ss-desc">Track loan repayments, outstanding balances, and interest schedules in one place.</p>
+        <div class="bwz-ss-actions">
+          <button class="bwz-ss-yes" id="bwz-ss-loan-yes">Yes</button>
+          <button class="bwz-ss-no" id="bwz-ss-loan-skip">No</button>
+        </div>
+        <div class="bwz-ss-existing" id="bwz-ss-existing-loans"></div>
+      </div>
+
+      <!-- Sub-step 2: Rentals -->
+      <div class="bwz-panel bwz-ss-panel" id="bwz-ss-panel-2" style="display:none">
+        <h2 class="bwz-ss-title">Do you have any rental property?</h2>
+        <p class="bwz-ss-desc">Log recurring rental payments and track lease schedules and due dates.</p>
+        <div class="bwz-ss-actions">
+          <button class="bwz-ss-yes" id="bwz-ss-rental-yes">Yes</button>
+          <button class="bwz-ss-no" id="bwz-ss-rental-skip">No</button>
+        </div>
+        <div class="bwz-ss-existing" id="bwz-ss-existing-rentals"></div>
+      </div>
+
+      <!-- Sub-step 3: Properties -->
+      <div class="bwz-panel bwz-ss-panel" id="bwz-ss-panel-3" style="display:none">
+        <h2 class="bwz-ss-title">Does your business own any properties?</h2>
+        <p class="bwz-ss-desc">Register business-owned properties to link them to rental agreements and assets.</p>
+        <div class="bwz-ss-actions">
+          <button class="bwz-ss-yes" id="bwz-ss-property-yes">Yes</button>
+          <button class="bwz-ss-no" id="bwz-ss-property-skip">No</button>
+        </div>
+        <div class="bwz-ss-existing" id="bwz-ss-existing-properties"></div>
+      </div>
+
+      <!-- Sub-step 4: Bills -->
+      <div class="bwz-panel bwz-ss-panel" id="bwz-ss-panel-4" style="display:none">
+        <h2 class="bwz-ss-title">How are your bills?</h2>
+        <p class="bwz-ss-desc">Pick a common bill type to add, or skip for now.</p>
+        <div class="bwz-ss-existing" id="bwz-ss-existing-bills-rentals"></div>
+        <div class="bwz-ss-existing" id="bwz-ss-existing-bills-properties"></div>
+        <div style="text-align:center;margin-top:8px">
+          <button class="bwz-ss-no" id="bwz-ss-bill-skip" style="min-width:120px">Next</button>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Panel 3: Products setup (shown only when stock_management / product_management enabled) -->
+    <div id="bwz-panel-products" style="display:none">
+
+      <!-- Sub-step indicator: 2 dots -->
+      <div class="bwz-ss-track">
+        <div class="bwz-ss-dot active" id="bwz-ps-dot-1"><span>1</span></div>
+        <div class="bwz-ss-line" id="bwz-ps-line-1"></div>
+        <div class="bwz-ss-dot" id="bwz-ps-dot-2"><span>2</span></div>
+      </div>
+
+      <!-- Sub-step 1: Categories -->
+      <div class="bwz-panel bwz-ss-panel" id="bwz-ps-panel-1">
+        <h2 class="bwz-ss-title">Do you have product categories?</h2>
+        <p class="bwz-ss-desc">Organise your products into categories for easier filtering and reporting.</p>
+        <div class="bwz-ss-actions">
+          <button class="bwz-ss-yes" id="bwz-ps-cat-yes">Yes</button>
+          <button class="bwz-ss-no"  id="bwz-ps-cat-skip">No</button>
+        </div>
+        <div class="bwz-ss-existing" id="bwz-ps-existing-cats"></div>
+      </div>
+
+      <!-- Sub-step 2: Products -->
+      <div class="bwz-panel bwz-ss-panel" id="bwz-ps-panel-2" style="display:none">
+        <h2 class="bwz-ss-title">Ready to add your first product?</h2>
+        <p class="bwz-ss-desc">Add your products, set prices and stock levels to start selling right away.</p>
+        <div class="bwz-ss-actions">
+          <button class="bwz-ss-yes" id="bwz-ps-product-yes">Yes, add product</button>
+          <button class="bwz-ss-no"  id="bwz-ps-product-skip">Skip for now</button>
+        </div>
+        <div class="bwz-ss-existing" id="bwz-ps-existing-products"></div>
+      </div>
+
     </div>
 
     <!-- Footer -->
     <div class="bwz-footer">
-      <button class="bwz-btn-skip" id="bwz-skip-btn"><i class="fa fa-forward-step"></i> Skip for now</button>
+      <button class="bwz-btn-skip" id="bwz-billing-skip-btn" style="display:none"><i class="fa fa-forward-step"></i> Set up later</button>
       <div class="bwz-footer-right">
-        <button class="bwz-btn-back" id="bwz-back-btn" style="display:none"><i class="fa fa-arrow-left"></i> Back</button>
-        <button class="bwz-btn-next" id="bwz-next-btn">Next <i class="fa fa-arrow-right"></i></button>
-        <button class="bwz-btn-next" id="bwz-submit-btn" style="display:none"><i class="fa fa-check"></i> Create Account</button>
+        <button class="bwz-btn-next" id="bwz-submit-btn"><i class="fa fa-check"></i> Create Account</button>
       </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── SQL Dump Import Modal ─────────────────────────────────────────────── -->
+<div id="dump-import-overlay" style="display:none;position:fixed;inset:0;z-index:99990;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center" role="dialog" aria-modal="true">
+  <div class="dim-card" id="dim-card">
+
+    <!-- Header -->
+    <div class="dim-head">
+      <div class="dim-head-icon"><i class="fa fa-database"></i></div>
+      <div class="dim-head-text">
+        <div class="dim-head-title">Import Products from SQL Dump</div>
+        <div class="dim-head-sub">AI-assisted MySQL backup parser</div>
+      </div>
+      <button class="dim-close" id="dim-close" title="Close"><i class="fa fa-xmark"></i></button>
+    </div>
+
+    <!-- Step track -->
+    <div class="dim-steps" id="dim-steps">
+      <div class="dim-step active" id="dim-st-1"><span>1</span> Upload</div>
+      <div class="dim-step-line"></div>
+      <div class="dim-step" id="dim-st-2"><span>2</span> Analyse</div>
+      <div class="dim-step-line"></div>
+      <div class="dim-step" id="dim-st-3"><span>3</span> Map Columns</div>
+      <div class="dim-step-line"></div>
+      <div class="dim-step" id="dim-st-4"><span>4</span> Preview</div>
+      <div class="dim-step-line"></div>
+      <div class="dim-step" id="dim-st-5"><span>5</span> Import</div>
+    </div>
+
+    <!-- Step 1: Upload -->
+    <div class="dim-body" id="dim-panel-1">
+      <div class="dim-dropzone" id="dim-dropzone">
+        <div class="dim-dz-icon"><i class="fa fa-cloud-arrow-up"></i></div>
+        <div class="dim-dz-title">Drop your MySQL dump file here</div>
+        <div class="dim-dz-sub">Accepts <strong>.sql</strong>, <strong>.dump</strong>, or plain text MySQL export</div>
+        <label class="dim-dz-btn" for="dim-file-input"><i class="fa fa-folder-open"></i> Choose File</label>
+        <input type="file" id="dim-file-input" accept=".sql,.dump,.txt" style="display:none">
+        <div class="dim-dz-note" id="dim-file-name" style="display:none"></div>
+      </div>
+      <div class="dim-alert" id="dim-alert-1" style="display:none"></div>
+    </div>
+
+    <!-- Step 2: Analysing -->
+    <div class="dim-body" id="dim-panel-2" style="display:none">
+      <div class="dim-analyse-wrap">
+        <div class="dim-analyse-icon"><i class="fa fa-microchip-ai"></i></div>
+        <div class="dim-analyse-title" id="dim-analyse-title">Reading file…</div>
+        <div class="dim-analyse-bar"><div class="dim-analyse-fill" id="dim-analyse-fill"></div></div>
+        <div class="dim-analyse-log" id="dim-analyse-log"></div>
+      </div>
+    </div>
+
+    <!-- Step 3: Map Columns -->
+    <div class="dim-body" id="dim-panel-3" style="display:none">
+      <div class="dim-map-intro">
+        <i class="fa fa-microchip-ai"></i>
+        <span>AI detected <strong id="dim-rows-count">0</strong> rows in <strong id="dim-table-name">—</strong>.
+        Map the columns to product fields.</span>
+      </div>
+      <div class="dim-map-grid" id="dim-map-grid">
+        <!-- rows injected by JS: dump column → product field select -->
+      </div>
+      <div class="dim-alert" id="dim-alert-3" style="display:none"></div>
+    </div>
+
+    <!-- Step 4: Preview -->
+    <div class="dim-body dim-body--scroll" id="dim-panel-4" style="display:none">
+      <div class="dim-preview-info">Showing first <strong id="dim-preview-count">10</strong> of <strong id="dim-total-count">0</strong> products to import.</div>
+      <div class="dim-preview-wrap">
+        <table class="dim-preview-table" id="dim-preview-table">
+          <thead id="dim-preview-thead"></thead>
+          <tbody id="dim-preview-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Step 5: Import progress -->
+    <div class="dim-body" id="dim-panel-5" style="display:none">
+      <div class="dim-import-wrap">
+        <div class="dim-import-icon" id="dim-import-icon"><i class="fa fa-gear fa-spin"></i></div>
+        <div class="dim-import-status" id="dim-import-status">Importing…</div>
+        <div class="dim-import-counter" id="dim-import-counter">0 / 0</div>
+        <div class="dim-analyse-bar"><div class="dim-analyse-fill" id="dim-import-fill"></div></div>
+        <div class="dim-import-results" id="dim-import-results" style="display:none"></div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="dim-footer">
+      <button class="dim-btn-back" id="dim-btn-back" style="display:none"><i class="fa fa-arrow-left"></i> Back</button>
+      <div style="flex:1"></div>
+      <button class="dim-btn-next" id="dim-btn-next" disabled><i class="fa fa-arrow-right"></i> Next</button>
+      <button class="dim-btn-import" id="dim-btn-import" style="display:none"><i class="fa fa-download"></i> Import Products</button>
+      <button class="dim-btn-done" id="dim-btn-done" style="display:none"><i class="fa fa-check"></i> Done</button>
     </div>
 
   </div>

@@ -5221,7 +5221,7 @@ function showApp() {
   if (typeof window.hscInit === 'function') window.hscInit();
   // Give one frame for layout + title update before activating Home
   requestAnimationFrame(() => activateTab('home'));
-  // Check if bank account onboarding is needed
+  // Check if bank account / billing onboarding is needed
   _checkBankOnboarding();
   // Load business + branch switchers
   _bizSwInit();
@@ -5236,16 +5236,34 @@ function showApp() {
 }
 
 // ── Bank Account Setup Wizard ──────────────────────────────────────────────
-const _bwz = { step: 1, banks: [], bankTypes: [] };
+const _bwz = { banks: [], bankTypes: [], billingActive: false, billingNextStep: null };
 
 async function _checkBankOnboarding() {
   const res = await API.accounts();
   if (res.status !== 200) return;
-  if ((res.body?.data || []).length === 0) _bankWizOpen();
+  if ((res.body?.data || []).length > 0) {
+    // Bank already set up — only check billing
+    _checkBillingOnboarding();
+    return;
+  }
+  _bankWizOpen();
 }
 
 async function _bankWizOpen() {
-  _bwz.step = 1;
+  // Ensure panel-1 is visible and billing panel is hidden
+  $('#bwz-panel-1').style.display          = '';
+  $('#bwz-panel-billing').style.display    = 'none';
+  $('#bwz-submit-btn').style.display       = '';
+  $('#bwz-billing-skip-btn').style.display = 'none';
+  // Reset step indicator to step 1
+  $('#bwz-step-1').className = 'bwz-step active';
+  $('#bwz-step-2').className = 'bwz-step';
+  $('#bwz-step-3').className = 'bwz-step';
+  $('#bwz-step-conn-1').classList.remove('filled');
+  $('#bwz-step-conn-2').classList.remove('filled');
+  const hasProducts = _bwzHasProductsStep();
+  $('#bwz-step-conn-2').style.display = hasProducts ? '' : 'none';
+  $('#bwz-step-3').style.display      = hasProducts ? '' : 'none';
   // Reset all fields
   $('#bwz-f-name').value     = '';
   $('#bwz-f-category').value = 'operating';
@@ -5260,7 +5278,6 @@ async function _bankWizOpen() {
   const sym = state.currency ? state.currency.split(' ')[0] : '';
   $('#bwz-currency-prefix').textContent = sym || '0.00';
 
-  _bwzSetStep(1);
   $('#bwz-overlay').style.display = 'flex';
   setTimeout(() => $('#bwz-f-name').focus(), 80);
 
@@ -5279,29 +5296,9 @@ async function _bankWizOpen() {
   }
 }
 
-function _bwzSetStep(n) {
-  _bwz.step = n;
-  document.querySelectorAll('[data-bwz-dot]').forEach(dot => {
-    const num = Number(dot.dataset.bwzDot);
-    dot.classList.toggle('active', num === n);
-    dot.classList.toggle('done',   num < n);
-  });
-  document.querySelectorAll('[data-bwz-line]').forEach(line => {
-    line.classList.toggle('filled', Number(line.dataset.bwzLine) < n);
-  });
-  ['1','2','3'].forEach(i => {
-    const p = $(`#bwz-panel-${i}`);
-    if (p) p.style.display = (i === String(n)) ? '' : 'none';
-  });
-  const back   = $('#bwz-back-btn');
-  const next   = $('#bwz-next-btn');
-  const submit = $('#bwz-submit-btn');
-  if (back)   back.style.display   = n > 1   ? '' : 'none';
-  if (next)   next.style.display   = n < 3   ? '' : 'none';
-  if (submit) submit.style.display = n === 3 ? '' : 'none';
-}
-
 async function _bwzSubmit() {
+  const name = $('#bwz-f-name').value.trim();
+  if (!name) { toast('Enter an account name', 'error'); $('#bwz-f-name').focus(); return; }
   const bankTypeId = Number($('#bwz-f-bank-type').value);
   if (!bankTypeId) { toast('Select an account type', 'error'); return; }
   const balance = parseFloat($('#bwz-f-balance').value) || 0;
@@ -5316,7 +5313,7 @@ async function _bwzSubmit() {
   btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Creating…';
 
   const res = await API.createAccount({
-    account_name:        $('#bwz-f-name').value.trim(),
+    account_name:        name,
     category:            $('#bwz-f-category').value,
     bank_type_id:        bankTypeId,
     bank_id:             bankId,
@@ -5337,27 +5334,433 @@ async function _bwzSubmit() {
     return;
   }
 
-  $('#bwz-overlay').style.display = 'none';
   toast('Bank account created', 'success');
   // Refresh the account dropdown so the new account appears immediately
   _posAccountsCache = null;
   loadPosAccounts();
+  // Always offer billing setup as step 2 after the bank account is created
+  _bwzShowBillingPanel();
 }
 
-// Wire wizard buttons once on page load
-$('#bwz-skip-btn')?.addEventListener('click', () => { $('#bwz-overlay').style.display = 'none'; });
-$('#bwz-back-btn')?.addEventListener('click', () => { if (_bwz.step > 1) _bwzSetStep(_bwz.step - 1); });
-$('#bwz-next-btn')?.addEventListener('click', () => {
-  if (_bwz.step === 1) {
-    const name = $('#bwz-f-name').value.trim();
-    if (!name) { toast('Enter an account name', 'error'); $('#bwz-f-name').focus(); return; }
+function _bwzShowBillingPanel() {
+  $('#bwz-panel-1').style.display          = 'none';
+  $('#bwz-panel-billing').style.display    = '';
+  $('#bwz-panel-products').style.display   = 'none';
+  $('#bwz-submit-btn').style.display       = 'none';
+  $('#bwz-billing-skip-btn').style.display = '';
+  // Top step indicator: step 1 done, step 2 active; step 3 visible only if feature enabled
+  $('#bwz-step-1').className = 'bwz-step done';
+  $('#bwz-step-2').className = 'bwz-step active';
+  $('#bwz-step-3').className = 'bwz-step';
+  $('#bwz-step-conn-1').classList.add('filled');
+  $('#bwz-step-conn-2').classList.remove('filled');
+  const hasProducts = _bwzHasProductsStep();
+  $('#bwz-step-conn-2').style.display = hasProducts ? '' : 'none';
+  $('#bwz-step-3').style.display      = hasProducts ? '' : 'none';
+  // Start at billing sub-step 1 and load existing records
+  _bwzSsGoto(1);
+  _bwzLoadExisting();
+}
+
+async function _bwzLoadExisting() {
+  const [loansRes, rentalsRes, propsRes, billsRes] = await Promise.all([
+    API.loans(), API.rentalList(), API.propertyList(), API.bills(),
+  ]);
+
+  // Row style — steps 1, 2, 3
+  function renderRows(containerId, items, dotColor) {
+    const el = $(`#${containerId}`);
+    if (!el) return;
+    if (!items.length) { el.innerHTML = ''; return; }
+    el.innerHTML = `<div class="bwz-ss-existing-label">Already added</div>
+      <div class="bwz-ss-existing-list">` +
+      items.map(item => {
+        const name = escHtml(item.name || item.property_name || item.account_name || '—');
+        const meta = item.monthly_fmt || item.cost_fmt || item.borrowed_amount_fmt || '';
+        return `<div class="bwz-ss-existing-row">
+          <div class="bwz-ss-existing-dot" style="background:${dotColor}"></div>
+          <span class="bwz-ss-existing-name">${name}</span>
+          ${meta ? `<span class="bwz-ss-existing-meta">${escHtml(String(meta))}</span>` : ''}
+        </div>`;
+      }).join('') + `</div>`;
   }
-  if (_bwz.step === 2) {
-    if (!$('#bwz-f-bank-type').value) { toast('Select an account type', 'error'); return; }
+
+  // Hub-and-spoke diagram — step 4: each item = center, 5 bill types orbit around it
+  const HUB_BILLS = [
+    { name: 'Water',    icon: 'fa-droplet',  bg: 'linear-gradient(135deg,#3b82f6,#1d4ed8)', billName: 'Water Bill',      category: 'water'       },
+    { name: 'Electric', icon: 'fa-bolt',      bg: 'linear-gradient(135deg,#f59e0b,#d97706)', billName: 'Electricity Bill', category: 'electricity' },
+    { name: 'Gas',      icon: 'fa-fire',      bg: 'linear-gradient(135deg,#ef4444,#b91c1c)', billName: 'Gas Bill',         category: 'gas'         },
+    { name: 'Wastes',   icon: 'fa-trash-can', bg: 'linear-gradient(135deg,#6b7280,#374151)', billName: 'Waste Bill',       category: 'waste'       },
+    { name: 'Others',   icon: 'fa-ellipsis',  bg: 'linear-gradient(135deg,#8b5cf6,#6d28d9)', billName: 'Other Bill',       category: 'other'       },
+  ];
+  // Hub geometry: button is exactly 38×38 (circle), so translate(-50%,-50%) places circle-center at (CX+R·cos, CY+R·sin)
+  const CX = 110, CY = 110, R = 82;
+  const CENTER_R = 26; // half of 52px center circle
+  const SPOKE_R  = 19; // half of 38px spoke circle
+
+  const allBills = billsRes.status === 200 ? (billsRes.body?.data || []) : [];
+
+  // items = [{ item, color, icon, assignType }, ...], bills = full bills array
+  function renderCards(containerId, taggedItems) {
+    const el = $(`#${containerId}`);
+    if (!el) return;
+    if (!taggedItems.length) { el.innerHTML = ''; return; }
+
+    // ── Helper: find bills already linked to this item + category ───
+    const idKey = { rental: 'rental_id', property: 'property_id' };
+    function matchedBills(assignType, itemId, category) {
+      const id = Number(itemId);
+      return allBills.filter(b =>
+        b.assignment_type === assignType &&
+        Number(b[idKey[assignType]] ?? b.assign_id ?? -1) === id &&
+        b.bill_category === category
+      );
+    }
+    function billSummaryJson(bills) {
+      return JSON.stringify(bills.map(b => ({
+        name:   b.name || '',
+        amt:    b.amount_fmt || '',
+        cadence: b.cadence || '',
+        overdue: !!b.overdue,
+      })));
+    }
+
+    // ── Helper: common spoke/pill button attrs ───────────────────────
+    function spokeAttrs(bill, assignType, itemId) {
+      const mb = matchedBills(assignType, itemId, bill.category);
+      return `data-bill-name="${escHtml(bill.billName)}" data-bill-cat="${escHtml(bill.category)}" data-assign-type="${escHtml(assignType)}" data-assign-id="${escHtml(itemId)}" data-existing='${billSummaryJson(mb)}' title="${escHtml(bill.billName)}"`;
+    }
+
+    if (taggedItems.length > 2) {
+      // ── List mode: compact rows when > 2 items ────────────────────
+      el.innerHTML = `<div class="bwz-bill-list">` +
+        taggedItems.map(({ item, color, icon, assignType }, idx) => {
+          const name   = item.name || item.property_name || item.account_name || '—';
+          const itemId = String(item.id || '');
+          const pills  = HUB_BILLS.map(bill => {
+            const mb = matchedBills(assignType, itemId, bill.category);
+            return `<button class="bwz-hub-spoke bwz-bill-pill${mb.length ? ' has-bills' : ''}" ${spokeAttrs(bill, assignType, itemId)}>
+               <div class="bwz-hub-spoke-circle" style="background:${bill.bg}"><i class="fa ${bill.icon}"></i></div>
+               <span class="bwz-hub-spoke-label">${escHtml(bill.name)}</span>
+               ${mb.length ? `<span class="bwz-pill-badge">${mb.length}</span>` : ''}
+             </button>`;
+          }).join('');
+          return `<div class="bwz-bill-list-row" style="animation-delay:${idx * 0.06}s">
+            <div class="bwz-bill-list-item">
+              <div class="bwz-bill-list-dot" style="background:${color}"><i class="fa ${icon}"></i></div>
+              <span class="bwz-bill-list-name" title="${escHtml(name)}">${escHtml(name)}</span>
+            </div>
+            <div class="bwz-bill-pill-row">${pills}</div>
+          </div>`;
+        }).join('') + `</div>`;
+
+    } else {
+      // ── Hub mode: full pentagon diagram for ≤ 2 items ────────────
+      el.innerHTML = `<div class="bwz-hub-row">` +
+        taggedItems.map(({ item, color, icon, assignType }, idx) => {
+          const name   = item.name || item.property_name || item.account_name || '—';
+          const meta   = item.cost_fmt || item.amount_fmt || item.monthly_fmt || '';
+          const itemId = String(item.id || '');
+
+          let svgLines = '';
+          const spokes = HUB_BILLS.map((bill, i) => {
+            const a  = (i * 72 - 90) * Math.PI / 180;
+            const sx = CX + R * Math.cos(a);
+            const sy = CY + R * Math.sin(a);
+            const ux = Math.cos(a), uy = Math.sin(a);
+            svgLines += `<line x1="${(CX + ux * CENTER_R).toFixed(1)}" y1="${(CY + uy * CENTER_R).toFixed(1)}" x2="${(sx - ux * SPOKE_R).toFixed(1)}" y2="${(sy - uy * SPOKE_R).toFixed(1)}" stroke="var(--border)" stroke-width="1.5" stroke-dasharray="4 3" stroke-linecap="round"/>`;
+            const mb = matchedBills(assignType, itemId, bill.category);
+            return `<button class="bwz-hub-spoke${mb.length ? ' has-bills' : ''}" style="left:${sx.toFixed(1)}px;top:${sy.toFixed(1)}px" ${spokeAttrs(bill, assignType, itemId)}>
+              <div class="bwz-hub-spoke-circle" style="background:${bill.bg}"><i class="fa ${bill.icon}"></i></div>
+              <span class="bwz-hub-spoke-label">${escHtml(bill.name)}</span>
+              ${mb.length ? `<span class="bwz-pill-badge">${mb.length}</span>` : ''}
+            </button>`;
+          }).join('');
+
+          return `<div class="bwz-hub" style="animation-delay:${idx * 0.12}s">
+            <svg class="bwz-hub-svg" width="220" height="220" xmlns="http://www.w3.org/2000/svg">${svgLines}</svg>
+            <div class="bwz-hub-center">
+              <div class="bwz-hub-center-circle" style="background:${color}"><i class="fa ${icon}"></i></div>
+              <span class="bwz-hub-center-label" title="${escHtml(name)}">${escHtml(name)}</span>
+              ${meta ? `<span class="bwz-hub-center-meta">${escHtml(meta)}</span>` : ''}
+            </div>
+            ${spokes}
+          </div>`;
+        }).join('') + `</div>`;
+    }
+
+    // Wire spoke clicks — pre-fill name, category, and assignment in the bill modal
+    el.querySelectorAll('.bwz-hub-spoke').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const billName   = btn.dataset.billName   || '';
+        const billCat    = btn.dataset.billCat    || '';
+        const assignType = btn.dataset.assignType || 'none';
+        const assignId   = btn.dataset.assignId   || '';
+
+        _bwz.billingActive = true; _bwz.billingNextStep = 4; // return to step 4 after save
+        $('#bwz-overlay').style.display = 'none';
+        activateTab('finance'); switchFinView('bills');
+
+        await new Promise(r => setTimeout(r, 80)); // let view switch settle
+        await openBillCreateModal();                // resets form + loads targets
+
+        // 1. Name
+        if (billName) $('#bill-name').value = billName;
+
+        // 2. Bill category
+        if (billCat) {
+          $('#bill-category').value = billCat;
+          $('#bill-cat-other-wrap').style.display = billCat === 'other' ? '' : 'none';
+        }
+
+        // 3. Assignment — type dropdown → populate target list → select item
+        if (assignType && assignType !== 'none') {
+          $('#bill-assign-type').value = assignType;
+          syncAssignTarget(assignType);              // populates #bill-assign-target from already-loaded billData
+          if (assignId) $('#bill-assign-target').value = assignId;
+        }
+
+        // Move focus to amount so the user just types the amount and saves
+        $('#bill-amount').focus();
+      });
+    });
+
+    // ── Hover tooltip: show existing bill summary ────────────────────
+    let _bwzTip = null;
+    function _showBillTip(btn, rect) {
+      _hideBillTip();
+      let existing = [];
+      try { existing = JSON.parse(btn.dataset.existing || '[]'); } catch(e) {}
+      if (!existing.length) return;
+      const tip = document.createElement('div');
+      tip.className = 'bwz-bill-tip';
+      tip.innerHTML = existing.map(b => `
+        <div class="bwz-bill-tip-row">
+          <span class="bwz-bill-tip-name">${escHtml(b.name || '—')}</span>
+          <span class="bwz-bill-tip-amt ${b.overdue ? 'overdue' : ''}">${escHtml(b.amt || '')}${b.cadence ? ' · ' + escHtml(b.cadence) : ''}</span>
+        </div>`).join('');
+      document.body.appendChild(tip);
+      _bwzTip = tip;
+      // Position above the button
+      const tr = tip.getBoundingClientRect();
+      let left = rect.left + rect.width / 2 - tr.width / 2;
+      let top  = rect.top  - tr.height - 8;
+      if (left < 6) left = 6;
+      if (left + tr.width > window.innerWidth - 6) left = window.innerWidth - tr.width - 6;
+      if (top < 6) top = rect.bottom + 8;
+      tip.style.left = left + 'px';
+      tip.style.top  = top  + 'px';
+      tip.style.opacity = '1';
+    }
+    function _hideBillTip() {
+      if (_bwzTip) { _bwzTip.remove(); _bwzTip = null; }
+    }
+    el.querySelectorAll('.bwz-hub-spoke').forEach(btn => {
+      btn.addEventListener('mouseenter', () => _showBillTip(btn, btn.getBoundingClientRect()));
+      btn.addEventListener('mouseleave', _hideBillTip);
+    });
   }
-  if (_bwz.step < 3) _bwzSetStep(_bwz.step + 1);
+
+  const loans      = loansRes.status   === 200 ? (loansRes.body?.data   || []) : [];
+  const rentals    = rentalsRes.status === 200 ? (rentalsRes.body?.data  || []) : [];
+  const properties = propsRes.status   === 200 ? (propsRes.body?.data    || []) : [];
+
+  // Steps 1–3: row lists
+  renderRows('bwz-ss-existing-loans',      loans,      '#8b5cf6');
+  renderRows('bwz-ss-existing-rentals',    rentals,    '#f59e0b');
+  renderRows('bwz-ss-existing-properties', properties, '#10b981');
+
+  // Step 4: rentals + properties merged into one hub row, each with assignType for auto-fill
+  const billHubItems = [
+    ...rentals.map(item    => ({ item, color: '#f59e0b', icon: 'fa-house',     assignType: 'rental'   })),
+    ...properties.map(item => ({ item, color: '#10b981', icon: 'fa-building',  assignType: 'property' })),
+  ];
+  renderCards('bwz-ss-existing-bills-rentals', billHubItems);
+  const billsPropsEl = $('#bwz-ss-existing-bills-properties');
+  if (billsPropsEl) billsPropsEl.innerHTML = '';
+}
+
+// ── Billing sub-step navigation ────────────────────────────────────────────
+function _bwzSsGoto(n) {
+  [1, 2, 3, 4].forEach(i => {
+    const panel = $(`#bwz-ss-panel-${i}`);
+    const dot   = $(`#bwz-ss-dot-${i}`);
+    if (panel) panel.style.display = (i === n) ? '' : 'none';
+    if (dot) {
+      dot.className = i < n ? 'bwz-ss-dot done'
+                    : i === n ? 'bwz-ss-dot active'
+                    : 'bwz-ss-dot';
+    }
+    if (i < 4) {
+      const line = $(`#bwz-ss-line-${i}`);
+      if (line) line.classList.toggle('filled', i < n);
+    }
+  });
+}
+
+function _bwzClose() {
+  $('#bwz-overlay').style.display = 'none';
+  _bwz.billingActive = false;
+  _bwz.billingNextStep = null;
+}
+
+// Whether the products step should show
+function _bwzHasProductsStep() {
+  return hasFeature('stock_management') || hasFeature('product_management');
+}
+
+// ── Products panel (Step 3) ────────────────────────────────────────────────
+function _bwzShowProductsPanel() {
+  $('#bwz-panel-1').style.display          = 'none';
+  $('#bwz-panel-billing').style.display    = 'none';
+  $('#bwz-panel-products').style.display   = '';
+  $('#bwz-submit-btn').style.display       = 'none';
+  $('#bwz-billing-skip-btn').style.display = '';
+  $('#bwz-step-1').className = 'bwz-step done';
+  $('#bwz-step-2').className = 'bwz-step done';
+  $('#bwz-step-3').className = 'bwz-step active';
+  $('#bwz-step-conn-1').classList.add('filled');
+  $('#bwz-step-conn-2').classList.add('filled');
+  _bwzPsGoto(1);
+  _bwzLoadProductsExisting();
+}
+
+function _bwzPsGoto(n) {
+  [1, 2].forEach(i => {
+    const panel = $(`#bwz-ps-panel-${i}`);
+    const dot   = $(`#bwz-ps-dot-${i}`);
+    if (panel) panel.style.display = (i === n) ? '' : 'none';
+    if (dot) dot.className = i < n ? 'bwz-ss-dot done' : i === n ? 'bwz-ss-dot active' : 'bwz-ss-dot';
+  });
+  const line = $('#bwz-ps-line-1');
+  if (line) line.classList.toggle('filled', n > 1);
+}
+
+async function _bwzLoadProductsExisting() {
+  const [catsRes, prodsRes] = await Promise.all([API.categories(), API.productSearch('', 10)]);
+  const cats  = catsRes.status  === 200 ? (catsRes.body?.data  || []) : [];
+  const prods = prodsRes.status === 200 ? (prodsRes.body?.data || prodsRes.body?.products || []) : [];
+
+  function renderPsRows(containerId, items, dotColor, nameField = 'name') {
+    const el = $(`#${containerId}`);
+    if (!el) return;
+    if (!items.length) { el.innerHTML = ''; return; }
+    el.innerHTML = `<div class="bwz-ss-existing-list">` +
+      items.slice(0, 6).map(item => {
+        const name = item[nameField] || item.name || '—';
+        const meta = item.sku ? `SKU: ${item.sku}` : (item.description || '');
+        return `<div class="bwz-ss-existing-row">
+          <span class="bwz-ss-existing-dot" style="background:${dotColor}"></span>
+          <span class="bwz-ss-existing-name">${escHtml(name)}</span>
+          ${meta ? `<span class="bwz-ss-existing-meta">${escHtml(String(meta))}</span>` : ''}
+        </div>`;
+      }).join('') +
+      (items.length > 6 ? `<div class="bwz-ss-existing-more">+${items.length - 6} more</div>` : '') +
+      `</div>`;
+  }
+  renderPsRows('bwz-ps-existing-cats',     cats,  '#8b5cf6');
+  renderPsRows('bwz-ps-existing-products', prods, '#10b981');
+}
+
+function _bwzResumeWizard(nextStep) {
+  if (nextStep === null) { _bwzClose(); return; }
+  // String tokens for products sub-steps: 'ps:1', 'ps:2'
+  if (typeof nextStep === 'string' && nextStep.startsWith('ps:')) {
+    const n = parseInt(nextStep.split(':')[1]);
+    _bwzPsGoto(n);
+    _bwzLoadProductsExisting();
+    $('#bwz-overlay').style.display = 'flex';
+    return;
+  }
+  _bwzSsGoto(nextStep);
+  _bwzLoadExisting(); // refresh lists so just-added record appears
+  $('#bwz-overlay').style.display = 'flex';
+}
+
+// Home subnav setup-wizard button — always opens wizard (bank form or billing/products step)
+$('#home-subnav-setup-wizard')?.addEventListener('click', async () => {
+  const res = await API.accounts();
+  if (res.status === 200 && (res.body?.data || []).length === 0) {
+    _bankWizOpen();
+  } else {
+    _bwzShowBillingPanel();
+    $('#bwz-overlay').style.display = 'flex';
+  }
 });
+
+// Wire wizard buttons once on page load
 $('#bwz-submit-btn')?.addEventListener('click', _bwzSubmit);
+$('#bwz-billing-skip-btn')?.addEventListener('click', _bwzClose);
+
+// Sub-step 1: Loans — hide wizard, open modal; resumes at sub-step 2 after save
+$('#bwz-ss-loan-yes')?.addEventListener('click', () => {
+  _bwz.billingActive = true; _bwz.billingNextStep = 2;
+  $('#bwz-overlay').style.display = 'none';
+  activateTab('finance'); switchFinView('loans');
+  setTimeout(openLoanCreateModal, 80);
+});
+$('#bwz-ss-loan-skip')?.addEventListener('click', () => _bwzSsGoto(2));
+
+// Sub-step 2: Rentals — hide wizard, open modal; resumes at sub-step 3 after save
+$('#bwz-ss-rental-yes')?.addEventListener('click', () => {
+  _bwz.billingActive = true; _bwz.billingNextStep = 3;
+  $('#bwz-overlay').style.display = 'none';
+  activateTab('finance'); switchFinView('rentals');
+  setTimeout(openRentalCreateModal, 80);
+});
+$('#bwz-ss-rental-skip')?.addEventListener('click', () => _bwzSsGoto(3));
+
+// Sub-step 3: Properties — hide wizard, open modal; resumes at sub-step 4 after save
+$('#bwz-ss-property-yes')?.addEventListener('click', () => {
+  _bwz.billingActive = true; _bwz.billingNextStep = 4;
+  $('#bwz-overlay').style.display = 'none';
+  activateTab('finance'); switchFinView('properties');
+  setTimeout(openPropertyCreateModal, 80);
+});
+$('#bwz-ss-property-skip')?.addEventListener('click', () => _bwzSsGoto(4));
+
+// Sub-step 4: Bill skip/next — go to Products step if feature enabled, else close
+$('#bwz-ss-bill-skip')?.addEventListener('click', () => {
+  if (_bwzHasProductsStep()) {
+    _bwzShowProductsPanel();
+    $('#bwz-overlay').style.display = 'flex';
+  } else {
+    _bwzClose();
+  }
+});
+
+// Products sub-step 1: Categories
+$('#bwz-ps-cat-yes')?.addEventListener('click', () => {
+  _bwz.billingActive = true; _bwz.billingNextStep = 'ps:2';
+  $('#bwz-overlay').style.display = 'none';
+  activateTab('inventory'); switchInvView('categories');
+  setTimeout(() => $('#cat-add-btn')?.click(), 80);
+});
+$('#bwz-ps-cat-skip')?.addEventListener('click', () => _bwzPsGoto(2));
+
+// Products sub-step 2: Products
+$('#bwz-ps-product-yes')?.addEventListener('click', () => {
+  _bwz.billingActive = true; _bwz.billingNextStep = 'ps:2';
+  $('#bwz-overlay').style.display = 'none';
+  activateTab('inventory'); switchInvView('products');
+  setTimeout(openAddProductModal, 80);
+});
+$('#bwz-ps-product-skip')?.addEventListener('click', _bwzClose);
+
+// ── Billing Setup standalone check (when bank account already exists) ──────
+async function _checkBillingOnboarding() {
+  if (!hasFeature('bill_management')) return;
+  const [billsRes, loansRes, rentalsRes, propsRes] = await Promise.all([
+    API.bills(), API.loans(), API.rentalList(), API.propertyList(),
+  ]);
+  const allEmpty = [billsRes, loansRes, rentalsRes, propsRes].every(r =>
+    r.status === 200 && (r.body?.data || []).length === 0
+  );
+  if (!allEmpty) return;
+  // Open the wizard overlay in billing-panel mode (bank form hidden)
+  _bwzShowBillingPanel();
+  $('#bwz-overlay').style.display = 'flex';
+}
 
 function updateProfileUI(bizName, email, userName) {
   // Button shows business name as context
@@ -11462,6 +11865,7 @@ async function _catSave() {
     toast(_cat.editingId ? 'Category updated' : 'Category created', 'success');
     $('#cat-modal').style.display = 'none';
     _catLoad();
+    if (_bwz.billingActive) { _bwz.billingActive = false; _bwzResumeWizard(_bwz.billingNextStep); }
   } else {
     const msg = Object.values(res.body?.errors || {}).flat().join(', ') || res.body?.message || 'Failed to save';
     toast(msg, 'error');
@@ -13542,6 +13946,7 @@ async function _prodSave(andNew = false) {
         invState.loaded = false;
         loadInventory('', 0, 1);
       }
+      if (_bwz.billingActive) { _bwz.billingActive = false; _bwzResumeWizard(_bwz.billingNextStep); }
     }
   } else {
     const errors = res.body?.errors;
@@ -14156,6 +14561,182 @@ $('#csv-import-btn')?.addEventListener('click', async () => {
   if (imported > 0) { invState.loaded = false; loadInventory(); }
 });
 // ── End CSV Product Import ─────────────────────────────────────────────────
+
+// ══════════════════════════════════════════════════════════════════════════════
+// CSV CATEGORY IMPORT
+// ══════════════════════════════════════════════════════════════════════════════
+const _CAT_CSV_SAMPLE = `name,description,parent_name\nElectronics,Electronic products,\nMobiles,Mobile phones,Electronics\nLaptops,Laptop computers,Electronics\nClothing,Clothing and apparel,\nFootwear,Shoes and sandals,Clothing\n`;
+
+let _catCsvRows = [], _catCsvValid = [];
+
+function _catCsvSetStep(n) {
+  [1, 2, 3].forEach(i => {
+    const body = $(`#cat-csv-step-${i}`);
+    const ind  = $(`#cat-csv-ind-${i}`);
+    if (body) body.style.display = i === n ? 'flex' : 'none';
+    if (ind) { ind.classList.toggle('active', i === n); ind.classList.toggle('done', i < n); }
+  });
+}
+
+function _catCsvParseFile(text) {
+  const lines = text.split(/\r?\n/).filter(l => l.trim());
+  if (!lines.length) return { rows: [], error: 'File is empty' };
+  const headers = _csvParseLine(lines[0]).map(h => h.trim().toLowerCase());
+  const nameIdx = headers.indexOf('name');
+  if (nameIdx === -1) return { rows: [], error: 'CSV must have a "name" column header' };
+  const descIdx   = headers.indexOf('description');
+  const parentIdx = headers.indexOf('parent_name');
+  const rows = [];
+  for (let i = 1; i < lines.length; i++) {
+    const cells = _csvParseLine(lines[i]);
+    const name  = (cells[nameIdx] || '').trim();
+    const row   = {
+      _rowNum:     i + 1,
+      _errors:     [],
+      name,
+      description: descIdx   >= 0 ? (cells[descIdx]   || '').trim() || null : null,
+      parent_name: parentIdx >= 0 ? (cells[parentIdx] || '').trim() || null : null,
+    };
+    if (!name) row._errors.push('Name is required');
+    rows.push(row);
+  }
+  return { rows, error: null };
+}
+
+function _catCsvShowPreview(rows) {
+  const valid = rows.filter(r => !r._errors.length);
+  const bad   = rows.filter(r =>  r._errors.length);
+  _catCsvValid = valid;
+
+  $('#cat-csv-preview-summary').innerHTML =
+    `<b>${rows.length} row${rows.length !== 1 ? 's' : ''} found</b>
+     <span class="csv-preview-badge ok"><i class="fa fa-circle-check"></i> ${valid.length} valid</span>
+     ${bad.length ? `<span class="csv-preview-badge error"><i class="fa fa-triangle-exclamation"></i> ${bad.length} with errors</span>` : ''}`;
+
+  $('#cat-csv-preview-thead').innerHTML = `<tr><th>#</th><th>Name</th><th>Description</th><th>Parent</th><th>Status</th></tr>`;
+  $('#cat-csv-preview-tbody').innerHTML = rows.slice(0, 100).map(r => {
+    const isErr  = r._errors.length > 0;
+    const status = isErr
+      ? `<span class="csv-row-error-msg"><i class="fa fa-triangle-exclamation"></i> ${escHtml(r._errors.join('; '))}</span>`
+      : `<span style="color:#10b981;font-size:11px"><i class="fa fa-circle-check"></i> OK</span>`;
+    return `<tr class="${isErr ? 'csv-row-error' : ''}">
+      <td style="color:var(--text-muted)">${r._rowNum}</td>
+      <td><strong>${escHtml(r.name || '—')}</strong></td>
+      <td style="color:var(--text-muted)">${escHtml(r.description || '—')}</td>
+      <td>${escHtml(r.parent_name || '—')}</td>
+      <td>${status}</td>
+    </tr>`;
+  }).join('');
+
+  $('#cat-csv-import-count').textContent = valid.length;
+  $('#cat-csv-import-btn').disabled      = valid.length === 0;
+  _catCsvSetStep(2);
+}
+
+function _catCsvReset() {
+  _catCsvRows = []; _catCsvValid = [];
+  $('#cat-csv-file-input').value = '';
+  _catCsvSetStep(1);
+}
+
+function _catCsvOpen() { _catCsvReset(); $('#cat-csv-import-modal').style.display = 'flex'; }
+function _catCsvClose() { $('#cat-csv-import-modal').style.display = 'none'; _catCsvReset(); }
+
+function _catCsvHandleFile(file) {
+  if (!file || !file.name.match(/\.csv$/i)) { toast('Please select a .csv file', 'error'); return; }
+  const reader = new FileReader();
+  reader.onload = e => {
+    const { rows, error } = _catCsvParseFile(e.target.result);
+    if (error) { toast(error, 'error'); return; }
+    _catCsvRows = rows.slice(0, 500);
+    _catCsvShowPreview(_catCsvRows);
+  };
+  reader.readAsText(file);
+}
+
+// Drag & drop
+const _catCsvDz = $('#cat-csv-dropzone');
+if (_catCsvDz) {
+  _catCsvDz.addEventListener('dragover',  e => { e.preventDefault(); _catCsvDz.classList.add('drag-over'); });
+  _catCsvDz.addEventListener('dragleave', () => _catCsvDz.classList.remove('drag-over'));
+  _catCsvDz.addEventListener('drop', e => { e.preventDefault(); _catCsvDz.classList.remove('drag-over'); _catCsvHandleFile(e.dataTransfer.files[0]); });
+}
+$('#cat-csv-file-input')?.addEventListener('change', e => _catCsvHandleFile(e.target.files[0]));
+$('#cat-csv-close')?.addEventListener('click', _catCsvClose);
+$('#cat-csv-import-modal')?.addEventListener('click', e => { if (e.target === e.currentTarget) _catCsvClose(); });
+$('#cat-csv-back-btn')?.addEventListener('click', _catCsvReset);
+$('#cat-csv-done-btn')?.addEventListener('click', _catCsvClose);
+$('#cat-csv-more-btn')?.addEventListener('click', _catCsvReset);
+$('#cat-import-csv-btn')?.addEventListener('click', _catCsvOpen);
+$('#cat-csv-download-sample')?.addEventListener('click', () => {
+  const blob = new Blob([_CAT_CSV_SAMPLE], { type: 'text/csv' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = 'categories-sample.csv'; a.click();
+  URL.revokeObjectURL(url);
+});
+
+$('#cat-csv-import-btn')?.addEventListener('click', async () => {
+  if (!_catCsvValid.length) return;
+  const btn = $('#cat-csv-import-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Importing…';
+
+  // First pass: create parent-less categories; second pass: create children
+  // Build a name→id map from existing categories
+  const existRes = await API.categories();
+  const nameToId = {};
+  (existRes.body?.data || []).forEach(c => { nameToId[c.name] = c.id; });
+
+  let imported = 0, failed = 0;
+  const errors = [];
+
+  // Sort: rows with no parent first
+  const sorted = [..._catCsvValid].sort((a, b) => (a.parent_name ? 1 : 0) - (b.parent_name ? 1 : 0));
+
+  for (const row of sorted) {
+    const body = { name: row.name, description: row.description || null, is_active: true };
+    if (row.parent_name) {
+      const pid = nameToId[row.parent_name];
+      if (pid) body.parent_id = pid;
+      else { errors.push({ name: row.name, message: `Parent "${row.parent_name}" not found` }); failed++; continue; }
+    }
+    const res = await API.createCategory(body);
+    if (res.status === 200 || res.status === 201) {
+      imported++;
+      nameToId[row.name] = res.body?.data?.id || res.body?.id;
+    } else {
+      failed++;
+      const msg = res.body?.errors ? Object.values(res.body.errors).flat()[0] : (res.body?.message || `Error ${res.status}`);
+      errors.push({ name: row.name, message: msg });
+    }
+  }
+
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fa fa-file-import"></i> Import Categories';
+
+  $('#cat-csv-result-summary').innerHTML = `
+    <div class="csv-result-stat">
+      <div class="csv-result-stat-num green">${imported}</div>
+      <div class="csv-result-stat-label"><i class="fa fa-circle-check"></i> Categories imported</div>
+    </div>
+    <div class="csv-result-stat">
+      <div class="csv-result-stat-num ${failed > 0 ? 'red' : ''}">${failed}</div>
+      <div class="csv-result-stat-label"><i class="fa fa-triangle-exclamation"></i> Rows failed</div>
+    </div>`;
+
+  const errWrap = $('#cat-csv-result-errors');
+  if (errors.length) {
+    errWrap.style.display = '';
+    $('#cat-csv-result-errors-list').innerHTML = errors.map(e =>
+      `<div class="csv-result-error-row"><b>${escHtml(e.name)}:</b><span>${escHtml(e.message)}</span></div>`
+    ).join('');
+  } else { errWrap.style.display = 'none'; }
+
+  _catCsvSetStep(3);
+  if (imported > 0) _catLoad();
+});
+// ── End CSV Category Import ───────────────────────────────────────────────────
 
 // Image
 $('#prod-img-choose')?.addEventListener('click', () => openImgPicker(null));
@@ -22909,6 +23490,7 @@ async function submitBillForm() {
   billData.targets  = null; // invalidate cache so next open re-fetches
   billData.accounts = null;
   loadFinance();
+  if (_bwz.billingActive) { _bwz.billingActive = false; _bwzResumeWizard(_bwz.billingNextStep); }
 }
 
 // ── Finance sub-nav (Bills ↔ Loans) ────────────────────────────────────────
@@ -23715,6 +24297,7 @@ async function submitRentalForm() {
     rcClose();
     toast('Rental added', 'success');
     await loadRentals();
+    if (_bwz.billingActive) { _bwz.billingActive = false; _bwzResumeWizard(_bwz.billingNextStep); }
   } else {
     const msg = res.body?.message || res.body?.errors
       ? (Object.values(res.body.errors || {})[0]?.[0] || res.body.message)
@@ -23946,6 +24529,7 @@ async function submitPropertyForm() {
     pcClose();
     toast('Property saved', 'success');
     await loadProperties();
+    if (_bwz.billingActive) { _bwz.billingActive = false; _bwzResumeWizard(_bwz.billingNextStep); }
   } else {
     const msg = res.body?.errors
       ? Object.values(res.body.errors).flat().join(' ')
@@ -24628,6 +25212,7 @@ async function submitLoanForm() {
   loanData.banks = null; loanData.accounts = null;
   toast('Loan added successfully', 'success');
   loadLoans();
+  if (_bwz.billingActive) { _bwz.billingActive = false; _bwzResumeWizard(_bwz.billingNextStep); }
 }
 
 // ── Utilities ──────────────────────────────────────────────────────────────
@@ -39815,3 +40400,404 @@ window.getRibbonUserCtx = function () {
 
 // ── Boot ───────────────────────────────────────────────────────────────────
 init();
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SQL DUMP IMPORT — AI-assisted MySQL backup product importer
+// ══════════════════════════════════════════════════════════════════════════════
+(function () {
+  // ── State ────────────────────────────────────────────────────────────────
+  const _dim = {
+    step: 1,
+    fileText: '',
+    tables: {},          // { tableName: { columns:[], rows:[] } }
+    chosenTable: null,
+    columnMap: {},       // dumpCol → productField
+    mapped: [],          // [{ name, sku, unit_price, cost_price, description, stock_quantity }]
+    imported: 0,
+    failed: 0,
+  };
+
+  // Product fields available for mapping
+  const PROD_FIELDS = [
+    { value: '',                label: '— Skip —' },
+    { value: 'name',            label: 'Product Name *' },
+    { value: 'sku',             label: 'SKU / Barcode' },
+    { value: 'unit_price',      label: 'Selling Price' },
+    { value: 'cost_price',      label: 'Cost Price' },
+    { value: 'wholesale_price', label: 'Wholesale Price' },
+    { value: 'stock_quantity',  label: 'Stock Qty' },
+    { value: 'description',     label: 'Description' },
+    { value: 'model_no',        label: 'Model No.' },
+    { value: 'size',            label: 'Size' },
+  ];
+
+  // Column-name heuristics → auto-suggest product field
+  const COL_HINTS = [
+    [/^(product_?)?name$/i,              'name'],
+    [/^(product_?)?title$/i,             'name'],
+    [/^(item_?)?name$/i,                 'name'],
+    [/^(product_?)?sku$/i,               'sku'],
+    [/^barcode$/i,                        'sku'],
+    [/^code$/i,                           'sku'],
+    [/^(selling_?|unit_?|sale_?)?price$/i,'unit_price'],
+    [/^retail_price$/i,                   'unit_price'],
+    [/^(cost_?|purchase_?)?price$/i,      'cost_price'],
+    [/^wholesale_price$/i,                'wholesale_price'],
+    [/^(stock_?|qty|quantity|on_hand)$/i, 'stock_quantity'],
+    [/^(description|details|about)$/i,    'description'],
+    [/^model(_no)?$/i,                    'model_no'],
+    [/^size$/i,                           'size'],
+  ];
+
+  function suggestField(col) {
+    for (const [re, field] of COL_HINTS) if (re.test(col)) return field;
+    return '';
+  }
+
+  // ── MySQL dump parser ─────────────────────────────────────────────────────
+  function parseDump(sql) {
+    const tables = {};
+
+    // Extract CREATE TABLE column names
+    const createRe = /CREATE TABLE\s+`?(\w+)`?\s*\(([\s\S]*?)\)\s*(?:ENGINE|;)/gi;
+    let m;
+    while ((m = createRe.exec(sql)) !== null) {
+      const tName = m[1];
+      const colDefs = m[2];
+      const cols = [];
+      const colRe = /^\s*`?(\w+)`?\s+(?:int|varchar|text|decimal|float|double|tinyint|bigint|mediumint|smallint|char|longtext|datetime|date|timestamp|json|enum)/gim;
+      let cm;
+      while ((cm = colRe.exec(colDefs)) !== null) cols.push(cm[1]);
+      if (cols.length) tables[tName] = { columns: cols, rows: [] };
+    }
+
+    // Extract INSERT INTO rows
+    const insertRe = /INSERT INTO\s+`?(\w+)`?\s*(?:\(([^)]+)\))?\s*VALUES\s*([\s\S]*?);/gi;
+    while ((m = insertRe.exec(sql)) !== null) {
+      const tName = m[1];
+      const colList = m[2] ? m[2].split(',').map(c => c.trim().replace(/`/g,'')) : null;
+      const valueBlock = m[3];
+
+      if (!tables[tName]) tables[tName] = { columns: colList || [], rows: [] };
+      if (colList && !tables[tName].columns.length) tables[tName].columns = colList;
+
+      // Parse individual value rows
+      const rowRe = /\(([^)]*(?:'[^']*'[^)]*)*)\)/g;
+      let rm;
+      while ((rm = rowRe.exec(valueBlock)) !== null) {
+        const raw = rm[1];
+        const vals = splitSqlValues(raw);
+        tables[tName].rows.push(vals);
+      }
+    }
+
+    return tables;
+  }
+
+  function splitSqlValues(str) {
+    const vals = [];
+    let cur = '', inStr = false, esc = false;
+    for (let i = 0; i < str.length; i++) {
+      const c = str[i];
+      if (esc) { cur += c; esc = false; continue; }
+      if (c === '\\') { esc = true; continue; }
+      if (c === "'" && !inStr) { inStr = true; continue; }
+      if (c === "'" && inStr)  { inStr = false; continue; }
+      if (c === ',' && !inStr) { vals.push(cur.trim()); cur = ''; continue; }
+      cur += c;
+    }
+    vals.push(cur.trim());
+    return vals.map(v => v === 'NULL' ? '' : v);
+  }
+
+  // Score a table: how likely is it to be a products table?
+  function tableScore(name, { columns }) {
+    let s = 0;
+    if (/product|item|goods|inventory|stock|merchandise/i.test(name)) s += 10;
+    for (const c of columns) {
+      if (/^(product_?)?name$/i.test(c)) s += 5;
+      if (/price|cost/i.test(c)) s += 3;
+      if (/sku|barcode/i.test(c)) s += 3;
+      if (/stock|qty|quantity/i.test(c)) s += 2;
+    }
+    return s;
+  }
+
+  // ── UI helpers ────────────────────────────────────────────────────────────
+  const ov  = () => document.getElementById('dump-import-overlay');
+  const D   = id => document.getElementById(id);
+  const log = msg => {
+    const el = D('dim-analyse-log');
+    if (el) { el.innerHTML += `<div>• ${msg}</div>`; el.scrollTop = el.scrollHeight; }
+  };
+
+  function dimSetStep(n) {
+    _dim.step = n;
+    for (let i = 1; i <= 5; i++) {
+      const s = D(`dim-st-${i}`);
+      if (!s) continue;
+      s.className = i < n ? 'dim-step done' : i === n ? 'dim-step active' : 'dim-step';
+      const p = D(`dim-panel-${i}`);
+      if (p) p.style.display = i === n ? '' : 'none';
+    }
+    D('dim-btn-back').style.display   = n > 1 && n < 5 ? '' : 'none';
+    D('dim-btn-next').style.display   = (n === 1 || n === 3 || n === 4) ? '' : 'none';
+    D('dim-btn-import').style.display = n === 4 ? '' : 'none';
+    D('dim-btn-done').style.display   = n === 5 && (_dim.imported + _dim.failed) >= _dim.mapped.length ? '' : 'none';
+    D('dim-btn-import').style.display = n === 4 ? '' : 'none';
+    D('dim-btn-next').disabled        = n === 1; // enabled after file chosen
+  }
+
+  function dimOpen() {
+    Object.assign(_dim, { step:1, fileText:'', tables:{}, chosenTable:null, columnMap:{}, mapped:[], imported:0, failed:0 });
+    D('dim-file-name').style.display = 'none';
+    D('dim-alert-1').style.display   = 'none';
+    D('dim-btn-next').disabled       = true;
+    D('dim-analyse-log').innerHTML   = '';
+    D('dim-analyse-fill').style.width = '0%';
+    dimSetStep(1);
+    const o = ov();
+    o.style.display = 'flex';
+    o.classList.add('open');
+  }
+
+  function dimClose() {
+    const o = ov();
+    o.style.display = 'none';
+    o.classList.remove('open');
+  }
+
+  // ── File handling ─────────────────────────────────────────────────────────
+  function onFileChosen(file) {
+    if (!file) return;
+    D('dim-file-name').textContent = `${file.name}  (${(file.size/1024).toFixed(1)} KB)`;
+    D('dim-file-name').style.display = '';
+    D('dim-alert-1').style.display = 'none';
+    const reader = new FileReader();
+    reader.onload = e => {
+      _dim.fileText = e.target.result;
+      D('dim-btn-next').disabled = false;
+    };
+    reader.readAsText(file);
+  }
+
+  // ── Step 2: analyse ───────────────────────────────────────────────────────
+  async function dimAnalyse() {
+    dimSetStep(2);
+    D('dim-analyse-fill').style.width = '0%';
+    D('dim-analyse-log').innerHTML = '';
+
+    await tick(80);
+    log('Reading MySQL dump…');
+    D('dim-analyse-fill').style.width = '20%';
+    await tick(200);
+
+    _dim.tables = parseDump(_dim.fileText);
+    const tNames = Object.keys(_dim.tables);
+    log(`Found ${tNames.length} table(s): ${tNames.slice(0,6).join(', ')}${tNames.length > 6 ? '…' : ''}`);
+    D('dim-analyse-fill').style.width = '55%';
+    await tick(300);
+
+    // Auto-pick best product table
+    let best = null, bestScore = -1;
+    for (const [name, tbl] of Object.entries(_dim.tables)) {
+      const sc = tableScore(name, tbl);
+      if (sc > bestScore) { best = name; bestScore = sc; }
+    }
+    _dim.chosenTable = best;
+    if (best) {
+      log(`AI selected table: "${best}" (${_dim.tables[best].rows.length} rows)`);
+    } else {
+      log('No obvious product table found — picking largest table.');
+      _dim.chosenTable = tNames.sort((a,b)=>_dim.tables[b].rows.length-_dim.tables[a].rows.length)[0];
+    }
+    D('dim-analyse-fill').style.width = '80%';
+    await tick(300);
+
+    // Auto-suggest column mappings
+    const cols = _dim.tables[_dim.chosenTable]?.columns || [];
+    _dim.columnMap = {};
+    for (const c of cols) {
+      const sf = suggestField(c);
+      if (sf) _dim.columnMap[c] = sf;
+    }
+    log(`Column auto-map: ${Object.entries(_dim.columnMap).map(([k,v])=>`${k}→${v}`).join(', ') || 'none detected'}`);
+    D('dim-analyse-fill').style.width = '100%';
+    D('dim-analyse-title').textContent = 'Analysis complete!';
+    await tick(400);
+
+    buildMapGrid();
+    dimSetStep(3);
+  }
+
+  // ── Step 3: column map UI ─────────────────────────────────────────────────
+  function buildMapGrid() {
+    const tbl = _dim.tables[_dim.chosenTable];
+    if (!tbl) return;
+    D('dim-rows-count').textContent  = tbl.rows.length;
+    D('dim-table-name').textContent  = _dim.chosenTable;
+    const cols = tbl.columns;
+    const grid = D('dim-map-grid');
+    grid.innerHTML = cols.map(col => {
+      const suggested = _dim.columnMap[col] || '';
+      const opts = PROD_FIELDS.map(f =>
+        `<option value="${f.value}" ${f.value === suggested ? 'selected' : ''}>${f.label}</option>`
+      ).join('');
+      return `<div class="dim-map-col-name" title="${escHtml(col)}">${escHtml(col)}</div>
+        <div class="dim-map-arrow"><i class="fa fa-arrow-right"></i></div>
+        <select class="dim-map-select ${suggested ? 'mapped' : ''}" data-col="${escHtml(col)}">${opts}</select>`;
+    }).join('');
+    grid.querySelectorAll('select').forEach(sel => {
+      sel.addEventListener('change', () => {
+        sel.classList.toggle('mapped', !!sel.value);
+        _dim.columnMap[sel.dataset.col] = sel.value;
+      });
+    });
+  }
+
+  // ── Step 4: preview ───────────────────────────────────────────────────────
+  function buildPreview() {
+    const tbl = _dim.tables[_dim.chosenTable];
+    if (!tbl) return false;
+    // Check name column is mapped
+    const nameCol = Object.entries(_dim.columnMap).find(([,v]) => v === 'name')?.[0];
+    if (!nameCol) {
+      D('dim-alert-3').textContent = 'Please map at least the "Product Name" column before continuing.';
+      D('dim-alert-3').style.display = '';
+      return false;
+    }
+    D('dim-alert-3').style.display = 'none';
+
+    // Build mapped rows
+    const colIdx = {};
+    tbl.columns.forEach((c, i) => { colIdx[c] = i; });
+    _dim.mapped = tbl.rows.map(row => {
+      const prod = { name:'', sku:null, unit_price:null, cost_price:null, wholesale_price:null, stock_quantity:0, description:null, model_no:null, size:null };
+      for (const [col, field] of Object.entries(_dim.columnMap)) {
+        if (!field) continue;
+        const val = row[colIdx[col]] ?? '';
+        if (field === 'unit_price' || field === 'cost_price' || field === 'wholesale_price') {
+          prod[field] = parseFloat(val) || null;
+        } else if (field === 'stock_quantity') {
+          prod[field] = parseInt(val) || 0;
+        } else {
+          prod[field] = val || null;
+        }
+      }
+      return prod;
+    }).filter(p => p.name);
+
+    const preview = _dim.mapped.slice(0, 10);
+    const shownFields = ['name','sku','unit_price','cost_price','stock_quantity','description'];
+    const labels = { name:'Name', sku:'SKU', unit_price:'Price', cost_price:'Cost', stock_quantity:'Stock', description:'Description' };
+
+    D('dim-preview-count').textContent = preview.length;
+    D('dim-total-count').textContent   = _dim.mapped.length;
+    D('dim-preview-thead').innerHTML   = `<tr>${shownFields.map(f=>`<th>${labels[f]}</th>`).join('')}</tr>`;
+    D('dim-preview-tbody').innerHTML   = preview.map(p =>
+      `<tr>${shownFields.map(f=>`<td title="${escHtml(String(p[f]??''))}">
+        ${escHtml(String(p[f]??'—').slice(0,40))}
+      </td>`).join('')}</tr>`
+    ).join('');
+    return true;
+  }
+
+  // ── Step 5: import ────────────────────────────────────────────────────────
+  async function dimImport() {
+    dimSetStep(5);
+    _dim.imported = 0; _dim.failed = 0;
+    const total = _dim.mapped.length;
+    const results = [];
+    D('dim-import-fill').style.width = '0%';
+    D('dim-import-results').style.display = 'none';
+    D('dim-btn-done').style.display = 'none';
+
+    for (let i = 0; i < total; i++) {
+      const prod = _dim.mapped[i];
+      D('dim-import-status').textContent  = `Importing: ${prod.name}`;
+      D('dim-import-counter').textContent = `${i+1} / ${total}`;
+      D('dim-import-fill').style.width    = `${Math.round((i+1)/total*100)}%`;
+
+      const body = { ...prod, is_active: true };
+      if (body.stock_quantity > 0) {
+        body.opening_batches = [{ quantity: body.stock_quantity, cost_price: body.cost_price, selling_price: body.unit_price }];
+      }
+      const res = await API.createProduct(body);
+      if (res.status === 200 || res.status === 201) {
+        _dim.imported++;
+        results.push(`<span style="color:#10b981">✓</span> ${escHtml(prod.name)}`);
+      } else {
+        _dim.failed++;
+        const err = res.body?.errors ? Object.values(res.body.errors).flat()[0] : (res.body?.message || `Error ${res.status}`);
+        results.push(`<span style="color:#ef4444">✗</span> ${escHtml(prod.name)} — ${escHtml(err)}`);
+      }
+      await tick(30); // small pause so UI can update
+    }
+
+    D('dim-import-icon').innerHTML   = `<i class="fa fa-circle-check" style="color:#10b981"></i>`;
+    D('dim-import-status').textContent  = `Done! ${_dim.imported} imported, ${_dim.failed} failed.`;
+    D('dim-import-counter').textContent = '';
+    D('dim-import-results').innerHTML   = results.join('<br>');
+    D('dim-import-results').style.display = '';
+    D('dim-btn-done').style.display = '';
+
+    // Refresh inventory list
+    invState.loaded = false;
+    loadInventory('', 0, 1);
+  }
+
+  function tick(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+  // ── Wire everything up ────────────────────────────────────────────────────
+  document.addEventListener('DOMContentLoaded', () => {
+    D('inv-dump-import-btn')?.addEventListener('click', dimOpen);
+    D('dim-close')?.addEventListener('click', dimClose);
+
+    // File input
+    D('dim-file-input')?.addEventListener('change', e => onFileChosen(e.target.files[0]));
+
+    // Drag-and-drop
+    const dz = D('dim-dropzone');
+    if (dz) {
+      dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag-over'); });
+      dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+      dz.addEventListener('drop', e => {
+        e.preventDefault(); dz.classList.remove('drag-over');
+        onFileChosen(e.dataTransfer.files[0]);
+      });
+      dz.addEventListener('click', e => { if (!e.target.closest('label')) D('dim-file-input').click(); });
+    }
+
+    // Next button
+    D('dim-btn-next')?.addEventListener('click', async () => {
+      if (_dim.step === 1) {
+        if (!_dim.fileText) { D('dim-alert-1').textContent='Please choose a file first.'; D('dim-alert-1').style.display=''; return; }
+        await dimAnalyse();
+      } else if (_dim.step === 3) {
+        // Update map from selects
+        D('dim-map-grid')?.querySelectorAll('select').forEach(s => { _dim.columnMap[s.dataset.col] = s.value; });
+        if (buildPreview()) dimSetStep(4);
+      } else if (_dim.step === 4) {
+        await dimImport();
+      }
+    });
+
+    // Import button (same as next from step 4)
+    D('dim-btn-import')?.addEventListener('click', async () => {
+      D('dim-map-grid')?.querySelectorAll('select').forEach(s => { _dim.columnMap[s.dataset.col] = s.value; });
+      await dimImport();
+    });
+
+    // Back button
+    D('dim-btn-back')?.addEventListener('click', () => {
+      if (_dim.step === 4) { buildMapGrid(); dimSetStep(3); }
+      else dimSetStep(1);
+    });
+
+    // Done button
+    D('dim-btn-done')?.addEventListener('click', dimClose);
+
+    // Click outside card to close
+    ov()?.addEventListener('click', e => { if (e.target === ov()) dimClose(); });
+  });
+})();

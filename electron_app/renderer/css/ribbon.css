@@ -3297,9 +3297,11 @@ body.dark .ob-continue-btn:hover { background: var(--accent-dark); }
 .bwz-card {
   background: var(--surface);
   border-radius: 20px;
-  width: 480px;
+  width: 70vw;
+  max-width: 860px;
+  max-height: 85vh;
+  overflow-y: auto;
   box-shadow: 0 24px 64px rgba(0,0,0,.28);
-  overflow: hidden;
 }
 
 /* Step track */
@@ -3425,6 +3427,413 @@ body.dark .ob-continue-btn:hover { background: var(--accent-dark); }
 .bwz-btn-next:disabled { opacity: .55; cursor: not-allowed; }
 body.dark .bwz-btn-next { background: var(--accent); }
 body.dark .bwz-btn-next:hover { background: var(--accent-dark); }
+
+/* ── Billing sub-step: existing records (shared) ─────────────────── */
+.bwz-ss-existing { margin-top: 18px; }
+.bwz-ss-existing:empty { display: none; }
+.bwz-ss-existing-label {
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .06em; color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+/* Row style — steps 1, 2, 3 */
+.bwz-ss-existing-list {
+  display: flex; flex-direction: column; gap: 0;
+  border: 1px solid var(--border); border-radius: 10px; overflow: hidden;
+}
+.bwz-ss-existing-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--border-light);
+  background: var(--surface);
+}
+.bwz-ss-existing-row:last-child { border-bottom: none; }
+.bwz-ss-existing-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+}
+.bwz-ss-existing-name {
+  flex: 1; font-size: 13px; font-weight: 600; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left;
+}
+.bwz-ss-existing-meta { font-size: 11px; color: var(--text-muted); flex-shrink: 0; }
+.bwz-ss-existing-more { font-size: 11px; color: var(--text-muted); padding: 2px 0 0 20px; font-style: italic; }
+
+/* Bubble row — step 4 existing items */
+.bwz-ss-bubble-row {
+  display: flex; flex-wrap: wrap; gap: 12px; justify-content: center;
+  margin-top: 2px;
+}
+.bwz-ss-bubble {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  animation: bwzBubbleIn .3s cubic-bezier(.34,1.56,.64,1) both;
+}
+.bwz-ss-bubble-circle {
+  width: 56px; height: 56px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px; color: #fff;
+  box-shadow: 0 5px 16px rgba(0,0,0,.18);
+  transition: transform .15s, box-shadow .15s;
+}
+.bwz-ss-bubble:hover .bwz-ss-bubble-circle {
+  transform: scale(1.1);
+  box-shadow: 0 8px 22px rgba(0,0,0,.25);
+}
+.bwz-ss-bubble-name {
+  font-size: 11px; font-weight: 700; color: var(--text);
+  max-width: 72px; text-align: center;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.bwz-ss-bubble-meta {
+  font-size: 10px; color: var(--text-muted); text-align: center;
+}
+
+/* Card style — step 4 (bills) */
+.bwz-ss-existing-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px;
+}
+@keyframes bwzCardIn {
+  from { opacity: 0; transform: translateY(10px) scale(.95); }
+  to   { opacity: 1; transform: translateY(0)    scale(1);   }
+}
+.bwz-ss-existing-card {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 12px; padding: 12px;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
+  min-width: 0;
+  animation: bwzCardIn .22s ease both;
+  transition: border-color .15s, box-shadow .15s;
+}
+.bwz-ss-existing-card:nth-child(1) { animation-delay: .04s; }
+.bwz-ss-existing-card:nth-child(2) { animation-delay: .08s; }
+.bwz-ss-existing-card:nth-child(3) { animation-delay: .12s; }
+.bwz-ss-existing-card:nth-child(4) { animation-delay: .16s; }
+.bwz-ss-existing-card:hover { border-color: var(--accent); box-shadow: 0 4px 12px rgba(78,142,247,.12); }
+.bwz-ss-existing-card-icon {
+  width: 34px; height: 34px; border-radius: 9px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; color: #fff;
+}
+.bwz-ss-existing-card .bwz-ss-existing-name {
+  font-size: 12px; font-weight: 700; width: 100%; text-align: left;
+}
+.bwz-ss-existing-card .bwz-ss-existing-meta {
+  flex-shrink: unset;
+}
+
+/* ── Bill type bubble nodes (step 4) ─────────────────────────────── */
+.bwz-bill-types {
+  display: flex; justify-content: center; gap: 16px;
+  flex-wrap: wrap; margin-top: 8px;
+}
+@keyframes bwzBubbleIn {
+  from { opacity: 0; transform: scale(.6); }
+  to   { opacity: 1; transform: scale(1);  }
+}
+/* Spoke-specific variant: keeps translate(-50%,-50%) throughout so positioning isn't wiped */
+@keyframes bwzSpokeIn {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(.4); }
+  to   { opacity: 1; transform: translate(-50%, -50%) scale(1);  }
+}
+.bwz-bill-type {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  background: none; border: none; cursor: pointer;
+  font-size: 11px; font-weight: 700; color: var(--text-muted);
+  transition: color .15s, transform .15s;
+  animation: bwzBubbleIn .3s cubic-bezier(.34,1.56,.64,1) both;
+}
+.bwz-bill-type:nth-child(1) { animation-delay: .05s; }
+.bwz-bill-type:nth-child(2) { animation-delay: .10s; }
+.bwz-bill-type:nth-child(3) { animation-delay: .15s; }
+.bwz-bill-type:nth-child(4) { animation-delay: .20s; }
+.bwz-bill-type:nth-child(5) { animation-delay: .25s; }
+.bwz-bill-type:hover { color: var(--text); transform: translateY(-3px); }
+.bwz-bill-type-icon {
+  width: 68px; height: 68px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 24px; color: #fff;
+  box-shadow: 0 6px 20px rgba(0,0,0,.18);
+  transition: box-shadow .15s, transform .15s;
+}
+.bwz-bill-type:hover .bwz-bill-type-icon {
+  box-shadow: 0 10px 28px rgba(0,0,0,.26);
+  transform: scale(1.08);
+}
+
+/* ── Hub-and-spoke diagram (step 4 bill types) ──────────────────── */
+.bwz-hub-row {
+  display: flex; flex-wrap: wrap; justify-content: center;
+  gap: 32px; padding: 16px 0 8px;
+}
+/* Hub container: sized to comfortably contain center + 5 satellite circles at R=82 */
+.bwz-hub {
+  position: relative;
+  width: 220px; height: 220px;
+  flex-shrink: 0;
+  overflow: visible;
+  animation: bwzBubbleIn .5s cubic-bezier(.34,1.56,.64,1) both;
+}
+/* SVG spoke lines — sits below circles (z-index lower than nodes) */
+.bwz-hub-svg {
+  position: absolute; inset: 0;
+  overflow: visible; pointer-events: none; z-index: 1;
+}
+/* center node — anchored to exact center of container */
+.bwz-hub-center {
+  position: absolute;
+  left: 110px; top: 110px;          /* = CX, CY from JS */
+  transform: translate(-50%, -50%);
+  display: flex; flex-direction: column; align-items: center;
+  gap: 4px; z-index: 2;
+}
+.bwz-hub-center-circle {
+  width: 52px; height: 52px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; font-size: 20px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.25);
+}
+.bwz-hub-center-label {
+  font-size: 11px; font-weight: 700; color: var(--text);
+  max-width: 74px; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; text-align: center;
+}
+.bwz-hub-center-meta {
+  font-size: 10px; color: var(--text-muted); text-align: center;
+}
+/* satellite spoke — button positions the CIRCLE center at (left, top) via translate(-50%,-50%)
+   The label floats below the circle using absolute positioning so it doesn't affect the button's own box size */
+.bwz-hub-spoke {
+  position: absolute;
+  width: 38px; height: 38px;       /* exact circle size — bwzSpokeIn keeps translate(-50%,-50%) in both states */
+  transform: translate(-50%, -50%); /* fallback before animation fires */
+  z-index: 2;
+  background: none; border: none; padding: 0; cursor: pointer;
+  overflow: visible;
+  animation: bwzSpokeIn .45s cubic-bezier(.34,1.56,.64,1) both;
+}
+.bwz-hub-spoke:nth-child(2) { animation-delay: .04s; }
+.bwz-hub-spoke:nth-child(3) { animation-delay: .08s; }
+.bwz-hub-spoke:nth-child(4) { animation-delay: .12s; }
+.bwz-hub-spoke:nth-child(5) { animation-delay: .16s; }
+.bwz-hub-spoke:nth-child(6) { animation-delay: .20s; }
+.bwz-hub-spoke-circle {
+  width: 38px; height: 38px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; font-size: 15px;
+  box-shadow: 0 3px 10px rgba(0,0,0,.22);
+  transition: transform .15s, box-shadow .15s;
+}
+.bwz-hub-spoke:hover .bwz-hub-spoke-circle {
+  transform: scale(1.15);
+  box-shadow: 0 6px 18px rgba(0,0,0,.32);
+}
+/* label sits below the circle, centered, via absolute — doesn't stretch the button box */
+.bwz-hub-spoke-label {
+  position: absolute;
+  top: 100%; left: 50%; transform: translateX(-50%);
+  margin-top: 4px;
+  font-size: 9.5px; font-weight: 700; color: var(--text-muted);
+  white-space: nowrap; pointer-events: none;
+}
+
+/* ── Bill list mode (> 2 items) ──────────────────────────────────── */
+.bwz-bill-list {
+  display: flex; flex-direction: column;
+  gap: 8px; padding: 10px 0 4px; width: 100%;
+}
+.bwz-bill-list-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 14px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  animation: bwzBubbleIn .3s cubic-bezier(.34,1.56,.64,1) both;
+}
+.bwz-bill-list-item {
+  display: flex; align-items: center; gap: 8px;
+  min-width: 140px; flex-shrink: 0;
+}
+.bwz-bill-list-dot {
+  width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; font-size: 13px;
+}
+.bwz-bill-list-name {
+  font-size: 12px; font-weight: 700; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  max-width: 100px;
+}
+/* pill buttons in list mode — right-aligned, smaller than hub spokes */
+.bwz-bill-pill-row {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin-left: auto;          /* push pills to the right */
+  justify-content: flex-end;
+}
+.bwz-bill-pill {
+  /* override hub-spoke absolute positioning — pills flow in the row */
+  position: relative !important;
+  transform: none !important;
+  animation: bwzBubbleIn .25s cubic-bezier(.34,1.56,.64,1) both;
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  background: none; border: none; padding: 0; cursor: pointer; overflow: visible;
+}
+.bwz-bill-pill .bwz-hub-spoke-circle {
+  width: 32px; height: 32px; font-size: 13px;
+}
+.bwz-bill-pill .bwz-hub-spoke-label {
+  position: static; transform: none; margin-top: 0;
+  font-size: 9px;
+}
+.bwz-bill-pill:hover .bwz-hub-spoke-circle {
+  transform: scale(1.15);
+  box-shadow: 0 6px 18px rgba(0,0,0,.32);
+}
+/* badge showing count of existing bills */
+.bwz-pill-badge {
+  position: absolute; top: -4px; right: -5px;
+  width: 16px; height: 16px; border-radius: 50%;
+  background: var(--accent); color: #fff;
+  font-size: 9px; font-weight: 800; line-height: 16px; text-align: center;
+  border: 1.5px solid var(--surface); pointer-events: none;
+  z-index: 5;
+}
+/* spoke badge in hub mode */
+.bwz-hub-spoke .bwz-pill-badge {
+  top: -5px; right: -5px;
+}
+/* green ring on spoke/pill when bills already exist */
+.bwz-hub-spoke.has-bills .bwz-hub-spoke-circle {
+  box-shadow: 0 0 0 2.5px var(--accent), 0 3px 10px rgba(0,0,0,.22);
+}
+/* hover tooltip for existing bill summary */
+.bwz-bill-tip {
+  position: fixed; z-index: 99999;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  box-shadow: 0 8px 28px rgba(0,0,0,.22);
+  padding: 8px 12px;
+  min-width: 160px; max-width: 260px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .12s;
+}
+.bwz-bill-tip-row {
+  display: flex; justify-content: space-between; gap: 10px;
+  align-items: center; padding: 3px 0;
+  border-bottom: 1px solid var(--border);
+}
+.bwz-bill-tip-row:last-child { border-bottom: none; }
+.bwz-bill-tip-name {
+  font-size: 11.5px; font-weight: 700; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;
+}
+.bwz-bill-tip-amt {
+  font-size: 10.5px; color: var(--text-muted); white-space: nowrap; flex-shrink: 0;
+}
+.bwz-bill-tip-amt.overdue { color: var(--danger, #ef4444); font-weight: 700; }
+
+/* ── Bank wizard 2-step indicator ───────────────────────────────── */
+.bwz-steps {
+  display: flex; align-items: center;
+  padding: 20px 32px 0;
+  gap: 0;
+}
+.bwz-step {
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  flex-shrink: 0;
+}
+.bwz-step-circle {
+  width: 30px; height: 30px; border-radius: 50%;
+  border: 2px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700; color: var(--text-muted);
+  background: var(--surface);
+  transition: all .25s;
+}
+.bwz-step-label {
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .05em; color: var(--text-muted);
+  white-space: nowrap; transition: color .25s;
+}
+.bwz-step.active .bwz-step-circle {
+  border-color: var(--accent); color: var(--accent);
+  box-shadow: 0 0 0 4px rgba(78,142,247,.12);
+}
+.bwz-step.active .bwz-step-label { color: var(--accent); }
+.bwz-step.done .bwz-step-circle {
+  border-color: var(--accent); background: var(--accent); color: #fff;
+  font-size: 0;
+}
+.bwz-step.done .bwz-step-circle::after {
+  font-family: 'Font Awesome 6 Free'; font-weight: 900;
+  content: '\f00c'; font-size: 11px;
+}
+.bwz-step.done .bwz-step-label { color: var(--accent); }
+.bwz-step-connector {
+  flex: 1; height: 2px; background: var(--border);
+  margin: 0 10px 14px; transition: background .25s;
+}
+.bwz-step-connector.filled { background: var(--accent); }
+
+/* ── Billing sub-step track ──────────────────────────────────────── */
+.bwz-ss-track {
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px 32px 4px;
+  gap: 0;
+  max-width: 200px; margin: 0 auto;
+}
+.bwz-ss-dot {
+  width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0;
+  border: 2px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700; color: var(--text-muted);
+  background: var(--surface); transition: all .2s;
+}
+.bwz-ss-dot.active {
+  border-color: #8b5cf6; color: #8b5cf6;
+  box-shadow: 0 0 0 3px rgba(139,92,246,.12);
+}
+.bwz-ss-dot.done {
+  border-color: #8b5cf6; background: #8b5cf6; color: #fff; font-size: 0;
+}
+.bwz-ss-dot.done::after {
+  font-family: 'Font Awesome 6 Free'; font-weight: 900;
+  content: '\f00c'; font-size: 10px;
+}
+.bwz-ss-line {
+  flex: 1; height: 2px; background: var(--border);
+  margin: 0 6px; transition: background .2s;
+}
+.bwz-ss-line.filled { background: #8b5cf6; }
+
+/* Sub-step panels */
+.bwz-ss-panel { padding-bottom: 8px; text-align: center; }
+.bwz-ss-title {
+  font-size: 18px; font-weight: 800; color: var(--text);
+  margin: 0 0 8px; text-wrap: balance;
+}
+.bwz-ss-desc {
+  font-size: 13px; color: var(--text-muted); line-height: 1.6;
+  margin: 0 0 24px;
+}
+.bwz-ss-actions {
+  display: flex; gap: 12px; justify-content: center;
+}
+.bwz-ss-yes {
+  min-width: 100px; height: 42px; padding: 0 28px;
+  background: #8b5cf6; color: #fff; border: none;
+  border-radius: 8px; font-size: 14px; font-weight: 700;
+  cursor: pointer; transition: background .15s;
+}
+.bwz-ss-yes:hover { background: #7c3aed; }
+.bwz-ss-no {
+  min-width: 100px; height: 42px; padding: 0 28px;
+  background: var(--surface2); border: 1.5px solid var(--border);
+  border-radius: 8px; font-size: 14px; font-weight: 600; color: var(--text-muted);
+  cursor: pointer; transition: border-color .15s, color .15s;
+}
+.bwz-ss-no:hover { border-color: var(--accent); color: var(--accent); }
 
 /* ── Business onboarding wizard ──────────────────────────────────── */
 .bbwz-card {
@@ -16522,3 +16931,223 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
   border-color: #fca5a5 !important;
 }
 .grn-reject-btn:hover { background: #fee2e2 !important; }
+
+/* ══════════════════════════════════════════════════════════════════
+   SQL DUMP IMPORT MODAL  (#dump-import-overlay)
+   ══════════════════════════════════════════════════════════════════ */
+#dump-import-overlay { display: none; align-items: center; justify-content: center; }
+#dump-import-overlay.open { display: flex !important; }
+
+.dim-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 28px 72px rgba(0,0,0,.35);
+  width: min(780px, 96vw);
+  max-height: 92vh;
+  display: flex; flex-direction: column;
+  overflow: hidden;
+  animation: bwzBubbleIn .22s cubic-bezier(.34,1.56,.64,1) both;
+}
+
+/* Header */
+.dim-head {
+  display: flex; align-items: center; gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.dim-head-icon {
+  width: 38px; height: 38px; border-radius: 10px;
+  background: linear-gradient(135deg,#4e8ef7,#6c63ff);
+  color: #fff; font-size: 16px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.dim-head-title { font-size: 15px; font-weight: 800; color: var(--text); }
+.dim-head-sub   { font-size: 11.5px; color: var(--text-muted); margin-top: 1px; }
+.dim-close {
+  margin-left: auto; border: none; background: none;
+  color: var(--text-muted); font-size: 16px; cursor: pointer;
+  padding: 6px 8px; border-radius: 6px; transition: background .1s;
+}
+.dim-close:hover { background: var(--surface2); color: var(--text); }
+
+/* Step track */
+.dim-steps {
+  display: flex; align-items: center;
+  padding: 12px 24px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0; gap: 0;
+}
+.dim-step {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 11px; font-weight: 700; color: var(--text-muted);
+  white-space: nowrap; transition: color .2s; flex-shrink: 0;
+}
+.dim-step span {
+  width: 20px; height: 20px; border-radius: 50%;
+  background: var(--surface2); border: 1.5px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 800; transition: all .2s;
+}
+.dim-step.active { color: var(--accent); }
+.dim-step.active span { background: var(--accent); color: #fff; border-color: var(--accent); }
+.dim-step.done span { background: #10b981; color: #fff; border-color: #10b981; }
+.dim-step.done { color: #10b981; }
+.dim-step-line {
+  flex: 1; height: 1.5px; background: var(--border); margin: 0 6px;
+}
+
+/* Body */
+.dim-body { padding: 24px; flex: 1; overflow: hidden; }
+.dim-body--scroll { overflow-y: auto; }
+
+/* Drop zone */
+.dim-dropzone {
+  border: 2px dashed var(--border);
+  border-radius: 12px;
+  padding: 40px 24px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color .15s, background .15s;
+}
+.dim-dropzone.drag-over { border-color: var(--accent); background: var(--accent-light); }
+.dim-dz-icon { font-size: 40px; color: var(--accent); margin-bottom: 12px; }
+.dim-dz-title { font-size: 16px; font-weight: 700; color: var(--text); margin-bottom: 6px; }
+.dim-dz-sub   { font-size: 12.5px; color: var(--text-muted); margin-bottom: 18px; }
+.dim-dz-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 20px; border-radius: 8px;
+  background: var(--accent); color: #fff;
+  font-size: 13px; font-weight: 700; cursor: pointer;
+  transition: filter .1s;
+}
+.dim-dz-btn:hover { filter: brightness(1.08); }
+.dim-dz-note {
+  margin-top: 14px; font-size: 12px; font-weight: 700;
+  color: var(--accent);
+}
+
+/* Analyse step */
+.dim-analyse-wrap { text-align: center; padding: 20px 0; }
+.dim-analyse-icon { font-size: 48px; color: var(--accent); margin-bottom: 14px; }
+.dim-analyse-title { font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: 16px; }
+.dim-analyse-bar {
+  width: 100%; max-width: 380px; height: 6px;
+  background: var(--surface2); border-radius: 99px;
+  overflow: hidden; margin: 0 auto 14px;
+}
+.dim-analyse-fill {
+  height: 100%; width: 0%;
+  background: linear-gradient(90deg,#4e8ef7,#6c63ff);
+  border-radius: 99px;
+  transition: width .3s;
+}
+.dim-analyse-log {
+  font-size: 11px; color: var(--text-muted);
+  max-height: 100px; overflow-y: auto;
+  text-align: left; padding: 8px 12px;
+  background: var(--surface2); border-radius: 8px;
+  margin-top: 8px;
+}
+
+/* Column map */
+.dim-map-intro {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--accent-light); border-radius: 10px;
+  padding: 10px 14px; margin-bottom: 16px;
+  font-size: 12.5px; color: var(--text);
+}
+.dim-map-intro i { color: var(--accent); font-size: 18px; flex-shrink: 0; }
+.dim-map-grid {
+  display: grid; grid-template-columns: 1fr auto 1fr;
+  align-items: center; gap: 8px 12px;
+  max-height: 320px; overflow-y: auto;
+}
+.dim-map-col-name {
+  font-size: 12px; font-weight: 700; color: var(--text);
+  background: var(--surface2); border: 1px solid var(--border);
+  padding: 6px 10px; border-radius: 6px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.dim-map-arrow { color: var(--accent); font-size: 13px; text-align: center; }
+.dim-map-select {
+  font-size: 12px; padding: 6px 8px;
+  border: 1px solid var(--border); border-radius: 6px;
+  background: var(--surface); color: var(--text);
+  width: 100%;
+}
+.dim-map-select.mapped { border-color: var(--accent); }
+
+/* Preview */
+.dim-preview-info { font-size: 12px; color: var(--text-muted); margin-bottom: 10px; }
+.dim-preview-wrap { overflow-x: auto; }
+.dim-preview-table {
+  width: 100%; border-collapse: collapse; font-size: 12px;
+}
+.dim-preview-table th {
+  background: var(--surface2); text-align: left;
+  padding: 7px 10px; font-size: 10.5px; font-weight: 800;
+  text-transform: uppercase; letter-spacing: .04em;
+  color: var(--text-muted); border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.dim-preview-table td {
+  padding: 6px 10px; border-bottom: 1px solid var(--border);
+  color: var(--text); max-width: 180px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.dim-preview-table tr:hover td { background: var(--surface2); }
+
+/* Import progress */
+.dim-import-wrap { text-align: center; padding: 20px 0; }
+.dim-import-icon { font-size: 48px; color: var(--accent); margin-bottom: 14px; }
+.dim-import-status { font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: 6px; }
+.dim-import-counter { font-size: 12px; color: var(--text-muted); margin-bottom: 14px; }
+.dim-import-results {
+  text-align: left; margin-top: 14px; font-size: 12px;
+  background: var(--surface2); border-radius: 8px;
+  padding: 10px 14px; max-height: 120px; overflow-y: auto;
+}
+
+/* Alert */
+.dim-alert {
+  margin-top: 12px; padding: 8px 12px; border-radius: 8px;
+  font-size: 12px; font-weight: 600;
+  background: rgba(239,68,68,.12); color: #dc2626;
+  border: 1px solid rgba(239,68,68,.25);
+}
+
+/* Footer */
+.dim-footer {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.dim-btn-back {
+  border: 1px solid var(--border); background: var(--surface2);
+  color: var(--text); font-size: 13px; font-weight: 600;
+  padding: 8px 16px; border-radius: 8px; cursor: pointer;
+  display: flex; align-items: center; gap: 6px;
+  transition: background .1s;
+}
+.dim-btn-back:hover { background: var(--surface3); }
+.dim-btn-next, .dim-btn-import {
+  border: none; background: var(--accent); color: #fff;
+  font-size: 13px; font-weight: 700;
+  padding: 8px 20px; border-radius: 8px; cursor: pointer;
+  display: flex; align-items: center; gap: 6px;
+  transition: filter .1s;
+}
+.dim-btn-next:hover, .dim-btn-import:hover { filter: brightness(1.08); }
+.dim-btn-next:disabled { opacity: .45; cursor: not-allowed; filter: none; }
+.dim-btn-done {
+  border: none; background: #10b981; color: #fff;
+  font-size: 13px; font-weight: 700;
+  padding: 8px 20px; border-radius: 8px; cursor: pointer;
+  display: flex; align-items: center; gap: 6px;
+  transition: filter .1s;
+}
+.dim-btn-done:hover { filter: brightness(1.08); }

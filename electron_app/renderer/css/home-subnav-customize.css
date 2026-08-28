@@ -2,9 +2,34 @@
    HOME SUB-NAV TAB CUSTOMIZER  —  gear button + enable/disable dialog
    ══════════════════════════════════════════════════════════════════ */
 
+/* ── Right-side button group ─────────────────────────────────────── */
+.home-subnav-right {
+  margin-left: auto;
+  display: flex; align-items: center; gap: 2px; flex-shrink: 0;
+}
+
+/* ── Wizard shortcut button ──────────────────────────────────────── */
+.home-subnav-action-btn {
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  transition: background .12s, color .12s;
+}
+.home-subnav-action-btn:hover {
+  background: var(--accent-light);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
 /* ── Gear button (sits at the right end of the Home sub-nav) ────────── */
 .home-subnav-gear-btn {
-  margin-left: auto;
+  margin-left: 0;
   width: 26px; height: 26px;
   border-radius: 50%;
   border: 1px solid transparent;
