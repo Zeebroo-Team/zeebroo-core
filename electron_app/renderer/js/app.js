@@ -5756,6 +5756,8 @@ $('#bwz-ps-cat-back')?.addEventListener('click', () => {
   $('#bwz-ps-cat-choice').style.display  = 'none';
   $('#bwz-ps-cat-actions').style.display = '';
 });
+// Next — skip choice and advance to Products sub-step
+$('#bwz-ps-cat-next')?.addEventListener('click', () => _bwzPsGoto(2));
 // Choice: Import CSV
 $('#bwz-ps-cat-import')?.addEventListener('click', () => {
   _bwz.billingActive = true; _bwz.billingNextStep = 'ps:1';
@@ -5788,6 +5790,8 @@ $('#bwz-ps-product-back')?.addEventListener('click', () => {
   $('#bwz-ps-product-choice').style.display  = 'none';
   $('#bwz-ps-product-actions').style.display = '';
 });
+// Next — skip choice and close wizard
+$('#bwz-ps-product-next')?.addEventListener('click', () => _bwzClose());
 // Choice: Import CSV
 $('#bwz-ps-product-import')?.addEventListener('click', () => {
   _bwz.billingActive = true; _bwz.billingNextStep = 'ps:2';

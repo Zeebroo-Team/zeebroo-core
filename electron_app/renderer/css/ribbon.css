@@ -17203,3 +17203,17 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
   font-size: 13px; color: var(--text-muted); margin: 0 0 14px;
   line-height: 1.5;
 }
+
+/* ── Choice panel footer (Back + Next) ───────────────────────────────────── */
+.bwz-ps-choice-footer {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-top: 2px;
+}
+.bwz-ps-choice-next {
+  border: none; background: var(--accent); color: #fff;
+  font-size: 12px; font-weight: 600;
+  padding: 6px 14px; border-radius: 8px; cursor: pointer;
+  display: flex; align-items: center; gap: 5px;
+  transition: filter .12s;
+}
+.bwz-ps-choice-next:hover { filter: brightness(1.08); }
