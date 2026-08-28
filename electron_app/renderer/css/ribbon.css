@@ -17385,3 +17385,14 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
 .bwz-ai-result-icon.err { background: #fee2e2; color: #ef4444; }
 .bwz-ai-result-title { font-size: 16px; font-weight: 700; color: var(--text); }
 .bwz-ai-result-sub   { font-size: 13px; color: var(--text-muted); }
+
+/* ── Bills step Next button — state-aware styling ────────────────────────── */
+#bwz-ss-bill-skip.bwz-ss-bill-skip-done {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+  min-width: 260px;
+}
+#bwz-ss-bill-skip.bwz-ss-bill-skip-done:hover {
+  filter: brightness(1.08);
+}

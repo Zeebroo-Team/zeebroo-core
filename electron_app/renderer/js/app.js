@@ -5578,6 +5578,18 @@ async function _bwzLoadExisting() {
   renderCards('bwz-ss-existing-bills-rentals', billHubItems);
   const billsPropsEl = $('#bwz-ss-existing-bills-properties');
   if (billsPropsEl) billsPropsEl.innerHTML = '';
+
+  // Update the Next button label based on whether any bills have been added
+  const skipBtn = $('#bwz-ss-bill-skip');
+  if (skipBtn) {
+    if (allBills.length > 0) {
+      skipBtn.innerHTML = '<i class="fa fa-circle-check"></i> Already Added Bills and Go Next';
+      skipBtn.classList.add('bwz-ss-bill-skip-done');
+    } else {
+      skipBtn.innerHTML = '<i class="fa fa-forward-step"></i> I will add that later, Go to Next';
+      skipBtn.classList.remove('bwz-ss-bill-skip-done');
+    }
+  }
 }
 
 // ── Billing sub-step navigation ────────────────────────────────────────────
