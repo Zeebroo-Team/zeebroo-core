@@ -12806,9 +12806,26 @@
       <div class="bwz-panel bwz-ss-panel" id="bwz-ps-panel-1">
         <h2 class="bwz-ss-title">Do you have product categories?</h2>
         <p class="bwz-ss-desc">Organise your products into categories for easier filtering and reporting.</p>
-        <div class="bwz-ss-actions">
+        <div class="bwz-ss-actions" id="bwz-ps-cat-actions">
           <button class="bwz-ss-yes" id="bwz-ps-cat-yes">Yes</button>
           <button class="bwz-ss-no"  id="bwz-ps-cat-skip">No</button>
+        </div>
+        <!-- Choice cards (shown when Yes is clicked) -->
+        <div class="bwz-ps-choice" id="bwz-ps-cat-choice" style="display:none">
+          <p class="bwz-ps-choice-label">How would you like to add categories?</p>
+          <div class="bwz-ps-choice-grid">
+            <button class="bwz-ps-choice-card" id="bwz-ps-cat-import">
+              <span class="bwz-ps-choice-icon"><i class="fa fa-file-csv"></i></span>
+              <span class="bwz-ps-choice-name">Import CSV</span>
+              <span class="bwz-ps-choice-sub">Bulk import from a spreadsheet</span>
+            </button>
+            <button class="bwz-ps-choice-card" id="bwz-ps-cat-add">
+              <span class="bwz-ps-choice-icon"><i class="fa fa-plus"></i></span>
+              <span class="bwz-ps-choice-name">Add Category</span>
+              <span class="bwz-ps-choice-sub">Create categories one by one</span>
+            </button>
+          </div>
+          <button class="bwz-ps-choice-back" id="bwz-ps-cat-back"><i class="fa fa-arrow-left"></i> Back</button>
         </div>
         <div class="bwz-ss-existing" id="bwz-ps-existing-cats"></div>
       </div>
@@ -12816,10 +12833,27 @@
       <!-- Sub-step 2: Products -->
       <div class="bwz-panel bwz-ss-panel" id="bwz-ps-panel-2" style="display:none">
         <h2 class="bwz-ss-title">Ready to add your first product?</h2>
-        <p class="bwz-ss-desc">Add your products, set prices and stock levels to start selling right away.</p>
-        <div class="bwz-ss-actions">
+        <p class="bwz-ps-desc">Add your products, set prices and stock levels to start selling right away.</p>
+        <div class="bwz-ss-actions" id="bwz-ps-product-actions">
           <button class="bwz-ss-yes" id="bwz-ps-product-yes">Yes, add product</button>
           <button class="bwz-ss-no"  id="bwz-ps-product-skip">Skip for now</button>
+        </div>
+        <!-- Choice cards (shown when Yes is clicked) -->
+        <div class="bwz-ps-choice" id="bwz-ps-product-choice" style="display:none">
+          <p class="bwz-ps-choice-label">How would you like to add products?</p>
+          <div class="bwz-ps-choice-grid">
+            <button class="bwz-ps-choice-card" id="bwz-ps-product-import">
+              <span class="bwz-ps-choice-icon"><i class="fa fa-file-csv"></i></span>
+              <span class="bwz-ps-choice-name">Import CSV</span>
+              <span class="bwz-ps-choice-sub">Bulk import from a spreadsheet</span>
+            </button>
+            <button class="bwz-ps-choice-card" id="bwz-ps-product-add">
+              <span class="bwz-ps-choice-icon"><i class="fa fa-plus"></i></span>
+              <span class="bwz-ps-choice-name">Add Product</span>
+              <span class="bwz-ps-choice-sub">Create products one by one</span>
+            </button>
+          </div>
+          <button class="bwz-ps-choice-back" id="bwz-ps-product-back"><i class="fa fa-arrow-left"></i> Back</button>
         </div>
         <div class="bwz-ss-existing" id="bwz-ps-existing-products"></div>
       </div>

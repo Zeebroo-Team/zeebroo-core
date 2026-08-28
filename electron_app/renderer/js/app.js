@@ -5634,6 +5634,11 @@ function _bwzPsGoto(n) {
   });
   const line = $('#bwz-ps-line-1');
   if (line) line.classList.toggle('filled', n > 1);
+  // Always reset choice cards so yes/skip buttons are visible on re-entry
+  const cc = $('#bwz-ps-cat-choice');     const ca = $('#bwz-ps-cat-actions');
+  const pc = $('#bwz-ps-product-choice'); const pa = $('#bwz-ps-product-actions');
+  if (cc) cc.style.display = 'none'; if (ca) ca.style.display = '';
+  if (pc) pc.style.display = 'none'; if (pa) pa.style.display = '';
 }
 
 async function _bwzLoadProductsExisting() {
@@ -5730,22 +5735,68 @@ $('#bwz-ss-bill-skip')?.addEventListener('click', () => {
 });
 
 // Products sub-step 1: Categories
+// Yes → show choice cards (Import CSV | Add Manually)
 $('#bwz-ps-cat-yes')?.addEventListener('click', () => {
+  $('#bwz-ps-cat-actions').style.display = 'none';
+  $('#bwz-ps-cat-choice').style.display  = '';
+});
+// Back from choice
+$('#bwz-ps-cat-back')?.addEventListener('click', () => {
+  $('#bwz-ps-cat-choice').style.display  = 'none';
+  $('#bwz-ps-cat-actions').style.display = '';
+});
+// Choice: Import CSV
+$('#bwz-ps-cat-import')?.addEventListener('click', () => {
+  _bwz.billingActive = true; _bwz.billingNextStep = 'ps:1';
+  $('#bwz-overlay').style.display = 'none';
+  activateTab('inventory'); switchInvView('categories');
+  setTimeout(() => _catCsvOpen(), 80);
+});
+// Choice: Add manually
+$('#bwz-ps-cat-add')?.addEventListener('click', () => {
   _bwz.billingActive = true; _bwz.billingNextStep = 'ps:2';
   $('#bwz-overlay').style.display = 'none';
   activateTab('inventory'); switchInvView('categories');
   setTimeout(() => $('#cat-add-btn')?.click(), 80);
 });
-$('#bwz-ps-cat-skip')?.addEventListener('click', () => _bwzPsGoto(2));
+$('#bwz-ps-cat-skip')?.addEventListener('click', () => {
+  // reset choice state before advancing
+  $('#bwz-ps-cat-choice').style.display  = 'none';
+  $('#bwz-ps-cat-actions').style.display = '';
+  _bwzPsGoto(2);
+});
 
 // Products sub-step 2: Products
+// Yes → show choice cards (Import CSV | Add Manually)
 $('#bwz-ps-product-yes')?.addEventListener('click', () => {
+  $('#bwz-ps-product-actions').style.display = 'none';
+  $('#bwz-ps-product-choice').style.display  = '';
+});
+// Back from choice
+$('#bwz-ps-product-back')?.addEventListener('click', () => {
+  $('#bwz-ps-product-choice').style.display  = 'none';
+  $('#bwz-ps-product-actions').style.display = '';
+});
+// Choice: Import CSV
+$('#bwz-ps-product-import')?.addEventListener('click', () => {
+  _bwz.billingActive = true; _bwz.billingNextStep = 'ps:2';
+  $('#bwz-overlay').style.display = 'none';
+  activateTab('inventory'); switchInvView('products');
+  setTimeout(() => _csvOpenModal(), 80);
+});
+// Choice: Add manually
+$('#bwz-ps-product-add')?.addEventListener('click', () => {
   _bwz.billingActive = true; _bwz.billingNextStep = 'ps:2';
   $('#bwz-overlay').style.display = 'none';
   activateTab('inventory'); switchInvView('products');
   setTimeout(openAddProductModal, 80);
 });
-$('#bwz-ps-product-skip')?.addEventListener('click', _bwzClose);
+$('#bwz-ps-product-skip')?.addEventListener('click', () => {
+  // reset choice state before closing
+  $('#bwz-ps-product-choice').style.display  = 'none';
+  $('#bwz-ps-product-actions').style.display = '';
+  _bwzClose();
+});
 
 // ── Billing Setup standalone check (when bank account already exists) ──────
 async function _checkBillingOnboarding() {
