@@ -5504,7 +5504,7 @@ async function _bwzLoadExisting() {
         const assignId   = btn.dataset.assignId   || '';
 
         _bwz.billingActive = true; _bwz.billingNextStep = 4; // return to step 4 after save
-        $('#bwz-overlay').style.display = 'none';
+        _bwzGoBehind();
         activateTab('finance'); switchFinView('bills');
 
         await new Promise(r => setTimeout(r, 80)); // let view switch settle
@@ -5619,9 +5619,21 @@ function _bwzSsGoto(n) {
 }
 
 function _bwzClose() {
-  $('#bwz-overlay').style.display = 'none';
+  const _ov = $('#bwz-overlay');
+  _ov.classList.remove('bwz-behind');
+  _ov.style.display = 'none';
   _bwz.billingActive = false;
   _bwz.billingNextStep = null;
+}
+// Drop wizard behind a child modal (stays visible, z-index lowered below .modal-overlay)
+function _bwzGoBehind() {
+  $('#bwz-overlay').classList.add('bwz-behind');
+}
+// Bring wizard back to front after child modal closes
+function _bwzComeForward() {
+  const _ov = $('#bwz-overlay');
+  _ov.classList.remove('bwz-behind');
+  _ov.style.display = 'flex'; // safeguard in case it was somehow hidden
 }
 
 // Whether the products step should show
@@ -5890,7 +5902,7 @@ function _bwzResumeWizard(nextStep) {
     const n = parseInt(nextStep.split(':')[1]);
     _bwzShowProductsPanel(); // makes products panel visible, sets step indicators + loads existing
     _bwzPsGoto(n);           // override to the correct sub-step
-    $('#bwz-overlay').style.display = 'flex';
+    _bwzComeForward();
     _bwzShowResumeBanner();
     return;
   }
@@ -5899,13 +5911,13 @@ function _bwzResumeWizard(nextStep) {
     const n = parseInt(nextStep.split(':')[1]);
     _bwzShowPosPanel(); // makes POS panel visible, sets step indicators
     _bwzPosGoto(n);     // override to the correct sub-step
-    $('#bwz-overlay').style.display = 'flex';
+    _bwzComeForward();
     _bwzShowResumeBanner();
     return;
   }
   _bwzSsGoto(nextStep);
   _bwzLoadExisting(); // refresh lists so just-added record appears
-  $('#bwz-overlay').style.display = 'flex';
+  _bwzComeForward();
   _bwzShowResumeBanner();
 }
 
@@ -5937,10 +5949,10 @@ $('#home-subnav-setup-wizard')?.addEventListener('click', async () => {
 $('#bwz-submit-btn')?.addEventListener('click', _bwzSubmit);
 $('#bwz-billing-skip-btn')?.addEventListener('click', _bwzClose);
 
-// Sub-step 1: Loans — hide wizard, open modal; resumes at sub-step 2 after save
+// Sub-step 1: Loans — open modal over wizard; resumes at sub-step 2 after save
 $('#bwz-ss-loan-yes')?.addEventListener('click', () => {
   _bwz.billingActive = true; _bwz.billingNextStep = 2;
-  $('#bwz-overlay').style.display = 'none';
+  _bwzGoBehind();
   activateTab('finance'); switchFinView('loans');
   setTimeout(openLoanCreateModal, 80);
 });
@@ -5950,19 +5962,19 @@ $('#bwz-ss-back-2')?.addEventListener('click', () => _bwzSsGoto(1));
 $('#bwz-ss-back-3')?.addEventListener('click', () => _bwzSsGoto(2));
 $('#bwz-ss-back-4')?.addEventListener('click', () => _bwzSsGoto(3));
 
-// Sub-step 2: Rentals — hide wizard, open modal; resumes at sub-step 3 after save
+// Sub-step 2: Rentals — open modal over wizard; resumes at sub-step 3 after save
 $('#bwz-ss-rental-yes')?.addEventListener('click', () => {
   _bwz.billingActive = true; _bwz.billingNextStep = 3;
-  $('#bwz-overlay').style.display = 'none';
+  _bwzGoBehind();
   activateTab('finance'); switchFinView('rentals');
   setTimeout(openRentalCreateModal, 80);
 });
 $('#bwz-ss-rental-skip')?.addEventListener('click', () => _bwzSsGoto(3));
 
-// Sub-step 3: Properties — hide wizard, open modal; resumes at sub-step 4 after save
+// Sub-step 3: Properties — open modal over wizard; resumes at sub-step 4 after save
 $('#bwz-ss-property-yes')?.addEventListener('click', () => {
   _bwz.billingActive = true; _bwz.billingNextStep = 4;
-  $('#bwz-overlay').style.display = 'none';
+  _bwzGoBehind();
   activateTab('finance'); switchFinView('properties');
   setTimeout(openPropertyCreateModal, 80);
 });
@@ -5997,14 +6009,14 @@ $('#bwz-ps-cat-next')?.addEventListener('click', () => _bwzPsGoto(2));
 // Choice: Import CSV
 $('#bwz-ps-cat-import')?.addEventListener('click', () => {
   _bwz.billingActive = true; _bwz.billingNextStep = 'ps:1';
-  $('#bwz-overlay').style.display = 'none';
+  _bwzGoBehind();
   activateTab('inventory'); switchInvView('categories');
   setTimeout(() => _catCsvOpen(), 80);
 });
 // Choice: Add manually — stay on categories step if modal is closed; advance only on save
 $('#bwz-ps-cat-add')?.addEventListener('click', () => {
   _bwz.billingActive = true; _bwz.billingNextStep = 'ps:1';
-  $('#bwz-overlay').style.display = 'none';
+  _bwzGoBehind();
   activateTab('inventory'); switchInvView('categories');
   setTimeout(() => $('#cat-add-btn')?.click(), 80);
 });
@@ -6036,21 +6048,21 @@ $('#bwz-ps-product-next')?.addEventListener('click', () => {
 // Choice: Import CSV
 $('#bwz-ps-product-import')?.addEventListener('click', () => {
   _bwz.billingActive = true; _bwz.billingNextStep = 'ps:2';
-  $('#bwz-overlay').style.display = 'none';
+  _bwzGoBehind();
   activateTab('inventory'); switchInvView('products');
   setTimeout(() => _csvOpenModal(), 80);
 });
 // Choice: SQL Dump Import
 $('#bwz-ps-product-dump')?.addEventListener('click', () => {
   _bwz.billingActive = true; _bwz.billingNextStep = 'ps:2';
-  $('#bwz-overlay').style.display = 'none';
+  _bwzGoBehind();
   activateTab('inventory'); switchInvView('products');
   setTimeout(() => $('#inv-dump-import-btn')?.click(), 80);
 });
 // Choice: Add manually
 $('#bwz-ps-product-add')?.addEventListener('click', () => {
   _bwz.billingActive = true; _bwz.billingNextStep = 'ps:2';
-  $('#bwz-overlay').style.display = 'none';
+  _bwzGoBehind();
   activateTab('inventory'); switchInvView('products');
   setTimeout(openAddProductModal, 80);
 });

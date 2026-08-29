@@ -3294,6 +3294,11 @@ body.dark .ob-continue-btn:hover { background: var(--accent-dark); }
   display: flex; align-items: center; justify-content: center;
   animation: fadeIn .2s ease;
 }
+/* Wizard drops behind a child modal that it opens — stays visible, z-index lowered below .modal-overlay (800) */
+#bwz-overlay.bwz-behind {
+  z-index: 780;
+  transition: none;
+}
 .bwz-card {
   background: var(--surface);
   border-radius: 20px;
