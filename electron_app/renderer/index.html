@@ -2917,9 +2917,9 @@
           </div><!-- /prod-modal-body -->
           <div class="po-aim-footer">
             <button class="po-btn-ghost" id="prod-modal-cancel"><i class="fa fa-xmark"></i> Cancel</button>
-            <div style="display:flex;gap:8px;margin-left:auto">
-              <button class="po-btn-ghost" id="prod-modal-save-new" style="display:none"><i class="fa fa-plus"></i> Save &amp; Add Another</button>
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;margin-left:auto">
               <button class="po-btn-primary" id="prod-modal-save"><i class="fa fa-check"></i> Save Product</button>
+              <button class="bwz-save-add-link" id="prod-modal-save-new" style="display:none"><i class="fa fa-plus"></i> Save &amp; add another</button>
             </div>
           </div>
         </div>
@@ -3329,8 +3329,10 @@
           </div>
           <div class="po-aim-footer">
             <button class="po-btn-ghost" id="cat-modal-cancel"><i class="fa fa-xmark"></i> Cancel</button>
-            <button class="po-btn-ghost" id="cat-modal-save-another"><i class="fa fa-plus"></i> Save &amp; Add Another</button>
-            <button class="po-btn-primary" id="cat-modal-save"><i class="fa fa-check"></i> Save Category</button>
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;margin-left:auto">
+              <button class="po-btn-primary" id="cat-modal-save"><i class="fa fa-check"></i> Save Category</button>
+              <button class="bwz-save-add-link" id="cat-modal-save-another"><i class="fa fa-plus"></i> Save &amp; add another</button>
+            </div>
           </div>
         </div>
       </div>
@@ -12671,11 +12673,17 @@
       </div>
     </div>
 
+    <!-- Resume banner (shown briefly when wizard reopens after a modal) -->
+    <div class="bwz-resume-banner" id="bwz-resume-banner" style="display:none">
+      <i class="fa fa-rotate-left"></i> Resuming setup — back to where you left off
+    </div>
+
     <!-- Panel 1: Bank account form -->
     <div class="bwz-panel" id="bwz-panel-1">
       <div class="bwz-panel-icon"><i class="fa fa-building-columns"></i></div>
       <h2 class="bwz-panel-title">Set up your bank account</h2>
       <p class="bwz-panel-sub">Add your account details, banking information, and opening balance.</p>
+      <p class="bwz-time-estimate"><i class="fa fa-clock"></i> Takes about 3–5 minutes. You can skip any step and return later.</p>
 
       <!-- Account info -->
       <div class="bwz-row">
@@ -12741,6 +12749,9 @@
     <!-- Panel 2: Billing setup — 3 sub-steps -->
     <div id="bwz-panel-billing" style="display:none">
 
+      <!-- Depth label -->
+      <p class="bwz-depth-label" id="bwz-depth-label-billing">Billing Setup · 1 of 4</p>
+
       <!-- Sub-step indicator -->
       <div class="bwz-ss-track">
         <div class="bwz-ss-dot active" id="bwz-ss-dot-1"><span>1</span></div>
@@ -12760,6 +12771,7 @@
           <button class="bwz-ss-yes" id="bwz-ss-loan-yes">Yes</button>
           <button class="bwz-ss-no" id="bwz-ss-loan-skip">No</button>
         </div>
+        <p class="bwz-skip-hint">Add loans later in Finance → Loans</p>
         <div class="bwz-ss-existing" id="bwz-ss-existing-loans"></div>
       </div>
 
@@ -12771,7 +12783,9 @@
           <button class="bwz-ss-yes" id="bwz-ss-rental-yes">Yes</button>
           <button class="bwz-ss-no" id="bwz-ss-rental-skip">No</button>
         </div>
+        <p class="bwz-skip-hint">Add rentals later in Finance → Rentals</p>
         <div class="bwz-ss-existing" id="bwz-ss-existing-rentals"></div>
+        <div class="bwz-ss-back-row"><button class="bwz-back-btn" id="bwz-ss-back-2"><i class="fa fa-arrow-left"></i> Back</button></div>
       </div>
 
       <!-- Sub-step 3: Properties -->
@@ -12782,7 +12796,9 @@
           <button class="bwz-ss-yes" id="bwz-ss-property-yes">Yes</button>
           <button class="bwz-ss-no" id="bwz-ss-property-skip">No</button>
         </div>
+        <p class="bwz-skip-hint">Add properties later in Finance → Properties</p>
         <div class="bwz-ss-existing" id="bwz-ss-existing-properties"></div>
+        <div class="bwz-ss-back-row"><button class="bwz-back-btn" id="bwz-ss-back-3"><i class="fa fa-arrow-left"></i> Back</button></div>
       </div>
 
       <!-- Sub-step 4: Bills -->
@@ -12791,8 +12807,12 @@
         <p class="bwz-ss-desc">Pick a common bill type to add, or skip for now.</p>
         <div class="bwz-ss-existing" id="bwz-ss-existing-bills-rentals"></div>
         <div class="bwz-ss-existing" id="bwz-ss-existing-bills-properties"></div>
-        <div style="text-align:center;margin-top:8px">
-          <button class="bwz-ss-no" id="bwz-ss-bill-skip" style="min-width:120px">Next</button>
+        <div class="bwz-ss-bill-footer">
+          <button class="bwz-back-btn" id="bwz-ss-back-4"><i class="fa fa-arrow-left"></i> Back</button>
+          <div>
+            <button class="bwz-ss-no" id="bwz-ss-bill-skip" style="min-width:140px">Next</button>
+            <p class="bwz-skip-hint" style="text-align:right">Manage bills later in Finance → Bills</p>
+          </div>
         </div>
       </div>
 
@@ -12800,6 +12820,9 @@
 
     <!-- Panel 3: Products setup (shown only when stock_management / product_management enabled) -->
     <div id="bwz-panel-products" style="display:none">
+
+      <!-- Depth label -->
+      <p class="bwz-depth-label" id="bwz-depth-label-products">Products · 1 of 2</p>
 
       <!-- Sub-step indicator: 2 dots -->
       <div class="bwz-ss-track">
@@ -12817,19 +12840,20 @@
           <button class="bwz-ss-no"  id="bwz-ps-cat-skip">No</button>
           <button class="bwz-ps-ai-btn" id="bwz-ps-cat-ai"><i class="fa fa-wand-magic-sparkles"></i> Generate Using AI</button>
         </div>
+        <p class="bwz-skip-hint">Add categories later in Products → Categories</p>
         <!-- Choice cards (shown when Yes is clicked) -->
         <div class="bwz-ps-choice" id="bwz-ps-cat-choice" style="display:none">
           <p class="bwz-ps-choice-label">How would you like to add categories?</p>
           <div class="bwz-ps-choice-grid">
+            <button class="bwz-ps-choice-card bwz-ps-choice-card--primary" id="bwz-ps-cat-add">
+              <span class="bwz-ps-choice-icon"><i class="fa fa-plus"></i></span>
+              <span class="bwz-ps-choice-name">Add Manually</span>
+              <span class="bwz-ps-choice-sub">Create categories one by one</span>
+            </button>
             <button class="bwz-ps-choice-card" id="bwz-ps-cat-import">
               <span class="bwz-ps-choice-icon"><i class="fa fa-file-csv"></i></span>
               <span class="bwz-ps-choice-name">Import CSV</span>
               <span class="bwz-ps-choice-sub">Bulk import from a spreadsheet</span>
-            </button>
-            <button class="bwz-ps-choice-card" id="bwz-ps-cat-add">
-              <span class="bwz-ps-choice-icon"><i class="fa fa-plus"></i></span>
-              <span class="bwz-ps-choice-name">Add Category</span>
-              <span class="bwz-ps-choice-sub">Create categories one by one</span>
             </button>
           </div>
           <div class="bwz-ps-choice-footer">
@@ -12843,30 +12867,29 @@
       <!-- Sub-step 2: Products -->
       <div class="bwz-panel bwz-ss-panel" id="bwz-ps-panel-2" style="display:none">
         <h2 class="bwz-ss-title">Ready to add your first product?</h2>
-        <p class="bwz-ps-desc">Add your products, set prices and stock levels to start selling right away.</p>
+        <p class="bwz-ss-desc">Add your products, set prices and stock levels to start selling right away.</p>
         <div class="bwz-ss-actions" id="bwz-ps-product-actions">
           <button class="bwz-ss-yes" id="bwz-ps-product-yes">Yes, add product</button>
           <button class="bwz-ss-no"  id="bwz-ps-product-skip">Skip for now</button>
         </div>
+        <p class="bwz-skip-hint">Add products later in Products → All Products</p>
         <!-- Choice cards (shown when Yes is clicked) -->
         <div class="bwz-ps-choice" id="bwz-ps-product-choice" style="display:none">
           <p class="bwz-ps-choice-label">How would you like to add products?</p>
-          <div class="bwz-ps-choice-grid bwz-ps-choice-grid-3">
+          <div class="bwz-ps-choice-grid">
+            <button class="bwz-ps-choice-card bwz-ps-choice-card--primary" id="bwz-ps-product-add">
+              <span class="bwz-ps-choice-icon"><i class="fa fa-plus"></i></span>
+              <span class="bwz-ps-choice-name">Add Manually</span>
+              <span class="bwz-ps-choice-sub">Create products one by one</span>
+            </button>
             <button class="bwz-ps-choice-card" id="bwz-ps-product-import">
               <span class="bwz-ps-choice-icon"><i class="fa fa-file-csv"></i></span>
               <span class="bwz-ps-choice-name">Import CSV</span>
               <span class="bwz-ps-choice-sub">Bulk import from a spreadsheet</span>
             </button>
-            <button class="bwz-ps-choice-card" id="bwz-ps-product-dump">
-              <span class="bwz-ps-choice-icon"><i class="fa fa-database"></i></span>
-              <span class="bwz-ps-choice-name">SQL Dump Import</span>
-              <span class="bwz-ps-choice-sub">Import from a MySQL backup file</span>
-            </button>
-            <button class="bwz-ps-choice-card" id="bwz-ps-product-add">
-              <span class="bwz-ps-choice-icon"><i class="fa fa-plus"></i></span>
-              <span class="bwz-ps-choice-name">Add Product</span>
-              <span class="bwz-ps-choice-sub">Create products one by one</span>
-            </button>
+          </div>
+          <div class="bwz-ps-choice-adv">
+            <button class="bwz-choice-adv-link" id="bwz-ps-product-dump"><i class="fa fa-database"></i> Advanced: Import from SQL dump</button>
           </div>
           <div class="bwz-ps-choice-footer">
             <button class="bwz-ps-choice-back" id="bwz-ps-product-back"><i class="fa fa-arrow-left"></i> Back</button>
@@ -12874,6 +12897,7 @@
           </div>
         </div>
         <div class="bwz-ss-existing" id="bwz-ps-existing-products"></div>
+        <div class="bwz-ss-back-row"><button class="bwz-back-btn" id="bwz-ps-back-2"><i class="fa fa-arrow-left"></i> Back to Categories</button></div>
       </div>
 
     </div>
@@ -12881,35 +12905,41 @@
     <!-- Panel 4: POS Setup (shown only when point_of_sale feature enabled) -->
     <div id="bwz-panel-pos" style="display:none">
 
-      <!-- Sub-step indicator: 3 dots -->
+      <!-- Depth label -->
+      <p class="bwz-depth-label" id="bwz-depth-label-pos">POS Setup · 1 of 4</p>
+
+      <!-- Sub-step indicator: 4 dots -->
       <div class="bwz-ss-track">
         <div class="bwz-ss-dot active" id="bwz-pos-dot-1"><span>1</span></div>
         <div class="bwz-ss-line" id="bwz-pos-line-1"></div>
         <div class="bwz-ss-dot" id="bwz-pos-dot-2"><span>2</span></div>
         <div class="bwz-ss-line" id="bwz-pos-line-2"></div>
         <div class="bwz-ss-dot" id="bwz-pos-dot-3"><span>3</span></div>
+        <div class="bwz-ss-line" id="bwz-pos-line-3"></div>
+        <div class="bwz-ss-dot" id="bwz-pos-dot-4"><span>4</span></div>
       </div>
 
-      <!-- Sub-step 1: General / Payment settings -->
+      <!-- Sub-step 1: Regional & Financial -->
       <div class="bwz-panel bwz-ss-panel bwz-pos-config-panel" id="bwz-pos-panel-1">
-        <h2 class="bwz-ss-title">Configure your POS</h2>
-        <p class="bwz-ss-desc">Set the essential options for your point of sale system.</p>
+        <h2 class="bwz-ss-title">Regional &amp; Financial</h2>
+        <p class="bwz-ss-desc">Set your currency, timezone and how sales are settled.</p>
 
-        <div class="bwz-pos-form" id="bwz-pos-config-form">
-
-          <!-- Row 1: Currency + Timezone -->
+        <div class="bwz-pos-form">
+          <!-- Currency + Timezone -->
           <div class="bwz-pos-row">
             <div class="bwz-pos-field">
               <label class="bwz-pos-label" for="bwz-pos-currency"><i class="fa fa-coins"></i> Currency</label>
               <input type="text" id="bwz-pos-currency" class="bwz-pos-input" placeholder="e.g. USD, EUR, LKR" maxlength="10">
             </div>
             <div class="bwz-pos-field">
-              <label class="bwz-pos-label" for="bwz-pos-timezone"><i class="fa fa-clock"></i> Timezone</label>
+              <label class="bwz-pos-label" for="bwz-pos-timezone">
+                <i class="fa fa-clock"></i> Timezone
+                <span class="bwz-pos-tz-hint" id="bwz-pos-tz-hint"></span>
+              </label>
               <input type="text" id="bwz-pos-timezone" class="bwz-pos-input" placeholder="e.g. Asia/Colombo">
             </div>
           </div>
-
-          <!-- Row 2: Default deposit account + Settlement mode -->
+          <!-- Deposit account + Settlement mode -->
           <div class="bwz-pos-row">
             <div class="bwz-pos-field">
               <label class="bwz-pos-label" for="bwz-pos-account"><i class="fa fa-building-columns"></i> Default Deposit Account</label>
@@ -12925,8 +12955,24 @@
               </select>
             </div>
           </div>
+        </div>
 
-          <!-- Row 3: Featured limits -->
+        <div class="bwz-pos-form-footer">
+          <div>
+            <button class="bwz-ss-no" id="bwz-pos-general-skip">Skip for now</button>
+            <p class="bwz-skip-hint">Complete later in Settings → POS Configuration</p>
+          </div>
+          <button class="bwz-pos-save-btn" id="bwz-pos-general-save"><i class="fa fa-floppy-disk"></i> Save &amp; Continue</button>
+        </div>
+      </div>
+
+      <!-- Sub-step 2: POS Features -->
+      <div class="bwz-panel bwz-ss-panel bwz-pos-config-panel" id="bwz-pos-panel-2" style="display:none">
+        <h2 class="bwz-ss-title">POS Features</h2>
+        <p class="bwz-ss-desc">Configure what appears on your point-of-sale screen.</p>
+
+        <div class="bwz-pos-form">
+          <!-- Featured limits -->
           <div class="bwz-pos-row">
             <div class="bwz-pos-field">
               <label class="bwz-pos-label" for="bwz-pos-feat-products"><i class="fa fa-star"></i> Featured Products Limit</label>
@@ -12937,8 +12983,7 @@
               <input type="number" id="bwz-pos-feat-cats" class="bwz-pos-input" min="0" max="200" placeholder="0">
             </div>
           </div>
-
-          <!-- Row 4: Toggles -->
+          <!-- Toggles -->
           <div class="bwz-pos-toggles">
             <div class="bwz-pos-toggle-row">
               <div class="bwz-pos-toggle-info">
@@ -12955,43 +13000,102 @@
               <label class="bwz-pos-switch"><input type="checkbox" id="bwz-pos-multi-cashier"><span class="bwz-pos-switch-track"></span></label>
             </div>
           </div>
-
           <!-- Counters info note -->
-          <div class="bwz-pos-info-note" id="bwz-pos-counter-note" style="display:none">
+          <div class="bwz-pos-info-note" id="bwz-pos-counter-note">
             <i class="fa fa-circle-info"></i>
-            <span>You can add and configure POS counters (terminals) after setup in <b>POS Settings → Counters</b>.</span>
+            <span>POS counters (terminals) can be added in <b>POS Settings → Counters</b> after setup.</span>
           </div>
-
         </div>
 
-        <!-- Footer -->
         <div class="bwz-pos-form-footer">
-          <button class="bwz-ss-no" id="bwz-pos-general-skip">Skip for now</button>
-          <button class="bwz-pos-save-btn" id="bwz-pos-general-save"><i class="fa fa-floppy-disk"></i> Save &amp; Continue</button>
+          <div>
+            <button class="bwz-back-btn" id="bwz-pos-back-2"><i class="fa fa-arrow-left"></i> Back</button>
+            <button class="bwz-ss-no" id="bwz-pos-features-skip" style="margin-left:8px">Skip</button>
+            <p class="bwz-skip-hint">Configure later in Settings → POS Configuration</p>
+          </div>
+          <button class="bwz-pos-save-btn" id="bwz-pos-features-save"><i class="fa fa-floppy-disk"></i> Save &amp; Continue</button>
         </div>
       </div>
 
-      <!-- Sub-step 2: Tax setup -->
-      <div class="bwz-panel bwz-ss-panel" id="bwz-pos-panel-2" style="display:none">
-        <h2 class="bwz-ss-title">Do you charge tax on sales?</h2>
-        <p class="bwz-ss-desc">Set up tax rules and rates that will be applied automatically at checkout.</p>
-        <div class="bwz-ss-actions">
-          <button class="bwz-ss-yes" id="bwz-pos-tax-yes"><i class="fa fa-percent"></i> Set Up Tax</button>
-          <button class="bwz-ss-no"  id="bwz-pos-tax-skip">No / Skip</button>
+      <!-- Sub-step 3: Tax (inline) -->
+      <div class="bwz-panel bwz-ss-panel bwz-pos-config-panel" id="bwz-pos-panel-3" style="display:none">
+        <h2 class="bwz-ss-title">Set up tax</h2>
+        <p class="bwz-ss-desc">Configure the tax applied to sales. You can add more rules later.</p>
+
+        <div class="bwz-pos-form">
+          <div class="bwz-pos-row">
+            <div class="bwz-pos-field">
+              <label class="bwz-pos-label" for="bwz-pos-tax-name"><i class="fa fa-percent"></i> Tax Name</label>
+              <input type="text" id="bwz-pos-tax-name" class="bwz-pos-input" placeholder="e.g. VAT, GST, Sales Tax">
+            </div>
+            <div class="bwz-pos-field">
+              <label class="bwz-pos-label" for="bwz-pos-tax-rate"><i class="fa fa-percent"></i> Tax Rate (%)</label>
+              <input type="number" id="bwz-pos-tax-rate" class="bwz-pos-input" min="0" max="100" step="0.01" placeholder="e.g. 15">
+            </div>
+          </div>
         </div>
-        <div class="bwz-ss-existing" id="bwz-pos-existing-tax"></div>
+
+        <div class="bwz-pos-form-footer">
+          <div>
+            <button class="bwz-back-btn" id="bwz-pos-back-3"><i class="fa fa-arrow-left"></i> Back</button>
+            <button class="bwz-ss-no" id="bwz-pos-tax-skip" style="margin-left:8px">Skip</button>
+            <p class="bwz-skip-hint">Set up tax later in POS Settings → Tax</p>
+          </div>
+          <button class="bwz-pos-save-btn" id="bwz-pos-tax-save"><i class="fa fa-floppy-disk"></i> Save &amp; Continue</button>
+        </div>
       </div>
 
-      <!-- Sub-step 3: Receipt setup -->
-      <div class="bwz-panel bwz-ss-panel" id="bwz-pos-panel-3" style="display:none">
+      <!-- Sub-step 4: Receipt (inline) -->
+      <div class="bwz-panel bwz-ss-panel bwz-pos-config-panel" id="bwz-pos-panel-4" style="display:none">
         <h2 class="bwz-ss-title">Customize your receipt</h2>
-        <p class="bwz-ss-desc">Add your business name, logo, header and footer text to every receipt.</p>
-        <div class="bwz-ss-actions">
-          <button class="bwz-ss-yes" id="bwz-pos-receipt-yes"><i class="fa fa-receipt"></i> Customize Receipt</button>
-          <button class="bwz-ss-no"  id="bwz-pos-receipt-skip">Skip for now</button>
+        <p class="bwz-ss-desc">Add header and footer text printed on every receipt.</p>
+
+        <div class="bwz-pos-form">
+          <div class="bwz-pos-row" style="grid-template-columns:1fr">
+            <div class="bwz-pos-field">
+              <label class="bwz-pos-label" for="bwz-pos-receipt-header"><i class="fa fa-align-left"></i> Receipt Header</label>
+              <input type="text" id="bwz-pos-receipt-header" class="bwz-pos-input" placeholder="e.g. Welcome to Acme Store">
+            </div>
+          </div>
+          <div class="bwz-pos-row" style="grid-template-columns:1fr">
+            <div class="bwz-pos-field">
+              <label class="bwz-pos-label" for="bwz-pos-receipt-footer"><i class="fa fa-align-right"></i> Receipt Footer</label>
+              <input type="text" id="bwz-pos-receipt-footer" class="bwz-pos-input" placeholder="e.g. Thank you for shopping with us!">
+            </div>
+          </div>
+        </div>
+
+        <div class="bwz-pos-form-footer">
+          <div>
+            <button class="bwz-back-btn" id="bwz-pos-back-4"><i class="fa fa-arrow-left"></i> Back</button>
+            <button class="bwz-ss-no" id="bwz-pos-receipt-skip" style="margin-left:8px">Skip</button>
+            <p class="bwz-skip-hint">Customize later in POS Settings → Receipt</p>
+          </div>
+          <button class="bwz-pos-save-btn" id="bwz-pos-receipt-save"><i class="fa fa-floppy-disk"></i> Save &amp; Finish</button>
         </div>
       </div>
 
+    </div>
+
+    <!-- Panel: Setup Complete -->
+    <div id="bwz-panel-done" style="display:none">
+      <div class="bwz-panel bwz-done-panel">
+        <div class="bwz-done-icon"><i class="fa fa-circle-check"></i></div>
+        <h2 class="bwz-done-title">You're all set!</h2>
+        <p class="bwz-done-sub">Your business is configured and ready to go. Here's what you can do next:</p>
+        <div class="bwz-done-actions">
+          <button class="bwz-done-btn bwz-done-btn--primary" id="bwz-done-open-pos">
+            <i class="fa fa-cash-register"></i> Open POS
+          </button>
+          <button class="bwz-done-btn" id="bwz-done-products">
+            <i class="fa fa-boxes-stacked"></i> Manage Products
+          </button>
+          <button class="bwz-done-btn" id="bwz-done-settings">
+            <i class="fa fa-gear"></i> Review Settings
+          </button>
+        </div>
+        <button class="bwz-done-close" id="bwz-done-close">Close wizard</button>
+      </div>
     </div>
 
     <!-- Footer -->

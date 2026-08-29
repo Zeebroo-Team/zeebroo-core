@@ -5589,10 +5589,10 @@ async function _bwzLoadExisting() {
   const skipBtn = $('#bwz-ss-bill-skip');
   if (skipBtn) {
     if (allBills.length > 0) {
-      skipBtn.innerHTML = '<i class="fa fa-circle-check"></i> Already Added Bills and Go Next';
+      skipBtn.innerHTML = '<i class="fa fa-circle-check"></i> Bills ready — Continue';
       skipBtn.classList.add('bwz-ss-bill-skip-done');
     } else {
-      skipBtn.innerHTML = '<i class="fa fa-forward-step"></i> I will add that later, Go to Next';
+      skipBtn.innerHTML = '<i class="fa fa-forward-step"></i> I\'ll add these later — Continue';
       skipBtn.classList.remove('bwz-ss-bill-skip-done');
     }
   }
@@ -5614,6 +5614,8 @@ function _bwzSsGoto(n) {
       if (line) line.classList.toggle('filled', i < n);
     }
   });
+  const dl = $('#bwz-depth-label-billing');
+  if (dl) dl.textContent = `Billing Setup · ${n} of 4`;
 }
 
 function _bwzClose() {
@@ -5663,6 +5665,9 @@ function _bwzPsGoto(n) {
   const pc = $('#bwz-ps-product-choice'); const pa = $('#bwz-ps-product-actions');
   if (cc) cc.style.display = 'none'; if (ca) ca.style.display = '';
   if (pc) pc.style.display = 'none'; if (pa) pa.style.display = '';
+  // Depth label
+  const dl = $('#bwz-depth-label-products');
+  if (dl) dl.textContent = `Products · ${n} of 2`;
 }
 
 async function _bwzLoadProductsExisting() {
@@ -5715,94 +5720,157 @@ function _bwzShowPosPanel() {
 }
 
 function _bwzPosGoto(n) {
-  [1, 2, 3].forEach(i => {
+  [1, 2, 3, 4].forEach(i => {
     const panel = $(`#bwz-pos-panel-${i}`);
     const dot   = $(`#bwz-pos-dot-${i}`);
     if (panel) panel.style.display = i === n ? '' : 'none';
     if (dot) dot.className = i < n ? 'bwz-ss-dot done' : i === n ? 'bwz-ss-dot active' : 'bwz-ss-dot';
   });
-  [1, 2].forEach(i => {
+  [1, 2, 3].forEach(i => {
     const line = $(`#bwz-pos-line-${i}`);
     if (line) line.classList.toggle('filled', n > i);
   });
+  const dl = $('#bwz-depth-label-pos');
+  if (dl) dl.textContent = `POS Setup · ${n} of 4`;
 }
 
-// POS sub-step 1: Inline config form — load + save
+// POS: load config into both sub-step panels
 async function _bwzPosLoadConfig() {
   const [sRes, aRes] = await Promise.all([API.settingsGet(), API.accounts()]);
   const s = sRes.status === 200 ? (sRes.body?.data ?? {}) : {};
   const accounts = aRes.status === 200 ? (aRes.body?.data ?? []) : [];
 
-  $('#bwz-pos-currency').value    = s.currency ?? '';
-  $('#bwz-pos-timezone').value    = s.timezone ?? '';
-  $('#bwz-pos-settlement').value  = s.payment_settlement_mode ?? 'immediate';
-  $('#bwz-pos-feat-products').value = s.featured_products_limit ?? 0;
-  $('#bwz-pos-feat-cats').value     = s.featured_categories_limit ?? 0;
-  $('#bwz-pos-discount').checked    = !!s.discount_field_enabled;
-  // Multiple cashiers: derive from existing cashiers feature flag
-  $('#bwz-pos-multi-cashier').checked = hasFeature('point_of_sale');
-  // Show counter note
-  const note = $('#bwz-pos-counter-note');
-  if (note) note.style.display = '';
-
-  // Populate accounts dropdown
+  // Sub-step 1: Regional & Financial
+  $('#bwz-pos-currency').value   = s.currency ?? '';
+  // Timezone: auto-detect from browser if not set (F8)
+  const detectedTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const tz = s.timezone || detectedTz;
+  $('#bwz-pos-timezone').value   = tz;
+  const tzHint = $('#bwz-pos-tz-hint');
+  if (tzHint) tzHint.textContent = !s.timezone && detectedTz ? '(auto-detected)' : '';
+  $('#bwz-pos-settlement').value = s.payment_settlement_mode ?? 'immediate';
   const sel = $('#bwz-pos-account');
   if (sel) {
     sel.innerHTML = '<option value="">— None —</option>' +
       accounts.map(a => `<option value="${a.id}"${String(a.id) === String(s.default_deposit_account_id) ? ' selected' : ''}>${escHtml(a.account_name)}${a.bank_name ? ' · '+escHtml(a.bank_name) : ''}</option>`).join('');
   }
+
+  // Sub-step 2: POS Features
+  $('#bwz-pos-feat-products').value = s.featured_products_limit ?? 0;
+  $('#bwz-pos-feat-cats').value     = s.featured_categories_limit ?? 0;
+  $('#bwz-pos-discount').checked    = !!s.discount_field_enabled;
+  $('#bwz-pos-multi-cashier').checked = hasFeature('point_of_sale');
 }
 
+// ── POS sub-step 1: Regional & Financial ──────────────────────────────────
 $('#bwz-pos-general-skip')?.addEventListener('click', () => _bwzPosGoto(2));
 
 $('#bwz-pos-general-save')?.addEventListener('click', async () => {
   const btn = $('#bwz-pos-general-save');
-  btn.disabled = true;
-  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
-
+  btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
   const res = await API.settingsUpdate({
-    currency:                  ($('#bwz-pos-currency').value || '').trim(),
-    timezone:                  ($('#bwz-pos-timezone').value || '').trim(),
-    default_deposit_account_id: $('#bwz-pos-account').value || null,
-    payment_settlement_mode:   $('#bwz-pos-settlement').value,
-    featured_products_limit:   parseInt($('#bwz-pos-feat-products').value) || 0,
-    featured_categories_limit: parseInt($('#bwz-pos-feat-cats').value) || 0,
-    discount_field_enabled:    $('#bwz-pos-discount').checked,
+    currency:                   ($('#bwz-pos-currency').value  || '').trim(),
+    timezone:                   ($('#bwz-pos-timezone').value  || '').trim(),
+    default_deposit_account_id: $('#bwz-pos-account').value    || null,
+    payment_settlement_mode:    $('#bwz-pos-settlement').value,
   });
-
-  btn.disabled = false;
-  btn.innerHTML = '<i class="fa fa-floppy-disk"></i> Save & Continue';
-
+  btn.disabled = false; btn.innerHTML = '<i class="fa fa-floppy-disk"></i> Save & Continue';
   if (res.status === 200) {
-    // Sync currency into app state if returned
     const updated = res.body?.data ?? {};
     if (updated.currency) state.currency = updated.currency;
-    toast('POS settings saved', 'success');
-    // If multiple cashiers enabled, navigate to cashiers after finishing wizard
-    _bwz._posWantsMultiCashier = $('#bwz-pos-multi-cashier').checked;
+    toast('Settings saved', 'success');
     _bwzPosGoto(2);
   } else {
     toast(res.body?.message || 'Failed to save settings', 'error');
   }
 });
 
-// POS sub-step 2: Tax
-$('#bwz-pos-tax-yes')?.addEventListener('click', () => {
-  _bwz.billingActive = true; _bwz.billingNextStep = 'pos:3';
-  $('#bwz-overlay').style.display = 'none';
-  activateTab('pos');
-  setTimeout(() => { openPosSettings(); psmShowTab('tax'); }, 80);
-});
-$('#bwz-pos-tax-skip')?.addEventListener('click', () => _bwzPosGoto(3));
+// ── POS sub-step 2: POS Features ─────────────────────────────────────────
+$('#bwz-pos-back-2')?.addEventListener('click', () => _bwzPosGoto(1));
+$('#bwz-pos-features-skip')?.addEventListener('click', () => _bwzPosGoto(3));
 
-// POS sub-step 3: Receipt
-$('#bwz-pos-receipt-yes')?.addEventListener('click', () => {
-  _bwz.billingActive = true; _bwz.billingNextStep = null;
-  $('#bwz-overlay').style.display = 'none';
-  activateTab('pos');
-  setTimeout(() => { openPosSettings(); psmShowTab('receipt'); }, 80);
+$('#bwz-pos-features-save')?.addEventListener('click', async () => {
+  const btn = $('#bwz-pos-features-save');
+  btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
+  const res = await API.settingsUpdate({
+    featured_products_limit:   parseInt($('#bwz-pos-feat-products').value) || 0,
+    featured_categories_limit: parseInt($('#bwz-pos-feat-cats').value)     || 0,
+    discount_field_enabled:    $('#bwz-pos-discount').checked,
+  });
+  btn.disabled = false; btn.innerHTML = '<i class="fa fa-floppy-disk"></i> Save & Continue';
+  if (res.status === 200) {
+    _bwz._posWantsMultiCashier = $('#bwz-pos-multi-cashier').checked;
+    toast('Settings saved', 'success');
+    _bwzPosGoto(3);
+  } else {
+    toast(res.body?.message || 'Failed to save settings', 'error');
+  }
 });
-$('#bwz-pos-receipt-skip')?.addEventListener('click', _bwzClose);
+
+// ── POS sub-step 3: Tax (inline, F10) ────────────────────────────────────
+$('#bwz-pos-back-3')?.addEventListener('click', () => _bwzPosGoto(2));
+$('#bwz-pos-tax-skip')?.addEventListener('click', () => _bwzPosGoto(4));
+
+$('#bwz-pos-tax-save')?.addEventListener('click', async () => {
+  const btn = $('#bwz-pos-tax-save');
+  const name = ($('#bwz-pos-tax-name').value || '').trim();
+  const rate = parseFloat($('#bwz-pos-tax-rate').value) || 0;
+  btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
+  const res = await API.settingsUpdate({ tax_name: name, tax_rate: rate });
+  btn.disabled = false; btn.innerHTML = '<i class="fa fa-floppy-disk"></i> Save & Continue';
+  if (res.status === 200) {
+    toast('Tax settings saved', 'success');
+    _bwzPosGoto(4);
+  } else {
+    toast(res.body?.message || 'Failed to save tax settings', 'error');
+  }
+});
+
+// ── POS sub-step 4: Receipt (inline, F10) ────────────────────────────────
+$('#bwz-pos-back-4')?.addEventListener('click', () => _bwzPosGoto(3));
+$('#bwz-pos-receipt-skip')?.addEventListener('click', _bwzShowDone);
+
+$('#bwz-pos-receipt-save')?.addEventListener('click', async () => {
+  const btn = $('#bwz-pos-receipt-save');
+  btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
+  const res = await API.settingsUpdate({
+    receipt_header_text: ($('#bwz-pos-receipt-header').value || '').trim(),
+    receipt_footer_text: ($('#bwz-pos-receipt-footer').value || '').trim(),
+  });
+  btn.disabled = false; btn.innerHTML = '<i class="fa fa-floppy-disk"></i> Save & Finish';
+  if (res.status === 200) {
+    toast('Receipt customized', 'success');
+  }
+  _bwzShowDone(); // always advance even if save failed
+});
+
+// ── Completion screen (F13) ───────────────────────────────────────────────
+function _bwzShowDone() {
+  ['#bwz-panel-1', '#bwz-panel-billing', '#bwz-panel-products', '#bwz-panel-pos'].forEach(id => {
+    const el = $(id); if (el) el.style.display = 'none';
+  });
+  const done = $('#bwz-panel-done');
+  if (done) done.style.display = '';
+  $('#bwz-submit-btn').style.display       = 'none';
+  $('#bwz-billing-skip-btn').style.display = 'none';
+  [1, 2, 3, 4].forEach(i => {
+    const step = $(`#bwz-step-${i}`);
+    if (step) step.className = 'bwz-step done';
+    const conn = $(`#bwz-step-conn-${i}`);
+    if (conn) { conn.style.display = ''; conn.classList.add('filled'); }
+  });
+}
+
+$('#bwz-done-open-pos')?.addEventListener('click', () => {
+  _bwzClose(); activateTab('pos');
+});
+$('#bwz-done-products')?.addEventListener('click', () => {
+  _bwzClose(); activateTab('inventory'); switchInvView('products');
+});
+$('#bwz-done-settings')?.addEventListener('click', () => {
+  _bwzClose(); setTimeout(openPosSettings, 80);
+});
+$('#bwz-done-close')?.addEventListener('click', _bwzClose);
 
 // Call at the top of any modal close handler that may have been opened from the wizard.
 // If billingActive is true the wizard was waiting — clear the flag and reopen.
@@ -5823,19 +5891,35 @@ function _bwzResumeWizard(nextStep) {
     _bwzShowProductsPanel(); // makes products panel visible, sets step indicators + loads existing
     _bwzPsGoto(n);           // override to the correct sub-step
     $('#bwz-overlay').style.display = 'flex';
+    _bwzShowResumeBanner();
     return;
   }
-  // POS sub-steps: 'pos:1', 'pos:2', 'pos:3'
+  // POS sub-steps: 'pos:1', 'pos:2', 'pos:3', 'pos:4'
   if (typeof nextStep === 'string' && nextStep.startsWith('pos:')) {
     const n = parseInt(nextStep.split(':')[1]);
     _bwzShowPosPanel(); // makes POS panel visible, sets step indicators
     _bwzPosGoto(n);     // override to the correct sub-step
     $('#bwz-overlay').style.display = 'flex';
+    _bwzShowResumeBanner();
     return;
   }
   _bwzSsGoto(nextStep);
   _bwzLoadExisting(); // refresh lists so just-added record appears
   $('#bwz-overlay').style.display = 'flex';
+  _bwzShowResumeBanner();
+}
+
+// Brief "resuming" banner — fades out after 2 s (F2)
+function _bwzShowResumeBanner() {
+  const el = $('#bwz-resume-banner');
+  if (!el) return;
+  el.style.display = '';
+  el.classList.remove('bwz-resume-out');
+  clearTimeout(_bwz._resumeTimer);
+  _bwz._resumeTimer = setTimeout(() => {
+    el.classList.add('bwz-resume-out');
+    setTimeout(() => { el.style.display = 'none'; el.classList.remove('bwz-resume-out'); }, 400);
+  }, 2000);
 }
 
 // Home subnav setup-wizard button — always opens wizard (bank form or billing/products step)
@@ -5861,6 +5945,10 @@ $('#bwz-ss-loan-yes')?.addEventListener('click', () => {
   setTimeout(openLoanCreateModal, 80);
 });
 $('#bwz-ss-loan-skip')?.addEventListener('click', () => _bwzSsGoto(2));
+// Billing back-navigation (F12)
+$('#bwz-ss-back-2')?.addEventListener('click', () => _bwzSsGoto(1));
+$('#bwz-ss-back-3')?.addEventListener('click', () => _bwzSsGoto(2));
+$('#bwz-ss-back-4')?.addEventListener('click', () => _bwzSsGoto(3));
 
 // Sub-step 2: Rentals — hide wizard, open modal; resumes at sub-step 3 after save
 $('#bwz-ss-rental-yes')?.addEventListener('click', () => {
@@ -5926,6 +6014,8 @@ $('#bwz-ps-cat-skip')?.addEventListener('click', () => {
   $('#bwz-ps-cat-actions').style.display = '';
   _bwzPsGoto(2);
 });
+// Products sub-step 2 back (F12)
+$('#bwz-ps-back-2')?.addEventListener('click', () => _bwzPsGoto(1));
 
 // Products sub-step 2: Products
 // Yes → show choice cards (Import CSV | Add Manually)
@@ -6062,9 +6152,17 @@ $('#bwz-ai-cat-generate')?.addEventListener('click', async () => {
 
   const btn = $('#bwz-ai-cat-generate');
   btn.disabled = true;
-  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Generating…';
+
+  // Stage messages for perceived progress (F5)
+  const stages = ['Reading your description…', 'Generating categories…', 'Almost done…'];
+  let stageIdx = 0;
+  const setStage = () => { btn.innerHTML = `<i class="fa fa-spinner fa-spin"></i> ${stages[stageIdx]}`; };
+  setStage();
+  const stageTimer1 = setTimeout(() => { stageIdx = 1; setStage(); }, 1500);
+  const stageTimer2 = setTimeout(() => { stageIdx = 2; setStage(); }, 3200);
 
   const res = await API.generateAiCategories(desc);
+  clearTimeout(stageTimer1); clearTimeout(stageTimer2);
 
   btn.disabled = false;
   btn.innerHTML = '<i class="fa fa-wand-magic-sparkles"></i> Generate Categories';

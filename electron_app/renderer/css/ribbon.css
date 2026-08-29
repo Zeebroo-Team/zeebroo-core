@@ -17482,3 +17482,142 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
 }
 .bwz-pos-save-btn:hover    { filter: brightness(1.08); }
 .bwz-pos-save-btn:disabled { opacity: .5; cursor: not-allowed; filter: none; }
+
+/* ── Wizard UX improvements ──────────────────────────────────────────────── */
+
+/* F1 — Time estimate */
+.bwz-time-estimate {
+  font-size: 12px; color: var(--text-muted);
+  display: flex; align-items: center; gap: 6px;
+  margin-top: 6px; margin-bottom: 2px;
+}
+.bwz-time-estimate i { color: var(--accent); }
+
+/* F2 — Resume banner */
+.bwz-resume-banner {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 16px; border-radius: 8px;
+  background: var(--accent-light); color: var(--accent);
+  font-size: 12.5px; font-weight: 500;
+  margin-bottom: 6px;
+  animation: bwzResumeIn .25s ease;
+  transition: opacity .4s;
+}
+.bwz-resume-banner.bwz-resume-out { opacity: 0; }
+@keyframes bwzResumeIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* F4 — Primary choice card */
+.bwz-ps-choice-card--primary {
+  border-color: var(--accent) !important;
+  background: var(--accent-light) !important;
+}
+.bwz-ps-choice-card--primary .bwz-ps-choice-icon { color: var(--accent); }
+.bwz-ps-choice-card--primary .bwz-ps-choice-name { color: var(--accent); }
+
+/* F4 — Advanced SQL dump link */
+.bwz-ps-choice-adv { text-align: center; margin-top: 6px; }
+.bwz-choice-adv-link {
+  background: none; border: none; color: var(--text-muted);
+  font-size: 12px; cursor: pointer; padding: 4px 8px;
+  display: inline-flex; align-items: center; gap: 6px;
+  border-radius: 6px; transition: color .12s, background .12s;
+}
+.bwz-choice-adv-link:hover { color: var(--accent); background: var(--accent-light); }
+
+/* F6 — Save & Add Another as text link */
+.bwz-save-add-link {
+  background: none; border: none; color: var(--text-muted);
+  font-size: 11.5px; cursor: pointer; padding: 0;
+  display: inline-flex; align-items: center; gap: 4px;
+  transition: color .12s;
+}
+.bwz-save-add-link:hover { color: var(--accent); }
+
+/* F9 — Skip recovery hints */
+.bwz-skip-hint {
+  font-size: 11px; color: var(--text-muted); margin-top: 5px;
+  display: flex; align-items: center; gap: 4px;
+}
+
+/* F11 — Sub-step depth label */
+.bwz-depth-label {
+  font-size: 11px; font-weight: 600; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--accent);
+  margin-bottom: 8px;
+}
+
+/* F12 — Back navigation button */
+.bwz-back-btn {
+  background: none; border: 1px solid var(--border);
+  color: var(--text-muted); font-size: 12.5px;
+  padding: 5px 12px; border-radius: 8px; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px;
+  transition: color .12s, border-color .12s, background .12s;
+}
+.bwz-back-btn:hover { color: var(--text); border-color: var(--text-muted); background: var(--surface2); }
+
+/* Back row inside sub-step panels */
+.bwz-ss-back-row {
+  padding-top: 10px; border-top: 1px solid var(--border);
+  margin-top: 10px;
+}
+
+/* Bill sub-step 4 footer layout */
+.bwz-ss-bill-footer {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; margin-top: 8px;
+}
+
+/* POS timezone hint */
+.bwz-pos-tz-hint {
+  font-size: 10px; color: var(--text-muted); font-weight: 400;
+  margin-left: 4px; font-style: italic;
+}
+
+/* F13 — Completion / Done panel */
+.bwz-done-panel {
+  display: flex; flex-direction: column; align-items: center;
+  text-align: center; padding: 12px 0 4px;
+}
+.bwz-done-icon {
+  font-size: 52px; color: #22c55e; margin-bottom: 14px;
+  animation: bwzDoneIn .4s cubic-bezier(.34,1.56,.64,1);
+}
+@keyframes bwzDoneIn {
+  from { opacity: 0; transform: scale(.6); }
+  to   { opacity: 1; transform: scale(1); }
+}
+.bwz-done-title {
+  font-size: 22px; font-weight: 700; color: var(--text);
+  margin-bottom: 8px;
+}
+.bwz-done-sub {
+  font-size: 13.5px; color: var(--text-muted); max-width: 320px;
+  margin-bottom: 22px;
+}
+.bwz-done-actions {
+  display: flex; flex-direction: column; gap: 10px;
+  width: 100%; max-width: 300px; margin-bottom: 14px;
+}
+.bwz-done-btn {
+  border: 1px solid var(--border); background: var(--surface2);
+  color: var(--text); font-size: 13.5px; font-weight: 600;
+  padding: 10px 20px; border-radius: 10px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  transition: background .12s, border-color .12s;
+  width: 100%;
+}
+.bwz-done-btn:hover { background: var(--surface3); border-color: var(--text-muted); }
+.bwz-done-btn--primary {
+  background: var(--accent); border-color: var(--accent); color: #fff;
+}
+.bwz-done-btn--primary:hover { filter: brightness(1.08); background: var(--accent); }
+.bwz-done-close {
+  background: none; border: none; color: var(--text-muted);
+  font-size: 12px; cursor: pointer; padding: 4px 8px;
+  border-radius: 6px; transition: color .12s;
+}
+.bwz-done-close:hover { color: var(--text); }
