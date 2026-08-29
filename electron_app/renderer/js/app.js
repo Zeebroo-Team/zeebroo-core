@@ -5962,27 +5962,34 @@ $('#bwz-billing-skip-btn')?.addEventListener('click', () => {
   else { _bwzClose(); }
 });
 
-// ── Simplified billing add buttons ────────────────────────────────────────
+// Returns the wizard step to go to after billing is done
+function _bwzAfterBilling() {
+  if (_bwzHasProductsStep()) return 'ps:1';
+  if (_bwzHasPosStep())      return 'pos:1';
+  return null; // will close wizard
+}
+
+// ── Simplified billing add buttons — after save, advance to next step ────────
 $('#bwz-bill-add-loans')?.addEventListener('click', () => {
-  _bwz.billingActive = true; _bwz.billingNextStep = 'billing';
+  _bwz.billingActive = true; _bwz.billingNextStep = _bwzAfterBilling();
   _bwzGoBehind();
   activateTab('finance'); switchFinView('loans');
   setTimeout(openLoanCreateModal, 80);
 });
 $('#bwz-bill-add-rentals')?.addEventListener('click', () => {
-  _bwz.billingActive = true; _bwz.billingNextStep = 'billing';
+  _bwz.billingActive = true; _bwz.billingNextStep = _bwzAfterBilling();
   _bwzGoBehind();
   activateTab('finance'); switchFinView('rentals');
   setTimeout(openRentalCreateModal, 80);
 });
 $('#bwz-bill-add-properties')?.addEventListener('click', () => {
-  _bwz.billingActive = true; _bwz.billingNextStep = 'billing';
+  _bwz.billingActive = true; _bwz.billingNextStep = _bwzAfterBilling();
   _bwzGoBehind();
   activateTab('finance'); switchFinView('properties');
   setTimeout(openPropertyCreateModal, 80);
 });
 $('#bwz-bill-add-bills')?.addEventListener('click', () => {
-  _bwz.billingActive = true; _bwz.billingNextStep = 'billing';
+  _bwz.billingActive = true; _bwz.billingNextStep = _bwzAfterBilling();
   _bwzGoBehind();
   activateTab('finance'); switchFinView('bills');
   setTimeout(openBillCreateModal, 80);
