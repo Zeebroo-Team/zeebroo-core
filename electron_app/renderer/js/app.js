@@ -5711,6 +5711,7 @@ function _bwzShowPosPanel() {
   $('#bwz-step-conn-2').classList.add('filled');
   $('#bwz-step-conn-3').classList.add('filled');
   _bwzPosGoto(1);
+  _bwzPosLoadConfig();
 }
 
 function _bwzPosGoto(n) {
@@ -5726,14 +5727,64 @@ function _bwzPosGoto(n) {
   });
 }
 
-// POS sub-step 1: General settings
-$('#bwz-pos-general-yes')?.addEventListener('click', () => {
-  _bwz.billingActive = true; _bwz.billingNextStep = 'pos:2';
-  $('#bwz-overlay').style.display = 'none';
-  activateTab('pos');
-  setTimeout(() => { openPosSettings(); psmShowTab('general'); }, 80);
-});
+// POS sub-step 1: Inline config form — load + save
+async function _bwzPosLoadConfig() {
+  const [sRes, aRes] = await Promise.all([API.settingsGet(), API.accounts()]);
+  const s = sRes.status === 200 ? (sRes.body?.data ?? {}) : {};
+  const accounts = aRes.status === 200 ? (aRes.body?.data ?? []) : [];
+
+  $('#bwz-pos-currency').value    = s.currency ?? '';
+  $('#bwz-pos-timezone').value    = s.timezone ?? '';
+  $('#bwz-pos-settlement').value  = s.payment_settlement_mode ?? 'immediate';
+  $('#bwz-pos-feat-products').value = s.featured_products_limit ?? 0;
+  $('#bwz-pos-feat-cats').value     = s.featured_categories_limit ?? 0;
+  $('#bwz-pos-discount').checked    = !!s.discount_field_enabled;
+  // Multiple cashiers: derive from existing cashiers feature flag
+  $('#bwz-pos-multi-cashier').checked = hasFeature('point_of_sale');
+  // Show counter note
+  const note = $('#bwz-pos-counter-note');
+  if (note) note.style.display = '';
+
+  // Populate accounts dropdown
+  const sel = $('#bwz-pos-account');
+  if (sel) {
+    sel.innerHTML = '<option value="">— None —</option>' +
+      accounts.map(a => `<option value="${a.id}"${String(a.id) === String(s.default_deposit_account_id) ? ' selected' : ''}>${escHtml(a.account_name)}${a.bank_name ? ' · '+escHtml(a.bank_name) : ''}</option>`).join('');
+  }
+}
+
 $('#bwz-pos-general-skip')?.addEventListener('click', () => _bwzPosGoto(2));
+
+$('#bwz-pos-general-save')?.addEventListener('click', async () => {
+  const btn = $('#bwz-pos-general-save');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
+
+  const res = await API.settingsUpdate({
+    currency:                  ($('#bwz-pos-currency').value || '').trim(),
+    timezone:                  ($('#bwz-pos-timezone').value || '').trim(),
+    default_deposit_account_id: $('#bwz-pos-account').value || null,
+    payment_settlement_mode:   $('#bwz-pos-settlement').value,
+    featured_products_limit:   parseInt($('#bwz-pos-feat-products').value) || 0,
+    featured_categories_limit: parseInt($('#bwz-pos-feat-cats').value) || 0,
+    discount_field_enabled:    $('#bwz-pos-discount').checked,
+  });
+
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fa fa-floppy-disk"></i> Save & Continue';
+
+  if (res.status === 200) {
+    // Sync currency into app state if returned
+    const updated = res.body?.data ?? {};
+    if (updated.currency) state.currency = updated.currency;
+    toast('POS settings saved', 'success');
+    // If multiple cashiers enabled, navigate to cashiers after finishing wizard
+    _bwz._posWantsMultiCashier = $('#bwz-pos-multi-cashier').checked;
+    _bwzPosGoto(2);
+  } else {
+    toast(res.body?.message || 'Failed to save settings', 'error');
+  }
+});
 
 // POS sub-step 2: Tax
 $('#bwz-pos-tax-yes')?.addEventListener('click', () => {

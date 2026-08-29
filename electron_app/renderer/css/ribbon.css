@@ -17401,3 +17401,84 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
 .bwz-ps-choice-grid-3 {
   grid-template-columns: 1fr 1fr 1fr;
 }
+
+/* ── POS Setup wizard inline config form ─────────────────────────────────── */
+.bwz-pos-config-panel { gap: 10px; }
+.bwz-pos-form { display: flex; flex-direction: column; gap: 10px; }
+
+.bwz-pos-row {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+}
+.bwz-pos-field { display: flex; flex-direction: column; gap: 4px; }
+.bwz-pos-label {
+  font-size: 11.5px; font-weight: 600; color: var(--text-muted);
+  display: flex; align-items: center; gap: 5px;
+}
+.bwz-pos-input, .bwz-pos-select {
+  height: 34px; padding: 0 10px;
+  border: 1px solid var(--border); border-radius: 8px;
+  background: var(--surface2); color: var(--text);
+  font-size: 13px; font-family: inherit;
+  transition: border-color .15s;
+  box-sizing: border-box; width: 100%;
+}
+.bwz-pos-input:focus, .bwz-pos-select:focus {
+  outline: none; border-color: var(--accent);
+}
+
+/* Toggles */
+.bwz-pos-toggles {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 10px; overflow: hidden;
+}
+.bwz-pos-toggle-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.bwz-pos-toggle-row:last-child { border-bottom: none; }
+.bwz-pos-toggle-info { flex: 1; min-width: 0; }
+.bwz-pos-toggle-name {
+  font-size: 13px; font-weight: 600; color: var(--text);
+  display: flex; align-items: center; gap: 6px;
+}
+.bwz-pos-toggle-desc { font-size: 11.5px; color: var(--text-muted); margin-top: 2px; }
+
+/* Reuse psm switch style */
+.bwz-pos-switch { position: relative; width: 34px; height: 19px; flex-shrink: 0; cursor: pointer; }
+.bwz-pos-switch input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+.bwz-pos-switch-track {
+  position: absolute; inset: 0; background: var(--surface3);
+  border-radius: 999px; transition: background .15s;
+}
+.bwz-pos-switch-track::before {
+  content: ''; position: absolute; top: 2px; left: 2px;
+  width: 15px; height: 15px; border-radius: 50%; background: #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,.2); transition: transform .15s;
+}
+.bwz-pos-switch input:checked + .bwz-pos-switch-track { background: var(--accent); }
+.bwz-pos-switch input:checked + .bwz-pos-switch-track::before { transform: translateX(15px); }
+
+/* Info note */
+.bwz-pos-info-note {
+  display: flex; align-items: flex-start; gap: 8px;
+  padding: 10px 12px; border-radius: 8px;
+  background: var(--accent-light); color: var(--text-muted);
+  font-size: 12px; line-height: 1.4;
+}
+.bwz-pos-info-note i { color: var(--accent); flex-shrink: 0; margin-top: 2px; }
+
+/* Footer */
+.bwz-pos-form-footer {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; padding-top: 4px;
+}
+.bwz-pos-save-btn {
+  border: none; background: var(--accent); color: #fff;
+  font-size: 13px; font-weight: 700; padding: 9px 20px;
+  border-radius: 9px; cursor: pointer;
+  display: flex; align-items: center; gap: 7px;
+  transition: filter .12s;
+}
+.bwz-pos-save-btn:hover    { filter: brightness(1.08); }
+.bwz-pos-save-btn:disabled { opacity: .5; cursor: not-allowed; filter: none; }

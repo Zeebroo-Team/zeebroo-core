@@ -12891,12 +12891,83 @@
       </div>
 
       <!-- Sub-step 1: General / Payment settings -->
-      <div class="bwz-panel bwz-ss-panel" id="bwz-pos-panel-1">
-        <h2 class="bwz-ss-title">Set up your general POS settings</h2>
-        <p class="bwz-ss-desc">Configure payment modes, currency, and how sales are processed.</p>
-        <div class="bwz-ss-actions">
-          <button class="bwz-ss-yes" id="bwz-pos-general-yes"><i class="fa fa-gear"></i> Configure Now</button>
-          <button class="bwz-ss-no"  id="bwz-pos-general-skip">Skip for now</button>
+      <div class="bwz-panel bwz-ss-panel bwz-pos-config-panel" id="bwz-pos-panel-1">
+        <h2 class="bwz-ss-title">Configure your POS</h2>
+        <p class="bwz-ss-desc">Set the essential options for your point of sale system.</p>
+
+        <div class="bwz-pos-form" id="bwz-pos-config-form">
+
+          <!-- Row 1: Currency + Timezone -->
+          <div class="bwz-pos-row">
+            <div class="bwz-pos-field">
+              <label class="bwz-pos-label" for="bwz-pos-currency"><i class="fa fa-coins"></i> Currency</label>
+              <input type="text" id="bwz-pos-currency" class="bwz-pos-input" placeholder="e.g. USD, EUR, LKR" maxlength="10">
+            </div>
+            <div class="bwz-pos-field">
+              <label class="bwz-pos-label" for="bwz-pos-timezone"><i class="fa fa-clock"></i> Timezone</label>
+              <input type="text" id="bwz-pos-timezone" class="bwz-pos-input" placeholder="e.g. Asia/Colombo">
+            </div>
+          </div>
+
+          <!-- Row 2: Default deposit account + Settlement mode -->
+          <div class="bwz-pos-row">
+            <div class="bwz-pos-field">
+              <label class="bwz-pos-label" for="bwz-pos-account"><i class="fa fa-building-columns"></i> Default Deposit Account</label>
+              <select id="bwz-pos-account" class="bwz-pos-select">
+                <option value="">— None —</option>
+              </select>
+            </div>
+            <div class="bwz-pos-field">
+              <label class="bwz-pos-label" for="bwz-pos-settlement"><i class="fa fa-money-bill-transfer"></i> Payment Settlement Mode</label>
+              <select id="bwz-pos-settlement" class="bwz-pos-select">
+                <option value="immediate">Immediate — settle per sale</option>
+                <option value="end_of_day">End of day — batch settlement</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Row 3: Featured limits -->
+          <div class="bwz-pos-row">
+            <div class="bwz-pos-field">
+              <label class="bwz-pos-label" for="bwz-pos-feat-products"><i class="fa fa-star"></i> Featured Products Limit</label>
+              <input type="number" id="bwz-pos-feat-products" class="bwz-pos-input" min="0" max="200" placeholder="0">
+            </div>
+            <div class="bwz-pos-field">
+              <label class="bwz-pos-label" for="bwz-pos-feat-cats"><i class="fa fa-star"></i> Featured Categories Limit</label>
+              <input type="number" id="bwz-pos-feat-cats" class="bwz-pos-input" min="0" max="200" placeholder="0">
+            </div>
+          </div>
+
+          <!-- Row 4: Toggles -->
+          <div class="bwz-pos-toggles">
+            <div class="bwz-pos-toggle-row">
+              <div class="bwz-pos-toggle-info">
+                <span class="bwz-pos-toggle-name"><i class="fa fa-tag"></i> Discount Field</span>
+                <span class="bwz-pos-toggle-desc">Show a discount input at checkout</span>
+              </div>
+              <label class="bwz-pos-switch"><input type="checkbox" id="bwz-pos-discount"><span class="bwz-pos-switch-track"></span></label>
+            </div>
+            <div class="bwz-pos-toggle-row">
+              <div class="bwz-pos-toggle-info">
+                <span class="bwz-pos-toggle-name"><i class="fa fa-users"></i> Multiple Cashiers</span>
+                <span class="bwz-pos-toggle-desc">Enable cashier login management for your POS</span>
+              </div>
+              <label class="bwz-pos-switch"><input type="checkbox" id="bwz-pos-multi-cashier"><span class="bwz-pos-switch-track"></span></label>
+            </div>
+          </div>
+
+          <!-- Counters info note -->
+          <div class="bwz-pos-info-note" id="bwz-pos-counter-note" style="display:none">
+            <i class="fa fa-circle-info"></i>
+            <span>You can add and configure POS counters (terminals) after setup in <b>POS Settings → Counters</b>.</span>
+          </div>
+
+        </div>
+
+        <!-- Footer -->
+        <div class="bwz-pos-form-footer">
+          <button class="bwz-ss-no" id="bwz-pos-general-skip">Skip for now</button>
+          <button class="bwz-pos-save-btn" id="bwz-pos-general-save"><i class="fa fa-floppy-disk"></i> Save &amp; Continue</button>
         </div>
       </div>
 
