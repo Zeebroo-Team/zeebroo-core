@@ -17634,15 +17634,15 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
 
 /* ── Card shell ────────────────────────────────────────────────────────── */
 #bwz-overlay .bwz-card {
-  width: 80vw;
-  max-width: 960px;
-  max-height: 92vh;
-  border-radius: 24px;
+  width: 94vw;
+  max-width: 580px;
+  max-height: 90vh;
+  border-radius: 20px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
   box-shadow:
-    0 48px 120px rgba(0,0,0,.5),
+    0 32px 80px rgba(0,0,0,.46),
     0 0 0 1px rgba(255,255,255,.07),
     inset 0 1px 0 rgba(255,255,255,.08);
 }
@@ -17650,7 +17650,7 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
 /* ── Gradient step-bar header ──────────────────────────────────────────── */
 #bwz-overlay .bwz-steps {
   background: linear-gradient(135deg, #090d22 0%, #141b48 55%, #1e2666 100%);
-  padding: 24px 44px 22px;
+  padding: 18px 28px 16px;
   gap: 0;
   flex-shrink: 0;
   border-bottom: 1px solid rgba(255,255,255,.06);
@@ -17659,13 +17659,13 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
 /* Subtle noise-texture shimmer line at top */
 #bwz-overlay .bwz-steps::before {
   content: '';
-  position: absolute; top: 0; left: 44px; right: 44px; height: 1px;
+  position: absolute; top: 0; left: 28px; right: 28px; height: 1px;
   background: linear-gradient(90deg, transparent, rgba(255,255,255,.15), transparent);
 }
 
 /* Step circles on dark header */
 #bwz-overlay .bwz-step-circle {
-  width: 34px; height: 34px; font-size: 13px; font-weight: 800;
+  width: 30px; height: 30px; font-size: 12px; font-weight: 800;
   border: 2px solid rgba(255,255,255,.15);
   color: rgba(255,255,255,.3);
   background: rgba(255,255,255,.05);
@@ -17716,7 +17716,7 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
 
 /* ── Bank-account form panel (panel 1) ─────────────────────────────────── */
 #bwz-overlay .bwz-panel {
-  padding: 32px 44px 20px;
+  padding: 24px 28px 16px;
   animation: bwzPanelSlide .24s cubic-bezier(.16,1,.3,1);
 }
 @keyframes bwzPanelSlide {
@@ -17725,12 +17725,12 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
 }
 
 #bwz-overlay .bwz-panel-icon {
-  width: 68px; height: 68px; border-radius: 20px;
-  font-size: 28px; margin-bottom: 18px;
-  box-shadow: 0 10px 30px rgba(78,142,247,.38);
+  width: 58px; height: 58px; border-radius: 16px;
+  font-size: 24px; margin-bottom: 14px;
+  box-shadow: 0 8px 24px rgba(78,142,247,.36);
 }
-#bwz-overlay .bwz-panel-title { font-size: 22px; font-weight: 800; margin-bottom: 5px; }
-#bwz-overlay .bwz-panel-sub   { font-size: 13.5px; margin-bottom: 8px; }
+#bwz-overlay .bwz-panel-title { font-size: 19px; font-weight: 800; margin-bottom: 4px; }
+#bwz-overlay .bwz-panel-sub   { font-size: 13px; margin-bottom: 6px; }
 
 /* Time estimate */
 #bwz-overlay .bwz-time-estimate {
@@ -17799,17 +17799,17 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
 
 /* ── Sub-step panel ────────────────────────────────────────────────────── */
 #bwz-overlay .bwz-ss-panel {
-  padding: 26px 44px 20px;
+  padding: 20px 28px 16px;
   animation: bwzPanelSlide .22s cubic-bezier(.16,1,.3,1);
 }
 
-/* Sub-step illustration icon */
+/* Sub-step illustration icon (config/form panels only) */
 #bwz-overlay .bwz-ss-icon {
-  width: 76px; height: 76px; border-radius: 24px;
+  width: 60px; height: 60px; border-radius: 18px;
   display: flex; align-items: center; justify-content: center;
-  font-size: 32px; color: #fff;
-  margin: 0 auto 20px;
-  box-shadow: 0 12px 32px rgba(0,0,0,.2);
+  font-size: 26px; color: #fff;
+  margin: 0 auto 14px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.2);
   animation: bwzIconPop .38s cubic-bezier(.34,1.56,.64,1) both;
 }
 @keyframes bwzIconPop {
@@ -17819,45 +17819,44 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
 
 /* Title / desc */
 #bwz-overlay .bwz-ss-title {
-  font-size: 21px; font-weight: 800; margin-bottom: 8px; line-height: 1.2;
+  font-size: 18px; font-weight: 800; margin-bottom: 6px; line-height: 1.25;
   text-wrap: balance;
 }
 #bwz-overlay .bwz-ss-desc {
-  font-size: 13.5px; line-height: 1.65; margin-bottom: 26px;
-  max-width: 400px; margin-left: auto; margin-right: auto;
+  font-size: 13px; line-height: 1.6; margin-bottom: 20px;
+  max-width: 100%; margin-left: auto; margin-right: auto;
 }
 
-/* ── Yes / No / Skip action buttons ───────────────────────────────────── */
+/* ── Yes / No / Skip action buttons — side by side ────────────────────── */
 #bwz-overlay .bwz-ss-actions {
-  flex-direction: column;
-  align-items: stretch;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 10px;
-  max-width: 360px;
-  margin: 0 auto 8px;
+  margin: 0 0 8px;
 }
 
 #bwz-overlay .bwz-ss-yes {
-  min-width: unset; width: 100%; height: 52px;
+  min-width: unset; width: 100%; height: 44px;
   background: linear-gradient(135deg, var(--accent) 0%, #6366f1 100%);
-  border: none; border-radius: 14px;
-  font-size: 15px; font-weight: 700; color: #fff;
-  display: flex; align-items: center; justify-content: center; gap: 10px;
+  border: none; border-radius: 12px;
+  font-size: 14px; font-weight: 700; color: #fff;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
   cursor: pointer;
-  box-shadow: 0 6px 20px rgba(78,142,247,.34);
+  box-shadow: 0 4px 14px rgba(78,142,247,.32);
   transition: filter .14s, box-shadow .14s, transform .1s;
 }
 #bwz-overlay .bwz-ss-yes:hover {
   filter: brightness(1.1);
-  box-shadow: 0 8px 28px rgba(78,142,247,.44);
+  box-shadow: 0 6px 20px rgba(78,142,247,.42);
   transform: translateY(-1px);
 }
 #bwz-overlay .bwz-ss-yes:active { transform: translateY(0); filter: brightness(.97); }
 
 #bwz-overlay .bwz-ss-no {
-  min-width: unset; width: 100%; height: 48px;
+  min-width: unset; width: 100%; height: 44px;
   background: var(--surface2);
-  border: 1.5px solid var(--border); border-radius: 14px;
-  font-size: 14px; font-weight: 600; color: var(--text-muted);
+  border: 1.5px solid var(--border); border-radius: 12px;
+  font-size: 13.5px; font-weight: 600; color: var(--text-muted);
   display: flex; align-items: center; justify-content: center; gap: 8px;
   cursor: pointer;
   transition: border-color .14s, color .14s, background .14s, transform .1s;
@@ -17874,10 +17873,11 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
 }
 #bwz-overlay .bwz-ss-no.bwz-ss-bill-skip-done:hover { border-color: #16a34a; }
 
-/* AI generate button inside actions stacks full-width too */
+/* AI generate button spans both grid columns */
 #bwz-overlay .bwz-ps-ai-btn {
-  width: 100%; border-radius: 14px;
-  height: 44px; margin-top: 2px;
+  grid-column: 1 / -1;
+  width: 100%; border-radius: 12px;
+  height: 40px; margin-top: 0;
 }
 
 /* Skip recovery hint */
@@ -18010,7 +18010,7 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
 
 /* ── POS config form ───────────────────────────────────────────────────── */
 #bwz-overlay .bwz-pos-config-panel {
-  padding: 26px 44px 20px;
+  padding: 20px 28px 16px;
 }
 #bwz-overlay .bwz-pos-input,
 #bwz-overlay .bwz-pos-select {
