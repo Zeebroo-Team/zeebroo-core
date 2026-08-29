@@ -12664,6 +12664,11 @@
         <div class="bwz-step-circle">3</div>
         <span class="bwz-step-label">Products</span>
       </div>
+      <div class="bwz-step-connector" id="bwz-step-conn-3" style="display:none"></div>
+      <div class="bwz-step" id="bwz-step-4" style="display:none">
+        <div class="bwz-step-circle">4</div>
+        <span class="bwz-step-label">POS Setup</span>
+      </div>
     </div>
 
     <!-- Panel 1: Bank account form -->
@@ -12869,6 +12874,51 @@
           </div>
         </div>
         <div class="bwz-ss-existing" id="bwz-ps-existing-products"></div>
+      </div>
+
+    </div>
+
+    <!-- Panel 4: POS Setup (shown only when point_of_sale feature enabled) -->
+    <div id="bwz-panel-pos" style="display:none">
+
+      <!-- Sub-step indicator: 3 dots -->
+      <div class="bwz-ss-track">
+        <div class="bwz-ss-dot active" id="bwz-pos-dot-1"><span>1</span></div>
+        <div class="bwz-ss-line" id="bwz-pos-line-1"></div>
+        <div class="bwz-ss-dot" id="bwz-pos-dot-2"><span>2</span></div>
+        <div class="bwz-ss-line" id="bwz-pos-line-2"></div>
+        <div class="bwz-ss-dot" id="bwz-pos-dot-3"><span>3</span></div>
+      </div>
+
+      <!-- Sub-step 1: General / Payment settings -->
+      <div class="bwz-panel bwz-ss-panel" id="bwz-pos-panel-1">
+        <h2 class="bwz-ss-title">Set up your general POS settings</h2>
+        <p class="bwz-ss-desc">Configure payment modes, currency, and how sales are processed.</p>
+        <div class="bwz-ss-actions">
+          <button class="bwz-ss-yes" id="bwz-pos-general-yes"><i class="fa fa-gear"></i> Configure Now</button>
+          <button class="bwz-ss-no"  id="bwz-pos-general-skip">Skip for now</button>
+        </div>
+      </div>
+
+      <!-- Sub-step 2: Tax setup -->
+      <div class="bwz-panel bwz-ss-panel" id="bwz-pos-panel-2" style="display:none">
+        <h2 class="bwz-ss-title">Do you charge tax on sales?</h2>
+        <p class="bwz-ss-desc">Set up tax rules and rates that will be applied automatically at checkout.</p>
+        <div class="bwz-ss-actions">
+          <button class="bwz-ss-yes" id="bwz-pos-tax-yes"><i class="fa fa-percent"></i> Set Up Tax</button>
+          <button class="bwz-ss-no"  id="bwz-pos-tax-skip">No / Skip</button>
+        </div>
+        <div class="bwz-ss-existing" id="bwz-pos-existing-tax"></div>
+      </div>
+
+      <!-- Sub-step 3: Receipt setup -->
+      <div class="bwz-panel bwz-ss-panel" id="bwz-pos-panel-3" style="display:none">
+        <h2 class="bwz-ss-title">Customize your receipt</h2>
+        <p class="bwz-ss-desc">Add your business name, logo, header and footer text to every receipt.</p>
+        <div class="bwz-ss-actions">
+          <button class="bwz-ss-yes" id="bwz-pos-receipt-yes"><i class="fa fa-receipt"></i> Customize Receipt</button>
+          <button class="bwz-ss-no"  id="bwz-pos-receipt-skip">Skip for now</button>
+        </div>
       </div>
 
     </div>

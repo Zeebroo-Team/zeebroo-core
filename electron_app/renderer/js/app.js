@@ -5346,17 +5346,23 @@ function _bwzShowBillingPanel() {
   $('#bwz-panel-1').style.display          = 'none';
   $('#bwz-panel-billing').style.display    = '';
   $('#bwz-panel-products').style.display   = 'none';
+  $('#bwz-panel-pos').style.display        = 'none';
   $('#bwz-submit-btn').style.display       = 'none';
   $('#bwz-billing-skip-btn').style.display = '';
-  // Top step indicator: step 1 done, step 2 active; step 3 visible only if feature enabled
+  // Top step indicator: step 1 done, step 2 active
   $('#bwz-step-1').className = 'bwz-step done';
   $('#bwz-step-2').className = 'bwz-step active';
   $('#bwz-step-3').className = 'bwz-step';
+  $('#bwz-step-4').className = 'bwz-step';
   $('#bwz-step-conn-1').classList.add('filled');
   $('#bwz-step-conn-2').classList.remove('filled');
+  $('#bwz-step-conn-3').classList.remove('filled');
   const hasProducts = _bwzHasProductsStep();
+  const hasPos      = _bwzHasPosStep();
   $('#bwz-step-conn-2').style.display = hasProducts ? '' : 'none';
   $('#bwz-step-3').style.display      = hasProducts ? '' : 'none';
+  $('#bwz-step-conn-3').style.display = hasPos ? '' : 'none';
+  $('#bwz-step-4').style.display      = hasPos ? '' : 'none';
   // Start at billing sub-step 1 and load existing records
   _bwzSsGoto(1);
   _bwzLoadExisting();
@@ -5626,13 +5632,19 @@ function _bwzShowProductsPanel() {
   $('#bwz-panel-1').style.display          = 'none';
   $('#bwz-panel-billing').style.display    = 'none';
   $('#bwz-panel-products').style.display   = '';
+  $('#bwz-panel-pos').style.display        = 'none';
   $('#bwz-submit-btn').style.display       = 'none';
   $('#bwz-billing-skip-btn').style.display = '';
   $('#bwz-step-1').className = 'bwz-step done';
   $('#bwz-step-2').className = 'bwz-step done';
   $('#bwz-step-3').className = 'bwz-step active';
+  $('#bwz-step-4').className = 'bwz-step';
   $('#bwz-step-conn-1').classList.add('filled');
   $('#bwz-step-conn-2').classList.add('filled');
+  const hasPos = _bwzHasPosStep();
+  $('#bwz-step-conn-3').style.display = hasPos ? '' : 'none';
+  $('#bwz-step-4').style.display      = hasPos ? '' : 'none';
+  $('#bwz-step-conn-3').classList.remove('filled');
   _bwzPsGoto(1);
   _bwzLoadProductsExisting();
 }
@@ -5679,6 +5691,68 @@ async function _bwzLoadProductsExisting() {
   renderPsRows('bwz-ps-existing-products', prods, '#10b981');
 }
 
+// ── POS Setup panel (Step 4) ────────────────────────────────────────────────
+function _bwzHasPosStep() {
+  return hasFeature('point_of_sale');
+}
+
+function _bwzShowPosPanel() {
+  $('#bwz-panel-1').style.display          = 'none';
+  $('#bwz-panel-billing').style.display    = 'none';
+  $('#bwz-panel-products').style.display   = 'none';
+  $('#bwz-panel-pos').style.display        = '';
+  $('#bwz-submit-btn').style.display       = 'none';
+  $('#bwz-billing-skip-btn').style.display = '';
+  $('#bwz-step-1').className = 'bwz-step done';
+  $('#bwz-step-2').className = 'bwz-step done';
+  $('#bwz-step-3').className = 'bwz-step done';
+  $('#bwz-step-4').className = 'bwz-step active';
+  $('#bwz-step-conn-1').classList.add('filled');
+  $('#bwz-step-conn-2').classList.add('filled');
+  $('#bwz-step-conn-3').classList.add('filled');
+  _bwzPosGoto(1);
+}
+
+function _bwzPosGoto(n) {
+  [1, 2, 3].forEach(i => {
+    const panel = $(`#bwz-pos-panel-${i}`);
+    const dot   = $(`#bwz-pos-dot-${i}`);
+    if (panel) panel.style.display = i === n ? '' : 'none';
+    if (dot) dot.className = i < n ? 'bwz-ss-dot done' : i === n ? 'bwz-ss-dot active' : 'bwz-ss-dot';
+  });
+  [1, 2].forEach(i => {
+    const line = $(`#bwz-pos-line-${i}`);
+    if (line) line.classList.toggle('filled', n > i);
+  });
+}
+
+// POS sub-step 1: General settings
+$('#bwz-pos-general-yes')?.addEventListener('click', () => {
+  _bwz.billingActive = true; _bwz.billingNextStep = 'pos:2';
+  $('#bwz-overlay').style.display = 'none';
+  activateTab('pos');
+  setTimeout(() => { openPosSettings(); psmShowTab('general'); }, 80);
+});
+$('#bwz-pos-general-skip')?.addEventListener('click', () => _bwzPosGoto(2));
+
+// POS sub-step 2: Tax
+$('#bwz-pos-tax-yes')?.addEventListener('click', () => {
+  _bwz.billingActive = true; _bwz.billingNextStep = 'pos:3';
+  $('#bwz-overlay').style.display = 'none';
+  activateTab('pos');
+  setTimeout(() => { openPosSettings(); psmShowTab('tax'); }, 80);
+});
+$('#bwz-pos-tax-skip')?.addEventListener('click', () => _bwzPosGoto(3));
+
+// POS sub-step 3: Receipt
+$('#bwz-pos-receipt-yes')?.addEventListener('click', () => {
+  _bwz.billingActive = true; _bwz.billingNextStep = null;
+  $('#bwz-overlay').style.display = 'none';
+  activateTab('pos');
+  setTimeout(() => { openPosSettings(); psmShowTab('receipt'); }, 80);
+});
+$('#bwz-pos-receipt-skip')?.addEventListener('click', _bwzClose);
+
 // Call at the top of any modal close handler that may have been opened from the wizard.
 // If billingActive is true the wizard was waiting — clear the flag and reopen.
 // Returns true when the wizard was resumed so the caller can skip its normal teardown if needed.
@@ -5692,14 +5766,19 @@ function _bwzCheckResume() {
 
 function _bwzResumeWizard(nextStep) {
   if (nextStep === null) { _bwzClose(); return; }
-  // String tokens for products sub-steps: 'ps:1', 'ps:2'
+  // Products sub-steps: 'ps:1', 'ps:2'
   if (typeof nextStep === 'string' && nextStep.startsWith('ps:')) {
     const n = parseInt(nextStep.split(':')[1]);
-    // _bwzShowProductsPanel() makes the products panel visible, hides others,
-    // sets step indicators, calls _bwzPsGoto(1) and _bwzLoadProductsExisting().
-    // Then override to the correct sub-step.
-    _bwzShowProductsPanel();
-    _bwzPsGoto(n);
+    _bwzShowProductsPanel(); // makes products panel visible, sets step indicators + loads existing
+    _bwzPsGoto(n);           // override to the correct sub-step
+    $('#bwz-overlay').style.display = 'flex';
+    return;
+  }
+  // POS sub-steps: 'pos:1', 'pos:2', 'pos:3'
+  if (typeof nextStep === 'string' && nextStep.startsWith('pos:')) {
+    const n = parseInt(nextStep.split(':')[1]);
+    _bwzShowPosPanel(); // makes POS panel visible, sets step indicators
+    _bwzPosGoto(n);     // override to the correct sub-step
     $('#bwz-overlay').style.display = 'flex';
     return;
   }
@@ -5755,6 +5834,9 @@ $('#bwz-ss-bill-skip')?.addEventListener('click', () => {
   if (_bwzHasProductsStep()) {
     _bwzShowProductsPanel();
     $('#bwz-overlay').style.display = 'flex';
+  } else if (_bwzHasPosStep()) {
+    _bwzShowPosPanel();
+    $('#bwz-overlay').style.display = 'flex';
   } else {
     _bwzClose();
   }
@@ -5806,7 +5888,10 @@ $('#bwz-ps-product-back')?.addEventListener('click', () => {
   $('#bwz-ps-product-actions').style.display = '';
 });
 // Next — skip choice and close wizard
-$('#bwz-ps-product-next')?.addEventListener('click', () => _bwzClose());
+$('#bwz-ps-product-next')?.addEventListener('click', () => {
+  if (_bwzHasPosStep()) { _bwzShowPosPanel(); $('#bwz-overlay').style.display = 'flex'; }
+  else _bwzClose();
+});
 // Choice: Import CSV
 $('#bwz-ps-product-import')?.addEventListener('click', () => {
   _bwz.billingActive = true; _bwz.billingNextStep = 'ps:2';
@@ -5829,10 +5914,15 @@ $('#bwz-ps-product-add')?.addEventListener('click', () => {
   setTimeout(openAddProductModal, 80);
 });
 $('#bwz-ps-product-skip')?.addEventListener('click', () => {
-  // reset choice state before closing
+  // reset choice state before advancing
   $('#bwz-ps-product-choice').style.display  = 'none';
   $('#bwz-ps-product-actions').style.display = '';
-  _bwzClose();
+  if (_bwzHasPosStep()) {
+    _bwzShowPosPanel();
+    $('#bwz-overlay').style.display = 'flex';
+  } else {
+    _bwzClose();
+  }
 });
 
 // ── AI Category Generator ──────────────────────────────────────────────────
@@ -19900,10 +19990,10 @@ function _applyPurchaseOrderMode(enabled) {
   if (grnDirectBtn) grnDirectBtn.style.display = enabled ? 'none' : '';
 }
 
-$('#psm-close').addEventListener('click',  () => { $('#pos-settings-modal').style.display = 'none'; });
-$('#psm-cancel').addEventListener('click', () => { $('#pos-settings-modal').style.display = 'none'; });
+$('#psm-close').addEventListener('click',  () => { $('#pos-settings-modal').style.display = 'none'; _bwzCheckResume(); });
+$('#psm-cancel').addEventListener('click', () => { $('#pos-settings-modal').style.display = 'none'; _bwzCheckResume(); });
 $('#pos-settings-modal').addEventListener('click', (e) => {
-  if (e.target === e.currentTarget) e.currentTarget.style.display = 'none';
+  if (e.target === e.currentTarget) { e.currentTarget.style.display = 'none'; _bwzCheckResume(); }
 });
 
 $('#psm-logo-choose')?.addEventListener('click', () => {
