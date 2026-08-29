@@ -5363,12 +5363,13 @@ function _bwzShowBillingPanel() {
   $('#bwz-step-3').style.display      = hasProducts ? '' : 'none';
   $('#bwz-step-conn-3').style.display = hasPos ? '' : 'none';
   $('#bwz-step-4').style.display      = hasPos ? '' : 'none';
-  // Start at billing sub-step 1 and load existing records
-  _bwzSsGoto(1);
-  _bwzLoadExisting();
+  // Load counts for the simplified billing list
+  _bwzBillingRefresh();
 }
 
+/* _bwzLoadExisting — replaced by _bwzBillingRefresh (simplified billing panel) */
 async function _bwzLoadExisting() {
+  return _bwzBillingRefresh();
   const [loansRes, rentalsRes, propsRes, billsRes] = await Promise.all([
     API.loans(), API.rentalList(), API.propertyList(), API.bills(),
   ]);
@@ -5503,7 +5504,7 @@ async function _bwzLoadExisting() {
         const assignType = btn.dataset.assignType || 'none';
         const assignId   = btn.dataset.assignId   || '';
 
-        _bwz.billingActive = true; _bwz.billingNextStep = 4; // return to step 4 after save
+        _bwz.billingActive = true; _bwz.billingNextStep = 'billing';
         _bwzGoBehind();
         activateTab('finance'); switchFinView('bills');
 
@@ -5598,24 +5599,31 @@ async function _bwzLoadExisting() {
   }
 }
 
-// ── Billing sub-step navigation ────────────────────────────────────────────
-function _bwzSsGoto(n) {
-  [1, 2, 3, 4].forEach(i => {
-    const panel = $(`#bwz-ss-panel-${i}`);
-    const dot   = $(`#bwz-ss-dot-${i}`);
-    if (panel) panel.style.display = (i === n) ? '' : 'none';
-    if (dot) {
-      dot.className = i < n ? 'bwz-ss-dot done'
-                    : i === n ? 'bwz-ss-dot active'
-                    : 'bwz-ss-dot';
-    }
-    if (i < 4) {
-      const line = $(`#bwz-ss-line-${i}`);
-      if (line) line.classList.toggle('filled', i < n);
+// ── Simplified billing refresh — update row badges ─────────────────────────
+async function _bwzBillingRefresh() {
+  const [loansRes, rentalsRes, propsRes, billsRes] = await Promise.all([
+    API.loans(), API.rentalList(), API.propertyList(), API.bills(),
+  ]);
+  const counts = {
+    loans:      (loansRes.status   === 200 ? loansRes.body?.data   : null)?.length ?? 0,
+    rentals:    (rentalsRes.status === 200 ? rentalsRes.body?.data  : null)?.length ?? 0,
+    properties: (propsRes.status   === 200 ? propsRes.body?.data    : null)?.length ?? 0,
+    bills:      (billsRes.status   === 200 ? billsRes.body?.data    : null)?.length ?? 0,
+  };
+  Object.entries(counts).forEach(([key, n]) => {
+    const badge = $(`#bwz-bill-badge-${key}`);
+    const row   = badge?.closest?.('.bwz-bill-row');
+    if (!badge) return;
+    if (n > 0) {
+      badge.textContent = n + (n === 1 ? ' added' : ' added');
+      badge.classList.add('has-items');
+      row?.classList.add('has-items');
+    } else {
+      badge.textContent = '';
+      badge.classList.remove('has-items');
+      row?.classList.remove('has-items');
     }
   });
-  const dl = $('#bwz-depth-label-billing');
-  if (dl) dl.textContent = `Billing Setup · ${n} of 4`;
 }
 
 function _bwzClose() {
@@ -5915,8 +5923,8 @@ function _bwzResumeWizard(nextStep) {
     _bwzShowResumeBanner();
     return;
   }
-  _bwzSsGoto(nextStep);
-  _bwzLoadExisting(); // refresh lists so just-added record appears
+  // Billing panel resume — refresh counts and stay on billing panel
+  _bwzShowBillingPanel(); // ensures panel is visible with correct step state
   _bwzComeForward();
   _bwzShowResumeBanner();
 }
@@ -5947,50 +5955,37 @@ $('#home-subnav-setup-wizard')?.addEventListener('click', async () => {
 
 // Wire wizard buttons once on page load
 $('#bwz-submit-btn')?.addEventListener('click', _bwzSubmit);
-$('#bwz-billing-skip-btn')?.addEventListener('click', _bwzClose);
+$('#bwz-billing-skip-btn')?.addEventListener('click', () => {
+  // "Set up later" on billing panel — advance to next step or close
+  if (_bwzHasProductsStep()) { _bwzShowProductsPanel(); }
+  else if (_bwzHasPosStep()) { _bwzShowPosPanel(); }
+  else { _bwzClose(); }
+});
 
-// Sub-step 1: Loans — open modal over wizard; resumes at sub-step 2 after save
-$('#bwz-ss-loan-yes')?.addEventListener('click', () => {
-  _bwz.billingActive = true; _bwz.billingNextStep = 2;
+// ── Simplified billing add buttons ────────────────────────────────────────
+$('#bwz-bill-add-loans')?.addEventListener('click', () => {
+  _bwz.billingActive = true; _bwz.billingNextStep = 'billing';
   _bwzGoBehind();
   activateTab('finance'); switchFinView('loans');
   setTimeout(openLoanCreateModal, 80);
 });
-$('#bwz-ss-loan-skip')?.addEventListener('click', () => _bwzSsGoto(2));
-// Billing back-navigation (F12)
-$('#bwz-ss-back-2')?.addEventListener('click', () => _bwzSsGoto(1));
-$('#bwz-ss-back-3')?.addEventListener('click', () => _bwzSsGoto(2));
-$('#bwz-ss-back-4')?.addEventListener('click', () => _bwzSsGoto(3));
-
-// Sub-step 2: Rentals — open modal over wizard; resumes at sub-step 3 after save
-$('#bwz-ss-rental-yes')?.addEventListener('click', () => {
-  _bwz.billingActive = true; _bwz.billingNextStep = 3;
+$('#bwz-bill-add-rentals')?.addEventListener('click', () => {
+  _bwz.billingActive = true; _bwz.billingNextStep = 'billing';
   _bwzGoBehind();
   activateTab('finance'); switchFinView('rentals');
   setTimeout(openRentalCreateModal, 80);
 });
-$('#bwz-ss-rental-skip')?.addEventListener('click', () => _bwzSsGoto(3));
-
-// Sub-step 3: Properties — open modal over wizard; resumes at sub-step 4 after save
-$('#bwz-ss-property-yes')?.addEventListener('click', () => {
-  _bwz.billingActive = true; _bwz.billingNextStep = 4;
+$('#bwz-bill-add-properties')?.addEventListener('click', () => {
+  _bwz.billingActive = true; _bwz.billingNextStep = 'billing';
   _bwzGoBehind();
   activateTab('finance'); switchFinView('properties');
   setTimeout(openPropertyCreateModal, 80);
 });
-$('#bwz-ss-property-skip')?.addEventListener('click', () => _bwzSsGoto(4));
-
-// Sub-step 4: Bill skip/next — go to Products step if feature enabled, else close
-$('#bwz-ss-bill-skip')?.addEventListener('click', () => {
-  if (_bwzHasProductsStep()) {
-    _bwzShowProductsPanel();
-    $('#bwz-overlay').style.display = 'flex';
-  } else if (_bwzHasPosStep()) {
-    _bwzShowPosPanel();
-    $('#bwz-overlay').style.display = 'flex';
-  } else {
-    _bwzClose();
-  }
+$('#bwz-bill-add-bills')?.addEventListener('click', () => {
+  _bwz.billingActive = true; _bwz.billingNextStep = 'billing';
+  _bwzGoBehind();
+  activateTab('finance'); switchFinView('bills');
+  setTimeout(openBillCreateModal, 80);
 });
 
 // Products sub-step 1: Categories

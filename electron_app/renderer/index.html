@@ -12746,76 +12746,55 @@
       </div>
     </div>
 
-    <!-- Panel 2: Billing setup — 3 sub-steps -->
+    <!-- Panel 2: Billing setup — simplified single-panel -->
     <div id="bwz-panel-billing" style="display:none">
+      <div class="bwz-panel">
+        <h2 class="bwz-panel-title">Billing Setup</h2>
+        <p class="bwz-panel-sub">Add your recurring financial items. All optional — skip any and add later.</p>
+        <div class="bwz-bill-simple-list">
 
-      <!-- Depth label -->
-      <p class="bwz-depth-label" id="bwz-depth-label-billing">Billing Setup · 1 of 4</p>
-
-      <!-- Sub-step indicator -->
-      <div class="bwz-ss-track">
-        <div class="bwz-ss-dot active" id="bwz-ss-dot-1"><span>1</span></div>
-        <div class="bwz-ss-line" id="bwz-ss-line-1"></div>
-        <div class="bwz-ss-dot" id="bwz-ss-dot-2"><span>2</span></div>
-        <div class="bwz-ss-line" id="bwz-ss-line-2"></div>
-        <div class="bwz-ss-dot" id="bwz-ss-dot-3"><span>3</span></div>
-        <div class="bwz-ss-line" id="bwz-ss-line-3"></div>
-        <div class="bwz-ss-dot" id="bwz-ss-dot-4"><span>4</span></div>
-      </div>
-
-      <!-- Sub-step 1: Loans -->
-      <div class="bwz-panel bwz-ss-panel" id="bwz-ss-panel-1">
-        <h2 class="bwz-ss-title">Do you have any business loans?</h2>
-        <p class="bwz-ss-desc">Track loan repayments, outstanding balances, and interest schedules in one place.</p>
-        <div class="bwz-ss-actions">
-          <button class="bwz-ss-yes" id="bwz-ss-loan-yes">Yes</button>
-          <button class="bwz-ss-no" id="bwz-ss-loan-skip">No</button>
-        </div>
-        <p class="bwz-skip-hint">Add loans later in Finance → Loans</p>
-        <div class="bwz-ss-existing" id="bwz-ss-existing-loans"></div>
-      </div>
-
-      <!-- Sub-step 2: Rentals -->
-      <div class="bwz-panel bwz-ss-panel" id="bwz-ss-panel-2" style="display:none">
-        <h2 class="bwz-ss-title">Do you have any rental property?</h2>
-        <p class="bwz-ss-desc">Log recurring rental payments and track lease schedules and due dates.</p>
-        <div class="bwz-ss-actions">
-          <button class="bwz-ss-yes" id="bwz-ss-rental-yes">Yes</button>
-          <button class="bwz-ss-no" id="bwz-ss-rental-skip">No</button>
-        </div>
-        <p class="bwz-skip-hint">Add rentals later in Finance → Rentals</p>
-        <div class="bwz-ss-existing" id="bwz-ss-existing-rentals"></div>
-        <div class="bwz-ss-back-row"><button class="bwz-back-btn" id="bwz-ss-back-2"><i class="fa fa-arrow-left"></i> Back</button></div>
-      </div>
-
-      <!-- Sub-step 3: Properties -->
-      <div class="bwz-panel bwz-ss-panel" id="bwz-ss-panel-3" style="display:none">
-        <h2 class="bwz-ss-title">Does your business own any properties?</h2>
-        <p class="bwz-ss-desc">Register business-owned properties to link them to rental agreements and assets.</p>
-        <div class="bwz-ss-actions">
-          <button class="bwz-ss-yes" id="bwz-ss-property-yes">Yes</button>
-          <button class="bwz-ss-no" id="bwz-ss-property-skip">No</button>
-        </div>
-        <p class="bwz-skip-hint">Add properties later in Finance → Properties</p>
-        <div class="bwz-ss-existing" id="bwz-ss-existing-properties"></div>
-        <div class="bwz-ss-back-row"><button class="bwz-back-btn" id="bwz-ss-back-3"><i class="fa fa-arrow-left"></i> Back</button></div>
-      </div>
-
-      <!-- Sub-step 4: Bills -->
-      <div class="bwz-panel bwz-ss-panel" id="bwz-ss-panel-4" style="display:none">
-        <h2 class="bwz-ss-title">How are your bills?</h2>
-        <p class="bwz-ss-desc">Pick a common bill type to add, or skip for now.</p>
-        <div class="bwz-ss-existing" id="bwz-ss-existing-bills-rentals"></div>
-        <div class="bwz-ss-existing" id="bwz-ss-existing-bills-properties"></div>
-        <div class="bwz-ss-bill-footer">
-          <button class="bwz-back-btn" id="bwz-ss-back-4"><i class="fa fa-arrow-left"></i> Back</button>
-          <div>
-            <button class="bwz-ss-no" id="bwz-ss-bill-skip" style="min-width:140px">Next</button>
-            <p class="bwz-skip-hint" style="text-align:right">Manage bills later in Finance → Bills</p>
+          <div class="bwz-bill-row">
+            <div class="bwz-bill-row-icon" style="background:linear-gradient(135deg,#f59e0b,#d97706)"><i class="fa fa-hand-holding-dollar"></i></div>
+            <div class="bwz-bill-row-body">
+              <span class="bwz-bill-row-name">Loans</span>
+              <span class="bwz-bill-row-desc">Business loans &amp; repayments</span>
+            </div>
+            <span class="bwz-bill-row-badge" id="bwz-bill-badge-loans"></span>
+            <button class="bwz-bill-row-btn" id="bwz-bill-add-loans"><i class="fa fa-plus"></i> Add</button>
           </div>
+
+          <div class="bwz-bill-row">
+            <div class="bwz-bill-row-icon" style="background:linear-gradient(135deg,#10b981,#059669)"><i class="fa fa-house"></i></div>
+            <div class="bwz-bill-row-body">
+              <span class="bwz-bill-row-name">Rentals</span>
+              <span class="bwz-bill-row-desc">Properties you rent out</span>
+            </div>
+            <span class="bwz-bill-row-badge" id="bwz-bill-badge-rentals"></span>
+            <button class="bwz-bill-row-btn" id="bwz-bill-add-rentals"><i class="fa fa-plus"></i> Add</button>
+          </div>
+
+          <div class="bwz-bill-row">
+            <div class="bwz-bill-row-icon" style="background:linear-gradient(135deg,#8b5cf6,#7c3aed)"><i class="fa fa-building"></i></div>
+            <div class="bwz-bill-row-body">
+              <span class="bwz-bill-row-name">Properties</span>
+              <span class="bwz-bill-row-desc">Business-owned buildings</span>
+            </div>
+            <span class="bwz-bill-row-badge" id="bwz-bill-badge-properties"></span>
+            <button class="bwz-bill-row-btn" id="bwz-bill-add-properties"><i class="fa fa-plus"></i> Add</button>
+          </div>
+
+          <div class="bwz-bill-row">
+            <div class="bwz-bill-row-icon" style="background:linear-gradient(135deg,#ef4444,#dc2626)"><i class="fa fa-file-invoice-dollar"></i></div>
+            <div class="bwz-bill-row-body">
+              <span class="bwz-bill-row-name">Bills</span>
+              <span class="bwz-bill-row-desc">Recurring payments &amp; utilities</span>
+            </div>
+            <span class="bwz-bill-row-badge" id="bwz-bill-badge-bills"></span>
+            <button class="bwz-bill-row-btn" id="bwz-bill-add-bills"><i class="fa fa-plus"></i> Add</button>
+          </div>
+
         </div>
       </div>
-
     </div>
 
     <!-- Panel 3: Products setup (shown only when stock_management / product_management enabled) -->
