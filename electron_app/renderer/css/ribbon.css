@@ -17762,7 +17762,7 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
 
 /* ── Resume banner ─────────────────────────────────────────────────────── */
 #bwz-overlay .bwz-resume-banner {
-  margin: 10px 44px 0;
+  margin: 10px 20px 0;
   border-radius: 10px;
   font-size: 12.5px; font-weight: 600;
   background: linear-gradient(90deg, rgba(78,142,247,.12), rgba(99,102,241,.08));
@@ -17774,15 +17774,15 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
 #bwz-overlay .bwz-depth-label {
   font-size: 10.5px; font-weight: 700; letter-spacing: .1em;
   text-transform: uppercase; color: var(--accent);
-  padding: 14px 44px 0;
+  padding: 14px 28px 0;
   opacity: .8;
   margin-bottom: 0;
 }
 
 /* ── Sub-step dot track ────────────────────────────────────────────────── */
 #bwz-overlay .bwz-ss-track {
-  padding: 10px 44px 0;
-  max-width: 280px;
+  padding: 10px 28px 0;
+  max-width: unset;
 }
 #bwz-overlay .bwz-ss-dot {
   width: 30px; height: 30px; font-size: 12px; font-weight: 800;
@@ -17805,6 +17805,7 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
 /* ── Sub-step panel ────────────────────────────────────────────────────── */
 #bwz-overlay .bwz-ss-panel {
   padding: 20px 28px 16px;
+  text-align: center;
   animation: bwzPanelSlide .22s cubic-bezier(.16,1,.3,1);
 }
 
@@ -17838,6 +17839,7 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
   grid-template-columns: 1fr 1fr;
   gap: 10px;
   margin: 0 0 8px;
+  text-align: left; /* don't inherit centered text from ss-panel */
 }
 
 #bwz-overlay .bwz-ss-yes {
@@ -17919,7 +17921,7 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
 }
 
 /* ── Choice card grid ──────────────────────────────────────────────────── */
-#bwz-overlay .bwz-ps-choice { padding: 0; }
+#bwz-overlay .bwz-ps-choice { padding: 0; text-align: left; }
 #bwz-overlay .bwz-ps-choice-label {
   font-size: 13px; font-weight: 600; color: var(--text-muted);
   margin-bottom: 12px; letter-spacing: .01em;
@@ -18016,6 +18018,7 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
 /* ── POS config form ───────────────────────────────────────────────────── */
 #bwz-overlay .bwz-pos-config-panel {
   padding: 20px 28px 16px;
+  text-align: left; /* override centered ss-panel for form panels */
 }
 #bwz-overlay .bwz-pos-input,
 #bwz-overlay .bwz-pos-select {
@@ -18061,7 +18064,7 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
 #bwz-overlay .bwz-footer {
   background: var(--surface2);
   border-top: 1px solid var(--border-light);
-  padding: 16px 44px 22px;
+  padding: 14px 28px 18px;
   flex-shrink: 0;
 }
 #bwz-overlay .bwz-btn-next {
@@ -18086,33 +18089,33 @@ body.dark #bwz-overlay .bwz-btn-next {
 
 /* ── Completion / Done panel ───────────────────────────────────────────── */
 #bwz-overlay .bwz-done-panel {
-  padding: 44px 44px 36px;
+  padding: 32px 28px 28px;
   text-align: center;
   display: flex; flex-direction: column; align-items: center;
 }
 #bwz-overlay .bwz-done-icon {
-  width: 96px; height: 96px; border-radius: 50%;
+  width: 80px; height: 80px; border-radius: 50%;
   background: linear-gradient(135deg, #22c55e, #16a34a);
   display: flex; align-items: center; justify-content: center;
-  font-size: 42px; color: #fff; margin-bottom: 22px;
-  box-shadow: 0 16px 44px rgba(34,197,94,.38), 0 0 0 12px rgba(34,197,94,.1);
+  font-size: 36px; color: #fff; margin-bottom: 18px;
+  box-shadow: 0 12px 36px rgba(34,197,94,.36), 0 0 0 10px rgba(34,197,94,.1);
   animation: bwzDoneIn .5s cubic-bezier(.34,1.56,.64,1);
 }
-#bwz-overlay .bwz-done-title { font-size: 28px; font-weight: 800; margin-bottom: 10px; }
-#bwz-overlay .bwz-done-sub { font-size: 14px; margin-bottom: 32px; max-width: 340px; }
+#bwz-overlay .bwz-done-title { font-size: 24px; font-weight: 800; margin-bottom: 8px; }
+#bwz-overlay .bwz-done-sub { font-size: 13.5px; margin-bottom: 24px; max-width: 100%; }
 #bwz-overlay .bwz-done-actions {
-  display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px;
-  width: 100%; max-width: 520px; margin-bottom: 18px;
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;
+  width: 100%; margin-bottom: 16px;
 }
 #bwz-overlay .bwz-done-btn {
-  flex-direction: column; gap: 8px; border-radius: 18px;
-  height: 88px; font-size: 13px; font-weight: 700;
+  flex-direction: column; gap: 7px; border-radius: 16px;
+  height: 80px; font-size: 12.5px; font-weight: 700;
   border: 2px solid var(--border); background: var(--surface);
   padding: 0; cursor: pointer; color: var(--text);
   display: flex; align-items: center; justify-content: center;
   width: 100%; transition: border-color .15s, box-shadow .15s, transform .12s, background .15s;
 }
-#bwz-overlay .bwz-done-btn i { font-size: 26px; color: var(--accent); }
+#bwz-overlay .bwz-done-btn i { font-size: 22px; color: var(--accent); }
 #bwz-overlay .bwz-done-btn:hover {
   border-color: var(--accent);
   box-shadow: 0 6px 20px rgba(78,142,247,.16);
