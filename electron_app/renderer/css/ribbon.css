@@ -17641,7 +17641,8 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
 #bwz-overlay .bwz-card {
   width: 94vw;
   max-width: 580px;
-  max-height: 90vh;
+  height: 90vh;
+  max-height: 720px;
   border-radius: 20px;
   overflow: hidden;
   display: flex;
@@ -18157,8 +18158,8 @@ body.dark #bwz-overlay .bwz-card { background: var(--surface); }
   display: flex; flex-direction: column; gap: 8px; margin-top: 6px;
 }
 #bwz-overlay .bwz-bill-row {
-  display: flex; align-items: center; gap: 12px;
-  padding: 11px 14px; border-radius: 14px;
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 12px 14px; border-radius: 14px;
   border: 1.5px solid var(--border);
   background: var(--surface2);
   transition: border-color .15s, background .15s;
@@ -18170,21 +18171,22 @@ body.dark #bwz-overlay .bwz-card { background: var(--surface); }
 #bwz-overlay .bwz-bill-row-icon {
   width: 38px; height: 38px; border-radius: 11px; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
-  font-size: 17px; color: #fff;
+  font-size: 17px; color: #fff; margin-top: 1px;
 }
 #bwz-overlay .bwz-bill-row-body {
-  flex: 1; display: flex; flex-direction: column; gap: 1px; min-width: 0;
+  flex: 1; display: flex; flex-direction: column; gap: 4px; min-width: 0;
 }
 #bwz-overlay .bwz-bill-row-name {
   font-size: 13.5px; font-weight: 700; color: var(--text);
 }
 #bwz-overlay .bwz-bill-row-desc {
-  font-size: 11.5px; color: var(--text-muted);
+  font-size: 11.5px; color: var(--text-muted); line-height: 1.6;
 }
 #bwz-overlay .bwz-bill-row-badge {
   display: none; font-size: 11px; font-weight: 700;
   background: var(--accent); color: #fff;
   padding: 2px 8px; border-radius: 20px; flex-shrink: 0;
+  align-self: flex-start; margin-top: 3px;
 }
 #bwz-overlay .bwz-bill-row-badge.has-items { display: inline-flex; }
 #bwz-overlay .bwz-bill-row-btn {
@@ -18194,8 +18196,276 @@ body.dark #bwz-overlay .bwz-card { background: var(--surface); }
   background: var(--surface); color: var(--text-muted);
   cursor: pointer; display: flex; align-items: center; gap: 5px;
   transition: border-color .14s, color .14s, background .14s;
+  align-self: flex-start; margin-top: 1px;
 }
 #bwz-overlay .bwz-bill-row-btn:hover {
   border-color: var(--accent); color: var(--accent);
   background: var(--accent-light);
+}
+/* --- Categories step: skip row & skip button --- */
+#bwz-overlay .bwz-ps-skip-row {
+  margin-top: 14px; display: flex; justify-content: flex-end; width: 100%;
+}
+#bwz-overlay .bwz-skip-step-btn {
+  background: none; border: none; cursor: pointer;
+  color: var(--text-muted); font-size: 12.5px;
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 10px; border-radius: 8px;
+  transition: color .14s, background .14s;
+}
+#bwz-overlay .bwz-skip-step-btn:hover {
+  color: var(--text); background: var(--surface2);
+}
+/* Choice grid shown directly on categories panel (no toggle) */
+#bwz-ps-panel-1 .bwz-ps-choice-grid {
+  margin-top: 14px;
+}
+/* --- Compact single-line method buttons (categories & products panels) --- */
+#bwz-overlay .bwz-ps-method-row {
+  display: flex; gap: 8px; margin-top: 16px; flex-wrap: nowrap; align-items: stretch;
+}
+#bwz-overlay .bwz-ps-method-btn {
+  flex: 1; border-radius: 12px; padding: 14px 12px;
+  border: 1.5px solid var(--border);
+  background: var(--surface); color: var(--text);
+  cursor: pointer; display: flex; flex-direction: column;
+  align-items: center; gap: 5px; text-align: center;
+  transition: border-color .14s, background .14s;
+}
+#bwz-overlay .bwz-ps-method-btn:hover {
+  border-color: var(--accent); background: var(--accent-light);
+}
+#bwz-overlay .bwz-ps-method-btn--primary {
+  border-color: var(--accent); background: var(--accent-light);
+}
+#bwz-overlay .bwz-ps-method-icon {
+  font-size: 18px; color: var(--accent); margin-bottom: 2px;
+}
+#bwz-overlay .bwz-ps-method-label {
+  font-size: 12.5px; font-weight: 700; color: var(--text);
+}
+#bwz-overlay .bwz-ps-method-desc {
+  font-size: 11px; color: var(--text-muted); line-height: 1.5; font-weight: 400;
+}
+/* --- POS setup panel field arrangement --- */
+#bwz-overlay .bwz-pos-config-panel .bwz-pos-form {
+  margin-top: 14px; gap: 12px;
+}
+#bwz-overlay .bwz-pos-config-panel .bwz-pos-field { gap: 5px; }
+#bwz-overlay .bwz-pos-config-panel .bwz-pos-label {
+  font-size: 11px; font-weight: 700;
+  color: var(--text-muted); letter-spacing: .02em;
+  display: flex; align-items: center; gap: 5px;
+}
+#bwz-overlay .bwz-pos-config-panel .bwz-pos-row { gap: 12px; }
+/* Toggle rows: divider between each row */
+#bwz-overlay .bwz-pos-toggle-row {
+  padding: 10px 14px;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+#bwz-overlay .bwz-pos-toggle-row + .bwz-pos-toggle-row {
+  border-top: 1px solid var(--border-light);
+}
+#bwz-overlay .bwz-pos-toggle-name {
+  font-size: 12.5px; font-weight: 700;
+  display: flex; align-items: center; gap: 6px;
+}
+#bwz-overlay .bwz-pos-toggle-desc { font-size: 11.5px; color: var(--text-muted); margin-top: 1px; }
+#bwz-overlay .bwz-pos-toggle-info { display: flex; flex-direction: column; }
+/* Info note layout */
+#bwz-overlay .bwz-pos-info-note {
+  padding: 10px 14px; margin-top: 4px;
+  font-size: 11.5px; color: var(--text-muted);
+  display: flex; align-items: flex-start; gap: 8px; line-height: 1.5;
+}
+#bwz-overlay .bwz-pos-info-note i { margin-top: 1px; color: var(--accent); flex-shrink: 0; }
+/* Always pin the right-side footer group to the right edge */
+#bwz-overlay .bwz-footer-right { margin-left: auto; }
+/* --- Receipt editor open button (POS sub-step 4) --- */
+#bwz-overlay .bwz-pos-receipt-open-btn {
+  width: 100%; margin-top: 18px;
+  display: flex; align-items: center; gap: 14px;
+  padding: 14px 16px; border-radius: 14px;
+  border: 1.5px solid var(--border);
+  background: var(--surface); cursor: pointer;
+  text-align: left; transition: border-color .14s, background .14s, box-shadow .14s;
+}
+#bwz-overlay .bwz-pos-receipt-open-btn:hover {
+  border-color: var(--accent); background: var(--accent-light);
+  box-shadow: 0 4px 16px rgba(78,142,247,.12);
+}
+#bwz-overlay .bwz-pos-receipt-open-icon {
+  width: 42px; height: 42px; border-radius: 12px; flex-shrink: 0;
+  background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; color: #fff;
+}
+#bwz-overlay .bwz-pos-receipt-open-body {
+  flex: 1; display: flex; flex-direction: column; gap: 2px;
+}
+#bwz-overlay .bwz-pos-receipt-open-title {
+  font-size: 13px; font-weight: 700; color: var(--text);
+}
+#bwz-overlay .bwz-pos-receipt-open-sub {
+  font-size: 11.5px; color: var(--text-muted);
+}
+#bwz-overlay .bwz-pos-receipt-open-arrow {
+  color: var(--text-muted); font-size: 12px; flex-shrink: 0;
+}
+/* --- POS field descriptions + smaller inputs --- */
+#bwz-overlay .bwz-pos-field-desc {
+  font-size: 10.5px; color: var(--text-muted);
+  margin: 0 0 4px; line-height: 1.4;
+}
+#bwz-overlay .bwz-pos-config-panel .bwz-pos-input,
+#bwz-overlay .bwz-pos-config-panel .bwz-pos-select {
+  height: 34px; font-size: 12.5px;
+  border-radius: 9px; padding: 0 10px;
+}
+#bwz-overlay .bwz-pos-config-panel .bwz-pos-field { gap: 0; }
+#bwz-overlay .bwz-pos-config-panel .bwz-pos-label {
+  margin-bottom: 2px;
+}
+/* --- Tax rules UI (POS sub-step 3) --- */
+#bwz-overlay .bwz-tax-rules-wrap {
+  border: 1.5px solid var(--border); border-radius: 12px; overflow: hidden; margin-top: 4px;
+}
+#bwz-overlay .bwz-tax-rules-hdr {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 12px; background: var(--surface2);
+  border-bottom: 1px solid var(--border-light);
+}
+#bwz-overlay .bwz-tax-rules-hdr-title {
+  font-size: 11px; font-weight: 700; color: var(--text-muted);
+  display: flex; align-items: center; gap: 5px; letter-spacing: .03em;
+}
+#bwz-overlay .bwz-tax-add-btn {
+  height: 26px; padding: 0 10px; border-radius: 7px; font-size: 11px; font-weight: 700;
+  background: var(--accent-light); color: var(--accent);
+  border: 1.5px solid rgba(78,142,247,.3); cursor: pointer;
+  display: flex; align-items: center; gap: 5px;
+  transition: background .13s, border-color .13s;
+}
+#bwz-overlay .bwz-tax-add-btn:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+#bwz-overlay .bwz-tax-rule-row {
+  display: grid; grid-template-columns: 1fr 64px 72px 30px;
+  gap: 6px; align-items: center; padding: 7px 10px;
+  border-bottom: 1px solid var(--border-light);
+}
+#bwz-overlay .bwz-tax-rule-row:last-child { border-bottom: none; }
+#bwz-overlay .bwz-tax-rule-name,
+#bwz-overlay .bwz-tax-rule-value { height: 30px; font-size: 12px; border-radius: 7px; padding: 0 8px; }
+#bwz-overlay .bwz-tax-rule-type { height: 30px; font-size: 12px; border-radius: 7px; padding: 0 4px; }
+#bwz-overlay .bwz-tax-rule-del {
+  width: 28px; height: 28px; border-radius: 7px; border: none;
+  background: none; color: var(--text-muted); cursor: pointer; font-size: 11px;
+  display: flex; align-items: center; justify-content: center;
+  transition: background .12s, color .12s;
+}
+#bwz-overlay .bwz-tax-rule-del:hover { background: #fee2e2; color: #dc2626; }
+#bwz-overlay .bwz-tax-rules-empty {
+  padding: 12px; font-size: 12px; color: var(--text-muted); text-align: center;
+}
+
+/* ── Branches & Counters step ──────────────────────────────────────── */
+#bwz-overlay .bwz-bc-section { display:flex; flex-direction:column; gap:8px; margin-top:6px; }
+#bwz-overlay .bwz-bc-section + .bwz-bc-section {
+  margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border);
+}
+#bwz-overlay .bwz-bc-section-hdr {
+  display: flex; align-items: center; justify-content: space-between;
+}
+#bwz-overlay .bwz-bc-section-title {
+  font-size: 12px; font-weight: 700; color: var(--text);
+  display: flex; align-items: center; gap: 6px;
+}
+#bwz-overlay .bwz-bc-add-btn {
+  height: 28px; padding: 0 10px; font-size: 11.5px; font-weight: 600;
+  border-radius: 8px; border: 1px solid var(--accent);
+  background: var(--accent-light); color: var(--accent);
+  cursor: pointer; display: flex; align-items: center; gap: 5px;
+  transition: background 0.15s, color 0.15s;
+}
+#bwz-overlay .bwz-bc-add-btn:hover { background: var(--accent); color: #fff; }
+#bwz-overlay .bwz-bc-row {
+  display: grid; grid-template-columns: 16px 1fr auto;
+  align-items: center; gap: 8px;
+  padding: 6px 8px; border: 1px solid var(--border);
+  border-radius: 9px; background: var(--surface2);
+}
+#bwz-overlay .bwz-bc-counter-row { grid-template-columns: 16px 1fr 120px auto; }
+#bwz-overlay .bwz-bc-row-icon { font-size: 11px; color: var(--text-muted); text-align: center; }
+#bwz-overlay .bwz-bc-del-btn {
+  width: 26px; height: 26px; border-radius: 7px;
+  border: 1px solid var(--border); background: transparent;
+  color: var(--text-muted); cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+#bwz-overlay .bwz-bc-del-btn:hover { background: #fee2e2; border-color: #fca5a5; color: #dc2626; }
+#bwz-overlay .bwz-bc-empty {
+  font-size: 11px; color: var(--text-muted); text-align: center;
+  padding: 10px 0; font-style: italic;
+}
+
+/* ── Cashiers step ─────────────────────────────────────────────────── */
+#bwz-overlay .bwz-cashier-hdr {
+  display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;
+}
+#bwz-overlay .bwz-cashier-hdr-title {
+  font-size: 12px; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 6px;
+}
+#bwz-overlay .bwz-cashier-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 10px; margin-bottom: 6px;
+  border: 1px solid var(--border); border-radius: 10px; background: var(--surface2);
+  transition: border-color 0.15s;
+}
+#bwz-overlay .bwz-cashier-row--editing { border-color: var(--accent); }
+#bwz-overlay .bwz-cashier-icon { font-size: 12px; color: var(--text-muted); flex: 0 0 16px; text-align: center; }
+#bwz-overlay .bwz-cashier-info { flex: 1; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+#bwz-overlay .bwz-cashier-name {
+  font-size: 12.5px; font-weight: 600; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+#bwz-overlay .bwz-cashier-username { font-size: 11px; color: var(--text-muted); }
+#bwz-overlay .bwz-cashier-badge {
+  flex: 0 0 auto; font-size: 10px; font-weight: 700;
+  letter-spacing: 0.03em; text-transform: uppercase;
+  padding: 2px 7px; border-radius: 99px;
+}
+#bwz-overlay .bwz-cashier-badge--active  { background: #dcfce7; color: #16a34a; }
+#bwz-overlay .bwz-cashier-badge--inactive { background: var(--surface2); color: var(--text-muted); border: 1px solid var(--border); }
+#bwz-overlay .bwz-cashier-actions { flex: 0 0 auto; display: flex; gap: 5px; align-items: center; }
+#bwz-overlay .bwz-cashier-edit-btn {
+  width: 26px; height: 26px; border-radius: 7px;
+  border: 1px solid var(--border); background: transparent;
+  color: var(--text-muted); cursor: pointer;
+  display: flex; align-items: center; justify-content: center; font-size: 11px;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+#bwz-overlay .bwz-cashier-edit-btn:hover {
+  background: var(--accent-light); color: var(--accent); border-color: var(--accent);
+}
+/* Edit-mode inputs share space equally */
+#bwz-overlay .bwz-cashier-row--editing .bwz-cashier-fname,
+#bwz-overlay .bwz-cashier-row--editing .bwz-cashier-fuser,
+#bwz-overlay .bwz-cashier-row--editing .bwz-cashier-fpass { flex: 1 1 70px; min-width: 60px; }
+#bwz-overlay .bwz-cashier-edit-btns { flex: 0 0 auto; display: flex; gap: 4px; align-items: center; }
+#bwz-overlay .bwz-cashier-save-btn,
+#bwz-overlay .bwz-cashier-cancel-btn {
+  width: 26px; height: 26px; border-radius: 7px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; font-size: 11px;
+  border: 1px solid; transition: background 0.15s, color 0.15s;
+}
+#bwz-overlay .bwz-cashier-save-btn {
+  background: var(--accent-light); color: var(--accent); border-color: var(--accent);
+}
+#bwz-overlay .bwz-cashier-save-btn:hover { background: var(--accent); color: #fff; }
+#bwz-overlay .bwz-cashier-cancel-btn {
+  background: transparent; color: var(--text-muted); border-color: var(--border);
+}
+#bwz-overlay .bwz-cashier-cancel-btn:hover { background: #fee2e2; color: #dc2626; border-color: #fca5a5; }
+#bwz-overlay .bwz-cashier-empty {
+  font-size: 11px; color: var(--text-muted); text-align: center; padding: 12px 0; font-style: italic;
 }

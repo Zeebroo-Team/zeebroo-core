@@ -232,41 +232,59 @@ class PosSettingsService
      */
     public function saveForBusiness(Business $business, array $data): void
     {
-        $rawAccount = $data['default_deposit_account_id'] ?? null;
-        if ($rawAccount === null || $rawAccount === '') {
-            $business->setSetting(self::KEY_DEFAULT_DEPOSIT_ACCOUNT, null);
-        } else {
-            $accountId = (int) $rawAccount;
-            $exists = Account::query()
-                ->whereKey($accountId)
-                ->where('business_id', $business->id)
-                ->exists();
-            if ($exists) {
-                $business->setSetting(self::KEY_DEFAULT_DEPOSIT_ACCOUNT, $accountId);
+        if (array_key_exists('default_deposit_account_id', $data)) {
+            $rawAccount = $data['default_deposit_account_id'];
+            if ($rawAccount === null || $rawAccount === '') {
+                $business->setSetting(self::KEY_DEFAULT_DEPOSIT_ACCOUNT, null);
+            } else {
+                $accountId = (int) $rawAccount;
+                $exists = Account::query()
+                    ->whereKey($accountId)
+                    ->where('business_id', $business->id)
+                    ->exists();
+                if ($exists) {
+                    $business->setSetting(self::KEY_DEFAULT_DEPOSIT_ACCOUNT, $accountId);
+                }
             }
         }
 
-        $business->setSetting(
-            self::KEY_DISCOUNT_FIELD_ENABLED,
-            filter_var($data['discount_field_enabled'] ?? false, FILTER_VALIDATE_BOOLEAN),
-        );
-
-        $business->setSetting(
-            self::KEY_CHECKOUT_MODAL_ENABLED,
-            filter_var($data['checkout_modal_enabled'] ?? false, FILTER_VALIDATE_BOOLEAN),
-        );
-
-        $theme = strtolower(trim((string) ($data['display_theme'] ?? 'light')));
-        if (! in_array($theme, ['light', 'dark'], true)) {
-            $theme = 'light';
+        if (array_key_exists('discount_field_enabled', $data)) {
+            $business->setSetting(
+                self::KEY_DISCOUNT_FIELD_ENABLED,
+                filter_var($data['discount_field_enabled'], FILTER_VALIDATE_BOOLEAN),
+            );
         }
-        $business->setSetting(self::KEY_DISPLAY_THEME, $theme);
 
-        $business->setSetting(self::KEY_RECEIPT_HEADER, substr(trim((string) ($data['receipt_header'] ?? '')), 0, 200));
-        $business->setSetting(self::KEY_RECEIPT_FOOTER, substr(trim((string) ($data['receipt_footer'] ?? '')), 0, 200));
-        $business->setSetting(self::KEY_SHOW_BUSINESS_NAME, filter_var($data['show_business_name'] ?? true, FILTER_VALIDATE_BOOLEAN));
-        $business->setSetting(self::KEY_SHOW_BUSINESS_ADDRESS, filter_var($data['show_business_address'] ?? false, FILTER_VALIDATE_BOOLEAN));
-        $business->setSetting(self::KEY_SHOW_ACCOUNT_INFO, filter_var($data['show_account_info'] ?? true, FILTER_VALIDATE_BOOLEAN));
+        if (array_key_exists('checkout_modal_enabled', $data)) {
+            $business->setSetting(
+                self::KEY_CHECKOUT_MODAL_ENABLED,
+                filter_var($data['checkout_modal_enabled'], FILTER_VALIDATE_BOOLEAN),
+            );
+        }
+
+        if (array_key_exists('display_theme', $data)) {
+            $theme = strtolower(trim((string) ($data['display_theme'] ?? 'light')));
+            if (! in_array($theme, ['light', 'dark'], true)) {
+                $theme = 'light';
+            }
+            $business->setSetting(self::KEY_DISPLAY_THEME, $theme);
+        }
+
+        if (array_key_exists('receipt_header', $data)) {
+            $business->setSetting(self::KEY_RECEIPT_HEADER, substr(trim((string) ($data['receipt_header'] ?? '')), 0, 200));
+        }
+        if (array_key_exists('receipt_footer', $data)) {
+            $business->setSetting(self::KEY_RECEIPT_FOOTER, substr(trim((string) ($data['receipt_footer'] ?? '')), 0, 200));
+        }
+        if (array_key_exists('show_business_name', $data)) {
+            $business->setSetting(self::KEY_SHOW_BUSINESS_NAME, filter_var($data['show_business_name'], FILTER_VALIDATE_BOOLEAN));
+        }
+        if (array_key_exists('show_business_address', $data)) {
+            $business->setSetting(self::KEY_SHOW_BUSINESS_ADDRESS, filter_var($data['show_business_address'], FILTER_VALIDATE_BOOLEAN));
+        }
+        if (array_key_exists('show_account_info', $data)) {
+            $business->setSetting(self::KEY_SHOW_ACCOUNT_INFO, filter_var($data['show_account_info'], FILTER_VALIDATE_BOOLEAN));
+        }
         if (array_key_exists('receipt_address_line', $data)) {
             $business->setSetting(self::KEY_RECEIPT_ADDRESS, substr(trim((string) ($data['receipt_address_line'] ?? '')), 0, 300));
         }
@@ -275,22 +293,30 @@ class PosSettingsService
             $business->setSetting(self::KEY_RECEIPT_LANGUAGE, in_array($lang, ['en', 'si', 'ta'], true) ? $lang : 'en');
         }
 
-        $mode = strtolower(trim((string) ($data['payment_settlement_mode'] ?? 'immediate')));
-        if (!in_array($mode, ['immediate', 'end_of_day'], true)) {
-            $mode = 'immediate';
+        if (array_key_exists('payment_settlement_mode', $data)) {
+            $mode = strtolower(trim((string) ($data['payment_settlement_mode'] ?? 'immediate')));
+            if (!in_array($mode, ['immediate', 'end_of_day'], true)) {
+                $mode = 'immediate';
+            }
+            $business->setSetting(self::KEY_PAYMENT_SETTLEMENT_MODE, $mode);
         }
-        $business->setSetting(self::KEY_PAYMENT_SETTLEMENT_MODE, $mode);
 
-        $productsLimit = max(0, (int) ($data['featured_products_limit'] ?? 0));
-        $business->setSetting(self::KEY_FEATURED_PRODUCTS_LIMIT, $productsLimit > 0 ? $productsLimit : null);
+        if (array_key_exists('featured_products_limit', $data)) {
+            $productsLimit = max(0, (int) ($data['featured_products_limit'] ?? 0));
+            $business->setSetting(self::KEY_FEATURED_PRODUCTS_LIMIT, $productsLimit > 0 ? $productsLimit : null);
+        }
 
-        $categoriesLimit = max(0, (int) ($data['featured_categories_limit'] ?? 0));
-        $business->setSetting(self::KEY_FEATURED_CATEGORIES_LIMIT, $categoriesLimit > 0 ? $categoriesLimit : null);
+        if (array_key_exists('featured_categories_limit', $data)) {
+            $categoriesLimit = max(0, (int) ($data['featured_categories_limit'] ?? 0));
+            $business->setSetting(self::KEY_FEATURED_CATEGORIES_LIMIT, $categoriesLimit > 0 ? $categoriesLimit : null);
+        }
 
-        $business->setSetting(
-            self::KEY_SHOW_SERVICE_BOUND_PRODUCTS,
-            filter_var($data['show_service_bound_products'] ?? true, FILTER_VALIDATE_BOOLEAN),
-        );
+        if (array_key_exists('show_service_bound_products', $data)) {
+            $business->setSetting(
+                self::KEY_SHOW_SERVICE_BOUND_PRODUCTS,
+                filter_var($data['show_service_bound_products'], FILTER_VALIDATE_BOOLEAN),
+            );
+        }
 
         if (array_key_exists('dont_settle_to_account', $data)) {
             $business->setSetting(

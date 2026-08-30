@@ -5656,7 +5656,8 @@ function _bwzShowProductsPanel() {
   $('#bwz-panel-products').style.display   = '';
   $('#bwz-panel-pos').style.display        = 'none';
   $('#bwz-submit-btn').style.display       = 'none';
-  $('#bwz-billing-skip-btn').style.display = '';
+  $('#bwz-billing-skip-btn').style.display = 'none'; // _bwzPsGoto controls which skip btn shows
+  $('#bwz-ps-cat-skip-btn').style.display  = 'none'; // _bwzPsGoto controls which skip btn shows
   $('#bwz-step-1').className = 'bwz-step done';
   $('#bwz-step-2').className = 'bwz-step done';
   $('#bwz-step-3').className = 'bwz-step active';
@@ -5680,11 +5681,13 @@ function _bwzPsGoto(n) {
   });
   const line = $('#bwz-ps-line-1');
   if (line) line.classList.toggle('filled', n > 1);
-  // Always reset choice cards so yes/skip buttons are visible on re-entry
-  const cc = $('#bwz-ps-cat-choice');     const ca = $('#bwz-ps-cat-actions');
-  const pc = $('#bwz-ps-product-choice'); const pa = $('#bwz-ps-product-actions');
-  if (cc) cc.style.display = 'none'; if (ca) ca.style.display = '';
-  if (pc) pc.style.display = 'none'; if (pa) pa.style.display = '';
+  // Footer skip buttons: PS1 → "Skip this step", PS2 → "Set up later"
+  const catSkip  = $('#bwz-ps-cat-skip-btn');
+  const billSkip = $('#bwz-billing-skip-btn');
+  if (catSkip)  catSkip.style.display  = (n === 1) ? '' : 'none';
+  if (billSkip) billSkip.style.display = (n === 2) ? '' : 'none';
+  // Track current PS sub-step for footer skip handler
+  _bwz._psStep = n;
   // Depth label
   const dl = $('#bwz-depth-label-products');
   if (dl) dl.textContent = `Products · ${n} of 2`;
@@ -5727,7 +5730,7 @@ function _bwzShowPosPanel() {
   $('#bwz-panel-products').style.display   = 'none';
   $('#bwz-panel-pos').style.display        = '';
   $('#bwz-submit-btn').style.display       = 'none';
-  $('#bwz-billing-skip-btn').style.display = '';
+  $('#bwz-billing-skip-btn').style.display = 'none'; // _bwzPosGoto controls footer
   $('#bwz-step-1').className = 'bwz-step done';
   $('#bwz-step-2').className = 'bwz-step done';
   $('#bwz-step-3').className = 'bwz-step done';
@@ -5740,18 +5743,34 @@ function _bwzShowPosPanel() {
 }
 
 function _bwzPosGoto(n) {
-  [1, 2, 3, 4].forEach(i => {
+  [1, 2, 3, 4, 5, 6].forEach(i => {
     const panel = $(`#bwz-pos-panel-${i}`);
     const dot   = $(`#bwz-pos-dot-${i}`);
     if (panel) panel.style.display = i === n ? '' : 'none';
     if (dot) dot.className = i < n ? 'bwz-ss-dot done' : i === n ? 'bwz-ss-dot active' : 'bwz-ss-dot';
   });
-  [1, 2, 3].forEach(i => {
+  [1, 2, 3, 4, 5].forEach(i => {
     const line = $(`#bwz-pos-line-${i}`);
     if (line) line.classList.toggle('filled', n > i);
   });
   const dl = $('#bwz-depth-label-pos');
-  if (dl) dl.textContent = `POS Setup · ${n} of 4`;
+  if (dl) dl.textContent = `POS Setup · ${n} of 6`;
+  // Footer: show POS save button, hide other footer controls
+  const footerSave = $('#bwz-pos-footer-save');
+  const footerBack = $('#bwz-pos-footer-back');
+  if (footerSave) {
+    footerSave.style.display = '';
+    footerSave.innerHTML = n === 6
+      ? '<i class="fa fa-floppy-disk"></i> Save &amp; Finish'
+      : '<i class="fa fa-floppy-disk"></i> Save &amp; Continue';
+  }
+  if (footerBack) footerBack.style.display = n > 1 ? '' : 'none';
+  $('#bwz-submit-btn').style.display      = 'none';
+  $('#bwz-billing-skip-btn').style.display = 'none';
+  $('#bwz-ps-cat-skip-btn').style.display  = 'none';
+  // Lazy-load data when entering sub-steps that need it
+  if (n === 5) _bwzLoadBranchesCounters();
+  if (n === 6) _bwzLoadCashiers();
 }
 
 // POS: load config into both sub-step panels
@@ -5761,38 +5780,63 @@ async function _bwzPosLoadConfig() {
   const accounts = aRes.status === 200 ? (aRes.body?.data ?? []) : [];
 
   // Sub-step 1: Regional & Financial
-  $('#bwz-pos-currency').value   = s.currency ?? '';
-  // Timezone: auto-detect from browser if not set (F8)
+  $('#bwz-pos-currency').value = s.currency ?? '';
+  // Timezone: auto-detect from browser if not stored
   const detectedTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const tz = s.timezone || detectedTz;
-  $('#bwz-pos-timezone').value   = tz;
+  $('#bwz-pos-timezone').value = tz;
   const tzHint = $('#bwz-pos-tz-hint');
-  if (tzHint) tzHint.textContent = !s.timezone && detectedTz ? '(auto-detected)' : '';
+  if (tzHint) tzHint.textContent = !s.timezone && detectedTz ? '· auto-detected' : '';
   $('#bwz-pos-settlement').value = s.payment_settlement_mode ?? 'immediate';
   const sel = $('#bwz-pos-account');
   if (sel) {
     sel.innerHTML = '<option value="">— None —</option>' +
       accounts.map(a => `<option value="${a.id}"${String(a.id) === String(s.default_deposit_account_id) ? ' selected' : ''}>${escHtml(a.account_name)}${a.bank_name ? ' · '+escHtml(a.bank_name) : ''}</option>`).join('');
   }
+  const dontSettle = !!s.dont_settle_to_account;
+  const dsChk = $('#bwz-pos-dont-settle');
+  if (dsChk) dsChk.checked = dontSettle;
+  _bwzApplyDontSettle(dontSettle);
 
   // Sub-step 2: POS Features
-  $('#bwz-pos-feat-products').value = s.featured_products_limit ?? 0;
-  $('#bwz-pos-feat-cats').value     = s.featured_categories_limit ?? 0;
-  $('#bwz-pos-discount').checked    = !!s.discount_field_enabled;
+  $('#bwz-pos-feat-products').value  = s.featured_products_limit ?? 0;
+  $('#bwz-pos-feat-cats').value      = s.featured_categories_limit ?? 0;
+  $('#bwz-pos-stock-mode').value     = s.stock_selection_mode ?? 'fifo';
+  $('#bwz-pos-choose-price').checked = !!s.choose_price;
+  $('#bwz-pos-discount').checked     = !!s.discount_field_enabled;
   $('#bwz-pos-multi-cashier').checked = hasFeature('point_of_sale');
+
+  // Sub-step 3: Tax
+  $('#bwz-pos-tax-enabled').checked = !!s.tax_enabled;
+  const existingRules = Array.isArray(s.tax_rules) ? s.tax_rules : [];
+  const rulesList = $('#bwz-tax-rules-list');
+  if (rulesList) rulesList.innerHTML = '';
+  existingRules.forEach(r => _bwzAddTaxRuleRow(r));
+  _bwzUpdateTaxEmpty();
 }
 
 // ── POS sub-step 1: Regional & Financial ──────────────────────────────────
-$('#bwz-pos-general-skip')?.addEventListener('click', () => _bwzPosGoto(2));
+function _bwzApplyDontSettle(on) {
+  const account    = $('#bwz-pos-account');
+  const settlement = $('#bwz-pos-settlement');
+  if (account)    { account.disabled    = on; account.closest('.bwz-pos-field').style.opacity    = on ? '0.45' : ''; }
+  if (settlement) { settlement.disabled = on; settlement.closest('.bwz-pos-field').style.opacity = on ? '0.45' : ''; }
+}
+
+$('#bwz-pos-dont-settle')?.addEventListener('change', function () {
+  _bwzApplyDontSettle(this.checked);
+});
 
 $('#bwz-pos-general-save')?.addEventListener('click', async () => {
   const btn = $('#bwz-pos-general-save');
   btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
+  const dontSettle = !!$('#bwz-pos-dont-settle')?.checked;
   const res = await API.settingsUpdate({
     currency:                   ($('#bwz-pos-currency').value  || '').trim(),
     timezone:                   ($('#bwz-pos-timezone').value  || '').trim(),
-    default_deposit_account_id: $('#bwz-pos-account').value    || null,
+    default_deposit_account_id: dontSettle ? null : ($('#bwz-pos-account').value || null),
     payment_settlement_mode:    $('#bwz-pos-settlement').value,
+    dont_settle_to_account:     dontSettle,
   });
   btn.disabled = false; btn.innerHTML = '<i class="fa fa-floppy-disk"></i> Save & Continue';
   if (res.status === 200) {
@@ -5807,7 +5851,6 @@ $('#bwz-pos-general-save')?.addEventListener('click', async () => {
 
 // ── POS sub-step 2: POS Features ─────────────────────────────────────────
 $('#bwz-pos-back-2')?.addEventListener('click', () => _bwzPosGoto(1));
-$('#bwz-pos-features-skip')?.addEventListener('click', () => _bwzPosGoto(3));
 
 $('#bwz-pos-features-save')?.addEventListener('click', async () => {
   const btn = $('#bwz-pos-features-save');
@@ -5815,6 +5858,8 @@ $('#bwz-pos-features-save')?.addEventListener('click', async () => {
   const res = await API.settingsUpdate({
     featured_products_limit:   parseInt($('#bwz-pos-feat-products').value) || 0,
     featured_categories_limit: parseInt($('#bwz-pos-feat-cats').value)     || 0,
+    stock_selection_mode:      $('#bwz-pos-stock-mode').value              || 'fifo',
+    choose_price:              !!$('#bwz-pos-choose-price')?.checked,
     discount_field_enabled:    $('#bwz-pos-discount').checked,
   });
   btn.disabled = false; btn.innerHTML = '<i class="fa fa-floppy-disk"></i> Save & Continue';
@@ -5829,14 +5874,51 @@ $('#bwz-pos-features-save')?.addEventListener('click', async () => {
 
 // ── POS sub-step 3: Tax (inline, F10) ────────────────────────────────────
 $('#bwz-pos-back-3')?.addEventListener('click', () => _bwzPosGoto(2));
-$('#bwz-pos-tax-skip')?.addEventListener('click', () => _bwzPosGoto(4));
+
+// ── Tax rule helpers ──────────────────────────────────────────────────────
+function _bwzAddTaxRuleRow(rule) {
+  const id   = rule?.id   || ('bwz-tr-' + Math.random().toString(36).slice(2, 9));
+  const name = rule?.name || '';
+  const type = rule?.type || 'percentage';
+  const val  = rule?.value != null ? rule.value : '';
+  const row  = document.createElement('div');
+  row.className = 'bwz-tax-rule-row';
+  row.dataset.ruleId = id;
+  row.innerHTML =
+    `<input class="bwz-pos-input bwz-tax-rule-name" placeholder="Name e.g. VAT" value="${escHtml(String(name))}">` +
+    `<select class="bwz-pos-select bwz-tax-rule-type">` +
+      `<option value="percentage"${type==='percentage'?' selected':''}>%</option>` +
+      `<option value="flat"${type==='flat'?' selected':''}>Flat</option>` +
+    `</select>` +
+    `<input class="bwz-pos-input bwz-tax-rule-value" type="number" min="0" step="0.01" placeholder="0" value="${escHtml(String(val))}">` +
+    `<button class="bwz-tax-rule-del" title="Remove rule" type="button"><i class="fa fa-trash"></i></button>`;
+  row.querySelector('.bwz-tax-rule-del').addEventListener('click', () => { row.remove(); _bwzUpdateTaxEmpty(); });
+  $('#bwz-tax-rules-list').appendChild(row);
+  _bwzUpdateTaxEmpty();
+}
+function _bwzUpdateTaxEmpty() {
+  const list  = $('#bwz-tax-rules-list');
+  const empty = $('#bwz-tax-rules-empty');
+  if (!list || !empty) return;
+  empty.style.display = list.children.length === 0 ? '' : 'none';
+}
+function _bwzCollectTaxRules() {
+  return Array.from($$('.bwz-tax-rule-row')).map(row => ({
+    id:    row.dataset.ruleId,
+    name:  row.querySelector('.bwz-tax-rule-name')?.value.trim() || '',
+    type:  row.querySelector('.bwz-tax-rule-type')?.value || 'percentage',
+    value: parseFloat(row.querySelector('.bwz-tax-rule-value')?.value) || 0,
+  })).filter(r => r.name !== '');
+}
+$('#bwz-tax-add-rule')?.addEventListener('click', () => _bwzAddTaxRuleRow(null));
 
 $('#bwz-pos-tax-save')?.addEventListener('click', async () => {
   const btn = $('#bwz-pos-tax-save');
-  const name = ($('#bwz-pos-tax-name').value || '').trim();
-  const rate = parseFloat($('#bwz-pos-tax-rate').value) || 0;
   btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
-  const res = await API.settingsUpdate({ tax_name: name, tax_rate: rate });
+  const res = await API.settingsUpdate({
+    tax_enabled: $('#bwz-pos-tax-enabled').checked,
+    tax_rules:   _bwzCollectTaxRules(),
+  });
   btn.disabled = false; btn.innerHTML = '<i class="fa fa-floppy-disk"></i> Save & Continue';
   if (res.status === 200) {
     toast('Tax settings saved', 'success');
@@ -5848,21 +5930,309 @@ $('#bwz-pos-tax-save')?.addEventListener('click', async () => {
 
 // ── POS sub-step 4: Receipt (inline, F10) ────────────────────────────────
 $('#bwz-pos-back-4')?.addEventListener('click', () => _bwzPosGoto(3));
-$('#bwz-pos-receipt-skip')?.addEventListener('click', _bwzShowDone);
 
-$('#bwz-pos-receipt-save')?.addEventListener('click', async () => {
-  const btn = $('#bwz-pos-receipt-save');
-  btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
-  const res = await API.settingsUpdate({
-    receipt_header_text: ($('#bwz-pos-receipt-header').value || '').trim(),
-    receipt_footer_text: ($('#bwz-pos-receipt-footer').value || '').trim(),
-  });
-  btn.disabled = false; btn.innerHTML = '<i class="fa fa-floppy-disk"></i> Save & Finish';
-  if (res.status === 200) {
-    toast('Receipt customized', 'success');
-  }
-  _bwzShowDone(); // always advance even if save failed
+// Open receipt editor from wizard — go behind, resume at pos:4 when closed
+$('#bwz-pos-open-receipt-editor')?.addEventListener('click', () => {
+  _bwz.billingActive = true; _bwz.billingNextStep = 'pos:4';
+  _bwzGoBehind();
+  showReceiptEditor();
 });
+
+// Hidden save btn — footer "Save & Continue" delegates here; advances to step 5
+$('#bwz-pos-receipt-save')?.addEventListener('click', () => {
+  _bwzPosGoto(5);
+});
+
+// ── POS footer bar save / back delegates ─────────────────────────────────
+$('#bwz-pos-footer-save')?.addEventListener('click', () => {
+  const activeN = [1, 2, 3, 4, 5, 6].find(i => {
+    const p = $(`#bwz-pos-panel-${i}`);
+    return p && p.style.display !== 'none';
+  });
+  if (activeN) $(`#bwz-pos-panel-${activeN} .bwz-pos-save-btn`)?.click();
+});
+$('#bwz-pos-footer-back')?.addEventListener('click', () => {
+  const activeN = [1, 2, 3, 4, 5, 6].find(i => {
+    const p = $(`#bwz-pos-panel-${i}`);
+    return p && p.style.display !== 'none';
+  });
+  if (activeN && activeN > 1) _bwzPosGoto(activeN - 1);
+});
+
+// ── Branches & Counters helpers ───────────────────────────────────────────
+function _bwzAddBranchRow(branch) {
+  const isExisting = branch && branch.id;
+  const rid  = isExisting ? branch.id : ('new-' + Math.random().toString(36).slice(2, 9));
+  const name = branch?.name || '';
+  const row  = document.createElement('div');
+  row.className = 'bwz-bc-row';
+  row.dataset.branchId = rid;
+  row.innerHTML =
+    `<i class="fa fa-store bwz-bc-row-icon"></i>` +
+    `<input class="bwz-pos-input bwz-bc-name" placeholder="Branch name" value="${escHtml(String(name))}">` +
+    `<button class="bwz-bc-del-btn" title="Remove" type="button"><i class="fa fa-trash"></i></button>`;
+  row.querySelector('.bwz-bc-del-btn').addEventListener('click', () => {
+    if (isExisting) (_bwz._deletedBranches = _bwz._deletedBranches || []).push(branch.id);
+    row.remove();
+    _bwzUpdateBranchEmpty();
+    _bwzRebuildCounterBranchOpts();
+  });
+  $('#bwz-bc-branch-list').appendChild(row);
+  _bwzUpdateBranchEmpty();
+  _bwzRebuildCounterBranchOpts();
+}
+
+function _bwzUpdateBranchEmpty() {
+  const list  = $('#bwz-bc-branch-list');
+  const empty = $('#bwz-bc-branch-empty');
+  if (!list || !empty) return;
+  empty.style.display = list.children.length === 0 ? '' : 'none';
+}
+
+function _bwzAddCounterRow(counter) {
+  const isExisting = counter && counter.id;
+  const rid     = isExisting ? counter.id : ('new-' + Math.random().toString(36).slice(2, 9));
+  const name    = counter?.name || '';
+  const branchId = counter?.branch_id || '';
+  const row     = document.createElement('div');
+  row.className = 'bwz-bc-row bwz-bc-counter-row';
+  row.dataset.counterId = rid;
+  row.innerHTML =
+    `<i class="fa fa-cash-register bwz-bc-row-icon"></i>` +
+    `<input class="bwz-pos-input bwz-bc-name" placeholder="Counter name e.g. Till 1" value="${escHtml(String(name))}">` +
+    `<select class="bwz-pos-select bwz-bc-branch-sel" data-selected="${escHtml(String(branchId))}">` +
+      `<option value="">All branches</option>` +
+    `</select>` +
+    `<button class="bwz-bc-del-btn" title="Remove" type="button"><i class="fa fa-trash"></i></button>`;
+  row.querySelector('.bwz-bc-del-btn').addEventListener('click', () => {
+    if (isExisting) (_bwz._deletedCounters = _bwz._deletedCounters || []).push(counter.id);
+    row.remove();
+    _bwzUpdateCounterEmpty();
+  });
+  $('#bwz-bc-counter-list').appendChild(row);
+  _bwzUpdateCounterEmpty();
+  _bwzRebuildCounterBranchOpts();
+}
+
+function _bwzUpdateCounterEmpty() {
+  const list  = $('#bwz-bc-counter-list');
+  const empty = $('#bwz-bc-counter-empty');
+  if (!list || !empty) return;
+  empty.style.display = list.children.length === 0 ? '' : 'none';
+}
+
+// Sync branch options in every counter select from the current branch list rows
+function _bwzRebuildCounterBranchOpts() {
+  const branchRows = Array.from($('#bwz-bc-branch-list')?.children || []);
+  const opts = branchRows.map(r => {
+    const bid  = r.dataset.branchId;
+    const bName = r.querySelector('.bwz-bc-name')?.value || 'Unnamed';
+    return `<option value="${escHtml(String(bid))}">${escHtml(bName)}</option>`;
+  }).join('');
+  document.querySelectorAll('.bwz-bc-branch-sel').forEach(sel => {
+    const current = sel.value || sel.dataset.selected || '';
+    sel.innerHTML = `<option value="">All branches</option>` + opts;
+    sel.value = current;
+  });
+}
+
+async function _bwzLoadBranchesCounters() {
+  _bwz._deletedBranches = [];
+  _bwz._deletedCounters = [];
+  const bl = $('#bwz-bc-branch-list');
+  const cl = $('#bwz-bc-counter-list');
+  if (bl) bl.innerHTML = '';
+  if (cl) cl.innerHTML = '';
+  const [bRes, cRes] = await Promise.all([API.branchesList(), API.counters()]);
+  if (bRes.status === 200 && Array.isArray(bRes.body?.data)) bRes.body.data.forEach(b => _bwzAddBranchRow(b));
+  _bwzUpdateBranchEmpty();
+  if (cRes.status === 200 && Array.isArray(cRes.body?.data)) cRes.body.data.forEach(c => _bwzAddCounterRow(c));
+  _bwzUpdateCounterEmpty();
+}
+
+// Add branch / counter buttons
+$('#bwz-bc-add-branch')?.addEventListener('click', () => {
+  _bwzAddBranchRow(null);
+  const rows = $('#bwz-bc-branch-list')?.children;
+  if (rows?.length) rows[rows.length - 1].querySelector('.bwz-bc-name')?.focus();
+});
+$('#bwz-bc-add-counter')?.addEventListener('click', () => {
+  _bwzAddCounterRow(null);
+  const rows = $('#bwz-bc-counter-list')?.children;
+  if (rows?.length) rows[rows.length - 1].querySelector('.bwz-bc-name')?.focus();
+});
+
+// Save branches & counters → done
+$('#bwz-pos-bc-save')?.addEventListener('click', async () => {
+  const btn = $('#bwz-pos-bc-save');
+  btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
+
+  // Delete removed items
+  for (const id of (_bwz._deletedBranches || [])) await API.branchRemove(id);
+  for (const id of (_bwz._deletedCounters || [])) await API.counterDelete(id);
+
+  // POST new branches — collect server IDs to resolve counter branch_id
+  const branchIdMap = {}; // temp-id → server-id
+  const branchRows  = Array.from($('#bwz-bc-branch-list')?.children || []);
+  for (const row of branchRows) {
+    const bid  = row.dataset.branchId;
+    const name = row.querySelector('.bwz-bc-name')?.value.trim() || '';
+    if (!name || !String(bid).startsWith('new-')) continue;
+    const res = await API.branchAdd({ name });
+    if (res.status === 201 && res.body?.data?.id) {
+      branchIdMap[bid] = res.body.data.id;
+      row.dataset.branchId = res.body.data.id;
+    }
+  }
+
+  // POST new counters
+  const counterRows = Array.from($('#bwz-bc-counter-list')?.children || []);
+  for (const row of counterRows) {
+    const cid  = row.dataset.counterId;
+    const name = row.querySelector('.bwz-bc-name')?.value.trim() || '';
+    if (!name || !String(cid).startsWith('new-')) continue;
+    const selVal  = row.querySelector('.bwz-bc-branch-sel')?.value || '';
+    const branchId = branchIdMap[selVal] || (!selVal || String(selVal).startsWith('new-') ? null : parseInt(selVal, 10)) || null;
+    await API.counterCreate({ name, ...(branchId ? { branch_id: branchId } : {}) });
+  }
+
+  btn.disabled = false; btn.innerHTML = '<i class="fa fa-floppy-disk"></i> Save &amp; Continue';
+  toast('Branches &amp; counters saved', 'success');
+  _bwzPosGoto(6);
+});
+
+// ── Cashiers step (step 6) ────────────────────────────────────────────────
+function _bwzCashierViewHtml(c) {
+  const badge = c.is_active
+    ? `<span class="bwz-cashier-badge bwz-cashier-badge--active">Active</span>`
+    : `<span class="bwz-cashier-badge bwz-cashier-badge--inactive">Inactive</span>`;
+  return (
+    `<i class="fa fa-user bwz-cashier-icon"></i>` +
+    `<div class="bwz-cashier-info">` +
+      `<span class="bwz-cashier-name">${escHtml(c.name)}</span>` +
+      `<span class="bwz-cashier-username">@${escHtml(c.username)}</span>` +
+    `</div>` +
+    badge +
+    `<div class="bwz-cashier-actions">` +
+      `<button class="bwz-cashier-edit-btn" title="Edit"><i class="fa fa-pen"></i></button>` +
+      `<button class="bwz-bc-del-btn" title="Delete"><i class="fa fa-trash"></i></button>` +
+    `</div>`
+  );
+}
+
+function _bwzCashierEditHtml(c, isNew) {
+  const passPlaceholder = isNew ? 'Password (min 4 chars)' : 'New password (blank = keep)';
+  return (
+    `<i class="fa fa-user bwz-cashier-icon"></i>` +
+    `<input class="bwz-pos-input bwz-cashier-fname" placeholder="Full name" value="${escHtml(c?.name || '')}">` +
+    `<input class="bwz-pos-input bwz-cashier-fuser" placeholder="Username" value="${escHtml(c?.username || '')}">` +
+    `<input class="bwz-pos-input bwz-cashier-fpass" type="password" placeholder="${passPlaceholder}" autocomplete="new-password">` +
+    `<div class="bwz-cashier-edit-btns">` +
+      `<button class="bwz-cashier-save-btn" title="Save"><i class="fa fa-check"></i></button>` +
+      `<button class="bwz-cashier-cancel-btn" title="Cancel"><i class="fa fa-xmark"></i></button>` +
+    `</div>`
+  );
+}
+
+function _bwzCashierSetViewMode(row, cashierData) {
+  row.classList.remove('bwz-cashier-row--editing');
+  row.innerHTML = _bwzCashierViewHtml(cashierData);
+  row.querySelector('.bwz-cashier-edit-btn').addEventListener('click', () => {
+    _bwzCashierSetEditMode(row, cashierData, false);
+  });
+  row.querySelector('.bwz-bc-del-btn').addEventListener('click', async () => {
+    const res = await API.cashierDelete(cashierData.id);
+    if (res.status === 200) {
+      row.remove(); _bwzUpdateCashierEmpty();
+      toast('Cashier removed', 'success');
+    } else {
+      toast(res.body?.message || 'Delete failed', 'error');
+    }
+  });
+}
+
+function _bwzCashierSetEditMode(row, cashierData, isNew) {
+  row.classList.add('bwz-cashier-row--editing');
+  row.innerHTML = _bwzCashierEditHtml(cashierData, isNew);
+  row.querySelector('.bwz-cashier-fname')?.focus();
+
+  row.querySelector('.bwz-cashier-save-btn').addEventListener('click', async () => {
+    const name  = row.querySelector('.bwz-cashier-fname').value.trim();
+    const uname = row.querySelector('.bwz-cashier-fuser').value.trim().replace(/\s+/g, '');
+    const pass  = row.querySelector('.bwz-cashier-fpass').value;
+    if (!name || !uname) { toast('Name and username are required', 'error'); return; }
+    if (isNew && !pass)  { toast('Password is required', 'error'); return; }
+    if (pass && pass.length < 4) { toast('Password must be at least 4 characters', 'error'); return; }
+
+    const saveBtn = row.querySelector('.bwz-cashier-save-btn');
+    saveBtn.disabled = true; saveBtn.innerHTML = '<i class="fa fa-spinner fa-spin"></i>';
+
+    let res;
+    if (isNew) {
+      res = await API.cashierCreate({ name, username: uname, password: pass });
+    } else {
+      const body = { name, username: uname };
+      if (pass) body.password = pass;
+      res = await API.cashierUpdate(cashierData.id, body);
+    }
+
+    saveBtn.disabled = false; saveBtn.innerHTML = '<i class="fa fa-check"></i>';
+
+    if (res.status === 200 || res.status === 201) {
+      const saved = res.body?.data || { ...cashierData, name, username: uname, is_active: true };
+      _bwzCashierSetViewMode(row, saved);
+      _bwzUpdateCashierEmpty();
+      toast(isNew ? 'Cashier added' : 'Cashier updated', 'success');
+    } else {
+      const msg = res.body?.message
+        || Object.values(res.body?.errors || {})[0]?.[0]
+        || 'Save failed';
+      toast(msg, 'error');
+    }
+  });
+
+  row.querySelector('.bwz-cashier-cancel-btn').addEventListener('click', () => {
+    if (isNew) { row.remove(); _bwzUpdateCashierEmpty(); }
+    else _bwzCashierSetViewMode(row, cashierData);
+  });
+}
+
+function _bwzAddCashierRow(cashier) {
+  const row = document.createElement('div');
+  row.className = 'bwz-cashier-row';
+  if (cashier?.id) row.dataset.cashierId = cashier.id;
+  $('#bwz-cashier-list').appendChild(row);
+  if (cashier) _bwzCashierSetViewMode(row, cashier);
+  else          _bwzCashierSetEditMode(row, null, true);
+  _bwzUpdateCashierEmpty();
+}
+
+function _bwzUpdateCashierEmpty() {
+  const list  = $('#bwz-cashier-list');
+  const empty = $('#bwz-cashier-empty');
+  if (!list || !empty) return;
+  empty.style.display = list.children.length === 0 ? '' : 'none';
+}
+
+async function _bwzLoadCashiers() {
+  const list = $('#bwz-cashier-list');
+  if (list) list.innerHTML = '';
+  _bwzUpdateCashierEmpty();
+  const res = await API.cashiers();
+  if (res.status === 200 && Array.isArray(res.body?.data)) {
+    res.body.data.forEach(c => _bwzAddCashierRow(c));
+  }
+  _bwzUpdateCashierEmpty();
+}
+
+$('#bwz-cashier-add-btn')?.addEventListener('click', () => {
+  _bwzAddCashierRow(null);
+  const rows = $('#bwz-cashier-list')?.children;
+  if (rows?.length) rows[rows.length - 1].querySelector('.bwz-cashier-fname')?.focus();
+});
+
+// Cashier step footer "Save & Finish" → just advance to done
+$('#bwz-pos-cashier-save')?.addEventListener('click', () => { _bwzShowDone(); });
 
 // ── Completion screen (F13) ───────────────────────────────────────────────
 function _bwzShowDone() {
@@ -5871,8 +6241,10 @@ function _bwzShowDone() {
   });
   const done = $('#bwz-panel-done');
   if (done) done.style.display = '';
-  $('#bwz-submit-btn').style.display       = 'none';
-  $('#bwz-billing-skip-btn').style.display = 'none';
+  $('#bwz-submit-btn').style.display        = 'none';
+  $('#bwz-billing-skip-btn').style.display  = 'none';
+  $('#bwz-pos-footer-save').style.display   = 'none';
+  $('#bwz-pos-footer-back').style.display   = 'none';
   [1, 2, 3, 4].forEach(i => {
     const step = $(`#bwz-step-${i}`);
     if (step) step.className = 'bwz-step done';
@@ -5956,10 +6328,19 @@ $('#home-subnav-setup-wizard')?.addEventListener('click', async () => {
 // Wire wizard buttons once on page load
 $('#bwz-submit-btn')?.addEventListener('click', _bwzSubmit);
 $('#bwz-billing-skip-btn')?.addEventListener('click', () => {
-  // "Set up later" on billing panel — advance to next step or close
-  if (_bwzHasProductsStep()) { _bwzShowProductsPanel(); }
-  else if (_bwzHasPosStep()) { _bwzShowPosPanel(); }
-  else { _bwzClose(); }
+  // "Set up later" — context-aware: from billing advances to products;
+  // from PS2 (products sub-step 2) advances past products entirely
+  const onPs2 = _bwzHasProductsStep() && _bwz._psStep === 2;
+  if (onPs2) {
+    if (_bwzHasPosStep()) { _bwzShowPosPanel(); }
+    else { _bwzClose(); }
+  } else if (_bwzHasProductsStep()) {
+    _bwzShowProductsPanel();
+  } else if (_bwzHasPosStep()) {
+    _bwzShowPosPanel();
+  } else {
+    _bwzClose();
+  }
 });
 
 // Returns the wizard step to go to after billing is done
@@ -5996,57 +6377,26 @@ $('#bwz-bill-add-bills')?.addEventListener('click', () => {
 });
 
 // Products sub-step 1: Categories
-// Yes → show choice cards (Import CSV | Add Manually)
-$('#bwz-ps-cat-yes')?.addEventListener('click', () => {
-  $('#bwz-ps-cat-actions').style.display = 'none';
-  $('#bwz-ps-cat-choice').style.display  = '';
-});
-// Back from choice
-$('#bwz-ps-cat-back')?.addEventListener('click', () => {
-  $('#bwz-ps-cat-choice').style.display  = 'none';
-  $('#bwz-ps-cat-actions').style.display = '';
-});
-// Next — skip choice and advance to Products sub-step
-$('#bwz-ps-cat-next')?.addEventListener('click', () => _bwzPsGoto(2));
-// Choice: Import CSV
+// Import CSV
 $('#bwz-ps-cat-import')?.addEventListener('click', () => {
   _bwz.billingActive = true; _bwz.billingNextStep = 'ps:1';
   _bwzGoBehind();
   activateTab('inventory'); switchInvView('categories');
   setTimeout(() => _catCsvOpen(), 80);
 });
-// Choice: Add manually — stay on categories step if modal is closed; advance only on save
+// Add manually — stay on categories step; advance only on save
 $('#bwz-ps-cat-add')?.addEventListener('click', () => {
   _bwz.billingActive = true; _bwz.billingNextStep = 'ps:1';
   _bwzGoBehind();
   activateTab('inventory'); switchInvView('categories');
   setTimeout(() => $('#cat-add-btn')?.click(), 80);
 });
-$('#bwz-ps-cat-skip')?.addEventListener('click', () => {
-  // reset choice state before advancing
-  $('#bwz-ps-cat-choice').style.display  = 'none';
-  $('#bwz-ps-cat-actions').style.display = '';
-  _bwzPsGoto(2);
-});
+// Footer "Skip this step" — advance from categories (PS1) to products (PS2)
+$('#bwz-ps-cat-skip-btn')?.addEventListener('click', () => _bwzPsGoto(2));
 // Products sub-step 2 back (F12)
-$('#bwz-ps-back-2')?.addEventListener('click', () => _bwzPsGoto(1));
 
 // Products sub-step 2: Products
 // Yes → show choice cards (Import CSV | Add Manually)
-$('#bwz-ps-product-yes')?.addEventListener('click', () => {
-  $('#bwz-ps-product-actions').style.display = 'none';
-  $('#bwz-ps-product-choice').style.display  = '';
-});
-// Back from choice
-$('#bwz-ps-product-back')?.addEventListener('click', () => {
-  $('#bwz-ps-product-choice').style.display  = 'none';
-  $('#bwz-ps-product-actions').style.display = '';
-});
-// Next — skip choice and close wizard
-$('#bwz-ps-product-next')?.addEventListener('click', () => {
-  if (_bwzHasPosStep()) { _bwzShowPosPanel(); $('#bwz-overlay').style.display = 'flex'; }
-  else _bwzClose();
-});
 // Choice: Import CSV
 $('#bwz-ps-product-import')?.addEventListener('click', () => {
   _bwz.billingActive = true; _bwz.billingNextStep = 'ps:2';
@@ -6067,17 +6417,6 @@ $('#bwz-ps-product-add')?.addEventListener('click', () => {
   _bwzGoBehind();
   activateTab('inventory'); switchInvView('products');
   setTimeout(openAddProductModal, 80);
-});
-$('#bwz-ps-product-skip')?.addEventListener('click', () => {
-  // reset choice state before advancing
-  $('#bwz-ps-product-choice').style.display  = 'none';
-  $('#bwz-ps-product-actions').style.display = '';
-  if (_bwzHasPosStep()) {
-    _bwzShowPosPanel();
-    $('#bwz-overlay').style.display = 'flex';
-  } else {
-    _bwzClose();
-  }
 });
 
 // ── AI Category Generator ──────────────────────────────────────────────────
@@ -21112,9 +21451,9 @@ function showReceiptEditor() {
   $('#receipt-editor-modal').style.display = 'flex';
 }
 
-$('#rcpt-ed-close').addEventListener('click', () => { $('#receipt-editor-modal').style.display = 'none'; });
+$('#rcpt-ed-close').addEventListener('click', () => { $('#receipt-editor-modal').style.display = 'none'; _bwzCheckResume(); });
 $('#receipt-editor-modal').addEventListener('click', (e) => {
-  if (e.target === e.currentTarget) e.currentTarget.style.display = 'none';
+  if (e.target === e.currentTarget) { e.currentTarget.style.display = 'none'; _bwzCheckResume(); }
 });
 
 $('#rcpt-logo-choose').addEventListener('click', () => {
@@ -21172,6 +21511,7 @@ $('#rcpt-ed-save').addEventListener('click', async () => {
 
   toast('Receipt layout saved', 'success');
   $('#receipt-editor-modal').style.display = 'none';
+  _bwzCheckResume();
 });
 // ── End Receipt ────────────────────────────────────────────────────────────
 $('#rb-clear-filters').addEventListener('click', () => {
