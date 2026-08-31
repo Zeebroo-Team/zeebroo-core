@@ -12708,6 +12708,8 @@ async function _catOpenModal(editId) {
   $('#cat-f-description').value = '';
   $('#cat-f-active').checked    = true;
   $('#cat-f-parent').innerHTML  = '<option value="">Loading…</option>';
+  $('#cat-alert').style.display = 'none';
+  $('#cat-alert').classList.remove('qap-alert-success');
   $('#cat-modal').style.display = 'flex';
   await _catLoadParentOpts(editId);
 
@@ -12752,6 +12754,9 @@ async function _catSave(andAnother = false) {
   const saveBtn    = $('#cat-modal-save');
   const anotherBtn = $('#cat-modal-save-another');
   const name = $('#cat-f-name').value.trim();
+  const alertEl = $('#cat-alert');
+  alertEl.style.display = 'none';
+  alertEl.classList.remove('qap-alert-success');
   if (!name) { toast('Category name is required', 'error'); return; }
 
   if (btn) btn.disabled = true;
@@ -12781,6 +12786,11 @@ async function _catSave(andAnother = false) {
       $('#cat-f-name').value = '';
       $('#cat-f-description').value = '';
       // Keep parent and active state so user can add siblings quickly
+
+      alertEl.textContent = `"${name}" added successfully.`;
+      alertEl.classList.add('qap-alert-success');
+      alertEl.style.display = 'block';
+
       setTimeout(() => $('#cat-f-name')?.focus(), 60);
     } else {
       $('#cat-modal').style.display = 'none';
@@ -23530,6 +23540,7 @@ async function openAddProductModal() {
   $('#qap-price').value = '';
   $('#qap-stock').value = '';
   $('#qap-alert').style.display = 'none';
+  $('#qap-alert').classList.remove('qap-alert-success');
 
   // Currency prefix
   $('#qap-currency-prefix').textContent = state.currency || '';
@@ -23543,6 +23554,9 @@ async function openAddProductModal() {
   const btn = $('#qap-save');
   btn.disabled = false;
   btn.innerHTML = '<i class="fa fa-plus"></i> Add Product';
+  const anotherBtn = $('#qap-save-another');
+  anotherBtn.disabled = false;
+  anotherBtn.innerHTML = '<i class="fa fa-plus"></i> Save & add another';
 
   $('#qap-modal').style.display = 'flex';
   setTimeout(() => $('#qap-name').focus(), 80);
@@ -23553,12 +23567,13 @@ async function openAddProductModal() {
   });
 }
 
-async function submitAddProduct() {
+async function submitAddProduct(andAnother = false) {
   const name  = $('#qap-name').value.trim();
   const price = parseFloat($('#qap-price').value);
   const alertEl = $('#qap-alert');
 
   alertEl.style.display = 'none';
+  alertEl.classList.remove('qap-alert-success');
 
   if (!name) {
     alertEl.textContent = 'Product name is required.';
@@ -23573,9 +23588,12 @@ async function submitAddProduct() {
     return;
   }
 
-  const btn = $('#qap-save');
+  const btn        = $('#qap-save');
+  const anotherBtn = $('#qap-save-another');
+  const activeBtn  = andAnother ? anotherBtn : btn;
   btn.disabled = true;
-  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Adding…';
+  anotherBtn.disabled = true;
+  activeBtn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Adding…';
 
   // Create new unit on the fly if needed
   let _unitId = _qapUnit.id || undefined;
@@ -23585,7 +23603,9 @@ async function submitAddProduct() {
       alertEl.textContent = `Failed to create unit "${_qapUnit.name}"`;
       alertEl.style.display = 'block';
       btn.disabled = false;
+      anotherBtn.disabled = false;
       btn.innerHTML = '<i class="fa fa-plus"></i> Add Product';
+      anotherBtn.innerHTML = '<i class="fa fa-plus"></i> Save & add another';
       return;
     }
     _unitId = uRes.body?.data?.id;
@@ -23602,7 +23622,9 @@ async function submitAddProduct() {
 
   const res = await API.createProduct(body);
   btn.disabled = false;
+  anotherBtn.disabled = false;
   btn.innerHTML = '<i class="fa fa-plus"></i> Add Product';
+  anotherBtn.innerHTML = '<i class="fa fa-plus"></i> Save & add another';
 
   if (res.status !== 201 && res.status !== 200) {
     const firstError = res.body?.errors ? Object.values(res.body.errors)[0]?.[0] : null;
@@ -23611,9 +23633,27 @@ async function submitAddProduct() {
     return;
   }
 
-  $('#qap-modal').style.display = 'none';
   toast(`"${escHtml(name)}" added to catalog`, 'success');
   loadProducts(state.searchQuery, state.activeCategory);
+
+  if (andAnother) {
+    // Stay open — reset the form for the next product
+    $('#qap-name').value  = '';
+    $('#qap-sku').value   = '';
+    $('#qap-price').value = '';
+    $('#qap-stock').value = '';
+    _qapUnit = { id: null, name: '', _new: false };
+    $('#qap-unit-input').value = '';
+    $('#qap-unit-dd').style.display = 'none';
+
+    alertEl.textContent = `"${name}" added successfully.`;
+    alertEl.classList.add('qap-alert-success');
+    alertEl.style.display = 'block';
+
+    setTimeout(() => $('#qap-name')?.focus(), 60);
+  } else {
+    $('#qap-modal').style.display = 'none';
+  }
 }
 
 $('#qap-sku-gen').addEventListener('click', () => {
@@ -23628,9 +23668,10 @@ $('#qap-cancel').addEventListener('click', () => { $('#qap-modal').style.display
 $('#qap-modal').addEventListener('click', (e) => {
   if (e.target === e.currentTarget) e.currentTarget.style.display = 'none';
 });
-$('#qap-save').addEventListener('click', submitAddProduct);
+$('#qap-save').addEventListener('click', () => submitAddProduct(false));
+$('#qap-save-another').addEventListener('click', () => submitAddProduct(true));
 $('#qap-modal').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitAddProduct(); }
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitAddProduct(false); }
   if (e.key === 'Escape') $('#qap-modal').style.display = 'none';
 });
 

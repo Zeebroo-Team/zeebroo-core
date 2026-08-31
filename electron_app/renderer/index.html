@@ -3308,6 +3308,7 @@
             <button class="psm-close" id="cat-modal-close"><i class="fa fa-xmark"></i></button>
           </div>
           <div class="po-aim-body">
+            <div id="cat-alert" class="qap-alert" style="display:none;margin-bottom:14px"></div>
             <div class="po-field">
               <label class="po-field-label">Name <span class="po-required">*</span></label>
               <input type="text" id="cat-f-name" class="po-field-input" placeholder="Category name…" maxlength="120">
@@ -3329,9 +3330,9 @@
           </div>
           <div class="po-aim-footer">
             <button class="po-btn-ghost" id="cat-modal-cancel"><i class="fa fa-xmark"></i> Cancel</button>
-            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;margin-left:auto">
+            <div style="display:flex;align-items:center;gap:8px;margin-left:auto">
+              <button class="po-btn-outline" id="cat-modal-save-another"><i class="fa fa-plus"></i> Save &amp; add another</button>
               <button class="po-btn-primary" id="cat-modal-save"><i class="fa fa-check"></i> Save Category</button>
-              <button class="bwz-save-add-link" id="cat-modal-save-another"><i class="fa fa-plus"></i> Save &amp; add another</button>
             </div>
           </div>
         </div>
@@ -12268,6 +12269,7 @@
 
     <div class="qap-footer">
       <button class="psm-btn-cancel" id="qap-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+      <button class="qap-btn-save-another" id="qap-save-another"><i class="fa fa-plus"></i> Save &amp; add another</button>
       <button class="qap-btn-save" id="qap-save"><i class="fa fa-plus"></i> Add Product</button>
     </div>
   </div>

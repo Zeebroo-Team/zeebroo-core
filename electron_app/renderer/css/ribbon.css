@@ -10087,6 +10087,9 @@ body.dark .pc-modal-head {
   padding: 10px 14px; background: #fef2f2; border: 1px solid #fecaca;
   color: #b91c1c; border-radius: 8px; font-size: 12.5px;
 }
+.qap-alert.qap-alert-success {
+  background: #f0fdf4; border-color: #bbf7d0; color: #15803d;
+}
 
 .qap-field-full { display: flex; flex-direction: column; gap: 6px; }
 .qap-row { display: flex; gap: 12px; }
@@ -10137,6 +10140,15 @@ body.dark .pc-modal-head {
 .qap-btn-save:hover  { background: var(--accent-dark, #3a7de0); }
 .qap-btn-save:active { transform: scale(.98); }
 .qap-btn-save:disabled { opacity: .6; cursor: not-allowed; box-shadow: none; }
+.qap-btn-save-another {
+  padding: 9px 22px; border: 1.5px solid var(--border); border-radius: 8px;
+  background: var(--surface); color: var(--text); font-size: 13px; font-weight: 600;
+  cursor: pointer; display: flex; align-items: center; gap: 8px;
+  transition: border-color .12s, color .12s, transform .1s;
+}
+.qap-btn-save-another:hover  { border-color: var(--accent); color: var(--accent); }
+.qap-btn-save-another:active { transform: scale(.98); }
+.qap-btn-save-another:disabled { opacity: .6; cursor: not-allowed; }
 .qap-combo-wrap { position: relative; }
 .qap-combo-dd {
   position: absolute; top: calc(100% + 3px); left: 0; right: 0;
