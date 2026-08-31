@@ -13733,22 +13733,32 @@ $('#psm-printer-test')?.addEventListener('click', async () => {
         *** END OF TEST ***
       </div>
     </div>`;
-  const printable = $('#receipt-printable');
-  if (!printable) return;
-  const prevHtml = printable.innerHTML;
-  _psmInjectThermalCss(cfg.paperWidth);
-  printable.innerHTML = testHtml;
-  printable.style.display = 'block';
-  try {
-    const res = cfg.name
-      ? await window.electronAPI.printReceiptThermal(cfg)
-      : await window.electronAPI.printReceipt();
+  if (cfg.name) {
+    // Dedicated thermal window — clean rendering, no main-window interference
+    const res = await window.electronAPI.printReceiptThermal({
+      html:       testHtml,
+      name:       cfg.name,
+      silent:     cfg.silent,
+      paperWidth: cfg.paperWidth,
+    });
     if (res && !res.success) toast(res.error || res.failureReason || 'Print failed', 'error');
     else toast('Test page sent to printer', 'success');
-  } finally {
-    printable.style.display = 'none';
-    printable.innerHTML = prevHtml;
-    _psmRemoveThermalCss();
+  } else {
+    // No printer selected — show system dialog on main window
+    const printable = $('#receipt-printable');
+    if (!printable) return;
+    const prevHtml = printable.innerHTML;
+    _psmInjectThermalCss(cfg.paperWidth);
+    printable.innerHTML = testHtml;
+    printable.style.display = 'block';
+    try {
+      await window.electronAPI.printReceipt();
+      toast('Test page sent to printer', 'success');
+    } catch { /* ignore */ } finally {
+      printable.style.display = 'none';
+      printable.innerHTML = prevHtml;
+      _psmRemoveThermalCss();
+    }
   }
 });
 
@@ -21372,17 +21382,26 @@ $('#receipt-modal').addEventListener('click', (e) => {
 });
 $('#rcpt-print').addEventListener('click', async () => {
   const cfg = await window.electronAPI.getPrinterConfig().catch(() => null);
-  _psmInjectThermalCss(cfg?.paperWidth || 80);
-  $('#receipt-printable').style.display = 'block';
-  try {
-    const res = cfg?.name
-      ? await window.electronAPI.printReceiptThermal(cfg)
-      : await window.electronAPI.printReceipt();
-    if (res && !res.success && (res.error || res.failureReason))
-      toast(res.error || res.failureReason, 'error');
-  } finally {
-    $('#receipt-printable').style.display = 'none';
-    _psmRemoveThermalCss();
+  if (cfg?.name) {
+    // Dedicated thermal window — pass receipt HTML; no main-window printing needed
+    const receiptHtml = $('#receipt-printable')?.innerHTML || '';
+    const res = await window.electronAPI.printReceiptThermal({
+      html:       receiptHtml,
+      name:       cfg.name,
+      silent:     cfg.silent !== false,
+      paperWidth: cfg.paperWidth || 80,
+    });
+    if (res && !res.success) toast(res.error || 'Print failed', 'error');
+  } else {
+    // No thermal printer configured — use system print dialog on the main window
+    _psmInjectThermalCss(cfg?.paperWidth || 80);
+    $('#receipt-printable').style.display = 'block';
+    try {
+      await window.electronAPI.printReceipt();
+    } finally {
+      $('#receipt-printable').style.display = 'none';
+      _psmRemoveThermalCss();
+    }
   }
 });
 
