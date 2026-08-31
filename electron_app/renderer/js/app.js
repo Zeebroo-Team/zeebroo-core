@@ -102,6 +102,11 @@ function applyDarkMode(dark) {
   if ($('#home-view-today')?.style.display !== 'none' && document.getElementById('tds-chart-rev')) {
     loadTodaySummary();
   }
+  // Redraw the Business Flow chart if visible (its node colors are baked in at render time)
+  if ($('#home-view-flow')?.style.display !== 'none' && document.getElementById('home-chart')) {
+    const storedBiz = state._bizName || $('#app-title').textContent.replace('Zeebroo POS — ', '').replace('Zeebroo POS', '').trim();
+    renderBusinessChart(storedBiz || 'Your Business');
+  }
 }
 
 $('#toggle-dark').addEventListener('change', async (e) => {
@@ -7552,61 +7557,61 @@ $('#tpm-logout').addEventListener('click', async () => {
 
 // ── Feature Management Modal ───────────────────────────────────────────────
 const _featDefs = [
-  { key: 'account_management',   category: 'finance',       name: 'Account Management',    desc: 'Financial accounts & bank management',    longDesc: [
+  { key: 'account_management',   category: 'finance',       name: 'Account Management',    img: 'img/features/accounting.jpeg', desc: 'Financial accounts & bank management',    longDesc: [
       'Track ledgers, bank accounts, and financial movements across your business from one place. Every sale, bill, and payroll run posts here automatically, so your books stay current without manual entry.',
       'This module powers the numbers behind every other feature — reports, payroll, and bill tracking all read from the same accounts — so it is always included and cannot be turned off.',
     ], icon: 'fa-building-columns',   color: '#4e8ef7', locked: true, price: 'Included' },
-  { key: 'point_of_sale',        category: 'sales',         name: 'Point of Sale',         desc: 'Cashier checkout interface & quick sales', longDesc: [
+  { key: 'point_of_sale',        category: 'sales',         name: 'Point of Sale',         img: 'img/features/pos.jpeg', desc: 'Cashier checkout interface & quick sales', longDesc: [
       'A fast, touch-friendly checkout screen for ringing up sales, applying discounts, and taking payments. Built for a busy counter — barcode scanning, quick-add favorites, and split payments are all one tap away.',
       'Receipts print automatically or can be sent by email/SMS, and every sale reconciles straight into Account Management and Stock Management, so your numbers and inventory stay in sync.',
       'Note: Point of Sale and Restaurant cover the same checkout role, so only one of the two can be installed at a time.',
     ], icon: 'fa-cash-register',      color: '#4caf7d', price: 'Free' },
-  { key: 'product_management',   category: 'inventory',     name: 'Product Management',    desc: 'Product catalog, categories & brands',     longDesc: [
+  { key: 'product_management',   category: 'inventory',     name: 'Product Management',    img: 'img/features/product-management.svg', desc: 'Product catalog, categories & brands',     longDesc: [
       'Organize your entire product catalog — categories, brands, and variants — from a single screen. Bulk import, bulk price updates, and barcode printing make catalog maintenance fast even for large inventories.',
       'Changes here show up instantly at checkout and in your online listings, so pricing and descriptions never drift out of sync between channels.',
     ], icon: 'fa-boxes-stacked',      color: '#0ea5e9', price: 'Free' },
-  { key: 'stock_management',     category: 'inventory',     name: 'Stock Management',      desc: 'Stock audits & inventory adjustments',     longDesc: [
+  { key: 'stock_management',     category: 'inventory',     name: 'Stock Management',      img: 'img/features/stock-management.png', desc: 'Stock audits & inventory adjustments',     longDesc: [
       'Keep inventory counts accurate with stock audits, manual adjustments, and layer-level tracking (FIFO, last price, or manual selection) across branches and warehouses.',
       'Low-stock alerts and audit history give you a clear trail of what changed, when, and who made the change — useful for spotting shrinkage or restocking before you run out.',
     ], icon: 'fa-clipboard-list',     color: '#64748b', price: 'Free' },
-  { key: 'bill_management',      category: 'finance',       name: 'Bill Management',       desc: 'Bills, loans & expense tracking',          longDesc: [
+  { key: 'bill_management',      category: 'finance',       name: 'Bill Management',       img: 'img/features/bill-management.png', desc: 'Bills, loans & expense tracking',          longDesc: [
       'Record bills, loans, and recurring expenses, and track what is due, paid, and overdue at a glance. Attach documents, set due-date reminders, and log partial payments as they come in.',
       'Everything posts to your accounts automatically, so your expense picture in Account Management is always up to date without double entry.',
     ], icon: 'fa-file-invoice-dollar',color: '#9c6ef7', price: 'Free' },
-  { key: 'human_resources',      category: 'hr',            name: 'Human Resources',       desc: 'Employees, departments & payroll',         longDesc: [
+  { key: 'human_resources',      category: 'hr',            name: 'Human Resources',       img: 'img/features/HR management.jpeg', desc: 'Employees, departments & payroll',         longDesc: [
       'Manage employees, departments, and attendance, and run payroll without leaving the POS. Set up salary structures once and let recurring payroll runs handle the rest each period.',
       'Employee records, attendance logs, and payroll history stay linked, so HR questions ("who was on shift", "what did we pay in March") are a quick lookup rather than a spreadsheet hunt.',
     ], icon: 'fa-users',              color: '#f7a54e', price: 'Free' },
-  { key: 'service_management',   category: 'sales',         name: 'Services',              desc: 'Service-bound products & job management',  longDesc: [
+  { key: 'service_management',   category: 'sales',         name: 'Services',              img: 'img/features/service.png', desc: 'Service-bound products & job management',  longDesc: [
       'Sell service-bound products — repairs, installations, consultations — and schedule the jobs that come with them. Assign a job to staff, track its status, and bill for it once complete.',
       'Works alongside Point of Sale, so a service can be sold at the counter just like a physical product, with the work order generated automatically behind the scenes.',
     ], icon: 'fa-screwdriver-wrench', color: '#f0a030', price: 'Free' },
-  { key: 'social_media_campaign',category: 'marketing',     name: 'Designer',              desc: 'Design studio & marketing assets',         longDesc: [
+  { key: 'social_media_campaign',category: 'marketing',     name: 'Designer',              img: 'img/features/Graphic Design.jpeg', desc: 'Design studio & marketing assets',         longDesc: [
       'A built-in design studio for creating social posts, flyers, and other marketing assets for your business — no separate design software required.',
       'Start from a template or a blank canvas, drop in your logo and product photos, and export the result ready to post or print. Designs are saved to your business so your team can reuse and edit them later.',
     ], icon: 'fa-bullhorn',           color: '#e040fb', price: 'Free' },
-  { key: 'restaurant',           category: 'sales',         name: 'Restaurant',            desc: 'Restaurant POS, orders, menu & kitchen',   longDesc: [
+  { key: 'restaurant',           category: 'sales',         name: 'Restaurant',            img: 'img/features/returnt management.jpeg', desc: 'Restaurant POS, orders, menu & kitchen',   longDesc: [
       'A dedicated restaurant workflow with table management, order tickets, a live kitchen display, and menu management built for dine-in and takeaway service.',
       'Servers fire orders straight to the kitchen display, tables show their status at a glance, and the menu (with modifiers and combos) stays in sync with what the kitchen can actually make.',
       'Note: Restaurant and Point of Sale cover the same checkout role, so only one of the two can be installed at a time.',
     ], icon: 'fa-utensils',           color: '#f97316', price: 'Free' },
-  { key: 'mail',                 category: 'communication', name: 'Mail',                  desc: 'Business inbox, templates & scheduled sending', longDesc: [
+  { key: 'mail',                 category: 'communication', name: 'Mail',                  img: 'img/features/mail.png', desc: 'Business inbox, templates & scheduled sending', longDesc: [
       'A shared business inbox with reusable templates and scheduled sending, so your team can email customers — receipts, follow-ups, promotions — without leaving the app.',
       'Templates keep tone and formatting consistent across the team, and scheduled sends let you queue a campaign or reminder ahead of time instead of sending everything manually.',
     ], icon: 'fa-envelope',   color: '#06b6d4', price: 'Free' },
-  { key: 'crm',                  category: 'marketing',     name: 'CRM',                   desc: 'Leads pipeline, contacts & follow-up tasks',    longDesc: [
+  { key: 'crm',                  category: 'marketing',     name: 'CRM',                   img: 'img/features/CRM.jpeg', desc: 'Leads pipeline, contacts & follow-up tasks',    longDesc: [
       'Track leads through a sales pipeline, from first contact to closed deal, and manage all your contacts in one address book shared across the team.',
       'Follow-up tasks and reminders make sure a promising lead never goes quiet just because everyone assumed someone else was handling it.',
     ], icon: 'fa-bullseye',   color: '#7c3aed', price: 'Free' },
-  { key: 'developers',           category: 'developer',     name: 'Developers',            desc: 'API keys & webhooks for third-party integrations', longDesc: [
+  { key: 'developers',           category: 'developer',     name: 'Developers',            img: 'img/features/developers.svg', desc: 'API keys & webhooks for third-party integrations', longDesc: [
       'Generate API keys and configure webhooks to connect your business data to third-party tools — accounting software, custom dashboards, automation platforms, and more.',
       'Meant for technical users: scoped keys can be revoked individually, and webhook delivery logs make it easy to debug an integration that isn\'t receiving events as expected.',
     ], icon: 'fa-code',    color: '#0f766e', price: 'Free' },
-  { key: 'automation_editor',    category: 'developer',     name: 'Automation Editor',     desc: 'Visual workflow builder — triggers, conditions & actions', longDesc: [
+  { key: 'automation_editor',    category: 'developer',     name: 'Automation Editor',     img: 'img/features/automation-editor.svg', desc: 'Visual workflow builder — triggers, conditions & actions', longDesc: [
       'Build no-code automations with a visual, drag-and-drop editor — trigger actions based on events and conditions across your business data (a sale over a threshold, stock running low, a bill coming due).',
       'Combine triggers, conditions, and actions into a workflow once, then let it run in the background so your team doesn\'t have to remember to do it manually every time.',
     ], icon: 'fa-bolt',           color: '#f59e0b', price: 'Free' },
-  { key: 'project_management',  category: 'productivity',  name: 'Projects',              desc: 'Projects, tasks, milestones & kanban boards',             longDesc: [
+  { key: 'project_management',  category: 'productivity',  name: 'Projects',              img: 'img/features/Project Management.jpeg', desc: 'Projects, tasks, milestones & kanban boards',             longDesc: [
       'Plan and track projects with tasks, milestones, and kanban boards built for small teams — no need for a separate project-management subscription.',
       'Assign tasks, set due dates, and watch a project move across the board from "To Do" through "In Progress" to "Done," with milestones marking the bigger checkpoints along the way.',
     ], icon: 'fa-diagram-project', color: '#0284c7', price: 'Free' },
@@ -7726,17 +7731,22 @@ function _featMgmtRenderGrid() {
            <span class="fm-card-rating-text">${rev.average.toFixed(1)} (${rev.count})</span>
          </div>`
       : '';
+    const bannerInner = f.img
+      ? `<img src="${escHtml(f.img)}" alt="${escHtml(f.name)}" class="fm-card-banner-img">`
+      : `<div class="fm-card-banner-icon" style="color:${f.color}"><i class="fa ${f.icon}"></i></div>`;
     return `<div class="fm-card" data-fm-card="${f.key}">
-      <div class="fm-card-top">
-        <div class="fm-card-icon" style="background:${iconBg};color:${f.color}"><i class="fa ${f.icon}"></i></div>
-        ${badge}
+      <div class="fm-card-banner" style="background:${iconBg}">
+        ${bannerInner}
+        <div class="fm-card-banner-badge">${badge}</div>
       </div>
-      <div class="fm-card-name">${escHtml(f.name)}</div>
-      ${ratingHtml}
-      <div class="fm-card-desc">${escHtml(f.desc)}</div>
-      <div class="fm-card-footer">
-        ${actionHtml}
-        <button class="fm-readmore-btn" data-fm-detail="${f.key}">Read more</button>
+      <div class="fm-card-body">
+        <div class="fm-card-name">${escHtml(f.name)}</div>
+        ${ratingHtml}
+        <div class="fm-card-desc">${escHtml(f.desc)}</div>
+        <div class="fm-card-footer">
+          ${actionHtml}
+          <button class="fm-readmore-btn" data-fm-detail="${f.key}">Read more</button>
+        </div>
       </div>
     </div>`;
   }).join('');
@@ -7835,9 +7845,14 @@ function _featMgmtRenderDetail(f) {
              <div class="fm-progress-wrap"><div class="fm-progress-fill"></div></div>
            </button>`);
 
+  const bannerInner = f.img
+    ? `<img src="${escHtml(f.img)}" alt="" class="fm-detail-banner-bg" aria-hidden="true">
+       <img src="${escHtml(f.img)}" alt="${escHtml(f.name)}" class="fm-detail-banner-img">`
+    : `<div class="fm-detail-banner-icon" style="color:${f.color}"><i class="fa ${f.icon}"></i></div>`;
+
   $('#feat-mgmt-detail-body').innerHTML = `
+    <div class="fm-detail-banner" style="background:${iconBg}">${bannerInner}</div>
     <div class="fm-detail-hero">
-      <div class="fm-detail-icon" style="background:${iconBg};color:${f.color}"><i class="fa ${f.icon}"></i></div>
       <div class="fm-detail-heroinfo">
         <div class="fm-detail-name">${escHtml(f.name)}</div>
         <div class="fm-detail-badges">
@@ -7915,12 +7930,26 @@ async function _featMgmtLoadReviews(key) {
     ? reviews.map(r => `
       <div class="fm-review-item">
         <div class="fm-review-item-head">
-          <span class="fm-review-item-name">${escHtml(r.name)}</span>
-          <span class="fm-stars fm-stars-readonly fm-stars-sm">${_featMgmtStarIcons(r.rating)}</span>
+          <div class="fm-review-avatar" style="background:${_featMgmtAvatarColor(r.name)}">${escHtml(_featMgmtInitial(r.name))}</div>
+          <div class="fm-review-item-headinfo">
+            <span class="fm-review-item-name">${escHtml(r.name)}</span>
+            <span class="fm-stars fm-stars-readonly fm-stars-sm">${_featMgmtStarIcons(r.rating)}</span>
+          </div>
         </div>
         ${r.comment ? `<div class="fm-review-item-comment">${escHtml(r.comment)}</div>` : ''}
       </div>`).join('')
     : '<div class="fm-empty">No reviews yet. Be the first to share your thoughts.</div>';
+}
+
+const _FM_AVATAR_COLORS = ['#4e8ef7', '#4caf7d', '#f59e0b', '#9c6ef7', '#ef4444', '#0ea5e9', '#ec4899', '#0f766e', '#f97316', '#7c3aed'];
+function _featMgmtInitial(name) {
+  return (name || '?').trim().charAt(0).toUpperCase() || '?';
+}
+function _featMgmtAvatarColor(name) {
+  const str = name || '?';
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) hash = (hash * 31 + str.charCodeAt(i)) >>> 0;
+  return _FM_AVATAR_COLORS[hash % _FM_AVATAR_COLORS.length];
 }
 
 async function _featMgmtSubmitReview(key) {
