@@ -11827,6 +11827,15 @@
             </div>
 
             <div class="psm-field-row">
+              <label class="psm-field-label" for="psm-printer-mode">Print Mode</label>
+              <select id="psm-printer-mode" class="psm-select">
+                <option value="escpos">ESC/POS Direct — recommended for XP-80T &amp; all thermal printers</option>
+                <option value="html">HTML Window — for document / laser / inkjet printers</option>
+              </select>
+              <span class="psm-hint">ESC/POS sends raw commands directly — no Windows driver rendering conflicts</span>
+            </div>
+
+            <div class="psm-field-row">
               <label class="psm-field-label" for="psm-printer-paper">Paper Width</label>
               <select id="psm-printer-paper" class="psm-select">
                 <option value="80">80 mm — standard thermal roll (XP-80T)</option>
@@ -11838,7 +11847,7 @@
             <div class="psm-toggle-row">
               <div class="psm-toggle-info">
                 <span class="psm-toggle-name">Silent print</span>
-                <span class="psm-toggle-desc">Skip the system print dialog and send directly to the printer</span>
+                <span class="psm-toggle-desc">Applies in HTML Window mode — ESC/POS always prints silently</span>
               </div>
               <label class="psm-switch"><input type="checkbox" id="psm-printer-silent" checked><span class="psm-switch-track"></span></label>
             </div>

@@ -399,7 +399,8 @@ ipcMain.handle('get-printers', async (e) => {
 
 ipcMain.handle('get-printer-config', () => {
   config = loadConfig();
-  return config.thermalPrinter || { name: '', silent: true, paperWidth: 80 };
+  const tp = config.thermalPrinter || {};
+  return { name: tp.name || '', silent: tp.silent !== false, paperWidth: tp.paperWidth || 80, mode: tp.mode || 'escpos' };
 });
 
 ipcMain.handle('set-printer-config', (_e, cfg) => {
@@ -408,9 +409,232 @@ ipcMain.handle('set-printer-config', (_e, cfg) => {
     name:       String(cfg.name       || ''),
     silent:     cfg.silent !== false,
     paperWidth: cfg.paperWidth === 58 ? 58 : 80,
+    mode:       cfg.mode === 'html' ? 'html' : 'escpos',
   };
   saveConfig(config);
   return true;
+});
+
+// ── ESC/POS builder — pure Node.js, no native modules ────────────────────────
+function _escposBuffer(receipt, paperWidth) {
+  const COL  = paperWidth === 58 ? 30 : 42;
+  const NAMW = paperWidth === 58 ? 14 : 20;  // item name column width
+  const QTYF = 4;                              // qty column
+  const PRCF = paperWidth === 58 ?  0 :  8;  // price column (skipped on 58mm)
+  const TOTF = COL - NAMW - QTYF - PRCF;     // total column
+
+  const buf = [];
+  const push    = (...b)  => buf.push(...b);
+  const text    = (s) => {
+    for (const ch of String(s || '')) {
+      const c = ch.charCodeAt(0);
+      buf.push(c < 128 ? c : 0x3F);  // non-ASCII → '?'
+    }
+  };
+  const println = (s = '') => { text(s); push(0x0A); };
+
+  // ESC/POS commands
+  const alignL  = () => push(0x1B, 0x61, 0x00);
+  const alignC  = () => push(0x1B, 0x61, 0x01);
+  const boldOn  = () => push(0x1B, 0x45, 0x01);
+  const boldOff = () => push(0x1B, 0x45, 0x00);
+  const feed    = (n = 1) => push(0x1B, 0x64, n);
+  const cut     = ()       => push(0x1D, 0x56, 0x42, 0x03);  // partial cut + 3-line feed
+
+  // Layout helpers
+  const line  = () => { text('-'.repeat(COL)); push(0x0A); };
+  const dline = () => { text('='.repeat(COL)); push(0x0A); };
+  const ctr   = (s) => {
+    s = String(s || '').slice(0, COL);
+    const pad = Math.max(0, Math.floor((COL - s.length) / 2));
+    return ' '.repeat(pad) + s;
+  };
+  const rowLR = (left, right) => {
+    left  = String(left  || '');
+    right = String(right || '');
+    const gap = COL - left.length - right.length;
+    if (gap <= 0) {
+      text(left.slice(0, Math.max(0, COL - right.length - 1)) + ' ' + right);
+    } else {
+      text(left + ' '.repeat(gap) + right);
+    }
+    push(0x0A);
+  };
+
+  // ── Build receipt ──────────────────────────────────────────────────────────
+  push(0x1B, 0x40);  // ESC @ — initialize printer
+
+  // Header
+  if (receipt.businessName) {
+    alignC(); boldOn();
+    println(ctr(receipt.businessName));
+    boldOff();
+  }
+  if (receipt.address) {
+    alignC();
+    for (const l of receipt.address.split('\n')) {
+      if (l.trim()) println(ctr(l.trim()));
+    }
+  }
+  if (receipt.header) { alignC(); println(ctr(receipt.header)); }
+
+  alignL(); line();
+
+  // Metadata
+  rowLR('Receipt No.:', String(receipt.saleNumber || ''));
+  rowLR('Date:',        String(receipt.date        || ''));
+  if (receipt.customer) rowLR('Customer:', String(receipt.customer));
+  if (receipt.cashier)  rowLR('Cashier:',  String(receipt.cashier));
+
+  line();
+
+  // Items header
+  const ih = 'ITEM'.padEnd(NAMW) + 'QTY'.padStart(QTYF) +
+             (PRCF ? 'PRICE'.padStart(PRCF) : '') + 'TOTAL'.padStart(TOTF);
+  boldOn(); println(ih.slice(0, COL)); boldOff();
+  line();
+
+  for (const item of (receipt.items || [])) {
+    const name  = String(item.name || '').slice(0, NAMW).padEnd(NAMW);
+    const qtyN  = parseFloat(item.qty) || 0;
+    const qty   = (qtyN % 1 === 0 ? String(Math.round(qtyN)) : qtyN.toFixed(2)).padStart(QTYF);
+    const price = PRCF ? parseFloat(item.price).toFixed(2).padStart(PRCF) : '';
+    const total = parseFloat(item.total).toFixed(2).padStart(TOTF);
+    println((name + qty + price + total).slice(0, COL));
+    if (parseFloat(item.discount) > 0) {
+      println(('  Discount: -' + parseFloat(item.discount).toFixed(2)).slice(0, COL));
+    }
+  }
+
+  line();
+
+  // Totals
+  const cur = receipt.currency ? ' ' + receipt.currency : '';
+  rowLR('Subtotal:', parseFloat(receipt.subtotal || 0).toFixed(2) + cur);
+  if (parseFloat(receipt.discount) > 0) {
+    const dl = 'Discount' + (receipt.discountPct ? ' (' + receipt.discountPct + '%)' : '') + ':';
+    rowLR(dl, '-' + parseFloat(receipt.discount).toFixed(2) + cur);
+  }
+  for (const tax of (receipt.taxes || [])) {
+    rowLR(String(tax.name) + ':', '+' + parseFloat(tax.amount).toFixed(2) + cur);
+  }
+
+  dline();
+  boldOn();
+  rowLR('TOTAL:', parseFloat(receipt.total || 0).toFixed(2) + cur);
+  boldOff();
+
+  rowLR('Paid (' + (receipt.paymentMethod || 'Cash') + '):', parseFloat(receipt.paid || 0).toFixed(2) + cur);
+  if (parseFloat(receipt.change) > 0.005) {
+    rowLR('Change:', parseFloat(receipt.change || 0).toFixed(2) + cur);
+  }
+
+  // Notes
+  if (receipt.notes) {
+    line();
+    alignL();
+    for (const l of receipt.notes.split('\n')) println(l.slice(0, COL));
+  }
+
+  // Footer
+  feed(1);
+  alignC(); boldOn();
+  println(ctr(String(receipt.footer || 'Thank you for your purchase!')));
+  boldOff();
+  println(ctr('[ ' + String(receipt.paymentMethod || 'CASH').toUpperCase() + ' ]'));
+
+  feed(3);
+  cut();
+
+  return Buffer.from(buf);
+}
+
+// ── Send raw ESC/POS bytes to a printer ──────────────────────────────────────
+// Windows: PowerShell → winspool.drv RAW datatype (bypasses GDI completely)
+// Mac/Linux: lp -o raw
+async function _sendRawToPrinter(printerName, buffer) {
+  const os            = require('os');
+  const { execFile }  = require('child_process');
+
+  const tmpBin = path.join(os.tmpdir(), `escpos-${Date.now()}.bin`);
+  fs.writeFileSync(tmpBin, buffer);
+
+  return new Promise((resolve) => {
+    const cleanup = (psFile) => {
+      try { fs.unlinkSync(tmpBin); } catch (_) {}
+      if (psFile) try { fs.unlinkSync(psFile); } catch (_) {}
+    };
+
+    if (process.platform === 'win32') {
+      // Inline C# P/Invoke calls winspool.drv with RAW datatype —
+      // driver passes bytes straight to the printer, no GDI rendering at all.
+      const psScript = `param([string]$N, [string]$F)
+$ErrorActionPreference = 'Stop'
+try {
+  $b = [IO.File]::ReadAllBytes($F)
+  Add-Type -TypeDefinition @"
+using System; using System.Runtime.InteropServices;
+[StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
+public struct DOCINFOA { public string pDocName; public string pOutputFile; public string pDataType; }
+public static class WP {
+  [DllImport("winspool.drv", CharSet=CharSet.Ansi, ExactSpelling=true)]
+  public static extern bool OpenPrinterA(string n, out IntPtr h, IntPtr d);
+  [DllImport("winspool.drv")] public static extern bool ClosePrinter(IntPtr h);
+  [DllImport("winspool.drv", CharSet=CharSet.Ansi, ExactSpelling=true)]
+  public static extern int StartDocPrinterA(IntPtr h, int lv, ref DOCINFOA di);
+  [DllImport("winspool.drv")] public static extern bool EndDocPrinter(IntPtr h);
+  [DllImport("winspool.drv")] public static extern bool StartPagePrinter(IntPtr h);
+  [DllImport("winspool.drv")] public static extern bool EndPagePrinter(IntPtr h);
+  [DllImport("winspool.drv")] public static extern bool WritePrinter(IntPtr h, byte[] b, int n, out int w);
+}
+"@
+  $h = [IntPtr]::Zero
+  if (-not [WP]::OpenPrinterA($N, [ref]$h, [IntPtr]::Zero)) { throw "Cannot open printer '$N'" }
+  $di = New-Object DOCINFOA; $di.pDocName = 'Receipt'; $di.pDataType = 'RAW'
+  if ([WP]::StartDocPrinterA($h, 1, [ref]$di) -le 0) { [WP]::ClosePrinter($h); throw 'StartDocPrinter failed' }
+  [WP]::StartPagePrinter($h)  | Out-Null
+  $w = 0; [WP]::WritePrinter($h, $b, $b.Length, [ref]$w) | Out-Null
+  [WP]::EndPagePrinter($h)   | Out-Null
+  [WP]::EndDocPrinter($h)    | Out-Null
+  [WP]::ClosePrinter($h)     | Out-Null
+  Write-Output "OK:$w"
+} catch { Write-Output "ERR:$($_.Exception.Message)"; exit 1 }`;
+
+      const tmpPs = path.join(os.tmpdir(), `escpos-${Date.now()}.ps1`);
+      fs.writeFileSync(tmpPs, psScript, 'utf8');
+
+      execFile(
+        'powershell.exe',
+        ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', tmpPs, '-N', printerName, '-F', tmpBin],
+        { timeout: 12000 },
+        (err, stdout) => {
+          cleanup(tmpPs);
+          if (err) return resolve({ success: false, error: err.message });
+          const out = String(stdout || '').trim();
+          if (out.startsWith('ERR:')) return resolve({ success: false, error: out.slice(4) });
+          resolve({ success: true });
+        }
+      );
+    } else {
+      // macOS / Linux
+      execFile('lp', ['-d', printerName, '-o', 'raw', tmpBin], { timeout: 10000 }, (err) => {
+        cleanup(null);
+        if (err) return resolve({ success: false, error: err.message });
+        resolve({ success: true });
+      });
+    }
+  });
+}
+
+ipcMain.handle('print-receipt-escpos', async (_e, opts = {}) => {
+  const { receipt, name, paperWidth = 80 } = opts;
+  if (!name) return { success: false, error: 'No printer name specified' };
+  try {
+    const buffer = _escposBuffer(receipt, paperWidth);
+    return await _sendRawToPrinter(name, buffer);
+  } catch (err) {
+    return { success: false, error: err.message || String(err) };
+  }
 });
 
 ipcMain.handle('print-receipt-thermal', (_e, opts = {}) => {
