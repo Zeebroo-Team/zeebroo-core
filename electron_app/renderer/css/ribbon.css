@@ -17664,10 +17664,26 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
   display: flex;
   flex-direction: column;
   position: relative;
+  transition: max-width .2s ease;
   box-shadow:
     0 32px 80px rgba(0,0,0,.46),
     0 0 0 1px rgba(255,255,255,.07),
     inset 0 1px 0 rgba(255,255,255,.08);
+}
+
+/* Wider card for steps that need more horizontal room (System Configuration's
+   embedded Roles/Users list-detail editor) */
+#bwz-overlay.bwz-wide .bwz-card {
+  max-width: 920px;
+}
+/* .psm-roles-body is `flex:1` (flex-basis:0%) inside .psm-panel--roles, which
+   only resolves to a real height when its own height is definite rather than
+   auto — in the Settings modal that anchor comes from .psm-shell{height:90vh}.
+   The wizard's embedded copy has no such ancestor, so give it one directly;
+   without this the list/detail box collapses to zero height and disappears. */
+.bwz-sc-um-panel .psm-panel--roles {
+  height: 440px;
+  flex: none;
 }
 
 /* ── Wizard close (X) button ───────────────────────────────────────────── */
@@ -17741,6 +17757,7 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
 #bwz-overlay #bwz-panel-billing,
 #bwz-overlay #bwz-panel-products,
 #bwz-overlay #bwz-panel-pos,
+#bwz-overlay #bwz-panel-sysconfig,
 #bwz-overlay #bwz-panel-done,
 #bwz-overlay .bwz-resume-banner {
   flex-shrink: 0;
@@ -17750,6 +17767,7 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
 #bwz-overlay #bwz-panel-billing:not([style*="display:none"]),
 #bwz-overlay #bwz-panel-products:not([style*="display:none"]),
 #bwz-overlay #bwz-panel-pos:not([style*="display:none"]),
+#bwz-overlay #bwz-panel-sysconfig:not([style*="display:none"]),
 #bwz-overlay #bwz-panel-done:not([style*="display:none"]) {
   overflow-y: auto;
   flex: 1;
