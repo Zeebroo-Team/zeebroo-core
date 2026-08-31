@@ -7534,79 +7534,347 @@ $('#tpm-logout').addEventListener('click', async () => {
 
 // ── Feature Management Modal ───────────────────────────────────────────────
 const _featDefs = [
-  { key: 'account_management',   name: 'Account Management',    desc: 'Financial accounts & bank management',    icon: 'fa-building-columns',   color: '#4e8ef7', locked: true },
-  { key: 'point_of_sale',        name: 'Point of Sale',         desc: 'Cashier checkout interface & quick sales',icon: 'fa-cash-register',      color: '#4caf7d' },
-  { key: 'product_management',   name: 'Product Management',    desc: 'Product catalog, categories & brands',    icon: 'fa-boxes-stacked',      color: '#0ea5e9' },
-  { key: 'stock_management',     name: 'Stock Management',      desc: 'Stock audits & inventory adjustments',    icon: 'fa-clipboard-list',     color: '#64748b' },
-  { key: 'bill_management',      name: 'Bill Management',       desc: 'Bills, loans & expense tracking',         icon: 'fa-file-invoice-dollar',color: '#9c6ef7' },
-  { key: 'human_resources',      name: 'Human Resources',       desc: 'Employees, departments & payroll',        icon: 'fa-users',              color: '#f7a54e' },
-  { key: 'service_management',   name: 'Services',              desc: 'Service-bound products & job management', icon: 'fa-screwdriver-wrench', color: '#f0a030' },
-  { key: 'social_media_campaign',name: 'Designer',              desc: 'Design studio & marketing assets',        icon: 'fa-bullhorn',           color: '#e040fb' },
-  { key: 'restaurant',           name: 'Restaurant',            desc: 'Restaurant POS, orders, menu & kitchen', icon: 'fa-utensils',           color: '#f97316' },
-  { key: 'mail',                 name: 'Mail',                  desc: 'Business inbox, templates & scheduled sending', icon: 'fa-envelope',   color: '#06b6d4' },
-  { key: 'crm',                  name: 'CRM',                   desc: 'Leads pipeline, contacts & follow-up tasks',    icon: 'fa-bullseye',   color: '#7c3aed' },
-  { key: 'developers',           name: 'Developers',            desc: 'API keys & webhooks for third-party integrations', icon: 'fa-code',    color: '#0f766e' },
-  { key: 'automation_editor',    name: 'Automation Editor',     desc: 'Visual workflow builder — triggers, conditions & actions', icon: 'fa-bolt',           color: '#f59e0b' },
-  { key: 'project_management',  name: 'Projects',              desc: 'Projects, tasks, milestones & kanban boards',             icon: 'fa-diagram-project', color: '#0284c7' },
-  { key: 'event_management',    name: 'Event Advertising Agency', desc: 'Brands, jobs, reporters, officers & salary sheets',    icon: 'fa-tag',            color: '#0ea5e9' },
+  { key: 'account_management',   name: 'Account Management',    desc: 'Financial accounts & bank management',    longDesc: [
+      'Track ledgers, bank accounts, and financial movements across your business from one place. Every sale, bill, and payroll run posts here automatically, so your books stay current without manual entry.',
+      'This module powers the numbers behind every other feature — reports, payroll, and bill tracking all read from the same accounts — so it is always included and cannot be turned off.',
+    ], icon: 'fa-building-columns',   color: '#4e8ef7', locked: true, price: 'Included' },
+  { key: 'point_of_sale',        name: 'Point of Sale',         desc: 'Cashier checkout interface & quick sales', longDesc: [
+      'A fast, touch-friendly checkout screen for ringing up sales, applying discounts, and taking payments. Built for a busy counter — barcode scanning, quick-add favorites, and split payments are all one tap away.',
+      'Receipts print automatically or can be sent by email/SMS, and every sale reconciles straight into Account Management and Stock Management, so your numbers and inventory stay in sync.',
+      'Note: Point of Sale and Restaurant cover the same checkout role, so only one of the two can be installed at a time.',
+    ], icon: 'fa-cash-register',      color: '#4caf7d', price: 'Free' },
+  { key: 'product_management',   name: 'Product Management',    desc: 'Product catalog, categories & brands',     longDesc: [
+      'Organize your entire product catalog — categories, brands, and variants — from a single screen. Bulk import, bulk price updates, and barcode printing make catalog maintenance fast even for large inventories.',
+      'Changes here show up instantly at checkout and in your online listings, so pricing and descriptions never drift out of sync between channels.',
+    ], icon: 'fa-boxes-stacked',      color: '#0ea5e9', price: 'Free' },
+  { key: 'stock_management',     name: 'Stock Management',      desc: 'Stock audits & inventory adjustments',     longDesc: [
+      'Keep inventory counts accurate with stock audits, manual adjustments, and layer-level tracking (FIFO, last price, or manual selection) across branches and warehouses.',
+      'Low-stock alerts and audit history give you a clear trail of what changed, when, and who made the change — useful for spotting shrinkage or restocking before you run out.',
+    ], icon: 'fa-clipboard-list',     color: '#64748b', price: 'Free' },
+  { key: 'bill_management',      name: 'Bill Management',       desc: 'Bills, loans & expense tracking',          longDesc: [
+      'Record bills, loans, and recurring expenses, and track what is due, paid, and overdue at a glance. Attach documents, set due-date reminders, and log partial payments as they come in.',
+      'Everything posts to your accounts automatically, so your expense picture in Account Management is always up to date without double entry.',
+    ], icon: 'fa-file-invoice-dollar',color: '#9c6ef7', price: 'Free' },
+  { key: 'human_resources',      name: 'Human Resources',       desc: 'Employees, departments & payroll',         longDesc: [
+      'Manage employees, departments, and attendance, and run payroll without leaving the POS. Set up salary structures once and let recurring payroll runs handle the rest each period.',
+      'Employee records, attendance logs, and payroll history stay linked, so HR questions ("who was on shift", "what did we pay in March") are a quick lookup rather than a spreadsheet hunt.',
+    ], icon: 'fa-users',              color: '#f7a54e', price: 'Free' },
+  { key: 'service_management',   name: 'Services',              desc: 'Service-bound products & job management',  longDesc: [
+      'Sell service-bound products — repairs, installations, consultations — and schedule the jobs that come with them. Assign a job to staff, track its status, and bill for it once complete.',
+      'Works alongside Point of Sale, so a service can be sold at the counter just like a physical product, with the work order generated automatically behind the scenes.',
+    ], icon: 'fa-screwdriver-wrench', color: '#f0a030', price: 'Free' },
+  { key: 'social_media_campaign',name: 'Designer',              desc: 'Design studio & marketing assets',         longDesc: [
+      'A built-in design studio for creating social posts, flyers, and other marketing assets for your business — no separate design software required.',
+      'Start from a template or a blank canvas, drop in your logo and product photos, and export the result ready to post or print. Designs are saved to your business so your team can reuse and edit them later.',
+    ], icon: 'fa-bullhorn',           color: '#e040fb', price: 'Free' },
+  { key: 'restaurant',           name: 'Restaurant',            desc: 'Restaurant POS, orders, menu & kitchen',   longDesc: [
+      'A dedicated restaurant workflow with table management, order tickets, a live kitchen display, and menu management built for dine-in and takeaway service.',
+      'Servers fire orders straight to the kitchen display, tables show their status at a glance, and the menu (with modifiers and combos) stays in sync with what the kitchen can actually make.',
+      'Note: Restaurant and Point of Sale cover the same checkout role, so only one of the two can be installed at a time.',
+    ], icon: 'fa-utensils',           color: '#f97316', price: 'Free' },
+  { key: 'mail',                 name: 'Mail',                  desc: 'Business inbox, templates & scheduled sending', longDesc: [
+      'A shared business inbox with reusable templates and scheduled sending, so your team can email customers — receipts, follow-ups, promotions — without leaving the app.',
+      'Templates keep tone and formatting consistent across the team, and scheduled sends let you queue a campaign or reminder ahead of time instead of sending everything manually.',
+    ], icon: 'fa-envelope',   color: '#06b6d4', price: 'Free' },
+  { key: 'crm',                  name: 'CRM',                   desc: 'Leads pipeline, contacts & follow-up tasks',    longDesc: [
+      'Track leads through a sales pipeline, from first contact to closed deal, and manage all your contacts in one address book shared across the team.',
+      'Follow-up tasks and reminders make sure a promising lead never goes quiet just because everyone assumed someone else was handling it.',
+    ], icon: 'fa-bullseye',   color: '#7c3aed', price: 'Free' },
+  { key: 'developers',           name: 'Developers',            desc: 'API keys & webhooks for third-party integrations', longDesc: [
+      'Generate API keys and configure webhooks to connect your business data to third-party tools — accounting software, custom dashboards, automation platforms, and more.',
+      'Meant for technical users: scoped keys can be revoked individually, and webhook delivery logs make it easy to debug an integration that isn\'t receiving events as expected.',
+    ], icon: 'fa-code',    color: '#0f766e', price: 'Free' },
+  { key: 'automation_editor',    name: 'Automation Editor',     desc: 'Visual workflow builder — triggers, conditions & actions', longDesc: [
+      'Build no-code automations with a visual, drag-and-drop editor — trigger actions based on events and conditions across your business data (a sale over a threshold, stock running low, a bill coming due).',
+      'Combine triggers, conditions, and actions into a workflow once, then let it run in the background so your team doesn\'t have to remember to do it manually every time.',
+    ], icon: 'fa-bolt',           color: '#f59e0b', price: 'Free' },
+  { key: 'project_management',  name: 'Projects',              desc: 'Projects, tasks, milestones & kanban boards',             longDesc: [
+      'Plan and track projects with tasks, milestones, and kanban boards built for small teams — no need for a separate project-management subscription.',
+      'Assign tasks, set due dates, and watch a project move across the board from "To Do" through "In Progress" to "Done," with milestones marking the bigger checkpoints along the way.',
+    ], icon: 'fa-diagram-project', color: '#0284c7', price: 'Free' },
+  { key: 'event_management',    name: 'Event Advertising Agency', desc: 'Brands, jobs, reporters, officers & salary sheets',    longDesc: [
+      'Run an event or advertising agency workflow — manage client brands, the jobs booked for them, and the reporters and officers assigned to cover each one.',
+      'Salary sheets tie the work back to payroll, so agency-specific staffing and pay structures don\'t have to be shoehorned into a generic HR setup.',
+    ], icon: 'fa-tag',            color: '#0ea5e9', price: 'Free' },
 ];
 
-function openFeatureMgmtModal() {
-  const list = $('#feat-mgmt-list');
-  list.innerHTML = _featDefs.map(f => {
-    const isOn = !state.features || state.features.has(f.key);
-    const iconBg = f.color + '22';
-    return `<div class="feat-mgmt-row${f.locked ? ' feat-mgmt-row-locked' : ''}">
-      <div class="feat-mgmt-icon" style="background:${iconBg};color:${f.color}"><i class="fa ${f.icon}"></i></div>
-      <div class="feat-mgmt-info">
-        <div class="feat-mgmt-name">${f.name}${f.locked ? ' <span class="feat-mgmt-badge">Always On</span>' : ''}</div>
-        <div class="feat-mgmt-desc">${f.desc}</div>
-      </div>
-      <div class="feat-mgmt-toggle${isOn ? ' on' : ''}${f.locked ? ' locked' : ''}" data-fm-key="${f.key}"></div>
-    </div>`;
-  }).join('');
-  const MUTUAL_EXCL = { restaurant: 'point_of_sale', point_of_sale: 'restaurant' };
-  list.querySelectorAll('.feat-mgmt-toggle:not(.locked)').forEach(t => {
-    t.addEventListener('click', () => {
-      t.classList.toggle('on');
-      const rival = MUTUAL_EXCL[t.dataset.fmKey];
-      if (rival && t.classList.contains('on')) {
-        const rivalEl = list.querySelector(`.feat-mgmt-toggle[data-fm-key="${rival}"]`);
-        if (rivalEl) rivalEl.classList.remove('on');
-      }
-    });
-  });
-  $('#feat-mgmt-alert').style.display = 'none';
-  $('#feat-mgmt-overlay').style.display = 'flex';
+const _FM_MUTUAL_EXCL = { restaurant: 'point_of_sale', point_of_sale: 'restaurant' };
+let _fmSearchTerm = '';
+let _fmDetailKey = null;
+let _fmSelectedRating = 0;
+let _fmReviewSummary = {};
+
+function _featMgmtIsOn(key) {
+  return !state.features || state.features.has(key);
 }
 
-function _featMgmtClose() { $('#feat-mgmt-overlay').style.display = 'none'; }
+async function openFeatureMgmtModal() {
+  _fmSearchTerm = '';
+  $('#feat-mgmt-search').value = '';
+  $('#feat-mgmt-alert').style.display = 'none';
+  _featMgmtShowGrid();
+  $('#feat-mgmt-overlay').style.display = 'flex';
 
-async function _featMgmtSave() {
-  const btn = $('#feat-mgmt-save');
-  btn.disabled = true;
-  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
-  const features = {};
-  _featDefs.forEach(f => {
-    features[f.key] = !!$(`[data-fm-key="${f.key}"]`)?.classList.contains('on');
+  const res = await API.featureReviewsSummary();
+  if (res.status === 200) {
+    _fmReviewSummary = res.body?.data || {};
+    if (_fmDetailKey === null) _featMgmtRenderGrid();
+  }
+}
+
+function _featMgmtShowGrid() {
+  $('#feat-mgmt-grid-view').style.display = 'flex';
+  $('#feat-mgmt-detail-view').style.display = 'none';
+  _fmDetailKey = null;
+  _featMgmtRenderGrid();
+}
+
+function _featMgmtRenderGrid() {
+  const grid = $('#feat-mgmt-grid');
+  const term = _fmSearchTerm.trim().toLowerCase();
+  const defs = term
+    ? _featDefs.filter(f => f.name.toLowerCase().includes(term) || f.desc.toLowerCase().includes(term))
+    : _featDefs;
+
+  if (!defs.length) {
+    grid.innerHTML = `<div class="fm-empty">No features match "${escHtml(_fmSearchTerm)}".</div>`;
+    return;
+  }
+
+  grid.innerHTML = defs.map(f => {
+    const isOn = _featMgmtIsOn(f.key);
+    const iconBg = f.color + '22';
+    const badge = f.locked
+      ? '<span class="fm-badge fm-badge-locked">Always On</span>'
+      : `<span class="fm-badge fm-badge-price">${escHtml(f.price || 'Free')}</span>`;
+    const actionHtml = f.locked
+      ? '<span class="fm-installed-label"><i class="fa fa-check"></i> Included</span>'
+      : `<button class="fm-install-btn${isOn ? ' installed' : ''}" data-fm-key="${f.key}">
+           <span class="fm-install-btn-label">${isOn ? '<i class="fa fa-check"></i> Installed' : '<i class="fa fa-download"></i> Install'}</span>
+           <div class="fm-progress-wrap"><div class="fm-progress-fill"></div></div>
+         </button>`;
+    const rev = _fmReviewSummary[f.key];
+    const ratingHtml = rev && rev.count > 0
+      ? `<div class="fm-card-rating">
+           <span class="fm-stars fm-stars-readonly fm-stars-sm">${_featMgmtStarIcons(Math.round(rev.average))}</span>
+           <span class="fm-card-rating-text">${rev.average.toFixed(1)} (${rev.count})</span>
+         </div>`
+      : '';
+    return `<div class="fm-card" data-fm-card="${f.key}">
+      <div class="fm-card-top">
+        <div class="fm-card-icon" style="background:${iconBg};color:${f.color}"><i class="fa ${f.icon}"></i></div>
+        ${badge}
+      </div>
+      <div class="fm-card-name">${escHtml(f.name)}</div>
+      ${ratingHtml}
+      <div class="fm-card-desc">${escHtml(f.desc)}</div>
+      <div class="fm-card-footer">
+        ${actionHtml}
+        <button class="fm-readmore-btn" data-fm-detail="${f.key}">Read more</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  grid.querySelectorAll('.fm-install-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      _featMgmtToggle(btn.dataset.fmKey, btn);
+    });
   });
-  features.account_management = true;
+  grid.querySelectorAll('[data-fm-detail]').forEach(el => {
+    el.addEventListener('click', e => {
+      e.stopPropagation();
+      _featMgmtOpenDetail(el.dataset.fmDetail);
+    });
+  });
+  grid.querySelectorAll('.fm-card').forEach(card => {
+    card.addEventListener('click', () => _featMgmtOpenDetail(card.dataset.fmCard));
+  });
+}
+
+$('#feat-mgmt-search').addEventListener('input', e => {
+  _fmSearchTerm = e.target.value;
+  _featMgmtRenderGrid();
+});
+
+async function _featMgmtToggle(key, btnEl) {
+  const def = _featDefs.find(f => f.key === key);
+  if (!def || def.locked) return;
+  const installing = !_featMgmtIsOn(key);
+  const label = btnEl.querySelector('.fm-install-btn-label');
+  const fill  = btnEl.querySelector('.fm-progress-fill');
+
+  btnEl.classList.add('busy');
+  btnEl.disabled = true;
+  label.innerHTML = installing
+    ? '<i class="fa fa-spinner fa-spin"></i> Installing…'
+    : '<i class="fa fa-spinner fa-spin"></i> Removing…';
+  fill.style.width = '0%';
+  requestAnimationFrame(() => { fill.style.width = '100%'; });
+
+  await new Promise(r => setTimeout(r, 500));
+
+  const features = {};
+  _featDefs.forEach(f => { features[f.key] = f.locked ? true : _featMgmtIsOn(f.key); });
+  features[key] = installing;
+  const rival = _FM_MUTUAL_EXCL[key];
+  if (rival && installing) features[rival] = false;
+
   const res = await API.updateFeatures({ features });
   if (res.status !== 200) {
-    btn.disabled = false;
-    btn.innerHTML = '<i class="fa fa-check"></i> Save Changes';
+    btnEl.classList.remove('busy');
+    btnEl.disabled = false;
+    fill.style.width = '0%';
+    label.innerHTML = installing ? '<i class="fa fa-download"></i> Install' : '<i class="fa fa-check"></i> Installed';
     const al = $('#feat-mgmt-alert');
     al.textContent = res.body?.message || 'Failed to save. Please try again.';
     al.style.display = '';
     return;
   }
-  btn.innerHTML = '<i class="fa fa-rotate fa-spin"></i> Restarting…';
+
+  label.innerHTML = installing ? '<i class="fa fa-check"></i> Installed' : '<i class="fa fa-download"></i> Install';
+  await new Promise(r => setTimeout(r, 250));
   window.location.reload();
 }
 
+function _featMgmtOpenDetail(key) {
+  const def = _featDefs.find(f => f.key === key);
+  if (!def) return;
+  _fmDetailKey = key;
+  $('#feat-mgmt-grid-view').style.display = 'none';
+  $('#feat-mgmt-detail-view').style.display = 'flex';
+  _featMgmtRenderDetail(def);
+}
+
+function _featMgmtRenderDetail(f) {
+  const isOn = _featMgmtIsOn(f.key);
+  const iconBg = f.color + '22';
+  const actionHtml = f.locked
+    ? '<span class="fm-installed-label"><i class="fa fa-check"></i> Included</span>'
+    : (isOn
+        ? `<div class="fm-detail-actions">
+             <span class="fm-installed-pill"><i class="fa fa-check"></i> Installed</span>
+             <button class="fm-uninstall-btn" data-fm-key="${f.key}">
+               <span class="fm-install-btn-label"><i class="fa fa-trash"></i> Uninstall</span>
+               <div class="fm-progress-wrap"><div class="fm-progress-fill"></div></div>
+             </button>
+           </div>`
+        : `<button class="fm-install-btn fm-install-btn-lg" data-fm-key="${f.key}">
+             <span class="fm-install-btn-label"><i class="fa fa-download"></i> Install</span>
+             <div class="fm-progress-wrap"><div class="fm-progress-fill"></div></div>
+           </button>`);
+
+  $('#feat-mgmt-detail-body').innerHTML = `
+    <div class="fm-detail-hero">
+      <div class="fm-detail-icon" style="background:${iconBg};color:${f.color}"><i class="fa ${f.icon}"></i></div>
+      <div class="fm-detail-heroinfo">
+        <div class="fm-detail-name">${escHtml(f.name)}</div>
+        <div class="fm-detail-badges">
+          ${f.locked ? '<span class="fm-badge fm-badge-locked">Always On</span>' : `<span class="fm-badge fm-badge-price">${escHtml(f.price || 'Free')}</span>`}
+        </div>
+      </div>
+      ${actionHtml}
+    </div>
+    <div class="fm-detail-columns">
+      <div class="fm-detail-col-left">
+        <div class="fm-detail-section-title">About this feature</div>
+        <div class="fm-detail-scroll">
+          <div class="fm-detail-longdesc">${(Array.isArray(f.longDesc) ? f.longDesc : [f.longDesc || f.desc]).map(p => `<p>${escHtml(p)}</p>`).join('')}</div>
+        </div>
+      </div>
+      <div class="fm-detail-col-right">
+        <div class="fm-detail-section-title">Ratings &amp; Reviews</div>
+        <div class="fm-detail-scroll">
+          <div class="fm-review-summary" id="fm-review-summary"><i class="fa fa-spinner fa-spin"></i> Loading reviews…</div>
+          <div class="fm-review-form" id="fm-review-form" style="display:none">
+            <div class="fm-stars" id="fm-review-stars">${[1,2,3,4,5].map(n => `<i class="fa fa-star" data-star="${n}"></i>`).join('')}</div>
+            <textarea id="fm-review-comment" placeholder="Share your experience with this feature…" maxlength="1000"></textarea>
+            <button class="po-btn-primary" id="fm-review-submit"><i class="fa fa-paper-plane"></i> Submit Review</button>
+          </div>
+          <div class="fm-review-list" id="fm-review-list"></div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const actionBtn = $('#feat-mgmt-detail-body .fm-install-btn, #feat-mgmt-detail-body .fm-uninstall-btn');
+  if (actionBtn) actionBtn.addEventListener('click', () => _featMgmtToggle(f.key, actionBtn));
+
+  _featMgmtBindStars();
+  _featMgmtLoadReviews(f.key);
+}
+
+function _featMgmtStarIcons(n) {
+  return [1,2,3,4,5].map(i => `<i class="fa fa-star${i <= n ? ' active' : ''}"></i>`).join('');
+}
+
+function _featMgmtBindStars() {
+  const stars = $$('#fm-review-stars i');
+  const paint = n => stars.forEach(s => s.classList.toggle('active', +s.dataset.star <= n));
+  stars.forEach(s => {
+    s.addEventListener('mouseenter', () => paint(+s.dataset.star));
+    s.addEventListener('mouseleave', () => paint(_fmSelectedRating));
+    s.addEventListener('click', () => { _fmSelectedRating = +s.dataset.star; paint(_fmSelectedRating); });
+  });
+}
+
+async function _featMgmtLoadReviews(key) {
+  const res = await API.featureReviews(key);
+  if (_fmDetailKey !== key) return;
+  const summary = $('#fm-review-summary');
+  const list = $('#fm-review-list');
+  const form = $('#fm-review-form');
+  if (res.status !== 200) {
+    summary.innerHTML = '<span class="fm-review-error">Couldn\'t load reviews.</span>';
+    return;
+  }
+  const { reviews, average, count, my_review } = res.body?.data || {};
+  summary.innerHTML = `
+    <div class="fm-stars fm-stars-readonly">${_featMgmtStarIcons(Math.round(average || 0))}</div>
+    <span class="fm-review-avg">${(average || 0).toFixed(1)}</span>
+    <span class="fm-review-count">(${count || 0} review${count === 1 ? '' : 's'})</span>
+  `;
+  form.style.display = '';
+  _fmSelectedRating = my_review?.rating || 0;
+  $('#fm-review-comment').value = my_review?.comment || '';
+  $$('#fm-review-stars i').forEach(s => s.classList.toggle('active', +s.dataset.star <= _fmSelectedRating));
+  $('#fm-review-submit').onclick = () => _featMgmtSubmitReview(key);
+
+  list.innerHTML = (reviews || []).length
+    ? reviews.map(r => `
+      <div class="fm-review-item">
+        <div class="fm-review-item-head">
+          <span class="fm-review-item-name">${escHtml(r.name)}</span>
+          <span class="fm-stars fm-stars-readonly fm-stars-sm">${_featMgmtStarIcons(r.rating)}</span>
+        </div>
+        ${r.comment ? `<div class="fm-review-item-comment">${escHtml(r.comment)}</div>` : ''}
+      </div>`).join('')
+    : '<div class="fm-empty">No reviews yet. Be the first to share your thoughts.</div>';
+}
+
+async function _featMgmtSubmitReview(key) {
+  if (!_fmSelectedRating) {
+    toast('Pick a star rating first', 'error');
+    return;
+  }
+  const btn = $('#fm-review-submit');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Submitting…';
+  const comment = $('#fm-review-comment').value.trim();
+  const res = await API.submitFeatureReview(key, { rating: _fmSelectedRating, comment });
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fa fa-paper-plane"></i> Submit Review';
+  if (res.status !== 200) {
+    toast(res.body?.message || 'Failed to submit review', 'error');
+    return;
+  }
+  _featMgmtLoadReviews(key);
+}
+
+function _featMgmtClose() { $('#feat-mgmt-overlay').style.display = 'none'; }
+
 $('#feat-mgmt-close').addEventListener('click', _featMgmtClose);
-$('#feat-mgmt-cancel').addEventListener('click', _featMgmtClose);
-$('#feat-mgmt-save').addEventListener('click', _featMgmtSave);
+$('#feat-mgmt-back').addEventListener('click', _featMgmtShowGrid);
 $('#feat-mgmt-overlay').addEventListener('click', e => { if (e.target === $('#feat-mgmt-overlay')) _featMgmtClose(); });
 
 function showShortcutsModal() {

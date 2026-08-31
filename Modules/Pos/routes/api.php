@@ -25,6 +25,7 @@ use Modules\Pos\Http\Controllers\Api\PosEndOfDayApiController;
 use Modules\Pos\Http\Controllers\Api\PosQuotationApiController;
 use Modules\Pos\Http\Controllers\Api\PosInvoiceApiController;
 use Modules\Pos\Http\Controllers\Api\PosSalesOrderApiController;
+use Modules\Pos\Http\Controllers\Api\PosFeatureReviewApiController;
 use Modules\Pos\Http\Controllers\Api\PosSettingsApiController;
 use Modules\Pos\Http\Controllers\Api\PosCustomerApiController;
 use Modules\Pos\Http\Controllers\Api\PosCustomerCategoryApiController;
@@ -90,6 +91,9 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
 
     Route::get('online/features', [PosSettingsApiController::class, 'features'])->name('online.features');
     Route::put('online/features', [PosSettingsApiController::class, 'updateFeatures'])->name('online.features.update');
+    Route::get('features/reviews/summary', [PosFeatureReviewApiController::class, 'summary'])->name('features.reviews.summary');
+    Route::get('features/{key}/reviews', [PosFeatureReviewApiController::class, 'index'])->name('features.reviews.index');
+    Route::post('features/{key}/reviews', [PosFeatureReviewApiController::class, 'store'])->name('features.reviews.store');
     Route::get('online/sync-status', [PosSettingsApiController::class, 'syncStatus'])->name('online.sync-status');
     Route::get('online/settings', [PosSettingsApiController::class, 'show'])->name('online.settings.show');
     Route::put('online/settings', [PosSettingsApiController::class, 'update'])->name('online.settings.update');
