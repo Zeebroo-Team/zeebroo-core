@@ -2944,6 +2944,34 @@ body.dark .ob-continue-btn { background: var(--accent); }
 body.dark .ob-continue-btn:hover { background: var(--accent-dark); }
 
 /* ── Feature Management Modal (Play-Store style marketplace) ── */
+.fm-sidebar {
+  width: 230px; flex-shrink: 0; overflow-y: auto;
+  border-right: 1px solid var(--border); background: var(--surface2);
+  padding: 16px 10px;
+}
+.fm-sidebar-title {
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
+  color: var(--text-muted); padding: 0 10px 8px;
+}
+.fm-cat-list { display: flex; flex-direction: column; gap: 2px; }
+.fm-cat-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px; border-radius: 8px; cursor: pointer;
+  font-size: 13px; color: var(--text); user-select: none;
+}
+.fm-cat-item:hover { background: var(--surface); }
+.fm-cat-item.active { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); font-weight: 600; }
+.fm-cat-item i { width: 15px; text-align: center; font-size: 13px; flex-shrink: 0; }
+.fm-cat-item-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fm-cat-count {
+  font-size: 10.5px; font-weight: 600; color: var(--text-muted);
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; padding: 1px 6px; flex-shrink: 0;
+}
+.fm-cat-item.active .fm-cat-count { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 35%, transparent); }
+
+.fm-main { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+
 .fm-toolbar {
   display: flex; align-items: center; gap: 16px;
   padding: 14px 20px; border-bottom: 1px solid var(--border); flex-shrink: 0;
@@ -2959,7 +2987,15 @@ body.dark .ob-continue-btn:hover { background: var(--accent-dark); }
   border: none; background: none; outline: none;
   font-size: 13px; color: var(--text); width: 100%;
 }
-.fm-toolbar-hint { font-size: 12px; color: var(--text-muted); }
+.fm-toolbar-hint { font-size: 12px; color: var(--text-muted); flex: 1; min-width: 0; }
+.fm-toolbar-sort { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.fm-toolbar-sort label { font-size: 12px; color: var(--text-muted); }
+.fm-toolbar-sort select {
+  font-size: 12.5px; color: var(--text); background: var(--surface2);
+  border: 1px solid var(--border); border-radius: 7px; padding: 6px 10px;
+  outline: none; cursor: pointer;
+}
+.fm-toolbar-sort select:focus { border-color: var(--accent); }
 
 .fm-grid {
   flex: 1; overflow-y: auto; padding: 18px 20px;
@@ -2967,6 +3003,18 @@ body.dark .ob-continue-btn:hover { background: var(--accent-dark); }
   align-content: start;
 }
 .fm-empty { grid-column: 1 / -1; text-align: center; padding: 40px 0; color: var(--text-muted); font-size: 13px; }
+
+@media (max-width: 780px) {
+  #feat-mgmt-grid-view { flex-direction: column; }
+  .fm-sidebar {
+    width: auto; border-right: none; border-bottom: 1px solid var(--border);
+    padding: 10px; overflow-x: auto; overflow-y: hidden;
+  }
+  .fm-sidebar-title { display: none; }
+  .fm-cat-list { flex-direction: row; }
+  .fm-cat-item { flex-shrink: 0; }
+  .fm-toolbar { flex-wrap: wrap; }
+}
 
 .fm-card {
   display: flex; flex-direction: column; gap: 8px;
