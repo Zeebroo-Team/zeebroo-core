@@ -7541,7 +7541,7 @@ const _featDefs = [
   { key: 'bill_management',      name: 'Bill Management',       desc: 'Bills, loans & expense tracking',         icon: 'fa-file-invoice-dollar',color: '#9c6ef7' },
   { key: 'human_resources',      name: 'Human Resources',       desc: 'Employees, departments & payroll',        icon: 'fa-users',              color: '#f7a54e' },
   { key: 'service_management',   name: 'Services',              desc: 'Service-bound products & job management', icon: 'fa-screwdriver-wrench', color: '#f0a030' },
-  { key: 'social_media_campaign',name: 'Social Media Campaign', desc: 'Design studio & marketing assets',        icon: 'fa-bullhorn',           color: '#e040fb' },
+  { key: 'social_media_campaign',name: 'Designer',              desc: 'Design studio & marketing assets',        icon: 'fa-bullhorn',           color: '#e040fb' },
   { key: 'restaurant',           name: 'Restaurant',            desc: 'Restaurant POS, orders, menu & kitchen', icon: 'fa-utensils',           color: '#f97316' },
   { key: 'mail',                 name: 'Mail',                  desc: 'Business inbox, templates & scheduled sending', icon: 'fa-envelope',   color: '#06b6d4' },
   { key: 'crm',                  name: 'CRM',                   desc: 'Leads pipeline, contacts & follow-up tasks',    icon: 'fa-bullseye',   color: '#7c3aed' },
