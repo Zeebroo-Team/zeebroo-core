@@ -13750,16 +13750,31 @@
       <button class="psm-close" id="feat-mgmt-close"><i class="fa fa-xmark"></i></button>
     </div>
 
-    <div id="feat-mgmt-grid-view" style="flex:1;display:flex;flex-direction:column;min-height:0">
-      <div class="fm-toolbar">
-        <div class="fm-search-wrap">
-          <i class="fa fa-magnifying-glass"></i>
-          <input type="text" id="feat-mgmt-search" placeholder="Search features…">
+    <div id="feat-mgmt-grid-view" style="flex:1;display:flex;flex-direction:row;min-height:0;overflow:hidden">
+      <aside class="fm-sidebar">
+        <div class="fm-sidebar-title">Categories</div>
+        <nav id="feat-mgmt-categories" class="fm-cat-list"></nav>
+      </aside>
+      <div class="fm-main">
+        <div class="fm-toolbar">
+          <div class="fm-search-wrap">
+            <i class="fa fa-magnifying-glass"></i>
+            <input type="text" id="feat-mgmt-search" placeholder="Search features…">
+          </div>
+          <span class="fm-toolbar-hint">Enable or disable features for this business. Changes apply immediately.</span>
+          <div class="fm-toolbar-sort">
+            <label for="feat-mgmt-sort">Sort by</label>
+            <select id="feat-mgmt-sort">
+              <option value="relevant">Most relevant</option>
+              <option value="name">Name (A–Z)</option>
+              <option value="rating">Highest rated</option>
+              <option value="installed">Installed first</option>
+            </select>
+          </div>
         </div>
-        <span class="fm-toolbar-hint">Enable or disable features for this business. Changes apply immediately.</span>
+        <div id="feat-mgmt-alert" class="alert alert-error" style="display:none;margin:0 20px 10px"></div>
+        <div id="feat-mgmt-grid" class="fm-grid"></div>
       </div>
-      <div id="feat-mgmt-alert" class="alert alert-error" style="display:none;margin:0 20px 10px"></div>
-      <div id="feat-mgmt-grid" class="fm-grid"></div>
     </div>
 
     <div id="feat-mgmt-detail-view" style="display:none;flex:1;flex-direction:column;min-height:0;overflow:hidden">
