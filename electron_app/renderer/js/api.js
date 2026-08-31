@@ -139,6 +139,9 @@ const API = (() => {
     settingsUpdate: (data) => request('PATCH', '/online/settings', data),
     features:       ()     => request('GET',   '/online/features'),
     updateFeatures: (data) => request('PUT',   '/online/features', data),
+    featureReviews:        (key)       => request('GET',  `/features/${encodeURIComponent(key)}/reviews`),
+    submitFeatureReview:   (key, data) => request('POST', `/features/${encodeURIComponent(key)}/reviews`, data),
+    featureReviewsSummary: ()          => request('GET',  '/features/reviews/summary'),
     syncStatus:     ()     => request('GET',   '/online/sync-status'),
     billTargets:  ()                  => request('GET',  '/expenses/bill-assignment-targets'),
     // Finance — flow overview
