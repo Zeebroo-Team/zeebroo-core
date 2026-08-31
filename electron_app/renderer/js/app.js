@@ -5262,6 +5262,7 @@ async function _bankWizOpen() {
   $('#bwz-ps-cat-skip-btn').style.display  = 'none';
   $('#bwz-pos-footer-back').style.display  = 'none';
   $('#bwz-pos-footer-save').style.display  = 'none';
+  $('#bwz-pos-footer-skip').style.display  = 'none';
   // Reset step indicator to step 1
   $('#bwz-step-1').className = 'bwz-step active';
   $('#bwz-step-2').className = 'bwz-step';
@@ -5362,6 +5363,7 @@ function _bwzShowBillingPanel() {
   $('#bwz-ps-cat-skip-btn').style.display  = 'none';
   $('#bwz-pos-footer-back').style.display  = '';
   $('#bwz-pos-footer-save').style.display  = 'none';
+  $('#bwz-pos-footer-skip').style.display  = 'none';
   // Top step indicator: step 1 done, step 2 active
   $('#bwz-step-1').className = 'bwz-step done';
   $('#bwz-step-2').className = 'bwz-step active';
@@ -5674,6 +5676,7 @@ function _bwzShowProductsPanel() {
   $('#bwz-ps-cat-skip-btn').style.display  = 'none'; // _bwzPsGoto controls which skip btn shows
   $('#bwz-pos-footer-back').style.display  = '';
   $('#bwz-pos-footer-save').style.display  = 'none';
+  $('#bwz-pos-footer-skip').style.display  = 'none';
   $('#bwz-step-1').className = 'bwz-step done';
   $('#bwz-step-2').className = 'bwz-step done';
   $('#bwz-step-3').className = 'bwz-step active';
@@ -5778,10 +5781,13 @@ function _bwzPosGoto(n) {
   if (footerSave) {
     footerSave.style.display = '';
     footerSave.innerHTML = n === 6
-      ? '<i class="fa fa-floppy-disk"></i> Save &amp; Finish'
-      : '<i class="fa fa-floppy-disk"></i> Save &amp; Continue';
+      ? '<i class="fa fa-check"></i> Save &amp; Finish'
+      : 'Save &amp; Continue <i class="fa fa-arrow-right"></i>';
   }
   if (footerBack) footerBack.style.display = '';
+  // Lightweight "Skip this step" — advances without saving (all but the last sub-step)
+  const footerSkip = $('#bwz-pos-footer-skip');
+  if (footerSkip) footerSkip.style.display = n < 6 ? '' : 'none';
   $('#bwz-submit-btn').style.display      = 'none';
   $('#bwz-billing-skip-btn').style.display = 'none';
   $('#bwz-ps-cat-skip-btn').style.display  = 'none';
@@ -5967,6 +5973,13 @@ $('#bwz-pos-footer-save')?.addEventListener('click', () => {
     return p && p.style.display !== 'none';
   });
   if (activeN) $(`#bwz-pos-panel-${activeN} .bwz-pos-save-btn`)?.click();
+});
+$('#bwz-pos-footer-skip')?.addEventListener('click', () => {
+  const activeN = [1, 2, 3, 4, 5, 6].find(i => {
+    const p = $(`#bwz-pos-panel-${i}`);
+    return p && p.style.display !== 'none';
+  });
+  if (activeN && activeN < 6) _bwzPosGoto(activeN + 1);
 });
 $('#bwz-pos-footer-back')?.addEventListener('click', _bwzFooterBackClick);
 
@@ -6278,6 +6291,7 @@ function _bwzShowDone() {
   $('#bwz-submit-btn').style.display        = 'none';
   $('#bwz-billing-skip-btn').style.display  = 'none';
   $('#bwz-pos-footer-save').style.display   = 'none';
+  $('#bwz-pos-footer-skip').style.display   = 'none';
   $('#bwz-pos-footer-back').style.display   = 'none';
   [1, 2, 3, 4].forEach(i => {
     const step = $(`#bwz-step-${i}`);
@@ -6373,6 +6387,16 @@ $('#bwz-wizard-close')?.addEventListener('click', _bwzClose);
     else if (i === 3) _bwzShowProductsPanel();
     else if (i === 4) _bwzShowPosPanel();
   });
+});
+
+// Products sub-step dots (1-2) — click any visible dot to jump straight to it
+[1, 2].forEach(n => {
+  $(`#bwz-ps-dot-${n}`)?.addEventListener('click', () => _bwzPsGoto(n));
+});
+
+// POS sub-step dots (1-6) — click any visible dot to jump straight to it
+[1, 2, 3, 4, 5, 6].forEach(n => {
+  $(`#bwz-pos-dot-${n}`)?.addEventListener('click', () => _bwzPosGoto(n));
 });
 
 // Wire wizard buttons once on page load
