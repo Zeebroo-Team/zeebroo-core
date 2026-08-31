@@ -413,19 +413,108 @@ ipcMain.handle('set-printer-config', (_e, cfg) => {
   return true;
 });
 
-ipcMain.handle('print-receipt-thermal', (e, opts = {}) => {
-  const win = BrowserWindow.fromWebContents(e.sender);
-  if (!win) return { success: false, error: 'No window' };
-  return new Promise(resolve => {
-    const printOpts = {
-      silent:          opts.silent !== false,
-      printBackground: false,
-      margins:         { marginType: 'none' },
-    };
-    if (opts.name) printOpts.deviceName = opts.name;
-    win.webContents.print(printOpts, (success, failureReason) => {
-      resolve({ success, error: failureReason || null });
+ipcMain.handle('print-receipt-thermal', (_e, opts = {}) => {
+  const { html = '', name = '', silent = true, paperWidth = 80 } = opts;
+
+  return new Promise((resolve) => {
+    const paperMm   = paperWidth === 58 ? 58 : 80;
+    const marginMm  = 3;
+    const contentMm = paperMm - marginMm * 2;
+
+    // Build a fully self-contained, clean HTML page for the thermal printer.
+    // Running in a dedicated hidden window avoids all main-app CSS interference
+    // and lets us use marginType:'printableArea' which every Windows driver accepts.
+    const fullHtml = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body {
+    width: ${contentMm}mm;
+    background: #fff; color: #000;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 10pt; line-height: 1.45;
+  }
+  @page { size: ${paperMm}mm auto; margin: ${marginMm}mm; }
+  .rcpt-paper { width:100%; }
+  .rcpt-logo-wrap    { text-align:center; margin-bottom:8px; }
+  .rcpt-logo-img     { max-width:100px; max-height:48px; object-fit:contain; display:block; margin:0 auto; }
+  .rcpt-biz-name     { text-align:center; font-size:12pt; font-weight:700; margin-bottom:2px; }
+  .rcpt-biz-sub      { text-align:center; font-size:8.5pt; color:#555; margin-bottom:8px; }
+  .rcpt-divider      { border:none; border-top:1px dashed #999; margin:6px 0; }
+  .rcpt-divider-solid{ border:none; border-top:1px solid #555; margin:6px 0; }
+  .rcpt-meta         { display:flex; justify-content:space-between; font-size:8.5pt; color:#333; margin:1px 0; }
+  .rcpt-items-header { display:flex; font-size:8pt; font-weight:700; text-transform:uppercase; color:#333; padding:3px 0; border-top:1px dashed #aaa; border-bottom:1px dashed #aaa; margin:4px 0; }
+  .rcpt-items-header .ih-name  { flex:1; min-width:0; }
+  .rcpt-items-header .ih-qty   { width:28px; text-align:right; flex-shrink:0; }
+  .rcpt-items-header .ih-price { width:52px; text-align:right; flex-shrink:0; }
+  .rcpt-items-header .ih-total { width:58px; text-align:right; flex-shrink:0; }
+  .rcpt-item         { display:flex; align-items:center; padding:2px 0; border-bottom:1px dotted #ccc; }
+  .rcpt-item:last-child { border-bottom:none; }
+  .rcpt-item .ri-name  { flex:1; font-size:9pt; padding-right:4px; min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+  .rcpt-item .ri-qty   { width:28px; text-align:right; font-size:8.5pt; flex-shrink:0; }
+  .rcpt-item .ri-price { width:52px; text-align:right; font-size:8.5pt; flex-shrink:0; }
+  .rcpt-item .ri-total { width:58px; text-align:right; font-size:9pt; font-weight:600; flex-shrink:0; }
+  .rcpt-totals       { margin-top:4px; }
+  .rcpt-total-row    { display:flex; justify-content:space-between; padding:1px 0; font-size:9pt; }
+  .rcpt-total-row.grand  { font-size:11pt; font-weight:700; padding:4px 0 3px; border-top:1px solid #555; }
+  .rcpt-total-row.change { color:#000; font-weight:700; }
+  .rcpt-payment-badge{ display:inline-block; padding:1px 8px; border:1px solid #333; font-size:8.5pt; font-weight:700; text-transform:uppercase; letter-spacing:.04em; }
+  .rcpt-footer       { text-align:center; font-size:8pt; color:#555; margin-top:10px; line-height:1.5; }
+  .rcpt-thank        { text-align:center; font-size:10pt; font-weight:700; margin:8px 0 3px; }
+  .rcpt-note         { font-size:8.5pt; color:#444; margin:4px 0; font-style:italic; white-space:pre-wrap; }
+  .rcpt-customer     { display:flex; justify-content:space-between; font-size:8.5pt; color:#333; margin:1px 0; }
+</style>
+</head>
+<body>${html}</body>
+</html>`;
+
+    const thermalWin = new BrowserWindow({
+      width: 400, height: 600,
+      show: false,
+      skipTaskbar: true,
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+        sandbox: true,
+      },
     });
+
+    let resolved = false;
+    const done = (result) => {
+      if (resolved) return;
+      resolved = true;
+      if (!thermalWin.isDestroyed()) thermalWin.destroy();
+      resolve(result);
+    };
+
+    // 15-second guard — destroy and resolve if the driver hangs
+    const guard = setTimeout(() => done({ success: false, error: 'Print timeout' }), 15000);
+
+    thermalWin.webContents.once('did-finish-load', () => {
+      // 500 ms for fonts / images to settle before the print job starts
+      setTimeout(() => {
+        const printOpts = {
+          silent,
+          printBackground: false,
+          // 'printableArea' is accepted by every Windows driver; 'none' causes errors
+          margins: { marginType: 'printableArea' },
+        };
+        if (name) printOpts.deviceName = name;
+        thermalWin.webContents.print(printOpts, (success, failureReason) => {
+          clearTimeout(guard);
+          done({ success, error: failureReason || null });
+        });
+      }, 500);
+    });
+
+    thermalWin.once('closed', () => {
+      clearTimeout(guard);
+      done({ success: false, error: 'Window closed before print completed' });
+    });
+
+    thermalWin.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(fullHtml));
   });
 });
 
