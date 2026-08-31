@@ -13711,6 +13711,8 @@ async function _psmLoadPrinterSettings() {
       ).join('');
     if (!printers.length) sel.innerHTML += '<option disabled>No printers found — install your printer driver first</option>';
   }
+  const modeEl = $('#psm-printer-mode');
+  if (modeEl) modeEl.value = cfg.mode === 'html' ? 'html' : 'escpos';
   const paper = $('#psm-printer-paper');
   if (paper) paper.value = String(cfg.paperWidth || 80);
   const silent = $('#psm-printer-silent');
@@ -13725,6 +13727,7 @@ $('#psm-printer-refresh')?.addEventListener('click', () => _psmLoadPrinterSettin
 $('#psm-printer-save')?.addEventListener('click', async () => {
   const cfg = {
     name:       $('#psm-printer-name')?.value       || '',
+    mode:       $('#psm-printer-mode')?.value        || 'escpos',
     silent:   !!$('#psm-printer-silent')?.checked,
     paperWidth: parseInt($('#psm-printer-paper')?.value) || 80,
   };
@@ -13732,56 +13735,91 @@ $('#psm-printer-save')?.addEventListener('click', async () => {
   toast('Printer settings saved', 'success');
   const statusEl = $('#psm-printer-status');
   if (statusEl) statusEl.textContent = cfg.name
-    ? `Saved — printing to "${cfg.name}" (${cfg.paperWidth}mm)${cfg.silent ? ', silent' : ''}`
+    ? `Saved — ${cfg.mode === 'escpos' ? 'ESC/POS direct' : 'HTML window'} → "${cfg.name}" (${cfg.paperWidth}mm)`
     : 'Saved — no printer selected, system dialog will open when printing';
 });
 
 $('#psm-printer-test')?.addEventListener('click', async () => {
   const cfg = {
     name:       $('#psm-printer-name')?.value       || '',
+    mode:       $('#psm-printer-mode')?.value        || 'escpos',
     silent:   !!$('#psm-printer-silent')?.checked,
     paperWidth: parseInt($('#psm-printer-paper')?.value) || 80,
   };
-  const w = cfg.paperWidth === 58 ? 50 : 72;
-  const testHtml = `
-    <div style="font-family:'Courier New',Courier,monospace;font-size:10pt;width:${w}mm;padding:0 2mm">
-      <div style="text-align:center;font-size:12pt;font-weight:bold;margin-bottom:4px">TEST PRINT</div>
-      <div style="border-top:1px dashed #000;border-bottom:1px dashed #000;padding:4px 0;text-align:center;margin-bottom:6px">
-        Zeebroo POS — Thermal Printer Test
-      </div>
-      <div>Printer: ${escHtml(cfg.name || 'System default')}</div>
-      <div>Paper:   ${cfg.paperWidth}mm</div>
-      <div>Silent:  ${cfg.silent ? 'Yes' : 'No'}</div>
-      <div>Time:    ${new Date().toLocaleTimeString()}</div>
-      <div style="border-top:1px dashed #000;margin-top:6px;padding-top:4px;text-align:center">
-        *** END OF TEST ***
-      </div>
-    </div>`;
-  if (cfg.name) {
-    // Dedicated thermal window — clean rendering, no main-window interference
-    const res = await window.electronAPI.printReceiptThermal({
-      html:       testHtml,
+
+  if (cfg.name && cfg.mode !== 'html') {
+    // ── ESC/POS test — structured data, raw bytes ────────────────────────────
+    const testReceipt = {
+      businessName: 'Zeebroo POS',
+      address:      '',
+      header:       'ESC/POS DIRECT TEST',
+      footer:       '*** END OF TEST ***',
+      currency:     '',
+      saleNumber:   'TEST-001',
+      date:         new Date().toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }),
+      customer:     '',
+      cashier:      '',
+      items: [
+        { name: 'Test Item A',    qty: 1, price: 10.00, total: 10.00, discount: 0 },
+        { name: 'Test Item B',    qty: 2, price:  5.00, total: 10.00, discount: 0 },
+        { name: 'Disc Item',      qty: 1, price: 15.00, total: 12.00, discount: 3.00 },
+      ],
+      subtotal:     32.00,
+      discount:     3.00,
+      discountPct:  '',
+      taxes:        [{ name: 'Tax 10%', amount: 2.90 }],
+      total:        31.90,
+      paid:         35.00,
+      change:        3.10,
+      paymentMethod:'Cash',
+      notes:        `Printer: ${cfg.name}\nPaper: ${cfg.paperWidth}mm`,
+    };
+    const res = await window.electronAPI.printReceiptEscpos({
+      receipt:    testReceipt,
       name:       cfg.name,
-      silent:     cfg.silent,
       paperWidth: cfg.paperWidth,
     });
-    if (res && !res.success) toast(res.error || res.failureReason || 'Print failed', 'error');
-    else toast('Test page sent to printer', 'success');
+    if (res && !res.success) toast(res.error || 'ESC/POS print failed', 'error');
+    else toast('ESC/POS test page sent to printer', 'success');
+
   } else {
-    // No printer selected — show system dialog on main window
-    const printable = $('#receipt-printable');
-    if (!printable) return;
-    const prevHtml = printable.innerHTML;
-    _psmInjectThermalCss(cfg.paperWidth);
-    printable.innerHTML = testHtml;
-    printable.style.display = 'block';
-    try {
-      await window.electronAPI.printReceipt();
-      toast('Test page sent to printer', 'success');
-    } catch { /* ignore */ } finally {
-      printable.style.display = 'none';
-      printable.innerHTML = prevHtml;
-      _psmRemoveThermalCss();
+    // ── HTML window test (or no printer selected) ────────────────────────────
+    const w = cfg.paperWidth === 58 ? 50 : 72;
+    const testHtml = `
+      <div style="font-family:'Courier New',Courier,monospace;font-size:10pt;width:${w}mm;padding:0 2mm">
+        <div style="text-align:center;font-size:12pt;font-weight:bold;margin-bottom:4px">TEST PRINT</div>
+        <div style="border-top:1px dashed #000;border-bottom:1px dashed #000;padding:4px 0;text-align:center;margin-bottom:6px">
+          Zeebroo POS — HTML Window
+        </div>
+        <div>Printer: ${escHtml(cfg.name || 'System default')}</div>
+        <div>Paper: ${cfg.paperWidth}mm</div>
+        <div>Time: ${new Date().toLocaleTimeString()}</div>
+        <div style="border-top:1px dashed #000;margin-top:6px;padding-top:4px;text-align:center">*** END ***</div>
+      </div>`;
+    if (cfg.name) {
+      const res = await window.electronAPI.printReceiptThermal({
+        html:       testHtml,
+        name:       cfg.name,
+        silent:     cfg.silent,
+        paperWidth: cfg.paperWidth,
+      });
+      if (res && !res.success) toast(res.error || 'Print failed', 'error');
+      else toast('HTML test page sent to printer', 'success');
+    } else {
+      const printable = $('#receipt-printable');
+      if (!printable) return;
+      const prevHtml = printable.innerHTML;
+      _psmInjectThermalCss(cfg.paperWidth);
+      printable.innerHTML = testHtml;
+      printable.style.display = 'block';
+      try {
+        await window.electronAPI.printReceipt();
+        toast('Test page sent to printer', 'success');
+      } catch { /* ignore */ } finally {
+        printable.style.display = 'none';
+        printable.innerHTML = prevHtml;
+        _psmRemoveThermalCss();
+      }
     }
   }
 });
@@ -21404,10 +21442,54 @@ $('#rcpt-close').addEventListener('click', () => { $('#receipt-modal').style.dis
 $('#receipt-modal').addEventListener('click', (e) => {
   if (e.target === e.currentTarget) e.currentTarget.style.display = 'none';
 });
+// Build flat receipt data from _receiptSale for ESC/POS printing
+function _buildEscposReceiptData(sale) {
+  const s = state.receiptSettings || {};
+  return {
+    businessName:  state._bizName || '',
+    address:       s.receipt_address_line || '',
+    header:        s.receipt_header || '',
+    footer:        s.receipt_footer || 'Thank you for your purchase!',
+    currency:      state.currency || '',
+    saleNumber:    sale?.sale_number || '',
+    date:          sale?.sold_at
+      ? new Date(sale.sold_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })
+      : new Date().toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }),
+    customer:      sale?.customer?.name || sale?.customer_name || '',
+    cashier:       sale?.cashier?.name || '',
+    items:         (sale?.items || []).map(i => ({
+      name:     i.product_name || '',
+      qty:      parseFloat(i.quantity),
+      price:    parseFloat(i.unit_sell_price),
+      total:    parseFloat(i.line_total),
+      discount: parseFloat(i.discount_amount || 0),
+    })),
+    subtotal:      parseFloat(sale?.subtotal     || 0),
+    discount:      parseFloat(sale?.discount_amount || 0),
+    discountPct:   sale?.discount_percent || '',
+    taxes:         (sale?._taxBreakdown || []).map(t => ({ name: t.name, amount: parseFloat(t.amount) })),
+    total:         parseFloat(sale?.total        || 0),
+    paid:          parseFloat(sale?.amount_paid  || sale?.total || 0),
+    change:        parseFloat(sale?.change_amount || 0),
+    paymentMethod: sale?.payment_method_label || sale?.payment_method || '',
+    notes:         sale?.notes || '',
+  };
+}
+
 $('#rcpt-print').addEventListener('click', async () => {
   const cfg = await window.electronAPI.getPrinterConfig().catch(() => null);
-  if (cfg?.name) {
-    // Dedicated thermal window — pass receipt HTML; no main-window printing needed
+
+  if (cfg?.name && cfg?.mode !== 'html') {
+    // ── ESC/POS direct — raw bytes, no GDI, no Windows driver conflict ──────
+    const res = await window.electronAPI.printReceiptEscpos({
+      receipt:    _buildEscposReceiptData(_receiptSale),
+      name:       cfg.name,
+      paperWidth: cfg.paperWidth || 80,
+    });
+    if (res && !res.success) toast(res.error || 'Print failed', 'error');
+
+  } else if (cfg?.name) {
+    // ── HTML window mode (document/laser printers) ───────────────────────────
     const receiptHtml = $('#receipt-printable')?.innerHTML || '';
     const res = await window.electronAPI.printReceiptThermal({
       html:       receiptHtml,
@@ -21416,8 +21498,9 @@ $('#rcpt-print').addEventListener('click', async () => {
       paperWidth: cfg.paperWidth || 80,
     });
     if (res && !res.success) toast(res.error || 'Print failed', 'error');
+
   } else {
-    // No thermal printer configured — use system print dialog on the main window
+    // ── No printer configured — system print dialog ──────────────────────────
     _psmInjectThermalCss(cfg?.paperWidth || 80);
     $('#receipt-printable').style.display = 'block';
     try {
