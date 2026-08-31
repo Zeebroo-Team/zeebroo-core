@@ -23,6 +23,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // API
   apiRequest:      (method, path, body) => ipcRenderer.invoke('api-request', { method, path, body }),
   printReceipt:    ()                   => ipcRenderer.invoke('print-receipt'),
+  getPrinters:         ()      => ipcRenderer.invoke('get-printers'),
+  getPrinterConfig:    ()      => ipcRenderer.invoke('get-printer-config'),
+  setPrinterConfig:    (cfg)   => ipcRenderer.invoke('set-printer-config', cfg),
+  printReceiptThermal: (opts)  => ipcRenderer.invoke('print-receipt-thermal', opts),
   fetchJson:       (url)                => ipcRenderer.invoke('fetch-json', url),
   apiUpload:       (apiPath, filePath)  => ipcRenderer.invoke('api-upload', { path: apiPath, filePath }),
   showOpenDialog:  (options)            => ipcRenderer.invoke('show-open-dialog', options),

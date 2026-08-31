@@ -11119,6 +11119,9 @@
         <button class="psm-nav-item" data-tab="delivery">
           <i class="fa fa-truck"></i><span>Delivery</span>
         </button>
+        <button class="psm-nav-item" data-tab="printer">
+          <i class="fa fa-print"></i><span>Printer</span>
+        </button>
       </nav>
 
       <!-- Content panels -->
@@ -11803,6 +11806,54 @@
           </div><!-- /psm-dm-section -->
 
         </div><!-- /psm-tab-delivery -->
+
+        <!-- Printer settings panel -->
+        <div class="psm-panel" id="psm-tab-printer" style="display:none">
+
+          <div class="psm-section">
+            <div class="psm-section-label"><i class="fa fa-print"></i> Thermal Printer</div>
+
+            <div class="psm-field-row">
+              <label class="psm-field-label" for="psm-printer-name">Printer</label>
+              <div style="display:flex;gap:6px;align-items:center">
+                <select id="psm-printer-name" class="psm-select" style="flex:1">
+                  <option value="">— No printer selected (show system dialog) —</option>
+                </select>
+                <button class="psm-btn-cancel" id="psm-printer-refresh" title="Refresh printer list" style="flex-shrink:0;padding:7px 10px">
+                  <i class="fa fa-rotate"></i>
+                </button>
+              </div>
+              <span class="psm-hint">Select your XP-80T or other thermal printer. It must be installed as a system printer first.</span>
+            </div>
+
+            <div class="psm-field-row">
+              <label class="psm-field-label" for="psm-printer-paper">Paper Width</label>
+              <select id="psm-printer-paper" class="psm-select">
+                <option value="80">80 mm — standard thermal roll (XP-80T)</option>
+                <option value="58">58 mm — small thermal roll</option>
+              </select>
+              <span class="psm-hint">Must match the paper roll loaded in your printer</span>
+            </div>
+
+            <div class="psm-toggle-row">
+              <div class="psm-toggle-info">
+                <span class="psm-toggle-name">Silent print</span>
+                <span class="psm-toggle-desc">Skip the system print dialog and send directly to the printer</span>
+              </div>
+              <label class="psm-switch"><input type="checkbox" id="psm-printer-silent" checked><span class="psm-switch-track"></span></label>
+            </div>
+          </div>
+
+          <div class="psm-section">
+            <div class="psm-section-label"><i class="fa fa-circle-check"></i> Actions</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="psm-btn-save" id="psm-printer-save"><i class="fa fa-floppy-disk"></i> Save Settings</button>
+              <button class="psm-btn-cancel" id="psm-printer-test"><i class="fa fa-print"></i> Test Print</button>
+            </div>
+            <p class="psm-hint" id="psm-printer-status" style="margin-top:8px"></p>
+          </div>
+
+        </div><!-- /psm-tab-printer -->
 
       </div><!-- /psm-content -->
     </div><!-- /psm-layout -->

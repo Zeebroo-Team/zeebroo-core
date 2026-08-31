@@ -383,6 +383,52 @@ ipcMain.handle('print-receipt', (e) => {
   });
 });
 
+// ── Thermal printer support ───────────────────────────────────────────────
+ipcMain.handle('get-printers', async (e) => {
+  const win = BrowserWindow.fromWebContents(e.sender);
+  if (!win) return [];
+  try {
+    const list = await win.webContents.getPrintersAsync();
+    return list.map(p => ({
+      name:        p.name,
+      displayName: p.displayName || p.name,
+      isDefault:   p.isDefault || false,
+    }));
+  } catch (_) { return []; }
+});
+
+ipcMain.handle('get-printer-config', () => {
+  config = loadConfig();
+  return config.thermalPrinter || { name: '', silent: true, paperWidth: 80 };
+});
+
+ipcMain.handle('set-printer-config', (_e, cfg) => {
+  config = loadConfig();
+  config.thermalPrinter = {
+    name:       String(cfg.name       || ''),
+    silent:     cfg.silent !== false,
+    paperWidth: cfg.paperWidth === 58 ? 58 : 80,
+  };
+  saveConfig(config);
+  return true;
+});
+
+ipcMain.handle('print-receipt-thermal', (e, opts = {}) => {
+  const win = BrowserWindow.fromWebContents(e.sender);
+  if (!win) return { success: false, error: 'No window' };
+  return new Promise(resolve => {
+    const printOpts = {
+      silent:          opts.silent !== false,
+      printBackground: false,
+      margins:         { marginType: 'none' },
+    };
+    if (opts.name) printOpts.deviceName = opts.name;
+    win.webContents.print(printOpts, (success, failureReason) => {
+      resolve({ success, error: failureReason || null });
+    });
+  });
+});
+
 // ── API proxy (avoids CORS in renderer) ──────────────────────────────────
 const https = require('https');
 const http  = require('http');

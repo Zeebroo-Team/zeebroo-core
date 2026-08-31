@@ -13616,6 +13616,103 @@ $('#bc-print-all-btn')?.addEventListener('click', () => {
   _bcRenderPreview(allItems, _bcGetPrintConfig(), '', '');
 });
 
+// ── Thermal printer settings (PSM Printer tab) ────────────────────────────
+async function _psmLoadPrinterSettings() {
+  const statusEl = $('#psm-printer-status');
+  if (statusEl) statusEl.textContent = 'Loading printers…';
+  const [printers, cfg] = await Promise.all([
+    window.electronAPI.getPrinters(),
+    window.electronAPI.getPrinterConfig(),
+  ]).catch(() => [[], { name: '', silent: true, paperWidth: 80 }]);
+
+  const sel = $('#psm-printer-name');
+  if (sel) {
+    sel.innerHTML = '<option value="">— No printer selected (show system dialog) —</option>' +
+      printers.map(p =>
+        `<option value="${escHtml(p.name)}"${p.name === cfg.name ? ' selected' : ''}>` +
+        `${escHtml(p.displayName)}${p.isDefault ? ' (default)' : ''}</option>`
+      ).join('');
+    if (!printers.length) sel.innerHTML += '<option disabled>No printers found — install your printer driver first</option>';
+  }
+  const paper = $('#psm-printer-paper');
+  if (paper) paper.value = String(cfg.paperWidth || 80);
+  const silent = $('#psm-printer-silent');
+  if (silent) silent.checked = cfg.silent !== false;
+  if (statusEl) statusEl.textContent = printers.length
+    ? `${printers.length} printer${printers.length > 1 ? 's' : ''} found`
+    : 'No printers found — install your XP-80T driver and reconnect USB';
+}
+
+$('#psm-printer-refresh')?.addEventListener('click', () => _psmLoadPrinterSettings());
+
+$('#psm-printer-save')?.addEventListener('click', async () => {
+  const cfg = {
+    name:       $('#psm-printer-name')?.value       || '',
+    silent:   !!$('#psm-printer-silent')?.checked,
+    paperWidth: parseInt($('#psm-printer-paper')?.value) || 80,
+  };
+  await window.electronAPI.setPrinterConfig(cfg);
+  toast('Printer settings saved', 'success');
+  const statusEl = $('#psm-printer-status');
+  if (statusEl) statusEl.textContent = cfg.name
+    ? `Saved — printing to "${cfg.name}" (${cfg.paperWidth}mm)${cfg.silent ? ', silent' : ''}`
+    : 'Saved — no printer selected, system dialog will open when printing';
+});
+
+$('#psm-printer-test')?.addEventListener('click', async () => {
+  const cfg = {
+    name:       $('#psm-printer-name')?.value       || '',
+    silent:   !!$('#psm-printer-silent')?.checked,
+    paperWidth: parseInt($('#psm-printer-paper')?.value) || 80,
+  };
+  const w = cfg.paperWidth === 58 ? 50 : 72;
+  const testHtml = `
+    <div style="font-family:'Courier New',Courier,monospace;font-size:10pt;width:${w}mm;padding:0 2mm">
+      <div style="text-align:center;font-size:12pt;font-weight:bold;margin-bottom:4px">TEST PRINT</div>
+      <div style="border-top:1px dashed #000;border-bottom:1px dashed #000;padding:4px 0;text-align:center;margin-bottom:6px">
+        Zeebroo POS — Thermal Printer Test
+      </div>
+      <div>Printer: ${escHtml(cfg.name || 'System default')}</div>
+      <div>Paper:   ${cfg.paperWidth}mm</div>
+      <div>Silent:  ${cfg.silent ? 'Yes' : 'No'}</div>
+      <div>Time:    ${new Date().toLocaleTimeString()}</div>
+      <div style="border-top:1px dashed #000;margin-top:6px;padding-top:4px;text-align:center">
+        *** END OF TEST ***
+      </div>
+    </div>`;
+  const printable = $('#receipt-printable');
+  if (!printable) return;
+  const prevHtml = printable.innerHTML;
+  _psmInjectThermalCss(cfg.paperWidth);
+  printable.innerHTML = testHtml;
+  printable.style.display = 'block';
+  try {
+    const res = cfg.name
+      ? await window.electronAPI.printReceiptThermal(cfg)
+      : await window.electronAPI.printReceipt();
+    if (res && !res.success) toast(res.error || res.failureReason || 'Print failed', 'error');
+    else toast('Test page sent to printer', 'success');
+  } finally {
+    printable.style.display = 'none';
+    printable.innerHTML = prevHtml;
+    _psmRemoveThermalCss();
+  }
+});
+
+// Inject/remove temporary @page CSS for correct thermal paper width
+function _psmInjectThermalCss(paperWidth) {
+  _psmRemoveThermalCss();
+  const w = paperWidth === 58 ? 58 : 80;
+  const printW = w - 8; // 4mm margin each side
+  const s = document.createElement('style');
+  s.id = 'thermal-print-override';
+  s.textContent = `@media print { @page { size: ${w}mm auto; margin: 0; } #receipt-printable { width: ${printW}mm !important; } }`;
+  document.head.appendChild(s);
+}
+function _psmRemoveThermalCss() {
+  $('#thermal-print-override')?.remove();
+}
+
 // ── Print settings strip ──────────────────────────────────────────────────
 $('#bc-ps-type')?.querySelectorAll('.bc-ps-seg-btn').forEach(btn => {
   btn.addEventListener('click', () => {
@@ -20444,6 +20541,7 @@ $$('.psm-nav-item').forEach(btn => btn.addEventListener('click', () => {
   if (btn.dataset.tab === 'mail')     loadMailSettings();
   if (btn.dataset.tab === 'counters') loadPsmCounters();
   if (btn.dataset.tab === 'cashiers') { _psmCashierResetForm(); loadPsmCashiers(); }
+  if (btn.dataset.tab === 'printer')  _psmLoadPrinterSettings();
 }));
 
 $('#psm-multi-warehouse').addEventListener('change', (e) => {
@@ -21220,11 +21318,18 @@ $('#receipt-modal').addEventListener('click', (e) => {
   if (e.target === e.currentTarget) e.currentTarget.style.display = 'none';
 });
 $('#rcpt-print').addEventListener('click', async () => {
+  const cfg = await window.electronAPI.getPrinterConfig().catch(() => null);
+  _psmInjectThermalCss(cfg?.paperWidth || 80);
   $('#receipt-printable').style.display = 'block';
   try {
-    await window.electronAPI.printReceipt();
+    const res = cfg?.name
+      ? await window.electronAPI.printReceiptThermal(cfg)
+      : await window.electronAPI.printReceipt();
+    if (res && !res.success && (res.error || res.failureReason))
+      toast(res.error || res.failureReason, 'error');
   } finally {
     $('#receipt-printable').style.display = 'none';
+    _psmRemoveThermalCss();
   }
 });
 
