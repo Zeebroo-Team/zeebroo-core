@@ -5250,17 +5250,26 @@ async function _checkBankOnboarding() {
 }
 
 async function _bankWizOpen() {
-  // Ensure panel-1 is visible and billing panel is hidden
+  // Ensure panel-1 is visible and every other wizard panel is hidden
   $('#bwz-panel-1').style.display          = '';
   $('#bwz-panel-billing').style.display    = 'none';
+  $('#bwz-panel-products').style.display   = 'none';
+  $('#bwz-panel-pos').style.display        = 'none';
+  $('#bwz-panel-done').style.display       = 'none';
   $('#bwz-submit-btn').style.display       = '';
-  $('#bwz-billing-skip-btn').style.display = 'none';
+  $('#bwz-billing-skip-btn').style.display = '';
+  $('#bwz-billing-skip-btn').innerHTML     = '<i class="fa fa-forward-step"></i> Set up later';
+  $('#bwz-ps-cat-skip-btn').style.display  = 'none';
+  $('#bwz-pos-footer-back').style.display  = 'none';
+  $('#bwz-pos-footer-save').style.display  = 'none';
   // Reset step indicator to step 1
   $('#bwz-step-1').className = 'bwz-step active';
   $('#bwz-step-2').className = 'bwz-step';
   $('#bwz-step-3').className = 'bwz-step';
+  $('#bwz-step-4').className = 'bwz-step';
   $('#bwz-step-conn-1').classList.remove('filled');
   $('#bwz-step-conn-2').classList.remove('filled');
+  $('#bwz-step-conn-3').classList.remove('filled');
   const hasProducts = _bwzHasProductsStep();
   $('#bwz-step-conn-2').style.display = hasProducts ? '' : 'none';
   $('#bwz-step-3').style.display      = hasProducts ? '' : 'none';
@@ -5347,8 +5356,12 @@ function _bwzShowBillingPanel() {
   $('#bwz-panel-billing').style.display    = '';
   $('#bwz-panel-products').style.display   = 'none';
   $('#bwz-panel-pos').style.display        = 'none';
+  $('#bwz-panel-done').style.display       = 'none';
   $('#bwz-submit-btn').style.display       = 'none';
   $('#bwz-billing-skip-btn').style.display = '';
+  $('#bwz-ps-cat-skip-btn').style.display  = 'none';
+  $('#bwz-pos-footer-back').style.display  = '';
+  $('#bwz-pos-footer-save').style.display  = 'none';
   // Top step indicator: step 1 done, step 2 active
   $('#bwz-step-1').className = 'bwz-step done';
   $('#bwz-step-2').className = 'bwz-step active';
@@ -5655,9 +5668,12 @@ function _bwzShowProductsPanel() {
   $('#bwz-panel-billing').style.display    = 'none';
   $('#bwz-panel-products').style.display   = '';
   $('#bwz-panel-pos').style.display        = 'none';
+  $('#bwz-panel-done').style.display       = 'none';
   $('#bwz-submit-btn').style.display       = 'none';
   $('#bwz-billing-skip-btn').style.display = 'none'; // _bwzPsGoto controls which skip btn shows
   $('#bwz-ps-cat-skip-btn').style.display  = 'none'; // _bwzPsGoto controls which skip btn shows
+  $('#bwz-pos-footer-back').style.display  = '';
+  $('#bwz-pos-footer-save').style.display  = 'none';
   $('#bwz-step-1').className = 'bwz-step done';
   $('#bwz-step-2').className = 'bwz-step done';
   $('#bwz-step-3').className = 'bwz-step active';
@@ -5729,6 +5745,7 @@ function _bwzShowPosPanel() {
   $('#bwz-panel-billing').style.display    = 'none';
   $('#bwz-panel-products').style.display   = 'none';
   $('#bwz-panel-pos').style.display        = '';
+  $('#bwz-panel-done').style.display       = 'none';
   $('#bwz-submit-btn').style.display       = 'none';
   $('#bwz-billing-skip-btn').style.display = 'none'; // _bwzPosGoto controls footer
   $('#bwz-step-1').className = 'bwz-step done';
@@ -5764,7 +5781,7 @@ function _bwzPosGoto(n) {
       ? '<i class="fa fa-floppy-disk"></i> Save &amp; Finish'
       : '<i class="fa fa-floppy-disk"></i> Save &amp; Continue';
   }
-  if (footerBack) footerBack.style.display = n > 1 ? '' : 'none';
+  if (footerBack) footerBack.style.display = '';
   $('#bwz-submit-btn').style.display      = 'none';
   $('#bwz-billing-skip-btn').style.display = 'none';
   $('#bwz-ps-cat-skip-btn').style.display  = 'none';
@@ -5951,13 +5968,30 @@ $('#bwz-pos-footer-save')?.addEventListener('click', () => {
   });
   if (activeN) $(`#bwz-pos-panel-${activeN} .bwz-pos-save-btn`)?.click();
 });
-$('#bwz-pos-footer-back')?.addEventListener('click', () => {
-  const activeN = [1, 2, 3, 4, 5, 6].find(i => {
-    const p = $(`#bwz-pos-panel-${i}`);
-    return p && p.style.display !== 'none';
-  });
-  if (activeN && activeN > 1) _bwzPosGoto(activeN - 1);
-});
+$('#bwz-pos-footer-back')?.addEventListener('click', _bwzFooterBackClick);
+
+// Universal footer "Back" — walks back across Billing / Products / POS main steps
+function _bwzFooterBackClick() {
+  if ($('#bwz-panel-pos').style.display !== 'none') {
+    const activeN = [1, 2, 3, 4, 5, 6].find(i => {
+      const p = $(`#bwz-pos-panel-${i}`);
+      return p && p.style.display !== 'none';
+    });
+    if (activeN > 1) { _bwzPosGoto(activeN - 1); return; }
+    // First POS sub-step — step back to the previous main step
+    if (_bwzHasProductsStep()) { _bwzShowProductsPanel(); _bwzPsGoto(2); }
+    else { _bwzShowBillingPanel(); }
+    return;
+  }
+  if ($('#bwz-panel-products').style.display !== 'none') {
+    if (_bwz._psStep === 2) { _bwzPsGoto(1); return; }
+    _bwzShowBillingPanel();
+    return;
+  }
+  if ($('#bwz-panel-billing').style.display !== 'none') {
+    _bankWizOpen();
+  }
+}
 
 // ── Branches & Counters helpers ───────────────────────────────────────────
 function _bwzAddBranchRow(branch) {
@@ -6325,11 +6359,30 @@ $('#home-subnav-setup-wizard')?.addEventListener('click', async () => {
   }
 });
 
+// Close (X) — safe to close any time, each step already persists as it's completed
+$('#bwz-wizard-close')?.addEventListener('click', _bwzClose);
+
+// Top step badges — click any visible step to jump straight to it (free navigation)
+[1, 2, 3, 4].forEach(i => {
+  $(`#bwz-step-${i}`)?.addEventListener('click', () => {
+    const el = $(`#bwz-step-${i}`);
+    if (!el || el.style.display === 'none') return;
+    if (el.classList.contains('active')) return; // already there
+    if (i === 1) _bankWizOpen();
+    else if (i === 2) _bwzShowBillingPanel();
+    else if (i === 3) _bwzShowProductsPanel();
+    else if (i === 4) _bwzShowPosPanel();
+  });
+});
+
 // Wire wizard buttons once on page load
 $('#bwz-submit-btn')?.addEventListener('click', _bwzSubmit);
 $('#bwz-billing-skip-btn')?.addEventListener('click', () => {
-  // "Set up later" — context-aware: from billing advances to products;
-  // from PS2 (products sub-step 2) advances past products entirely
+  // "Set up later" — context-aware: from the bank account step it just
+  // advances to Billing Setup (skips creating an account for now); from
+  // billing it advances to products; from PS2 (products sub-step 2) it
+  // advances past products entirely
+  if ($('#bwz-panel-1').style.display !== 'none') { _bwzShowBillingPanel(); return; }
   const onPs2 = _bwzHasProductsStep() && _bwz._psStep === 2;
   if (onPs2) {
     if (_bwzHasPosStep()) { _bwzShowPosPanel(); }
