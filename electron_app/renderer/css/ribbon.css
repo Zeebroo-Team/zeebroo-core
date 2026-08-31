@@ -17647,16 +17647,36 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  position: relative;
   box-shadow:
     0 32px 80px rgba(0,0,0,.46),
     0 0 0 1px rgba(255,255,255,.07),
     inset 0 1px 0 rgba(255,255,255,.08);
 }
 
+/* ── Wizard close (X) button ───────────────────────────────────────────── */
+.bwz-wizard-close {
+  position: absolute; top: 14px; right: 14px; z-index: 5;
+  width: 30px; height: 30px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  border: none; background: rgba(255,255,255,.12); color: rgba(255,255,255,.75);
+  font-size: 13px; cursor: pointer;
+  transition: background .15s, color .15s, transform .1s;
+}
+.bwz-wizard-close:hover { background: rgba(255,255,255,.22); color: #fff; }
+.bwz-wizard-close:active { transform: scale(.92); }
+
+/* Step badges: click any step to jump straight to it */
+.bwz-step { cursor: pointer; }
+.bwz-step:hover .bwz-step-circle { filter: brightness(1.15); transform: scale(1.06); }
+.bwz-step:hover .bwz-step-label { color: var(--accent); }
+.bwz-step.active { cursor: default; }
+.bwz-step.active:hover .bwz-step-circle { filter: none; transform: none; }
+
 /* ── Gradient step-bar header ──────────────────────────────────────────── */
 #bwz-overlay .bwz-steps {
   background: linear-gradient(135deg, #090d22 0%, #141b48 55%, #1e2666 100%);
-  padding: 18px 28px 16px;
+  padding: 18px 56px 16px 28px;
   gap: 0;
   flex-shrink: 0;
   border-bottom: 1px solid rgba(255,255,255,.06);
@@ -17759,7 +17779,8 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
   box-shadow: 0 0 0 3.5px rgba(78,142,247,.16);
 }
 #bwz-overlay .bwz-row { gap: 14px; }
-#bwz-overlay .bwz-input--amount { height: 58px; font-size: 22px; }
+#bwz-overlay .bwz-input--amount { height: 46px; font-size: 15px; padding-left: 48px; }
+#bwz-overlay .bwz-textarea { height: 46px; }
 
 /* ── Resume banner ─────────────────────────────────────────────────────── */
 #bwz-overlay .bwz-resume-banner {
@@ -18067,11 +18088,12 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
   border-top: 1px solid var(--border-light);
   padding: 14px 28px 18px;
   flex-shrink: 0;
+  gap: 16px;
 }
 #bwz-overlay .bwz-btn-next {
-  height: 46px; padding: 0 28px;
+  height: 38px; padding: 0 18px;
   background: linear-gradient(135deg, var(--accent), #6366f1);
-  border-radius: 13px; font-size: 14px; font-weight: 700;
+  border-radius: 10px; font-size: 12.5px; font-weight: 700;
   box-shadow: 0 6px 20px rgba(78,142,247,.32);
   border: none;
   transition: filter .14s, box-shadow .14s, transform .1s;
