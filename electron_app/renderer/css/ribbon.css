@@ -17636,12 +17636,6 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
   background: var(--accent); border-color: var(--accent); color: #fff;
 }
 .bwz-done-btn--primary:hover { filter: brightness(1.08); background: var(--accent); }
-.bwz-done-close {
-  background: none; border: none; color: var(--text-muted);
-  font-size: 12px; cursor: pointer; padding: 4px 8px;
-  border-radius: 6px; transition: color .12s;
-}
-.bwz-done-close:hover { color: var(--text); }
 
 /* ══════════════════════════════════════════════════════════════════════════
    WIZARD VISUAL REDESIGN — overrides all defaults above via cascade order
@@ -18190,12 +18184,6 @@ body.dark #bwz-overlay .bwz-btn-next {
   border-color: transparent; transform: translateY(-2px);
   box-shadow: 0 10px 30px rgba(78,142,247,.44);
 }
-#bwz-overlay .bwz-done-close {
-  background: none; border: none; color: var(--text-muted);
-  font-size: 12.5px; cursor: pointer; padding: 6px 14px;
-  border-radius: 8px; transition: color .14s, background .14s;
-}
-#bwz-overlay .bwz-done-close:hover { color: var(--text); background: var(--surface2); }
 
 /* Save & Add Another text link */
 #bwz-overlay .bwz-save-add-link {

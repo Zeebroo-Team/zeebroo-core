@@ -6497,6 +6497,9 @@ $('#bwz-done-settings')?.addEventListener('click', () => {
   _bwzClose(); setTimeout(openPosSettings, 80);
 });
 $('#bwz-done-close')?.addEventListener('click', _bwzClose);
+$('#bwz-done-dashboard')?.addEventListener('click', () => {
+  _bwzClose(); activateTab('home');
+});
 
 // Call at the top of any modal close handler that may have been opened from the wizard.
 // If billingActive is true the wizard was waiting — clear the flag and reopen.
