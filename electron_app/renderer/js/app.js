@@ -5836,6 +5836,7 @@ async function _bwzPosLoadConfig() {
   if (rulesList) rulesList.innerHTML = '';
   existingRules.forEach(r => _bwzAddTaxRuleRow(r));
   _bwzUpdateTaxEmpty();
+  _bwzUpdateTaxRulesVisibility();
 }
 
 // ── POS sub-step 1: Regional & Financial ──────────────────────────────────
@@ -5897,6 +5898,13 @@ $('#bwz-pos-features-save')?.addEventListener('click', async () => {
 
 // ── POS sub-step 3: Tax (inline, F10) ────────────────────────────────────
 $('#bwz-pos-back-3')?.addEventListener('click', () => _bwzPosGoto(2));
+
+function _bwzUpdateTaxRulesVisibility() {
+  const wrap = $('#bwz-tax-rules-wrap');
+  if (!wrap) return;
+  wrap.style.display = $('#bwz-pos-tax-enabled')?.checked ? '' : 'none';
+}
+$('#bwz-pos-tax-enabled')?.addEventListener('change', _bwzUpdateTaxRulesVisibility);
 
 // ── Tax rule helpers ──────────────────────────────────────────────────────
 function _bwzAddTaxRuleRow(rule) {
