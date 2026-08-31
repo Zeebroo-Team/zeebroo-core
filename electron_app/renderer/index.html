@@ -12735,6 +12735,11 @@
         <div class="bwz-step-circle">4</div>
         <span class="bwz-step-label">POS Setup</span>
       </div>
+      <div class="bwz-step-connector" id="bwz-step-conn-4"></div>
+      <div class="bwz-step" id="bwz-step-5">
+        <div class="bwz-step-circle">5</div>
+        <span class="bwz-step-label">System Config</span>
+      </div>
     </div>
 
     <!-- Resume banner (shown briefly when wizard reopens after a modal) -->
@@ -13283,6 +13288,143 @@
 
     </div>
 
+    <!-- Panel 5: System Configuration -->
+    <div id="bwz-panel-sysconfig" style="display:none">
+
+      <!-- Depth label -->
+      <p class="bwz-depth-label" id="bwz-depth-label-sysconfig">System Configuration · 1 of 4</p>
+
+      <!-- Sub-step indicator: 4 dots -->
+      <div class="bwz-ss-track">
+        <div class="bwz-ss-dot active" id="bwz-sc-dot-1"><span>1</span></div>
+        <div class="bwz-ss-line" id="bwz-sc-line-1"></div>
+        <div class="bwz-ss-dot" id="bwz-sc-dot-2"><span>2</span></div>
+        <div class="bwz-ss-line" id="bwz-sc-line-2"></div>
+        <div class="bwz-ss-dot" id="bwz-sc-dot-3"><span>3</span></div>
+        <div class="bwz-ss-line" id="bwz-sc-line-3"></div>
+        <div class="bwz-ss-dot" id="bwz-sc-dot-4"><span>4</span></div>
+      </div>
+
+      <!-- Sub-step 1: Style & Theme -->
+      <div class="bwz-panel bwz-ss-panel bwz-pos-config-panel" id="bwz-sc-panel-1">
+        <h2 class="bwz-ss-title">Style &amp; Theme</h2>
+        <p class="bwz-ss-desc">Choose how the app looks and how navigation is laid out. You can change these anytime in Settings.</p>
+
+        <div class="bwz-pos-form">
+          <div class="bwz-pos-row">
+            <div class="bwz-pos-field">
+              <label class="bwz-pos-label" for="bwz-sc-layout"><i class="fa fa-table-columns"></i> Navigation Layout</label>
+              <p class="bwz-pos-field-desc">How the app's tabs and menu are arranged</p>
+              <select id="bwz-sc-layout" class="bwz-pos-select">
+                <option value="ribbon">Ribbon (top bar with tabs &amp; buttons)</option>
+                <option value="sidebar">Sidebar (left-side navigation panel)</option>
+              </select>
+            </div>
+            <div class="bwz-pos-field">
+              <label class="bwz-pos-label" for="bwz-sc-theme"><i class="fa fa-palette"></i> Display Theme</label>
+              <p class="bwz-pos-field-desc">Light or dark appearance</p>
+              <select id="bwz-sc-theme" class="bwz-pos-select">
+                <option value="inherit">System Default</option>
+                <option value="light">Light</option>
+                <option value="dark">Dark</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <button class="bwz-pos-save-btn" id="bwz-sc-theme-save" style="display:none"><i class="fa fa-floppy-disk"></i> Save &amp; Continue</button>
+      </div>
+
+      <!-- Sub-step 2: Business Logo -->
+      <div class="bwz-panel bwz-ss-panel bwz-pos-config-panel" id="bwz-sc-panel-2" style="display:none">
+        <h2 class="bwz-ss-title">Business Logo</h2>
+        <p class="bwz-ss-desc">Shown on receipts, invoices and across the app.</p>
+
+        <div class="bwz-pos-form">
+          <div class="bwz-pos-field">
+            <div class="psm-logo-wrap" id="bwz-sc-logo-wrap">
+              <div class="psm-logo-ph" id="bwz-sc-logo-ph">
+                <i class="fa fa-image"></i>
+                <span>No logo set</span>
+              </div>
+              <img id="bwz-sc-logo-img" class="psm-logo-img" style="display:none" src="" alt="Logo">
+            </div>
+            <div class="psm-logo-btns">
+              <button class="psm-logo-btn" id="bwz-sc-logo-choose" type="button"><i class="fa fa-folder-open"></i> Choose image</button>
+              <button class="psm-logo-btn psm-logo-btn--rm" id="bwz-sc-logo-remove" type="button" title="Remove logo"><i class="fa fa-trash"></i></button>
+            </div>
+          </div>
+        </div>
+
+        <button class="bwz-pos-save-btn" id="bwz-sc-logo-save" style="display:none"><i class="fa fa-floppy-disk"></i> Save &amp; Continue</button>
+      </div>
+
+      <!-- Sub-step 3: Role Management -->
+      <div class="bwz-panel bwz-ss-panel bwz-pos-config-panel bwz-sc-um-panel" id="bwz-sc-panel-3" style="display:none">
+        <h2 class="bwz-ss-title">Role Management</h2>
+        <p class="bwz-ss-desc">Create roles and control which modules each one can access.</p>
+
+        <div class="psm-panel psm-panel--roles" style="display:flex">
+          <div class="psm-roles-toolbar">
+            <div class="psm-roles-toolbar-left">
+              <i class="fa fa-shield-halved" style="color:var(--accent)"></i>
+              <span class="psm-roles-title">Roles &amp; Permissions</span>
+              <span class="um-count-badge" id="bwz-sc-role-count"></span>
+            </div>
+            <button class="um-add-btn" id="bwz-sc-add-role-btn" type="button">
+              <i class="fa fa-plus"></i> New Role
+            </button>
+          </div>
+          <div class="psm-roles-body">
+            <div class="um-list-col" id="bwz-sc-role-list">
+              <div class="um-loading"><i class="fa fa-spinner fa-spin"></i> Loading roles…</div>
+            </div>
+            <div class="um-detail-col" id="bwz-sc-role-detail">
+              <div class="um-detail-empty">
+                <i class="fa fa-shield-halved"></i>
+                <p>Select a role to view and edit its permissions</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <button class="bwz-pos-save-btn" id="bwz-sc-role-save" style="display:none"><i class="fa fa-check"></i> Continue</button>
+      </div>
+
+      <!-- Sub-step 4: User Management -->
+      <div class="bwz-panel bwz-ss-panel bwz-pos-config-panel bwz-sc-um-panel" id="bwz-sc-panel-4" style="display:none">
+        <h2 class="bwz-ss-title">User Management</h2>
+        <p class="bwz-ss-desc">Invite staff and assign them a role.</p>
+
+        <div class="psm-panel psm-panel--roles" style="display:flex">
+          <div class="psm-roles-toolbar">
+            <div class="psm-roles-toolbar-left">
+              <i class="fa fa-users" style="color:var(--accent)"></i>
+              <span class="psm-roles-title">User Management</span>
+              <span class="um-count-badge" id="bwz-sc-users-count"></span>
+            </div>
+            <button class="um-add-btn" id="bwz-sc-add-user-btn" type="button">
+              <i class="fa fa-user-plus"></i> Add User
+            </button>
+          </div>
+          <div class="psm-roles-body">
+            <div class="um-list-col" id="bwz-sc-users-list">
+              <div class="um-loading"><i class="fa fa-spinner fa-spin"></i> Loading users…</div>
+            </div>
+            <div class="um-detail-col" id="bwz-sc-users-detail">
+              <div class="um-detail-empty">
+                <i class="fa fa-user-shield"></i>
+                <p>Select a user to view their role and permissions</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <button class="bwz-pos-save-btn" id="bwz-sc-users-save" style="display:none"><i class="fa fa-check"></i> Finish Setup</button>
+      </div>
+
+    </div>
+
     <!-- Panel: Setup Complete -->
     <div id="bwz-panel-done" style="display:none">
       <div class="bwz-panel bwz-done-panel">
@@ -13307,12 +13449,15 @@
     <!-- Footer -->
     <div class="bwz-footer">
       <button class="bwz-btn-skip" id="bwz-pos-footer-back" style="display:none"><i class="fa fa-arrow-left"></i> Back</button>
+      <button class="bwz-btn-skip" id="bwz-sc-footer-back" style="display:none"><i class="fa fa-arrow-left"></i> Back</button>
       <button class="bwz-btn-next" id="bwz-submit-btn"><i class="fa fa-check"></i> Create Account</button>
       <div class="bwz-footer-right">
         <button class="bwz-btn-skip" id="bwz-pos-footer-skip" style="display:none"><i class="fa fa-forward-step"></i> Skip this step</button>
         <button class="bwz-btn-next" id="bwz-pos-footer-save" style="display:none">Save &amp; Continue <i class="fa fa-arrow-right"></i></button>
         <button class="bwz-btn-skip" id="bwz-billing-skip-btn" style="display:none"><i class="fa fa-forward-step"></i> Set up later</button>
         <button class="bwz-btn-skip" id="bwz-ps-cat-skip-btn" style="display:none"><i class="fa fa-forward-step"></i> Skip this step</button>
+        <button class="bwz-btn-skip" id="bwz-sc-footer-skip" style="display:none"><i class="fa fa-forward-step"></i> Skip this step</button>
+        <button class="bwz-btn-next" id="bwz-sc-footer-save" style="display:none">Save &amp; Continue <i class="fa fa-arrow-right"></i></button>
       </div>
     </div>
 

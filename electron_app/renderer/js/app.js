@@ -5255,6 +5255,7 @@ async function _bankWizOpen() {
   $('#bwz-panel-billing').style.display    = 'none';
   $('#bwz-panel-products').style.display   = 'none';
   $('#bwz-panel-pos').style.display        = 'none';
+  $('#bwz-panel-sysconfig').style.display  = 'none';
   $('#bwz-panel-done').style.display       = 'none';
   $('#bwz-submit-btn').style.display       = '';
   $('#bwz-billing-skip-btn').style.display = '';
@@ -5263,14 +5264,20 @@ async function _bankWizOpen() {
   $('#bwz-pos-footer-back').style.display  = 'none';
   $('#bwz-pos-footer-save').style.display  = 'none';
   $('#bwz-pos-footer-skip').style.display  = 'none';
+  $('#bwz-sc-footer-back').style.display   = 'none';
+  $('#bwz-sc-footer-save').style.display   = 'none';
+  $('#bwz-sc-footer-skip').style.display   = 'none';
+  $('#bwz-overlay').classList.remove('bwz-wide');
   // Reset step indicator to step 1
   $('#bwz-step-1').className = 'bwz-step active';
   $('#bwz-step-2').className = 'bwz-step';
   $('#bwz-step-3').className = 'bwz-step';
   $('#bwz-step-4').className = 'bwz-step';
+  $('#bwz-step-5').className = 'bwz-step';
   $('#bwz-step-conn-1').classList.remove('filled');
   $('#bwz-step-conn-2').classList.remove('filled');
   $('#bwz-step-conn-3').classList.remove('filled');
+  $('#bwz-step-conn-4').classList.remove('filled');
   const hasProducts = _bwzHasProductsStep();
   $('#bwz-step-conn-2').style.display = hasProducts ? '' : 'none';
   $('#bwz-step-3').style.display      = hasProducts ? '' : 'none';
@@ -5357,6 +5364,7 @@ function _bwzShowBillingPanel() {
   $('#bwz-panel-billing').style.display    = '';
   $('#bwz-panel-products').style.display   = 'none';
   $('#bwz-panel-pos').style.display        = 'none';
+  $('#bwz-panel-sysconfig').style.display  = 'none';
   $('#bwz-panel-done').style.display       = 'none';
   $('#bwz-submit-btn').style.display       = 'none';
   $('#bwz-billing-skip-btn').style.display = '';
@@ -5364,14 +5372,20 @@ function _bwzShowBillingPanel() {
   $('#bwz-pos-footer-back').style.display  = '';
   $('#bwz-pos-footer-save').style.display  = 'none';
   $('#bwz-pos-footer-skip').style.display  = 'none';
+  $('#bwz-sc-footer-back').style.display   = 'none';
+  $('#bwz-sc-footer-save').style.display   = 'none';
+  $('#bwz-sc-footer-skip').style.display   = 'none';
+  $('#bwz-overlay').classList.remove('bwz-wide');
   // Top step indicator: step 1 done, step 2 active
   $('#bwz-step-1').className = 'bwz-step done';
   $('#bwz-step-2').className = 'bwz-step active';
   $('#bwz-step-3').className = 'bwz-step';
   $('#bwz-step-4').className = 'bwz-step';
+  $('#bwz-step-5').className = 'bwz-step';
   $('#bwz-step-conn-1').classList.add('filled');
   $('#bwz-step-conn-2').classList.remove('filled');
   $('#bwz-step-conn-3').classList.remove('filled');
+  $('#bwz-step-conn-4').classList.remove('filled');
   const hasProducts = _bwzHasProductsStep();
   const hasPos      = _bwzHasPosStep();
   $('#bwz-step-conn-2').style.display = hasProducts ? '' : 'none';
@@ -5670,6 +5684,7 @@ function _bwzShowProductsPanel() {
   $('#bwz-panel-billing').style.display    = 'none';
   $('#bwz-panel-products').style.display   = '';
   $('#bwz-panel-pos').style.display        = 'none';
+  $('#bwz-panel-sysconfig').style.display  = 'none';
   $('#bwz-panel-done').style.display       = 'none';
   $('#bwz-submit-btn').style.display       = 'none';
   $('#bwz-billing-skip-btn').style.display = 'none'; // _bwzPsGoto controls which skip btn shows
@@ -5677,16 +5692,22 @@ function _bwzShowProductsPanel() {
   $('#bwz-pos-footer-back').style.display  = '';
   $('#bwz-pos-footer-save').style.display  = 'none';
   $('#bwz-pos-footer-skip').style.display  = 'none';
+  $('#bwz-sc-footer-back').style.display   = 'none';
+  $('#bwz-sc-footer-save').style.display   = 'none';
+  $('#bwz-sc-footer-skip').style.display   = 'none';
+  $('#bwz-overlay').classList.remove('bwz-wide');
   $('#bwz-step-1').className = 'bwz-step done';
   $('#bwz-step-2').className = 'bwz-step done';
   $('#bwz-step-3').className = 'bwz-step active';
   $('#bwz-step-4').className = 'bwz-step';
+  $('#bwz-step-5').className = 'bwz-step';
   $('#bwz-step-conn-1').classList.add('filled');
   $('#bwz-step-conn-2').classList.add('filled');
   const hasPos = _bwzHasPosStep();
   $('#bwz-step-conn-3').style.display = hasPos ? '' : 'none';
   $('#bwz-step-4').style.display      = hasPos ? '' : 'none';
   $('#bwz-step-conn-3').classList.remove('filled');
+  $('#bwz-step-conn-4').classList.remove('filled');
   _bwzPsGoto(1);
   _bwzLoadProductsExisting();
 }
@@ -5748,16 +5769,23 @@ function _bwzShowPosPanel() {
   $('#bwz-panel-billing').style.display    = 'none';
   $('#bwz-panel-products').style.display   = 'none';
   $('#bwz-panel-pos').style.display        = '';
+  $('#bwz-panel-sysconfig').style.display  = 'none';
   $('#bwz-panel-done').style.display       = 'none';
   $('#bwz-submit-btn').style.display       = 'none';
   $('#bwz-billing-skip-btn').style.display = 'none'; // _bwzPosGoto controls footer
+  $('#bwz-sc-footer-back').style.display   = 'none';
+  $('#bwz-sc-footer-save').style.display   = 'none';
+  $('#bwz-sc-footer-skip').style.display   = 'none';
+  $('#bwz-overlay').classList.remove('bwz-wide');
   $('#bwz-step-1').className = 'bwz-step done';
   $('#bwz-step-2').className = 'bwz-step done';
   $('#bwz-step-3').className = 'bwz-step done';
   $('#bwz-step-4').className = 'bwz-step active';
+  $('#bwz-step-5').className = 'bwz-step';
   $('#bwz-step-conn-1').classList.add('filled');
   $('#bwz-step-conn-2').classList.add('filled');
   $('#bwz-step-conn-3').classList.add('filled');
+  $('#bwz-step-conn-4').classList.remove('filled');
   _bwzPosGoto(1);
   _bwzPosLoadConfig();
 }
@@ -5795,6 +5823,152 @@ function _bwzPosGoto(n) {
   if (n === 5) _bwzLoadBranchesCounters();
   if (n === 6) _bwzLoadCashiers();
 }
+
+// ── System Configuration panel (Step 5) ─────────────────────────────────────
+function _bwzShowSysConfigPanel() {
+  $('#bwz-panel-1').style.display          = 'none';
+  $('#bwz-panel-billing').style.display    = 'none';
+  $('#bwz-panel-products').style.display   = 'none';
+  $('#bwz-panel-pos').style.display        = 'none';
+  $('#bwz-panel-sysconfig').style.display  = '';
+  $('#bwz-panel-done').style.display       = 'none';
+  $('#bwz-submit-btn').style.display       = 'none';
+  $('#bwz-billing-skip-btn').style.display = 'none';
+  $('#bwz-ps-cat-skip-btn').style.display  = 'none';
+  $('#bwz-pos-footer-back').style.display  = 'none';
+  $('#bwz-pos-footer-save').style.display  = 'none';
+  $('#bwz-pos-footer-skip').style.display  = 'none';
+  $('#bwz-step-1').className = 'bwz-step done';
+  $('#bwz-step-2').className = 'bwz-step done';
+  $('#bwz-step-3').className = 'bwz-step done';
+  $('#bwz-step-4').className = 'bwz-step done';
+  $('#bwz-step-5').className = 'bwz-step active';
+  $('#bwz-step-conn-1').classList.add('filled');
+  $('#bwz-step-conn-2').classList.add('filled');
+  $('#bwz-step-conn-3').classList.add('filled');
+  $('#bwz-step-conn-4').classList.add('filled');
+  $('#bwz-overlay').classList.add('bwz-wide');
+  _bwzScGoto(1);
+  _bwzScLoadStyleTheme();
+}
+
+function _bwzScGoto(n) {
+  [1, 2, 3, 4].forEach(i => {
+    const panel = $(`#bwz-sc-panel-${i}`);
+    const dot   = $(`#bwz-sc-dot-${i}`);
+    if (panel) panel.style.display = i === n ? '' : 'none';
+    if (dot) dot.className = i < n ? 'bwz-ss-dot done' : i === n ? 'bwz-ss-dot active' : 'bwz-ss-dot';
+  });
+  [1, 2, 3].forEach(i => {
+    const line = $(`#bwz-sc-line-${i}`);
+    if (line) line.classList.toggle('filled', n > i);
+  });
+  const dl = $('#bwz-depth-label-sysconfig');
+  if (dl) dl.textContent = `System Configuration · ${n} of 4`;
+  const footerSave = $('#bwz-sc-footer-save');
+  const footerBack = $('#bwz-sc-footer-back');
+  const footerSkip = $('#bwz-sc-footer-skip');
+  if (footerSave) {
+    footerSave.style.display = '';
+    footerSave.innerHTML = n === 4
+      ? '<i class="fa fa-check"></i> Finish Setup'
+      : 'Save &amp; Continue <i class="fa fa-arrow-right"></i>';
+  }
+  if (footerBack) footerBack.style.display = '';
+  if (footerSkip) footerSkip.style.display = n < 4 ? '' : 'none';
+  $('#bwz-submit-btn').style.display       = 'none';
+  $('#bwz-billing-skip-btn').style.display = 'none';
+  $('#bwz-ps-cat-skip-btn').style.display  = 'none';
+  $('#bwz-pos-footer-back').style.display  = 'none';
+  $('#bwz-pos-footer-save').style.display  = 'none';
+  $('#bwz-pos-footer-skip').style.display  = 'none';
+  _bwz._scStep = n;
+  // Lazy-load data when entering sub-steps that need it
+  if (n === 3 && window.loadRolesForSettings) window.loadRolesForSettings('bwz-sc-role-list');
+  if (n === 4 && window.loadUsersForSettings) window.loadUsersForSettings('bwz-sc-users-list');
+}
+
+$('#bwz-sc-footer-back')?.addEventListener('click', () => {
+  const n = _bwz._scStep || 1;
+  if (n > 1) { _bwzScGoto(n - 1); return; }
+  // First sysconfig sub-step — step back to the last POS Setup sub-step
+  _bwzShowPosPanel();
+  _bwzPosGoto(6);
+});
+$('#bwz-sc-footer-skip')?.addEventListener('click', () => {
+  const n = _bwz._scStep || 1;
+  if (n < 4) _bwzScGoto(n + 1);
+});
+$('#bwz-sc-footer-save')?.addEventListener('click', () => {
+  const n = _bwz._scStep || 1;
+  $(`#bwz-sc-panel-${n} .bwz-pos-save-btn`)?.click();
+});
+
+// ── Sub-step 1: Style & Theme ───────────────────────────────────────────────
+async function _bwzScLoadStyleTheme() {
+  const res = await API.settingsGet();
+  const s = res.status === 200 ? (res.body?.data ?? {}) : {};
+  $('#bwz-sc-theme').value  = s.display_theme ?? 'inherit';
+  $('#bwz-sc-layout').value = state.config?.layout_mode || 'ribbon';
+  _bwzScLogoUrl = s.business_logo_url || '';
+  _bwzScLogoRender();
+}
+
+$('#bwz-sc-theme-save')?.addEventListener('click', async () => {
+  const btn = $('#bwz-sc-theme-save');
+  btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
+  const res = await API.settingsUpdate({ display_theme: $('#bwz-sc-theme').value });
+  btn.disabled = false; btn.innerHTML = '<i class="fa fa-floppy-disk"></i> Save &amp; Continue';
+  if (res.status !== 200) { toast(res.body?.message || 'Failed to save settings', 'error'); return; }
+
+  const newLayout = $('#bwz-sc-layout').value;
+  if (newLayout !== (state.config?.layout_mode || 'ribbon')) {
+    if (state.config) state.config.layout_mode = newLayout;
+    _applyLayoutMode(newLayout);
+    await window.electronAPI.setConfig({ layout_mode: newLayout });
+  }
+  toast('Settings saved', 'success');
+  _bwzScGoto(2);
+});
+
+// ── Sub-step 2: Business Logo ───────────────────────────────────────────────
+let _bwzScLogoUrl = '';
+
+function _bwzScLogoRender() {
+  const ph  = $('#bwz-sc-logo-ph');
+  const img = $('#bwz-sc-logo-img');
+  if (!ph || !img) return;
+  if (_bwzScLogoUrl) {
+    img.src = _bwzScLogoUrl; img.style.display = '';
+    ph.style.display = 'none';
+  } else {
+    img.style.display = 'none'; img.src = '';
+    ph.style.display = '';
+  }
+}
+
+$('#bwz-sc-logo-choose')?.addEventListener('click', () => {
+  openImgPicker((fileId, url) => { _bwzScLogoUrl = url || ''; _bwzScLogoRender(); });
+});
+$('#bwz-sc-logo-remove')?.addEventListener('click', () => { _bwzScLogoUrl = ''; _bwzScLogoRender(); });
+
+$('#bwz-sc-logo-save')?.addEventListener('click', async () => {
+  const btn = $('#bwz-sc-logo-save');
+  btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
+  const res = await API.settingsUpdate({ business_logo_url: _bwzScLogoUrl || null });
+  btn.disabled = false; btn.innerHTML = '<i class="fa fa-floppy-disk"></i> Save &amp; Continue';
+  if (res.status !== 200) { toast(res.body?.message || 'Failed to save logo', 'error'); return; }
+  toast('Logo saved', 'success');
+  _bwzScGoto(3);
+});
+
+// ── Sub-step 3: Role Management ─────────────────────────────────────────────
+$('#bwz-sc-add-role-btn')?.addEventListener('click', () => { window.openCreateRoleModal && window.openCreateRoleModal(); });
+$('#bwz-sc-role-save')?.addEventListener('click', () => { _bwzScGoto(4); });
+
+// ── Sub-step 4: User Management ─────────────────────────────────────────────
+$('#bwz-sc-add-user-btn')?.addEventListener('click', () => { window.openAddModal && window.openAddModal(); });
+$('#bwz-sc-users-save')?.addEventListener('click', () => { _bwzShowDone(); });
 
 // POS: load config into both sub-step panels
 async function _bwzPosLoadConfig() {
@@ -6286,12 +6460,12 @@ $('#bwz-cashier-add-btn')?.addEventListener('click', () => {
   if (rows?.length) rows[rows.length - 1].querySelector('.bwz-cashier-fname')?.focus();
 });
 
-// Cashier step footer "Save & Finish" → just advance to done
-$('#bwz-pos-cashier-save')?.addEventListener('click', () => { _bwzShowDone(); });
+// Cashier step footer "Save & Finish" → move on to System Configuration
+$('#bwz-pos-cashier-save')?.addEventListener('click', () => { _bwzShowSysConfigPanel(); });
 
 // ── Completion screen (F13) ───────────────────────────────────────────────
 function _bwzShowDone() {
-  ['#bwz-panel-1', '#bwz-panel-billing', '#bwz-panel-products', '#bwz-panel-pos'].forEach(id => {
+  ['#bwz-panel-1', '#bwz-panel-billing', '#bwz-panel-products', '#bwz-panel-pos', '#bwz-panel-sysconfig'].forEach(id => {
     const el = $(id); if (el) el.style.display = 'none';
   });
   const done = $('#bwz-panel-done');
@@ -6301,7 +6475,11 @@ function _bwzShowDone() {
   $('#bwz-pos-footer-save').style.display   = 'none';
   $('#bwz-pos-footer-skip').style.display   = 'none';
   $('#bwz-pos-footer-back').style.display   = 'none';
-  [1, 2, 3, 4].forEach(i => {
+  $('#bwz-sc-footer-save').style.display    = 'none';
+  $('#bwz-sc-footer-skip').style.display    = 'none';
+  $('#bwz-sc-footer-back').style.display    = 'none';
+  $('#bwz-overlay').classList.remove('bwz-wide');
+  [1, 2, 3, 4, 5].forEach(i => {
     const step = $(`#bwz-step-${i}`);
     if (step) step.className = 'bwz-step done';
     const conn = $(`#bwz-step-conn-${i}`);
@@ -6351,6 +6529,15 @@ function _bwzResumeWizard(nextStep) {
     _bwzShowResumeBanner();
     return;
   }
+  // System Configuration sub-steps: 'sc:1', 'sc:2', 'sc:3', 'sc:4'
+  if (typeof nextStep === 'string' && nextStep.startsWith('sc:')) {
+    const n = parseInt(nextStep.split(':')[1]);
+    _bwzShowSysConfigPanel(); // makes sysconfig panel visible, sets step indicators
+    _bwzScGoto(n);            // override to the correct sub-step
+    _bwzComeForward();
+    _bwzShowResumeBanner();
+    return;
+  }
   // Billing panel resume — refresh counts and stay on billing panel
   _bwzShowBillingPanel(); // ensures panel is visible with correct step state
   _bwzComeForward();
@@ -6385,7 +6572,7 @@ $('#home-subnav-setup-wizard')?.addEventListener('click', async () => {
 $('#bwz-wizard-close')?.addEventListener('click', _bwzClose);
 
 // Top step badges — click any visible step to jump straight to it (free navigation)
-[1, 2, 3, 4].forEach(i => {
+[1, 2, 3, 4, 5].forEach(i => {
   $(`#bwz-step-${i}`)?.addEventListener('click', () => {
     const el = $(`#bwz-step-${i}`);
     if (!el || el.style.display === 'none') return;
@@ -6394,6 +6581,7 @@ $('#bwz-wizard-close')?.addEventListener('click', _bwzClose);
     else if (i === 2) _bwzShowBillingPanel();
     else if (i === 3) _bwzShowProductsPanel();
     else if (i === 4) _bwzShowPosPanel();
+    else if (i === 5) _bwzShowSysConfigPanel();
   });
 });
 
@@ -6405,6 +6593,11 @@ $('#bwz-wizard-close')?.addEventListener('click', _bwzClose);
 // POS sub-step dots (1-6) — click any visible dot to jump straight to it
 [1, 2, 3, 4, 5, 6].forEach(n => {
   $(`#bwz-pos-dot-${n}`)?.addEventListener('click', () => _bwzPosGoto(n));
+});
+
+// System Configuration sub-step dots (1-4) — click any visible dot to jump straight to it
+[1, 2, 3, 4].forEach(n => {
+  $(`#bwz-sc-dot-${n}`)?.addEventListener('click', () => _bwzScGoto(n));
 });
 
 // Wire wizard buttons once on page load
@@ -34364,7 +34557,7 @@ async function submitDsCreate() {
 
   // ── Load + render list ──────────────────────────────────────────────────
 
-  async function loadUsersView() {
+  async function loadUsersView(listId) {
     _umSelected = null;
 
     const res = await API.usersList();
@@ -34374,15 +34567,18 @@ async function submitDsCreate() {
     if (res.body.permissions) _buildPermGroupsFromApi(res.body.permissions);
 
     const count = _umUsers.length;
-    const badge = $('#psm-users-count');
-    if (badge) badge.textContent = `${count} user${count !== 1 ? 's' : ''}`;
+    const countLabel = `${count} user${count !== 1 ? 's' : ''}`;
+    ['psm-users-count', 'bwz-sc-users-count'].forEach(id => {
+      const badge = $(`#${id}`);
+      if (badge) badge.textContent = countLabel;
+    });
 
-    renderUserList('psm-users-list');
+    renderUserList(listId || 'psm-users-list');
   }
 
   function renderUserList(listId) {
     listId = listId || 'um-list';
-    const detailId = listId === 'psm-users-list' ? 'psm-users-detail' : 'um-detail';
+    const detailId = listId.replace(/-list$/, '-detail');
     const list = $(`#${listId}`);
     if (!list) return;
     if (_umUsers.length === 0) {
@@ -34418,7 +34614,7 @@ async function submitDsCreate() {
   function selectUser(user, cardEl, detailId) {
     detailId = detailId || 'um-detail';
     _umSelected = user;
-    const listId = detailId === 'psm-users-detail' ? 'psm-users-list' : 'um-list';
+    const listId = detailId.replace(/-detail$/, '-list');
     $(`#${listId}`)?.querySelectorAll('.um-user-card').forEach(c => c.classList.remove('active'));
     if (cardEl) cardEl.classList.add('active');
     renderUserDetail(user, detailId);
@@ -34507,11 +34703,31 @@ async function submitDsCreate() {
     }
   }
 
+  // ── Active list/detail context (Settings modal vs. wizard vs. legacy) ────
+
+  function _umActiveRoleIds() {
+    if ($('#bwz-panel-sysconfig')?.style.display !== 'none' && $('#bwz-sc-panel-3')?.style.display !== 'none')
+      return { listId: 'bwz-sc-role-list', detailId: 'bwz-sc-role-detail' };
+    const inSettings = $('#pos-settings-modal')?.style.display !== 'none';
+    return inSettings ? { listId: 'psm-role-list', detailId: 'psm-role-detail' } : { listId: 'um-role-list', detailId: 'um-role-detail' };
+  }
+
+  function _umActiveUserIds() {
+    if ($('#bwz-panel-sysconfig')?.style.display !== 'none' && $('#bwz-sc-panel-4')?.style.display !== 'none')
+      return { listId: 'bwz-sc-users-list', detailId: 'bwz-sc-users-detail' };
+    const inSettings = $('#pos-settings-modal')?.style.display !== 'none';
+    return inSettings ? { listId: 'psm-users-list', detailId: 'psm-users-detail' } : { listId: 'um-list', detailId: 'um-detail' };
+  }
+
   // ── Add User Modal ──────────────────────────────────────────────────────
 
   async function openAddModal() {
     const modal = $('#um-add-modal');
     if (!modal) return;
+    if ($('#bwz-panel-sysconfig')?.style.display !== 'none' && $('#bwz-sc-panel-4')?.style.display !== 'none') {
+      _bwz.billingActive = true; _bwz.billingNextStep = 'sc:4';
+      _bwzGoBehind();
+    }
     $('#um-add-email').value = '';
     $('#um-add-error').style.display = 'none';
 
@@ -34543,7 +34759,7 @@ async function submitDsCreate() {
     setTimeout(() => $('#um-add-email')?.focus(), 80);
   }
 
-  function closeAddModal() { const m = $('#um-add-modal'); if (m) m.style.display = 'none'; }
+  function closeAddModal() { const m = $('#um-add-modal'); if (m) m.style.display = 'none'; _bwzCheckResume(); }
 
   async function submitAddUser() {
     const email = $('#um-add-email')?.value?.trim();
@@ -34561,12 +34777,11 @@ async function submitDsCreate() {
 
     if (res.status === 201) {
       closeAddModal();
-      await loadUsersView();
+      const ids = _umActiveUserIds();
+      await loadUsersView(ids.listId);
       const newUser = _umUsers.find(u => u.email === email);
       if (newUser) {
-        const inSettings = $('#pos-settings-modal')?.style.display !== 'none';
-        const listId   = inSettings ? 'psm-users-list' : 'um-list';
-        const detailId = inSettings ? 'psm-users-detail' : 'um-detail';
+        const { listId, detailId } = ids;
         const card = $(`#${listId} [data-uid="${newUser.user_id}"]`);
         selectUser(newUser, card, detailId);
       }
@@ -34581,6 +34796,10 @@ async function submitDsCreate() {
     _umEditTarget = user;
     const modal = $('#um-edit-modal');
     if (!modal) return;
+    if ($('#bwz-panel-sysconfig')?.style.display !== 'none' && $('#bwz-sc-panel-4')?.style.display !== 'none') {
+      _bwz.billingActive = true; _bwz.billingNextStep = 'sc:4';
+      _bwzGoBehind();
+    }
 
     const info = $('#um-edit-user-info');
     if (info) {
@@ -34608,7 +34827,7 @@ async function submitDsCreate() {
     modal.style.display = 'flex';
   }
 
-  function closeEditModal() { const m = $('#um-edit-modal'); if (m) m.style.display = 'none'; }
+  function closeEditModal() { const m = $('#um-edit-modal'); if (m) m.style.display = 'none'; _bwzCheckResume(); }
 
   async function submitEditUser() {
     if (!_umEditTarget) return;
@@ -34625,14 +34844,12 @@ async function submitDsCreate() {
 
     if (res.status === 200) {
       closeEditModal();
-      await loadUsersView();
+      const ids = _umActiveUserIds();
+      await loadUsersView(ids.listId);
       const updated = _umUsers.find(u => u.id === _umEditTarget.id);
       if (updated) {
-        const inSettings = $('#pos-settings-modal')?.style.display !== 'none';
-        const listId   = inSettings ? 'psm-users-list' : 'um-list';
-        const detailId = inSettings ? 'psm-users-detail' : 'um-detail';
-        const card = $(`#${listId} [data-uid="${updated.user_id}"]`);
-        selectUser(updated, card, detailId);
+        const card = $(`#${ids.listId} [data-uid="${updated.user_id}"]`);
+        selectUser(updated, card, ids.detailId);
       }
     } else {
       _showModalErr(errEl, res.body?.message || 'Failed to save changes.');
@@ -34646,11 +34863,10 @@ async function submitDsCreate() {
 
     const res = await API.usersRemove(user.id);
     if (res.status === 200) {
-      await loadUsersView();
+      const ids = _umActiveUserIds();
+      await loadUsersView(ids.listId);
       // Clear detail in the active context
-      const inSettings = $('#pos-settings-modal')?.style.display !== 'none';
-      const detailId = inSettings ? 'psm-users-detail' : 'um-detail';
-      const detail = $(`#${detailId}`);
+      const detail = $(`#${ids.detailId}`);
       if (detail) detail.innerHTML = '<div class="um-detail-empty"><i class="fa fa-user-shield"></i><p>Select a user to view their role and permissions</p></div>';
     } else {
       alert(res.body?.message || 'Failed to remove user.');
@@ -34864,7 +35080,7 @@ async function submitDsCreate() {
 
   // ── Roles view ───────────────────────────────────────────────────────────
 
-  async function loadRolesView() {
+  async function loadRolesView(listId) {
     _umRoleSelected = null;
 
     const [rolesRes, usersRes] = await Promise.all([API.rolesList(), API.usersList()]);
@@ -34875,15 +35091,18 @@ async function submitDsCreate() {
     if (rolesRes.body.permissions) _buildPermGroupsFromApi(rolesRes.body.permissions);
     if (usersRes.status === 200) _umUsers = usersRes.body.data || [];
 
-    const badge = $('#psm-role-count');
-    if (badge) badge.textContent = `${_umRoles.length} role${_umRoles.length !== 1 ? 's' : ''}`;
+    const countLabel = `${_umRoles.length} role${_umRoles.length !== 1 ? 's' : ''}`;
+    ['psm-role-count', 'bwz-sc-role-count'].forEach(id => {
+      const badge = $(`#${id}`);
+      if (badge) badge.textContent = countLabel;
+    });
 
-    renderRoleList('psm-role-list');
+    renderRoleList(listId || 'psm-role-list');
   }
 
   function renderRoleList(listId) {
     listId = listId || 'um-role-list';
-    const detailId = listId === 'psm-role-list' ? 'psm-role-detail' : 'um-role-detail';
+    const detailId = listId.replace(/-list$/, '-detail');
     const list = $(`#${listId}`);
     if (!list) return;
     if (_umRoles.length === 0) { list.innerHTML = '<div class="um-loading">No roles found.</div>'; return; }
@@ -34925,7 +35144,7 @@ async function submitDsCreate() {
   function selectRole(role, cardEl, detailId) {
     detailId = detailId || 'um-role-detail';
     _umRoleSelected = role;
-    const listId = detailId === 'psm-role-detail' ? 'psm-role-list' : 'um-role-list';
+    const listId = detailId.replace(/-detail$/, '-list');
     $(`#${listId}`)?.querySelectorAll('.um-role-card').forEach(c => c.classList.remove('active'));
     if (cardEl) cardEl.classList.add('active');
     renderRoleDetail(role, detailId);
@@ -35051,6 +35270,10 @@ async function submitDsCreate() {
   async function openCreateRoleModal() {
     const modal = $('#um-role-create-modal');
     if (!modal) return;
+    if ($('#bwz-panel-sysconfig')?.style.display !== 'none' && $('#bwz-sc-panel-3')?.style.display !== 'none') {
+      _bwz.billingActive = true; _bwz.billingNextStep = 'sc:3';
+      _bwzGoBehind();
+    }
     await _ensurePermGroups();
     $('#um-rc-name').value = '';
     $('#um-rc-desc').value = '';
@@ -35062,7 +35285,7 @@ async function submitDsCreate() {
     setTimeout(() => $('#um-rc-name')?.focus(), 80);
   }
 
-  function closeCreateRoleModal() { const m = $('#um-role-create-modal'); if (m) m.style.display = 'none'; }
+  function closeCreateRoleModal() { const m = $('#um-role-create-modal'); if (m) m.style.display = 'none'; _bwzCheckResume(); }
 
   async function submitCreateRole() {
     const name  = $('#um-rc-name')?.value?.trim();
@@ -35081,14 +35304,12 @@ async function submitDsCreate() {
 
     if (res.status === 201) {
       closeCreateRoleModal();
-      await loadRolesView();
+      const ids = _umActiveRoleIds();
+      await loadRolesView(ids.listId);
       const newRole = _umRoles.find(r => r.id === res.body.data?.id);
       if (newRole) {
-        const inSettings = $('#pos-settings-modal')?.style.display !== 'none';
-        const listId   = inSettings ? 'psm-role-list' : 'um-role-list';
-        const detailId = inSettings ? 'psm-role-detail' : 'um-role-detail';
-        const card = $(`#${listId} [data-role-id="${newRole.id}"]`);
-        selectRole(newRole, card, detailId);
+        const card = $(`#${ids.listId} [data-role-id="${newRole.id}"]`);
+        selectRole(newRole, card, ids.detailId);
       }
     } else {
       _showModalErr(errEl, res.body?.message || 'Failed to create role.');
@@ -35100,6 +35321,10 @@ async function submitDsCreate() {
     _umRoleEditTarget = role;
     const modal = $('#um-role-edit-modal');
     if (!modal) return;
+    if ($('#bwz-panel-sysconfig')?.style.display !== 'none' && $('#bwz-sc-panel-3')?.style.display !== 'none') {
+      _bwz.billingActive = true; _bwz.billingNextStep = 'sc:3';
+      _bwzGoBehind();
+    }
     await _ensurePermGroups();
 
     // Name field: disabled for system roles
@@ -35125,7 +35350,7 @@ async function submitDsCreate() {
     modal.style.display = 'flex';
   }
 
-  function closeEditRoleModal() { const m = $('#um-role-edit-modal'); if (m) m.style.display = 'none'; }
+  function closeEditRoleModal() { const m = $('#um-role-edit-modal'); if (m) m.style.display = 'none'; _bwzCheckResume(); }
 
   async function submitEditRole() {
     if (!_umRoleEditTarget) return;
@@ -35149,14 +35374,12 @@ async function submitDsCreate() {
 
     if (res.status === 200) {
       closeEditRoleModal();
-      await loadRolesView();
+      const ids = _umActiveRoleIds();
+      await loadRolesView(ids.listId);
       const updated = _umRoles.find(r => r.id === _umRoleEditTarget.id);
       if (updated) {
-        const inSettings = $('#pos-settings-modal')?.style.display !== 'none';
-        const listId   = inSettings ? 'psm-role-list' : 'um-role-list';
-        const detailId = inSettings ? 'psm-role-detail' : 'um-role-detail';
-        const card = $(`#${listId} [data-role-id="${updated.id}"]`);
-        selectRole(updated, card, detailId);
+        const card = $(`#${ids.listId} [data-role-id="${updated.id}"]`);
+        selectRole(updated, card, ids.detailId);
       }
     } else {
       _showModalErr(errEl, res.body?.message || 'Failed to save role.');
@@ -35168,11 +35391,10 @@ async function submitDsCreate() {
     const res = await API.rolesDelete(role.id);
     if (res.status === 200) {
       closeEditRoleModal();
-      await loadRolesView();
+      const ids = _umActiveRoleIds();
+      await loadRolesView(ids.listId);
       // Clear detail in the active context
-      const inSettings = $('#pos-settings-modal')?.style.display !== 'none';
-      const detailId = inSettings ? 'psm-role-detail' : 'um-role-detail';
-      const detail = $(`#${detailId}`);
+      const detail = $(`#${ids.detailId}`);
       if (detail) detail.innerHTML = '<div class="um-detail-empty"><i class="fa fa-shield-halved"></i><p>Select a role to view and edit its permissions</p></div>';
     } else {
       alert(res.body?.message || 'Failed to delete role.');
@@ -35261,10 +35483,12 @@ async function submitDsCreate() {
   // Expose loaders so activateTab can call them
   window.loadUsersView = loadUsersView;
 
-  // Expose for Settings modal Users tab
-  window.loadUsersForSettings = async function() {
-    const list   = $('#psm-users-list');
-    const detail = $('#psm-users-detail');
+  // Expose for Settings modal Users tab (and the wizard's User Management sub-step)
+  window.loadUsersForSettings = async function(listId) {
+    listId = listId || 'psm-users-list';
+    const detailId = listId.replace(/-list$/, '-detail');
+    const list   = $(`#${listId}`);
+    const detail = $(`#${detailId}`);
     if (!list) return;
     list.innerHTML = '<div class="um-loading"><i class="fa fa-spinner fa-spin"></i> Loading users…</div>';
     if (detail) detail.innerHTML = '<div class="um-detail-empty"><i class="fa fa-user-shield"></i><p>Select a user to view their role and permissions</p></div>';
@@ -35283,18 +35507,23 @@ async function submitDsCreate() {
     }
 
     const count = _umUsers.length;
-    const badge = $('#psm-users-count');
-    if (badge) badge.textContent = `${count} user${count !== 1 ? 's' : ''}`;
+    const countLabel = `${count} user${count !== 1 ? 's' : ''}`;
+    ['psm-users-count', 'bwz-sc-users-count'].forEach(id => {
+      const badge = $(`#${id}`);
+      if (badge) badge.textContent = countLabel;
+    });
 
-    renderUserList('psm-users-list');
+    renderUserList(listId);
   };
 
   window.openAddModal = openAddModal;
 
-  // Expose for Settings modal Roles tab
-  window.loadRolesForSettings = async function() {
-    const list   = $('#psm-role-list');
-    const detail = $('#psm-role-detail');
+  // Expose for Settings modal Roles tab (and the wizard's Role Management sub-step)
+  window.loadRolesForSettings = async function(listId) {
+    listId = listId || 'psm-role-list';
+    const detailId = listId.replace(/-list$/, '-detail');
+    const list   = $(`#${listId}`);
+    const detail = $(`#${detailId}`);
     if (!list) return;
     list.innerHTML = '<div class="um-loading"><i class="fa fa-spinner fa-spin"></i> Loading roles…</div>';
     if (detail) detail.innerHTML = '<div class="um-detail-empty"><i class="fa fa-shield-halved"></i><p>Select a role to view its permissions</p></div>';
@@ -35308,10 +35537,13 @@ async function submitDsCreate() {
     if (rolesRes.body.permissions) _buildPermGroupsFromApi(rolesRes.body.permissions);
     if (usersRes.status === 200) _umUsers = usersRes.body.data || [];
 
-    const badge = $('#psm-role-count');
-    if (badge) badge.textContent = `${_umRoles.length} role${_umRoles.length !== 1 ? 's' : ''}`;
+    const countLabel = `${_umRoles.length} role${_umRoles.length !== 1 ? 's' : ''}`;
+    ['psm-role-count', 'bwz-sc-role-count'].forEach(id => {
+      const badge = $(`#${id}`);
+      if (badge) badge.textContent = countLabel;
+    });
 
-    renderRoleList('psm-role-list');
+    renderRoleList(listId);
   };
 
   window.openCreateRoleModal = openCreateRoleModal;
