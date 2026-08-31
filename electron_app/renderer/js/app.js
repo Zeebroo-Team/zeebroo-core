@@ -110,6 +110,18 @@ $('#toggle-dark').addEventListener('change', async (e) => {
   await window.electronAPI.setConfig({ dark_mode: dark });
 });
 
+// Business-level "Display Theme" setting ('light' | 'dark' | 'inherit') — applies
+// the resolved theme to the window and persists it as the local dark-mode config,
+// mirroring the manual toggle above.
+async function applyDisplayTheme(theme) {
+  const dark = theme === 'dark' ? true
+    : theme === 'light' ? false
+    : window.matchMedia?.('(prefers-color-scheme: dark)').matches || false;
+  applyDarkMode(dark);
+  if (state.config) state.config.dark_mode = dark;
+  await window.electronAPI.setConfig({ dark_mode: dark });
+}
+
 // ── Sidebar sub-item definitions ──────────────────────────────────────────
 const _sbSubItems = {
   home: [
@@ -5229,6 +5241,10 @@ function showApp() {
   loadFeatures();
   // Load POS counters for ribbon dropdown
   loadCounters();
+  // Apply the business's saved Display Theme setting (light/dark/inherit)
+  API.settingsGet().then(res => {
+    if (res.status === 200) applyDisplayTheme(res.body?.data?.display_theme ?? 'inherit');
+  });
   // Restore register lock if active
   checkRegisterLock();
   // Start real-time background sync
@@ -5920,6 +5936,8 @@ $('#bwz-sc-theme-save')?.addEventListener('click', async () => {
   const res = await API.settingsUpdate({ display_theme: $('#bwz-sc-theme').value });
   btn.disabled = false; btn.innerHTML = '<i class="fa fa-floppy-disk"></i> Save &amp; Continue';
   if (res.status !== 200) { toast(res.body?.message || 'Failed to save settings', 'error'); return; }
+
+  await applyDisplayTheme($('#bwz-sc-theme').value);
 
   const newLayout = $('#bwz-sc-layout').value;
   if (newLayout !== (state.config?.layout_mode || 'ribbon')) {
@@ -21398,6 +21416,9 @@ $('#psm-save').addEventListener('click', async () => {
 
   // Apply purchase order mode immediately from the toggle
   _applyPurchaseOrderMode(!!$('#psm-purchase-order-enabled')?.checked);
+
+  // Apply display theme immediately from the dropdown
+  await applyDisplayTheme($('#psm-theme').value);
 
   // Sync relevant settings into state so in-session logic stays current
   const saved = res.body?.data || {};
