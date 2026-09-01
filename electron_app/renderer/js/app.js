@@ -7287,7 +7287,7 @@ $('#tpm-settings').addEventListener('click', () => {
 });
 $('#tpm-my-profile').addEventListener('click', () => {
   closeProfileMenu();
-  toast('Profile page coming soon', 'info');
+  openMyProfileModal();
 });
 $('#tpm-notifications').addEventListener('click', () => {
   closeProfileMenu();
@@ -7370,6 +7370,130 @@ $('#about-modal-overlay').addEventListener('click', e => {
 $('#about-check-updates').addEventListener('click', () => {
   _closeAboutModal();
   openUpdateModal();
+});
+
+// ── My Profile modal ────────────────────────────────────────────────────
+function _mpShowAlert(el, msg, isError = true) {
+  el.textContent = msg;
+  el.classList.toggle('qap-alert-success', !isError);
+  el.style.display = 'block';
+}
+
+function _mpHideAlerts() {
+  ['#mp-alert', '#mp-pwd-alert'].forEach(sel => {
+    const el = $(sel);
+    el.style.display = 'none';
+    el.classList.remove('qap-alert-success');
+  });
+}
+
+async function openMyProfileModal() {
+  _mpHideAlerts();
+  $('#mp-f-current-password').value = '';
+  $('#mp-f-new-password').value = '';
+  $('#mp-f-confirm-password').value = '';
+
+  const name  = state._userName  || '';
+  const email = state._userEmail || '';
+  $('#mp-f-name').value  = name;
+  $('#mp-f-email').value = email;
+  $('#mp-avatar').textContent = (name || email || 'A').trim()[0].toUpperCase();
+
+  $('#my-profile-modal-overlay').style.display = 'flex';
+
+  // Refresh from server in case another session changed it
+  const res = await API.me();
+  if (res.status === 200 && res.body?.data) {
+    $('#mp-f-name').value  = res.body.data.name  || name;
+    $('#mp-f-email').value = res.body.data.email || email;
+    $('#mp-avatar').textContent = (res.body.data.name || res.body.data.email || 'A').trim()[0].toUpperCase();
+  }
+}
+
+function _closeMyProfileModal() {
+  $('#my-profile-modal-overlay').style.display = 'none';
+}
+
+$('#my-profile-modal-close').addEventListener('click', _closeMyProfileModal);
+$('#my-profile-modal-cancel').addEventListener('click', _closeMyProfileModal);
+$('#my-profile-modal-overlay').addEventListener('click', e => {
+  if (e.target === $('#my-profile-modal-overlay')) _closeMyProfileModal();
+});
+
+$('#mp-save-profile').addEventListener('click', async () => {
+  const alertEl = $('#mp-alert');
+  alertEl.style.display = 'none';
+  const name  = $('#mp-f-name').value.trim();
+  const email = $('#mp-f-email').value.trim();
+  if (!name || !email) { toast('Name and email are required', 'error'); return; }
+
+  const btn = $('#mp-save-profile');
+  btn.disabled = true;
+  const prevHtml = btn.innerHTML;
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
+
+  const res = await API.updateProfile({ name, email });
+
+  btn.disabled = false;
+  btn.innerHTML = prevHtml;
+
+  if (res.status === 200) {
+    state._userName  = res.body?.data?.name  || name;
+    state._userEmail = res.body?.data?.email || email;
+    const currentBizName = $('#tb-profile-name').textContent;
+    updateProfileUI(currentBizName, state._userEmail, state._userName);
+    toast('Profile updated', 'success');
+    _closeMyProfileModal();
+  } else {
+    const msg = Object.values(res.body?.errors || {}).flat().join(' ') || res.body?.message || 'Failed to update profile';
+    _mpShowAlert(alertEl, msg);
+  }
+});
+
+$('#mp-save-password').addEventListener('click', async () => {
+  const alertEl = $('#mp-pwd-alert');
+  alertEl.style.display = 'none';
+
+  const currentPassword = $('#mp-f-current-password').value;
+  const newPassword     = $('#mp-f-new-password').value;
+  const confirmPassword = $('#mp-f-confirm-password').value;
+
+  if (!currentPassword || !newPassword || !confirmPassword) {
+    toast('Fill in all password fields', 'error');
+    return;
+  }
+  if (newPassword.length < 8) {
+    _mpShowAlert(alertEl, 'New password must be at least 8 characters.');
+    return;
+  }
+  if (newPassword !== confirmPassword) {
+    _mpShowAlert(alertEl, 'New password and confirmation do not match.');
+    return;
+  }
+
+  const btn = $('#mp-save-password');
+  btn.disabled = true;
+  const prevHtml = btn.innerHTML;
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Updating…';
+
+  const res = await API.updatePassword({
+    current_password: currentPassword,
+    password: newPassword,
+    password_confirmation: confirmPassword,
+  });
+
+  btn.disabled = false;
+  btn.innerHTML = prevHtml;
+
+  if (res.status === 200) {
+    $('#mp-f-current-password').value = '';
+    $('#mp-f-new-password').value = '';
+    $('#mp-f-confirm-password').value = '';
+    toast('Password updated', 'success');
+  } else {
+    const msg = Object.values(res.body?.errors || {}).flat().join(' ') || res.body?.message || 'Failed to update password';
+    _mpShowAlert(alertEl, msg);
+  }
 });
 $('#tpm-check-updates').addEventListener('click', () => {
   closeProfileMenu();

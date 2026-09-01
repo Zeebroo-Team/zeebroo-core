@@ -63,8 +63,10 @@ Route::prefix('v1/pos')->group(function (): void {
 });
 
 Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(function (): void {
-    Route::get ('auth/me',     [PosAuthApiController::class, 'me'])->name('auth.me');
-    Route::post('auth/revoke', [PosAuthApiController::class, 'revoke'])->name('auth.revoke');
+    Route::get ('auth/me',       [PosAuthApiController::class, 'me'])->name('auth.me');
+    Route::put ('auth/profile',  [PosAuthApiController::class, 'updateProfile'])->name('auth.profile.update');
+    Route::put ('auth/password', [PosAuthApiController::class, 'updatePassword'])->name('auth.password.update');
+    Route::post('auth/revoke',   [PosAuthApiController::class, 'revoke'])->name('auth.revoke');
     Route::get ('businesses', [PosBusinessesApiController::class, 'index'])->name('businesses.index');
     Route::post('businesses', [PosBusinessesApiController::class, 'store'])->name('businesses.store');
     Route::get('online/bootstrap', PosOnlineBootstrapApiController::class)->name('online.bootstrap');
