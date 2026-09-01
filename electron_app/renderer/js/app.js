@@ -10229,7 +10229,7 @@ function renderBusinessChart(bizName) {
       proOptions: { hideAttribution: true },
       onInit: setRfInst,
       onNodeClick,
-      style: { background: isDark ? '#1a1b2e' : '#f8fafc', width: '100%', height: '100%' },
+      style: { background: isDark ? '#1a1b2e' : '#ffffff', width: '100%', height: '100%' },
     },
       React.createElement(Controls, { showInteractive: false })
     );

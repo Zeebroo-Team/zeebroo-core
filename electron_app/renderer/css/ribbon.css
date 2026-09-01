@@ -5729,7 +5729,7 @@ body.dark .kpi-pill-purple { background: #3b0764; color: #c4b5fd; border-color: 
 
 /* D3 / React Flow chart — fills remaining height */
 #home-chart {
-  flex: 1; overflow: hidden; position: relative; background: var(--bg);
+  flex: 1; overflow: hidden; position: relative; background: #fff;
 }
 #home-chart svg { display: block; }
 
