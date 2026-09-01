@@ -7480,11 +7480,13 @@ async function openUpdateModal() {
 
   body.innerHTML = _renderUpdateAvailable(`
     <div style="display:flex;gap:10px;margin-top:18px;justify-content:flex-end">
-      <button class="po-btn-ghost" onclick="$('#update-modal-overlay').style.display='none'">Later</button>
+      <button class="po-btn-ghost" id="update-later-btn">Later</button>
       ${dlUrl
         ? `<button class="po-btn-primary" id="update-download-btn"><i class="fa fa-download"></i> Download &amp; Install v${escHtml(latest)}</button>`
         : `<span style="font-size:12px;color:var(--text-muted)">No download available for your platform.</span>`}
     </div>`);
+
+  $('#update-later-btn')?.addEventListener('click', _updateModalClose);
 
   if (!dlUrl) return;
 
@@ -7517,11 +7519,12 @@ async function openUpdateModal() {
         <div style="margin-top:14px;padding:10px 12px;background:#fef2f2;border-radius:8px;color:#b91c1c;font-size:13px">
           <i class="fa fa-circle-exclamation"></i> Download failed: ${escHtml(result.error)}
           <div style="margin-top:10px;display:flex;justify-content:flex-end;gap:8px">
-            <button class="po-btn-ghost" onclick="$('#update-modal-overlay').style.display='none'">Close</button>
+            <button class="po-btn-ghost" id="update-later-btn">Close</button>
             <button class="po-btn-primary" id="update-download-btn"><i class="fa fa-rotate-right"></i> Retry</button>
           </div>
         </div>`);
-      // Re-wire retry
+      // Re-wire retry and close
+      $('#update-later-btn')?.addEventListener('click', _updateModalClose);
       $('#update-download-btn')?.addEventListener('click', () => openUpdateModal());
       return;
     }
