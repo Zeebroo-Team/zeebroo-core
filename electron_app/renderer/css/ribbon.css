@@ -6450,6 +6450,7 @@ body.dark .han-icon-amber  { color: #fbbf24; }
 }
 
 .toast.error { background: #dc2626; color: #fff; }
+.toast.clickable { cursor: pointer; }
 
 @keyframes slideIn {
   from { transform: translateX(24px); opacity: 0; }
