@@ -154,7 +154,9 @@ class PosCatalogApiController extends Controller
             $images = collect([['id' => null, 'url' => $product->imageUrl()]]);
         }
 
-        $totalStock = $product->stockLayers->sum('quantity_remaining');
+        $totalStock = $branchStockSeparate && $branchId !== null
+            ? $product->stockLayers->where('branch_id', $branchId)->sum('quantity_remaining')
+            : $product->stockLayers->sum('quantity_remaining');
 
         return response()->json([
             'data' => array_merge($card, [
@@ -232,20 +234,34 @@ class PosCatalogApiController extends Controller
             return response()->json(['message' => 'Product not found.'], 404);
         }
 
+        $branchId = $request->query('branch') ?? $request->header('X-Branch-Id');
+        $branchId = is_numeric($branchId) ? (int) $branchId : null;
+        $branchStockSeparate = (bool) get_settings('business.branch_stock_separate', false, $business);
+
         $layers = $product->stockLayers()
+            ->when(
+                $branchStockSeparate && $branchId !== null,
+                fn ($q) => $q->where('branch_id', $branchId),
+            )
             ->with([
                 'goodsReceiveNoteItem.goodsReceiveNote.purchase.supplier',
+                'stockTransferLine.transfer.fromBranch',
+                'stockTransferLine.transfer.toBranch',
+                'stockTransferLine.transfer.transferredBy',
             ])
             ->orderByDesc('received_at')
             ->orderByDesc('id')
             ->get();
 
         $data = $layers->map(function ($layer) {
-            $grnItem = $layer->goodsReceiveNoteItem;
-            $grn     = $grnItem?->goodsReceiveNote;
-            $po      = $grn?->purchase;
+            $grnItem  = $layer->goodsReceiveNoteItem;
+            $grn      = $grnItem?->goodsReceiveNote;
+            $po       = $grn?->purchase;
+            $transfer = $layer->stockTransferLine?->transfer;
 
-            if ($grnItem === null) {
+            if ($transfer !== null) {
+                $sourceType = 'transfer';
+            } elseif ($grnItem === null) {
                 $sourceType = 'opening';
             } elseif ($po !== null) {
                 $sourceType = 'po';
@@ -269,6 +285,11 @@ class PosCatalogApiController extends Controller
                 'po_number'          => $po?->po_number,
                 'po_id'              => $po?->id,
                 'supplier_name'      => $po?->supplier?->name,
+                'transfer_number'    => $transfer?->transfer_number,
+                'transfer_id'        => $transfer?->id,
+                'from_branch_name'   => $transfer?->fromBranch?->name,
+                'to_branch_name'     => $transfer?->toBranch?->name,
+                'transferred_by_name'=> $transfer?->transferredBy?->name,
             ];
         });
 

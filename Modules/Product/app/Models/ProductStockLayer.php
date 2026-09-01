@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Modules\Business\Models\Branch;
 use Modules\Business\Models\Business;
+use Modules\Pos\Models\StockTransferLine;
 use Modules\Purchase\Models\GoodsReceiveNoteItem;
 
 class ProductStockLayer extends Model
@@ -15,6 +16,7 @@ class ProductStockLayer extends Model
         'branch_id',
         'product_id',
         'goods_receive_note_item_id',
+        'stock_transfer_line_id',
         'batch_sku',
         'quantity_received',
         'quantity_remaining',
@@ -54,6 +56,11 @@ class ProductStockLayer extends Model
     public function goodsReceiveNoteItem(): BelongsTo
     {
         return $this->belongsTo(GoodsReceiveNoteItem::class);
+    }
+
+    public function stockTransferLine(): BelongsTo
+    {
+        return $this->belongsTo(StockTransferLine::class);
     }
 
     public function marginAmount(): ?float

@@ -347,9 +347,14 @@ class GoodsReceiveNoteService
             ? (int) $data['supplier_id']
             : null;
 
-        $grn = DB::transaction(function () use ($business, $user, $data, $lines, $supplierId) {
+        $branchId = isset($data['branch_id']) && (int) $data['branch_id'] > 0
+            ? (int) $data['branch_id']
+            : null;
+
+        $grn = DB::transaction(function () use ($business, $user, $data, $lines, $supplierId, $branchId) {
             $grn = $business->goodsReceiveNotes()->create([
                 'business_id'       => $business->id,
+                'branch_id'         => $branchId,
                 'purchase_id'       => null,
                 'supplier_id'       => $supplierId,
                 'grn_number'        => $this->nextGrnNumber($business),

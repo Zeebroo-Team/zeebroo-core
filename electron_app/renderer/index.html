@@ -2475,6 +2475,7 @@
         <button class="inv-subnav-btn" data-inv-view="grn"><i class="fa fa-truck-ramp-box"></i> Goods Receive</button>
         <button class="inv-subnav-btn" data-inv-view="cheques"><i class="fa fa-money-check"></i> Cheques</button>
         <button class="inv-subnav-btn" data-inv-view="audit"><i class="fa fa-clipboard-list"></i> Stock Audit</button>
+        <button class="inv-subnav-btn" data-inv-view="transfer"><i class="fa fa-right-left"></i> Stock Transfer</button>
         <button class="inv-subnav-btn" data-inv-view="categories"><i class="fa fa-tags"></i> Categories</button>
         <button class="inv-subnav-btn" data-inv-view="units"><i class="fa fa-ruler"></i> Units</button>
         <button class="inv-subnav-btn" data-inv-view="discounts"><i class="fa fa-tag"></i> Discounts</button>
@@ -3206,6 +3207,72 @@
         </div>
       </div><!-- /inv-audit-view -->
 
+      <!-- ── Stock Transfer view ── -->
+      <div id="inv-transfer-view" style="display:none">
+        <div class="po-toolbar">
+          <div class="po-search-wrap">
+            <i class="fa fa-magnifying-glass"></i>
+            <input type="text" id="transfer-search" placeholder="Search transfer #…">
+          </div>
+          <button class="po-add-btn" id="transfer-new-btn" style="padding:6px 14px;gap:6px;font-size:12px;font-weight:700;background:var(--accent);color:#fff;border-color:var(--accent)">
+            <i class="fa fa-plus"></i> New Transfer
+          </button>
+        </div>
+        <div class="po-body">
+          <!-- List -->
+          <div class="po-list-pane">
+            <table class="po-table">
+              <thead><tr>
+                <th>Transfer #</th><th>Route</th><th>Status</th><th>Transferred By</th><th>Date</th>
+              </tr></thead>
+              <tbody id="transfer-tbody"></tbody>
+            </table>
+            <div class="po-footer">
+              <span id="transfer-count">—</span>
+              <div style="display:flex;gap:8px">
+                <button class="grn-pf-btn" id="transfer-prev-btn" disabled><i class="fa fa-chevron-left"></i></button>
+                <span id="transfer-page-label" style="font-size:11px;color:var(--text-muted)"></span>
+                <button class="grn-pf-btn" id="transfer-next-btn" disabled><i class="fa fa-chevron-right"></i></button>
+              </div>
+            </div>
+          </div>
+          <!-- Detail -->
+          <div class="po-detail-pane" id="transfer-detail-pane" style="width:100%;max-width:none;flex:1">
+            <div class="po-detail-empty" id="transfer-detail-empty">
+              <i class="fa fa-right-left"></i>
+              <span>Select a transfer to view its details</span>
+            </div>
+            <div id="transfer-detail-view" style="display:none;flex-direction:column;height:100%">
+              <div class="grn-dv-sticky-header">
+                <div>
+                  <div class="po-dv-number" id="transfer-dv-number"></div>
+                  <div class="po-dv-meta"   id="transfer-dv-meta"></div>
+                </div>
+                <div class="po-dv-actions" id="transfer-dv-actions"></div>
+              </div>
+              <div class="grn-dv-body">
+                <div class="transfer-dv-route" id="transfer-dv-route"></div>
+                <div class="grn-dv-section">
+                  <div class="grn-dv-section-label"><i class="fa fa-clock-rotate-left"></i> History</div>
+                  <div class="transfer-dv-history" id="transfer-dv-audit"></div>
+                </div>
+                <div class="grn-dv-section">
+                  <div class="grn-dv-section-label"><i class="fa fa-boxes-stacked"></i> Items</div>
+                  <div class="grn-dv-table-scroll">
+                    <table class="po-items-table">
+                      <thead><tr>
+                        <th>Product</th><th>SKU</th><th style="text-align:right">Quantity</th><th style="text-align:right">Unit Cost</th>
+                      </tr></thead>
+                      <tbody id="transfer-lines-tbody"></tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div><!-- /inv-transfer-view -->
+
       <!-- ── New Audit Modal ─────────────────────────────────────────── -->
       <div id="audit-modal" class="modal-overlay" style="display:none">
         <div class="po-aim-shell">
@@ -3230,6 +3297,56 @@
           <div class="po-aim-footer">
             <button class="po-btn-ghost" id="audit-modal-cancel"><i class="fa fa-xmark"></i> Cancel</button>
             <button class="po-btn-primary" id="audit-modal-save"><i class="fa fa-clipboard-list"></i> Create Audit</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── New Stock Transfer Modal ─────────────────────────────────────── -->
+      <div id="transfer-modal" class="modal-overlay" style="display:none">
+        <div class="po-aim-shell">
+          <div class="po-aim-header">
+            <i class="fa fa-right-left" style="color:var(--accent)"></i>
+            <span>New Stock Transfer</span>
+            <button class="psm-close" id="transfer-modal-close"><i class="fa fa-xmark"></i></button>
+          </div>
+          <div class="po-aim-body">
+            <div style="display:flex;gap:12px">
+              <div class="po-field" style="flex:1">
+                <label class="po-field-label">From Branch <span class="po-required">*</span></label>
+                <select id="transfer-f-from-branch" class="po-field-input"></select>
+              </div>
+              <div class="po-field" style="flex:1">
+                <label class="po-field-label">To Branch <span class="po-required">*</span></label>
+                <select id="transfer-f-to-branch" class="po-field-input"></select>
+              </div>
+            </div>
+
+            <div class="po-field">
+              <label class="po-field-label">Add Product</label>
+              <div style="display:flex;gap:8px">
+                <div style="position:relative;flex:1">
+                  <input type="text" id="transfer-f-product-search" class="po-field-input" placeholder="Search product…" autocomplete="off">
+                  <div id="transfer-product-dd" class="po-aim-dd" style="display:none"></div>
+                </div>
+                <input type="number" id="transfer-f-qty" class="po-field-input" placeholder="Qty" min="0.001" step="any" style="max-width:110px">
+                <button class="po-btn-primary" id="transfer-f-add-line" type="button" style="white-space:nowrap"><i class="fa fa-plus"></i> Add</button>
+              </div>
+              <input type="hidden" id="transfer-f-product-id">
+            </div>
+
+            <table class="audit-lines-table" style="margin-top:4px">
+              <thead><tr><th>Product</th><th class="audit-th-num">Qty</th><th></th></tr></thead>
+              <tbody id="transfer-f-lines-tbody"></tbody>
+            </table>
+
+            <div class="po-field">
+              <label class="po-field-label">Notes</label>
+              <textarea id="transfer-f-notes" class="po-field-textarea" rows="2" placeholder="Optional notes about this transfer…"></textarea>
+            </div>
+          </div>
+          <div class="po-aim-footer">
+            <button class="po-btn-ghost" id="transfer-modal-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+            <button class="po-btn-primary" id="transfer-modal-save"><i class="fa fa-right-left"></i> Create Transfer</button>
           </div>
         </div>
       </div>
@@ -3684,6 +3801,15 @@
                 <input type="date" id="grn-f-date" class="po-field-input po-field-with-icon">
               </div>
             </div>
+            <div class="po-field" id="grn-field-branch">
+              <label class="po-field-label">Receiving Branch</label>
+              <div class="po-field-icon-wrap">
+                <i class="fa fa-code-branch po-fi"></i>
+                <select id="grn-f-branch" class="po-field-input po-field-with-icon">
+                  <option value="">Loading…</option>
+                </select>
+              </div>
+            </div>
             <div class="po-field" id="grn-field-reference">
               <label class="po-field-label">Reference</label>
               <div class="po-field-icon-wrap">
@@ -3868,6 +3994,15 @@
               <div class="po-field-icon-wrap">
                 <i class="fa fa-calendar po-fi"></i>
                 <input type="date" id="grn-direct-date" class="po-field-input po-field-with-icon">
+              </div>
+            </div>
+            <div class="po-field" id="grn-direct-field-branch">
+              <label class="po-field-label">Receiving Branch</label>
+              <div class="po-field-icon-wrap">
+                <i class="fa fa-code-branch po-fi"></i>
+                <select id="grn-direct-branch" class="po-field-input po-field-with-icon">
+                  <option value="">Loading…</option>
+                </select>
               </div>
             </div>
             <div class="po-field" id="grn-direct-field-reference">
@@ -12486,6 +12621,23 @@
 <div id="receipt-printable" style="display:none"></div>
 
 <div id="toast-container"></div>
+
+<!-- ── Generic Confirm Dialog (replaces native confirm()) ────────────────── -->
+<div id="app-confirm-modal" class="modal-overlay" style="display:none;z-index:2100">
+  <div class="app-confirm-box" id="app-confirm-box">
+    <div class="app-confirm-body">
+      <div class="app-confirm-icon" id="app-confirm-icon"><i class="fa fa-circle-question"></i></div>
+      <div>
+        <div class="app-confirm-title" id="app-confirm-title">Are you sure?</div>
+        <div class="app-confirm-message" id="app-confirm-message"></div>
+      </div>
+    </div>
+    <div class="app-confirm-footer">
+      <button class="app-confirm-cancel" id="app-confirm-cancel-btn">Cancel</button>
+      <button class="app-confirm-submit" id="app-confirm-submit-btn"><i class="fa fa-check"></i> Confirm</button>
+    </div>
+  </div>
+</div>
 
 <!-- ── Sales Order Confirmation Modal ──────────────────────────────────── -->
 <div id="so-confirm-modal" class="modal-overlay" style="display:none;z-index:1050">

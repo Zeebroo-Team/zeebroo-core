@@ -284,6 +284,13 @@ const API = (() => {
     finalizeAudit:    (id)            => request('POST',   `/stock-audits/${id}/finalize`),
     deleteAudit:      (id)            => request('DELETE', `/stock-audits/${id}`),
 
+    // Stock Transfers
+    stockTransfers:       (page, q) => request('GET', `/stock-transfers?page=${page||1}&q=${encodeURIComponent(q||'')}`),
+    stockTransfer:        (id)   => request('GET',  `/stock-transfers/${id}`),
+    createStockTransfer:  (body) => request('POST', '/stock-transfers', body),
+    receiveStockTransfer: (id)   => request('POST', `/stock-transfers/${id}/receive`, {}),
+    cancelStockTransfer:  (id)   => request('POST', `/stock-transfers/${id}/cancel`, {}),
+
     // Cheques
     cheques:       (filter)           => request('GET',  `/cheques?filter=${filter||'all'}`),
     clearCheque:   (id, body)         => request('POST', `/cheques/${id}/clear`, body || {}),

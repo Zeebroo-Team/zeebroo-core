@@ -430,9 +430,17 @@ class PosCatalogService
             );
         }
 
+        $stockQuantity = $branchStockSeparate && $branchId !== null
+            ? (float) ProductStockLayer::query()
+                ->where('product_id', $product->id)
+                ->where('business_id', $product->business_id)
+                ->where('branch_id', $branchId)
+                ->sum('quantity_remaining')
+            : (float) $product->stock_quantity;
+
         return [
             'unit_sell_price' => $unitSell,
-            'stock_quantity' => round((float) $product->stock_quantity, 3),
+            'stock_quantity' => round($stockQuantity, 3),
             'has_layers' => $layer !== null,
         ];
     }
