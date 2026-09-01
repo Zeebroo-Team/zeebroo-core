@@ -53,13 +53,14 @@ let bodyPos = '', pgStack = '', lhLayer = '';
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => document.querySelectorAll(sel);
 
-function toast(msg, type = 'info') {
-  if (type === 'success') return;
+function toast(msg, type = 'info', onClick = null) {
+  if (type === 'success' && !onClick) return;
   const el = document.createElement('div');
-  el.className = `toast ${type}`;
+  el.className = `toast ${type}${onClick ? ' clickable' : ''}`;
   el.textContent = msg;
+  if (onClick) el.addEventListener('click', () => { onClick(); el.remove(); });
   $('#toast-container').appendChild(el);
-  setTimeout(() => el.remove(), 3500);
+  setTimeout(() => el.remove(), onClick ? 10000 : 3500);
 }
 
 function setStatus(msg) { $('#status-text').textContent = msg; }
@@ -5254,6 +5255,8 @@ function showApp() {
   checkRegisterLock();
   // Start real-time background sync
   _syncStart();
+  // Silently check for a new desktop app version, once the app has settled
+  setTimeout(() => _autoCheckForUpdate(), 4000);
 }
 
 // ── Bank Account Setup Wizard ──────────────────────────────────────────────
@@ -7545,6 +7548,19 @@ async function openUpdateModal() {
       });
     }
   });
+}
+
+// Silent background check run after login — if a newer version is published,
+// pop the full "Check for Updates" dialog automatically so the user can't miss it.
+async function _autoCheckForUpdate() {
+  try {
+    const current = state.config?.app_version || '0.0.0';
+    const res     = await window.electronAPI.checkForUpdate();
+    const release = res?.body?.data;
+    if (!release || !_semverGt(release.version, current)) return;
+
+    openUpdateModal();
+  } catch (_) { /* silent — user can still check manually from the About modal */ }
 }
 $('#tpm-logout').addEventListener('click', async () => {
   closeProfileMenu();

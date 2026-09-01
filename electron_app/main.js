@@ -306,8 +306,8 @@ ipcMain.handle('open-external', (_e, url) => shell.openExternal(url));
 ipcMain.handle('check-for-update', () => new Promise(resolve => {
   const https = require('https');
   const http  = require('http');
-  const base  = API_BASE_URL.replace(/\/$/, '');
-  const url   = new URL(base + '/api/releases/latest');
+  const origin = new URL(API_BASE_URL).origin;
+  const url    = new URL(origin + '/api/releases/latest');
   const lib   = url.protocol === 'https:' ? https : http;
   lib.get(url.toString(), { headers: { Accept: 'application/json' } }, res => {
     let d = '';
