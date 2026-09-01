@@ -199,44 +199,59 @@ ipcMain.handle('check-for-update', () => new Promise(resolve => {
 
 // ── Update download with progress ─────────────────────────────────────────
 ipcMain.handle('download-update', async (_e, { url, filename }) => {
-  const https  = require('https');
-  const http   = require('http');
-  const os     = require('os');
+  const https = require('https');
+  const http  = require('http');
 
   const dest = path.join(app.getPath('downloads'), filename);
-  const lib  = url.startsWith('https') ? https : http;
 
   return new Promise((resolve) => {
     const file = fs.createWriteStream(dest);
 
-    const request = lib.get(url, (res) => {
-      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        // Follow redirect
-        file.close(() => fs.unlink(dest, () => {}));
-        ipcMain.emit('download-update', _e, { url: res.headers.location, filename });
-        resolve(null); // caller retries via redirect — handled client-side
-        return;
-      }
-      const total = parseInt(res.headers['content-length'] || '0', 10);
-      let received = 0;
-      res.on('data', chunk => {
-        received += chunk.length;
-        if (total > 0) {
-          const pct = Math.round((received / total) * 100);
-          _e.sender.send('download-progress', pct);
-        }
-        file.write(chunk);
-      });
-      res.on('end', () => {
-        file.end();
-        resolve({ path: dest });
-      });
-    });
+    function fetch(currentUrl, redirectsLeft) {
+      const lib = currentUrl.startsWith('https') ? https : http;
 
-    request.on('error', (err) => {
-      file.close(() => fs.unlink(dest, () => {}));
-      resolve({ error: err.message });
-    });
+      const request = lib.get(currentUrl, (res) => {
+        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+          if (redirectsLeft <= 0) {
+            file.close(() => fs.unlink(dest, () => {}));
+            resolve({ error: 'Too many redirects' });
+            return;
+          }
+          // Follow redirect on the same request/promise
+          const nextUrl = new URL(res.headers.location, currentUrl).toString();
+          fetch(nextUrl, redirectsLeft - 1);
+          return;
+        }
+
+        if (res.statusCode >= 400) {
+          file.close(() => fs.unlink(dest, () => {}));
+          resolve({ error: `Server responded with ${res.statusCode}` });
+          return;
+        }
+
+        const total = parseInt(res.headers['content-length'] || '0', 10);
+        let received = 0;
+        res.on('data', chunk => {
+          received += chunk.length;
+          if (total > 0) {
+            const pct = Math.round((received / total) * 100);
+            _e.sender.send('download-progress', pct);
+          }
+          file.write(chunk);
+        });
+        res.on('end', () => {
+          file.end();
+          resolve({ path: dest });
+        });
+      });
+
+      request.on('error', (err) => {
+        file.close(() => fs.unlink(dest, () => {}));
+        resolve({ error: err.message });
+      });
+    }
+
+    fetch(url, 5);
   });
 });
 
