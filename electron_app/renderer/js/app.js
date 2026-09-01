@@ -7472,7 +7472,7 @@ async function openUpdateModal() {
           <span style="color:var(--text-muted)">New version</span>
           <span style="font-weight:700;color:#22c55e">v${escHtml(latest)}</span>
         </div>
-        ${release.release_date ? `<div style="display:flex;justify-content:space-between;margin-top:4px"><span style="color:var(--text-muted)">Released</span><span>${escHtml(release.release_date)}</span></div>` : ''}
+        ${release.release_date ? `<div style="display:flex;justify-content:space-between;margin-top:4px"><span style="color:var(--text-muted)">Released</span><span>${escHtml(new Date(release.release_date).toLocaleDateString(undefined, { month:'short', day:'numeric', year:'numeric' }))}</span></div>` : ''}
       </div>
       ${notes}
       ${extraHtml}`;
