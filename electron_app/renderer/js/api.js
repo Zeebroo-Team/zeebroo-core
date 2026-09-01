@@ -24,6 +24,8 @@ const API = (() => {
       publicRequest('POST', '/auth/register', { name, business_name: businessName, business_category: businessCategory, features, email, password, password_confirmation: password, device_name: deviceName }),
     businessCategories: () => publicRequest('GET', '/auth/business-categories'),
     me:                 () => request('GET', '/auth/me'),
+    updateProfile:      (body) => request('PUT', '/auth/profile', body),
+    updatePassword:     (body) => request('PUT', '/auth/password', body),
 
     // Business selection
     businesses:      ()     => request('GET',  '/businesses'),

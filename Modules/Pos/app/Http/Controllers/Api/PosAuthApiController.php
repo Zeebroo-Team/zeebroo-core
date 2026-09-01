@@ -8,6 +8,7 @@ use App\Models\UserActivityLog;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
 use Modules\Auth\Services\AuthService;
@@ -121,6 +122,48 @@ class PosAuthApiController extends Controller
                 'name'  => $user->name,
                 'email' => $user->email,
             ],
+        ]);
+    }
+
+    public function updateProfile(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        $validated = $request->validate([
+            'name'  => ['required', 'string', 'max:255'],
+            'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
+        ]);
+
+        $user->update($validated);
+
+        return response()->json([
+            'data' => [
+                'id'    => (int) $user->id,
+                'name'  => $user->name,
+                'email' => $user->email,
+            ],
+        ]);
+    }
+
+    public function updatePassword(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        $validated = $request->validate([
+            'current_password' => ['required', 'string'],
+            'password'         => ['required', 'confirmed', Password::min(8)],
+        ]);
+
+        if (! Hash::check($validated['current_password'], (string) $user->password)) {
+            throw ValidationException::withMessages([
+                'current_password' => ['The current password is incorrect.'],
+            ]);
+        }
+
+        $user->update(['password' => $validated['password']]);
+
+        return response()->json([
+            'message' => 'Password updated.',
         ]);
     }
 
