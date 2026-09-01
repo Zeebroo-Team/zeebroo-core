@@ -7376,7 +7376,10 @@ $('#tpm-check-updates').addEventListener('click', () => {
   openUpdateModal();
 });
 
+let _updateModalForced = false; // true = mandatory update, Later/✕ disabled
+
 function _updateModalClose() {
+  if (_updateModalForced) return;
   $('#update-modal-overlay').style.display = 'none';
 }
 $('#update-modal-close').addEventListener('click', _updateModalClose);
@@ -7392,10 +7395,13 @@ function _semverGt(a, b) {
   return false;
 }
 
-async function openUpdateModal() {
+async function openUpdateModal(force = false) {
   const overlay = $('#update-modal-overlay');
   const body    = $('#update-modal-body');
   overlay.style.display = 'flex';
+  // Reset to closable while we don't yet know if there's a mandatory update
+  _updateModalForced = false;
+  $('#update-modal-close').style.display = '';
 
   body.innerHTML = `<div style="text-align:center;padding:20px 0;color:var(--text-muted)">
     <i class="fa fa-spinner fa-spin" style="font-size:28px;margin-bottom:14px;display:block"></i>
@@ -7434,9 +7440,11 @@ async function openUpdateModal() {
                   : release.linux_url;
 
   const notes = Array.isArray(release.notes) && release.notes.length
-    ? `<ul style="margin:8px 0 0;padding-left:18px;font-size:13px;color:var(--text-muted)">
-        ${release.notes.map(n => `<li>${escHtml(n)}</li>`).join('')}
-       </ul>`
+    ? `<div style="max-height:160px;overflow-y:auto;margin-top:8px;padding-right:4px">
+        <ul style="margin:0;padding-left:18px;font-size:13px;color:var(--text-muted)">
+          ${release.notes.map(n => `<li style="margin-bottom:4px">${escHtml(n)}</li>`).join('')}
+        </ul>
+       </div>`
     : '';
 
   if (!hasUpdate) {
@@ -7478,9 +7486,17 @@ async function openUpdateModal() {
       ${extraHtml}`;
   }
 
+  // Auto-triggered checks (app launch / login) force the update through —
+  // no Later, no ✕ — as long as there's actually something to download.
+  if (force && dlUrl) {
+    _updateModalForced = true;
+    $('#update-modal-close').style.display = 'none';
+  }
+
   body.innerHTML = _renderUpdateAvailable(`
+    ${_updateModalForced ? `<div style="font-size:12px;color:var(--text-muted);margin-top:14px">This update is required to continue using Zeebroo POS.</div>` : ''}
     <div style="display:flex;gap:10px;margin-top:18px;justify-content:flex-end">
-      <button class="po-btn-ghost" id="update-later-btn">Later</button>
+      ${_updateModalForced ? '' : '<button class="po-btn-ghost" id="update-later-btn">Later</button>'}
       ${dlUrl
         ? `<button class="po-btn-primary" id="update-download-btn"><i class="fa fa-download"></i> Download &amp; Install v${escHtml(latest)}</button>`
         : `<span style="font-size:12px;color:var(--text-muted)">No download available for your platform.</span>`}
@@ -7562,7 +7578,7 @@ async function _autoCheckForUpdate() {
     const release = res?.body?.data;
     if (!release || !_semverGt(release.version, current)) return;
 
-    openUpdateModal();
+    openUpdateModal(true); // forced — triggered by app launch / login, not a manual check
   } catch (_) { /* silent — user can still check manually from the About modal */ }
 }
 $('#tpm-logout').addEventListener('click', async () => {
