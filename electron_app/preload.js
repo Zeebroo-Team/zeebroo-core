@@ -79,16 +79,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   kdsFullscreen:    (flag)   => ipcRenderer.send('kds-fullscreen', flag),
   kdsIsFullScreen:  ()       => ipcRenderer.invoke('kds-is-fullscreen'),
 
-  // Auto-updater
-  appVersion:             ()   => ipcRenderer.invoke('app-version'),
-  updateCheckNow:         ()   => ipcRenderer.invoke('update-check-now'),
-  updateStartDownload:    ()   => ipcRenderer.send('update-start-download'),
-  updateInstallAndRestart:()   => ipcRenderer.send('update-install-and-restart'),
-  onUpdateAvailable:      (cb) => ipcRenderer.on('update-available',        (_e, info)     => cb(info)),
-  onUpdateDownloadProgress:(cb)=> ipcRenderer.on('update-download-progress', (_e, progress) => cb(progress)),
-  onUpdateDownloaded:     (cb) => ipcRenderer.on('update-downloaded',        (_e, info)     => cb(info)),
-  onUpdateError:          (cb) => ipcRenderer.on('update-error',             (_e, err)      => cb(err)),
-
-  // Dev-only: simulate update popup states
-  updateSimulate: (state) => ipcRenderer.send('update-simulate', state),
+  // App version (shown in About modal, compared in Check for Updates)
+  appVersion: () => ipcRenderer.invoke('app-version'),
 });
