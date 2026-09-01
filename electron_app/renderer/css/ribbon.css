@@ -6869,6 +6869,8 @@ body.dark .han-icon-amber  { color: #fbbf24; }
 .po-status-badge.partially_received { background: rgba(245,158,11,.1); color: #d97706; }
 .po-status-badge.received         { background: rgba(34,197,94,.1);   color: #16a34a; }
 .po-status-badge.cancelled        { background: rgba(239,68,68,.1);   color: #dc2626; }
+.po-status-badge.in_transit       { background: rgba(59,130,246,.1);  color: #3b82f6; }
+.po-status-badge.completed        { background: rgba(16,185,129,.1); color: #059669; }
 
 .po-footer {
   display: flex; align-items: center; justify-content: space-between;
@@ -7005,6 +7007,19 @@ body.dark .han-icon-amber  { color: #fbbf24; }
   font-size: 12px; color: var(--text-muted);
 }
 .po-aim-preview strong { font-size: 15px; color: var(--accent); }
+.po-aim-dd {
+  position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+  z-index: 999;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; box-shadow: 0 8px 28px rgba(0,0,0,.18);
+  max-height: 220px; overflow-y: auto;
+  animation: ssIn .12s ease;
+}
+.po-aim-dd-item {
+  padding: 9px 12px; cursor: pointer; font-size: 13px;
+  transition: background .08s; outline: none;
+}
+.po-aim-dd-item:hover, .po-aim-dd-item:focus { background: var(--accent-light); }
 .po-aim-footer {
   display: flex; justify-content: flex-end; gap: 8px;
   padding: 12px 16px; border-top: 1px solid var(--border); background: var(--surface2);
@@ -8530,17 +8545,23 @@ body.dark .inv-badge-purple { background: #2e1065; color: #c4b5fd; }
 .inv-src-po {
   background: #fef3c7; color: #b45309; border: 1px solid #fde68a;
 }
+.inv-src-transfer {
+  background: #f5f3ff; color: #6d28d9; border: 1px solid #ddd6fe;
+}
 @media (prefers-color-scheme: dark) {
   .inv-src-opening { background: #1e3a5f; color: #93c5fd; border-color: #1e40af; }
   .inv-src-grn     { background: #14352a; color: #86efac; border-color: #166534; }
   .inv-src-po      { background: #3d2906; color: #fcd34d; border-color: #92400e; }
+  .inv-src-transfer{ background: #2e1065; color: #c4b5fd; border-color: #5b21b6; }
 }
 :root[data-theme="dark"] .inv-src-opening { background: #1e3a5f; color: #93c5fd; border-color: #1e40af; }
 :root[data-theme="dark"] .inv-src-grn     { background: #14352a; color: #86efac; border-color: #166534; }
 :root[data-theme="dark"] .inv-src-po      { background: #3d2906; color: #fcd34d; border-color: #92400e; }
+:root[data-theme="dark"] .inv-src-transfer{ background: #2e1065; color: #c4b5fd; border-color: #5b21b6; }
 :root[data-theme="light"] .inv-src-opening { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
 :root[data-theme="light"] .inv-src-grn     { background: #f0fdf4; color: #15803d; border-color: #bbf7d0; }
 :root[data-theme="light"] .inv-src-po      { background: #fef3c7; color: #b45309; border-color: #fde68a; }
+:root[data-theme="light"] .inv-src-transfer{ background: #f5f3ff; color: #6d28d9; border-color: #ddd6fe; }
 
 .inv-grn-meta-lines {
   display: flex; flex-direction: column; gap: 2px;
@@ -11409,6 +11430,66 @@ body.dark .bc-main-preview-body { background: #1a1a1a; }
 .so-confirm-submit:hover   { opacity: .88; }
 .so-confirm-submit:disabled { opacity: .55; cursor: default; }
 /* ── End Sales Order Confirmation Modal ───────────────── */
+
+/* ── Generic Confirm Dialog (replaces native confirm()) ─ */
+.app-confirm-box {
+  background: var(--surface); border-radius: 16px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.28);
+  width: 400px; max-width: 92vw;
+  display: flex; flex-direction: column; overflow: hidden;
+  animation: slideIn .15s ease;
+}
+.app-confirm-body { display: flex; gap: 14px; padding: 22px 22px 6px; }
+.app-confirm-icon {
+  width: 42px; height: 42px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent);
+}
+.app-confirm-box.danger .app-confirm-icon { background: rgba(239,68,68,.12); color: #dc2626; }
+.app-confirm-title   { font-size: 15px; font-weight: 800; color: var(--text); margin-bottom: 4px; }
+.app-confirm-message { font-size: 13px; color: var(--text-muted); line-height: 1.5; }
+.app-confirm-footer {
+  display: flex; gap: 10px; justify-content: flex-end;
+  padding: 18px 22px; flex-shrink: 0;
+}
+.app-confirm-cancel {
+  padding: 9px 18px; border-radius: 9px; border: 1.5px solid var(--border);
+  background: var(--surface2); color: var(--text); font-size: 13px; font-weight: 600;
+  cursor: pointer; font-family: inherit; transition: background .12s;
+}
+.app-confirm-cancel:hover { background: var(--surface3); }
+.app-confirm-submit {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 9px 22px; border-radius: 9px; border: none;
+  background: var(--accent); color: #fff; font-size: 13px; font-weight: 700;
+  cursor: pointer; font-family: inherit; transition: opacity .12s;
+}
+.app-confirm-box.danger .app-confirm-submit { background: #dc2626; }
+.app-confirm-submit:hover { opacity: .88; }
+/* ── End Generic Confirm Dialog ────────────────────────── */
+
+/* ── Stock Transfer detail: route card + history timeline ─ */
+.transfer-dv-route {
+  display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 10px;
+}
+.transfer-dv-route-arrow {
+  width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--surface2); color: var(--accent); font-size: 12px;
+}
+.transfer-dv-history { padding: 10px 12px; display: flex; flex-direction: column; gap: 12px; }
+.transfer-dv-history-item { display: flex; gap: 10px; align-items: flex-start; font-size: 12px; color: var(--text); }
+.transfer-dv-history-icon {
+  width: 24px; height: 24px; border-radius: 50%; flex-shrink: 0; margin-top: 1px;
+  display: flex; align-items: center; justify-content: center; font-size: 10px;
+  background: var(--surface2); color: var(--text-muted);
+}
+.transfer-dv-history-icon.sent      { background: rgba(59,130,246,.12); color: #3b82f6; }
+.transfer-dv-history-icon.received  { background: rgba(34,197,94,.12);  color: #16a34a; }
+.transfer-dv-history-icon.cancelled { background: rgba(239,68,68,.12);  color: #dc2626; }
+.transfer-dv-history-time { color: var(--text-muted); font-size: 10.5px; margin-top: 2px; }
+/* ── End Stock Transfer detail ─────────────────────────── */
 
 /* ── Barcode Preview Modal ────────────────────────────── */
 .bc-preview-modal {

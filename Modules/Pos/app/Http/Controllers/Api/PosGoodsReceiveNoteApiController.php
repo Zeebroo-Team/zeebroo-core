@@ -97,6 +97,7 @@ class PosGoodsReceiveNoteApiController extends Controller
         $this->abortUnlessPerm($request, $business, 'inv_purchasing');
 
         $validated = $request->validate([
+            'branch_id'          => ['nullable', 'integer', Rule::exists('branches', 'id')->where(fn ($q) => $q->where('business_id', $business->id))],
             'received_date'      => ['required', 'date'],
             'reference'          => ['nullable', 'string', 'max:120'],
             'notes'              => ['nullable', 'string', 'max:5000'],
@@ -150,6 +151,7 @@ class PosGoodsReceiveNoteApiController extends Controller
 
         $validated = $request->validate([
             'supplier_id'        => ['nullable', 'integer', 'min:1'],
+            'branch_id'          => ['nullable', 'integer', Rule::exists('branches', 'id')->where(fn ($q) => $q->where('business_id', $business->id))],
             'received_date'      => ['required', 'date'],
             'reference'          => ['nullable', 'string', 'max:120'],
             'notes'              => ['nullable', 'string', 'max:5000'],

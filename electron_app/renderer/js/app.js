@@ -63,6 +63,41 @@ function toast(msg, type = 'info', onClick = null) {
   setTimeout(() => el.remove(), onClick ? 10000 : 3500);
 }
 
+// ── Custom confirm dialog (replaces native confirm()) ────────────────────
+let _appConfirmResolve = null;
+function appConfirm(opts) {
+  if (typeof opts === 'string') opts = { message: opts };
+  const {
+    title = 'Are you sure?',
+    message = '',
+    confirmText = '<i class="fa fa-check"></i> Confirm',
+    cancelText = 'Cancel',
+    icon = 'fa-circle-question',
+    danger = false,
+  } = opts;
+  return new Promise(resolve => {
+    _appConfirmResolve = resolve;
+    $('#app-confirm-box').classList.toggle('danger', !!danger);
+    $('#app-confirm-icon').innerHTML = `<i class="fa ${icon}"></i>`;
+    $('#app-confirm-title').textContent = title;
+    $('#app-confirm-message').textContent = message;
+    $('#app-confirm-cancel-btn').textContent = cancelText;
+    $('#app-confirm-submit-btn').innerHTML = confirmText;
+    $('#app-confirm-modal').style.display = 'flex';
+    setTimeout(() => $('#app-confirm-submit-btn')?.focus(), 30);
+  });
+}
+function _appConfirmClose(result) {
+  $('#app-confirm-modal').style.display = 'none';
+  if (_appConfirmResolve) { _appConfirmResolve(result); _appConfirmResolve = null; }
+}
+$('#app-confirm-cancel-btn')?.addEventListener('click', () => _appConfirmClose(false));
+$('#app-confirm-submit-btn')?.addEventListener('click', () => _appConfirmClose(true));
+$('#app-confirm-modal')?.addEventListener('click', e => { if (e.target.id === 'app-confirm-modal') _appConfirmClose(false); });
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && $('#app-confirm-modal')?.style.display === 'flex') _appConfirmClose(false);
+});
+
 function setStatus(msg) { $('#status-text').textContent = msg; }
 
 // ── Window controls ────────────────────────────────────────────────────────
@@ -155,6 +190,7 @@ const _sbSubItems = {
     { view:'discounts',      icon:'fa-tag',                  label:'Discounts' },
     { view:'suppliers',      icon:'fa-building-user',        label:'Suppliers' },
     { view:'audit',          icon:'fa-clipboard-list',       label:'Stock Audit' },
+    { view:'transfer',       icon:'fa-right-left',           label:'Stock Transfer' },
     { view:'po',             icon:'fa-file-invoice',         label:'Purchase Orders' },
     { view:'grn',            icon:'fa-truck-ramp-box',       label:'Goods Receive' },
     { view:'cheques',        icon:'fa-money-check',          label:'Cheques' },
@@ -401,6 +437,7 @@ function _bsAction(action) {
     case 'navDiscounts':     nav('inventory','discounts'); break;
     case 'navSuppliers':     nav('inventory','suppliers'); break;
     case 'navAudit':         nav('inventory','audit'); break;
+    case 'navTransfer':      nav('inventory','transfer'); break;
     case 'navPO':            nav('inventory','po'); break;
     case 'navGRN':           nav('inventory','grn'); break;
     case 'navCheques':       nav('inventory','cheques'); break;
@@ -4534,11 +4571,12 @@ function applyFeatureVisibility() {
   // ── Inventory ──
   const inv_products   = (bf('product_management'))                          && mp('inv_products');
   const inv_audit      = (bf('product_management') || bf('stock_management'))&& mp('inv_audit');
+  const inv_transfer   = (bf('product_management') || bf('stock_management'))&& mp('inv_transfer');
   const inv_discounts  = (bf('product_management'))                          && mp('inv_discounts');
   const inv_purchasing = (bf('stock_management'))                            && mp('inv_purchasing');
   const inv_suppliers  = (bf('product_management') || bf('stock_management'))&& mp('inv_suppliers');
   const inv_barcodes   = (bf('product_management') || bf('stock_management'))&& mp('inv_barcodes');
-  const inv_any        = inv_products || inv_audit || inv_discounts || inv_purchasing || inv_suppliers || inv_barcodes;
+  const inv_any        = inv_products || inv_audit || inv_transfer || inv_discounts || inv_purchasing || inv_suppliers || inv_barcodes;
 
   // ── Finance ──
   const fin_bills      = bf('bill_management') && mp('fin_bills');
@@ -4932,7 +4970,7 @@ function applyFeatureVisibility() {
     if (invGrps[3]) invGrps[3].style.display = (mp('inv_btn_suppliers')||mp('inv_btn_add_supplier')) ? '' : 'none';
     if (invGrps[4]) invGrps[4].style.display = mp('inv_btn_barcodes') ? '' : 'none'; }
   // ── Inventory panel: sub-nav tab gating with fallback ──
-  { const _invTabPerms = { products: mp('inv_tab_products'), suppliers: mp('inv_tab_suppliers'), po: mp('inv_tab_po'), grn: mp('inv_tab_grn'), cheques: mp('inv_tab_cheques'), audit: mp('inv_tab_audit'), categories: mp('inv_tab_categories'), units: mp('inv_tab_units'), discounts: mp('inv_tab_discounts'), brands: mp('inv_tab_brands'), barcodes: mp('inv_tab_barcodes') };
+  { const _invTabPerms = { products: mp('inv_tab_products'), suppliers: mp('inv_tab_suppliers'), po: mp('inv_tab_po'), grn: mp('inv_tab_grn'), cheques: mp('inv_tab_cheques'), audit: mp('inv_tab_audit'), transfer: mp('inv_tab_transfer'), categories: mp('inv_tab_categories'), units: mp('inv_tab_units'), discounts: mp('inv_tab_discounts'), brands: mp('inv_tab_brands'), barcodes: mp('inv_tab_barcodes') };
     $$('.inv-subnav-btn').forEach(b => { b.style.display = _invTabPerms[b.dataset.invView] ? '' : 'none'; });
     const _invActive = $('.inv-subnav-btn.active');
     if (_invActive && !_invTabPerms[_invActive.dataset.invView]) {
@@ -5074,7 +5112,7 @@ function applyFeatureVisibility() {
   // ── Backstage sections ──
   const pos  = pos_any;
   const prod = inv_products || inv_audit || inv_discounts;
-  const stock= inv_purchasing || inv_suppliers || inv_barcodes;
+  const stock= inv_purchasing || inv_suppliers || inv_barcodes || inv_transfer;
   const bill = fin_any;
   const hr   = hr_any;
   const camp = design_all;
@@ -10475,7 +10513,7 @@ $('#inv-back-btn').addEventListener('click', () => {
 
 // ── Inventory sub-nav switching ───────────────────────────────────────────
 function switchInvView(view) {
-  const views = { products: '#inv-products-view', suppliers: '#inv-suppliers-view', po: '#inv-po-view', grn: '#inv-grn-view', cheques: '#inv-cheques-view', audit: '#inv-audit-view', categories: '#inv-categories-view', units: '#inv-units-view', discounts: '#inv-discounts-view', brands: '#inv-brands-view', barcodes: '#inv-barcodes-view' };
+  const views = { products: '#inv-products-view', suppliers: '#inv-suppliers-view', po: '#inv-po-view', grn: '#inv-grn-view', cheques: '#inv-cheques-view', audit: '#inv-audit-view', transfer: '#inv-transfer-view', categories: '#inv-categories-view', units: '#inv-units-view', discounts: '#inv-discounts-view', brands: '#inv-brands-view', barcodes: '#inv-barcodes-view' };
   Object.entries(views).forEach(([k, sel]) => {
     const el = $(sel);
     if (el) el.style.display = k === view ? 'flex' : 'none';
@@ -10487,6 +10525,7 @@ function switchInvView(view) {
   if (view === 'grn')       _grnLoad();
   if (view === 'cheques')   _chqLoad();
   if (view === 'audit')      _auditLoad();
+  if (view === 'transfer')   _transferLoad();
   if (view === 'categories') _catLoad();
   if (view === 'units')      _unitLoad();
   if (view === 'discounts')  _discLoad();
@@ -12222,6 +12261,23 @@ document.getElementById('grn-modal-settings-btn')?.addEventListener('click', e =
 })();
 
 // ── Create GRN Modal ──────────────────────────────────────────────────────
+async function _grnPopulateBranchSelect(sel) {
+  if (!sel) return;
+  sel.innerHTML = '<option value="">Loading…</option>';
+  const res = await API.branchesList();
+  const branches = res.status === 200 ? (res.body?.data ?? []) : [];
+  if (!branches.length) {
+    sel.innerHTML = '<option value="">No branches found</option>';
+    return;
+  }
+  sel.innerHTML = '<option value="">— Unassigned —</option>'
+    + branches.map(b => `<option value="${b.id}">${escHtml(b.name)}</option>`).join('');
+  const curBranchId = state.config?.branch_id;
+  if (curBranchId && branches.some(b => b.id === curBranchId)) {
+    sel.value = String(curBranchId);
+  }
+}
+
 async function _grnOpenCreateModal(purchaseId) {
   _grn.formPurchaseId = purchaseId;
   _grn.formItems = [];
@@ -12252,6 +12308,9 @@ async function _grnOpenCreateModal(purchaseId) {
   }
   const accSel = $('#grn-f-account');
   accSel.innerHTML = _grn.accounts.map(a => `<option value="${a.id}">${a.account_name || a.name}</option>`).join('');
+
+  // Load branches — defaults to the currently active branch (top-bar switcher)
+  _grnPopulateBranchSelect($('#grn-f-branch'));
 
   // Load PO items for this form
   $('#grn-items-tbody').innerHTML = `<tr><td colspan="7" style="text-align:center;padding:20px"><i class="fa fa-spinner fa-spin"></i> Loading items…</td></tr>`;
@@ -12391,6 +12450,7 @@ async function _grnSubmitCreate() {
   const isCash    = method === 'cash' || method === 'cheque';
   const body = {
     received_date:       $('#grn-f-date').value,
+    branch_id:           parseInt($('#grn-f-branch')?.value) || null,
     reference:           $('#grn-f-reference').value.trim() || null,
     notes:               $('#grn-f-notes').value.trim() || null,
     payment_method:      method,
@@ -12635,6 +12695,9 @@ function _dgrnOpen() {
   // Load accounts into dropdown
   _dgrnLoadAccounts();
 
+  // Load branches — defaults to the currently active branch (top-bar switcher)
+  _grnPopulateBranchSelect($('#grn-direct-branch'));
+
   // Apply field visibility prefs
   _applyGrnPrefs();
 
@@ -12855,6 +12918,7 @@ async function _dgrnSubmit() {
 
   const body = {
     supplier_id:  parseInt($('#grn-direct-supplier')?.value) || null,
+    branch_id:    parseInt($('#grn-direct-branch')?.value) || null,
     received_date: dateVal,
     reference:    $('#grn-direct-reference')?.value.trim() || null,
     notes:        $('#grn-direct-notes')?.value.trim()     || null,
@@ -13361,6 +13425,331 @@ $('#audit-search')?.addEventListener('input', e => {
 });
 
 // ── End Stock Audit ───────────────────────────────────────────────────────
+
+// ── Stock Transfer ───────────────────────────────────────────────────────
+const _transfer = {
+  page: 1, lastPage: 1, total: 0, q: '',
+  activeId: null, activeTransfer: null,
+  pendingLines: [], // [{product_id, name, sku, qty}] — being built in the create modal
+};
+let _transferSearchTimer;
+let _transferProdTimer;
+
+async function _transferLoad() {
+  const tbody = $('#transfer-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = `<tr><td colspan="5" class="inv-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</td></tr>`;
+  const res = await API.stockTransfers(_transfer.page, _transfer.q);
+  if (res.status !== 200) {
+    tbody.innerHTML = `<tr><td colspan="5" class="inv-loading" style="color:#ef4444"><i class="fa fa-triangle-exclamation"></i> Failed to load</td></tr>`;
+    return;
+  }
+  const list = res.body?.data ?? [];
+  _transfer.lastPage = res.body?.meta?.last_page ?? 1;
+  _transfer.total    = res.body?.meta?.total ?? list.length;
+  _transferRenderList(list);
+}
+
+function _transferStatusBadge(status) {
+  const labels = { in_transit: 'In Transit', completed: 'Completed', cancelled: 'Cancelled' };
+  return `<span class="po-status-badge ${status}">${labels[status] || status}</span>`;
+}
+
+function _transferRenderList(list) {
+  const tbody = $('#transfer-tbody');
+  $('#transfer-count').textContent = `${_transfer.total} transfer${_transfer.total !== 1 ? 's' : ''}`;
+  const prevBtn = $('#transfer-prev-btn'); const nextBtn = $('#transfer-next-btn');
+  const pageLabel = $('#transfer-page-label');
+  if (prevBtn) prevBtn.disabled = _transfer.page <= 1;
+  if (nextBtn) nextBtn.disabled = _transfer.page >= _transfer.lastPage;
+  if (pageLabel) pageLabel.textContent = _transfer.lastPage > 1 ? `${_transfer.page} / ${_transfer.lastPage}` : '';
+
+  if (!list.length) {
+    tbody.innerHTML = `<tr><td colspan="5" class="inv-loading" style="color:var(--text-muted)"><i class="fa fa-inbox"></i> No stock transfers yet</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = list.map(t => `<tr class="po-row${_transfer.activeId === t.id ? ' po-row-active' : ''}" data-transfer-id="${t.id}">
+      <td><strong>${escHtml(t.transfer_number)}</strong></td>
+      <td>${escHtml(t.from_branch?.name || '—')} <i class="fa fa-arrow-right" style="font-size:9px;color:var(--text-muted);margin:0 2px"></i> ${escHtml(t.to_branch?.name || '—')}</td>
+      <td>${_transferStatusBadge(t.status)}</td>
+      <td>${escHtml(t.transferred_by?.name || '—')}</td>
+      <td style="font-size:11px;color:var(--text-muted)">${t.transferred_at ? t.transferred_at.slice(0, 10) : '—'}</td>
+    </tr>`).join('');
+
+  tbody.querySelectorAll('.po-row').forEach(row => {
+    row.addEventListener('click', () => _transferSelect(+row.dataset.transferId));
+  });
+}
+
+async function _transferSelect(id) {
+  _transfer.activeId = id;
+  const res0 = await API.stockTransfers(_transfer.page, _transfer.q);
+  if (res0.status === 200) _transferRenderList(res0.body?.data ?? []);
+
+  _transferShowDetail(false);
+  const res = await API.stockTransfer(id);
+  if (res.status !== 200) { toast('Failed to load transfer', 'error'); return; }
+  _transfer.activeTransfer = res.body?.data ?? res.body;
+  _transferRenderDetail(_transfer.activeTransfer);
+}
+
+function _transferShowDetail(show) {
+  const empty = $('#transfer-detail-empty');
+  const view  = $('#transfer-detail-view');
+  if (!empty || !view) return;
+  empty.style.display = show ? 'none' : 'flex';
+  view.style.display  = show ? 'flex' : 'none';
+}
+
+function _transferRenderDetail(t) {
+  $('#transfer-dv-number').textContent = t.transfer_number;
+  $('#transfer-dv-meta').innerHTML = `${_transferStatusBadge(t.status)}${t.notes ? ' &nbsp;|&nbsp; ' + escHtml(t.notes) : ''}`;
+
+  const actDiv = $('#transfer-dv-actions');
+  actDiv.innerHTML = '';
+  if (t.status === 'in_transit') {
+    const recvBtn = document.createElement('button');
+    recvBtn.className = 'po-dv-action-btn primary';
+    recvBtn.innerHTML = '<i class="fa fa-check"></i> Mark as Received';
+    recvBtn.addEventListener('click', () => _transferReceive(t.id));
+    actDiv.appendChild(recvBtn);
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'po-dv-action-btn danger';
+    cancelBtn.innerHTML = '<i class="fa fa-ban"></i> Cancel';
+    cancelBtn.addEventListener('click', () => _transferCancel(t.id));
+    actDiv.appendChild(cancelBtn);
+  }
+
+  $('#transfer-dv-route').innerHTML = `
+    <div class="grn-dv-party">
+      <div class="grn-dv-party-label"><i class="fa fa-warehouse"></i> From</div>
+      <div class="grn-dv-party-name">${escHtml(t.from_branch?.name || '—')}</div>
+    </div>
+    <div class="transfer-dv-route-arrow"><i class="fa fa-arrow-right"></i></div>
+    <div class="grn-dv-party grn-dv-party-biz">
+      <div class="grn-dv-party-label">To <i class="fa fa-warehouse"></i></div>
+      <div class="grn-dv-party-name">${escHtml(t.to_branch?.name || '—')}</div>
+    </div>`;
+
+  const hist = [];
+  if (t.transferred_by) hist.push({ cls: 'sent',      icon: 'fa-arrow-up-from-bracket',   label: 'Transferred by', who: t.transferred_by.name, at: t.transferred_at });
+  if (t.received_by)    hist.push({ cls: 'received',  icon: 'fa-arrow-down-to-bracket',   label: 'Received by',    who: t.received_by.name,    at: t.received_at });
+  if (t.cancelled_by)   hist.push({ cls: 'cancelled', icon: 'fa-ban',                     label: 'Cancelled by',   who: t.cancelled_by.name,   at: t.cancelled_at });
+  $('#transfer-dv-audit').innerHTML = hist.map(h => `
+      <div class="transfer-dv-history-item">
+        <div class="transfer-dv-history-icon ${h.cls}"><i class="fa ${h.icon}"></i></div>
+        <div>
+          <div>${h.label} <strong>${escHtml(h.who)}</strong></div>
+          <div class="transfer-dv-history-time">${(h.at || '').slice(0, 16).replace('T', ' ')}</div>
+        </div>
+      </div>`).join('') || `<div class="grn-dv-no-data"><i class="fa fa-circle-info"></i> No history yet</div>`;
+
+  const lines = t.lines ?? [];
+  $('#transfer-lines-tbody').innerHTML = lines.map(l => `<tr>
+      <td>${escHtml(l.product_name)}</td>
+      <td style="color:var(--text-muted);font-size:11px">${escHtml(l.sku || '—')}</td>
+      <td style="text-align:right">${parseFloat(l.quantity)}</td>
+      <td style="text-align:right">${parseFloat(l.unit_cost).toFixed(2)}</td>
+    </tr>`).join('') || `<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--text-muted)">No line items</td></tr>`;
+
+  _transferShowDetail(true);
+}
+
+async function _transferReceive(id) {
+  const ok = await appConfirm({
+    title: 'Mark as received?',
+    message: 'Stock will be added to the destination branch.',
+    icon: 'fa-truck-ramp-box',
+    confirmText: '<i class="fa fa-check"></i> Mark as Received',
+  });
+  if (!ok) return;
+  const res = await API.receiveStockTransfer(id);
+  if (res.status === 200) {
+    toast('Transfer received — stock updated', 'success');
+    _transfer.activeTransfer = res.body?.data ?? res.body;
+    _transferRenderDetail(_transfer.activeTransfer);
+    _transferLoad();
+  } else {
+    toast(res.body?.message || 'Failed to receive transfer', 'error');
+  }
+}
+
+async function _transferCancel(id) {
+  const ok = await appConfirm({
+    title: 'Cancel this transfer?',
+    message: 'The stock deducted from the source branch will be restored.',
+    icon: 'fa-ban',
+    danger: true,
+    confirmText: '<i class="fa fa-ban"></i> Cancel Transfer',
+    cancelText: 'Keep Transfer',
+  });
+  if (!ok) return;
+  const res = await API.cancelStockTransfer(id);
+  if (res.status === 200) {
+    toast('Transfer cancelled — stock restored', 'success');
+    _transfer.activeTransfer = res.body?.data ?? res.body;
+    _transferRenderDetail(_transfer.activeTransfer);
+    _transferLoad();
+  } else {
+    toast(res.body?.message || 'Failed to cancel transfer', 'error');
+  }
+}
+
+// ── Create-transfer modal ──
+// Pass presetProduct ({id, name}) to open the modal with that product already
+// selected (e.g. from a product's Stock tab) so the user doesn't have to search for it.
+async function _transferOpenModal(presetProduct) {
+  _transfer.pendingLines = [];
+  $('#transfer-f-notes').value = '';
+  $('#transfer-f-product-search').value = presetProduct ? presetProduct.name : '';
+  $('#transfer-f-product-id').value = presetProduct ? presetProduct.id : '';
+  $('#transfer-f-qty').value = '';
+  $('#transfer-product-dd').style.display = 'none';
+  _transferRenderPendingLines();
+
+  const fromSel = $('#transfer-f-from-branch');
+  const toSel   = $('#transfer-f-to-branch');
+  fromSel.innerHTML = '<option value="">Loading…</option>';
+  toSel.innerHTML   = '<option value="">Loading…</option>';
+
+  const res = await API.branchesList();
+  const branches = res.status === 200 ? (res.body?.data ?? []) : [];
+  const opts = branches.map(b => `<option value="${b.id}">${escHtml(b.name)}</option>`).join('');
+  fromSel.innerHTML = opts || '<option value="">No branches found</option>';
+  toSel.innerHTML   = opts || '<option value="">No branches found</option>';
+
+  $('#transfer-modal').style.display = 'flex';
+  setTimeout(() => (presetProduct ? $('#transfer-f-qty') : $('#transfer-f-product-search'))?.focus(), 60);
+}
+
+function _transferRenderPendingLines() {
+  const tbody = $('#transfer-f-lines-tbody');
+  if (!_transfer.pendingLines.length) {
+    tbody.innerHTML = `<tr><td colspan="3" style="text-align:center;padding:14px;color:var(--text-muted);font-size:11px">No products added yet</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = _transfer.pendingLines.map((l, i) => `<tr>
+      <td>${escHtml(l.name)}</td>
+      <td style="text-align:right">${l.qty}</td>
+      <td style="text-align:center"><button type="button" class="po-btn-ghost transfer-remove-line" data-idx="${i}" style="padding:2px 8px;font-size:11px"><i class="fa fa-xmark"></i></button></td>
+    </tr>`).join('');
+  tbody.querySelectorAll('.transfer-remove-line').forEach(btn => {
+    btn.addEventListener('click', () => {
+      _transfer.pendingLines.splice(+btn.dataset.idx, 1);
+      _transferRenderPendingLines();
+    });
+  });
+}
+
+function _transferSearchProducts(q) {
+  clearTimeout(_transferProdTimer);
+  const dd = $('#transfer-product-dd');
+  if (!q) { dd.style.display = 'none'; return; }
+  _transferProdTimer = setTimeout(async () => {
+    dd.innerHTML = '<div style="padding:8px 12px;font-size:12px;color:var(--text-muted)"><i class="fa fa-spinner fa-spin"></i></div>';
+    dd.style.display = 'block';
+    const res = await API.discountProductOpts(q);
+    if (res.status !== 200) { dd.style.display = 'none'; return; }
+    const products = res.body?.data || [];
+    if (!products.length) {
+      dd.innerHTML = '<div style="padding:8px 12px;font-size:12px;color:var(--text-muted)">No products found</div>';
+      return;
+    }
+    dd.innerHTML = products.map(p => `<div class="po-aim-dd-item" data-id="${p.id}" data-name="${escHtml(p.name)}" data-sku="${escHtml(p.sku || '')}">${escHtml(p.name)}</div>`).join('');
+    dd.querySelectorAll('.po-aim-dd-item').forEach(item => {
+      item.addEventListener('click', () => {
+        $('#transfer-f-product-search').value = item.dataset.name;
+        $('#transfer-f-product-id').value = item.dataset.id;
+        $('#transfer-f-product-id').dataset.sku = item.dataset.sku;
+        dd.style.display = 'none';
+        $('#transfer-f-qty')?.focus();
+      });
+    });
+  }, 280);
+}
+
+function _transferAddLine() {
+  const id   = parseInt($('#transfer-f-product-id').value) || 0;
+  const name = $('#transfer-f-product-search').value.trim();
+  const qty  = parseFloat($('#transfer-f-qty').value) || 0;
+
+  if (!id)      { toast('Search and select a product', 'error'); return; }
+  if (qty <= 0) { toast('Enter a quantity greater than zero', 'error'); return; }
+
+  const existing = _transfer.pendingLines.find(l => l.product_id === id);
+  if (existing) {
+    existing.qty = Math.round((existing.qty + qty) * 1000) / 1000;
+  } else {
+    _transfer.pendingLines.push({ product_id: id, name, qty: Math.round(qty * 1000) / 1000 });
+  }
+  _transferRenderPendingLines();
+
+  $('#transfer-f-product-search').value = '';
+  $('#transfer-f-product-id').value = '';
+  $('#transfer-f-qty').value = '';
+  $('#transfer-product-dd').style.display = 'none';
+  $('#transfer-f-product-search')?.focus();
+}
+
+async function _transferSave() {
+  const fromBranch = parseInt($('#transfer-f-from-branch').value) || 0;
+  const toBranch   = parseInt($('#transfer-f-to-branch').value) || 0;
+
+  if (!fromBranch || !toBranch) { toast('Select both branches', 'error'); return; }
+  if (fromBranch === toBranch)  { toast('Source and destination branches must be different', 'error'); return; }
+  if (!_transfer.pendingLines.length) { toast('Add at least one product', 'error'); return; }
+
+  const btn = $('#transfer-modal-save');
+  btn.disabled = true;
+  const res = await API.createStockTransfer({
+    from_branch_id: fromBranch,
+    to_branch_id:   toBranch,
+    notes:          $('#transfer-f-notes').value.trim() || null,
+    lines:          _transfer.pendingLines.map(l => ({ product_id: l.product_id, quantity: l.qty })),
+  });
+  btn.disabled = false;
+
+  if (res.status === 201) {
+    toast(`${res.body?.data?.transfer_number || 'Transfer'} created`, 'success');
+    $('#transfer-modal').style.display = 'none';
+    await _transferLoad();
+    const created = res.body?.data;
+    if (created?.id) _transferSelect(created.id);
+  } else {
+    const msg = res.body?.errors ? Object.values(res.body.errors).flat()[0] : (res.body?.message || 'Failed to create transfer');
+    toast(msg, 'error');
+  }
+}
+
+// ── Stock Transfer event listeners ─────────────────────────────────────────
+$('#transfer-new-btn')?.addEventListener('click', () => _transferOpenModal());
+$('#transfer-modal-close')?.addEventListener('click',  () => { $('#transfer-modal').style.display = 'none'; });
+$('#transfer-modal-cancel')?.addEventListener('click', () => { $('#transfer-modal').style.display = 'none'; });
+$('#transfer-modal-save')?.addEventListener('click', _transferSave);
+$('#transfer-f-add-line')?.addEventListener('click', _transferAddLine);
+$('#transfer-f-product-search')?.addEventListener('input', e => {
+  $('#transfer-f-product-id').value = '';
+  _transferSearchProducts(e.target.value.trim());
+});
+document.addEventListener('click', e => {
+  const dd = $('#transfer-product-dd');
+  if (dd && !e.target.closest('#transfer-f-product-search') && !e.target.closest('#transfer-product-dd')) {
+    dd.style.display = 'none';
+  }
+});
+
+$('#transfer-prev-btn')?.addEventListener('click', () => { if (_transfer.page > 1) { _transfer.page--; _transferLoad(); } });
+$('#transfer-next-btn')?.addEventListener('click', () => { if (_transfer.page < _transfer.lastPage) { _transfer.page++; _transferLoad(); } });
+
+$('#transfer-search')?.addEventListener('input', e => {
+  clearTimeout(_transferSearchTimer);
+  _transfer.q = e.target.value.trim();
+  _transfer.page = 1;
+  _transferSearchTimer = setTimeout(_transferLoad, 300);
+});
+
+// ── End Stock Transfer ───────────────────────────────────────────────────
 
 // ── Product Categories ────────────────────────────────────────────────────
 const _cat = {
@@ -14202,9 +14591,10 @@ async function _bcOpenStockModal(productId, productName, productSku, productQty,
     const date     = h.received_at ? new Date(h.received_at).toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }) : '—';
     const qtyStatusCls = qtyLeft <= 0 ? 'srh-qty-depleted' : qtyLeft < qtyIn ? 'srh-qty-partial' : 'srh-qty-full';
     let srcBadge;
-    if (src === 'opening') srcBadge = `<span class="inv-src-badge inv-src-opening"><i class="fa fa-box-open"></i> Opening Stock</span>`;
-    else if (src === 'po') srcBadge = `<span class="inv-src-badge inv-src-po"><i class="fa fa-file-invoice"></i> PO — ${escHtml(h.po_number||'')}</span>`;
-    else                   srcBadge = `<span class="inv-src-badge inv-src-grn"><i class="fa fa-truck-ramp-box"></i> GRN — ${escHtml(h.grn_number||'')}</span>`;
+    if (src === 'opening')       srcBadge = `<span class="inv-src-badge inv-src-opening"><i class="fa fa-box-open"></i> Opening Stock</span>`;
+    else if (src === 'po')       srcBadge = `<span class="inv-src-badge inv-src-po"><i class="fa fa-file-invoice"></i> PO — ${escHtml(h.po_number||'')}</span>`;
+    else if (src === 'transfer') srcBadge = `<span class="inv-src-badge inv-src-transfer"><i class="fa fa-right-left"></i> Transfer from ${escHtml(h.from_branch_name||'—')}</span>`;
+    else                          srcBadge = `<span class="inv-src-badge inv-src-grn"><i class="fa fa-truck-ramp-box"></i> GRN — ${escHtml(h.grn_number||'')}</span>`;
     const price = sell ? `${cur}${sell}` : '';
     return `<div class="bc-stock-row">
       <div class="bc-stock-row-info">
@@ -16968,6 +17358,13 @@ function renderProductDetail(p, stockHistory = []) {
           h.grn_number   ? `<span class="srh-ref-chip srh-ref-grn"><i class="fa fa-truck-ramp-box"></i> ${escHtml(h.grn_number)}</span>` : '',
           h.supplier_name? `<span class="srh-ref-chip srh-ref-sup"><i class="fa fa-building-user"></i> ${escHtml(h.supplier_name)}</span>` : '',
         ].filter(Boolean).join('');
+      } else if (src === 'transfer') {
+        badgeHtml = `<span class="inv-src-badge inv-src-transfer"><i class="fa fa-right-left"></i> Stock Transfer</span>`;
+        refHtml   = [
+          h.transfer_number     ? `<span class="srh-ref-chip srh-ref-grn"><i class="fa fa-hashtag"></i> ${escHtml(h.transfer_number)}</span>` : '',
+          h.from_branch_name    ? `<span class="srh-ref-chip srh-ref-ref"><i class="fa fa-right-from-bracket"></i> from ${escHtml(h.from_branch_name)}</span>` : '',
+          h.transferred_by_name ? `<span class="srh-ref-chip srh-ref-sup"><i class="fa fa-user"></i> ${escHtml(h.transferred_by_name)}</span>` : '',
+        ].filter(Boolean).join('');
       } else {
         badgeHtml = `<span class="inv-src-badge inv-src-grn"><i class="fa fa-truck-ramp-box"></i> Goods Receive</span>`;
         refHtml   = [
@@ -17035,7 +17432,10 @@ function renderProductDetail(p, stockHistory = []) {
 
   $('#inv-pane-stock').innerHTML = `
     <div class="inv-section">
-      <div class="inv-section-title"><i class="fa fa-boxes-stacked"></i> Stock Information</div>
+      <div class="inv-section-title" style="display:flex;align-items:center;justify-content:space-between">
+        <span><i class="fa fa-boxes-stacked"></i> Stock Information</span>
+        <button class="po-btn-ghost" id="stock-tab-transfer-btn" style="font-size:11px;padding:4px 10px;gap:5px"><i class="fa fa-right-left"></i> Transfer Stock</button>
+      </div>
       <table class="inv-detail-table">
         ${stockRows.map(([label, val]) => `
           <tr><td class="inv-dt-label">${escHtml(String(label))}</td><td class="inv-dt-val">${val}</td></tr>`).join('')}
@@ -17046,6 +17446,11 @@ function renderProductDetail(p, stockHistory = []) {
   _bindLayerCostSave(p.id, stockHistory);
   _bindLayerPriceSave(p.id, stockHistory);
   _bindLayerWholesaleSave(p.id, stockHistory);
+
+  // Shortcut: open the Stock Transfer modal with this product already selected
+  $('#stock-tab-transfer-btn')?.addEventListener('click', () => {
+    _transferOpenModal({ id: p.id, name: p.name });
+  });
 
   // ── Images tab ──
   if (images.length) {
@@ -34934,6 +35339,7 @@ async function submitDsCreate() {
       { key: 'inv_btn_categories',  label: 'Categories',       desc: 'Ribbon Catalog: Categories button' },
       { key: 'inv_btn_units',       label: 'Units',            desc: 'Ribbon Catalog: Units of measure button' },
       { key: 'inv_btn_audit',       label: 'Stock Audit',      desc: 'Ribbon Stock: Stock Audit button' },
+      { key: 'inv_btn_transfer',    label: 'Stock Transfer',   desc: 'Ribbon Stock: Stock Transfer button' },
       { key: 'inv_btn_brands',      label: 'Brands',           desc: 'Ribbon Stock: Brands button' },
       { key: 'inv_btn_discounts',   label: 'Discounts',        desc: 'Ribbon Stock: Discounts button' },
       { key: 'inv_btn_orders',      label: 'Purchase Orders',  desc: 'Ribbon Purchasing: Purchase Orders button' },
@@ -34950,6 +35356,7 @@ async function submitDsCreate() {
       { key: 'inv_tab_grn',        label: 'Tab: Goods Receive',   desc: 'Inventory panel: Goods Receive sub-nav tab' },
       { key: 'inv_tab_cheques',    label: 'Tab: Cheques',         desc: 'Inventory panel: Cheques sub-nav tab' },
       { key: 'inv_tab_audit',      label: 'Tab: Stock Audit',     desc: 'Inventory panel: Stock Audit sub-nav tab' },
+      { key: 'inv_tab_transfer',   label: 'Tab: Stock Transfer',  desc: 'Inventory panel: Stock Transfer sub-nav tab' },
       { key: 'inv_tab_categories', label: 'Tab: Categories',      desc: 'Inventory panel: Categories sub-nav tab' },
       { key: 'inv_tab_units',      label: 'Tab: Units',           desc: 'Inventory panel: Units sub-nav tab' },
       { key: 'inv_tab_discounts',  label: 'Tab: Discounts',       desc: 'Inventory panel: Discounts sub-nav tab' },
@@ -34987,6 +35394,7 @@ async function submitDsCreate() {
       { key: 'inv_discounts',  label: 'Brands & Discounts',    desc: 'Manage product brands and discount schemes' },
       { key: 'inv_purchasing', label: 'Purchase Orders & GRN', desc: 'Raise purchase orders and receive goods (GRN)' },
       { key: 'inv_suppliers',  label: 'Suppliers',             desc: 'View and manage supplier records' },
+      { key: 'inv_transfer',   label: 'Stock Transfer',        desc: 'Move stock between branches and receive incoming transfers' },
       { key: 'inv_barcodes',   label: 'Barcode Printing',      desc: 'Generate and print product barcodes and labels' },
     ]},
     { key: 'finance', label: 'Finance & Accounts', icon: 'fa-file-invoice-dollar', color: '#22c55e', items: [
