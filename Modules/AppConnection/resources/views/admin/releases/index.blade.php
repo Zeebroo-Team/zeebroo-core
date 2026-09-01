@@ -16,7 +16,8 @@
 
 /* ── table card ── */
 .arl-card{border:1px solid var(--border);border-radius:16px;overflow:hidden;background:var(--card);}
-.arl-table{width:100%;border-collapse:collapse;}
+.arl-table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+.arl-table{width:100%;min-width:760px;border-collapse:collapse;}
 .arl-table th{padding:11px 16px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;
     color:var(--muted);background:color-mix(in srgb,var(--card) 88%,var(--border));text-align:left;
     border-bottom:1px solid var(--border);}
@@ -106,6 +107,20 @@
     border:1px solid var(--border);background:color-mix(in srgb,var(--card) 94%,transparent);cursor:pointer;}
 .arl-check-row input[type=checkbox]{width:15px;height:15px;accent-color:var(--primary);cursor:pointer;flex-shrink:0;}
 .arl-check-row span{font-size:13.5px;color:var(--text);}
+
+/* ── responsive ── */
+@media (max-width:640px){
+  .arl-wrap{max-width:100%;}
+  .arl-header{gap:12px;}
+  .arl-add-btn{width:100%;justify-content:center;}
+  .arl-field-row{grid-template-columns:1fr;gap:0;}
+  .arl-modal-overlay{padding:12px;}
+  .arl-modal-shell{max-width:100%;}
+  .arl-modal-body{padding:16px;}
+  .arl-modal-head{padding:16px 16px 12px;}
+  .arl-modal-foot{padding:12px 16px;flex-wrap:wrap;}
+  .arl-modal-foot button{flex:1;justify-content:center;}
+}
 </style>
 
 <div class="arl-wrap">
@@ -138,6 +153,7 @@
         <p class="arl-empty-sub">Click <strong>New Release</strong> to publish your first version.</p>
       </div>
     @else
+      <div class="arl-table-scroll">
       <table class="arl-table">
         <thead>
           <tr>
@@ -257,6 +273,7 @@
           @endforeach
         </tbody>
       </table>
+      </div>
     @endif
   </div>
 
