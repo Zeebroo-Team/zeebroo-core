@@ -10828,6 +10828,9 @@ body.dark .pc-modal-head {
 /* ── Stock Audit View ─────────────────────────────────── */
 #inv-audit-view { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 
+/* ── Stock Transfer View ──────────────────────────────── */
+#inv-transfer-view { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+
 #audit-detail-view { display: flex; flex-direction: column; height: 100%; }
 
 .audit-lines-table { width: 100%; border-collapse: collapse; font-size: 12px; }
