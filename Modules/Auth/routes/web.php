@@ -37,6 +37,7 @@ Route::middleware(['auth', 'role:admin'])->prefix('admin')->name('admin.')->grou
     // App Releases
     Route::get('/releases', [AppReleaseController::class, 'index'])->name('releases.index');
     Route::post('/releases', [AppReleaseController::class, 'store'])->name('releases.store');
+    Route::put('/releases/{release}', [AppReleaseController::class, 'update'])->name('releases.update');
     Route::post('/releases/{release}/set-latest', [AppReleaseController::class, 'setLatest'])->name('releases.set-latest');
     Route::delete('/releases/{release}', [AppReleaseController::class, 'destroy'])->name('releases.destroy');
 });

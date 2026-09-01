@@ -5,6 +5,7 @@ namespace Modules\AppConnection\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 use Modules\AppConnection\Models\AppRelease;
 
@@ -19,8 +20,36 @@ class AppReleaseController extends Controller
 
     public function store(Request $request): RedirectResponse
     {
+        $data = $this->validateRelease($request);
+
+        if (!empty($data['is_latest'])) {
+            AppRelease::where('channel', $data['channel'])->update(['is_latest' => false]);
+        }
+
+        $release = AppRelease::create($data);
+
+        return redirect()->route('admin.releases.index')
+            ->with('success', 'Release v' . $release->version . ' published.');
+    }
+
+    public function update(Request $request, AppRelease $release): RedirectResponse
+    {
+        $data = $this->validateRelease($request, $release);
+
+        if (!empty($data['is_latest'])) {
+            AppRelease::where('channel', $data['channel'])->where('id', '!=', $release->id)->update(['is_latest' => false]);
+        }
+
+        $release->update($data);
+
+        return redirect()->route('admin.releases.index')
+            ->with('success', 'Release v' . $release->version . ' updated.');
+    }
+
+    private function validateRelease(Request $request, ?AppRelease $release = null): array
+    {
         $data = $request->validate([
-            'version'      => ['required', 'string', 'max:32'],
+            'version'      => ['required', 'string', 'max:32', Rule::unique('app_releases', 'version')->ignore($release?->id)],
             'release_date' => ['required', 'date'],
             'channel'      => ['required', 'in:stable,beta,alpha,rc'],
             'is_latest'    => ['boolean'],
@@ -37,14 +66,7 @@ class AppReleaseController extends Controller
             ->values()
             ->all();
 
-        if (!empty($data['is_latest'])) {
-            AppRelease::where('channel', $data['channel'])->update(['is_latest' => false]);
-        }
-
-        AppRelease::updateOrCreate(['version' => $data['version']], $data);
-
-        return redirect()->route('admin.releases.index')
-            ->with('success', 'Release ' . $data['version'] . ' saved.');
+        return $data;
     }
 
     public function setLatest(AppRelease $release): RedirectResponse
