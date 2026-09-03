@@ -129,6 +129,7 @@ class BusinessMember extends Model
                     ['key' => 'pos_btn_accounts',       'label' => 'Accounts',            'desc' => 'Ribbon Customers: Accounts/wallet button'],
                     ['key' => 'pos_btn_settings',       'label' => 'POS Settings',        'desc' => 'Ribbon Configure: POS Settings button'],
                     ['key' => 'pos_btn_receipt_editor', 'label' => 'Receipt Editor',      'desc' => 'Ribbon Configure: Receipt Editor button'],
+                    ['key' => 'pos_btn_pos_refresh',    'label' => 'Refresh',             'desc' => 'Ribbon Configure: Refresh products button'],
                     ['key' => 'pos_btn_ribbon_stats',   'label' => "Today's Stats",       'desc' => 'Ribbon: Today\'s sales stats display'],
                 ],
             ],

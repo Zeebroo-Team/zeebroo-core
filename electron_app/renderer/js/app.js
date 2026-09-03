@@ -3188,7 +3188,7 @@ async function showInvoicePreviewModal(inv) {
   }
 
   const ic    = _isetupGetCfg();
-  const tpl   = INV_TEMPLATES.find(t => t.id === ic.template) || INV_TEMPLATES[0];
+  const tpl   = _isetupResolveTpl(ic.template, ic.color);
   const mg    = { top: ic.mgTop, bot: ic.mgBot, left: ic.mgLeft, right: ic.mgRight };
   const frame = document.getElementById('invp-frame');
 
@@ -3211,7 +3211,7 @@ async function showInvoicePreviewModal(inv) {
 
 async function _invPrint(inv) {
   const ic     = _isetupGetCfg();
-  const tpl    = INV_TEMPLATES.find(t => t.id === ic.template) || INV_TEMPLATES[0];
+  const tpl    = _isetupResolveTpl(ic.template, ic.color);
   const mg     = { top: ic.mgTop, bot: ic.mgBot, left: ic.mgLeft, right: ic.mgRight };
   const lhFull = await _fetchLetterhead();
   let   lhDataUrl = null;
@@ -4691,6 +4691,7 @@ function applyFeatureVisibility() {
   grp('#rb-customers',      pos_customers);                          // Customers
   grp('#rb-pos-settings',   pos_checkout || pos_session);            // Configure
   grp('#rb-receipt-editor', pos_checkout || pos_session);            // Receipt editor
+  grp('#rb-pos-refresh',    pos_checkout || pos_session);            // Refresh products
   // Within the Sales group: individual button gating (btn declared below)
   // (defined after btn helper in Sales Create section)
 
@@ -4892,6 +4893,7 @@ function applyFeatureVisibility() {
   btn('#rb-accounts',       mp('pos_btn_accounts'));
   btn('#rb-pos-settings',   mp('pos_btn_settings'));
   btn('#rb-receipt-editor', mp('pos_btn_receipt_editor'));
+  btn('#rb-pos-refresh',    mp('pos_btn_pos_refresh'));
   { const el = $('#pos-ribbon-stats'); if (el) el.style.display = mp('pos_btn_ribbon_stats') ? '' : 'none'; }
   // Auto-hide POS ribbon groups when all their buttons are hidden
   { const posGrps = $$('[data-page="pos"] .ribbon-group');
@@ -4899,7 +4901,7 @@ function applyFeatureVisibility() {
     if (posGrps[1]) posGrps[1].style.display = (mp('pos_btn_checkout')||mp('pos_btn_return')||mp('pos_btn_clear_cart')) ? '' : 'none';
     if (posGrps[2]) posGrps[2].style.display = (mp('pos_btn_search')||mp('pos_btn_barcode')||mp('pos_btn_add_product')) ? '' : 'none';
     if (posGrps[3]) posGrps[3].style.display = (mp('pos_btn_customers')||mp('pos_btn_accounts')) ? '' : 'none';
-    if (posGrps[4]) posGrps[4].style.display = (mp('pos_btn_settings')||mp('pos_btn_receipt_editor')) ? '' : 'none'; }
+    if (posGrps[4]) posGrps[4].style.display = (mp('pos_btn_settings')||mp('pos_btn_receipt_editor')||mp('pos_btn_pos_refresh')) ? '' : 'none'; }
   // ── POS panel: fine-grained per-element permission gating ──
   { const el = $('#pos-tab-add'); if (el) el.style.display = mp('pos_panel_tab_add') ? '' : 'none'; }
   { const el = $('.pos-mode-btn[data-mode="products"]');
@@ -20800,12 +20802,21 @@ const INV_TEMPLATES = [
   { id: 'executive', name: 'Executive',   desc: 'Dark luxury header with gold accent trim',    swatch: '#1e1b4b', accent: '#c7a84f' },
 ];
 
-let _isetupActiveTpl = 'classic';
+let _isetupActiveTpl   = 'classic';
+let _isetupActiveColor = null; // null = use the template's own default accent
+
+// Curated preset palette users can pick an accent color from, in addition to
+// a native color-input for any custom hex.
+const INV_COLOR_PRESETS = [
+  '#1d4ed8', '#e11d48', '#0891b2', '#059669', '#7c3aed',
+  '#c7a84f', '#ea580c', '#0f172a', '#374151', '#db2777',
+];
 
 function _isetupGetCfg() {
   const c = state.config || {};
   return {
     template:    c.invoice_template    || 'classic',
+    color:       c.invoice_color       || '',
     printer:     c.invoice_printer     || 'laser_a4',
     paper:       c.invoice_paper       || 'a4',
     orientation: c.invoice_orientation || 'portrait',
@@ -20816,6 +20827,13 @@ function _isetupGetCfg() {
     hdrLayout:   c.invoice_hdr_layout  || 'num-left',
     logoPos:     c.invoice_logo_pos    || 'header',
   };
+}
+
+// Resolves a template by id, optionally overriding its accent color with a
+// user-picked custom color (falls back to the template's own default accent).
+function _isetupResolveTpl(id, colorOverride) {
+  const base = INV_TEMPLATES.find(t => t.id === id) || INV_TEMPLATES[0];
+  return colorOverride ? { ...base, accent: colorOverride } : base;
 }
 
 function _isetupBuildPreviewDoc(tpl, mg, cur) {
@@ -21763,7 +21781,7 @@ function _isetupZoomAt(newZoom, pivotX, pivotY) {
 let _isetupLhDataUrl = null;
 
 function _isetupUpdatePreview() {
-  const tpl    = INV_TEMPLATES.find(t => t.id === _isetupActiveTpl) || INV_TEMPLATES[0];
+  const tpl    = _isetupResolveTpl(_isetupActiveTpl, _isetupActiveColor);
   const mg     = _isetupReadMg();
   const iframe = $('#isetup-prev-frame');
   if (!iframe) return;
@@ -21805,11 +21823,32 @@ function _isetupRenderTpls() {
     </div>`).join('');
 }
 
+function _isetupRenderColors() {
+  const list = $('#isetup-color-list');
+  if (!list) return;
+  const tpl    = INV_TEMPLATES.find(t => t.id === _isetupActiveTpl) || INV_TEMPLATES[0];
+  const active = _isetupActiveColor || '';
+  const opts   = [{ val: '', hex: tpl.accent, icon: 'fa-rotate-left', title: 'Template default' },
+                  ...INV_COLOR_PRESETS.map(hex => ({ val: hex, hex, icon: '', title: hex }))];
+  list.innerHTML = `
+    <div class="isetup-color-grid">
+      ${opts.map(o => `
+        <button type="button" class="isetup-color-swatch${active === o.val ? ' active' : ''}" data-color="${o.val}" style="background:${o.hex}" title="${o.title}">
+          ${o.icon ? `<i class="fa ${o.icon}"></i>` : ''}
+        </button>`).join('')}
+    </div>
+    <label class="isetup-color-custom-row">
+      <input type="color" id="isetup-color-custom" value="${active || tpl.accent}">
+      <span>Custom color</span>
+    </label>`;
+}
+
 async function openInvoiceSetup() {
   const modal = $('#isetup-modal');
   if (!modal) return;
   const cfg = _isetupGetCfg();
-  _isetupActiveTpl = cfg.template;
+  _isetupActiveTpl   = cfg.template;
+  _isetupActiveColor = cfg.color || null;
 
   // Populate left panel
   if ($('#isetup-printer'))    $('#isetup-printer').value    = cfg.printer;
@@ -21825,6 +21864,7 @@ async function openInvoiceSetup() {
 
   _isetupLhDataUrl = null; // clear stale cache from previous open
   _isetupRenderTpls();
+  _isetupRenderColors();
   modal.style.display = 'flex';
   // Show preview immediately (no letterhead), then fetch letterhead in background
   setTimeout(_isetupUpdatePreview, 80);
@@ -21836,6 +21876,7 @@ async function _isetupSave() {
   const orient = document.querySelector('input[name="isetup-orient"]:checked')?.value || 'portrait';
   const update = {
     invoice_template:    tpl,
+    invoice_color:       _isetupActiveColor || '',
     invoice_printer:     $('#isetup-printer')?.value    || 'laser_a4',
     invoice_paper:       $('#isetup-paper')?.value      || 'a4',
     invoice_orientation: orient,
@@ -21862,6 +21903,21 @@ $('#isetup-tpl-list')?.addEventListener('click', e => {
   if (!card) return;
   _isetupActiveTpl = card.dataset.tplId;
   _isetupRenderTpls();
+  _isetupRenderColors();
+  _isetupUpdatePreview();
+});
+
+$('#isetup-color-list')?.addEventListener('click', e => {
+  const btn = e.target.closest('.isetup-color-swatch');
+  if (!btn) return;
+  _isetupActiveColor = btn.dataset.color || null;
+  _isetupRenderColors();
+  _isetupUpdatePreview();
+});
+$('#isetup-color-list')?.addEventListener('input', e => {
+  if (e.target.id !== 'isetup-color-custom') return;
+  _isetupActiveColor = e.target.value;
+  $('#isetup-color-list')?.querySelectorAll('.isetup-color-swatch').forEach(s => s.classList.remove('active'));
   _isetupUpdatePreview();
 });
 
@@ -22354,6 +22410,7 @@ $('#psm-logo-remove')?.addEventListener('click', () => {
 
 $('#rb-pos-settings').addEventListener('click', openPosSettings);
 $('#rb-receipt-editor').addEventListener('click', () => { showReceiptEditor(); });
+$('#rb-pos-refresh').addEventListener('click', () => loadProducts(state.searchQuery, state.activeCategory));
 
 $('#psm-add-user-btn')?.addEventListener('click', () => window.openAddModal && window.openAddModal());
 $('#psm-add-role-btn')?.addEventListener('click', () => window.openCreateRoleModal && window.openCreateRoleModal());
