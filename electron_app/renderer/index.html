@@ -1661,7 +1661,8 @@
 
       <!-- Subnav tabs -->
       <div class="home-subnav">
-        <button class="home-tab-btn active" data-home-view="flow"><i class="fa fa-diagram-project"></i> Business Flow</button>
+        <button class="home-tab-btn active" data-home-view="overview"><i class="fa fa-compass"></i> Overview</button>
+        <button class="home-tab-btn" data-home-view="flow"><i class="fa fa-diagram-project"></i> Business Flow</button>
         <button class="home-tab-btn" data-home-view="today"><i class="fa fa-sun"></i> Today</button>
         <button class="home-tab-btn" data-home-view="activity"><i class="fa fa-clock-rotate-left"></i> Recent Activity</button>
         <button class="home-tab-btn" data-home-view="analytics"><i class="fa fa-chart-line"></i> Analytics</button>
@@ -1680,8 +1681,188 @@
 
         <!-- Main content area (tabs) -->
         <div class="home-main">
+          <!-- Overview / guide view -->
+          <div id="home-view-overview" class="home-view" style="display:flex;flex-direction:column">
+          <div class="han-container">
+            <div class="hog-scroll">
+
+              <div class="hog-hero">
+                <div class="hog-hero-icon"><i class="fa fa-compass"></i></div>
+                <div class="hog-hero-text">
+                  <div class="hog-hero-title">Welcome to Zeebroo ERP</div>
+                  <div class="hog-hero-sub">Your all-in-one system for sales, inventory, finance, HR and services — everything your business needs in one place. Use the shortcuts below to jump straight to any section.</div>
+                </div>
+              </div>
+
+              <div class="hog-section">
+                <div class="hog-section-head">
+                  <div class="hog-section-icon hog-icon-blue"><i class="fa fa-cart-shopping"></i></div>
+                  <div>
+                    <div class="hog-section-title">Sales &amp; Point of Sale</div>
+                    <div class="hog-section-desc">Ring up sales, track orders and monitor daily performance</div>
+                  </div>
+                </div>
+                <div class="hog-grid">
+                  <button type="button" class="hog-card" data-hog-action="open-pos">
+                    <div class="hog-card-top"><div class="hog-card-icon hog-icon-blue"><i class="fa fa-cash-register"></i></div></div>
+                    <div class="hog-card-body"><div class="hog-card-name">Open POS<i class="fa fa-chevron-right hog-card-arrow"></i></div><div class="hog-card-desc">Start ringing up a sale at the register — search products, scan barcodes and take payments in seconds.</div><div class="hog-card-path">Home &rsaquo; POS</div></div>
+                  </button>
+                  <button type="button" class="hog-card" data-hog-action="today-summary">
+                    <div class="hog-card-top"><div class="hog-card-icon hog-icon-blue"><i class="fa fa-sun"></i></div><span class="hog-card-stat" data-hog-stat="today-summary">—</span></div>
+                    <div class="hog-card-body"><div class="hog-card-name">Today's Summary<i class="fa fa-chevron-right hog-card-arrow"></i></div><div class="hog-card-desc">See today's sales count, revenue and top-selling items, updated in real time.</div><div class="hog-card-path">Home &rsaquo; Today</div></div>
+                  </button>
+                  <button type="button" class="hog-card" data-hog-action="orders">
+                    <div class="hog-card-top"><div class="hog-card-icon hog-icon-blue"><i class="fa fa-receipt"></i></div></div>
+                    <div class="hog-card-body"><div class="hog-card-name">Orders<i class="fa fa-chevron-right hog-card-arrow"></i></div><div class="hog-card-desc">Browse the full history of sales and purchase orders, with status and date filters.</div><div class="hog-card-path">Home &rsaquo; Orders</div></div>
+                  </button>
+                  <button type="button" class="hog-card" data-hog-action="recent-activity">
+                    <div class="hog-card-top"><div class="hog-card-icon hog-icon-blue"><i class="fa fa-clock-rotate-left"></i></div></div>
+                    <div class="hog-card-body"><div class="hog-card-name">Recent Activity<i class="fa fa-chevron-right hog-card-arrow"></i></div><div class="hog-card-desc">A live feed of the latest transactions and changes happening across the business.</div><div class="hog-card-path">Home &rsaquo; Recent Activity</div></div>
+                  </button>
+                </div>
+              </div>
+
+              <div class="hog-section">
+                <div class="hog-section-head">
+                  <div class="hog-section-icon hog-icon-amber"><i class="fa fa-boxes-stacked"></i></div>
+                  <div>
+                    <div class="hog-section-title">Inventory</div>
+                    <div class="hog-section-desc">Manage products, stock levels and suppliers</div>
+                  </div>
+                </div>
+                <div class="hog-grid">
+                  <button type="button" class="hog-card" data-hog-action="products">
+                    <div class="hog-card-top"><div class="hog-card-icon hog-icon-amber"><i class="fa fa-box"></i></div><span class="hog-card-stat" data-hog-stat="products">—</span></div>
+                    <div class="hog-card-body"><div class="hog-card-name">Products<i class="fa fa-chevron-right hog-card-arrow"></i></div><div class="hog-card-desc">Browse, add and edit your product catalog — prices, stock, images and variants.</div><div class="hog-card-path">Inventory &rsaquo; Products</div></div>
+                  </button>
+                  <button type="button" class="hog-card" data-hog-action="categories">
+                    <div class="hog-card-top"><div class="hog-card-icon hog-icon-amber"><i class="fa fa-tags"></i></div><span class="hog-card-stat" data-hog-stat="categories">—</span></div>
+                    <div class="hog-card-body"><div class="hog-card-name">Categories<i class="fa fa-chevron-right hog-card-arrow"></i></div><div class="hog-card-desc">Group products into categories and sub-categories to keep your catalog organized.</div><div class="hog-card-path">Inventory &rsaquo; Categories</div></div>
+                  </button>
+                  <button type="button" class="hog-card" data-hog-action="suppliers">
+                    <div class="hog-card-top"><div class="hog-card-icon hog-icon-amber"><i class="fa fa-truck-field"></i></div><span class="hog-card-stat" data-hog-stat="suppliers">—</span></div>
+                    <div class="hog-card-body"><div class="hog-card-name">Suppliers<i class="fa fa-chevron-right hog-card-arrow"></i></div><div class="hog-card-desc">Manage supplier contacts, addresses and the products you buy from each one.</div><div class="hog-card-path">Inventory &rsaquo; Suppliers</div></div>
+                  </button>
+                  <button type="button" class="hog-card" data-hog-action="purchase-orders">
+                    <div class="hog-card-top"><div class="hog-card-icon hog-icon-amber"><i class="fa fa-cart-arrow-down"></i></div><span class="hog-card-stat" data-hog-stat="purchase-orders">—</span></div>
+                    <div class="hog-card-body"><div class="hog-card-name">Purchase Orders<i class="fa fa-chevron-right hog-card-arrow"></i></div><div class="hog-card-desc">Order new stock from your suppliers and track deliveries until they arrive.</div><div class="hog-card-path">Inventory &rsaquo; Purchase Orders</div></div>
+                  </button>
+                  <button type="button" class="hog-card" data-hog-action="stock-audit">
+                    <div class="hog-card-top"><div class="hog-card-icon hog-icon-amber"><i class="fa fa-clipboard-check"></i></div><span class="hog-card-stat" data-hog-stat="stock-audit">—</span></div>
+                    <div class="hog-card-body"><div class="hog-card-name">Stock Audit<i class="fa fa-chevron-right hog-card-arrow"></i></div><div class="hog-card-desc">Count your physical stock and reconcile it against system records.</div><div class="hog-card-path">Inventory &rsaquo; Stock Audit</div></div>
+                  </button>
+                </div>
+              </div>
+
+              <div class="hog-section">
+                <div class="hog-section-head">
+                  <div class="hog-section-icon hog-icon-rose"><i class="fa fa-file-invoice-dollar"></i></div>
+                  <div>
+                    <div class="hog-section-title">Finance</div>
+                    <div class="hog-section-desc">Track bills, loans, rentals and profitability</div>
+                  </div>
+                </div>
+                <div class="hog-grid">
+                  <button type="button" class="hog-card" data-hog-action="bills">
+                    <div class="hog-card-top"><div class="hog-card-icon hog-icon-rose"><i class="fa fa-file-invoice"></i></div><span class="hog-card-stat" data-hog-stat="bills">—</span></div>
+                    <div class="hog-card-body"><div class="hog-card-name">Bills &amp; Expenses<i class="fa fa-chevron-right hog-card-arrow"></i></div><div class="hog-card-desc">Track recurring bills, due dates and overdue payments in one place.</div><div class="hog-card-path">Finance &rsaquo; Bills</div></div>
+                  </button>
+                  <button type="button" class="hog-card" data-hog-action="loans">
+                    <div class="hog-card-top"><div class="hog-card-icon hog-icon-rose"><i class="fa fa-hand-holding-dollar"></i></div><span class="hog-card-stat" data-hog-stat="loans">—</span></div>
+                    <div class="hog-card-body"><div class="hog-card-name">Loans<i class="fa fa-chevron-right hog-card-arrow"></i></div><div class="hog-card-desc">Track business loans, monthly repayments and outstanding balances.</div><div class="hog-card-path">Finance &rsaquo; Loans</div></div>
+                  </button>
+                  <button type="button" class="hog-card" data-hog-action="rentals">
+                    <div class="hog-card-top"><div class="hog-card-icon hog-icon-rose"><i class="fa fa-house-chimney"></i></div><span class="hog-card-stat" data-hog-stat="rentals">—</span></div>
+                    <div class="hog-card-body"><div class="hog-card-name">Rentals<i class="fa fa-chevron-right hog-card-arrow"></i></div><div class="hog-card-desc">Manage rented properties, monthly costs and lease details.</div><div class="hog-card-path">Finance &rsaquo; Rentals</div></div>
+                  </button>
+                  <button type="button" class="hog-card" data-hog-action="profit-report">
+                    <div class="hog-card-top"><div class="hog-card-icon hog-icon-rose"><i class="fa fa-sack-dollar"></i></div></div>
+                    <div class="hog-card-body"><div class="hog-card-name">Profit Report<i class="fa fa-chevron-right hog-card-arrow"></i></div><div class="hog-card-desc">See revenue vs. expenses and your profit margin over any period.</div><div class="hog-card-path">Home &rsaquo; Profit</div></div>
+                  </button>
+                </div>
+              </div>
+
+              <div class="hog-section">
+                <div class="hog-section-head">
+                  <div class="hog-section-icon hog-icon-purple"><i class="fa fa-users"></i></div>
+                  <div>
+                    <div class="hog-section-title">HR &amp; Payroll</div>
+                    <div class="hog-section-desc">Manage staff, departments and payroll cycles</div>
+                  </div>
+                </div>
+                <div class="hog-grid">
+                  <button type="button" class="hog-card" data-hog-action="employees">
+                    <div class="hog-card-top"><div class="hog-card-icon hog-icon-purple"><i class="fa fa-id-badge"></i></div><span class="hog-card-stat" data-hog-stat="employees">—</span></div>
+                    <div class="hog-card-body"><div class="hog-card-name">Employees<i class="fa fa-chevron-right hog-card-arrow"></i></div><div class="hog-card-desc">Staff records, contact details, roles and employment history.</div><div class="hog-card-path">HR &rsaquo; Employees</div></div>
+                  </button>
+                  <button type="button" class="hog-card" data-hog-action="departments">
+                    <div class="hog-card-top"><div class="hog-card-icon hog-icon-purple"><i class="fa fa-sitemap"></i></div><span class="hog-card-stat" data-hog-stat="departments">—</span></div>
+                    <div class="hog-card-body"><div class="hog-card-name">Departments<i class="fa fa-chevron-right hog-card-arrow"></i></div><div class="hog-card-desc">Organize your workforce into departments and reporting structures.</div><div class="hog-card-path">HR &rsaquo; Departments</div></div>
+                  </button>
+                  <button type="button" class="hog-card" data-hog-action="payroll">
+                    <div class="hog-card-top"><div class="hog-card-icon hog-icon-purple"><i class="fa fa-money-check-dollar"></i></div><span class="hog-card-stat" data-hog-stat="payroll">—</span></div>
+                    <div class="hog-card-body"><div class="hog-card-name">Payroll Cycles<i class="fa fa-chevron-right hog-card-arrow"></i></div><div class="hog-card-desc">Run payroll, and review payment status for past and current salary cycles.</div><div class="hog-card-path">HR &rsaquo; Payroll</div></div>
+                  </button>
+                </div>
+              </div>
+
+              <div class="hog-section">
+                <div class="hog-section-head">
+                  <div class="hog-section-icon hog-icon-teal"><i class="fa fa-screwdriver-wrench"></i></div>
+                  <div>
+                    <div class="hog-section-title">Services</div>
+                    <div class="hog-section-desc">Handle service requests and your service catalog</div>
+                  </div>
+                </div>
+                <div class="hog-grid">
+                  <button type="button" class="hog-card" data-hog-action="svc-requests">
+                    <div class="hog-card-top"><div class="hog-card-icon hog-icon-teal"><i class="fa fa-list-check"></i></div><span class="hog-card-stat" data-hog-stat="svc-requests">—</span></div>
+                    <div class="hog-card-body"><div class="hog-card-name">Service Requests<i class="fa fa-chevron-right hog-card-arrow"></i></div><div class="hog-card-desc">Track service jobs from request through to completion.</div><div class="hog-card-path">Services &rsaquo; Requests</div></div>
+                  </button>
+                  <button type="button" class="hog-card" data-hog-action="svc-catalog">
+                    <div class="hog-card-top"><div class="hog-card-icon hog-icon-teal"><i class="fa fa-book"></i></div><span class="hog-card-stat" data-hog-stat="svc-catalog">—</span></div>
+                    <div class="hog-card-body"><div class="hog-card-name">Service Catalog<i class="fa fa-chevron-right hog-card-arrow"></i></div><div class="hog-card-desc">Manage the services you offer, along with their pricing and descriptions.</div><div class="hog-card-path">Services &rsaquo; Catalog</div></div>
+                  </button>
+                </div>
+              </div>
+
+              <div class="hog-section">
+                <div class="hog-section-head">
+                  <div class="hog-section-icon hog-icon-green"><i class="fa fa-chart-line"></i></div>
+                  <div>
+                    <div class="hog-section-title">Insights &amp; Tools</div>
+                    <div class="hog-section-desc">Reports, customers and system settings</div>
+                  </div>
+                </div>
+                <div class="hog-grid">
+                  <button type="button" class="hog-card" data-hog-action="analytics">
+                    <div class="hog-card-top"><div class="hog-card-icon hog-icon-green"><i class="fa fa-chart-line"></i></div></div>
+                    <div class="hog-card-body"><div class="hog-card-name">Analytics<i class="fa fa-chevron-right hog-card-arrow"></i></div><div class="hog-card-desc">Sales trends and performance charts over 7, 30 or 90 days.</div><div class="hog-card-path">Home &rsaquo; Analytics</div></div>
+                  </button>
+                  <button type="button" class="hog-card" data-hog-action="business-flow">
+                    <div class="hog-card-top"><div class="hog-card-icon hog-icon-green"><i class="fa fa-diagram-project"></i></div></div>
+                    <div class="hog-card-body"><div class="hog-card-name">Business Flow<i class="fa fa-chevron-right hog-card-arrow"></i></div><div class="hog-card-desc">A visual diagram of how money and goods move through your business.</div><div class="hog-card-path">Home &rsaquo; Business Flow</div></div>
+                  </button>
+                  <button type="button" class="hog-card" data-hog-action="customers">
+                    <div class="hog-card-top"><div class="hog-card-icon hog-icon-green"><i class="fa fa-address-book"></i></div><span class="hog-card-stat" data-hog-stat="customers">—</span></div>
+                    <div class="hog-card-body"><div class="hog-card-name">Customers<i class="fa fa-chevron-right hog-card-arrow"></i></div><div class="hog-card-desc">Customer list, contact details, loyalty points and account balances.</div><div class="hog-card-path">Home &rsaquo; Customers</div></div>
+                  </button>
+                  <button type="button" class="hog-card" data-hog-action="settings">
+                    <div class="hog-card-top"><div class="hog-card-icon hog-icon-green"><i class="fa fa-gear"></i></div></div>
+                    <div class="hog-card-body"><div class="hog-card-name">Settings<i class="fa fa-chevron-right hog-card-arrow"></i></div><div class="hog-card-desc">Configure your business profile, taxes, receipts and preferences.</div><div class="hog-card-path">Home &rsaquo; Settings</div></div>
+                  </button>
+                  <button type="button" class="hog-card" data-hog-action="shortcuts">
+                    <div class="hog-card-top"><div class="hog-card-icon hog-icon-green"><i class="fa fa-keyboard"></i></div></div>
+                    <div class="hog-card-body"><div class="hog-card-name">Keyboard Shortcuts<i class="fa fa-chevron-right hog-card-arrow"></i></div><div class="hog-card-desc">Learn hotkeys that speed up checkout, search and navigation.</div><div class="hog-card-path">Home &rsaquo; Help</div></div>
+                  </button>
+                </div>
+              </div>
+
+            </div>
+          </div>
+          </div>
           <!-- Flow view -->
-          <div id="home-view-flow" class="home-view" style="display:flex">
+          <div id="home-view-flow" class="home-view" style="display:none">
             <div id="home-chart"></div>
           </div>
           <!-- Today Summary view -->
