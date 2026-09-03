@@ -11,6 +11,7 @@ use Modules\Business\Models\Business;
 use Modules\Pos\Models\PosNotification;
 use Modules\Pos\Models\Sale;
 use Modules\Product\Models\Product;
+use Modules\Purchase\Models\ChequePayment;
 use Modules\Purchase\Models\Purchase;
 
 class PosNotificationService
@@ -38,6 +39,7 @@ class PosNotificationService
             $this->syncStockNotifications($business);
             $this->syncFinanceOverdueNotifications($business);
             $this->syncPurchaseOrderOverdueNotifications($business);
+            $this->syncChequeOverdueNotifications($business);
 
             return true;
         });
@@ -350,6 +352,35 @@ class PosNotificationService
             (int) $business->id,
             PosNotification::TYPE_PURCHASE_ORDER_OVERDUE,
             'purchase',
+            $overdue->pluck('id')->all(),
+        );
+    }
+
+    private function syncChequeOverdueNotifications(Business $business): void
+    {
+        $overdue = ChequePayment::query()
+            ->where('business_id', $business->id)
+            ->where('status', ChequePayment::STATUS_PENDING)
+            ->whereNotNull('due_date')
+            ->whereDate('due_date', '<', now()->startOfDay())
+            ->get(['id', 'cheque_number', 'due_date', 'amount']);
+
+        foreach ($overdue as $cheque) {
+            $this->upsert(
+                business: (int) $business->id,
+                branchId: null,
+                type: PosNotification::TYPE_CHEQUE_OVERDUE,
+                referenceType: 'cheque',
+                referenceId: (int) $cheque->id,
+                title: 'Cheque overdue',
+                message: "Cheque \"{$cheque->cheque_number}\" is past its due date.",
+                payload: ['cheque_id' => $cheque->id, 'cheque_number' => $cheque->cheque_number, 'amount' => (float) $cheque->amount],
+            );
+        }
+        $this->prune(
+            (int) $business->id,
+            PosNotification::TYPE_CHEQUE_OVERDUE,
+            'cheque',
             $overdue->pluck('id')->all(),
         );
     }

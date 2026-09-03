@@ -23,6 +23,8 @@ class PosNotification extends Model
 
     public const TYPE_PURCHASE_ORDER_OVERDUE = 'purchase_order_overdue';
 
+    public const TYPE_CHEQUE_OVERDUE = 'cheque_overdue';
+
     public const TYPE_PURCHASE_ORDER_RECEIVED = 'purchase_order_received';
 
     public const TYPE_SALE_LARGE = 'sale_large';

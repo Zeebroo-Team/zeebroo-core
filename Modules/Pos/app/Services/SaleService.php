@@ -240,16 +240,19 @@ class SaleService
         $paymentMethod = $this->normalizePaymentMethod($paymentMethod);
         $channel       = $this->normalizeChannel($channel);
 
+        $posSettings = $this->posSettings->forBusiness($business);
+        $branchStockSeparate = (bool) ($posSettings['branch_stock_separate'] ?? false);
+
         // Auto-resolve deposit account from POS settings when none provided
         if ($creditAccountId === null && in_array($paymentMethod, [Sale::PAYMENT_CASH, Sale::PAYMENT_CARD], true)) {
-            $creditAccountId = $this->posSettings->forBusiness($business)['default_deposit_account_id'];
+            $creditAccountId = $posSettings['default_deposit_account_id'];
         }
 
         // Load active discounts for all products in the cart in one query
         $cartProductIds = array_map(fn ($l) => (int) $l['product']->id, $productLines);
         $activeDiscounts = $this->discountService->activeForProducts($business, $cartProductIds);
 
-        $sale = DB::transaction(function () use ($business, $user, $productLines, $serviceLines, $paymentMethod, $creditAccountId, $amountPaid, $notes, $channel, $discountPercent, $discountFlat, $amountTendered, $customerId, $deferSettlement, $branchId, $activeDiscounts, $scheduledAt, $posCounterId, $creditDueDate) {
+        $sale = DB::transaction(function () use ($business, $user, $productLines, $serviceLines, $paymentMethod, $creditAccountId, $amountPaid, $notes, $channel, $discountPercent, $discountFlat, $amountTendered, $customerId, $deferSettlement, $branchId, $branchStockSeparate, $activeDiscounts, $scheduledAt, $posCounterId, $creditDueDate) {
             $sale = $business->sales()->create([
                 'branch_id'       => $branchId,
                 'pos_counter_id'  => $posCounterId,
@@ -280,8 +283,8 @@ class SaleService
                 $product = $line['product'];
                 $layerId = $line['product_stock_layer_id'] ?? null;
                 $allocations = $layerId !== null
-                    ? $this->stockConsumption->consumeFromLayer($product, (int) $layerId, $line['quantity'])
-                    : $this->stockConsumption->consumeFifo($product, $line['quantity']);
+                    ? $this->stockConsumption->consumeFromLayer($product, (int) $layerId, $line['quantity'], $branchId, $branchStockSeparate)
+                    : $this->stockConsumption->consumeFifo($product, $line['quantity'], $branchId, $branchStockSeparate);
 
                 // Resolve the applicable discount for this line
                 $productDiscounts = $activeDiscounts->where('product_id', $product->id);
@@ -397,7 +400,7 @@ class SaleService
                     if ($deductQty <= 0) {
                         continue;
                     }
-                    $this->stockConsumption->consumeFifo($boundProduct, $deductQty);
+                    $this->stockConsumption->consumeFifo($boundProduct, $deductQty, $branchId, $branchStockSeparate);
                 }
             }
 
