@@ -246,6 +246,9 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
     Route::post('hr/departments', [\Modules\Pos\Http\Controllers\Api\PosHrDepartmentListApiController::class, 'store'])->name('hr.departments.store');
     Route::delete('hr/departments/{department}', [\Modules\Pos\Http\Controllers\Api\PosHrDepartmentListApiController::class, 'destroy'])->name('hr.departments.destroy');
     Route::get('hr/job-titles', [\Modules\Pos\Http\Controllers\Api\PosHrJobTitleListApiController::class, 'index'])->name('hr.job-titles.index');
+    Route::post('hr/job-titles', [\Modules\Pos\Http\Controllers\Api\PosHrJobTitleListApiController::class, 'store'])->name('hr.job-titles.store');
+    Route::put('hr/job-titles/{jobTitle}', [\Modules\Pos\Http\Controllers\Api\PosHrJobTitleListApiController::class, 'update'])->name('hr.job-titles.update');
+    Route::delete('hr/job-titles/{jobTitle}', [\Modules\Pos\Http\Controllers\Api\PosHrJobTitleListApiController::class, 'destroy'])->name('hr.job-titles.destroy');
     Route::get('hr/allowance-types', [\Modules\Pos\Http\Controllers\Api\PosHrAllowanceTypeApiController::class, 'index'])->name('hr.allowance-types.index');
     Route::post('hr/allowance-types', [\Modules\Pos\Http\Controllers\Api\PosHrAllowanceTypeApiController::class, 'store'])->name('hr.allowance-types.store');
     Route::delete('hr/allowance-types/{allowanceType}', [\Modules\Pos\Http\Controllers\Api\PosHrAllowanceTypeApiController::class, 'destroy'])->name('hr.allowance-types.destroy');

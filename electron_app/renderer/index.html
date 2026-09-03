@@ -1090,6 +1090,9 @@
             <button class="ribbon-btn-lg" id="rb-hr-payroll">
               <i class="fa fa-money-check-dollar"></i>Payroll
             </button>
+            <button class="ribbon-btn-lg" id="rb-positions">
+              <i class="fa fa-id-badge"></i>Positions
+            </button>
           </div>
           <div class="ribbon-group-label">Compensation</div>
         </div>
@@ -4976,6 +4979,7 @@
         <button class="fin-subnav-btn"         data-hr="payroll"><i class="fa fa-money-check-dollar"></i> Payroll</button>
         <button class="fin-subnav-btn"         data-hr="rule-sets"><i class="fa fa-sliders"></i> Rule Sets</button>
         <button class="fin-subnav-btn"         data-hr="allowance-types"><i class="fa fa-coins"></i> Allowance Types</button>
+        <button class="fin-subnav-btn"         data-hr="positions"><i class="fa fa-id-badge"></i> Positions</button>
       </div>
 
       <!-- ── Employees list view ── -->
@@ -5117,6 +5121,35 @@
         </div>
 
         <div class="finance-footer"><span id="at-footer-text"></span></div>
+      </div>
+
+      <!-- ── Positions view ── -->
+      <div id="positions-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+
+        <div class="finance-toolbar">
+          <div class="finance-search-wrap">
+            <i class="fa fa-magnifying-glass"></i>
+            <input type="text" id="pos-search" placeholder="Search positions…">
+          </div>
+          <button class="finance-create-btn" id="pos-add-btn">
+            <i class="fa fa-plus"></i> Add Position
+          </button>
+        </div>
+
+        <div class="lm-stats-bar">
+          <div class="lm-stat-item">
+            <span class="lm-stat-label"><i class="fa fa-id-badge"></i> Positions</span>
+            <span class="lm-stat-val" id="pos-total-count">—</span>
+          </div>
+        </div>
+
+        <div class="finance-cards-wrap">
+          <div class="finance-cards-area" id="pos-cards-area">
+            <div class="finance-loading"><i class="fa fa-spinner fa-spin"></i> Loading positions…</div>
+          </div>
+        </div>
+
+        <div class="finance-footer"><span id="pos-footer-text"></span></div>
       </div>
 
       <!-- ── Payroll list view ── -->
@@ -9400,6 +9433,34 @@
     <div class="bill-modal-footer">
       <button class="bill-save-btn" id="at-create-modal-save"><i class="fa fa-plus"></i> Create</button>
       <button class="btn-secondary" id="at-create-modal-cancel" style="margin-left:auto">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Position: Create Modal ────────────────────────────────────────── -->
+<div class="modal-overlay" id="pos-create-modal" style="display:none">
+  <div class="modal bill-modal-inner" style="max-width:420px">
+    <div class="bill-modal-header">
+      <h3 id="pos-create-modal-title"><i class="fa fa-id-badge"></i> New Position</h3>
+      <button class="bill-modal-close" id="pos-create-modal-close"><i class="fa fa-xmark"></i></button>
+    </div>
+    <div class="bill-modal-body">
+      <div id="pos-create-alert" class="alert alert-error" style="display:none;margin:0 0 4px"></div>
+      <div class="bill-section">
+        <div class="bsec-hdr">
+          <div class="bsec-icon" style="--si:#2563eb;--sb:#dbeafe"><i class="fa fa-id-badge"></i></div>
+          <span class="bsec-title">Position</span>
+        </div>
+        <div class="bf-group">
+          <label class="bf-label">NAME <span class="bf-req">*</span></label>
+          <input type="text" id="pos-modal-name" class="bf-input" placeholder="e.g. Senior Accountant, Cashier" maxlength="255">
+          <p class="bf-hint">Examples: Senior Accountant, Cashier, Branch Manager, Sales Associate.</p>
+        </div>
+      </div>
+    </div>
+    <div class="bill-modal-footer">
+      <button class="bill-save-btn" id="pos-create-modal-save"><i class="fa fa-plus"></i> Create</button>
+      <button class="btn-secondary" id="pos-create-modal-cancel" style="margin-left:auto">Cancel</button>
     </div>
   </div>
 </div>

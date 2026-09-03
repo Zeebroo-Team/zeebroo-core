@@ -190,6 +190,12 @@ const API = (() => {
     deleteDepartment: (id)   => request('DELETE', `/hr/departments/${id}`),
     jobTitles:      ()     => request('GET',  '/hr/job-titles'),
 
+    // HR — Positions (job titles)
+    positions:      ()     => request('GET',    '/hr/job-titles'),
+    createPosition: (body) => request('POST',   '/hr/job-titles', body),
+    updatePosition: (id, body) => request('PUT', `/hr/job-titles/${id}`, body),
+    deletePosition: (id)   => request('DELETE', `/hr/job-titles/${id}`),
+
     // HR — Allowance types
     allowanceTypes:      ()     => request('GET',    '/hr/allowance-types'),
     createAllowanceType: (body) => request('POST',   '/hr/allowance-types', body),

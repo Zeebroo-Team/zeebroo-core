@@ -13,4 +13,16 @@ class JobTitleService
             'name' => trim($name),
         ]);
     }
+
+    public function rename(JobTitle $jobTitle, string $name): JobTitle
+    {
+        $jobTitle->update(['name' => trim($name)]);
+
+        return $jobTitle;
+    }
+
+    public function delete(JobTitle $jobTitle): void
+    {
+        $jobTitle->delete();
+    }
 }
