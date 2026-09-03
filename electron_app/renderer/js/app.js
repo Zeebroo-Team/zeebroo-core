@@ -2394,6 +2394,7 @@ $$('.qt-chip[data-qst]').forEach(btn => {
 // Ribbon buttons (switch to quotes view first, then act)
 $('#rb-qt-new')?.addEventListener('click', () => { _salSwitchView('quotes'); setTimeout(() => _qtOpenForm(null), 50); });
 $('#rb-qt-refresh')?.addEventListener('click', () => { _salSwitchView('quotes'); });
+$('#rb-sal-new-wizard')?.addEventListener('click', () => openSaleWizard());
 $('#rb-sal-new-invoice')?.addEventListener('click', () => { _salSwitchView('invoices'); setTimeout(() => _invOpenForm(null), 50); });
 $('#rb-sal-new-quotation')?.addEventListener('click', () => { _salSwitchView('quotes'); setTimeout(() => _qtOpenForm(null), 50); });
 $('#rb-so-new')?.addEventListener('click', () => { _salSwitchView('orders'); setTimeout(() => _soOpenForm(null), 50); });
@@ -16601,7 +16602,13 @@ async function _prodSave(andNew = false) {
 
   if (res.status === 200 || res.status === 201) {
     toast(_prod.editingId ? 'Product updated' : 'Product created', 'success');
-    if (andNew && !_prod.editingId && !_bwz.billingActive) {
+    if (_sawCatalogReturn === 'product' && !_prod.editingId) {
+      $('#product-modal').style.display = 'none';
+      const saved = res.body?.data;
+      _sawCatalogResume();
+      const row = _sawAddLine(saved.name, 1, price);
+      row.dataset.productId = saved.id;
+    } else if (andNew && !_prod.editingId && !_bwz.billingActive) {
       // Stay in create-another flow only when wizard is not waiting
       invState.loaded = false;
       loadInventory('', 0, 1);
@@ -16645,8 +16652,8 @@ async function _prodDelete() {
 $('#inv-new-product-btn')?.addEventListener('click', () => _prodOpenModal(null));
 $('#prod-edit-btn')?.addEventListener('click',        () => _prodOpenModal(_prodActiveId));
 $('#prod-delete-btn')?.addEventListener('click',      _prodDelete);
-$('#prod-modal-close')?.addEventListener('click',   () => { $('#product-modal').style.display = 'none'; _bwzCheckResume(); });
-$('#prod-modal-cancel')?.addEventListener('click',  () => { $('#product-modal').style.display = 'none'; _bwzCheckResume(); });
+$('#prod-modal-close')?.addEventListener('click',   () => { $('#product-modal').style.display = 'none'; _bwzCheckResume(); _sawCatalogResume(); });
+$('#prod-modal-cancel')?.addEventListener('click',  () => { $('#product-modal').style.display = 'none'; _bwzCheckResume(); _sawCatalogResume(); });
 $('#prod-modal-save')?.addEventListener('click',     () => _prodSave(false));
 $('#prod-modal-save-new')?.addEventListener('click', () => _prodSave(true));
 $('#prod-delivery-goto-settings')?.addEventListener('click', () => {
@@ -19206,8 +19213,11 @@ const _cm = {
   list: [],
 };
 
+let _cmReturnToSaleWizard = false;
+
 function openCustomersModal() {
   $('#customers-modal').style.display = 'flex';
+  _cmReturnToSaleWizard = false;
   _cm.page = 1; _cm.searchQ = ''; _cm.selectedId = null; _cm.editingId = null;
   $('#cm-search').value = '';
   _cmShowDetail(false); _cmShowForm(false);
@@ -19218,6 +19228,10 @@ function openCustomersModal() {
 
 function _cmClose() {
   $('#customers-modal').style.display = 'none';
+  if (_cmReturnToSaleWizard) {
+    _cmReturnToSaleWizard = false;
+    $('#sale-wizard').style.display = 'flex';
+  }
 }
 
 async function _cmLoadList() {
@@ -19382,6 +19396,16 @@ async function _cmSave() {
   const c = res.body?.data;
   const wasEditing = !!_cm.editingId;
   _cm.editingId = null;
+
+  if (_cmReturnToSaleWizard && !wasEditing) {
+    _cmReturnToSaleWizard = false;
+    $('#customers-modal').style.display = 'none';
+    $('#sale-wizard').style.display = 'flex';
+    if (c) _sawSelectCustomer(c.id, c.name);
+    toast('Customer saved', 'success');
+    return;
+  }
+
   _cmShowForm(false);
   await _cmLoadList();
   if (c) { _cm.selectedId = c.id; _cmRenderList(); _cmSelectCustomer(c.id); }
@@ -19433,6 +19457,7 @@ $('#cm-btn-assign')?.addEventListener('click', () => {
 $('#cm-btn-delete')?.addEventListener('click', _cmDelete);
 
 $('#cm-form-cancel')?.addEventListener('click', () => {
+  if (_cmReturnToSaleWizard) { _cmClose(); return; }
   _cm.editingId = null;
   _cmShowForm(false);
   if (_cm.selectedId) _cmShowDetail(true);
@@ -20792,6 +20817,573 @@ $('#psw-skip-all')?.addEventListener('click', () => {
   if (wiz) wiz.style.display = 'none';
 });
 $('#psw-tax-enabled')?.addEventListener('change', _pswToggleTaxRate);
+
+// ── Sale Wizard ─────────────────────────────────────────────────────────
+let _sawStep = 1;
+const _SAW_STEPS = 4;
+let _sawLineSeq = 0;
+let _saw = { type: null, customerId: null, customerName: null };
+
+const _SAW_TYPE_META = {
+  quotation:   { label: 'Quotation',   dateLabels: ['Quote Date', 'Valid Until'],       payment: false },
+  invoice:     { label: 'Invoice',     dateLabels: ['Issue Date', 'Due Date'],          payment: true  },
+  sales_order: { label: 'Sales Order', dateLabels: ['Order Date', 'Expected Delivery'], payment: false },
+};
+
+function openSaleWizard() {
+  const wiz = $('#sale-wizard');
+  if (!wiz) return;
+
+  _saw = { type: null, customerId: null, customerName: null };
+  _sawLineSeq = 0;
+
+  $('#saw-cust-search').value = '';
+  $('#saw-cust-results').style.display = 'none';
+  $('#saw-cust-results').innerHTML = '';
+  $('#saw-cust-picker').style.display = '';
+  $('#saw-cust-selected').style.display = 'none';
+
+  $$('#saw-type-grid .saw-type-card').forEach(c => c.classList.remove('active'));
+
+  $('#saw-items-body').innerHTML = '';
+  $('#saw-new-item-form').style.display = 'none';
+
+  $('#saw-f-ref').value = '';
+  $('#saw-f-date1').value = '';
+  $('#saw-f-date2').value = '';
+  $('#saw-f-payment').value = '';
+  $('#saw-f-notes').value = '';
+  $('#saw-f-discount').value = '';
+  $('#saw-f-tax').value = '';
+  $('#saw-form-alert').style.display = 'none';
+
+  _sawStep = 1;
+  _sawSetStep(1);
+  wiz.style.display = 'flex';
+  setTimeout(() => $('#saw-cust-search')?.focus(), 60);
+}
+
+function _sawSetStep(n) {
+  _sawStep = n;
+
+  document.querySelectorAll('[data-saw-panel]').forEach(p => {
+    p.classList.toggle('active', +p.dataset.sawPanel === n);
+  });
+  document.querySelectorAll('#saw-steps .psw-step-dot').forEach(d => {
+    const s = +d.dataset.step;
+    d.classList.toggle('active', s === n);
+    d.classList.toggle('done', s < n);
+  });
+  document.querySelectorAll('#saw-steps .psw-step-line').forEach((l, i) => {
+    l.classList.toggle('done', (i + 1) < n);
+  });
+
+  const ctr = $('#saw-step-counter');
+  if (ctr) ctr.textContent = 'Step ' + n + ' of ' + _SAW_STEPS;
+
+  const backBtn = $('#saw-back');
+  if (backBtn) backBtn.style.visibility = n === 1 ? 'hidden' : 'visible';
+
+  const nextBtn = $('#saw-next');
+  if (nextBtn) {
+    if (n === _SAW_STEPS) {
+      nextBtn.innerHTML = 'Finish <i class="fa fa-check"></i>';
+      nextBtn.className = 'psw-btn psw-btn--finish';
+    } else {
+      nextBtn.innerHTML = 'Next <i class="fa fa-arrow-right"></i>';
+      nextBtn.className = 'psw-btn psw-btn--next';
+    }
+  }
+
+  if (n === 3) _sawPrepItemsStep();
+  if (n === 4) _sawPrepSummaryStep();
+}
+
+function _sawPrepItemsStep() {
+  const rich = _saw.type === 'invoice';
+  $('#saw-col-disc').style.display = rich ? '' : 'none';
+  $('#saw-col-tax').style.display  = rich ? '' : 'none';
+  $$('#saw-items-body [data-role="disc-wrap"]').forEach(el => { el.style.display = rich ? '' : 'none'; });
+  $$('#saw-items-body [data-role="tax"]').forEach(el => { el.style.display = rich ? '' : 'none'; });
+  _sawRecalcItems();
+}
+
+function _sawPrepSummaryStep() {
+  const meta = _SAW_TYPE_META[_saw.type] || _SAW_TYPE_META.invoice;
+  $('#saw-f-date1-label').textContent = meta.dateLabels[0];
+  $('#saw-f-date2-label').textContent = meta.dateLabels[1];
+  $('#saw-payment-wrap').style.display = meta.payment ? '' : 'none';
+  $('#saw-finish-sub').textContent = `Confirm the details and save this ${meta.label.toLowerCase()}.`;
+  if (!$('#saw-f-date1').value) $('#saw-f-date1').value = new Date().toISOString().slice(0, 10);
+  _sawRecalcItems();
+}
+
+// ── Step 1: Customer ────────────────────────────────────────────────────
+let _sawCustTimer;
+$('#saw-cust-search')?.addEventListener('input', () => {
+  clearTimeout(_sawCustTimer);
+  const q = $('#saw-cust-search').value.trim();
+  const box = $('#saw-cust-results');
+  if (q.length < 2) { box.style.display = 'none'; box.innerHTML = ''; return; }
+  _sawCustTimer = setTimeout(async () => {
+    const res  = await API.customers(q, 1);
+    const list = res.body?.data || [];
+    if (!list.length) {
+      box.innerHTML = '<div class="qt-suggest-item" style="cursor:default;color:var(--text-muted)">No customers found</div>';
+      box.style.display = 'block';
+      return;
+    }
+    box.innerHTML = list.slice(0, 8).map(c => `
+      <div class="qt-suggest-item" data-id="${c.id}" data-name="${escHtml(c.name)}">
+        ${escHtml(c.name)}${c.phone ? `<span class="qt-suggest-sku">${escHtml(c.phone)}</span>` : ''}
+      </div>`).join('');
+    box.style.display = 'block';
+    box.querySelectorAll('.qt-suggest-item[data-id]').forEach(el => {
+      el.addEventListener('mousedown', e => {
+        e.preventDefault();
+        _sawSelectCustomer(el.dataset.id, el.dataset.name);
+      });
+    });
+  }, 250);
+});
+$('#saw-cust-search')?.addEventListener('blur', () => {
+  setTimeout(() => { const box = $('#saw-cust-results'); if (box) box.style.display = 'none'; }, 150);
+});
+
+function _sawSelectCustomer(id, name) {
+  _saw.customerId   = id ? parseInt(id) : null;
+  _saw.customerName = name;
+  $('#saw-cust-picker').style.display = 'none';
+  $('#saw-cust-selected-name').textContent = name;
+  $('#saw-cust-selected').style.display = '';
+}
+
+$('#saw-cust-walkin')?.addEventListener('click', () => _sawSelectCustomer(null, 'Walk-in customer'));
+
+$('#saw-cust-change')?.addEventListener('click', () => {
+  _saw.customerId   = null;
+  _saw.customerName = null;
+  $('#saw-cust-selected').style.display = 'none';
+  $('#saw-cust-picker').style.display = '';
+  $('#saw-cust-search').value = '';
+  setTimeout(() => $('#saw-cust-search')?.focus(), 30);
+});
+
+$('#saw-cust-add-new')?.addEventListener('click', () => {
+  const prefillName = $('#saw-cust-search').value.trim();
+  $('#sale-wizard').style.display = 'none';
+  openCustomersModal();
+  _cmReturnToSaleWizard = true;
+  setTimeout(() => {
+    $('#cm-new-btn')?.click();
+    if (prefillName) { const f = $('#cm-f-name'); if (f) f.value = prefillName; }
+  }, 60);
+});
+
+// ── Step 2: Type ────────────────────────────────────────────────────────
+$$('#saw-type-grid .saw-type-card').forEach(card => {
+  card.addEventListener('click', () => {
+    $$('#saw-type-grid .saw-type-card').forEach(c => c.classList.remove('active'));
+    card.classList.add('active');
+    _saw.type = card.dataset.type;
+  });
+});
+
+// ── Step 3: Items ───────────────────────────────────────────────────────
+function _sawAddLine(desc = '', qty = 1, price = 0, discType = 'pct', discValue = 0, taxType = 'pct', taxValue = 0) {
+  const id  = ++_sawLineSeq;
+  const row = document.createElement('div');
+  row.className        = 'qt-line-row';
+  row.dataset.lineId    = id;
+  row.dataset.discType  = discType;
+  row.dataset.taxType   = taxType;
+  row.dataset.taxValue  = taxValue;
+
+  const cur  = state.currency || '¤';
+  const rich = _saw.type === 'invoice';
+  const s    = state.receiptSettings || {};
+  const taxRules = Array.isArray(s.tax_rules) ? s.tax_rules.filter(r => parseFloat(r.value || 0) > 0) : [];
+  const taxOpts  = taxRules.map((r, ri) => {
+    const lbl = escHtml(r.name) + (r.type === 'flat' ? ' (' + escHtml(cur) + parseFloat(r.value).toFixed(2) + ')' : ' ' + parseFloat(r.value) + '%');
+    const sel = r.type === taxType && String(r.value) === String(taxValue) ? ' selected' : '';
+    return `<option value="${ri}"${sel}>${lbl}</option>`;
+  }).join('');
+
+  row.innerHTML = `
+    <div class="qt-line-desc">
+      <input type="text" class="qt-line-input qt-line-desc-input" placeholder="Description or search product…" value="${escHtml(desc)}" data-role="desc">
+    </div>
+    <input type="number" class="qt-line-input qt-line-num" value="${qty}" min="0.001" step="any" data-role="qty">
+    <input type="number" class="qt-line-input qt-line-price" value="${price > 0 ? price.toFixed(2) : ''}" min="0" step="any" data-role="price" placeholder="0.00">
+    <div class="qt-line-disc-wrap" data-role="disc-wrap" style="${rich ? '' : 'display:none'}">
+      <input type="number" class="qt-line-disc-inp${discValue > 0 ? ' has-val' : ''}" value="${discValue > 0 ? discValue : ''}" min="0" ${discType === 'pct' ? 'max="100"' : ''} step="any" data-role="disc" placeholder="0">
+      <button type="button" class="qt-disc-toggle${discType === 'flat' ? ' is-flat' : ''}" data-role="disc-toggle" title="Toggle % / flat">${discType === 'flat' ? escHtml(cur) : '%'}</button>
+    </div>
+    <select class="qt-line-tax-sel${taxValue > 0 ? ' has-tax' : ''}" data-role="tax" style="${rich ? '' : 'display:none'}">
+      <option value="">– None</option>
+      ${taxOpts}
+    </select>
+    <div class="qt-line-total" data-role="total">0.00</div>
+    <button type="button" class="qt-line-del" title="Remove"><i class="fa fa-xmark"></i></button>`;
+
+  const descInp  = row.querySelector('[data-role="desc"]');
+  const priceInp = row.querySelector('[data-role="price"]');
+
+  const sug = document.createElement('div');
+  sug.className = 'qt-product-suggest';
+  sug.style.cssText = 'position:fixed!important;z-index:9999;display:none;right:auto!important;';
+  document.body.appendChild(sug);
+
+  function _sugPosition() {
+    const r = descInp.getBoundingClientRect();
+    sug.style.top   = r.bottom + 2 + 'px';
+    sug.style.left  = r.left + 'px';
+    sug.style.width = r.width + 'px';
+  }
+  function _sugShow() { _sugPosition(); sug.style.display = 'block'; }
+  function _sugHide() { sug.style.display = 'none'; sug.innerHTML = ''; }
+
+  const _onScroll = () => _sugHide();
+  window.addEventListener('scroll', _onScroll, { passive: true, capture: true });
+
+  let sugTimer;
+  descInp.addEventListener('input', () => {
+    clearTimeout(sugTimer);
+    const q = descInp.value.trim();
+    if (q.length < 2) { _sugHide(); return; }
+    sugTimer = setTimeout(async () => {
+      const [prodRes, svcRes] = await Promise.all([
+        API.productSearch(q, 6),
+        API.serviceMgmtCatalog(q),
+      ]);
+      const products = prodRes.body?.data || [];
+      const services = svcRes.body?.data  || [];
+      if (!products.length && !services.length) { _sugHide(); return; }
+      sug.innerHTML = [
+        ...products.map(p => `<div class="qt-suggest-item" data-type="product" data-id="${p.id}" data-name="${escHtml(p.name)}" data-price="${p.unit_sell_price ?? p.discounted_sell_price ?? 0}">
+          <i class="fa fa-box" style="opacity:.45;margin-right:5px;font-size:11px"></i>${escHtml(p.name)}<span class="qt-suggest-sku">${p.sku ? escHtml(p.sku) : ''}</span>
+        </div>`),
+        ...services.map(sv => `<div class="qt-suggest-item" data-type="service" data-id="${sv.id}" data-name="${escHtml(sv.name)}" data-price="${sv.price ?? 0}">
+          <i class="fa fa-screwdriver-wrench" style="color:#10b981;margin-right:5px;font-size:11px"></i>${escHtml(sv.name)}${sv.duration_label ? `<span class="qt-suggest-sku">${escHtml(sv.duration_label)}</span>` : ''}
+        </div>`),
+      ].join('');
+      _sugShow();
+      sug.querySelectorAll('.qt-suggest-item').forEach(el => {
+        el.addEventListener('mousedown', e => {
+          e.preventDefault();
+          _sugHide();
+          descInp.value  = el.dataset.name;
+          priceInp.value = parseFloat(el.dataset.price || 0).toFixed(2);
+          if (el.dataset.type === 'product') row.dataset.productId = el.dataset.id;
+          _sawRecalcItems();
+          priceInp.focus();
+        });
+      });
+    }, 200);
+  });
+  descInp.addEventListener('blur', () => setTimeout(_sugHide, 150));
+
+  row.querySelector('[data-role="qty"]').addEventListener('input', _sawRecalcItems);
+  priceInp.addEventListener('input', _sawRecalcItems);
+
+  const discInp = row.querySelector('[data-role="disc"]');
+  discInp?.addEventListener('input', () => {
+    discInp.classList.toggle('has-val', (parseFloat(discInp.value) || 0) > 0);
+    _sawRecalcItems();
+  });
+  row.querySelector('[data-role="disc-toggle"]')?.addEventListener('click', () => {
+    const isFlat = row.dataset.discType === 'flat';
+    row.dataset.discType = isFlat ? 'pct' : 'flat';
+    const tog = row.querySelector('[data-role="disc-toggle"]');
+    tog.textContent = isFlat ? '%' : escHtml(state.currency || '¤');
+    tog.classList.toggle('is-flat', !isFlat);
+    discInp.removeAttribute('max');
+    if (!isFlat) discInp.setAttribute('max', '100');
+    _sawRecalcItems();
+  });
+
+  const taxSel = row.querySelector('[data-role="tax"]');
+  taxSel?.addEventListener('change', () => {
+    const rules = Array.isArray(state.receiptSettings?.tax_rules) ? state.receiptSettings.tax_rules.filter(r => parseFloat(r.value || 0) > 0) : [];
+    const ri   = taxSel.value === '' ? -1 : parseInt(taxSel.value);
+    const rule = ri >= 0 && rules[ri] ? rules[ri] : null;
+    taxSel.classList.toggle('has-tax', !!rule);
+    const ruleType = rule ? (rule.type === 'percentage' ? 'pct' : rule.type) : 'pct';
+    row.dataset.taxType  = ruleType;
+    row.dataset.taxValue = rule ? rule.value : 0;
+    _sawRecalcItems();
+  });
+
+  row.querySelector('.qt-line-del').addEventListener('click', () => {
+    _sugHide();
+    window.removeEventListener('scroll', _onScroll, { capture: true });
+    sug.remove();
+    row.remove();
+    _sawRecalcItems();
+  });
+
+  $('#saw-items-body').appendChild(row);
+  if (!desc) setTimeout(() => descInp.focus(), 40);
+  _sawRecalcItems();
+  return row;
+}
+
+function _sawRecalcItems() {
+  let sub = 0;
+  $$('#saw-items-body .qt-line-row').forEach(row => {
+    const qty      = parseFloat(row.querySelector('[data-role="qty"]')?.value)   || 0;
+    const price    = parseFloat(row.querySelector('[data-role="price"]')?.value) || 0;
+    const discType = row.dataset.discType || 'pct';
+    const discVal  = _saw.type === 'invoice' ? (parseFloat(row.querySelector('[data-role="disc"]')?.value) || 0) : 0;
+    const taxType  = row.dataset.taxType || 'pct';
+    const taxValue = _saw.type === 'invoice' ? (parseFloat(row.dataset.taxValue) || 0) : 0;
+
+    const gross   = qty * price;
+    const discAmt = discType === 'flat' ? discVal : gross * (discVal / 100);
+    const net     = Math.max(0, gross - discAmt);
+    const taxAmt  = taxType === 'flat' ? taxValue : net * (taxValue / 100);
+    const total   = net + taxAmt;
+
+    row.dataset.discAmt = discAmt;
+    row.dataset.taxAmt  = taxAmt;
+
+    const totalEl = row.querySelector('[data-role="total"]');
+    if (totalEl) totalEl.textContent = total.toFixed(2);
+    sub += total;
+  });
+  const subEl = $('#saw-items-subtotal');
+  if (subEl) subEl.textContent = sub.toFixed(2);
+  _sawRecalcSummary();
+}
+
+// Subtotal/Total below are net of each line's own discount+tax (matching
+// what the backend stores as the sale's subtotal). The "Item Discount" /
+// "Item Tax" rows are a read-only breakdown of how much of that subtotal
+// already came from per-line discounts/tax, so it isn't hidden from the
+// user; the editable Discount/Tax fields remain an *additional* header-level
+// adjustment on top, which is what the API's discount_amount/tax_amount
+// fields represent.
+function _sawRecalcSummary() {
+  let sub = 0, itemDiscount = 0, itemTax = 0;
+  $$('#saw-items-body .qt-line-row').forEach(row => {
+    sub          += parseFloat(row.querySelector('[data-role="total"]')?.textContent) || 0;
+    itemDiscount += parseFloat(row.dataset.discAmt) || 0;
+    itemTax      += parseFloat(row.dataset.taxAmt)  || 0;
+  });
+
+  const isInvoice = _saw.type === 'invoice';
+  const discRow = $('#saw-item-discount-row');
+  const taxRow  = $('#saw-item-tax-row');
+  if (discRow) discRow.style.display = (isInvoice && itemDiscount > 0) ? '' : 'none';
+  if (taxRow)  taxRow.style.display  = (isInvoice && itemTax > 0)      ? '' : 'none';
+  const discValEl = $('#saw-item-discount'); if (discValEl) discValEl.textContent = '-' + itemDiscount.toFixed(2);
+  const taxValEl  = $('#saw-item-tax');      if (taxValEl)  taxValEl.textContent  = itemTax.toFixed(2);
+
+  const discLabel = $('#saw-discount-label'); if (discLabel) discLabel.textContent = isInvoice ? 'Additional Discount' : 'Discount';
+  const taxLabel  = $('#saw-tax-label');      if (taxLabel)  taxLabel.textContent  = isInvoice ? 'Additional Tax' : 'Tax';
+
+  const discount = parseFloat($('#saw-f-discount')?.value) || 0;
+  const tax      = parseFloat($('#saw-f-tax')?.value) || 0;
+  const grand    = Math.max(0, sub - discount + tax);
+  const subEl   = $('#saw-subtotal');
+  if (subEl) subEl.textContent = sub.toFixed(2);
+  const grandEl = $('#saw-grand-total');
+  if (grandEl) grandEl.textContent = grand.toFixed(2);
+}
+
+$('#saw-add-line')?.addEventListener('click', () => _sawAddLine());
+$('#saw-f-discount')?.addEventListener('input', _sawRecalcSummary);
+$('#saw-f-tax')?.addEventListener('input', _sawRecalcSummary);
+
+$('#saw-new-item-toggle')?.addEventListener('click', () => {
+  const form    = $('#saw-new-item-form');
+  const showing = form.style.display !== 'none';
+  form.style.display = showing ? 'none' : '';
+});
+
+// The Product/Service create modals are normally nested inside their own
+// tab's content-panel (#panel-inventory / #panel-services), which the ribbon
+// CSS hides (display:none) unless that tab is active. Move them to be
+// top-level overlays instead — like the Customers modal already is — so
+// they can be opened from anywhere (e.g. the sale wizard) without having to
+// switch tabs first, which previously caused a visible tab-navigation flash.
+document.body.appendChild($('#product-modal'));
+document.body.appendChild($('#svc-new-modal'));
+
+// Opening the full Product/Service form from the sale wizard, then returning
+// here with the newly created item added as a line once it's saved.
+let _sawCatalogReturn = null; // 'product' | 'service' | null
+
+function _sawCatalogResume() {
+  if (!_sawCatalogReturn) return;
+  _sawCatalogReturn = null;
+  $('#sale-wizard').style.display = 'flex';
+  $('#saw-new-item-form').style.display = 'none';
+}
+
+$('#saw-newitem-open-product')?.addEventListener('click', () => {
+  $('#sale-wizard').style.display = 'none';
+  _sawCatalogReturn = 'product';
+  _prodOpenModal(null);
+});
+$('#saw-newitem-open-service')?.addEventListener('click', () => {
+  $('#sale-wizard').style.display = 'none';
+  _sawCatalogReturn = 'service';
+  openNewServiceModal();
+});
+
+// ── Step 4: Save ────────────────────────────────────────────────────────
+function _sawCollectLines() {
+  const lines = [];
+  $$('#saw-items-body .qt-line-row').forEach(row => {
+    const desc  = (row.querySelector('[data-role="desc"]')?.value || '').trim();
+    const qty   = parseFloat(row.querySelector('[data-role="qty"]')?.value)   || 0;
+    const price = parseFloat(row.querySelector('[data-role="price"]')?.value) || 0;
+    if (!(qty > 0 || price > 0 || desc)) return;
+    lines.push({
+      description:    desc,
+      quantity:       qty || 1,
+      unit_price:     price,
+      discount_type:  row.dataset.discType || 'pct',
+      discount_value: parseFloat(row.querySelector('[data-role="disc"]')?.value) || 0,
+      tax_type:       row.dataset.taxType || 'pct',
+      tax_value:      parseFloat(row.dataset.taxValue) || 0,
+      product_id:     row.dataset.productId ? parseInt(row.dataset.productId) : null,
+    });
+  });
+  return lines;
+}
+
+async function _sawSave() {
+  const alertEl = $('#saw-form-alert');
+  alertEl.style.display = 'none';
+
+  const lines = _sawCollectLines();
+  if (!lines.length) {
+    alertEl.textContent   = 'Add at least one line item.';
+    alertEl.style.display = '';
+    _sawSetStep(3);
+    return;
+  }
+
+  const discountAmount = parseFloat($('#saw-f-discount').value) || 0;
+  const taxAmount      = parseFloat($('#saw-f-tax').value) || 0;
+  const reference      = $('#saw-f-ref').value.trim() || null;
+  const notes          = $('#saw-f-notes').value.trim() || null;
+  const date1          = $('#saw-f-date1').value || null;
+  const date2          = $('#saw-f-date2').value || null;
+
+  let body, apiCall;
+
+  if (_saw.type === 'invoice') {
+    body = {
+      customer_id:     _saw.customerId,
+      reference,
+      issue_date:      date1,
+      due_date:        date2,
+      notes,
+      payment_method:  $('#saw-f-payment').value || null,
+      discount_amount: discountAmount,
+      tax_amount:      taxAmount,
+      items: lines.map(l => ({
+        item_type:      'custom',
+        description:    l.description,
+        quantity:       l.quantity,
+        unit_price:     l.unit_price,
+        discount_type:  l.discount_type,
+        discount_value: l.discount_value,
+        tax_pct:        l.tax_value,
+        tax_type:       l.tax_type,
+      })),
+    };
+    apiCall = () => API.createInvoice(body);
+  } else if (_saw.type === 'sales_order') {
+    body = {
+      customer_id:             _saw.customerId,
+      order_date:              date1,
+      expected_delivery_date:  date2,
+      reference,
+      discount_amount:         discountAmount,
+      tax_amount:              taxAmount,
+      notes,
+      items: lines.map(l => ({
+        description: l.description,
+        quantity:    l.quantity,
+        unit_price:  l.unit_price,
+        product_id:  l.product_id,
+      })),
+    };
+    apiCall = () => API.createSalesOrder(body);
+  } else {
+    body = {
+      customer_id:     _saw.customerId,
+      reference,
+      quote_date:      date1,
+      expiry_date:     date2,
+      notes,
+      discount_amount: discountAmount,
+      tax_amount:      taxAmount,
+      items: lines.map(l => ({
+        item_type:   'custom',
+        description: l.description,
+        quantity:    l.quantity,
+        unit_price:  l.unit_price,
+      })),
+    };
+    apiCall = () => API.createQuotation(body);
+  }
+
+  const nextBtn = $('#saw-next');
+  nextBtn.disabled  = true;
+  nextBtn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
+
+  const res = await apiCall();
+
+  nextBtn.disabled  = false;
+  nextBtn.innerHTML = 'Finish <i class="fa fa-check"></i>';
+
+  if (res.status === 200 || res.status === 201) {
+    const saved = res.body?.data;
+    toast(`${_SAW_TYPE_META[_saw.type].label} saved`, 'success');
+    $('#sale-wizard').style.display = 'none';
+    if (_saw.type === 'invoice')          { _salSwitchView('invoices'); if (saved?.id) _invOpenDetail(saved.id); }
+    else if (_saw.type === 'sales_order') { _salSwitchView('orders');   if (saved?.id) _soOpenDetail(saved.id); }
+    else                                  { _salSwitchView('quotes');   if (saved?.id) _qtOpenDetail(saved.id); }
+  } else {
+    const msg = res.body?.errors ? Object.values(res.body.errors).flat().join(' ') : (res.body?.message || 'Failed to save.');
+    alertEl.textContent   = msg;
+    alertEl.style.display = '';
+  }
+}
+
+// ── Navigation ──────────────────────────────────────────────────────────
+function _sawValidateStep(n) {
+  if (n === 1 && _saw.customerId === null && _saw.customerName === null) {
+    toast('Select a customer or continue as walk-in', 'error');
+    return false;
+  }
+  if (n === 2 && !_saw.type) {
+    toast('Choose a document type', 'error');
+    return false;
+  }
+  if (n === 3 && !_sawCollectLines().length) {
+    toast('Add at least one line item', 'error');
+    return false;
+  }
+  return true;
+}
+
+$('#saw-next')?.addEventListener('click', () => {
+  if (!_sawValidateStep(_sawStep)) return;
+  if (_sawStep < _SAW_STEPS) { _sawSetStep(_sawStep + 1); }
+  else { _sawSave(); }
+});
+$('#saw-back')?.addEventListener('click', () => {
+  if (_sawStep > 1) _sawSetStep(_sawStep - 1);
+});
+$('#saw-close')?.addEventListener('click', () => { $('#sale-wizard').style.display = 'none'; });
+$('#sale-wizard')?.addEventListener('click', e => { if (e.target === e.currentTarget) $('#sale-wizard').style.display = 'none'; });
+// ── End Sale Wizard ──────────────────────────────────────────────────────
 
 // ── Invoice Setup ────────────────────────────────────────────────────────
 const INV_TEMPLATES = [
@@ -34210,6 +34802,7 @@ async function openEditServiceModal(id) {
 function closeNewServiceModal() {
   $('#svc-new-modal').style.display = 'none';
   _svcEditingId = null;
+  _sawCatalogResume();
 }
 
 async function _svcLoadFormCategories() {
@@ -34471,10 +35064,16 @@ $('#svc-form-submit')?.addEventListener('click', async () => {
 
   const ok = isEdit ? res.status === 200 : res.status === 201;
   if (ok) {
+    const returningToSaw = _sawCatalogReturn === 'service' && !isEdit;
+    const created = res.body?.data;
     closeNewServiceModal();
     toast(isEdit ? 'Service updated' : 'Service created', 'success');
-    loadSvcCatalog();
-    if (isEdit) _svcOpenItemDetail(_svcEditingId);
+    if (returningToSaw && created) {
+      _sawAddLine(created.name || name, 1, parseFloat(created.price ?? price) || 0);
+    } else {
+      loadSvcCatalog();
+      if (isEdit) _svcOpenItemDetail(_svcEditingId);
+    }
   } else {
     const msg = Object.values(res.body?.errors || {}).flat()[0] || res.body?.message || 'Failed to save service.';
     toast(msg, 'error');

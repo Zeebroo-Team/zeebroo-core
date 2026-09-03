@@ -16383,6 +16383,44 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
 .psw-btn--finish:hover { background: #16a34a; }
 /* ── End POS Setup Wizard ────────────────────────────────────────────────── */
 
+/* ── Sale Wizard ─────────────────────────────────────────────────────────── */
+.saw-card { width: 920px; }
+
+.saw-type-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.saw-type-card {
+  border: 1.5px solid var(--border); border-radius: 12px; padding: 18px 14px;
+  cursor: pointer; text-align: center; transition: all .15s;
+}
+.saw-type-card i { font-size: 22px; color: var(--text-muted); margin-bottom: 10px; display: block; }
+.saw-type-card:hover { background: var(--hover); }
+.saw-type-card.active { border-color: #4e8ef7; background: color-mix(in srgb,#4e8ef7 6%,transparent); }
+.saw-type-card.active i { color: #4e8ef7; }
+.saw-type-name { font-size: 13.5px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+.saw-type-desc { font-size: 11.5px; color: var(--text-muted); line-height: 1.4; }
+
+.saw-cust-chip {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 9px 12px; border: 1px solid var(--border); border-radius: 10px;
+  background: var(--hover); font-size: 13px; color: var(--text);
+}
+.saw-cust-chip i.fa-circle-user { color: #4e8ef7; }
+.saw-cust-chip button {
+  border: none; background: none; cursor: pointer; color: var(--text-muted);
+  width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;
+  border-radius: 5px; margin-left: 2px;
+}
+.saw-cust-chip button:hover { background: var(--border); color: var(--text); }
+
+.saw-newitem-type { display: flex; gap: 8px; }
+.saw-newitem-type-btn {
+  display: flex; align-items: center; gap: 6px;
+  padding: 7px 14px; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--surface); color: var(--text-muted); font-size: 12.5px; font-weight: 600;
+  cursor: pointer; transition: all .15s;
+}
+.saw-newitem-type-btn.active { border-color: #4e8ef7; background: color-mix(in srgb,#4e8ef7 8%,transparent); color: #4e8ef7; }
+/* ── End Sale Wizard ─────────────────────────────────────────────────────── */
+
 /* ── Developers Dialog ───────────────────────────────────────────────────── */
 .dev-dialog-shell {
   background: var(--surface);

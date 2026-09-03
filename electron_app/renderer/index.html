@@ -870,6 +870,9 @@
 
         <div class="ribbon-group">
           <div class="ribbon-group-content">
+            <button class="ribbon-btn-lg primary" id="rb-sal-new-wizard">
+              <i class="fa fa-wand-magic-sparkles"></i>Add New Sale
+            </button>
             <button class="ribbon-btn-lg primary" id="rb-sal-new-invoice">
               <i class="fa fa-file-invoice"></i>New Invoice
             </button>
@@ -15337,6 +15340,189 @@
       <button class="psw-btn psw-btn--back" id="psw-back" style="visibility:hidden"><i class="fa fa-arrow-left"></i> Back</button>
       <span class="psw-step-counter" id="psw-step-counter">Step 1 of 5</span>
       <button class="psw-btn psw-btn--next" id="psw-next">Next <i class="fa fa-arrow-right"></i></button>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── Sale Wizard (guided Add New Sale) ───────────────────────────────────── -->
+<div id="sale-wizard" class="psw-overlay" style="display:none" aria-modal="true" role="dialog">
+  <div class="psw-card saw-card">
+
+    <!-- Header -->
+    <div class="psw-header">
+      <div class="psw-header-icon"><i class="fa fa-wand-magic-sparkles"></i></div>
+      <div>
+        <div class="psw-header-title">Add New Sale</div>
+        <div class="psw-header-sub">Put together a quotation, invoice or sales order in a few quick steps</div>
+      </div>
+      <button class="psw-skip-all" id="saw-close" title="Close"><i class="fa fa-xmark"></i></button>
+    </div>
+
+    <!-- Step indicator -->
+    <div class="psw-steps" id="saw-steps">
+      <div class="psw-step-dot active" data-step="1"><span>1</span><div class="psw-step-label">Customer</div></div>
+      <div class="psw-step-line"></div>
+      <div class="psw-step-dot" data-step="2"><span>2</span><div class="psw-step-label">Type</div></div>
+      <div class="psw-step-line"></div>
+      <div class="psw-step-dot" data-step="3"><span>3</span><div class="psw-step-label">Items</div></div>
+      <div class="psw-step-line"></div>
+      <div class="psw-step-dot" data-step="4"><span>4</span><div class="psw-step-label">Finish</div></div>
+    </div>
+
+    <!-- Step panels -->
+    <div class="psw-body">
+
+      <!-- Step 1: Customer -->
+      <div class="psw-panel active" data-saw-panel="1">
+        <div class="psw-panel-icon" style="background:rgba(78,142,247,.12);color:#4e8ef7"><i class="fa fa-user"></i></div>
+        <h3 class="psw-panel-title">Who is this sale for?</h3>
+        <p class="psw-panel-sub">Search for an existing customer, add a new one, or continue without one.</p>
+
+        <div id="saw-cust-picker">
+          <div class="psw-field" style="position:relative">
+            <label>Search customer</label>
+            <input type="text" id="saw-cust-search" placeholder="Type a name or phone number…" autocomplete="off">
+            <div id="saw-cust-results" class="qt-product-suggest" style="position:static;display:none;margin-top:6px;border-radius:8px"></div>
+          </div>
+          <div style="display:flex;gap:10px;margin-top:4px;flex-wrap:wrap">
+            <button type="button" class="qt-back-btn" id="saw-cust-add-new"><i class="fa fa-user-plus"></i> Add new customer</button>
+            <button type="button" class="qt-back-btn" id="saw-cust-walkin"><i class="fa fa-person-walking"></i> Continue as walk-in</button>
+          </div>
+        </div>
+
+        <div id="saw-cust-selected" style="display:none;margin-top:10px">
+          <div class="saw-cust-chip">
+            <i class="fa fa-circle-user"></i>
+            <span id="saw-cust-selected-name"></span>
+            <button type="button" id="saw-cust-change" title="Change"><i class="fa fa-xmark"></i></button>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Step 2: Type -->
+      <div class="psw-panel" data-saw-panel="2">
+        <div class="psw-panel-icon" style="background:rgba(20,184,166,.12);color:#14b8a6"><i class="fa fa-list-check"></i></div>
+        <h3 class="psw-panel-title">What are you creating?</h3>
+        <p class="psw-panel-sub">Choose the kind of sale document you want to make.</p>
+
+        <div class="saw-type-grid" id="saw-type-grid">
+          <div class="saw-type-card" data-type="quotation">
+            <i class="fa fa-file-circle-plus"></i>
+            <div class="saw-type-name">Quotation</div>
+            <div class="saw-type-desc">A price estimate to send before the sale is confirmed.</div>
+          </div>
+          <div class="saw-type-card" data-type="invoice">
+            <i class="fa fa-file-invoice"></i>
+            <div class="saw-type-name">Invoice</div>
+            <div class="saw-type-desc">A billable sale with payment details, ready to be paid.</div>
+          </div>
+          <div class="saw-type-card" data-type="sales_order">
+            <i class="fa fa-box"></i>
+            <div class="saw-type-name">Sales Order</div>
+            <div class="saw-type-desc">A confirmed order to fulfil and deliver later.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 3: Items -->
+      <div class="psw-panel" data-saw-panel="3">
+        <div class="psw-panel-icon" style="background:rgba(245,158,11,.12);color:#f59e0b"><i class="fa fa-boxes-stacked"></i></div>
+        <h3 class="psw-panel-title">What's being sold?</h3>
+        <p class="psw-panel-sub">Search for a product or service, or create a new one.</p>
+
+        <div class="qt-card">
+          <div class="qt-items-cols" id="saw-items-cols">
+            <span style="flex:1">Description</span>
+            <span class="qt-col-qty">Qty</span>
+            <span class="qt-col-price">Unit Price</span>
+            <span class="qt-col-disc" id="saw-col-disc">Disc</span>
+            <span class="qt-col-tax" id="saw-col-tax">Tax</span>
+            <span class="qt-col-total">Total</span>
+            <span class="qt-col-del"></span>
+          </div>
+          <div id="saw-items-body"></div>
+          <button type="button" class="qt-add-line-btn" id="saw-add-line"><i class="fa fa-plus"></i> Add Line</button>
+        </div>
+
+        <div style="margin-top:12px">
+          <button type="button" class="qt-back-btn" id="saw-new-item-toggle"><i class="fa fa-plus"></i> Create a new product or service</button>
+        </div>
+
+        <div id="saw-new-item-form" class="qt-card" style="display:none;margin-top:10px;padding:14px">
+          <p class="psw-hint" style="margin:0 0 10px">Choose what you're creating — it opens the full form, then adds it to this sale.</p>
+          <div class="saw-newitem-type">
+            <button type="button" class="saw-newitem-type-btn" id="saw-newitem-open-product"><i class="fa fa-box"></i> New Product</button>
+            <button type="button" class="saw-newitem-type-btn" id="saw-newitem-open-service"><i class="fa fa-screwdriver-wrench"></i> New Service</button>
+          </div>
+        </div>
+
+        <div class="qt-total-row qt-grand-total" style="margin-top:12px;border-radius:8px">
+          <span>Items Subtotal</span><span id="saw-items-subtotal">0.00</span>
+        </div>
+      </div>
+
+      <!-- Step 4: Finish -->
+      <div class="psw-panel" data-saw-panel="4">
+        <div class="psw-panel-icon" style="background:rgba(34,197,94,.12);color:#22c55e"><i class="fa fa-circle-check"></i></div>
+        <h3 class="psw-panel-title">Review &amp; finish</h3>
+        <p class="psw-panel-sub" id="saw-finish-sub">Confirm the details and save this sale.</p>
+
+        <div class="qt-card">
+          <div class="qt-card-hd"><i class="fa fa-circle-info"></i> Sale Details</div>
+          <div class="qt-fields-grid">
+            <div class="qt-field">
+              <label class="qt-label">Reference No.</label>
+              <input type="text" id="saw-f-ref" class="qt-input" placeholder="e.g. PO-123" maxlength="120">
+            </div>
+            <div class="qt-field">
+              <label class="qt-label" id="saw-f-date1-label">Date</label>
+              <input type="date" id="saw-f-date1" class="qt-input">
+            </div>
+            <div class="qt-field">
+              <label class="qt-label" id="saw-f-date2-label">Date</label>
+              <input type="date" id="saw-f-date2" class="qt-input">
+            </div>
+            <div class="qt-field" id="saw-payment-wrap" style="display:none">
+              <label class="qt-label">Payment Method</label>
+              <select id="saw-f-payment" class="qt-select">
+                <option value="">— Select method —</option>
+                <option value="cash">Cash</option>
+                <option value="card">Card</option>
+                <option value="bank_transfer">Bank Transfer</option>
+                <option value="credit_payment">Credit Payment</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="qt-summary-row" style="margin-top:14px">
+          <div class="qt-card qt-notes-card">
+            <div class="qt-card-hd"><i class="fa fa-note-sticky"></i> Notes</div>
+            <textarea id="saw-f-notes" class="qt-textarea" rows="5" placeholder="Terms, conditions or notes…"></textarea>
+          </div>
+          <div class="qt-card">
+            <div class="qt-card-hd"><i class="fa fa-calculator"></i> Summary</div>
+            <div class="qt-total-row"><span>Subtotal</span><span id="saw-subtotal">0.00</span></div>
+            <div class="qt-total-row" id="saw-item-discount-row" style="display:none;color:var(--text-muted)"><span>Item Discount</span><span id="saw-item-discount">0.00</span></div>
+            <div class="qt-total-row" id="saw-item-tax-row" style="display:none;color:var(--text-muted)"><span>Item Tax</span><span id="saw-item-tax">0.00</span></div>
+            <div class="qt-total-row"><span id="saw-discount-label">Discount</span><input type="number" id="saw-f-discount" class="qt-total-input" min="0" step="0.01" placeholder="0.00"></div>
+            <div class="qt-total-row"><span id="saw-tax-label">Tax</span><input type="number" id="saw-f-tax" class="qt-total-input" min="0" step="0.01" placeholder="0.00"></div>
+            <div class="qt-total-row qt-grand-total"><span>Total</span><span id="saw-grand-total">0.00</span></div>
+          </div>
+        </div>
+
+        <div id="saw-form-alert" class="alert alert-error" style="display:none;margin-top:12px"></div>
+      </div>
+
+    </div><!-- /.psw-body -->
+
+    <!-- Footer -->
+    <div class="psw-footer">
+      <button class="psw-btn psw-btn--back" id="saw-back" style="visibility:hidden"><i class="fa fa-arrow-left"></i> Back</button>
+      <span class="psw-step-counter" id="saw-step-counter">Step 1 of 4</span>
+      <button class="psw-btn psw-btn--next" id="saw-next">Next <i class="fa fa-arrow-right"></i></button>
     </div>
 
   </div>
