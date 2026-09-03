@@ -210,6 +210,7 @@ const _sbSubItems = {
     { view:'payroll',        icon:'fa-money-check-dollar',   label:'Payroll' },
     { view:'rule-sets',      icon:'fa-list-check',           label:'Rule Sets' },
     { view:'allowance-types',icon:'fa-coins',                label:'Allowances' },
+    { view:'positions',      icon:'fa-id-badge',             label:'Positions' },
   ],
   services: [
     { view:'requests',       icon:'fa-clipboard-list',       label:'Requests' },
@@ -8682,6 +8683,7 @@ const HOG_ACTIONS = {
   'employees':       () => { activateTab('hr'); switchHrView('employees'); },
   'departments':     () => { activateTab('hr'); switchHrView('departments'); },
   'payroll':         () => { activateTab('hr'); switchHrView('payroll'); },
+  'positions':       () => { activateTab('hr'); switchHrView('positions'); },
   'svc-requests':    () => { activateTab('services'); switchSvcView('requests'); },
   'svc-catalog':     () => { activateTab('services'); switchSvcView('catalog'); },
   'analytics':       () => { activateTab('home'); switchHomeView('analytics'); },
@@ -29151,11 +29153,13 @@ function switchHrView(view) {
   $('#rule-set-detail-view').style.display      = 'none';
   $('#template-page-view').style.display        = 'none';
   $('#allowance-types-view').style.display      = view === 'allowance-types' ? 'flex' : 'none';
+  $('#positions-view').style.display            = view === 'positions' ? 'flex' : 'none';
   if (view === 'employees')        loadEmployees();
   if (view === 'departments')      loadDepartments();
   if (view === 'payroll')          loadPayrollCycles();
   if (view === 'rule-sets')        loadRuleSets();
   if (view === 'allowance-types')  loadAllowanceTypes();
+  if (view === 'positions')        loadPositions();
 }
 
 $$('#panel-hr .fin-subnav-btn[data-hr]').forEach(btn => {
@@ -32054,6 +32058,7 @@ $('#rst-po-new-btn')?.addEventListener('click', () => _rstPoOpenModal(null));
 $('#rb-employees').addEventListener('click',   () => { activateTab('hr'); switchHrView('employees'); });
 $('#rb-departments').addEventListener('click', () => { activateTab('hr'); switchHrView('departments'); });
 $('#rb-hr-payroll').addEventListener('click',  () => { activateTab('hr'); switchHrView('payroll'); });
+$('#rb-positions').addEventListener('click',   () => { activateTab('hr'); switchHrView('positions'); });
 
 // ── Employees list ──────────────────────────────────────────────────────────
 
@@ -33910,6 +33915,157 @@ async function submitAtCreate() {
   } else {
     const msg = res.body?.errors?.name?.[0] || res.body?.message || 'Failed to create allowance type.';
     showAtError(msg);
+  }
+}
+
+// ── HR Positions (job titles) ───────────────────────────────────────────────
+
+let _positions = [];
+
+async function loadPositions(search) {
+  const area   = $('#pos-cards-area');
+  const footer = $('#pos-footer-text');
+  area.innerHTML = '<p style="color:var(--text-muted);padding:20px 0"><i class="fa fa-spinner fa-spin"></i> Loading positions…</p>';
+
+  const res = await API.positions();
+  if (res.status !== 200) {
+    area.innerHTML = '<p style="color:#e74c3c"><i class="fa fa-circle-exclamation"></i> Failed to load positions.</p>';
+    return;
+  }
+
+  _positions = res.body.data || [];
+
+  const q = (search || '').toLowerCase().trim();
+  const filtered = q ? _positions.filter(p => p.name.toLowerCase().includes(q)) : _positions;
+
+  $('#pos-total-count').textContent = _positions.length;
+
+  if (!filtered.length) {
+    area.innerHTML = `<p style="color:var(--text-muted);text-align:center;padding:40px 0"><i class="fa fa-id-badge" style="font-size:32px;display:block;margin-bottom:12px;opacity:.3"></i>${_positions.length ? 'No positions match your search.' : 'No positions yet. Click <strong>Add Position</strong> to get started.'}</p>`;
+    footer.textContent = filtered.length + ' positions';
+    return;
+  }
+
+  area.innerHTML = filtered.map(p => buildPositionCard(p)).join('');
+  footer.textContent = `${filtered.length} position${filtered.length !== 1 ? 's' : ''}`;
+
+  area.querySelectorAll('.pos-edit-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const id   = parseInt(btn.dataset.id, 10);
+      const name = btn.dataset.name;
+      openPosEditModal(id, name);
+    });
+  });
+
+  area.querySelectorAll('.pos-delete-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const id   = parseInt(btn.dataset.id, 10);
+      const name = btn.dataset.name;
+      if (!confirm(`Delete position "${name}"? This cannot be undone.`)) return;
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i>';
+      const r = await API.deletePosition(id);
+      if (r.status === 200) {
+        toast('Position deleted.', 'success');
+        await loadPositions($('#pos-search').value);
+      } else {
+        toast(r.body?.message || 'Failed to delete.', 'error');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa fa-trash"></i>';
+      }
+    });
+  });
+}
+
+function buildPositionCard(p) {
+  const canDelete = (p.employees_count || 0) === 0;
+  return `
+    <div class="lm-card" style="cursor:default">
+      <div class="lm-card-header">
+        <div class="lm-card-icon" style="background:#dbeafe20;color:#2563eb"><i class="fa fa-id-badge"></i></div>
+        <div class="lm-card-title-wrap">
+          <span class="lm-card-name">${escHtml(p.name)}</span>
+          <div class="lm-card-pills">
+            <span class="lm-pill" style="background:#dbeafe18;color:#2563eb">${p.employees_count || 0} employee${(p.employees_count || 0) !== 1 ? 's' : ''}</span>
+          </div>
+        </div>
+        <button class="lm-remove-btn pos-edit-btn" data-id="${p.id}" data-name="${escHtml(p.name)}" title="Edit position" style="margin-right:4px"><i class="fa fa-pen"></i></button>
+        ${canDelete
+          ? `<button class="lm-remove-btn pos-delete-btn" data-id="${p.id}" data-name="${escHtml(p.name)}" title="Delete position"><i class="fa fa-trash"></i></button>`
+          : `<span style="font-size:11px;color:var(--text-muted);white-space:nowrap;padding-right:4px">In use</span>`}
+      </div>
+    </div>`;
+}
+
+$('#pos-search').addEventListener('input', e => loadPositions(e.target.value));
+$('#pos-add-btn').addEventListener('click', openPosCreateModal);
+
+// ── Position: Create / Edit Modal ───────────────────────────────────────────
+
+let _posEditingId = null;
+
+function openPosCreateModal() {
+  _posEditingId = null;
+  $('#pos-create-modal-title').innerHTML = '<i class="fa fa-id-badge"></i> New Position';
+  $('#pos-create-modal-save').innerHTML = '<i class="fa fa-plus"></i> Create';
+  $('#pos-modal-name').value = '';
+  showPosError('');
+  $('#pos-create-modal').style.display = '';
+  setTimeout(() => $('#pos-modal-name').focus(), 60);
+}
+
+function openPosEditModal(id, name) {
+  _posEditingId = id;
+  $('#pos-create-modal-title').innerHTML = '<i class="fa fa-id-badge"></i> Edit Position';
+  $('#pos-create-modal-save').innerHTML = '<i class="fa fa-check"></i> Save';
+  $('#pos-modal-name').value = name;
+  showPosError('');
+  $('#pos-create-modal').style.display = '';
+  setTimeout(() => $('#pos-modal-name').focus(), 60);
+}
+
+function closePosCreateModal() {
+  _posEditingId = null;
+  $('#pos-create-modal').style.display = 'none';
+}
+
+function showPosError(msg) {
+  const el = $('#pos-create-alert');
+  el.textContent = msg;
+  el.style.display = msg ? '' : 'none';
+}
+
+$('#pos-create-modal-close').addEventListener('click', closePosCreateModal);
+$('#pos-create-modal-cancel').addEventListener('click', closePosCreateModal);
+$('#pos-create-modal').addEventListener('click', e => { if (e.target === $('#pos-create-modal')) closePosCreateModal(); });
+$('#pos-modal-name').addEventListener('keydown', e => { if (e.key === 'Enter') submitPosCreate(); });
+$('#pos-create-modal-save').addEventListener('click', submitPosCreate);
+
+async function submitPosCreate() {
+  const name = $('#pos-modal-name').value.trim();
+  if (!name) { showPosError('Position name is required.'); return; }
+
+  const btn = $('#pos-create-modal-save');
+  const editingId = _posEditingId;
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
+
+  const res = editingId
+    ? await API.updatePosition(editingId, { name })
+    : await API.createPosition({ name });
+
+  btn.disabled = false;
+  btn.innerHTML = editingId ? '<i class="fa fa-check"></i> Save' : '<i class="fa fa-plus"></i> Create';
+
+  if (res.status === 201 || res.status === 200) {
+    closePosCreateModal();
+    toast(editingId ? 'Position updated.' : 'Position created.', 'success');
+    await loadPositions($('#pos-search').value);
+  } else {
+    const msg = res.body?.errors?.name?.[0] || res.body?.message || (editingId ? 'Failed to update position.' : 'Failed to create position.');
+    showPosError(msg);
   }
 }
 
