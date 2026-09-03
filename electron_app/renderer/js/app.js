@@ -211,6 +211,7 @@ const _sbSubItems = {
     { view:'rule-sets',      icon:'fa-list-check',           label:'Rule Sets' },
     { view:'allowance-types',icon:'fa-coins',                label:'Allowances' },
     { view:'positions',      icon:'fa-id-badge',             label:'Positions' },
+    { view:'attendance',     icon:'fa-clock',                label:'Attendance' },
   ],
   services: [
     { view:'requests',       icon:'fa-clipboard-list',       label:'Requests' },
@@ -8684,6 +8685,7 @@ const HOG_ACTIONS = {
   'departments':     () => { activateTab('hr'); switchHrView('departments'); },
   'payroll':         () => { activateTab('hr'); switchHrView('payroll'); },
   'positions':       () => { activateTab('hr'); switchHrView('positions'); },
+  'attendance':      () => { activateTab('hr'); switchHrView('attendance'); },
   'svc-requests':    () => { activateTab('services'); switchSvcView('requests'); },
   'svc-catalog':     () => { activateTab('services'); switchSvcView('catalog'); },
   'analytics':       () => { activateTab('home'); switchHomeView('analytics'); },
@@ -29154,12 +29156,14 @@ function switchHrView(view) {
   $('#template-page-view').style.display        = 'none';
   $('#allowance-types-view').style.display      = view === 'allowance-types' ? 'flex' : 'none';
   $('#positions-view').style.display            = view === 'positions' ? 'flex' : 'none';
+  $('#attendance-view').style.display           = view === 'attendance' ? 'flex' : 'none';
   if (view === 'employees')        loadEmployees();
   if (view === 'departments')      loadDepartments();
   if (view === 'payroll')          loadPayrollCycles();
   if (view === 'rule-sets')        loadRuleSets();
   if (view === 'allowance-types')  loadAllowanceTypes();
   if (view === 'positions')        loadPositions();
+  if (view === 'attendance')       loadAttendance();
 }
 
 $$('#panel-hr .fin-subnav-btn[data-hr]').forEach(btn => {
@@ -32059,6 +32063,7 @@ $('#rb-employees').addEventListener('click',   () => { activateTab('hr'); switch
 $('#rb-departments').addEventListener('click', () => { activateTab('hr'); switchHrView('departments'); });
 $('#rb-hr-payroll').addEventListener('click',  () => { activateTab('hr'); switchHrView('payroll'); });
 $('#rb-positions').addEventListener('click',   () => { activateTab('hr'); switchHrView('positions'); });
+$('#rb-attendance').addEventListener('click',  () => { activateTab('hr'); switchHrView('attendance'); });
 
 // ── Employees list ──────────────────────────────────────────────────────────
 
@@ -34068,6 +34073,270 @@ async function submitPosCreate() {
     showPosError(msg);
   }
 }
+
+// ── HR Attendance ────────────────────────────────────────────────────────────
+
+let _attendanceRecords = [];
+
+async function loadAttendance(search) {
+  const area   = $('#att-cards-area');
+  const footer = $('#att-footer-text');
+  area.innerHTML = '<p style="color:var(--text-muted);padding:20px 0"><i class="fa fa-spinner fa-spin"></i> Loading attendance…</p>';
+
+  const res = await API.attendance(search);
+  if (res.status !== 200) {
+    area.innerHTML = '<p style="color:#e74c3c"><i class="fa fa-circle-exclamation"></i> Failed to load attendance.</p>';
+    return;
+  }
+
+  _attendanceRecords = res.body.data || [];
+  $('#att-total-count').textContent = res.body.total_count ?? _attendanceRecords.length;
+
+  if (!_attendanceRecords.length) {
+    area.innerHTML = `<p style="color:var(--text-muted);text-align:center;padding:40px 0"><i class="fa fa-clock" style="font-size:32px;display:block;margin-bottom:12px;opacity:.3"></i>${search ? 'No attendance records match your search.' : 'No attendance records yet. Click <strong>Upload CSV</strong> to import check-in / check-out logs.'}</p>`;
+    footer.textContent = '0 records';
+    return;
+  }
+
+  area.innerHTML = _attendanceRecords.map(r => buildAttendanceCard(r)).join('');
+  footer.textContent = `${_attendanceRecords.length} record${_attendanceRecords.length !== 1 ? 's' : ''}`;
+}
+
+function _attFmtTime(dt) {
+  if (!dt) return '—';
+  const d = new Date(dt.replace(' ', 'T'));
+  if (isNaN(d.getTime())) return dt;
+  return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function _attFmtWorked(minutes) {
+  if (minutes === null || minutes === undefined) return '—';
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return `${h}h ${m}m`;
+}
+
+function buildAttendanceCard(r) {
+  return `
+    <div class="lm-card" style="cursor:default">
+      <div class="lm-card-header">
+        <div class="lm-card-icon" style="background:#dbeafe20;color:#2563eb"><i class="fa fa-user-clock"></i></div>
+        <div class="lm-card-title-wrap">
+          <span class="lm-card-name">${escHtml(r.employee_name || 'Unknown')} <span style="color:var(--text-muted);font-weight:400">#${escHtml(r.employee_id || '—')}</span></span>
+          <div class="lm-card-pills">
+            <span class="lm-pill" style="background:#dbeafe18;color:#2563eb"><i class="fa fa-right-to-bracket"></i> In: ${_attFmtTime(r.check_in_at)}</span>
+            <span class="lm-pill" style="background:#fef3c718;color:#d97706"><i class="fa fa-right-from-bracket"></i> Out: ${_attFmtTime(r.check_out_at)}</span>
+            <span class="lm-pill" style="background:#dcfce718;color:#16a34a"><i class="fa fa-hourglass-half"></i> ${_attFmtWorked(r.worked_minutes)}</span>
+          </div>
+        </div>
+        <span style="font-size:11px;color:var(--text-muted);white-space:nowrap">${escHtml(r.work_date || '')}</span>
+      </div>
+    </div>`;
+}
+
+$('#att-search')?.addEventListener('input', e => loadAttendance(e.target.value));
+$('#att-import-btn')?.addEventListener('click', _attCsvOpenModal);
+
+// ── Attendance: CSV Import ──────────────────────────────────────────────────
+const _ATT_CSV_SAMPLE = [
+  'employee_id,check_in,check_out',
+  '0001,2026-09-03 09:00,2026-09-03 17:30',
+  '0002,2026-09-03 09:05,2026-09-03 17:00',
+].join('\n');
+
+const _ATT_CSV_COL_MAP = {
+  'employee_id': 'employee_id', 'employee id': 'employee_id', 'emp id': 'employee_id',
+  'emp_id': 'employee_id', 'employee code': 'employee_id', 'id': 'employee_id', 'code': 'employee_id',
+  'check_in': 'check_in', 'check in': 'check_in', 'in': 'check_in', 'time in': 'check_in',
+  'clock in': 'check_in', 'check_in_at': 'check_in', 'in time': 'check_in',
+  'check_out': 'check_out', 'check out': 'check_out', 'out': 'check_out', 'time out': 'check_out',
+  'clock out': 'check_out', 'check_out_at': 'check_out', 'out time': 'check_out',
+};
+
+let _attCsvParsedRows = [];
+let _attCsvValidRows  = [];
+
+function _attCsvParseFile(text) {
+  const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').filter(l => l.trim());
+  if (lines.length < 2) return { headers: [], rows: [], error: 'File must have a header row and at least one data row.' };
+
+  const headers = _csvParseLine(lines[0]).map(h => h.trim().toLowerCase());
+  const colMap  = {};
+  headers.forEach((h, i) => { if (_ATT_CSV_COL_MAP[h]) colMap[_ATT_CSV_COL_MAP[h]] = i; });
+
+  if (colMap['employee_id'] === undefined) {
+    return { headers, rows: [], error: 'Missing required column: "employee_id" (or "employee id", "emp id").' };
+  }
+  if (colMap['check_in'] === undefined) {
+    return { headers, rows: [], error: 'Missing required column: "check_in" (or "check in", "in", "time in").' };
+  }
+
+  const rows = [];
+  for (let i = 1; i < lines.length; i++) {
+    const cells = _csvParseLine(lines[i]);
+    const row   = {};
+    Object.entries(colMap).forEach(([key, ci]) => { row[key] = (cells[ci] || '').trim(); });
+    row._rowNum = i + 1;
+
+    row._errors = [];
+    if (!row.employee_id) row._errors.push('Employee ID is required');
+    if (!row.check_in && !row.check_out) row._errors.push('Check-in or check-out time is required');
+    if (row.check_in && isNaN(new Date(row.check_in.replace(' ', 'T')).getTime())) row._errors.push('Invalid check-in date/time');
+    if (row.check_out && isNaN(new Date(row.check_out.replace(' ', 'T')).getTime())) row._errors.push('Invalid check-out date/time');
+
+    rows.push(row);
+  }
+  return { headers: Object.keys(colMap), rows };
+}
+
+function _attCsvSetStep(n) {
+  [1, 2, 3].forEach(i => {
+    const body = $(`#att-csv-step-${i}`);
+    const ind  = $(`#att-csv-step-ind-${i}`);
+    if (body) body.style.display = i === n ? 'flex' : 'none';
+    if (ind) {
+      ind.classList.toggle('active', i === n);
+      ind.classList.toggle('done',   i < n);
+    }
+  });
+}
+
+function _attCsvShowPreview(rows) {
+  const valid = rows.filter(r => !r._errors.length);
+  const bad   = rows.filter(r => r._errors.length);
+  _attCsvValidRows = valid;
+
+  const sumEl = $('#att-csv-preview-summary');
+  sumEl.innerHTML = `
+    <b>${rows.length} row${rows.length !== 1 ? 's' : ''} found</b>
+    <span class="csv-preview-badge ok"><i class="fa fa-circle-check"></i> ${valid.length} valid</span>
+    ${bad.length ? `<span class="csv-preview-badge error"><i class="fa fa-triangle-exclamation"></i> ${bad.length} with errors</span>` : ''}
+    ${rows.length > 100 ? `<span class="csv-preview-badge warn"><i class="fa fa-eye"></i> Showing first 100 rows</span>` : ''}`;
+
+  const display = rows.slice(0, 100);
+  $('#att-csv-preview-thead').innerHTML = `<tr>
+    <th>#</th><th>Employee ID</th><th>Check In</th><th>Check Out</th><th>Status</th>
+  </tr>`;
+  $('#att-csv-preview-tbody').innerHTML = display.map(r => {
+    const isErr = r._errors.length > 0;
+    const status = isErr
+      ? `<span class="csv-row-error-msg"><i class="fa fa-triangle-exclamation"></i> ${escHtml(r._errors.join('; '))}</span>`
+      : `<span style="color:#10b981;font-size:11px"><i class="fa fa-circle-check"></i> OK</span>`;
+    return `<tr class="${isErr ? 'csv-row-error' : ''}">
+      <td style="color:var(--text-muted)">${r._rowNum}</td>
+      <td><strong>${escHtml(r.employee_id || '—')}</strong></td>
+      <td style="color:var(--text-muted)">${escHtml(r.check_in || '—')}</td>
+      <td style="color:var(--text-muted)">${escHtml(r.check_out || '—')}</td>
+      <td>${status}</td>
+    </tr>`;
+  }).join('');
+
+  $('#att-csv-import-count').textContent = valid.length;
+  $('#att-csv-import-btn').disabled = valid.length === 0;
+  _attCsvSetStep(2);
+}
+
+function _attCsvReset() {
+  _attCsvParsedRows = [];
+  _attCsvValidRows  = [];
+  $('#att-csv-file-input').value = '';
+  _attCsvSetStep(1);
+}
+
+function _attCsvOpenModal() {
+  _attCsvReset();
+  $('#att-csv-import-modal').style.display = 'flex';
+}
+
+function _attCsvCloseModal() {
+  $('#att-csv-import-modal').style.display = 'none';
+  _attCsvReset();
+}
+
+function _attCsvDownloadSample() {
+  const blob = new Blob([_ATT_CSV_SAMPLE], { type: 'text/csv' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = 'attendance-sample.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function _attCsvHandleFile(file) {
+  if (!file || !file.name.match(/\.csv$/i)) { toast('Please select a .csv file', 'error'); return; }
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const { rows, error } = _attCsvParseFile(e.target.result);
+    if (error) { toast(error, 'error'); return; }
+    if (rows.length > 1000) { toast(`CSV has ${rows.length} rows. Only the first 1000 will be imported.`, 'error'); }
+    _attCsvParsedRows = rows.slice(0, 1000);
+    _attCsvShowPreview(_attCsvParsedRows);
+  };
+  reader.readAsText(file);
+}
+
+const _attCsvDz = $('#att-csv-dropzone');
+if (_attCsvDz) {
+  _attCsvDz.addEventListener('dragover',  e => { e.preventDefault(); _attCsvDz.classList.add('drag-over'); });
+  _attCsvDz.addEventListener('dragleave', () => _attCsvDz.classList.remove('drag-over'));
+  _attCsvDz.addEventListener('drop', e => {
+    e.preventDefault(); _attCsvDz.classList.remove('drag-over');
+    _attCsvHandleFile(e.dataTransfer.files[0]);
+  });
+}
+$('#att-csv-file-input')?.addEventListener('change', e => _attCsvHandleFile(e.target.files[0]));
+$('#att-csv-download-sample')?.addEventListener('click', _attCsvDownloadSample);
+$('#att-csv-import-close')?.addEventListener('click',  _attCsvCloseModal);
+$('#att-csv-import-modal')?.addEventListener('click',  e => { if (e.target === e.currentTarget) _attCsvCloseModal(); });
+$('#att-csv-back-btn')?.addEventListener('click',      _attCsvReset);
+$('#att-csv-done-btn')?.addEventListener('click',      _attCsvCloseModal);
+$('#att-csv-import-more-btn')?.addEventListener('click', _attCsvReset);
+
+$('#att-csv-import-btn')?.addEventListener('click', async () => {
+  if (!_attCsvValidRows.length) return;
+  const btn = $('#att-csv-import-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Importing…';
+
+  const payload = _attCsvValidRows.map(r => ({
+    employee_id: r.employee_id,
+    check_in:    r.check_in  || undefined,
+    check_out:   r.check_out || undefined,
+  }));
+
+  const res = await API.importAttendance(payload);
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fa fa-file-import"></i> Import Records';
+
+  if (res.status !== 200) { toast(res.body?.message || 'Import failed', 'error'); return; }
+
+  const { imported, skipped, errors } = res.body;
+  const resSum = $('#att-csv-result-summary');
+  resSum.innerHTML = `
+    <div class="csv-result-stat">
+      <div class="csv-result-stat-num green">${imported}</div>
+      <div class="csv-result-stat-label"><i class="fa fa-circle-check"></i> Records imported</div>
+    </div>
+    <div class="csv-result-stat">
+      <div class="csv-result-stat-num ${skipped > 0 ? 'red' : ''}">${skipped}</div>
+      <div class="csv-result-stat-label"><i class="fa fa-triangle-exclamation"></i> Rows skipped</div>
+    </div>`;
+
+  const errWrap = $('#att-csv-result-errors');
+  if (errors && errors.length) {
+    errWrap.style.display = '';
+    $('#att-csv-result-errors-list').innerHTML = errors.map(e =>
+      `<div class="csv-result-error-row"><b>Row ${e.row}${e.employee_id ? ' — ' + escHtml(String(e.employee_id)) : ''}:</b><span>${escHtml(e.message)}</span></div>`
+    ).join('');
+  } else {
+    errWrap.style.display = 'none';
+  }
+
+  _attCsvSetStep(3);
+  if (imported > 0) loadAttendance($('#att-search').value);
+});
+// ── End Attendance ───────────────────────────────────────────────────────────
 
 // ── Services Panel ─────────────────────────────────────────────────────────
 let _svcView       = 'requests';

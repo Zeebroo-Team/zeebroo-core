@@ -196,6 +196,10 @@ const API = (() => {
     updatePosition: (id, body) => request('PUT', `/hr/job-titles/${id}`, body),
     deletePosition: (id)   => request('DELETE', `/hr/job-titles/${id}`),
 
+    // HR — Attendance
+    attendance:       (q)     => request('GET',  `/hr/attendance${q ? '?q=' + encodeURIComponent(q) : ''}`),
+    importAttendance: (rows)  => request('POST', '/hr/attendance/import', { rows }),
+
     // HR — Allowance types
     allowanceTypes:      ()     => request('GET',    '/hr/allowance-types'),
     createAllowanceType: (body) => request('POST',   '/hr/allowance-types', body),
