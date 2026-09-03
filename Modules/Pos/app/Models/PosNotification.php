@@ -39,6 +39,7 @@ class PosNotification extends Model
         'reference_id',
         'payload',
         'read_at',
+        'dismissed_at',
     ];
 
     protected function casts(): array
@@ -46,6 +47,7 @@ class PosNotification extends Model
         return [
             'payload' => 'array',
             'read_at' => 'datetime',
+            'dismissed_at' => 'datetime',
         ];
     }
 
@@ -59,6 +61,11 @@ class PosNotification extends Model
         return $this->read_at !== null;
     }
 
+    public function isDismissed(): bool
+    {
+        return $this->dismissed_at !== null;
+    }
+
     public function scopeUnread(Builder $query): Builder
     {
         return $query->whereNull('read_at');
@@ -67,5 +74,10 @@ class PosNotification extends Model
     public function scopeReadOnly(Builder $query): Builder
     {
         return $query->whereNotNull('read_at');
+    }
+
+    public function scopeNotDismissed(Builder $query): Builder
+    {
+        return $query->whereNull('dismissed_at');
     }
 }

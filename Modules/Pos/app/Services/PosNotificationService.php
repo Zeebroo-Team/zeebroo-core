@@ -48,6 +48,7 @@ class PosNotificationService
     {
         $query = PosNotification::query()
             ->where('business_id', $business->id)
+            ->notDismissed()
             ->orderByDesc('created_at');
 
         if ($status === 'unread') {
@@ -57,7 +58,7 @@ class PosNotificationService
         }
 
         $notifications = $query->limit($limit)->get();
-        $unreadCount = PosNotification::query()->where('business_id', $business->id)->unread()->count();
+        $unreadCount = PosNotification::query()->where('business_id', $business->id)->notDismissed()->unread()->count();
 
         return [
             'data' => $notifications->map(fn (PosNotification $n) => $this->format($n))->all(),
@@ -91,10 +92,15 @@ class PosNotificationService
 
     public function delete(Business $business, int $id): bool
     {
+        // Soft-dismiss rather than hard-delete: condition-based notifications
+        // (stock, overdue bills, etc.) are re-synced periodically, and without
+        // this the sync would just recreate the same alert a few minutes later.
+        // upsert() checks dismissed_at and only resurfaces the notification if
+        // its underlying condition has materially changed.
         return (bool) PosNotification::query()
             ->where('business_id', $business->id)
             ->whereKey($id)
-            ->delete();
+            ->update(['dismissed_at' => now()]);
     }
 
     public function clearAll(Business $business): int
@@ -361,6 +367,25 @@ class PosNotificationService
         string $message,
         array $payload,
     ): void {
+        $existing = PosNotification::query()
+            ->where('business_id', $business)
+            ->where('type', $type)
+            ->where('reference_type', $referenceType)
+            ->where('reference_id', $referenceId)
+            ->first();
+
+        if ($existing && $existing->isDismissed()) {
+            $unchanged = $existing->title === $title
+                && $existing->message === $message
+                && $existing->payload == $payload;
+
+            if ($unchanged) {
+                // User dismissed this and nothing about the underlying
+                // condition has changed since — keep it hidden.
+                return;
+            }
+        }
+
         PosNotification::query()->updateOrCreate(
             [
                 'business_id' => $business,
@@ -373,6 +398,8 @@ class PosNotificationService
                 'title' => $title,
                 'message' => $message,
                 'payload' => $payload,
+                'dismissed_at' => null,
+                'read_at' => $existing && $existing->isDismissed() ? null : $existing?->read_at,
             ],
         );
     }
