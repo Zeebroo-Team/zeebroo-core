@@ -51,6 +51,7 @@ use Modules\Pos\Http\Controllers\Api\PosRoleManagementApiController;
 use Modules\Pos\Http\Controllers\Api\PosCounterApiController;
 use Modules\Pos\Http\Controllers\Api\PosRegisterLockApiController;
 use Modules\Pos\Http\Controllers\Api\PosCashierApiController;
+use Modules\Pos\Http\Controllers\Api\PosNotificationApiController;
 
 Route::prefix('v1/pos')->group(function (): void {
     Route::post('auth/token',             [PosAuthApiController::class, 'token'])->name('auth.token');
@@ -275,6 +276,16 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
     Route::delete('rentals/{rental}', [PosRentalApiController::class, 'destroy'])->name('rentals.destroy');
 
     Route::get('finance/flow', [PosFinanceFlowApiController::class, 'index'])->name('finance.flow');
+
+    // Notifications
+    Route::get('notifications', [PosNotificationApiController::class, 'index'])->name('notifications.index');
+    Route::post('notifications/read-all', [PosNotificationApiController::class, 'markAllRead'])->name('notifications.read-all');
+    Route::get('notifications/settings', [PosNotificationApiController::class, 'settingsShow'])->name('notifications.settings.show');
+    Route::put('notifications/settings', [PosNotificationApiController::class, 'settingsUpdate'])->name('notifications.settings.update');
+    Route::post('notifications/{id}/read', [PosNotificationApiController::class, 'markRead'])->name('notifications.read');
+    Route::post('notifications/{id}/unread', [PosNotificationApiController::class, 'markUnread'])->name('notifications.unread');
+    Route::delete('notifications/clear-all', [PosNotificationApiController::class, 'clearAll'])->name('notifications.clear-all');
+    Route::delete('notifications/{id}', [PosNotificationApiController::class, 'destroy'])->whereNumber('id')->name('notifications.destroy');
 
     Route::get('properties', [PosPropertyApiController::class, 'index'])->name('properties.index');
     Route::post('properties', [PosPropertyApiController::class, 'store'])->name('properties.store');

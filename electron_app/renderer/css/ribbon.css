@@ -4785,6 +4785,141 @@ body.dark .sal-void-notice { color: #f87171; background: rgba(239,68,68,.12); bo
 
 /* ── End account dropdown (titlebar) ─────────────────── */
 
+/* ── Notification bell (ribbon tab row) ──────────────────────────────── */
+.rb-notif-wrap { position: relative; flex-shrink: 0; -webkit-app-region: no-drag; }
+
+.rb-notif-btn {
+  background: transparent; border: none; cursor: pointer;
+  color: var(--text-muted); padding: 0 13px; font-size: 11px; font-weight: 500;
+  display: flex; align-items: center; gap: 5px; position: relative;
+  height: 100%; white-space: nowrap; transition: color .12s, background .12s;
+}
+.rb-notif-btn i { font-size: 13px; }
+.rb-notif-btn:hover, .rb-notif-btn.active { color: var(--text); background: var(--surface2); }
+.rb-notif-btn.has-unread { color: var(--accent); }
+.rb-notif-btn.has-unread:hover { color: var(--accent-dark, var(--accent)); }
+
+.rb-notif-icon-wrap { position: relative; display: inline-flex; align-items: center; }
+
+.rb-notif-badge {
+  position: absolute; top: -7px; right: -8px;
+  background: #dc2626; color: #fff; font-size: 9px; font-weight: 700;
+  min-width: 15px; height: 15px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center; padding: 0 3px;
+  line-height: 1; box-shadow: 0 0 0 2px var(--ribbon-bg);
+}
+
+.rb-notif-menu {
+  display: none; position: absolute; top: calc(100% + 6px); right: 0; z-index: 420;
+  width: 340px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden;
+}
+.rb-notif-menu.open { display: block; }
+
+.rb-notif-menu-head {
+  padding: 10px 14px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 12.5px; font-weight: 700; color: var(--text);
+}
+
+.rb-notif-head-actions { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
+
+.rb-notif-mark-all {
+  border: none; background: transparent; color: var(--accent);
+  font-size: 11px; font-weight: 600; cursor: pointer; padding: 4px 6px;
+  border-radius: var(--radius-sm); transition: background .12s; white-space: nowrap;
+}
+.rb-notif-mark-all:hover { background: var(--accent-light); }
+.rb-notif-mark-all.rb-notif-danger { color: #dc2626; }
+.rb-notif-mark-all.rb-notif-danger:hover { background: #fee2e2; }
+
+.rb-notif-list { max-height: 320px; overflow-y: auto; }
+.rb-notif-list-full { max-height: min(55vh, 460px); overflow-y: auto; min-height: 0; }
+#notif-modal .modal-body { min-height: 0; }
+
+.rb-notif-empty {
+  padding: 26px 14px; text-align: center; color: var(--text-muted); font-size: 12px;
+}
+
+.rb-notif-row {
+  padding: 10px 14px; border-bottom: 1px solid var(--border-light);
+  display: flex; gap: 10px; align-items: flex-start; cursor: pointer;
+  transition: background .12s; position: relative;
+}
+.rb-notif-row:last-child { border-bottom: none; }
+.rb-notif-row:hover { background: var(--surface2); }
+.rb-notif-row.unread { background: color-mix(in srgb, var(--accent) 5%, var(--surface)); }
+
+.rb-notif-icon {
+  width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center; font-size: 13px;
+  background: var(--accent-light); color: var(--accent);
+}
+.rb-notif-icon.danger  { background: #fee2e2; color: #dc2626; }
+.rb-notif-icon.warning { background: #fef3c7; color: #d97706; }
+.rb-notif-icon.info    { background: #dbeafe; color: #2563eb; }
+.rb-notif-icon.success { background: #dcfce7; color: #16a34a; }
+
+.rb-notif-body { flex: 1; min-width: 0; }
+.rb-notif-title { font-size: 12.5px; font-weight: 700; color: var(--text); }
+.rb-notif-message { font-size: 11.5px; color: var(--text-muted); margin-top: 2px; line-height: 1.4; }
+.rb-notif-time { font-size: 10px; color: var(--text-light); margin-top: 4px; }
+
+.rb-notif-dot {
+  width: 8px; height: 8px; border-radius: 50%; background: var(--accent);
+  flex-shrink: 0; margin-top: 4px;
+}
+
+.rb-notif-row-actions { display: flex; align-items: center; flex-shrink: 0; }
+.rb-notif-toggle-read {
+  border: none; background: transparent; color: var(--text-light);
+  cursor: pointer; font-size: 11px; padding: 4px; border-radius: var(--radius-sm);
+}
+.rb-notif-toggle-read:hover { background: var(--surface3, var(--surface2)); color: var(--text); }
+
+.rb-notif-menu-footer { padding: 8px 10px; border-top: 1px solid var(--border); }
+.rb-notif-menu-footer button {
+  width: 100%; padding: 7px 10px; border: none; background: transparent;
+  color: var(--accent); font-size: 12px; font-weight: 600; cursor: pointer;
+  border-radius: var(--radius-sm); transition: background .12s;
+}
+.rb-notif-menu-footer button:hover { background: var(--accent-light); }
+
+.rb-notif-filters {
+  display: flex; align-items: center; gap: 6px; padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.rb-notif-filter-btn {
+  border: 1px solid var(--border); background: var(--surface2); color: var(--text-muted);
+  font-size: 11px; font-weight: 600; padding: 5px 11px; border-radius: 999px; cursor: pointer;
+  transition: background .12s, color .12s, border-color .12s;
+}
+.rb-notif-filter-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.rb-notif-settings-btn {
+  border: none; background: transparent; color: var(--text-muted); cursor: pointer;
+  width: 28px; height: 28px; border-radius: var(--radius-sm); display: flex;
+  align-items: center; justify-content: center; transition: background .12s, color .12s;
+}
+.rb-notif-settings-btn:hover, .rb-notif-settings-btn.active { background: var(--surface2); color: var(--accent); }
+
+.rb-notif-settings-panel {
+  padding: 12px 14px; border-bottom: 1px solid var(--border); background: var(--surface2);
+}
+
+/* Stock-summary product list (opened from a stock_out/stock_low notification) */
+.rb-stock-row {
+  padding: 10px 14px; border-bottom: 1px solid var(--border-light);
+  display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  cursor: pointer; transition: background .12s;
+}
+.rb-stock-row:last-child { border-bottom: none; }
+.rb-stock-row:hover { background: var(--surface2); }
+.rb-stock-row-name { font-size: 12.5px; font-weight: 600; color: var(--text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rb-stock-row-qty { font-size: 11px; font-weight: 700; flex-shrink: 0; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
+.rb-stock-row-qty.zero { background: #fee2e2; color: #dc2626; }
+.rb-stock-row-qty.low  { background: #fef3c7; color: #d97706; }
+/* ── End notification bell ────────────────────────────────────────────── */
+
 /* ── POS Settings Modal ───────────────────────────────── */
 .psm-shell {
   width: 90vw; height: 90vh;

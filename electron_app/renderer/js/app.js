@@ -5293,6 +5293,9 @@ function showApp() {
   checkRegisterLock();
   // Start real-time background sync
   _syncStart();
+  // Load notification badge count, then poll for new ones
+  refreshNotifBadge();
+  if (!_notif.pollTimer) _notif.pollTimer = setInterval(refreshNotifBadge, 60000);
   // Silently check for a new desktop app version, once the app has settled
   setTimeout(() => _autoCheckForUpdate(), 4000);
 }
@@ -7329,7 +7332,354 @@ $('#tpm-my-profile').addEventListener('click', () => {
 });
 $('#tpm-notifications').addEventListener('click', () => {
   closeProfileMenu();
-  toast('Notifications coming soon', 'info');
+  openNotificationsModal();
+});
+
+// ── Notifications ────────────────────────────────────────────────────────
+const _notif = { list: [], unread: 0, modalFilter: 'all', pollTimer: null };
+
+const _notifIconMap = {
+  stock_out:               { icon: 'fa-box',                  cls: 'danger'  },
+  stock_low:               { icon: 'fa-box',                  cls: 'warning' },
+  bill_overdue:            { icon: 'fa-file-invoice-dollar',  cls: 'danger'  },
+  loan_overdue:            { icon: 'fa-hand-holding-dollar',  cls: 'danger'  },
+  rental_overdue:          { icon: 'fa-house',                cls: 'danger'  },
+  property_expired:        { icon: 'fa-building',             cls: 'warning' },
+  purchase_order_overdue:  { icon: 'fa-truck-fast',           cls: 'warning' },
+  purchase_order_received: { icon: 'fa-circle-check',         cls: 'success' },
+  sale_large:              { icon: 'fa-sack-dollar',          cls: 'info'    },
+};
+
+function _notifTimeAgo(dateStr) {
+  if (!dateStr) return '';
+  const then = new Date(String(dateStr).replace(' ', 'T'));
+  if (isNaN(then.getTime())) return '';
+  const mins = Math.floor((Date.now() - then.getTime()) / 60000);
+  if (mins < 1)  return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24)  return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
+
+function _notifRowHtml(n, showToggle) {
+  const meta = _notifIconMap[n.type] || { icon: 'fa-bell', cls: 'info' };
+  const dot = (!showToggle && !n.read) ? '<div class="rb-notif-dot"></div>' : '';
+  const toggleBtn = showToggle
+    ? `<button class="rb-notif-toggle-read" data-notif-toggle="${n.id}" data-notif-was-read="${n.read ? 1 : 0}" title="${n.read ? 'Mark as unread' : 'Mark as read'}">
+         <i class="fa ${n.read ? 'fa-envelope-open' : 'fa-envelope'}"></i>
+       </button>`
+    : '';
+  const deleteBtn = `<button class="rb-notif-toggle-read" data-notif-delete="${n.id}" title="Dismiss">
+         <i class="fa fa-xmark"></i>
+       </button>`;
+  const actions = `<div class="rb-notif-row-actions">${dot}${toggleBtn}${deleteBtn}</div>`;
+  return `
+    <div class="rb-notif-row ${n.read ? '' : 'unread'}" data-notif-id="${n.id}">
+      <div class="rb-notif-icon ${meta.cls}"><i class="fa ${meta.icon}"></i></div>
+      <div class="rb-notif-body">
+        <div class="rb-notif-title">${escHtml(n.title || '')}</div>
+        <div class="rb-notif-message">${escHtml(n.message || '')}</div>
+        <div class="rb-notif-time">${_notifTimeAgo(n.created_at)}</div>
+      </div>
+      ${actions}
+    </div>`;
+}
+
+function _notifApplyBadge() {
+  const count = _notif.unread > 99 ? '99+' : String(_notif.unread);
+  const rb = $('#rb-notif-badge');
+  if (rb) { rb.textContent = count; rb.style.display = _notif.unread > 0 ? 'flex' : 'none'; }
+  $('#rb-notif-btn')?.classList.toggle('has-unread', _notif.unread > 0);
+  const tpm = $('#tpm-notif-badge');
+  if (tpm) { tpm.textContent = count; tpm.style.display = _notif.unread > 0 ? '' : 'none'; }
+}
+
+async function refreshNotifBadge() {
+  const res = await API.notifications({ limit: 1 });
+  if (res.status !== 200) return;
+  _notif.unread = res.body?.unread_count ?? 0;
+  _notifApplyBadge();
+}
+
+function _notifBindRows(container, sourceList) {
+  container.querySelectorAll('[data-notif-id]').forEach(row => {
+    row.addEventListener('click', (e) => {
+      if (e.target.closest('[data-notif-toggle], [data-notif-delete]')) return;
+      _notifOpenFromRow(Number(row.dataset.notifId), sourceList);
+    });
+  });
+  container.querySelectorAll('[data-notif-toggle]').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const id = Number(btn.dataset.notifToggle);
+      const wasRead = btn.dataset.notifWasRead === '1';
+      if (wasRead) await API.notificationMarkUnread(id); else await API.notificationMarkRead(id);
+      await _notifLoadModalList();
+      _notifLoadDropdown();
+    });
+  });
+  container.querySelectorAll('[data-notif-delete]').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const id = Number(btn.dataset.notifDelete);
+      await API.notificationDelete(id);
+      await _notifLoadModalList();
+      _notifLoadDropdown();
+    });
+  });
+}
+
+function _notifOpenFromRow(id, sourceList) {
+  const n = (sourceList || _notif.list).find(x => x.id === id);
+  if (!n) return;
+  if (!n.read) {
+    API.notificationMarkRead(id).catch(() => {});
+    n.read = true;
+    _notif.unread = Math.max(0, _notif.unread - 1);
+    _notifApplyBadge();
+  }
+  $('#rb-notif-menu')?.classList.remove('open');
+  $('#rb-notif-btn')?.classList.remove('active');
+  $('#notif-modal').style.display = 'none';
+  _notifNavigate(n);
+}
+
+function _notifNavigate(n) {
+  const payload = n.payload || {};
+  switch (n.type) {
+    case 'stock_out':
+    case 'stock_low':
+      openStockListModal(n);
+      break;
+    case 'bill_overdue':
+      activateTab('finance');
+      switchFinView('bills');
+      break;
+    case 'loan_overdue':
+      activateTab('finance');
+      switchFinView('loans');
+      break;
+    case 'rental_overdue':
+      activateTab('finance');
+      switchFinView('rentals');
+      break;
+    case 'property_expired':
+      activateTab('finance');
+      switchFinView('properties');
+      break;
+    case 'purchase_order_overdue':
+    case 'purchase_order_received':
+      activateTab('inventory');
+      switchInvView('po');
+      if (payload.purchase_id && typeof _poSelectPO === 'function') _poSelectPO(payload.purchase_id);
+      break;
+    case 'sale_large':
+      activateTab('sales');
+      if (typeof _salSwitchView === 'function') _salSwitchView('transactions');
+      if (payload.sale_id && typeof _salSelectSale === 'function') _salSelectSale(payload.sale_id);
+      break;
+    default:
+      break;
+  }
+}
+
+async function _notifLoadDropdown() {
+  const list = $('#rb-notif-list');
+  list.innerHTML = '<div class="rb-notif-empty"><i class="fa fa-spinner fa-spin"></i></div>';
+  const res = await API.notifications({ limit: 5 });
+  if (res.status !== 200) {
+    list.innerHTML = '<div class="rb-notif-empty">Failed to load notifications</div>';
+    return;
+  }
+  _notif.list   = res.body?.data ?? [];
+  _notif.unread = res.body?.unread_count ?? 0;
+  _notifApplyBadge();
+  if (!_notif.list.length) {
+    list.innerHTML = '<div class="rb-notif-empty">You\'re all caught up</div>';
+    return;
+  }
+  list.innerHTML = _notif.list.map(n => _notifRowHtml(n, false)).join('');
+  _notifBindRows(list, _notif.list);
+}
+
+const _notifBtn  = $('#rb-notif-btn');
+const _notifMenu = $('#rb-notif-menu');
+_notifBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  const opening = !_notifMenu.classList.contains('open');
+  _notifMenu.classList.toggle('open', opening);
+  _notifBtn.classList.toggle('active', opening);
+  if (opening) _notifLoadDropdown();
+});
+document.addEventListener('click', (e) => {
+  if (!$('#rb-notif-wrap').contains(e.target)) {
+    _notifMenu.classList.remove('open');
+    _notifBtn.classList.remove('active');
+  }
+});
+$('#rb-notif-mark-all-read').addEventListener('click', async (e) => {
+  e.stopPropagation();
+  await API.notificationsMarkAllRead();
+  _notif.list.forEach(n => { n.read = true; });
+  _notif.unread = 0;
+  _notifApplyBadge();
+  const list = $('#rb-notif-list');
+  list.innerHTML = _notif.list.length
+    ? _notif.list.map(n => _notifRowHtml(n, false)).join('')
+    : '<div class="rb-notif-empty">You\'re all caught up</div>';
+  _notifBindRows(list, _notif.list);
+});
+$('#rb-notif-clear-all').addEventListener('click', async (e) => {
+  e.stopPropagation();
+  const ok = await appConfirm({
+    title: 'Clear all notifications?',
+    message: 'This removes every notification in your inbox. Alerts for conditions that are still true (like low stock or an overdue bill) will reappear the next time they refresh.',
+    confirmText: '<i class="fa fa-trash"></i> Clear all',
+    icon: 'fa-triangle-exclamation',
+    danger: true,
+  });
+  if (!ok) return;
+  await API.notificationsClearAll();
+  _notif.list = [];
+  _notif.unread = 0;
+  _notifApplyBadge();
+  $('#rb-notif-list').innerHTML = '<div class="rb-notif-empty">You\'re all caught up</div>';
+  _notifLoadModalList();
+});
+$('#rb-notif-see-all').addEventListener('click', (e) => {
+  e.stopPropagation();
+  _notifMenu.classList.remove('open');
+  _notifBtn.classList.remove('active');
+  openNotificationsModal();
+});
+
+// ── Notifications: full window ──────────────────────────────────────────
+async function _notifLoadModalList() {
+  const list = $('#notif-modal-list');
+  list.innerHTML = '<div class="rb-notif-empty"><i class="fa fa-spinner fa-spin"></i></div>';
+  const res = await API.notifications({ status: _notif.modalFilter, limit: 100 });
+  if (res.status !== 200) {
+    list.innerHTML = '<div class="rb-notif-empty">Failed to load notifications</div>';
+    return;
+  }
+  const items = res.body?.data ?? [];
+  _notif.unread = res.body?.unread_count ?? _notif.unread;
+  _notifApplyBadge();
+  if (!items.length) {
+    list.innerHTML = '<div class="rb-notif-empty">No notifications</div>';
+    return;
+  }
+  list.innerHTML = items.map(n => _notifRowHtml(n, true)).join('');
+  _notifBindRows(list, items);
+}
+
+async function openNotificationsModal() {
+  $('#notif-modal').style.display = 'flex';
+  $('#notif-settings-panel').style.display = 'none';
+  $('#notif-modal-settings-toggle').classList.remove('active');
+  _notif.modalFilter = 'all';
+  $$('#notif-modal .rb-notif-filter-btn').forEach(b => b.classList.toggle('active', b.dataset.notifFilter === 'all'));
+  await _notifLoadModalList();
+}
+
+$$('#notif-modal .rb-notif-filter-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    _notif.modalFilter = btn.dataset.notifFilter;
+    $$('#notif-modal .rb-notif-filter-btn').forEach(b => b.classList.toggle('active', b === btn));
+    _notifLoadModalList();
+  });
+});
+
+$('#notif-modal-close').addEventListener('click', () => { $('#notif-modal').style.display = 'none'; });
+$('#notif-modal').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) e.currentTarget.style.display = 'none';
+});
+$('#notif-modal-mark-all-read').addEventListener('click', async () => {
+  await API.notificationsMarkAllRead();
+  _notif.unread = 0;
+  _notifApplyBadge();
+  _notifLoadModalList();
+  _notifLoadDropdown();
+});
+$('#notif-modal-clear-all').addEventListener('click', async () => {
+  const ok = await appConfirm({
+    title: 'Clear all notifications?',
+    message: 'This removes every notification in your inbox. Alerts for conditions that are still true (like low stock or an overdue bill) will reappear the next time they refresh.',
+    confirmText: '<i class="fa fa-trash"></i> Clear all',
+    icon: 'fa-triangle-exclamation',
+    danger: true,
+  });
+  if (!ok) return;
+  await API.notificationsClearAll();
+  _notif.unread = 0;
+  _notifApplyBadge();
+  _notifLoadModalList();
+  _notifLoadDropdown();
+});
+
+$('#notif-modal-settings-toggle').addEventListener('click', async () => {
+  const panel = $('#notif-settings-panel');
+  const opening = panel.style.display === 'none';
+  panel.style.display = opening ? '' : 'none';
+  $('#notif-modal-settings-toggle').classList.toggle('active', opening);
+  if (opening) {
+    const res = await API.notificationSettings();
+    if (res.status === 200) {
+      const v = res.body?.data?.large_sale_threshold;
+      $('#notif-large-sale-threshold').value = (v === null || v === undefined) ? '' : v;
+    }
+  }
+});
+$('#notif-settings-save').addEventListener('click', async () => {
+  const raw = $('#notif-large-sale-threshold').value;
+  const res = await API.notificationSettingsUpdate({ large_sale_threshold: raw === '' ? null : raw });
+  if (res.status === 200) toast('Notification settings saved', 'success');
+  else toast(res.body?.message || 'Failed to save settings', 'error');
+});
+
+// ── Notifications: stock-summary product list ───────────────────────────
+function _notifStockRowHtml(p) {
+  const qty = Number(p.stock_quantity) || 0;
+  const qtyLabel = Number.isInteger(qty) ? String(qty) : qty.toFixed(3).replace(/\.?0+$/, '');
+  const cls = qty <= 0 ? 'zero' : 'low';
+  return `
+    <div class="rb-stock-row" data-stock-product-id="${p.product_id}" data-stock-product-name="${escAttr(p.product_name)}">
+      <div class="rb-stock-row-name">${escHtml(p.product_name || '')}</div>
+      <div class="rb-stock-row-qty ${cls}">${qtyLabel} left</div>
+    </div>`;
+}
+
+function openStockListModal(n) {
+  const payload  = n.payload || {};
+  const products = payload.products || [];
+  const total    = payload.total ?? products.length;
+
+  $('#notif-stock-modal-title').textContent = n.title || 'Stock alert';
+  $('#notif-stock-modal-subtitle').textContent = total > products.length
+    ? `Showing ${products.length} of ${total} products — click one to open it`
+    : `${total} product${total === 1 ? '' : 's'} — click one to open it`;
+
+  const list = $('#notif-stock-modal-list');
+  list.innerHTML = products.length
+    ? products.map(_notifStockRowHtml).join('')
+    : '<div class="rb-notif-empty">No products found</div>';
+
+  list.querySelectorAll('[data-stock-product-id]').forEach(row => {
+    row.addEventListener('click', () => {
+      $('#notif-stock-modal').style.display = 'none';
+      activateTab('inventory');
+      switchInvView('products');
+      openProductDetail(Number(row.dataset.stockProductId), row.dataset.stockProductName);
+    });
+  });
+
+  $('#notif-stock-modal').style.display = 'flex';
+}
+
+$('#notif-stock-modal-close').addEventListener('click', () => { $('#notif-stock-modal').style.display = 'none'; });
+$('#notif-stock-modal').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) e.currentTarget.style.display = 'none';
 });
 $('#tpm-switch-branch').addEventListener('click', async () => {
   closeProfileMenu();
@@ -19840,6 +20190,8 @@ function _bizSwRefreshAll() {
     default:
       loadProducts();
   }
+
+  refreshNotifBadge();
 }
 
 async function _bizSwLoadBranches() {
