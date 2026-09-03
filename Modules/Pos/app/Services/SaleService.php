@@ -322,6 +322,9 @@ class SaleService
                     $warrantyExpiresAt = ($warrantyType === 'date' && $warrantyDate)
                         ? $warrantyDate
                         : null;
+                    $warrantyDays = $warrantyExpiresAt
+                        ? max(0, $sale->sold_at->copy()->startOfDay()->diffInDays(\Carbon\Carbon::parse($warrantyExpiresAt)->startOfDay()))
+                        : null;
 
                     SaleItem::query()->create([
                         'pos_sale_id' => $sale->id,
@@ -338,7 +341,7 @@ class SaleService
                         'line_total' => $lineTotal,
                         'sort_order' => $sortOrder++,
                         'warranty_type'       => $warrantyType,
-                        'warranty_days'       => null,
+                        'warranty_days'       => $warrantyDays,
                         'warranty_expires_at' => $warrantyExpiresAt,
                     ]);
                 }
@@ -361,6 +364,9 @@ class SaleService
                 $svcWarrantyExpiresAt = ($svcWarrantyType === 'date' && $svcWarrantyDate)
                     ? $svcWarrantyDate
                     : null;
+                $svcWarrantyDays = $svcWarrantyExpiresAt
+                    ? max(0, $sale->sold_at->copy()->startOfDay()->diffInDays(\Carbon\Carbon::parse($svcWarrantyExpiresAt)->startOfDay()))
+                    : null;
 
                 SaleItem::query()->create([
                     'pos_sale_id'         => $sale->id,
@@ -375,7 +381,7 @@ class SaleService
                     'line_total'          => $lineTotal,
                     'sort_order'          => $sortOrder++,
                     'warranty_type'       => $svcWarrantyType,
-                    'warranty_days'       => null,
+                    'warranty_days'       => $svcWarrantyDays,
                     'warranty_expires_at' => $svcWarrantyExpiresAt,
                     'custom_requirement_values' => $svcLine['custom_requirement_values'] ?? null,
                 ]);

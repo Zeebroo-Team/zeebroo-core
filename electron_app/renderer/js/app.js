@@ -962,11 +962,7 @@ async function _salSelectSale(id) {
 
   const itemsRows = (sale.items || []).map(i => {
     const wtyBadge = i.warranty_type
-      ? (() => {
-          if (i.warranty_type === 'lifetime') return '<br><span class="warranty-badge"><i class="fa fa-shield-halved"></i> Lifetime warranty</span>';
-          const exp = i.warranty_expires_at ? ` until ${i.warranty_expires_at}` : '';
-          return `<br><span class="warranty-badge"><i class="fa fa-shield-halved"></i> Warranty${exp}</span>`;
-        })()
+      ? `<br><span class="warranty-badge"><i class="fa fa-shield-halved"></i> ${escHtml(_warrantyLabel(i.warranty_type, i.warranty_expires_at, i.warranty_days))}</span>`
       : '';
     return `<tr>
     <td>${escHtml(i.product_name || '—')}${wtyBadge}</td>
@@ -21349,7 +21345,11 @@ function _invBuildActualDoc(inv, tpl, mg, cur, lhDataUrl = null) {
       }
     }
 
-    return `<tr><td class="n">${n}</td><td><b>${escHtml(it.description || '')}</b></td><td class="r">${qty}</td><td class="r">${up}${c}</td>${discTd}${taxTd}<td class="r b">${lt}${c}</td></tr>`;
+    const wtyLine = it.warranty_type
+      ? `<div style="font-size:9px;color:#0891b2;font-weight:600;margin-top:2px">🛡 ${escHtml(_warrantyLabel(it.warranty_type, it.warranty_expires_at, it.warranty_days))}</div>`
+      : '';
+
+    return `<tr><td class="n">${n}</td><td><b>${escHtml(it.description || '')}</b>${wtyLine}</td><td class="r">${qty}</td><td class="r">${up}${c}</td>${discTd}${taxTd}<td class="r b">${lt}${c}</td></tr>`;
   }).join('\n    ');
 
   // ── Summary rows ──────────────────────────────────────────────────────────
@@ -22889,11 +22889,8 @@ function buildReceiptHTML(sale, overrides = {}) {
 
   const itemsHTML = (sale.items || []).map(i => {
     let wtyLine = '';
-    if (i.warranty_type === 'lifetime') {
-      wtyLine = `<div class="rcpt-warranty-line"><i class="fa fa-shield-halved"></i> Lifetime warranty</div>`;
-    } else if (i.warranty_type === 'date') {
-      const exp = i.warranty_expires_at || '';
-      wtyLine = `<div class="rcpt-warranty-line"><i class="fa fa-shield-halved"></i> Warranty until ${exp}</div>`;
+    if (i.warranty_type) {
+      wtyLine = `<div class="rcpt-warranty-line"><i class="fa fa-shield-halved"></i> ${escHtml(_warrantyLabel(i.warranty_type, i.warranty_expires_at, i.warranty_days))}</div>`;
     }
     const discPerUnit = parseFloat(i.discount_amount || 0);
     const qty = parseFloat(i.quantity);
@@ -23037,10 +23034,14 @@ async function _posCreateInvoiceFromSale(sale, customerId) {
         inv.status_label = 'Paid';
       }
       toast(`Invoice ${inv.invoice_number} created`, 'success');
-      // Stamp per-item discount onto each invoice line so the print template can render it
+      // Stamp per-item discount + warranty onto each invoice line so the print template can render it
       if (Array.isArray(inv.items)) {
         inv.items.forEach((invItem, idx) => {
-          invItem.item_discount_per_unit = parseFloat(sale.items?.[idx]?.discount_amount || 0);
+          const srcItem = sale.items?.[idx];
+          invItem.item_discount_per_unit = parseFloat(srcItem?.discount_amount || 0);
+          invItem.warranty_type          = srcItem?.warranty_type || null;
+          invItem.warranty_expires_at    = srcItem?.warranty_expires_at || null;
+          invItem.warranty_days          = srcItem?.warranty_days || null;
         });
       }
       // Stamp tax breakdown for per-rule rendering in the invoice template
@@ -23661,6 +23662,31 @@ $('#pos-price-input').addEventListener('keydown', e => {
 });
 // ── End Price override prompt ──────────────────────────────────────────────
 
+// ── Warranty display helpers ────────────────────────────────────────────────
+// Format a day count into a friendly duration ("60 Days", "6 Months", "1 Year")
+function _fmtWarrantyDuration(days) {
+  const n = parseInt(days, 10);
+  if (!n || n <= 0) return '';
+  if (n % 365 === 0) { const y = n / 365; return `${y} Year${y > 1 ? 's' : ''}`; }
+  if (n % 30  === 0) { const m = n / 30;  return `${m} Month${m > 1 ? 's' : ''}`; }
+  return `${n} Day${n > 1 ? 's' : ''}`;
+}
+// Fallback day count when the server hasn't stamped warranty_days yet (e.g. still in cart)
+function _warrantyDaysFromToday(dateStr) {
+  if (!dateStr) return null;
+  const exp = new Date(dateStr + 'T00:00:00');
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const diff = Math.round((exp - today) / 86400000);
+  return diff > 0 ? diff : null;
+}
+// Human label for a warranty, e.g. "Warranty: 60 Days · Expires 2026-11-02"
+function _warrantyLabel(type, expiresAt, days) {
+  if (type === 'lifetime') return 'Lifetime warranty';
+  if (!expiresAt) return 'Warranty';
+  const dur = _fmtWarrantyDuration(days != null ? days : _warrantyDaysFromToday(expiresAt));
+  return `Warranty${dur ? ': ' + dur : ''} · Expires ${expiresAt}`;
+}
+
 // ── Warranty prompt ────────────────────────────────────────────────────────
 // Resolve a warranty type/date from a duration string (e.g. "1 Year", "30 Days", "Lifetime")
 function _resolveWarrantyFromDuration(duration) {
@@ -24106,7 +24132,7 @@ function renderCart() {
     const typeBadge = item._type === 'service'
       ? `<span class="ci-badge ci-badge--service"><i class="fa fa-screwdriver-wrench"></i> Service</span>` : '';
     const warrantyBadge = item.warrantyType
-      ? `<span class="warranty-badge"><i class="fa fa-shield-halved"></i> ${item.warrantyType === 'lifetime' ? 'Lifetime warranty' : `Warranty until ${item.warrantyDate ?? ''}`}</span>` : '';
+      ? `<span class="warranty-badge"><i class="fa fa-shield-halved"></i> ${escHtml(_warrantyLabel(item.warrantyType, item.warrantyDate, null))}</span>` : '';
     const creqBadge = (item.customRequirementValues && item.customRequirementValues.length)
       ? `<span class="ci-badge ci-badge--creq"><i class="fa fa-list-check"></i> Details saved</span>` : '';
     const extras = (discountBadge || noteBadge || typeBadge || warrantyBadge || creqBadge)
