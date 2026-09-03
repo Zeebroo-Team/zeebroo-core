@@ -12,6 +12,7 @@
   const PREFS_KEY = 'home_subnav_prefs';
 
   const DESCRIPTIONS = {
+    overview:  'ERP shortcuts & getting-started guide',
     flow:      'Visual diagram of money & goods flow',
     today:     "Today's sales, revenue and KPIs",
     activity:  'Latest actions across the business',

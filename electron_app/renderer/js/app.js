@@ -4833,6 +4833,7 @@ function applyFeatureVisibility() {
   // ── Home sub-nav tabs (hide tab button + view when not permitted) ───────────
   {
     const _hTabPerms = {
+      overview:  mp('home_tab_overview'),
       flow:      mp('home_tab_flow'),
       today:     mp('home_tab_today'),
       activity:  mp('home_tab_activity'),
@@ -8625,6 +8626,7 @@ function loadHomeDashboard() {
   requestAnimationFrame(() => renderBusinessChart(bizName || 'Your Business'));
   loadHomeKPIs();
   _homeRightPanelLoad();
+  loadHomeOverviewStats();
 }
 
 async function loadHomeKPIs() {
@@ -8644,6 +8646,7 @@ function switchHomeView(view) {
   $$('.home-tab-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.homeView === view));
   const target = $(`#home-view-${view}`);
   if (target) target.style.display = 'flex';
+  if (view === 'overview')  loadHomeOverviewStats();
   if (view === 'today')     loadTodaySummary();
   if (view === 'activity')  _homeActivityLoad();
   if (view === 'analytics') requestAnimationFrame(_homeAnalyticsLoad);
@@ -8656,6 +8659,120 @@ function switchHomeView(view) {
 $$('.home-tab-btn').forEach(btn => {
   btn.addEventListener('click', () => switchHomeView(btn.dataset.homeView));
 });
+
+// ── Home Overview tab — ERP shortcuts guide ─────────────────────────────────
+const HOG_ACTIONS = {
+  'open-pos':        () => activateTab('pos'),
+  'today-summary':   () => { activateTab('home'); switchHomeView('today'); },
+  'orders':          () => { activateTab('home'); switchHomeView('orders'); },
+  'recent-activity': () => { activateTab('home'); switchHomeView('activity'); },
+  'products':        () => { activateTab('inventory'); switchInvView('products'); },
+  'categories':      () => { activateTab('inventory'); switchInvView('categories'); },
+  'suppliers':       () => { activateTab('inventory'); switchInvView('suppliers'); },
+  'purchase-orders': () => { activateTab('inventory'); switchInvView('po'); },
+  'stock-audit':     () => { activateTab('inventory'); switchInvView('audit'); },
+  'bills':           () => { activateTab('finance'); switchFinView('bills'); },
+  'loans':           () => { activateTab('finance'); switchFinView('loans'); },
+  'rentals':         () => { activateTab('finance'); switchFinView('rentals'); },
+  'profit-report':   () => { activateTab('home'); switchHomeView('profit'); },
+  'employees':       () => { activateTab('hr'); switchHrView('employees'); },
+  'departments':     () => { activateTab('hr'); switchHrView('departments'); },
+  'payroll':         () => { activateTab('hr'); switchHrView('payroll'); },
+  'svc-requests':    () => { activateTab('services'); switchSvcView('requests'); },
+  'svc-catalog':     () => { activateTab('services'); switchSvcView('catalog'); },
+  'analytics':       () => { activateTab('home'); switchHomeView('analytics'); },
+  'business-flow':   () => { activateTab('home'); switchHomeView('flow'); },
+  'customers':       () => openCustomersModal(),
+  'settings':        () => openPosSettings(),
+  'shortcuts':       () => showShortcutsModal(),
+};
+$('#home-view-overview')?.addEventListener('click', e => {
+  const card = e.target.closest('[data-hog-action]');
+  if (!card) return;
+  HOG_ACTIONS[card.dataset.hogAction]?.();
+});
+
+function _hogSetStat(key, text) {
+  const el = $(`.hog-card-stat[data-hog-stat="${key}"]`);
+  if (el) el.textContent = text;
+}
+const _hogFmt = n => (n ?? 0).toLocaleString();
+
+// Fetches a live count/summary for each Overview shortcut card. Each source
+// is independent so one failing endpoint doesn't block the others.
+async function loadHomeOverviewStats() {
+  API.bootstrap('', 0, 1, {}).then(res => {
+    if (res.status !== 200) return;
+    const body = res.body?.data || res.body || {};
+    const meta = body.products_meta || body.meta || {};
+    _hogSetStat('products', `${_hogFmt(meta.total)} items`);
+  }).catch(() => {});
+
+  API.categories('', '', 1).then(res => {
+    if (res.status !== 200) return;
+    _hogSetStat('categories', `${_hogFmt(res.body?.meta?.total)} total`);
+  }).catch(() => {});
+
+  API.suppliers('', 1).then(res => {
+    if (res.status !== 200) return;
+    _hogSetStat('suppliers', `${_hogFmt(res.body?.meta?.total)} total`);
+  }).catch(() => {});
+
+  API.purchaseOrders('', '').then(res => {
+    if (res.status !== 200) return;
+    const n = (res.body?.data || []).length;
+    _hogSetStat('purchase-orders', `${_hogFmt(n)} order${n !== 1 ? 's' : ''}`);
+  }).catch(() => {});
+
+  API.stockAudits(1).then(res => {
+    if (res.status !== 200) return;
+    _hogSetStat('stock-audit', `${_hogFmt(res.body?.meta?.total)} audits`);
+  }).catch(() => {});
+
+  API.financeFlow().then(res => {
+    if (res.status !== 200) return;
+    _hogSetStat('bills',   `${_hogFmt((res.body?.bills   || []).length)} active`);
+    _hogSetStat('loans',   `${_hogFmt((res.body?.loans   || []).length)} active`);
+    _hogSetStat('rentals', `${_hogFmt((res.body?.rentals || []).length)} active`);
+  }).catch(() => {});
+
+  API.employees().then(res => {
+    if (res.status !== 200) return;
+    _hogSetStat('employees', `${_hogFmt(res.body?.total_count ?? (res.body?.data || []).length)} staff`);
+  }).catch(() => {});
+
+  API.departments().then(res => {
+    if (res.status !== 200) return;
+    _hogSetStat('departments', `${_hogFmt((res.body?.data || []).length)} total`);
+  }).catch(() => {});
+
+  API.payrollCycles().then(res => {
+    if (res.status !== 200) return;
+    _hogSetStat('payroll', `${_hogFmt((res.body?.data || []).length)} cycles`);
+  }).catch(() => {});
+
+  API.serviceRequests('', '').then(res => {
+    if (res.status !== 200) return;
+    _hogSetStat('svc-requests', `${_hogFmt((res.body?.data || []).length)} total`);
+  }).catch(() => {});
+
+  API.serviceMgmtCatalog('').then(res => {
+    if (res.status !== 200) return;
+    _hogSetStat('svc-catalog', `${_hogFmt((res.body?.data || []).length)} services`);
+  }).catch(() => {});
+
+  API.customers('', 1).then(res => {
+    if (res.status !== 200) return;
+    _hogSetStat('customers', `${_hogFmt(res.body?.meta?.total)} total`);
+  }).catch(() => {});
+
+  API.sales('').then(res => {
+    if (res.status !== 200) return;
+    const today = new Date().toISOString().slice(0, 10);
+    const todayCount = (res.body?.data || []).filter(s => (s.sold_at || '').slice(0, 10) === today).length;
+    _hogSetStat('today-summary', `${_hogFmt(todayCount)} today`);
+  }).catch(() => {});
+}
 
 // ── Home Orders View ───────────────────────────────────────────────────────
 async function loadOrdersView() {
@@ -35617,6 +35734,7 @@ async function submitDsCreate() {
       { key: 'home_kpi_products',      label: 'KPI: Products',         desc: 'Dashboard top bar: Products count pill' },
       { key: 'home_kpi_customers',     label: 'KPI: Customers',        desc: 'Dashboard top bar: Customers count pill' },
       // ── Sub-nav tabs ────────────────────────────────────────────────────────
+      { key: 'home_tab_overview',      label: 'Tab: Overview',         desc: 'Dashboard: ERP overview & shortcuts guide tab' },
       { key: 'home_tab_flow',          label: 'Tab: Business Flow',    desc: 'Dashboard: Business Flow diagram tab' },
       { key: 'home_tab_today',         label: 'Tab: Today',            desc: "Dashboard: Today's Summary tab" },
       { key: 'home_tab_activity',      label: 'Tab: Recent Activity',  desc: 'Dashboard: Recent transactions tab' },
