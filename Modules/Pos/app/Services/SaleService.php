@@ -26,6 +26,7 @@ class SaleService
         private readonly ProductDiscountService $discountService,
         private readonly PosSettingsService $posSettings,
         private readonly ServiceRequestService $serviceRequests,
+        private readonly PosNotificationService $notifications,
     ) {
     }
 
@@ -457,6 +458,12 @@ class SaleService
                 ->dispatch('sale.created', $business, $this->salePayload($sale));
         } catch (\Throwable) {
             // Automation errors must never break the checkout
+        }
+
+        try {
+            $this->notifications->notifyLargeSale($business, $sale);
+        } catch (\Throwable) {
+            // Notification errors must never break the checkout
         }
 
         return $sale;

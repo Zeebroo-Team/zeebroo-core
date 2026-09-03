@@ -149,6 +149,21 @@ const API = (() => {
     // Finance — flow overview
     financeFlow:    ()         => request('GET', '/finance/flow'),
 
+    // Notifications
+    notifications: (params) => {
+      const p = new URLSearchParams();
+      if (params?.status) p.set('status', params.status);
+      if (params?.limit)  p.set('limit',  String(params.limit));
+      return request('GET', `/notifications?${p.toString()}`);
+    },
+    notificationMarkRead:      (id)   => request('POST', `/notifications/${id}/read`, {}),
+    notificationMarkUnread:    (id)   => request('POST', `/notifications/${id}/unread`, {}),
+    notificationsMarkAllRead:  ()     => request('POST', '/notifications/read-all', {}),
+    notificationDelete:        (id)   => request('DELETE', `/notifications/${id}`),
+    notificationsClearAll:     ()     => request('DELETE', '/notifications/clear-all'),
+    notificationSettings:      ()     => request('GET', '/notifications/settings'),
+    notificationSettingsUpdate:(data) => request('PUT', '/notifications/settings', data),
+
     // Finance — properties
     propertyList:   ()         => request('GET',    '/properties'),
     createProperty: (body)     => request('POST',   '/properties', body),

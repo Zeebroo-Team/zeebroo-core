@@ -7,6 +7,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesPosBusinessForApi;
+use Modules\Pos\Services\PosNotificationService;
 use Modules\Purchase\Models\Purchase;
 use Modules\Purchase\Models\PurchaseItem;
 use Modules\Purchase\Services\PurchaseService;
@@ -15,7 +16,10 @@ class PosPurchaseOrderApiController extends Controller
 {
     use ResolvesPosBusinessForApi;
 
-    public function __construct(private readonly PurchaseService $service) {}
+    public function __construct(
+        private readonly PurchaseService $service,
+        private readonly PosNotificationService $notifications,
+    ) {}
 
     public function index(Request $request): JsonResponse
     {
@@ -112,6 +116,10 @@ class PosPurchaseOrderApiController extends Controller
         }
 
         $purchase->refresh()->load(['supplier', 'items.product']);
+
+        if ($purchase->isReceived()) {
+            $this->notifications->notifyPurchaseOrderReceived($purchase);
+        }
 
         return response()->json([
             'message' => 'Goods received for '.$purchase->po_number.'.',
