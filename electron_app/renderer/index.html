@@ -1093,6 +1093,9 @@
             <button class="ribbon-btn-lg" id="rb-positions">
               <i class="fa fa-id-badge"></i>Positions
             </button>
+            <button class="ribbon-btn-lg" id="rb-attendance">
+              <i class="fa fa-clock"></i>Attendance
+            </button>
           </div>
           <div class="ribbon-group-label">Compensation</div>
         </div>
@@ -4980,6 +4983,7 @@
         <button class="fin-subnav-btn"         data-hr="rule-sets"><i class="fa fa-sliders"></i> Rule Sets</button>
         <button class="fin-subnav-btn"         data-hr="allowance-types"><i class="fa fa-coins"></i> Allowance Types</button>
         <button class="fin-subnav-btn"         data-hr="positions"><i class="fa fa-id-badge"></i> Positions</button>
+        <button class="fin-subnav-btn"         data-hr="attendance"><i class="fa fa-clock"></i> Attendance</button>
       </div>
 
       <!-- ── Employees list view ── -->
@@ -5150,6 +5154,35 @@
         </div>
 
         <div class="finance-footer"><span id="pos-footer-text"></span></div>
+      </div>
+
+      <!-- ── Attendance view ── -->
+      <div id="attendance-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+
+        <div class="finance-toolbar">
+          <div class="finance-search-wrap">
+            <i class="fa fa-magnifying-glass"></i>
+            <input type="text" id="att-search" placeholder="Search by employee name or ID…">
+          </div>
+          <button class="finance-create-btn" id="att-import-btn">
+            <i class="fa fa-file-arrow-up"></i> Upload CSV
+          </button>
+        </div>
+
+        <div class="lm-stats-bar">
+          <div class="lm-stat-item">
+            <span class="lm-stat-label"><i class="fa fa-clock"></i> Records</span>
+            <span class="lm-stat-val" id="att-total-count">—</span>
+          </div>
+        </div>
+
+        <div class="finance-cards-wrap">
+          <div class="finance-cards-area" id="att-cards-area">
+            <div class="finance-loading"><i class="fa fa-spinner fa-spin"></i> Loading attendance…</div>
+          </div>
+        </div>
+
+        <div class="finance-footer"><span id="att-footer-text"></span></div>
       </div>
 
       <!-- ── Payroll list view ── -->
@@ -9461,6 +9494,72 @@
     <div class="bill-modal-footer">
       <button class="bill-save-btn" id="pos-create-modal-save"><i class="fa fa-plus"></i> Create</button>
       <button class="btn-secondary" id="pos-create-modal-cancel" style="margin-left:auto">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Attendance: CSV Import Modal ─────────────────────────────────────── -->
+<div id="att-csv-import-modal" class="bwz-overlay" style="display:none" role="dialog" aria-modal="true">
+  <div class="csv-import-card">
+    <div class="csv-import-header">
+      <div class="csv-import-title"><i class="fa fa-file-arrow-up"></i> Upload Attendance CSV</div>
+      <button class="csv-import-close" id="att-csv-import-close"><i class="fa fa-xmark"></i></button>
+    </div>
+
+    <div class="csv-step-track">
+      <div class="csv-step active" id="att-csv-step-ind-1"><span class="csv-step-num">1</span><span class="csv-step-label">Upload</span></div>
+      <div class="csv-step-line"></div>
+      <div class="csv-step" id="att-csv-step-ind-2"><span class="csv-step-num">2</span><span class="csv-step-label">Preview</span></div>
+      <div class="csv-step-line"></div>
+      <div class="csv-step" id="att-csv-step-ind-3"><span class="csv-step-num">3</span><span class="csv-step-label">Result</span></div>
+    </div>
+
+    <!-- Step 1: Upload -->
+    <div class="csv-import-body" id="att-csv-step-1">
+      <div class="csv-dropzone" id="att-csv-dropzone">
+        <i class="fa fa-cloud-arrow-up csv-dropzone-icon"></i>
+        <p class="csv-dropzone-text">Drag &amp; drop your CSV file here</p>
+        <p class="csv-dropzone-sub">or click to browse</p>
+        <input type="file" id="att-csv-file-input" accept=".csv,text/csv" style="position:absolute;inset:0;opacity:0;cursor:pointer">
+      </div>
+      <div class="csv-upload-info">
+        <div class="csv-info-item"><i class="fa fa-circle-check"></i> First row must be column headers</div>
+        <div class="csv-info-item"><i class="fa fa-circle-check"></i> Required columns: <strong>employee_id</strong>, <strong>check_in</strong></div>
+        <div class="csv-info-item"><i class="fa fa-circle-check"></i> Optional: check_out</div>
+        <div class="csv-info-item"><i class="fa fa-circle-check"></i> Date/time example: 2026-09-03 09:00</div>
+        <div class="csv-info-item"><i class="fa fa-circle-check"></i> Max 1000 rows per import</div>
+      </div>
+      <div class="csv-import-footer">
+        <button class="csv-sample-btn" id="att-csv-download-sample"><i class="fa fa-download"></i> Download Sample CSV</button>
+      </div>
+    </div>
+
+    <!-- Step 2: Preview -->
+    <div class="csv-import-body" id="att-csv-step-2" style="display:none">
+      <div class="csv-preview-summary" id="att-csv-preview-summary"></div>
+      <div class="csv-preview-wrap">
+        <table class="csv-preview-tbl" id="att-csv-preview-tbl">
+          <thead id="att-csv-preview-thead"></thead>
+          <tbody id="att-csv-preview-tbody"></tbody>
+        </table>
+      </div>
+      <div class="csv-import-footer">
+        <button class="psm-btn-cancel" id="att-csv-back-btn"><i class="fa fa-arrow-left"></i> Back</button>
+        <button class="eod-settle-btn" id="att-csv-import-btn"><i class="fa fa-file-import"></i> Import <span id="att-csv-import-count"></span> Records</button>
+      </div>
+    </div>
+
+    <!-- Step 3: Result -->
+    <div class="csv-import-body" id="att-csv-step-3" style="display:none">
+      <div class="csv-result-summary" id="att-csv-result-summary"></div>
+      <div class="csv-result-errors" id="att-csv-result-errors" style="display:none">
+        <div class="csv-result-errors-title"><i class="fa fa-triangle-exclamation"></i> Rows with errors</div>
+        <div class="csv-result-errors-list" id="att-csv-result-errors-list"></div>
+      </div>
+      <div class="csv-import-footer">
+        <button class="psm-btn-cancel" id="att-csv-done-btn">Done</button>
+        <button class="eod-settle-btn" id="att-csv-import-more-btn"><i class="fa fa-plus"></i> Import More</button>
+      </div>
     </div>
   </div>
 </div>

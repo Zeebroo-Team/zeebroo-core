@@ -252,6 +252,8 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
     Route::get('hr/allowance-types', [\Modules\Pos\Http\Controllers\Api\PosHrAllowanceTypeApiController::class, 'index'])->name('hr.allowance-types.index');
     Route::post('hr/allowance-types', [\Modules\Pos\Http\Controllers\Api\PosHrAllowanceTypeApiController::class, 'store'])->name('hr.allowance-types.store');
     Route::delete('hr/allowance-types/{allowanceType}', [\Modules\Pos\Http\Controllers\Api\PosHrAllowanceTypeApiController::class, 'destroy'])->name('hr.allowance-types.destroy');
+    Route::get('hr/attendance', [\Modules\Pos\Http\Controllers\Api\PosHrAttendanceApiController::class, 'index'])->name('hr.attendance.index');
+    Route::post('hr/attendance/import', [\Modules\Pos\Http\Controllers\Api\PosHrAttendanceApiController::class, 'import'])->name('hr.attendance.import');
 
     Route::get('hr/payroll/rule-sets',                                     [\Modules\Pos\Http\Controllers\Api\PosHrPayrollRuleSetApiController::class, 'index'])->name('hr.payroll.rule-sets.index');
     Route::post('hr/payroll/rule-sets',                                    [\Modules\Pos\Http\Controllers\Api\PosHrPayrollRuleSetApiController::class, 'store'])->name('hr.payroll.rule-sets.store');
