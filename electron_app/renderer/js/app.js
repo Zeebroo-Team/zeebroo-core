@@ -7347,6 +7347,7 @@ const _notifIconMap = {
   rental_overdue:          { icon: 'fa-house',                cls: 'danger'  },
   property_expired:        { icon: 'fa-building',             cls: 'warning' },
   purchase_order_overdue:  { icon: 'fa-truck-fast',           cls: 'warning' },
+  cheque_overdue:          { icon: 'fa-money-check-dollar',   cls: 'danger'  },
   purchase_order_received: { icon: 'fa-circle-check',         cls: 'success' },
   sale_large:              { icon: 'fa-sack-dollar',          cls: 'info'    },
 };
@@ -7474,6 +7475,10 @@ function _notifNavigate(n) {
       activateTab('inventory');
       switchInvView('po');
       if (payload.purchase_id && typeof _poSelectPO === 'function') _poSelectPO(payload.purchase_id);
+      break;
+    case 'cheque_overdue':
+      activateTab('inventory');
+      switchInvView('cheques');
       break;
     case 'sale_large':
       activateTab('sales');

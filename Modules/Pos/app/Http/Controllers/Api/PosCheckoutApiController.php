@@ -61,6 +61,11 @@ class PosCheckoutApiController extends Controller
             'pos_counter_id'                 => ['nullable', 'integer', 'min:1'],
         ]);
 
+        $branchId = $validated['branch_id']
+            ?? $request->query('branch')
+            ?? $request->header('X-Branch-Id');
+        $branchId = is_numeric($branchId) ? (int) $branchId : null;
+
         if ($validated['payment_method'] === 'credit' && empty($validated['pos_customer_id'])) {
             return response()->json([
                 'message' => 'A customer must be assigned for credit payment.',
@@ -94,7 +99,7 @@ class PosCheckoutApiController extends Controller
                 isset($validated['amount_tendered']) ? (float) $validated['amount_tendered'] : null,
                 isset($validated['pos_customer_id']) ? (int) $validated['pos_customer_id'] : null,
                 $deferSettlement,
-                isset($validated['branch_id']) ? (int) $validated['branch_id'] : null,
+                $branchId,
                 $validated['scheduled_at'] ?? null,
                 isset($validated['pos_counter_id']) ? (int) $validated['pos_counter_id'] : null,
                 $validated['credit_due_date'] ?? null,

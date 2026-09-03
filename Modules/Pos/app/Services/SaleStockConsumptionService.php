@@ -25,15 +25,20 @@ class SaleStockConsumptionService
      *     unit_sell_price: float,
      * }>
      */
-    public function consumeFromLayer(Product $product, int $layerId, float $quantity): array
-    {
+    public function consumeFromLayer(
+        Product $product,
+        int $layerId,
+        float $quantity,
+        ?int $branchId = null,
+        bool $branchStockSeparate = false,
+    ): array {
         if ($quantity <= self::QTY_TOLERANCE) {
             throw ValidationException::withMessages([
                 'items' => 'Quantity must be greater than zero.',
             ]);
         }
 
-        return DB::transaction(function () use ($product, $layerId, $quantity) {
+        return DB::transaction(function () use ($product, $layerId, $quantity, $branchId, $branchStockSeparate) {
             $product = Product::query()->whereKey($product->id)->lockForUpdate()->firstOrFail();
             $product->loadMissing('business');
 
@@ -92,6 +97,10 @@ class SaleStockConsumptionService
                     ->where('business_id', $product->business_id)
                     ->where('quantity_remaining', '>', 0)
                     ->where('id', '!=', $layerId)
+                    ->when(
+                        $branchStockSeparate && $branchId !== null,
+                        fn ($q) => $q->where('branch_id', $branchId),
+                    )
                     ->orderBy('received_at')
                     ->orderBy('id')
                     ->lockForUpdate()
@@ -133,15 +142,19 @@ class SaleStockConsumptionService
         });
     }
 
-    public function consumeFifo(Product $product, float $quantity): array
-    {
+    public function consumeFifo(
+        Product $product,
+        float $quantity,
+        ?int $branchId = null,
+        bool $branchStockSeparate = false,
+    ): array {
         if ($quantity <= self::QTY_TOLERANCE) {
             throw ValidationException::withMessages([
                 'items' => 'Quantity must be greater than zero.',
             ]);
         }
 
-        return DB::transaction(function () use ($product, $quantity) {
+        return DB::transaction(function () use ($product, $quantity, $branchId, $branchStockSeparate) {
             $product = Product::query()->whereKey($product->id)->lockForUpdate()->firstOrFail();
             $product->loadMissing('business');
 
@@ -149,12 +162,34 @@ class SaleStockConsumptionService
                 ->where('product_id', $product->id)
                 ->where('business_id', $product->business_id)
                 ->where('quantity_remaining', '>', 0)
+                ->when(
+                    $branchStockSeparate && $branchId !== null,
+                    fn ($q) => $q->where('branch_id', $branchId),
+                )
                 ->orderBy('received_at')
                 ->orderBy('id')
                 ->lockForUpdate()
                 ->get();
 
             if ($layers->isEmpty()) {
+                // If branch-scoped stock is empty but the product does have layers
+                // elsewhere (a different branch), don't fall back to the cross-branch
+                // stock_quantity counter — that would sell/price stock that isn't
+                // actually assigned to this branch.
+                if ($branchStockSeparate && $branchId !== null) {
+                    $hasLayersElsewhere = ProductStockLayer::query()
+                        ->where('product_id', $product->id)
+                        ->where('business_id', $product->business_id)
+                        ->where('quantity_remaining', '>', 0)
+                        ->exists();
+
+                    if ($hasLayersElsewhere) {
+                        throw ValidationException::withMessages([
+                            'items' => 'Insufficient stock for '.$product->name.' in this branch.',
+                        ]);
+                    }
+                }
+
                 return $this->consumeWithoutLayers($product, $quantity);
             }
 
@@ -187,8 +222,10 @@ class SaleStockConsumptionService
             }
 
             if ($remaining > self::QTY_TOLERANCE) {
+                $branchSuffix = $branchStockSeparate && $branchId !== null ? ' in this branch' : '';
                 throw ValidationException::withMessages([
-                    'items' => 'Insufficient stock for '.$product->name.'. Available: '.number_format((float) $product->stock_quantity, 3, '.', '').'.',
+                    'items' => 'Insufficient stock for '.$product->name.$branchSuffix
+                        .'. Available: '.number_format((float) $product->stock_quantity, 3, '.', '').'.',
                 ]);
             }
 
