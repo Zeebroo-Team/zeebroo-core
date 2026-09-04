@@ -110,6 +110,20 @@ class PosSubscriptionApiController extends Controller
         return response()->json(['message' => 'Subscription marked as renewed.', 'data' => $this->format($subscription)]);
     }
 
+    public function notify(Request $request, CustomerSubscription $subscription): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        abort_unless((int) $subscription->business_id === (int) $business->id, 404);
+
+        $result = $this->subscriptions->notify($business, $subscription);
+
+        if (!$result['success']) {
+            return response()->json(['message' => $result['error']], 422);
+        }
+
+        return response()->json(['message' => 'Reminder sent.', 'data' => $this->format($subscription->fresh())]);
+    }
+
     private function format(CustomerSubscription $s): array
     {
         return [
@@ -117,6 +131,7 @@ class PosSubscriptionApiController extends Controller
             'customer_id'       => $s->pos_customer_id,
             'customer_name'     => $s->customer?->name,
             'customer_phone'    => $s->customer?->phone,
+            'customer_email'    => $s->customer?->email,
             'product_id'        => $s->product_id,
             'product_name'      => $s->product?->name,
             'product_sku'       => $s->product?->sku,
@@ -131,6 +146,7 @@ class PosSubscriptionApiController extends Controller
             'started_at'        => $s->started_at?->toDateString(),
             'next_billing_at'   => $s->next_billing_at?->toDateString(),
             'last_renewed_at'   => $s->last_renewed_at?->toDateString(),
+            'last_notified_at'  => $s->last_notified_at?->toIso8601String(),
             'cancelled_at'      => $s->cancelled_at?->toIso8601String(),
         ];
     }

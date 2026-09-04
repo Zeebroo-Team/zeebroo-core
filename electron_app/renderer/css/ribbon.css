@@ -12345,6 +12345,28 @@ body.dark .bc-main-preview-body { background: #1a1a1a; }
 .qt-act-btn.danger { color: #ef4444; border-color: color-mix(in srgb,#ef4444 35%,var(--border)); }
 .qt-act-btn.danger:hover { background: color-mix(in srgb,#ef4444 8%,transparent); }
 .subs-act-btn { padding: 5px 10px; font-size: 11px; gap: 4px; }
+.subs-act-btn:disabled { opacity: .45; cursor: not-allowed; }
+
+/* Subscriptions summary bar */
+.subs-stats-bar { display: flex; gap: 10px; padding: 14px 20px 12px; flex-wrap: wrap; }
+.subs-stat-card {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 8px 14px; border: 1px solid var(--border); border-radius: 10px;
+  background: var(--surface); font-size: 12px;
+}
+.subs-stat-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.subs-stat-value { font-weight: 700; font-size: 14px; color: var(--text); }
+.subs-stat-label { color: var(--text-muted); }
+
+/* Due-billing badges + notify hint */
+.subs-due-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 999px;
+  white-space: nowrap;
+}
+.subs-due-badge.subs-due-soon { color: #f97316; background: color-mix(in srgb,#f97316 12%,transparent); }
+.subs-due-badge.subs-due-overdue { color: #ef4444; background: color-mix(in srgb,#ef4444 12%,transparent); }
+.subs-notified-hint { font-size: 10px; color: var(--text-muted); white-space: nowrap; }
 
 /* Form cards */
 .qt-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }

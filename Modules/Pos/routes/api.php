@@ -144,6 +144,7 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
     Route::post  ('subscriptions/{subscription}/pause',        [PosSubscriptionApiController::class, 'pause'] )->name('subscriptions.pause');
     Route::post  ('subscriptions/{subscription}/resume',       [PosSubscriptionApiController::class, 'resume'])->name('subscriptions.resume');
     Route::post  ('subscriptions/{subscription}/renew',        [PosSubscriptionApiController::class, 'renew'] )->name('subscriptions.renew');
+    Route::post  ('subscriptions/{subscription}/notify',       [PosSubscriptionApiController::class, 'notify'])->name('subscriptions.notify');
 
     Route::get ('eod',            [PosEndOfDayApiController::class,    'status'])->name('eod.status');
     Route::post('eod/settle',     [PosEndOfDayApiController::class,    'settle'])->name('eod.settle');
