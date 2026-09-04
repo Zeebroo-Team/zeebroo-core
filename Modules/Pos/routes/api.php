@@ -82,6 +82,7 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
     Route::patch('online/products/{id}/stock-layers/{layerId}/selling-price',   [PosCatalogApiController::class, 'updateLayerSellingPrice'])->where(['id' => '[0-9]+', 'layerId' => '[0-9]+'])->name('online.products.stock-layers.selling-price');
     Route::patch('online/products/{id}/stock-layers/{layerId}/wholesale-price', [PosCatalogApiController::class, 'updateLayerWholesalePrice'])->where(['id' => '[0-9]+', 'layerId' => '[0-9]+'])->name('online.products.stock-layers.wholesale-price');
     Route::patch('online/products/{id}/stock-layers/{layerId}/cost-price',      [PosCatalogApiController::class, 'updateLayerCostPrice'])->where(['id' => '[0-9]+', 'layerId' => '[0-9]+'])->name('online.products.stock-layers.cost-price');
+    Route::patch('online/products/{id}/stock-layers/{layerId}/barcode',         [PosCatalogApiController::class, 'updateLayerBarcode'])->where(['id' => '[0-9]+', 'layerId' => '[0-9]+'])->name('online.products.stock-layers.barcode');
     Route::get('online/products/{id}/sales-chart', \Modules\Pos\Http\Controllers\Api\PosProductSalesChartApiController::class)->where('id', '[0-9]+')->name('online.products.sales-chart');
     Route::get('online/products/sku/{sku}', [PosCatalogApiController::class, 'productBySku'])->name('online.products.sku');
     Route::post('online/products/{id}/backfill-batch-skus', [PosCatalogApiController::class, 'backfillBatchSkus'])->where('id', '[0-9]+')->name('online.products.backfill-batch-skus');

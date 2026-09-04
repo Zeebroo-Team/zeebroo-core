@@ -839,7 +839,7 @@ function _subsRenderList() {
       }
       actions += `<button class="qt-act-btn subs-act-btn" style="border-color:#ef4444;color:#ef4444" data-subs-act="cancel" data-subs-id="${s.id}"><i class="fa fa-ban"></i> Cancel</button>`;
     }
-    html += `<tr>
+    html += `<tr class="subs-row" data-subs-row="${s.id}" style="cursor:pointer">
       <td class="qt-tbl-customer">${escHtml(s.customer_name || '—')}</td>
       <td>${escHtml(s.product_name || '—')}</td>
       <td class="qt-tbl-muted">${periodLabels[s.recurring_period] || escHtml(s.recurring_period)}</td>
@@ -857,23 +857,199 @@ function _subsRenderList() {
   $('#subs-body').innerHTML = html;
 
   $$('#subs-body [data-subs-act]').forEach(b => {
-    b.addEventListener('click', async () => {
+    b.addEventListener('click', async (e) => {
+      e.stopPropagation();
       const id = Number(b.dataset.subsId);
       const act = b.dataset.subsAct;
-      const fns = { renew: API.renewSubscription, pause: API.pauseSubscription, resume: API.resumeSubscription, cancel: API.cancelSubscription, notify: API.notifySubscription };
-      if (act === 'cancel' && !confirm('Cancel this subscription? This cannot be undone.')) return;
-      b.disabled = true;
-      const res = await fns[act](id);
-      if (res.status === 200) {
-        toast(res.body?.message || 'Updated', 'success');
-        loadSubscriptionsList();
-      } else {
-        toast(res.body?.message || 'Action failed', 'error');
-        b.disabled = false;
-      }
+      await _subsRunAction(act, id, b);
+    });
+  });
+
+  $$('#subs-body [data-subs-row]').forEach(row => {
+    row.addEventListener('click', () => {
+      const s = _subs.list.find(x => x.id === Number(row.dataset.subsRow));
+      if (s) _subsOpenDetail(s);
     });
   });
 }
+
+async function _subsRunAction(act, id, btn) {
+  const fns = { renew: API.renewSubscription, pause: API.pauseSubscription, resume: API.resumeSubscription, cancel: API.cancelSubscription, notify: API.notifySubscription };
+  if (act === 'cancel' && !confirm('Cancel this subscription? This cannot be undone.')) return false;
+  if (btn) btn.disabled = true;
+  const res = await fns[act](id);
+  if (res.status === 200) {
+    toast(res.body?.message || 'Updated', 'success');
+    await loadSubscriptionsList();
+    return true;
+  } else {
+    toast(res.body?.message || 'Action failed', 'error');
+    if (btn) btn.disabled = false;
+    return false;
+  }
+}
+
+function _subsCadenceMonths(period) {
+  return { weekly: null, monthly: 1, quarterly: 3, yearly: 12 }[period] ?? 1;
+}
+
+function _subsAddCadence(date, period) {
+  const d = new Date(date);
+  if (period === 'weekly') d.setDate(d.getDate() + 7);
+  else d.setMonth(d.getMonth() + _subsCadenceMonths(period));
+  return d;
+}
+
+function _subsBuildSchedule(s) {
+  if (!s.started_at) return [];
+  const cur = state.currency ? ' ' + state.currency : '';
+  const fmtMonth = d => d.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+  const fmtDay   = d => d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const nextBilling = s.next_billing_at ? new Date(s.next_billing_at + 'T00:00:00') : null;
+  const cancelledAt = s.cancelled_at ? new Date(s.cancelled_at) : null;
+
+  const rows = [];
+  let cursor = new Date(s.started_at + 'T00:00:00');
+  let guard = 0;
+  const FUTURE_CYCLES_TO_SHOW = 2;
+  let futureShown = 0;
+
+  while (guard++ < 60) {
+    const isCancelledCycle = cancelledAt && cursor > cancelledAt;
+    if (isCancelledCycle) break;
+
+    let status, statusColor;
+    if (nextBilling && cursor.getTime() === nextBilling.getTime()) {
+      const days = Math.round((nextBilling - today) / 86400000);
+      if (days < 0)       { status = 'Overdue';  statusColor = '#ef4444'; }
+      else if (days === 0){ status = 'Due today';statusColor = '#f97316'; }
+      else                { status = 'Upcoming'; statusColor = '#f59e0b'; }
+    } else if (nextBilling && cursor < nextBilling) {
+      status = s.free_trial && rows.length === 0 ? 'Free trial' : 'Paid';
+      statusColor = s.free_trial && rows.length === 0 ? '#8b5cf6' : '#22c55e';
+    } else {
+      status = 'Upcoming';
+      statusColor = '#94a3b8';
+      futureShown++;
+    }
+
+    rows.push({ label: fmtMonth(cursor), date: fmtDay(cursor), amount: `${parseFloat(s.price || 0).toFixed(2)}${cur}`, status, statusColor });
+
+    if (nextBilling && cursor >= nextBilling && futureShown >= FUTURE_CYCLES_TO_SHOW) break;
+    if (!nextBilling && rows.length >= 6) break;
+
+    cursor = _subsAddCadence(cursor, s.recurring_period);
+  }
+
+  return rows;
+}
+
+function _subsOpenDetail(s) {
+  const statusColors = { trial: '#8b5cf6', active: '#22c55e', paused: '#f59e0b', cancelled: '#ef4444' };
+  const periodLabels = { weekly: 'Weekly', monthly: 'Monthly', quarterly: 'Quarterly', yearly: 'Yearly' };
+  const color = statusColors[s.status] || '#8b5cf6';
+  const cur = state.currency ? ' ' + state.currency : '';
+  const fmtDate = d => d ? new Date(d + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
+  const fmtDateTime = d => d ? new Date(d).toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : '—';
+
+  $('#sdm-product-name').textContent = s.product_name || 'Subscription';
+  $('#sdm-customer-name').textContent = s.customer_name || '';
+
+  $('#sdm-badges').innerHTML = `
+    <span class="so-badge" style="background:${color}20;color:${color};border-color:${color}40">${escHtml(s.status_label)}</span>
+    <span class="inv-badge inv-badge-blue">${periodLabels[s.recurring_period] || escHtml(s.recurring_period)}</span>
+    ${s.free_trial ? '<span class="inv-badge inv-badge-purple">Free trial</span>' : ''}
+  `;
+
+  const rowsHtml = rows => rows.map(([label, val]) =>
+    `<tr><td class="inv-dt-label">${escHtml(label)}</td><td class="inv-dt-val">${val}</td></tr>`).join('');
+
+  const subRows = [
+    ['Price',    `<strong>${parseFloat(s.price || 0).toFixed(2)}${cur}</strong>`],
+    ['Quantity', escHtml(String(s.quantity ?? 1))],
+    ['Product',  escHtml(s.product_name || '—') + (s.product_sku ? ` <span style="color:var(--text-muted)">(${escHtml(s.product_sku)})</span>` : '')],
+    ['Sale',     s.sale_number ? escHtml(s.sale_number) : '—'],
+  ];
+
+  const custRows = [
+    ['Customer', escHtml(s.customer_name || '—')],
+    ['Phone',    escHtml(s.customer_phone || '—')],
+    ['Email',    escHtml(s.customer_email || '—')],
+  ];
+
+  const billRows = [
+    ['Started',       fmtDate(s.started_at)],
+    ['Next billing',  fmtDate(s.next_billing_at)],
+    ['Last renewed',  fmtDate(s.last_renewed_at)],
+    ['Last notified', s.last_notified_at ? fmtDateTime(s.last_notified_at) : '—'],
+  ];
+  if (s.cancelled_at) billRows.push(['Cancelled', fmtDateTime(s.cancelled_at)]);
+
+  const schedule = _subsBuildSchedule(s);
+  const scheduleHtml = schedule.length ? `
+    <div class="inv-section" style="margin-top:14px">
+      <div class="inv-section-title"><i class="fa fa-calendar-days"></i> Billing schedule</div>
+      <table class="inv-detail-table">
+        <thead><tr>
+          <th style="text-align:left;padding:9px 14px;font-size:12px;color:var(--text-muted)">Cycle</th>
+          <th style="text-align:left;padding:9px 14px;font-size:12px;color:var(--text-muted)">Date</th>
+          <th style="text-align:right;padding:9px 14px;font-size:12px;color:var(--text-muted)">Amount</th>
+          <th style="text-align:left;padding:9px 14px;font-size:12px;color:var(--text-muted)">Status</th>
+        </tr></thead>
+        <tbody>
+          ${schedule.map(r => `<tr>
+            <td class="inv-dt-val">${escHtml(r.label)}</td>
+            <td class="inv-dt-val" style="color:var(--text-muted)">${escHtml(r.date)}</td>
+            <td class="inv-dt-val" style="text-align:right">${r.amount}</td>
+            <td class="inv-dt-val"><span class="so-badge" style="background:${r.statusColor}20;color:${r.statusColor};border-color:${r.statusColor}40">${escHtml(r.status)}</span></td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>` : '';
+
+  $('#sdm-content').innerHTML = `
+    <div class="inv-section">
+      <div class="inv-section-title"><i class="fa fa-repeat"></i> Subscription</div>
+      <table class="inv-detail-table">${rowsHtml(subRows)}</table>
+    </div>
+    <div class="inv-section" style="margin-top:14px">
+      <div class="inv-section-title"><i class="fa fa-user"></i> Customer</div>
+      <table class="inv-detail-table">${rowsHtml(custRows)}</table>
+    </div>
+    <div class="inv-section" style="margin-top:14px">
+      <div class="inv-section-title"><i class="fa fa-clock"></i> Billing dates</div>
+      <table class="inv-detail-table">${rowsHtml(billRows)}</table>
+    </div>
+    ${scheduleHtml}
+  `;
+
+  let actions = '';
+  if (s.status !== 'cancelled') {
+    actions += `<button class="qt-act-btn subs-act-btn" data-subs-act="renew" data-subs-id="${s.id}"><i class="fa fa-rotate"></i> Renew</button>`;
+    actions += s.status === 'paused'
+      ? `<button class="qt-act-btn subs-act-btn" data-subs-act="resume" data-subs-id="${s.id}"><i class="fa fa-play"></i> Resume</button>`
+      : `<button class="qt-act-btn subs-act-btn" data-subs-act="pause" data-subs-id="${s.id}"><i class="fa fa-pause"></i> Pause</button>`;
+    if (_subsShowNotify) {
+      actions += `<button class="qt-act-btn subs-act-btn" title="${s.customer_email ? 'Email a renewal reminder' : 'No email on file for this customer'}" ${s.customer_email ? '' : 'disabled'} data-subs-act="notify" data-subs-id="${s.id}"><i class="fa fa-bell"></i> Notify</button>`;
+    }
+    actions += `<button class="qt-act-btn subs-act-btn" style="border-color:#ef4444;color:#ef4444" data-subs-act="cancel" data-subs-id="${s.id}"><i class="fa fa-ban"></i> Cancel</button>`;
+  }
+  $('#sdm-actions').innerHTML = actions;
+  $$('#sdm-actions [data-subs-act]').forEach(b => {
+    b.addEventListener('click', async () => {
+      const ok = await _subsRunAction(b.dataset.subsAct, Number(b.dataset.subsId), b);
+      if (ok) $('#subs-detail-modal').style.display = 'none';
+    });
+  });
+
+  $('#subs-detail-modal').style.display = 'flex';
+}
+
+$('#subs-detail-modal-close')?.addEventListener('click', () => { $('#subs-detail-modal').style.display = 'none'; });
+$('#subs-detail-modal')?.addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) e.currentTarget.style.display = 'none';
+});
 
 $('#subs-search')?.addEventListener('input', () => {
   clearTimeout(_subs.searchTimer);
@@ -3399,12 +3575,14 @@ async function _invPrint(inv) {
 // ── Invoice form ──────────────────────────────────────────────────────────
 let _invLineSeq = 0;
 
-function _invAddLine(desc = '', qty = 1, price = 0, discType = 'pct', discValue = 0, taxType = 'pct', taxValue = 0) {
+function _invAddLine(desc = '', qty = 1, price = 0, discType = 'pct', discValue = 0, taxType = 'pct', taxValue = 0, productId = null, isSubscription = false) {
   const id  = ++_invLineSeq;
   const row = document.createElement('div');
   row.className        = 'qt-line-row';
   row.dataset.lineId   = id;
   row.dataset.discType = discType;
+  if (productId) row.dataset.productId = productId;
+  if (isSubscription) row.dataset.isSubscription = '1';
 
   const cur = state.currency || '¤';
   const s   = state.receiptSettings || {};
@@ -3424,6 +3602,7 @@ function _invAddLine(desc = '', qty = 1, price = 0, discType = 'pct', discValue 
   row.innerHTML = `
     <div class="qt-line-desc">
       <input type="text" class="qt-line-input qt-line-desc-input" placeholder="Description or search product…" value="${escHtml(desc)}" data-role="desc" data-lid="${id}">
+      <span class="qt-line-sub-badge" data-role="sub-badge" style="display:${isSubscription ? '' : 'none'};font-size:10px;color:#7c3aed;background:#f3e8ff;border-radius:4px;padding:1px 6px;margin-left:6px;white-space:nowrap;"><i class="fa fa-repeat"></i> Subscription</span>
     </div>
     <input type="number" class="qt-line-input qt-line-num"   value="${qty}" min="0.001" step="any" data-role="qty">
     <input type="number" class="qt-line-input qt-line-price" value="${price > 0 ? price.toFixed(2) : ''}" min="0" step="any" data-role="price" placeholder="0.00">
@@ -3467,6 +3646,12 @@ function _invAddLine(desc = '', qty = 1, price = 0, discType = 'pct', discValue 
 
   let sugTimer;
 
+  const subBadge = row.querySelector('[data-role="sub-badge"]');
+  function _setSubBadge(show) {
+    if (show) { row.dataset.isSubscription = '1'; } else { delete row.dataset.isSubscription; }
+    if (subBadge) subBadge.style.display = show ? '' : 'none';
+  }
+
   // ── Full POS product-selection logic on suggestion click ─────────────────
   async function _invHandleSugClick(el) {
     _sugHide();
@@ -3474,6 +3659,8 @@ function _invAddLine(desc = '', qty = 1, price = 0, discType = 'pct', discValue 
 
     if (!isProduct) {
       // Service: simple fill — no layers or warranty
+      delete row.dataset.productId;
+      _setSubBadge(false);
       descInp.value  = el.dataset.name;
       priceInp.value = parseFloat(el.dataset.price || 0).toFixed(2);
       _invRecalc();
@@ -3486,6 +3673,8 @@ function _invAddLine(desc = '', qty = 1, price = 0, discType = 'pct', discValue 
     const p   = res.status === 200 ? (res.body?.data ?? res.body) : null;
 
     if (!p) {
+      delete row.dataset.productId;
+      _setSubBadge(false);
       descInp.value  = el.dataset.name;
       priceInp.value = parseFloat(el.dataset.price || 0).toFixed(2);
       _invRecalc();
@@ -3534,6 +3723,8 @@ function _invAddLine(desc = '', qty = 1, price = 0, discType = 'pct', discValue 
       }
     }
 
+    row.dataset.productId = p.id;
+    _setSubBadge(!!p.is_subscription);
     descInp.value  = p.name;
     priceInp.value = chosenPrice.toFixed(2);
     _invRecalc();
@@ -3542,6 +3733,8 @@ function _invAddLine(desc = '', qty = 1, price = 0, discType = 'pct', discValue 
 
   // ── Typeahead input listener ──────────────────────────────────────────────
   descInp.addEventListener('input', () => {
+    // Any manual retyping invalidates a previously-linked product selection
+    if (row.dataset.productId) { delete row.dataset.productId; _setSubBadge(false); }
     clearTimeout(sugTimer);
     const q = descInp.value.trim();
     if (q.length < 2) { _sugHide(); return; }
@@ -3655,6 +3848,10 @@ function _invRecalc() {
   const tax  = parseFloat($('#sinv-f-tax').value)      || 0;
   $('#sinv-subtotal').textContent    = sub.toFixed(2);
   $('#sinv-grand-total').textContent = Math.max(0, sub - disc + tax).toFixed(2);
+
+  const hasSub = !!$('#sinv-items-body .qt-line-row[data-is-subscription="1"]');
+  const hintEl = $('#sinv-sub-hint');
+  if (hintEl) hintEl.style.display = hasSub ? '' : 'none';
 }
 
 async function _invOpenForm(existing, prefill = null) {
@@ -3697,6 +3894,7 @@ async function _invOpenForm(existing, prefill = null) {
       i.description, i.quantity, i.unit_price,
       i.discount_type || 'pct', i.discount_value || 0,
       i.tax_type || 'pct', i.tax_pct || 0,
+      i.product_id || null, !!i.is_subscription,
     ));
   } else if (prefill?.items?.length) {
     prefill.items.forEach(i => _invAddLine(
@@ -3716,6 +3914,7 @@ $('#sinv-f-tax').addEventListener('input', _invRecalc);
 $('#sinv-form-save').addEventListener('click', async () => {
   const btn   = $('#sinv-form-save');
   const lines = [];
+  let hasSubscriptionLine = false;
   $$('#sinv-items-body .qt-line-row').forEach(row => {
     const qty      = parseFloat(row.querySelector('[data-role="qty"]').value)   || 0;
     const price    = parseFloat(row.querySelector('[data-role="price"]').value) || 0;
@@ -3723,6 +3922,7 @@ $('#sinv-form-save').addEventListener('click', async () => {
     const discVal  = parseFloat(row.querySelector('[data-role="disc"]')?.value) || 0;
     const taxType  = row.dataset.taxType  || 'pct';
     const taxValue = parseFloat(row.dataset.taxValue) || 0;
+    const productId = row.dataset.productId ? parseInt(row.dataset.productId) : null;
     let   desc  = (row.querySelector('[data-role="desc"]')?.value || '').trim();
     // Append warranty info to description if captured during product selection
     if (row.dataset.warrantyType === 'lifetime') {
@@ -3731,8 +3931,10 @@ $('#sinv-form-save').addEventListener('click', async () => {
       desc += (desc ? ' ' : '') + `(Warranty expires: ${row.dataset.warrantyDate})`;
     }
     if (qty > 0 || price > 0 || desc) {
+      if (row.dataset.isSubscription === '1') hasSubscriptionLine = true;
       lines.push({
-        item_type:      'custom',
+        item_type:      productId ? 'product' : 'custom',
+        product_id:     productId,
         description:    desc,
         quantity:       qty,
         unit_price:     price,
@@ -3746,6 +3948,12 @@ $('#sinv-form-save').addEventListener('click', async () => {
 
   if (!lines.length) {
     $('#sinv-form-alert').textContent = 'Add at least one line item.';
+    $('#sinv-form-alert').style.display = '';
+    return;
+  }
+
+  if (hasSubscriptionLine && !parseInt($('#sinv-f-customer').value)) {
+    $('#sinv-form-alert').textContent = 'Select a customer for subscription products — subscriptions cannot be tracked for walk-in customers.';
     $('#sinv-form-alert').style.display = '';
     return;
   }
@@ -17736,6 +17944,52 @@ async function _saveLayerCostPrice(productId, layerId, cost) {
   }
 }
 
+async function _saveLayerBarcode(productId, layerId, barcode) {
+  const statusEl = $(`.inv-layer-barcode-status[data-layer-id="${layerId}"]`);
+  const saveBtn  = $(`.inv-layer-barcode-save[data-layer-id="${layerId}"]`);
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.innerHTML = '<i class="fa fa-spinner fa-spin"></i>'; }
+  if (statusEl) statusEl.textContent = '';
+
+  const val = barcode == null ? null : String(barcode).trim() || null;
+  const res = await API.updateLayerBarcode(productId, layerId, val);
+
+  if (saveBtn) { saveBtn.disabled = false; saveBtn.innerHTML = '<i class="fa fa-check"></i>'; }
+  if (res.status === 200) {
+    if (statusEl) {
+      statusEl.textContent = 'Saved';
+      statusEl.className = 'inv-layer-barcode-status inv-layer-price-ok';
+      setTimeout(() => { if (statusEl) { statusEl.textContent = ''; statusEl.className = 'inv-layer-barcode-status'; } }, 2000);
+    }
+  } else {
+    if (statusEl) {
+      statusEl.textContent = res.body?.message || res.body?.errors?.batch_sku?.[0] || 'Error';
+      statusEl.className = 'inv-layer-barcode-status inv-layer-price-err';
+    }
+  }
+}
+
+function _bindLayerBarcodeSave(productId, stockHistory) {
+  const pane = $('#inv-pane-stock');
+  if (!pane || !stockHistory.length) return;
+
+  pane.querySelectorAll('.inv-layer-barcode-save').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const layerId = btn.dataset.layerId;
+      const input   = pane.querySelector(`.inv-layer-barcode-input[data-layer-id="${layerId}"]`);
+      _saveLayerBarcode(productId, layerId, input?.value ?? '');
+    });
+  });
+
+  pane.querySelectorAll('.inv-layer-barcode-input').forEach(input => {
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        _saveLayerBarcode(productId, input.dataset.layerId, input.value);
+      }
+    });
+  });
+}
+
 function _bindLayerCostSave(productId, stockHistory) {
   const pane = $('#inv-pane-stock');
   if (!pane || !stockHistory.length) return;
@@ -18101,8 +18355,16 @@ function renderProductDetail(p, stockHistory = []) {
         ].filter(Boolean).join('');
       }
 
-      const batchChip = h.batch_sku
-        ? `<span class="srh-batch-chip"><i class="fa fa-barcode"></i> ${escHtml(h.batch_sku)}</span>` : '';
+      const barcodeField = `
+        <div class="srh-inline-field srh-inline-field--barcode">
+          <span class="srh-inline-label"><i class="fa fa-barcode"></i></span>
+          <div class="srh-price-input-wrap">
+            <input type="text" class="inv-layer-barcode-input srh-price-input srh-barcode-input" data-layer-id="${h.id}"
+              value="${escHtml(h.batch_sku || '')}" maxlength="150" placeholder="Barcode">
+            <button class="inv-layer-barcode-save srh-price-btn" data-layer-id="${h.id}" title="Save barcode"><i class="fa fa-check"></i></button>
+          </div>
+          <span class="inv-layer-barcode-status srh-price-status" data-layer-id="${h.id}"></span>
+        </div>`;
 
       const qtyDisp = `${qtyLeft % 1 === 0 ? qtyLeft : qtyLeft.toFixed(2)} / ${qtyIn % 1 === 0 ? qtyIn : qtyIn.toFixed(2)}`;
       return `
@@ -18110,7 +18372,6 @@ function renderProductDetail(p, stockHistory = []) {
         <div class="srh-row-info">
           ${badgeHtml}
           ${refHtml}
-          ${batchChip}
           <span class="srh-qty-pill ${qtyStatusCls}">
             <span class="srh-qty-mini-bar"><span class="srh-qty-mini-fill ${barCls}" style="width:${pct.toFixed(1)}%"></span></span>
             ${qtyDisp}
@@ -18118,6 +18379,7 @@ function renderProductDetail(p, stockHistory = []) {
           <span class="srh-date"><i class="fa fa-calendar-day"></i> ${date}</span>
         </div>
         <div class="srh-row-prices">
+          ${barcodeField}
           <div class="srh-inline-field">
             <span class="srh-inline-label">Cost</span>
             <div class="srh-price-input-wrap">
@@ -18173,6 +18435,7 @@ function renderProductDetail(p, stockHistory = []) {
   _bindLayerCostSave(p.id, stockHistory);
   _bindLayerPriceSave(p.id, stockHistory);
   _bindLayerWholesaleSave(p.id, stockHistory);
+  _bindLayerBarcodeSave(p.id, stockHistory);
 
   // Shortcut: open the Stock Transfer modal with this product already selected
   $('#stock-tab-transfer-btn')?.addEventListener('click', () => {
@@ -37251,7 +37514,7 @@ async function submitDsCreate() {
       { key: 'sal_tab_quotes',       label: 'Tab: Quotations',     desc: 'Sales panel: Quotations sub-nav tab' },
       { key: 'sal_tab_invoices',     label: 'Tab: Invoices',       desc: 'Sales panel: Invoices sub-nav tab' },
       { key: 'sal_tab_orders',       label: 'Tab: Sales Orders',   desc: 'Sales panel: Sales Orders sub-nav tab' },
-      { key: 'sal_tab_subscriptions',label: 'Tab: Subscriptions',  desc: 'Sales panel: Subscriptions sub-nav tab' },
+      { key: 'sal_tab_subscriptions',label: 'Tab: Recurring Sales',  desc: 'Sales panel: Recurring Sales sub-nav tab' },
     ]},
     { key: 'inv_ribbon', label: 'Inventory · Ribbon', icon: 'fa-boxes-stacked', color: '#8b5cf6', items: [
       { key: 'inv_btn_products',    label: 'Products',         desc: 'Ribbon Catalog: Products list button' },

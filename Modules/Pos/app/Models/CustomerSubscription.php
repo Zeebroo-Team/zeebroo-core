@@ -6,6 +6,8 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Modules\Business\Models\Business;
 use Modules\Product\Models\Product;
+use Modules\Sales\Models\Invoice;
+use Modules\Sales\Models\InvoiceItem;
 
 class CustomerSubscription extends Model
 {
@@ -23,6 +25,8 @@ class CustomerSubscription extends Model
         'product_id',
         'pos_sale_id',
         'pos_sale_item_id',
+        'invoice_id',
+        'invoice_item_id',
         'recurring_period',
         'free_trial',
         'price',
@@ -84,6 +88,16 @@ class CustomerSubscription extends Model
     public function saleItem(): BelongsTo
     {
         return $this->belongsTo(SaleItem::class, 'pos_sale_item_id');
+    }
+
+    public function invoice(): BelongsTo
+    {
+        return $this->belongsTo(Invoice::class);
+    }
+
+    public function invoiceItem(): BelongsTo
+    {
+        return $this->belongsTo(InvoiceItem::class);
     }
 
     public function isCancelled(): bool

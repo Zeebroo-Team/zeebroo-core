@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesPosBusinessForApi;
 use Modules\Pos\Services\PosCatalogService;
 use Modules\Pos\Services\PosOnlineApiService;
@@ -438,6 +439,36 @@ class PosCatalogApiController extends Controller
         return response()->json([
             'message'   => 'Cost price updated.',
             'unit_cost' => (float) $layer->unit_cost,
+        ]);
+    }
+
+    public function updateLayerBarcode(Request $request, int $productId, int $layerId): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'inv_products');
+
+        $product = $business->products()->where('id', $productId)->first();
+        abort_if($product === null, 404, 'Product not found.');
+
+        $layer = ProductStockLayer::where('id', $layerId)
+            ->where('product_id', $product->id)
+            ->where('business_id', $business->id)
+            ->first();
+        abort_if($layer === null, 404, 'Stock layer not found.');
+
+        $validated = $request->validate([
+            'batch_sku' => [
+                'nullable', 'string', 'max:150',
+                Rule::unique('product_stock_layers', 'batch_sku')->ignore($layer->id),
+            ],
+        ]);
+
+        $layer->batch_sku = $validated['batch_sku'] ?? null;
+        $layer->save();
+
+        return response()->json([
+            'message'   => 'Barcode updated.',
+            'batch_sku' => $layer->batch_sku,
         ]);
     }
 }

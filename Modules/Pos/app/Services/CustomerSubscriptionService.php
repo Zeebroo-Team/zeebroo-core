@@ -31,6 +31,38 @@ class CustomerSubscriptionService
         float $price,
         float $quantity,
     ): CustomerSubscription {
+        return $this->create($business, $product, $customerId, $price, $quantity, [
+            'pos_sale_id'      => $saleId,
+            'pos_sale_item_id' => $saleItemId,
+        ]);
+    }
+
+    public function createForInvoiceLine(
+        Business $business,
+        Product $product,
+        int $invoiceId,
+        ?int $invoiceItemId,
+        ?int $customerId,
+        float $price,
+        float $quantity,
+    ): CustomerSubscription {
+        return $this->create($business, $product, $customerId, $price, $quantity, [
+            'invoice_id'      => $invoiceId,
+            'invoice_item_id' => $invoiceItemId,
+        ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $sourceAttributes
+     */
+    private function create(
+        Business $business,
+        Product $product,
+        ?int $customerId,
+        float $price,
+        float $quantity,
+        array $sourceAttributes,
+    ): CustomerSubscription {
         $period = in_array($product->subscription_recurring_period, self::PERIODS, true)
             ? $product->subscription_recurring_period
             : 'monthly';
@@ -41,8 +73,6 @@ class CustomerSubscriptionService
             'business_id'      => $business->id,
             'pos_customer_id'  => $customerId,
             'product_id'       => $product->id,
-            'pos_sale_id'      => $saleId,
-            'pos_sale_item_id' => $saleItemId,
             'recurring_period' => $period,
             'free_trial'       => (bool) $product->subscription_free_trial,
             'price'            => round($price, 2),
@@ -50,6 +80,7 @@ class CustomerSubscriptionService
             'status'           => $product->subscription_free_trial ? CustomerSubscription::STATUS_TRIAL : CustomerSubscription::STATUS_ACTIVE,
             'started_at'       => $startedAt,
             'next_billing_at'  => $nextBillingAt,
+            ...$sourceAttributes,
         ]);
     }
 

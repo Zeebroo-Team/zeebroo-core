@@ -2238,7 +2238,7 @@
         <button class="fin-subnav-btn sal-view-btn" data-sal-view="quotes"><i class="fa fa-file-lines"></i> Quotations</button>
         <button class="fin-subnav-btn sal-view-btn" data-sal-view="invoices"><i class="fa fa-file-invoice"></i> Invoices</button>
         <button class="fin-subnav-btn sal-view-btn" data-sal-view="orders"><i class="fa fa-box"></i> Sales Orders</button>
-        <button class="fin-subnav-btn sal-view-btn" data-sal-view="subscriptions"><i class="fa fa-repeat"></i> Subscriptions</button>
+        <button class="fin-subnav-btn sal-view-btn" data-sal-view="subscriptions"><i class="fa fa-repeat"></i> Recurring Sales</button>
       </div>
 
       <!-- Transactions list -->
@@ -2548,6 +2548,9 @@
               </div>
               <div id="sinv-items-body"></div>
               <button class="qt-add-line-btn" id="sinv-add-line"><i class="fa fa-plus"></i> Add Line</button>
+              <div id="sinv-sub-hint" style="display:none;margin:10px 14px 4px;padding:8px 12px;border-radius:6px;background:#f3e8ff;color:#6d28d9;font-size:12.5px;">
+                <i class="fa fa-circle-info"></i> This invoice includes a subscription product — the subscription starts automatically once the invoice is marked <strong>Paid</strong>, and will appear under Sales → Recurring Sales.
+              </div>
             </div>
 
             <!-- Summary: notes + totals -->
@@ -2681,7 +2684,7 @@
 
       </div><!-- /sal-orders-view -->
 
-      <!-- Subscriptions view -->
+      <!-- Recurring Sales (Subscriptions) view -->
       <div id="sal-subscriptions-view" style="display:none;flex:1;flex-direction:column;overflow:hidden">
         <div class="qt-topbar">
           <div class="finance-search-wrap" style="flex:1;max-width:320px">
@@ -2706,6 +2709,24 @@
       </div>
 
     </div><!-- /panel-sales -->
+
+    <!-- ── Subscription Detail Modal ─────────────────────────────────────── -->
+    <div id="subs-detail-modal" class="modal-overlay" style="display:none">
+      <div class="modal-box" style="width:640px">
+        <div class="modal-header">
+          <div>
+            <div class="modal-title"><i class="fa fa-repeat"></i> <span id="sdm-product-name">Subscription</span></div>
+            <div class="modal-subtitle" id="sdm-customer-name"></div>
+          </div>
+          <button class="psm-close" id="subs-detail-modal-close" title="Close"><i class="fa fa-xmark"></i></button>
+        </div>
+        <div class="modal-body" style="padding:16px 18px">
+          <div id="sdm-badges" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px"></div>
+          <div id="sdm-content"></div>
+        </div>
+        <div id="sdm-actions" style="display:flex;gap:8px;flex-wrap:wrap;padding:14px 18px;border-top:1px solid var(--border);flex-shrink:0"></div>
+      </div>
+    </div>
 
     <div class="content-panel" id="panel-inventory">
 
@@ -2879,10 +2900,10 @@
                   <input type="text" id="prod-f-name" class="po-field-input" placeholder="Product name" maxlength="255">
                 </div>
                 <div class="po-field">
-                  <label class="po-field-label">SKU</label>
+                  <label class="po-field-label">Barcode / SKU</label>
                   <div style="display:flex;gap:6px">
                     <input type="text" id="prod-f-sku" class="po-field-input" placeholder="Barcode / SKU" maxlength="120" style="flex:1;min-width:0">
-                    <button type="button" id="prod-sku-gen" class="po-btn-ghost" style="padding:0 10px;flex-shrink:0;white-space:nowrap" title="Auto-generate SKU"><i class="fa fa-wand-magic-sparkles"></i></button>
+                    <button type="button" id="prod-sku-gen" class="po-btn-ghost" style="padding:0 10px;flex-shrink:0;white-space:nowrap" title="Auto-generate Barcode / SKU"><i class="fa fa-wand-magic-sparkles"></i></button>
                   </div>
                 </div>
               </div>

@@ -205,6 +205,7 @@ class PosInvoiceApiController extends Controller
                 'id'             => (int) $item->id,
                 'product_id'     => $item->product_id,
                 'item_type'      => $item->product_id ? 'product' : ($item->service_item_id ? 'service' : 'custom'),
+                'is_subscription'=> (bool) $item->product?->is_subscription,
                 'description'    => $item->description,
                 'quantity'       => round((float) $item->quantity, 3),
                 'unit_price'     => round((float) $item->unit_price, 2),
