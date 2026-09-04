@@ -2238,7 +2238,7 @@
         <button class="fin-subnav-btn sal-view-btn" data-sal-view="quotes"><i class="fa fa-file-lines"></i> Quotations</button>
         <button class="fin-subnav-btn sal-view-btn" data-sal-view="invoices"><i class="fa fa-file-invoice"></i> Invoices</button>
         <button class="fin-subnav-btn sal-view-btn" data-sal-view="orders"><i class="fa fa-box"></i> Sales Orders</button>
-        <button class="fin-subnav-btn sal-view-btn" data-sal-view="subscriptions"><i class="fa fa-repeat"></i> Subscriptions</button>
+        <button class="fin-subnav-btn sal-view-btn" data-sal-view="subscriptions"><i class="fa fa-repeat"></i> Recurring Sales</button>
       </div>
 
       <!-- Transactions list -->
@@ -2681,7 +2681,7 @@
 
       </div><!-- /sal-orders-view -->
 
-      <!-- Subscriptions view -->
+      <!-- Recurring Sales (Subscriptions) view -->
       <div id="sal-subscriptions-view" style="display:none;flex:1;flex-direction:column;overflow:hidden">
         <div class="qt-topbar">
           <div class="finance-search-wrap" style="flex:1;max-width:320px">
@@ -2706,6 +2706,24 @@
       </div>
 
     </div><!-- /panel-sales -->
+
+    <!-- ── Subscription Detail Modal ─────────────────────────────────────── -->
+    <div id="subs-detail-modal" class="modal-overlay" style="display:none">
+      <div class="modal-box" style="width:640px">
+        <div class="modal-header">
+          <div>
+            <div class="modal-title"><i class="fa fa-repeat"></i> <span id="sdm-product-name">Subscription</span></div>
+            <div class="modal-subtitle" id="sdm-customer-name"></div>
+          </div>
+          <button class="psm-close" id="subs-detail-modal-close" title="Close"><i class="fa fa-xmark"></i></button>
+        </div>
+        <div class="modal-body" style="padding:16px 18px">
+          <div id="sdm-badges" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px"></div>
+          <div id="sdm-content"></div>
+        </div>
+        <div id="sdm-actions" style="display:flex;gap:8px;flex-wrap:wrap;padding:14px 18px;border-top:1px solid var(--border);flex-shrink:0"></div>
+      </div>
+    </div>
 
     <div class="content-panel" id="panel-inventory">
 
