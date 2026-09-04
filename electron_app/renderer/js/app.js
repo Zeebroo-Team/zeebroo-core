@@ -412,7 +412,7 @@ function _bsAction(action) {
     case 'createCategory':   nav('inventory','categories'); setTimeout(() => $('#cat-add-btn')?.click(), 80); break;
     case 'createBrand':      nav('inventory','brands'); setTimeout(() => $('#brand-add-btn')?.click(), 80); break;
     case 'createSupplier':   C(); openSuppliersModal(); setTimeout(() => $('#sm-new-btn')?.click(), 100); break;
-    case 'createUnit':       nav('inventory','units'); setTimeout(() => $('#unit-add-btn')?.click(), 80); break;
+    case 'createUnit':       nav('inventory','units'); setTimeout(() => $('#um-new-btn')?.click(), 100); break;
     case 'createPO':         nav('inventory','po'); setTimeout(openPOCreateModal, 80); break;
     case 'openBarcodes':     nav('inventory','barcodes'); break;
     // Finance — create
@@ -11371,7 +11371,8 @@ $('#inv-back-btn').addEventListener('click', () => {
 
 // ── Inventory sub-nav switching ───────────────────────────────────────────
 function switchInvView(view) {
-  const views = { products: '#inv-products-view', po: '#inv-po-view', grn: '#inv-grn-view', cheques: '#inv-cheques-view', audit: '#inv-audit-view', transfer: '#inv-transfer-view', categories: '#inv-categories-view', units: '#inv-units-view', discounts: '#inv-discounts-view', brands: '#inv-brands-view', barcodes: '#inv-barcodes-view' };
+  if (view === 'units') { openUnitsModal(); return; }
+  const views = { products: '#inv-products-view', po: '#inv-po-view', grn: '#inv-grn-view', cheques: '#inv-cheques-view', audit: '#inv-audit-view', transfer: '#inv-transfer-view', categories: '#inv-categories-view', discounts: '#inv-discounts-view', brands: '#inv-brands-view', barcodes: '#inv-barcodes-view' };
   Object.entries(views).forEach(([k, sel]) => {
     const el = $(sel);
     if (el) el.style.display = k === view ? 'flex' : 'none';
@@ -11384,7 +11385,6 @@ function switchInvView(view) {
   if (view === 'audit')      _auditLoad();
   if (view === 'transfer')   _transferLoad();
   if (view === 'categories') _catLoad();
-  if (view === 'units')      _unitLoad();
   if (view === 'discounts')  _discLoad();
   if (view === 'brands')     _brandLoad();
   if (view === 'barcodes')   _barcodeLoad();
@@ -14992,133 +14992,223 @@ $('#cat-next-btn')?.addEventListener('click', () => { if (_cat.page < _cat.lastP
 
 // ── End Product Categories ────────────────────────────────────────────────
 
-// ── Product Units ─────────────────────────────────────────────────────────
-const _unit = { list: [], q: '', editingId: null };
+// ── Product Units (Suppliers-style master/detail modal) ────────────────────
+const _um = { list: [], q: '', selectedId: null, editingId: null };
 
-async function _unitLoad() {
-  const tbody = $('#unit-tbody');
-  if (!tbody) return;
-  tbody.innerHTML = `<tr><td colspan="5" class="inv-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</td></tr>`;
+function openUnitsModal() {
+  $('#units-modal').style.display = 'flex';
+  _um.q = ''; _um.selectedId = null; _um.editingId = null;
+  $('#um-search').value = '';
+  _umShowDetail(false); _umShowForm(false);
+  _umLoadList();
+  requestAnimationFrame(() => $('#um-search').focus());
+}
+
+function _umClose() {
+  $('#units-modal').style.display = 'none';
+}
+
+async function _umLoadList() {
+  const list = $('#um-list');
+  list.innerHTML = '<div class="cm-list-empty"><i class="fa fa-spinner fa-spin"></i></div>';
   const res = await API.units();
-  if (res.status !== 200) {
-    tbody.innerHTML = `<tr><td colspan="5" class="inv-loading" style="color:#ef4444"><i class="fa fa-triangle-exclamation"></i> Failed to load</td></tr>`;
-    return;
-  }
-  _unit.list = res.body?.data ?? [];
-  _unitRender();
+  if (res.status !== 200) { list.innerHTML = '<div class="cm-list-empty"><i class="fa fa-triangle-exclamation"></i> Failed to load</div>'; return; }
+  _um.list = res.body?.data ?? [];
+  _umRenderList();
 }
 
-function _unitRender() {
-  const tbody = $('#unit-tbody');
-  const q     = _unit.q.toLowerCase();
-  const list  = q ? _unit.list.filter(u => u.name.toLowerCase().includes(q) || (u.abbreviation||'').toLowerCase().includes(q)) : _unit.list;
+function _umFilteredList() {
+  const q = _um.q.toLowerCase();
+  return q ? _um.list.filter(u => u.name.toLowerCase().includes(q) || (u.abbreviation||'').toLowerCase().includes(q)) : _um.list;
+}
 
-  $('#unit-count').textContent = `${_unit.list.length} unit${_unit.list.length !== 1 ? 's' : ''}`;
+function _umRenderList() {
+  const list   = $('#um-list');
+  const filtered = _umFilteredList();
 
-  if (!list.length) {
-    tbody.innerHTML = `<tr><td colspan="5" class="inv-loading" style="color:var(--text-muted)"><i class="fa fa-inbox"></i> No units yet</td></tr>`;
+  $('#um-pagination').innerHTML = `<span>${_um.list.length} unit${_um.list.length !== 1 ? 's' : ''}</span>`;
+
+  if (!filtered.length) {
+    list.innerHTML = `<div class="cm-list-empty"><i class="fa fa-ruler"></i><span>${_um.q ? 'No results' : 'No units yet'}</span></div>`;
     return;
   }
+  list.innerHTML = filtered.map(u => {
+    const initial = (u.abbreviation || u.name || '?')[0].toUpperCase();
+    const sub     = `${u.products_count ?? 0} product${(u.products_count ?? 0) !== 1 ? 's' : ''}`;
+    const inactiveBadge = !u.is_active
+      ? `<span class="sup-status-badge inactive" style="font-size:9.5px">Inactive</span>` : '';
+    return `<div class="cm-item${u.id === _um.selectedId ? ' active' : ''}" data-id="${u.id}">
+      <div class="cm-item-avatar">${escHtml(initial)}</div>
+      <div class="cm-item-body">
+        <div class="cm-item-name" style="display:flex;align-items:center;gap:6px">${escHtml(u.name)}${inactiveBadge}</div>
+        <div class="cm-item-sub">${sub}</div>
+      </div>
+    </div>`;
+  }).join('');
 
-  tbody.innerHTML = list.map(u => `
-    <tr>
-      <td><strong>${u.name}</strong></td>
-      <td><code style="background:var(--surface2);padding:2px 6px;border-radius:4px;font-size:11px">${u.abbreviation || '—'}</code></td>
-      <td style="text-align:center">
-        <span class="cat-status-badge ${u.is_active ? 'cat-status-active' : 'cat-status-inactive'}">${u.is_active ? 'Active' : 'Inactive'}</span>
-      </td>
-      <td style="text-align:right;color:var(--text-muted)">${u.products_count ?? 0}</td>
-      <td style="text-align:center">
-        <div style="display:flex;justify-content:center;gap:6px">
-          <button class="cat-action-btn unit-edit-btn" data-unit-id="${u.id}"><i class="fa fa-pen"></i> Edit</button>
-          <button class="cat-action-btn danger unit-del-btn" data-unit-id="${u.id}" data-unit-name="${u.name.replace(/"/g,'&quot;')}" data-unit-products="${u.products_count??0}">
-            <i class="fa fa-trash"></i>
-          </button>
-        </div>
-      </td>
-    </tr>`).join('');
-
-  tbody.querySelectorAll('.unit-edit-btn').forEach(btn => {
-    btn.addEventListener('click', () => _unitOpenModal(+btn.dataset.unitId));
-  });
-  tbody.querySelectorAll('.unit-del-btn').forEach(btn => {
-    btn.addEventListener('click', () => _unitDelete(+btn.dataset.unitId, btn.dataset.unitName, +btn.dataset.unitProducts));
+  list.querySelectorAll('.cm-item').forEach(el => {
+    el.addEventListener('click', () => _umSelectUnit(Number(el.dataset.id)));
   });
 }
 
-function _unitOpenModal(editId) {
-  _unit.editingId = editId || null;
-  $('#unit-modal-title').textContent = editId ? 'Edit Unit' : 'New Unit';
+function _umSelectUnit(id) {
+  _um.selectedId = id;
+  _um.editingId  = null;
+  _umRenderList();
+  _umShowForm(false);
+  _umShowDetail(true);
 
-  if (editId) {
-    const u = _unit.list.find(x => x.id === editId);
-    if (u) {
-      $('#unit-f-name').value    = u.name;
-      $('#unit-f-abbr').value    = u.abbreviation || '';
-      $('#unit-f-active').checked = u.is_active;
-    }
-  } else {
-    $('#unit-f-name').value     = '';
-    $('#unit-f-abbr').value     = '';
-    $('#unit-f-active').checked  = true;
-  }
+  const u = _um.list.find(x => x.id === id);
+  if (!u) return;
 
-  $('#unit-modal').style.display = 'flex';
-  setTimeout(() => $('#unit-f-name')?.focus(), 60);
+  const init = (u.abbreviation || u.name || '?')[0].toUpperCase();
+  $('#um-dv-avatar').textContent = init;
+  $('#um-dv-name').textContent   = u.name;
+  $('#um-dv-products-badge').textContent = `${u.products_count ?? 0} product${(u.products_count ?? 0) !== 1 ? 's' : ''}`;
+  const statusBadge = $('#um-dv-status-badge');
+  statusBadge.className = `sup-status-badge ${u.is_active ? 'active' : 'inactive'}`;
+  statusBadge.innerHTML = `<i class="fa fa-circle" style="font-size:6px"></i> ${u.is_active ? 'Active' : 'Inactive'}`;
+  const toggleBtn = $('#um-btn-toggle-active');
+  toggleBtn.innerHTML = u.is_active ? '<i class="fa fa-ban"></i> Deactivate' : '<i class="fa fa-rotate-left"></i> Activate';
+
+  const fields = [
+    { label: 'Abbreviation', val: u.abbreviation },
+  ];
+  $('#um-dv-fields').innerHTML = fields.map(f => `
+    <div class="cm-dv-field">
+      <div class="cm-dv-field-label">${f.label}</div>
+      <div class="cm-dv-field-val${f.val ? '' : ' empty'}">${f.val ? escHtml(f.val) : '—'}</div>
+    </div>`).join('');
 }
 
-async function _unitSave() {
-  const btn  = $('#unit-modal-save');
-  const name = $('#unit-f-name').value.trim();
-  if (!name) { toast('Unit name is required', 'error'); return; }
+function _umShowDetail(show) {
+  $('#um-detail-empty').style.display = show ? 'none' : '';
+  $('#um-detail-view').style.display  = show ? 'flex' : 'none';
+}
 
-  btn.disabled = true;
+function _umShowForm(show, unit = null) {
+  $('#um-form-view').style.display   = show ? 'flex' : 'none';
+  $('#um-detail-empty').style.display = (!show && !_um.selectedId) ? '' : 'none';
+  $('#um-detail-view').style.display  = (!show && _um.selectedId) ? 'flex' : 'none';
+
+  if (show) {
+    const isEdit = unit !== null;
+    $('#um-form-title').textContent = isEdit ? 'Edit Unit' : 'New Unit';
+    $('#um-f-name').value     = unit?.name ?? '';
+    $('#um-f-abbr').value     = unit?.abbreviation ?? '';
+    $('#um-f-active').checked = unit ? !!unit.is_active : true;
+    requestAnimationFrame(() => $('#um-f-name').focus());
+  }
+}
+
+async function _umSave() {
+  const name = $('#um-f-name').value.trim();
+  if (!name) { toast('Unit name is required', 'error'); $('#um-f-name').focus(); return; }
+
+  const btn = $('#um-form-save');
+  btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
+
   const body = {
     name,
-    abbreviation: $('#unit-f-abbr').value.trim() || null,
-    is_active:    $('#unit-f-active').checked,
+    abbreviation: $('#um-f-abbr').value.trim() || null,
+    is_active:    $('#um-f-active').checked,
   };
 
-  const res = _unit.editingId
-    ? await API.updateUnit(_unit.editingId, body)
+  const res = _um.editingId
+    ? await API.updateUnit(_um.editingId, body)
     : await API.createUnit(body);
-  btn.disabled = false;
 
-  if (res.status === 200 || res.status === 201) {
-    toast(_unit.editingId ? 'Unit updated' : 'Unit created', 'success');
-    $('#unit-modal').style.display = 'none';
-    _unitLoad();
-  } else {
+  btn.disabled = false; btn.innerHTML = '<i class="fa fa-check"></i> Save';
+
+  if (res.status !== 200 && res.status !== 201) {
     const msg = Object.values(res.body?.errors || {}).flat().join(', ') || res.body?.message || 'Failed to save';
-    toast(msg, 'error');
+    toast(msg, 'error'); return;
   }
+
+  const u = res.body?.data;
+  const wasEditing = !!_um.editingId;
+  _um.editingId = null;
+
+  _umShowForm(false);
+  await _umLoadList();
+  if (u) { _um.selectedId = u.id; _umRenderList(); _umSelectUnit(u.id); }
+  toast(wasEditing ? 'Unit updated' : 'Unit created', 'success');
 }
 
-async function _unitDelete(id, name, productsCount) {
-  if (productsCount > 0) {
-    toast(`Cannot delete "${name}" — it is used by ${productsCount} product${productsCount !== 1 ? 's' : ''}.`, 'error');
+async function _umToggleActive() {
+  if (!_um.selectedId) return;
+  const u = _um.list.find(x => x.id === _um.selectedId);
+  if (!u) return;
+
+  const res = await API.updateUnit(_um.selectedId, { is_active: !u.is_active });
+  if (res.status !== 200) { toast(`Failed to ${u.is_active ? 'deactivate' : 'activate'} unit`, 'error'); return; }
+  toast(`"${u.name}" ${u.is_active ? 'deactivated' : 'activated'}`, 'success');
+  await _umLoadList();
+  _umSelectUnit(_um.selectedId);
+}
+
+async function _umDelete() {
+  if (!_um.selectedId) return;
+  const u = _um.list.find(x => x.id === _um.selectedId);
+  if (!u) return;
+
+  if ((u.products_count ?? 0) > 0) {
+    toast(`Cannot delete "${u.name}" — it is used by ${u.products_count} product${u.products_count !== 1 ? 's' : ''}.`, 'error');
     return;
   }
-  if (!confirm(`Delete unit "${name}"?`)) return;
-  const res = await API.deleteUnit(id);
-  if (res.status === 200) {
-    toast('Unit deleted', 'success');
-    _unitLoad();
-  } else {
-    toast(res.body?.message || 'Failed to delete', 'error');
-  }
+  const ok = await _sstConfirm(`Delete unit "${u.name}"? This cannot be undone.`, 'Delete Unit');
+  if (!ok) return;
+
+  const res = await API.deleteUnit(_um.selectedId);
+  if (res.status !== 200) { toast(res.body?.message || 'Failed to delete', 'error'); return; }
+  toast('Unit deleted', 'success');
+  _um.selectedId = null;
+  _umShowDetail(false);
+  await _umLoadList();
 }
 
-// Unit event listeners
-$('#unit-add-btn')?.addEventListener('click',       () => _unitOpenModal(null));
-$('#unit-modal-close')?.addEventListener('click',   () => { $('#unit-modal').style.display = 'none'; });
-$('#unit-modal-cancel')?.addEventListener('click',  () => { $('#unit-modal').style.display = 'none'; });
-$('#unit-modal-save')?.addEventListener('click',    _unitSave);
-$('#unit-f-name')?.addEventListener('keydown',      e => { if (e.key === 'Enter') _unitSave(); });
+// Wire modal controls
+$('#um-close')?.addEventListener('click', _umClose);
+$('#units-modal')?.addEventListener('click', e => { if (e.target === e.currentTarget) _umClose(); });
 
-$('#unit-search')?.addEventListener('input', e => {
-  _unit.q = e.target.value.trim();
-  _unitRender();
+$('#um-new-btn')?.addEventListener('click', () => {
+  _um.editingId = null; _um.selectedId = null;
+  _umRenderList();
+  _umShowDetail(false);
+  _umShowForm(true);
+});
+
+$('#um-btn-edit')?.addEventListener('click', () => {
+  if (!_um.selectedId) return;
+  const u = _um.list.find(x => x.id === _um.selectedId);
+  if (!u) return;
+  _um.editingId = _um.selectedId;
+  _umShowForm(true, u);
+});
+
+$('#um-btn-toggle-active')?.addEventListener('click', _umToggleActive);
+$('#um-btn-delete')?.addEventListener('click', _umDelete);
+
+$('#um-form-cancel')?.addEventListener('click', () => {
+  _um.editingId = null;
+  _umShowForm(false);
+  if (_um.selectedId) _umShowDetail(true);
+});
+
+$('#um-form-save')?.addEventListener('click', _umSave);
+
+$('#um-search')?.addEventListener('input', e => {
+  _um.q = e.target.value.trim();
+  _umRenderList();
+});
+
+$('#um-search')?.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { e.preventDefault(); if (_um.q) { _um.q = ''; e.target.value = ''; _umRenderList(); } else _umClose(); }
+  if (e.key === 'Enter' && _umFilteredList().length) { _umSelectUnit(_umFilteredList()[0].id); }
+});
+
+['#um-f-name','#um-f-abbr'].forEach(sel => {
+  $(sel)?.addEventListener('keydown', e => { if (e.key === 'Enter') _umSave(); if (e.key === 'Escape') $('#um-form-cancel')?.click(); });
 });
 
 // ── End Product Units ─────────────────────────────────────────────────────

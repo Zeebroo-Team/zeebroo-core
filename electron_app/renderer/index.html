@@ -2734,7 +2734,6 @@
         <button class="inv-subnav-btn" data-inv-view="audit"><i class="fa fa-clipboard-list"></i> Stock Audit</button>
         <button class="inv-subnav-btn" data-inv-view="transfer"><i class="fa fa-right-left"></i> Stock Transfer</button>
         <button class="inv-subnav-btn" data-inv-view="categories"><i class="fa fa-tags"></i> Categories</button>
-        <button class="inv-subnav-btn" data-inv-view="units"><i class="fa fa-ruler"></i> Units</button>
         <button class="inv-subnav-btn" data-inv-view="discounts"><i class="fa fa-tag"></i> Discounts</button>
         <button class="inv-subnav-btn" data-inv-view="brands"><i class="fa fa-award"></i> Brands</button>
         <button class="inv-subnav-btn" data-inv-view="barcodes"><i class="fa fa-barcode"></i> Barcodes</button>
@@ -3702,32 +3701,6 @@
         </div>
       </div>
 
-      <!-- ── Units view ── -->
-      <div id="inv-units-view" style="display:none">
-        <div class="po-toolbar">
-          <div class="po-search-wrap">
-            <i class="fa fa-magnifying-glass"></i>
-            <input type="text" id="unit-search" placeholder="Search units…">
-          </div>
-          <button class="po-add-btn cat-add-btn" id="unit-add-btn">
-            <i class="fa fa-plus"></i> New Unit
-          </button>
-        </div>
-        <div class="cat-body">
-          <table class="po-table">
-            <thead><tr>
-              <th>Name</th>
-              <th>Abbreviation</th>
-              <th style="text-align:center">Status</th>
-              <th style="text-align:right">Products</th>
-              <th style="text-align:center">Actions</th>
-            </tr></thead>
-            <tbody id="unit-tbody"></tbody>
-          </table>
-          <div class="po-footer"><span id="unit-count">—</span></div>
-        </div>
-      </div><!-- /inv-units-view -->
-
       <!-- ── Discounts view ── -->
       <div id="inv-discounts-view" style="display:none">
         <div class="po-toolbar">
@@ -3794,35 +3767,6 @@
           <div class="po-footer"><span id="brand-count">—</span></div>
         </div>
       </div><!-- /inv-brands-view -->
-
-      <!-- ── Unit Create / Edit Modal ─────────────────────────────── -->
-      <div id="unit-modal" class="modal-overlay" style="display:none">
-        <div class="po-aim-shell" style="width:min(400px,94vw)">
-          <div class="po-aim-header">
-            <i class="fa fa-ruler" style="color:var(--accent)"></i>
-            <span id="unit-modal-title">New Unit</span>
-            <button class="psm-close" id="unit-modal-close"><i class="fa fa-xmark"></i></button>
-          </div>
-          <div class="po-aim-body">
-            <div class="po-field">
-              <label class="po-field-label">Name <span class="po-required">*</span></label>
-              <input type="text" id="unit-f-name" class="po-field-input" placeholder="e.g. Kilogram, Piece, Litre…" maxlength="80">
-            </div>
-            <div class="po-field">
-              <label class="po-field-label">Abbreviation</label>
-              <input type="text" id="unit-f-abbr" class="po-field-input" placeholder="e.g. kg, pcs, L…" maxlength="20">
-            </div>
-            <div class="po-field" style="flex-direction:row;align-items:center;gap:10px">
-              <input type="checkbox" id="unit-f-active" checked style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent)">
-              <label for="unit-f-active" class="po-field-label" style="margin:0;cursor:pointer">Active</label>
-            </div>
-          </div>
-          <div class="po-aim-footer">
-            <button class="po-btn-ghost" id="unit-modal-cancel"><i class="fa fa-xmark"></i> Cancel</button>
-            <button class="po-btn-primary" id="unit-modal-save"><i class="fa fa-check"></i> Save Unit</button>
-          </div>
-        </div>
-      </div>
 
       <!-- ── Discount Create / Edit Modal ─────────────────────────────── -->
       <div id="discount-modal" class="modal-overlay" style="display:none">
@@ -12498,6 +12442,86 @@
           <div class="cm-form-actions">
             <button class="psm-btn-cancel" id="sm-form-cancel"><i class="fa fa-xmark"></i> Cancel</button>
             <button class="qap-btn-save"   id="sm-form-save"><i class="fa fa-check"></i> Save</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Units Management Modal ───────────────────────────────────────────── -->
+<div id="units-modal" class="modal-overlay" style="display:none">
+  <div class="cm-shell">
+    <!-- Header -->
+    <div class="cm-header">
+      <i class="fa fa-ruler" style="color:var(--accent)"></i>
+      <span>Units</span>
+      <button class="cm-new-btn" id="um-new-btn"><i class="fa fa-plus"></i> New Unit</button>
+      <button class="psm-close" id="um-close"><i class="fa fa-xmark"></i></button>
+    </div>
+
+    <!-- Body: list + detail -->
+    <div class="cm-body">
+      <!-- Left: search + list -->
+      <div class="cm-list-pane">
+        <div class="cm-search-wrap">
+          <i class="fa fa-magnifying-glass cm-search-icon"></i>
+          <input type="text" id="um-search" class="cm-search-input" placeholder="Search units…">
+        </div>
+        <div id="um-list" class="cm-list">
+          <div class="cm-list-empty"><i class="fa fa-spinner fa-spin"></i> Loading…</div>
+        </div>
+        <div id="um-pagination" class="cm-pagination"></div>
+      </div>
+
+      <!-- Right: detail / form -->
+      <div class="cm-detail-pane" id="um-detail-pane">
+        <!-- Empty state -->
+        <div class="cm-detail-empty" id="um-detail-empty">
+          <i class="fa fa-ruler"></i>
+          <span>Select a unit to view details</span>
+        </div>
+
+        <!-- Detail view -->
+        <div id="um-detail-view" style="display:none">
+          <div class="cm-dv-header">
+            <div class="cm-dv-avatar" id="um-dv-avatar">U</div>
+            <div class="cm-dv-titles">
+              <h2 class="cm-dv-name" id="um-dv-name">—</h2>
+              <span class="cm-dv-sales-badge" id="um-dv-products-badge">0 products</span>
+              <span class="sup-status-badge" id="um-dv-status-badge" style="margin-left:6px"><i class="fa fa-circle" style="font-size:6px"></i> Active</span>
+            </div>
+          </div>
+          <div class="cm-dv-fields" id="um-dv-fields"></div>
+          <div class="cm-dv-actions">
+            <button class="cm-btn-edit" id="um-btn-edit"><i class="fa fa-pen"></i> Edit</button>
+            <button class="cm-btn-delete" id="um-btn-toggle-active" style="margin-left:auto"><i class="fa fa-ban"></i> Deactivate</button>
+            <button class="cm-btn-delete" id="um-btn-delete" title="Delete unit" style="margin-left:8px"><i class="fa fa-trash"></i></button>
+          </div>
+        </div>
+
+        <!-- Edit / Create form -->
+        <div id="um-form-view" style="display:none">
+          <div class="cm-form-title" id="um-form-title">New Unit</div>
+          <div class="cm-form-body">
+            <div class="sup-form-grid">
+              <div class="sup-field sup-field--full">
+                <label class="cm-label">Name <span style="color:#ef4444">*</span></label>
+                <input type="text" id="um-f-name" class="cm-input" placeholder="e.g. Kilogram, Piece, Litre…" maxlength="80">
+              </div>
+              <div class="sup-field">
+                <label class="cm-label">Abbreviation</label>
+                <input type="text" id="um-f-abbr" class="cm-input" placeholder="e.g. kg, pcs, L…" maxlength="20">
+              </div>
+              <div class="sup-field" style="flex-direction:row;align-items:center;gap:10px;margin-top:22px">
+                <input type="checkbox" id="um-f-active" checked style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent)">
+                <label for="um-f-active" class="cm-label" style="margin:0;cursor:pointer">Active</label>
+              </div>
+            </div>
+          </div>
+          <div class="cm-form-actions">
+            <button class="psm-btn-cancel" id="um-form-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+            <button class="qap-btn-save"   id="um-form-save"><i class="fa fa-check"></i> Save</button>
           </div>
         </div>
       </div>

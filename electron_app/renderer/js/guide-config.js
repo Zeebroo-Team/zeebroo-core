@@ -851,11 +851,11 @@ window.GUIDE_CONFIG = {
       "steps": [
         { "type": "walk_click",   "selector": "[data-tab='inventory']",                      "wait": 500 },
         { "type": "walk_click",   "selector": "#rb-inv-units",                               "wait": 600 },
-        { "type": "wait_visible", "selector": "#inv-units-view" },
-        { "type": "walk_to",      "selector": "#unit-add-btn" },
-        { "type": "highlight",    "selector": "#unit-add-btn" },
+        { "type": "wait_visible", "selector": "#units-modal" },
+        { "type": "walk_to",      "selector": "#um-new-btn" },
+        { "type": "highlight",    "selector": "#um-new-btn" },
         { "type": "bubble",       "text": "Units of measure (kg, pcs, litre, etc.) are managed here. Click New Unit to add a custom unit for your products.", "wait": 4000 },
-        { "type": "unhighlight",  "selector": "#unit-add-btn" }
+        { "type": "unhighlight",  "selector": "#um-new-btn" }
       ]
     },
 
