@@ -5,7 +5,6 @@ namespace Modules\Pos\Http\Controllers\Api;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
-use Modules\Business\Models\Business;
 use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesPosBusinessForApi;
 use Modules\Pos\Models\StockTransfer;
 use Modules\Pos\Services\StockTransferService;
@@ -16,20 +15,9 @@ class PosStockTransferApiController extends Controller
 
     public function __construct(private readonly StockTransferService $service) {}
 
-    private function business(Request $request): Business|JsonResponse
-    {
-        $business = Business::currentForNavbar($request->user());
-        if (! $business) {
-            return response()->json(['error' => 'No business selected.'], 422);
-        }
-
-        return $business;
-    }
-
     public function index(Request $request): JsonResponse
     {
-        $business = $this->business($request);
-        if ($business instanceof JsonResponse) return $business;
+        $business = $this->businessOrAbort($request);
 
         $transfers = $this->service->listForBusiness($business, $request->string('q')->trim()->value() ?: null);
 
@@ -45,8 +33,7 @@ class PosStockTransferApiController extends Controller
 
     public function store(Request $request): JsonResponse
     {
-        $business = $this->business($request);
-        if ($business instanceof JsonResponse) return $business;
+        $business = $this->businessOrAbort($request);
         $this->abortUnlessPerm($request, $business, 'inv_transfer');
 
         $data = $request->validate([
@@ -66,8 +53,7 @@ class PosStockTransferApiController extends Controller
 
     public function show(Request $request, StockTransfer $stockTransfer): JsonResponse
     {
-        $business = $this->business($request);
-        if ($business instanceof JsonResponse) return $business;
+        $business = $this->businessOrAbort($request);
 
         $transfer = $this->service->transferForBusiness($business, $stockTransfer);
         $transfer->load(['lines', 'fromBranch', 'toBranch', 'transferredBy', 'receivedBy', 'cancelledBy']);
@@ -77,8 +63,7 @@ class PosStockTransferApiController extends Controller
 
     public function receive(Request $request, StockTransfer $stockTransfer): JsonResponse
     {
-        $business = $this->business($request);
-        if ($business instanceof JsonResponse) return $business;
+        $business = $this->businessOrAbort($request);
         $this->abortUnlessPerm($request, $business, 'inv_transfer');
 
         $transfer = $this->service->transferForBusiness($business, $stockTransfer);
@@ -89,8 +74,7 @@ class PosStockTransferApiController extends Controller
 
     public function cancel(Request $request, StockTransfer $stockTransfer): JsonResponse
     {
-        $business = $this->business($request);
-        if ($business instanceof JsonResponse) return $business;
+        $business = $this->businessOrAbort($request);
         $this->abortUnlessPerm($request, $business, 'inv_transfer');
 
         $transfer = $this->service->transferForBusiness($business, $stockTransfer);
