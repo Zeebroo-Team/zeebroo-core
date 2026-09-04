@@ -17944,6 +17944,52 @@ async function _saveLayerCostPrice(productId, layerId, cost) {
   }
 }
 
+async function _saveLayerBarcode(productId, layerId, barcode) {
+  const statusEl = $(`.inv-layer-barcode-status[data-layer-id="${layerId}"]`);
+  const saveBtn  = $(`.inv-layer-barcode-save[data-layer-id="${layerId}"]`);
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.innerHTML = '<i class="fa fa-spinner fa-spin"></i>'; }
+  if (statusEl) statusEl.textContent = '';
+
+  const val = barcode == null ? null : String(barcode).trim() || null;
+  const res = await API.updateLayerBarcode(productId, layerId, val);
+
+  if (saveBtn) { saveBtn.disabled = false; saveBtn.innerHTML = '<i class="fa fa-check"></i>'; }
+  if (res.status === 200) {
+    if (statusEl) {
+      statusEl.textContent = 'Saved';
+      statusEl.className = 'inv-layer-barcode-status inv-layer-price-ok';
+      setTimeout(() => { if (statusEl) { statusEl.textContent = ''; statusEl.className = 'inv-layer-barcode-status'; } }, 2000);
+    }
+  } else {
+    if (statusEl) {
+      statusEl.textContent = res.body?.message || res.body?.errors?.batch_sku?.[0] || 'Error';
+      statusEl.className = 'inv-layer-barcode-status inv-layer-price-err';
+    }
+  }
+}
+
+function _bindLayerBarcodeSave(productId, stockHistory) {
+  const pane = $('#inv-pane-stock');
+  if (!pane || !stockHistory.length) return;
+
+  pane.querySelectorAll('.inv-layer-barcode-save').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const layerId = btn.dataset.layerId;
+      const input   = pane.querySelector(`.inv-layer-barcode-input[data-layer-id="${layerId}"]`);
+      _saveLayerBarcode(productId, layerId, input?.value ?? '');
+    });
+  });
+
+  pane.querySelectorAll('.inv-layer-barcode-input').forEach(input => {
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        _saveLayerBarcode(productId, input.dataset.layerId, input.value);
+      }
+    });
+  });
+}
+
 function _bindLayerCostSave(productId, stockHistory) {
   const pane = $('#inv-pane-stock');
   if (!pane || !stockHistory.length) return;
@@ -18309,8 +18355,16 @@ function renderProductDetail(p, stockHistory = []) {
         ].filter(Boolean).join('');
       }
 
-      const batchChip = h.batch_sku
-        ? `<span class="srh-batch-chip"><i class="fa fa-barcode"></i> ${escHtml(h.batch_sku)}</span>` : '';
+      const barcodeField = `
+        <div class="srh-inline-field srh-inline-field--barcode">
+          <span class="srh-inline-label"><i class="fa fa-barcode"></i></span>
+          <div class="srh-price-input-wrap">
+            <input type="text" class="inv-layer-barcode-input srh-price-input srh-barcode-input" data-layer-id="${h.id}"
+              value="${escHtml(h.batch_sku || '')}" maxlength="150" placeholder="Barcode">
+            <button class="inv-layer-barcode-save srh-price-btn" data-layer-id="${h.id}" title="Save barcode"><i class="fa fa-check"></i></button>
+          </div>
+          <span class="inv-layer-barcode-status srh-price-status" data-layer-id="${h.id}"></span>
+        </div>`;
 
       const qtyDisp = `${qtyLeft % 1 === 0 ? qtyLeft : qtyLeft.toFixed(2)} / ${qtyIn % 1 === 0 ? qtyIn : qtyIn.toFixed(2)}`;
       return `
@@ -18318,7 +18372,6 @@ function renderProductDetail(p, stockHistory = []) {
         <div class="srh-row-info">
           ${badgeHtml}
           ${refHtml}
-          ${batchChip}
           <span class="srh-qty-pill ${qtyStatusCls}">
             <span class="srh-qty-mini-bar"><span class="srh-qty-mini-fill ${barCls}" style="width:${pct.toFixed(1)}%"></span></span>
             ${qtyDisp}
@@ -18326,6 +18379,7 @@ function renderProductDetail(p, stockHistory = []) {
           <span class="srh-date"><i class="fa fa-calendar-day"></i> ${date}</span>
         </div>
         <div class="srh-row-prices">
+          ${barcodeField}
           <div class="srh-inline-field">
             <span class="srh-inline-label">Cost</span>
             <div class="srh-price-input-wrap">
@@ -18381,6 +18435,7 @@ function renderProductDetail(p, stockHistory = []) {
   _bindLayerCostSave(p.id, stockHistory);
   _bindLayerPriceSave(p.id, stockHistory);
   _bindLayerWholesaleSave(p.id, stockHistory);
+  _bindLayerBarcodeSave(p.id, stockHistory);
 
   // Shortcut: open the Stock Transfer modal with this product already selected
   $('#stock-tab-transfer-btn')?.addEventListener('click', () => {

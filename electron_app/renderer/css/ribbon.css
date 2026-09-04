@@ -8862,6 +8862,7 @@ body.dark .inv-badge-purple { background: #2e1065; color: #c4b5fd; }
 .srh-price-btn--sell { color: var(--accent); }
 .srh-price-btn--ws   { color: #d97706; }
 .srh-price-status { font-size: 10px; font-weight: 600; min-width: 28px; }
+.srh-barcode-input { width: 110px; font-family: monospace; letter-spacing: .3px; }
 
 /* dark theme */
 @media (prefers-color-scheme: dark) {

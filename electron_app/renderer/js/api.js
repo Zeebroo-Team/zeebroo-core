@@ -51,6 +51,8 @@ const API = (() => {
       request('PATCH', `/online/products/${productId}/stock-layers/${layerId}/wholesale-price`, { wholesale_unit_price: price }),
     updateLayerCostPrice: (productId, layerId, cost) =>
       request('PATCH', `/online/products/${productId}/stock-layers/${layerId}/cost-price`, { unit_cost: cost }),
+    updateLayerBarcode: (productId, layerId, barcode) =>
+      request('PATCH', `/online/products/${productId}/stock-layers/${layerId}/barcode`, { batch_sku: barcode }),
     productBySku: (sku)               => request('GET',  `/online/products/sku/${encodeURIComponent(sku)}`),
     backfillBatchSkus: (productId)    => request('POST', `/online/products/${productId}/backfill-batch-skus`),
     checkout:     (body)              => request('POST', '/online/checkout', body),
