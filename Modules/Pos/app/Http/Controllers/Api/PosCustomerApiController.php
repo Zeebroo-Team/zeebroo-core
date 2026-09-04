@@ -10,6 +10,8 @@ use Modules\Business\Models\Business;
 use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesPosBusinessForApi;
 use Modules\Pos\Models\Customer;
 use Modules\Pos\Models\CustomerCategory;
+use Modules\Pos\Models\Sale;
+use Modules\Pos\Models\SaleItem;
 use Modules\Pos\Services\PosSettingsService;
 
 class PosCustomerApiController extends Controller
@@ -20,6 +22,7 @@ class PosCustomerApiController extends Controller
     {
         $business = $this->businessOrAbort($request);
         $q = (string) $request->query('q', '');
+        $categoryId = $request->query('category_id');
 
         $customers = Customer::query()
             ->where('business_id', $business->id)
@@ -28,6 +31,7 @@ class PosCustomerApiController extends Controller
                     ->orWhere('phone', 'like', "%{$q}%")
                     ->orWhere('email', 'like', "%{$q}%");
             }))
+            ->when($categoryId !== null && $categoryId !== '', fn ($query) => $query->where('customer_category_id', (int) $categoryId))
             ->withCount('sales')
             ->with('category:id,name')
             ->orderBy('name')
@@ -55,6 +59,77 @@ class PosCustomerApiController extends Controller
         ]);
 
         return response()->json(['data' => $this->format($customer, full: true)]);
+    }
+
+    public function warranties(Request $request, Customer $customer): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        abort_unless((int) $customer->business_id === (int) $business->id, 404);
+
+        $today = now()->startOfDay();
+
+        $items = SaleItem::query()
+            ->whereNotNull('warranty_type')
+            ->whereHas('sale', fn ($q) => $q->where('business_id', $business->id)->where('pos_customer_id', $customer->id))
+            ->with('sale:id,sale_number,sold_at')
+            ->latest('id')
+            ->limit(100)
+            ->get();
+
+        return response()->json([
+            'data' => $items->map(fn (SaleItem $i) => [
+                'id'                  => $i->id,
+                'product_name'        => $i->product_name,
+                'sku'                 => $i->sku,
+                'sale_number'         => $i->sale?->sale_number,
+                'sold_at'             => $i->sale?->sold_at?->toDateString(),
+                'warranty_type'       => $i->warranty_type,
+                'warranty_days'       => $i->warranty_days,
+                'warranty_expires_at' => $i->warranty_expires_at?->toDateString(),
+                'is_expired'          => $i->warranty_type === 'days' && $i->warranty_expires_at !== null && $i->warranty_expires_at->lt($today),
+            ])->values(),
+        ]);
+    }
+
+    public function creditSales(Request $request, Customer $customer): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        abort_unless((int) $customer->business_id === (int) $business->id, 404);
+
+        $today = now()->startOfDay();
+
+        $sales = Sale::query()
+            ->where('business_id', $business->id)
+            ->where('pos_customer_id', $customer->id)
+            ->where('payment_method', Sale::PAYMENT_CREDIT)
+            ->where('status', Sale::STATUS_COMPLETED)
+            ->orderByDesc('sold_at')
+            ->limit(100)
+            ->get();
+
+        $data = $sales->map(function (Sale $s) use ($today) {
+            $due       = max(round((float) $s->total - (float) $s->amount_paid, 2), 0);
+            $isOverdue = $due > 0.01 && $s->credit_due_date !== null && $s->credit_due_date->lt($today);
+
+            return [
+                'id'              => $s->id,
+                'sale_number'     => $s->sale_number,
+                'total'           => round((float) $s->total, 2),
+                'amount_paid'     => round((float) $s->amount_paid, 2),
+                'due_amount'      => $due,
+                'sold_at'         => $s->sold_at?->toDateString(),
+                'credit_due_date' => $s->credit_due_date?->format('Y-m-d'),
+                'is_overdue'      => $isOverdue,
+                'is_paid'         => $due <= 0.01,
+            ];
+        })->values();
+
+        return response()->json([
+            'data' => $data,
+            'meta' => [
+                'total_due' => round($data->sum('due_amount'), 2),
+            ],
+        ]);
     }
 
     public function store(Request $request): JsonResponse

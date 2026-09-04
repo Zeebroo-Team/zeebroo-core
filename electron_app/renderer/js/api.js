@@ -98,6 +98,8 @@ const API = (() => {
     subscriptions:        (q, status) => request('GET',    `/subscriptions?q=${encodeURIComponent(q||'')}&status=${status||'all'}`),
     subscription:         (id)        => request('GET',    `/subscriptions/${id}`),
     customerSubscriptions:(customerId)=> request('GET',    `/customers/${customerId}/subscriptions`),
+    customerWarranties:   (customerId)=> request('GET',    `/customers/${customerId}/warranties`),
+    customerCreditSales:  (customerId)=> request('GET',    `/customers/${customerId}/credit-sales`),
     cancelSubscription:   (id)        => request('POST',   `/subscriptions/${id}/cancel`),
     pauseSubscription:    (id)        => request('POST',   `/subscriptions/${id}/pause`),
     resumeSubscription:   (id)        => request('POST',   `/subscriptions/${id}/resume`),
@@ -257,7 +259,7 @@ const API = (() => {
     linkProposalToInvoice: (group, invoiceId) => request('POST', `/design-studio/proposals/${encodeURIComponent(group)}/link-invoice`, { invoice_id: invoiceId }),
 
     // Customers
-    customers:      (q, page) => request('GET',  `/customers?q=${encodeURIComponent(q || '')}&page=${page || 1}`),
+    customers:      (q, page, categoryId) => request('GET',  `/customers?q=${encodeURIComponent(q || '')}&page=${page || 1}${categoryId ? `&category_id=${encodeURIComponent(categoryId)}` : ''}`),
     customer:       (id)   => request('GET',  `/customers/${id}`),
     createCustomer: (body) => request('POST', '/customers', body),
     importCustomers:(rows) => request('POST', '/customers/import', { rows }),

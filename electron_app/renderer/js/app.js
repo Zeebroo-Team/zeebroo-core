@@ -19721,9 +19721,11 @@ $('#cust-new-name')?.addEventListener('keydown', e => {
 // ── Customers Management Modal ──────────────────────────────────────────────
 const _cm = {
   page: 1, lastPage: 1, total: 0,
-  searchQ: '', searchTimer: null,
+  searchQ: '', searchTimer: null, categoryId: '',
   selectedId: null, editingId: null,
   list: [],
+  activeTab: 'sales',
+  tabLoaded: { subs: false, warranty: false, credit: false },
 };
 
 let _cmReturnToSaleWizard = false;
@@ -19731,12 +19733,22 @@ let _cmReturnToSaleWizard = false;
 function openCustomersModal() {
   $('#customers-modal').style.display = 'flex';
   _cmReturnToSaleWizard = false;
-  _cm.page = 1; _cm.searchQ = ''; _cm.selectedId = null; _cm.editingId = null;
+  _cm.page = 1; _cm.searchQ = ''; _cm.categoryId = ''; _cm.selectedId = null; _cm.editingId = null;
   $('#cm-search').value = '';
+  if ($('#cm-category-filter')) $('#cm-category-filter').value = '';
   _cmShowDetail(false); _cmShowForm(false);
   _cmLoadList();
-  _loadCustomerConfig();
+  _loadCustomerConfig().then(_cmRenderCategoryFilterOptions);
   requestAnimationFrame(() => $('#cm-search').focus());
+}
+
+function _cmRenderCategoryFilterOptions() {
+  const sel = $('#cm-category-filter');
+  if (!sel) return;
+  const current = sel.value;
+  sel.innerHTML = '<option value="">All Categories</option>' +
+    _custCfg.categories.map(c => `<option value="${c.id}">${escHtml(c.name)}</option>`).join('');
+  sel.value = current;
 }
 
 function _cmClose() {
@@ -19750,7 +19762,7 @@ function _cmClose() {
 async function _cmLoadList() {
   const list = $('#cm-list');
   list.innerHTML = '<div class="cm-list-empty"><i class="fa fa-spinner fa-spin"></i></div>';
-  const res = await API.customers(_cm.searchQ, _cm.page);
+  const res = await API.customers(_cm.searchQ, _cm.page, _cm.categoryId);
   if (res.status !== 200) { list.innerHTML = '<div class="cm-list-empty"><i class="fa fa-triangle-exclamation"></i> Failed to load</div>'; return; }
   _cm.list      = res.body?.data ?? [];
   _cm.lastPage  = res.body?.meta?.last_page ?? 1;
@@ -19798,9 +19810,11 @@ function _cmRenderPagination() {
 async function _cmSelectCustomer(id) {
   _cm.selectedId = id;
   _cm.editingId  = null;
+  _cm.tabLoaded  = { subs: false, warranty: false, credit: false };
   _cmRenderList();
   _cmShowForm(false);
   _cmShowDetail(true);
+  _cmSwitchTab('sales');
   const pane = $('#cm-detail-view');
   if (pane) pane.style.opacity = '.5';
 
@@ -19833,17 +19847,100 @@ async function _cmSelectCustomer(id) {
       <div class="cm-dv-field-val${f.val ? '' : ' empty'}">${f.val ? (f.raw ? f.val : escHtml(f.val)) : '—'}</div>
     </div>`).join('');
 
+  const pmLabel = { cash: 'Cash', card: 'Card', credit: 'Credit' };
   const history = $('#cm-dv-history');
   if (c.recent_sales?.length) {
     history.innerHTML = `<div class="cm-dv-history-title"><i class="fa fa-clock-rotate-left"></i> Recent Sales</div>` +
-      c.recent_sales.map(s => `
+      c.recent_sales.map(s => {
+        const pm = (s.payment_method || '').toLowerCase();
+        const pmBadge = pm ? `<span class="cm-dv-pm-badge cm-dv-pm-badge--${escHtml(pm)}">${escHtml(pmLabel[pm] || s.payment_method)}</span>` : '';
+        return `
         <div class="cm-dv-sale-row">
           <span class="cm-dv-sale-num">${escHtml(s.sale_number || `#${s.id}`)}</span>
+          ${pmBadge}
           <span class="cm-dv-sale-date">${s.sold_at ? s.sold_at.slice(0, 10) : ''}</span>
           <span class="cm-dv-sale-amt">${parseFloat(s.total || 0).toFixed(2)}</span>
-        </div>`).join('');
+        </div>`;
+      }).join('');
   } else {
     history.innerHTML = '<div class="cm-dv-no-sales"><i class="fa fa-receipt"></i> No sales yet</div>';
+  }
+}
+
+function _cmSwitchTab(tab) {
+  _cm.activeTab = tab;
+  $('#cm-dv-tabs')?.querySelectorAll('.cm-dv-tab').forEach(b => b.classList.toggle('active', b.dataset.cmTab === tab));
+  $('#cm-dv-tab-panels')?.querySelectorAll('.cm-dv-tab-panel').forEach(p => { p.style.display = 'none'; });
+  const panel = tab === 'sales' ? $('#cm-dv-history') : $(`#cm-dv-panel-${tab}`);
+  if (panel) panel.style.display = '';
+  if (tab !== 'sales' && !_cm.tabLoaded[tab]) _cmLoadTabData(tab);
+}
+
+async function _cmLoadTabData(tab) {
+  const id = _cm.selectedId;
+  if (!id) return;
+  _cm.tabLoaded[tab] = true;
+
+  if (tab === 'subs') {
+    const panel = $('#cm-dv-panel-subs');
+    panel.innerHTML = '<div class="cm-dv-no-sales"><i class="fa fa-spinner fa-spin"></i> Loading…</div>';
+    const res = await API.customerSubscriptions(id);
+    if (_cm.selectedId !== id) return;
+    const list = res.status === 200 ? (res.body?.data ?? []) : [];
+    panel.innerHTML = list.length ? list.map(s => `
+      <div class="cm-dv-sub-row">
+        <span class="cm-dv-sale-num">${escHtml(s.product_name || '—')}</span>
+        <span class="cm-dv-sub-meta">${escHtml(s.recurring_period || '')} · Qty ${parseFloat(s.quantity || 0)}</span>
+        <span class="cm-dv-sub-status cm-dv-sub-status--${escHtml(s.status)}">${escHtml(s.status_label || s.status)}</span>
+        <span class="cm-dv-sale-amt">${parseFloat(s.price || 0).toFixed(2)}</span>
+      </div>`).join('') : '<div class="cm-dv-no-sales"><i class="fa fa-rotate"></i> No subscription products purchased</div>';
+
+  } else if (tab === 'warranty') {
+    const panel = $('#cm-dv-panel-warranty');
+    panel.innerHTML = '<div class="cm-dv-no-sales"><i class="fa fa-spinner fa-spin"></i> Loading…</div>';
+    const res = await API.customerWarranties(id);
+    if (_cm.selectedId !== id) return;
+    const list = res.status === 200 ? (res.body?.data ?? []) : [];
+    panel.innerHTML = list.length ? list.map(w => {
+      const expiredBadge = w.is_expired
+        ? `<span class="cm-dv-wty-badge cm-dv-wty-badge--expired">Expired</span>`
+        : `<span class="cm-dv-wty-badge cm-dv-wty-badge--active">Active</span>`;
+      const expiryText = w.warranty_type === 'lifetime' ? 'Lifetime warranty' : (w.warranty_expires_at ? `Expires ${w.warranty_expires_at}` : '—');
+      return `
+      <div class="cm-dv-wty-row">
+        <span class="cm-dv-sale-num">${escHtml(w.product_name || '—')}</span>
+        <span class="cm-dv-wty-meta">${escHtml(w.sale_number || '')} · ${escHtml(expiryText)}</span>
+        ${w.warranty_type === 'lifetime' ? '' : expiredBadge}
+      </div>`;
+    }).join('') : '<div class="cm-dv-no-sales"><i class="fa fa-shield-halved"></i> No warranty products purchased</div>';
+
+  } else if (tab === 'credit') {
+    const panel = $('#cm-dv-panel-credit');
+    panel.innerHTML = '<div class="cm-dv-no-sales"><i class="fa fa-spinner fa-spin"></i> Loading…</div>';
+    const res = await API.customerCreditSales(id);
+    if (_cm.selectedId !== id) return;
+    const list = res.status === 200 ? (res.body?.data ?? []) : [];
+    const totalDue = res.status === 200 ? (res.body?.meta?.total_due ?? 0) : 0;
+    if (!list.length) {
+      panel.innerHTML = '<div class="cm-dv-no-sales"><i class="fa fa-hand-holding-dollar"></i> No credit or due payments</div>';
+      return;
+    }
+    const summary = `<div class="cm-dv-credit-summary"><span>Total Due</span><span>${parseFloat(totalDue).toFixed(2)}</span></div>`;
+    panel.innerHTML = summary + list.map(s => {
+      const badge = s.is_paid
+        ? `<span class="cm-dv-credit-badge cm-dv-credit-badge--paid">Paid</span>`
+        : (s.is_overdue
+          ? `<span class="cm-dv-credit-badge cm-dv-credit-badge--overdue">Overdue</span>`
+          : `<span class="cm-dv-credit-badge cm-dv-credit-badge--due">Due</span>`);
+      const dueText = s.credit_due_date ? `Due ${s.credit_due_date}` : '';
+      return `
+      <div class="cm-dv-credit-row">
+        <span class="cm-dv-sale-num">${escHtml(s.sale_number || `#${s.id}`)}</span>
+        <span class="cm-dv-credit-meta">${escHtml(s.sold_at || '')} ${dueText ? '· ' + escHtml(dueText) : ''}</span>
+        ${badge}
+        <span class="cm-dv-sale-amt">${parseFloat(s.due_amount || 0).toFixed(2)}</span>
+      </div>`;
+    }).join('');
   }
 }
 
@@ -19941,6 +20038,11 @@ async function _cmDelete() {
 $('#cm-close')?.addEventListener('click', _cmClose);
 $('#customers-modal')?.addEventListener('click', e => { if (e.target === e.currentTarget) _cmClose(); });
 
+$('#cm-dv-tabs')?.addEventListener('click', e => {
+  const btn = e.target.closest('.cm-dv-tab');
+  if (btn) _cmSwitchTab(btn.dataset.cmTab);
+});
+
 $('#cm-new-btn')?.addEventListener('click', () => {
   _cm.editingId = null; _cm.selectedId = null;
   _cmRenderList();
@@ -19988,6 +20090,12 @@ $('#cm-search')?.addEventListener('input', e => {
 $('#cm-search')?.addEventListener('keydown', e => {
   if (e.key === 'Escape') { e.preventDefault(); if (_cm.searchQ) { _cm.searchQ = ''; e.target.value = ''; _cm.page = 1; _cmLoadList(); } else _cmClose(); }
   if (e.key === 'Enter' && _cm.list.length) { _cmSelectCustomer(_cm.list[0].id); }
+});
+
+$('#cm-category-filter')?.addEventListener('change', e => {
+  _cm.categoryId = e.target.value;
+  _cm.page = 1;
+  _cmLoadList();
 });
 
 ['#cm-f-name','#cm-f-phone','#cm-f-email','#cm-f-address','#cm-f-notes'].forEach(sel => {

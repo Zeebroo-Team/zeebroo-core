@@ -5,7 +5,6 @@ namespace Modules\Pos\Http\Controllers\Api;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
-use Modules\Business\Models\Business;
 use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesPosBusinessForApi;
 use Modules\Pos\Models\StockAudit;
 use Modules\Pos\Services\StockAuditService;
@@ -16,20 +15,9 @@ class PosStockAuditApiController extends Controller
 
     public function __construct(private readonly StockAuditService $service) {}
 
-    private function business(Request $request): Business|JsonResponse
-    {
-        $business = Business::currentForNavbar($request->user());
-        if (! $business) {
-            return response()->json(['error' => 'No business selected.'], 422);
-        }
-
-        return $business;
-    }
-
     public function index(Request $request): JsonResponse
     {
-        $business = $this->business($request);
-        if ($business instanceof JsonResponse) return $business;
+        $business = $this->businessOrAbort($request);
 
         $audits = $this->service->listForBusiness($business);
 
@@ -45,8 +33,7 @@ class PosStockAuditApiController extends Controller
 
     public function store(Request $request): JsonResponse
     {
-        $business = $this->business($request);
-        if ($business instanceof JsonResponse) return $business;
+        $business = $this->businessOrAbort($request);
         $this->abortUnlessPerm($request, $business, 'inv_audit');
 
         $data = $request->validate([
@@ -62,8 +49,7 @@ class PosStockAuditApiController extends Controller
 
     public function show(Request $request, StockAudit $stockAudit): JsonResponse
     {
-        $business = $this->business($request);
-        if ($business instanceof JsonResponse) return $business;
+        $business = $this->businessOrAbort($request);
 
         $audit = $this->service->auditForBusiness($business, $stockAudit);
         $audit->load('lines');
@@ -73,8 +59,7 @@ class PosStockAuditApiController extends Controller
 
     public function saveLines(Request $request, StockAudit $stockAudit): JsonResponse
     {
-        $business = $this->business($request);
-        if ($business instanceof JsonResponse) return $business;
+        $business = $this->businessOrAbort($request);
         $this->abortUnlessPerm($request, $business, 'inv_audit');
 
         $audit = $this->service->auditForBusiness($business, $stockAudit);
@@ -93,8 +78,7 @@ class PosStockAuditApiController extends Controller
 
     public function finalize(Request $request, StockAudit $stockAudit): JsonResponse
     {
-        $business = $this->business($request);
-        if ($business instanceof JsonResponse) return $business;
+        $business = $this->businessOrAbort($request);
         $this->abortUnlessPerm($request, $business, 'inv_audit');
 
         $audit = $this->service->auditForBusiness($business, $stockAudit);
@@ -105,8 +89,7 @@ class PosStockAuditApiController extends Controller
 
     public function destroy(Request $request, StockAudit $stockAudit): JsonResponse
     {
-        $business = $this->business($request);
-        if ($business instanceof JsonResponse) return $business;
+        $business = $this->businessOrAbort($request);
         $this->abortUnlessPerm($request, $business, 'inv_audit');
 
         $audit = $this->service->auditForBusiness($business, $stockAudit);
