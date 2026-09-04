@@ -16145,6 +16145,21 @@
 <script src="js/d3.min.js"></script>
 <script src="js/jsbarcode.min.js"></script>
 <script src="js/api.js"></script>
+<!-- Preload ribbon.json synchronously so app.js can render ribbon before wiring listeners -->
+<script>
+(function () {
+  try {
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', './ribbon.json', false); // synchronous — local file only
+    xhr.send(null);
+    if (xhr.status === 200 || xhr.status === 0) {
+      window._ribbonJson = JSON.parse(xhr.responseText);
+    }
+  } catch (e) {
+    console.warn('[ribbon] Could not preload ribbon.json:', e);
+  }
+})();
+</script>
 <script src="js/app.js"></script>
 <script src="js/ribbon-customize.js"></script>
 <script src="js/home-subnav-customize.js"></script>

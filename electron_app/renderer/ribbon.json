@@ -1,0 +1,628 @@
+{
+  "_comment": "Ribbon configuration — each tab maps to a page of groups and items. Types: 'lg' (large button), 'sm' (small button), 'stack' (vertical stack of sm buttons), 'sep' (vertical separator). Primary buttons get the accent colour.",
+
+  "tabs": [
+    { "id": "home",        "label": "Home",           "icon": "fa-house",              "hasSub": true  },
+    { "id": "pos",         "label": "POS",             "icon": "fa-cart-shopping",      "hasSub": false },
+    { "id": "sales",       "label": "Sales",           "icon": "fa-receipt",            "hasSub": true  },
+    { "id": "inventory",   "label": "Inventory",       "icon": "fa-boxes-stacked",      "hasSub": true  },
+    { "id": "finance",     "label": "Finance",         "icon": "fa-file-invoice-dollar","hasSub": true  },
+    { "id": "hr",          "label": "HR",              "icon": "fa-users",              "hasSub": true  },
+    { "id": "services",    "label": "Services",        "icon": "fa-screwdriver-wrench", "hasSub": true  },
+    { "id": "design",      "label": "Design",          "icon": "fa-palette",            "hasSub": false },
+    { "id": "restaurant",  "label": "Restaurant",      "icon": "fa-utensils",           "hasSub": true  },
+    { "id": "rst-pos",     "label": "Restaurant POS",  "icon": "fa-cash-register",      "hasSub": false },
+    { "id": "mail",        "label": "Mail",            "icon": "fa-envelope",           "hasSub": true  },
+    { "id": "crm",         "label": "CRM",             "icon": "fa-handshake",          "hasSub": true  },
+    { "id": "automations", "label": "Automations",     "icon": "fa-bolt",               "hasSub": false },
+    { "id": "projects",    "label": "Projects",        "icon": "fa-diagram-project",    "hasSub": true  },
+    { "id": "event-mgmt",  "label": "Event",           "icon": "fa-tag",                "hasSub": false }
+  ],
+
+  "pages": [
+
+    {
+      "tab": "home",
+      "groups": [
+        {
+          "label": "Quick Actions",
+          "items": [
+            { "type": "lg", "id": "rb-home-pos",          "icon": "fa-cart-shopping",      "label": "Open\nPOS",        "primary": true },
+            { "type": "stack", "items": [
+              { "type": "sm", "id": "rb-home-new-sale",      "icon": "fa-plus",             "label": "New Sale" },
+              { "type": "sm", "id": "rb-home-daily-summary", "icon": "fa-calendar-day",     "label": "Today's Summary" }
+            ]}
+          ]
+        },
+        {
+          "label": "Overview",
+          "items": [
+            { "type": "lg", "id": "rb-home-dashboard",    "icon": "fa-gauge-high",         "label": "Dashboard" },
+            { "type": "lg", "id": "rb-home-analytics",    "icon": "fa-chart-line",         "label": "Analytics" }
+          ]
+        },
+        {
+          "label": "Operations",
+          "items": [
+            { "type": "lg", "id": "rb-home-orders",       "icon": "fa-receipt",            "label": "Orders" },
+            { "type": "stack", "items": [
+              { "type": "sm", "id": "rb-home-customers",    "icon": "fa-users",            "label": "Customers" },
+              { "type": "sm", "id": "rb-home-suppliers",    "icon": "fa-truck",            "label": "Suppliers" }
+            ]}
+          ]
+        },
+        {
+          "label": "Finance",
+          "items": [
+            { "type": "lg", "id": "rb-home-expenses",     "icon": "fa-file-invoice-dollar","label": "Expenses" },
+            { "type": "stack", "items": [
+              { "type": "sm", "id": "rb-home-profit",       "icon": "fa-chart-bar",        "label": "Profit Report" },
+              { "type": "sm", "id": "rb-home-payroll",      "icon": "fa-user-tie",         "label": "Payroll" }
+            ]}
+          ]
+        },
+        {
+          "label": "Tools",
+          "items": [
+            { "type": "lg", "id": "rb-home-settings",     "icon": "fa-gear",               "label": "Settings" },
+            { "type": "lg", "id": "rb-home-help",         "icon": "fa-circle-question",    "label": "Help" }
+          ]
+        }
+      ]
+    },
+
+    {
+      "tab": "pos",
+      "groups": [
+        {
+          "label": "Session",
+          "items": [
+            { "type": "lg", "id": "rb-new-session",       "icon": "fa-circle-play",        "label": "New\nSession" },
+            { "type": "lg", "id": "rb-close-session",     "icon": "fa-circle-stop",        "label": "Close\nSession" },
+            { "type": "lg", "id": "rb-lock-register",     "icon": "fa-lock",               "label": "Close\nRegister", "title": "Close Cash Register" },
+            { "type": "counter-select" }
+          ]
+        },
+        {
+          "label": "Sales",
+          "items": [
+            { "type": "lg", "id": "rb-checkout",          "icon": "fa-cash-register",      "label": "Checkout",        "primary": true },
+            { "type": "stack", "items": [
+              { "type": "sm", "id": "rb-return",            "icon": "fa-rotate-left",      "label": "Return / Refund", "kbd": "F9" },
+              { "type": "sm", "id": "rb-clear-cart",        "icon": "fa-trash",            "label": "Clear Cart",      "kbd": "F10" }
+            ]}
+          ]
+        },
+        {
+          "label": "Find",
+          "items": [
+            { "type": "lg", "id": "rb-search",            "icon": "fa-magnifying-glass",   "label": "Search",          "kbd": "F3" },
+            { "type": "stack", "items": [
+              { "type": "sm", "id": "rb-barcode",           "icon": "fa-barcode",          "label": "Scan Barcode",    "kbd": "F2" },
+              { "type": "sm", "id": "rb-add-product",       "icon": "fa-plus",             "label": "Add Product" }
+            ]}
+          ]
+        },
+        {
+          "label": "Customers",
+          "items": [
+            { "type": "lg", "id": "rb-customers",         "icon": "fa-users",              "label": "Customers" },
+            { "type": "lg", "id": "rb-accounts",          "icon": "fa-building-columns",   "label": "Accounts" }
+          ]
+        },
+        {
+          "label": "Configure",
+          "items": [
+            { "type": "lg", "id": "rb-pos-settings",      "icon": "fa-gear",               "label": "POS\nSettings" },
+            { "type": "lg", "id": "rb-receipt-editor",    "icon": "fa-file-lines",         "label": "Receipt\nEditor" },
+            { "type": "lg", "id": "rb-pos-refresh",       "icon": "fa-rotate",             "label": "Refresh" }
+          ]
+        }
+      ]
+    },
+
+    {
+      "tab": "sales",
+      "groups": [
+        {
+          "label": "Create",
+          "items": [
+            { "type": "lg", "id": "rb-sal-new-wizard",    "icon": "fa-wand-magic-sparkles","label": "Add New Sale",    "primary": true },
+            { "type": "lg", "id": "rb-sal-new-invoice",   "icon": "fa-file-invoice",       "label": "New Invoice",     "primary": true },
+            { "type": "lg", "id": "rb-sal-new-quotation", "icon": "fa-file-circle-plus",   "label": "New Quotation" },
+            { "type": "lg", "id": "rb-so-new",            "icon": "fa-box",                "label": "New Sales Order", "primary": true }
+          ]
+        },
+        {
+          "label": "Transactions",
+          "items": [
+            { "type": "stack", "items": [
+              { "type": "sm", "id": "rb-sal-refresh",       "icon": "fa-rotate",           "label": "Refresh" },
+              { "type": "sm", "id": "rb-sal-invoice-setup", "icon": "fa-sliders",          "label": "Invoice Setup" }
+            ]},
+            { "type": "stack", "items": [
+              { "type": "sm", "id": "rb-sal-all",           "icon": "fa-list",             "label": "All Sales" },
+              { "type": "sm", "id": "rb-sal-pos",           "icon": "fa-cash-register",    "label": "POS Sales" }
+            ]}
+          ]
+        },
+        {
+          "label": "Returns",
+          "items": [
+            { "type": "lg", "id": "rb-sal-return",        "icon": "fa-rotate-left",        "label": "Returns" }
+          ]
+        },
+        {
+          "label": "Settlement",
+          "items": [
+            { "type": "lg", "id": "rb-eod-open",          "icon": "fa-building-columns",   "label": "End of Day" }
+          ]
+        },
+        {
+          "label": "Customers",
+          "items": [
+            { "type": "lg", "id": "rb-sal-customers",     "icon": "fa-users",              "label": "Customers" }
+          ]
+        }
+      ]
+    },
+
+    {
+      "tab": "inventory",
+      "groups": [
+        {
+          "label": "Catalog",
+          "items": [
+            { "type": "lg", "id": "rb-inv-products",      "icon": "fa-boxes-stacked",      "label": "Products" },
+            { "type": "stack", "items": [
+              { "type": "sm", "id": "rb-refresh",           "icon": "fa-rotate",           "label": "Refresh" },
+              { "type": "sm", "id": "rb-clear-filters",     "icon": "fa-filter-circle-xmark","label": "Clear Filters" }
+            ]},
+            { "type": "stack", "items": [
+              { "type": "sm", "id": "rb-inv-categories",    "icon": "fa-layer-group",      "label": "Categories" },
+              { "type": "sm", "id": "rb-inv-units",         "icon": "fa-weight-scale",     "label": "Units" }
+            ]}
+          ]
+        },
+        {
+          "label": "Stock",
+          "items": [
+            { "type": "lg", "id": "rb-inv-audit",         "icon": "fa-clipboard-list",     "label": "Stock Audit" },
+            { "type": "stack", "items": [
+              { "type": "sm", "id": "rb-inv-brands",        "icon": "fa-tag",              "label": "Brands" },
+              { "type": "sm", "id": "rb-inv-discounts",     "icon": "fa-percent",          "label": "Discounts" }
+            ]}
+          ]
+        },
+        {
+          "label": "Purchasing",
+          "items": [
+            { "type": "lg", "id": "rb-orders",            "icon": "fa-truck",              "label": "Purchase Orders" },
+            { "type": "stack", "items": [
+              { "type": "sm", "id": "rb-inv-grn",           "icon": "fa-box-open",         "label": "Goods Receive" },
+              { "type": "sm", "id": "rb-inv-cheques",       "icon": "fa-money-check",      "label": "Cheques" }
+            ]}
+          ]
+        },
+        {
+          "label": "Suppliers",
+          "items": [
+            { "type": "lg", "id": "rb-inv-suppliers",     "icon": "fa-building-user",      "label": "Suppliers" }
+          ]
+        },
+        {
+          "label": "Print",
+          "items": [
+            { "type": "lg", "id": "rb-inv-barcodes",      "icon": "fa-barcode",            "label": "Print\nBarcodes" }
+          ]
+        }
+      ]
+    },
+
+    {
+      "tab": "finance",
+      "groups": [
+        {
+          "label": "Bills & Loans",
+          "items": [
+            { "type": "lg", "id": "rb-create-bill",       "icon": "fa-file-invoice-dollar","label": "Create Bill",     "primary": true },
+            { "type": "stack", "items": [
+              { "type": "sm", "id": "rb-bills-list",        "icon": "fa-list",             "label": "Bills" },
+              { "type": "sm", "id": "rb-loans",             "icon": "fa-hand-holding-dollar","label": "Loans" }
+            ]}
+          ]
+        },
+        {
+          "label": "Assets & Liabilities",
+          "items": [
+            { "type": "lg", "id": "rb-rentals",           "icon": "fa-building",           "label": "Rentals" },
+            { "type": "lg", "id": "rb-properties",        "icon": "fa-map-location-dot",   "label": "Properties" }
+          ]
+        },
+        {
+          "label": "Reports",
+          "items": [
+            { "type": "lg", "id": "rb-fin-profit",        "icon": "fa-chart-bar",          "label": "Profit\nReport" },
+            { "type": "lg", "id": "rb-fin-sales",         "icon": "fa-chart-line",         "label": "Sales\nReport" }
+          ]
+        }
+      ]
+    },
+
+    {
+      "tab": "hr",
+      "groups": [
+        {
+          "label": "People",
+          "items": [
+            { "type": "lg", "id": "rb-employees",         "icon": "fa-users",              "label": "Employees" },
+            { "type": "lg", "id": "rb-departments",       "icon": "fa-sitemap",            "label": "Departments" }
+          ]
+        },
+        {
+          "label": "Compensation",
+          "items": [
+            { "type": "lg", "id": "rb-hr-payroll",        "icon": "fa-money-bill-wave",    "label": "Payroll" },
+            { "type": "lg", "id": "rb-positions",         "icon": "fa-briefcase",          "label": "Positions" },
+            { "type": "lg", "id": "rb-attendance",        "icon": "fa-calendar-check",     "label": "Attendance" }
+          ]
+        }
+      ]
+    },
+
+    {
+      "tab": "services",
+      "groups": [
+        {
+          "label": "Service Requests",
+          "items": [
+            { "type": "lg", "id": "rb-svc-new-req",       "icon": "fa-plus",               "label": "New Request",     "primary": true },
+            { "type": "lg", "id": "rb-svc-requests",      "icon": "fa-list-check",         "label": "All Requests" },
+            { "type": "stack", "items": [
+              { "type": "sm", "id": "rb-svc-req-all",       "icon": "fa-list",             "label": "All" },
+              { "type": "sm", "id": "rb-svc-req-pending",   "icon": "fa-clock",            "label": "Pending" }
+            ]}
+          ]
+        },
+        {
+          "label": "Services",
+          "items": [
+            { "type": "lg", "id": "rb-svc-catalog",       "icon": "fa-screwdriver-wrench", "label": "Services" },
+            { "type": "lg", "id": "rb-svc-new-item",      "icon": "fa-plus",               "label": "New Service",     "primary": true }
+          ]
+        },
+        {
+          "label": "Organise",
+          "items": [
+            { "type": "lg", "id": "rb-svc-categories",    "icon": "fa-layer-group",        "label": "Categories" }
+          ]
+        },
+        {
+          "label": "Actions",
+          "items": [
+            { "type": "lg", "id": "rb-svc-refresh",       "icon": "fa-rotate",             "label": "Refresh" }
+          ]
+        }
+      ]
+    },
+
+    {
+      "tab": "design",
+      "groups": [
+        {
+          "label": "Designs",
+          "items": [
+            { "type": "lg", "id": "rb-design-new",        "icon": "fa-plus",               "label": "New Design",      "primary": true },
+            { "type": "lg", "id": "rb-design-all",        "icon": "fa-images",             "label": "All Designs" }
+          ]
+        },
+        {
+          "label": "Proposals",
+          "items": [
+            { "type": "lg", "id": "rb-design-proposals",  "icon": "fa-file-lines",         "label": "Proposals" },
+            { "type": "lg", "id": "rb-design-new-proposal","icon": "fa-file-circle-plus",  "label": "New Proposal" }
+          ]
+        },
+        {
+          "label": "Types",
+          "items": [
+            { "type": "stack", "items": [
+              { "type": "sm", "id": "rb-design-letterhead",    "icon": "fa-envelope-open-text","label": "Letterhead" },
+              { "type": "sm", "id": "rb-design-company-profile","icon": "fa-building",        "label": "Company Profile" }
+            ]},
+            { "type": "stack", "items": [
+              { "type": "sm", "id": "rb-design-social-media",  "icon": "fa-share-nodes",    "label": "Social Media" },
+              { "type": "sm", "id": "rb-design-business-card", "icon": "fa-id-card",        "label": "Business Card" }
+            ]}
+          ]
+        }
+      ]
+    },
+
+    {
+      "tab": "restaurant",
+      "groups": [
+        {
+          "label": "POS",
+          "items": [
+            { "type": "lg", "id": "rb-rst-pos",           "icon": "fa-cash-register",      "label": "Restaurant\nPOS", "primary": true }
+          ]
+        },
+        {
+          "label": "Orders",
+          "items": [
+            { "type": "lg", "id": "rb-rst-new-order",     "icon": "fa-plus",               "label": "New Order" },
+            { "type": "lg", "id": "rb-rst-orders",        "icon": "fa-receipt",            "label": "All Orders" }
+          ]
+        },
+        {
+          "label": "Floor",
+          "items": [
+            { "type": "lg", "id": "rb-rst-tables",        "icon": "fa-table-cells",        "label": "Tables" },
+            { "type": "lg", "id": "rb-rst-reservations",  "icon": "fa-calendar-days",      "label": "Reservations" }
+          ]
+        },
+        {
+          "label": "Menu",
+          "items": [
+            { "type": "lg", "id": "rb-rst-menu-items",    "icon": "fa-utensils",           "label": "Menu Items" },
+            { "type": "stack", "items": [
+              { "type": "sm", "id": "rb-rst-menu-categories","icon": "fa-layer-group",     "label": "Categories" },
+              { "type": "sm", "id": "rb-rst-add-menu-item",  "icon": "fa-plus",           "label": "Add Item" }
+            ]}
+          ]
+        },
+        {
+          "label": "Ingredients",
+          "items": [
+            { "type": "lg", "id": "rb-rst-ingredients",   "icon": "fa-carrot",             "label": "Ingredients" },
+            { "type": "stack", "items": [
+              { "type": "sm", "id": "rb-rst-stock-in",      "icon": "fa-box-open",         "label": "Stock In" },
+              { "type": "sm", "id": "rb-rst-purchase-orders","icon": "fa-truck",           "label": "Purchase Orders" }
+            ]}
+          ]
+        },
+        {
+          "label": "KDS",
+          "items": [
+            { "type": "lg", "id": "rb-rst-kitchen",       "icon": "fa-kitchen-set",        "label": "Kitchen\nDisplay" }
+          ]
+        }
+      ]
+    },
+
+    {
+      "tab": "rst-pos",
+      "groups": [
+        {
+          "label": "Order",
+          "items": [
+            { "type": "lg", "id": "rb-rst-pos-takeaway",  "icon": "fa-bag-shopping",       "label": "Takeaway" },
+            { "type": "lg", "id": "rb-rst-pos-tables",    "icon": "fa-table-cells",        "label": "Tables" }
+          ]
+        },
+        {
+          "label": "Navigate",
+          "items": [
+            { "type": "lg", "id": "rb-rst-pos-go-rst",    "icon": "fa-utensils",           "label": "Restaurant" },
+            { "type": "lg", "id": "rb-rst-pos-kds",       "icon": "fa-kitchen-set",        "label": "Kitchen\nDisplay" }
+          ]
+        }
+      ]
+    },
+
+    {
+      "tab": "mail",
+      "groups": [
+        {
+          "label": "Messages",
+          "items": [
+            { "type": "lg", "id": "rb-mail-inbox",        "icon": "fa-inbox",              "label": "Inbox" },
+            { "type": "lg", "id": "rb-mail-compose",      "icon": "fa-pen-to-square",      "label": "Compose",         "primary": true }
+          ]
+        },
+        {
+          "label": "Sent",
+          "items": [
+            { "type": "lg", "id": "rb-mail-sent",         "icon": "fa-paper-plane",        "label": "Sent" }
+          ]
+        },
+        {
+          "label": "Manage",
+          "items": [
+            { "type": "lg", "id": "rb-mail-templates",    "icon": "fa-file-code",          "label": "Templates" },
+            { "type": "lg", "id": "rb-mail-filters",      "icon": "fa-filter",             "label": "Filters" }
+          ]
+        },
+        {
+          "label": "Scheduled",
+          "items": [
+            { "type": "lg", "id": "rb-mail-scheduled",    "icon": "fa-clock",              "label": "Scheduled" }
+          ]
+        },
+        {
+          "label": "Actions",
+          "items": [
+            { "type": "lg", "id": "rb-mail-refresh",      "icon": "fa-rotate",             "label": "Refresh" },
+            { "type": "lg", "id": "rb-mail-sync",         "icon": "fa-cloud-arrow-down",   "label": "Sync" }
+          ]
+        }
+      ]
+    },
+
+    {
+      "tab": "crm",
+      "groups": [
+        {
+          "label": "Pipeline",
+          "items": [
+            { "type": "lg", "id": "rb-crm-pipeline",      "icon": "fa-chart-gantt",        "label": "Pipeline" },
+            { "type": "lg", "id": "rb-crm-new-lead",      "icon": "fa-user-plus",          "label": "New Lead",        "primary": true }
+          ]
+        },
+        {
+          "label": "Contacts",
+          "items": [
+            { "type": "lg", "id": "rb-crm-contacts",      "icon": "fa-address-book",       "label": "Contacts" }
+          ]
+        },
+        {
+          "label": "Tasks",
+          "items": [
+            { "type": "lg", "id": "rb-crm-tasks",         "icon": "fa-list-check",         "label": "Tasks" },
+            { "type": "lg", "id": "rb-crm-new-task",      "icon": "fa-plus",               "label": "New Task",        "primary": true }
+          ]
+        },
+        {
+          "label": "Forms",
+          "items": [
+            { "type": "lg", "id": "rb-crm-forms",         "icon": "fa-file-lines",         "label": "Forms" },
+            { "type": "lg", "id": "rb-crm-new-form",      "icon": "fa-plus",               "label": "New Form",        "primary": true }
+          ]
+        },
+        {
+          "label": "Manage",
+          "items": [
+            { "type": "lg", "id": "rb-crm-projects",      "icon": "fa-diagram-project",    "label": "Projects" },
+            { "type": "lg", "id": "rb-crm-stages",        "icon": "fa-stairs",             "label": "Stages" }
+          ]
+        },
+        {
+          "label": "Actions",
+          "items": [
+            { "type": "lg", "id": "rb-crm-refresh",       "icon": "fa-rotate",             "label": "Refresh" }
+          ]
+        }
+      ]
+    },
+
+    {
+      "tab": "automations",
+      "groups": [
+        {
+          "label": "Flows",
+          "items": [
+            { "type": "lg", "id": "rb-auto-new",          "icon": "fa-plus",               "label": "New Flow",        "primary": true },
+            { "type": "lg", "id": "rb-auto-open",         "icon": "fa-folder-open",        "label": "Open Flow" }
+          ]
+        },
+        {
+          "label": "Manage",
+          "items": [
+            { "type": "lg", "id": "rb-auto-toggle",       "icon": "fa-toggle-on",          "label": "Enable /\nDisable" },
+            { "type": "lg", "id": "rb-auto-delete",       "icon": "fa-trash",              "label": "Delete" }
+          ]
+        },
+        {
+          "label": "Actions",
+          "items": [
+            { "type": "lg", "id": "rb-auto-refresh",      "icon": "fa-rotate",             "label": "Refresh" }
+          ]
+        }
+      ]
+    },
+
+    {
+      "tab": "projects",
+      "groups": [
+        {
+          "label": "Projects",
+          "items": [
+            { "type": "lg", "id": "rb-pm-all-projects",   "icon": "fa-diagram-project",    "label": "All Projects" },
+            { "type": "lg", "id": "rb-pm-new-project",    "icon": "fa-plus",               "label": "New Project",     "primary": true }
+          ]
+        },
+        {
+          "label": "Board",
+          "items": [
+            { "type": "lg", "id": "rb-pm-board",          "icon": "fa-table-columns",      "label": "Kanban\nBoard" }
+          ]
+        },
+        {
+          "label": "Tasks",
+          "items": [
+            { "type": "lg", "id": "rb-pm-tasks",          "icon": "fa-list-check",         "label": "All Tasks" },
+            { "type": "lg", "id": "rb-pm-my-tasks",       "icon": "fa-user-check",         "label": "My Tasks" },
+            { "type": "lg", "id": "rb-pm-new-task",       "icon": "fa-plus",               "label": "New Task",        "primary": true }
+          ]
+        },
+        {
+          "label": "Actions",
+          "items": [
+            { "type": "lg", "id": "rb-pm-refresh",        "icon": "fa-rotate",             "label": "Refresh" }
+          ]
+        }
+      ]
+    },
+
+    {
+      "tab": "event-mgmt",
+      "groups": [
+        {
+          "label": "Brands",
+          "items": [
+            { "type": "lg", "id": "rb-brd-all",           "icon": "fa-tag",                "label": "All Brands" },
+            { "type": "stack", "items": [
+              { "type": "sm", "id": "rb-brd-new",          "icon": "fa-plus",              "label": "New Brand",      "primary": true }
+            ]}
+          ]
+        },
+        {
+          "label": "Reporters & Officers",
+          "items": [
+            { "type": "lg", "id": "rb-rpt-all",           "icon": "fa-person-chalkboard",  "label": "Reporters" },
+            { "type": "stack", "items": [
+              { "type": "sm", "id": "rb-rpt-new",          "icon": "fa-plus",              "label": "New Reporter",   "primary": true },
+              { "type": "sm", "id": "rb-ofc-all",          "icon": "fa-user-tie",          "label": "All Officers" },
+              { "type": "sm", "id": "rb-ofc-new",          "icon": "fa-plus",              "label": "New Officer",    "primary": true }
+            ]}
+          ]
+        },
+        {
+          "label": "Coordinators & Promoters",
+          "items": [
+            { "type": "lg", "id": "rb-crd-all",           "icon": "fa-user-gear",          "label": "Coordinators" },
+            { "type": "stack", "items": [
+              { "type": "sm", "id": "rb-crd-new",          "icon": "fa-plus",              "label": "New Coordinator","primary": true },
+              { "type": "sm", "id": "rb-pmt-all",          "icon": "fa-person-walking",    "label": "All Promoters" },
+              { "type": "sm", "id": "rb-pmt-new",          "icon": "fa-plus",              "label": "New Promoter",   "primary": true }
+            ]}
+          ]
+        },
+        {
+          "label": "Positions",
+          "items": [
+            { "type": "lg", "id": "rb-ppos-manage",       "icon": "fa-id-badge",           "label": "Positions" }
+          ]
+        },
+        {
+          "label": "Jobs & Agencies",
+          "items": [
+            { "type": "lg", "id": "rb-job-all",           "icon": "fa-briefcase",          "label": "Jobs" },
+            { "type": "stack", "items": [
+              { "type": "sm", "id": "rb-job-new",          "icon": "fa-plus",              "label": "New Job",        "primary": true },
+              { "type": "sm", "id": "rb-agc-all",          "icon": "fa-building-user",     "label": "All Agencies" },
+              { "type": "sm", "id": "rb-agc-new",          "icon": "fa-plus",              "label": "New Agency",     "primary": true }
+            ]}
+          ]
+        },
+        {
+          "label": "Salary Sheets",
+          "items": [
+            { "type": "lg", "id": "rb-ss-all",            "icon": "fa-file-invoice-dollar","label": "Salary Sheets" },
+            { "type": "stack", "items": [
+              { "type": "sm", "id": "rb-ss-new",           "icon": "fa-plus",              "label": "New Sheet",      "primary": true }
+            ]}
+          ]
+        },
+        {
+          "label": "Actions",
+          "items": [
+            { "type": "lg", "id": "rb-brd-refresh",       "icon": "fa-rotate",             "label": "Refresh" }
+          ]
+        }
+      ]
+    }
+
+  ]
+}

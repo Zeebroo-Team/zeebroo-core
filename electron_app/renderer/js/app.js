@@ -332,6 +332,105 @@ async function _toggleLayoutMode() {
   await window.electronAPI.setConfig({ layout_mode: next });
 }
 
+// ── Ribbon JSON renderer ───────────────────────────────────────────────────
+
+/** Attach click listeners to every .ribbon-tab present in the DOM. */
+function _initRibbonTabListeners() {
+  $$('.ribbon-tab').forEach(tab => {
+    tab.addEventListener('click', () => activateTab(tab.dataset.tab));
+  });
+}
+
+/**
+ * Build the HTML for a single ribbon item from a JSON descriptor.
+ * Supported types: 'lg', 'sm', 'stack', 'sep', 'counter-select'.
+ * The POS stats div is appended at the page level, not as an item type.
+ */
+function _buildRibbonItem(item) {
+  if (item.type === 'lg') {
+    const primary = item.primary ? ' primary' : '';
+    const title   = item.title ? ` title="${item.title}"` : '';
+    const kbd     = item.kbd   ? ` <kbd>${item.kbd}</kbd>` : '';
+    const label   = (item.label || '').replace(/\n/g, '<br>');
+    return `<button class="ribbon-btn-lg${primary}" id="${item.id}"${title}>`
+         + `<i class="fa ${item.icon}"></i>${label}${kbd}</button>`;
+  }
+  if (item.type === 'sm') {
+    const primary = item.primary ? ' primary' : '';
+    const kbd     = item.kbd ? ` <kbd>${item.kbd}</kbd>` : '';
+    return `<button class="ribbon-btn-sm${primary}" id="${item.id}">`
+         + `<i class="fa ${item.icon}"></i> ${item.label || ''}${kbd}</button>`;
+  }
+  if (item.type === 'stack') {
+    const inner = (item.items || []).map(_buildRibbonItem).join('');
+    return `<div class="ribbon-small-stack">${inner}</div>`;
+  }
+  if (item.type === 'sep') {
+    return '<div class="ribbon-sep"></div>';
+  }
+  if (item.type === 'counter-select') {
+    // Special element — counter selector in POS session group
+    return '<div class="ribbon-counter-wrap" id="rb-counter-wrap" style="display:none">'
+         + '<label class="ribbon-counter-label"><i class="fa fa-cash-register"></i> Counter</label>'
+         + '<select id="rb-counter-select" class="ribbon-counter-select">'
+         + '<option value="">— None —</option>'
+         + '</select></div>';
+  }
+  return '';
+}
+
+/** Build a single ribbon-group element from a group descriptor. */
+function _buildRibbonGroupHtml(group) {
+  const items = (group.items || []).map(_buildRibbonItem).join('');
+  return `<div class="ribbon-group">`
+       + `<div class="ribbon-group-content">${items}</div>`
+       + `<div class="ribbon-group-label">${group.label || ''}</div>`
+       + `</div>`;
+}
+
+/** Build a full ribbon-page element from a page descriptor. */
+function _buildRibbonPageHtml(page) {
+  const groups = (page.groups || []).map(_buildRibbonGroupHtml).join('');
+  // The POS stats widget lives outside groups (right-floated in the page)
+  const statsHtml = page.tab === 'pos'
+    ? '<div id="pos-ribbon-stats" class="pos-ribbon-stats">'
+    + '<div class="prs-spin"><i class="fa fa-spinner fa-spin"></i></div></div>'
+    : '';
+  return `<div class="ribbon-page" data-page="${page.tab}">${groups}${statsHtml}</div>`;
+}
+
+/**
+ * Render the full ribbon (tabs + pages) from the parsed ribbon.json object.
+ * After rebuilding the DOM, tab listeners are re-attached via _initRibbonTabListeners().
+ * Ribbon button listeners (wired by ID later in app.js) find their elements by the
+ * same IDs that are declared in ribbon.json, so they continue to work correctly.
+ */
+function _renderRibbonFromJson(data) {
+  if (!data) return;
+
+  const tabsEl = $('#ribbon-tabs');
+  const bodyEl = $('#ribbon-body');
+  if (!tabsEl || !bodyEl) return;
+
+  // ── Build tab row ──
+  const tabsHtml = (data.tabs || []).map(t => {
+    const active = t.id === 'pos' ? ' active' : '';
+    return `<div class="ribbon-tab${active}" data-tab="${t.id}">${t.label}</div>`;
+  }).join('');
+  tabsEl.innerHTML = tabsHtml;
+
+  // ── Build ribbon pages ──
+  const pageMap = {};
+  (data.pages || []).forEach(p => { pageMap[p.tab] = p; });
+
+  // Render pages in tab order so the layout matches the tab row
+  const pagesHtml = (data.tabs || [])
+    .filter(t => pageMap[t.id])
+    .map(t => _buildRibbonPageHtml(pageMap[t.id]))
+    .join('');
+  bodyEl.innerHTML = pagesHtml;
+}
+
 // ── Ribbon tabs ────────────────────────────────────────────────────────────
 function activateTab(tabName) {
   $$('.ribbon-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tabName));
@@ -364,9 +463,9 @@ function activateTab(tabName) {
   _sbNavExpand(tabName);
 }
 
-$$('.ribbon-tab').forEach(tab => {
-  tab.addEventListener('click', () => activateTab(tab.dataset.tab));
-});
+// If ribbon.json was preloaded, render from it; otherwise fall through to hardcoded HTML
+if (window._ribbonJson) { _renderRibbonFromJson(window._ribbonJson); }
+_initRibbonTabListeners();
 $$('.sb-nav-item[data-tab]').forEach(item => {
   item.addEventListener('click', () => {
     const tab = item.dataset.tab;
