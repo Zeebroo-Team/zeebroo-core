@@ -31,6 +31,7 @@ class CustomerSubscription extends Model
         'started_at',
         'next_billing_at',
         'last_renewed_at',
+        'last_notified_at',
         'cancelled_at',
         'notes',
     ];
@@ -38,13 +39,14 @@ class CustomerSubscription extends Model
     protected function casts(): array
     {
         return [
-            'free_trial'       => 'boolean',
-            'price'            => 'decimal:2',
-            'quantity'         => 'decimal:3',
-            'started_at'       => 'date',
-            'next_billing_at'  => 'date',
-            'last_renewed_at'  => 'date',
-            'cancelled_at'     => 'datetime',
+            'free_trial'        => 'boolean',
+            'price'             => 'decimal:2',
+            'quantity'          => 'decimal:3',
+            'started_at'        => 'date',
+            'next_billing_at'   => 'date',
+            'last_renewed_at'   => 'date',
+            'last_notified_at'  => 'datetime',
+            'cancelled_at'      => 'datetime',
         ];
     }
 

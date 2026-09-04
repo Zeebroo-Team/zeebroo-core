@@ -729,6 +729,7 @@ function _salSwitchView(view) {
 
 // ── Subscriptions (Sales panel tab) ─────────────────────────────────────────
 const _subs = { list: [], search: '', status: 'all', searchTimer: null };
+const _subsShowNotify = false; // temporarily hidden
 
 async function loadSubscriptionsList() {
   $('#subs-loading').style.display = '';
@@ -740,12 +741,61 @@ async function loadSubscriptionsList() {
 
   if (res.status !== 200) {
     $('#subs-body').innerHTML = '<div class="qt-empty"><i class="fa fa-circle-exclamation"></i> Failed to load subscriptions.</div>';
+    $('#subs-stats').innerHTML = '';
     return;
   }
 
   _subs.list = res.body?.data || [];
   $('#subs-count').textContent = `${_subs.list.length} subscription${_subs.list.length !== 1 ? 's' : ''}`;
+  _subsRenderStats();
   _subsRenderList();
+}
+
+function _subsDaysUntil(dateStr) {
+  if (!dateStr) return null;
+  const target = new Date(dateStr + 'T00:00:00');
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  return Math.round((target - today) / 86400000);
+}
+
+function _subsDueBadge(s) {
+  if (s.status !== 'active' && s.status !== 'trial') return '';
+  const days = _subsDaysUntil(s.next_billing_at);
+  if (days === null) return '';
+  if (days < 0) return `<span class="subs-due-badge subs-due-overdue"><i class="fa fa-triangle-exclamation"></i> Overdue ${Math.abs(days)}d</span>`;
+  if (days <= 7) return `<span class="subs-due-badge subs-due-soon"><i class="fa fa-clock"></i> ${days === 0 ? 'Due today' : `Due in ${days}d`}</span>`;
+  return '';
+}
+
+function _subsRenderStats() {
+  const el = $('#subs-stats');
+  if (!el) return;
+  if (!_subs.list.length) { el.innerHTML = ''; return; }
+
+  const counts = { active: 0, trial: 0, paused: 0, cancelled: 0 };
+  let dueSoon = 0;
+  _subs.list.forEach(s => {
+    if (counts[s.status] !== undefined) counts[s.status]++;
+    if ((s.status === 'active' || s.status === 'trial')) {
+      const days = _subsDaysUntil(s.next_billing_at);
+      if (days !== null && days <= 7) dueSoon++;
+    }
+  });
+
+  const cards = [
+    { label: 'Active',     value: counts.active,    color: '#22c55e' },
+    { label: 'Free Trial', value: counts.trial,     color: '#8b5cf6' },
+    { label: 'Paused',     value: counts.paused,    color: '#f59e0b' },
+    { label: 'Cancelled',  value: counts.cancelled, color: '#ef4444' },
+    { label: 'Due Soon',   value: dueSoon,           color: '#f97316' },
+  ];
+
+  el.innerHTML = cards.map(c => `
+    <div class="subs-stat-card">
+      <span class="subs-stat-dot" style="background:${c.color}"></span>
+      <span class="subs-stat-value">${c.value}</span>
+      <span class="subs-stat-label">${c.label}</span>
+    </div>`).join('');
 }
 
 function _subsRenderList() {
@@ -762,6 +812,13 @@ function _subsRenderList() {
   const statusColors = { trial: '#8b5cf6', active: '#22c55e', paused: '#f59e0b', cancelled: '#ef4444' };
   const periodLabels = { weekly: 'Weekly', monthly: 'Monthly', quarterly: 'Quarterly', yearly: 'Yearly' };
   const fmtDate = d => d ? new Date(d + 'T00:00:00').toLocaleDateString(undefined, { month:'short', day:'numeric', year:'numeric' }) : '—';
+  const fmtNotified = d => {
+    if (!d) return '';
+    const days = Math.floor((Date.now() - new Date(d).getTime()) / 86400000);
+    if (days <= 0) return 'Notified today';
+    if (days === 1) return 'Notified 1d ago';
+    return `Notified ${days}d ago`;
+  };
 
   let html = `<div class="qt-tbl-wrap"><table class="qt-tbl">
     <thead><tr>
@@ -777,6 +834,9 @@ function _subsRenderList() {
       actions += s.status === 'paused'
         ? `<button class="qt-act-btn subs-act-btn" data-subs-act="resume" data-subs-id="${s.id}"><i class="fa fa-play"></i> Resume</button>`
         : `<button class="qt-act-btn subs-act-btn" data-subs-act="pause" data-subs-id="${s.id}"><i class="fa fa-pause"></i> Pause</button>`;
+      if (_subsShowNotify) {
+        actions += `<button class="qt-act-btn subs-act-btn" title="${s.customer_email ? 'Email a renewal reminder' : 'No email on file for this customer'}" ${s.customer_email ? '' : 'disabled'} data-subs-act="notify" data-subs-id="${s.id}"><i class="fa fa-bell"></i> Notify</button>`;
+      }
       actions += `<button class="qt-act-btn subs-act-btn" style="border-color:#ef4444;color:#ef4444" data-subs-act="cancel" data-subs-id="${s.id}"><i class="fa fa-ban"></i> Cancel</button>`;
     }
     html += `<tr>
@@ -785,7 +845,10 @@ function _subsRenderList() {
       <td class="qt-tbl-muted">${periodLabels[s.recurring_period] || escHtml(s.recurring_period)}</td>
       <td class="qt-tbl-amt">${parseFloat(s.price || 0).toFixed(2)}${cur}</td>
       <td><span class="so-badge" style="background:${color}20;color:${color};border-color:${color}40">${escHtml(s.status_label)}</span></td>
-      <td class="qt-tbl-muted">${fmtDate(s.next_billing_at)}</td>
+      <td class="qt-tbl-muted">${(() => {
+        const extra = `${_subsDueBadge(s)}${s.last_notified_at ? `<span class="subs-notified-hint">${fmtNotified(s.last_notified_at)}</span>` : ''}`;
+        return `<div>${fmtDate(s.next_billing_at)}</div>` + (extra ? `<div style="display:flex;gap:6px;align-items:center;margin-top:4px">${extra}</div>` : '');
+      })()}</td>
       <td style="display:flex;gap:4px;flex-wrap:nowrap;white-space:nowrap">${actions}</td>
     </tr>`;
   });
@@ -797,7 +860,7 @@ function _subsRenderList() {
     b.addEventListener('click', async () => {
       const id = Number(b.dataset.subsId);
       const act = b.dataset.subsAct;
-      const fns = { renew: API.renewSubscription, pause: API.pauseSubscription, resume: API.resumeSubscription, cancel: API.cancelSubscription };
+      const fns = { renew: API.renewSubscription, pause: API.pauseSubscription, resume: API.resumeSubscription, cancel: API.cancelSubscription, notify: API.notifySubscription };
       if (act === 'cancel' && !confirm('Cancel this subscription? This cannot be undone.')) return;
       b.disabled = true;
       const res = await fns[act](id);

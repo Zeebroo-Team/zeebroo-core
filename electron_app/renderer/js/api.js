@@ -100,6 +100,7 @@ const API = (() => {
     pauseSubscription:    (id)        => request('POST',   `/subscriptions/${id}/pause`),
     resumeSubscription:   (id)        => request('POST',   `/subscriptions/${id}/resume`),
     renewSubscription:    (id)        => request('POST',   `/subscriptions/${id}/renew`),
+    notifySubscription:   (id)        => request('POST',   `/subscriptions/${id}/notify`),
 
     // End of Day
     eodStatus:  () => request('GET',  '/eod'),

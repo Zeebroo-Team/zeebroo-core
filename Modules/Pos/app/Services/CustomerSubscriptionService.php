@@ -5,12 +5,22 @@ namespace Modules\Pos\Services;
 use Carbon\Carbon;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Modules\Business\Models\Business;
+use Modules\Mail\Services\BusinessMailerService;
+use Modules\Pos\Mail\SubscriptionRenewalReminderMail;
 use Modules\Pos\Models\CustomerSubscription;
 use Modules\Product\Models\Product;
 
 class CustomerSubscriptionService
 {
     public const PERIODS = ['weekly', 'monthly', 'quarterly', 'yearly'];
+
+    /** Subscriptions with a next billing date within this many days are "due soon". */
+    public const DUE_SOON_DAYS = 7;
+
+    public function __construct(
+        private readonly BusinessMailerService $mailer,
+    ) {
+    }
 
     public function createForSaleLine(
         Business $business,
@@ -60,7 +70,7 @@ class CustomerSubscriptionService
     {
         return CustomerSubscription::query()
             ->where('business_id', $business->id)
-            ->with(['customer:id,name,phone', 'product:id,name,sku'])
+            ->with(['customer:id,name,phone,email', 'product:id,name,sku'])
             ->when($status && $status !== 'all', fn ($q) => $q->where('status', $status))
             ->when($customerId, fn ($q) => $q->where('pos_customer_id', $customerId))
             ->when($search, function ($q) use ($search) {
@@ -107,5 +117,42 @@ class CustomerSubscriptionService
         ]);
 
         return $subscription;
+    }
+
+    /**
+     * @return array{success: bool, error: ?string}
+     */
+    public function notify(Business $business, CustomerSubscription $subscription): array
+    {
+        $subscription->loadMissing(['customer', 'product']);
+        $email = $subscription->customer?->email;
+
+        if (!filled($email)) {
+            return ['success' => false, 'error' => 'This customer has no email address on file.'];
+        }
+
+        $periodLabels = [
+            'weekly'    => 'weekly',
+            'monthly'   => 'monthly',
+            'quarterly' => 'quarterly',
+            'yearly'    => 'yearly',
+        ];
+
+        $mailable = new SubscriptionRenewalReminderMail(
+            businessName:     $business->name,
+            customerName:     $subscription->customer->name ?? 'there',
+            productName:      $subscription->product?->name ?? 'your subscription',
+            priceLabel:       trim(number_format((float) $subscription->price, 2) . ' ' . (string) $business->getSetting('business.currency', '')),
+            periodLabel:      $periodLabels[$subscription->recurring_period] ?? $subscription->recurring_period,
+            nextBillingLabel: $subscription->next_billing_at?->format('M j, Y') ?? '—',
+        );
+
+        $result = $this->mailer->send($business, $mailable, $email);
+
+        if ($result['success']) {
+            $subscription->update(['last_notified_at' => now()]);
+        }
+
+        return $result;
     }
 }
