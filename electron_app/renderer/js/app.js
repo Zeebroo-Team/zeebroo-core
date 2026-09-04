@@ -19721,7 +19721,7 @@ $('#cust-new-name')?.addEventListener('keydown', e => {
 // ── Customers Management Modal ──────────────────────────────────────────────
 const _cm = {
   page: 1, lastPage: 1, total: 0,
-  searchQ: '', searchTimer: null,
+  searchQ: '', searchTimer: null, categoryId: '',
   selectedId: null, editingId: null,
   list: [],
   activeTab: 'sales',
@@ -19733,12 +19733,22 @@ let _cmReturnToSaleWizard = false;
 function openCustomersModal() {
   $('#customers-modal').style.display = 'flex';
   _cmReturnToSaleWizard = false;
-  _cm.page = 1; _cm.searchQ = ''; _cm.selectedId = null; _cm.editingId = null;
+  _cm.page = 1; _cm.searchQ = ''; _cm.categoryId = ''; _cm.selectedId = null; _cm.editingId = null;
   $('#cm-search').value = '';
+  if ($('#cm-category-filter')) $('#cm-category-filter').value = '';
   _cmShowDetail(false); _cmShowForm(false);
   _cmLoadList();
-  _loadCustomerConfig();
+  _loadCustomerConfig().then(_cmRenderCategoryFilterOptions);
   requestAnimationFrame(() => $('#cm-search').focus());
+}
+
+function _cmRenderCategoryFilterOptions() {
+  const sel = $('#cm-category-filter');
+  if (!sel) return;
+  const current = sel.value;
+  sel.innerHTML = '<option value="">All Categories</option>' +
+    _custCfg.categories.map(c => `<option value="${c.id}">${escHtml(c.name)}</option>`).join('');
+  sel.value = current;
 }
 
 function _cmClose() {
@@ -19752,7 +19762,7 @@ function _cmClose() {
 async function _cmLoadList() {
   const list = $('#cm-list');
   list.innerHTML = '<div class="cm-list-empty"><i class="fa fa-spinner fa-spin"></i></div>';
-  const res = await API.customers(_cm.searchQ, _cm.page);
+  const res = await API.customers(_cm.searchQ, _cm.page, _cm.categoryId);
   if (res.status !== 200) { list.innerHTML = '<div class="cm-list-empty"><i class="fa fa-triangle-exclamation"></i> Failed to load</div>'; return; }
   _cm.list      = res.body?.data ?? [];
   _cm.lastPage  = res.body?.meta?.last_page ?? 1;
@@ -20080,6 +20090,12 @@ $('#cm-search')?.addEventListener('input', e => {
 $('#cm-search')?.addEventListener('keydown', e => {
   if (e.key === 'Escape') { e.preventDefault(); if (_cm.searchQ) { _cm.searchQ = ''; e.target.value = ''; _cm.page = 1; _cmLoadList(); } else _cmClose(); }
   if (e.key === 'Enter' && _cm.list.length) { _cmSelectCustomer(_cm.list[0].id); }
+});
+
+$('#cm-category-filter')?.addEventListener('change', e => {
+  _cm.categoryId = e.target.value;
+  _cm.page = 1;
+  _cmLoadList();
 });
 
 ['#cm-f-name','#cm-f-phone','#cm-f-email','#cm-f-address','#cm-f-notes'].forEach(sel => {

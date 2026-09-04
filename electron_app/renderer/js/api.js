@@ -259,7 +259,7 @@ const API = (() => {
     linkProposalToInvoice: (group, invoiceId) => request('POST', `/design-studio/proposals/${encodeURIComponent(group)}/link-invoice`, { invoice_id: invoiceId }),
 
     // Customers
-    customers:      (q, page) => request('GET',  `/customers?q=${encodeURIComponent(q || '')}&page=${page || 1}`),
+    customers:      (q, page, categoryId) => request('GET',  `/customers?q=${encodeURIComponent(q || '')}&page=${page || 1}${categoryId ? `&category_id=${encodeURIComponent(categoryId)}` : ''}`),
     customer:       (id)   => request('GET',  `/customers/${id}`),
     createCustomer: (body) => request('POST', '/customers', body),
     importCustomers:(rows) => request('POST', '/customers/import', { rows }),
