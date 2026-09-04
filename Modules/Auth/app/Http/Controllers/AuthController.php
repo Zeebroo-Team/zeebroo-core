@@ -46,6 +46,17 @@ class AuthController extends Controller
         $request->session()->regenerate();
 
         $user = $request->user();
+
+        if ($user !== null && ! $user->is_active) {
+            $this->authService->logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+
+            return redirect()->route('login')
+                ->withErrors(['email' => __('Your account has been disabled. Contact an administrator.')])
+                ->onlyInput('email');
+        }
+
         if ($user !== null) {
             UserActivityLog::record($user, UserActivityLog::PLATFORM_WEB, UserActivityLog::EVENT_LOGIN, $request);
         }

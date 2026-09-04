@@ -17,6 +17,7 @@ use Modules\Business\Models\Business;
 use Modules\Business\Models\BusinessMember;
 use Modules\CRM\Models\Project as CrmProject;
 use Modules\FileManager\Models\FileManagerFile;
+use Modules\Package\Models\Package;
 use Modules\Pos\Models\Customer;
 use Modules\Pos\Models\Sale;
 use Modules\Purchase\Models\Purchase;
@@ -33,6 +34,8 @@ class AdminUserController extends Controller
         return view('auth::admin.users.index', [
             'users' => $this->users->paginate(),
             'roles' => Role::orderBy('name')->pluck('name'),
+            'packages' => Package::where('is_active', true)->orderBy('sort_order')->orderBy('name')->get(),
+            'featureCatalog' => config('features.list', []),
         ]);
     }
 
@@ -66,8 +69,8 @@ class AdminUserController extends Controller
         $platformActivity = UserActivityLog::query()
             ->where('user_id', $user->id)
             ->latest('created_at')
-            ->limit(30)
-            ->get();
+            ->paginate(15, ['*'], 'platform_page')
+            ->withQueryString();
 
         $registeredPlatform = UserActivityLog::query()
             ->where('user_id', $user->id)
@@ -286,5 +289,24 @@ class AdminUserController extends Controller
         $this->users->delete($user);
 
         return redirect()->route('admin.users.index')->with('status', __('User deleted.'));
+    }
+
+    public function toggleStatus(Request $request, User $user): RedirectResponse
+    {
+        if ((int) $user->id === (int) $request->user()->id) {
+            return redirect()->route('admin.users.index')->withErrors([
+                'status' => __('You cannot disable your own account.'),
+            ]);
+        }
+
+        if ($user->is_active && ($reason = $this->users->cannotDeactivateReason($user))) {
+            return redirect()->route('admin.users.index')->withErrors(['status' => $reason]);
+        }
+
+        $updated = $this->users->toggleActive($user);
+
+        return redirect()->route('admin.users.index')->with('status', $updated->is_active
+            ? __('User account enabled.')
+            : __('User account disabled. They have been signed out and can no longer log in.'));
     }
 }

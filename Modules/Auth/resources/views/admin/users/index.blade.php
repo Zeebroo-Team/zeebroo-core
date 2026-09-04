@@ -31,6 +31,17 @@
 .adu-act-btn:hover{border-color:color-mix(in srgb,var(--primary) 45%,var(--border));background:color-mix(in srgb,var(--primary) 7%,transparent);}
 .adu-act-btn--danger:hover{border-color:color-mix(in srgb,#ef4444 45%,var(--border));background:color-mix(in srgb,#ef4444 7%,transparent);color:#b91c1c;}
 .adu-protected{font-size:11px;color:var(--muted);font-style:italic;}
+.adu-status-cell{display:flex;align-items:center;gap:8px;margin:0;}
+.adu-toggle{position:relative;display:inline-block;width:36px;height:20px;flex-shrink:0;}
+.adu-toggle input{position:absolute;opacity:0;width:100%;height:100%;margin:0;cursor:pointer;}
+.adu-toggle-track{position:absolute;inset:0;background:color-mix(in srgb,var(--muted) 40%,transparent);border-radius:999px;transition:.15s ease;pointer-events:none;}
+.adu-toggle-track::before{content:"";position:absolute;width:14px;height:14px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.15s ease;box-shadow:0 1px 2px rgba(0,0,0,.3);}
+.adu-toggle input:checked ~ .adu-toggle-track{background:#16a34a;}
+.adu-toggle input:checked ~ .adu-toggle-track::before{transform:translateX(16px);}
+.adu-toggle input:focus-visible ~ .adu-toggle-track{outline:2px solid var(--primary);outline-offset:2px;}
+.adu-status-text{font-size:12px;font-weight:700;white-space:nowrap;}
+.adu-status-text.is-active{color:#16a34a;}
+.adu-status-text.is-inactive{color:#ef4444;}
 .adu-empty{padding:48px 24px;text-align:center;}
 .adu-empty-icon{width:52px;height:52px;border-radius:14px;margin:0 auto 14px;display:grid;place-items:center;font-size:22px;background:color-mix(in srgb,var(--primary) 10%,transparent);color:var(--primary);}
 .adu-empty-title{margin:0 0 6px;font-size:16px;font-weight:700;}
@@ -43,6 +54,7 @@
 .adu-modal-backdrop{position:absolute;inset:0;background:rgba(2,6,23,.55);backdrop-filter:blur(4px);cursor:pointer;}
 :is(html[data-theme="light"],html[data-theme="light_blue"]) .adu-modal-backdrop{background:rgba(17,24,39,.42);}
 .adu-modal-shell{position:relative;z-index:1;width:100%;max-width:460px;border-radius:18px;border:1px solid var(--border);background:var(--card);box-shadow:0 24px 56px rgba(0,0,0,.28);display:flex;flex-direction:column;max-height:calc(100vh - 40px);}
+.adu-modal-shell>form{display:flex;flex-direction:column;flex:1;min-height:0;}
 .adu-modal-head{padding:20px 22px 16px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;justify-content:space-between;gap:12px;}
 .adu-modal-title{margin:0 0 3px;font-size:18px;font-weight:800;letter-spacing:-.02em;}
 .adu-modal-sub{margin:0;font-size:13px;color:var(--muted);}
@@ -59,6 +71,20 @@
 .adu-field-err{margin:5px 0 0;font-size:12px;font-weight:600;color:#ef4444;}
 .adu-cancel-btn{padding:9px 18px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;}
 .adu-cancel-btn:hover{border-color:var(--primary);}
+.adp-modal-shell{max-width:720px;}
+.adc-modal-shell{max-width:420px;}
+.adc-modal-message{margin:0;font-size:13.5px;line-height:1.5;color:var(--text);}
+.adc-confirm-btn{padding:9px 18px;border-radius:10px;font-size:13px;color:#fff;background:#ef4444;border-color:#ef4444;}
+.adc-confirm-btn:hover{background:#dc2626;border-color:#dc2626;color:#fff;}
+.adp-check-row{display:flex;align-items:center;gap:9px;padding:10px 13px;border-radius:11px;border:1px solid var(--border);background:color-mix(in srgb,var(--card) 94%,transparent);cursor:pointer;}
+.adp-check-row input[type=checkbox]{width:15px;height:15px;accent-color:var(--primary);cursor:pointer;flex-shrink:0;}
+.adp-check-row span{font-size:13.5px;color:var(--text);}
+.adp-feat-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;}
+.adp-feat-check{display:flex;align-items:center;gap:8px;padding:8px 11px;border-radius:10px;border:1px solid var(--border);background:color-mix(in srgb,var(--card) 94%,transparent);cursor:pointer;}
+.adp-feat-check.is-disabled{opacity:.5;cursor:not-allowed;pointer-events:none;}
+.adp-feat-check input[type=checkbox]{width:14px;height:14px;accent-color:var(--primary);cursor:pointer;flex-shrink:0;}
+.adp-feat-check span{font-size:12.5px;color:var(--text);}
+@media(max-width:640px){ .adp-feat-grid{grid-template-columns:1fr;} }
 @media(max-width:640px){
     .adu-wrap{overflow-x:hidden;}
     .adu-header{margin-bottom:18px;}
@@ -105,6 +131,7 @@
                     <th>Role</th>
                     <th>Owns</th>
                     <th>Joined</th>
+                    <th>Status</th>
                     <th></th>
                 </tr>
             </thead>
@@ -113,8 +140,6 @@
                     @php
                         $roleName = $u->roles->first()->name ?? 'user';
                         $isSelf = (int) $u->id === (int) auth()->id();
-                        $deletable = ! $isSelf && (int) $u->businesses_count === 0 && (int) $u->accounts_count === 0
-                            && ! ($roleName === 'admin' && \App\Models\User::role('admin')->count() <= 1);
                     @endphp
                     <tr>
                         <td>
@@ -139,8 +164,39 @@
                             {{ $u->created_at?->diffForHumans() }}
                             <div style="font-size:11px;color:var(--muted);margin-top:2px;">{{ $u->created_at?->format('d M Y · H:i') }}</div>
                         </td>
+                        <td data-label="Status">
+                            @if($isSelf)
+                                <span class="adu-status-text is-active">Active</span>
+                            @else
+                                <form method="POST" action="{{ route('admin.users.toggle-status', $u) }}" class="adu-status-cell adu-toggle-form" data-user-name="{{ $u->name }}">
+                                    @csrf
+                                    @method('PATCH')
+                                    <label class="adu-toggle">
+                                        <input type="checkbox" class="adu-toggle-input" {{ $u->is_active ? 'checked' : '' }}
+                                            aria-label="{{ $u->is_active ? 'Disable' : 'Enable' }} {{ $u->name }}">
+                                        <span class="adu-toggle-track"></span>
+                                    </label>
+                                    <span class="adu-status-text {{ $u->is_active ? 'is-active' : 'is-inactive' }}">{{ $u->is_active ? 'Active' : 'Inactive' }}</span>
+                                </form>
+                            @endif
+                        </td>
                         <td>
                             <div style="display:flex;gap:6px;justify-content:flex-end;">
+                                @if($u->businesses->isNotEmpty())
+                                    @php
+                                        $businessOptions = $u->businesses->map(fn ($b) => [
+                                            'id' => $b->id,
+                                            'name' => $b->name,
+                                            'package_id' => $b->package_id,
+                                            'unlimited' => (bool) $b->has_unlimited_access,
+                                            'features' => $b->effectiveFeatureKeys(),
+                                        ])->values();
+                                    @endphp
+                                    <button type="button" class="adu-act-btn adu-package-btn"
+                                        data-businesses="{{ $businessOptions->toJson() }}">
+                                        <i class="fa fa-box-open"></i> Package
+                                    </button>
+                                @endif
                                 <button type="button" class="adu-act-btn adu-edit-btn"
                                     data-user-id="{{ $u->id }}"
                                     data-user-name="{{ $u->name }}"
@@ -152,21 +208,12 @@
                                 <a href="{{ route('admin.users.show', $u) }}" class="adu-act-btn" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;">
                                     <i class="fa fa-eye"></i> View
                                 </a>
-                                @if($deletable)
-                                    <form method="POST" action="{{ route('admin.users.destroy', $u) }}" style="margin:0;" onsubmit="return confirm('Delete {{ $u->name }}? This cannot be undone.');">
-                                        @csrf
-                                        @method('DELETE')
-                                        <button type="submit" class="adu-act-btn adu-act-btn--danger"><i class="fa fa-trash"></i> Delete</button>
-                                    </form>
-                                @else
-                                    <span class="adu-protected">protected</span>
-                                @endif
                             </div>
                         </td>
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="5">
+                        <td colspan="6">
                             <div class="adu-empty">
                                 <div class="adu-empty-icon"><i class="fa fa-users"></i></div>
                                 <p class="adu-empty-title">No users yet</p>
@@ -234,6 +281,81 @@
                 <button type="submit" class="adu-add-btn" id="aduSubmitBtn"><i class="fa fa-user-plus"></i> <span id="aduSubmitLabel">Add User</span></button>
             </div>
         </form>
+    </div>
+</div>
+
+<div id="adpModal" class="adu-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="adpModalTitle">
+    <div class="adu-modal-backdrop" id="adpModalBackdrop"></div>
+    <div class="adu-modal-shell adp-modal-shell">
+        <div class="adu-modal-head">
+            <div>
+                <h2 class="adu-modal-title" id="adpModalTitle">Assign Package</h2>
+                <p class="adu-modal-sub" id="adpModalSub">Choose a package and fine-tune its features for this business.</p>
+            </div>
+            <button type="button" class="adu-modal-close" id="adpModalClose" aria-label="Close">&times;</button>
+        </div>
+        <form id="adpForm" method="POST" action="">
+            @csrf
+            <input type="hidden" name="_method" value="PUT">
+            <div class="adu-modal-body">
+                <div class="adu-field">
+                    <label for="adpBusinessSelect">Business</label>
+                    <select id="adpBusinessSelect"></select>
+                    <p class="adu-field-hint" id="adpBusinessHint" style="display:none;">This user owns multiple businesses — pick which one to manage.</p>
+                </div>
+                <div class="adu-field">
+                    <label for="adpPackage">Package</label>
+                    <select id="adpPackage" name="package_id">
+                        <option value="">No package (unrestricted — all features)</option>
+                        @foreach($packages as $package)
+                            <option value="{{ $package->id }}" data-features="{{ json_encode($package->features ?? []) }}">{{ $package->name }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                <div class="adu-field">
+                    <label class="adp-check-row" style="text-transform:none;letter-spacing:0;font-weight:normal;">
+                        <input type="checkbox" name="has_unlimited_access" id="adpUnlimited" value="1">
+                        <span><strong>Unlimited access</strong> — grants every feature, ignoring the package below</span>
+                    </label>
+                </div>
+                <div class="adu-field">
+                    <label>Features</label>
+                    <p class="adu-field-hint" style="margin:0 0 8px;">Checked features are available to this business. Untick to disable a feature the package includes; tick an extra one to grant it beyond the package.</p>
+                    <div class="adp-feat-grid" id="adpFeatureGrid">
+                        @foreach($featureCatalog as $key => $label)
+                            <label class="adp-feat-check" data-feature-key="{{ $key }}">
+                                <input type="checkbox" name="features[]" value="{{ $key }}" class="adp-f-feature">
+                                <span>{{ $label }}</span>
+                            </label>
+                        @endforeach
+                    </div>
+                </div>
+            </div>
+            <div class="adu-modal-foot">
+                <button type="button" class="adu-cancel-btn" id="adpModalCancel">Cancel</button>
+                <button type="submit" class="adu-add-btn"><i class="fa fa-box-open"></i> Save Assignment</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="adcModal" class="adu-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="adcModalTitle">
+    <div class="adu-modal-backdrop" id="adcModalBackdrop"></div>
+    <div class="adu-modal-shell adc-modal-shell">
+        <div class="adu-modal-head">
+            <div>
+                <h2 class="adu-modal-title" id="adcModalTitle">Disable account?</h2>
+                <p class="adu-modal-sub">This takes effect immediately.</p>
+            </div>
+            <button type="button" class="adu-modal-close" id="adcModalClose" aria-label="Close">&times;</button>
+        </div>
+        <div class="adu-modal-body">
+            <p id="adcModalMessage" class="adc-modal-message"></p>
+        </div>
+        <div class="adu-modal-foot">
+            <button type="button" class="adu-cancel-btn" id="adcModalCancel">Cancel</button>
+            <button type="button" class="adu-act-btn adu-act-btn--danger adc-confirm-btn" id="adcModalConfirm"><i class="fa fa-ban"></i> Disable account</button>
+        </div>
     </div>
 </div>
 
@@ -319,6 +441,147 @@
             selfRoleHint.style.display = isSelf ? 'block' : 'none';
 
             openModal();
+        });
+    });
+})();
+
+(function () {
+    var modal      = document.getElementById('adpModal');
+    var backdrop   = document.getElementById('adpModalBackdrop');
+    var closeBtn   = document.getElementById('adpModalClose');
+    var cancelBtn  = document.getElementById('adpModalCancel');
+    var form       = document.getElementById('adpForm');
+    var sub        = document.getElementById('adpModalSub');
+    var businessSelectEl = document.getElementById('adpBusinessSelect');
+    var businessHintEl   = document.getElementById('adpBusinessHint');
+    var packageEl  = document.getElementById('adpPackage');
+    var unlimitedEl= document.getElementById('adpUnlimited');
+    var grid       = document.getElementById('adpFeatureGrid');
+    var featureBoxes = document.querySelectorAll('.adp-f-feature');
+    var currentBusinesses = [];
+
+    function openModal() { modal.classList.add('is-open'); document.body.style.overflow = 'hidden'; }
+    function closeModal() { modal.classList.remove('is-open'); document.body.style.overflow = ''; }
+
+    function applyUnlimitedState() {
+        // Unlimited access grants every feature, so reflect that in the grid immediately
+        // instead of waiting for a save+reload. The pre-unlimited selections are stashed
+        // on each checkbox so they come back if unlimited access is turned off again.
+        var on = unlimitedEl.checked;
+        grid.querySelectorAll('.adp-feat-check').forEach(function (row) {
+            row.classList.toggle('is-disabled', on);
+            var cb = row.querySelector('.adp-f-feature');
+            if (on) {
+                cb.dataset.prevChecked = cb.checked ? '1' : '0';
+                cb.checked = true;
+            } else if (cb.dataset.prevChecked !== undefined) {
+                cb.checked = cb.dataset.prevChecked === '1';
+            }
+        });
+    }
+
+    // Populate the Package / Unlimited / Features fields for one business, and point
+    // the form at that specific business's assignment endpoint.
+    function applyBusiness(business) {
+        form.action = '/admin/businesses/' + business.id + '/package';
+        packageEl.value = business.package_id ? String(business.package_id) : '';
+        unlimitedEl.checked = !!business.unlimited;
+        featureBoxes.forEach(function (cb) { cb.checked = business.features.indexOf(cb.value) !== -1; });
+        applyUnlimitedState();
+    }
+
+    unlimitedEl.addEventListener('change', applyUnlimitedState);
+
+    packageEl.addEventListener('change', function () {
+        var opt = packageEl.options[packageEl.selectedIndex];
+        var features = [];
+        try { features = JSON.parse(opt.getAttribute('data-features') || '[]'); } catch (e) {}
+        featureBoxes.forEach(function (cb) { cb.checked = features.indexOf(cb.value) !== -1; });
+    });
+
+    businessSelectEl.addEventListener('change', function () {
+        var business = currentBusinesses.filter(function (b) { return String(b.id) === businessSelectEl.value; })[0];
+        if (business) applyBusiness(business);
+    });
+
+    closeBtn.addEventListener('click', closeModal);
+    cancelBtn.addEventListener('click', closeModal);
+    backdrop.addEventListener('click', closeModal);
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && modal.classList.contains('is-open')) closeModal();
+    });
+
+    document.querySelectorAll('.adu-package-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var businesses = [];
+            try { businesses = JSON.parse(btn.getAttribute('data-businesses') || '[]'); } catch (e) {}
+            if (!businesses.length) return;
+
+            currentBusinesses = businesses;
+            sub.textContent = 'Choose a package and fine-tune its features for this business.';
+            businessHintEl.style.display = businesses.length > 1 ? 'block' : 'none';
+
+            businessSelectEl.innerHTML = '';
+            businesses.forEach(function (b) {
+                var opt = document.createElement('option');
+                opt.value = b.id;
+                opt.textContent = b.name;
+                businessSelectEl.appendChild(opt);
+            });
+            businessSelectEl.value = businesses[0].id;
+            applyBusiness(businesses[0]);
+
+            openModal();
+        });
+    });
+})();
+
+(function () {
+    var modal      = document.getElementById('adcModal');
+    var backdrop   = document.getElementById('adcModalBackdrop');
+    var closeBtn   = document.getElementById('adcModalClose');
+    var cancelBtn  = document.getElementById('adcModalCancel');
+    var confirmBtn = document.getElementById('adcModalConfirm');
+    var messageEl  = document.getElementById('adcModalMessage');
+    var pendingCheckbox = null;
+    var pendingForm     = null;
+
+    function openModal() { modal.classList.add('is-open'); document.body.style.overflow = 'hidden'; }
+    function closeModal() { modal.classList.remove('is-open'); document.body.style.overflow = ''; }
+
+    function cancel() {
+        if (pendingCheckbox) pendingCheckbox.checked = true;
+        pendingCheckbox = null;
+        pendingForm = null;
+        closeModal();
+    }
+
+    closeBtn.addEventListener('click', cancel);
+    cancelBtn.addEventListener('click', cancel);
+    backdrop.addEventListener('click', cancel);
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && modal.classList.contains('is-open')) cancel();
+    });
+
+    confirmBtn.addEventListener('click', function () {
+        var form = pendingForm;
+        pendingCheckbox = null;
+        pendingForm = null;
+        closeModal();
+        if (form) form.submit();
+    });
+
+    document.querySelectorAll('.adu-toggle-form').forEach(function (form) {
+        var checkbox = form.querySelector('.adu-toggle-input');
+        checkbox.addEventListener('change', function () {
+            if (!checkbox.checked) {
+                pendingCheckbox = checkbox;
+                pendingForm = form;
+                messageEl.textContent = 'Disable ' + form.getAttribute('data-user-name') + '? They will be signed out immediately and won\'t be able to log in on the web or the desktop app.';
+                openModal();
+                return;
+            }
+            form.submit();
         });
     });
 })();

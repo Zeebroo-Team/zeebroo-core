@@ -6,6 +6,8 @@ use Modules\Auth\Http\Controllers\AdminUserController;
 use Modules\Auth\Http\Controllers\AuthController;
 use Modules\Auth\Http\Controllers\EmployeeVerifyController;
 use Modules\Auth\Http\Controllers\GoogleAuthController;
+use Modules\Package\Http\Controllers\Admin\BusinessPackageController;
+use Modules\Package\Http\Controllers\Admin\PackageController;
 
 Route::middleware('guest')->group(function (): void {
     Route::get('/login', [AuthController::class, 'showLogin'])->name('login');
@@ -32,6 +34,7 @@ Route::middleware(['auth', 'role:admin'])->prefix('admin')->name('admin.')->grou
     Route::get('/users/{user}', [AdminUserController::class, 'show'])->name('users.show');
     Route::post('/users', [AdminUserController::class, 'store'])->name('users.store');
     Route::put('/users/{user}', [AdminUserController::class, 'update'])->name('users.update');
+    Route::patch('/users/{user}/toggle-status', [AdminUserController::class, 'toggleStatus'])->name('users.toggle-status');
     Route::delete('/users/{user}', [AdminUserController::class, 'destroy'])->name('users.destroy');
 
     // App Releases
@@ -40,4 +43,13 @@ Route::middleware(['auth', 'role:admin'])->prefix('admin')->name('admin.')->grou
     Route::put('/releases/{release}', [AppReleaseController::class, 'update'])->name('releases.update');
     Route::post('/releases/{release}/set-latest', [AppReleaseController::class, 'setLatest'])->name('releases.set-latest');
     Route::delete('/releases/{release}', [AppReleaseController::class, 'destroy'])->name('releases.destroy');
+
+    // Packages
+    Route::get('/packages', [PackageController::class, 'index'])->name('packages.index');
+    Route::post('/packages', [PackageController::class, 'store'])->name('packages.store');
+    Route::put('/packages/{package}', [PackageController::class, 'update'])->name('packages.update');
+    Route::delete('/packages/{package}', [PackageController::class, 'destroy'])->name('packages.destroy');
+
+    // Per-business package assignment & feature overrides
+    Route::put('/businesses/{business}/package', [BusinessPackageController::class, 'update'])->name('businesses.package.update');
 });

@@ -446,6 +446,7 @@
                         </tbody>
                     </table>
                 </div>
+                <div style="margin-top:12px;">{{ $platformActivity->links() }}</div>
             @endif
 
             <p class="ads-conn-lastseen" style="margin-top:14px;">

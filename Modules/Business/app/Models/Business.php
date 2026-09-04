@@ -33,6 +33,8 @@ use Modules\HRManagement\Models\PayrollCustomTemplate;
 use Modules\HRManagement\Models\PayrollCycle;
 use Modules\HRManagement\Models\PayrollRuleSet;
 use Modules\Modification\Models\Modification;
+use Modules\Package\Models\BusinessFeatureOverride;
+use Modules\Package\Models\Package;
 use Modules\Settings\Concerns\HasSettings;
 
 class Business extends Model
@@ -91,6 +93,7 @@ class Business extends Model
             'warehouse_branch_intro_acknowledged_at' => 'datetime',
             'google_location_linked_at' => 'datetime',
             'brand_features' => 'array',
+            'has_unlimited_access' => 'boolean',
         ];
     }
 
@@ -123,13 +126,63 @@ class Business extends Model
     /**
      * Whether a Feature Manager feature (business.features.{key}) is enabled
      * for this business. Unset keys default to enabled, matching the
-     * Feature Manager UI's own fallback.
+     * Feature Manager UI's own fallback — unless an admin has restricted
+     * this business's package/overrides to exclude the feature entirely,
+     * which always wins regardless of the business's own toggle.
      */
     public function hasFeature(string $key): bool
     {
+        if (! in_array($key, $this->effectiveFeatureKeys(), true)) {
+            return false;
+        }
+
         $features = (array) $this->getSetting('business.features', []);
 
         return (bool) ($features[$key] ?? true);
+    }
+
+    public function package(): BelongsTo
+    {
+        return $this->belongsTo(Package::class);
+    }
+
+    public function featureOverrides(): HasMany
+    {
+        return $this->hasMany(BusinessFeatureOverride::class);
+    }
+
+    /**
+     * The feature keys an admin allows this business to use: every key when
+     * unlimited access is granted, the assigned package's feature list with
+     * per-business overrides applied on top, or every key (unrestricted) when
+     * no package has been assigned yet — preserving pre-package behavior.
+     */
+    public function effectiveFeatureKeys(): array
+    {
+        $catalog = array_keys(config('features.list', []));
+
+        if ($this->has_unlimited_access) {
+            return $catalog;
+        }
+
+        $base = $this->relationLoaded('package')
+            ? $this->package
+            : $this->package()->first();
+
+        $allowed = $base?->features ?? $catalog;
+
+        $overrides = ($this->relationLoaded('featureOverrides') ? $this->featureOverrides : $this->featureOverrides()->get())
+            ->pluck('enabled', 'feature_key');
+
+        $result = collect($allowed)->reject(fn ($key) => $overrides->get($key) === false)->values();
+
+        foreach ($overrides as $key => $enabled) {
+            if ($enabled && ! $result->contains($key)) {
+                $result->push($key);
+            }
+        }
+
+        return $result->unique()->values()->all();
     }
 
     /** Logo URL for UI: uploaded file or shared placeholder graphic. */

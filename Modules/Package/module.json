@@ -1,0 +1,11 @@
+{
+    "name": "Package",
+    "alias": "package",
+    "description": "Subscription packages catalog and admin management.",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\Package\\Providers\\PackageServiceProvider"
+    ],
+    "files": []
+}
