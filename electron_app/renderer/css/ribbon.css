@@ -12344,6 +12344,7 @@ body.dark .bc-main-preview-body { background: #1a1a1a; }
 .qt-act-btn.accent:hover { opacity: .88; background: var(--accent); }
 .qt-act-btn.danger { color: #ef4444; border-color: color-mix(in srgb,#ef4444 35%,var(--border)); }
 .qt-act-btn.danger:hover { background: color-mix(in srgb,#ef4444 8%,transparent); }
+.subs-act-btn { padding: 5px 10px; font-size: 11px; gap: 4px; }
 
 /* Form cards */
 .qt-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }

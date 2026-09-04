@@ -47,6 +47,8 @@ class Product extends Model
         'rental_late_fee_multiplier',
         'rental_needs_cleaning',
         'is_subscription',
+        'subscription_recurring_period',
+        'subscription_free_trial',
         'item_wise_tax',
         'item_wise_discount',
     ];
@@ -75,6 +77,7 @@ class Product extends Model
             'rental_late_fee_multiplier' => 'decimal:2',
             'rental_needs_cleaning'      => 'boolean',
             'is_subscription'            => 'boolean',
+            'subscription_free_trial'    => 'boolean',
             'item_wise_tax'              => 'boolean',
             'item_wise_discount'         => 'boolean',
         ];

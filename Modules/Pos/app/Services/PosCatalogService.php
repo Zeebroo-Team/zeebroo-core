@@ -277,6 +277,9 @@ class PosCatalogService
             'track_expiry'       => (bool) $product->track_expiry,
             'courier_delivery'   => (bool) $product->courier_delivery,
             'loyalty_redeemable' => (bool) $product->loyalty_redeemable,
+            'is_subscription'              => (bool) $product->is_subscription,
+            'subscription_recurring_period' => $product->subscription_recurring_period,
+            'subscription_free_trial'      => (bool) $product->subscription_free_trial,
         ];
     }
 

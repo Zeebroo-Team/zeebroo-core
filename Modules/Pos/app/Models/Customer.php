@@ -23,6 +23,11 @@ class Customer extends Model
         return $this->hasMany(Sale::class, 'pos_customer_id');
     }
 
+    public function subscriptions(): HasMany
+    {
+        return $this->hasMany(CustomerSubscription::class, 'pos_customer_id');
+    }
+
     public function category(): BelongsTo
     {
         return $this->belongsTo(CustomerCategory::class, 'customer_category_id');

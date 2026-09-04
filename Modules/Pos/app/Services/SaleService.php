@@ -27,6 +27,7 @@ class SaleService
         private readonly PosSettingsService $posSettings,
         private readonly ServiceRequestService $serviceRequests,
         private readonly PosNotificationService $notifications,
+        private readonly CustomerSubscriptionService $subscriptions,
     ) {
     }
 
@@ -294,6 +295,10 @@ class SaleService
                         ?? $productDiscounts->firstWhere('product_selling_unit_id', null))
                     : $productDiscounts->firstWhere('product_selling_unit_id', null);
 
+                $subscriptionSaleItemId = null;
+                $subscriptionQty        = 0.0;
+                $subscriptionUnitPrice  = null;
+
                 foreach ($allocations as $allocation) {
                     $rawPrice = (float) $allocation['unit_sell_price'];
 
@@ -326,7 +331,7 @@ class SaleService
                         ? max(0, $sale->sold_at->copy()->startOfDay()->diffInDays(\Carbon\Carbon::parse($warrantyExpiresAt)->startOfDay()))
                         : null;
 
-                    SaleItem::query()->create([
+                    $saleItem = SaleItem::query()->create([
                         'pos_sale_id' => $sale->id,
                         'product_id' => $product->id,
                         'product_stock_layer_id' => $allocation['product_stock_layer_id'],
@@ -344,6 +349,24 @@ class SaleService
                         'warranty_days'       => $warrantyDays,
                         'warranty_expires_at' => $warrantyExpiresAt,
                     ]);
+
+                    if ($product->is_subscription) {
+                        $subscriptionSaleItemId ??= $saleItem->id;
+                        $subscriptionQty       += (float) $allocation['quantity'];
+                        $subscriptionUnitPrice  = $finalSellPrice;
+                    }
+                }
+
+                if ($product->is_subscription && $subscriptionQty > 0) {
+                    $this->subscriptions->createForSaleLine(
+                        $business,
+                        $product,
+                        $sale->id,
+                        $subscriptionSaleItemId,
+                        $customerId,
+                        (float) $subscriptionUnitPrice,
+                        $subscriptionQty,
+                    );
                 }
             }
 

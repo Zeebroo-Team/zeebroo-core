@@ -52,6 +52,7 @@ use Modules\Pos\Http\Controllers\Api\PosCounterApiController;
 use Modules\Pos\Http\Controllers\Api\PosRegisterLockApiController;
 use Modules\Pos\Http\Controllers\Api\PosCashierApiController;
 use Modules\Pos\Http\Controllers\Api\PosNotificationApiController;
+use Modules\Pos\Http\Controllers\Api\PosSubscriptionApiController;
 
 Route::prefix('v1/pos')->group(function (): void {
     Route::post('auth/token',             [PosAuthApiController::class, 'token'])->name('auth.token');
@@ -136,6 +137,14 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
     Route::post  ('sales-orders/{salesOrder}/cancel',        [PosSalesOrderApiController::class, 'cancel']  )->name('sales-orders.cancel');
     Route::delete('sales-orders/{salesOrder}',               [PosSalesOrderApiController::class, 'destroy'] )->name('sales-orders.destroy');
 
+    // Customer Subscriptions
+    Route::get   ('subscriptions',                            [PosSubscriptionApiController::class, 'index'] )->name('subscriptions.index');
+    Route::get   ('subscriptions/{subscription}',              [PosSubscriptionApiController::class, 'show']  )->name('subscriptions.show');
+    Route::post  ('subscriptions/{subscription}/cancel',       [PosSubscriptionApiController::class, 'cancel'])->name('subscriptions.cancel');
+    Route::post  ('subscriptions/{subscription}/pause',        [PosSubscriptionApiController::class, 'pause'] )->name('subscriptions.pause');
+    Route::post  ('subscriptions/{subscription}/resume',       [PosSubscriptionApiController::class, 'resume'])->name('subscriptions.resume');
+    Route::post  ('subscriptions/{subscription}/renew',        [PosSubscriptionApiController::class, 'renew'] )->name('subscriptions.renew');
+
     Route::get ('eod',            [PosEndOfDayApiController::class,    'status'])->name('eod.status');
     Route::post('eod/settle',     [PosEndOfDayApiController::class,    'settle'])->name('eod.settle');
 
@@ -203,6 +212,7 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
     Route::get('customers/{customer}', [PosCustomerApiController::class, 'show'])->name('customers.show');
     Route::patch('customers/{customer}', [PosCustomerApiController::class, 'update'])->name('customers.update');
     Route::delete('customers/{customer}', [PosCustomerApiController::class, 'destroy'])->name('customers.destroy');
+    Route::get('customers/{customer}/subscriptions', [PosSubscriptionApiController::class, 'forCustomer'])->name('customers.subscriptions.index');
 
     Route::get('customer-categories', [PosCustomerCategoryApiController::class, 'index'])->name('customer-categories.index');
     Route::post('customer-categories', [PosCustomerCategoryApiController::class, 'store'])->name('customer-categories.store');

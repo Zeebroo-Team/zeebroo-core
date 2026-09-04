@@ -709,12 +709,14 @@ function _salSwitchView(view) {
   const showQuotes   = view === 'quotes';
   const showInvoices = view === 'invoices';
   const showOrders   = view === 'orders';
+  const showSubs     = view === 'subscriptions';
   $('#sal-list-view').style.display      = showTxn      ? '' : 'none';
   $('#sal-history-view').style.display   = showHist     ? '' : 'none';
   $('#sal-credits-view').style.display   = showCredits  ? 'flex' : 'none';
   $('#sal-quotes-view').style.display    = showQuotes   ? 'flex' : 'none';
   $('#sal-invoices-view').style.display  = showInvoices ? 'flex' : 'none';
   $('#sal-orders-view').style.display    = showOrders   ? 'flex' : 'none';
+  $('#sal-subscriptions-view').style.display = showSubs ? 'flex' : 'none';
   $('#sal-detail-view').style.display    = 'none';
   if (showTxn      && !_sal.all.length) loadSalesList();
   if (showHist)     loadSalesHistory();
@@ -722,7 +724,103 @@ function _salSwitchView(view) {
   if (showQuotes)   loadQuotesList();
   if (showInvoices) loadInvoicesList();
   if (showOrders)   loadSalesOrderList();
+  if (showSubs)     loadSubscriptionsList();
 }
+
+// ── Subscriptions (Sales panel tab) ─────────────────────────────────────────
+const _subs = { list: [], search: '', status: 'all', searchTimer: null };
+
+async function loadSubscriptionsList() {
+  $('#subs-loading').style.display = '';
+  $('#subs-body').innerHTML = '';
+  $('#subs-count').textContent = '—';
+
+  const res = await API.subscriptions(_subs.search, _subs.status);
+  $('#subs-loading').style.display = 'none';
+
+  if (res.status !== 200) {
+    $('#subs-body').innerHTML = '<div class="qt-empty"><i class="fa fa-circle-exclamation"></i> Failed to load subscriptions.</div>';
+    return;
+  }
+
+  _subs.list = res.body?.data || [];
+  $('#subs-count').textContent = `${_subs.list.length} subscription${_subs.list.length !== 1 ? 's' : ''}`;
+  _subsRenderList();
+}
+
+function _subsRenderList() {
+  const cur = state.currency ? ' ' + state.currency : '';
+  if (!_subs.list.length) {
+    $('#subs-body').innerHTML = `<div class="qt-empty">
+      <i class="fa fa-repeat"></i>
+      <h4>No Subscriptions</h4>
+      <p>Subscriptions are created automatically when a subscription product is sold.</p>
+    </div>`;
+    return;
+  }
+
+  const statusColors = { trial: '#8b5cf6', active: '#22c55e', paused: '#f59e0b', cancelled: '#ef4444' };
+  const periodLabels = { weekly: 'Weekly', monthly: 'Monthly', quarterly: 'Quarterly', yearly: 'Yearly' };
+  const fmtDate = d => d ? new Date(d + 'T00:00:00').toLocaleDateString(undefined, { month:'short', day:'numeric', year:'numeric' }) : '—';
+
+  let html = `<div class="qt-tbl-wrap"><table class="qt-tbl">
+    <thead><tr>
+      <th>Customer</th><th>Product</th><th>Period</th><th style="text-align:right">Price</th><th>Status</th>
+      <th>Next Billing</th><th style="width:1%;white-space:nowrap">Actions</th>
+    </tr></thead><tbody>`;
+
+  _subs.list.forEach(s => {
+    const color = statusColors[s.status] || '#8b5cf6';
+    let actions = '';
+    if (s.status !== 'cancelled') {
+      actions += `<button class="qt-act-btn subs-act-btn" data-subs-act="renew" data-subs-id="${s.id}"><i class="fa fa-rotate"></i> Renew</button>`;
+      actions += s.status === 'paused'
+        ? `<button class="qt-act-btn subs-act-btn" data-subs-act="resume" data-subs-id="${s.id}"><i class="fa fa-play"></i> Resume</button>`
+        : `<button class="qt-act-btn subs-act-btn" data-subs-act="pause" data-subs-id="${s.id}"><i class="fa fa-pause"></i> Pause</button>`;
+      actions += `<button class="qt-act-btn subs-act-btn" style="border-color:#ef4444;color:#ef4444" data-subs-act="cancel" data-subs-id="${s.id}"><i class="fa fa-ban"></i> Cancel</button>`;
+    }
+    html += `<tr>
+      <td class="qt-tbl-customer">${escHtml(s.customer_name || '—')}</td>
+      <td>${escHtml(s.product_name || '—')}</td>
+      <td class="qt-tbl-muted">${periodLabels[s.recurring_period] || escHtml(s.recurring_period)}</td>
+      <td class="qt-tbl-amt">${parseFloat(s.price || 0).toFixed(2)}${cur}</td>
+      <td><span class="so-badge" style="background:${color}20;color:${color};border-color:${color}40">${escHtml(s.status_label)}</span></td>
+      <td class="qt-tbl-muted">${fmtDate(s.next_billing_at)}</td>
+      <td style="display:flex;gap:4px;flex-wrap:nowrap;white-space:nowrap">${actions}</td>
+    </tr>`;
+  });
+
+  html += '</tbody></table></div>';
+  $('#subs-body').innerHTML = html;
+
+  $$('#subs-body [data-subs-act]').forEach(b => {
+    b.addEventListener('click', async () => {
+      const id = Number(b.dataset.subsId);
+      const act = b.dataset.subsAct;
+      const fns = { renew: API.renewSubscription, pause: API.pauseSubscription, resume: API.resumeSubscription, cancel: API.cancelSubscription };
+      if (act === 'cancel' && !confirm('Cancel this subscription? This cannot be undone.')) return;
+      b.disabled = true;
+      const res = await fns[act](id);
+      if (res.status === 200) {
+        toast(res.body?.message || 'Updated', 'success');
+        loadSubscriptionsList();
+      } else {
+        toast(res.body?.message || 'Action failed', 'error');
+        b.disabled = false;
+      }
+    });
+  });
+}
+
+$('#subs-search')?.addEventListener('input', () => {
+  clearTimeout(_subs.searchTimer);
+  _subs.searchTimer = setTimeout(() => { _subs.search = $('#subs-search').value; loadSubscriptionsList(); }, 300);
+});
+$('#subs-status-filter')?.addEventListener('change', () => {
+  _subs.status = $('#subs-status-filter').value;
+  loadSubscriptionsList();
+});
+$('#subs-refresh')?.addEventListener('click', loadSubscriptionsList);
 
 async function loadSalesList() {
   _salCloseDetail();
@@ -4942,7 +5040,7 @@ function applyFeatureVisibility() {
     if (salGrps[4]) salGrps[4].style.display = (mp('sal_btn_qt_new')||mp('sal_btn_qt_refresh')) ? '' : 'none';
     if (salGrps[5]) salGrps[5].style.display = mp('sal_tab_orders') ? '' : 'none'; }
   // ── Sales panel: sub-nav tab gating with fallback ──
-  { const _salTabPerms = { transactions: mp('sal_tab_transactions'), history: mp('sal_tab_history'), credits: mp('sal_tab_transactions'), quotes: mp('sal_tab_quotes'), invoices: mp('sal_tab_invoices'), orders: mp('sal_tab_orders') };
+  { const _salTabPerms = { transactions: mp('sal_tab_transactions'), history: mp('sal_tab_history'), credits: mp('sal_tab_transactions'), quotes: mp('sal_tab_quotes'), invoices: mp('sal_tab_invoices'), orders: mp('sal_tab_orders'), subscriptions: mp('sal_tab_subscriptions') };
     $$('.sal-view-btn').forEach(b => { b.style.display = _salTabPerms[b.dataset.salView] ? '' : 'none'; });
     const _salActive = $('.sal-view-btn.active');
     if (_salActive && !_salTabPerms[_salActive.dataset.salView]) {
@@ -16329,6 +16427,8 @@ async function _prodOpenModal(editId) {
   $('#prod-f-rental-late-fee-multiplier').value = '';
   $('#prod-f-rental-needs-cleaning').checked    = false;
   $('#prod-f-subscription').checked       = false;
+  $('#prod-f-subscription-period').value      = 'monthly';
+  $('#prod-f-subscription-free-trial').checked = false;
   $('#prod-f-item-tax').checked           = false;
   $('#prod-f-item-discount').checked      = false;
 
@@ -16400,6 +16500,8 @@ async function _prodOpenModal(editId) {
     $('#prod-f-rental-late-fee-multiplier').value = p.rental_late_fee_multiplier != null ? p.rental_late_fee_multiplier : '';
     $('#prod-f-rental-needs-cleaning').checked    = !!p.rental_needs_cleaning;
     $('#prod-f-subscription').checked       = !!p.is_subscription;
+    $('#prod-f-subscription-period').value      = p.subscription_recurring_period || 'monthly';
+    $('#prod-f-subscription-free-trial').checked = !!p.subscription_free_trial;
     $('#prod-f-item-tax').checked           = !!p.item_wise_tax;
     $('#prod-f-item-discount').checked      = !!p.item_wise_discount;
 
@@ -16648,6 +16750,8 @@ async function _prodSave(andNew = false) {
     rental_late_fee_multiplier: $('#prod-f-rental').checked ? (parseFloat($('#prod-f-rental-late-fee-multiplier').value) || null) : null,
     rental_needs_cleaning:      $('#prod-f-rental').checked ? $('#prod-f-rental-needs-cleaning').checked : false,
     is_subscription:       $('#prod-f-subscription').checked,
+    subscription_recurring_period: $('#prod-f-subscription').checked ? $('#prod-f-subscription-period').value : null,
+    subscription_free_trial:       $('#prod-f-subscription').checked ? $('#prod-f-subscription-free-trial').checked : false,
     item_wise_tax:         $('#prod-f-item-tax').checked,
     item_wise_discount:    $('#prod-f-item-discount').checked,
   };
@@ -17030,6 +17134,12 @@ $('#prod-f-rental')?.addEventListener('change', function () {
     $('#prod-f-rental-max-days').value = '';
     $('#prod-f-rental-late-fee-multiplier').value = '';
     $('#prod-f-rental-needs-cleaning').checked = false;
+  }
+});
+$('#prod-f-subscription')?.addEventListener('change', function () {
+  if (!this.checked) {
+    $('#prod-f-subscription-period').value = 'monthly';
+    $('#prod-f-subscription-free-trial').checked = false;
   }
 });
 $('#prod-f-warranty-duration')?.addEventListener('input', _prodSyncWarrantyChips);
@@ -25635,6 +25745,13 @@ $('#checkout-confirm').addEventListener('click', async () => {
   // Block checkout if warranty products are in the cart but no customer is assigned
   if (cart.some(i => i.warrantyType) && !tab?._customer) {
     showAlert(alertEl, 'Warranty products require a customer. Please assign a customer or add a customer to this bill before completing the sale.');
+    setTimeout(() => $('#co-cust-input')?.focus(), 60);
+    return;
+  }
+
+  // Block checkout if subscription products are in the cart but no customer is assigned
+  if (cart.some(i => state.products.find(p => p.id === i.id)?.is_subscription) && !tab?._customer) {
+    showAlert(alertEl, 'Subscription products require a customer. Please assign a customer or add a customer to this bill before completing the sale.');
     setTimeout(() => $('#co-cust-input')?.focus(), 60);
     return;
   }
@@ -37071,6 +37188,7 @@ async function submitDsCreate() {
       { key: 'sal_tab_quotes',       label: 'Tab: Quotations',     desc: 'Sales panel: Quotations sub-nav tab' },
       { key: 'sal_tab_invoices',     label: 'Tab: Invoices',       desc: 'Sales panel: Invoices sub-nav tab' },
       { key: 'sal_tab_orders',       label: 'Tab: Sales Orders',   desc: 'Sales panel: Sales Orders sub-nav tab' },
+      { key: 'sal_tab_subscriptions',label: 'Tab: Subscriptions',  desc: 'Sales panel: Subscriptions sub-nav tab' },
     ]},
     { key: 'inv_ribbon', label: 'Inventory · Ribbon', icon: 'fa-boxes-stacked', color: '#8b5cf6', items: [
       { key: 'inv_btn_products',    label: 'Products',         desc: 'Ribbon Catalog: Products list button' },

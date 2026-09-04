@@ -13,6 +13,7 @@ use Modules\Pos\Models\Sale;
 use Modules\Pos\Services\PosOnlineApiService;
 use Modules\Pos\Services\PosSettingsService;
 use Modules\Pos\Services\SaleService;
+use Modules\Product\Models\Product;
 
 class PosCheckoutApiController extends Controller
 {
@@ -71,6 +72,16 @@ class PosCheckoutApiController extends Controller
                 'message' => 'A customer must be assigned for credit payment.',
                 'errors'  => ['pos_customer_id' => ['A customer is required for credit payment.']],
             ], 422);
+        }
+
+        if (empty($validated['pos_customer_id'])) {
+            $productIds = collect($validated['items'])->pluck('product_id')->filter()->unique();
+            if ($productIds->isNotEmpty() && Product::query()->whereIn('id', $productIds)->where('is_subscription', true)->exists()) {
+                return response()->json([
+                    'message' => 'A customer must be assigned for subscription products.',
+                    'errors'  => ['pos_customer_id' => ['A customer is required to sell a subscription product.']],
+                ], 422);
+            }
         }
 
         $channel = $validated['channel'] ?? Sale::CHANNEL_ONLINE;
