@@ -49,6 +49,32 @@ class PosProductApiController extends Controller
         return array_values($out);
     }
 
+    /**
+     * Normalize a client-submitted tags payload: trim, drop blanks, dedupe (case-insensitive).
+     *
+     * @param  array<int, mixed>  $submitted
+     * @return list<string>
+     */
+    private function normalizeTags(array $submitted): array
+    {
+        $seen = [];
+        $out  = [];
+        foreach ($submitted as $tag) {
+            $tag = trim((string) $tag);
+            if ($tag === '') {
+                continue;
+            }
+            $key = mb_strtolower($tag);
+            if (isset($seen[$key])) {
+                continue;
+            }
+            $seen[$key] = true;
+            $out[] = $tag;
+        }
+
+        return $out;
+    }
+
     public function store(Request $request): JsonResponse
     {
         $business = $this->businessOrAbort($request);
@@ -69,6 +95,7 @@ class PosProductApiController extends Controller
             if ($product) {
                 $fill = [];
                 if ($request->filled('description'))         $fill['description']          = $request->input('description');
+                if ($request->has('tags'))                   $fill['tags']                 = $this->normalizeTags((array) $request->input('tags', []));
                 if ($request->filled('model_no'))            $fill['model_no']             = $request->input('model_no');
                 if ($request->filled('size'))                $fill['size']                 = $request->input('size');
                 if ($request->filled('mfg_date'))            $fill['mfg_date']             = $request->input('mfg_date');
@@ -154,6 +181,8 @@ class PosProductApiController extends Controller
             'mfg_date'                  => 'nullable|date',
             'exp_date'                  => 'nullable|date',
             'description'               => 'nullable|string|max:5000',
+            'tags'                      => 'nullable|array',
+            'tags.*'                    => 'string|max:60',
             'unit_price'                => 'nullable|numeric|min:0',
             'cost_price'                => 'nullable|numeric|min:0',
             'wholesale_price'           => 'nullable|numeric|min:0',
@@ -189,6 +218,7 @@ class PosProductApiController extends Controller
             'bundle_items.*.quantity'   => 'required_with:bundle_items|numeric|min:0.001',
         ]);
 
+        if ($request->has('tags'))                   $data['tags']                 = $this->normalizeTags((array) $request->input('tags', []));
         if ($request->has('is_active'))              $data['is_active']            = $request->boolean('is_active');
         if ($request->has('is_bundle'))              $data['is_bundle']            = $request->boolean('is_bundle');
         if ($request->has('has_warranty'))           $data['has_warranty']         = $request->boolean('has_warranty');
