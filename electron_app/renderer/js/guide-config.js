@@ -270,14 +270,14 @@ window.GUIDE_CONFIG = {
                           "how to view suppliers",
                           "i want to see suppliers",
                           "how do i view suppliers"],
-      "reply": "Taking you to the Suppliers view in Inventory!",
+      "reply": "Taking you to the Suppliers view!",
       "steps": [
         { "type": "walk_click",   "selector": "[data-tab='home']",                       "wait": 400 },
         { "type": "walk_click",   "selector": "#rb-home-suppliers",                      "wait": 600 },
-        { "type": "walk_to",      "selector": ".inv-subnav-btn[data-inv-view='suppliers']" },
-        { "type": "highlight",    "selector": ".inv-subnav-btn[data-inv-view='suppliers']" },
+        { "type": "walk_to",      "selector": "#suppliers-modal" },
+        { "type": "highlight",    "selector": "#suppliers-modal" },
         { "type": "bubble",       "text": "You're in the Suppliers view. Add, edit, and manage all your suppliers and their contact details here.", "wait": 3500 },
-        { "type": "unhighlight",  "selector": ".inv-subnav-btn[data-inv-view='suppliers']" }
+        { "type": "unhighlight",  "selector": "#suppliers-modal" }
       ]
     },
 
@@ -851,11 +851,11 @@ window.GUIDE_CONFIG = {
       "steps": [
         { "type": "walk_click",   "selector": "[data-tab='inventory']",                      "wait": 500 },
         { "type": "walk_click",   "selector": "#rb-inv-units",                               "wait": 600 },
-        { "type": "wait_visible", "selector": "#inv-units-view" },
-        { "type": "walk_to",      "selector": "#unit-add-btn" },
-        { "type": "highlight",    "selector": "#unit-add-btn" },
+        { "type": "wait_visible", "selector": "#units-modal" },
+        { "type": "walk_to",      "selector": "#um-new-btn" },
+        { "type": "highlight",    "selector": "#um-new-btn" },
         { "type": "bubble",       "text": "Units of measure (kg, pcs, litre, etc.) are managed here. Click New Unit to add a custom unit for your products.", "wait": 4000 },
-        { "type": "unhighlight",  "selector": "#unit-add-btn" }
+        { "type": "unhighlight",  "selector": "#um-new-btn" }
       ]
     },
 
@@ -1009,10 +1009,10 @@ window.GUIDE_CONFIG = {
       "steps": [
         { "type": "walk_click",   "selector": "[data-tab='inventory']",                      "wait": 500 },
         { "type": "walk_click",   "selector": "#rb-inv-suppliers",                           "wait": 600 },
-        { "type": "wait_visible", "selector": "#inv-suppliers-view" },
-        { "type": "walk_click",   "selector": "#sup-add-btn",                                "wait": 400 },
-        { "type": "wait_visible", "selector": "#sup-modal" },
-        { "type": "walk_to",      "selector": "#sup-modal" },
+        { "type": "wait_visible", "selector": "#suppliers-modal" },
+        { "type": "walk_click",   "selector": "#sm-new-btn",                                 "wait": 400 },
+        { "type": "wait_visible", "selector": "#sm-form-view" },
+        { "type": "walk_to",      "selector": "#sm-form-view" },
         { "type": "bubble",       "text": "Fill in the supplier's name, contact details, and payment terms, then click Save to add them to your supplier list.", "wait": 4500 }
       ]
     },
@@ -1029,11 +1029,11 @@ window.GUIDE_CONFIG = {
       "steps": [
         { "type": "walk_click",   "selector": "[data-tab='inventory']",                      "wait": 500 },
         { "type": "walk_click",   "selector": "#rb-inv-suppliers",                           "wait": 600 },
-        { "type": "wait_visible", "selector": "#inv-suppliers-view" },
-        { "type": "walk_to",      "selector": "#sup-add-btn" },
-        { "type": "highlight",    "selector": "#sup-add-btn" },
+        { "type": "wait_visible", "selector": "#suppliers-modal" },
+        { "type": "walk_to",      "selector": "#sm-new-btn" },
+        { "type": "highlight",    "selector": "#sm-new-btn" },
         { "type": "bubble",       "text": "This is the Suppliers view. Click a supplier to see their details, purchase history, and outstanding payments. Click New Supplier to add one.", "wait": 4500 },
-        { "type": "unhighlight",  "selector": "#sup-add-btn" }
+        { "type": "unhighlight",  "selector": "#sm-new-btn" }
       ]
     },
 

@@ -5496,7 +5496,7 @@ body.dark .product-card .p-icon { background: rgba(255,255,255,.07); }
 .cm-detail-empty i { font-size: 48px; opacity: .18; }
 
 /* Detail view */
-#cm-detail-view { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+#cm-detail-view, #sm-detail-view, #um-detail-view { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 .cm-dv-header {
   display: flex; align-items: center; gap: 14px;
   padding: 18px 20px 12px; border-bottom: 1px solid var(--border-light); flex-shrink: 0;
@@ -5641,7 +5641,7 @@ body.dark .product-card .p-icon { background: rgba(255,255,255,.07); }
 .cm-btn-delete:hover { background: #fef2f2; }
 
 /* Form view */
-#cm-form-view { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+#cm-form-view, #sm-form-view, #um-form-view { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 .cm-form-title {
   font-size: 14px; font-weight: 800; padding: 16px 20px 10px;
   border-bottom: 1px solid var(--border-light); flex-shrink: 0;
@@ -6759,25 +6759,6 @@ body.dark .han-icon-amber  { color: #fbbf24; }
   background: var(--bg);
 }
 
-/* Suppliers view */
-#inv-suppliers-view {
-  display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden;
-}
-.sup-toolbar {
-  display: flex; align-items: center; gap: 10px;
-  padding: 10px 16px; background: var(--surface);
-  border-bottom: 1px solid var(--border); flex-shrink: 0;
-}
-.sup-add-btn {
-  display: flex; align-items: center; gap: 6px;
-  padding: 6px 14px; font-size: 12px; font-weight: 700;
-  border: 1px solid var(--accent); border-radius: var(--radius-sm);
-  background: var(--accent); color: #fff; cursor: pointer;
-  transition: opacity .12s; white-space: nowrap;
-}
-.sup-add-btn:hover { opacity: .88; }
-.sup-table-wrap { flex: 1; overflow: auto; background: var(--bg); padding: 4px 12px 8px; }
-.sup-table td, .sup-table th { white-space: nowrap; }
 .sup-status-badge {
   display: inline-flex; align-items: center; gap: 4px;
   font-size: 10px; font-weight: 700; padding: 2px 8px;
@@ -6785,37 +6766,10 @@ body.dark .han-icon-amber  { color: #fbbf24; }
 }
 .sup-status-badge.active   { background: rgba(16,185,129,.12); color: #059669; border: 1px solid rgba(16,185,129,.22); }
 .sup-status-badge.inactive { background: rgba(239,68,68,.1);   color: #dc2626; border: 1px solid rgba(239,68,68,.18); }
-.sup-action-btn {
-  width: 28px; height: 28px; border: 1px solid var(--border); border-radius: 6px;
-  background: var(--surface2); cursor: pointer; font-size: 12px; color: var(--text-muted);
-  display: inline-flex; align-items: center; justify-content: center;
-  transition: background .1s, color .1s, border-color .1s; vertical-align: middle;
-}
-.sup-action-btn:hover { background: var(--accent-light); color: var(--accent); border-color: var(--accent); }
-.sup-action-btn.del:hover { background: #fef2f2; color: #ef4444; border-color: #ef4444; }
-.sup-orders-count { font-size: 11px; color: var(--text-muted); }
 
-/* Supplier modal */
-.sup-modal-shell {
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: 14px; box-shadow: 0 16px 48px rgba(0,0,0,.26);
-  width: min(560px, 96vw); display: flex; flex-direction: column; overflow: hidden;
-  animation: qapIn .18s cubic-bezier(.34,1.56,.64,1);
-}
-.sup-modal-header {
-  display: flex; align-items: center; gap: 10px;
-  padding: 14px 18px; border-bottom: 1px solid var(--border-light);
-  font-size: 14px; font-weight: 800; flex-shrink: 0;
-}
-.sup-modal-header span { flex: 1; }
-.sup-modal-body { padding: 16px 18px; overflow-y: auto; }
 .sup-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px; }
 .sup-field { display: flex; flex-direction: column; }
 .sup-field--full { grid-column: 1 / -1; }
-.sup-modal-footer {
-  display: flex; justify-content: flex-end; gap: 8px;
-  padding: 12px 18px; border-top: 1px solid var(--border-light); flex-shrink: 0;
-}
 
 /* ── Return / Refund Modal ── */
 .rfnd-shell {
@@ -7061,28 +7015,28 @@ body.dark .han-icon-amber  { color: #fbbf24; }
 .po-row.po-row-active { box-shadow: 0 2px 8px rgba(0,0,0,.08); }
 .po-row.po-row-active td { background: color-mix(in srgb, var(--accent) 8%, var(--surface)); border-color: var(--accent); }
 
-/* ── Card rows: cheques, categories, units, discounts, brands (plain <tr>) ── */
-#chq-tbody tr, #cat-tbody tr, #unit-tbody tr, #disc-tbody tr, #brand-tbody tr {
+/* ── Card rows: cheques, categories, discounts, brands (plain <tr>) ── */
+#chq-tbody tr, #cat-tbody tr, #disc-tbody tr, #brand-tbody tr {
   box-shadow: 0 1px 3px rgba(0,0,0,.07); transition: box-shadow .15s; cursor: pointer;
 }
-#chq-tbody tr td, #cat-tbody tr td, #unit-tbody tr td, #disc-tbody tr td, #brand-tbody tr td {
+#chq-tbody tr td, #cat-tbody tr td, #disc-tbody tr td, #brand-tbody tr td {
   background: var(--surface);
   border-top: 1px solid var(--border-light); border-bottom: 1px solid var(--border-light);
   transition: background .12s, border-color .12s;
 }
 #chq-tbody tr td:first-child, #cat-tbody tr td:first-child,
-#unit-tbody tr td:first-child, #disc-tbody tr td:first-child,
+#disc-tbody tr td:first-child,
 #brand-tbody tr td:first-child {
   border-left: 1px solid var(--border-light); border-radius: var(--radius) 0 0 var(--radius);
 }
 #chq-tbody tr td:last-child, #cat-tbody tr td:last-child,
-#unit-tbody tr td:last-child, #disc-tbody tr td:last-child,
+#disc-tbody tr td:last-child,
 #brand-tbody tr td:last-child {
   border-right: 1px solid var(--border-light); border-radius: 0 var(--radius) var(--radius) 0;
 }
-#chq-tbody tr:hover, #cat-tbody tr:hover, #unit-tbody tr:hover,
+#chq-tbody tr:hover, #cat-tbody tr:hover,
 #disc-tbody tr:hover, #brand-tbody tr:hover { box-shadow: 0 3px 10px rgba(0,0,0,.12); }
-#chq-tbody tr:hover td, #cat-tbody tr:hover td, #unit-tbody tr:hover td,
+#chq-tbody tr:hover td, #cat-tbody tr:hover td,
 #disc-tbody tr:hover td, #brand-tbody tr:hover td {
   background: var(--surface2); border-color: var(--border);
 }
@@ -11125,10 +11079,6 @@ body.dark .pc-modal-head {
 
 .cat-indent { display: inline-block; }
 /* ── End Categories View ──────────────────────────────── */
-
-/* ── Units View ───────────────────────────────────────── */
-#inv-units-view { display: flex; flex-direction: column; flex: 1; min-height: 0; background: var(--bg); }
-/* ── End Units View ───────────────────────────────────── */
 
 /* ── Discounts View ───────────────────────────────────── */
 #inv-discounts-view { display: flex; flex-direction: column; flex: 1; min-height: 0; background: var(--bg); }
