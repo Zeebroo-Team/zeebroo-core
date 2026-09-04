@@ -411,7 +411,7 @@ function _bsAction(action) {
     case 'createProduct':    nav('inventory','products'); setTimeout(openAddProductModal, 80); break;
     case 'createCategory':   nav('inventory','categories'); setTimeout(() => $('#cat-add-btn')?.click(), 80); break;
     case 'createBrand':      nav('inventory','brands'); setTimeout(() => $('#brand-add-btn')?.click(), 80); break;
-    case 'createSupplier':   nav('inventory','suppliers'); setTimeout(_supOpenModal, 80); break;
+    case 'createSupplier':   C(); openSuppliersModal(); setTimeout(() => $('#sm-new-btn')?.click(), 100); break;
     case 'createUnit':       nav('inventory','units'); setTimeout(() => $('#unit-add-btn')?.click(), 80); break;
     case 'createPO':         nav('inventory','po'); setTimeout(openPOCreateModal, 80); break;
     case 'openBarcodes':     nav('inventory','barcodes'); break;
@@ -437,7 +437,7 @@ function _bsAction(action) {
     case 'navBrands':        nav('inventory','brands'); break;
     case 'navUnits':         nav('inventory','units'); break;
     case 'navDiscounts':     nav('inventory','discounts'); break;
-    case 'navSuppliers':     nav('inventory','suppliers'); break;
+    case 'navSuppliers':     C(); openSuppliersModal(); break;
     case 'navAudit':         nav('inventory','audit'); break;
     case 'navTransfer':      nav('inventory','transfer'); break;
     case 'navPO':            nav('inventory','po'); break;
@@ -5332,17 +5332,16 @@ function applyFeatureVisibility() {
   btn('#rb-inv-grn',       mp('inv_btn_grn'));
   btn('#rb-inv-cheques',   mp('inv_btn_cheques'));
   btn('#rb-inv-suppliers', mp('inv_btn_suppliers'));
-  btn('#rb-add-supplier',  mp('inv_btn_add_supplier'));
   btn('#rb-inv-barcodes',  mp('inv_btn_barcodes'));
   // Auto-hide Inventory ribbon groups when all their buttons are hidden
   { const invGrps = $$('[data-page="inventory"] .ribbon-group');
     if (invGrps[0]) invGrps[0].style.display = (mp('inv_btn_products')||mp('inv_btn_refresh')||mp('inv_btn_clear')||mp('inv_btn_categories')||mp('inv_btn_units')) ? '' : 'none';
     if (invGrps[1]) invGrps[1].style.display = (mp('inv_btn_audit')||mp('inv_btn_brands')||mp('inv_btn_discounts')) ? '' : 'none';
     if (invGrps[2]) invGrps[2].style.display = (mp('inv_btn_orders')||mp('inv_btn_grn')||mp('inv_btn_cheques')) ? '' : 'none';
-    if (invGrps[3]) invGrps[3].style.display = (mp('inv_btn_suppliers')||mp('inv_btn_add_supplier')) ? '' : 'none';
+    if (invGrps[3]) invGrps[3].style.display = mp('inv_btn_suppliers') ? '' : 'none';
     if (invGrps[4]) invGrps[4].style.display = mp('inv_btn_barcodes') ? '' : 'none'; }
   // ── Inventory panel: sub-nav tab gating with fallback ──
-  { const _invTabPerms = { products: mp('inv_tab_products'), suppliers: mp('inv_tab_suppliers'), po: mp('inv_tab_po'), grn: mp('inv_tab_grn'), cheques: mp('inv_tab_cheques'), audit: mp('inv_tab_audit'), transfer: mp('inv_tab_transfer'), categories: mp('inv_tab_categories'), units: mp('inv_tab_units'), discounts: mp('inv_tab_discounts'), brands: mp('inv_tab_brands'), barcodes: mp('inv_tab_barcodes') };
+  { const _invTabPerms = { products: mp('inv_tab_products'), po: mp('inv_tab_po'), grn: mp('inv_tab_grn'), cheques: mp('inv_tab_cheques'), audit: mp('inv_tab_audit'), transfer: mp('inv_tab_transfer'), categories: mp('inv_tab_categories'), units: mp('inv_tab_units'), discounts: mp('inv_tab_discounts'), brands: mp('inv_tab_brands'), barcodes: mp('inv_tab_barcodes') };
     $$('.inv-subnav-btn').forEach(b => { b.style.display = _invTabPerms[b.dataset.invView] ? '' : 'none'; });
     const _invActive = $('.inv-subnav-btn.active');
     if (_invActive && !_invTabPerms[_invActive.dataset.invView]) {
@@ -9058,7 +9057,7 @@ const HOG_ACTIONS = {
   'recent-activity': () => { activateTab('home'); switchHomeView('activity'); },
   'products':        () => { activateTab('inventory'); switchInvView('products'); },
   'categories':      () => { activateTab('inventory'); switchInvView('categories'); },
-  'suppliers':       () => { activateTab('inventory'); switchInvView('suppliers'); },
+  'suppliers':       () => openSuppliersModal(),
   'purchase-orders': () => { activateTab('inventory'); switchInvView('po'); },
   'stock-audit':     () => { activateTab('inventory'); switchInvView('audit'); },
   'bills':           () => { activateTab('finance'); switchFinView('bills'); },
@@ -10569,7 +10568,7 @@ $('#rb-home-dashboard').addEventListener('click',     () => activateTab('home'))
 $('#rb-home-analytics').addEventListener('click',     () => { activateTab('home'); switchHomeView('analytics'); });
 $('#rb-home-orders').addEventListener('click',        () => { activateTab('home'); switchHomeView('orders'); });
 $('#rb-home-customers').addEventListener('click',     () => toast('Customers coming soon', 'info'));
-$('#rb-home-suppliers').addEventListener('click', () => { activateTab('inventory'); switchInvView('suppliers'); });
+$('#rb-home-suppliers').addEventListener('click', () => openSuppliersModal());
 $('#rb-home-expenses').addEventListener('click',      () => { activateTab('home'); switchHomeView('expenses'); });
 $('#rb-home-profit').addEventListener('click',        () => { activateTab('home'); switchHomeView('profit'); });
 $('#rb-home-payroll').addEventListener('click',       () => { activateTab('home'); switchHomeView('payroll'); });
@@ -11372,14 +11371,13 @@ $('#inv-back-btn').addEventListener('click', () => {
 
 // ── Inventory sub-nav switching ───────────────────────────────────────────
 function switchInvView(view) {
-  const views = { products: '#inv-products-view', suppliers: '#inv-suppliers-view', po: '#inv-po-view', grn: '#inv-grn-view', cheques: '#inv-cheques-view', audit: '#inv-audit-view', transfer: '#inv-transfer-view', categories: '#inv-categories-view', units: '#inv-units-view', discounts: '#inv-discounts-view', brands: '#inv-brands-view', barcodes: '#inv-barcodes-view' };
+  const views = { products: '#inv-products-view', po: '#inv-po-view', grn: '#inv-grn-view', cheques: '#inv-cheques-view', audit: '#inv-audit-view', transfer: '#inv-transfer-view', categories: '#inv-categories-view', units: '#inv-units-view', discounts: '#inv-discounts-view', brands: '#inv-brands-view', barcodes: '#inv-barcodes-view' };
   Object.entries(views).forEach(([k, sel]) => {
     const el = $(sel);
     if (el) el.style.display = k === view ? 'flex' : 'none';
   });
   $$('.inv-subnav-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.invView === view));
   if (view === 'products')  loadInventory();
-  if (view === 'suppliers') _supLoad();
   if (view === 'po')        _poLoad();
   if (view === 'grn')       _grnLoad();
   if (view === 'cheques')   _chqLoad();
@@ -11393,172 +11391,8 @@ function switchInvView(view) {
 }
 
 $$('.inv-subnav-btn').forEach(btn => {
-  btn.addEventListener('click', () => switchInvView(btn.dataset.invView));
-});
-
-// ── Supplier Management ───────────────────────────────────────────────────
-const _sup = { page: 1, lastPage: 1, total: 0, q: '', timer: null, editingId: null };
-
-async function _supLoad() {
-  const tbody = $('#sup-tbody');
-  tbody.innerHTML = `<tr><td colspan="7" class="inv-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</td></tr>`;
-  const res = await API.suppliers(_sup.q, _sup.page);
-  if (res.status !== 200) {
-    tbody.innerHTML = `<tr><td colspan="7" class="inv-loading" style="color:#ef4444"><i class="fa fa-triangle-exclamation"></i> Failed to load</td></tr>`;
-    return;
-  }
-  const list      = res.body?.data ?? [];
-  _sup.lastPage   = res.body?.meta?.last_page ?? 1;
-  _sup.total      = res.body?.meta?.total ?? list.length;
-  _supRenderTable(list);
-  _supRenderPagination();
-  $('#sup-count').textContent = `${_sup.total} supplier${_sup.total !== 1 ? 's' : ''}`;
-}
-
-function _supRenderTable(list) {
-  const tbody = $('#sup-tbody');
-  if (!list.length) {
-    tbody.innerHTML = `<tr><td colspan="7" class="inv-loading"><i class="fa fa-building-user" style="font-size:22px;display:block;margin-bottom:6px;opacity:.3"></i>${_sup.q ? 'No suppliers match your search' : 'No suppliers yet — click <strong>New Supplier</strong> to add one'}</td></tr>`;
-    return;
-  }
-  tbody.innerHTML = list.map(s => `
-    <tr class="inv-row" data-id="${s.id}">
-      <td>
-        <div style="font-weight:700;font-size:13px">${escHtml(s.name)}</div>
-        ${s.address ? `<div style="font-size:11px;color:var(--text-muted)">${escHtml(s.address)}</div>` : ''}
-      </td>
-      <td>${s.contact_name ? escHtml(s.contact_name) : '<span style="color:var(--text-light)">—</span>'}</td>
-      <td>${s.phone       ? escHtml(s.phone)         : '<span style="color:var(--text-light)">—</span>'}</td>
-      <td>${s.email       ? escHtml(s.email)         : '<span style="color:var(--text-light)">—</span>'}</td>
-      <td style="text-align:center"><span class="sup-orders-count">${s.purchases_count ?? 0}</span></td>
-      <td style="text-align:center">
-        <span class="sup-status-badge ${s.is_active ? 'active' : 'inactive'}">
-          <i class="fa fa-circle" style="font-size:6px"></i> ${s.is_active ? 'Active' : 'Inactive'}
-        </span>
-      </td>
-      <td style="text-align:right">
-        <button class="sup-action-btn sup-edit-btn" data-id="${s.id}" title="Edit"><i class="fa fa-pen"></i></button>
-        <button class="sup-action-btn del sup-del-btn" data-id="${s.id}" data-name="${escHtml(s.name)}" title="${s.is_active ? 'Deactivate' : 'Already inactive'}" ${!s.is_active ? 'disabled style="opacity:.35"' : ''}><i class="fa fa-ban"></i></button>
-      </td>
-    </tr>`).join('');
-
-  tbody.querySelectorAll('.sup-edit-btn').forEach(btn => {
-    btn.addEventListener('click', e => { e.stopPropagation(); _supOpenModal(Number(btn.dataset.id)); });
-  });
-  tbody.querySelectorAll('.sup-del-btn').forEach(btn => {
-    btn.addEventListener('click', e => {
-      e.stopPropagation();
-      const name = btn.dataset.name;
-      if (!confirm(`Deactivate "${name}"? They will no longer appear in active supplier lists.`)) return;
-      API.deleteSupplier(Number(btn.dataset.id)).then(res => {
-        if (res.status !== 200) { toast('Failed to deactivate supplier', 'error'); return; }
-        toast(`"${name}" deactivated`, 'success');
-        _supLoad();
-      });
-    });
-  });
-}
-
-function _supRenderPagination() {
-  const el = $('#sup-pagination');
-  if (_sup.lastPage <= 1) { el.innerHTML = ''; return; }
-  el.innerHTML = `
-    <button class="cm-page-btn" id="sup-pg-prev" ${_sup.page <= 1 ? 'disabled' : ''}><i class="fa fa-chevron-left"></i></button>
-    <span style="font-size:11px">${_sup.page} / ${_sup.lastPage}</span>
-    <button class="cm-page-btn" id="sup-pg-next" ${_sup.page >= _sup.lastPage ? 'disabled' : ''}><i class="fa fa-chevron-right"></i></button>`;
-  $('#sup-pg-prev')?.addEventListener('click', () => { if (_sup.page > 1) { _sup.page--; _supLoad(); } });
-  $('#sup-pg-next')?.addEventListener('click', () => { if (_sup.page < _sup.lastPage) { _sup.page++; _supLoad(); } });
-}
-
-async function _supOpenModal(id = null) {
-  _sup.editingId = id;
-  $('#sup-modal-title').textContent = id ? 'Edit Supplier' : 'New Supplier';
-  $('#sup-f-name').value    = '';
-  $('#sup-f-contact').value = '';
-  $('#sup-f-phone').value   = '';
-  $('#sup-f-email').value   = '';
-  $('#sup-f-address').value = '';
-  $('#sup-f-notes').value   = '';
-  _setSupplierCategoryComboValue('#sup-f-category-input', '#sup-f-category', '');
-
-  await _loadSupplierConfig();
-
-  if (id) {
-    const res = await API.supplier(id);
-    if (res.status !== 200) { toast('Failed to load supplier', 'error'); return; }
-    const s = res.body?.data;
-    if (s) {
-      $('#sup-f-name').value    = s.name ?? '';
-      $('#sup-f-contact').value = s.contact_name ?? '';
-      $('#sup-f-phone').value   = s.phone ?? '';
-      $('#sup-f-email').value   = s.email ?? '';
-      $('#sup-f-address').value = s.address ?? '';
-      $('#sup-f-notes').value   = s.notes ?? '';
-      _setSupplierCategoryComboValue('#sup-f-category-input', '#sup-f-category', s.supplier_category_id ?? '');
-    }
-  }
-
-  $('#sup-modal').style.display = 'flex';
-  requestAnimationFrame(() => $('#sup-f-name').focus());
-}
-
-async function _supSave() {
-  const name       = $('#sup-f-name').value.trim();
-  const contact    = $('#sup-f-contact').value.trim() || null;
-  const phone      = $('#sup-f-phone').value.trim() || null;
-  const email      = $('#sup-f-email').value.trim() || null;
-  const address    = $('#sup-f-address').value.trim() || null;
-  const notes      = $('#sup-f-notes').value.trim() || null;
-  const categoryId = $('#sup-f-category').value || null;
-
-  if (!name) { toast('Supplier name is required', 'error'); $('#sup-f-name').focus(); return; }
-  if (_supCfg.requirePhone && !phone) { toast('Phone number is required', 'error'); $('#sup-f-phone').focus(); return; }
-  if (_supCfg.requireEmail && !email) { toast('Email is required', 'error'); $('#sup-f-email').focus(); return; }
-  if (_supCfg.requireAddress && !address) { toast('Address is required', 'error'); $('#sup-f-address').focus(); return; }
-
-  const btn = $('#sup-form-save');
-  btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
-
-  const body = { name, contact_name: contact, phone, email, address, notes, supplier_category_id: categoryId };
-  const res  = _sup.editingId
-    ? await API.updateSupplier(_sup.editingId, body)
-    : await API.createSupplier(body);
-
-  btn.disabled = false; btn.innerHTML = '<i class="fa fa-check"></i> Save Supplier';
-
-  if (res.status !== 200 && res.status !== 201) {
-    const msg = res.body?.errors?.name?.[0] || res.body?.message || 'Failed to save';
-    toast(msg, 'error'); return;
-  }
-
-  $('#sup-modal').style.display = 'none';
-  toast(_sup.editingId ? 'Supplier updated' : 'Supplier created', 'success');
-  _supLoad();
-}
-
-// Supplier modal controls
-$('#sup-modal')?.addEventListener('click', e => { if (e.target === e.currentTarget) $('#sup-modal').style.display = 'none'; });
-$('#sup-modal-close')?.addEventListener('click', () => { $('#sup-modal').style.display = 'none'; });
-$('#sup-form-cancel')?.addEventListener('click', () => { $('#sup-modal').style.display = 'none'; });
-$('#sup-form-save')?.addEventListener('click', _supSave);
-$('#sup-add-btn')?.addEventListener('click', () => _supOpenModal());
-$('#sup-refresh')?.addEventListener('click', _supLoad);
-
-let _supSearchTimer;
-$('#sup-search')?.addEventListener('input', e => {
-  clearTimeout(_supSearchTimer);
-  _sup.q = e.target.value.trim();
-  _sup.page = 1;
-  _supSearchTimer = setTimeout(_supLoad, 300);
-});
-$('#sup-search')?.addEventListener('keydown', e => {
-  if (e.key === 'Escape') { _sup.q = ''; e.target.value = ''; _sup.page = 1; _supLoad(); }
-});
-
-['#sup-f-name','#sup-f-contact','#sup-f-phone','#sup-f-email','#sup-f-address'].forEach(sel => {
-  $(sel)?.addEventListener('keydown', e => {
-    if (e.key === 'Enter') _supSave();
-    if (e.key === 'Escape') $('#sup-modal').style.display = 'none';
+  btn.addEventListener('click', () => {
+    switchInvView(btn.dataset.invView);
   });
 });
 
@@ -11578,7 +11412,7 @@ async function _loadSupplierConfig() {
 }
 
 function _applySupplierFieldRequirements() {
-  const map = { '#sup-req-phone': _supCfg.requirePhone, '#sup-req-email': _supCfg.requireEmail, '#sup-req-address': _supCfg.requireAddress };
+  const map = { '#sm-req-phone': _supCfg.requirePhone, '#sm-req-email': _supCfg.requireEmail, '#sm-req-address': _supCfg.requireAddress };
   Object.entries(map).forEach(([sel, required]) => {
     const el = $(sel);
     if (el) el.style.display = required ? '' : 'none';
@@ -11623,7 +11457,7 @@ function _wireSupplierCategoryCombo(inputSel, hiddenSel, listSel) {
   input.addEventListener('keydown', e => { if (e.key === 'Escape') { list.style.display = 'none'; input.blur(); } });
 }
 
-_wireSupplierCategoryCombo('#sup-f-category-input', '#sup-f-category', '#sup-f-category-list');
+_wireSupplierCategoryCombo('#sm-f-category-input', '#sm-f-category', '#sm-f-category-list');
 
 function _sstRenderCategoryList() {
   const el = $('#sst-cat-list');
@@ -11791,6 +11625,337 @@ $('#sup-settings-save')?.addEventListener('click', async () => {
   _applySupplierFieldRequirements();
   $('#sup-settings-modal').style.display = 'none';
   toast('Supplier settings saved', 'success');
+});
+
+// ── Suppliers Management Modal ──────────────────────────────────────────────
+const _sm = {
+  page: 1, lastPage: 1, total: 0,
+  searchQ: '', searchTimer: null, categoryId: '',
+  selectedId: null, editingId: null,
+  list: [],
+  activeTab: 'po',
+  tabLoaded: { grn: false, cheques: false },
+};
+
+function openSuppliersModal() {
+  $('#suppliers-modal').style.display = 'flex';
+  _sm.page = 1; _sm.searchQ = ''; _sm.categoryId = ''; _sm.selectedId = null; _sm.editingId = null;
+  $('#sm-search').value = '';
+  if ($('#sm-category-filter')) $('#sm-category-filter').value = '';
+  _smShowDetail(false); _smShowForm(false);
+  _smLoadList();
+  _loadSupplierConfig().then(_smRenderCategoryFilterOptions);
+  requestAnimationFrame(() => $('#sm-search').focus());
+}
+
+function _smRenderCategoryFilterOptions() {
+  const sel = $('#sm-category-filter');
+  if (!sel) return;
+  const current = sel.value;
+  sel.innerHTML = '<option value="">All Categories</option>' +
+    _supCfg.categories.map(c => `<option value="${c.id}">${escHtml(c.name)}</option>`).join('');
+  sel.value = current;
+}
+
+function _smClose() {
+  $('#suppliers-modal').style.display = 'none';
+}
+
+async function _smLoadList() {
+  const list = $('#sm-list');
+  list.innerHTML = '<div class="cm-list-empty"><i class="fa fa-spinner fa-spin"></i></div>';
+  const res = await API.suppliers(_sm.searchQ, _sm.page, _sm.categoryId);
+  if (res.status !== 200) { list.innerHTML = '<div class="cm-list-empty"><i class="fa fa-triangle-exclamation"></i> Failed to load</div>'; return; }
+  _sm.list      = res.body?.data ?? [];
+  _sm.lastPage  = res.body?.meta?.last_page ?? 1;
+  _sm.total     = res.body?.meta?.total ?? _sm.list.length;
+  _smRenderList();
+  _smRenderPagination();
+}
+
+function _smRenderList() {
+  const list = $('#sm-list');
+  if (!_sm.list.length) {
+    list.innerHTML = `<div class="cm-list-empty"><i class="fa fa-building-user"></i><span>${_sm.searchQ ? 'No results' : 'No suppliers yet'}</span></div>`;
+    return;
+  }
+  list.innerHTML = _sm.list.map(s => {
+    const initial = (s.name || '?')[0].toUpperCase();
+    const sub     = s.phone || s.email || '';
+    const inactiveBadge = !s.is_active
+      ? `<span class="sup-status-badge inactive" style="font-size:9.5px">Inactive</span>` : '';
+    return `<div class="cm-item${s.id === _sm.selectedId ? ' active' : ''}" data-id="${s.id}">
+      <div class="cm-item-avatar">${escHtml(initial)}</div>
+      <div class="cm-item-body">
+        <div class="cm-item-name" style="display:flex;align-items:center;gap:6px">${escHtml(s.name)}${inactiveBadge}</div>
+        ${sub ? `<div class="cm-item-sub">${escHtml(sub)}</div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+
+  list.querySelectorAll('.cm-item').forEach(el => {
+    el.addEventListener('click', () => _smSelectSupplier(Number(el.dataset.id)));
+  });
+}
+
+function _smRenderPagination() {
+  const el = $('#sm-pagination');
+  if (_sm.lastPage <= 1) { el.innerHTML = `<span>${_sm.total} supplier${_sm.total !== 1 ? 's' : ''}</span>`; return; }
+  el.innerHTML = `
+    <button class="cm-page-btn" id="sm-pg-prev" ${_sm.page <= 1 ? 'disabled' : ''}><i class="fa fa-chevron-left"></i></button>
+    <span>${_sm.page} / ${_sm.lastPage}</span>
+    <button class="cm-page-btn" id="sm-pg-next" ${_sm.page >= _sm.lastPage ? 'disabled' : ''}><i class="fa fa-chevron-right"></i></button>`;
+  $('#sm-pg-prev')?.addEventListener('click', () => { if (_sm.page > 1) { _sm.page--; _smLoadList(); } });
+  $('#sm-pg-next')?.addEventListener('click', () => { if (_sm.page < _sm.lastPage) { _sm.page++; _smLoadList(); } });
+}
+
+async function _smSelectSupplier(id) {
+  _sm.selectedId = id;
+  _sm.editingId  = null;
+  _sm.tabLoaded  = { grn: false, cheques: false };
+  _smRenderList();
+  _smShowForm(false);
+  _smShowDetail(true);
+  _smSwitchTab('po');
+  const pane = $('#sm-detail-view');
+  if (pane) pane.style.opacity = '.5';
+
+  const res = await API.supplier(id);
+  if (res.status !== 200) { _smShowDetail(false); return; }
+  const s = res.body?.data;
+  if (!s) return;
+
+  if (pane) pane.style.opacity = '1';
+  const init = (s.name || '?')[0].toUpperCase();
+  $('#sm-dv-avatar').textContent = init;
+  $('#sm-dv-name').textContent   = s.name;
+  $('#sm-dv-orders-badge').textContent = `${s.purchases_count ?? 0} order${(s.purchases_count ?? 0) !== 1 ? 's' : ''}`;
+  const statusBadge = $('#sm-dv-status-badge');
+  statusBadge.className = `sup-status-badge ${s.is_active ? 'active' : 'inactive'}`;
+  statusBadge.innerHTML = `<i class="fa fa-circle" style="font-size:6px"></i> ${s.is_active ? 'Active' : 'Inactive'}`;
+  const toggleBtn = $('#sm-btn-toggle-active');
+  toggleBtn.innerHTML = s.is_active ? '<i class="fa fa-ban"></i> Deactivate' : '<i class="fa fa-rotate-left"></i> Activate';
+
+  const fields = [
+    { label: 'Contact',  val: s.contact_name },
+    { label: 'Category', val: s.category_name },
+    { label: 'Phone',    val: s.phone },
+    { label: 'Email',    val: s.email },
+    { label: 'Address',  val: s.address },
+    { label: 'Notes',    val: s.notes },
+  ];
+  $('#sm-dv-fields').innerHTML = fields.map(f => `
+    <div class="cm-dv-field">
+      <div class="cm-dv-field-label">${f.label}</div>
+      <div class="cm-dv-field-val${f.val ? '' : ' empty'}">${f.val ? escHtml(f.val) : '—'}</div>
+    </div>`).join('');
+
+  const history = $('#sm-dv-po');
+  if (s.recent_purchase_orders?.length) {
+    history.innerHTML = `<div class="cm-dv-history-title"><i class="fa fa-file-invoice"></i> Recent Purchase Orders</div>` +
+      s.recent_purchase_orders.map(p => `
+        <div class="cm-dv-sale-row">
+          <span class="cm-dv-sale-num">${escHtml(p.po_number || `#${p.id}`)}</span>
+          <span class="cm-dv-sub-status">${escHtml(p.status_label || p.status)}</span>
+          <span class="cm-dv-sale-date">${p.purchase_date || ''}</span>
+          <span class="cm-dv-sale-amt">${parseFloat(p.total || 0).toFixed(2)}</span>
+        </div>`).join('');
+  } else {
+    history.innerHTML = '<div class="cm-dv-no-sales"><i class="fa fa-file-invoice"></i> No purchase orders yet</div>';
+  }
+}
+
+function _smSwitchTab(tab) {
+  _sm.activeTab = tab;
+  $('#sm-dv-tabs')?.querySelectorAll('.cm-dv-tab').forEach(b => b.classList.toggle('active', b.dataset.smTab === tab));
+  $('#sm-dv-tab-panels')?.querySelectorAll('.cm-dv-tab-panel').forEach(p => { p.style.display = 'none'; });
+  const panel = tab === 'po' ? $('#sm-dv-po') : $(`#sm-dv-panel-${tab}`);
+  if (panel) panel.style.display = '';
+  if (tab !== 'po' && !_sm.tabLoaded[tab]) _smLoadTabData(tab);
+}
+
+async function _smLoadTabData(tab) {
+  const id = _sm.selectedId;
+  if (!id) return;
+  _sm.tabLoaded[tab] = true;
+
+  if (tab === 'grn') {
+    const panel = $('#sm-dv-panel-grn');
+    panel.innerHTML = '<div class="cm-dv-no-sales"><i class="fa fa-spinner fa-spin"></i> Loading…</div>';
+    const res = await API.supplierGoodsReceive(id);
+    if (_sm.selectedId !== id) return;
+    const list = res.status === 200 ? (res.body?.data ?? []) : [];
+    panel.innerHTML = list.length ? list.map(g => `
+      <div class="cm-dv-sub-row">
+        <span class="cm-dv-sale-num">${escHtml(g.grn_number || `#${g.id}`)}</span>
+        <span class="cm-dv-sub-meta">${escHtml(g.received_date || '')}</span>
+        <span class="cm-dv-sub-status">${escHtml(g.payment_status_label || g.payment_status || '')}</span>
+        <span class="cm-dv-sale-amt">${parseFloat(g.total || 0).toFixed(2)}</span>
+      </div>`).join('') : '<div class="cm-dv-no-sales"><i class="fa fa-truck-ramp-box"></i> No goods receive notes yet</div>';
+
+  } else if (tab === 'cheques') {
+    const panel = $('#sm-dv-panel-cheques');
+    panel.innerHTML = '<div class="cm-dv-no-sales"><i class="fa fa-spinner fa-spin"></i> Loading…</div>';
+    const res = await API.supplierCheques(id);
+    if (_sm.selectedId !== id) return;
+    const list = res.status === 200 ? (res.body?.data ?? []) : [];
+    panel.innerHTML = list.length ? list.map(c => {
+      const status = c.status || '';
+      const badgeClass = status === 'cleared' ? 'cm-dv-credit-badge--paid'
+        : (status === 'overdue' ? 'cm-dv-credit-badge--overdue' : 'cm-dv-credit-badge--due');
+      return `
+      <div class="cm-dv-credit-row">
+        <span class="cm-dv-sale-num">${escHtml(c.cheque_number || `#${c.id}`)}</span>
+        <span class="cm-dv-credit-meta">${c.due_date ? `Due ${escHtml(c.due_date)}` : ''}</span>
+        <span class="cm-dv-credit-badge ${badgeClass}">${escHtml(c.status_label || status)}</span>
+        <span class="cm-dv-sale-amt">${parseFloat(c.amount || 0).toFixed(2)}</span>
+      </div>`;
+    }).join('') : '<div class="cm-dv-no-sales"><i class="fa fa-money-check-dollar"></i> No cheques recorded</div>';
+  }
+}
+
+function _smShowDetail(show) {
+  $('#sm-detail-empty').style.display = show ? 'none' : '';
+  $('#sm-detail-view').style.display  = show ? 'flex' : 'none';
+}
+
+function _smShowForm(show, supplier = null) {
+  $('#sm-form-view').style.display   = show ? 'flex' : 'none';
+  $('#sm-detail-empty').style.display = (!show && !_sm.selectedId) ? '' : 'none';
+  $('#sm-detail-view').style.display  = (!show && _sm.selectedId) ? 'flex' : 'none';
+
+  if (show) {
+    const isEdit = supplier !== null;
+    $('#sm-form-title').textContent = isEdit ? 'Edit Supplier' : 'New Supplier';
+    $('#sm-f-name').value    = supplier?.name         ?? '';
+    $('#sm-f-contact').value = supplier?.contact_name ?? '';
+    $('#sm-f-phone').value   = supplier?.phone        ?? '';
+    $('#sm-f-email').value   = supplier?.email        ?? '';
+    $('#sm-f-address').value = supplier?.address      ?? '';
+    $('#sm-f-notes').value   = supplier?.notes        ?? '';
+    _setSupplierCategoryComboValue('#sm-f-category-input', '#sm-f-category', supplier?.supplier_category_id ?? '');
+    _applySupplierFieldRequirements();
+    requestAnimationFrame(() => $('#sm-f-name').focus());
+  }
+}
+
+async function _smSave() {
+  const name       = $('#sm-f-name').value.trim();
+  const contact    = $('#sm-f-contact').value.trim() || null;
+  const phone      = $('#sm-f-phone').value.trim() || null;
+  const email      = $('#sm-f-email').value.trim() || null;
+  const address    = $('#sm-f-address').value.trim() || null;
+  const notes      = $('#sm-f-notes').value.trim() || null;
+  const categoryId = $('#sm-f-category').value || null;
+
+  if (!name) { toast('Supplier name is required', 'error'); $('#sm-f-name').focus(); return; }
+  if (_supCfg.requirePhone && !phone) { toast('Phone number is required', 'error'); $('#sm-f-phone').focus(); return; }
+  if (_supCfg.requireEmail && !email) { toast('Email is required', 'error'); $('#sm-f-email').focus(); return; }
+  if (_supCfg.requireAddress && !address) { toast('Address is required', 'error'); $('#sm-f-address').focus(); return; }
+
+  const btn = $('#sm-form-save');
+  btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
+
+  const body = { name, contact_name: contact, phone, email, address, notes, supplier_category_id: categoryId };
+  let res;
+  if (_sm.editingId) {
+    res = await API.updateSupplier(_sm.editingId, body);
+  } else {
+    res = await API.createSupplier(body);
+  }
+
+  btn.disabled = false; btn.innerHTML = '<i class="fa fa-check"></i> Save';
+
+  if (res.status !== 200 && res.status !== 201) {
+    const msg = res.body?.errors?.name?.[0] || res.body?.message || 'Failed to save';
+    toast(msg, 'error'); return;
+  }
+
+  const s = res.body?.data;
+  const wasEditing = !!_sm.editingId;
+  _sm.editingId = null;
+
+  _smShowForm(false);
+  await _smLoadList();
+  if (s) { _sm.selectedId = s.id; _smRenderList(); _smSelectSupplier(s.id); }
+  toast(wasEditing ? 'Supplier updated' : 'Supplier created', 'success');
+}
+
+async function _smToggleActive() {
+  if (!_sm.selectedId) return;
+  const s = _sm.list.find(x => x.id === _sm.selectedId);
+  if (!s) return;
+
+  if (s.is_active) {
+    const ok = await _sstConfirm(`Deactivate "${s.name}"? They will no longer appear in active supplier lists.`, 'Deactivate Supplier');
+    if (!ok) return;
+    const res = await API.deleteSupplier(_sm.selectedId);
+    if (res.status !== 200) { toast('Failed to deactivate supplier', 'error'); return; }
+    toast(`"${s.name}" deactivated`, 'success');
+  } else {
+    const res = await API.updateSupplier(_sm.selectedId, { is_active: true });
+    if (res.status !== 200) { toast('Failed to activate supplier', 'error'); return; }
+    toast(`"${s.name}" activated`, 'success');
+  }
+  await _smLoadList();
+  _smSelectSupplier(_sm.selectedId);
+}
+
+// Wire modal controls
+$('#sm-close')?.addEventListener('click', _smClose);
+$('#suppliers-modal')?.addEventListener('click', e => { if (e.target === e.currentTarget) _smClose(); });
+
+$('#sm-dv-tabs')?.addEventListener('click', e => {
+  const btn = e.target.closest('.cm-dv-tab');
+  if (btn) _smSwitchTab(btn.dataset.smTab);
+});
+
+$('#sm-new-btn')?.addEventListener('click', () => {
+  _sm.editingId = null; _sm.selectedId = null;
+  _smRenderList();
+  _smShowDetail(false);
+  _smShowForm(true);
+});
+
+$('#sm-btn-edit')?.addEventListener('click', async () => {
+  if (!_sm.selectedId) return;
+  const res = await API.supplier(_sm.selectedId);
+  if (res.status !== 200) return;
+  const s = res.body?.data;
+  _sm.editingId = _sm.selectedId;
+  _smShowForm(true, s);
+});
+
+$('#sm-btn-toggle-active')?.addEventListener('click', _smToggleActive);
+
+$('#sm-form-cancel')?.addEventListener('click', () => {
+  _sm.editingId = null;
+  _smShowForm(false);
+  if (_sm.selectedId) _smShowDetail(true);
+});
+
+$('#sm-form-save')?.addEventListener('click', _smSave);
+
+$('#sm-search')?.addEventListener('input', e => {
+  clearTimeout(_sm.searchTimer);
+  _sm.searchQ = e.target.value.trim();
+  _sm.page = 1;
+  _sm.searchTimer = setTimeout(_smLoadList, 300);
+});
+
+$('#sm-search')?.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { e.preventDefault(); if (_sm.searchQ) { _sm.searchQ = ''; e.target.value = ''; _sm.page = 1; _smLoadList(); } else _smClose(); }
+  if (e.key === 'Enter' && _sm.list.length) { _smSelectSupplier(_sm.list[0].id); }
+});
+
+$('#sm-category-filter')?.addEventListener('change', e => {
+  _sm.categoryId = e.target.value;
+  _sm.page = 1;
+  _smLoadList();
+});
+
+['#sm-f-name','#sm-f-contact','#sm-f-phone','#sm-f-email','#sm-f-address'].forEach(sel => {
+  $(sel)?.addEventListener('keydown', e => { if (e.key === 'Enter') _smSave(); if (e.key === 'Escape') $('#sm-form-cancel')?.click(); });
 });
 
 // ── Purchase Orders ───────────────────────────────────────────────────────
@@ -12240,8 +12405,8 @@ async function _poQSupSave() {
     opt.textContent = sup.name;
     $('#po-f-supplier').appendChild(opt);
     $('#po-f-supplier').value = sup.id;
-    // Also refresh the full supplier list cache
-    _sup.page = 1; _supLoad();
+    // Refresh the suppliers modal list cache if it's open
+    if ($('#suppliers-modal').style.display !== 'none') _smLoadList();
     _poQSupClose();
     toast(`Supplier "${sup.name}" added`, 'success');
   } else {
@@ -20767,7 +20932,7 @@ $('#sup-csv-import-btn')?.addEventListener('click', async () => {
   }
 
   _supCsvSetStep(3);
-  if (imported > 0) _supLoad();
+  if (imported > 0) _smLoadList();
 });
 // ── End CSV Supplier Import ──────────────────────────────────────────────────
 
@@ -26695,8 +26860,7 @@ $('#rb-inv-discounts')?.addEventListener('click', () => { activateTab('inventory
 $('#rb-orders')?.addEventListener('click',        () => { activateTab('inventory'); switchInvView('po'); });
 $('#rb-inv-grn')?.addEventListener('click',       () => { activateTab('inventory'); switchInvView('grn'); });
 $('#rb-inv-cheques')?.addEventListener('click',   () => { activateTab('inventory'); switchInvView('cheques'); });
-$('#rb-inv-suppliers')?.addEventListener('click', () => { activateTab('inventory'); switchInvView('suppliers'); });
-$('#rb-add-supplier')?.addEventListener('click',  () => { activateTab('inventory'); switchInvView('suppliers'); _supOpenModal(); });
+$('#rb-inv-suppliers')?.addEventListener('click', () => openSuppliersModal());
 $('#rb-inv-barcodes')?.addEventListener('click',  () => { activateTab('inventory'); switchInvView('barcodes'); });
 // ── Restaurant ribbon buttons ──────────────────────────────────────────────
 // Restaurant ribbon
@@ -37637,13 +37801,11 @@ async function submitDsCreate() {
       { key: 'inv_btn_orders',      label: 'Purchase Orders',  desc: 'Ribbon Purchasing: Purchase Orders button' },
       { key: 'inv_btn_grn',         label: 'Goods Receive',    desc: 'Ribbon Purchasing: Goods Receive (GRN) button' },
       { key: 'inv_btn_cheques',     label: 'Cheques',          desc: 'Ribbon Purchasing: Cheques button' },
-      { key: 'inv_btn_suppliers',   label: 'Suppliers',        desc: 'Ribbon Suppliers: Suppliers list button' },
-      { key: 'inv_btn_add_supplier',label: 'Add Supplier',     desc: 'Ribbon Suppliers: Add new supplier button' },
+      { key: 'inv_btn_suppliers',   label: 'Suppliers',        desc: 'Ribbon Suppliers: Suppliers button' },
       { key: 'inv_btn_barcodes',    label: 'Barcode Sheets',   desc: 'Ribbon Print: Barcode sheets button' },
     ]},
     { key: 'inv_panel', label: 'Inventory · Panel', icon: 'fa-layer-group', color: '#a78bfa', items: [
       { key: 'inv_tab_products',   label: 'Tab: Products',        desc: 'Inventory panel: Products sub-nav tab' },
-      { key: 'inv_tab_suppliers',  label: 'Tab: Suppliers',       desc: 'Inventory panel: Suppliers sub-nav tab' },
       { key: 'inv_tab_po',         label: 'Tab: Purchase Orders', desc: 'Inventory panel: Purchase Orders sub-nav tab' },
       { key: 'inv_tab_grn',        label: 'Tab: Goods Receive',   desc: 'Inventory panel: Goods Receive sub-nav tab' },
       { key: 'inv_tab_cheques',    label: 'Tab: Cheques',         desc: 'Inventory panel: Cheques sub-nav tab' },

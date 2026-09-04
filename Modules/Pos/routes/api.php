@@ -227,6 +227,8 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
     Route::post('suppliers', [PosSupplierApiController::class, 'store'])->name('suppliers.store');
     Route::post('suppliers/import', [PosSupplierApiController::class, 'import'])->name('suppliers.import');
     Route::get('suppliers/{supplier}', [PosSupplierApiController::class, 'show'])->name('suppliers.show');
+    Route::get('suppliers/{supplier}/goods-receive', [PosSupplierApiController::class, 'goodsReceive'])->name('suppliers.goods-receive');
+    Route::get('suppliers/{supplier}/cheques', [PosSupplierApiController::class, 'cheques'])->name('suppliers.cheques');
     Route::patch('suppliers/{supplier}', [PosSupplierApiController::class, 'update'])->name('suppliers.update');
     Route::delete('suppliers/{supplier}', [PosSupplierApiController::class, 'destroy'])->name('suppliers.destroy');
 

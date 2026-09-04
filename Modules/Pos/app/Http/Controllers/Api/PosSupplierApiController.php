@@ -8,6 +8,8 @@ use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesPosBusinessForApi;
 use Modules\Pos\Services\PosSettingsService;
+use Modules\Purchase\Models\ChequePayment;
+use Modules\Purchase\Models\GoodsReceiveNote;
 use Modules\Purchase\Models\Supplier;
 use Modules\Purchase\Models\SupplierCategory;
 
@@ -17,9 +19,10 @@ class PosSupplierApiController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $business = $this->businessOrAbort($request);
-        $q        = (string) $request->query('q', '');
-        $active   = $request->query('active'); // null = all, 1 = active only
+        $business   = $this->businessOrAbort($request);
+        $q          = (string) $request->query('q', '');
+        $active     = $request->query('active'); // null = all, 1 = active only
+        $categoryId = $request->query('category_id');
 
         $suppliers = Supplier::query()
             ->where('business_id', $business->id)
@@ -30,6 +33,7 @@ class PosSupplierApiController extends Controller
                     ->orWhere('email', 'like', "%{$q}%")
                     ->orWhere('phone', 'like', "%{$q}%");
             }))
+            ->when($categoryId !== null && $categoryId !== '', fn ($q2) => $q2->where('supplier_category_id', (int) $categoryId))
             ->withCount('purchases')
             ->with('category')
             ->orderBy('name')
@@ -51,9 +55,69 @@ class PosSupplierApiController extends Controller
         if ((int) $supplier->business_id !== (int) $business->id) abort(403);
 
         $supplier->loadCount('purchases');
-        $supplier->load('category');
+        $supplier->load([
+            'category',
+            'purchases' => fn ($q) => $q->latest('purchase_date')->latest('id')->limit(10)
+                ->select('id', 'supplier_id', 'po_number', 'status', 'purchase_date', 'total'),
+        ]);
 
         return response()->json(['data' => $this->format($supplier, full: true)]);
+    }
+
+    public function goodsReceive(Request $request, Supplier $supplier): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        if ((int) $supplier->business_id !== (int) $business->id) abort(403);
+
+        $grns = GoodsReceiveNote::query()
+            ->where('business_id', $business->id)
+            ->where(function ($q) use ($supplier) {
+                $q->where('supplier_id', $supplier->id)
+                    ->orWhereHas('purchase', fn ($q2) => $q2->where('supplier_id', $supplier->id));
+            })
+            ->latest('received_date')
+            ->latest('id')
+            ->limit(50)
+            ->get();
+
+        return response()->json([
+            'data' => $grns->map(fn (GoodsReceiveNote $g) => [
+                'id'                   => $g->id,
+                'grn_number'           => $g->grn_number,
+                'received_date'        => $g->received_date?->toDateString(),
+                'total'                => $g->total,
+                'payment_status'       => $g->paymentStatus(),
+                'payment_status_label' => $g->paymentStatusLabel(),
+            ])->values(),
+        ]);
+    }
+
+    public function cheques(Request $request, Supplier $supplier): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        if ((int) $supplier->business_id !== (int) $business->id) abort(403);
+
+        $cheques = ChequePayment::query()
+            ->where('business_id', $business->id)
+            ->whereHas('goodsReceiveNote', function ($q) use ($supplier) {
+                $q->where('supplier_id', $supplier->id)
+                    ->orWhereHas('purchase', fn ($q2) => $q2->where('supplier_id', $supplier->id));
+            })
+            ->latest('due_date')
+            ->latest('id')
+            ->limit(50)
+            ->get();
+
+        return response()->json([
+            'data' => $cheques->map(fn (ChequePayment $c) => [
+                'id'            => $c->id,
+                'cheque_number' => $c->cheque_number,
+                'due_date'      => $c->due_date?->toDateString(),
+                'amount'        => $c->amount,
+                'status'        => $c->displayStatus(),
+                'status_label'  => $c->displayStatusLabel(),
+            ])->values(),
+        ]);
     }
 
     public function store(Request $request): JsonResponse
@@ -215,6 +279,17 @@ class PosSupplierApiController extends Controller
             'supplier_category_id'  => $s->supplier_category_id,
             'category_name'         => $s->relationLoaded('category') ? $s->category?->name : null,
         ];
+
+        if ($full && $s->relationLoaded('purchases')) {
+            $data['recent_purchase_orders'] = $s->purchases->map(fn ($p) => [
+                'id'            => $p->id,
+                'po_number'     => $p->po_number,
+                'status'        => $p->status,
+                'status_label'  => $p->statusLabel(),
+                'purchase_date' => $p->purchase_date?->toDateString(),
+                'total'         => $p->total,
+            ])->values();
+        }
 
         return $data;
     }

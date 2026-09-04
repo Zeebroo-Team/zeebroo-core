@@ -273,8 +273,10 @@ const API = (() => {
     deleteCustomerCategory:  (id)   => request('DELETE', `/customer-categories/${id}`),
 
     // Suppliers
-    suppliers:      (q, page)  => request('GET',    `/suppliers?q=${encodeURIComponent(q||'')}&page=${page||1}`),
+    suppliers:      (q, page, categoryId) => request('GET', `/suppliers?q=${encodeURIComponent(q || '')}&page=${page || 1}${categoryId ? `&category_id=${encodeURIComponent(categoryId)}` : ''}`),
     supplier:       (id)       => request('GET',    `/suppliers/${id}`),
+    supplierGoodsReceive: (id) => request('GET',    `/suppliers/${id}/goods-receive`),
+    supplierCheques:      (id) => request('GET',    `/suppliers/${id}/cheques`),
     createSupplier: (body)     => request('POST',   '/suppliers', body),
     importSuppliers:(rows)     => request('POST',   '/suppliers/import', { rows }),
     updateSupplier: (id, body) => request('PATCH',  `/suppliers/${id}`, body),

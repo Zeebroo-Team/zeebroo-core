@@ -1004,11 +1004,6 @@
             <button class="ribbon-btn-lg" id="rb-inv-suppliers">
               <i class="fa fa-building-user"></i>Suppliers
             </button>
-            <div class="ribbon-small-stack">
-              <button class="ribbon-btn-sm" id="rb-add-supplier">
-                <i class="fa fa-plus"></i> Add Supplier
-              </button>
-            </div>
           </div>
           <div class="ribbon-group-label">Suppliers</div>
         </div>
@@ -2733,7 +2728,6 @@
       <!-- ── Inventory sub-navigation ── -->
       <div class="inv-subnav" id="inv-subnav">
         <button class="inv-subnav-btn active" data-inv-view="products"><i class="fa fa-boxes-stacked"></i> Products</button>
-        <button class="inv-subnav-btn" data-inv-view="suppliers"><i class="fa fa-building-user"></i> Suppliers</button>
         <button class="inv-subnav-btn" data-inv-view="po"><i class="fa fa-file-invoice"></i> Purchase Orders</button>
         <button class="inv-subnav-btn" data-inv-view="grn"><i class="fa fa-truck-ramp-box"></i> Goods Receive</button>
         <button class="inv-subnav-btn" data-inv-view="cheques"><i class="fa fa-money-check"></i> Cheques</button>
@@ -3213,40 +3207,6 @@
         </div>
       </div>
 
-
-      <!-- ── Suppliers view ── -->
-      <div id="inv-suppliers-view" style="display:none">
-        <div class="sup-toolbar">
-          <div class="inv-search-wrap">
-            <i class="fa fa-magnifying-glass"></i>
-            <input type="text" id="sup-search" placeholder="Search suppliers…">
-          </div>
-          <button class="sup-add-btn" id="sup-add-btn"><i class="fa fa-plus"></i> New Supplier</button>
-          <button class="inv-refresh-btn" id="sup-refresh" title="Refresh"><i class="fa fa-arrows-rotate"></i></button>
-        </div>
-        <div class="sup-table-wrap">
-          <table class="inv-table sup-table">
-            <thead>
-              <tr>
-                <th>Supplier Name</th>
-                <th>Contact Person</th>
-                <th>Phone</th>
-                <th>Email</th>
-                <th style="text-align:center">Orders</th>
-                <th style="text-align:center">Status</th>
-                <th style="text-align:right">Actions</th>
-              </tr>
-            </thead>
-            <tbody id="sup-tbody">
-              <tr><td colspan="7" class="inv-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</td></tr>
-            </tbody>
-          </table>
-        </div>
-        <div class="inv-footer">
-          <span id="sup-count">—</span>
-          <div class="inv-pagination" id="sup-pagination"></div>
-        </div>
-      </div><!-- /inv-suppliers-view -->
 
       <!-- ── Purchase Orders view ── -->
       <div id="inv-po-view" style="display:none">
@@ -4571,156 +4531,6 @@
         <div class="po-aim-footer">
           <button class="po-btn-ghost" id="po-aim-cancel"><i class="fa fa-xmark"></i> Cancel</button>
           <button class="po-btn-primary" id="po-aim-add"><i class="fa fa-plus"></i> Add to Order</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- ── Supplier Create / Edit Modal ───────────────────────────────────── -->
-    <div id="sup-modal" class="modal-overlay" style="display:none">
-      <div class="sup-modal-shell">
-        <div class="sup-modal-header">
-          <i class="fa fa-building-user" style="color:var(--accent)"></i>
-          <span id="sup-modal-title">New Supplier</span>
-          <button class="psm-close" id="sup-settings-btn" title="Supplier Settings"><i class="fa fa-gear"></i></button>
-          <button class="psm-close" id="sup-modal-close"><i class="fa fa-xmark"></i></button>
-        </div>
-        <div class="sup-modal-body">
-          <div class="sup-form-grid">
-            <div class="sup-field sup-field--full">
-              <label class="cm-label">Company / Supplier Name <span style="color:#ef4444">*</span></label>
-              <input type="text" id="sup-f-name" class="cm-input" placeholder="e.g. ABC Trading Co.">
-            </div>
-            <div class="sup-field">
-              <label class="cm-label">Contact Person</label>
-              <input type="text" id="sup-f-contact" class="cm-input" placeholder="Full name">
-            </div>
-            <div class="sup-field">
-              <label class="cm-label">Phone <span id="sup-req-phone" style="color:#ef4444;display:none">*</span></label>
-              <input type="text" id="sup-f-phone" class="cm-input" placeholder="+1 234 567 8900">
-            </div>
-            <div class="sup-field">
-              <label class="cm-label">Email <span id="sup-req-email" style="color:#ef4444;display:none">*</span></label>
-              <input type="email" id="sup-f-email" class="cm-input" placeholder="supplier@example.com">
-            </div>
-            <div class="sup-field">
-              <label class="cm-label">Address <span id="sup-req-address" style="color:#ef4444;display:none">*</span></label>
-              <input type="text" id="sup-f-address" class="cm-input" placeholder="Street, City, Country">
-            </div>
-            <div class="sup-field">
-              <label class="cm-label">Category</label>
-              <div class="cat-combo">
-                <input type="text" id="sup-f-category-input" class="cm-input" placeholder="No category" autocomplete="off">
-                <input type="hidden" id="sup-f-category">
-                <div class="cat-combo-list" id="sup-f-category-list" style="display:none"></div>
-              </div>
-            </div>
-            <div class="sup-field sup-field--full">
-              <label class="cm-label">Notes</label>
-              <textarea id="sup-f-notes" class="cm-input cm-textarea" placeholder="Payment terms, delivery notes…" rows="3"></textarea>
-            </div>
-          </div>
-        </div>
-        <div class="sup-modal-footer">
-          <button class="psm-btn-cancel" id="sup-form-cancel"><i class="fa fa-xmark"></i> Cancel</button>
-          <button class="qap-btn-save"   id="sup-form-save"><i class="fa fa-check"></i> Save Supplier</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- ── Supplier Settings Modal ────────────────────────────────────────────── -->
-    <div id="sup-settings-modal" class="modal-overlay" style="display:none">
-      <div class="po-aim-shell pfs-shell" style="width:min(560px,94vw)">
-        <div class="po-aim-header">
-          <i class="fa fa-gear" style="color:var(--accent)"></i>
-          <span>Supplier Settings</span>
-          <button class="psm-close" id="sup-settings-close"><i class="fa fa-xmark"></i></button>
-        </div>
-        <nav class="pfs-tab-nav" id="sup-settings-nav">
-          <button class="pfs-opt-tab active" data-sst-tab="general"><i class="fa fa-sliders"></i>&ensp;General</button>
-          <button class="pfs-opt-tab"        data-sst-tab="category"><i class="fa fa-tags"></i>&ensp;Supplier Category</button>
-        </nav>
-        <div id="sup-settings-panels" class="pfs-panels">
-          <!-- General panel -->
-          <div class="pfs-panel pfs-fields-body" id="sst-panel-general">
-            <div class="pfs-field-row">
-              <div class="pfs-field-icon"><i class="fa fa-phone"></i></div>
-              <div class="pfs-field-body">
-                <div class="pfs-field-label">Require Phone Number</div>
-                <div class="pfs-field-desc">Staff must enter a phone number when adding a supplier.</div>
-              </div>
-              <label class="pfs-sw" title="Require phone number">
-                <input type="checkbox" class="pfs-sw-input" id="sst-req-phone">
-                <span class="pfs-sw-track"><span class="pfs-sw-knob"></span></span>
-              </label>
-            </div>
-            <div class="pfs-field-row">
-              <div class="pfs-field-icon"><i class="fa fa-envelope"></i></div>
-              <div class="pfs-field-body">
-                <div class="pfs-field-label">Require Email</div>
-                <div class="pfs-field-desc">Staff must enter an email address when adding a supplier.</div>
-              </div>
-              <label class="pfs-sw" title="Require email">
-                <input type="checkbox" class="pfs-sw-input" id="sst-req-email">
-                <span class="pfs-sw-track"><span class="pfs-sw-knob"></span></span>
-              </label>
-            </div>
-            <div class="pfs-field-row">
-              <div class="pfs-field-icon"><i class="fa fa-location-dot"></i></div>
-              <div class="pfs-field-body">
-                <div class="pfs-field-label">Require Address</div>
-                <div class="pfs-field-desc">Staff must enter an address when adding a supplier.</div>
-              </div>
-              <label class="pfs-sw" title="Require address">
-                <input type="checkbox" class="pfs-sw-input" id="sst-req-address">
-                <span class="pfs-sw-track"><span class="pfs-sw-knob"></span></span>
-              </label>
-            </div>
-            <div class="pfs-field-row">
-              <div class="pfs-field-icon"><i class="fa fa-file-csv"></i></div>
-              <div class="pfs-field-body">
-                <div class="pfs-field-label">Import Suppliers</div>
-                <div class="pfs-field-desc">Bulk-add suppliers from a CSV file.</div>
-              </div>
-              <button class="psm-btn-cancel" id="sst-import-csv-btn"><i class="fa fa-file-arrow-up"></i> Import CSV</button>
-            </div>
-          </div>
-
-          <!-- Supplier Category panel -->
-          <div class="pfs-panel pfs-gen-body" id="sst-panel-category" style="display:none;padding:18px 22px 16px">
-            <div class="pfs-section-label">Add Category</div>
-            <div style="display:flex;flex-direction:column;gap:8px;margin:8px 0 18px">
-              <input type="text" id="sst-cat-name" class="cm-input" placeholder="Category name, e.g. Wholesale" maxlength="120">
-              <textarea id="sst-cat-desc" class="cm-input cm-textarea" placeholder="Description (optional)" rows="2" style="min-height:44px"></textarea>
-              <div style="display:flex;gap:8px">
-                <button class="qap-btn-save" id="sst-cat-add"><i class="fa fa-plus"></i> Add Category</button>
-                <button class="psm-btn-cancel" id="sst-cat-cancel-edit" style="display:none">Cancel</button>
-              </div>
-            </div>
-            <div class="pfs-section-label">Existing Categories</div>
-            <div id="sst-cat-list" style="margin-top:6px;max-height:260px;overflow-y:auto"></div>
-          </div>
-        </div>
-        <div class="po-aim-footer">
-          <button class="po-btn-ghost"   id="sup-settings-cancel">Close</button>
-          <button class="po-btn-primary" id="sup-settings-save"><i class="fa fa-check"></i> Save</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- ── Confirm Dialog (Supplier Category delete) ──────────────────────────── -->
-    <div id="sst-confirm-modal" class="modal-overlay" style="display:none">
-      <div class="ci-popup-shell">
-        <div class="ci-popup-header">
-          <i class="fa fa-triangle-exclamation" style="color:#ef4444"></i>
-          <span id="sst-confirm-title">Delete category?</span>
-          <button class="psm-close" id="sst-confirm-close"><i class="fa fa-xmark"></i></button>
-        </div>
-        <div class="ci-popup-body">
-          <p id="sst-confirm-msg" style="margin:0;font-size:13px;color:var(--text-muted);line-height:1.5"></p>
-        </div>
-        <div class="ci-popup-footer">
-          <button class="psm-btn-cancel" id="sst-confirm-cancel">Cancel</button>
-          <button class="rt-btn rt-btn-danger" id="sst-confirm-ok"><i class="fa fa-trash"></i> Delete</button>
         </div>
       </div>
     </div>
@@ -12576,6 +12386,220 @@
       </button>
     </div>
 
+  </div>
+</div>
+
+<!-- ── Suppliers Management Modal ────────────────────────────────────────── -->
+<div id="suppliers-modal" class="modal-overlay" style="display:none">
+  <div class="cm-shell">
+    <!-- Header -->
+    <div class="cm-header">
+      <i class="fa fa-building-user" style="color:var(--accent)"></i>
+      <span>Suppliers</span>
+      <button class="cm-new-btn" id="sm-new-btn"><i class="fa fa-plus"></i> New Supplier</button>
+      <button class="psm-close" id="sup-settings-btn" title="Supplier Settings"><i class="fa fa-gear"></i></button>
+      <button class="psm-close" id="sm-close"><i class="fa fa-xmark"></i></button>
+    </div>
+
+    <!-- Body: list + detail -->
+    <div class="cm-body">
+      <!-- Left: search + list -->
+      <div class="cm-list-pane">
+        <div class="cm-search-wrap">
+          <i class="fa fa-magnifying-glass cm-search-icon"></i>
+          <input type="text" id="sm-search" class="cm-search-input" placeholder="Search name, phone, email…">
+        </div>
+        <div class="cm-filter-wrap">
+          <i class="fa fa-filter cm-filter-icon"></i>
+          <select id="sm-category-filter" class="cm-cat-filter">
+            <option value="">All Categories</option>
+          </select>
+        </div>
+        <div id="sm-list" class="cm-list">
+          <div class="cm-list-empty"><i class="fa fa-spinner fa-spin"></i> Loading…</div>
+        </div>
+        <div id="sm-pagination" class="cm-pagination"></div>
+      </div>
+
+      <!-- Right: detail / form -->
+      <div class="cm-detail-pane" id="sm-detail-pane">
+        <!-- Empty state -->
+        <div class="cm-detail-empty" id="sm-detail-empty">
+          <i class="fa fa-building-user"></i>
+          <span>Select a supplier to view details</span>
+        </div>
+
+        <!-- Detail view -->
+        <div id="sm-detail-view" style="display:none">
+          <div class="cm-dv-header">
+            <div class="cm-dv-avatar" id="sm-dv-avatar">S</div>
+            <div class="cm-dv-titles">
+              <h2 class="cm-dv-name" id="sm-dv-name">—</h2>
+              <span class="cm-dv-sales-badge" id="sm-dv-orders-badge">0 orders</span>
+              <span class="sup-status-badge" id="sm-dv-status-badge" style="margin-left:6px"><i class="fa fa-circle" style="font-size:6px"></i> Active</span>
+            </div>
+          </div>
+          <div class="cm-dv-fields" id="sm-dv-fields"></div>
+          <div class="cm-dv-tabs" id="sm-dv-tabs">
+            <button class="cm-dv-tab active" data-sm-tab="po"><i class="fa fa-file-invoice"></i> Purchase Orders</button>
+            <button class="cm-dv-tab" data-sm-tab="grn"><i class="fa fa-truck-ramp-box"></i> Goods Receive</button>
+            <button class="cm-dv-tab" data-sm-tab="cheques"><i class="fa fa-money-check-dollar"></i> Cheques</button>
+          </div>
+          <div class="cm-dv-tab-panels" id="sm-dv-tab-panels">
+            <div class="cm-dv-tab-panel cm-dv-history" id="sm-dv-po"></div>
+            <div class="cm-dv-tab-panel" id="sm-dv-panel-grn" style="display:none"></div>
+            <div class="cm-dv-tab-panel" id="sm-dv-panel-cheques" style="display:none"></div>
+          </div>
+          <div class="cm-dv-actions">
+            <button class="cm-btn-edit" id="sm-btn-edit"><i class="fa fa-pen"></i> Edit</button>
+            <button class="cm-btn-delete" id="sm-btn-toggle-active" style="margin-left:auto"><i class="fa fa-ban"></i> Deactivate</button>
+          </div>
+        </div>
+
+        <!-- Edit / Create form -->
+        <div id="sm-form-view" style="display:none">
+          <div class="cm-form-title" id="sm-form-title">New Supplier</div>
+          <div class="cm-form-body">
+            <div class="sup-form-grid">
+              <div class="sup-field sup-field--full">
+                <label class="cm-label">Company / Supplier Name <span style="color:#ef4444">*</span></label>
+                <input type="text" id="sm-f-name" class="cm-input" placeholder="e.g. ABC Trading Co.">
+              </div>
+              <div class="sup-field">
+                <label class="cm-label">Contact Person</label>
+                <input type="text" id="sm-f-contact" class="cm-input" placeholder="Full name">
+              </div>
+              <div class="sup-field">
+                <label class="cm-label">Phone <span id="sm-req-phone" style="color:#ef4444;display:none">*</span></label>
+                <input type="text" id="sm-f-phone" class="cm-input" placeholder="+1 234 567 8900">
+              </div>
+              <div class="sup-field">
+                <label class="cm-label">Email <span id="sm-req-email" style="color:#ef4444;display:none">*</span></label>
+                <input type="email" id="sm-f-email" class="cm-input" placeholder="supplier@example.com">
+              </div>
+              <div class="sup-field">
+                <label class="cm-label">Address <span id="sm-req-address" style="color:#ef4444;display:none">*</span></label>
+                <input type="text" id="sm-f-address" class="cm-input" placeholder="Street, City, Country">
+              </div>
+              <div class="sup-field">
+                <label class="cm-label">Category</label>
+                <div class="cat-combo">
+                  <input type="text" id="sm-f-category-input" class="cm-input" placeholder="No category" autocomplete="off">
+                  <input type="hidden" id="sm-f-category">
+                  <div class="cat-combo-list" id="sm-f-category-list" style="display:none"></div>
+                </div>
+              </div>
+              <div class="sup-field sup-field--full">
+                <label class="cm-label">Notes</label>
+                <textarea id="sm-f-notes" class="cm-input cm-textarea" placeholder="Payment terms, delivery notes…" rows="3"></textarea>
+              </div>
+            </div>
+          </div>
+          <div class="cm-form-actions">
+            <button class="psm-btn-cancel" id="sm-form-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+            <button class="qap-btn-save"   id="sm-form-save"><i class="fa fa-check"></i> Save</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Supplier Settings Modal ────────────────────────────────────────────── -->
+<div id="sup-settings-modal" class="modal-overlay" style="display:none">
+  <div class="po-aim-shell pfs-shell" style="width:min(560px,94vw)">
+    <div class="po-aim-header">
+      <i class="fa fa-gear" style="color:var(--accent)"></i>
+      <span>Supplier Settings</span>
+      <button class="psm-close" id="sup-settings-close"><i class="fa fa-xmark"></i></button>
+    </div>
+    <nav class="pfs-tab-nav" id="sup-settings-nav">
+      <button class="pfs-opt-tab active" data-sst-tab="general"><i class="fa fa-sliders"></i>&ensp;General</button>
+      <button class="pfs-opt-tab"        data-sst-tab="category"><i class="fa fa-tags"></i>&ensp;Supplier Category</button>
+    </nav>
+    <div id="sup-settings-panels" class="pfs-panels">
+      <!-- General panel -->
+      <div class="pfs-panel pfs-fields-body" id="sst-panel-general">
+        <div class="pfs-field-row">
+          <div class="pfs-field-icon"><i class="fa fa-phone"></i></div>
+          <div class="pfs-field-body">
+            <div class="pfs-field-label">Require Phone Number</div>
+            <div class="pfs-field-desc">Staff must enter a phone number when adding a supplier.</div>
+          </div>
+          <label class="pfs-sw" title="Require phone number">
+            <input type="checkbox" class="pfs-sw-input" id="sst-req-phone">
+            <span class="pfs-sw-track"><span class="pfs-sw-knob"></span></span>
+          </label>
+        </div>
+        <div class="pfs-field-row">
+          <div class="pfs-field-icon"><i class="fa fa-envelope"></i></div>
+          <div class="pfs-field-body">
+            <div class="pfs-field-label">Require Email</div>
+            <div class="pfs-field-desc">Staff must enter an email address when adding a supplier.</div>
+          </div>
+          <label class="pfs-sw" title="Require email">
+            <input type="checkbox" class="pfs-sw-input" id="sst-req-email">
+            <span class="pfs-sw-track"><span class="pfs-sw-knob"></span></span>
+          </label>
+        </div>
+        <div class="pfs-field-row">
+          <div class="pfs-field-icon"><i class="fa fa-location-dot"></i></div>
+          <div class="pfs-field-body">
+            <div class="pfs-field-label">Require Address</div>
+            <div class="pfs-field-desc">Staff must enter an address when adding a supplier.</div>
+          </div>
+          <label class="pfs-sw" title="Require address">
+            <input type="checkbox" class="pfs-sw-input" id="sst-req-address">
+            <span class="pfs-sw-track"><span class="pfs-sw-knob"></span></span>
+          </label>
+        </div>
+        <div class="pfs-field-row">
+          <div class="pfs-field-icon"><i class="fa fa-file-csv"></i></div>
+          <div class="pfs-field-body">
+            <div class="pfs-field-label">Import Suppliers</div>
+            <div class="pfs-field-desc">Bulk-add suppliers from a CSV file.</div>
+          </div>
+          <button class="psm-btn-cancel" id="sst-import-csv-btn"><i class="fa fa-file-arrow-up"></i> Import CSV</button>
+        </div>
+      </div>
+
+      <!-- Supplier Category panel -->
+      <div class="pfs-panel pfs-gen-body" id="sst-panel-category" style="display:none;padding:18px 22px 16px">
+        <div class="pfs-section-label">Add Category</div>
+        <div style="display:flex;flex-direction:column;gap:8px;margin:8px 0 18px">
+          <input type="text" id="sst-cat-name" class="cm-input" placeholder="Category name, e.g. Wholesale" maxlength="120">
+          <textarea id="sst-cat-desc" class="cm-input cm-textarea" placeholder="Description (optional)" rows="2" style="min-height:44px"></textarea>
+          <div style="display:flex;gap:8px">
+            <button class="qap-btn-save" id="sst-cat-add"><i class="fa fa-plus"></i> Add Category</button>
+            <button class="psm-btn-cancel" id="sst-cat-cancel-edit" style="display:none">Cancel</button>
+          </div>
+        </div>
+        <div class="pfs-section-label">Existing Categories</div>
+        <div id="sst-cat-list" style="margin-top:6px;max-height:260px;overflow-y:auto"></div>
+      </div>
+    </div>
+    <div class="po-aim-footer">
+      <button class="po-btn-ghost"   id="sup-settings-cancel">Close</button>
+      <button class="po-btn-primary" id="sup-settings-save"><i class="fa fa-check"></i> Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Confirm Dialog (Supplier Category delete) ──────────────────────────── -->
+<div id="sst-confirm-modal" class="modal-overlay" style="display:none">
+  <div class="ci-popup-shell">
+    <div class="ci-popup-header">
+      <i class="fa fa-triangle-exclamation" style="color:#ef4444"></i>
+      <span id="sst-confirm-title">Delete category?</span>
+      <button class="psm-close" id="sst-confirm-close"><i class="fa fa-xmark"></i></button>
+    </div>
+    <div class="ci-popup-body">
+      <p id="sst-confirm-msg" style="margin:0;font-size:13px;color:var(--text-muted);line-height:1.5"></p>
+    </div>
+    <div class="ci-popup-footer">
+      <button class="psm-btn-cancel" id="sst-confirm-cancel">Cancel</button>
+      <button class="rt-btn rt-btn-danger" id="sst-confirm-ok"><i class="fa fa-trash"></i> Delete</button>
+    </div>
   </div>
 </div>
 
