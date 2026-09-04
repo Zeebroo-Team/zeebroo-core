@@ -5473,6 +5473,10 @@
               <div class="svc-detail-section-title">Categories</div>
               <div class="svc-detail-chips" id="svc-detail-cats"></div>
             </div>
+            <div class="svc-detail-section" id="svc-detail-tags-section" style="display:none">
+              <div class="svc-detail-section-title">Tags</div>
+              <div class="svc-detail-chips" id="svc-detail-tags"></div>
+            </div>
           </div>
 
           <!-- ── Employees Tab ── -->
@@ -5750,6 +5754,13 @@
               <div class="po-field">
                 <label class="po-field-label">Description</label>
                 <textarea id="svc-form-desc" class="po-field-input" rows="4" placeholder="Short description of the service…" style="resize:vertical;min-height:80px"></textarea>
+              </div>
+              <div class="po-field">
+                <label class="po-field-label">Tags</label>
+                <div class="tag-input-wrap" id="svc-tags-wrap">
+                  <div id="svc-tags-tags" class="tag-input-tags"></div>
+                  <input type="text" id="svc-tags-input" class="tag-input-field" placeholder="Type a tag and press Enter…" autocomplete="off" maxlength="60">
+                </div>
               </div>
             </div>
 

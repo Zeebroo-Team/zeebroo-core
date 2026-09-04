@@ -34961,6 +34961,10 @@ function _svcOpenItemDetail(id) {
       ? d.categories.map(c => `<span class="svc-form-cat-chip selected" style="cursor:default;pointer-events:none"><i class="fa fa-check"></i>${escHtml(c.name)}</span>`).join('')
       : '<span style="color:var(--text-muted);font-size:13px">No categories assigned</span>';
 
+    const tags = Array.isArray(d.tags) ? d.tags : [];
+    $('#svc-detail-tags-section').style.display = tags.length ? '' : 'none';
+    $('#svc-detail-tags').innerHTML = tags.map(t => `<span class="tag-chip" style="cursor:default">${escHtml(t)}</span>`).join('');
+
     // Employees tab
     _svcDetailEmployees = d.employees || [];
     _svcRenderDetailEmployees();
@@ -35203,6 +35207,7 @@ let _svcAvailEmps    = [];
 let _svcCatInputWired = false;
 let _svcEmpInputWired = false;
 let _svcProdLines    = []; // [{product_id, name, qty}]
+let _svcTags         = []; // [string]
 let _svcEditingId    = null; // null = create mode, number = edit mode
 let _svcFormImageFileId = null;
 let _svcCustomReqFields = []; // [{_id, key, keyEdited, label, type, options}]
@@ -35217,6 +35222,48 @@ function _svcRemoveEmp(id) {
   _tagRender('svc-emp-tags', _svcSelectedEmps, _svcRemoveEmp);
 }
 
+// ── Service free-form tags ────────────────────────────────────────────────
+function _svcTagsRender() {
+  const el = $('#svc-tags-tags');
+  if (!el) return;
+  el.innerHTML = _svcTags.map((t, i) => `
+    <span class="tag-chip" title="${escHtml(t)}">
+      <span style="overflow:hidden;text-overflow:ellipsis;max-width:160px">${escHtml(t)}</span>
+      <button class="tag-chip-x" data-idx="${i}" type="button"><i class="fa fa-xmark"></i></button>
+    </span>`).join('');
+  el.querySelectorAll('.tag-chip-x').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      _svcTags.splice(parseInt(btn.dataset.idx), 1);
+      _svcTagsRender();
+    });
+  });
+}
+
+function _svcTagsAdd(raw) {
+  const val = String(raw || '').trim();
+  if (!val) return;
+  if (_svcTags.some(t => t.toLowerCase() === val.toLowerCase())) return;
+  _svcTags.push(val);
+  _svcTagsRender();
+}
+
+$('#svc-tags-wrap')?.addEventListener('click', () => $('#svc-tags-input')?.focus());
+$('#svc-tags-input')?.addEventListener('keydown', e => {
+  if (e.key === 'Enter' || e.key === ',') {
+    e.preventDefault();
+    _svcTagsAdd(e.target.value);
+    e.target.value = '';
+  } else if (e.key === 'Backspace' && !e.target.value && _svcTags.length) {
+    _svcTags.pop();
+    _svcTagsRender();
+  }
+});
+$('#svc-tags-input')?.addEventListener('blur', () => {
+  const el = $('#svc-tags-input');
+  if (el && el.value.trim()) { _svcTagsAdd(el.value); el.value = ''; }
+});
+
 function _svcSetImage(fileId, url) {
   _svcFormImageFileId = fileId;
   const thumb = $('#svc-img-thumb');
@@ -35228,10 +35275,13 @@ function _svcResetModal() {
   _svcSelectedCats = [];
   _svcSelectedEmps = [];
   _svcProdLines    = [];
+  _svcTags         = [];
   _tagRender('svc-cat-tags', [], _svcRemoveCat);
   _tagRender('svc-emp-tags', [], _svcRemoveEmp);
+  _svcTagsRender();
   $('#svc-cat-input').value = '';
   $('#svc-emp-input').value = '';
+  $('#svc-tags-input').value = '';
   $('#svc-form-name').value     = '';
   $('#svc-form-barcode').value  = '';
   $('#svc-form-desc').value     = '';
@@ -35294,6 +35344,8 @@ async function openEditServiceModal(id) {
   $('#svc-form-name').value     = d.name || '';
   $('#svc-form-barcode').value  = d.barcode || '';
   $('#svc-form-desc').value     = d.description || '';
+  _svcTags = Array.isArray(d.tags) ? d.tags.slice() : [];
+  _svcTagsRender();
   $('#svc-form-price').value    = d.price != null ? d.price : '';
   $('#svc-form-cost-price').value      = d.cost_price != null ? d.cost_price : '';
   $('#svc-form-wholesale-price').value = d.wholesale_price != null ? d.wholesale_price : '';
@@ -35561,6 +35613,7 @@ $('#svc-form-submit')?.addEventListener('click', async () => {
     name,
     barcode:              $('#svc-form-barcode').value.trim() || null,
     description:          $('#svc-form-desc').value.trim() || null,
+    tags:                 _svcTags.slice(),
     price:                parseFloat(price),
     cost_price:           costPrice ? parseFloat(costPrice) : null,
     wholesale_price:      wholesalePrice ? parseFloat(wholesalePrice) : null,

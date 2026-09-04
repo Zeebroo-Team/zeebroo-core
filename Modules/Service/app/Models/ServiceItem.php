@@ -20,6 +20,7 @@ class ServiceItem extends Model
         'name',
         'barcode',
         'description',
+        'tags',
         'price',
         'cost_price',
         'wholesale_price',
@@ -33,6 +34,7 @@ class ServiceItem extends Model
     ];
 
     protected $casts = [
+        'tags'                       => 'array',
         'price'                      => 'decimal:2',
         'cost_price'                 => 'decimal:2',
         'wholesale_price'            => 'decimal:2',
