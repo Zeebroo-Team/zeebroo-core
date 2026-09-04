@@ -112,20 +112,25 @@ class PosSettingsApiController extends Controller
     {
         $business = $this->businessOrAbort($request);
         $all      = ['account_management','automation_editor','bill_management','crm','developers','event_management','human_resources','mail','point_of_sale','product_management','project_management','restaurant','service_management','social_media_campaign','stock_management'];
+        $allowed  = $business->effectiveFeatureKeys();
         $stored   = $business->getSetting('business.features') ?? [];
-        $enabled  = array_values(array_filter($all, fn ($k) => ! empty($stored[$k])));
+        $enabled  = array_values(array_filter($all, fn ($k) => in_array($k, $allowed, true) && ! empty($stored[$k])));
 
-        // account_management is always enabled; event_management is user-controlled.
-        if (! in_array('account_management', $enabled, true)) {
+        // account_management is always enabled by default (unless an admin has restricted it); event_management is user-controlled.
+        if (in_array('account_management', $allowed, true) && ! in_array('account_management', $enabled, true)) {
             $enabled[] = 'account_management';
         }
-        return response()->json(['data' => $enabled]);
+
+        // 'allowed' is the admin-controlled feature set (package + per-business overrides); the
+        // desktop app uses it to hide feature cards entirely, not just show them as "not installed".
+        return response()->json(['data' => $enabled, 'allowed' => array_values($allowed)]);
     }
 
     public function updateFeatures(Request $request): JsonResponse
     {
         $business = $this->businessOrAbort($request);
         $all      = ['account_management','automation_editor','bill_management','crm','developers','event_management','human_resources','mail','point_of_sale','product_management','project_management','restaurant','service_management','social_media_campaign','stock_management'];
+        $allowed  = $business->effectiveFeatureKeys();
         $validated = $request->validate([
             'features'   => ['required', 'array'],
             'features.*' => ['boolean'],
@@ -133,9 +138,11 @@ class PosSettingsApiController extends Controller
         $input   = $validated['features'];
         $stored  = array_fill_keys($all, false);
         foreach ($all as $k) {
-            $stored[$k] = (bool) ($input[$k] ?? false);
+            $stored[$k] = in_array($k, $allowed, true) && (bool) ($input[$k] ?? false);
         }
-        $stored['account_management'] = true;
+        if (in_array('account_management', $allowed, true)) {
+            $stored['account_management'] = true;
+        }
         $business->setSetting('business.features', $stored);
         $enabled = array_values(array_filter($all, fn ($k) => $stored[$k]));
         return response()->json(['data' => $enabled]);

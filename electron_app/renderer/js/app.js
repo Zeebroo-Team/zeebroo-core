@@ -5144,8 +5144,11 @@ async function loadFeatures() {
 
   if (featRes.status === 200) {
     state.features = new Set(featRes.body?.data || []);
+    // Admin-controlled allow-list (package + per-business overrides). null = unrestricted.
+    state.allowedFeatures = Array.isArray(featRes.body?.allowed) ? new Set(featRes.body.allowed) : null;
   } else {
     state.features = null;
+    state.allowedFeatures = null;
   }
 
   if (meRes.status === 200) {
@@ -8199,6 +8202,17 @@ function _featMgmtIsOn(key) {
   return !state.features || state.features.has(key);
 }
 
+// Whether an admin has permitted this business to use the feature at all (package +
+// per-business overrides). Disallowed features are hidden from Feature Management
+// entirely, not just shown as "not installed".
+function _featMgmtIsAllowed(key) {
+  return !state.allowedFeatures || state.allowedFeatures.has(key);
+}
+
+function _fmVisibleDefs() {
+  return _featDefs.filter(f => _featMgmtIsAllowed(f.key));
+}
+
 async function openFeatureMgmtModal() {
   _fmSearchTerm = '';
   _fmActiveCategory = 'all';
@@ -8227,7 +8241,7 @@ function _featMgmtShowGrid() {
 function _featMgmtRenderCategories() {
   const nav = $('#feat-mgmt-categories');
   nav.innerHTML = _FM_CATEGORIES.map(c => {
-    const count = c.key === 'all' ? _featDefs.length : _featDefs.filter(f => f.category === c.key).length;
+    const count = c.key === 'all' ? _fmVisibleDefs().length : _fmVisibleDefs().filter(f => f.category === c.key).length;
     const active = c.key === _fmActiveCategory ? ' active' : '';
     return `<div class="fm-cat-item${active}" data-fm-cat="${c.key}">
       <i class="fa ${c.icon}"></i>
@@ -8249,8 +8263,8 @@ function _featMgmtRenderGrid() {
   const grid = $('#feat-mgmt-grid');
   const term = _fmSearchTerm.trim().toLowerCase();
   let defs = _fmActiveCategory === 'all'
-    ? _featDefs.slice()
-    : _featDefs.filter(f => f.category === _fmActiveCategory);
+    ? _fmVisibleDefs()
+    : _fmVisibleDefs().filter(f => f.category === _fmActiveCategory);
   if (term) defs = defs.filter(f => f.name.toLowerCase().includes(term) || f.desc.toLowerCase().includes(term));
 
   if (_fmSortBy === 'name') {

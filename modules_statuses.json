@@ -24,5 +24,6 @@
     "AutomationEditor": true,
     "ProjectManage": true,
     "EventManagement": true,
-    "AdvertisingAgency": false
+    "AdvertisingAgency": false,
+    "Package": true
 }

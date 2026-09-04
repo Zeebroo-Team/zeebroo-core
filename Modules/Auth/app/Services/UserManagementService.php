@@ -10,7 +10,7 @@ class UserManagementService
     public function paginate(int $perPage = 20): LengthAwarePaginator
     {
         return User::query()
-            ->with('roles')
+            ->with(['roles', 'businesses.package', 'businesses.featureOverrides'])
             ->withCount(['businesses', 'accounts'])
             ->orderByDesc('created_at')
             ->paginate($perPage);
@@ -72,5 +72,33 @@ class UserManagementService
     public function delete(User $user): void
     {
         $user->delete();
+    }
+
+    /**
+     * Returns a reason $user cannot be disabled, or null if it's safe.
+     */
+    public function cannotDeactivateReason(User $user): ?string
+    {
+        if ($user->hasRole('admin') && User::role('admin')->where('is_active', true)->count() <= 1) {
+            return __('Cannot disable the last remaining active admin.');
+        }
+
+        return null;
+    }
+
+    /**
+     * Flips the account's active flag. Disabling also revokes every API token so an
+     * already-signed-in pos-desktop (Electron) client is logged out immediately.
+     */
+    public function toggleActive(User $user): User
+    {
+        $user->is_active = ! $user->is_active;
+        $user->save();
+
+        if (! $user->is_active) {
+            $user->tokens()->delete();
+        }
+
+        return $user;
     }
 }

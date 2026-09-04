@@ -105,6 +105,17 @@ class HrEmployeePortalController extends Controller
         $request->session()->regenerate();
 
         $user = Auth::user();
+
+        if (! $user->is_active) {
+            Auth::logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+
+            return back()
+                ->withErrors(['email' => __('Your account has been disabled. Contact an administrator.')])
+                ->onlyInput('email');
+        }
+
         $employee = $this->employeePortal->linkAndResolve($user);
 
         if ($employee === null) {

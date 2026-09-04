@@ -35,6 +35,12 @@ class PosAuthApiController extends Controller
             ]);
         }
 
+        if (! $user->is_active) {
+            throw ValidationException::withMessages([
+                'email' => ['Your account has been disabled. Contact an administrator.'],
+            ]);
+        }
+
         $deviceName = $validated['device_name'] ?? 'pos-api-client';
         $token = $user->createToken($deviceName);
         UserActivityLog::record($user, UserActivityLog::PLATFORM_DESKTOP, UserActivityLog::EVENT_LOGIN, $request, $deviceName);
