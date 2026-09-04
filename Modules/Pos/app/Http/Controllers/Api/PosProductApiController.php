@@ -121,6 +121,8 @@ class PosProductApiController extends Controller
                 if ($request->has('rental_late_fee_multiplier')) $fill['rental_late_fee_multiplier'] = $request->input('rental_late_fee_multiplier') !== null ? (float) $request->input('rental_late_fee_multiplier') : null;
                 if ($request->has('rental_needs_cleaning'))  $fill['rental_needs_cleaning'] = $request->boolean('rental_needs_cleaning');
                 if ($request->has('is_subscription'))        $fill['is_subscription']      = $request->boolean('is_subscription');
+                if ($request->has('subscription_recurring_period')) $fill['subscription_recurring_period'] = $request->input('subscription_recurring_period') ?: null;
+                if ($request->has('subscription_free_trial')) $fill['subscription_free_trial'] = $request->boolean('subscription_free_trial');
                 if ($request->has('item_wise_tax'))          $fill['item_wise_tax']        = $request->boolean('item_wise_tax');
                 if ($request->has('item_wise_discount'))     $fill['item_wise_discount']   = $request->boolean('item_wise_discount');
                 if ($fill) $product->fill($fill)->save();
@@ -205,6 +207,8 @@ class PosProductApiController extends Controller
             'rental_late_fee_multiplier' => 'nullable|numeric|min:0',
             'rental_needs_cleaning'     => 'boolean',
             'is_subscription'           => 'boolean',
+            'subscription_recurring_period' => 'nullable|string|in:weekly,monthly,quarterly,yearly',
+            'subscription_free_trial'   => 'boolean',
             'item_wise_tax'             => 'boolean',
             'item_wise_discount'        => 'boolean',
             'product_category_ids'      => 'nullable|array',
@@ -237,6 +241,8 @@ class PosProductApiController extends Controller
         if ($request->has('rental_late_fee_multiplier')) $data['rental_late_fee_multiplier'] = $request->input('rental_late_fee_multiplier') !== null ? (float) $request->input('rental_late_fee_multiplier') : null;
         if ($request->has('rental_needs_cleaning'))  $data['rental_needs_cleaning'] = $request->boolean('rental_needs_cleaning');
         if ($request->has('is_subscription'))        $data['is_subscription']      = $request->boolean('is_subscription');
+        if ($request->has('subscription_recurring_period')) $data['subscription_recurring_period'] = $request->input('subscription_recurring_period') ?: null;
+        if ($request->has('subscription_free_trial')) $data['subscription_free_trial'] = $request->boolean('subscription_free_trial');
         if ($request->has('item_wise_tax'))          $data['item_wise_tax']        = $request->boolean('item_wise_tax');
         if ($request->has('item_wise_discount'))     $data['item_wise_discount']   = $request->boolean('item_wise_discount');
 

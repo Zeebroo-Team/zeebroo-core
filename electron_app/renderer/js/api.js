@@ -92,6 +92,15 @@ const API = (() => {
     cancelSalesOrder:     (id)        => request('POST',   `/sales-orders/${id}/cancel`),
     deleteSalesOrder:     (id)        => request('DELETE', `/sales-orders/${id}`),
 
+    // Customer Subscriptions
+    subscriptions:        (q, status) => request('GET',    `/subscriptions?q=${encodeURIComponent(q||'')}&status=${status||'all'}`),
+    subscription:         (id)        => request('GET',    `/subscriptions/${id}`),
+    customerSubscriptions:(customerId)=> request('GET',    `/customers/${customerId}/subscriptions`),
+    cancelSubscription:   (id)        => request('POST',   `/subscriptions/${id}/cancel`),
+    pauseSubscription:    (id)        => request('POST',   `/subscriptions/${id}/pause`),
+    resumeSubscription:   (id)        => request('POST',   `/subscriptions/${id}/resume`),
+    renewSubscription:    (id)        => request('POST',   `/subscriptions/${id}/renew`),
+
     // End of Day
     eodStatus:  () => request('GET',  '/eod'),
     eodSettle:  () => request('POST', '/eod/settle'),

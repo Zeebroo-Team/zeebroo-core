@@ -181,6 +181,8 @@ class PosCatalogApiController extends Controller
                 'rental_late_fee_multiplier' => $product->rental_late_fee_multiplier !== null ? (float) $product->rental_late_fee_multiplier : null,
                 'rental_needs_cleaning'      => (bool) $product->rental_needs_cleaning,
                 'is_subscription'    => (bool) $product->is_subscription,
+                'subscription_recurring_period' => $product->subscription_recurring_period,
+                'subscription_free_trial'       => (bool) $product->subscription_free_trial,
                 'item_wise_tax'      => (bool) $product->item_wise_tax,
                 'item_wise_discount' => (bool) $product->item_wise_discount,
                 'unit_price'   => (float) $product->unit_price,
