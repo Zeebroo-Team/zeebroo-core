@@ -3201,6 +3201,7 @@ async function showInvoicePreviewModal(inv) {
   setTimeout(_invpResetView, 50);
 
   // Load letterhead asynchronously and update the preview once ready
+  if (!ic.lhEnabled) return;
   const lhFull = await _fetchLetterhead();
   if (lhFull && lhFull.canvas_json && frame) {
     const lhDataUrl = await window.electronAPI.renderCanvasToDataUrl(
@@ -3216,7 +3217,7 @@ async function _invPrint(inv) {
   const ic     = _isetupGetCfg();
   const tpl    = _isetupResolveTpl(ic.template, ic.color);
   const mg     = { top: ic.mgTop, bot: ic.mgBot, left: ic.mgLeft, right: ic.mgRight };
-  const lhFull = await _fetchLetterhead();
+  const lhFull = ic.lhEnabled ? await _fetchLetterhead() : null;
   let   lhDataUrl = null;
   if (lhFull && lhFull.canvas_json) {
     lhDataUrl = await window.electronAPI.renderCanvasToDataUrl(
@@ -21422,6 +21423,7 @@ function _isetupGetCfg() {
     mgRight:     c.invoice_mg_right    ?? 15,
     hdrLayout:   c.invoice_hdr_layout  || 'num-left',
     logoPos:     c.invoice_logo_pos    || 'header',
+    lhEnabled:   c.invoice_lh_enabled  !== false, // default on for existing setups
   };
 }
 
@@ -21448,6 +21450,8 @@ function _iTPLDummy(cur) {
 // ── Template 1: Classic ── traditional bordered table, blue letterhead ──────
 function _iTPLClassic(tpl, mg, cur) {
   const a = tpl.accent, { biz, addr, c } = _iTPLDummy(cur);
+  const hideBiz = !!lhLayer;
+  const bizBlock = hideBiz ? '' : `<div class="bn">${biz}</div><div class="bi">${addr}<br>invoices@example.com · +1 555 000-0001</div>`;
   return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{font-family:Inter,Arial,sans-serif;font-size:12px;color:#0f172a;background:#fff;${bodyPos}}
@@ -21480,7 +21484,7 @@ td.n{color:#94a3b8;text-align:center;width:26px}td.r{text-align:right}td.b{font-
 .ft{margin-top:22px;padding-top:12px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:10px;color:#94a3b8}
 </style></head><body>${lhLayer}<div class="pg">
 <div class="top">
-  <div><div class="bn">${biz}</div><div class="bi">${addr}<br>invoices@example.com · +1 555 000-0001</div></div>
+  <div>${bizBlock}</div>
   <div><div class="it">Invoice</div><div class="in">INV-0024 · 01 Aug 2026</div></div>
 </div>
 <div class="meta">
@@ -21587,6 +21591,8 @@ td.n{color:#94a3b8;text-align:center;width:22px}td.r{text-align:right}td.b{font-
 // ── Template 3: Bold Banner ── full-width colour header, borderless table ─────
 function _iTPLBold(tpl, mg, cur) {
   const a = tpl.accent, { biz, addr, c } = _iTPLDummy(cur);
+  const hideBiz = !!lhLayer;
+  const bizBlock = hideBiz ? '' : `<div class="b-biz">${biz}</div><div class="b-addr">${addr}<br>invoices@example.com</div>`;
   return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{font-family:Inter,Arial,sans-serif;font-size:12px;color:#0f172a;background:#fff;${bodyPos}}
@@ -21619,7 +21625,7 @@ td.n{color:#94a3b8;text-align:center;width:26px}td.r{text-align:right}td.b{font-
 .gr span{color:#fff!important}
 </style></head><body>${lhLayer}<div class="pg">
 <div class="banner">
-  <div><div class="b-biz">${biz}</div><div class="b-addr">${addr}<br>invoices@example.com</div></div>
+  <div>${bizBlock}</div>
   <div><div class="b-lbl">Invoice</div><div class="b-num">INV-0024</div></div>
 </div>
 <div class="body">
@@ -21653,6 +21659,8 @@ td.n{color:#94a3b8;text-align:center;width:26px}td.r{text-align:right}td.b{font-
 // ── Template 4: Minimal ── typography-only, serif, no fills ───────────────────
 function _iTPLMinimal(tpl, mg, cur) {
   const a = tpl.accent, { biz, addr, c } = _iTPLDummy(cur);
+  const hideBiz = !!lhLayer;
+  const bizBlock = hideBiz ? '' : `<div class="bn">${biz}</div><div class="bi">${addr}<br>invoices@example.com · +1 555 000-0001</div>`;
   return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{font-family:Georgia,'Times New Roman',serif;font-size:12px;color:#1a1a1a;background:#fff;${bodyPos}}
@@ -21684,7 +21692,7 @@ td.n{color:#d1d5db;text-align:center;width:26px;font-style:italic}td.r{text-alig
 .ft{margin-top:28px;padding-top:12px;border-top:1px solid #e5e7eb;font-size:9px;color:#9ca3af;text-align:center;letter-spacing:.06em;font-family:Arial,sans-serif;text-transform:uppercase}
 </style></head><body>${lhLayer}<div class="pg">
 <div class="top">
-  <div><div class="bn">${biz}</div><div class="bi">${addr}<br>invoices@example.com · +1 555 000-0001</div></div>
+  <div>${bizBlock}</div>
   <div><div class="inv-word">INVOICE</div><div class="inv-ref">INV-0024 / 01 Aug 2026</div></div>
 </div>
 <div class="rule"></div>
@@ -21723,6 +21731,8 @@ td.n{color:#d1d5db;text-align:center;width:26px;font-style:italic}td.r{text-alig
 // ── Template 5: Compact ── card info grid, teal accent chips ──────────────────
 function _iTPLCompact(tpl, mg, cur) {
   const a = tpl.accent, { biz, addr, c } = _iTPLDummy(cur);
+  const hideBiz = !!lhLayer;
+  const bizBlock = hideBiz ? '' : `<div class="tb-biz">${biz}</div><div class="tb-addr">${addr}</div>`;
   return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{font-family:Inter,Arial,sans-serif;font-size:12px;color:#0f172a;background:#fff;${bodyPos}}
@@ -21756,7 +21766,7 @@ td.n{color:#94a3b8;text-align:center;width:26px}td.r{text-align:right}td.b{font-
 .ft{margin-top:16px;padding-top:10px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:10px;color:#94a3b8}
 </style></head><body>${lhLayer}<div class="pg">
 <div class="topbar">
-  <div><div class="tb-biz">${biz}</div><div class="tb-addr">${addr}</div></div>
+  <div>${bizBlock}</div>
   <div><div class="tb-il">Invoice</div><div class="tb-in">INV-0024</div></div>
 </div>
 <div class="grid4">
@@ -21798,6 +21808,8 @@ function _iTPLExecutive(tpl, mg, cur) {
   const a = tpl.accent; // gold #c7a84f
   const dk = '#0f172a'; // dark navy
   const { biz, addr, c } = _iTPLDummy(cur);
+  const hideBiz = !!lhLayer;
+  const bizBlock = hideBiz ? '' : `<div class="biz-n">${biz}</div><div class="biz-i">${addr}<br>invoices@example.com · +1 555 000-0001</div>`;
   return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{font-family:Inter,Arial,sans-serif;font-size:12px;color:#0f172a;background:#fff;${bodyPos}}
@@ -21837,7 +21849,7 @@ td.n{color:#94a3b8;text-align:center;width:26px}td.r{text-align:right}td.b{font-
 </style></head><body>${lhLayer}<div class="pg">
 <div class="hdr">
   <div class="hdr-top">
-    <div><div class="biz-n">${biz}</div><div class="biz-i">${addr}<br>invoices@example.com · +1 555 000-0001</div></div>
+    <div>${bizBlock}</div>
     <div><div class="il">Invoice</div><div class="in">INV-0024</div></div>
   </div>
   <div class="hdr-rule"></div>
@@ -21982,12 +21994,21 @@ function _invBuildActualDoc(inv, tpl, mg, cur, lhDataUrl = null) {
   // kept for backwards compatibility with callers that inject _taxBreakdown
   const discRow = ''; const taxRow = '';
 
-  // Letterhead: absolute image layer behind content (embedded as data URL)
-  const lhLayer   = lhDataUrl
-    ? `<img src="${lhDataUrl}" style="position:absolute;top:0;left:0;width:794px;height:1123px;z-index:0;pointer-events:none;display:block;object-fit:fill;image-rendering:auto;" alt="">`
+  // Letterhead: normal-flow block pinned to the top of the page (position 0);
+  // the invoice content below is a sibling element, so it always starts right
+  // after the letterhead with no manual margin tuning and no overlap.
+  const lhUrl = lhDataUrl && typeof lhDataUrl === 'object' ? lhDataUrl.dataUrl : lhDataUrl;
+  const lhH   = lhDataUrl && typeof lhDataUrl === 'object' && lhDataUrl.contentHeight > 0
+    ? Math.ceil(lhDataUrl.contentHeight) + 6
+    : (lhUrl ? 150 : 0);
+  const lhLayer   = lhUrl
+    ? `<div style="width:794px;height:${lhH}px;overflow:hidden;position:relative;"><img src="${lhUrl}" style="position:absolute;top:0;left:0;width:794px;height:1123px;display:block;pointer-events:none;object-fit:fill;image-rendering:auto;" alt=""></div>`
     : '';
-  const bodyPos   = lhDataUrl ? 'position:relative;overflow:hidden;' : '';
-  const pgStack   = lhDataUrl ? 'position:relative;z-index:1;' : '';
+  const bodyPos   = '';
+  const pgStack   = '';
+  // A letterhead already carries the business name/logo, so drop the
+  // template's own business-name block to avoid showing it twice.
+  const hideBiz   = !!lhUrl;
 
   if (tpl.id === 'sidebar') {
     return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
@@ -22040,6 +22061,7 @@ td.n{color:#94a3b8;text-align:center;width:22px}td.r{text-align:right}td.b{font-
   }
 
   if (tpl.id === 'bold') {
+    const bizBlock = hideBiz ? '' : `<div class="b-biz">${biz}</div><div class="b-addr">${addr}</div>`;
     return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{font-family:Inter,Arial,sans-serif;font-size:12px;color:#0f172a;background:#fff;${bodyPos}}
@@ -22068,7 +22090,7 @@ td.n{color:#94a3b8;text-align:center;width:26px}td.r{text-align:right}td.b{font-
 .gr{background:${a};color:#fff!important;font-weight:900;font-size:14px}.gr span{color:#fff!important}
 </style></head><body>${lhLayer}<div class="pg">
 <div class="banner">
-  <div><div class="b-biz">${biz}</div><div class="b-addr">${addr}</div></div>
+  <div>${bizBlock}</div>
   <div><div class="b-lbl">Invoice</div><div class="b-num">${invNum}</div></div>
 </div>
 <div class="body">
@@ -22089,6 +22111,7 @@ td.n{color:#94a3b8;text-align:center;width:26px}td.r{text-align:right}td.b{font-
   }
 
   if (tpl.id === 'minimal') {
+    const bizBlock = hideBiz ? '' : `<div class="bn">${biz}</div><div class="bi">${addr}</div>`;
     return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{font-family:Georgia,'Times New Roman',serif;font-size:12px;color:#1a1a1a;background:#fff;${bodyPos}}
@@ -22118,7 +22141,7 @@ td.n{color:#d1d5db;text-align:center;width:26px;font-style:italic}td.r{text-alig
 .ft{margin-top:28px;padding-top:12px;border-top:1px solid #e5e7eb;font-size:9px;color:#9ca3af;text-align:center;letter-spacing:.06em;font-family:Arial,sans-serif;text-transform:uppercase}
 </style></head><body>${lhLayer}<div class="pg">
 <div class="top">
-  <div><div class="bn">${biz}</div><div class="bi">${addr}</div></div>
+  <div>${bizBlock}</div>
   <div><div class="inv-word">INVOICE</div><div class="inv-ref">${invNum} / ${issDate}</div></div>
 </div>
 <div class="rule"></div>
@@ -22145,6 +22168,7 @@ td.n{color:#d1d5db;text-align:center;width:26px;font-style:italic}td.r{text-alig
   }
 
   if (tpl.id === 'compact') {
+    const bizBlock = hideBiz ? '' : `<div class="tb-biz">${biz}</div><div class="tb-addr">${addr}</div>`;
     return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{font-family:Inter,Arial,sans-serif;font-size:12px;color:#0f172a;background:#fff;${bodyPos}}
@@ -22175,7 +22199,7 @@ td.n{color:#94a3b8;text-align:center;width:26px}td.r{text-align:right}td.b{font-
 .ft{margin-top:16px;padding-top:10px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:10px;color:#94a3b8}
 </style></head><body>${lhLayer}<div class="pg">
 <div class="topbar">
-  <div><div class="tb-biz">${biz}</div><div class="tb-addr">${addr}</div></div>
+  <div>${bizBlock}</div>
   <div><div class="tb-il">Invoice</div><div class="tb-in">${invNum}</div></div>
 </div>
 <div class="grid4">
@@ -22200,6 +22224,7 @@ td.n{color:#94a3b8;text-align:center;width:26px}td.r{text-align:right}td.b{font-
 
   if (tpl.id === 'executive') {
     const dk = '#0f172a';
+    const bizBlock = hideBiz ? '' : `<div class="biz-n">${biz}</div><div class="biz-i">${addr}</div>`;
     return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{font-family:Inter,Arial,sans-serif;font-size:12px;color:#0f172a;background:#fff;${bodyPos}}
@@ -22237,7 +22262,7 @@ td.n{color:#94a3b8;text-align:center;width:26px}td.r{text-align:right}td.b{font-
 </style></head><body>${lhLayer}<div class="pg">
 <div class="hdr">
   <div class="hdr-top">
-    <div><div class="biz-n">${biz}</div><div class="biz-i">${addr}</div></div>
+    <div>${bizBlock}</div>
     <div><div class="il">Invoice</div><div class="in">${invNum}</div></div>
   </div>
   <div class="hdr-rule"></div>
@@ -22263,6 +22288,7 @@ td.n{color:#94a3b8;text-align:center;width:26px}td.r{text-align:right}td.b{font-
   }
 
   // Classic (default / fallback)
+  const bizBlock = hideBiz ? '' : `<div class="bn">${biz}</div><div class="bi">${addr}</div>`;
   return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{font-family:Inter,Arial,sans-serif;font-size:12px;color:#0f172a;background:#fff;${bodyPos}}
@@ -22294,7 +22320,7 @@ td.n{color:#94a3b8;text-align:center;width:26px}td.r{text-align:right}td.b{font-
 .ft{margin-top:22px;padding-top:12px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:10px;color:#94a3b8}
 </style></head><body>${lhLayer}<div class="pg">
 <div class="top">
-  <div><div class="bn">${biz}</div><div class="bi">${addr}</div></div>
+  <div>${bizBlock}</div>
   <div><div class="it">Invoice</div><div class="in">${invNum} · ${issDate}</div></div>
 </div>
 <div class="meta">
@@ -22382,10 +22408,10 @@ function _isetupUpdatePreview() {
   const iframe = $('#isetup-prev-frame');
   if (!iframe) return;
   // Temporarily borrow the module-level letterhead vars so _iTPL* functions render with letterhead
-  if (_isetupLhDataUrl) {
-    lhLayer = `<img src="${_isetupLhDataUrl}" style="position:absolute;top:0;left:0;width:794px;height:1123px;z-index:0;pointer-events:none;display:block;object-fit:fill;image-rendering:auto;" alt="">`;
-    bodyPos = 'position:relative;overflow:hidden;';
-    pgStack = 'position:relative;z-index:1;';
+  const lhEnabled = $('#isetup-lh-enabled')?.checked !== false;
+  if (lhEnabled && _isetupLhDataUrl) {
+    const lhH = _isetupLhDataUrl.contentHeight > 0 ? Math.ceil(_isetupLhDataUrl.contentHeight) + 6 : 150;
+    lhLayer = `<div style="width:794px;height:${lhH}px;overflow:hidden;position:relative;"><img src="${_isetupLhDataUrl.dataUrl}" style="position:absolute;top:0;left:0;width:794px;height:1123px;display:block;pointer-events:none;object-fit:fill;image-rendering:auto;" alt=""></div>`;
   }
   iframe.srcdoc = _isetupBuildPreviewDoc(tpl, mg, state.currency || '');
   // Always reset so normal preview-builder calls remain unaffected
@@ -22455,6 +22481,7 @@ async function openInvoiceSetup() {
   if ($('#isetup-mg-right'))   $('#isetup-mg-right').value   = cfg.mgRight;
   if ($('#isetup-hdr-layout')) $('#isetup-hdr-layout').value = cfg.hdrLayout;
   if ($('#isetup-logo-pos'))   $('#isetup-logo-pos').value   = cfg.logoPos;
+  if ($('#isetup-lh-enabled')) $('#isetup-lh-enabled').checked = cfg.lhEnabled;
   const orientEl = document.querySelector(`input[name="isetup-orient"][value="${cfg.orientation}"]`);
   if (orientEl) orientEl.checked = true;
 
@@ -22464,7 +22491,7 @@ async function openInvoiceSetup() {
   modal.style.display = 'flex';
   // Show preview immediately (no letterhead), then fetch letterhead in background
   setTimeout(_isetupUpdatePreview, 80);
-  _isetupLoadLetterhead();
+  if (cfg.lhEnabled) _isetupLoadLetterhead();
 }
 
 async function _isetupSave() {
@@ -22482,6 +22509,7 @@ async function _isetupSave() {
     invoice_mg_right:    parseInt($('#isetup-mg-right')?.value) ?? 15,
     invoice_hdr_layout:  $('#isetup-hdr-layout')?.value || 'num-left',
     invoice_logo_pos:    $('#isetup-logo-pos')?.value   || 'header',
+    invoice_lh_enabled:  $('#isetup-lh-enabled')?.checked !== false,
   };
   if (state.config) Object.assign(state.config, update);
   await window.electronAPI.setConfig(update);
@@ -22522,6 +22550,11 @@ $('#isetup-color-list')?.addEventListener('input', e => {
   if (el) { el.addEventListener('change', _isetupUpdatePreview); el.addEventListener('input', _isetupUpdatePreview); }
 });
 document.querySelectorAll('input[name="isetup-orient"]').forEach(r => r.addEventListener('change', _isetupUpdatePreview));
+
+$('#isetup-lh-enabled')?.addEventListener('change', e => {
+  if (e.target.checked && !_isetupLhDataUrl) _isetupLoadLetterhead();
+  else _isetupUpdatePreview();
+});
 
 $('#rb-sal-invoice-setup')?.addEventListener('click', openInvoiceSetup);
 
