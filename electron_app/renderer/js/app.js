@@ -3575,12 +3575,14 @@ async function _invPrint(inv) {
 // ── Invoice form ──────────────────────────────────────────────────────────
 let _invLineSeq = 0;
 
-function _invAddLine(desc = '', qty = 1, price = 0, discType = 'pct', discValue = 0, taxType = 'pct', taxValue = 0) {
+function _invAddLine(desc = '', qty = 1, price = 0, discType = 'pct', discValue = 0, taxType = 'pct', taxValue = 0, productId = null, isSubscription = false) {
   const id  = ++_invLineSeq;
   const row = document.createElement('div');
   row.className        = 'qt-line-row';
   row.dataset.lineId   = id;
   row.dataset.discType = discType;
+  if (productId) row.dataset.productId = productId;
+  if (isSubscription) row.dataset.isSubscription = '1';
 
   const cur = state.currency || '¤';
   const s   = state.receiptSettings || {};
@@ -3600,6 +3602,7 @@ function _invAddLine(desc = '', qty = 1, price = 0, discType = 'pct', discValue 
   row.innerHTML = `
     <div class="qt-line-desc">
       <input type="text" class="qt-line-input qt-line-desc-input" placeholder="Description or search product…" value="${escHtml(desc)}" data-role="desc" data-lid="${id}">
+      <span class="qt-line-sub-badge" data-role="sub-badge" style="display:${isSubscription ? '' : 'none'};font-size:10px;color:#7c3aed;background:#f3e8ff;border-radius:4px;padding:1px 6px;margin-left:6px;white-space:nowrap;"><i class="fa fa-repeat"></i> Subscription</span>
     </div>
     <input type="number" class="qt-line-input qt-line-num"   value="${qty}" min="0.001" step="any" data-role="qty">
     <input type="number" class="qt-line-input qt-line-price" value="${price > 0 ? price.toFixed(2) : ''}" min="0" step="any" data-role="price" placeholder="0.00">
@@ -3643,6 +3646,12 @@ function _invAddLine(desc = '', qty = 1, price = 0, discType = 'pct', discValue 
 
   let sugTimer;
 
+  const subBadge = row.querySelector('[data-role="sub-badge"]');
+  function _setSubBadge(show) {
+    if (show) { row.dataset.isSubscription = '1'; } else { delete row.dataset.isSubscription; }
+    if (subBadge) subBadge.style.display = show ? '' : 'none';
+  }
+
   // ── Full POS product-selection logic on suggestion click ─────────────────
   async function _invHandleSugClick(el) {
     _sugHide();
@@ -3650,6 +3659,8 @@ function _invAddLine(desc = '', qty = 1, price = 0, discType = 'pct', discValue 
 
     if (!isProduct) {
       // Service: simple fill — no layers or warranty
+      delete row.dataset.productId;
+      _setSubBadge(false);
       descInp.value  = el.dataset.name;
       priceInp.value = parseFloat(el.dataset.price || 0).toFixed(2);
       _invRecalc();
@@ -3662,6 +3673,8 @@ function _invAddLine(desc = '', qty = 1, price = 0, discType = 'pct', discValue 
     const p   = res.status === 200 ? (res.body?.data ?? res.body) : null;
 
     if (!p) {
+      delete row.dataset.productId;
+      _setSubBadge(false);
       descInp.value  = el.dataset.name;
       priceInp.value = parseFloat(el.dataset.price || 0).toFixed(2);
       _invRecalc();
@@ -3710,6 +3723,8 @@ function _invAddLine(desc = '', qty = 1, price = 0, discType = 'pct', discValue 
       }
     }
 
+    row.dataset.productId = p.id;
+    _setSubBadge(!!p.is_subscription);
     descInp.value  = p.name;
     priceInp.value = chosenPrice.toFixed(2);
     _invRecalc();
@@ -3718,6 +3733,8 @@ function _invAddLine(desc = '', qty = 1, price = 0, discType = 'pct', discValue 
 
   // ── Typeahead input listener ──────────────────────────────────────────────
   descInp.addEventListener('input', () => {
+    // Any manual retyping invalidates a previously-linked product selection
+    if (row.dataset.productId) { delete row.dataset.productId; _setSubBadge(false); }
     clearTimeout(sugTimer);
     const q = descInp.value.trim();
     if (q.length < 2) { _sugHide(); return; }
@@ -3831,6 +3848,10 @@ function _invRecalc() {
   const tax  = parseFloat($('#sinv-f-tax').value)      || 0;
   $('#sinv-subtotal').textContent    = sub.toFixed(2);
   $('#sinv-grand-total').textContent = Math.max(0, sub - disc + tax).toFixed(2);
+
+  const hasSub = !!$('#sinv-items-body .qt-line-row[data-is-subscription="1"]');
+  const hintEl = $('#sinv-sub-hint');
+  if (hintEl) hintEl.style.display = hasSub ? '' : 'none';
 }
 
 async function _invOpenForm(existing, prefill = null) {
@@ -3873,6 +3894,7 @@ async function _invOpenForm(existing, prefill = null) {
       i.description, i.quantity, i.unit_price,
       i.discount_type || 'pct', i.discount_value || 0,
       i.tax_type || 'pct', i.tax_pct || 0,
+      i.product_id || null, !!i.is_subscription,
     ));
   } else if (prefill?.items?.length) {
     prefill.items.forEach(i => _invAddLine(
@@ -3892,6 +3914,7 @@ $('#sinv-f-tax').addEventListener('input', _invRecalc);
 $('#sinv-form-save').addEventListener('click', async () => {
   const btn   = $('#sinv-form-save');
   const lines = [];
+  let hasSubscriptionLine = false;
   $$('#sinv-items-body .qt-line-row').forEach(row => {
     const qty      = parseFloat(row.querySelector('[data-role="qty"]').value)   || 0;
     const price    = parseFloat(row.querySelector('[data-role="price"]').value) || 0;
@@ -3899,6 +3922,7 @@ $('#sinv-form-save').addEventListener('click', async () => {
     const discVal  = parseFloat(row.querySelector('[data-role="disc"]')?.value) || 0;
     const taxType  = row.dataset.taxType  || 'pct';
     const taxValue = parseFloat(row.dataset.taxValue) || 0;
+    const productId = row.dataset.productId ? parseInt(row.dataset.productId) : null;
     let   desc  = (row.querySelector('[data-role="desc"]')?.value || '').trim();
     // Append warranty info to description if captured during product selection
     if (row.dataset.warrantyType === 'lifetime') {
@@ -3907,8 +3931,10 @@ $('#sinv-form-save').addEventListener('click', async () => {
       desc += (desc ? ' ' : '') + `(Warranty expires: ${row.dataset.warrantyDate})`;
     }
     if (qty > 0 || price > 0 || desc) {
+      if (row.dataset.isSubscription === '1') hasSubscriptionLine = true;
       lines.push({
-        item_type:      'custom',
+        item_type:      productId ? 'product' : 'custom',
+        product_id:     productId,
         description:    desc,
         quantity:       qty,
         unit_price:     price,
@@ -3922,6 +3948,12 @@ $('#sinv-form-save').addEventListener('click', async () => {
 
   if (!lines.length) {
     $('#sinv-form-alert').textContent = 'Add at least one line item.';
+    $('#sinv-form-alert').style.display = '';
+    return;
+  }
+
+  if (hasSubscriptionLine && !parseInt($('#sinv-f-customer').value)) {
+    $('#sinv-form-alert').textContent = 'Select a customer for subscription products — subscriptions cannot be tracked for walk-in customers.';
     $('#sinv-form-alert').style.display = '';
     return;
   }

@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Modules\AutomationEditor\Services\AutomationRunnerService;
 use Modules\Business\Models\Business;
+use Modules\Pos\Services\CustomerSubscriptionService;
 use Modules\Pos\Services\SaleStockConsumptionService;
 use Modules\Sales\Models\Invoice;
 use Modules\Sales\Models\InvoiceItem;
@@ -15,6 +16,7 @@ class InvoiceService
 {
     public function __construct(
         private readonly SaleStockConsumptionService $stockConsumption,
+        private readonly CustomerSubscriptionService $subscriptions,
     ) {}
 
     public function listForBusiness(
@@ -128,7 +130,9 @@ class InvoiceService
             return $invoice;
         }
 
-        $invoice = DB::transaction(function () use ($invoice): Invoice {
+        $business = $invoice->business ?? Business::find($invoice->business_id);
+
+        $invoice = DB::transaction(function () use ($invoice, $business): Invoice {
             $invoice->update(['status' => Invoice::STATUS_PAID]);
 
             $invoice->load('items.product');
@@ -144,13 +148,24 @@ class InvoiceService
                 }
 
                 $this->stockConsumption->consumeFifo($item->product, $qty);
+
+                if ($business && $item->product->is_subscription) {
+                    $this->subscriptions->createForInvoiceLine(
+                        $business,
+                        $item->product,
+                        $invoice->id,
+                        $item->id,
+                        $invoice->customer_id,
+                        (float) $item->unit_price,
+                        $qty,
+                    );
+                }
             }
 
             return $invoice;
         });
 
         $invoice->loadMissing('customer');
-        $business = $invoice->business ?? \Modules\Business\Models\Business::find($invoice->business_id);
         if ($business) {
             app(AutomationRunnerService::class)->dispatch('invoice.paid', $business, $this->invoicePayload($invoice));
         }
