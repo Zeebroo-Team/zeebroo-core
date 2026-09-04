@@ -62,6 +62,9 @@
 :is(html[data-theme="light"],html[data-theme="light_blue"]) .pkg-modal-backdrop{background:rgba(17,24,39,.42);}
 .pkg-modal-shell{position:relative;z-index:1;width:100%;max-width:560px;margin:auto 0;border-radius:18px;border:1px solid var(--border);
     background:var(--card);box-shadow:0 24px 56px rgba(0,0,0,.28);}
+@media (min-width:1024px){
+  .pkg-modal-shell{max-width:760px;}
+}
 .pkg-modal-head{padding:20px 22px 16px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;justify-content:space-between;gap:12px;}
 .pkg-modal-title{margin:0 0 3px;font-size:18px;font-weight:800;letter-spacing:-.02em;}
 .pkg-modal-sub{margin:0;font-size:13px;color:var(--muted);}
