@@ -41594,15 +41594,58 @@ async function submitDsCreate() {
 
   // ── Sidebar nav ──
   function _switchDevView(view) {
-    ['keys', 'webhooks'].forEach(v => {
+    ['keys', 'webhooks', 'separate-space'].forEach(v => {
       const el = $('#dev-view-' + v);
-      el.style.display = v === view ? 'flex' : 'none';
+      if (el) el.style.display = v === view ? 'flex' : 'none';
     });
     $$('.dev-snav-btn').forEach(btn => {
       btn.classList.toggle('dev-snav-btn--active', btn.dataset.dev === view);
     });
+    if (view === 'separate-space') _devSsLoad();
   }
   $$('.dev-snav-btn').forEach(btn => btn.addEventListener('click', () => _switchDevView(btn.dataset.dev)));
+
+  // ── Separate Space ────────────────────────────────────────────────────────
+  function _devSsApplyEnabled(on) {
+    const settings = $('#dev-ss-settings');
+    if (settings) settings.style.display = on ? 'flex' : 'none';
+  }
+
+  async function _devSsLoad() {
+    const cfg = await window.electronAPI.getConfig().catch(() => ({}));
+    const ss  = cfg.separateSpace || { enabled: false, spaceUrl: '', onload: false };
+    const enabledEl = $('#dev-ss-enabled');
+    const urlEl     = $('#dev-ss-url');
+    const onloadEl  = $('#dev-ss-onload');
+    if (enabledEl) enabledEl.checked = !!ss.enabled;
+    if (urlEl)     urlEl.value       = ss.spaceUrl || '';
+    if (onloadEl)  onloadEl.checked  = !!ss.onload;
+    _devSsApplyEnabled(!!ss.enabled);
+    const statusEl = $('#dev-ss-status');
+    if (statusEl) statusEl.textContent = '';
+  }
+
+  $('#dev-ss-enabled')?.addEventListener('change', (e) => _devSsApplyEnabled(e.target.checked));
+
+  $('#dev-ss-save')?.addEventListener('click', async () => {
+    const enabled = !!$('#dev-ss-enabled')?.checked;
+    const spaceUrl = ($('#dev-ss-url')?.value || '').trim();
+    const onload   = !!$('#dev-ss-onload')?.checked;
+
+    if (enabled && !spaceUrl) {
+      toast('Please enter a Space Drive URL', 'error');
+      $('#dev-ss-url')?.focus();
+      return;
+    }
+
+    await window.electronAPI.setConfig({ separateSpace: { enabled, spaceUrl, onload } });
+
+    const statusEl = $('#dev-ss-status');
+    if (statusEl) statusEl.textContent = enabled
+      ? `Saved — Separate Space enabled${onload ? ', connects on startup' : ''}`
+      : 'Saved — Separate Space disabled';
+    toast('Separate Space settings saved', 'success');
+  });
 
   // ── Load all data ──
   async function _loadDevData() {

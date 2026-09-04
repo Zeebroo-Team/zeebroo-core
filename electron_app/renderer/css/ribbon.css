@@ -16571,6 +16571,23 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
 :root[data-theme="light"] .dev-snav-btn--active:hover { background: #ddd6fe; }
 :root[data-theme="light"] .dev-token-banner           { background: #f0fdf4; border-color: #22c55e; }
 
+/* ── Developer: Separate Space form ─────────────────────────────────────── */
+.dev-ss-card {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 8px; padding: 14px 16px; flex-shrink: 0;
+}
+.dev-ss-toggle-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+.dev-ss-toggle-info { display: flex; flex-direction: column; gap: 3px; }
+.dev-ss-toggle-name { font-size: 13px; font-weight: 600; color: var(--text); }
+.dev-ss-toggle-name i { color: #7c3aed; margin-right: 5px; }
+.dev-ss-toggle-desc { font-size: 12px; color: var(--text-muted); }
+.dev-ss-label {
+  font-size: 12.5px; font-weight: 600; color: var(--text); display: block;
+}
+.dev-ss-label i { color: #7c3aed; margin-right: 5px; }
+
 /* ── Automations panel ──────────────────────────────────────────────────── */
 #panel-automations.active { flex-direction: column; gap: 0; height: 100%; }
 #panel-projects.active    { flex-direction: column; height: 100%; }

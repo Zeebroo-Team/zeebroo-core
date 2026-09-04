@@ -15898,6 +15898,9 @@
         <button class="dev-snav-btn" data-dev="webhooks">
           <i class="fa fa-bolt"></i> Webhooks
         </button>
+        <button class="dev-snav-btn" data-dev="separate-space">
+          <i class="fa fa-cube"></i> Separate Space
+        </button>
       </div>
 
       <!-- Content pane -->
@@ -15957,6 +15960,66 @@
             </table>
           </div>
         </div>
+
+        <!-- Separate Space view -->
+        <div id="dev-view-separate-space" class="dev-view" style="display:none">
+          <div class="dev-view-topbar">
+            <div>
+              <div class="dev-view-title">Separate Space</div>
+              <div class="dev-view-desc">Configure an isolated workspace with its own dedicated storage drive.</div>
+            </div>
+          </div>
+
+          <!-- Enable toggle (always visible) -->
+          <div class="dev-ss-card">
+            <div class="dev-ss-toggle-row">
+              <div class="dev-ss-toggle-info">
+                <span class="dev-ss-toggle-name"><i class="fa fa-cube"></i> Enable Separate Space</span>
+                <span class="dev-ss-toggle-desc">Activate the separate space feature for this device</span>
+              </div>
+              <label class="psm-switch">
+                <input type="checkbox" id="dev-ss-enabled">
+                <span class="psm-switch-track"></span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Settings (shown only when enabled) -->
+          <div id="dev-ss-settings" style="display:none;flex-direction:column;gap:12px">
+
+            <div class="dev-ss-card">
+              <label class="dev-ss-label" for="dev-ss-url">
+                <i class="fa fa-hard-drive"></i> Space Drive URL
+              </label>
+              <input type="url" id="dev-ss-url" class="psm-input" placeholder="https://space.example.com/drive"
+                     style="margin-top:6px">
+              <span class="psm-hint" style="margin-top:4px;display:block">
+                The base URL of the Separate Space storage endpoint
+              </span>
+            </div>
+
+            <div class="dev-ss-card">
+              <div class="dev-ss-toggle-row">
+                <div class="dev-ss-toggle-info">
+                  <span class="dev-ss-toggle-name"><i class="fa fa-circle-play"></i> Onload</span>
+                  <span class="dev-ss-toggle-desc">Automatically connect to Separate Space when the app starts</span>
+                </div>
+                <label class="psm-switch">
+                  <input type="checkbox" id="dev-ss-onload">
+                  <span class="psm-switch-track"></span>
+                </label>
+              </div>
+            </div>
+
+          </div><!-- /dev-ss-settings -->
+
+          <div style="display:flex;gap:8px;flex-shrink:0;margin-top:4px">
+            <button class="psm-btn-save" id="dev-ss-save">
+              <i class="fa fa-floppy-disk"></i> Save Settings
+            </button>
+          </div>
+          <p class="psm-hint" id="dev-ss-status" style="margin-top:4px"></p>
+        </div><!-- /dev-view-separate-space -->
 
       </div><!-- /content pane -->
     </div><!-- /body -->
