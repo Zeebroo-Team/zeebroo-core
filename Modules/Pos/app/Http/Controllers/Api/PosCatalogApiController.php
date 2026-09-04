@@ -161,6 +161,7 @@ class PosCatalogApiController extends Controller
         return response()->json([
             'data' => array_merge($card, [
                 'description'        => $product->description,
+                'tags'               => $product->tags ?? [],
                 'is_active'          => $product->is_active,
                 'is_bundle'          => $product->is_bundle,
                 'model_no'           => $product->model_no,

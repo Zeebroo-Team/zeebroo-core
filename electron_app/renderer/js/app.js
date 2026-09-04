@@ -15811,6 +15811,7 @@ const _prod = {
   brandOptions:   [],
   selectedCats:   [],
   selectedBrands: [],
+  tags:           [],
   imageFileId:        null,
   bundleItems:        [],
   _bundleSearchWired: false,
@@ -16305,6 +16306,9 @@ async function _prodOpenModal(editId) {
   $('#prod-f-wholesale-price').value   = '';
   $('#prod-f-stock').value             = '';
   $('#prod-f-description').value = '';
+  _prod.tags = [];
+  _prodTagsRender();
+  $('#prod-tags-input').value    = '';
   $('#prod-f-active').checked    = true;
   $('#prod-f-unit').value        = '';
   $('#prod-f-bundle').checked    = false;
@@ -16376,6 +16380,8 @@ async function _prodOpenModal(editId) {
     $('#prod-f-wholesale-price').value   = p.wholesale_price != null ? p.wholesale_price : '';
     $('#prod-f-stock').value             = p.stock_quantity ?? p.total_stock ?? '';
     $('#prod-f-description').value = p.description || '';
+    _prod.tags = Array.isArray(p.tags) ? p.tags.slice() : [];
+    _prodTagsRender();
     $('#prod-f-active').checked    = p.is_active !== false;
     if (p.product_unit_id) $('#prod-f-unit').value = p.product_unit_id;
     $('#prod-f-warranty').checked           = !!p.has_warranty;
@@ -16443,6 +16449,32 @@ async function _prodOpenModal(editId) {
   setTimeout(() => $('#prod-f-name').focus(), 80);
 }
 
+// ── Product free-form tags ────────────────────────────────────────────────
+function _prodTagsRender() {
+  const el = $('#prod-tags-tags');
+  if (!el) return;
+  el.innerHTML = _prod.tags.map((t, i) => `
+    <span class="tag-chip" title="${escHtml(t)}">
+      <span style="overflow:hidden;text-overflow:ellipsis;max-width:160px">${escHtml(t)}</span>
+      <button class="tag-chip-x" data-idx="${i}" type="button"><i class="fa fa-xmark"></i></button>
+    </span>`).join('');
+  el.querySelectorAll('.tag-chip-x').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      _prod.tags.splice(parseInt(btn.dataset.idx), 1);
+      _prodTagsRender();
+    });
+  });
+}
+
+function _prodTagsAdd(raw) {
+  const val = String(raw || '').trim();
+  if (!val) return;
+  if (_prod.tags.some(t => t.toLowerCase() === val.toLowerCase())) return;
+  _prod.tags.push(val);
+  _prodTagsRender();
+}
+
 function _prodRemoveCat(id) {
   _prod.selectedCats = _prod.selectedCats.filter(x => x.id !== id);
   _tagRender('prod-cat-tags', _prod.selectedCats, _prodRemoveCat);
@@ -16505,6 +16537,24 @@ async function _prodLoadFormOptions() {
       _tagRender('prod-brand-tags', _prod.selectedBrands, _prodRemoveBrand);
     },
   );
+
+  // Wire tags input
+  const tagsInput = $('#prod-tags-input');
+  if (tagsInput) {
+    tagsInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ',') {
+        e.preventDefault();
+        _prodTagsAdd(tagsInput.value);
+        tagsInput.value = '';
+      } else if (e.key === 'Backspace' && !tagsInput.value && _prod.tags.length) {
+        _prod.tags.pop();
+        _prodTagsRender();
+      }
+    });
+    tagsInput.addEventListener('blur', () => {
+      if (tagsInput.value.trim()) { _prodTagsAdd(tagsInput.value); tagsInput.value = ''; }
+    });
+  }
 
   _prod._optionsLoaded = true;
 }
@@ -16570,6 +16620,7 @@ async function _prodSave(andNew = false) {
     wholesale_price:       parseFloat($('#prod-f-wholesale-price').value) || null,
     stock_quantity:        _prod.editingId ? (parseFloat($('#prod-f-stock').value) || 0) : 0,
     description:           $('#prod-f-description').value.trim() || null,
+    tags:                  _prod.tags.slice(),
     product_unit_id:       parseInt($('#prod-f-unit').value)     || null,
     product_category_ids:  catIds,
     product_brand_ids:     brandIds,
@@ -16715,6 +16766,7 @@ const _PROD_FIELD_MAP = [
   { id: 'size',        label: 'Size',            icon: 'fa-ruler',          section: 'Basic',           getEl() { return document.getElementById('prod-f-size')?.closest('.po-field'); } },
   { id: 'mfg-date',    label: 'Mfg Date',        icon: 'fa-calendar',       section: 'Basic',           getEl() { return document.getElementById('prod-f-mfg-date')?.closest('.po-field'); } },
   { id: 'description', label: 'Description',     icon: 'fa-align-left',     section: 'Basic',           getEl() { return document.getElementById('prod-f-description')?.closest('.po-field'); } },
+  { id: 'tags',        label: 'Tags',            icon: 'fa-tags',           section: 'Basic',           getEl() { return document.getElementById('prod-tags-wrap')?.closest('.po-field'); } },
   { id: 'active',      label: 'Active flag',     icon: 'fa-toggle-on',      section: 'Basic',           getEl() { return document.getElementById('prod-f-active')?.closest('.po-field'); } },
   // Pricing & Stock
   { id: 'cost-price',      label: 'Cost Price',      icon: 'fa-coins',          section: 'Pricing & Stock', getEl() { return document.getElementById('prod-f-cost-price')?.closest('.po-field'); } },
@@ -17459,6 +17511,7 @@ $('#prod-f-bundle')?.addEventListener('change', function () {
 // Click inside tag-input wrap focuses the input
 $('#prod-cat-wrap')?.addEventListener('click',   () => $('#prod-cat-input').focus());
 $('#prod-brand-wrap')?.addEventListener('click', () => $('#prod-brand-input').focus());
+$('#prod-tags-wrap')?.addEventListener('click',  () => $('#prod-tags-input').focus());
 // ── End Product CRUD ──────────────────────────────────────────────────────
 
 // ── Product detail ────────────────────────────────────────────────────────
@@ -17691,12 +17744,17 @@ function renderProductDetail(p, stockHistory = []) {
 
   const unitName = p.unit_name || p.unit?.name || p.unit || null;
 
+  const tagChips = Array.isArray(p.tags) && p.tags.length
+    ? p.tags.map(t => `<span class="inv-detail-chip">${escHtml(t)}</span>`).join('')
+    : '<span class="inv-detail-none">—</span>';
+
   const detailCells = [
     { label: 'SKU',        value: p.sku        ? escHtml(p.sku)      : '<span class="inv-detail-none">—</span>' },
     { label: 'STATUS',     value: `<span class="inv-badge ${statusClass}">${statusLabel}</span>` },
     { label: 'TYPE',       value: `<strong>${typeLabel}</strong>` },
     { label: 'CATEGORIES', value: catChips },
     { label: 'BRANDS',     value: brandChip },
+    { label: 'TAGS',       value: tagChips },
     { label: 'UNIT',       value: unitName ? escHtml(unitName) : '<span class="inv-detail-none">—</span>' },
   ];
 

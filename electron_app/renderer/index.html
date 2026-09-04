@@ -2879,6 +2879,13 @@
                 <label class="po-field-label">Description</label>
                 <textarea id="prod-f-description" class="po-field-input" rows="4" placeholder="Optional product description…" maxlength="5000" style="resize:vertical;min-height:80px"></textarea>
               </div>
+              <div class="po-field">
+                <label class="po-field-label">Tags</label>
+                <div class="tag-input-wrap" id="prod-tags-wrap">
+                  <div id="prod-tags-tags" class="tag-input-tags"></div>
+                  <input type="text" id="prod-tags-input" class="tag-input-field" placeholder="Type a tag and press Enter…" autocomplete="off" maxlength="60">
+                </div>
+              </div>
               <div class="po-field" style="flex-direction:row;align-items:center;gap:10px">
                 <input type="checkbox" id="prod-f-active" checked style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent)">
                 <label for="prod-f-active" class="po-field-label" style="margin:0;cursor:pointer">Active</label>
