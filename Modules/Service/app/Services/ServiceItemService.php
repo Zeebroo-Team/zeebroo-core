@@ -48,6 +48,7 @@ class ServiceItemService
             'name'                        => $data['name'],
             'barcode'                     => filled($data['barcode'] ?? '') ? $data['barcode'] : null,
             'description'                 => filled($data['description'] ?? '') ? $data['description'] : null,
+            'tags'                        => $this->normalizeTags($data['tags'] ?? []),
             'price'                       => isset($data['price']) && $data['price'] !== '' ? (float) $data['price'] : null,
             'cost_price'                  => isset($data['cost_price']) && $data['cost_price'] !== '' ? (float) $data['cost_price'] : null,
             'wholesale_price'             => isset($data['wholesale_price']) && $data['wholesale_price'] !== '' ? (float) $data['wholesale_price'] : null,
@@ -77,6 +78,7 @@ class ServiceItemService
             'name'                        => $data['name'],
             'barcode'                     => filled($data['barcode'] ?? '') ? $data['barcode'] : null,
             'description'                 => filled($data['description'] ?? '') ? $data['description'] : null,
+            'tags'                        => array_key_exists('tags', $data) ? $this->normalizeTags($data['tags'] ?? []) : $item->tags,
             'price'                       => isset($data['price']) && $data['price'] !== '' ? (float) $data['price'] : null,
             'cost_price'                  => isset($data['cost_price']) && $data['cost_price'] !== '' ? (float) $data['cost_price'] : null,
             'wholesale_price'             => isset($data['wholesale_price']) && $data['wholesale_price'] !== '' ? (float) $data['wholesale_price'] : null,
@@ -106,6 +108,32 @@ class ServiceItemService
     public function itemForBusiness(Business $business, ServiceItem $item): ?ServiceItem
     {
         return $item->business_id === $business->id ? $item : null;
+    }
+
+    /**
+     * Trim, drop blanks, and dedupe (case-insensitive) a client-submitted tags payload.
+     *
+     * @param  array<int, mixed>  $tags
+     * @return list<string>
+     */
+    private function normalizeTags(array $tags): array
+    {
+        $seen = [];
+        $out  = [];
+        foreach ($tags as $tag) {
+            $tag = trim((string) $tag);
+            if ($tag === '') {
+                continue;
+            }
+            $key = mb_strtolower($tag);
+            if (isset($seen[$key])) {
+                continue;
+            }
+            $seen[$key] = true;
+            $out[] = $tag;
+        }
+
+        return $out;
     }
 
     /**

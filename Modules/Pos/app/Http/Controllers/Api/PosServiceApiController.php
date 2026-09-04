@@ -179,6 +179,8 @@ class PosServiceApiController extends Controller
             'name'                       => ['required', 'string', 'max:255'],
             'barcode'                    => ['nullable', 'string', 'max:120'],
             'description'                => ['nullable', 'string', 'max:2000'],
+            'tags'                       => ['nullable', 'array'],
+            'tags.*'                     => ['string', 'max:60'],
             'price'                      => ['required', 'numeric', 'min:0'],
             'cost_price'                 => ['nullable', 'numeric', 'min:0'],
             'wholesale_price'            => ['nullable', 'numeric', 'min:0'],
@@ -212,6 +214,7 @@ class PosServiceApiController extends Controller
             'name'                        => $validated['name'],
             'barcode'                     => $validated['barcode'] ?? null,
             'description'                 => $validated['description'] ?? null,
+            'tags'                        => $validated['tags'] ?? [],
             'price'                       => $validated['price'],
             'cost_price'                  => $validated['cost_price'] ?? null,
             'wholesale_price'             => $validated['wholesale_price'] ?? null,
@@ -248,6 +251,8 @@ class PosServiceApiController extends Controller
             'name'                       => ['required', 'string', 'max:255'],
             'barcode'                    => ['nullable', 'string', 'max:120'],
             'description'                => ['nullable', 'string', 'max:2000'],
+            'tags'                       => ['nullable', 'array'],
+            'tags.*'                     => ['string', 'max:60'],
             'price'                      => ['required', 'numeric', 'min:0'],
             'cost_price'                 => ['nullable', 'numeric', 'min:0'],
             'wholesale_price'            => ['nullable', 'numeric', 'min:0'],
@@ -295,6 +300,9 @@ class PosServiceApiController extends Controller
         ];
         if (array_key_exists('custom_requirement_fields', $validated)) {
             $updateData['custom_requirement_fields'] = $validated['custom_requirement_fields'];
+        }
+        if (array_key_exists('tags', $validated)) {
+            $updateData['tags'] = $validated['tags'];
         }
         if (array_key_exists('file_manager_file_id', $validated)) {
             $updateData['file_manager_file_id'] = $validated['file_manager_file_id'];
@@ -392,6 +400,7 @@ class PosServiceApiController extends Controller
                 'name'                  => $serviceItem->name,
                 'barcode'               => $serviceItem->barcode,
                 'description'           => $serviceItem->description,
+                'tags'                  => $serviceItem->tags ?? [],
                 'price'                 => (float) $serviceItem->price,
                 'cost_price'            => $serviceItem->cost_price !== null ? (float) $serviceItem->cost_price : null,
                 'wholesale_price'       => $serviceItem->wholesale_price !== null ? (float) $serviceItem->wholesale_price : null,
@@ -498,6 +507,7 @@ class PosServiceApiController extends Controller
             'name'                        => $i->name,
             'barcode'                     => $i->barcode,
             'description'                 => $i->description,
+            'tags'                        => $i->tags ?? [],
             'price'                       => (float) $i->price,
             'cost_price'                  => $i->cost_price !== null ? (float) $i->cost_price : null,
             'wholesale_price'             => $i->wholesale_price !== null ? (float) $i->wholesale_price : null,
