@@ -16880,6 +16880,13 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
 }
 .isetup-sel:focus, .isetup-num:focus { outline: none; border-color: var(--accent); }
 .isetup-num { width: 100%; }
+.isetup-toggle-row {
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 12px; font-weight: 600; color: var(--text); cursor: pointer; padding: 2px 0;
+}
+.isetup-toggle-row input { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
+.isetup-hint { font-size: 10.5px; color: var(--text-muted); margin-top: 4px; line-height: 1.4; }
+.isetup-field:has(#isetup-lh-enabled:not(:checked)) + .isetup-field:has(#isetup-logo-pos) { opacity: .5; pointer-events: none; }
 .isetup-radio-row { display: flex; gap: 10px; }
 .isetup-radio {
   display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500;

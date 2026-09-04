@@ -995,6 +995,12 @@ try{
     c.setWidth(${pw});
     c.setHeight(${ph});
     c.renderAll();
+    var maxY=0;
+    (data.objects||[]).forEach(function(o){
+      var bottom=(o.top||0)+(o.height||0)*(o.scaleY||1);
+      if(bottom>maxY) maxY=bottom;
+    });
+    window.__lhContentHeight=maxY;
     document.title='__ready__';
   });
 }catch(e){document.title='__error__';}
@@ -1024,9 +1030,10 @@ try{
 
     const getDataUrl = () => {
       win.webContents.executeJavaScript(
-        "(function(){var c=document.getElementById('c');if(!c)return null;return c.toDataURL('image/png');})()"
-      ).then(dataUrl => {
-        finish(typeof dataUrl === 'string' && dataUrl.startsWith('data:image/png;base64,') ? dataUrl : null);
+        "(function(){var c=document.getElementById('c');if(!c)return null;return {dataUrl:c.toDataURL('image/png'),contentHeight:(window.__lhContentHeight||0)};})()"
+      ).then(result => {
+        const ok = result && typeof result.dataUrl === 'string' && result.dataUrl.startsWith('data:image/png;base64,');
+        finish(ok ? { dataUrl: result.dataUrl, contentHeight: result.contentHeight || 0 } : null);
       }).catch(() => finish(null));
     };
 
