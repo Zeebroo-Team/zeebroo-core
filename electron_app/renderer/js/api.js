@@ -98,6 +98,8 @@ const API = (() => {
     subscriptions:        (q, status) => request('GET',    `/subscriptions?q=${encodeURIComponent(q||'')}&status=${status||'all'}`),
     subscription:         (id)        => request('GET',    `/subscriptions/${id}`),
     customerSubscriptions:(customerId)=> request('GET',    `/customers/${customerId}/subscriptions`),
+    customerWarranties:   (customerId)=> request('GET',    `/customers/${customerId}/warranties`),
+    customerCreditSales:  (customerId)=> request('GET',    `/customers/${customerId}/credit-sales`),
     cancelSubscription:   (id)        => request('POST',   `/subscriptions/${id}/cancel`),
     pauseSubscription:    (id)        => request('POST',   `/subscriptions/${id}/pause`),
     resumeSubscription:   (id)        => request('POST',   `/subscriptions/${id}/resume`),

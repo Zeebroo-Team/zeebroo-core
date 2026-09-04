@@ -215,6 +215,8 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
     Route::patch('customers/{customer}', [PosCustomerApiController::class, 'update'])->name('customers.update');
     Route::delete('customers/{customer}', [PosCustomerApiController::class, 'destroy'])->name('customers.destroy');
     Route::get('customers/{customer}/subscriptions', [PosSubscriptionApiController::class, 'forCustomer'])->name('customers.subscriptions.index');
+    Route::get('customers/{customer}/warranties', [PosCustomerApiController::class, 'warranties'])->name('customers.warranties.index');
+    Route::get('customers/{customer}/credit-sales', [PosCustomerApiController::class, 'creditSales'])->name('customers.credit-sales.index');
 
     Route::get('customer-categories', [PosCustomerCategoryApiController::class, 'index'])->name('customer-categories.index');
     Route::post('customer-categories', [PosCustomerCategoryApiController::class, 'store'])->name('customer-categories.store');

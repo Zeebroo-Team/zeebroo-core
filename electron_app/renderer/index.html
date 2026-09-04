@@ -12623,7 +12623,18 @@
             </div>
           </div>
           <div class="cm-dv-fields" id="cm-dv-fields"></div>
-          <div class="cm-dv-history" id="cm-dv-history"></div>
+          <div class="cm-dv-tabs" id="cm-dv-tabs">
+            <button class="cm-dv-tab active" data-cm-tab="sales"><i class="fa fa-clock-rotate-left"></i> Recent Sales</button>
+            <button class="cm-dv-tab" data-cm-tab="subs"><i class="fa fa-rotate"></i> Subscriptions</button>
+            <button class="cm-dv-tab" data-cm-tab="warranty"><i class="fa fa-shield-halved"></i> Warranty</button>
+            <button class="cm-dv-tab" data-cm-tab="credit"><i class="fa fa-hand-holding-dollar"></i> Credit / Due</button>
+          </div>
+          <div class="cm-dv-tab-panels" id="cm-dv-tab-panels">
+            <div class="cm-dv-tab-panel cm-dv-history" id="cm-dv-history"></div>
+            <div class="cm-dv-tab-panel" id="cm-dv-panel-subs" style="display:none"></div>
+            <div class="cm-dv-tab-panel" id="cm-dv-panel-warranty" style="display:none"></div>
+            <div class="cm-dv-tab-panel" id="cm-dv-panel-credit" style="display:none"></div>
+          </div>
           <div class="cm-dv-actions">
             <button class="cm-btn-edit"   id="cm-btn-edit"><i class="fa fa-pen"></i> Edit</button>
             <button class="cm-btn-assign" id="cm-btn-assign"><i class="fa fa-cart-plus"></i> Assign to Sale</button>
