@@ -83,8 +83,8 @@ class StockAuditService
                 'updated_at'     => now(),
             ])->all();
 
-            if (!empty($lines)) {
-                StockAuditLine::insert($lines);
+            foreach (array_chunk($lines, 500) as $chunk) {
+                StockAuditLine::insert($chunk);
             }
 
             return $audit;

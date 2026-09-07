@@ -57,7 +57,8 @@ function toast(msg, type = 'info', onClick = null) {
   if (type === 'success' && !onClick) return;
   const el = document.createElement('div');
   el.className = `toast ${type}${onClick ? ' clickable' : ''}`;
-  el.textContent = msg;
+  msg = String(msg);
+  el.textContent = msg.length > 300 ? msg.slice(0, 300) + '…' : msg;
   if (onClick) el.addEventListener('click', () => { onClick(); el.remove(); });
   $('#toast-container').appendChild(el);
   setTimeout(() => el.remove(), onClick ? 10000 : 3500);
