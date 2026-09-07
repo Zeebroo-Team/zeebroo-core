@@ -4176,7 +4176,7 @@ function _soRenderList() {
   _so.list.forEach(o => {
     const date     = o.order_date             ? new Date(o.order_date             + 'T00:00:00').toLocaleDateString(undefined, { month:'short', day:'numeric', year:'numeric' }) : '—';
     const delivery = o.expected_delivery_date ? new Date(o.expected_delivery_date + 'T00:00:00').toLocaleDateString(undefined, { month:'short', day:'numeric', year:'numeric' }) : '—';
-    html += `<tr data-so-id="${o.id}">
+    html += `<tr data-so-id="${o.id}" data-so-status="${o.status}" data-so-invoice-id="${o.invoice_id || ''}">
       <td><span class="qt-tbl-num">${escHtml(o.order_number || String(o.id))}</span></td>
       <td class="qt-tbl-customer">${escHtml(o.customer_name || 'Walk-in')}</td>
       <td class="qt-tbl-muted">${date}</td>
@@ -4191,7 +4191,18 @@ function _soRenderList() {
   html += '</tbody></table></div>';
   $('#so-list-body').innerHTML = html;
   $$('#so-list-body tr[data-so-id]').forEach(row => {
-    row.addEventListener('click', () => _soOpenDetail(Number(row.dataset.soId)));
+    row.addEventListener('click', () => {
+      const invId = row.dataset.soInvoiceId;
+      if (row.dataset.soStatus === 'confirmed' && invId) {
+        const o = _so.list.find(x => String(x.id) === row.dataset.soId) || {};
+        const msg = o.invoice_number
+          ? `Sales order ${o.order_number || ''} has already been automatically converted to Invoice ${o.invoice_number}.`
+          : `This sales order has already been automatically converted to an invoice.`;
+        _soShowConfirmedModal(msg, Number(invId), 'Already Converted to Invoice');
+      } else {
+        _soOpenDetail(Number(row.dataset.soId));
+      }
+    });
   });
 }
 
@@ -4239,13 +4250,50 @@ async function _soOpenDetail(id) {
   const dateStr     = o.order_date             ? new Date(o.order_date             + 'T00:00:00').toLocaleDateString(undefined, { month:'long', day:'numeric', year:'numeric' }) : '—';
   const deliveryStr = o.expected_delivery_date ? new Date(o.expected_delivery_date + 'T00:00:00').toLocaleDateString(undefined, { month:'long', day:'numeric', year:'numeric' }) : '—';
 
-  const itemRows = (o.items || []).map((item, idx) => `<tr>
+  const taxRulesForLookup = Array.isArray(state.receiptSettings?.tax_rules)
+    ? state.receiptSettings.tax_rules.filter(r => parseFloat(r.value || 0) > 0)
+    : [];
+
+  const itemRows = (o.items || []).map((item, idx) => {
+    const qty      = parseFloat(item.quantity);
+    const price    = parseFloat(item.unit_price);
+    const gross    = qty * price;
+    const discType = item.discount_type || 'pct';
+    const discVal  = parseFloat(item.discount_value) || 0;
+    const discAmt  = discType === 'flat' ? Math.min(discVal, gross) : (gross * discVal / 100);
+    const net      = Math.max(0, gross - discAmt);
+    const taxType  = item.tax_type || 'pct';
+    const taxVal   = parseFloat(item.tax_pct) || 0;
+    const taxAmt   = taxType === 'flat' ? taxVal : (net * taxVal / 100);
+
+    let discCell = '—';
+    if (discVal > 0) {
+      const discLabel = discType === 'flat' ? `−${discAmt.toFixed(2)}${cur}` : `${discVal}%`;
+      discCell = `<span class="invd-adj-badge invd-disc-badge">${discLabel}</span>`;
+    }
+
+    let taxCell = '—';
+    if (taxVal > 0) {
+      const matchRule = taxRulesForLookup.find(r =>
+        (r.type === taxType || (r.type === 'percentage' && taxType === 'pct')) &&
+        String(r.value) === String(taxVal)
+      );
+      const taxLabel = matchRule
+        ? escHtml(matchRule.name) + (taxType !== 'flat' ? ' ' + taxVal + '%' : '')
+        : (taxType === 'flat' ? taxAmt.toFixed(2) + cur : taxVal + '%');
+      taxCell = `<span class="invd-adj-badge invd-tax-badge">${taxLabel}</span>`;
+    }
+
+    return `<tr>
     <td class="qt-item-n">${idx + 1}</td>
     <td>${escHtml(item.description || '—')}</td>
-    <td class="td-r">${parseFloat(item.quantity) % 1 === 0 ? parseInt(item.quantity) : parseFloat(item.quantity).toFixed(3)}</td>
-    <td class="td-r">${parseFloat(item.unit_price).toFixed(2)}${cur}</td>
+    <td class="td-r">${qty % 1 === 0 ? parseInt(qty) : qty.toFixed(3)}</td>
+    <td class="td-r">${price.toFixed(2)}${cur}</td>
+    <td class="td-r">${discCell}</td>
+    <td class="td-r">${taxCell}</td>
     <td class="td-r qt-item-total">${parseFloat(item.line_total).toFixed(2)}${cur}</td>
-  </tr>`).join('');
+  </tr>`;
+  }).join('');
 
   $('#so-detail-body').innerHTML = `<div class="qt-doc">
     <div class="qt-doc-banner">
@@ -4274,7 +4322,7 @@ async function _soOpenDetail(id) {
       ${o.invoice_number ? `<div class="qt-doc-meta-block"><div class="qt-doc-meta-lbl">Invoice</div><div class="qt-doc-meta-val">${escHtml(o.invoice_number)}</div></div>` : ''}
     </div>
     <table class="qt-item-table">
-      <thead><tr><th style="width:32px">#</th><th>Description</th><th class="td-r">Qty</th><th class="td-r">Unit Price</th><th class="td-r">Line Total</th></tr></thead>
+      <thead><tr><th style="width:32px">#</th><th>Description</th><th class="td-r">Qty</th><th class="td-r">Unit Price</th><th class="td-r">Disc</th><th class="td-r">Tax</th><th class="td-r">Line Total</th></tr></thead>
       <tbody>${itemRows}</tbody>
     </table>
     <div class="qt-doc-totals">
@@ -4291,16 +4339,47 @@ async function _soAction(id, action) {
   const fnMap = { confirm: API.confirmSalesOrder, process: API.processSalesOrder, complete: API.completeSalesOrder, cancel: API.cancelSalesOrder };
   const res = await fnMap[action](id);
   if (res.status === 200) {
-    const msg = action === 'confirm' && res.body?.invoice_number
-      ? `Order confirmed → Invoice ${res.body.invoice_number} created`
-      : { confirm: 'Order confirmed', process: 'Marked as processing', complete: 'Order completed', cancel: 'Order cancelled' }[action];
-    toast(msg, 'success');
+    const orderNumber = $('#so-detail-title')?.textContent || '';
     _soOpenDetail(id);
     loadSalesOrderList();
+    if (action === 'confirm' && res.body?.invoice_id) {
+      const msg = res.body.invoice_number
+        ? `Sales order ${orderNumber} has been confirmed and moved to Invoice ${res.body.invoice_number}.`
+        : `Sales order ${orderNumber} has been confirmed.`;
+      _soShowConfirmedModal(msg, res.body.invoice_id, 'Order Confirmed');
+    } else {
+      const msg = { confirm: 'Order confirmed', process: 'Marked as processing', complete: 'Order completed', cancel: 'Order cancelled' }[action];
+      toast(msg, 'success');
+    }
   } else {
     toast(res.body?.message || 'Action failed', 'error');
   }
 }
+
+// ── "Order confirmed → moved to Invoice" modal ─────────────────────────────
+let _soConfirmedInvoiceId = null;
+
+function _soShowConfirmedModal(message, invoiceId, title = 'Order Confirmed') {
+  _soConfirmedInvoiceId = invoiceId || null;
+  $('#so-invoice-moved-title').textContent   = title;
+  $('#so-invoice-moved-message').textContent = message;
+  $('#so-invoice-moved-view').style.display = _soConfirmedInvoiceId ? '' : 'none';
+  $('#so-invoice-moved-modal').style.display = 'flex';
+}
+
+$('#so-invoice-moved-close')?.addEventListener('click', () => {
+  $('#so-invoice-moved-modal').style.display = 'none';
+});
+$('#so-invoice-moved-view')?.addEventListener('click', () => {
+  $('#so-invoice-moved-modal').style.display = 'none';
+  if (_soConfirmedInvoiceId) {
+    _salSwitchView('invoices');
+    _invOpenDetail(_soConfirmedInvoiceId);
+  }
+});
+$('#so-invoice-moved-modal')?.addEventListener('pointerdown', e => {
+  if (e.target === e.currentTarget) $('#so-invoice-moved-modal').style.display = 'none';
+});
 
 function _soResetForm() {
   _so.editingId = null;
@@ -4387,15 +4466,35 @@ function _soRenderItems() {
   $$('#so-items-body .qt-line-row').forEach(row => {
     const idx = +row.dataset.idx;
     if (_so.items[idx]) {
-      _so.items[idx].description = row.querySelector('.so-item-desc')?.value ?? _so.items[idx].description;
-      _so.items[idx].quantity    = parseFloat(row.querySelector('.so-item-qty')?.value)   || _so.items[idx].quantity;
-      _so.items[idx].unit_price  = parseFloat(row.querySelector('.so-item-price')?.value) || _so.items[idx].unit_price;
+      _so.items[idx].description    = row.querySelector('.so-item-desc')?.value ?? _so.items[idx].description;
+      _so.items[idx].quantity       = parseFloat(row.querySelector('.so-item-qty')?.value)   || _so.items[idx].quantity;
+      _so.items[idx].unit_price     = parseFloat(row.querySelector('.so-item-price')?.value) || _so.items[idx].unit_price;
+      _so.items[idx].discount_value = parseFloat(row.querySelector('.so-item-disc')?.value)  || 0;
+      _so.items[idx].tax_pct        = parseFloat(row.dataset.taxValue) || _so.items[idx].tax_pct || 0;
     }
   });
 
+  const cur      = state.currency || '¤';
+  const taxRules = Array.isArray(state.receiptSettings?.tax_rules)
+    ? state.receiptSettings.tax_rules.filter(r => parseFloat(r.value || 0) > 0)
+    : [];
+
   body.innerHTML = _so.items.map((item, idx) => {
-    const lineTotal = (parseFloat(item.quantity || 0) * parseFloat(item.unit_price || 0)).toFixed(2);
-    return `<div class="qt-line-row" data-idx="${idx}">
+    const discType  = item.discount_type  || 'pct';
+    const discValue = parseFloat(item.discount_value || 0);
+    const taxType   = item.tax_type       || 'pct';
+    const taxValue  = parseFloat(item.tax_pct || 0);
+    const lineTotal = _soLineTotal(item).toFixed(2);
+
+    const taxOpts = taxRules.map((r, ri) => {
+      const lbl = escHtml(r.name) + (r.type === 'flat'
+        ? ' (' + escHtml(cur) + parseFloat(r.value).toFixed(2) + ')'
+        : ' ' + parseFloat(r.value) + '%');
+      const sel = r.type === taxType && String(r.value) === String(taxValue) ? ' selected' : '';
+      return `<option value="${ri}"${sel}>${lbl}</option>`;
+    }).join('');
+
+    return `<div class="qt-line-row" data-idx="${idx}" data-disc-type="${discType}" data-tax-type="${taxType}" data-tax-value="${taxValue}">
       <div class="qt-line-desc">
         <input type="text" class="qt-line-input qt-line-desc-input so-item-desc" data-idx="${idx}"
           value="${escHtml(item.description || '')}" placeholder="Description or search product…">
@@ -4404,6 +4503,15 @@ function _soRenderItems() {
         min="0.001" step="any" value="${item.quantity || 1}">
       <input type="number" class="qt-line-input qt-line-price so-item-price" data-idx="${idx}"
         min="0" step="any" value="${item.unit_price !== undefined ? item.unit_price : ''}" placeholder="0.00">
+      <div class="qt-line-disc-wrap">
+        <input type="number" class="qt-line-disc-inp so-item-disc${discValue > 0 ? ' has-val' : ''}" data-idx="${idx}"
+          value="${discValue > 0 ? discValue : ''}" min="0" ${discType === 'pct' ? 'max="100"' : ''} step="any" placeholder="0">
+        <button class="qt-disc-toggle so-item-disc-toggle${discType === 'flat' ? ' is-flat' : ''}" data-idx="${idx}" title="Toggle % / flat">${discType === 'flat' ? escHtml(cur) : '%'}</button>
+      </div>
+      <select class="qt-line-tax-sel so-item-tax${taxValue > 0 ? ' has-tax' : ''}" data-idx="${idx}">
+        <option value="">– None</option>
+        ${taxOpts}
+      </select>
       <div class="qt-line-total">${lineTotal}</div>
       <button class="qt-line-del so-item-del" data-idx="${idx}"><i class="fa fa-xmark"></i></button>
     </div>`;
@@ -4430,14 +4538,55 @@ function _soRenderItems() {
       _soRenderItems(); _soCalcTotals();
     });
   });
+  $$('#so-items-body .so-item-disc').forEach(el => {
+    el.addEventListener('input', () => {
+      _so.items[+el.dataset.idx].discount_value = parseFloat(el.value) || 0;
+      _soRenderItems(); _soCalcTotals();
+    });
+  });
+  $$('#so-items-body .so-item-disc-toggle').forEach(el => {
+    el.addEventListener('click', () => {
+      const idx  = +el.dataset.idx;
+      const item = _so.items[idx];
+      item.discount_type = (item.discount_type === 'flat') ? 'pct' : 'flat';
+      _soRenderItems(); _soCalcTotals();
+    });
+  });
+  $$('#so-items-body .so-item-tax').forEach(el => {
+    el.addEventListener('change', () => {
+      const idx  = +el.dataset.idx;
+      const item = _so.items[idx];
+      const ri   = el.value === '' ? -1 : parseInt(el.value);
+      const rule = ri >= 0 && taxRules[ri] ? taxRules[ri] : null;
+      // Normalize 'percentage' (POS settings format) → 'pct'
+      item.tax_type = rule ? (rule.type === 'percentage' ? 'pct' : rule.type) : 'pct';
+      item.tax_pct  = rule ? parseFloat(rule.value) : 0;
+      _soRenderItems(); _soCalcTotals();
+    });
+  });
   $$('#so-items-body .so-item-del').forEach(el => {
     el.addEventListener('click', () => { _so.items.splice(+el.dataset.idx, 1); _soRenderItems(); _soCalcTotals(); });
   });
 }
 
+function _soLineTotal(item) {
+  const qty      = parseFloat(item.quantity || 0);
+  const price    = parseFloat(item.unit_price || 0);
+  const discType = item.discount_type || 'pct';
+  const discVal  = parseFloat(item.discount_value || 0);
+  const taxType  = item.tax_type || 'pct';
+  const taxValue = parseFloat(item.tax_pct || 0);
+
+  const gross   = qty * price;
+  const discAmt = discType === 'flat' ? Math.min(discVal, gross) : (gross * discVal / 100);
+  const net     = Math.max(0, gross - discAmt);
+  const taxAmt  = taxType === 'flat' ? taxValue : (net * taxValue / 100);
+  return Math.round((net + taxAmt) * 100) / 100;
+}
+
 function _soCalcTotals() {
   const cur      = state.currency ? ' ' + state.currency : '';
-  const subtotal = _so.items.reduce((s, i) => s + (parseFloat(i.quantity || 0) * parseFloat(i.unit_price || 0)), 0);
+  const subtotal = _so.items.reduce((s, i) => s + _soLineTotal(i), 0);
   const discount = parseFloat($('#so-f-discount').value) || 0;
   const tax      = parseFloat($('#so-f-tax').value)      || 0;
   const total    = Math.max(0, subtotal - discount + tax);
@@ -4467,7 +4616,16 @@ async function _soOpenForm(order) {
     $('#so-f-discount').value      = parseFloat(order.discount_amount || 0).toFixed(2);
     $('#so-f-tax').value           = parseFloat(order.tax_amount || 0).toFixed(2);
     $('#so-f-notes').value         = order.notes || '';
-    _so.items = (order.items || []).map(i => ({ description: i.description || '', quantity: parseFloat(i.quantity), unit_price: parseFloat(i.unit_price), product_id: i.product_id || null }));
+    _so.items = (order.items || []).map(i => ({
+      description:    i.description || '',
+      quantity:        parseFloat(i.quantity),
+      unit_price:      parseFloat(i.unit_price),
+      product_id:      i.product_id || null,
+      discount_type:   i.discount_type  || 'pct',
+      discount_value:  parseFloat(i.discount_value || 0),
+      tax_type:        i.tax_type       || 'pct',
+      tax_pct:         parseFloat(i.tax_pct || 0),
+    }));
   } else {
     _soResetForm();
     return;
@@ -4481,9 +4639,13 @@ async function _soSave() {
   $$('#so-items-body .qt-line-row').forEach(row => {
     const idx = +row.dataset.idx;
     if (_so.items[idx]) {
-      _so.items[idx].description = row.querySelector('.so-item-desc')?.value ?? '';
-      _so.items[idx].quantity    = parseFloat(row.querySelector('.so-item-qty')?.value)   || 1;
-      _so.items[idx].unit_price  = parseFloat(row.querySelector('.so-item-price')?.value) || 0;
+      _so.items[idx].description    = row.querySelector('.so-item-desc')?.value ?? '';
+      _so.items[idx].quantity       = parseFloat(row.querySelector('.so-item-qty')?.value)   || 1;
+      _so.items[idx].unit_price     = parseFloat(row.querySelector('.so-item-price')?.value) || 0;
+      _so.items[idx].discount_type  = row.dataset.discType || 'pct';
+      _so.items[idx].discount_value = parseFloat(row.querySelector('.so-item-disc')?.value)  || 0;
+      _so.items[idx].tax_type       = row.dataset.taxType  || 'pct';
+      _so.items[idx].tax_pct        = parseFloat(row.dataset.taxValue) || 0;
     }
   });
 
@@ -4499,7 +4661,16 @@ async function _soSave() {
     discount_amount:         parseFloat($('#so-f-discount').value) || 0,
     tax_amount:              parseFloat($('#so-f-tax').value) || 0,
     notes:                   $('#so-f-notes').value || null,
-    items: _so.items.map(i => ({ description: i.description, quantity: i.quantity, unit_price: i.unit_price, product_id: i.product_id || null })),
+    items: _so.items.map(i => ({
+      description:     i.description,
+      quantity:         i.quantity,
+      unit_price:       i.unit_price,
+      product_id:       i.product_id || null,
+      discount_type:    i.discount_type  || 'pct',
+      discount_value:   i.discount_value || 0,
+      tax_type:         i.tax_type       || 'pct',
+      tax_pct:          i.tax_pct        || 0,
+    })),
   };
 
   const saveBtn = $('#so-save-btn');
@@ -4530,7 +4701,7 @@ $('#so-cancel-form-btn').addEventListener('click', () => { _so.editingId ? _soOp
 $('#so-new-btn').addEventListener('click', () => _soOpenForm(null));
 $('#so-save-btn').addEventListener('click', _soSave);
 $('#so-add-item-btn').addEventListener('click', () => {
-  _so.items.push({ description: '', quantity: 1, unit_price: 0, product_id: null });
+  _so.items.push({ description: '', quantity: 1, unit_price: 0, product_id: null, discount_type: 'pct', discount_value: 0, tax_type: 'pct', tax_pct: 0 });
   _soRenderItems();
   _soCalcTotals();
   const inputs = $$('#so-items-body .so-item-desc');
