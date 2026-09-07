@@ -2651,6 +2651,8 @@
                 <span style="flex:1">Description</span>
                 <span class="qt-col-qty">Qty</span>
                 <span class="qt-col-price">Unit Price</span>
+                <span class="qt-col-disc">Disc</span>
+                <span class="qt-col-tax">Tax</span>
                 <span class="qt-col-total">Total</span>
                 <span class="qt-col-del"></span>
               </div>
@@ -13389,6 +13391,23 @@
     <div class="app-confirm-footer">
       <button class="app-confirm-cancel" id="app-confirm-cancel-btn">Cancel</button>
       <button class="app-confirm-submit" id="app-confirm-submit-btn"><i class="fa fa-check"></i> Confirm</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Sales Order Confirmed → Invoice Modal ─────────────────────────────── -->
+<div id="so-invoice-moved-modal" class="modal-overlay" style="display:none;z-index:2100">
+  <div class="app-confirm-box success" id="so-invoice-moved-box">
+    <div class="app-confirm-body">
+      <div class="app-confirm-icon"><i class="fa fa-circle-check"></i></div>
+      <div>
+        <div class="app-confirm-title" id="so-invoice-moved-title">Order Confirmed</div>
+        <div class="app-confirm-message" id="so-invoice-moved-message"></div>
+      </div>
+    </div>
+    <div class="app-confirm-footer">
+      <button class="app-confirm-cancel" id="so-invoice-moved-close">Close</button>
+      <button class="app-confirm-submit" id="so-invoice-moved-view"><i class="fa fa-eye"></i> View Invoice</button>
     </div>
   </div>
 </div>

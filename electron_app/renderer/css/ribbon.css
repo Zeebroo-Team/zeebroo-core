@@ -11736,6 +11736,8 @@ body.dark .bc-main-preview-body { background: #1a1a1a; }
   background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent);
 }
 .app-confirm-box.danger .app-confirm-icon { background: rgba(239,68,68,.12); color: #dc2626; }
+.app-confirm-box.success .app-confirm-icon { background: rgba(16,185,129,.12); color: #10b981; }
+.app-confirm-box.success .app-confirm-submit { background: #10b981; }
 .app-confirm-title   { font-size: 15px; font-weight: 800; color: var(--text); margin-bottom: 4px; }
 .app-confirm-message { font-size: 13px; color: var(--text-muted); line-height: 1.5; }
 .app-confirm-footer {

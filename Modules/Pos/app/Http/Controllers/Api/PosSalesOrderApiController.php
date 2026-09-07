@@ -154,6 +154,8 @@ class PosSalesOrderApiController extends Controller
             'expected_delivery_date' => $o->expected_delivery_date?->toDateString(),
             'total'                  => round((float) $o->total, 2),
             'item_count'             => $o->items()->count(),
+            'invoice_id'             => $o->invoice_id,
+            'invoice_number'         => $o->invoice?->invoice_number,
         ];
     }
 
@@ -169,12 +171,16 @@ class PosSalesOrderApiController extends Controller
             'invoice_id'      => $o->invoice_id,
             'invoice_number'  => $o->invoice?->invoice_number,
             'items'           => $o->items->map(fn ($i) => [
-                'id'          => (int) $i->id,
-                'product_id'  => $i->product_id,
-                'description' => $i->description,
-                'quantity'    => round((float) $i->quantity, 3),
-                'unit_price'  => round((float) $i->unit_price, 2),
-                'line_total'  => round((float) $i->line_total, 2),
+                'id'             => (int) $i->id,
+                'product_id'     => $i->product_id,
+                'description'    => $i->description,
+                'quantity'       => round((float) $i->quantity, 3),
+                'unit_price'     => round((float) $i->unit_price, 2),
+                'discount_type'  => $i->discount_type ?? 'pct',
+                'discount_value' => round((float) ($i->discount_value ?? 0), 2),
+                'tax_pct'        => round((float) ($i->tax_pct ?? 0), 2),
+                'tax_type'       => $i->tax_type ?? 'pct',
+                'line_total'     => round((float) $i->line_total, 2),
             ])->values()->all(),
         ];
     }
@@ -194,6 +200,10 @@ class PosSalesOrderApiController extends Controller
             'items.*.description'     => ['nullable', 'string', 'max:500'],
             'items.*.quantity'        => ['required', 'numeric', 'min:0.001'],
             'items.*.unit_price'      => ['required', 'numeric', 'min:0'],
+            'items.*.discount_type'   => ['nullable', 'string', 'in:pct,flat'],
+            'items.*.discount_value'  => ['nullable', 'numeric', 'min:0'],
+            'items.*.tax_pct'         => ['nullable', 'numeric', 'min:0'],
+            'items.*.tax_type'        => ['nullable', 'string', 'in:pct,flat,percentage'],
         ]);
     }
 }

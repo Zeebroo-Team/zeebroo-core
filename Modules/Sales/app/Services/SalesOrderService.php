@@ -24,7 +24,7 @@ class SalesOrderService
     ): Collection {
         $query = SalesOrder::query()
             ->where('business_id', $business->id)
-            ->with('customer');
+            ->with(['customer', 'invoice']);
 
         if (filled($search)) {
             $query->where(function ($q) use ($search) {
@@ -100,11 +100,15 @@ class SalesOrderService
             $order->load('items');
 
             $items = $order->items->map(fn (SalesOrderItem $item) => [
-                'item_type'   => $item->product_id ? 'product' : null,
-                'product_id'  => $item->product_id,
-                'description' => $item->description,
-                'quantity'    => (float) $item->quantity,
-                'unit_price'  => (float) $item->unit_price,
+                'item_type'      => $item->product_id ? 'product' : null,
+                'product_id'     => $item->product_id,
+                'description'    => $item->description,
+                'quantity'       => (float) $item->quantity,
+                'unit_price'     => (float) $item->unit_price,
+                'discount_type'  => $item->discount_type ?? 'pct',
+                'discount_value' => (float) ($item->discount_value ?? 0),
+                'tax_pct'        => (float) ($item->tax_pct ?? 0),
+                'tax_type'       => $item->tax_type ?? 'pct',
             ])->all();
 
             $invoice = $this->invoices->create($order->business, [
@@ -166,24 +170,69 @@ class SalesOrderService
     private function syncItems(SalesOrder $order, array $items): void
     {
         $order->items()->delete();
-        foreach ($items as $idx => $item) {
-            $qty       = max(0.001, (float) ($item['quantity']  ?? 1));
-            $unitPrice = max(0,     (float) ($item['unit_price'] ?? 0));
+        foreach ($this->normalizeItems($items) as $idx => $item) {
             SalesOrderItem::create([
                 'sales_order_id' => $order->id,
-                'product_id'     => isset($item['product_id']) && $item['product_id'] ? (int) $item['product_id'] : null,
-                'description'    => $item['description'] ?? null,
-                'quantity'       => $qty,
-                'unit_price'     => $unitPrice,
-                'line_total'     => round($qty * $unitPrice, 2),
+                'product_id'     => $item['product_id'],
+                'description'    => $item['description'],
+                'quantity'       => $item['quantity'],
+                'unit_price'     => $item['unit_price'],
+                'discount_type'  => $item['discount_type'],
+                'discount_value' => $item['discount_value'],
+                'tax_pct'        => $item['tax_pct'],
+                'tax_type'       => $item['tax_type'],
+                'line_total'     => $item['line_total'],
                 'sort_order'     => $idx,
             ]);
         }
     }
 
+    private function normalizeItems(array $rawItems): array
+    {
+        $normalized = [];
+        foreach ($rawItems as $item) {
+            $qty   = max(0.001, (float) ($item['quantity']   ?? 1));
+            $price = max(0,     (float) ($item['unit_price'] ?? 0));
+
+            $discType  = in_array($item['discount_type'] ?? 'pct', ['pct', 'flat']) ? ($item['discount_type'] ?? 'pct') : 'pct';
+            $discValue = max(0, (float) ($item['discount_value'] ?? 0));
+            // Normalize 'percentage' (POS settings format) → 'pct'
+            $rawTaxType = $item['tax_type'] ?? 'pct';
+            $taxType    = $rawTaxType === 'percentage' ? 'pct' : (in_array($rawTaxType, ['pct', 'flat']) ? $rawTaxType : 'pct');
+            $taxValue   = max(0, (float) ($item['tax_pct'] ?? 0));
+
+            $lineGross = $qty * $price;
+            $discAmt   = $discType === 'flat'
+                ? min($discValue, $lineGross)
+                : ($lineGross * $discValue / 100);
+            $lineNet   = max(0, $lineGross - $discAmt);
+            $taxAmt    = $taxType === 'flat'
+                ? $taxValue
+                : ($lineNet * $taxValue / 100);
+            $lineTotal = round($lineNet + $taxAmt, 2);
+
+            $normalized[] = [
+                'product_id'     => isset($item['product_id']) && $item['product_id'] ? (int) $item['product_id'] : null,
+                'description'    => $item['description'] ?? null,
+                'quantity'       => $qty,
+                'unit_price'     => $price,
+                'discount_type'  => $discType,
+                'discount_value' => round($discValue, 2),
+                'tax_pct'        => round($taxValue, 2),
+                'tax_type'       => $taxType,
+                'line_total'     => $lineTotal,
+            ];
+        }
+
+        return $normalized;
+    }
+
     private function recalculateTotals(SalesOrder $order, array $data): void
     {
-        $subtotal = $order->items()->sum(DB::raw('quantity * unit_price'));
+        $order->load('items');
+        // Subtotal is the sum of line_totals; each line_total already includes
+        // per-line discount and tax, so we add any header-level adjustments on top.
+        $subtotal = (float) $order->items->sum('line_total');
         $discount = max(0, (float) ($data['discount_amount'] ?? 0));
         $tax      = max(0, (float) ($data['tax_amount']      ?? 0));
 
