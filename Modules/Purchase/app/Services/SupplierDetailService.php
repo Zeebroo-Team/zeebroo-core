@@ -143,6 +143,20 @@ class SupplierDetailService
     }
 
     /**
+     * @return array<string, int|float>
+     */
+    public function summaryFor(Supplier $supplier): array
+    {
+        $purchases = $this->purchasesForSupplier($supplier);
+        $grns = $this->grnsForSupplier($supplier);
+        $cashPayments = $this->cashLedgerForSupplier($supplier);
+        $cheques = $this->chequesForSupplier($supplier);
+        $creditGrns = $this->creditGrnsForSupplier($grns);
+
+        return $this->buildSummary($purchases, $grns, $cashPayments, $cheques, $creditGrns);
+    }
+
+    /**
      * @param  EloquentCollection<int, GoodsReceiveNote>  $grns
      * @return EloquentCollection<int, GoodsReceiveNote>
      */

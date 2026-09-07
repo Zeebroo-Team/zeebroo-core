@@ -11835,6 +11835,11 @@ async function _smSelectSupplier(id) {
   const toggleBtn = $('#sm-btn-toggle-active');
   toggleBtn.innerHTML = s.is_active ? '<i class="fa fa-ban"></i> Deactivate' : '<i class="fa fa-rotate-left"></i> Activate';
 
+  const sum = s.summary || {};
+  $('#sm-dv-sum-purchases').textContent   = parseFloat(sum.purchases_total || 0).toFixed(2);
+  $('#sm-dv-sum-outstanding').textContent = parseFloat(sum.outstanding_total || 0).toFixed(2);
+  $('#sm-dv-sum-cheques').textContent     = parseFloat(sum.cheques_open_amount || 0).toFixed(2);
+
   const fields = [
     { label: 'Contact',  val: s.contact_name },
     { label: 'Category', val: s.category_name },

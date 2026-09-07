@@ -5523,6 +5523,26 @@ body.dark .product-card .p-icon { background: rgba(255,255,255,.07); }
 .cm-dv-field-val   { font-size: 13px; font-weight: 500; color: var(--text); word-break: break-word; }
 .cm-dv-field-val.empty { color: var(--text-light); font-style: italic; }
 
+/* Supplier detail: small summary card */
+.sup-summary-card {
+  display: flex; margin: 12px 20px 4px;
+  background: var(--surface);
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
+  overflow: hidden; flex-shrink: 0;
+}
+.sup-summary-item {
+  flex: 1; padding: 9px 14px; text-align: center;
+  border-right: 1px solid var(--border-light);
+}
+.sup-summary-item:last-child { border-right: none; }
+.sup-summary-label {
+  font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
+  color: var(--text-muted); margin-bottom: 4px;
+}
+.sup-summary-value { font-size: 15px; font-weight: 800; color: var(--text); }
+.sup-summary-value--danger { color: #dc2626; }
+
 .cm-dv-history { flex: 1; overflow-y: auto; padding: 0 20px 10px; min-height: 0; display: flex; flex-direction: column; }
 .cm-dv-history-title {
   font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;

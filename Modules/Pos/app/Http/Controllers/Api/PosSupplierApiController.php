@@ -12,6 +12,7 @@ use Modules\Purchase\Models\ChequePayment;
 use Modules\Purchase\Models\GoodsReceiveNote;
 use Modules\Purchase\Models\Supplier;
 use Modules\Purchase\Models\SupplierCategory;
+use Modules\Purchase\Services\SupplierDetailService;
 
 class PosSupplierApiController extends Controller
 {
@@ -49,7 +50,7 @@ class PosSupplierApiController extends Controller
         ]);
     }
 
-    public function show(Request $request, Supplier $supplier): JsonResponse
+    public function show(Request $request, Supplier $supplier, SupplierDetailService $supplierDetail): JsonResponse
     {
         $business = $this->businessOrAbort($request);
         if ((int) $supplier->business_id !== (int) $business->id) abort(403);
@@ -61,7 +62,10 @@ class PosSupplierApiController extends Controller
                 ->select('id', 'supplier_id', 'po_number', 'status', 'purchase_date', 'total'),
         ]);
 
-        return response()->json(['data' => $this->format($supplier, full: true)]);
+        $data = $this->format($supplier, full: true);
+        $data['summary'] = $supplierDetail->summaryFor($supplier);
+
+        return response()->json(['data' => $data]);
     }
 
     public function goodsReceive(Request $request, Supplier $supplier): JsonResponse
