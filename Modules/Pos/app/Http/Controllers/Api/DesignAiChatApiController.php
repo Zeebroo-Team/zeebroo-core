@@ -7,12 +7,18 @@ use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Modules\Business\Models\Branch;
+use Modules\Business\Models\Business;
+use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesPosBusinessForApi;
 use Modules\Pos\Jobs\GenerateDesignImageJob;
 
 class DesignAiChatApiController extends Controller
 {
+    use ResolvesPosBusinessForApi;
+
     private const BASE_SYSTEM_PROMPT = <<<'PROMPT'
 You are an expert AI design assistant inside Zeebroo Design Studio (Fabric.js canvas).
 A canvas dimension header is prepended — use those exact pixel values for ALL coordinates and sizes.
@@ -650,7 +656,103 @@ PROMPT;
         return null;
     }
 
-    private function createLetterheadFromSample(): ?JsonResponse
+    /**
+     * Position of the round logo placeholder shared by every letterhead sample
+     * (see public/model_data/letterheads/letterhead{1..4}.json — the small grey
+     * circle + "LOGO" text sit at the same left/top/radius in all four files),
+     * expressed as fractions of the 794×1123 letterhead canvas.
+     */
+    private const LOGO_LEFT_PCT   = 27.5 / 794;
+    private const LOGO_TOP_PCT    = 10.6 / 1123;
+    private const LOGO_HEIGHT_PCT = 137.6 / 1123; // 160 * 0.86 scale
+
+    /**
+     * Business profile fetched from the authenticated business, used to replace
+     * the sample letterhead's generic placeholder copy with the real company
+     * details already saved under Settings → Business.
+     *
+     * @return array{name: ?string, slogan: ?string, address: ?string, phone: ?string, logo_url: ?string}
+     */
+    private function resolveLetterheadBusinessProfile(Request $request): array
+    {
+        $empty = ['name' => null, 'slogan' => null, 'address' => null, 'phone' => null, 'logo_url' => null];
+
+        $business = $this->resolveBusinessForApi($request);
+        if (! $business instanceof Business) {
+            return $empty;
+        }
+
+        $branch = null;
+        if (Schema::hasTable('branches')) {
+            $branch = Branch::query()
+                ->where('business_id', $business->id)
+                ->where('is_active', true)
+                ->orderBy('id')
+                ->first();
+        }
+
+        $logoUrl = trim((string) ($business->getSetting('business.logo_url', '') ?: ''));
+        if ($logoUrl === '') {
+            $logoUrl = (string) ($business->logoUrl() ?? '');
+        }
+
+        $address = trim((string) ($business->getSetting('pos.receipt_address', '') ?: ''));
+        if ($address === '') {
+            $address = trim((string) ($branch->address ?? ''));
+        }
+
+        return [
+            'name'     => trim((string) $business->name) ?: null,
+            'slogan'   => trim((string) ($business->short_description ?? '')) ?: null,
+            'address'  => $address ?: null,
+            'phone'    => trim((string) ($branch->phone ?? '')) ?: null,
+            'logo_url' => $logoUrl !== '' ? $this->resolveLogoDataUrl($logoUrl) : null,
+        ];
+    }
+
+    /**
+     * The desktop client loads generated images with `crossOrigin: anonymous`,
+     * which turns the request into a real CORS fetch — and this app sets no
+     * CORS headers on /storage assets, so a plain HTTP(S) URL silently fails
+     * to load there. Every other image command in Design Studio sidesteps
+     * this by shipping a base64 data: URL instead (see imageJobStatus()
+     * below); do the same here for the business logo.
+     */
+    private function resolveLogoDataUrl(string $logoUrl): ?string
+    {
+        // Fast path: the logo lives on our own "public" disk — read it straight off disk.
+        $publicBase = rtrim(Storage::disk('public')->url(''), '/');
+        if ($publicBase !== '' && str_starts_with($logoUrl, $publicBase . '/')) {
+            $relative = ltrim(substr($logoUrl, strlen($publicBase)), '/');
+            if (Storage::disk('public')->exists($relative)) {
+                $bytes = Storage::disk('public')->get($relative);
+                $mime  = Storage::disk('public')->mimeType($relative) ?: 'image/png';
+
+                return 'data:' . $mime . ';base64,' . base64_encode($bytes);
+            }
+        }
+
+        // Fallback: fetch it over HTTP (server-side calls aren't subject to browser CORS).
+        try {
+            $response = Http::timeout(10)->get($logoUrl);
+            if (! $response->successful()) {
+                return null;
+            }
+
+            $mime = strtok($response->header('Content-Type') ?: 'image/png', ';');
+            if (! str_starts_with($mime, 'image/')) {
+                return null;
+            }
+
+            $body = $response->body();
+
+            return $body !== '' ? 'data:' . $mime . ';base64,' . base64_encode($body) : null;
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    private function createLetterheadFromSample(Request $request): ?JsonResponse
     {
         $dir   = public_path('model_data/letterheads');
         $files = glob($dir . '/letterhead*.json');
@@ -674,14 +776,44 @@ PROMPT;
         $paletteName = $paletteNames[0];
         $palette     = self::COLOR_PALETTES[$paletteName];
 
+        $profile      = $this->resolveLetterheadBusinessProfile($request);
+        $placeholders = [
+            'Your Company Pvt LTD'                      => $profile['name'],
+            'Your Bussines Slogen'                       => $profile['slogan'],
+            '[No.128, Place your address, Road, City]'  => $profile['address'],
+            '011 - XXX XXXX| 011 - XXX XXXX'             => $profile['phone'],
+        ];
+
         $commands   = [];
         $commands[] = ['type' => 'set_background', 'fill' => '#eef0f5'];
 
         foreach ($data['canvas']['objects'] as $obj) {
+            $text = $obj['text'] ?? null;
+
+            // Real logo on file → drop the "LOGO" placeholder text, an image
+            // is placed over the same spot below instead.
+            if (($obj['type'] ?? '') === 'i-text' && $text === 'LOGO' && $profile['logo_url']) {
+                continue;
+            }
+
+            if ($text !== null && isset($placeholders[$text]) && filled($placeholders[$text])) {
+                $obj['text'] = $placeholders[$text];
+            }
+
             $cmd = $this->fabricObjectToCommand($obj, $palette);
             if ($cmd !== null) {
                 $commands[] = $cmd;
             }
+        }
+
+        if ($profile['logo_url']) {
+            $commands[] = [
+                'type'       => 'add_image',
+                'src'        => $profile['logo_url'],
+                'left_pct'   => self::LOGO_LEFT_PCT,
+                'top_pct'    => self::LOGO_TOP_PCT,
+                'height_pct' => self::LOGO_HEIGHT_PCT,
+            ];
         }
 
         $layouts = [
@@ -694,8 +826,12 @@ PROMPT;
         $layout = $layouts[$key] ?? 'classic';
         $label  = ucfirst($paletteName) . ' · ' . $layout;
 
+        $reply = $profile['name']
+            ? "Here's a {$label} letterhead for {$profile['name']}, pre-filled with your business details! Click any element to edit the text, colors, or layout."
+            : "Here's a {$label} letterhead! Click any element to edit the text, colors, or layout.";
+
         return response()->json([
-            'reply'    => "Here's a {$label} letterhead! Click any element to edit the text, colors, or layout.",
+            'reply'    => $reply,
             'commands' => $commands,
         ], 200);
     }
@@ -719,7 +855,7 @@ PROMPT;
 
         // Letterhead requests: bypass Gemini and animate a randomly chosen sample
         if (preg_match('/\b(letterhead|letter\s*head)\b/i', $message)) {
-            $result = $this->createLetterheadFromSample();
+            $result = $this->createLetterheadFromSample($request);
             if ($result !== null) {
                 return $result;
             }
