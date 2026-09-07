@@ -5044,7 +5044,8 @@ function applyFeatureVisibility() {
   const inv_purchasing = (bf('stock_management'))                            && mp('inv_purchasing');
   const inv_suppliers  = (bf('product_management') || bf('stock_management'))&& mp('inv_suppliers');
   const inv_barcodes   = (bf('product_management') || bf('stock_management'))&& mp('inv_barcodes');
-  const inv_any        = inv_products || inv_audit || inv_transfer || inv_discounts || inv_purchasing || inv_suppliers || inv_barcodes;
+  const inv_campaigns  = (bf('product_management'))                          && mp('inv_campaigns');
+  const inv_any        = inv_products || inv_audit || inv_transfer || inv_discounts || inv_purchasing || inv_suppliers || inv_barcodes || inv_campaigns;
 
   // ── Finance ──
   const fin_bills      = bf('bill_management') && mp('fin_bills');
@@ -5203,7 +5204,7 @@ function applyFeatureVisibility() {
   grp('#rb-inv-audit',    inv_audit || inv_discounts);
   grp('#rb-orders',       inv_purchasing);
   grp('#rb-inv-suppliers',inv_suppliers);
-  grp('#rb-inv-barcodes', inv_barcodes);
+  grp('#rb-inv-barcodes', inv_barcodes || inv_campaigns);
 
   // ── Finance sub-nav visibility ──
   const billFinViews = ['bills', 'loans', 'rentals', 'properties', 'modifications'];
@@ -5432,13 +5433,14 @@ function applyFeatureVisibility() {
   btn('#rb-inv-cheques',   mp('inv_btn_cheques'));
   btn('#rb-inv-suppliers', mp('inv_btn_suppliers'));
   btn('#rb-inv-barcodes',  mp('inv_btn_barcodes'));
+  btn('#rb-inv-sale-campaign', mp('inv_btn_sale_campaign'));
   // Auto-hide Inventory ribbon groups when all their buttons are hidden
   { const invGrps = $$('[data-page="inventory"] .ribbon-group');
     if (invGrps[0]) invGrps[0].style.display = (mp('inv_btn_products')||mp('inv_btn_refresh')||mp('inv_btn_clear')||mp('inv_btn_categories')||mp('inv_btn_units')) ? '' : 'none';
     if (invGrps[1]) invGrps[1].style.display = (mp('inv_btn_audit')||mp('inv_btn_brands')||mp('inv_btn_discounts')) ? '' : 'none';
     if (invGrps[2]) invGrps[2].style.display = (mp('inv_btn_orders')||mp('inv_btn_grn')||mp('inv_btn_cheques')) ? '' : 'none';
     if (invGrps[3]) invGrps[3].style.display = mp('inv_btn_suppliers') ? '' : 'none';
-    if (invGrps[4]) invGrps[4].style.display = mp('inv_btn_barcodes') ? '' : 'none'; }
+    if (invGrps[4]) invGrps[4].style.display = (mp('inv_btn_barcodes')||mp('inv_btn_sale_campaign')) ? '' : 'none'; }
   // ── Inventory panel: sub-nav tab gating with fallback ──
   { const _invTabPerms = { products: mp('inv_tab_products'), po: mp('inv_tab_po'), grn: mp('inv_tab_grn'), cheques: mp('inv_tab_cheques'), audit: mp('inv_tab_audit'), transfer: mp('inv_tab_transfer'), categories: mp('inv_tab_categories'), units: mp('inv_tab_units'), discounts: mp('inv_tab_discounts'), brands: mp('inv_tab_brands'), barcodes: mp('inv_tab_barcodes') };
     $$('.inv-subnav-btn').forEach(b => { b.style.display = _invTabPerms[b.dataset.invView] ? '' : 'none'; });
@@ -15564,6 +15566,543 @@ $$('.disc-ft-btn').forEach(btn => {
 
 // ── End Product Discounts ─────────────────────────────────────────────────
 
+// ── Sale Campaigns ────────────────────────────────────────────────────────
+const _sc = {
+  list: [], q: '', status: '', selectedId: null, editingId: null,
+  mode: 'storewide', discountType: 'percentage', items: [],
+  idefDiscountType: 'percentage', idefDiscountValue: null,
+  imageFileId: null, imageUrl: null, searchTimer: null,
+};
+
+function openSaleCampaignModal() {
+  $('#sale-campaign-modal').style.display = 'flex';
+  _sc.q = ''; _sc.status = ''; _sc.selectedId = null; _sc.editingId = null;
+  $('#sc-search').value = '';
+  $$('.sc-ft-btn').forEach(b => b.classList.toggle('active', b.dataset.scStatus === ''));
+  _scShowDetail(false); _scShowForm(false);
+  _scLoad();
+  requestAnimationFrame(() => $('#sc-search').focus());
+}
+
+function _scClose() {
+  $('#sale-campaign-modal').style.display = 'none';
+}
+
+async function _scLoad() {
+  const list = $('#sc-list');
+  list.innerHTML = '<div class="cm-list-empty"><i class="fa fa-spinner fa-spin"></i></div>';
+  const res = await API.saleCampaigns(_sc.q, _sc.status);
+  if (res.status !== 200) { list.innerHTML = '<div class="cm-list-empty"><i class="fa fa-triangle-exclamation"></i> Failed to load</div>'; return; }
+  _sc.list = res.body?.data || [];
+  _scRenderList();
+}
+
+function _scStatusBadge(c) {
+  if (!c.is_active) return `<span class="disc-status-inactive">Inactive</span>`;
+  if (c.is_currently_active) return `<span class="disc-status-active">Active</span>`;
+  if (c.is_expired) return `<span class="disc-status-expired">Expired</span>`;
+  return `<span class="disc-status-inactive">Scheduled</span>`;
+}
+
+function _scDiscountSummary(c) {
+  if (c.mode === 'storewide') {
+    if (c.discount_type == null || c.discount_value == null) return 'No discount set';
+    return c.discount_type === 'percentage'
+      ? `${c.discount_value}% off everything`
+      : `${state.currency}${Number(c.discount_value).toFixed(2)} off everything`;
+  }
+  const n = c.item_count ?? c.items?.length ?? 0;
+  return `${n} product${n !== 1 ? 's' : ''}`;
+}
+
+function _scDurationSummary(c) {
+  if (c.is_long_term) return 'Long term';
+  if (c.starts_at && c.ends_at) return `${c.starts_at} → ${c.ends_at}`;
+  if (c.ends_at) return `Until ${c.ends_at}`;
+  if (c.starts_at) return `From ${c.starts_at}`;
+  return 'No dates set';
+}
+
+function _scRenderList() {
+  const list = $('#sc-list');
+  $('#sc-count').textContent = `${_sc.list.length} campaign${_sc.list.length !== 1 ? 's' : ''}`;
+  if (!_sc.list.length) {
+    list.innerHTML = `<div class="cm-list-empty"><i class="fa fa-bullhorn"></i><span>${_sc.q ? 'No results' : 'No campaigns yet'}</span></div>`;
+    return;
+  }
+  list.innerHTML = _sc.list.map(c => `
+    <div class="cm-item${c.id === _sc.selectedId ? ' active' : ''}" data-id="${c.id}">
+      <div class="cm-item-avatar">${c.image_url ? `<img src="${escHtml(c.image_url)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">` : '<i class="fa fa-bullhorn"></i>'}</div>
+      <div class="cm-item-body">
+        <div class="cm-item-name">${escHtml(c.name)}</div>
+        <div class="cm-item-sub">${escHtml(_scDiscountSummary(c))} · ${escHtml(_scDurationSummary(c))}</div>
+      </div>
+    </div>`).join('');
+  list.querySelectorAll('.cm-item').forEach(el => {
+    el.addEventListener('click', () => _scSelect(Number(el.dataset.id)));
+  });
+}
+
+function _scShowDetail(show) {
+  $('#sc-detail-empty').style.display = show ? 'none' : 'flex';
+  $('#sc-detail-view').style.display  = show ? 'flex' : 'none';
+}
+
+function _scShowForm(show) {
+  $('#sc-form-view').style.display = show ? 'flex' : 'none';
+  if (show) { $('#sc-detail-empty').style.display = 'none'; $('#sc-detail-view').style.display = 'none'; }
+}
+
+function _scSelect(id) {
+  _sc.selectedId = id;
+  const c = _sc.list.find(x => x.id === id);
+  if (!c) return;
+  _scRenderList();
+  _scShowForm(false);
+  _scShowDetail(true);
+
+  $('#sc-dv-avatar').innerHTML = c.image_url
+    ? `<img src="${escHtml(c.image_url)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">`
+    : '<i class="fa fa-bullhorn"></i>';
+  $('#sc-dv-name').textContent = c.name;
+  $('#sc-dv-status-badge').innerHTML = _scStatusBadge(c);
+
+  const fields = [
+    { label: 'Type',       val: c.mode === 'storewide' ? 'Full Campaign' : 'Individual Products' },
+    { label: 'Discount',   val: _scDiscountSummary(c) },
+    c.mode === 'individual' && c.discount_value != null
+      ? { label: 'Default Discount', val: c.discount_type === 'percentage' ? `${c.discount_value}%` : `${state.currency}${Number(c.discount_value).toFixed(2)}` }
+      : null,
+    { label: 'Duration',   val: _scDurationSummary(c) },
+    { label: 'Description',val: c.description },
+  ].filter(Boolean);
+  $('#sc-dv-fields').innerHTML = fields.map(f => `
+    <div class="cm-dv-field">
+      <div class="cm-dv-field-label">${f.label}</div>
+      <div class="cm-dv-field-val${f.val ? '' : ' empty'}">${f.val ? escHtml(f.val) : '—'}</div>
+    </div>`).join('');
+
+  const itemsEl = $('#sc-dv-items');
+  if (c.mode === 'individual' && c.items?.length) {
+    itemsEl.innerHTML = `<div class="cm-dv-history-title"><i class="fa fa-list-check"></i> Products in this campaign</div>` +
+      c.items.map(it => {
+        const price = Number(it.product_price) || 0;
+        const discLabel = it.discount_type === 'percentage' ? `${it.discount_value}%` : `${state.currency}${Number(it.discount_value).toFixed(2)}`;
+        const final = _scItemFinalPrice({ price, discount_value: it.discount_value, discount_type: it.discount_type });
+        return `<div class="cm-dv-sale-row">
+          <span class="cm-dv-sale-num">${escHtml(it.product_name)}</span>
+          <span class="sc-dv-item-disc-tag">-${escHtml(discLabel)}</span>
+          ${price ? `<span class="sc-camp-item-price">${escHtml(state.currency)}${price.toFixed(2)}</span>` : ''}
+          <span class="cm-dv-sale-amt">${final != null ? `${escHtml(state.currency)}${final.toFixed(2)}` : escHtml(discLabel)}</span>
+        </div>`;
+      }).join('');
+  } else if (c.mode === 'individual') {
+    itemsEl.innerHTML = '<div class="cm-dv-no-sales"><i class="fa fa-box-open"></i> No products added</div>';
+  } else {
+    itemsEl.innerHTML = '';
+  }
+}
+
+function _scOpenForm(id) {
+  _sc.editingId = id || null;
+  const isEdit = !!id;
+  $('#sc-form-title').textContent = isEdit ? 'Edit Campaign' : 'New Campaign';
+
+  // Reset form
+  $('#sc-f-name').value = '';
+  $('#sc-f-description').value = '';
+  $('#sc-f-long-term').checked = false;
+  $('#sc-f-starts').value = '';
+  $('#sc-f-ends').value = '';
+  $('#sc-f-discount-value').value = '';
+  $('#sc-f-idef-discount-value').value = '';
+  $('#sc-f-active').checked = true;
+  _sc.items = [];
+  _scSetImage(null, null);
+  _scSetMode('storewide');
+  _scSetDiscType('percentage');
+  _scSetIdefType('percentage');
+  _sc.idefDiscountValue = null;
+  _scToggleLongTerm();
+  _scRenderItems();
+
+  if (isEdit) {
+    const c = _sc.list.find(x => x.id === id);
+    if (c) {
+      $('#sc-f-name').value = c.name || '';
+      $('#sc-f-description').value = c.description || '';
+      $('#sc-f-long-term').checked = !!c.is_long_term;
+      $('#sc-f-starts').value = c.starts_at || '';
+      $('#sc-f-ends').value = c.ends_at || '';
+      $('#sc-f-active').checked = !!c.is_active;
+      _scSetImage(c.file_manager_file_id, c.image_url);
+      _scSetMode(c.mode);
+      if (c.mode === 'storewide') {
+        _scSetDiscType(c.discount_type || 'percentage');
+        $('#sc-f-discount-value').value = c.discount_value ?? '';
+      } else {
+        if (c.discount_value != null) {
+          _scSetIdefType(c.discount_type || 'percentage');
+          _sc.idefDiscountValue = Number(c.discount_value);
+          $('#sc-f-idef-discount-value').value = c.discount_value;
+        }
+        _sc.items = (c.items || []).map(it => ({
+          product_id: it.product_id,
+          name: it.product_name,
+          price: it.product_price ?? 0,
+          product_selling_unit_id: it.product_selling_unit_id || null,
+          discount_type: it.discount_type,
+          discount_value: it.discount_value,
+        }));
+      }
+      _scToggleLongTerm();
+      _scRenderItems();
+    }
+  }
+
+  _scShowDetail(false);
+  _scShowForm(true);
+  setTimeout(() => $('#sc-f-name').focus(), 80);
+}
+
+function _scSetMode(mode) {
+  _sc.mode = mode;
+  $('#sc-f-mode').value = mode;
+  $$('#sc-mode-toggle .sc-toggle-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.scMode === mode));
+  $('#sc-storewide-block').style.display  = mode === 'storewide'  ? '' : 'none';
+  $('#sc-individual-block').style.display = mode === 'individual' ? '' : 'none';
+}
+
+function _scSetDiscType(type) {
+  _sc.discountType = type;
+  $('#sc-f-discount-type').value = type;
+  $$('#sc-sw-type-toggle .sc-toggle-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.scDiscType === type));
+  $('#sc-sw-value-label').innerHTML = type === 'percentage'
+    ? 'Discount Percentage (%) <span style="color:#ef4444">*</span>'
+    : 'Discount Amount <span style="color:#ef4444">*</span>';
+}
+
+function _scSetIdefType(type) {
+  _sc.idefDiscountType = type;
+  $('#sc-f-idef-discount-type').value = type;
+  $$('#sc-idef-type-toggle .sc-toggle-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.scIdefType === type));
+}
+
+function _scToggleLongTerm() {
+  const longTerm = $('#sc-f-long-term').checked;
+  $('#sc-ends-wrap').style.display = longTerm ? 'none' : '';
+  if (longTerm) $('#sc-f-ends').value = '';
+}
+
+function _scSetImage(fileId, url) {
+  _sc.imageFileId = fileId || null;
+  _sc.imageUrl = url || null;
+  $('#sc-f-image-file-id').value = fileId || '';
+  const thumb = $('#sc-img-thumb');
+  thumb.innerHTML = url ? `<img src="${escHtml(url)}" alt="">` : '<i class="fa fa-image" style="font-size:22px;color:var(--text-muted)"></i>';
+  $('#sc-img-remove').style.display = url ? 'inline-flex' : 'none';
+}
+
+// ── Sale Campaign: individual-mode product picker ──────────────────────────
+function _scRenderItems() {
+  const list = $('#sc-items');
+  const count = _sc.items.length;
+  const countEl = $('#sc-items-count');
+  if (countEl) countEl.textContent = `${count} product${count !== 1 ? 's' : ''}`;
+
+  if (!count) {
+    list.innerHTML = '<div class="prod-bundle-empty"><i class="fa fa-box-open"></i> No products yet — search above to add products</div>';
+    return;
+  }
+
+  list.innerHTML = _sc.items.map((item, i) => {
+    const price = Number(item.price) || 0;
+    const final = _scItemFinalPrice(item);
+    return `
+    <div class="prod-bundle-item sc-camp-item" data-idx="${i}">
+      <div class="sc-camp-item-top">
+        <span class="prod-bundle-item-idx">${i + 1}</span>
+        <span class="prod-bundle-item-name" title="${escHtml(item.name)}">${escHtml(item.name)}</span>
+        ${price ? `<span class="sc-camp-item-price">${escHtml(state.currency)}${price.toFixed(2)}</span>` : ''}
+        <button class="prod-bundle-item-rm" data-idx="${i}" type="button" title="Remove"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div class="sc-camp-item-bottom sc-item-controls">
+        <div class="sc-item-type-toggle">
+          <button type="button" class="sc-item-type-btn${item.discount_type === 'percentage' ? ' active' : ''}" data-idx="${i}" data-type="percentage" title="Percentage">%</button>
+          <button type="button" class="sc-item-type-btn${item.discount_type === 'flat' ? ' active' : ''}" data-idx="${i}" data-type="flat" title="Flat amount"><i class="fa fa-minus"></i></button>
+        </div>
+        <input type="number" class="sc-item-value${item.discount_value ? '' : ' sc-item-value-empty'}" min="0.01" step="0.01" placeholder="e.g. 10" value="${item.discount_value ?? ''}" data-idx="${i}" onwheel="this.blur()">
+        <span class="sc-camp-item-final${final == null ? ' sc-camp-item-final-empty' : ''}" id="sc-item-final-${i}">${final != null ? `→ ${escHtml(state.currency)}${final.toFixed(2)}` : (price ? 'Set a discount' : '')}</span>
+      </div>
+    </div>`;
+  }).join('');
+
+  list.querySelectorAll('.sc-item-type-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = parseInt(btn.dataset.idx);
+      if (_sc.items[idx]) { _sc.items[idx].discount_type = btn.dataset.type; _scRenderItems(); }
+    });
+  });
+  list.querySelectorAll('.sc-item-value').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const idx = parseInt(inp.dataset.idx);
+      const item = _sc.items[idx];
+      if (!item) return;
+      const v = parseFloat(inp.value);
+      // No default is assumed here — each product's discount must be entered
+      // explicitly by the user; an invalid/empty entry just clears back to blank.
+      item.discount_value = v > 0 ? v : null;
+      inp.classList.toggle('sc-item-value-empty', !item.discount_value);
+      const finalEl = $(`#sc-item-final-${idx}`);
+      if (!finalEl) return;
+      const price = Number(item.price) || 0;
+      const final = _scItemFinalPrice(item);
+      finalEl.classList.toggle('sc-camp-item-final-empty', final == null);
+      finalEl.textContent = final != null ? `→ ${state.currency}${final.toFixed(2)}` : (price ? 'Set a discount' : '');
+    });
+  });
+  list.querySelectorAll('.prod-bundle-item-rm').forEach(btn => {
+    btn.addEventListener('click', () => {
+      _sc.items.splice(parseInt(btn.dataset.idx), 1);
+      _scRenderItems();
+      const inp = $('#sc-item-search');
+      if (inp && inp.value.trim()) inp.dispatchEvent(new Event('input'));
+    });
+  });
+}
+
+function _scAddItem(id, name, price) {
+  const existing = _sc.items.find(it => it.product_id === id);
+  if (existing) return;
+  // If a default discount is set for this campaign, new items start pre-filled
+  // with it; otherwise they start blank and the user sets each one individually.
+  // Either way the value is stored per-item and can be edited independently.
+  _sc.items.push({
+    product_id: id,
+    name,
+    price: Number(price) || 0,
+    product_selling_unit_id: null,
+    discount_type: _sc.idefDiscountValue > 0 ? _sc.idefDiscountType : 'percentage',
+    discount_value: _sc.idefDiscountValue > 0 ? _sc.idefDiscountValue : null,
+  });
+  _scRenderItems();
+}
+
+/** Discounted price for a campaign item, or null if there's no price/discount to compute from. */
+function _scItemFinalPrice(item) {
+  const price = Number(item.price) || 0;
+  const val   = Number(item.discount_value) || 0;
+  if (!price || !val) return null;
+  const final = item.discount_type === 'percentage'
+    ? price - (price * val / 100)
+    : price - val;
+  return Math.max(final, 0);
+}
+
+function _scWireItemSearch() {
+  const inp = $('#sc-item-search');
+  const dd  = $('#sc-item-dd');
+  if (!inp || !dd) return;
+
+  const hide = () => { dd.style.display = 'none'; };
+  let _timer = null;
+
+  const refresh = async () => {
+    const q = inp.value.trim();
+    if (!q) { hide(); return; }
+
+    const res = await API.discountProductOpts(q);
+    if (res.status !== 200) { hide(); return; }
+    if (inp.value.trim() !== q) return;
+
+    const products = res.body?.data || [];
+    if (!products.length) {
+      _tagPositionDd(inp, dd);
+      dd.innerHTML = '<div class="tag-dd-empty">No products found</div>';
+      dd.style.display = 'block';
+      return;
+    }
+
+    const addedIds = new Set(_sc.items.map(it => it.product_id));
+    const rows = products.map((p, i) => {
+      const added = addedIds.has(p.id);
+      const price = Number(p.selling_price) || 0;
+      return `<div class="bundle-dd-item${i === 0 && !added ? ' focused' : ''}" data-id="${p.id}" data-name="${escHtml(p.name)}" data-price="${price}">
+        <span class="bundle-dd-item-name">${escHtml(p.name)}</span>
+        ${price ? `<span class="sc-camp-item-price">${escHtml(state.currency)}${price.toFixed(2)}</span>` : ''}
+        ${added
+          ? `<span class="bundle-dd-item-added"><i class="fa fa-check"></i> Added</span>`
+          : `<button class="bundle-add-btn" type="button"><i class="fa fa-plus"></i> Add</button>`}
+      </div>`;
+    }).join('');
+
+    _tagPositionDd(inp, dd);
+    dd.innerHTML = rows;
+
+    dd.querySelectorAll('.bundle-dd-item').forEach(item => {
+      const addBtn = item.querySelector('.bundle-add-btn');
+      if (addBtn) {
+        addBtn.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          _scAddItem(parseInt(item.dataset.id), item.dataset.name, parseFloat(item.dataset.price) || 0);
+          inp.dispatchEvent(new Event('input'));
+          inp.focus();
+        });
+      }
+    });
+
+    dd.style.display = 'block';
+  };
+
+  inp.addEventListener('input', () => { clearTimeout(_timer); _timer = setTimeout(refresh, 250); });
+  inp.addEventListener('focus', refresh);
+  inp.addEventListener('blur', () => setTimeout(hide, 200));
+  inp.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { hide(); inp.blur(); return; }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const first = dd.querySelector('.bundle-add-btn');
+      if (first) first.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    }
+  });
+
+  const scrollParent = inp.closest('.cm-detail-pane');
+  if (scrollParent) scrollParent.addEventListener('scroll', hide, { passive: true });
+}
+
+async function _scSave() {
+  const name        = $('#sc-f-name').value.trim();
+  const description = $('#sc-f-description').value.trim();
+  const mode         = $('#sc-f-mode').value;
+  const longTerm      = $('#sc-f-long-term').checked;
+  const starts       = $('#sc-f-starts').value || null;
+  const ends         = longTerm ? null : ($('#sc-f-ends').value || null);
+  const active       = $('#sc-f-active').checked;
+
+  if (!name) { toast('Campaign name is required', 'error'); return; }
+  if (!longTerm && !ends) { toast('Set an end date, or mark the campaign as long term', 'error'); return; }
+
+  const body = {
+    name,
+    description: description || null,
+    file_manager_file_id: _sc.imageFileId || null,
+    mode,
+    is_long_term: longTerm,
+    starts_at: starts,
+    ends_at: ends,
+    is_active: active,
+  };
+
+  if (mode === 'storewide') {
+    const value = parseFloat($('#sc-f-discount-value').value) || 0;
+    if (value <= 0) { toast('Discount value must be greater than 0', 'error'); return; }
+    body.discount_type  = $('#sc-f-discount-type').value;
+    body.discount_value = value;
+  } else {
+    if (!_sc.items.length) { toast('Add at least one product', 'error'); return; }
+    const missing = _sc.items.find(it => !(it.discount_value > 0));
+    if (missing) { toast(`Set a discount value for "${missing.name}"`, 'error'); return; }
+    const idefValue = parseFloat($('#sc-f-idef-discount-value').value);
+    body.discount_type  = idefValue > 0 ? _sc.idefDiscountType : null;
+    body.discount_value = idefValue > 0 ? idefValue : null;
+    body.items = _sc.items.map(it => ({
+      product_id: it.product_id,
+      product_selling_unit_id: it.product_selling_unit_id || null,
+      discount_type: it.discount_type,
+      discount_value: it.discount_value,
+    }));
+  }
+
+  const btn = $('#sc-form-save');
+  btn.disabled = true;
+
+  const res = _sc.editingId
+    ? await API.updateSaleCampaign(_sc.editingId, body)
+    : await API.createSaleCampaign(body);
+
+  btn.disabled = false;
+
+  if (res.status === 200 || res.status === 201) {
+    toast(_sc.editingId ? 'Campaign updated' : 'Campaign created', 'success');
+    _scShowForm(false);
+    const savedId = res.body?.data?.id;
+    await _scLoad();
+    if (savedId) _scSelect(savedId);
+  } else {
+    const errors = res.body?.errors;
+    const first  = errors ? Object.values(errors)[0]?.[0] : null;
+    toast(first || res.body?.message || 'Failed to save', 'error');
+  }
+}
+
+async function _scDelete(id) {
+  const c = _sc.list.find(x => x.id === id);
+  if (!c) return;
+  if (!confirm(`Delete campaign "${c.name}"?`)) return;
+  const res = await API.deleteSaleCampaign(id);
+  if (res.status === 200) {
+    toast('Campaign deleted', 'success');
+    _sc.selectedId = null;
+    _scShowDetail(false);
+    _scLoad();
+  } else {
+    toast(res.body?.message || 'Failed to delete', 'error');
+  }
+}
+
+// Sale Campaign event listeners
+$('#sale-campaign-modal')?.addEventListener('click', e => { if (e.target === e.currentTarget) _scClose(); });
+$('#sc-close')?.addEventListener('click', _scClose);
+$('#sc-new-btn')?.addEventListener('click', () => _scOpenForm(null));
+$('#sc-form-cancel')?.addEventListener('click', () => { _scShowForm(false); if (_sc.selectedId) _scShowDetail(true); });
+$('#sc-form-save')?.addEventListener('click', _scSave);
+$('#sc-btn-edit')?.addEventListener('click', () => _sc.selectedId && _scOpenForm(_sc.selectedId));
+$('#sc-btn-delete')?.addEventListener('click', () => _sc.selectedId && _scDelete(_sc.selectedId));
+
+$('#sc-search')?.addEventListener('input', e => {
+  _sc.q = e.target.value.trim();
+  clearTimeout(_sc.searchTimer);
+  _sc.searchTimer = setTimeout(_scLoad, 300);
+});
+
+$$('.sc-ft-btn').forEach(btn => {
+  btn?.addEventListener('click', () => {
+    $$('.sc-ft-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    _sc.status = btn.dataset.scStatus;
+    _scLoad();
+  });
+});
+
+$$('#sc-mode-toggle .sc-toggle-btn').forEach(btn => {
+  btn?.addEventListener('click', () => _scSetMode(btn.dataset.scMode));
+});
+$$('#sc-sw-type-toggle .sc-toggle-btn').forEach(btn => {
+  btn?.addEventListener('click', () => _scSetDiscType(btn.dataset.scDiscType));
+});
+$$('#sc-idef-type-toggle .sc-toggle-btn').forEach(btn => {
+  btn?.addEventListener('click', () => _scSetIdefType(btn.dataset.scIdefType));
+});
+$('#sc-f-idef-discount-value')?.addEventListener('input', e => {
+  const v = parseFloat(e.target.value);
+  _sc.idefDiscountValue = v > 0 ? v : null;
+});
+$('#sc-idef-apply-all')?.addEventListener('click', () => {
+  const v = parseFloat($('#sc-f-idef-discount-value').value);
+  if (!(v > 0)) { toast('Set a default discount value first', 'error'); return; }
+  if (!_sc.items.length) { toast('Add products to this campaign first', 'error'); return; }
+  _sc.items.forEach(it => { it.discount_type = _sc.idefDiscountType; it.discount_value = v; });
+  _scRenderItems();
+  toast(`Applied ${_sc.idefDiscountType === 'percentage' ? v + '%' : state.currency + v.toFixed(2)} to ${_sc.items.length} product${_sc.items.length !== 1 ? 's' : ''}`, 'success');
+});
+$('#sc-f-long-term')?.addEventListener('change', _scToggleLongTerm);
+
+$('#sc-img-choose')?.addEventListener('click', () => openImgPicker((fileId, url) => _scSetImage(fileId, url)));
+$('#sc-img-remove')?.addEventListener('click', () => _scSetImage(null, null));
+
+_scWireItemSearch();
+// ── End Sale Campaigns ────────────────────────────────────────────────────
+
 // ── Product Brands ────────────────────────────────────────────────────────
 const _brand = { list: [], q: '', status: '', searchTimer: null, editingId: null };
 
@@ -25654,6 +26193,10 @@ async function handleProductClick(p) {
   const _wholesalePrice = p.wholesale_price != null ? parseFloat(p.wholesale_price) : null;
   const _tab = activeTab();
   const _isWholesale = _tab?._customer?.customer_type === 'wholesale';
+  // Catalog price before any product/campaign discount — layer.unit_sell_price is
+  // already net-of-discount (the backend bakes it in), so the cart's "Discount"
+  // total needs this separately to know how much was taken off.
+  const _catalogOriginalPrice = p.unit_sell_price != null ? parseFloat(p.unit_sell_price) : null;
 
   if (stockMode === 'choose' && layers.length > 1) {
     // Manual batch picker
@@ -25665,7 +26208,7 @@ async function handleProductClick(p) {
       id: p.id, layerId: layer.id, layerLabel: layer.label || `Batch #${layer.id}`,
       name: p.name, price: (_isWholesale && _wholesalePrice != null) ? _wholesalePrice : retailP,
       stock: parseFloat(layer.quantity_remaining),
-      _retailPrice: retailP, _wholesalePrice,
+      _retailPrice: retailP, _wholesalePrice, _originalPrice: _catalogOriginalPrice ?? retailP,
     };
   } else if (stockMode === 'last_price' && layers.length > 1) {
     // Use the most recently added in-stock batch (highest id = latest price update)
@@ -25676,7 +26219,7 @@ async function handleProductClick(p) {
       id: p.id, layerId: layer.id, layerLabel: layer.label || `Batch #${layer.id}`,
       name: p.name, price: (_isWholesale && _wholesalePrice != null) ? _wholesalePrice : retailP,
       stock: parseFloat(layer.quantity_remaining),
-      _retailPrice: retailP, _wholesalePrice,
+      _retailPrice: retailP, _wholesalePrice, _originalPrice: _catalogOriginalPrice ?? retailP,
     };
   } else if (inStock.length > 0) {
     // FIFO: backend handles layer selection; no layerId pinned so consumeFifo runs server-side
@@ -25686,7 +26229,7 @@ async function handleProductClick(p) {
       id: p.id, layerId: null, layerLabel: null,
       name: p.name, price: (_isWholesale && _wholesalePrice != null) ? _wholesalePrice : retailP,
       stock: p.stock_quantity != null ? parseFloat(p.stock_quantity) : null,
-      _retailPrice: retailP, _wholesalePrice,
+      _retailPrice: retailP, _wholesalePrice, _originalPrice: _catalogOriginalPrice ?? retailP,
     };
   } else if (layers.length >= 1) {
     const layer = layers[0];
@@ -25695,7 +26238,7 @@ async function handleProductClick(p) {
       id: p.id, layerId: null, layerLabel: null,
       name: p.name, price: (_isWholesale && _wholesalePrice != null) ? _wholesalePrice : retailP,
       stock: 0,
-      _retailPrice: retailP, _wholesalePrice,
+      _retailPrice: retailP, _wholesalePrice, _originalPrice: _catalogOriginalPrice ?? retailP,
     };
   } else {
     const retailP = parseFloat(p.discounted_sell_price ?? p.unit_sell_price ?? 0);
@@ -25703,7 +26246,7 @@ async function handleProductClick(p) {
       id: p.id, layerId: null, layerLabel: null,
       name: p.name, price: (_isWholesale && _wholesalePrice != null) ? _wholesalePrice : retailP,
       stock: p.stock_quantity != null ? parseFloat(p.stock_quantity) : null,
-      _retailPrice: retailP, _wholesalePrice,
+      _retailPrice: retailP, _wholesalePrice, _originalPrice: _catalogOriginalPrice ?? retailP,
     };
   }
 
@@ -25751,7 +26294,7 @@ function addToCart(product) {
   if (existing) {
     existing.qty += 1;
   } else {
-    tab.cart.push({ ...product, qty: 1, _key: key, _basePrice: product.price, _discountPct: null, _note: null, _retailPrice: product._retailPrice ?? product.price, _wholesalePrice: product._wholesalePrice ?? null });
+    tab.cart.push({ ...product, qty: 1, _key: key, _basePrice: product._originalPrice ?? product.price, _discountPct: null, _note: null, _retailPrice: product._retailPrice ?? product.price, _wholesalePrice: product._wholesalePrice ?? null });
   }
   renderCart();
   renderPosTabBar();
@@ -27056,6 +27599,7 @@ $('#rb-inv-grn')?.addEventListener('click',       () => { activateTab('inventory
 $('#rb-inv-cheques')?.addEventListener('click',   () => { activateTab('inventory'); switchInvView('cheques'); });
 $('#rb-inv-suppliers')?.addEventListener('click', () => openSuppliersModal());
 $('#rb-inv-barcodes')?.addEventListener('click',  () => { activateTab('inventory'); switchInvView('barcodes'); });
+$('#rb-inv-sale-campaign')?.addEventListener('click', () => openSaleCampaignModal());
 // ── Restaurant ribbon buttons ──────────────────────────────────────────────
 // Restaurant ribbon
 $('#rb-rst-pos')?.addEventListener('click',              () => { activateTab('rst-pos'); });
@@ -37997,6 +38541,7 @@ async function submitDsCreate() {
       { key: 'inv_btn_cheques',     label: 'Cheques',          desc: 'Ribbon Purchasing: Cheques button' },
       { key: 'inv_btn_suppliers',   label: 'Suppliers',        desc: 'Ribbon Suppliers: Suppliers button' },
       { key: 'inv_btn_barcodes',    label: 'Barcode Sheets',   desc: 'Ribbon Print: Barcode sheets button' },
+      { key: 'inv_btn_sale_campaign', label: 'Sale Campaign', desc: 'Ribbon Print: Sale Campaign button' },
     ]},
     { key: 'inv_panel', label: 'Inventory · Panel', icon: 'fa-layer-group', color: '#a78bfa', items: [
       { key: 'inv_tab_products',   label: 'Tab: Products',        desc: 'Inventory panel: Products sub-nav tab' },

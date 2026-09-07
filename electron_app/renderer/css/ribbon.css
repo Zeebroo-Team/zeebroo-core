@@ -5496,7 +5496,7 @@ body.dark .product-card .p-icon { background: rgba(255,255,255,.07); }
 .cm-detail-empty i { font-size: 48px; opacity: .18; }
 
 /* Detail view */
-#cm-detail-view, #sm-detail-view, #um-detail-view { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+#cm-detail-view, #sm-detail-view, #um-detail-view, #sc-detail-view { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 .cm-dv-header {
   display: flex; align-items: center; gap: 14px;
   padding: 18px 20px 12px; border-bottom: 1px solid var(--border-light); flex-shrink: 0;
@@ -5661,7 +5661,7 @@ body.dark .product-card .p-icon { background: rgba(255,255,255,.07); }
 .cm-btn-delete:hover { background: #fef2f2; }
 
 /* Form view */
-#cm-form-view, #sm-form-view, #um-form-view { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+#cm-form-view, #sm-form-view, #um-form-view, #sc-form-view { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 .cm-form-title {
   font-size: 14px; font-weight: 800; padding: 16px 20px 10px;
   border-bottom: 1px solid var(--border-light); flex-shrink: 0;
@@ -11126,6 +11126,91 @@ body.dark .pc-modal-head {
 .disc-status-inactive { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 700; background: rgba(148,163,184,.15); color: var(--text-muted); }
 .disc-status-expired  { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 700; background: rgba(234,179,8,.12); color: #b45309; }
 /* ── End Discounts View ───────────────────────────────── */
+
+/* ── Sale Campaign Modal ──────────────────────────────── */
+.sc-filter-tabs { display: flex; gap: 6px; padding: 8px 12px; }
+.sc-ft-btn {
+  padding: 4px 10px; border-radius: var(--radius-xs); font-size: 10px; font-weight: 600;
+  background: none; border: 1px solid var(--border); color: var(--text-muted); cursor: pointer;
+  transition: all .15s;
+}
+.sc-ft-btn:hover  { background: var(--surface2); color: var(--text); }
+.sc-ft-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+/* Compact, minimal header/search — scoped so other cm- modals are unaffected */
+#sale-campaign-modal .cm-header { padding: 10px 14px; font-size: 13px; gap: 8px; }
+#sale-campaign-modal .cm-new-btn { padding: 5px 10px; font-size: 11px; gap: 5px; }
+#sale-campaign-modal .cm-search-wrap { padding: 6px 10px; }
+#sale-campaign-modal .cm-search-icon { left: 20px; font-size: 11px; }
+#sale-campaign-modal .cm-search-input { padding: 6px 8px 6px 26px; font-size: 11px; }
+
+.sc-toggle { display: flex; gap: 0; border: 1px solid var(--border); border-radius: var(--radius-xs); overflow: hidden; flex-shrink: 0; }
+.sc-toggle-btn {
+  flex: 1; padding: 5px 8px; font-size: 11px; font-weight: 600; cursor: pointer;
+  background: var(--surface); border: none; color: var(--text-muted); transition: all .15s;
+  display: flex; align-items: center; justify-content: center; gap: 5px;
+}
+.sc-toggle-btn + .sc-toggle-btn { border-left: 1px solid var(--border); }
+.sc-toggle-btn.active { background: var(--accent); color: #fff; }
+.sc-toggle-btn:hover:not(.active) { background: var(--surface2); color: var(--text); }
+
+.sc-item-controls { display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
+.sc-item-type-toggle { display: flex; border: 1px solid var(--border); border-radius: var(--radius-xs); overflow: hidden; flex-shrink: 0; min-height: 22px; }
+.sc-item-type-btn {
+  width: 26px; height: 22px; border: none; background: var(--surface); color: var(--text-muted);
+  font-size: 10px; font-weight: 700; cursor: pointer; transition: all .15s;
+}
+.sc-item-type-btn + .sc-item-type-btn { border-left: 1px solid var(--border); }
+.sc-item-type-btn.active { background: var(--accent); color: #fff; }
+.sc-item-type-btn:hover:not(.active) { background: var(--surface2); color: var(--text); }
+.sc-item-value {
+  width: 52px; height: 22px; padding: 0 5px; border: 1px solid var(--border); border-radius: var(--radius-xs);
+  background: var(--surface); color: var(--text); font-size: 11px; text-align: right;
+}
+.sc-item-value:focus { outline: none; border-color: var(--accent); }
+.sc-item-value-empty { border-color: #ef4444; }
+.sc-item-value-empty::placeholder { color: #ef4444; opacity: .6; }
+
+.sc-camp-item { flex-direction: column; align-items: stretch; gap: 4px; padding: 6px 7px; }
+.sc-camp-item-top { display: flex; align-items: center; gap: 6px; }
+.sc-camp-item-bottom { padding-left: 20px; }
+.sc-camp-item-price {
+  font-size: 10px; color: var(--text-muted); flex-shrink: 0;
+  text-decoration: line-through;
+}
+.sc-camp-item-final {
+  font-size: 11px; font-weight: 700; color: var(--accent); white-space: nowrap;
+}
+.sc-camp-item-final-empty { font-weight: 400; color: var(--text-muted); font-style: italic; }
+
+/* Sale Campaign form — compact, minimal sizing (scoped so other modals are unaffected) */
+#sc-form-view .cm-form-body { padding: 10px 16px; gap: 8px; }
+#sc-form-view #sc-storewide-block,
+#sc-form-view #sc-individual-block { display: flex; flex-direction: column; gap: 8px; }
+#sc-form-view .cm-label { margin-top: 0; font-size: 10px; }
+#sc-form-view .cm-input { padding: 6px 9px; font-size: 12px; }
+#sc-form-view .cm-textarea { min-height: 46px; }
+#sc-form-view .prod-img-thumb { width: 40px; height: 40px; }
+#sc-form-view .po-btn-ghost { padding: 5px 10px; font-size: 11px; border-radius: 6px; gap: 5px; }
+#sc-form-view .prod-bundle-search-row { padding: 5px 6px; }
+#sc-form-view .prod-bundle-search-wrap { padding: 0 8px; }
+#sc-form-view .prod-bundle-search-input { padding: 5px 0; font-size: 11px; }
+#sc-form-view .prod-bundle-list { padding: 4px 6px; gap: 3px; }
+#sc-form-view .prod-bundle-item-name { font-size: 11px; }
+#sc-form-view .prod-bundle-footer { padding: 4px 8px; }
+#sc-form-view .prod-bundle-count-label { font-size: 10px; }
+#sc-form-view .bundle-dd-item { padding: 5px 10px; font-size: 11px; }
+
+.sc-dv-item-disc-tag {
+  font-size: 10px; font-weight: 700; color: var(--accent); background: var(--accent-light);
+  padding: 2px 7px; border-radius: 999px; flex-shrink: 0; white-space: nowrap;
+}
+
+.sc-mode-badge, .sc-duration-badge {
+  display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 700;
+  background: var(--surface2); color: var(--text-muted); margin-left: 6px;
+}
+/* ── End Sale Campaign Modal ──────────────────────────── */
 
 /* ── Brands View ──────────────────────────────────────── */
 #inv-brands-view { display: flex; flex-direction: column; flex: 1; min-height: 0; background: var(--bg); }

@@ -309,6 +309,13 @@ const API = (() => {
     updateDiscount:        (id, body)      => request('PATCH',  `/discounts/${id}`, body),
     deleteDiscount:        (id)            => request('DELETE', `/discounts/${id}`),
 
+    // Sale Campaigns
+    saleCampaigns:       (q, status) => request('GET',    `/sale-campaigns?q=${encodeURIComponent(q||'')}&status=${status||''}`),
+    saleCampaign:        (id)        => request('GET',    `/sale-campaigns/${id}`),
+    createSaleCampaign:  (body)      => request('POST',   '/sale-campaigns', body),
+    updateSaleCampaign:  (id, body)  => request('PATCH',  `/sale-campaigns/${id}`, body),
+    deleteSaleCampaign:  (id)        => request('DELETE', `/sale-campaigns/${id}`),
+
     // Product Categories
     categories:             (q, status, page) => request('GET',    `/categories?q=${encodeURIComponent(q||'')}&status=${status||''}&page=${page||1}`),
     categoryParentOpts:     (excludeId)       => request('GET',    `/categories/parent-options${excludeId ? '?exclude='+excludeId : ''}`),

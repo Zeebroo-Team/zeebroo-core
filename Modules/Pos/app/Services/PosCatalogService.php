@@ -13,12 +13,15 @@ use Modules\Product\Models\ProductSellingUnit;
 use Modules\Product\Models\ProductStockLayer;
 use Modules\Product\Services\ProductDiscountService;
 use Modules\Product\Services\ProductStockLayerService;
+use Modules\Product\Services\SaleCampaignService;
+use Modules\Product\Support\PricingCandidates;
 
 class PosCatalogService
 {
     public function __construct(
         private readonly ProductStockLayerService $stockLayers,
         private readonly ProductDiscountService $discountService,
+        private readonly SaleCampaignService $campaignService,
     ) {
     }
 
@@ -166,7 +169,8 @@ class PosCatalogService
         $items    = $query->skip(($page - 1) * $perPage)->take($perPage)->get();
 
         $productIds      = $items->pluck('id')->all();
-        $activeDiscounts = $this->discountService->activeForProducts($business, $productIds);
+        $activeDiscounts = $this->discountService->activeForProducts($business, $productIds)
+            ->concat($this->campaignService->activeForProducts($business, $productIds));
 
         return [
             'data' => $items
@@ -183,7 +187,7 @@ class PosCatalogService
     }
 
     /**
-     * @param  Collection<int, ProductDiscount>|null  $activeDiscounts  Pre-loaded discounts for a batch; null triggers single-product fetch.
+     * @param  Collection|null  $activeDiscounts  Pre-loaded discount candidates (ProductDiscount rows + CampaignDiscountCandidate) for a batch; null triggers single-product fetch.
      * @return array<string, mixed>
      */
     public function productCardForProduct(
@@ -204,19 +208,24 @@ class PosCatalogService
         // Resolve discounts — use pre-loaded batch or fetch for this single product
         if ($activeDiscounts === null) {
             $product->loadMissing('business');
-            $activeDiscounts = $this->discountService->activeForProducts($product->business, [$product->id]);
+            $activeDiscounts = $this->discountService->activeForProducts($product->business, [$product->id])
+                ->concat($this->campaignService->activeForProducts($product->business, [$product->id]));
         }
 
         $productDiscounts = $activeDiscounts->where('product_id', $product->id);
-        $baseDiscount     = $productDiscounts->firstWhere('product_selling_unit_id', null);
-        $suDiscountById   = $productDiscounts
-            ->filter(fn ($d) => $d->product_selling_unit_id !== null)
-            ->keyBy('product_selling_unit_id');
 
         // Base price with discount applied
         $rawUnitSellPrice = $defaultLayer['unit_sell_price'] ?? $meta['unit_sell_price'];
         $discountData     = null;
         $discountedSellPrice = $rawUnitSellPrice;
+
+        $baseCandidates = $productDiscounts->where('product_selling_unit_id', null);
+        $baseDiscount   = $rawUnitSellPrice !== null
+            ? PricingCandidates::pickBest($baseCandidates, (float) $rawUnitSellPrice)
+            : $baseCandidates->first();
+        $suCandidatesById = $productDiscounts
+            ->filter(fn ($d) => $d->product_selling_unit_id !== null)
+            ->groupBy('product_selling_unit_id');
 
         if ($baseDiscount !== null && $rawUnitSellPrice !== null) {
             $rawPrice = (float) $rawUnitSellPrice;
@@ -268,7 +277,7 @@ class PosCatalogService
             'requires_layer_pick' => count($layers) > 1 && count($sellPrices) > 1,
             'has_multiple_prices' => count($sellPrices) > 1,
             'layers' => $layers,
-            'selling_units' => $this->sellingUnitsForProduct($product, $suDiscountById),
+            'selling_units' => $this->sellingUnitsForProduct($product, $suCandidatesById),
             'category_ids' => $product->categories->pluck('id')->map(fn ($id) => (int) $id)->all(),
             // Feature flags
             'wholesale_price'    => $product->wholesale_price !== null ? (float) $product->wholesale_price : null,
@@ -449,18 +458,18 @@ class PosCatalogService
     }
 
     /**
-     * @param  Collection<int, ProductDiscount>  $suDiscountById  Keyed by product_selling_unit_id
+     * @param  Collection<int, Collection>  $suCandidatesById  Discount candidates grouped by product_selling_unit_id
      * @return list<array{id: int, label: string, conversion_factor: float, selling_price: ?float, display_price: float, discounted_price: ?float, discount: ?array, stock_in_units: float}>
      */
-    private function sellingUnitsForProduct(Product $product, Collection $suDiscountById = new Collection()): array
+    private function sellingUnitsForProduct(Product $product, Collection $suCandidatesById = new Collection()): array
     {
         $basePrice = $product->unit_price !== null ? (float) $product->unit_price : null;
         $stockQty  = (float) $product->stock_quantity;
 
-        return $product->sellingUnits->map(function (ProductSellingUnit $u) use ($basePrice, $stockQty, $suDiscountById) {
+        return $product->sellingUnits->map(function (ProductSellingUnit $u) use ($basePrice, $stockQty, $suCandidatesById) {
             $factor       = max(0.000001, (float) $u->conversion_factor);
             $displayPrice = $u->displaySellingPrice($basePrice);
-            $discount     = $suDiscountById->get($u->id);
+            $discount     = PricingCandidates::pickBest($suCandidatesById->get($u->id, collect()), $displayPrice);
             $discountedPrice = null;
             $discountData    = null;
 
