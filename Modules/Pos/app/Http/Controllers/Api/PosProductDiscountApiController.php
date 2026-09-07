@@ -72,7 +72,7 @@ class PosProductDiscountApiController extends Controller
             'data' => $products->map(fn ($p) => [
                 'id'           => $p->id,
                 'name'         => $p->name,
-                'selling_price'=> (float) ($p->selling_price ?? 0),
+                'selling_price'=> (float) ($p->unit_price ?? 0),
                 'selling_units' => $p->sellingUnits->map(fn ($su) => [
                     'id'           => $su->id,
                     'label'        => $su->label ?? $su->name,

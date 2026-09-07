@@ -18,6 +18,7 @@ use Modules\Product\Models\ProductCategory;
 use Modules\Product\Models\ProductBarcodeSheet;
 use Modules\Product\Models\ProductDiscount;
 use Modules\Product\Models\ProductUnit;
+use Modules\Product\Models\SaleCampaign;
 use Modules\Purchase\Models\GoodsReceiveNote;
 use Modules\Purchase\Models\Purchase;
 use Modules\Purchase\Models\Supplier;
@@ -244,6 +245,11 @@ class Business extends Model
     public function productDiscounts(): HasMany
     {
         return $this->hasMany(ProductDiscount::class)->orderByDesc('created_at');
+    }
+
+    public function saleCampaigns(): HasMany
+    {
+        return $this->hasMany(SaleCampaign::class)->orderByDesc('created_at');
     }
 
     public function suppliers(): HasMany

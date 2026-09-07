@@ -39,6 +39,7 @@ use Modules\Pos\Http\Controllers\Api\PosGrnChequeApiController;
 use Modules\Pos\Http\Controllers\Api\PosProductCategoryApiController;
 use Modules\Pos\Http\Controllers\Api\PosProductUnitApiController;
 use Modules\Pos\Http\Controllers\Api\PosProductDiscountApiController;
+use Modules\Pos\Http\Controllers\Api\PosSaleCampaignApiController;
 use Modules\Pos\Http\Controllers\Api\PosProductBrandApiController;
 use Modules\Pos\Http\Controllers\Api\PosFileManagerApiController;
 use Modules\Pos\Http\Controllers\Api\PosTodaySummaryApiController;
@@ -184,6 +185,13 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
     Route::post('discounts', [PosProductDiscountApiController::class, 'store'])->name('discounts.store');
     Route::patch('discounts/{discount}', [PosProductDiscountApiController::class, 'update'])->name('discounts.update');
     Route::delete('discounts/{discount}', [PosProductDiscountApiController::class, 'destroy'])->name('discounts.destroy');
+
+    // Sale Campaigns
+    Route::get   ('sale-campaigns',            [PosSaleCampaignApiController::class, 'index'])  ->name('sale-campaigns.index');
+    Route::get   ('sale-campaigns/{campaign}', [PosSaleCampaignApiController::class, 'show'])   ->name('sale-campaigns.show');
+    Route::post  ('sale-campaigns',            [PosSaleCampaignApiController::class, 'store'])  ->name('sale-campaigns.store');
+    Route::patch ('sale-campaigns/{campaign}', [PosSaleCampaignApiController::class, 'update']) ->name('sale-campaigns.update');
+    Route::delete('sale-campaigns/{campaign}', [PosSaleCampaignApiController::class, 'destroy'])->name('sale-campaigns.destroy');
 
     // Product Categories
     Route::get ('categories',              [PosProductCategoryApiController::class, 'index'])->name('categories.index');

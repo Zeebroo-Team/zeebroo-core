@@ -213,7 +213,8 @@
         {
           "label": "Print",
           "items": [
-            { "type": "lg", "id": "rb-inv-barcodes",      "icon": "fa-barcode",            "label": "Print\nBarcodes" }
+            { "type": "lg", "id": "rb-inv-barcodes",      "icon": "fa-barcode",            "label": "Print\nBarcodes" },
+            { "type": "lg", "id": "rb-inv-sale-campaign", "icon": "fa-bullhorn",           "label": "Sale\nCampaign" }
           ]
         }
       ]

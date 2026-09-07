@@ -13,6 +13,8 @@ use Modules\Pos\Models\SaleItem;
 use Modules\Product\Models\Product;
 use Modules\Product\Models\ProductStockLayer;
 use Modules\Product\Services\ProductDiscountService;
+use Modules\Product\Services\SaleCampaignService;
+use Modules\Product\Support\PricingCandidates;
 use Modules\Service\Models\ServiceItem;
 use Modules\Service\Services\ServiceRequestService;
 
@@ -24,6 +26,7 @@ class SaleService
         private readonly SaleStockConsumptionService $stockConsumption,
         private readonly SalePaymentSettlementService $payments,
         private readonly ProductDiscountService $discountService,
+        private readonly SaleCampaignService $campaignService,
         private readonly PosSettingsService $posSettings,
         private readonly ServiceRequestService $serviceRequests,
         private readonly PosNotificationService $notifications,
@@ -251,7 +254,8 @@ class SaleService
 
         // Load active discounts for all products in the cart in one query
         $cartProductIds = array_map(fn ($l) => (int) $l['product']->id, $productLines);
-        $activeDiscounts = $this->discountService->activeForProducts($business, $cartProductIds);
+        $activeDiscounts = $this->discountService->activeForProducts($business, $cartProductIds)
+            ->concat($this->campaignService->activeForProducts($business, $cartProductIds));
 
         $sale = DB::transaction(function () use ($business, $user, $productLines, $serviceLines, $paymentMethod, $creditAccountId, $amountPaid, $notes, $channel, $discountPercent, $discountFlat, $amountTendered, $customerId, $deferSettlement, $branchId, $branchStockSeparate, $activeDiscounts, $scheduledAt, $posCounterId, $creditDueDate) {
             $sale = $business->sales()->create([
@@ -287,13 +291,17 @@ class SaleService
                     ? $this->stockConsumption->consumeFromLayer($product, (int) $layerId, $line['quantity'], $branchId, $branchStockSeparate)
                     : $this->stockConsumption->consumeFifo($product, $line['quantity'], $branchId, $branchStockSeparate);
 
-                // Resolve the applicable discount for this line
+                // Resolve the applicable discount for this line — when multiple
+                // sources (a manual per-product Discount and/or an active Sale
+                // Campaign) apply, pick whichever gives the customer the best price.
                 $productDiscounts = $activeDiscounts->where('product_id', $product->id);
                 $suId = $line['product_selling_unit_id'] ?? null;
-                $discount = $suId !== null
-                    ? ($productDiscounts->firstWhere('product_selling_unit_id', $suId)
-                        ?? $productDiscounts->firstWhere('product_selling_unit_id', null))
-                    : $productDiscounts->firstWhere('product_selling_unit_id', null);
+                $representativePrice = (float) ($allocations[0]['unit_sell_price'] ?? 0);
+                $suCandidates   = $suId !== null ? $productDiscounts->where('product_selling_unit_id', $suId) : collect();
+                $baseCandidates = $productDiscounts->where('product_selling_unit_id', null);
+                $discount = $suCandidates->isNotEmpty()
+                    ? PricingCandidates::pickBest($suCandidates, $representativePrice)
+                    : PricingCandidates::pickBest($baseCandidates, $representativePrice);
 
                 $subscriptionSaleItemId = null;
                 $subscriptionQty        = 0.0;
