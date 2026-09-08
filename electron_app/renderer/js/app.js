@@ -37787,6 +37787,8 @@ const DS_TYPES = {
   'company-profile':  { label: 'Business Profile', icon: 'fa-building',     color: '#0ea5e9', bg: '#0ea5e920' },
   'social-media':     { label: 'Social Media',     icon: 'fa-share-nodes',  color: '#ec4899', bg: '#ec489920' },
   'business-card':    { label: 'Business Card',    icon: 'fa-id-card',      color: '#f59e0b', bg: '#f59e0b20' },
+  'sales-campaign':   { label: 'Sales Campaign',   icon: 'fa-bullhorn',     color: '#dc2626', bg: '#dc262620' },
+  'hire-designer':    { label: 'Hire a Designer',  icon: 'fa-user-tie',     color: '#0284c7', bg: '#0284c720' },
   'custom':           { label: 'Custom',           icon: 'fa-paintbrush',   color: '#10b981', bg: '#10b98120' },
 };
 
@@ -37798,6 +37800,8 @@ const DS_TYPE_DEFAULTS = {
   'company-profile':  { w: 1920, h: 1080,  title: 'Business Profile' },
   'social-media':     { w: 1080, h: 1080,  title: '' },
   'business-card':    { w: 1050, h: 600,   title: '' },
+  'sales-campaign':   { w: 1080, h: 1080,  title: '' },
+  'hire-designer':    { w: 1200, h: 1600,  title: '' },
 };
 
 // Sample starter templates shown in the "Start from a template" gallery.
@@ -37906,6 +37910,27 @@ const DS_TEMPLATES = [
         { type: 'textbox', text: 'Creative Studio', left: 48, top: 102, width: 400, fontSize: 13, fill: '#ec4899', fontFamily: 'Inter' },
         { type: 'i-text', text: 'Dear [Recipient Name],', left: 48, top: 220, fontSize: 15, fill: '#111827', fontFamily: 'Inter' },
         { type: 'i-text', text: 'Start typing your letter here…', left: 48, top: 260, width: 680, fontSize: 13, fontStyle: 'italic', fill: '#6b7280', fontFamily: 'Inter' },
+      ],
+    }),
+  },
+  {
+    id: 'letterhead-generate', type: 'letterhead', title: 'Generate Letter', width: 794, height: 1123,
+    build: () => ({
+      version: '5.3.0', background: '#ffffff',
+      objects: [
+        { type: 'textbox', text: 'Your Company Name', left: 48, top: 48, width: 500, fontSize: 22, fontWeight: 'bold', fill: '#1f2430', fontFamily: 'Montserrat' },
+        { type: 'textbox', text: '123 Business Street, City, Country   •   hello@yourcompany.com', left: 48, top: 78, width: 600, fontSize: 11, fill: '#6b7280', fontFamily: 'Inter' },
+        { type: 'i-text', text: '[Date]', left: 640, top: 48, fontSize: 12, fill: '#6b7280', fontFamily: 'Inter' },
+        { type: 'i-text', text: '[Recipient Name]', left: 48, top: 170, fontSize: 13, fill: '#111827', fontFamily: 'Inter' },
+        { type: 'i-text', text: '[Recipient Address]', left: 48, top: 195, fontSize: 13, fill: '#111827', fontFamily: 'Inter' },
+        { type: 'i-text', text: 'Subject: [Letter Subject]', left: 48, top: 260, fontSize: 14, fontWeight: 'bold', fill: '#111827', fontFamily: 'Inter' },
+        { type: 'i-text', text: 'Dear [Recipient Name],', left: 48, top: 310, fontSize: 13, fill: '#111827', fontFamily: 'Inter' },
+        { type: 'i-text', text: 'I am writing to inform you about… Start typing the first paragraph of your letter here, covering the main point you want to make.', left: 48, top: 350, width: 698, fontSize: 12.5, fill: '#374151', fontFamily: 'Inter', lineHeight: 1.5 },
+        { type: 'i-text', text: 'Use this second paragraph to add supporting details, next steps, or any additional context the recipient needs to know.', left: 48, top: 430, width: 698, fontSize: 12.5, fill: '#374151', fontFamily: 'Inter', lineHeight: 1.5 },
+        { type: 'i-text', text: 'Please feel free to reach out if you have any questions.', left: 48, top: 510, width: 698, fontSize: 12.5, fill: '#374151', fontFamily: 'Inter', lineHeight: 1.5 },
+        { type: 'i-text', text: 'Sincerely,', left: 48, top: 600, fontSize: 13, fill: '#111827', fontFamily: 'Inter' },
+        { type: 'i-text', text: '[Your Name]', left: 48, top: 660, fontSize: 13, fontWeight: 'bold', fill: '#111827', fontFamily: 'Inter' },
+        { type: 'i-text', text: '[Your Title]', left: 48, top: 682, fontSize: 12, fill: '#6b7280', fontFamily: 'Inter' },
       ],
     }),
   },
@@ -38127,6 +38152,150 @@ const DS_TEMPLATES = [
       ],
     }),
   },
+  // ── Hire a Designer (4) ─────────────────────────────────────────────────
+  {
+    id: 'hire-a-designer', type: 'hire-designer', title: 'Graphic Designer Wanted', width: 1200, height: 1600,
+    build: () => ({
+      version: '5.3.0', background: '#0f172a',
+      objects: [
+        { type: 'rect', left: 0, top: 0, width: 1200, height: 12, fill: '#f59e0b' },
+        { type: 'textbox', text: "WE'RE HIRING", left: 80, top: 120, width: 1040, fontSize: 26, fontWeight: 'bold', fill: '#f59e0b', fontFamily: 'Inter' },
+        { type: 'textbox', text: 'Graphic Designer', left: 80, top: 165, width: 1040, fontSize: 64, fontWeight: 'bold', fill: '#ffffff', fontFamily: 'Montserrat' },
+        { type: 'textbox', text: 'Full-time  •  Remote / On-site', left: 80, top: 260, width: 1040, fontSize: 20, fill: 'rgba(255,255,255,.7)', fontFamily: 'Inter' },
+        { type: 'rect', left: 80, top: 330, width: 1040, height: 2, fill: 'rgba(255,255,255,.15)' },
+        { type: 'textbox', text: 'What you’ll do', left: 80, top: 380, width: 1040, fontSize: 22, fontWeight: 'bold', fill: '#f59e0b', fontFamily: 'Inter' },
+        { type: 'textbox', text: '•  Create branded graphics, layouts and marketing assets\n•  Collaborate with the team on new design concepts\n•  Deliver print-ready and digital-ready designs on time', left: 80, top: 420, width: 1040, fontSize: 19, fill: 'rgba(255,255,255,.85)', fontFamily: 'Inter', lineHeight: 1.7 },
+        { type: 'textbox', text: 'What we’re looking for', left: 80, top: 580, width: 1040, fontSize: 22, fontWeight: 'bold', fill: '#f59e0b', fontFamily: 'Inter' },
+        { type: 'textbox', text: '•  A strong portfolio and eye for detail\n•  Comfortable with Figma, Illustrator or similar tools\n•  Good communication and a fast turnaround', left: 80, top: 620, width: 1040, fontSize: 19, fill: 'rgba(255,255,255,.85)', fontFamily: 'Inter', lineHeight: 1.7 },
+        { type: 'rect', left: 80, top: 1420, width: 300, height: 80, fill: '#f59e0b', rx: 40, ry: 40 },
+        { type: 'textbox', text: 'APPLY NOW', left: 80, top: 1447, width: 300, fontSize: 22, fontWeight: 'bold', fill: '#0f172a', fontFamily: 'Inter', textAlign: 'center' },
+        { type: 'textbox', text: 'careers@yourcompany.com', left: 420, top: 1447, width: 700, fontSize: 20, fill: 'rgba(255,255,255,.75)', fontFamily: 'Inter' },
+      ],
+    }),
+  },
+  {
+    id: 'hire-designer-bold', type: 'hire-designer', title: 'Creative Director Wanted', width: 1200, height: 1600,
+    build: () => ({
+      version: '5.3.0', background: '#dc2626',
+      objects: [
+        { type: 'rect', left: 80, top: 120, width: 300, height: 50, fill: '#111827', rx: 25, ry: 25 },
+        { type: 'textbox', text: "WE'RE HIRING", left: 80, top: 135, width: 300, fontSize: 18, fontWeight: 'bold', fill: '#ffffff', fontFamily: 'Inter', textAlign: 'center' },
+        { type: 'textbox', text: 'Creative Director', left: 80, top: 195, width: 1040, fontSize: 62, fontWeight: 'bold', fill: '#ffffff', fontFamily: 'Montserrat' },
+        { type: 'textbox', text: 'Full-time  •  On-site', left: 80, top: 285, width: 1040, fontSize: 20, fill: 'rgba(255,255,255,.85)', fontFamily: 'Inter' },
+        { type: 'rect', left: 80, top: 400, width: 1040, height: 2, fill: 'rgba(17,24,39,.35)' },
+        { type: 'textbox', text: 'What you’ll do', left: 80, top: 440, width: 1040, fontSize: 22, fontWeight: 'bold', fill: '#111827', fontFamily: 'Inter' },
+        { type: 'textbox', text: '•  Lead the creative vision across every campaign\n•  Mentor and direct a team of designers\n•  Own the brand’s visual identity end-to-end', left: 80, top: 480, width: 1040, fontSize: 19, fill: 'rgba(17,24,39,.85)', fontFamily: 'Inter', lineHeight: 1.7 },
+        { type: 'textbox', text: 'What we’re looking for', left: 80, top: 640, width: 1040, fontSize: 22, fontWeight: 'bold', fill: '#111827', fontFamily: 'Inter' },
+        { type: 'textbox', text: '•  5+ years leading a creative team\n•  A bold, standout portfolio\n•  Confidence pitching ideas to clients', left: 80, top: 680, width: 1040, fontSize: 19, fill: 'rgba(17,24,39,.85)', fontFamily: 'Inter', lineHeight: 1.7 },
+        { type: 'rect', left: 80, top: 1420, width: 320, height: 80, fill: '#111827', rx: 40, ry: 40 },
+        { type: 'textbox', text: 'APPLY NOW', left: 80, top: 1447, width: 320, fontSize: 22, fontWeight: 'bold', fill: '#ffffff', fontFamily: 'Inter', textAlign: 'center' },
+        { type: 'textbox', text: 'careers@yourcompany.com', left: 440, top: 1447, width: 700, fontSize: 20, fill: 'rgba(17,24,39,.75)', fontFamily: 'Inter' },
+      ],
+    }),
+  },
+  {
+    id: 'hire-designer-minimal', type: 'hire-designer', title: 'UI/UX Designer Wanted', width: 1200, height: 1600,
+    build: () => ({
+      version: '5.3.0', background: '#f8fafc',
+      objects: [
+        { type: 'rect', left: 80, top: 110, width: 90, height: 6, fill: '#0284c7' },
+        { type: 'textbox', text: "WE'RE HIRING", left: 80, top: 130, width: 1040, fontSize: 20, fontWeight: 'bold', fill: '#0284c7', fontFamily: 'Inter' },
+        { type: 'textbox', text: 'UI/UX Designer', left: 80, top: 170, width: 1040, fontSize: 58, fontWeight: 'bold', fill: '#0f172a', fontFamily: 'Montserrat' },
+        { type: 'textbox', text: 'Full-time  •  Remote', left: 80, top: 255, width: 1040, fontSize: 20, fill: '#64748b', fontFamily: 'Inter' },
+        { type: 'rect', left: 80, top: 330, width: 1040, height: 1, fill: '#e2e8f0' },
+        { type: 'textbox', text: 'What you’ll do', left: 80, top: 380, width: 1040, fontSize: 22, fontWeight: 'bold', fill: '#0284c7', fontFamily: 'Inter' },
+        { type: 'textbox', text: '•  Design intuitive flows and interfaces for our product\n•  Run user research and turn insights into wireframes\n•  Partner closely with engineering on implementation', left: 80, top: 420, width: 1040, fontSize: 19, fill: '#334155', fontFamily: 'Inter', lineHeight: 1.7 },
+        { type: 'textbox', text: 'What we’re looking for', left: 80, top: 580, width: 1040, fontSize: 22, fontWeight: 'bold', fill: '#0284c7', fontFamily: 'Inter' },
+        { type: 'textbox', text: '•  2+ years of product design experience\n•  Fluency in Figma and design systems\n•  A portfolio that shows your process, not just polish', left: 80, top: 620, width: 1040, fontSize: 19, fill: '#334155', fontFamily: 'Inter', lineHeight: 1.7 },
+        { type: 'rect', left: 80, top: 1420, width: 300, height: 76, fill: '#0284c7', rx: 8, ry: 8 },
+        { type: 'textbox', text: 'APPLY NOW', left: 80, top: 1446, width: 300, fontSize: 21, fontWeight: 'bold', fill: '#ffffff', fontFamily: 'Inter', textAlign: 'center' },
+        { type: 'textbox', text: 'careers@yourcompany.com', left: 420, top: 1446, width: 700, fontSize: 20, fill: '#64748b', fontFamily: 'Inter' },
+      ],
+    }),
+  },
+  {
+    id: 'hire-designer-colorful', type: 'hire-designer', title: 'Freelance Illustrator Wanted', width: 1200, height: 1600,
+    build: () => ({
+      version: '5.3.0', background: '#7c3aed',
+      objects: [
+        { type: 'circle', left: 780, top: -140, radius: 260, fill: '#f472b6' },
+        { type: 'rect', left: 80, top: 120, width: 260, height: 50, fill: '#fde047', rx: 25, ry: 25 },
+        { type: 'textbox', text: "WE'RE HIRING", left: 80, top: 135, width: 260, fontSize: 18, fontWeight: 'bold', fill: '#4c1d95', fontFamily: 'Inter', textAlign: 'center' },
+        { type: 'textbox', text: 'Freelance Illustrator', left: 80, top: 195, width: 1040, fontSize: 58, fontWeight: 'bold', fill: '#ffffff', fontFamily: 'Montserrat' },
+        { type: 'textbox', text: 'Contract  •  Remote  •  Project-based', left: 80, top: 280, width: 1040, fontSize: 20, fill: 'rgba(255,255,255,.85)', fontFamily: 'Inter' },
+        { type: 'rect', left: 80, top: 400, width: 1040, height: 2, fill: 'rgba(255,255,255,.25)' },
+        { type: 'textbox', text: 'What you’ll do', left: 80, top: 440, width: 1040, fontSize: 22, fontWeight: 'bold', fill: '#fde047', fontFamily: 'Inter' },
+        { type: 'textbox', text: '•  Illustrate characters, icons and campaign artwork\n•  Turn rough briefs into polished, on-brand visuals\n•  Deliver a handful of projects per month, on your schedule', left: 80, top: 480, width: 1040, fontSize: 19, fill: 'rgba(255,255,255,.9)', fontFamily: 'Inter', lineHeight: 1.7 },
+        { type: 'textbox', text: 'What we’re looking for', left: 80, top: 640, width: 1040, fontSize: 22, fontWeight: 'bold', fill: '#fde047', fontFamily: 'Inter' },
+        { type: 'textbox', text: '•  A distinctive illustration style\n•  Reliable turnaround on freelance timelines\n•  Comfortable working from a creative brief', left: 80, top: 680, width: 1040, fontSize: 19, fill: 'rgba(255,255,255,.9)', fontFamily: 'Inter', lineHeight: 1.7 },
+        { type: 'rect', left: 80, top: 1420, width: 320, height: 80, fill: '#fde047', rx: 40, ry: 40 },
+        { type: 'textbox', text: 'APPLY NOW', left: 80, top: 1447, width: 320, fontSize: 22, fontWeight: 'bold', fill: '#4c1d95', fontFamily: 'Inter', textAlign: 'center' },
+        { type: 'textbox', text: 'careers@yourcompany.com', left: 440, top: 1447, width: 700, fontSize: 20, fill: 'rgba(255,255,255,.85)', fontFamily: 'Inter' },
+      ],
+    }),
+  },
+  // ── Sales Campaign (4) ──────────────────────────────────────────────────
+  {
+    id: 'sales-campaign-flash-sale', type: 'sales-campaign', title: 'Flash Sale Banner', width: 1080, height: 1080,
+    build: () => ({
+      version: '5.3.0', background: '#dc2626',
+      objects: [
+        { type: 'textbox', text: 'FLASH SALE', left: 0, top: 280, width: 1080, fontSize: 130, fontWeight: 'bold', fill: '#ffffff', fontFamily: 'Montserrat', textAlign: 'center' },
+        { type: 'textbox', text: '24 HOURS ONLY  •  UP TO 50% OFF', left: 0, top: 560, width: 1080, fontSize: 34, fontWeight: 'bold', fill: 'rgba(255,255,255,.9)', fontFamily: 'Inter', textAlign: 'center' },
+        { type: 'rect', left: 390, top: 680, width: 300, height: 70, fill: '#111827', rx: 35, ry: 35 },
+        { type: 'textbox', text: 'SHOP NOW', left: 390, top: 702, width: 300, fontSize: 22, fontWeight: 'bold', fill: '#ffffff', fontFamily: 'Inter', textAlign: 'center' },
+      ],
+    }),
+  },
+  {
+    id: 'sales-campaign-discount', type: 'sales-campaign', title: 'Discount Blast', width: 1080, height: 1080,
+    build: () => ({
+      version: '5.3.0', background: '#111827',
+      objects: [
+        { type: 'rect', left: 110, top: 80, width: 300, height: 60, fill: '#f97316', rx: 30, ry: 30 },
+        { type: 'textbox', text: 'LIMITED TIME', left: 110, top: 98, width: 300, fontSize: 20, fontWeight: 'bold', fill: '#ffffff', fontFamily: 'Inter', textAlign: 'center' },
+        { type: 'textbox', text: '30% OFF', left: 0, top: 340, width: 1080, fontSize: 150, fontWeight: 'bold', fill: '#ffffff', fontFamily: 'Montserrat', textAlign: 'center' },
+        { type: 'textbox', text: 'Use code SAVE30 at checkout', left: 0, top: 660, width: 1080, fontSize: 28, fill: 'rgba(255,255,255,.75)', fontFamily: 'Inter', textAlign: 'center' },
+        { type: 'rect', left: 390, top: 750, width: 300, height: 70, fill: '#f97316', rx: 35, ry: 35 },
+        { type: 'textbox', text: 'SHOP NOW', left: 390, top: 772, width: 300, fontSize: 22, fontWeight: 'bold', fill: '#ffffff', fontFamily: 'Inter', textAlign: 'center' },
+      ],
+    }),
+  },
+  {
+    id: 'sales-campaign-countdown', type: 'sales-campaign', title: 'Campaign Countdown', width: 1080, height: 1080,
+    build: () => ({
+      version: '5.3.0', background: '#fef3c7',
+      objects: [
+        { type: 'textbox', text: 'SALE ENDS SOON', left: 0, top: 90, width: 1080, fontSize: 46, fontWeight: 'bold', fill: '#1f2430', fontFamily: 'Montserrat', textAlign: 'center' },
+        { type: 'rect', left: 120, top: 440, width: 180, height: 180, fill: '#ffffff', rx: 16, ry: 16 },
+        { type: 'rect', left: 330, top: 440, width: 180, height: 180, fill: '#ffffff', rx: 16, ry: 16 },
+        { type: 'rect', left: 540, top: 440, width: 180, height: 180, fill: '#ffffff', rx: 16, ry: 16 },
+        { type: 'rect', left: 750, top: 440, width: 180, height: 180, fill: '#ffffff', rx: 16, ry: 16 },
+        { type: 'textbox', text: '02', left: 120, top: 480, width: 180, fontSize: 60, fontWeight: 'bold', fill: '#d97706', fontFamily: 'Montserrat', textAlign: 'center' },
+        { type: 'textbox', text: 'DAYS', left: 120, top: 555, width: 180, fontSize: 15, fill: '#6b7280', fontFamily: 'Inter', textAlign: 'center' },
+        { type: 'textbox', text: '14', left: 330, top: 480, width: 180, fontSize: 60, fontWeight: 'bold', fill: '#d97706', fontFamily: 'Montserrat', textAlign: 'center' },
+        { type: 'textbox', text: 'HOURS', left: 330, top: 555, width: 180, fontSize: 15, fill: '#6b7280', fontFamily: 'Inter', textAlign: 'center' },
+        { type: 'textbox', text: '32', left: 540, top: 480, width: 180, fontSize: 60, fontWeight: 'bold', fill: '#d97706', fontFamily: 'Montserrat', textAlign: 'center' },
+        { type: 'textbox', text: 'MINS', left: 540, top: 555, width: 180, fontSize: 15, fill: '#6b7280', fontFamily: 'Inter', textAlign: 'center' },
+        { type: 'textbox', text: '09', left: 750, top: 480, width: 180, fontSize: 60, fontWeight: 'bold', fill: '#d97706', fontFamily: 'Montserrat', textAlign: 'center' },
+        { type: 'textbox', text: 'SECS', left: 750, top: 555, width: 180, fontSize: 15, fill: '#6b7280', fontFamily: 'Inter', textAlign: 'center' },
+        { type: 'textbox', text: "Don't miss out — grab your discount before time runs out.", left: 140, top: 780, width: 800, fontSize: 22, fill: '#374151', fontFamily: 'Inter', textAlign: 'center' },
+      ],
+    }),
+  },
+  {
+    id: 'sales-campaign-bogo', type: 'sales-campaign', title: 'Buy One Get One', width: 1080, height: 1080,
+    build: () => ({
+      version: '5.3.0', background: '#0d9488',
+      objects: [
+        { type: 'textbox', text: 'BOGO', left: 0, top: 260, width: 1080, fontSize: 170, fontWeight: 'bold', fill: '#ffffff', fontFamily: 'Montserrat', textAlign: 'center' },
+        { type: 'textbox', text: 'BUY ONE, GET ONE FREE', left: 0, top: 500, width: 1080, fontSize: 36, fontWeight: 'bold', fill: 'rgba(255,255,255,.9)', fontFamily: 'Inter', textAlign: 'center' },
+        { type: 'textbox', text: 'Limited time offer — in-store and online', left: 0, top: 560, width: 1080, fontSize: 20, fill: 'rgba(255,255,255,.75)', fontFamily: 'Inter', textAlign: 'center' },
+        { type: 'rect', left: 390, top: 660, width: 300, height: 70, fill: '#f59e0b', rx: 35, ry: 35 },
+        { type: 'textbox', text: 'SHOP NOW', left: 390, top: 682, width: 300, fontSize: 22, fontWeight: 'bold', fill: '#111827', fontFamily: 'Inter', textAlign: 'center' },
+      ],
+    }),
+  },
 ];
 
 let _dsActiveType = 'all';
@@ -38299,6 +38468,8 @@ const DS_EMPTY_META = {
   'all':          { icon: 'fa-paintbrush',        color: '#6366f1', bg: '#6366f120', title: 'No designs yet',            sub: 'Create your first social media post, business card, or custom design.' },
   'social-media': { icon: 'fa-share-nodes',        color: '#ec4899', bg: '#ec489920', title: 'No social media posts yet', sub: 'Design eye-catching posts for Instagram, Facebook, YouTube and more.' },
   'business-card':{ icon: 'fa-id-card',            color: '#f59e0b', bg: '#f59e0b20', title: 'No business cards yet',    sub: 'Create sleek, professional business card designs ready to print.' },
+  'sales-campaign':{ icon: 'fa-bullhorn',           color: '#dc2626', bg: '#dc262620', title: 'No sales campaigns yet',  sub: 'Design flash sales, discount blasts and promo banners for your campaigns.' },
+  'hire-designer':{ icon: 'fa-user-tie',            color: '#0284c7', bg: '#0284c720', title: 'No job postings yet',     sub: 'Create a poster to hire a designer, illustrator or creative director.' },
   'custom':       { icon: 'fa-wand-magic-sparkles', color: '#10b981', bg: '#10b98120', title: 'No custom designs yet',   sub: 'Start with a blank canvas at any size for your own creative projects.' },
 };
 
