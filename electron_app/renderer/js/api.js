@@ -38,9 +38,11 @@ const API = (() => {
       if (filters?.stockStatus)  p.set('stock_status',  filters.stockStatus);
       if (filters?.brandId)      p.set('brand_id',      filters.brandId);
       if (filters?.recentSales)  p.set('recent_sales',  '1');
+      if (filters?.discountOnly) p.set('discount_only', '1');
       if (filters?.sort && filters.sort !== 'name_asc') p.set('sort', filters.sort);
       return request('GET', `/online/bootstrap?${p.toString()}`);
     },
+    campaignProducts: () => request('GET', '/online/sale-campaigns/products'),
     productSearch:(q, perPage)    => request('GET', `/online/products?q=${encodeURIComponent(q || '')}&per_page=${perPage || 20}`),
     product:          (id)         => request('GET', `/online/products/${id}`),
     productSalesChart:  (id, period) => request('GET', `/online/products/${id}/sales-chart?period=${period || 'weekly'}`),

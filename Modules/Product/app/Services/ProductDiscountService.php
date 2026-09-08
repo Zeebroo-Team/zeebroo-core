@@ -31,6 +31,25 @@ class ProductDiscountService
             ->get();
     }
 
+    /**
+     * Distinct product IDs with a currently active discount (any selling unit).
+     *
+     * @return list<int>
+     */
+    public function activeDiscountedProductIds(Business $business): array
+    {
+        $today = now()->startOfDay();
+
+        return ProductDiscount::where('business_id', $business->id)
+            ->where('is_active', true)
+            ->where(fn ($q) => $q->whereNull('starts_at')->orWhere('starts_at', '<=', $today))
+            ->where(fn ($q) => $q->whereNull('ends_at')->orWhere('ends_at', '>=', $today))
+            ->distinct()
+            ->pluck('product_id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+    }
+
     public function create(Business $business, array $data): ProductDiscount
     {
         return $business->productDiscounts()->create($data);

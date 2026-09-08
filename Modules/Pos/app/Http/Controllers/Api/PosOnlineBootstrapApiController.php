@@ -36,6 +36,7 @@ class PosOnlineBootstrapApiController extends Controller
         $sort        = in_array($request->query('sort'), ['name_asc', 'name_desc', 'price_asc', 'price_desc', 'stock_asc', 'stock_desc', 'recent_sales'], true)
             ? $request->query('sort') : 'name_asc';
         $recentSales = filter_var($request->query('recent_sales', false), FILTER_VALIDATE_BOOLEAN);
+        $discountOnly = filter_var($request->query('discount_only', false), FILTER_VALIDATE_BOOLEAN);
 
         // PosCashier tokens are not App\Models\User — pass null so the service
         // skips user-scoped account filtering and returns all business accounts.
@@ -54,6 +55,7 @@ class PosOnlineBootstrapApiController extends Controller
                 $brandId,
                 $sort,
                 $recentSales,
+                $discountOnly,
             ),
         ]);
     }
