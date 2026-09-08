@@ -37800,6 +37800,335 @@ const DS_TYPE_DEFAULTS = {
   'business-card':    { w: 1050, h: 600,   title: '' },
 };
 
+// Sample starter templates shown in the "Start from a template" gallery.
+// Each `build()` returns a Fabric.js canvas payload (version/background/objects)
+// that gets JSON.stringify'd into canvas_json when the user picks it — matches
+// the exact shape editor.html's loadFromJSON() expects.
+const DS_TEMPLATES = [
+  // ── Letterhead (7) ──────────────────────────────────────────────────────
+  {
+    id: 'letterhead-modern', type: 'letterhead', title: 'Modern Letterhead', width: 794, height: 1123,
+    build: () => ({
+      version: '5.3.0', background: '#ffffff',
+      objects: [
+        { type: 'rect', left: 0, top: 0, width: 794, height: 150, fill: '#6366f1' },
+        { type: 'textbox', text: 'Your Company Name', left: 48, top: 42, width: 500, fontSize: 30, fontWeight: 'bold', fill: '#ffffff', fontFamily: 'Montserrat' },
+        { type: 'textbox', text: 'Tagline goes here', left: 48, top: 90, width: 500, fontSize: 14, fill: 'rgba(255,255,255,.85)', fontFamily: 'Inter' },
+        { type: 'i-text', text: 'Dear [Recipient Name],', left: 48, top: 210, fontSize: 15, fill: '#111827', fontFamily: 'Inter' },
+        { type: 'i-text', text: 'Start typing your letter here…', left: 48, top: 250, width: 680, fontSize: 13, fontStyle: 'italic', fill: '#6b7280', fontFamily: 'Inter' },
+        { type: 'rect', left: 0, top: 1063, width: 794, height: 60, fill: '#f3f1fa' },
+        { type: 'textbox', text: 'www.yourcompany.com   •   hello@yourcompany.com   •   +1 234 567 8900', left: 48, top: 1083, width: 700, fontSize: 11, fill: '#6b6b85', fontFamily: 'Inter' },
+      ],
+    }),
+  },
+  {
+    id: 'letterhead-classic', type: 'letterhead', title: 'Classic Letterhead', width: 794, height: 1123,
+    build: () => ({
+      version: '5.3.0', background: '#ffffff',
+      objects: [
+        { type: 'rect', left: 0, top: 0, width: 794, height: 8, fill: '#0ea5e9' },
+        { type: 'textbox', text: 'YOUR COMPANY NAME', left: 0, top: 60, width: 794, fontSize: 26, fontWeight: 'bold', fill: '#1f2430', fontFamily: 'Montserrat', textAlign: 'center' },
+        { type: 'textbox', text: '123 Business Street, City, Country   •   +1 234 567 8900', left: 0, top: 100, width: 794, fontSize: 12, fill: '#6b7280', fontFamily: 'Inter', textAlign: 'center' },
+        { type: 'rect', left: 140, top: 140, width: 514, height: 2, fill: '#e5e7eb' },
+        { type: 'i-text', text: 'Dear [Recipient Name],', left: 70, top: 200, fontSize: 15, fill: '#111827', fontFamily: 'Inter' },
+        { type: 'i-text', text: 'Start typing your letter here…', left: 70, top: 240, width: 650, fontSize: 13, fontStyle: 'italic', fill: '#6b7280', fontFamily: 'Inter' },
+        { type: 'rect', left: 0, top: 1115, width: 794, height: 8, fill: '#0ea5e9' },
+      ],
+    }),
+  },
+  {
+    id: 'letterhead-elegant', type: 'letterhead', title: 'Elegant Letterhead', width: 794, height: 1123,
+    build: () => ({
+      version: '5.3.0', background: '#ffffff',
+      objects: [
+        { type: 'rect', left: 0, top: 0, width: 170, height: 1123, fill: '#7c3aed' },
+        { type: 'circle', left: 45, top: 50, radius: 40, fill: 'rgba(255,255,255,.2)' },
+        { type: 'textbox', text: 'CO', left: 55, top: 76, width: 60, fontSize: 26, fontWeight: 'bold', fill: '#ffffff', fontFamily: 'Montserrat', textAlign: 'center' },
+        { type: 'textbox', text: 'Your Company', left: 20, top: 950, width: 130, fontSize: 13, fontWeight: 'bold', fill: '#ffffff', fontFamily: 'Inter', textAlign: 'center' },
+        { type: 'textbox', text: 'Your Company Name', left: 210, top: 70, width: 500, fontSize: 26, fontWeight: 'bold', fill: '#1f2430', fontFamily: 'Montserrat' },
+        { type: 'i-text', text: 'Dear [Recipient Name],', left: 210, top: 230, fontSize: 15, fill: '#111827', fontFamily: 'Inter' },
+        { type: 'i-text', text: 'Start typing your letter here…', left: 210, top: 270, width: 520, fontSize: 13, fontStyle: 'italic', fill: '#6b7280', fontFamily: 'Inter' },
+      ],
+    }),
+  },
+  {
+    id: 'letterhead-bold', type: 'letterhead', title: 'Bold Letterhead', width: 794, height: 1123,
+    build: () => ({
+      version: '5.3.0', background: '#ffffff',
+      objects: [
+        { type: 'rect', left: 0, top: 0, width: 794, height: 200, fill: '#111827' },
+        { type: 'textbox', text: 'YOUR COMPANY', left: 48, top: 60, width: 600, fontSize: 34, fontWeight: 'bold', fill: '#ffffff', fontFamily: 'Montserrat' },
+        { type: 'rect', left: 48, top: 115, width: 120, height: 6, fill: '#ef4444' },
+        { type: 'textbox', text: 'Tagline goes here', left: 48, top: 135, width: 500, fontSize: 14, fill: 'rgba(255,255,255,.75)', fontFamily: 'Inter' },
+        { type: 'i-text', text: 'Dear [Recipient Name],', left: 48, top: 260, fontSize: 15, fill: '#111827', fontFamily: 'Inter' },
+        { type: 'i-text', text: 'Start typing your letter here…', left: 48, top: 300, width: 680, fontSize: 13, fontStyle: 'italic', fill: '#6b7280', fontFamily: 'Inter' },
+      ],
+    }),
+  },
+  {
+    id: 'letterhead-minimal', type: 'letterhead', title: 'Minimal Letterhead', width: 794, height: 1123,
+    build: () => ({
+      version: '5.3.0', background: '#ffffff',
+      objects: [
+        { type: 'rect', left: 0, top: 0, width: 6, height: 1123, fill: '#10b981' },
+        { type: 'textbox', text: 'Your Company Name', left: 60, top: 60, width: 600, fontSize: 24, fill: '#1f2430', fontFamily: 'Inter' },
+        { type: 'textbox', text: 'hello@yourcompany.com', left: 60, top: 100, width: 400, fontSize: 12, fill: '#6b7280', fontFamily: 'Inter' },
+        { type: 'i-text', text: 'Dear [Recipient Name],', left: 60, top: 220, fontSize: 15, fill: '#111827', fontFamily: 'Inter' },
+        { type: 'i-text', text: 'Start typing your letter here…', left: 60, top: 260, width: 650, fontSize: 13, fontStyle: 'italic', fill: '#6b7280', fontFamily: 'Inter' },
+      ],
+    }),
+  },
+  {
+    id: 'letterhead-corporate', type: 'letterhead', title: 'Corporate Letterhead', width: 794, height: 1123,
+    build: () => ({
+      version: '5.3.0', background: '#ffffff',
+      objects: [
+        { type: 'rect', left: 0, top: 0, width: 794, height: 10, fill: '#1e3a5f' },
+        { type: 'textbox', text: 'YOUR COMPANY', left: 48, top: 50, width: 400, fontSize: 24, fontWeight: 'bold', fill: '#1e3a5f', fontFamily: 'Montserrat' },
+        { type: 'textbox', text: 'Corporate Solutions', left: 48, top: 84, width: 400, fontSize: 12, fill: '#6b7280', fontFamily: 'Inter' },
+        { type: 'rect', left: 650, top: 40, width: 96, height: 96, fill: '#eef2f6', rx: 8, ry: 8 },
+        { type: 'rect', left: 48, top: 160, width: 698, height: 1, fill: '#e5e7eb' },
+        { type: 'i-text', text: 'Dear [Recipient Name],', left: 48, top: 210, fontSize: 15, fill: '#111827', fontFamily: 'Inter' },
+        { type: 'i-text', text: 'Start typing your letter here…', left: 48, top: 250, width: 680, fontSize: 13, fontStyle: 'italic', fill: '#6b7280', fontFamily: 'Inter' },
+        { type: 'rect', left: 0, top: 1113, width: 794, height: 10, fill: '#1e3a5f' },
+      ],
+    }),
+  },
+  {
+    id: 'letterhead-creative', type: 'letterhead', title: 'Creative Letterhead', width: 794, height: 1123,
+    build: () => ({
+      version: '5.3.0', background: '#ffffff',
+      objects: [
+        { type: 'rect', left: 0, top: 0, width: 794, height: 12, fill: '#ec4899' },
+        { type: 'circle', left: 660, top: 40, radius: 70, fill: '#fbcfe8' },
+        { type: 'circle', left: 600, top: 100, radius: 40, fill: '#f9a8d4' },
+        { type: 'textbox', text: 'Your Company Name', left: 48, top: 60, width: 500, fontSize: 28, fontWeight: 'bold', fill: '#1f2430', fontFamily: 'Montserrat' },
+        { type: 'textbox', text: 'Creative Studio', left: 48, top: 102, width: 400, fontSize: 13, fill: '#ec4899', fontFamily: 'Inter' },
+        { type: 'i-text', text: 'Dear [Recipient Name],', left: 48, top: 220, fontSize: 15, fill: '#111827', fontFamily: 'Inter' },
+        { type: 'i-text', text: 'Start typing your letter here…', left: 48, top: 260, width: 680, fontSize: 13, fontStyle: 'italic', fill: '#6b7280', fontFamily: 'Inter' },
+      ],
+    }),
+  },
+  // ── Business Card (6) ───────────────────────────────────────────────────
+  {
+    id: 'business-card-minimal', type: 'business-card', title: 'Minimal Card', width: 1050, height: 600,
+    build: () => ({
+      version: '5.3.0', background: '#ffffff',
+      objects: [
+        { type: 'rect', left: 0, top: 0, width: 18, height: 600, fill: '#f59e0b' },
+        { type: 'textbox', text: 'Full Name', left: 70, top: 210, width: 600, fontSize: 34, fontWeight: 'bold', fill: '#1f2430', fontFamily: 'Montserrat' },
+        { type: 'textbox', text: 'Job Title  •  Company Name', left: 70, top: 262, width: 600, fontSize: 15, fill: '#6b7280', fontFamily: 'Inter' },
+        { type: 'textbox', text: 'phone: +1 234 567 8900', left: 70, top: 420, width: 600, fontSize: 12, fill: '#374151', fontFamily: 'Inter' },
+        { type: 'textbox', text: 'email: hello@company.com   •   www.company.com', left: 70, top: 448, width: 700, fontSize: 12, fill: '#374151', fontFamily: 'Inter' },
+      ],
+    }),
+  },
+  {
+    id: 'business-card-bold', type: 'business-card', title: 'Bold Card', width: 1050, height: 600,
+    build: () => ({
+      version: '5.3.0', background: '#f59e0b',
+      objects: [
+        { type: 'circle', left: 850, top: 40, radius: 70, fill: 'rgba(255,255,255,.18)' },
+        { type: 'textbox', text: 'COMPANY', left: 70, top: 230, width: 700, fontSize: 40, fontWeight: 'bold', fill: '#ffffff', fontFamily: 'Montserrat' },
+        { type: 'textbox', text: 'Tagline / Slogan', left: 70, top: 290, width: 600, fontSize: 16, fill: 'rgba(255,255,255,.85)', fontFamily: 'Inter' },
+        { type: 'textbox', text: 'Full Name  •  Job Title', left: 70, top: 500, width: 700, fontSize: 13, fill: '#ffffff', fontFamily: 'Inter' },
+      ],
+    }),
+  },
+  {
+    id: 'business-card-elegant', type: 'business-card', title: 'Elegant Card', width: 1050, height: 600,
+    build: () => ({
+      version: '5.3.0', background: '#faf8fc',
+      objects: [
+        { type: 'textbox', text: 'Full Name', left: 0, top: 220, width: 1050, fontSize: 36, fontWeight: 'bold', fill: '#241f38', fontFamily: 'Montserrat', textAlign: 'center' },
+        { type: 'textbox', text: 'Job Title', left: 0, top: 272, width: 1050, fontSize: 15, fill: '#7c3aed', fontFamily: 'Inter', textAlign: 'center' },
+        { type: 'rect', left: 425, top: 330, width: 200, height: 2, fill: '#d8c9f5' },
+        { type: 'textbox', text: 'email@company.com   •   +1 234 567 8900   •   www.company.com', left: 0, top: 360, width: 1050, fontSize: 12, fill: '#4b4560', fontFamily: 'Inter', textAlign: 'center' },
+      ],
+    }),
+  },
+  {
+    id: 'business-card-split', type: 'business-card', title: 'Modern Split Card', width: 1050, height: 600,
+    build: () => ({
+      version: '5.3.0', background: '#ffffff',
+      objects: [
+        { type: 'rect', left: 525, top: 0, width: 525, height: 600, fill: '#0ea5e9' },
+        { type: 'textbox', text: 'Full Name', left: 70, top: 220, width: 420, fontSize: 32, fontWeight: 'bold', fill: '#1f2430', fontFamily: 'Montserrat' },
+        { type: 'textbox', text: 'Job Title', left: 70, top: 270, width: 420, fontSize: 15, fill: '#6b7280', fontFamily: 'Inter' },
+        { type: 'textbox', text: 'COMPANY', left: 575, top: 260, width: 400, fontSize: 26, fontWeight: 'bold', fill: '#ffffff', fontFamily: 'Montserrat' },
+      ],
+    }),
+  },
+  {
+    id: 'business-card-navy', type: 'business-card', title: 'Professional Navy', width: 1050, height: 600,
+    build: () => ({
+      version: '5.3.0', background: '#ffffff',
+      objects: [
+        { type: 'rect', left: 0, top: 540, width: 1050, height: 60, fill: '#1e3a5f' },
+        { type: 'textbox', text: 'Full Name', left: 70, top: 180, width: 600, fontSize: 32, fontWeight: 'bold', fill: '#1f2430', fontFamily: 'Montserrat' },
+        { type: 'textbox', text: 'Job Title', left: 70, top: 228, width: 600, fontSize: 15, fill: '#1e3a5f', fontFamily: 'Inter' },
+        { type: 'rect', left: 70, top: 270, width: 60, height: 4, fill: '#1e3a5f' },
+        { type: 'textbox', text: '+1 234 567 8900   •   hello@company.com', left: 70, top: 560, width: 700, fontSize: 12, fill: '#ffffff', fontFamily: 'Inter' },
+      ],
+    }),
+  },
+  {
+    id: 'business-card-gradient', type: 'business-card', title: 'Duotone Card', width: 1050, height: 600,
+    build: () => ({
+      version: '5.3.0', background: '#6366f1',
+      objects: [
+        { type: 'rect', left: 525, top: 0, width: 525, height: 600, fill: '#8b5cf6' },
+        { type: 'textbox', text: 'Full Name', left: 70, top: 240, width: 450, fontSize: 32, fontWeight: 'bold', fill: '#ffffff', fontFamily: 'Montserrat' },
+        { type: 'textbox', text: 'Job Title', left: 70, top: 288, width: 450, fontSize: 14, fill: 'rgba(255,255,255,.85)', fontFamily: 'Inter' },
+        { type: 'textbox', text: 'COMPANY', left: 600, top: 260, width: 380, fontSize: 24, fontWeight: 'bold', fill: 'rgba(255,255,255,.95)', fontFamily: 'Montserrat' },
+      ],
+    }),
+  },
+  // ── Social Media (6) ────────────────────────────────────────────────────
+  {
+    id: 'social-sale-promo', type: 'social-media', title: 'Sale Promo', width: 1080, height: 1080,
+    build: () => ({
+      version: '5.3.0', background: '#ec4899',
+      objects: [
+        { type: 'textbox', text: 'SALE', left: 0, top: 330, width: 1080, fontSize: 160, fontWeight: 'bold', fill: '#ffffff', fontFamily: 'Montserrat', textAlign: 'center' },
+        { type: 'textbox', text: 'UP TO 50% OFF', left: 0, top: 520, width: 1080, fontSize: 50, fontWeight: 'bold', fill: '#ffffff', fontFamily: 'Inter', textAlign: 'center' },
+        { type: 'rect', left: 390, top: 640, width: 300, height: 70, fill: '#ffffff', rx: 10, ry: 10 },
+        { type: 'textbox', text: 'SHOP NOW', left: 390, top: 662, width: 300, fontSize: 22, fontWeight: 'bold', fill: '#ec4899', fontFamily: 'Inter', textAlign: 'center' },
+      ],
+    }),
+  },
+  {
+    id: 'social-announcement', type: 'social-media', title: 'Announcement', width: 1080, height: 1080,
+    build: () => ({
+      version: '5.3.0', background: '#fdf3e7',
+      objects: [
+        { type: 'circle', left: 440, top: 120, radius: 100, fill: '#d1c4f9' },
+        { type: 'textbox', text: 'Big News!', left: 0, top: 380, width: 1080, fontSize: 70, fontWeight: 'bold', fill: '#241f38', fontFamily: 'Montserrat', textAlign: 'center' },
+        { type: 'textbox', text: "We're excited to announce something special is coming your way.", left: 140, top: 480, width: 800, fontSize: 24, fill: '#4b4560', fontFamily: 'Inter', textAlign: 'center', lineHeight: 1.4 },
+        { type: 'textbox', text: '@yourbusiness', left: 0, top: 950, width: 1080, fontSize: 18, fill: '#8b5cf6', fontFamily: 'Inter', textAlign: 'center' },
+      ],
+    }),
+  },
+  {
+    id: 'social-quote', type: 'social-media', title: 'Quote Post', width: 1080, height: 1080,
+    build: () => ({
+      version: '5.3.0', background: '#eafaf1',
+      objects: [
+        { type: 'textbox', text: 'Great things never came from comfort zones.', left: 140, top: 420, width: 800, fontSize: 40, fontWeight: 'bold', fill: '#1f2430', fontFamily: 'Montserrat', textAlign: 'center', lineHeight: 1.3 },
+        { type: 'textbox', text: '— Anonymous', left: 0, top: 640, width: 1080, fontSize: 20, fill: '#059669', fontFamily: 'Inter', textAlign: 'center' },
+      ],
+    }),
+  },
+  {
+    id: 'social-product-launch', type: 'social-media', title: 'Product Launch', width: 1080, height: 1080,
+    build: () => ({
+      version: '5.3.0', background: '#6366f1',
+      objects: [
+        { type: 'rect', left: 240, top: 140, width: 600, height: 500, fill: '#ffffff', rx: 16, ry: 16 },
+        { type: 'rect', left: 70, top: 70, width: 140, height: 50, fill: '#f59e0b', rx: 25, ry: 25 },
+        { type: 'textbox', text: 'NEW', left: 70, top: 84, width: 140, fontSize: 18, fontWeight: 'bold', fill: '#ffffff', fontFamily: 'Inter', textAlign: 'center' },
+        { type: 'textbox', text: 'Product Name', left: 0, top: 690, width: 1080, fontSize: 44, fontWeight: 'bold', fill: '#ffffff', fontFamily: 'Montserrat', textAlign: 'center' },
+        { type: 'rect', left: 390, top: 790, width: 300, height: 70, fill: '#ffffff', rx: 35, ry: 35 },
+        { type: 'textbox', text: 'SHOP NOW', left: 390, top: 812, width: 300, fontSize: 20, fontWeight: 'bold', fill: '#6366f1', fontFamily: 'Inter', textAlign: 'center' },
+      ],
+    }),
+  },
+  {
+    id: 'social-minimal-grid', type: 'social-media', title: 'Minimal Grid', width: 1080, height: 1080,
+    build: () => ({
+      version: '5.3.0', background: '#ffffff',
+      objects: [
+        { type: 'rect', left: 0, top: 0, width: 540, height: 1080, fill: '#f3f4f6' },
+        { type: 'rect', left: 540, top: 0, width: 540, height: 1080, fill: '#1f2430' },
+        { type: 'textbox', text: 'Minimal.', left: 600, top: 460, width: 400, fontSize: 50, fontWeight: 'bold', fill: '#ffffff', fontFamily: 'Montserrat' },
+        { type: 'textbox', text: 'Design that speaks for itself.', left: 600, top: 530, width: 400, fontSize: 16, fill: 'rgba(255,255,255,.75)', fontFamily: 'Inter' },
+      ],
+    }),
+  },
+  {
+    id: 'social-testimonial', type: 'social-media', title: 'Testimonial', width: 1080, height: 1080,
+    build: () => ({
+      version: '5.3.0', background: '#f0fdfa',
+      objects: [
+        { type: 'circle', left: 440, top: 100, radius: 90, fill: '#99f6e4' },
+        { type: 'textbox', text: '"Absolutely love this product, highly recommend it to everyone!"', left: 140, top: 330, width: 800, fontSize: 30, fontWeight: 'bold', fill: '#134e4a', fontFamily: 'Montserrat', textAlign: 'center', lineHeight: 1.4 },
+        { type: 'textbox', text: '— Happy Customer', left: 0, top: 560, width: 1080, fontSize: 18, fill: '#0d9488', fontFamily: 'Inter', textAlign: 'center' },
+      ],
+    }),
+  },
+  // ── Custom Design (5) ───────────────────────────────────────────────────
+  {
+    id: 'custom-poster', type: 'custom', title: 'Poster Layout', width: 1200, height: 1600,
+    build: () => ({
+      version: '5.3.0', background: '#ffffff',
+      objects: [
+        { type: 'rect', left: 80, top: 80, width: 1040, height: 700, fill: '#d7f3e6', rx: 16, ry: 16 },
+        { type: 'textbox', text: 'Poster Headline', left: 80, top: 820, width: 1040, fontSize: 56, fontWeight: 'bold', fill: '#1f2430', fontFamily: 'Montserrat' },
+        { type: 'textbox', text: 'A short supporting subheading goes here to set the context.', left: 80, top: 900, width: 1040, fontSize: 22, fill: '#4b4560', fontFamily: 'Inter', lineHeight: 1.4 },
+        { type: 'rect', left: 80, top: 1420, width: 260, height: 70, fill: '#10b981', rx: 10, ry: 10 },
+        { type: 'textbox', text: 'LEARN MORE', left: 80, top: 1442, width: 260, fontSize: 18, fontWeight: 'bold', fill: '#ffffff', fontFamily: 'Inter', textAlign: 'center' },
+      ],
+    }),
+  },
+  {
+    id: 'custom-flyer', type: 'custom', title: 'Event Flyer', width: 1200, height: 1600,
+    build: () => ({
+      version: '5.3.0', background: '#ffffff',
+      objects: [
+        { type: 'rect', left: 0, top: 0, width: 1200, height: 600, fill: '#fde7c7' },
+        { type: 'textbox', text: 'EVENT NAME', left: 80, top: 650, width: 1040, fontSize: 50, fontWeight: 'bold', fill: '#1f2430', fontFamily: 'Montserrat' },
+        { type: 'textbox', text: 'Date  •  Time  •  Venue', left: 80, top: 720, width: 1040, fontSize: 20, fill: '#6b7280', fontFamily: 'Inter' },
+        { type: 'rect', left: 80, top: 780, width: 200, height: 4, fill: '#f59e0b' },
+        { type: 'textbox', text: 'Join us for an unforgettable evening with music, food and fun for the whole family.', left: 80, top: 820, width: 1040, fontSize: 18, fill: '#4b4560', fontFamily: 'Inter', lineHeight: 1.5 },
+        { type: 'rect', left: 80, top: 1420, width: 260, height: 70, fill: '#f59e0b', rx: 10, ry: 10 },
+        { type: 'textbox', text: 'GET TICKETS', left: 80, top: 1442, width: 260, fontSize: 18, fontWeight: 'bold', fill: '#ffffff', fontFamily: 'Inter', textAlign: 'center' },
+      ],
+    }),
+  },
+  {
+    id: 'custom-certificate', type: 'custom', title: 'Certificate', width: 1600, height: 1200,
+    build: () => ({
+      version: '5.3.0', background: '#ffffff',
+      objects: [
+        { type: 'rect', left: 20, top: 20, width: 1560, height: 1160, fill: 'transparent', stroke: '#7c3aed', strokeWidth: 6 },
+        { type: 'textbox', text: 'CERTIFICATE OF ACHIEVEMENT', left: 0, top: 220, width: 1600, fontSize: 42, fontWeight: 'bold', fill: '#241f38', fontFamily: 'Montserrat', textAlign: 'center' },
+        { type: 'textbox', text: 'This certificate is proudly presented to', left: 0, top: 340, width: 1600, fontSize: 18, fill: '#6b7280', fontFamily: 'Inter', textAlign: 'center' },
+        { type: 'textbox', text: '[Recipient Name]', left: 0, top: 420, width: 1600, fontSize: 56, fontWeight: 'bold', fill: '#7c3aed', fontFamily: 'Georgia', textAlign: 'center' },
+        { type: 'textbox', text: 'for outstanding performance and dedication', left: 0, top: 540, width: 1600, fontSize: 18, fill: '#4b4560', fontFamily: 'Inter', textAlign: 'center' },
+        { type: 'textbox', text: 'Signature', left: 260, top: 980, width: 300, fontSize: 14, fill: '#6b7280', fontFamily: 'Inter', textAlign: 'center' },
+        { type: 'textbox', text: 'Date', left: 1040, top: 980, width: 300, fontSize: 14, fill: '#6b7280', fontFamily: 'Inter', textAlign: 'center' },
+      ],
+    }),
+  },
+  {
+    id: 'custom-report', type: 'custom', title: 'Report Cover', width: 1200, height: 1600,
+    build: () => ({
+      version: '5.3.0', background: '#ffffff',
+      objects: [
+        { type: 'rect', left: 0, top: 0, width: 1200, height: 500, fill: '#1e3a5f' },
+        { type: 'textbox', text: 'ANNUAL REPORT', left: 80, top: 380, width: 1040, fontSize: 30, fontWeight: 'bold', fill: 'rgba(255,255,255,.75)', fontFamily: 'Inter' },
+        { type: 'textbox', text: '2026 Business Overview', left: 80, top: 420, width: 1040, fontSize: 50, fontWeight: 'bold', fill: '#ffffff', fontFamily: 'Montserrat' },
+        { type: 'rect', left: 80, top: 600, width: 200, height: 6, fill: '#1e3a5f' },
+        { type: 'textbox', text: 'Prepared by Your Company', left: 80, top: 650, width: 1040, fontSize: 18, fill: '#4b4560', fontFamily: 'Inter' },
+      ],
+    }),
+  },
+  {
+    id: 'custom-webinar', type: 'custom', title: 'Webinar Banner', width: 1200, height: 800,
+    build: () => ({
+      version: '5.3.0', background: '#f5f3ff',
+      objects: [
+        { type: 'circle', left: 900, top: -60, radius: 220, fill: '#ede9fe' },
+        { type: 'textbox', text: 'LIVE WEBINAR', left: 80, top: 100, width: 600, fontSize: 20, fontWeight: 'bold', fill: '#7c3aed', fontFamily: 'Inter' },
+        { type: 'textbox', text: 'Growing Your Business in 2026', left: 80, top: 150, width: 800, fontSize: 48, fontWeight: 'bold', fill: '#1f2430', fontFamily: 'Montserrat' },
+        { type: 'textbox', text: 'Join us live — Thursday, 7 PM', left: 80, top: 260, width: 600, fontSize: 20, fill: '#4b4560', fontFamily: 'Inter' },
+        { type: 'rect', left: 80, top: 340, width: 220, height: 60, fill: '#7c3aed', rx: 30, ry: 30 },
+        { type: 'textbox', text: 'REGISTER', left: 80, top: 358, width: 220, fontSize: 16, fontWeight: 'bold', fill: '#ffffff', fontFamily: 'Inter', textAlign: 'center' },
+      ],
+    }),
+  },
+];
+
 let _dsActiveType = 'all';
 let _dsAllData    = [];
 
@@ -38157,6 +38486,80 @@ async function openSingletonDesign(type) {
   }
 }
 
+// ── Design Studio: "Start from a template" gallery ──────────────────────────
+// Gets (or creates, for singleton types reuses the existing record) a design
+// record for its id/dimensions, then opens the editor with the template's
+// starter layout merged in LOCALLY — nothing is written to the server here.
+// Like Canva: picking a template always shows that template; it only
+// overwrites anything real once the user clicks Save inside the editor.
+async function dsUseTemplate(tplId) {
+  const tpl = DS_TEMPLATES.find(t => t.id === tplId);
+  if (!tpl) return;
+
+  const card = $(`.dst-tpl-card[data-dst-tpl="${tplId}"]`);
+  if (card) card.classList.add('dst-tpl-loading');
+
+  try {
+    const isSingleton = DS_SINGLETON_TYPES.includes(tpl.type);
+    let design = null;
+
+    if (isSingleton) {
+      if (_dsAllData.length === 0) {
+        const list = await API.designs();
+        if (list.status === 200) {
+          _dsAllData = list.body?.data || [];
+          updateSingletonCards();
+        }
+      }
+      design = _dsAllData.find(d => d.type === tpl.type);
+    }
+
+    if (!design) {
+      const def = DS_TYPE_DEFAULTS[tpl.type] || {};
+      const createRes = await API.createDesign({
+        title:  tpl.title,
+        type:   tpl.type,
+        width:  tpl.width  || def.w,
+        height: tpl.height || def.h,
+      });
+      if (createRes.status === 201) {
+        design = createRes.body.data;
+        if (isSingleton) _dsAllData.push(design);
+      } else if (createRes.status === 422 && createRes.body?.data) {
+        design = createRes.body.data; // singleton already existed — reuse it
+        if (!_dsAllData.find(d => d.id === design.id)) _dsAllData.push(design);
+      } else {
+        toast(createRes.body?.message || 'Failed to create design.', 'error');
+        return;
+      }
+    }
+
+    if (isSingleton) updateSingletonCards();
+    await window.electronAPI.openEditor({ ...design, canvas_json: JSON.stringify(tpl.build()) });
+  } catch (err) {
+    toast(err?.message || 'Failed to use template.', 'error');
+  } finally {
+    if (card) card.classList.remove('dst-tpl-loading');
+  }
+}
+
+$('#dst-tpl-grid')?.addEventListener('click', e => {
+  const card = e.target.closest('.dst-tpl-card');
+  if (!card) return;
+  dsUseTemplate(card.dataset.dstTpl);
+});
+
+// Filter chips above the template gallery — client-side show/hide, no reload.
+$$('#dst-tpl-filters .dst-tpl-filter').forEach(btn => {
+  btn.addEventListener('click', () => {
+    $$('#dst-tpl-filters .dst-tpl-filter').forEach(b => b.classList.toggle('active', b === btn));
+    const type = btn.dataset.tplFilter;
+    $$('#dst-tpl-grid .dst-tpl-card').forEach(card => {
+      card.style.display = (type === 'all' || card.dataset.tplType === type) ? '' : 'none';
+    });
+  });
+});
+
 function buildDesignCard(d) {
   const typeKey = d.type || 'custom';
   const t  = DS_TYPES[typeKey] || DS_TYPES['custom'];
@@ -38166,7 +38569,7 @@ function buildDesignCard(d) {
     ? `<span class="ds-card-pill" style="background:#10b98115;color:#059669"><i class="fa fa-check"></i> Saved</span>`
     : `<span class="ds-card-pill"><i class="fa fa-plus"></i> New</span>`;
 
-  return `<div class="ds-card">
+  return `<div class="ds-card" style="--dst-c:${t.color}">
     <div class="ds-card-bar" style="background:${t.color}"></div>
     <div class="ds-card-body">
       <div class="ds-card-top">
