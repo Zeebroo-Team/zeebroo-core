@@ -67,6 +67,18 @@ class PosServiceApiController extends Controller
             }
         }
 
+        if (! empty($validated['service_item_id'])) {
+            $serviceItem = ServiceItem::where('id', $validated['service_item_id'])
+                              ->where('business_id', $business->id)->first();
+            if (! $serviceItem) {
+                return response()->json(['message' => 'Service not found.'], 422);
+            }
+            // Only services with adjustable pricing may have a client-supplied amount.
+            if (! $serviceItem->allow_price_adjustment) {
+                $validated['total_price'] = $serviceItem->price;
+            }
+        }
+
         $serviceRequest = $this->requestService->create($business, $validated);
         $serviceRequest->load(['serviceItem', 'customer', 'project']);
 
@@ -161,6 +173,7 @@ class PosServiceApiController extends Controller
                 'name'           => $i->name,
                 'description'    => $i->description,
                 'price'          => (float) $i->price,
+                'allow_price_adjustment' => (bool) $i->allow_price_adjustment,
                 'duration_label' => $i->durationLabel(),
                 'is_active'      => $i->is_active,
                 'has_warranty'   => (bool) $i->has_warranty,
@@ -184,6 +197,7 @@ class PosServiceApiController extends Controller
             'price'                      => ['required', 'numeric', 'min:0'],
             'cost_price'                 => ['nullable', 'numeric', 'min:0'],
             'wholesale_price'            => ['nullable', 'numeric', 'min:0'],
+            'allow_price_adjustment'     => ['boolean'],
             'duration_minutes'           => ['nullable', 'integer', 'min:0'],
             'is_active'                  => ['boolean'],
             'is_featured'                => ['boolean'],
@@ -218,6 +232,7 @@ class PosServiceApiController extends Controller
             'price'                       => $validated['price'],
             'cost_price'                  => $validated['cost_price'] ?? null,
             'wholesale_price'             => $validated['wholesale_price'] ?? null,
+            'allow_price_adjustment'      => $validated['allow_price_adjustment'] ?? false,
             'duration_minutes'            => $validated['duration_minutes'] ?? null,
             'is_active'                   => $validated['is_active'] ?? true,
             'is_featured'                 => $validated['is_featured'] ?? false,
@@ -256,6 +271,7 @@ class PosServiceApiController extends Controller
             'price'                      => ['required', 'numeric', 'min:0'],
             'cost_price'                 => ['nullable', 'numeric', 'min:0'],
             'wholesale_price'            => ['nullable', 'numeric', 'min:0'],
+            'allow_price_adjustment'     => ['boolean'],
             'duration_minutes'           => ['nullable', 'integer', 'min:0'],
             'is_active'                  => ['boolean'],
             'is_featured'                => ['boolean'],
@@ -289,6 +305,7 @@ class PosServiceApiController extends Controller
             'price'                       => $validated['price'],
             'cost_price'                  => $validated['cost_price'] ?? null,
             'wholesale_price'             => $validated['wholesale_price'] ?? null,
+            'allow_price_adjustment'      => $validated['allow_price_adjustment'] ?? $serviceItem->allow_price_adjustment,
             'duration_minutes'            => $validated['duration_minutes'] ?? null,
             'is_active'                   => $validated['is_active'] ?? $serviceItem->is_active,
             'is_featured'                 => $validated['is_featured'] ?? $serviceItem->is_featured,
@@ -404,6 +421,7 @@ class PosServiceApiController extends Controller
                 'price'                 => (float) $serviceItem->price,
                 'cost_price'            => $serviceItem->cost_price !== null ? (float) $serviceItem->cost_price : null,
                 'wholesale_price'       => $serviceItem->wholesale_price !== null ? (float) $serviceItem->wholesale_price : null,
+                'allow_price_adjustment' => (bool) $serviceItem->allow_price_adjustment,
                 'duration_minutes'      => $serviceItem->duration_minutes,
                 'duration_label'        => $serviceItem->durationLabel(),
                 'is_active'             => $serviceItem->is_active,
@@ -511,6 +529,7 @@ class PosServiceApiController extends Controller
             'price'                       => (float) $i->price,
             'cost_price'                  => $i->cost_price !== null ? (float) $i->cost_price : null,
             'wholesale_price'             => $i->wholesale_price !== null ? (float) $i->wholesale_price : null,
+            'allow_price_adjustment'      => (bool) $i->allow_price_adjustment,
             'duration_label'              => $i->durationLabel(),
             'is_active'                   => $i->is_active,
             'is_featured'                 => (bool) $i->is_featured,

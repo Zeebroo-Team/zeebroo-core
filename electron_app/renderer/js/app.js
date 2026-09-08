@@ -37018,6 +37018,7 @@ function _svcResetModal() {
   $('#svc-form-active').checked    = true;
   $('#svc-form-featured').checked  = false;
   $('#svc-form-warranty').checked  = false;
+  $('#svc-form-adjustable-price').checked = false;
   _svcCustomReqFields = [];
   $('#svc-form-creq-enabled').checked = false;
   $('#svc-creq-section').style.display = 'none';
@@ -37073,6 +37074,7 @@ async function openEditServiceModal(id) {
   $('#svc-form-active').checked   = !!d.is_active;
   $('#svc-form-featured').checked = !!d.is_featured;
   $('#svc-form-warranty').checked = !!d.has_warranty;
+  $('#svc-form-adjustable-price').checked = !!d.allow_price_adjustment;
   _svcSetImage(d.file_manager_file_id || null, d.image_url || null);
 
   // Pre-fill custom requirement form
@@ -37341,6 +37343,7 @@ $('#svc-form-submit')?.addEventListener('click', async () => {
     is_active:            $('#svc-form-active').checked,
     is_featured:          $('#svc-form-featured').checked,
     has_warranty:         $('#svc-form-warranty').checked,
+    allow_price_adjustment: $('#svc-form-adjustable-price').checked,
     custom_requirement_enabled: $('#svc-form-creq-enabled').checked,
     custom_requirement_fields: _svcCustomReqFields
       .filter(f => f.label.trim())
@@ -37577,6 +37580,53 @@ $('#svc-cat-q')?.addEventListener('input', function () {
 
 // ── New Service Request Modal ────────────────────────────────────────────────
 let _svcReqCustTimer = null;
+let _svcReqPriceMap  = {};
+
+function _svcReqSetAmountLocked(locked, price) {
+  const inputWrap = $('#svc-req-f-amount-wrap');
+  const lockedWrap = $('#svc-req-f-amount-locked');
+  const lockedValue = $('#svc-req-f-amount-locked-value');
+  const amountInput = $('#svc-req-f-amount');
+  if (locked) {
+    inputWrap.style.display  = 'none';
+    lockedWrap.style.display = 'flex';
+    lockedValue.textContent  = '$' + Number(price || 0).toFixed(2);
+    amountInput.value    = price != null ? price : '';
+    amountInput.readOnly = true;
+  } else {
+    inputWrap.style.display  = '';
+    lockedWrap.style.display = 'none';
+    amountInput.readOnly = false;
+  }
+}
+
+function _svcReqSetBaseHint(visible, price) {
+  const hint  = $('#svc-req-f-amount-base-hint');
+  const value = $('#svc-req-f-amount-base-value');
+  if (visible) {
+    value.textContent = '$' + Number(price || 0).toFixed(2);
+    hint.style.display = '';
+  } else {
+    hint.style.display = 'none';
+  }
+}
+
+function _svcReqApplyServicePricing(serviceId) {
+  const info = _svcReqPriceMap[serviceId];
+  if (!info) {
+    _svcReqSetAmountLocked(false);
+    _svcReqSetBaseHint(false);
+    return;
+  }
+  if (info.allow_price_adjustment) {
+    _svcReqSetAmountLocked(false);
+    $('#svc-req-f-amount').value = info.price != null ? info.price : '';
+    _svcReqSetBaseHint(info.price != null, info.price);
+  } else {
+    _svcReqSetAmountLocked(true, info.price);
+    _svcReqSetBaseHint(false);
+  }
+}
 
 async function openNewRequestModal() {
   activateTab('services');
@@ -37590,10 +37640,13 @@ async function openNewRequestModal() {
   $('#svc-req-f-amount').value      = '';
   $('#svc-req-f-notes').value       = '';
   $('#svc-new-req-alert').style.display = 'none';
+  _svcReqSetAmountLocked(false);
+  _svcReqSetBaseHint(false);
 
   // Populate service dropdown
   const svcSel = $('#svc-req-f-service');
   svcSel.innerHTML = '<option value="">— None —</option>';
+  _svcReqPriceMap = {};
   const catRes = await API.serviceMgmtCatalog('');
   if (catRes.status === 200) {
     (catRes.body?.data || []).forEach(s => {
@@ -37601,6 +37654,7 @@ async function openNewRequestModal() {
       opt.value = s.id;
       opt.textContent = s.name;
       svcSel.appendChild(opt);
+      _svcReqPriceMap[s.id] = { price: s.price, allow_price_adjustment: !!s.allow_price_adjustment };
     });
   }
 
@@ -37629,6 +37683,10 @@ async function openNewRequestModal() {
 function _closeNewRequestModal() {
   $('#svc-new-req-modal').style.display = 'none';
 }
+
+$('#svc-req-f-service')?.addEventListener('change', () => {
+  _svcReqApplyServicePricing($('#svc-req-f-service').value);
+});
 
 // Customer typeahead
 $('#svc-req-f-customer-q')?.addEventListener('input', () => {

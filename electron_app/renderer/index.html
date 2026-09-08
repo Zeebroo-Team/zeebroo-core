@@ -5549,9 +5549,16 @@
               </div>
               <div class="svc-form-group">
                 <label class="svc-form-label">Amount</label>
-                <div class="svc-form-prefix-wrap">
+                <div class="svc-form-prefix-wrap" id="svc-req-f-amount-wrap">
                   <span class="svc-form-prefix">$</span>
                   <input type="number" id="svc-req-f-amount" class="svc-form-input svc-form-input--prefix" placeholder="0.00" min="0" step="0.01">
+                </div>
+                <div id="svc-req-f-amount-base-hint" style="display:none;font-size:11px;color:var(--text-muted);margin-top:4px">
+                  Base price: <strong id="svc-req-f-amount-base-value">$0.00</strong>
+                </div>
+                <div class="svc-form-input" id="svc-req-f-amount-locked" style="display:none;align-items:center;justify-content:space-between;gap:8px;background:var(--bg-subtle,#f8f9fa);color:var(--text-muted);cursor:not-allowed">
+                  <span id="svc-req-f-amount-locked-value">$0.00</span>
+                  <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;opacity:.75;white-space:nowrap"><i class="fa fa-lock" style="margin-right:3px"></i>Fixed price</span>
                 </div>
               </div>
             </div>
@@ -5773,6 +5780,17 @@
                     <input type="number" id="svc-form-wholesale-price" class="po-field-input svc-form-input--prefix" placeholder="0.00" min="0" step="0.01">
                   </div>
                 </div>
+              </div>
+              <div class="prod-adv-card" style="margin-top:14px">
+                <input type="checkbox" id="svc-form-adjustable-price" class="prod-adv-card-chk">
+                <label class="prod-adv-card-top" for="svc-form-adjustable-price">
+                  <div class="prod-adv-card-icon"><i class="fa fa-sliders"></i></div>
+                  <div class="prod-adv-card-text">
+                    <span class="prod-adv-card-name">Adjustable Price</span>
+                    <span class="prod-adv-card-desc">Let staff change this service's price when creating a service request. When off, the price above is fixed and cannot be edited at request time.</span>
+                  </div>
+                  <div class="prod-adv-card-sw"><div class="prod-adv-card-knob"></div></div>
+                </label>
               </div>
             </div>
 
