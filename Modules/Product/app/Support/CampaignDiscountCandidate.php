@@ -16,6 +16,7 @@ final class CampaignDiscountCandidate
         public readonly string $name,
         public readonly string $discount_type,
         public readonly float $discount_value,
+        public readonly int $campaign_id,
     ) {
     }
 

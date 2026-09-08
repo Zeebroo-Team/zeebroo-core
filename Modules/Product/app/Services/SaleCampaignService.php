@@ -125,6 +125,7 @@ class SaleCampaignService
                         name: $campaign->name,
                         discount_type: $campaign->discount_type,
                         discount_value: (float) $campaign->discount_value,
+                        campaign_id: (int) $campaign->id,
                     ));
                 }
             } else {
@@ -135,11 +136,43 @@ class SaleCampaignService
                         name: $campaign->name,
                         discount_type: $item->discount_type,
                         discount_value: (float) $item->discount_value,
+                        campaign_id: (int) $campaign->id,
                     ));
                 }
             }
         }
 
         return $candidates;
+    }
+
+    /**
+     * Product IDs targeted by currently-active campaigns. Returns `true` when
+     * any active storewide campaign exists, since that effectively discounts
+     * every sellable product (the caller should skip ID filtering in that case).
+     *
+     * @return list<int>|true
+     */
+    public function activeCampaignProductIds(Business $business): array|true
+    {
+        $today = now()->startOfDay();
+
+        $campaigns = $business->saleCampaigns()
+            ->where('is_active', true)
+            ->where(fn ($q) => $q->whereNull('starts_at')->orWhere('starts_at', '<=', $today))
+            ->where(fn ($q) => $q->where('is_long_term', true)->orWhereNull('ends_at')->orWhere('ends_at', '>=', $today))
+            ->with('items:id,sale_campaign_id,product_id')
+            ->get();
+
+        $ids = [];
+        foreach ($campaigns as $campaign) {
+            if ($campaign->mode === 'storewide') {
+                return true;
+            }
+            foreach ($campaign->items as $item) {
+                $ids[] = (int) $item->product_id;
+            }
+        }
+
+        return array_values(array_unique($ids));
     }
 }

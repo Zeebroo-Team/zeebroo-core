@@ -77,6 +77,7 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
     Route::get('online/branches', PosBranchesApiController::class)->name('online.branches');
 
     Route::get('online/categories', [PosCatalogApiController::class, 'categories'])->name('online.categories');
+    Route::get('online/sale-campaigns/products', [PosSaleCampaignApiController::class, 'products'])->name('online.sale-campaigns.products');
     Route::get('online/products', [PosCatalogApiController::class, 'products'])->name('online.products');
     Route::get('online/products/{id}', [PosCatalogApiController::class, 'show'])->where('id', '[0-9]+')->name('online.products.show');
     Route::get  ('online/products/{id}/stock-history',                       [PosCatalogApiController::class, 'stockHistory'])->where('id', '[0-9]+')->name('online.products.stock-history');

@@ -7,6 +7,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesPosBusinessForApi;
+use Modules\Pos\Services\PosCatalogService;
 use Modules\Product\Models\SaleCampaign;
 use Modules\Product\Services\SaleCampaignService;
 
@@ -16,7 +17,31 @@ class PosSaleCampaignApiController extends Controller
 
     public function __construct(
         private readonly SaleCampaignService $service,
+        private readonly PosCatalogService $catalog,
     ) {
+    }
+
+    /** Products for the POS "Campaign" filter, grouped by active campaign. */
+    public function products(Request $request): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+
+        $branchId = $request->query('branch') ?? $request->header('X-Branch-Id');
+        $branchId = is_numeric($branchId) ? (int) $branchId : null;
+
+        $branchPosSeparate     = (bool) get_settings('business.branch_pos_separate', false, $business);
+        $branchProductSeparate = (bool) get_settings('business.branch_product_separate', false, $business);
+        $branchStockSeparate   = (bool) get_settings('business.branch_stock_separate', false, $business);
+        $effectiveBranchId     = $branchPosSeparate ? $branchId : null;
+
+        return response()->json([
+            'data' => $this->catalog->productsGroupedByCampaign(
+                $business,
+                $effectiveBranchId,
+                $branchProductSeparate,
+                $branchStockSeparate,
+            ),
+        ]);
     }
 
     public function index(Request $request): JsonResponse

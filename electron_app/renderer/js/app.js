@@ -7,6 +7,8 @@ const state = {
   categories: [],
   activeCategory: 0,
   filterRecentSales: false,
+  filterDiscount: false,
+  filterCampaign: false,
   searchQuery: '',
   currentPage: 1,
   sessionOpen: false,
@@ -19739,15 +19741,23 @@ $('#inv-tabs').addEventListener('click', e => {
 
 // ── Products ───────────────────────────────────────────────────────────────
 async function loadProducts(search = '', catId = 0, page = 1) {
+  // "Campaign" is a different layout (grouped sections), not the paginated grid —
+  // delegate unless the user is actively searching, which always falls back to a plain search.
+  if (state.filterCampaign && !search) {
+    return loadCampaignProducts();
+  }
+
   const grid = $('#product-grid');
   grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text-muted)"><i class="fa fa-spinner fa-spin" style="font-size:24px"></i></div>';
   setStatus('Loading products…');
 
-  const applyRecent  = state.filterRecentSales && !search;
-  const effectiveCat = search ? 0 : catId;
+  const applyRecent   = state.filterRecentSales && !search;
+  const applyDiscount = state.filterDiscount && !search;
+  const effectiveCat  = search ? 0 : catId;
   const res = await API.bootstrap(search, effectiveCat, page, {
     sort: applyRecent ? 'recent_sales' : 'name_asc',
     recentSales: applyRecent,
+    discountOnly: applyDiscount,
   });
   if (res.status !== 200) {
     grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:40px;color:#e74c3c"><i class="fa fa-circle-exclamation"></i> Failed to load products</div>`;
@@ -19773,27 +19783,68 @@ async function loadProducts(search = '', catId = 0, page = 1) {
   setStatus(`Zeebroo POS · ${products_meta.total || products.length} products`);
 }
 
+// Products divided into sections by active sale campaign (with campaign name headers).
+async function loadCampaignProducts() {
+  const grid = $('#product-grid');
+  grid.removeAttribute('style');
+  grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text-muted)"><i class="fa fa-spinner fa-spin" style="font-size:24px"></i></div>';
+  $('#pos-pagination').innerHTML = '';
+  setStatus('Loading campaigns…');
+
+  buildCategoryBar(state.categories || [], state.activeCategory);
+
+  const res = await API.campaignProducts();
+  if (res.status !== 200) {
+    grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:40px;color:#e74c3c"><i class="fa fa-circle-exclamation"></i> Failed to load campaigns</div>`;
+    setStatus('Error loading campaigns');
+    return;
+  }
+
+  const campaigns = res.body?.data || res.body || [];
+  buildCampaignSections(campaigns);
+  setStatus(`Zeebroo POS · ${campaigns.length} active campaign${campaigns.length === 1 ? '' : 's'}`);
+}
+
 function buildCategoryBar(categories, active) {
   const bar  = $('#category-filter');
   const rs   = state.filterRecentSales;
+  const disc = state.filterDiscount;
+  const camp = state.filterCampaign;
+  const noneActive = !rs && !disc && !camp;
   bar.innerHTML =
-    `<div class="cat-chip ${!rs && active === 0 ? 'active' : ''}" data-cat="0">All</div>` +
-    `<div class="cat-chip cat-chip-recent ${rs ? 'active' : ''}" data-cat="recent"><i class="fa fa-clock-rotate-left"></i> Recent</div>`;
+    `<div class="cat-chip ${noneActive && active === 0 ? 'active' : ''}" data-cat="0">All</div>` +
+    `<div class="cat-chip cat-chip-recent ${rs ? 'active' : ''}" data-cat="recent"><i class="fa fa-clock-rotate-left"></i> Recent</div>` +
+    `<div class="cat-chip cat-chip-discount ${disc ? 'active' : ''}" data-cat="discount"><i class="fa fa-tag"></i> Discount</div>` +
+    `<div class="cat-chip cat-chip-campaign ${camp ? 'active' : ''}" data-cat="campaign"><i class="fa fa-bullhorn"></i> Campaign</div>`;
   categories.forEach(c => {
     const chip = document.createElement('div');
-    chip.className = `cat-chip ${!rs && c.id === active ? 'active' : ''}`;
+    chip.className = `cat-chip ${noneActive && c.id === active ? 'active' : ''}`;
     chip.dataset.cat = c.id;
     chip.textContent = c.name;
     bar.appendChild(chip);
   });
   bar.querySelectorAll('.cat-chip').forEach(chip => {
     chip.addEventListener('click', () => {
-      if (chip.dataset.cat === 'recent') {
+      const cat = chip.dataset.cat;
+      if (cat === 'recent') {
         state.filterRecentSales = true;
+        state.filterDiscount    = false;
+        state.filterCampaign    = false;
         state.activeCategory    = 0;
+      } else if (cat === 'discount') {
+        state.filterRecentSales = false;
+        state.filterDiscount    = true;
+        state.filterCampaign    = false;
+        state.activeCategory    = 0;
+      } else if (cat === 'campaign') {
+        state.filterRecentSales = false;
+        state.filterDiscount    = false;
+        state.filterCampaign    = true;
       } else {
         state.filterRecentSales = false;
-        state.activeCategory    = Number(chip.dataset.cat);
+        state.filterDiscount    = false;
+        state.filterCampaign    = false;
+        state.activeCategory    = Number(cat);
       }
       _ssClose();
       loadProducts(state.searchQuery, state.activeCategory);
@@ -19802,52 +19853,96 @@ function buildCategoryBar(categories, active) {
   updateScrollArrows('category-filter', 'cat-scroll-left', 'cat-scroll-right');
 }
 
-function buildProductGrid(products) {
-  _pgSelIdx = -1;
-  const grid = $('#product-grid');
-  if (!products.length) {
-    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:60px;color:var(--text-muted)"><i class="fa fa-box-open" style="font-size:32px;display:block;margin-bottom:10px;opacity:.3"></i>No products found</div>';
-    return;
-  }
-  grid.innerHTML = products.map(p => {
-    const outOfStock    = (parseFloat(p.stock_quantity) || 0) <= 0;
-    const effectivePrice = p.discounted_sell_price ?? p.unit_sell_price ?? 0;
-    const origPrice     = p.discounted_sell_price !== null && p.discounted_sell_price !== undefined ? p.unit_sell_price : null;
-    const discount      = p.discount ?? null;
+function productCardHtml(p) {
+  const outOfStock    = (parseFloat(p.stock_quantity) || 0) <= 0;
+  const effectivePrice = p.discounted_sell_price ?? p.unit_sell_price ?? 0;
+  const origPrice     = p.discounted_sell_price !== null && p.discounted_sell_price !== undefined ? p.unit_sell_price : null;
+  const discount      = p.discount ?? null;
 
-    let priceHtml;
-    if (origPrice !== null) {
-      let badge = '';
-      if (discount) {
-        const lbl = discount.type === 'percentage'
-          ? `-${Math.round(discount.value)}%`
-          : `-${parseFloat(discount.amount ?? 0).toFixed(2)}`;
-        badge = ` <span class="p-discount-badge">${lbl}</span>`;
-      }
-      priceHtml = `<span class="p-price-orig">${parseFloat(origPrice).toFixed(2)}</span> ${parseFloat(effectivePrice).toFixed(2)}${badge}`;
-    } else {
-      priceHtml = parseFloat(effectivePrice).toFixed(2);
+  let priceHtml;
+  if (origPrice !== null) {
+    let badge = '';
+    if (discount) {
+      const lbl = discount.type === 'percentage'
+        ? `-${Math.round(discount.value)}%`
+        : `-${parseFloat(discount.amount ?? 0).toFixed(2)}`;
+      badge = ` <span class="p-discount-badge">${lbl}</span>`;
     }
+    priceHtml = `<span class="p-price-orig">${parseFloat(origPrice).toFixed(2)}</span> ${parseFloat(effectivePrice).toFixed(2)}${badge}`;
+  } else {
+    priceHtml = parseFloat(effectivePrice).toFixed(2);
+  }
 
-    const metaParts = [];
-    if (p.sku) metaParts.push(escHtml(p.sku));
-    if (p.stock_quantity != null) metaParts.push(`${p.stock_quantity} in stock`);
+  const metaParts = [];
+  if (p.sku) metaParts.push(escHtml(p.sku));
+  if (p.stock_quantity != null) metaParts.push(`${p.stock_quantity} in stock`);
+  const campaignName = discount && discount.campaign_id ? discount.name : null;
 
-    return `<div class="product-card${outOfStock ? ' is-out' : ''}" data-id="${p.id}" data-name="${escHtml(p.name)}" data-sku="${escHtml(p.sku ?? '')}" data-price="${effectivePrice}" data-stock="${p.stock_quantity ?? ''}">
-      ${p.image_url ? `<img src="${p.image_url}" alt="${escHtml(p.name)}" loading="lazy">` : `<div class="p-icon"><i class="fa fa-box"></i></div>`}
-      <div class="p-name">${escHtml(p.name)}</div>
-      ${metaParts.length ? `<div class="p-meta">${metaParts.join(' · ')}</div>` : ''}
-      <div class="p-price">${priceHtml}</div>
-    </div>`;
-  }).join('');
+  return `<div class="product-card${outOfStock ? ' is-out' : ''}" data-id="${p.id}" data-name="${escHtml(p.name)}" data-sku="${escHtml(p.sku ?? '')}" data-price="${effectivePrice}" data-stock="${p.stock_quantity ?? ''}">
+    ${p.image_url ? `<img src="${p.image_url}" alt="${escHtml(p.name)}" loading="lazy">` : `<div class="p-icon"><i class="fa fa-box"></i></div>`}
+    <div class="p-name">${escHtml(p.name)}</div>
+    ${metaParts.length ? `<div class="p-meta">${metaParts.join(' · ')}</div>` : ''}
+    ${campaignName ? `<div class="p-campaign-tag"><i class="fa fa-bullhorn"></i> ${escHtml(campaignName)}</div>` : ''}
+    <div class="p-price">${priceHtml}</div>
+  </div>`;
+}
 
-  grid.querySelectorAll('.product-card:not(.is-out)').forEach(card => {
+function bindProductCardClicks(container) {
+  container.querySelectorAll('.product-card:not(.is-out)').forEach(card => {
     const p = state.products.find(pr => pr.id === Number(card.dataset.id));
     card.addEventListener('click', () => {
       if (p) handleProductClick(p);
       else addToCart({ id: Number(card.dataset.id), name: card.dataset.name, price: parseFloat(card.dataset.price), stock: card.dataset.stock !== '' ? Number(card.dataset.stock) : null, layerId: null, layerLabel: null });
     });
   });
+}
+
+function buildProductGrid(products) {
+  _pgSelIdx = -1;
+  const grid = $('#product-grid');
+  grid.removeAttribute('style');
+  if (!products.length) {
+    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:60px;color:var(--text-muted)"><i class="fa fa-box-open" style="font-size:32px;display:block;margin-bottom:10px;opacity:.3"></i>No products found</div>';
+    return;
+  }
+  grid.innerHTML = products.map(productCardHtml).join('');
+  bindProductCardClicks(grid);
+}
+
+// Divides products into one section per active sale campaign, headed by the campaign's name.
+function buildCampaignSections(campaigns) {
+  _pgSelIdx = -1;
+  const grid = $('#product-grid');
+
+  if (!campaigns.length) {
+    grid.removeAttribute('style');
+    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:60px;color:var(--text-muted)"><i class="fa fa-bullhorn" style="font-size:32px;display:block;margin-bottom:10px;opacity:.3"></i>No active campaigns</div>';
+    state.products = [];
+    return;
+  }
+
+  grid.style.display = 'flex';
+  grid.style.flexDirection = 'column';
+  grid.style.gap = '18px';
+
+  const allProducts = [];
+  grid.innerHTML = campaigns.map(c => {
+    allProducts.push(...(c.products || []));
+    const hiddenCount = (c.product_count || 0) - (c.products || []).length;
+    return `<div class="campaign-section">
+      <div class="campaign-section-header">
+        <i class="fa fa-bullhorn"></i> ${escHtml(c.name)}
+        <span class="campaign-section-count">${c.product_count} product${c.product_count === 1 ? '' : 's'}</span>
+        ${hiddenCount > 0 ? `<span class="campaign-section-more">+${hiddenCount} more</span>` : ''}
+      </div>
+      <div class="campaign-section-grid">
+        ${(c.products || []).length ? c.products.map(productCardHtml).join('') : '<div class="campaign-section-empty">No products in this campaign</div>'}
+      </div>
+    </div>`;
+  }).join('');
+
+  state.products = allProducts;
+  bindProductCardClicks(grid);
 }
 
 // ── Product card context menu ────────────────────────────────────────────────

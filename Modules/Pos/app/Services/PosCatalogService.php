@@ -14,6 +14,7 @@ use Modules\Product\Models\ProductStockLayer;
 use Modules\Product\Services\ProductDiscountService;
 use Modules\Product\Services\ProductStockLayerService;
 use Modules\Product\Services\SaleCampaignService;
+use Modules\Product\Support\CampaignDiscountCandidate;
 use Modules\Product\Support\PricingCandidates;
 
 class PosCatalogService
@@ -90,6 +91,7 @@ class PosCatalogService
         ?int $brandId = null,
         string $sort = 'name_asc',
         bool $recentSales = false,
+        bool $discountOnly = false,
     ): array {
         $page    = max(1, $page);
         $perPage = max(1, min(100, $perPage));
@@ -146,6 +148,18 @@ class PosCatalogService
             );
         }
 
+        // Discount-only filter — products with an active manual discount OR
+        // one applied by a currently-active sale campaign (storewide or individual).
+        if ($discountOnly) {
+            $campaignProductIds = $this->campaignService->activeCampaignProductIds($business);
+            if ($campaignProductIds !== true) {
+                $discountedProductIds = $this->discountService->activeDiscountedProductIds($business);
+                $eligibleIds = array_values(array_unique(array_merge($campaignProductIds, $discountedProductIds)));
+                $query->whereIn('id', $eligibleIds ?: [0]);
+            }
+            // If true, an active storewide campaign discounts every product — no filter needed.
+        }
+
         // Stock status filter (uses the stock_quantity column directly)
         match ($stockStatus) {
             'in_stock'    => $query->where('stock_quantity', '>', 5),
@@ -184,6 +198,92 @@ class PosCatalogService
                 'total'        => $total,
             ],
         ];
+    }
+
+    /**
+     * Products grouped by currently-active sale campaign, for the POS "Campaign"
+     * filter — each group is capped at $perCampaign product cards, with
+     * `product_count` carrying the true total so the UI can show "+N more".
+     *
+     * @return list<array{
+     *     id: int, name: string, mode: string,
+     *     discount_type: ?string, discount_value: ?float,
+     *     product_count: int, products: list<array<string, mixed>>,
+     * }>
+     */
+    public function productsGroupedByCampaign(
+        Business $business,
+        ?int $branchId = null,
+        bool $branchProductSeparate = false,
+        bool $branchStockSeparate = false,
+        int $perCampaign = 60,
+    ): array {
+        $campaigns = $this->campaignService->list($business, '', 'active');
+        if ($campaigns->isEmpty()) {
+            return [];
+        }
+
+        $storewideProductIds = null;
+        $groups = [];
+
+        foreach ($campaigns as $campaign) {
+            if ($campaign->mode === 'storewide') {
+                if ($storewideProductIds === null) {
+                    $query = $business->products()
+                        ->where('is_active', true)
+                        ->where('is_bundle', false);
+                    if ($branchProductSeparate && $branchId !== null) {
+                        $query->where(function ($q) use ($branchId) {
+                            $q->where('branch_id', $branchId)->orWhereNull('branch_id');
+                        });
+                    }
+                    $storewideProductIds = $query->orderBy('name')
+                        ->pluck('id')
+                        ->map(fn ($id) => (int) $id)
+                        ->all();
+                }
+                $productIds = $storewideProductIds;
+            } else {
+                $productIds = $campaign->items->pluck('product_id')
+                    ->map(fn ($id) => (int) $id)
+                    ->unique()
+                    ->values()
+                    ->all();
+            }
+
+            if (empty($productIds)) {
+                continue;
+            }
+
+            $pageIds = array_slice($productIds, 0, $perCampaign);
+
+            $products = $business->products()
+                ->whereIn('id', $pageIds)
+                ->where('is_active', true)
+                ->where('is_bundle', false)
+                ->with(['productUnit', 'imageFile', 'categories'])
+                ->get()
+                ->sortBy(fn (Product $p) => array_search((int) $p->id, $pageIds, true))
+                ->values();
+
+            $activeDiscounts = $this->discountService->activeForProducts($business, $pageIds)
+                ->concat($this->campaignService->activeForProducts($business, $pageIds));
+
+            $groups[] = [
+                'id'             => (int) $campaign->id,
+                'name'           => $campaign->name,
+                'mode'           => $campaign->mode,
+                'discount_type'  => $campaign->discount_type,
+                'discount_value' => $campaign->discount_value !== null ? (float) $campaign->discount_value : null,
+                'product_count'  => count($productIds),
+                'products'       => $products
+                    ->map(fn (Product $product) => $this->productCardForProduct($product, $branchId, $branchStockSeparate, $activeDiscounts))
+                    ->values()
+                    ->all(),
+            ];
+        }
+
+        return $groups;
     }
 
     /**
@@ -240,6 +340,7 @@ class PosCatalogService
                 'value'       => (float) $baseDiscount->discount_value,
                 'amount'      => round($amount, 2),
                 'final_price' => round($finalPrice, 2),
+                'campaign_id' => $baseDiscount instanceof CampaignDiscountCandidate ? $baseDiscount->campaign_id : null,
             ];
 
             // Apply the discount to every layer's sell price so the JS cart always
