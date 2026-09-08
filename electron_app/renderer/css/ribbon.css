@@ -1607,6 +1607,377 @@ body.dark .loan-card.loan-overdue {
 body.dark .ds-card { border-color: var(--border); }
 body.dark .ds-card-pill { background: rgba(255,255,255,.06); }
 
+/* ── Design Studio — Canva-style landing page (dst-*) ───────────────────── */
+
+.dst-hero {
+  position: relative;
+  overflow: hidden;
+  flex-shrink: 0;
+  padding: 36px 24px 40px;
+  background: linear-gradient(120deg, #d3f5ee 0%, #eaf4fb 30%, #f3eefc 55%, #e6d9fa 80%, #d9c7f6 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.dst-hero-doodles { position: absolute; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+.dst-doodle { position: absolute; color: #5b3df0; opacity: .16; }
+.dst-doodle-pencil   { width: 44px; top: 16%;  left: 5%;   transform: rotate(-18deg); }
+.dst-doodle-scissors { width: 38px; bottom: 10%; left: 11%; transform: rotate(12deg); }
+.dst-doodle-ruler    { width: 52px; top: 20%;  right: 6%;  transform: rotate(-8deg); }
+.dst-doodle-brush    { width: 42px; bottom: 12%; right: 9%; transform: rotate(-15deg); }
+.dst-doodle-palette  { width: 32px; top: 10%;  right: 22%; transform: rotate(10deg); }
+.dst-doodle-sparkle  { width: 22px; bottom: 20%; left: 24%; transform: rotate(6deg); }
+body.dark .dst-doodle { color: #b4a4fb; opacity: .22; }
+.dst-hero-content {
+  position: relative;
+  z-index: 1;
+  text-align: center;
+  max-width: 560px;
+}
+.dst-hero-title {
+  font-size: 24px;
+  font-weight: 800;
+  color: #5b3df0;
+  letter-spacing: -.02em;
+  margin-bottom: 6px;
+}
+.dst-hero-sub {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 18px;
+}
+.dst-hero-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #fff;
+  border: 1.5px solid #8b5cf6;
+  border-radius: 999px;
+  padding: 11px 20px;
+  box-shadow: 0 1px 4px rgba(0,0,0,.05);
+}
+.dst-hero-search i { color: var(--text-muted); font-size: 13px; }
+.dst-hero-search input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 13.5px;
+  color: var(--text);
+}
+.dst-hero-search input::placeholder { color: #9ca3af; }
+
+.dst-hero::after {
+  content: "";
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 12px;
+  background:
+    linear-gradient(-45deg, transparent 7px, var(--bg) 7px),
+    linear-gradient(45deg, transparent 7px, var(--bg) 7px);
+  background-size: 14px 14px;
+  background-repeat: repeat-x;
+  background-position: bottom left;
+}
+#ds-studio-view {
+  background-image: radial-gradient(circle, color-mix(in srgb, var(--text) 7%, transparent) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+
+body.dark .dst-hero { background: linear-gradient(120deg, #12312c 0%, #16273a 30%, #241d3a 55%, #2c2144 80%, #33224a 100%); }
+body.dark .dst-hero-title { color: #b4a4fb; }
+body.dark .dst-hero-search { background: var(--surface); border-color: #8b5cf6; }
+
+.dst-section { padding: 22px 24px 4px; flex-shrink: 0; position: relative; z-index: 1; }
+.dst-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 14px;
+}
+.dst-section-title::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  flex-shrink: 0;
+  background: #8b5cf6;
+  border-radius: 2px;
+  transform: rotate(45deg);
+}
+body.dark .dst-section-title::before { background: #a78bfa; }
+.dst-section-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+.dst-section-title-row .dst-section-title { margin-bottom: 0; }
+.dst-see-all {
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.dst-see-all:hover { text-decoration: underline; }
+
+.dst-shortcuts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 20px 18px;
+}
+/* Each card reads as a small framed print pinned to a gallery wall:
+   a paper mat around the photo, a wax-seal icon badge, and a hand-lettered caption. */
+.dst-shortcut {
+  --mat: #faf6ec;
+  --mat-fiber: rgba(90,70,40,.05);
+  position: relative;
+  height: 214px;
+  border: 1px solid color-mix(in srgb, var(--ink) 25%, #ddd2b6);
+  border-radius: 12px 9px 13px 8px;
+  overflow: hidden;
+  cursor: pointer;
+  padding: 9px 9px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  text-align: left;
+  background-color: var(--mat);
+  background-image:
+    radial-gradient(circle at 14% 20%, var(--mat-fiber) 1px, transparent 1px),
+    radial-gradient(circle at 58% 64%, var(--mat-fiber) 1px, transparent 1px);
+  background-size: 7px 7px, 9px 9px;
+  box-shadow: 0 2px 6px rgba(60,45,20,.1);
+  transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+}
+.dst-shortcut:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 14px 26px rgba(60,45,20,.2);
+  border-color: var(--ink);
+}
+.dst-shortcut-tape {
+  position: absolute;
+  top: -7px;
+  left: 50%;
+  width: 52px;
+  height: 18px;
+  transform: translateX(-50%) rotate(-3deg);
+  background: repeating-linear-gradient(45deg, color-mix(in srgb, var(--ink) 55%, #fff) 0 6px, color-mix(in srgb, var(--ink) 40%, #fff) 6px 12px);
+  opacity: .6;
+  border-radius: 2px;
+  box-shadow: 0 1px 2px rgba(0,0,0,.15);
+  z-index: 2;
+}
+.dst-shortcut-photo {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  border-radius: 7px;
+  background-size: cover;
+  background-position: center;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.06), inset 0 -30px 26px -10px rgba(0,0,0,.45);
+}
+.dst-shortcut-photo::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 7px;
+  background: linear-gradient(160deg, color-mix(in srgb, var(--ink) 38%, transparent), transparent 65%);
+  mix-blend-mode: multiply;
+  opacity: .55;
+}
+.dst-shortcut-badge {
+  position: absolute;
+  left: 8px;
+  bottom: -12px;
+  z-index: 1;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: #fff;
+  background: var(--ink);
+  border: 2px solid var(--mat);
+  box-shadow: 0 3px 8px rgba(0,0,0,.3);
+}
+.dst-shortcut-text {
+  position: relative;
+  z-index: 1;
+  padding: 4px 4px 10px 44px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  text-align: left;
+}
+.dst-shortcut-label {
+  display: inline-block;
+  width: fit-content;
+  font-size: 12.5px;
+  font-weight: 700;
+  font-style: italic;
+  color: #4a3b22;
+  letter-spacing: .01em;
+  border-bottom: 2px solid color-mix(in srgb, var(--ink) 55%, transparent);
+  padding-bottom: 1px;
+}
+.dst-shortcut-desc  { display: block; font-size: 10px; color: #8a7a5c; line-height: 1.3; }
+
+body.dark .dst-shortcut { --mat: #241e14; --mat-fiber: rgba(255,240,210,.04); }
+body.dark .dst-shortcut-label { color: #f3e9d2; }
+body.dark .dst-shortcut-desc  { color: #b8a988; }
+body.dark .dst-shortcut-tape  { opacity: .42; }
+
+.dst-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 14px;
+}
+.dst-stat-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1.5px dashed color-mix(in srgb, var(--dst-a) 45%, #ddd2b6);
+  border-radius: 12px 8px 13px 9px;
+  background-color: #faf6ec;
+  background-image: radial-gradient(circle at 16% 26%, rgba(90,70,40,.05) 1px, transparent 1px);
+  background-size: 8px 8px;
+  overflow: hidden;
+}
+.dst-stat-card::after {
+  content: "";
+  position: absolute;
+  top: 7px;
+  right: 9px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--dst-a);
+  opacity: .55;
+}
+.dst-stat-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13.5px;
+  flex-shrink: 0;
+  background: var(--dst-a);
+  color: #fff;
+  border: 2px solid #faf6ec;
+  box-shadow: 0 2px 6px rgba(0,0,0,.18);
+}
+.dst-stat-val   { font-size: 18px; font-weight: 800; color: #4a3b22; font-variant-numeric: tabular-nums; }
+.dst-stat-label { font-size: 10.5px; font-weight: 600; font-style: italic; color: #8a7a5c; letter-spacing: .01em; margin-top: 1px; }
+.dst-stat-card > div:last-child { display: flex; flex-direction: column; }
+
+body.dark .dst-stat-card { background-color: #241e14; background-image: radial-gradient(circle at 16% 26%, rgba(255,240,210,.04) 1px, transparent 1px); }
+body.dark .dst-stat-icon { border-color: #241e14; }
+body.dark .dst-stat-val   { color: #f3e9d2; }
+body.dark .dst-stat-label { color: #b8a988; }
+
+/* ── Design tips & inspiration — sticky notes on a corkboard ───────────── */
+.dst-tips {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 26px 18px;
+  padding-bottom: 30px;
+}
+.dst-tip-note {
+  position: relative;
+  padding: 20px 16px 16px;
+  border-radius: 1px 8px 1px 8px;
+  font-size: 12px;
+  line-height: 1.55;
+  font-style: italic;
+  color: #4a3b22;
+  box-shadow: 0 8px 16px rgba(0,0,0,.14), inset 0 1px 0 rgba(255,255,255,.5);
+  transform: rotate(var(--tip-tilt, -1.6deg));
+  transition: transform .18s ease, box-shadow .18s ease;
+}
+.dst-tip-note:nth-child(2n) { --tip-tilt: 1.5deg; }
+.dst-tip-note:nth-child(3n) { --tip-tilt: -1.1deg; }
+.dst-tip-note:hover {
+  transform: rotate(0deg) translateY(-4px);
+  box-shadow: 0 14px 24px rgba(0,0,0,.2), inset 0 1px 0 rgba(255,255,255,.5);
+}
+.dst-tip-note p { margin: 0; }
+.dst-tip-pin {
+  position: absolute;
+  top: -7px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, rgba(255,255,255,.75), transparent 60%), #d3382f;
+  box-shadow: 0 2px 4px rgba(0,0,0,.3);
+}
+.dst-tip-yellow { background: #fdf1b8; }
+.dst-tip-pink   { background: #fbd8e8; }
+.dst-tip-blue   { background: #cfe8fb; }
+.dst-tip-green  { background: #d7f3d0; }
+.dst-tip-purple { background: #e5dcfb; }
+.dst-tip-orange { background: #fce0c4; }
+
+/* ── Closing inspiration banner — light paper card ──────────────────────── */
+.dst-quote-section { padding-bottom: 30px; }
+.dst-quote-board {
+  position: relative;
+  overflow: hidden;
+  border-radius: 14px;
+  padding: 34px 24px;
+  text-align: center;
+  background-color: #faf6ec;
+  background-image:
+    radial-gradient(circle at 20% 30%, rgba(90,70,40,.05) 1px, transparent 1px),
+    radial-gradient(circle at 70% 60%, rgba(90,70,40,.04) 1px, transparent 1px);
+  background-size: 9px 9px, 11px 11px;
+  border: 1.5px solid #e3d7b8;
+  box-shadow: 0 6px 16px rgba(60,45,20,.1);
+}
+.dst-quote-board-doodles { position: absolute; inset: 0; pointer-events: none; }
+.dst-chalk-doodle { position: absolute; color: #5b3df0; opacity: .16; }
+.dst-chalk-1 { width: 32px; top: 16%; left: 8%;  transform: rotate(-10deg); }
+.dst-chalk-2 { width: 36px; bottom: 14%; right: 9%; transform: rotate(14deg); }
+.dst-chalk-3 { width: 30px; top: 18%; right: 12%; transform: rotate(8deg); }
+.dst-quote-text {
+  position: relative;
+  z-index: 1;
+  margin: 0 0 8px;
+  font-size: 20px;
+  font-weight: 700;
+  font-style: italic;
+  color: #4a3b22;
+  letter-spacing: .01em;
+}
+.dst-quote-author {
+  position: relative;
+  z-index: 1;
+  display: block;
+  font-size: 12px;
+  color: #8a7a5c;
+  font-style: italic;
+}
+
+body.dark .dst-quote-board { background-color: #241e14; background-image: radial-gradient(circle at 20% 30%, rgba(255,240,210,.04) 1px, transparent 1px), radial-gradient(circle at 70% 60%, rgba(255,240,210,.035) 1px, transparent 1px); border-color: #3d3220; }
+body.dark .dst-chalk-doodle { color: #a78bfa; opacity: .22; }
+body.dark .dst-quote-text   { color: #f3e9d2; }
+body.dark .dst-quote-author { color: #b8a988; }
+
 /* ── Design Studio — context menu ─────────────────────────────────────── */
 .ds-ctx-menu {
   position: fixed;
