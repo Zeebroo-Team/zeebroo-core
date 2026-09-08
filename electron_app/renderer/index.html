@@ -1184,17 +1184,6 @@
               <button class="ribbon-btn-sm" id="rb-design-letterhead">
                 <i class="fa fa-file-lines"></i> Letterhead
               </button>
-              <button class="ribbon-btn-sm" id="rb-design-company-profile">
-                <i class="fa fa-building"></i> Business Profile
-              </button>
-            </div>
-            <div class="ribbon-small-stack">
-              <button class="ribbon-btn-sm" id="rb-design-social-media">
-                <i class="fa fa-share-nodes"></i> Social Media
-              </button>
-              <button class="ribbon-btn-sm" id="rb-design-business-card">
-                <i class="fa fa-id-card"></i> Business Cards
-              </button>
             </div>
           </div>
           <div class="ribbon-group-label">Types</div>
@@ -6082,15 +6071,184 @@
 
       <!-- Type filter subnav -->
       <div class="fin-subnav">
-        <button class="fin-subnav-btn active" data-ds="all"><i class="fa fa-layer-group"></i> All Designs</button>
+        <button class="fin-subnav-btn active" data-ds="studio"><i class="fa fa-wand-magic-sparkles"></i> Design Studio</button>
+        <button class="fin-subnav-btn"         data-ds="all"><i class="fa fa-layer-group"></i> All Designs</button>
         <button class="fin-subnav-btn"         data-ds="social-media"><i class="fa fa-share-nodes"></i> Social Media</button>
         <button class="fin-subnav-btn"         data-ds="business-card"><i class="fa fa-id-card"></i> Business Card</button>
         <button class="fin-subnav-btn"         data-ds="custom"><i class="fa fa-paintbrush"></i> Custom</button>
         <button class="fin-subnav-btn"         data-ds="proposals"><i class="fa fa-file-contract"></i> Project Proposals</button>
       </div>
 
+      <!-- ── Design Studio (Canva-style landing) view ── -->
+      <div id="ds-studio-view" style="display:flex;flex-direction:column;flex:1;overflow-y:auto">
+
+        <!-- Hero -->
+        <div class="dst-hero">
+          <div class="dst-hero-doodles" aria-hidden="true">
+            <svg class="dst-doodle dst-doodle-pencil" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 42l3-11L30 10l8 8-21 21z"/><path d="M27 13l8 8"/><path d="M9 31l8 8"/></svg>
+            <svg class="dst-doodle dst-doodle-scissors" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="12" r="5"/><circle cx="10" cy="36" r="5"/><path d="M14 15l26 26"/><path d="M14 33l26-26"/></svg>
+            <svg class="dst-doodle dst-doodle-ruler" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="18" width="40" height="12" rx="2"/><path d="M10 18v5M17 18v5M24 18v6M31 18v5M38 18v5"/></svg>
+            <svg class="dst-doodle dst-doodle-brush" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M33 6l9 9-19 19-11 2 2-11z"/><path d="M28 11l9 9"/></svg>
+            <svg class="dst-doodle dst-doodle-palette" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M24 6C13 6 5 14 6 24c1 8 8 10 11 8 2-1 1-4-1-5-2-1-2-4 1-5 8-2 17 2 21-4 3-4 0-9-5-11-2-1-5-1-8-1z"/><circle cx="15" cy="17" r="1.6" fill="currentColor" stroke="none"/><circle cx="21" cy="13" r="1.6" fill="currentColor" stroke="none"/><circle cx="28" cy="14" r="1.6" fill="currentColor" stroke="none"/></svg>
+            <svg class="dst-doodle dst-doodle-sparkle" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M24 6l3 12 12 3-12 3-3 12-3-12-12-3 12-3z"/></svg>
+          </div>
+          <div class="dst-hero-content">
+            <div class="dst-hero-title">What will you design today?</div>
+            <div class="dst-hero-sub">Letterheads, business cards, social posts and proposals — all in one place.</div>
+            <div class="dst-hero-search">
+              <i class="fa fa-magnifying-glass"></i>
+              <input type="text" id="dst-hero-search" placeholder="Search your designs…">
+            </div>
+          </div>
+        </div>
+
+        <!-- Quick-create shortcuts -->
+        <div class="dst-section">
+          <div class="dst-section-title">Create something</div>
+          <div class="dst-shortcuts" id="dst-shortcuts">
+            <button class="dst-shortcut" data-dst-action="letterhead" style="--ink:#6366f1">
+              <span class="dst-shortcut-tape"></span>
+              <span class="dst-shortcut-photo" style="background-image:url('img/design-studio/letterhead.jpg')">
+                <span class="dst-shortcut-badge"><i class="fa fa-file-lines"></i></span>
+              </span>
+              <div class="dst-shortcut-text">
+                <span class="dst-shortcut-label">Letterhead</span>
+                <span class="dst-shortcut-desc">Official document template</span>
+              </div>
+            </button>
+            <button class="dst-shortcut" data-dst-action="company-profile" style="--ink:#0ea5e9">
+              <span class="dst-shortcut-tape"></span>
+              <span class="dst-shortcut-photo" style="background-image:url('img/design-studio/profile.jpg')">
+                <span class="dst-shortcut-badge"><i class="fa fa-building"></i></span>
+              </span>
+              <div class="dst-shortcut-text">
+                <span class="dst-shortcut-label">Business Profile</span>
+                <span class="dst-shortcut-desc">Showcase your business</span>
+              </div>
+            </button>
+            <button class="dst-shortcut" data-dst-action="social-media" style="--ink:#ec4899">
+              <span class="dst-shortcut-tape"></span>
+              <span class="dst-shortcut-photo" style="background-image:url('img/design-studio/social.jpg')">
+                <span class="dst-shortcut-badge"><i class="fa fa-share-nodes"></i></span>
+              </span>
+              <div class="dst-shortcut-text">
+                <span class="dst-shortcut-label">Social Media Post</span>
+                <span class="dst-shortcut-desc">Instagram, Facebook &amp; more</span>
+              </div>
+            </button>
+            <button class="dst-shortcut" data-dst-action="business-card" style="--ink:#f59e0b">
+              <span class="dst-shortcut-tape"></span>
+              <span class="dst-shortcut-photo" style="background-image:url('img/design-studio/businesscard.jpg')">
+                <span class="dst-shortcut-badge"><i class="fa fa-id-card"></i></span>
+              </span>
+              <div class="dst-shortcut-text">
+                <span class="dst-shortcut-label">Business Card</span>
+                <span class="dst-shortcut-desc">Print-ready card design</span>
+              </div>
+            </button>
+            <button class="dst-shortcut" data-dst-action="custom" style="--ink:#10b981">
+              <span class="dst-shortcut-tape"></span>
+              <span class="dst-shortcut-photo" style="background-image:url('img/design-studio/custom.jpg')">
+                <span class="dst-shortcut-badge"><i class="fa fa-paintbrush"></i></span>
+              </span>
+              <div class="dst-shortcut-text">
+                <span class="dst-shortcut-label">Custom Design</span>
+                <span class="dst-shortcut-desc">Start from a blank canvas</span>
+              </div>
+            </button>
+            <button class="dst-shortcut" data-dst-action="proposals" style="--ink:#7c3aed">
+              <span class="dst-shortcut-tape"></span>
+              <span class="dst-shortcut-photo" style="background-image:url('img/design-studio/proposal.jpg')">
+                <span class="dst-shortcut-badge"><i class="fa fa-file-contract"></i></span>
+              </span>
+              <div class="dst-shortcut-text">
+                <span class="dst-shortcut-label">Project Proposal</span>
+                <span class="dst-shortcut-desc">6-page proposal deck</span>
+              </div>
+            </button>
+          </div>
+        </div>
+
+        <!-- Summary stats -->
+        <div class="dst-section">
+          <div class="dst-section-title">Your designs at a glance</div>
+          <div class="dst-stats">
+            <div class="dst-stat-card" style="--dst-a:#6366f1">
+              <div class="dst-stat-icon"><i class="fa fa-layer-group"></i></div>
+              <div><div class="dst-stat-val" id="dst-total-count">—</div><div class="dst-stat-label">Total Designs</div></div>
+            </div>
+            <div class="dst-stat-card" style="--dst-a:#ec4899">
+              <div class="dst-stat-icon"><i class="fa fa-share-nodes"></i></div>
+              <div><div class="dst-stat-val" id="dst-count-social-media">0</div><div class="dst-stat-label">Social Media</div></div>
+            </div>
+            <div class="dst-stat-card" style="--dst-a:#f59e0b">
+              <div class="dst-stat-icon"><i class="fa fa-id-card"></i></div>
+              <div><div class="dst-stat-val" id="dst-count-business-card">0</div><div class="dst-stat-label">Business Cards</div></div>
+            </div>
+            <div class="dst-stat-card" style="--dst-a:#10b981">
+              <div class="dst-stat-icon"><i class="fa fa-paintbrush"></i></div>
+              <div><div class="dst-stat-val" id="dst-count-custom">0</div><div class="dst-stat-label">Custom</div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Recent designs -->
+        <div class="dst-section" id="dst-recent-section" style="display:none">
+          <div class="dst-section-title-row">
+            <div class="dst-section-title">Recent designs</div>
+            <button class="dst-see-all" data-ds="all">See all <i class="fa fa-arrow-right"></i></button>
+          </div>
+          <div class="finance-cards-area" id="dst-recent-area"></div>
+        </div>
+
+        <!-- Design tips & inspiration -->
+        <div class="dst-section">
+          <div class="dst-section-title">Design tips &amp; inspiration</div>
+          <div class="dst-tips">
+            <div class="dst-tip-note dst-tip-yellow">
+              <span class="dst-tip-pin"></span>
+              <p>Keep your palette to 3 colors — it reads cleaner and prints truer.</p>
+            </div>
+            <div class="dst-tip-note dst-tip-pink">
+              <span class="dst-tip-pin"></span>
+              <p>White space isn't empty — it's what makes the important things stand out.</p>
+            </div>
+            <div class="dst-tip-note dst-tip-blue">
+              <span class="dst-tip-pin"></span>
+              <p>Pick one bold font for headings, one quiet one for body text.</p>
+            </div>
+            <div class="dst-tip-note dst-tip-green">
+              <span class="dst-tip-pin"></span>
+              <p>Save often — every version is a new sheet in your sketchbook.</p>
+            </div>
+            <div class="dst-tip-note dst-tip-purple">
+              <span class="dst-tip-pin"></span>
+              <p>Contrast draws the eye — let one element be the loudest thing on the page.</p>
+            </div>
+            <div class="dst-tip-note dst-tip-orange">
+              <span class="dst-tip-pin"></span>
+              <p>Flip it upside down — mistakes hide in familiar shapes, not unfamiliar ones.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Closing inspiration banner -->
+        <div class="dst-section dst-quote-section">
+          <div class="dst-quote-board">
+            <div class="dst-quote-board-doodles" aria-hidden="true">
+              <svg class="dst-chalk-doodle dst-chalk-1" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M24 6l3 12 12 3-12 3-3 12-3-12-12-3 12-3z"/></svg>
+              <svg class="dst-chalk-doodle dst-chalk-2" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 42l3-11L30 10l8 8-21 21z"/><path d="M27 13l8 8"/></svg>
+              <svg class="dst-chalk-doodle dst-chalk-3" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M24 6C13 6 5 14 6 24c1 8 8 10 11 8 2-1 1-4-1-5-2-1-2-4 1-5 8-2 17 2 21-4 3-4 0-9-5-11-2-1-5-1-8-1z"/></svg>
+            </div>
+            <p class="dst-quote-text">&ldquo;Design is intelligence made visible.&rdquo;</p>
+            <span class="dst-quote-author">— Alina Wheeler</span>
+          </div>
+        </div>
+
+      </div>
+
       <!-- Singleton designs — one per business, always at the top -->
-      <div class="ds-singletons">
+      <div class="ds-singletons" style="display:none">
         <div class="ds-singleton-card" id="ds-singleton-letterhead">
           <div class="ds-singleton-icon" style="background:#6366f120;color:#6366f1"><i class="fa fa-file-lines"></i></div>
           <div class="ds-singleton-info">
@@ -6116,7 +6274,7 @@
       </div>
 
       <!-- ── Designs list view ── -->
-      <div id="ds-list-view" style="display:flex;flex-direction:column;flex:1;overflow:hidden">
+      <div id="ds-list-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
 
         <!-- toolbar -->
         <div class="finance-toolbar">

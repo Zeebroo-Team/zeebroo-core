@@ -328,12 +328,7 @@
           "label": "Types",
           "items": [
             { "type": "stack", "items": [
-              { "type": "sm", "id": "rb-design-letterhead",    "icon": "fa-envelope-open-text","label": "Letterhead" },
-              { "type": "sm", "id": "rb-design-company-profile","icon": "fa-building",        "label": "Company Profile" }
-            ]},
-            { "type": "stack", "items": [
-              { "type": "sm", "id": "rb-design-social-media",  "icon": "fa-share-nodes",    "label": "Social Media" },
-              { "type": "sm", "id": "rb-design-business-card", "icon": "fa-id-card",        "label": "Business Card" }
+              { "type": "sm", "id": "rb-design-letterhead",    "icon": "fa-envelope-open-text","label": "Letterhead" }
             ]}
           ]
         }

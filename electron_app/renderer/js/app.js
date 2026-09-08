@@ -454,7 +454,7 @@ function activateTab(tabName) {
   if (tabName === 'finance')    { switchFinView('flow'); }
   if (tabName === 'hr')         { switchHrView('employees'); }
   if (tabName === 'services')   { switchSvcView('requests'); }
-  if (tabName === 'design')     { _dsAllData = []; switchDesignView('all'); }
+  if (tabName === 'design')     { _dsAllData = []; switchDesignView('studio'); }
   if (tabName === 'restaurant') { switchRstView('orders'); }
   if (tabName === 'rst-pos')    { rstPosInit(); }
   if (tabName === 'mail')       { switchMailView('inbox'); }
@@ -22115,9 +22115,11 @@ function _bizSwRefreshAll() {
       switchHrView(hrView);
       break;
     }
-    case 'design':
-      switchDesignView('all');
+    case 'design': {
+      const dsView = $('#panel-design .fin-subnav-btn.active')?.dataset.ds || 'studio';
+      switchDesignView(dsView);
       break;
+    }
     default:
       loadProducts();
   }
@@ -37802,14 +37804,26 @@ let _dsActiveType = 'all';
 let _dsAllData    = [];
 
 function switchDesignView(type) {
-  _dsActiveType = type || 'all';
+  _dsActiveType = type || 'studio';
   $$('#panel-design .fin-subnav .fin-subnav-btn[data-ds]').forEach(b => {
     b.classList.toggle('active', b.dataset.ds === _dsActiveType);
   });
 
-  const propView   = $('#ds-proposals-view');
-  const listView   = $('#ds-list-view');
-  const singletons = $('.ds-singletons');
+  const studioView = $('#ds-studio-view');
+  const propView    = $('#ds-proposals-view');
+  const listView    = $('#ds-list-view');
+  const singletons  = $('.ds-singletons');
+
+  if (type === 'studio') {
+    if (studioView)  studioView.style.display  = 'flex';
+    if (propView)    propView.style.display    = 'none';
+    if (listView)    listView.style.display    = 'none';
+    if (singletons)  singletons.style.display  = 'none';
+    loadDesignStudioSummary();
+    return;
+  }
+
+  if (studioView) studioView.style.display = 'none';
 
   if (type === 'proposals') {
     if (propView)   propView.style.display   = 'flex';
@@ -37824,6 +37838,132 @@ function switchDesignView(type) {
   if (singletons) singletons.style.display = '';
   _dsAllData = [];
   loadDesigns();
+}
+
+// Populates the Design Studio landing page: summary stats + recent designs strip.
+async function loadDesignStudioSummary() {
+  if (_dsAllData.length === 0) {
+    const res = await API.designs();
+    if (res.status === 200) {
+      if (_dsAllData.length === 0) _dsAllData = res.body?.data || [];
+      updateSingletonCards();
+    }
+  }
+
+  const total = _dsAllData.length;
+  const byType = { 'social-media': 0, 'business-card': 0, 'custom': 0 };
+  _dsAllData.forEach(d => { if (d.type in byType) byType[d.type]++; });
+
+  $('#ds-total-count').textContent         = total;
+  $('#ds-count-social-media').textContent  = byType['social-media'];
+  $('#ds-count-business-card').textContent = byType['business-card'];
+  $('#ds-count-custom').textContent        = byType['custom'];
+
+  $('#dst-total-count').textContent         = total;
+  $('#dst-count-social-media').textContent  = byType['social-media'];
+  $('#dst-count-business-card').textContent = byType['business-card'];
+  $('#dst-count-custom').textContent        = byType['custom'];
+
+  _dsApplyStudioSearch($('#dst-hero-search') ? $('#dst-hero-search').value : '');
+}
+
+// Applies the hero search box to both the "Create something" shortcut cards
+// and the "Recent designs" strip — everything filters in place on the
+// Design Studio tab, nothing navigates away.
+function _dsApplyStudioSearch(searchText) {
+  _dsFilterShortcuts(searchText);
+  _dsRenderStudioList(searchText);
+}
+
+// Shows only the "Create something" shortcut cards whose label matches the
+// search text (e.g. typing "letterhead" leaves only the Letterhead card visible).
+function _dsFilterShortcuts(searchText) {
+  const q = (searchText || '').trim().toLowerCase();
+  const shortcuts = $$('#dst-shortcuts .dst-shortcut');
+  let anyMatch = false;
+  shortcuts.forEach(btn => {
+    const label = btn.querySelector('.dst-shortcut-label')?.textContent || '';
+    const match = !q || label.toLowerCase().includes(q);
+    btn.style.display = match ? '' : 'none';
+    if (match) anyMatch = true;
+  });
+
+  let emptyEl = $('#dst-shortcuts-empty');
+  if (q && !anyMatch) {
+    if (!emptyEl) {
+      emptyEl = document.createElement('div');
+      emptyEl.id = 'dst-shortcuts-empty';
+      emptyEl.className = 'ds-empty';
+      $('#dst-shortcuts').insertAdjacentElement('afterend', emptyEl);
+    }
+    emptyEl.innerHTML = `
+      <div class="ds-empty-icon-wrap" style="background:#6366f120;color:#6366f1"><i class="fa fa-magnifying-glass"></i></div>
+      <p class="ds-empty-title">No design type matches "${escHtml(searchText.trim())}"</p>
+      <p class="ds-empty-sub">Try Letterhead, Business Profile, Social Media, Business Card, Custom, or Project Proposal.</p>`;
+    emptyEl.style.display = '';
+  } else if (emptyEl) {
+    emptyEl.style.display = 'none';
+  }
+}
+
+// Renders the "Recent designs" strip on the Design Studio landing page.
+// With no search text: the 4 most recently updated designs (original behaviour).
+// With search text: every matching design, title-filtered — stays on the
+// Design Studio tab the whole time, no view switch.
+function _dsRenderStudioList(searchText) {
+  const recentSection = $('#dst-recent-section');
+  const recentArea    = $('#dst-recent-area');
+  const titleEl        = recentSection.querySelector('.dst-section-title');
+  const q = (searchText || '').trim();
+
+  let list = _dsAllData
+    .filter(d => !DS_SINGLETON_TYPES.includes(d.type))
+    .slice()
+    .sort((a, b) => new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at));
+
+  if (q) {
+    const ql = q.toLowerCase();
+    list = list.filter(d => (d.title || '').toLowerCase().includes(ql));
+    if (titleEl) titleEl.textContent = `Search results for "${q}"`;
+  } else {
+    list = list.slice(0, 4);
+    if (titleEl) titleEl.textContent = 'Recent designs';
+  }
+
+  if (list.length === 0) {
+    if (!q) { recentSection.style.display = 'none'; return; }
+    recentSection.style.display = '';
+    recentArea.innerHTML = `
+      <div class="ds-empty">
+        <div class="ds-empty-icon-wrap" style="background:#6366f120;color:#6366f1"><i class="fa fa-magnifying-glass"></i></div>
+        <p class="ds-empty-title">No designs match "${escHtml(q)}"</p>
+        <p class="ds-empty-sub">Try a different search term.</p>
+      </div>`;
+    return;
+  }
+
+  recentSection.style.display = '';
+  recentArea.innerHTML = list.map(buildDesignCard).join('');
+  recentArea.querySelectorAll('.ds-open-btn').forEach(btn => {
+    btn.addEventListener('click', () => openDesignEditor(parseInt(btn.dataset.id, 10)));
+  });
+  recentArea.querySelectorAll('.ds-delete-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id    = parseInt(btn.dataset.id, 10);
+      const title = btn.dataset.title;
+      if (!confirm(`Delete "${title}"? This cannot be undone.`)) return;
+      btn.disabled = true;
+      const res = await API.deleteDesign(id);
+      if (res.status === 200) {
+        toast('Design deleted.', 'success');
+        _dsAllData = _dsAllData.filter(d => d.id !== id);
+        _dsRenderStudioList($('#dst-hero-search') ? $('#dst-hero-search').value : '');
+      } else {
+        btn.disabled = false;
+        toast(res.body?.message || 'Failed to delete design.', 'error');
+      }
+    });
+  });
 }
 
 const DS_EMPTY_META = {
@@ -38220,14 +38360,36 @@ $('#ds-new-btn').addEventListener('click', openDsCreateModal);
 $('#ds-singleton-letterhead').addEventListener('click',      () => openSingletonDesign('letterhead'));
 $('#ds-singleton-company-profile').addEventListener('click', () => openSingletonDesign('company-profile'));
 
+// ── Design Studio: quick-create shortcuts ───────────────────────────────────
+// All shortcut cards just filter to the matching view within Design Studio —
+// none of them navigate to a separate tab or jump straight into an editor.
+$('#dst-shortcuts').addEventListener('click', e => {
+  const btn = e.target.closest('[data-dst-action]');
+  if (!btn) return;
+  const action = btn.dataset.dstAction;
+  if (action === 'letterhead' || action === 'company-profile') {
+    switchDesignView('all');
+  } else {
+    switchDesignView(action);
+  }
+});
+
+$$('#panel-design .dst-see-all').forEach(btn => {
+  btn.addEventListener('click', () => switchDesignView(btn.dataset.ds || 'all'));
+});
+
+$('#dst-hero-search').addEventListener('input', () => {
+  _dsApplyStudioSearch($('#dst-hero-search').value);
+});
+
 // ── Design: ribbon buttons ─────────────────────────────────────────────────
 $('#rb-design-new').addEventListener('click', () => { activateTab('design'); openDsCreateModal(); });
 $('#rb-design-all').addEventListener('click', () => { activateTab('design'); switchDesignView('all'); });
 // Singletons: ribbon buttons open/create directly in the editor
 $('#rb-design-letterhead').addEventListener('click',      () => { activateTab('design'); openSingletonDesign('letterhead'); });
-$('#rb-design-company-profile').addEventListener('click', () => { activateTab('design'); openSingletonDesign('company-profile'); });
-$('#rb-design-social-media').addEventListener('click',    () => { activateTab('design'); switchDesignView('social-media'); });
-$('#rb-design-business-card').addEventListener('click',   () => { activateTab('design'); switchDesignView('business-card'); });
+$('#rb-design-company-profile')?.addEventListener('click', () => { activateTab('design'); openSingletonDesign('company-profile'); });
+$('#rb-design-social-media')?.addEventListener('click',    () => { activateTab('design'); switchDesignView('social-media'); });
+$('#rb-design-business-card')?.addEventListener('click',   () => { activateTab('design'); switchDesignView('business-card'); });
 
 // ── Design: Create Modal ───────────────────────────────────────────────────
 
