@@ -36310,8 +36310,10 @@ async function svcStartWithProject(requestId) {
 
   // Show or hide PM option cards based on feature flag
   const pmOn = state.features?.has('project_management');
-  const optRow = $('#svc-start-step-choose')?.querySelector('.svc-start-opts-row');
-  if (optRow) optRow.style.display = pmOn ? '' : 'none';
+  const optRow = $('#svc-start-opts-row');
+  if (optRow) optRow.style.display = pmOn ? 'grid' : 'none';
+  const pmHint = $('#svc-start-req-pm-hint');
+  if (pmHint) pmHint.style.display = pmOn ? '' : 'none';
 
   _svcStartShow('choose');
   $('#svc-start-modal').style.display = 'flex';
