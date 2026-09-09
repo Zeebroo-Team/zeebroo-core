@@ -5,6 +5,8 @@ namespace Modules\ProjectManage\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Validation\Rule;
 use Modules\ProjectManage\Models\Milestone;
 use Modules\ProjectManage\Models\Project;
 use Modules\ProjectManage\Models\Task;
@@ -38,7 +40,7 @@ class ProjectManageApiController extends Controller
     public function projectStore(Request $request): JsonResponse
     {
         $business  = $this->businessOrAbort($request);
-        $validated = $request->validate([
+        $validated = $request->validate(array_merge([
             'name'        => 'required|string|max:150',
             'description' => 'nullable|string|max:2000',
             'client_name' => 'nullable|string|max:120',
@@ -47,7 +49,7 @@ class ProjectManageApiController extends Controller
             'start_date'  => 'nullable|date',
             'due_date'    => 'nullable|date',
             'budget'      => 'nullable|numeric|min:0',
-        ]);
+        ], $this->assignmentValidationRules($business)));
 
         $project = $this->projects->create($business, $validated, $request->user()?->id ?? 0);
 
@@ -59,7 +61,7 @@ class ProjectManageApiController extends Controller
         $business = $this->businessOrAbort($request);
         $project  = Project::where('business_id', $business->id)->where('id', $id)->firstOrFail();
 
-        $validated = $request->validate([
+        $validated = $request->validate(array_merge([
             'name'        => 'sometimes|string|max:150',
             'description' => 'nullable|string|max:2000',
             'client_name' => 'nullable|string|max:120',
@@ -69,11 +71,39 @@ class ProjectManageApiController extends Controller
             'start_date'  => 'nullable|date',
             'due_date'    => 'nullable|date',
             'budget'      => 'nullable|numeric|min:0',
-        ]);
+        ], $this->assignmentValidationRules($business)));
 
         $project = $this->projects->update($project, $validated);
 
         return response()->json(['data' => $this->fmtProject($project->fresh())]);
+    }
+
+    /**
+     * Validation rules for the project-type / customer / in-house-assignment / image fields,
+     * shared by projectStore() and projectUpdate(). Mirrors the assignment pattern used by
+     * PosExpenseBillApiController (branch/department/property/employee/modification/rental)
+     * plus a "customer" project type and an "other" free-text reference.
+     */
+    private function assignmentValidationRules($business): array
+    {
+        $deptRule = ['nullable', 'integer'];
+        if (Schema::hasTable('hr_departments')) {
+            $deptRule[] = Rule::exists('hr_departments', 'id')->where(fn ($q) => $q->where('business_id', $business->id));
+        }
+
+        return [
+            'project_type'          => ['nullable', Rule::in(['in_house', 'customer'])],
+            'customer_id'           => ['nullable', 'integer', Rule::exists('pos_customers', 'id')->where(fn ($q) => $q->where('business_id', $business->id))],
+            'assignment_type'       => ['nullable', Rule::in(['none', 'branch', 'department', 'property', 'employee', 'modification', 'rental', 'other'])],
+            'branch_id'             => ['nullable', 'integer', Rule::exists('branches', 'id')->where(fn ($q) => $q->where('business_id', $business->id))],
+            'department_id'         => $deptRule,
+            'property_id'           => ['nullable', 'integer', Rule::exists('properties', 'id')->where(fn ($q) => $q->where('business_id', $business->id))],
+            'employee_id'           => ['nullable', 'integer', Rule::exists('hr_employees', 'id')->where(fn ($q) => $q->where('business_id', $business->id))],
+            'modification_id'       => ['nullable', 'integer', Rule::exists('modifications', 'id')->where(fn ($q) => $q->where('business_id', $business->id))],
+            'rental_id'             => ['nullable', 'integer', Rule::exists('rentals', 'id')->where(fn ($q) => $q->where('business_id', $business->id))],
+            'assignment_reference'  => ['nullable', 'string', 'max:255'],
+            'file_manager_file_id'  => ['nullable', 'integer', Rule::exists('file_manager_files', 'id')->where(fn ($q) => $q->where('business_id', $business->id))],
+        ];
     }
 
     public function projectDestroy(Request $request, int $id): JsonResponse
@@ -300,6 +330,18 @@ class ProjectManageApiController extends Controller
     private function fmtProject(Project $p): array
     {
         $stats = $p->taskStats();
+
+        $assignmentName = match ($p->assignment_type) {
+            Project::ASSIGNMENT_BRANCH       => $p->branch?->name,
+            Project::ASSIGNMENT_DEPARTMENT   => $p->department?->name,
+            Project::ASSIGNMENT_PROPERTY     => $p->property?->property_name,
+            Project::ASSIGNMENT_EMPLOYEE     => $p->employee?->full_name,
+            Project::ASSIGNMENT_MODIFICATION => $p->modification?->name,
+            Project::ASSIGNMENT_RENTAL       => $p->rental?->property_type,
+            Project::ASSIGNMENT_OTHER        => $p->assignment_reference,
+            default                          => null,
+        };
+
         return [
             'id'          => $p->id,
             'name'        => $p->name,
@@ -314,6 +356,16 @@ class ProjectManageApiController extends Controller
             'task_stats'  => $stats,
             'tasks_count' => $stats['total'],
             'created_at'  => $p->created_at?->toDateTimeString(),
+
+            'project_type'          => $p->project_type,
+            'customer_id'           => $p->customer_id,
+            'customer_name'         => $p->customer?->name,
+            'assignment_type'       => $p->assignment_type,
+            'assignment_target_id'  => $p->branch_id ?? $p->department_id ?? $p->property_id ?? $p->employee_id ?? $p->modification_id ?? $p->rental_id,
+            'assignment_reference'  => $p->assignment_reference,
+            'assignment_name'       => $assignmentName,
+            'file_manager_file_id'  => $p->file_manager_file_id,
+            'image_url'             => $p->imageFile?->publicUrl(),
         ];
     }
 

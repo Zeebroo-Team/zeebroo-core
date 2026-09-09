@@ -6,7 +6,10 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
+use Modules\Business\Models\Branch;
 use Modules\Business\Models\Business;
+use Modules\FileManager\Models\FileManagerFile;
+use Modules\Pos\Models\Customer;
 
 class Project extends Model
 {
@@ -21,6 +24,18 @@ class Project extends Model
     const PRIORITY_NORMAL = 'normal';
     const PRIORITY_HIGH   = 'high';
 
+    const TYPE_IN_HOUSE = 'in_house';
+    const TYPE_CUSTOMER = 'customer';
+
+    const ASSIGNMENT_NONE         = 'none';
+    const ASSIGNMENT_BRANCH       = 'branch';
+    const ASSIGNMENT_DEPARTMENT   = 'department';
+    const ASSIGNMENT_PROPERTY     = 'property';
+    const ASSIGNMENT_EMPLOYEE     = 'employee';
+    const ASSIGNMENT_MODIFICATION = 'modification';
+    const ASSIGNMENT_RENTAL       = 'rental';
+    const ASSIGNMENT_OTHER        = 'other';
+
     protected $fillable = [
         'business_id',
         'name',
@@ -32,6 +47,17 @@ class Project extends Model
         'due_date',
         'budget',
         'client_name',
+        'project_type',
+        'customer_id',
+        'assignment_type',
+        'branch_id',
+        'department_id',
+        'property_id',
+        'employee_id',
+        'modification_id',
+        'rental_id',
+        'assignment_reference',
+        'file_manager_file_id',
         'created_by',
     ];
 
@@ -44,6 +70,46 @@ class Project extends Model
     public function business(): BelongsTo
     {
         return $this->belongsTo(Business::class);
+    }
+
+    public function customer(): BelongsTo
+    {
+        return $this->belongsTo(Customer::class, 'customer_id');
+    }
+
+    public function branch(): BelongsTo
+    {
+        return $this->belongsTo(Branch::class, 'branch_id');
+    }
+
+    public function department(): BelongsTo
+    {
+        return $this->belongsTo(\Modules\HRManagement\Models\Department::class, 'department_id');
+    }
+
+    public function property(): BelongsTo
+    {
+        return $this->belongsTo(\Modules\Account\Models\Property::class, 'property_id');
+    }
+
+    public function employee(): BelongsTo
+    {
+        return $this->belongsTo(\Modules\HRManagement\Models\Employee::class, 'employee_id');
+    }
+
+    public function modification(): BelongsTo
+    {
+        return $this->belongsTo(\Modules\Modification\Models\Modification::class, 'modification_id');
+    }
+
+    public function rental(): BelongsTo
+    {
+        return $this->belongsTo(\Modules\Account\Models\Rental::class, 'rental_id');
+    }
+
+    public function imageFile(): BelongsTo
+    {
+        return $this->belongsTo(FileManagerFile::class, 'file_manager_file_id');
     }
 
     public function milestones(): HasMany

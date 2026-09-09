@@ -460,7 +460,7 @@ function activateTab(tabName) {
   if (tabName === 'mail')       { switchMailView('inbox'); }
   if (tabName === 'crm')        { switchCrmView('pipeline'); }
   if (tabName === 'automations'){ loadAutomations(); }
-  if (tabName === 'projects')    { switchPmView('projects'); }
+  if (tabName === 'projects')    { switchPmView('overview'); }
   if (tabName === 'event-mgmt') { switchEvtView('brands'); }
   _syncSidebarActive(tabName);
   _sbNavExpand(tabName);
@@ -43579,112 +43579,296 @@ async function submitDsCreate() {
 
   // ── State ──────────────────────────────────────────────────────────────────
   const pm = {
-    projects:       [],
-    projectFilter:  'all',
-    boardProjectId: null,
-    tasksProjectId: null,
-    taskFilter:     '',
-    myTaskFilter:   'open',
-    currentView:    'projects',
+    projects:        [],
+    projectsLoaded:  false,
+    statusFilter:    'all',
+    typeFilter:      'all',
+    search:          '',
+    currentView:     'overview',
+    detailProjectId: null,
+    detailProject:   null,
+    detailTab:       'dashboard',
+    detailLoaded:    { board: false, task: false, mytask: false },
+    taskFilter:      '',
+    myTaskFilter:    'open',
+    myTaskAll:       [],
   };
 
   // ── View switcher ───────────────────────────────────────────────────────────
   function switchPmView(view) {
     pm.currentView = view;
     $$('#panel-projects [data-pmsub]').forEach(b => b.classList.toggle('active', b.dataset.pmsub === view));
-    const views = ['projects', 'board', 'tasks', 'mytasks'];
-    views.forEach(v => {
-      const el = $(`#pm-${v}-view`);
-      if (el) el.style.display = v === view ? (v === 'projects' ? 'flex' : 'flex') : 'none';
-    });
-    if (view === 'projects')  loadPmProjects();
-    if (view === 'board')     { _populatePmProjectSelects(); loadPmBoard(); }
-    if (view === 'tasks')     { _populatePmProjectSelects(); loadPmTasks(); }
-    if (view === 'mytasks')   loadPmMyTasks();
+    const el = $('#pm-overview-view'); if (el) el.style.display = view === 'overview' ? 'flex' : 'none';
+    const el2 = $('#pm-projects-view'); if (el2) el2.style.display = view === 'projects' ? 'flex' : 'none';
+    if (view === 'overview') loadPmOverview();
+    if (view === 'projects') loadPmProjectsView();
   }
   window.switchPmView = switchPmView;
 
-  // ── Load projects list ──────────────────────────────────────────────────────
+  // ── Ensure project list is loaded (fetched once, filtered client-side) ──────
+  async function ensurePmProjects(force = false) {
+    if (pm.projectsLoaded && !force) return pm.projects;
+    const res = await API.pmProjects('all');
+    pm.projects = res.status < 400 ? (res.body?.data || []) : [];
+    pm.projectsLoaded = true;
+    return pm.projects;
+  }
+
+  // ── Refresh from server (used after create/update/delete) ───────────────────
   async function loadPmProjects() {
+    await ensurePmProjects(true);
+    if (pm.currentView === 'overview') renderPmOverview();
+    else renderPmProjectsGrid();
+  }
+
+  // ── Overview tab ──────────────────────────────────────────────────────────
+  async function loadPmOverview() {
+    await ensurePmProjects();
+    renderPmOverview();
+  }
+
+  function renderPmOverview() {
+    const projects = pm.projects;
+    const counts = { total: projects.length, active: 0, on_hold: 0, completed: 0 };
+    projects.forEach(p => { if (counts[p.status] !== undefined) counts[p.status]++; });
+    const statsEl = $('#pm-ov-stats');
+    const statTiles = [
+      { key: 'total',     icon: 'fa-diagram-project', label: 'Total Projects', value: counts.total },
+      { key: 'active',    icon: 'fa-bolt',             label: 'Active',        value: counts.active },
+      { key: 'on_hold',   icon: 'fa-pause',            label: 'On Hold',       value: counts.on_hold },
+      { key: 'completed', icon: 'fa-circle-check',     label: 'Completed',     value: counts.completed },
+    ];
+    if (statsEl) statsEl.innerHTML = statTiles.map(s => `
+      <div class="pm-stat-tile pm-stat-tile--${s.key}">
+        <div class="pm-stat-tile-icon"><i class="fa ${s.icon}"></i></div>
+        <div><div class="pm-stat-tile-value">${s.value}</div><div class="pm-stat-tile-label">${s.label}</div></div>
+      </div>
+    `).join('');
+    const grid  = $('#pm-ov-recent-grid');
+    const empty = $('#pm-ov-recent-empty');
+    if (!grid) return;
+    const recent = [...projects]
+      .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
+      .slice(0, 6);
+    grid.innerHTML = '';
+    if (!recent.length) {
+      empty.style.display = 'block';
+      grid.style.display = 'none';
+      return;
+    }
+    empty.style.display = 'none';
+    grid.style.display = '';
+    recent.forEach(p => grid.appendChild(_pmProjectCardEl(p, () => switchPmView('projects'))));
+  }
+
+  $('#pm-ov-new-project-btn')?.addEventListener('click', () => openNewProjectModal());
+  $('#pm-ov-viewall-btn')?.addEventListener('click', () => switchPmView('projects'));
+  $('#pm-ov-viewall-projects-btn')?.addEventListener('click', () => switchPmView('projects'));
+
+  // ── Projects tab (list) ──────────────────────────────────────────────────
+  async function loadPmProjectsView() {
+    await ensurePmProjects();
+    closeProjectDetail(true);
+    renderPmProjectsGrid();
+  }
+
+  function _pmProjectCardEl(p, onClick) {
+    const done  = p.task_stats?.done  || 0;
+    const total = p.task_stats?.total || 0;
+    const pct   = total > 0 ? Math.round((done / total) * 100) : 0;
+    const colorBar = p.color ? `<div class="pm-project-card--color-bar" style="background:${esc(p.color)}"></div>` : '';
+    const thumb = `
+      <div class="pm-project-card-thumb">
+        <img class="pm-project-card-thumb-img" src="${esc(p.image_url || '')}" alt="" style="${p.image_url ? '' : 'display:none'}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+        <div class="pm-project-card-thumb-placeholder" style="${p.image_url ? 'display:none' : 'display:flex'}"><i class="fa fa-diagram-project"></i></div>
+      </div>`;
+    const card = document.createElement('div');
+    card.className = 'pm-project-card';
+    card.dataset.pid = p.id;
+    card.innerHTML = `
+      ${colorBar}
+      ${thumb}
+      <div class="pm-project-card-header">
+        <span class="pm-project-card-name" title="${esc(p.name)}">${esc(p.name)}</span>
+        <span class="pm-status pm-status--${esc(p.status)}">${esc(p.status.replace('_',' '))}</span>
+      </div>
+      <div class="pm-project-card-meta">
+        ${p.client_name ? `<span class="pm-project-card-client"><i class="fa fa-user" style="margin-right:3px"></i>${esc(p.client_name)}</span>` : ''}
+        <span class="pm-priority pm-priority--${esc(p.priority)}">${esc(p.priority)}</span>
+        ${p.due_date ? `<span class="pm-task-card-due"><i class="fa fa-calendar" style="margin-right:3px"></i>${esc(p.due_date)}</span>` : ''}
+      </div>
+      <div class="pm-project-card-progress">
+        <div class="pm-progress-bar-wrap"><div class="pm-progress-bar-fill" style="width:${pct}%"></div></div>
+        <span class="pm-progress-pct">${pct}%</span>
+      </div>
+      <div class="pm-task-count"><i class="fa fa-bars-progress" style="margin-right:4px;color:var(--text-muted)"></i>${total} tasks · ${done} done</div>
+    `;
+    card.addEventListener('click', onClick || (() => openProjectDetail(p.id)));
+    return card;
+  }
+
+  function renderPmProjectsGrid() {
     const grid  = $('#pm-projects-grid');
     const empty = $('#pm-projects-empty');
     if (!grid) return;
-    grid.innerHTML = '<p style="color:var(--text-muted);font-size:12px;padding:8px 0">Loading…</p>';
-    try {
-      const res = await API.pmProjects(pm.projectFilter);
-      if (res.status >= 400) throw new Error(res.body?.message || 'Load failed');
-      pm.projects = res.body?.data || [];
-      grid.innerHTML = '';
-      if (!pm.projects.length) {
-        empty.style.display = 'block';
-        grid.style.display = 'none';
-        return;
-      }
-      empty.style.display = 'none';
-      grid.style.display = '';
-      pm.projects.forEach(p => {
-        const done  = p.task_stats?.done  || 0;
-        const total = p.task_stats?.total || 0;
-        const pct   = total > 0 ? Math.round((done / total) * 100) : 0;
-        const colorBar = p.color ? `<div class="pm-project-card--color-bar" style="background:${esc(p.color)}"></div>` : '';
-        const card = document.createElement('div');
-        card.className = 'pm-project-card';
-        card.dataset.pid = p.id;
-        card.innerHTML = `
-          ${colorBar}
-          <div class="pm-project-card-header">
-            <span class="pm-project-card-name" title="${esc(p.name)}">${esc(p.name)}</span>
-            <span class="pm-status pm-status--${esc(p.status)}">${esc(p.status.replace('_',' '))}</span>
-          </div>
-          <div class="pm-project-card-meta">
-            ${p.client_name ? `<span class="pm-project-card-client"><i class="fa fa-user" style="margin-right:3px"></i>${esc(p.client_name)}</span>` : ''}
-            <span class="pm-priority pm-priority--${esc(p.priority)}">${esc(p.priority)}</span>
-            ${p.due_date ? `<span class="pm-task-card-due"><i class="fa fa-calendar" style="margin-right:3px"></i>${esc(p.due_date)}</span>` : ''}
-          </div>
-          <div class="pm-project-card-progress">
-            <div class="pm-progress-bar-wrap"><div class="pm-progress-bar-fill" style="width:${pct}%"></div></div>
-            <span class="pm-progress-pct">${pct}%</span>
-          </div>
-          <div class="pm-task-count"><i class="fa fa-bars-progress" style="margin-right:4px;color:var(--text-muted)"></i>${total} tasks · ${done} done</div>
-        `;
-        card.addEventListener('click', () => _openProjectBoard(p.id));
-        grid.appendChild(card);
-      });
-    } catch (e) {
-      grid.innerHTML = `<p style="color:#dc2626;font-size:12px;padding:8px 0">${esc(String(e))}</p>`;
-    }
-  }
-
-  function _openProjectBoard(projectId) {
-    pm.boardProjectId = projectId;
-    switchPmView('board');
-    const sel = $('#pm-board-project-select');
-    if (sel) sel.value = projectId;
-  }
-
-  // ── Populate project selects ────────────────────────────────────────────────
-  function _populatePmProjectSelects() {
-    ['#pm-board-project-select', '#pm-tasks-project-select'].forEach(id => {
-      const sel = $(id);
-      if (!sel) return;
-      const cur = sel.value;
-      sel.innerHTML = '<option value="">— pick a project —</option>';
-      pm.projects.forEach(p => {
-        const opt = document.createElement('option');
-        opt.value = p.id;
-        opt.textContent = p.name;
-        sel.appendChild(opt);
-      });
-      if (cur) sel.value = cur;
-      if (!sel.value && pm.projects.length) sel.value = pm.projects[0].id;
+    const q = pm.search.trim().toLowerCase();
+    const list = pm.projects.filter(p => {
+      if (pm.statusFilter !== 'all' && p.status !== pm.statusFilter) return false;
+      if (pm.typeFilter !== 'all' && (p.project_type || 'in_house') !== pm.typeFilter) return false;
+      if (q && !`${p.name} ${p.client_name || ''} ${p.customer_name || ''}`.toLowerCase().includes(q)) return false;
+      return true;
     });
+    grid.innerHTML = '';
+    if (!list.length) {
+      empty.style.display = 'block';
+      grid.style.display = 'none';
+      const hint = $('#pm-projects-empty-hint');
+      if (hint) hint.innerHTML = pm.projects.length ? 'No projects match your search or filters.' : 'Click <strong>New Project</strong> in the ribbon to get started.';
+      return;
+    }
+    empty.style.display = 'none';
+    grid.style.display = '';
+    list.forEach(p => grid.appendChild(_pmProjectCardEl(p)));
   }
+
+  // ── Project detail page ──────────────────────────────────────────────────
+  function openProjectDetail(projectId) {
+    const p = pm.projects.find(x => +x.id === +projectId);
+    if (!p) return;
+    if (pm.currentView !== 'projects') switchPmView('projects');
+    pm.detailProjectId = +projectId;
+    pm.detailProject   = p;
+    pm.detailTab        = 'dashboard';
+    pm.detailLoaded      = { board: false, task: false, mytask: false };
+    pm.myTaskAll        = [];
+    const list   = $('#pm-projects-list');
+    const detail = $('#pm-detail-view');
+    if (list)   list.style.display   = 'none';
+    if (detail) detail.style.display = 'flex';
+    _pmRenderDetailHero(p);
+    _pmRenderDashboardPane(p);
+    _pmRenderAssignmentPane(p);
+    _pmSwitchDetailTab('dashboard');
+  }
+  window.openProjectDetail = openProjectDetail;
+
+  function closeProjectDetail(silent = false) {
+    pm.detailProjectId = null;
+    pm.detailProject   = null;
+    const list   = $('#pm-projects-list');
+    const detail = $('#pm-detail-view');
+    if (detail) detail.style.display = 'none';
+    if (list)   list.style.display   = 'flex';
+  }
+
+  function _pmStatusBadgeColor(s) { return { active: 'green', on_hold: 'amber', completed: 'blue', archived: 'gray' }[s] || 'gray'; }
+  function _pmPriorityBadgeColor(pr) { return { high: 'red', normal: 'blue', low: 'green' }[pr] || 'gray'; }
+
+  function _pmRenderDetailHero(p) {
+    const breadcrumb = $('#pm-detail-breadcrumb'); if (breadcrumb) breadcrumb.textContent = p.name;
+    const imgWrap = $('#pm-detail-hero-img');
+    if (imgWrap) {
+      imgWrap.innerHTML = p.image_url
+        ? `<img class="inv-hero-img-el" src="${esc(p.image_url)}" alt="">`
+        : `<div class="inv-thumb-ph inv-thumb-lg"><i class="fa fa-diagram-project"></i></div>`;
+    }
+    const nameEl = $('#pm-detail-hero-name'); if (nameEl) nameEl.textContent = p.name;
+    const metaParts = [];
+    if (p.project_type === 'customer' && p.customer_name) {
+      metaParts.push(`<span><i class="fa fa-user-tie" style="margin-right:4px"></i>${esc(p.customer_name)}</span>`);
+    } else if (p.client_name) {
+      metaParts.push(`<span><i class="fa fa-user" style="margin-right:4px"></i>${esc(p.client_name)}</span>`);
+    }
+    if (p.start_date || p.due_date) {
+      metaParts.push(`<span><i class="fa fa-calendar" style="margin-right:4px"></i>${esc(p.start_date || '—')} – ${esc(p.due_date || '—')}</span>`);
+    }
+    const metaEl = $('#pm-detail-hero-meta');
+    if (metaEl) metaEl.innerHTML = metaParts.join('<span class="inv-sep">·</span>');
+    const badgesEl = $('#pm-detail-hero-badges');
+    if (badgesEl) badgesEl.innerHTML = `
+      <span class="inv-badge inv-badge-${_pmStatusBadgeColor(p.status)}">${esc(p.status.replace('_',' '))}</span>
+      <span class="inv-badge inv-badge-${_pmPriorityBadgeColor(p.priority)}">${esc(p.priority)}</span>
+      <span class="inv-badge inv-badge-gray">${p.project_type === 'customer' ? 'Customer' : 'In-house'}</span>
+    `;
+  }
+
+  function _pmRenderDashboardPane(p) {
+    const s     = p.task_stats || {};
+    const total = s.total || 0;
+    const done  = s.done  || 0;
+    const pct   = total > 0 ? Math.round((done / total) * 100) : 0;
+    const pane = $('#pm-pane-dashboard');
+    if (!pane) return;
+    pane.innerHTML = `
+      <div class="inv-section">
+        <div class="inv-section-title"><i class="fa fa-chart-simple"></i> Progress</div>
+        <div style="padding:14px 16px">
+          <div class="pm-progress-bar-wrap" style="height:8px;margin-bottom:6px"><div class="pm-progress-bar-fill" style="width:${pct}%"></div></div>
+          <div style="font-size:12px;color:var(--text-muted)">${done} of ${total} tasks done (${pct}%)</div>
+        </div>
+        <div class="inv-detail-grid">
+          <div class="inv-detail-cell"><div class="inv-detail-cell-label">To Do</div><div class="inv-detail-cell-value">${s.todo || 0}</div></div>
+          <div class="inv-detail-cell"><div class="inv-detail-cell-label">In Progress</div><div class="inv-detail-cell-value">${s.in_progress || 0}</div></div>
+          <div class="inv-detail-cell"><div class="inv-detail-cell-label">Review</div><div class="inv-detail-cell-value">${s.review || 0}</div></div>
+          <div class="inv-detail-cell"><div class="inv-detail-cell-label">Done</div><div class="inv-detail-cell-value">${s.done || 0}</div></div>
+        </div>
+      </div>
+      <div class="inv-section">
+        <div class="inv-section-title"><i class="fa fa-circle-info"></i> Details</div>
+        <table class="inv-detail-table">
+          <tr><td class="inv-dt-label">Description</td><td class="inv-dt-val">${p.description ? esc(p.description) : '<span class="inv-detail-none">No description</span>'}</td></tr>
+          <tr><td class="inv-dt-label">Start Date</td><td class="inv-dt-val">${p.start_date ? esc(p.start_date) : '<span class="inv-detail-none">—</span>'}</td></tr>
+          <tr><td class="inv-dt-label">Due Date</td><td class="inv-dt-val">${p.due_date ? esc(p.due_date) : '<span class="inv-detail-none">—</span>'}</td></tr>
+          <tr><td class="inv-dt-label">Budget</td><td class="inv-dt-val">${p.budget ? esc(p.budget) : '<span class="inv-detail-none">—</span>'}</td></tr>
+        </table>
+      </div>
+    `;
+  }
+
+  function _pmRenderAssignmentPane(p) {
+    const pane = $('#pm-pane-assignment');
+    if (!pane) return;
+    const rows = [];
+    rows.push(`<tr><td class="inv-dt-label">Project Type</td><td class="inv-dt-val">${p.project_type === 'customer' ? 'Customer Project' : 'In-house Project'}</td></tr>`);
+    if (p.project_type === 'customer') {
+      rows.push(`<tr><td class="inv-dt-label">Customer</td><td class="inv-dt-val">${p.customer_name ? esc(p.customer_name) : '<span class="inv-detail-none">—</span>'}</td></tr>`);
+    } else {
+      const typeLabels = { none: 'Not assigned', branch: 'Branch', department: 'Department', property: 'Property', employee: 'Employee', modification: 'Modification', rental: 'Rental', other: 'Other' };
+      const label = typeLabels[p.assignment_type] || 'Not assigned';
+      rows.push(`<tr><td class="inv-dt-label">Assigned To</td><td class="inv-dt-val">${esc(label)}</td></tr>`);
+      if (p.assignment_type && p.assignment_type !== 'none') {
+        const value = p.assignment_type === 'other' ? p.assignment_reference : p.assignment_name;
+        rows.push(`<tr><td class="inv-dt-label">${esc(label)}</td><td class="inv-dt-val">${value ? esc(value) : '<span class="inv-detail-none">—</span>'}</td></tr>`);
+      }
+    }
+    pane.innerHTML = `
+      <div class="inv-section">
+        <div class="inv-section-title"><i class="fa fa-sitemap"></i> Assignment</div>
+        <table class="inv-detail-table">${rows.join('')}</table>
+      </div>
+    `;
+  }
+
+  function _pmSwitchDetailTab(tab) {
+    pm.detailTab = tab;
+    $$('#pm-detail-tabs .inv-tab').forEach(b => b.classList.toggle('active', b.dataset.pmdtab === tab));
+    $$('#pm-detail-tab-body .inv-tab-pane').forEach(el => el.classList.remove('active'));
+    $(`#pm-pane-${tab}`)?.classList.add('active');
+    const pid = pm.detailProjectId;
+    if (tab === 'board'  && !pm.detailLoaded.board)  { pm.detailLoaded.board  = true; loadPmBoard(pid); }
+    if (tab === 'task'   && !pm.detailLoaded.task)   { pm.detailLoaded.task   = true; loadPmTasks(pid); }
+    if (tab === 'mytask' && !pm.detailLoaded.mytask) { pm.detailLoaded.mytask = true; loadPmMyTasksForProject(pid); }
+  }
+
+  $('#pm-detail-tabs')?.addEventListener('click', e => {
+    const btn = e.target.closest('.inv-tab');
+    if (btn) _pmSwitchDetailTab(btn.dataset.pmdtab);
+  });
+  $('#pm-detail-back-btn')?.addEventListener('click', () => closeProjectDetail());
 
   // ── Board ───────────────────────────────────────────────────────────────────
-  async function loadPmBoard() {
-    const projectId = $('#pm-board-project-select')?.value;
+  async function loadPmBoard(projectId = pm.detailProjectId) {
     if (!projectId) return;
-    pm.boardProjectId = projectId;
     ['todo','in_progress','review','done'].forEach(s => {
       const col = $(`#pm-col-${s}`);
       if (col) col.innerHTML = '<div style="font-size:11px;color:var(--text-muted);padding:4px">Loading…</div>';
@@ -43748,16 +43932,10 @@ async function submitDsCreate() {
     return card;
   }
 
-  // ── Tasks list ──────────────────────────────────────────────────────────────
-  async function loadPmTasks() {
-    const projectId = $('#pm-tasks-project-select')?.value;
+  // ── Tasks list (scoped to the open project) ──────────────────────────────────
+  async function loadPmTasks(projectId = pm.detailProjectId) {
     const tbody = $('#pm-tasks-body');
-    if (!tbody) return;
-    if (!projectId) {
-      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:24px">Select a project above.</td></tr>';
-      return;
-    }
-    pm.tasksProjectId = projectId;
+    if (!tbody || !projectId) return;
     tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:24px">Loading…</td></tr>';
     const qs = pm.taskFilter ? `status=${encodeURIComponent(pm.taskFilter)}` : '';
     try {
@@ -43769,30 +43947,37 @@ async function submitDsCreate() {
         return;
       }
       tbody.innerHTML = tasks.map(t => _pmTaskRow(t, 7)).join('');
-      _bindTaskRowActions(tbody, () => loadPmTasks());
+      _bindTaskRowActions(tbody, () => loadPmTasks(projectId));
     } catch (e) {
       tbody.innerHTML = `<tr><td colspan="7" style="color:#dc2626;padding:12px">${esc(String(e))}</td></tr>`;
     }
   }
 
-  // ── My Tasks ────────────────────────────────────────────────────────────────
-  async function loadPmMyTasks() {
+  // ── My Tasks (assigned to me, scoped to the open project) ───────────────────
+  async function loadPmMyTasksForProject(projectId = pm.detailProjectId) {
+    const tbody = $('#pm-mytasks-body');
+    if (!tbody || !projectId) return;
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:24px">Loading…</td></tr>';
+    try {
+      const res = await API.pmMyTasks('mine');
+      if (res.status >= 400) throw new Error(res.body?.message || 'Load failed');
+      pm.myTaskAll = (res.body?.data || []).filter(t => +t.project_id === +projectId);
+      _renderPmMyTasksTable();
+    } catch (e) {
+      tbody.innerHTML = `<tr><td colspan="6" style="color:#dc2626;padding:12px">${esc(String(e))}</td></tr>`;
+    }
+  }
+
+  function _renderPmMyTasksTable() {
     const tbody = $('#pm-mytasks-body');
     if (!tbody) return;
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:24px">Loading…</td></tr>';
-    try {
-      const res   = await API.pmMyTasks(pm.myTaskFilter);
-      if (res.status >= 400) throw new Error(res.body?.message || 'Load failed');
-      const tasks = res.body?.data || [];
-      if (!tasks.length) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:24px">No tasks.</td></tr>';
-        return;
-      }
-      tbody.innerHTML = tasks.map(t => _pmTaskRow(t, 7, true)).join('');
-      _bindTaskRowActions(tbody, () => loadPmMyTasks());
-    } catch (e) {
-      tbody.innerHTML = `<tr><td colspan="7" style="color:#dc2626;padding:12px">${esc(String(e))}</td></tr>`;
+    const list = pm.myTaskFilter === 'overdue' ? pm.myTaskAll.filter(t => t.is_overdue) : pm.myTaskAll;
+    if (!list.length) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:24px">No tasks assigned to you in this project.</td></tr>';
+      return;
     }
+    tbody.innerHTML = list.map(t => _pmTaskRow(t, 6)).join('');
+    _bindTaskRowActions(tbody, () => loadPmMyTasksForProject());
   }
 
   function _pmTaskRow(t, cols, showProject = false) {
@@ -43841,7 +44026,48 @@ async function submitDsCreate() {
   }
 
   // ── New Project Modal ───────────────────────────────────────────────────────
-  function openNewProjectModal() {
+  // ── New Project: image + type/assignment state ───────────────────────────
+  const _pmNP = { imageFileId: null, targets: {}, customers: [] };
+
+  function _pmNpSetImage(fileId, url) {
+    _pmNP.imageFileId = fileId;
+    const thumb = $('#pm-np-img-thumb');
+    if (!thumb) return;
+    thumb.innerHTML = url ? `<img src="${escHtml(url)}" alt="" style="width:100%;height:100%;object-fit:cover">` : '<i class="fa fa-image" style="font-size:20px;color:var(--text-muted)"></i>';
+    $('#pm-np-img-remove').style.display = url ? 'inline-flex' : 'none';
+  }
+
+  function _pmNpSyncType() {
+    const type = $('#pm-np-type')?.value || 'in_house';
+    $('#pm-np-customer-wrap').style.display = type === 'customer' ? '' : 'none';
+    $('#pm-np-assign-wrap').style.display   = type === 'in_house' ? '' : 'none';
+    if (type === 'in_house') {
+      _pmNpSyncAssignTarget($('#pm-np-assign-type')?.value || 'none');
+    } else {
+      $('#pm-np-assign-target-wrap').style.display = 'none';
+      $('#pm-np-assign-other-wrap').style.display   = 'none';
+    }
+  }
+
+  function _pmNpSyncAssignTarget(type) {
+    $('#pm-np-assign-target-wrap').style.display = 'none';
+    $('#pm-np-assign-other-wrap').style.display   = 'none';
+    if (type === 'none') return;
+    if (type === 'other') { $('#pm-np-assign-other-wrap').style.display = ''; return; }
+    const labelMap = { branch: 'Branch', department: 'Department', property: 'Property', employee: 'Employee', modification: 'Modification', rental: 'Rental' };
+    const keyMap   = { branch: 'branches', department: 'departments', property: 'properties', employee: 'employees', modification: 'modifications', rental: 'rentals' };
+    $('#pm-np-assign-target-wrap').style.display = '';
+    $('#pm-np-assign-target-label').textContent = labelMap[type] || 'Select';
+    const items = (_pmNP.targets || {})[keyMap[type]] || [];
+    $('#pm-np-assign-target').innerHTML = items.length
+      ? `<option value="">Select ${labelMap[type] || type}…</option>` + items.map(i => `<option value="${i.id}">${escHtml(i.name || String(i.id))}</option>`).join('')
+      : `<option value="">No ${(labelMap[type] || type).toLowerCase()}s available</option>`;
+  }
+
+  function openNewProjectModal(existingProject = null) {
+    const isEdit = !!existingProject;
+    _pmNP.imageFileId = existingProject?.file_manager_file_id || null;
+    _pmNP.targets = {};
     const overlay = document.createElement('div');
     overlay.className = 'pm-modal-overlay';
     overlay.id = 'pm-new-project-overlay';
@@ -43849,36 +44075,88 @@ async function submitDsCreate() {
       <div class="pm-modal">
         <div class="pm-modal-hdr">
           <i class="fa fa-folder-plus" style="color:var(--accent)"></i>
-          <span class="pm-modal-title">New Project</span>
+          <span class="pm-modal-title">${isEdit ? 'Edit Project' : 'New Project'}</span>
           <button class="pm-modal-close" id="pm-np-close"><i class="fa fa-xmark"></i></button>
         </div>
         <div class="pm-modal-body">
           <div class="pm-modal-alert" id="pm-np-alert"></div>
-          <div><div class="pm-field-label">Project Name *</div><input id="pm-np-name" class="pm-field-input" maxlength="150" placeholder="e.g. Website Redesign"></div>
-          <div><div class="pm-field-label">Client Name</div><input id="pm-np-client" class="pm-field-input" maxlength="120" placeholder="Optional"></div>
+          <div><div class="pm-field-label">Project Name *</div><input id="pm-np-name" class="pm-field-input" maxlength="150" placeholder="e.g. Website Redesign" value="${existingProject ? escHtml(existingProject.name || '') : ''}"></div>
+
+          <div>
+            <div class="pm-field-label">Project Image <span style="font-weight:400;color:var(--text-muted)">(optional)</span></div>
+            <div style="display:flex;align-items:center;gap:10px">
+              <div id="pm-np-img-thumb" style="width:52px;height:52px;border-radius:8px;background:var(--surface3);display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0">
+                <i class="fa fa-image" style="font-size:20px;color:var(--text-muted)"></i>
+              </div>
+              <button type="button" class="pm-btn-secondary" id="pm-np-img-pick">Choose Image</button>
+              <button type="button" class="pm-btn-secondary" id="pm-np-img-remove" style="display:none">Remove</button>
+            </div>
+          </div>
+
+          <div class="pm-field-row">
+            <div>
+              <div class="pm-field-label">Project Type</div>
+              <select id="pm-np-type" class="pm-field-select">
+                <option value="in_house"${existingProject?.project_type !== 'customer' ? ' selected' : ''}>In-house Project</option>
+                <option value="customer"${existingProject?.project_type === 'customer' ? ' selected' : ''}>Customer Project</option>
+              </select>
+            </div>
+            <div id="pm-np-customer-wrap" style="display:none">
+              <div class="pm-field-label">Customer</div>
+              <select id="pm-np-customer" class="pm-field-select">
+                <option value="">Loading…</option>
+              </select>
+            </div>
+          </div>
+
+          <div id="pm-np-assign-wrap">
+            <div class="pm-field-label">Assign To</div>
+            <select id="pm-np-assign-type" class="pm-field-select">
+              <option value="none"${!existingProject || existingProject.assignment_type === 'none' || !existingProject.assignment_type ? ' selected' : ''}>None</option>
+              <option value="branch"${existingProject?.assignment_type === 'branch' ? ' selected' : ''}>Branch</option>
+              <option value="department"${existingProject?.assignment_type === 'department' ? ' selected' : ''}>Department</option>
+              <option value="property"${existingProject?.assignment_type === 'property' ? ' selected' : ''}>Property</option>
+              <option value="employee"${existingProject?.assignment_type === 'employee' ? ' selected' : ''}>Employee</option>
+              <option value="modification"${existingProject?.assignment_type === 'modification' ? ' selected' : ''}>Modification</option>
+              <option value="rental"${existingProject?.assignment_type === 'rental' ? ' selected' : ''}>Rental</option>
+              <option value="other"${existingProject?.assignment_type === 'other' ? ' selected' : ''}>Other</option>
+            </select>
+          </div>
+          <div id="pm-np-assign-target-wrap" style="display:none">
+            <div class="pm-field-label" id="pm-np-assign-target-label">Select</div>
+            <select id="pm-np-assign-target" class="pm-field-select">
+              <option value="">Loading…</option>
+            </select>
+          </div>
+          <div id="pm-np-assign-other-wrap" style="display:none">
+            <div class="pm-field-label">Reference</div>
+            <input id="pm-np-assign-other" class="pm-field-input" maxlength="255" placeholder="e.g. Building A, Floor 2" value="${existingProject ? escHtml(existingProject.assignment_reference || '') : ''}">
+          </div>
+
+          <div><div class="pm-field-label">Client Name</div><input id="pm-np-client" class="pm-field-input" maxlength="120" placeholder="Optional" value="${existingProject ? escHtml(existingProject.client_name || '') : ''}"></div>
           <div class="pm-field-row">
             <div>
               <div class="pm-field-label">Priority</div>
               <select id="pm-np-priority" class="pm-field-select">
-                <option value="normal">Normal</option>
-                <option value="high">High</option>
-                <option value="low">Low</option>
+                <option value="normal"${!existingProject || existingProject.priority === 'normal' ? ' selected' : ''}>Normal</option>
+                <option value="high"${existingProject?.priority === 'high' ? ' selected' : ''}>High</option>
+                <option value="low"${existingProject?.priority === 'low' ? ' selected' : ''}>Low</option>
               </select>
             </div>
             <div>
               <div class="pm-field-label">Color</div>
-              <input id="pm-np-color" type="color" class="pm-field-input" value="#4e8ef7" style="height:36px;padding:2px 6px">
+              <input id="pm-np-color" type="color" class="pm-field-input" value="${existingProject?.color || '#4e8ef7'}" style="height:36px;padding:2px 6px">
             </div>
           </div>
           <div class="pm-field-row">
-            <div><div class="pm-field-label">Start Date</div><input id="pm-np-start" type="date" class="pm-field-input"></div>
-            <div><div class="pm-field-label">Due Date</div><input id="pm-np-due" type="date" class="pm-field-input"></div>
+            <div><div class="pm-field-label">Start Date</div><input id="pm-np-start" type="date" class="pm-field-input" value="${existingProject?.start_date || ''}"></div>
+            <div><div class="pm-field-label">Due Date</div><input id="pm-np-due" type="date" class="pm-field-input" value="${existingProject?.due_date || ''}"></div>
           </div>
-          <div><div class="pm-field-label">Description</div><textarea id="pm-np-desc" class="pm-field-textarea" maxlength="2000" placeholder="Optional project description…"></textarea></div>
+          <div><div class="pm-field-label">Description</div><textarea id="pm-np-desc" class="pm-field-textarea" maxlength="2000" placeholder="Optional project description…">${existingProject ? escHtml(existingProject.description || '') : ''}</textarea></div>
         </div>
         <div class="pm-modal-footer">
           <button class="pm-btn-secondary" id="pm-np-cancel">Cancel</button>
-          <button class="pm-btn-primary" id="pm-np-save"><i class="fa fa-floppy-disk"></i> Create Project</button>
+          <button class="pm-btn-primary" id="pm-np-save"><i class="fa fa-floppy-disk"></i> ${isEdit ? 'Save Changes' : 'Create Project'}</button>
         </div>
       </div>
     `;
@@ -43886,27 +44164,81 @@ async function submitDsCreate() {
     $('#pm-np-close').addEventListener('click',  () => overlay.remove());
     $('#pm-np-cancel').addEventListener('click', () => overlay.remove());
     overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+
+    _pmNpSetImage(_pmNP.imageFileId, existingProject?.image_url || null);
+    $('#pm-np-img-pick').addEventListener('click', () => openImgPicker((fileId, url) => _pmNpSetImage(fileId, url)));
+    $('#pm-np-img-remove').addEventListener('click', () => _pmNpSetImage(null, null));
+
+    $('#pm-np-type').addEventListener('change', _pmNpSyncType);
+    $('#pm-np-assign-type').addEventListener('change', () => _pmNpSyncAssignTarget($('#pm-np-assign-type').value));
+    _pmNpSyncType();
+
+    $('#pm-np-customer').innerHTML = '<option value="">Loading…</option>';
+    API.customers().then(res => {
+      _pmNP.customers = res.status === 200 ? (res.body?.data || []) : [];
+      $('#pm-np-customer').innerHTML = '<option value="">Select customer…</option>' +
+        _pmNP.customers.map(c => `<option value="${c.id}">${escHtml(c.name || String(c.id))}</option>`).join('');
+      if (existingProject?.customer_id) $('#pm-np-customer').value = existingProject.customer_id;
+    });
+    API.billTargets().then(res => {
+      _pmNP.targets = res.status === 200 ? (res.body?.data || {}) : {};
+      const curType = $('#pm-np-assign-type')?.value || 'none';
+      if (curType !== 'none') _pmNpSyncAssignTarget(curType);
+      if (existingProject?.assignment_target_id && curType !== 'none' && curType !== 'other') {
+        $('#pm-np-assign-target').value = existingProject.assignment_target_id;
+      }
+    });
+
     $('#pm-np-save').addEventListener('click', async () => {
       const name = $('#pm-np-name')?.value.trim();
       const alert = $('#pm-np-alert');
       if (!name) { alert.textContent = 'Project name is required.'; alert.style.display = 'block'; return; }
+
+      const projectType = $('#pm-np-type')?.value || 'in_house';
+      if (projectType === 'customer' && !$('#pm-np-customer')?.value) {
+        alert.textContent = 'Select a customer for a customer project.'; alert.style.display = 'block'; return;
+      }
+      const assignType = projectType === 'in_house' ? ($('#pm-np-assign-type')?.value || 'none') : 'none';
+      if (assignType !== 'none' && assignType !== 'other' && !$('#pm-np-assign-target')?.value) {
+        alert.textContent = 'Select an assignment target.'; alert.style.display = 'block'; return;
+      }
       alert.style.display = 'none';
       $('#pm-np-save').disabled = true;
+
+      const targetKeyMap = { branch: 'branch_id', department: 'department_id', property: 'property_id', employee: 'employee_id', modification: 'modification_id', rental: 'rental_id' };
+      const body = {
+        name,
+        client_name: $('#pm-np-client')?.value.trim() || null,
+        priority:    $('#pm-np-priority')?.value || 'normal',
+        color:       $('#pm-np-color')?.value || null,
+        start_date:  $('#pm-np-start')?.value || null,
+        due_date:    $('#pm-np-due')?.value || null,
+        description: $('#pm-np-desc')?.value.trim() || null,
+        project_type:          projectType,
+        customer_id:           projectType === 'customer' ? ($('#pm-np-customer')?.value || null) : null,
+        assignment_type:       assignType,
+        assignment_reference:  assignType === 'other' ? ($('#pm-np-assign-other')?.value.trim() || null) : null,
+        file_manager_file_id:  _pmNP.imageFileId || null,
+      };
+      if (targetKeyMap[assignType]) body[targetKeyMap[assignType]] = $('#pm-np-assign-target')?.value || null;
+
       try {
-        const res = await API.pmProjectCreate({
-          name,
-          client_name: $('#pm-np-client')?.value.trim() || null,
-          priority:    $('#pm-np-priority')?.value || 'normal',
-          color:       $('#pm-np-color')?.value || null,
-          start_date:  $('#pm-np-start')?.value || null,
-          due_date:    $('#pm-np-due')?.value || null,
-          description: $('#pm-np-desc')?.value.trim() || null,
-        });
+        const res = isEdit
+          ? await API.pmProjectUpdate(existingProject.id, body)
+          : await API.pmProjectCreate(body);
         if (res.status >= 400) throw new Error(res.body?.message || 'Save failed');
         overlay.remove();
         await loadPmProjects();
-        _populatePmProjectSelects();
-        toast('Project created', 'success');
+        if (isEdit && pm.detailProjectId === +existingProject.id) {
+          const fresh = pm.projects.find(x => +x.id === +existingProject.id);
+          if (fresh) {
+            pm.detailProject = fresh;
+            _pmRenderDetailHero(fresh);
+            _pmRenderDashboardPane(fresh);
+            _pmRenderAssignmentPane(fresh);
+          }
+        }
+        toast(isEdit ? 'Project updated' : 'Project created', 'success');
       } catch (e) {
         alert.textContent = String(e);
         alert.style.display = 'block';
@@ -43993,9 +44325,15 @@ async function submitDsCreate() {
         });
         if (res.status >= 400) throw new Error(res.body?.message || 'Save failed');
         overlay.remove();
-        if (pm.currentView === 'board')   loadPmBoard();
-        else if (pm.currentView === 'tasks') loadPmTasks();
-        else if (pm.currentView === 'mytasks') loadPmMyTasks();
+        if (pm.detailProjectId) {
+          if (pm.detailTab === 'board')       loadPmBoard();
+          else if (pm.detailTab === 'task')   loadPmTasks();
+          else if (pm.detailTab === 'mytask') loadPmMyTasksForProject();
+          ensurePmProjects(true).then(() => {
+            const fresh = pm.projects.find(x => +x.id === +pm.detailProjectId);
+            if (fresh) { pm.detailProject = fresh; _pmRenderDashboardPane(fresh); }
+          });
+        }
         toast('Task created', 'success');
       } catch (e) {
         alertEl.textContent = String(e);
@@ -44009,15 +44347,26 @@ async function submitDsCreate() {
   // ── Ribbon buttons ──────────────────────────────────────────────────────────
   $('#rb-pm-all-projects')?.addEventListener('click', () => { activateTab('projects'); switchPmView('projects'); });
   $('#rb-pm-new-project') ?.addEventListener('click', () => { activateTab('projects'); openNewProjectModal(); });
-  $('#rb-pm-board')       ?.addEventListener('click', () => { activateTab('projects'); switchPmView('board'); });
-  $('#rb-pm-tasks')       ?.addEventListener('click', () => { activateTab('projects'); switchPmView('tasks'); });
-  $('#rb-pm-my-tasks')    ?.addEventListener('click', () => { activateTab('projects'); switchPmView('mytasks'); });
-  $('#rb-pm-new-task')    ?.addEventListener('click', () => { activateTab('projects'); openNewTaskModal(pm.boardProjectId || pm.tasksProjectId); });
+  $('#rb-pm-new-task')    ?.addEventListener('click', () => { activateTab('projects'); openNewTaskModal(pm.detailProjectId); });
   $('#rb-pm-refresh')     ?.addEventListener('click', () => {
-    if (pm.currentView === 'projects') loadPmProjects();
-    else if (pm.currentView === 'board') loadPmBoard();
-    else if (pm.currentView === 'tasks') loadPmTasks();
-    else if (pm.currentView === 'mytasks') loadPmMyTasks();
+    if (pm.detailProjectId) {
+      ensurePmProjects(true).then(() => {
+        const fresh = pm.projects.find(x => +x.id === +pm.detailProjectId);
+        if (fresh) {
+          pm.detailProject = fresh;
+          _pmRenderDetailHero(fresh);
+          _pmRenderDashboardPane(fresh);
+          _pmRenderAssignmentPane(fresh);
+        }
+        if (pm.detailTab === 'board')       loadPmBoard();
+        else if (pm.detailTab === 'task')   loadPmTasks();
+        else if (pm.detailTab === 'mytask') loadPmMyTasksForProject();
+      });
+    } else if (pm.currentView === 'overview') {
+      loadPmOverview();
+    } else {
+      loadPmProjects();
+    }
   });
 
   // ── Sub-nav buttons ─────────────────────────────────────────────────────────
@@ -44025,17 +44374,33 @@ async function submitDsCreate() {
     btn.addEventListener('click', () => switchPmView(btn.dataset.pmsub));
   });
 
-  // ── Project filter chips ────────────────────────────────────────────────────
+  // ── Project search ──────────────────────────────────────────────────────────
+  $('#pm-project-search')?.addEventListener('input', function () {
+    pm.search = this.value;
+    renderPmProjectsGrid();
+  });
+
+  // ── Project status filter chips ─────────────────────────────────────────────
   $$('#pm-project-filter-chips [data-pmprojectfilter]').forEach(chip => {
     chip.addEventListener('click', function () {
       $$('#pm-project-filter-chips .svc-chip').forEach(c => c.classList.remove('active'));
       this.classList.add('active');
-      pm.projectFilter = this.dataset.pmprojectfilter;
-      loadPmProjects();
+      pm.statusFilter = this.dataset.pmprojectfilter;
+      renderPmProjectsGrid();
     });
   });
 
-  // ── Task filter chips ───────────────────────────────────────────────────────
+  // ── Project type filter chips ───────────────────────────────────────────────
+  $$('#pm-project-type-chips [data-pmprojecttype]').forEach(chip => {
+    chip.addEventListener('click', function () {
+      $$('#pm-project-type-chips .svc-chip').forEach(c => c.classList.remove('active'));
+      this.classList.add('active');
+      pm.typeFilter = this.dataset.pmprojecttype;
+      renderPmProjectsGrid();
+    });
+  });
+
+  // ── Task filter chips (detail: Task tab) ────────────────────────────────────
   $$('#pm-task-filter-chips [data-pmtaskfilter]').forEach(chip => {
     chip.addEventListener('click', function () {
       $$('#pm-task-filter-chips .svc-chip').forEach(c => c.classList.remove('active'));
@@ -44045,33 +44410,40 @@ async function submitDsCreate() {
     });
   });
 
-  // ── My tasks filter chips ───────────────────────────────────────────────────
+  // ── My task filter chips (detail: My Task tab) ──────────────────────────────
   $$('#pm-mytask-filter-chips [data-pmmyfilter]').forEach(chip => {
     chip.addEventListener('click', function () {
       $$('#pm-mytask-filter-chips .svc-chip').forEach(c => c.classList.remove('active'));
       this.classList.add('active');
       pm.myTaskFilter = this.dataset.pmmyfilter;
-      loadPmMyTasks();
+      _renderPmMyTasksTable();
     });
   });
 
-  // ── Board project select ────────────────────────────────────────────────────
-  $('#pm-board-project-select')?.addEventListener('change', function () {
-    pm.boardProjectId = this.value;
-    loadPmBoard();
-  });
-
   // ── Board new task button ───────────────────────────────────────────────────
-  $('#pm-board-new-task-btn')?.addEventListener('click', () => openNewTaskModal(pm.boardProjectId));
-
-  // ── Tasks project select ────────────────────────────────────────────────────
-  $('#pm-tasks-project-select')?.addEventListener('change', function () {
-    pm.tasksProjectId = this.value;
-    loadPmTasks();
-  });
+  $('#pm-board-new-task-btn')?.addEventListener('click', () => openNewTaskModal(pm.detailProjectId));
 
   // ── Tasks new button ────────────────────────────────────────────────────────
-  $('#pm-tasks-new-btn')?.addEventListener('click', () => openNewTaskModal(pm.tasksProjectId));
+  $('#pm-tasks-new-btn')?.addEventListener('click', () => openNewTaskModal(pm.detailProjectId));
+
+  // ── Detail header: Edit / Delete ────────────────────────────────────────────
+  $('#pm-detail-edit-btn')?.addEventListener('click', () => {
+    if (pm.detailProject) openNewProjectModal(pm.detailProject);
+  });
+  $('#pm-detail-delete-btn')?.addEventListener('click', async () => {
+    const p = pm.detailProject;
+    if (!p) return;
+    if (!confirm(`Delete project "${p.name}"? This cannot be undone.`)) return;
+    try {
+      const res = await API.pmProjectDelete(p.id);
+      if (res.status >= 400) throw new Error(res.body?.message || 'Delete failed');
+      closeProjectDetail();
+      await loadPmProjects();
+      toast('Project deleted', 'success');
+    } catch (e) {
+      toast('Delete failed: ' + e, 'error');
+    }
+  });
 
   // ── Expose for debug ────────────────────────────────────────────────────────
   window._pm = pm;
