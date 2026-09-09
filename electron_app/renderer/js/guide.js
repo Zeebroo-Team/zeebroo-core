@@ -21,6 +21,11 @@
   let _bubbleOpen  = false;
   let _busy        = false;
 
+  // Chat history — all turns in the current app session are grouped under
+  // one conversation on the server; reset naturally on the next app launch.
+  let _conversationId  = null;
+  let _historyOpen     = false;
+
   // Voice Listening Worker state (MediaRecorder-based — no SpeechRecognition)
   let _voiceStream      = null;   // MediaStream from getUserMedia
   let _voiceRecorder    = null;   // MediaRecorder instance
@@ -522,11 +527,12 @@
     let isHtml       = false;
 
     try {
-      const res = await API.guideChat(message);
+      const res = await API.guideChat(message, _conversationId);
       if (res.status === 200 && res.body?.reply) {
         reply        = String(res.body.reply).trim();
         geminiWorked = reply.length > 0;
         isHtml       = !!res.body.isHtml;
+        if (res.body.conversation_id) _conversationId = res.body.conversation_id;
 
         // Data-query HTML reply — show immediately, then handle voice resume
         if (isHtml) {
@@ -800,7 +806,7 @@
 
     let res;
     try {
-      res = await API.guideVoice(b64, _voiceMimeType);
+      res = await API.guideVoice(b64, _voiceMimeType, _conversationId);
     } catch (err) {
       console.warn('[VoiceWorker] API error:', err);
       _voiceShowError('Could not reach the server. Check your connection and try again.');
@@ -819,6 +825,7 @@
     const transcript = body.transcript || '';
     const reply      = body.reply      || '';
     const replyLang  = body.lang       || '';   // BCP-47 from Gemini, e.g. 'si-LK'
+    if (body.conversation_id) _conversationId = body.conversation_id;
 
     // Show transcript in chat input
     if (inp && transcript) inp.value = transcript;
@@ -1019,6 +1026,164 @@
 
 
   /* ════════════════════════════════════════════════════════════════════════
+     CHAT HISTORY PANEL — lists past conversations and their full threads
+     ════════════════════════════════════════════════════════════════════════ */
+  function _escapeHtml(str) {
+    const d = document.createElement('div');
+    d.textContent = str == null ? '' : String(str);
+    return d.innerHTML;
+  }
+
+  function _relativeTime(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    const mins = Math.round((Date.now() - d.getTime()) / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return mins + 'm ago';
+    const hrs = Math.round(mins / 60);
+    if (hrs < 24) return hrs + 'h ago';
+    const days = Math.round(hrs / 24);
+    if (days < 7) return days + 'd ago';
+    return d.toLocaleDateString();
+  }
+
+  function _historyPanelEls() {
+    return {
+      panel:  document.getElementById('guide-history-panel'),
+      list:   document.getElementById('guide-history-list'),
+      thread: document.getElementById('guide-history-thread'),
+      title:  document.getElementById('guide-history-title'),
+      back:   document.getElementById('guide-history-back'),
+      footer: document.getElementById('guide-history-footer'),
+    };
+  }
+
+  async function _deleteConversation(id) {
+    try {
+      const res = await API.guideConversationDelete(id);
+      if (res.status !== 200) return false;
+      if (String(_conversationId) === String(id)) _conversationId = null;
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function _openHistoryPanel() {
+    const { panel } = _historyPanelEls();
+    if (!panel) return;
+    _closeBubble();
+    _historyOpen = true;
+    panel.style.display = 'flex';
+    void _showHistoryList();
+  }
+
+  function _closeHistoryPanel() {
+    const { panel } = _historyPanelEls();
+    if (!panel) return;
+    _historyOpen = false;
+    panel.style.display = 'none';
+  }
+
+  async function _showHistoryList() {
+    const { list, thread, title, back, footer } = _historyPanelEls();
+    if (!list || !thread) return;
+    thread.style.display = 'none';
+    thread.innerHTML = '';
+    list.style.display = 'block';
+    if (back)   back.style.display = 'none';
+    if (footer) footer.style.display = 'none';
+    if (title)  title.textContent = 'Chat History';
+    const delBtn = document.getElementById('guide-history-delete-current');
+    if (delBtn) delBtn.style.display = 'none';
+    list.innerHTML = '<div class="guide-history-loading">Loading…</div>';
+
+    try {
+      const res = await API.guideConversations();
+      const items = (res.status === 200 && res.body && res.body.conversations) || [];
+      if (!items.length) {
+        list.innerHTML = '<div class="guide-history-empty">No conversations yet.</div>';
+        return;
+      }
+      list.innerHTML = '';
+      items.forEach(item => {
+        const row = document.createElement('div');
+        row.className = 'guide-history-item';
+        row.innerHTML =
+          '<i class="fa fa-comment"></i>' +
+          '<div class="guide-history-item-body">' +
+            '<div class="guide-history-item-title">' + _escapeHtml(item.title || 'New chat') + '</div>' +
+            '<div class="guide-history-item-time">' + _escapeHtml(_relativeTime(item.last_message_at)) + '</div>' +
+          '</div>' +
+          '<button type="button" class="guide-history-item-delete" title="Delete conversation"><i class="fa fa-trash"></i></button>';
+        row.addEventListener('click', () => { void _showHistoryThread(item.id, item.title); });
+        row.querySelector('.guide-history-item-delete')?.addEventListener('click', e => {
+          e.stopPropagation();
+          if (!window.confirm('Delete this conversation?')) return;
+          _deleteConversation(item.id).then(ok => { if (ok) row.remove(); if (!list.children.length) void _showHistoryList(); });
+        });
+        list.appendChild(row);
+      });
+    } catch (e) {
+      list.innerHTML = '<div class="guide-history-empty">Could not load chat history.</div>';
+    }
+  }
+
+  async function _showHistoryThread(id, titleText) {
+    const { list, thread, title, back, footer } = _historyPanelEls();
+    if (!list || !thread) return;
+    list.style.display = 'none';
+    if (back)   back.style.display = 'inline-flex';
+    if (footer) footer.style.display = 'flex';
+    if (title)  title.textContent = titleText || 'Conversation';
+    thread.style.display = 'block';
+    thread.innerHTML = '<div class="guide-history-loading">Loading…</div>';
+    const delBtn = document.getElementById('guide-history-delete-current');
+    if (delBtn) { delBtn.style.display = 'inline-flex'; delBtn.dataset.id = String(id); }
+
+    try {
+      const res = await API.guideConversationShow(id);
+      if (res.status !== 200 || !res.body) {
+        thread.innerHTML = '<div class="guide-history-empty">Could not load this conversation.</div>';
+        return;
+      }
+      const messages = res.body.messages || [];
+      thread.innerHTML = '';
+      messages.forEach(m => {
+        const row = document.createElement('div');
+        const isBot = m.role === 'assistant';
+        row.className = 'guide-history-msg guide-history-msg--' + (isBot ? 'bot' : 'user');
+        const text = m.content || (m.is_voice ? '(Voice message)' : '');
+        if (isBot) { row.innerHTML = text; } else { row.textContent = text; }
+        thread.appendChild(row);
+      });
+      thread.scrollTop = thread.scrollHeight;
+
+      const continueBtn = document.getElementById('guide-history-continue');
+      if (continueBtn) continueBtn.dataset.id = String(id);
+    } catch (e) {
+      thread.innerHTML = '<div class="guide-history-empty">Could not load this conversation.</div>';
+    }
+  }
+
+  function _initHistoryPanel() {
+    document.getElementById('guide-history-close')?.addEventListener('click', _closeHistoryPanel);
+    document.getElementById('guide-history-back')?.addEventListener('click', () => { void _showHistoryList(); });
+    document.getElementById('guide-history-continue')?.addEventListener('click', function () {
+      const id = parseInt(this.dataset.id, 10);
+      if (id) _conversationId = id;
+      _closeHistoryPanel();
+      if (!_bubbleOpen) _openBubble();
+    });
+    document.getElementById('guide-history-delete-current')?.addEventListener('click', function () {
+      const id = parseInt(this.dataset.id, 10);
+      if (!id || !window.confirm('Delete this conversation?')) return;
+      _deleteConversation(id).then(ok => { if (ok) void _showHistoryList(); });
+    });
+  }
+
+  /* ════════════════════════════════════════════════════════════════════════
      CONTEXT MENU
      Right-click on the guide character image-wrap shows the context menu.
      ════════════════════════════════════════════════════════════════════════ */
@@ -1103,6 +1268,12 @@
       if (!_bubbleOpen) _openBubble();
     });
 
+    // Context menu item: Chat History
+    document.getElementById('guide-ctx-history')?.addEventListener('click', () => {
+      _closeCtxMenu();
+      _openHistoryPanel();
+    });
+
     // Context menu item: Reset Position
     document.getElementById('guide-ctx-reset')?.addEventListener('click', () => {
       _closeCtxMenu();
@@ -1141,7 +1312,10 @@
       if (!menu.contains(e.target)) _closeCtxMenu();
     });
     document.addEventListener('keydown', e => {
-      if (e.key === 'Escape') _closeCtxMenu();
+      if (e.key === 'Escape') {
+        _closeCtxMenu();
+        if (_historyOpen) _closeHistoryPanel();
+      }
     });
   }
 
@@ -1226,6 +1400,7 @@
 
     _makeDraggable(wrap, imgWrap);
     _initCtxMenu();
+    _initHistoryPanel();
   }
 
   /* ════════════════════════════════════════════════════════════════════════

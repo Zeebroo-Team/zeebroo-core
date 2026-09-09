@@ -40,6 +40,7 @@ class AIBotChatRequest extends FormRequest
     {
         return [
             'speak_reply' => ['sometimes', 'boolean'],
+            'conversation_id' => ['sometimes', 'nullable', 'integer', 'min:1'],
             'messages' => ['required', 'array', 'min:1', 'max:50'],
             'messages.*.role' => ['required', 'string', 'in:user,assistant'],
             'messages.*.content' => ['nullable', 'string', 'max:24000'],
@@ -47,6 +48,13 @@ class AIBotChatRequest extends FormRequest
             'messages.*.audio.base64' => ['required_with:messages.*.audio', 'string', 'max:5610000'],
             'messages.*.audio.mime_type' => ['required_with:messages.*.audio', 'string', Rule::in(self::voiceMimeTypes())],
         ];
+    }
+
+    public function conversationId(): ?int
+    {
+        $raw = $this->input('conversation_id');
+
+        return ($raw === null || $raw === '') ? null : (int) $raw;
     }
 
     public function wantsSpokenReply(): bool

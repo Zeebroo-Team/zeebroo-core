@@ -7,7 +7,9 @@ use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Http;
 use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesPosBusinessForApi;
+use Modules\Pos\Models\GuideConversation;
 use Modules\Pos\Models\Sale;
+use Modules\Pos\Services\GuideConversationService;
 use Modules\Product\Models\Product;
 use Modules\Account\Models\Bill;
 use Modules\Business\Models\Business;
@@ -15,6 +17,67 @@ use Modules\Business\Models\Business;
 class PosGuideChatApiController extends Controller
 {
     use ResolvesPosBusinessForApi;
+
+    /**
+     * Resolve the current business without aborting when none is selected —
+     * the guide chat works fine (minus data queries) with no business context.
+     */
+    private function softBusiness(Request $request): ?Business
+    {
+        $result = $this->resolveBusinessForApi($request);
+
+        return $result instanceof Business ? $result : null;
+    }
+
+    public function conversations(Request $request, GuideConversationService $conversations): JsonResponse
+    {
+        $business = $this->softBusiness($request);
+        $actorKey = $conversations->actorKey($request);
+
+        $items = $conversations->listForActor($business, $actorKey)
+            ->map(fn ($c) => [
+                'id' => $c->id,
+                'title' => $c->title ?: 'New chat',
+                'last_message_at' => optional($c->last_message_at)->toIso8601String(),
+            ])
+            ->values();
+
+        return response()->json(['conversations' => $items]);
+    }
+
+    public function conversationShow(int $conversation, Request $request, GuideConversationService $conversations): JsonResponse
+    {
+        $actorKey = $conversations->actorKey($request);
+        $model = $conversations->findOwned($actorKey, $conversation);
+        if ($model === null) {
+            return response()->json(['message' => 'Conversation not found.'], 404);
+        }
+
+        $model = $conversations->withMessages($model);
+
+        return response()->json([
+            'id' => $model->id,
+            'title' => $model->title,
+            'messages' => $model->messages->map(fn ($m) => [
+                'role' => $m->role,
+                'content' => $m->content,
+                'is_voice' => (bool) $m->is_voice,
+            ])->values(),
+        ]);
+    }
+
+    public function conversationDestroy(int $conversation, Request $request, GuideConversationService $conversations): JsonResponse
+    {
+        $actorKey = $conversations->actorKey($request);
+        $model = $conversations->findOwned($actorKey, $conversation);
+        if ($model === null) {
+            return response()->json(['message' => 'Conversation not found.'], 404);
+        }
+
+        $conversations->destroy($model);
+
+        return response()->json(['deleted' => true]);
+    }
 
     private const SYSTEM_PROMPT = <<<'PROMPT'
 You are a friendly animated guide character inside Zeebroo POS — a business management desktop application.
@@ -171,12 +234,23 @@ PROMPT;
      * API which both transcribes the user's speech AND generates the guide reply
      * in one round-trip, returning { transcript, reply, walkthrough, … }.
      */
-    public function voice(Request $request): JsonResponse
+    public function voice(Request $request, GuideConversationService $conversations): JsonResponse
     {
         $request->validate([
             'audio'     => 'required|string|max:6000000',   // ~4.5 MB decoded
             'mime_type' => 'nullable|string|max:100',
+            'conversation_id' => 'nullable|integer|min:1',
         ]);
+
+        $actorKey = $conversations->actorKey($request);
+        $conversation = null;
+        $conversationId = $request->integer('conversation_id') ?: null;
+        if ($conversationId) {
+            $conversation = $conversations->findOwned($actorKey, $conversationId);
+            if ($conversation === null) {
+                return response()->json(['message' => 'Conversation not found.'], 404);
+            }
+        }
 
         $apiKey = config('services.gemini.key');
         if (!$apiKey) {
@@ -240,19 +314,47 @@ PROMPT;
             return response()->json(['transcript' => null, 'reply' => null], 503);
         }
 
+        $transcript = trim($data['transcript'] ?? '');
+        $reply = trim($data['reply'] ?? '');
+
+        if ($reply !== '') {
+            $conversation = $conversations->recordTurn(
+                $this->softBusiness($request),
+                $actorKey,
+                $conversation,
+                $transcript !== '' ? $transcript : '(Voice message)',
+                true,
+                $reply,
+            );
+        }
+
         return response()->json([
-            'transcript'  => trim($data['transcript'] ?? ''),
-            'reply'       => trim($data['reply']       ?? ''),
+            'transcript'  => $transcript,
+            'reply'       => $reply,
             'walkthrough' => $data['walkthrough'] ?? null,
             'productName' => $data['productName'] ?? null,
             'fieldName'   => $data['fieldName']   ?? null,
             'lang'        => trim($data['lang']        ?? ''),
+            'conversation_id' => $conversation?->id,
         ]);
     }
 
-    public function chat(Request $request): JsonResponse
+    public function chat(Request $request, GuideConversationService $conversations): JsonResponse
     {
-        $request->validate(['message' => 'required|string|max:500']);
+        $request->validate([
+            'message' => 'required|string|max:500',
+            'conversation_id' => 'nullable|integer|min:1',
+        ]);
+
+        $actorKey = $conversations->actorKey($request);
+        $conversation = null;
+        $conversationId = $request->integer('conversation_id') ?: null;
+        if ($conversationId) {
+            $conversation = $conversations->findOwned($actorKey, $conversationId);
+            if ($conversation === null) {
+                return response()->json(['message' => 'Conversation not found.'], 404);
+            }
+        }
 
         $apiKey = config('services.gemini.key');
         if (!$apiKey) {
@@ -311,26 +413,40 @@ PROMPT;
 
         // ── Pass 2: data fetch + format (if dataQuery present) ────────────────
         $dataQuery = $data['dataQuery'] ?? null;
+        $userMessage = trim((string) $request->input('message'));
+
         if ($dataQuery) {
             try {
                 $business = $this->businessOrAbort($request);
                 $rawData  = $this->fetchData($dataQuery, $business);
                 $htmlReply = $this->formatWithGemini($models, $apiKey, $request->input('message'), $dataQuery, $rawData);
+
+                $conversation = $conversations->recordTurn(
+                    $business, $actorKey, $conversation, $userMessage, false, $htmlReply
+                );
+
                 return response()->json([
                     'reply'      => $htmlReply,
                     'walkthrough'=> null,
                     'isHtml'     => true,
+                    'conversation_id' => $conversation->id,
                 ]);
             } catch (\Throwable $e) {
                 // Fall through to plain reply if data fetch fails
             }
         }
 
+        $reply = trim($data['reply']);
+        $conversation = $conversations->recordTurn(
+            $this->softBusiness($request), $actorKey, $conversation, $userMessage, false, $reply
+        );
+
         return response()->json([
-            'reply'       => trim($data['reply']),
+            'reply'       => $reply,
             'walkthrough' => $data['walkthrough'] ?? null,
             'productName' => $data['productName'] ?? null,
             'fieldName'   => $data['fieldName']   ?? null,
+            'conversation_id' => $conversation->id,
         ]);
     }
 

@@ -4,6 +4,7 @@
 <div class="aibot-root aibot-root--intro"
      data-business-name="{{ e($businessLabel) }}"
      data-chat-url="{{ route('aibot.chat') }}"
+     data-conversations-url="{{ route('aibot.conversations.index') }}"
      data-csrf="{{ csrf_token() }}"
      data-tts-available="{{ filter_var(config('aibot.gemini.reply_audio_enabled', false), FILTER_VALIDATE_BOOLEAN) ? '1' : '0' }}">
     <div class="aibot-main">
@@ -50,9 +51,7 @@
             <i class="fa fa-plus"></i><span>New chat</span>
         </button>
         <div class="aibot-history-label muted">Recent</div>
-        <ul class="aibot-history-list" id="aibot-history">
-            <li><button type="button" class="aibot-history-item is-active"><i class="fa fa-comment"></i><span class="truncate">Workspace assistant</span></button></li>
-        </ul>
+        <ul class="aibot-history-list" id="aibot-history"></ul>
         <div class="aibot-panel-foot muted">
             <small>{{ $businessLabel }}</small>
         </div>
@@ -117,6 +116,7 @@
     .aibot-history-item:hover{background:color-mix(in srgb,var(--primary) 8%,transparent);}
     .aibot-history-item.is-active{background:color-mix(in srgb,var(--primary) 14%,transparent);outline:1px solid color-mix(in srgb,var(--primary) 35%,var(--border));}
     .aibot-history-item i{font-size:12px;color:var(--muted);width:1em;text-align:center;}
+    .aibot-history-empty{display:block;padding:9px 10px;font-size:12px;}
     .truncate{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
     .aibot-panel-foot{margin-top:auto;padding-top:8px;}
     .aibot-main{display:flex;flex-direction:column;flex:1 1 0;min-width:0;min-height:0;max-height:100%;overflow:hidden;}
@@ -336,6 +336,7 @@
         }
     }
     const chatUrl = root.dataset.chatUrl || '';
+    const conversationsUrl = root.dataset.conversationsUrl || '';
     const csrfToken = root.dataset.csrf || '';
     const speakCheckbox = document.getElementById('aibot-speak-check');
     const welcome = document.getElementById('aibot-welcome');
@@ -345,7 +346,9 @@
     const input = document.getElementById('aibot-input');
     const micBtn = document.getElementById('aibot-mic');
     const newChatBtn = document.getElementById('aibot-new-chat');
+    const historyList = document.getElementById('aibot-history');
     let conversation = [];
+    let activeConversationId = null;
     let busy = false;
     /** @type {MediaRecorder | null} */
     let voiceRecorder = null;
@@ -463,6 +466,8 @@
         messagesEl.hidden = true;
         messagesEl.innerHTML = '';
         conversation = [];
+        activeConversationId = null;
+        highlightActiveConversation();
         thread.scrollTop = 0;
         input.focus();
     }
@@ -477,6 +482,102 @@
         hideWelcomeIfNeeded();
         thread.scrollTop = thread.scrollHeight;
         return row;
+    }
+
+    function appendAiBubble(text) {
+        const row = document.createElement('div');
+        row.className = 'aibot-row aibot-row-ai';
+        row.innerHTML =
+            '<div class="aibot-avatar" aria-hidden="true"><i class="fa fa-robot"></i></div>' +
+            '<div class="aibot-msg aibot-msg-ai">' + renderChatMarkup(text) + '</div>';
+        messagesEl.appendChild(row);
+        hideWelcomeIfNeeded();
+        thread.scrollTop = thread.scrollHeight;
+        return row;
+    }
+
+    function highlightActiveConversation() {
+        if (!historyList) return;
+        historyList.querySelectorAll('.aibot-history-item').forEach(function (btn) {
+            btn.classList.toggle('is-active', String(btn.dataset.id) === String(activeConversationId));
+        });
+    }
+
+    function renderHistoryList(items) {
+        if (!historyList) return;
+        historyList.innerHTML = '';
+
+        if (!items || !items.length) {
+            const empty = document.createElement('li');
+            empty.innerHTML = '<span class="aibot-history-empty muted">No conversations yet</span>';
+            historyList.appendChild(empty);
+            return;
+        }
+
+        items.forEach(function (item) {
+            const li = document.createElement('li');
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'aibot-history-item';
+            btn.dataset.id = item.id;
+            btn.innerHTML = '<i class="fa fa-comment"></i><span class="truncate">' + escapeHtml(item.title || 'New chat') + '</span>';
+            btn.addEventListener('click', function () {
+                void openConversation(item.id);
+            });
+            li.appendChild(btn);
+            historyList.appendChild(li);
+        });
+
+        highlightActiveConversation();
+    }
+
+    async function refreshHistoryList() {
+        if (!conversationsUrl) return;
+        try {
+            const res = await fetch(conversationsUrl, {
+                method: 'GET',
+                credentials: 'same-origin',
+                headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            });
+            if (!res.ok) return;
+            const data = await res.json().catch(function () { return {}; });
+            renderHistoryList(data.conversations || []);
+        } catch (_) {}
+    }
+
+    async function openConversation(id) {
+        if (busy || !conversationsUrl) return;
+
+        try {
+            const res = await fetch(conversationsUrl + '/' + id, {
+                method: 'GET',
+                credentials: 'same-origin',
+                headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            });
+            if (!res.ok) return;
+            const data = await res.json().catch(function () { return {}; });
+
+            discardActiveVoiceRecording();
+            conversation = [];
+            messagesEl.innerHTML = '';
+
+            (data.messages || []).forEach(function (m) {
+                const text = m.content || (m.is_voice ? '(Voice message)' : '');
+                if (m.role === 'assistant') {
+                    appendAiBubble(text);
+                } else {
+                    appendUserBubble(text);
+                }
+                conversation.push({ role: m.role, content: text });
+            });
+
+            const hasMessages = messagesEl.children.length > 0;
+            welcome.hidden = hasMessages;
+            messagesEl.hidden = !hasMessages;
+            activeConversationId = id;
+            highlightActiveConversation();
+            thread.scrollTop = thread.scrollHeight;
+        } catch (_) {}
     }
 
     function appendTypingRow() {
@@ -660,7 +761,10 @@
 
         var userRow = appendUserBubble(displayUser);
         var typingRow = appendTypingRow();
-        var requestBody = Object.assign({ messages: conversation }, normalizeSpeakReplyPayload());
+        var requestBody = Object.assign(
+            { messages: conversation, conversation_id: activeConversationId },
+            normalizeSpeakReplyPayload()
+        );
 
         try {
             const res = await fetch(chatUrl, {
@@ -726,6 +830,11 @@
             if (uIdx >= 0 && conversation[uIdx].role === 'user' && conversation[uIdx].audio) {
                 conversation[uIdx] = { role: 'user', content: '(Voice question)' };
             }
+
+            if (data.conversation_id) {
+                activeConversationId = data.conversation_id;
+            }
+            void refreshHistoryList();
         } catch (err) {
             conversation.pop();
             typingRow.remove();
@@ -772,6 +881,7 @@
     }
 
     resizeInput();
+    void refreshHistoryList();
 })();
 </script>
 @endsection

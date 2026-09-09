@@ -464,8 +464,11 @@ const API = (() => {
     serviceMgmtCategories:     ()          => request('GET',   '/service/categories'),
     createServiceCategory:     (body)      => request('POST',  '/service/categories', body),
 
-    guideChat:  (message)             => request('POST', '/guide/chat',  { message }),
-    guideVoice: (audio, mime_type)    => request('POST', '/guide/voice', { audio, mime_type }),
+    guideChat:  (message, conversationId)          => request('POST', '/guide/chat',  { message, conversation_id: conversationId || null }),
+    guideVoice: (audio, mime_type, conversationId) => request('POST', '/guide/voice', { audio, mime_type, conversation_id: conversationId || null }),
+    guideConversations:    ()   => request('GET', '/guide/conversations'),
+    guideConversationShow: (id) => request('GET', `/guide/conversations/${id}`),
+    guideConversationDelete: (id) => request('DELETE', `/guide/conversations/${id}`),
 
     // CRM
     crmProjects:     ()                   => request('GET',    '/crm/projects'),
