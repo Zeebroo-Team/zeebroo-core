@@ -17,7 +17,10 @@ return new class extends Migration
             $table->timestamps();
 
             $table->foreign('business_id')->references('id')->on('businesses')->nullOnDelete();
-            $table->index(['actor_key', 'business_id', 'last_message_at']);
+            // Explicit short name — the auto-generated one
+            // (pos_guide_conversations_actor_key_business_id_last_message_at_index)
+            // exceeds MySQL's 64-char identifier limit.
+            $table->index(['actor_key', 'business_id', 'last_message_at'], 'pos_guide_conv_actor_biz_last_msg_idx');
         });
     }
 
