@@ -16471,11 +16471,20 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
 .guide-history-list,
 .guide-history-thread {
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 8px;
-  flex: 1;
-  min-height: 120px;
+  flex: 1 1 auto;
+  min-height: 0;
   max-height: 380px;
+  scrollbar-width: thin;
+  scrollbar-color: #c7cbe6 transparent;
 }
+.guide-history-list::-webkit-scrollbar,
+.guide-history-thread::-webkit-scrollbar { width: 7px; }
+.guide-history-list::-webkit-scrollbar-thumb,
+.guide-history-thread::-webkit-scrollbar-thumb { background: #c7cbe6; border-radius: 8px; }
+.guide-history-list::-webkit-scrollbar-track,
+.guide-history-thread::-webkit-scrollbar-track { background: transparent; }
 .guide-history-loading,
 .guide-history-empty {
   padding: 24px 12px;
@@ -16586,7 +16595,11 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
   .guide-history-item-delete:hover { background: #3b1f26; color: #f87171; }
   .guide-history-msg--user { background: rgba(116,143,252,0.16); color: #dfe3ff; }
   .guide-history-msg--bot { background: #14162a; color: #c8cce8; }
+  .guide-history-list, .guide-history-thread { scrollbar-color: #3a3f66 transparent; }
+  .guide-history-list::-webkit-scrollbar-thumb, .guide-history-thread::-webkit-scrollbar-thumb { background: #3a3f66; }
 }
+:root[data-theme="dark"] .guide-history-list, :root[data-theme="dark"] .guide-history-thread { scrollbar-color: #3a3f66 transparent; }
+:root[data-theme="dark"] .guide-history-list::-webkit-scrollbar-thumb, :root[data-theme="dark"] .guide-history-thread::-webkit-scrollbar-thumb { background: #3a3f66; }
 :root[data-theme="dark"] #guide-history-panel { background: #1e2135; box-shadow: 0 10px 34px rgba(0,0,0,0.5); }
 :root[data-theme="dark"] .guide-history-header, :root[data-theme="dark"] .guide-history-footer { border-color: #2d3257; }
 :root[data-theme="dark"] .guide-history-title { color: #e5e7fb; }
