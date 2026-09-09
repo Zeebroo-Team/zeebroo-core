@@ -16410,9 +16410,197 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
 .guide-ctx-item--voice.voice-on .guide-ctx-icon { background: #dcfce7; color: #16a34a; }
 .guide-ctx-item--voice.voice-on { color: #16a34a; }
 .guide-ctx-item--chat    .guide-ctx-icon { background: #ede9fe; color: #7c3aed; }
+.guide-ctx-item--history .guide-ctx-icon { background: #e0f2fe; color: #0284c7; }
 .guide-ctx-item--reset   .guide-ctx-icon { background: #dbeafe; color: #1d4ed8; }
 .guide-ctx-item--dismiss .guide-ctx-icon { background: #fef2f2; color: #ef4444; }
 .guide-ctx-item--ds      .guide-ctx-icon { background: #f3e8ff; color: #7c3aed; }
+
+/* ── Guide chat history panel ────────────────────────────────────────────── */
+#guide-history-panel {
+  position: fixed;
+  bottom: 24px;
+  right: 130px;
+  width: 320px;
+  max-height: 480px;
+  background: #fff;
+  border-radius: 14px;
+  box-shadow: 0 10px 34px rgba(0,0,0,0.18), 0 1px 4px rgba(0,0,0,0.08);
+  z-index: 9500;
+  display: none;
+  flex-direction: column;
+  overflow: hidden;
+}
+.guide-history-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #e8ecf3;
+  flex-shrink: 0;
+}
+.guide-history-title {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 700;
+  color: #1a1a2e;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.guide-history-back,
+.guide-history-close,
+.guide-history-delete-current {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  border: none;
+  background: transparent;
+  color: #6b7280;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  flex-shrink: 0;
+  transition: background 0.12s, color 0.12s;
+}
+.guide-history-back:hover,
+.guide-history-close:hover { background: #f0f3ff; color: #4263eb; }
+.guide-history-delete-current:hover { background: #fef2f2; color: #ef4444; }
+
+.guide-history-list,
+.guide-history-thread {
+  overflow-y: auto;
+  padding: 8px;
+  flex: 1;
+  min-height: 120px;
+  max-height: 380px;
+}
+.guide-history-loading,
+.guide-history-empty {
+  padding: 24px 12px;
+  text-align: center;
+  font-size: 12.5px;
+  color: #8a90ab;
+}
+.guide-history-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 9px 8px;
+  border-radius: 9px;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.guide-history-item:hover { background: #f0f3ff; }
+.guide-history-item i { font-size: 12px; color: #4263eb; margin-top: 3px; flex-shrink: 0; }
+.guide-history-item-body { min-width: 0; flex: 1; }
+.guide-history-item-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #2d3257;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.guide-history-item-time { font-size: 11px; color: #9aa0bc; margin-top: 2px; }
+.guide-history-item-delete {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: #b0b5cc;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.12s, background 0.12s, color 0.12s;
+}
+.guide-history-item:hover .guide-history-item-delete { opacity: 1; }
+.guide-history-item-delete:hover { background: #fef2f2; color: #ef4444; }
+
+.guide-history-msg {
+  font-size: 12.5px;
+  line-height: 1.55;
+  padding: 8px 11px;
+  border-radius: 11px;
+  margin-bottom: 8px;
+  max-width: 92%;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.guide-history-msg--user {
+  background: rgba(66,99,235,0.1);
+  color: #2d3257;
+  margin-left: auto;
+  border-bottom-right-radius: 4px;
+}
+.guide-history-msg--bot {
+  background: #f3f4f8;
+  color: #2d3257;
+  white-space: normal;
+  border-bottom-left-radius: 4px;
+}
+.guide-history-msg--bot ul { margin: 4px 0 4px 14px; padding: 0; }
+.guide-history-msg--bot li { margin-bottom: 2px; }
+
+.guide-history-footer {
+  padding: 9px 12px;
+  border-top: 1px solid #e8ecf3;
+  flex-shrink: 0;
+  display: none;
+}
+.guide-history-continue {
+  width: 100%;
+  background: #4263eb;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 8px 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: background 0.12s;
+}
+.guide-history-continue:hover { background: #3451c7; }
+
+@media (prefers-color-scheme: dark) {
+  #guide-history-panel { background: #1e2135; box-shadow: 0 10px 34px rgba(0,0,0,0.5); }
+  .guide-history-header, .guide-history-footer { border-color: #2d3257; }
+  .guide-history-title { color: #e5e7fb; }
+  .guide-history-back, .guide-history-close, .guide-history-delete-current { color: #9aa0c8; }
+  .guide-history-back:hover, .guide-history-close:hover { background: #272a47; color: #748ffc; }
+  .guide-history-delete-current:hover { background: #3b1f26; color: #f87171; }
+  .guide-history-item:hover { background: #272a47; }
+  .guide-history-item-title { color: #c8cce8; }
+  .guide-history-item-time { color: #6b7199; }
+  .guide-history-item-delete { color: #5a6088; }
+  .guide-history-item-delete:hover { background: #3b1f26; color: #f87171; }
+  .guide-history-msg--user { background: rgba(116,143,252,0.16); color: #dfe3ff; }
+  .guide-history-msg--bot { background: #14162a; color: #c8cce8; }
+}
+:root[data-theme="dark"] #guide-history-panel { background: #1e2135; box-shadow: 0 10px 34px rgba(0,0,0,0.5); }
+:root[data-theme="dark"] .guide-history-header, :root[data-theme="dark"] .guide-history-footer { border-color: #2d3257; }
+:root[data-theme="dark"] .guide-history-title { color: #e5e7fb; }
+:root[data-theme="dark"] .guide-history-back, :root[data-theme="dark"] .guide-history-close, :root[data-theme="dark"] .guide-history-delete-current { color: #9aa0c8; }
+:root[data-theme="dark"] .guide-history-back:hover, :root[data-theme="dark"] .guide-history-close:hover { background: #272a47; color: #748ffc; }
+:root[data-theme="dark"] .guide-history-delete-current:hover { background: #3b1f26; color: #f87171; }
+:root[data-theme="dark"] .guide-history-item:hover { background: #272a47; }
+:root[data-theme="dark"] .guide-history-item-title { color: #c8cce8; }
+:root[data-theme="dark"] .guide-history-item-time { color: #6b7199; }
+:root[data-theme="dark"] .guide-history-item-delete { color: #5a6088; }
+:root[data-theme="dark"] .guide-history-item-delete:hover { background: #3b1f26; color: #f87171; }
+:root[data-theme="dark"] .guide-history-msg--user { background: rgba(116,143,252,0.16); color: #dfe3ff; }
+:root[data-theme="dark"] .guide-history-msg--bot { background: #14162a; color: #c8cce8; }
+:root[data-theme="light"] #guide-history-panel { background: #fff; }
 .guide-ctx-group-label {
   padding: 3px 14px 2px;
   font-size: 10.5px;

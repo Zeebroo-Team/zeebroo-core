@@ -16394,6 +16394,10 @@
     <span class="guide-ctx-icon"><i class="fa fa-comment-dots"></i></span>
     Open Chat
   </div>
+  <div class="guide-ctx-item guide-ctx-item--history" id="guide-ctx-history" role="menuitem">
+    <span class="guide-ctx-icon"><i class="fa fa-clock-rotate-left"></i></span>
+    Chat History
+  </div>
 
   <!-- ── Design Studio quick actions (visible only on Design tab) ── -->
   <div class="guide-ctx-sep guide-ctx-ds-only" style="display:none"></div>
@@ -16433,6 +16437,21 @@
   <div class="guide-ctx-item guide-ctx-item--dismiss" id="guide-ctx-dismiss" role="menuitem">
     <span class="guide-ctx-icon"><i class="fa fa-eye-slash"></i></span>
     Dismiss Guide
+  </div>
+</div>
+
+<!-- ── Guide chat history panel ──────────────────────────────────────── -->
+<div id="guide-history-panel" style="display:none">
+  <div class="guide-history-header">
+    <button type="button" id="guide-history-back" class="guide-history-back" style="display:none" title="Back to conversations"><i class="fa fa-arrow-left"></i></button>
+    <span id="guide-history-title" class="guide-history-title">Chat History</span>
+    <button type="button" id="guide-history-delete-current" class="guide-history-delete-current" style="display:none" title="Delete this conversation"><i class="fa fa-trash"></i></button>
+    <button type="button" id="guide-history-close" class="guide-history-close" title="Close"><i class="fa fa-xmark"></i></button>
+  </div>
+  <div id="guide-history-list" class="guide-history-list"></div>
+  <div id="guide-history-thread" class="guide-history-thread" style="display:none"></div>
+  <div id="guide-history-footer" class="guide-history-footer">
+    <button type="button" id="guide-history-continue" class="guide-history-continue"><i class="fa fa-comment-dots"></i> Continue this chat</button>
   </div>
 </div>
 
