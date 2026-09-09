@@ -11137,9 +11137,25 @@
           <label class="bf-label">OWNER ADDRESS / LOCATION <span class="bf-opt">optional</span></label>
           <textarea id="rc-owner-address" class="bf-input" rows="2" placeholder="Mailing address or locality" style="resize:vertical"></textarea>
         </div>
-        <div class="bf-group" style="margin-top:12px">
-          <label class="bf-label">OWNER BANK ACCOUNT DETAILS <span class="bf-opt">optional</span></label>
-          <textarea id="rc-owner-bank" class="bf-input" rows="2" placeholder="Bank name, account name, IBAN/account number" style="resize:vertical"></textarea>
+        <div class="bf-row-2" style="margin-top:12px">
+          <div class="bf-group">
+            <label class="bf-label">BANK NAME <span class="bf-opt">optional</span></label>
+            <input type="text" id="rc-owner-bank-name" class="bf-input" placeholder="e.g. Seylan Bank">
+          </div>
+          <div class="bf-group">
+            <label class="bf-label">BRANCH <span class="bf-opt">optional</span></label>
+            <input type="text" id="rc-owner-bank-branch" class="bf-input" placeholder="e.g. Colombo">
+          </div>
+        </div>
+        <div class="bf-row-2" style="margin-top:12px">
+          <div class="bf-group">
+            <label class="bf-label">ACCOUNT HOLDER NAME <span class="bf-opt">optional</span></label>
+            <input type="text" id="rc-owner-bank-acc-name" class="bf-input" placeholder="Name on the account">
+          </div>
+          <div class="bf-group">
+            <label class="bf-label">ACCOUNT NUMBER <span class="bf-opt">optional</span></label>
+            <input type="text" id="rc-owner-bank-acc-no" class="bf-input" placeholder="Account / IBAN number">
+          </div>
         </div>
         <div class="bf-group" style="margin-top:12px">
           <label class="bf-label">OWNER NOTES <span class="bf-opt">optional · stored on contact card</span></label>
@@ -11340,7 +11356,19 @@
       <div class="lpm-info-block lpm-amount-block">
         <div class="lpm-amount-val" id="rpm-amount">—</div>
       </div>
-      <div style="margin-top:14px">
+
+      <!-- Recording option -->
+      <div class="lpm-field-label" style="margin-top:16px">RECORDING OPTION</div>
+      <label class="lpm-radio-row">
+        <input type="radio" name="rpm-option" value="ledger" id="rpm-opt-ledger" checked>
+        <span class="lpm-radio-label">Record in ledger (debit account)</span>
+      </label>
+      <label class="lpm-radio-row">
+        <input type="radio" name="rpm-option" value="external" id="rpm-opt-external">
+        <span class="lpm-radio-label">Already paid &mdash; no ledger entry</span>
+      </label>
+
+      <div id="rpm-account-wrap" style="margin-top:14px">
         <div class="lpm-field-label">DEBIT FROM ACCOUNT</div>
         <select class="lpm-select" id="rpm-account-select">
           <option value="">Loading accounts…</option>
@@ -11350,7 +11378,7 @@
       <button class="lpm-confirm-btn" id="rpm-confirm-btn">
         <i class="fa fa-circle-check"></i> Confirm payment
       </button>
-      <p class="lpm-note">Creates a ledger row for this billing date and reduces the selected account balance by the rent amount.</p>
+      <p class="lpm-note" id="rpm-note">Creates a ledger row for this billing date and reduces the selected account balance by the rent amount.</p>
     </div>
   </div>
 </div>

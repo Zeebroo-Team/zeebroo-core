@@ -85,6 +85,11 @@ class Rental extends Model
             ->orderByDesc('occurrence_date');
     }
 
+    public function externalBillingMarks(): HasMany
+    {
+        return $this->hasMany(RentalExternalBillingMark::class);
+    }
+
     public static function recurringTypes(): array
     {
         return [
