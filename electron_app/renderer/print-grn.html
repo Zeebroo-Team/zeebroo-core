@@ -285,7 +285,7 @@ body {
     return new Date(d + 'T00:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
   }
 
-  function buildGrnHtml(g, cur, lineItemCols, biz) {
+  function buildGrnHtml(g, money, lineItemCols, biz) {
     // Payment status badge
     var payStatus = g.payment_status || 'unpaid';
     if (g.payment_method === 'credit') payStatus = 'credit';
@@ -329,14 +329,14 @@ body {
         + '<td class="bd">' + escH(it.product_name || '—') + '</td>'
         + '<td class="muted">' + escH(it.sku || '—') + '</td>'
         + '<td class="r">' + qtyStr + '</td>'
-        + '<td class="r">' + cur + cost.toFixed(2) + '</td>'
+        + '<td class="r">' + money(cost) + '</td>'
         + (showUc   ? '<td class="r">' + escH(it.units_per_case != null ? it.units_per_case : '—') + '</td>' : '')
         + (showUom  ? '<td>' + escH(it.uom || '—') + '</td>'                                                 : '')
         + (showDisc ? '<td class="r">' + (disc > 0 ? disc.toFixed(2) + '%' : '—') + '</td>'                  : '')
         + (showNgv
-            ? '<td class="r">' + cur + gross.toFixed(2) + '</td>'
-              + '<td class="r bd" style="color:#10b981">' + cur + net.toFixed(2) + '</td>'
-            : '<td class="r bd">' + cur + parseFloat(it.line_total).toFixed(2) + '</td>')
+            ? '<td class="r">' + money(gross) + '</td>'
+              + '<td class="r bd" style="color:#10b981">' + money(net) + '</td>'
+            : '<td class="r bd">' + money(it.line_total) + '</td>')
         + '</tr>';
     }).join('');
 
@@ -346,7 +346,7 @@ body {
     var amountPaid  = parseFloat(g.amount_paid || 0);
     var outstanding = parseFloat(g.amount_outstanding || 0);
 
-    var totalsHtml = '<div class="pgrn-total-row"><span>Subtotal</span><span>' + cur + subtotal.toFixed(2) + '</span></div>';
+    var totalsHtml = '<div class="pgrn-total-row"><span>Subtotal</span><span>' + money(subtotal) + '</span></div>';
 
     // Expense lines
     var expLines = g.expense_lines || [];
@@ -356,16 +356,16 @@ body {
       var lbl = e.type === 'pct' ? (val.toFixed(2).replace(/\.?0+$/, '') + '%') : 'Flat';
       totalsHtml += '<div class="pgrn-total-row expense">'
         + '<span>' + escH(e.name) + '<span class="pgrn-exp-badge">' + escH(lbl) + '</span></span>'
-        + '<span>+' + cur + amt.toFixed(2) + '</span>'
+        + '<span>+' + money(amt) + '</span>'
         + '</div>';
     });
 
-    totalsHtml += '<div class="pgrn-total-row grand"><span>Total</span><span>' + cur + total.toFixed(2) + '</span></div>';
+    totalsHtml += '<div class="pgrn-total-row grand"><span>Total</span><span>' + money(total) + '</span></div>';
 
     if (g.payment_method !== 'credit') {
-      totalsHtml += '<div class="pgrn-total-row paid"><span>Amount Paid</span><span>' + cur + amountPaid.toFixed(2) + '</span></div>';
+      totalsHtml += '<div class="pgrn-total-row paid"><span>Amount Paid</span><span>' + money(amountPaid) + '</span></div>';
       if (outstanding > 0) {
-        totalsHtml += '<div class="pgrn-total-row owed"><span>Outstanding</span><span>' + cur + outstanding.toFixed(2) + '</span></div>';
+        totalsHtml += '<div class="pgrn-total-row owed"><span>Outstanding</span><span>' + money(outstanding) + '</span></div>';
       }
     }
 
@@ -381,7 +381,7 @@ body {
             return '<tr>'
               + '<td>' + escH(fmtDate(p.date)) + '</td>'
               + '<td>' + escH(p.account || '—') + '</td>'
-              + '<td class="r">' + cur + parseFloat(p.amount).toFixed(2) + '</td>'
+              + '<td class="r">' + money(p.amount) + '</td>'
               + '</tr>';
           }).join('')
         + '</tbody></table>';
@@ -466,11 +466,17 @@ body {
     var g           = data.grn;
     var lh          = data.letterhead;
     var cur         = data.currency || '';
+    var curBefore   = data.currencyPosition === 'before';
+    var money       = function(v) {
+      var num = parseFloat(v || 0).toFixed(2);
+      if (!cur) return num;
+      return curBefore ? (cur + ' ' + num) : (num + ' ' + cur);
+    };
     var lineItemCols = data.lineItemCols || {};
     var biz         = data.bizSettings || {};
 
     document.getElementById('pgrn-topbar-title').textContent = g.grn_number + ' — Goods Receive Note';
-    document.getElementById('pgrn-content').innerHTML = buildGrnHtml(g, cur, lineItemCols, biz);
+    document.getElementById('pgrn-content').innerHTML = buildGrnHtml(g, money, lineItemCols, biz);
 
     if (lh && lh.canvas_json) {
       var imgData = await renderLetterhead(lh.canvas_json, lh.width, lh.height);

@@ -50,6 +50,9 @@ class PosSettingsService
 
     public const KEY_BUSINESS_LOGO_URL = 'business.logo_url';
 
+    /** @var string `before` | `after` — where the currency code sits relative to the amount */
+    public const KEY_CURRENCY_POSITION = 'business.currency_position';
+
     public const KEY_RECEIPT_ADDRESS = 'pos.receipt_address';
 
     /** @var string `en` | `si` | `ta` */
@@ -122,6 +125,10 @@ class PosSettingsService
             'business_name'    => (string) $business->name,
             'slug'             => Str::slug($business->name),
             'currency'         => (string) ($business->getSetting('business.currency', '') ?: ''),
+            'currency_position' => (function () use ($business) {
+                $v = strtolower(trim((string) ($business->getSetting(self::KEY_CURRENCY_POSITION, 'after') ?: 'after')));
+                return in_array($v, ['before', 'after'], true) ? $v : 'after';
+            })(),
             'timezone'         => (string) ($business->getSetting('business.timezone', '') ?: ''),
             'business_logo_url' => (string) ($business->getSetting(self::KEY_BUSINESS_LOGO_URL, '') ?: ''),
             // POS
@@ -453,6 +460,10 @@ class PosSettingsService
         }
         if (array_key_exists('currency', $data)) {
             $business->setSetting('business.currency', strtoupper(trim((string) ($data['currency'] ?? ''))));
+        }
+        if (array_key_exists('currency_position', $data)) {
+            $position = strtolower(trim((string) ($data['currency_position'] ?? 'after')));
+            $business->setSetting(self::KEY_CURRENCY_POSITION, in_array($position, ['before', 'after'], true) ? $position : 'after');
         }
         if (array_key_exists('timezone', $data)) {
             $business->setSetting('business.timezone', trim((string) ($data['timezone'] ?? '')));

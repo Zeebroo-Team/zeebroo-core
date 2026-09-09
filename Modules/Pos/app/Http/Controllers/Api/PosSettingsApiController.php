@@ -155,6 +155,7 @@ class PosSettingsApiController extends Controller
         $validated = $request->validate([
             'business_name'               => ['nullable', 'string', 'max:255'],
             'currency'                    => ['nullable', 'string', 'max:10'],
+            'currency_position'           => ['nullable', 'string', 'in:before,after'],
             'timezone'                    => ['nullable', 'string', 'max:80'],
             'default_deposit_account_id'  => ['nullable', 'integer', 'min:1'],
             'discount_field_enabled'      => ['nullable', 'boolean'],

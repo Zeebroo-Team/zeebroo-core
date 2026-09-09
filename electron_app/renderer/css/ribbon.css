@@ -5623,6 +5623,25 @@ body.dark .sal-void-notice { color: #f87171; background: rgba(239,68,68,.12); bo
 }
 .psm-hint { font-size: 11px; color: var(--text-muted); margin-top: 5px; display: block; }
 
+/* Currency position picker */
+.psm-currency-pos-row { display: flex; flex-direction: column; gap: 6px; }
+.psm-radio-card {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 12px; border: 1px solid var(--border); border-radius: 9px;
+  background: var(--surface2); cursor: pointer; transition: border-color .15s, background .15s;
+}
+.psm-radio-card:hover { border-color: var(--accent); }
+.psm-radio-card input { margin: 0; accent-color: var(--accent); width: 14px; height: 14px; flex-shrink: 0; }
+.psm-radio-card-label { flex: 1; font-size: 12.5px; font-weight: 600; color: var(--text); }
+.psm-radio-card-preview {
+  font-size: 11px; font-weight: 700; color: var(--text-muted);
+  font-variant-numeric: tabular-nums; letter-spacing: .01em;
+  padding: 3px 9px; border-radius: 20px; background: var(--surface3);
+  transition: color .15s, background .15s;
+}
+.psm-radio-card:has(input:checked) { border-color: var(--accent); background: rgba(78,142,247,.06); }
+.psm-radio-card:has(input:checked) .psm-radio-card-preview { color: #fff; background: var(--accent); }
+
 /* Business logo picker in settings */
 .psm-logo-wrap {
   border: 1.5px dashed var(--border); border-radius: 8px; height: 80px;
@@ -6932,6 +6951,7 @@ body.dark .han-icon-amber  { color: #fbbf24; }
   display: flex; align-items: center; gap: 5px;
 }
 .co-gt-row { display: flex; align-items: baseline; gap: 8px; }
+.co-gt-row.cur-before { flex-direction: row-reverse; justify-content: flex-end; }
 .co-gt-amount {
   font-size: 38px; font-weight: 900; letter-spacing: -.03em;
   color: #b45309; font-variant-numeric: tabular-nums; line-height: 1;

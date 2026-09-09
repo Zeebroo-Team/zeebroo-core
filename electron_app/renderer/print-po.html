@@ -236,7 +236,7 @@ body {
     return new Date(d + 'T00:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
   }
 
-  function buildPoHtml(po, cur) {
+  function buildPoHtml(po, money) {
     var statusCls = 'ppo-badge-' + (po.status || 'draft');
     var statusLbl = po.status_label || po.status || '';
 
@@ -248,16 +248,16 @@ body {
         + '<td class="bd">' + escH(it.product_name || '—') + '</td>'
         + '<td class="muted">' + escH(it.sku || '—') + '</td>'
         + '<td class="r">' + qtyStr + '</td>'
-        + '<td class="r">' + cur + parseFloat(it.unit_cost).toFixed(2) + '</td>'
-        + '<td class="r bd">' + cur + parseFloat(it.line_total).toFixed(2) + '</td>'
+        + '<td class="r">' + money(it.unit_cost) + '</td>'
+        + '<td class="r bd">' + money(it.line_total) + '</td>'
         + '</tr>';
     }).join('');
 
     var subtotal = parseFloat(po.subtotal || po.total || 0);
     var total    = parseFloat(po.total || 0);
 
-    var totalsHtml = '<div class="ppo-total-row"><span>Subtotal</span><span>' + cur + subtotal.toFixed(2) + '</span></div>'
-      + '<div class="ppo-total-row grand"><span>Total</span><span>' + cur + total.toFixed(2) + '</span></div>';
+    var totalsHtml = '<div class="ppo-total-row"><span>Subtotal</span><span>' + money(subtotal) + '</span></div>'
+      + '<div class="ppo-total-row grand"><span>Total</span><span>' + money(total) + '</span></div>';
 
     return ''
       + '<div class="ppo-hdr">'
@@ -326,9 +326,15 @@ body {
     var po  = data.po;
     var lh  = data.letterhead;
     var cur = data.currency || '';
+    var curBefore = data.currencyPosition === 'before';
+    var money = function(v) {
+      var num = parseFloat(v || 0).toFixed(2);
+      if (!cur) return num;
+      return curBefore ? (cur + ' ' + num) : (num + ' ' + cur);
+    };
 
     document.getElementById('ppo-topbar-title').textContent = po.po_number + ' — Purchase Order';
-    document.getElementById('ppo-content').innerHTML = buildPoHtml(po, cur);
+    document.getElementById('ppo-content').innerHTML = buildPoHtml(po, money);
 
     if (lh && lh.canvas_json) {
       var imgData = await renderLetterhead(lh.canvas_json, lh.width, lh.height);
