@@ -282,6 +282,13 @@
           <div class="ob-step-item">
             <div class="ob-step-row">
               <div class="ob-step-circle" data-ob-dot="4"><span>4</span></div>
+              <span class="ob-step-lbl">PACKAGE</span>
+            </div>
+          </div>
+          <div class="ob-step-vline" data-ob-vline="4"></div>
+          <div class="ob-step-item">
+            <div class="ob-step-row">
+              <div class="ob-step-circle" data-ob-dot="5"><span>5</span></div>
               <span class="ob-step-lbl">FEATURES</span>
             </div>
           </div>
@@ -333,11 +340,18 @@
             <div class="ob-cat-grid" id="ob-cat-grid"></div>
           </div>
 
-          <!-- Panel 4: features -->
+          <!-- Panel 4: package selection -->
           <div class="ob-panel ob-main-panel" id="ob-panel-4" style="display:none">
-            <h1 class="ob-main-title">What do you need?</h1>
-            <p class="ob-main-subtitle">Choose the features to enable for your account</p>
-            <div class="ob-feature-list" id="ob-feature-list"></div>
+            <h1 class="ob-main-title">Choose your package</h1>
+            <p class="ob-main-subtitle">Pick the plan that fits your business — its features unlock automatically</p>
+            <div class="ob-pkg-grid" id="ob-pkg-grid"></div>
+          </div>
+
+          <!-- Panel 5: features (read-only preview, locked to the selected package) -->
+          <div class="ob-panel ob-main-panel" id="ob-panel-5" style="display:none">
+            <h1 class="ob-main-title">What do you get?</h1>
+            <p class="ob-main-subtitle" id="ob-panel-5-sub">These features are included in your selected package</p>
+            <div class="ob-feature-list ob-feature-list-locked" id="ob-feature-list"></div>
           </div>
         </div>
 
@@ -347,12 +361,14 @@
             <button class="ob-back-link" id="ob-back-2-btn" style="display:none"><i class="fa fa-arrow-left"></i> Back</button>
             <button class="ob-back-link" id="ob-back-3-btn" style="display:none"><i class="fa fa-arrow-left"></i> Back</button>
             <button class="ob-back-link" id="ob-back-4-btn" style="display:none"><i class="fa fa-arrow-left"></i> Back</button>
+            <button class="ob-back-link" id="ob-back-5-btn" style="display:none"><i class="fa fa-arrow-left"></i> Back, choose another package</button>
             <span class="ob-secure-badge"><i class="fa fa-lock"></i> Your data is secure and private.</span>
           </div>
           <div class="ob-bottom-right">
             <button class="ob-continue-btn" id="ob-next-btn">Continue <i class="fa fa-arrow-right"></i></button>
             <button class="ob-continue-btn" id="ob-next-2-btn" style="display:none">Continue <i class="fa fa-arrow-right"></i></button>
             <button class="ob-continue-btn" id="ob-next-3-btn" style="display:none">Continue <i class="fa fa-arrow-right"></i></button>
+            <button class="ob-continue-btn" id="ob-next-4-btn" style="display:none" disabled>Continue <i class="fa fa-arrow-right"></i></button>
             <button class="ob-continue-btn" id="signup-btn" style="display:none"><i class="fa fa-check"></i> Create Account</button>
           </div>
         </div>
@@ -15354,11 +15370,16 @@
       <div class="bwz-track-line" data-bbwz-line="1"></div>
       <div class="bwz-track-step" data-bbwz-dot="2">
         <div class="bwz-track-circle"><span>2</span></div>
-        <span class="bwz-track-lbl">Features</span>
+        <span class="bwz-track-lbl">Package</span>
       </div>
       <div class="bwz-track-line" data-bbwz-line="2"></div>
       <div class="bwz-track-step" data-bbwz-dot="3">
         <div class="bwz-track-circle"><span>3</span></div>
+        <span class="bwz-track-lbl">Features</span>
+      </div>
+      <div class="bwz-track-line" data-bbwz-line="3"></div>
+      <div class="bwz-track-step" data-bbwz-dot="4">
+        <div class="bwz-track-circle"><span>4</span></div>
         <span class="bwz-track-lbl">Review</span>
       </div>
     </div>
@@ -15379,16 +15400,25 @@
       </div>
     </div>
 
-    <!-- Panel 2: features -->
+    <!-- Panel 2: package selection -->
     <div class="bwz-panel" id="bbwz-panel-2" style="display:none">
-      <div class="bwz-panel-icon bwz-panel-icon--purple"><i class="fa fa-puzzle-piece"></i></div>
-      <div class="bwz-panel-title">Select Features</div>
-      <div class="bwz-panel-sub">Choose the modules to enable for this business.</div>
-      <div class="bbwz-feat-list" id="bbwz-feat-list"></div>
+      <div class="bwz-panel-icon" style="background:var(--accent);box-shadow:0 6px 18px rgba(78,142,247,.32)"><i class="fa fa-box-open"></i></div>
+      <div class="bwz-panel-title">Choose a Package</div>
+      <div class="bwz-panel-sub">Pick the plan for this business — its features unlock automatically.</div>
+      <div id="bbwz-pkg-alert" class="alert" style="display:none"></div>
+      <div class="ob-pkg-grid" id="bbwz-pkg-grid"></div>
     </div>
 
-    <!-- Panel 3: review -->
+    <!-- Panel 3: features (read-only preview, locked to the selected package) -->
     <div class="bwz-panel" id="bbwz-panel-3" style="display:none">
+      <div class="bwz-panel-icon bwz-panel-icon--purple"><i class="fa fa-puzzle-piece"></i></div>
+      <div class="bwz-panel-title">Included Features</div>
+      <div class="bwz-panel-sub">These features are included in the selected package.</div>
+      <div class="ob-feature-list ob-feature-list-locked" id="bbwz-feat-list"></div>
+    </div>
+
+    <!-- Panel 4: review -->
+    <div class="bwz-panel" id="bbwz-panel-4" style="display:none">
       <div class="bwz-panel-icon bwz-panel-icon--green"><i class="fa fa-circle-check"></i></div>
       <div class="bwz-panel-title">Review &amp; Create</div>
       <div class="bwz-panel-sub">Confirm the details before creating your business.</div>

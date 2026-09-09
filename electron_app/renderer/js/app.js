@@ -4976,6 +4976,8 @@ function showLogin() {
 let _obStep = 1;
 let _obSelectedCat = '';
 let _obFeatureSet  = new Set(['point_of_sale', 'product_management', 'stock_management']);
+let _obPackages = [];
+let _obSelectedPackage = null;
 
 const _obCatIcons = {
   education:              'fa-graduation-cap',
@@ -5035,7 +5037,8 @@ const _obStepSubs = {
   1: 'Your login credentials',
   2: 'About you & your business',
   3: "What's your industry?",
-  4: 'Which features do you need?',
+  4: 'Pick the plan that fits your business',
+  5: 'Which features do you get?',
 };
 
 const _obFeatureDefs = [
@@ -5091,12 +5094,76 @@ function _obBuildCatGrid(cats) {
   });
 }
 
-function _obBuildFeatureList() {
-  const list = $('#ob-feature-list');
+const OB_PKG_FALLBACK_IMG = 'data:image/svg+xml;utf8,' + encodeURIComponent(
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+     <rect width="64" height="64" rx="14" fill="#4e8ef7" fill-opacity=".12"/>
+     <path d="M32 13l17 9v20l-17 9-17-9V22l17-9z" fill="none" stroke="#4e8ef7" stroke-width="2.5" stroke-linejoin="round"/>
+     <path d="M15 22l17 9 17-9M32 31v20" fill="none" stroke="#4e8ef7" stroke-width="2.5" stroke-linejoin="round"/>
+   </svg>`
+);
+
+function _obPkgPriceHtml(pkg) {
+  if (pkg.is_free) return `<span class="ob-pkg-price">Free</span>`;
+  const price = Number(pkg.price || 0);
+  const disc  = pkg.discounted_price != null ? Number(pkg.discounted_price) : null;
+  if (disc != null && disc < price) {
+    return `<span class="ob-pkg-price">$${disc.toFixed(2)}</span><span class="ob-pkg-price-strike">$${price.toFixed(2)}</span>`;
+  }
+  return `<span class="ob-pkg-price">$${price.toFixed(2)}</span>`;
+}
+
+// Shared renderer — a clickable package-selection grid. Used by both the
+// signup onboarding wizard and the "Add Business" wizard.
+function _renderPkgGrid(containerSel, packages, selectedId, onSelect) {
+  const grid = $(containerSel);
+  if (!grid) return;
+  if (!packages.length) {
+    grid.innerHTML = `<div class="ob-pkg-empty"><i class="fa fa-spinner fa-spin"></i> Loading packages…</div>`;
+    return;
+  }
+  grid.innerHTML = packages.map(pkg => {
+    const active = selectedId === pkg.id ? ' active' : '';
+    const labels = (pkg.feature_labels || []).slice(0, 4);
+    const extra  = (pkg.feature_labels || []).length - labels.length;
+    return `<div class="ob-pkg-card${active}" data-pkg-id="${pkg.id}">
+      <div class="ob-pkg-check"><i class="fa fa-check"></i></div>
+      <div class="ob-pkg-img-wrap">
+        <img src="${escHtml(pkg.image_url || OB_PKG_FALLBACK_IMG)}" alt="${escHtml(pkg.name)}" class="ob-pkg-img">
+      </div>
+      <div class="ob-pkg-name">${escHtml(pkg.name)}</div>
+      <div class="ob-pkg-price-row">${_obPkgPriceHtml(pkg)}</div>
+      ${pkg.description ? `<div class="ob-pkg-desc">${escHtml(pkg.description)}</div>` : ''}
+      <div class="ob-pkg-feat-tags">
+        ${labels.map(l => `<span class="ob-pkg-tag">${escHtml(l)}</span>`).join('')}
+        ${extra > 0 ? `<span class="ob-pkg-tag ob-pkg-tag-more">+${extra}</span>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+  grid.querySelectorAll('.ob-pkg-img').forEach(img => {
+    img.addEventListener('error', () => { img.src = OB_PKG_FALLBACK_IMG; }, { once: true });
+  });
+  grid.querySelectorAll('.ob-pkg-card').forEach(card => {
+    card.addEventListener('click', () => {
+      const id = Number(card.dataset.pkgId);
+      const pkg = packages.find(p => p.id === id) || null;
+      grid.querySelectorAll('.ob-pkg-card').forEach(c => c.classList.remove('active'));
+      card.classList.add('active');
+      onSelect(pkg);
+    });
+  });
+}
+
+// Shared renderer — a read-only feature grid locked to a package's feature list.
+// Included features are highlighted; everything else is dimmed with a lock icon.
+function _renderLockedFeatureGrid(containerSel, includedKeys) {
+  const list = $(containerSel);
+  if (!list) return;
   list.innerHTML = _obFeatureDefs.map(f => {
-    const active = _obFeatureSet.has(f.key) ? ' active' : '';
-    return `<div class="ob-feat-card${active}" data-fkey="${f.key}" style="--feat-color:${f.color}">
+    const included = includedKeys.has(f.key);
+    const cls = included ? ' active' : ' locked-off';
+    return `<div class="ob-feat-card ob-feat-card-locked${cls}" style="--feat-color:${f.color}">
       <div class="ob-feat-check"><i class="fa fa-check"></i></div>
+      <div class="ob-feat-lock"><i class="fa fa-lock"></i></div>
       <div class="ob-feat-img-wrap">
         <img src="${escHtml(f.img)}" alt="${escHtml(f.name)}" class="ob-feat-img">
       </div>
@@ -5107,22 +5174,20 @@ function _obBuildFeatureList() {
       </div>
     </div>`;
   }).join('');
-  const _OB_MUTUAL_EXCL = { restaurant: 'point_of_sale', point_of_sale: 'restaurant' };
-  list.querySelectorAll('.ob-feat-card').forEach(card => {
-    card.addEventListener('click', () => {
-      const key = card.dataset.fkey;
-      if (_obFeatureSet.has(key)) {
-        _obFeatureSet.delete(key); card.classList.remove('active');
-      } else {
-        _obFeatureSet.add(key); card.classList.add('active');
-        const rival = _OB_MUTUAL_EXCL[key];
-        if (rival && _obFeatureSet.has(rival)) {
-          _obFeatureSet.delete(rival);
-          list.querySelector(`.ob-feat-card[data-fkey="${rival}"]`)?.classList.remove('active');
-        }
-      }
-    });
+}
+
+function _obBuildPkgGrid() {
+  _renderPkgGrid('#ob-pkg-grid', _obPackages, _obSelectedPackage ? _obSelectedPackage.id : null, pkg => {
+    _obSelectedPackage = pkg;
+    const nextBtn = $('#ob-next-4-btn');
+    if (nextBtn) nextBtn.disabled = !pkg;
   });
+}
+
+function _obBuildFeatureList() {
+  const includedKeys = new Set(_obSelectedPackage ? (_obSelectedPackage.features || []) : []);
+  _renderLockedFeatureGrid('#ob-feature-list', includedKeys);
+  _obFeatureSet = new Set(_obFeatureDefs.map(f => f.key).filter(k => includedKeys.has(k)));
 }
 
 function _obSetStep(n) {
@@ -5141,24 +5206,31 @@ function _obSetStep(n) {
   });
 
   // Show/hide panels
-  ['1','2','3','4'].forEach(i => {
+  ['1','2','3','4','5'].forEach(i => {
     const p = $(`#ob-panel-${i}`);
     if (p) p.style.display = (String(n) === i) ? '' : 'none';
   });
 
   // Show/hide bottom-bar back buttons
-  const backIds = { 2: 'ob-back-2-btn', 3: 'ob-back-3-btn', 4: 'ob-back-4-btn' };
+  const backIds = { 2: 'ob-back-2-btn', 3: 'ob-back-3-btn', 4: 'ob-back-4-btn', 5: 'ob-back-5-btn' };
   Object.values(backIds).forEach(id => { const el = $(`#${id}`); if (el) el.style.display = 'none'; });
   if (backIds[n]) { const el = $(`#${backIds[n]}`); if (el) el.style.display = ''; }
 
   // Show/hide bottom-bar next/submit buttons
-  const nextIds = { 1:'ob-next-btn', 2:'ob-next-2-btn', 3:'ob-next-3-btn', 4:'signup-btn' };
+  const nextIds = { 1:'ob-next-btn', 2:'ob-next-2-btn', 3:'ob-next-3-btn', 4:'ob-next-4-btn', 5:'signup-btn' };
   Object.values(nextIds).forEach(id => { const el = $(`#${id}`); if (el) el.style.display = 'none'; });
   { const el = $(`#${nextIds[n]}`); if (el) el.style.display = ''; }
 
   // Update progress bar (hidden but JS still sets it)
   const pb = $('#ob-progress-bar');
-  if (pb) pb.style.width = `${n * 25}%`;
+  if (pb) pb.style.width = `${n * 20}%`;
+
+  if (n === 5) {
+    const sub = $('#ob-panel-5-sub');
+    if (sub) sub.textContent = _obSelectedPackage
+      ? `These features are included in the "${_obSelectedPackage.name}" package`
+      : 'These features are included in your selected package';
+  }
 
   $('#signup-alert').style.display = 'none';
   const focusMap = { 1: '#su-email', 2: '#su-name' };
@@ -5178,8 +5250,11 @@ function showSignup() {
   $('#su-name').value     = '';
   $('#su-biz').value      = '';
   _obSelectedCat = '';
-  _obFeatureSet  = new Set(['point_of_sale', 'product_management', 'stock_management']);
-  _obBuildFeatureList();
+  _obFeatureSet  = new Set();
+  _obPackages = [];
+  _obSelectedPackage = null;
+  const pkgNextBtn = $('#ob-next-4-btn');
+  if (pkgNextBtn) pkgNextBtn.disabled = true;
   _obSetStep(1);
 }
 
@@ -7772,11 +7847,32 @@ $('#ob-back-3-btn').addEventListener('click', () => _obSetStep(2));
 $('#ob-next-3-btn').addEventListener('click', () => {
   const alert = $('#signup-alert');
   if (!_obSelectedCat) { showAlert(alert, 'Please select your industry'); return; }
-  _obBuildFeatureList();
   _obSetStep(4);
+  _obBuildPkgGrid();
+  API.packages().then(res => {
+    const pkgs = res.body?.data;
+    if (Array.isArray(pkgs)) {
+      _obPackages = pkgs;
+      if (_obSelectedPackage) {
+        _obSelectedPackage = _obPackages.find(p => p.id === _obSelectedPackage.id) || null;
+      }
+      _obBuildPkgGrid();
+    }
+  });
 });
 
 $('#ob-back-4-btn').addEventListener('click', () => _obSetStep(3));
+$('#ob-next-4-btn').addEventListener('click', () => {
+  const alert = $('#signup-alert');
+  if (!_obSelectedPackage) { showAlert(alert, 'Please select a package'); return; }
+  _obBuildFeatureList();
+  _obSetStep(5);
+});
+
+$('#ob-back-5-btn').addEventListener('click', () => {
+  _obSetStep(4);
+  _obBuildPkgGrid();
+});
 
 // Password visibility toggle
 $('#su-pw-toggle').addEventListener('click', () => {
@@ -7796,19 +7892,21 @@ async function doSignup() {
   const biz      = $('#su-biz').value.trim();
   const category = _obSelectedCat;
   const features = [..._obFeatureSet];
+  const packageId = _obSelectedPackage?.id || null;
   const btn      = $('#signup-btn');
   const alert    = $('#signup-alert');
 
-  if (!name)     { _obSetStep(2); showAlert(alert, 'Please enter your name'); return; }
-  if (!biz)      { _obSetStep(2); showAlert(alert, 'Please enter a business name'); return; }
-  if (!category) { _obSetStep(3); showAlert(alert, 'Please select your industry'); return; }
+  if (!name)      { _obSetStep(2); showAlert(alert, 'Please enter your name'); return; }
+  if (!biz)       { _obSetStep(2); showAlert(alert, 'Please enter a business name'); return; }
+  if (!category)  { _obSetStep(3); showAlert(alert, 'Please select your industry'); return; }
+  if (!packageId) { _obSetStep(4); showAlert(alert, 'Please select a package'); return; }
 
   btn.disabled = true;
   btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Creating account…';
   alert.style.display = 'none';
 
   const deviceName = state.config?.device_name || 'pos-desktop-1';
-  const res = await API.register(name, biz, category, features, email, password, deviceName);
+  const res = await API.register(name, biz, category, features, email, password, deviceName, packageId);
 
   btn.disabled = false;
   btn.innerHTML = '<i class="fa fa-check"></i>&nbsp; Create Account';
@@ -22225,16 +22323,20 @@ document.addEventListener('click', e => {
 // ── End business/branch switcher ──────────────────────────────────────────
 
 // ── Business onboarding wizard ─────────────────────────────────────────────
-const _bbwz = { step: 1, selectedCat: null, selectedFeatures: new Set(), cats: [] };
+const _bbwz = { step: 1, selectedCat: null, selectedFeatures: new Set(), cats: [], packages: [], selectedPackage: null };
 
 function _bbwzOpen() {
   _bizSwClose();
   _bbwz.step = 1;
   _bbwz.selectedCat = null;
   _bbwz.selectedFeatures = new Set();
+  _bbwz.selectedPackage = null;
   $('#bbwz-name').value = '';
   $('#bbwz-alert').style.display = 'none';
+  $('#bbwz-pkg-alert').style.display = 'none';
   $('#bbwz-submit-alert').style.display = 'none';
+  const nextBtn = $('#bbwz-next-btn');
+  if (nextBtn) nextBtn.disabled = false;
   _bbwzSetStep(1);
   if (_bbwz.cats.length) {
     _bbwzBuildCatGrid();
@@ -22244,7 +22346,14 @@ function _bbwzOpen() {
       _bbwzBuildCatGrid();
     });
   }
-  _bbwzBuildFeatList();
+  if (_bbwz.packages.length) {
+    _bbwzBuildPkgGrid();
+  } else {
+    API.packages().then(res => {
+      const pkgs = res.body?.data;
+      if (Array.isArray(pkgs)) { _bbwz.packages = pkgs; _bbwzBuildPkgGrid(); }
+    });
+  }
   $('#bbwz-overlay').style.display = 'flex';
   setTimeout(() => $('#bbwz-name').focus(), 60);
 }
@@ -22287,23 +22396,16 @@ function _bbwzBuildCatGrid() {
   });
 }
 
-function _bbwzBuildFeatList() {
-  const list = $('#bbwz-feat-list');
-  list.innerHTML = _obFeatureDefs.map(f => {
-    const active = _bbwz.selectedFeatures.has(f.key) ? ' active' : '';
-    return `<div class="bbwz-feat-card${active}" data-fkey="${f.key}" style="--feat-color:${f.color}">
-      <div class="bbwz-feat-check"><i class="fa fa-check"></i></div>
-      <img src="${escHtml(f.img)}" alt="${escHtml(f.name)}" class="bbwz-feat-img">
-      <div class="bbwz-feat-name">${escHtml(f.name)}</div>
-    </div>`;
-  }).join('');
-  list.querySelectorAll('.bbwz-feat-card').forEach(card => {
-    card.addEventListener('click', () => {
-      const key = card.dataset.fkey;
-      if (_bbwz.selectedFeatures.has(key)) { _bbwz.selectedFeatures.delete(key); card.classList.remove('active'); }
-      else                                  { _bbwz.selectedFeatures.add(key);    card.classList.add('active'); }
-    });
+function _bbwzBuildPkgGrid() {
+  _renderPkgGrid('#bbwz-pkg-grid', _bbwz.packages, _bbwz.selectedPackage ? _bbwz.selectedPackage.id : null, pkg => {
+    _bbwz.selectedPackage = pkg;
   });
+}
+
+function _bbwzBuildFeatList() {
+  const includedKeys = new Set(_bbwz.selectedPackage ? (_bbwz.selectedPackage.features || []) : []);
+  _renderLockedFeatureGrid('#bbwz-feat-list', includedKeys);
+  _bbwz.selectedFeatures = new Set(_obFeatureDefs.map(f => f.key).filter(k => includedKeys.has(k)));
 }
 
 function _bbwzBuildReview() {
@@ -22319,6 +22421,10 @@ function _bbwzBuildReview() {
       <div class="bbwz-review-val">${escHtml(catLabel)}</div>
     </div>
     <div class="bbwz-review-row">
+      <div class="bbwz-review-label">Package</div>
+      <div class="bbwz-review-val">${escHtml(_bbwz.selectedPackage?.name || '—')}</div>
+    </div>
+    <div class="bbwz-review-row">
       <div class="bbwz-review-label">Features</div>
       <div class="bbwz-review-val">${featureNames.length
         ? `<div class="bbwz-feat-tags">${featureNames.map(n => `<span class="bbwz-feat-tag">${escHtml(n)}</span>`).join('')}</div>`
@@ -22329,7 +22435,7 @@ function _bbwzBuildReview() {
 
 function _bbwzSetStep(n) {
   _bbwz.step = n;
-  [1, 2, 3].forEach(i => {
+  [1, 2, 3, 4].forEach(i => {
     const dot  = $(`[data-bbwz-dot="${i}"]`);
     const line = $(`[data-bbwz-line="${i - 1}"]`);
     dot.classList.toggle('active', i === n);
@@ -22338,8 +22444,8 @@ function _bbwzSetStep(n) {
     $(`#bbwz-panel-${i}`).style.display = i === n ? '' : 'none';
   });
   $('#bbwz-back-btn').style.display   = n > 1 ? '' : 'none';
-  $('#bbwz-next-btn').style.display   = n < 3 ? '' : 'none';
-  $('#bbwz-submit-btn').style.display = n === 3 ? '' : 'none';
+  $('#bbwz-next-btn').style.display   = n < 4 ? '' : 'none';
+  $('#bbwz-submit-btn').style.display = n === 4 ? '' : 'none';
 }
 
 $('#bbwz-next-btn').addEventListener('click', () => {
@@ -22349,8 +22455,13 @@ $('#bbwz-next-btn').addEventListener('click', () => {
     $('#bbwz-alert').style.display = 'none';
     _bbwzSetStep(2);
   } else if (_bbwz.step === 2) {
-    _bbwzBuildReview();
+    if (!_bbwz.selectedPackage) { showAlert($('#bbwz-pkg-alert'), 'Please select a package'); return; }
+    $('#bbwz-pkg-alert').style.display = 'none';
+    _bbwzBuildFeatList();
     _bbwzSetStep(3);
+  } else if (_bbwz.step === 3) {
+    _bbwzBuildReview();
+    _bbwzSetStep(4);
   }
 });
 
@@ -22363,6 +22474,7 @@ $('#bbwz-cancel-btn').addEventListener('click', () => _bbwzClose());
 $('#bbwz-submit-btn').addEventListener('click', async () => {
   const name = $('#bbwz-name').value.trim();
   if (!name) { _bbwzSetStep(1); $('#bbwz-name').focus(); return; }
+  if (!_bbwz.selectedPackage) { _bbwzSetStep(2); return; }
   const btn = $('#bbwz-submit-btn');
   btn.disabled = true;
   btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Creating…';
@@ -22370,6 +22482,7 @@ $('#bbwz-submit-btn').addEventListener('click', async () => {
     const res = await API.createBusiness({
       name,
       category: _bbwz.selectedCat || 'other',
+      package_id: _bbwz.selectedPackage.id,
       features: [..._bbwz.selectedFeatures],
     });
     if (res.status >= 400) throw new Error(res.body?.message || `Error ${res.status}`);

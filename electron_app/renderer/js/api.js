@@ -20,9 +20,10 @@ const API = (() => {
       publicRequest('POST', '/auth/token', { email, password, device_name: deviceName }),
     cashierLogin: (slug, username, password) =>
       publicRequest('POST', '/cashier/login', { slug, username, password }),
-    register:           (name, businessName, businessCategory, features, email, password, deviceName) =>
-      publicRequest('POST', '/auth/register', { name, business_name: businessName, business_category: businessCategory, features, email, password, password_confirmation: password, device_name: deviceName }),
+    register:           (name, businessName, businessCategory, features, email, password, deviceName, packageId) =>
+      publicRequest('POST', '/auth/register', { name, business_name: businessName, business_category: businessCategory, features, package_id: packageId, email, password, password_confirmation: password, device_name: deviceName }),
     businessCategories: () => publicRequest('GET', '/auth/business-categories'),
+    packages:           () => publicRequest('GET', '/auth/packages'),
     me:                 () => request('GET', '/auth/me'),
     updateProfile:      (body) => request('PUT', '/auth/profile', body),
     updatePassword:     (body) => request('PUT', '/auth/password', body),

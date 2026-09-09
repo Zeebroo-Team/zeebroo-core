@@ -20,7 +20,9 @@ use Modules\Business\Services\BusinessService;
 use Modules\Business\Services\GoogleBusinessProfileApiClient;
 use Modules\Business\Support\BrandCompanyCategoryCatalog;
 use Modules\Business\Support\LogoGenerationCatalog;
+use Modules\Package\Models\Package;
 use Modules\Settings\Services\SettingsService;
+use Illuminate\Validation\ValidationException;
 
 class BusinessController extends Controller
 {
@@ -396,6 +398,7 @@ class BusinessController extends Controller
                 Rule::exists('business_categories', 'slug')->where(fn ($q) => $q->where('is_active', true)),
             ],
             'description' => ['nullable', 'string', 'max:2000'],
+            'package_id' => ['nullable', 'integer', 'exists:packages,id'],
             'features' => ['nullable', 'array'],
             'features.*' => ['boolean'],
             'multi_warehouse_branch' => ['nullable', Rule::in(['0', '1'])],
@@ -413,6 +416,16 @@ class BusinessController extends Controller
             'vault_encryption_key' => ['nullable', 'string', 'max:500'],
         ]);
 
+        $package = null;
+        if (isset($validated['package_id'])) {
+            $package = Package::query()->where('is_active', true)->find($validated['package_id']);
+            if (! $package) {
+                throw ValidationException::withMessages([
+                    'package_id' => ['The selected package is no longer available.'],
+                ]);
+            }
+        }
+
         $slug = $validated['company_category_slug'];
         $label = BrandCompanyCategoryCatalog::labelsByValue()[$slug] ?? $slug;
 
@@ -421,16 +434,29 @@ class BusinessController extends Controller
             'category' => $label,
             'company_category_slug' => $slug,
             'description' => $validated['description'] ?? null,
+            'package_id' => $package?->id,
         ]);
 
+        // Save selected features. When a package is selected, its feature list is
+        // authoritative — the step-4 preview only shows those toggles as a locked
+        // read-only display, so the submitted `features` array is ignored here to
+        // prevent tampering.
+        $allKeys = array_keys(config('features.list', self::FEATURE_KEYS));
         $features = [];
-        foreach (self::FEATURE_KEYS as $key) {
-            $features[$key] = (bool) ($validated['features'][$key] ?? false);
+        if ($package) {
+            $enabledKeys = array_fill_keys($package->features ?? [], true);
+            foreach ($allKeys as $key) {
+                $features[$key] = isset($enabledKeys[$key]);
+            }
+        } else {
+            foreach ($allKeys as $key) {
+                $features[$key] = (bool) ($validated['features'][$key] ?? false);
+            }
+            if (! ($features['stock_management'] ?? false) || ! ($features['product_management'] ?? false)) {
+                $features['point_of_sale'] = false;
+            }
         }
         $features['account_management'] = true; // always required
-        if (! $features['stock_management'] || ! $features['product_management']) {
-            $features['point_of_sale'] = false;
-        }
         $business->setSetting('business.features', $features);
 
         $multiEnabled = ($validated['multi_warehouse_branch'] ?? '0') === '1';
