@@ -14,6 +14,7 @@ use Illuminate\Validation\ValidationException;
 use Modules\Auth\Services\AuthService;
 use Modules\Business\Models\Business;
 use Modules\Business\Models\BusinessCategory;
+use Modules\Package\Models\Package;
 
 class PosAuthApiController extends Controller
 {
@@ -62,12 +63,23 @@ class PosAuthApiController extends Controller
             'name'              => ['required', 'string', 'max:255'],
             'business_name'     => ['required', 'string', 'max:255'],
             'business_category' => ['required', 'string', 'max:120'],
+            'package_id'        => ['nullable', 'integer', 'exists:packages,id'],
             'features'          => ['nullable', 'array'],
             'features.*'        => ['string'],
             'email'             => ['required', 'email', 'max:255', 'unique:users,email'],
             'password'          => ['required', 'confirmed', Password::min(8)],
             'device_name'       => ['nullable', 'string', 'max:120'],
         ]);
+
+        $package = null;
+        if (isset($validated['package_id'])) {
+            $package = Package::query()->where('is_active', true)->find($validated['package_id']);
+            if (! $package) {
+                throw ValidationException::withMessages([
+                    'package_id' => ['The selected package is no longer available.'],
+                ]);
+            }
+        }
 
         $user = $this->authService->register([
             'name'     => $validated['name'],
@@ -83,17 +95,18 @@ class PosAuthApiController extends Controller
             'name'                  => $validated['business_name'],
             'category'              => $categoryLabel,
             'company_category_slug' => $categorySlug,
+            'package_id'            => $package?->id,
         ]);
 
-        // Save selected features
-        $allKeys     = ['account_management','bill_management','human_resources','point_of_sale','product_management','project_management','service_management','social_media_campaign','stock_management'];
-        $enabledKeys = array_fill_keys($validated['features'] ?? [], true);
+        // Save selected features. When a package is selected, its feature list is
+        // authoritative — the client only shows those toggles as a locked preview,
+        // so the submitted `features` array is ignored to prevent tampering.
+        $allKeys     = array_keys(config('features.list', []));
+        $sourceKeys  = $package ? ($package->features ?? []) : ($validated['features'] ?? []);
+        $enabledKeys = array_fill_keys($sourceKeys, true);
         $features    = [];
         foreach ($allKeys as $k) { $features[$k] = isset($enabledKeys[$k]); }
         $features['account_management'] = true; // always on
-        if (! $features['stock_management'] || ! $features['product_management']) {
-            $features['point_of_sale'] = false;
-        }
         $business->setSetting('business.features', $features);
 
         $deviceName = $validated['device_name'] ?? 'pos-api-client';
@@ -116,6 +129,29 @@ class PosAuthApiController extends Controller
         return response()->json([
             'data' => BusinessCategory::optionsForSelect(),
         ]);
+    }
+
+    public function packages(): JsonResponse
+    {
+        $packages = Package::query()
+            ->where('is_active', true)
+            ->orderBy('sort_order')
+            ->get()
+            ->map(fn (Package $package) => [
+                'id'               => $package->id,
+                'name'             => $package->name,
+                'slug'             => $package->slug,
+                'description'      => $package->description,
+                'image_url'        => $package->image ? asset('storage/' . $package->image) : null,
+                'price'            => (float) $package->price,
+                'discounted_price' => $package->discounted_price !== null ? (float) $package->discounted_price : null,
+                'is_free'          => $package->is_free,
+                'features'         => $package->features ?? [],
+                'feature_labels'   => $package->featureLabels(),
+            ])
+            ->values();
+
+        return response()->json(['data' => $packages]);
     }
 
     public function me(Request $request): JsonResponse

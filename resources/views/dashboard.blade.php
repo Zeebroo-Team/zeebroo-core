@@ -31,7 +31,7 @@
             'fullDesc'   => 'Keep your inventory accurate and up to date. Set reorder thresholds, record stock-in and stock-out movements, track stock across multiple warehouse branches, and get notified before items run out.',
             'highlights' => ['Real-time inventory levels', 'Stock-in and stock-out movements', 'Multi-warehouse tracking', 'Low-stock alerts and reorder points'],
         ],
-        ['key' => 'point_of_sale',        'label' => 'Point of Sale',         'icon' => 'fa-cash-register',      'image' => 'point-of-sale.png',             'desc' => 'Counter sales, receipts, daily float and cashier shifts', 'dependsOn' => ['product_management', 'stock_management'],
+        ['key' => 'point_of_sale',        'label' => 'Point of Sale',         'icon' => 'fa-cash-register',      'image' => 'point-of-sale.png',             'desc' => 'Counter sales, receipts, daily float and cashier shifts',
             'fullDesc'   => 'Run fast, reliable counter sales from any device. Process payments, print or email receipts, manage daily float, track cashier shifts, and keep a complete record of every transaction. Requires Product and Stock Management.',
             'highlights' => ['Counter sales and receipts', 'Multiple payment methods', 'Daily float and cashier shifts', 'Full sales history and void management'],
         ],
@@ -330,13 +330,13 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
             flex-shrink:1;min-height:0;overflow-y:auto;overflow-x:hidden;
             padding:0 clamp(20px,5vw,64px);box-sizing:border-box;
         }
-        #wizardStep1,#wizardStep4{
+        #wizardStep1{
             max-width:640px;margin:0 auto;
         }
         #wizardStep2{
             max-width:900px;margin:0 auto;
         }
-        #wizardStep3{
+        #wizardStep3,#wizardStep4{
             max-width:1160px;margin:0 auto;
         }
         .wiz-card-eyebrow{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--primary);margin:0 0 8px;text-align:center;}
@@ -536,7 +536,9 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
         .wiz-feat-card:not(.wiz-feat-card--on){opacity:.52;filter:grayscale(.55);}
         .wiz-feat-card--required{cursor:default;}
         .wiz-feat-card--required:hover{box-shadow:0 4px 14px -6px color-mix(in srgb,var(--primary) 28%,transparent);}
-        .wiz-feat-card--dep-blocked{opacity:.35;filter:grayscale(.75);border-style:dashed;}
+        /* Step 4 preview cards are locked to the selected package — not user-clickable */
+        .wiz-feat-card--locked{cursor:default;}
+        .wiz-feat-card--locked:hover{box-shadow:0 4px 14px -6px color-mix(in srgb,var(--primary) 28%,transparent);}
         /* Image area */
         .wiz-feat-img-wrap{position:relative;width:100%;overflow:hidden;background:color-mix(in srgb,var(--primary) 6%,var(--bg));}
         .wiz-feat-img{width:100%;height:auto;display:block;object-fit:contain;transition:transform .35s ease;}
@@ -558,7 +560,6 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
         .wiz-feat-card--required .wiz-feat-badge{background:color-mix(in srgb,#6366f1 13%,transparent);color:#6366f1;}
         .wiz-feat-card:not(.wiz-feat-card--on) .wiz-feat-badge{background:color-mix(in srgb,var(--muted) 13%,transparent);color:var(--muted);}
         .wiz-feat-desc{font-size:10.5px;color:var(--muted);line-height:1.4;margin:0;}
-        .wiz-feat-dep-hint{font-size:10px;font-weight:600;color:#b45309;}
         .wiz-feat-detail-btn{
             display:inline-flex;align-items:center;gap:4px;margin-top:5px;padding:3px 8px;
             font-size:10px;font-weight:650;border-radius:6px;border:1px solid var(--border);
@@ -663,6 +664,36 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
             display:flex;align-items:center;justify-content:center;gap:5px;transition:all .18s;
         }
         .wiz-cat-btn-select:hover,.wiz-cat-card--on .wiz-cat-btn-select{background:var(--primary);color:#fff;border-color:var(--primary);}
+
+        /* Package card grid (step 3) */
+        .wiz-pkg-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:4px;max-height:min(520px,56vh);overflow-y:auto;padding:3px;}
+        @media(max-width:760px){.wiz-pkg-grid{grid-template-columns:repeat(2,1fr);}}
+        @media(max-width:480px){.wiz-pkg-grid{grid-template-columns:1fr;}}
+        .wiz-pkg-card{
+            position:relative;display:flex;flex-direction:column;gap:6px;text-align:left;
+            padding:14px 14px 12px;border-radius:14px;border:2px solid var(--border);
+            background:color-mix(in srgb,var(--card) 94%,transparent);cursor:pointer;user-select:none;
+            transition:border-color .18s ease,background .18s ease,box-shadow .18s ease;
+        }
+        .wiz-pkg-card:hover{border-color:color-mix(in srgb,var(--primary) 55%,var(--border));box-shadow:0 4px 18px -8px color-mix(in srgb,var(--primary) 18%,transparent);}
+        .wiz-pkg-card--on{border-color:var(--primary);background:color-mix(in srgb,var(--primary) 5%,var(--card));box-shadow:0 6px 22px -8px color-mix(in srgb,var(--primary) 28%,transparent);}
+        .wiz-pkg-check{
+            position:absolute;top:10px;right:10px;width:20px;height:20px;border-radius:50%;
+            background:var(--primary);color:#fff;font-size:10px;display:grid;place-items:center;
+            opacity:0;transform:scale(.6);transition:opacity .15s,transform .15s;
+        }
+        .wiz-pkg-card--on .wiz-pkg-check{opacity:1;transform:scale(1);}
+        .wiz-pkg-img-wrap{width:44px;height:44px;border-radius:10px;overflow:hidden;background:color-mix(in srgb,var(--primary) 6%,var(--bg));display:grid;place-items:center;flex-shrink:0;}
+        .wiz-pkg-img{width:100%;height:100%;object-fit:cover;}
+        .wiz-pkg-img--fallback{color:var(--primary);font-size:17px;}
+        .wiz-pkg-name{font-size:13.5px;font-weight:700;color:var(--text);padding-right:20px;}
+        .wiz-pkg-price-row{display:flex;align-items:baseline;gap:6px;}
+        .wiz-pkg-price{font-size:16px;font-weight:800;color:var(--primary);}
+        .wiz-pkg-price-strike{font-size:11.5px;color:var(--muted);text-decoration:line-through;}
+        .wiz-pkg-desc{font-size:11.5px;color:var(--muted);line-height:1.4;margin:0;}
+        .wiz-pkg-feat-tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:2px;}
+        .wiz-pkg-tag{font-size:10px;font-weight:700;padding:3px 8px;border-radius:999px;background:color-mix(in srgb,var(--muted) 10%,transparent);color:var(--muted);}
+        .wiz-pkg-tag--more{background:transparent;border:1px dashed var(--border);}
 
         /* Category details modal */
         .wiz-cat-modal{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;}
@@ -803,17 +834,22 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                 <div class="wiz-step-connector" id="wizStepLine2"></div>
                 <div class="wiz-step-item">
                     <div class="wiz-step-dot" id="wizDot3">3</div>
-                    <span class="wiz-step-lbl" id="wizLbl3">Features</span>
+                    <span class="wiz-step-lbl" id="wizLbl3">Package</span>
                 </div>
                 <div class="wiz-step-connector" id="wizStepLine3"></div>
                 <div class="wiz-step-item">
                     <div class="wiz-step-dot" id="wizDot4">4</div>
-                    <span class="wiz-step-lbl" id="wizLbl4">Location</span>
+                    <span class="wiz-step-lbl" id="wizLbl4">Features</span>
                 </div>
                 <div class="wiz-step-connector" id="wizStepLine4"></div>
                 <div class="wiz-step-item">
                     <div class="wiz-step-dot" id="wizDot5">5</div>
-                    <span class="wiz-step-lbl" id="wizLbl5">Storage</span>
+                    <span class="wiz-step-lbl" id="wizLbl5">Location</span>
+                </div>
+                <div class="wiz-step-connector" id="wizStepLine5"></div>
+                <div class="wiz-step-item">
+                    <div class="wiz-step-dot" id="wizDot6">6</div>
+                    <span class="wiz-step-lbl" id="wizLbl6">Storage</span>
                 </div>
             </div>
 
@@ -958,10 +994,66 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                         </div>
                     </div>
 
-                    {{-- Step 3: Feature selection --}}
+                    {{-- Step 3: Package selection --}}
                     <div id="wizardStep3" style="display:none;">
-                        <h2 class="wiz-card-title">Which features do you need?</h2>
-                        <p class="wiz-card-sub">Turn on the modules you'll use — you can change these any time from your account menu.</p>
+                        <h2 class="wiz-card-title">Choose your package</h2>
+                        <p class="wiz-card-sub">Pick the plan that fits your business — its features unlock automatically on the next step.</p>
+
+                        <input type="hidden" name="package_id" id="wizPackageIdInput" value="{{ old('package_id') }}">
+                        <div id="wizPkgNoSelErr" class="wiz-field-error" style="display:none;margin-bottom:12px;">Please select a package before continuing.</div>
+                        @error('package_id')<div class="wiz-field-error" style="margin-bottom:12px;">{{ $message }}</div>@enderror
+
+                        <div class="wiz-pkg-grid">
+                            @forelse(($packages ?? []) as $pkg)
+                                @php
+                                    $pkgFeatures = $pkg->features ?? [];
+                                    $pkgLabels   = $pkg->featureLabels();
+                                @endphp
+                                <div class="wiz-pkg-card {{ (string) old('package_id') === (string) $pkg->id ? 'wiz-pkg-card--on' : '' }}"
+                                     data-pkg-id="{{ $pkg->id }}"
+                                     data-pkg-features="{{ json_encode($pkgFeatures) }}"
+                                     role="radio" aria-checked="{{ (string) old('package_id') === (string) $pkg->id ? 'true' : 'false' }}" tabindex="0">
+                                    <div class="wiz-pkg-check" aria-hidden="true"><i class="fa fa-check"></i></div>
+                                    <div class="wiz-pkg-img-wrap">
+                                        @if($pkg->image)
+                                            <img src="{{ asset('storage/' . $pkg->image) }}" alt="{{ $pkg->name }}" class="wiz-pkg-img">
+                                        @else
+                                            <div class="wiz-pkg-img wiz-pkg-img--fallback"><i class="fa fa-box-open" aria-hidden="true"></i></div>
+                                        @endif
+                                    </div>
+                                    <div class="wiz-pkg-name">{{ $pkg->name }}</div>
+                                    <div class="wiz-pkg-price-row">
+                                        @if($pkg->is_free)
+                                            <span class="wiz-pkg-price">Free</span>
+                                        @elseif($pkg->discounted_price !== null && (float) $pkg->discounted_price < (float) $pkg->price)
+                                            <span class="wiz-pkg-price">${{ number_format((float) $pkg->discounted_price, 2) }}</span>
+                                            <span class="wiz-pkg-price-strike">${{ number_format((float) $pkg->price, 2) }}</span>
+                                        @else
+                                            <span class="wiz-pkg-price">${{ number_format((float) $pkg->price, 2) }}</span>
+                                        @endif
+                                    </div>
+                                    @if($pkg->description)
+                                        <p class="wiz-pkg-desc">{{ $pkg->description }}</p>
+                                    @endif
+                                    <div class="wiz-pkg-feat-tags">
+                                        @foreach(array_slice($pkgLabels, 0, 4) as $label)
+                                            <span class="wiz-pkg-tag">{{ $label }}</span>
+                                        @endforeach
+                                        @if(count($pkgLabels) > 4)
+                                            <span class="wiz-pkg-tag wiz-pkg-tag--more">+{{ count($pkgLabels) - 4 }}</span>
+                                        @endif
+                                    </div>
+                                </div>
+                            @empty
+                                <p class="wiz-cat-noresults">No packages are available right now — contact support.</p>
+                            @endforelse
+                        </div>
+                    </div>
+
+                    {{-- Step 4: Feature preview (read-only, locked to the selected package) --}}
+                    <div id="wizardStep4" style="display:none;">
+                        <h2 class="wiz-card-title">What do you get?</h2>
+                        <p class="wiz-card-sub">These features are included in your selected package — they can't be edited here, but you can change packages any time from your account menu.</p>
                         <div class="wiz-feat-shell">
                             {{-- Left: search + grid --}}
                             <div class="wiz-feat-main">
@@ -976,11 +1068,10 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                                 <p id="wizFeatNoResults" class="wiz-cat-noresults" hidden>No features match your search.</p>
                                 <div class="wiz-feat-grid">
                                     @foreach($wizFeatureItems as $wizFeat)
-                                        @php $wizFeatOn = !empty($wizFeat['required']) || (bool) old('features.'.$wizFeat['key'], true); @endphp
-                                        <div class="wiz-feat-card {{ !empty($wizFeat['required']) ? 'wiz-feat-card--required' : '' }} {{ $wizFeatOn ? 'wiz-feat-card--on' : '' }}"
+                                        @php $wizFeatOn = !empty($wizFeat['required']) || (bool) old('features.'.$wizFeat['key'], false); @endphp
+                                        <div class="wiz-feat-card wiz-feat-card--locked {{ !empty($wizFeat['required']) ? 'wiz-feat-card--required' : '' }} {{ $wizFeatOn ? 'wiz-feat-card--on' : '' }}"
                                              data-feature="{{ $wizFeat['key'] }}"
-                                             @if(!empty($wizFeat['dependsOn'])) data-depends-on="{{ implode(',', $wizFeat['dependsOn']) }}" @endif
-                                             role="checkbox" aria-checked="{{ $wizFeatOn ? 'true' : 'false' }}" tabindex="0">
+                                             role="checkbox" aria-checked="{{ $wizFeatOn ? 'true' : 'false' }}" aria-disabled="true">
                                             <div class="wiz-feat-img-wrap">
                                                 <img src="{{ asset('features/' . $wizFeat['image']) }}"
                                                      alt="{{ $wizFeat['label'] }}"
@@ -997,9 +1088,6 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                                                     <span class="wiz-feat-badge">{{ !empty($wizFeat['required']) ? 'Required' : ($wizFeatOn ? 'Enabled' : 'Disabled') }}</span>
                                                 </div>
                                                 <p class="wiz-feat-desc">{{ $wizFeat['desc'] ?? '' }}</p>
-                                                @if(!empty($wizFeat['dependsOn']))
-                                                    <span class="wiz-feat-dep-hint" style="display:none;"><i class="fa fa-triangle-exclamation" aria-hidden="true"></i> Needs Stock + Product</span>
-                                                @endif
                                                 <button type="button" class="wiz-feat-detail-btn"
                                                     data-feat-label="{{ $wizFeat['label'] }}"
                                                     data-feat-icon="{{ $wizFeat['icon'] }}"
@@ -1026,7 +1114,7 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                                 </div>
                                 <div class="wiz-feat-sidebar-list" id="wizFeatSidebarList">
                                     @foreach($wizFeatureItems as $wizFeat)
-                                        @php $wizFeatOn = !empty($wizFeat['required']) || (bool) old('features.'.$wizFeat['key'], true); @endphp
+                                        @php $wizFeatOn = !empty($wizFeat['required']) || (bool) old('features.'.$wizFeat['key'], false); @endphp
                                         <div class="wiz-feat-sidebar-item {{ $wizFeatOn ? '' : 'wiz-feat-sidebar-item--off' }}"
                                              id="wizSidebarItem_{{ $wizFeat['key'] }}">
                                             <span class="wiz-feat-sidebar-ico">
@@ -1052,8 +1140,8 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                         </div>
                     </div>
 
-                    {{-- Step 4: Locations --}}
-                    <div id="wizardStep4" style="display:none;">
+                    {{-- Step 5: Locations --}}
+                    <div id="wizardStep5" style="display:none;">
                         <h2 class="wiz-card-title">Set up your first location</h2>
                         <p class="wiz-card-sub">Tell us if you run multiple branches, then add your primary location.</p>
 
@@ -1092,8 +1180,8 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                         <input type="hidden" name="branch_is_active" value="1">
                     </div>
 
-                    {{-- Step 5: Data Storage --}}
-                    <div id="wizardStep5" style="display:none;">
+                    {{-- Step 6: Data Storage --}}
+                    <div id="wizardStep6" style="display:none;">
                         <h2 class="wiz-card-title">Where should we store your data?</h2>
                         <p class="wiz-card-sub">Choose how your business data is stored and protected.</p>
 
@@ -1226,6 +1314,14 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                         </div>
                         <div class="wiz-actions-row-inner" data-wiz-actions="5" style="display:none;">
                             <button type="button" class="wiz-btn-back" data-wiz-back="4">
+                                <i class="fa fa-arrow-left" aria-hidden="true"></i> Back
+                            </button>
+                            <button type="button" class="wiz-btn-primary" data-wiz-next="6">
+                                Continue <i class="fa fa-arrow-right" aria-hidden="true"></i>
+                            </button>
+                        </div>
+                        <div class="wiz-actions-row-inner" data-wiz-actions="6" style="display:none;">
+                            <button type="button" class="wiz-btn-back" data-wiz-back="5">
                                 <i class="fa fa-arrow-left" aria-hidden="true"></i> Back
                             </button>
                             <button type="submit" class="wiz-btn-primary" id="wizFinishBtn">
@@ -1691,6 +1787,7 @@ function openWizStorageAgreementModal(type) {
         3: document.getElementById('wizardStep3'),
         4: document.getElementById('wizardStep4'),
         5: document.getElementById('wizardStep5'),
+        6: document.getElementById('wizardStep6'),
     };
     const dots = {
         1: document.getElementById('wizDot1'),
@@ -1698,6 +1795,7 @@ function openWizStorageAgreementModal(type) {
         3: document.getElementById('wizDot3'),
         4: document.getElementById('wizDot4'),
         5: document.getElementById('wizDot5'),
+        6: document.getElementById('wizDot6'),
     };
     const lbls = {
         1: document.getElementById('wizLbl1'),
@@ -1705,12 +1803,14 @@ function openWizStorageAgreementModal(type) {
         3: document.getElementById('wizLbl3'),
         4: document.getElementById('wizLbl4'),
         5: document.getElementById('wizLbl5'),
+        6: document.getElementById('wizLbl6'),
     };
     const lines = {
         1: document.getElementById('wizStepLine1'),
         2: document.getElementById('wizStepLine2'),
         3: document.getElementById('wizStepLine3'),
         4: document.getElementById('wizStepLine4'),
+        5: document.getElementById('wizStepLine5'),
     };
     const actionGroups = wizardForm.querySelectorAll('[data-wiz-actions]');
 
@@ -1752,11 +1852,12 @@ function openWizStorageAgreementModal(type) {
         });
     }
     const guideMessages = {
-        1: { step: 'Step 1 of 5', text: 'Hi there! What do you call your business? Use the name your customers already know.' },
-        2: { step: 'Step 2 of 5', text: 'Pick the category that best describes what you do — it helps me set up the right modules for you!' },
-        3: { step: 'Step 3 of 5', text: 'Toggle the features you need. Required ones stay on. You can change these any time later.' },
-        4: { step: 'Step 4 of 5', text: 'Almost done! Tell me where you operate — single location or multiple branches?' },
-        5: { step: 'Step 5 of 5', text: 'Last step! Choose how your data is stored — our secure cloud or your own server.' },
+        1: { step: 'Step 1 of 6', text: 'Hi there! What do you call your business? Use the name your customers already know.' },
+        2: { step: 'Step 2 of 6', text: 'Pick the category that best describes what you do — it helps me set up the right modules for you!' },
+        3: { step: 'Step 3 of 6', text: 'Pick a package — its features unlock automatically on the next step.' },
+        4: { step: 'Step 4 of 6', text: 'Here are the features included in your package. Required ones stay on — you can change plans any time later.' },
+        5: { step: 'Step 5 of 6', text: 'Almost done! Tell me where you operate — single location or multiple branches?' },
+        6: { step: 'Step 6 of 6', text: 'Last step! Choose how your data is stored — our secure cloud or your own server.' },
     };
     function updateGuide(num) {
         if (!wizGuideBubble || !wizGuideBubbleText) return;
@@ -1807,6 +1908,17 @@ function openWizStorageAgreementModal(type) {
                 }
             }
             if (target === 4) {
+                const pkgInput = document.getElementById('wizPackageIdInput');
+                const pkgErr = document.getElementById('wizPkgNoSelErr');
+                if (pkgInput && !pkgInput.value) {
+                    if (pkgErr) pkgErr.style.display = 'block';
+                    const firstPkgCard = wizardForm.querySelector('.wiz-pkg-card');
+                    if (firstPkgCard) firstPkgCard.focus();
+                    return;
+                }
+                if (pkgErr) pkgErr.style.display = 'none';
+            }
+            if (target === 5) {
                 const branchNameInput = document.getElementById('wiz-branch-name');
                 const bizNameInput = wizardForm.querySelector('input[name="name"]');
                 if (branchNameInput && bizNameInput && !branchNameInput.value.trim()) {
@@ -1832,25 +1944,10 @@ function openWizStorageAgreementModal(type) {
         });
     }
 
-    // Feature cards (step 3)
-    const POS_DEPS = ['product_management', 'stock_management'];
+    // Feature preview cards (step 4) — read-only, driven entirely by the package
+    // selected on step 3. Not user-clickable; see the package grid wiring below.
     function isFeatureOn(card) {
         return card.classList.contains('wiz-feat-card--on');
-    }
-    function refreshDepStates() {
-        wizardForm.querySelectorAll('[data-depends-on]').forEach(function (card) {
-            const deps = card.getAttribute('data-depends-on').split(',');
-            const blocked = deps.some(function (depKey) {
-                const depCard = wizardForm.querySelector('.wiz-feat-card[data-feature="' + depKey + '"]');
-                return depCard && !isFeatureOn(depCard);
-            });
-            const hint = card.querySelector('.wiz-feat-dep-hint');
-            if (blocked && isFeatureOn(card)) {
-                toggleFeatureCard(card, false);
-            }
-            card.classList.toggle('wiz-feat-card--dep-blocked', blocked);
-            if (hint) hint.style.display = blocked ? 'block' : 'none';
-        });
     }
     function toggleFeatureCard(card, forceOn) {
         if (card.classList.contains('wiz-feat-card--required')) return;
@@ -1889,19 +1986,44 @@ function openWizStorageAgreementModal(type) {
         const countBadge = document.getElementById('wizFeatEnabledCount');
         if (countBadge) countBadge.textContent = count;
     }
-    wizardForm.querySelectorAll('.wiz-feat-card:not(.wiz-feat-card--preview)').forEach(function (card) {
-        card.addEventListener('click', function () {
-            if (card.getAttribute('data-depends-on') && card.classList.contains('wiz-feat-card--dep-blocked')) return;
-            toggleFeatureCard(card);
-            refreshDepStates();
-            refreshFeatSidebar();
+    function applyPackageFeatures(featureKeys) {
+        const keys = featureKeys || [];
+        wizardForm.querySelectorAll('.wiz-feat-card[data-feature]').forEach(function (card) {
+            if (card.classList.contains('wiz-feat-card--required')) return;
+            toggleFeatureCard(card, keys.indexOf(card.getAttribute('data-feature')) !== -1);
         });
-        card.addEventListener('keydown', function (e) {
-            if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); card.click(); }
-        });
-    });
-    refreshDepStates();
+        refreshFeatSidebar();
+    }
     refreshFeatSidebar();
+
+    // Package cards (step 3) → select + drive the step 4 feature preview
+    const pkgInput = document.getElementById('wizPackageIdInput');
+    if (pkgInput) {
+        function selectPackage(card) {
+            wizardForm.querySelectorAll('.wiz-pkg-card').forEach(function (c) {
+                c.classList.toggle('wiz-pkg-card--on', c === card);
+                c.setAttribute('aria-checked', c === card ? 'true' : 'false');
+            });
+            pkgInput.value = card.getAttribute('data-pkg-id');
+            const errEl = document.getElementById('wizPkgNoSelErr');
+            if (errEl) errEl.style.display = 'none';
+            let features = [];
+            try { features = JSON.parse(card.getAttribute('data-pkg-features') || '[]'); } catch (e) {}
+            applyPackageFeatures(features);
+        }
+        wizardForm.querySelectorAll('.wiz-pkg-card').forEach(function (card) {
+            card.addEventListener('click', function () { selectPackage(card); });
+            card.addEventListener('keydown', function (e) {
+                if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); selectPackage(card); }
+            });
+        });
+        // Re-apply the previously selected package's features on page reload
+        // (e.g. after a validation error further down the wizard).
+        if (pkgInput.value) {
+            const preselected = wizardForm.querySelector('.wiz-pkg-card[data-pkg-id="' + pkgInput.value + '"]');
+            if (preselected) selectPackage(preselected);
+        }
+    }
 
     // Category card grid → select + details modal
     const categoryInput = document.getElementById('wizard-company-category');
@@ -1924,7 +2046,6 @@ function openWizStorageAgreementModal(type) {
                 if (card.classList.contains('wiz-feat-card--required')) return;
                 toggleFeatureCard(card, recommended.indexOf(card.getAttribute('data-feature')) !== -1);
             });
-            refreshDepStates();
             refreshFeatSidebar();
         }
 
@@ -2021,7 +2142,9 @@ function openWizStorageAgreementModal(type) {
             if (e.key === 'Escape' && wizCatModal && !wizCatModal.hasAttribute('hidden')) closeCatModal();
         });
 
-        if (categoryInput.value) applyCategoryRecommendation(categoryInput.value);
+        // Skip the category-based pre-suggestion once a package is selected — the
+        // package's feature list is authoritative and must not be overwritten.
+        if (categoryInput.value && !(pkgInput && pkgInput.value)) applyCategoryRecommendation(categoryInput.value);
 
         // Search bar filter
         const catSearchInput = document.getElementById('wizCatSearch');
@@ -2089,9 +2212,11 @@ function openWizStorageAgreementModal(type) {
     }
 
     @if($errors->has('data_storage_type') || $errors->has('data_agreement_accepted') || $errors->has('vault_server_url') || $errors->has('vault_api_token'))
-        setWizStep(5, false);
+        setWizStep(6, false);
     @elseif($errors->has('branch_name') || $errors->has('multi_warehouse_branch'))
-        setWizStep(4, false);
+        setWizStep(5, false);
+    @elseif($errors->has('package_id'))
+        setWizStep(3, false);
     @elseif($errors->has('company_category_slug'))
         setWizStep(2, false);
     @endif
@@ -2183,7 +2308,7 @@ function openWizStorageAgreementModal(type) {
         const typeInput = document.getElementById('wizDataStorageType');
         if (!typeInput || typeInput.value === '') {
             e.preventDefault();
-            setWizStep(5, false);
+            setWizStep(6, false);
             const noSelErr = document.getElementById('wizStorageNoSelErr');
             if (noSelErr) noSelErr.classList.add('is-visible');
             return;
@@ -2192,7 +2317,7 @@ function openWizStorageAgreementModal(type) {
             const agreeInput = document.getElementById('wizDataAgreementAccepted');
             if (!agreeInput || agreeInput.value !== '1') {
                 e.preventDefault();
-                setWizStep(5, false);
+                setWizStep(6, false);
                 openWizStorageAgreementModal();
             }
         }

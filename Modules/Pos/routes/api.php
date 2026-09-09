@@ -59,6 +59,7 @@ Route::prefix('v1/pos')->group(function (): void {
     Route::post('auth/token',             [PosAuthApiController::class, 'token'])->name('auth.token');
     Route::post('auth/register',          [PosAuthApiController::class, 'register'])->name('auth.register');
     Route::get ('auth/business-categories',[PosAuthApiController::class, 'businessCategories'])->name('auth.business-categories');
+    Route::get ('auth/packages',           [PosAuthApiController::class, 'packages'])->name('auth.packages');
     Route::post('cashier/login',          [PosCashierApiController::class, 'login'])->name('cashier.login');
     Route::get('docs', [PosApiDocsController::class, 'index'])->name('pos.docs');
     Route::get('docs/openapi.yaml', [PosApiDocsController::class, 'openapi'])->name('pos.docs.openapi');

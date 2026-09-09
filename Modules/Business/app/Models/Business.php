@@ -86,6 +86,7 @@ class Business extends Model
         'google_location_title_cache',
         'logo_path',
         'warehouse_branch_intro_acknowledged_at',
+        'package_id',
     ];
 
     protected function casts(): array

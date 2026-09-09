@@ -3419,6 +3419,119 @@ body.dark .alert-error { background: #3b1515; color: #fca5a5; border-color: #6b2
 .ob-feat-card.active .ob-toggle { background: var(--feat-color, var(--accent)); }
 .ob-feat-card.active .ob-toggle-thumb { left: 18px; }
 
+/* ── Locked feature preview (step 5 — read-only, driven by selected package) ── */
+.ob-feature-list-locked .ob-feat-card-locked { cursor: default; }
+.ob-feature-list-locked .ob-feat-card-locked:hover {
+  transform: none; box-shadow: none;
+}
+.ob-feat-card-locked.locked-off {
+  opacity: .45;
+  filter: grayscale(.5);
+}
+.ob-feat-lock {
+  position: absolute;
+  top: 8px; left: 8px;
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 9px;
+  display: none;
+  align-items: center; justify-content: center;
+  box-shadow: 0 1px 4px rgba(0,0,0,.15);
+}
+.ob-feat-card-locked.locked-off .ob-feat-lock { display: flex; }
+.ob-feat-card-locked .ob-feat-toggle { pointer-events: none; }
+
+/* ── Package selection grid — step 4 of onboarding ── */
+.ob-pkg-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 12px;
+  max-height: calc(100vh - 290px);
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.ob-pkg-empty {
+  grid-column: 1 / -1;
+  padding: 30px 0;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.ob-pkg-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 14px;
+  border: 2px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface2);
+  cursor: pointer;
+  transition: border-color .15s, background .15s, box-shadow .15s;
+  user-select: none;
+}
+.ob-pkg-card:hover {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: var(--surface);
+  box-shadow: 0 4px 14px rgba(0,0,0,.08);
+}
+.ob-pkg-card.active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 6%, var(--surface));
+  box-shadow: 0 4px 16px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.ob-pkg-check {
+  position: absolute;
+  top: 10px; right: 10px;
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10px;
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0;
+  transform: scale(.6);
+  transition: opacity .15s, transform .15s;
+}
+.ob-pkg-card.active .ob-pkg-check { opacity: 1; transform: scale(1); }
+.ob-pkg-img-wrap {
+  width: 64px; height: 64px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--surface);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.ob-pkg-img { width: 100%; height: 100%; object-fit: cover; }
+.ob-pkg-name {
+  font-size: 14px; font-weight: 800;
+  color: var(--text);
+  padding-right: 20px;
+}
+.ob-pkg-price-row { display: flex; align-items: baseline; gap: 6px; }
+.ob-pkg-price { font-size: 18px; font-weight: 800; color: var(--accent); }
+.ob-pkg-price-strike { font-size: 12px; color: var(--text-muted); text-decoration: line-through; }
+.ob-pkg-desc {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+.ob-pkg-feat-tags {
+  display: flex; flex-wrap: wrap; gap: 5px;
+  margin-top: 2px;
+}
+.ob-pkg-tag {
+  font-size: 10px; font-weight: 700;
+  padding: 3px 7px;
+  border-radius: 99px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+.ob-pkg-tag-more { background: transparent; border-style: dashed; }
+
 /* dark mode tint for sidebar */
 body.dark .ob-sidebar { background: #1c1d30; border-right-color: var(--border); }
 body.dark .ob-sidebar-name { color: var(--text); }
@@ -4527,6 +4640,13 @@ body.dark .bwz-btn-next:hover { background: var(--accent-dark); }
   box-shadow: 0 24px 60px rgba(0,0,0,.28);
   position: relative;
 }
+/* Package + locked-feature grids reused inside the (already-scrolling) bbwz card
+   — drop their own scroll area so there's only one scrollbar for the whole card. */
+#bbwz-pkg-grid, #bbwz-feat-list {
+  max-height: none;
+  overflow-y: visible;
+}
+
 /* category grid */
 .bbwz-cat-grid {
   display: grid;
@@ -4552,36 +4672,6 @@ body.dark .bwz-btn-next:hover { background: var(--accent-dark); }
   display: flex; align-items: center; justify-content: center;
   color: var(--cat-color, var(--accent)); font-size: 14px;
 }
-/* feature grid */
-.bbwz-feat-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(136px, 1fr));
-  gap: 10px;
-  margin-top: 8px;
-}
-.bbwz-feat-card {
-  position: relative;
-  display: flex; flex-direction: column; align-items: center; gap: 6px;
-  padding: 14px 10px 10px;
-  border-radius: 12px; border: 2px solid var(--border);
-  cursor: pointer; transition: border-color .15s, background .15s;
-  background: var(--surface); text-align: center;
-}
-.bbwz-feat-card:hover { border-color: var(--feat-color, var(--accent)); }
-.bbwz-feat-card.active {
-  border-color: var(--feat-color, var(--accent));
-  background: color-mix(in srgb, var(--feat-color, var(--accent)) 10%, var(--surface));
-}
-.bbwz-feat-check {
-  position: absolute; top: 6px; right: 8px;
-  width: 18px; height: 18px; border-radius: 50%;
-  background: var(--feat-color, var(--accent)); color: #fff; font-size: 9px;
-  display: flex; align-items: center; justify-content: center;
-  opacity: 0; transition: opacity .15s;
-}
-.bbwz-feat-card.active .bbwz-feat-check { opacity: 1; }
-.bbwz-feat-img  { width: 42px; height: 42px; object-fit: contain; }
-.bbwz-feat-name { font-size: 11px; font-weight: 600; color: var(--text); line-height: 1.3; }
 /* review panel */
 .bbwz-review { margin-top: 4px; }
 .bbwz-review-row {

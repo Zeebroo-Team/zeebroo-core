@@ -5,10 +5,12 @@ namespace Modules\Pos\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 use Modules\Business\Models\Business;
 use Modules\Business\Models\BusinessCategory;
 use Modules\Business\Models\BusinessMember;
 use Modules\HRManagement\Models\Employee;
+use Modules\Package\Models\Package;
 
 class PosBusinessesApiController extends Controller
 {
@@ -62,9 +64,20 @@ class PosBusinessesApiController extends Controller
         $validated = $request->validate([
             'name'       => ['required', 'string', 'max:255'],
             'category'   => ['required', 'string', 'max:120'],
+            'package_id' => ['nullable', 'integer', 'exists:packages,id'],
             'features'   => ['nullable', 'array'],
             'features.*' => ['string'],
         ]);
+
+        $package = null;
+        if (isset($validated['package_id'])) {
+            $package = Package::query()->where('is_active', true)->find($validated['package_id']);
+            if (! $package) {
+                throw ValidationException::withMessages([
+                    'package_id' => ['The selected package is no longer available.'],
+                ]);
+            }
+        }
 
         $categorySlug  = $validated['category'];
         $categoryLabel = BusinessCategory::labelForSlug($categorySlug) ?? $categorySlug;
@@ -74,19 +87,20 @@ class PosBusinessesApiController extends Controller
             'name'                  => $validated['name'],
             'category'              => $categoryLabel,
             'company_category_slug' => $categorySlug,
+            'package_id'            => $package?->id,
         ]);
 
-        $allKeys     = ['account_management', 'bill_management', 'human_resources', 'point_of_sale',
-                        'product_management', 'project_management', 'service_management', 'social_media_campaign', 'stock_management'];
-        $enabledKeys = array_fill_keys($validated['features'] ?? [], true);
+        // Save selected features. When a package is selected, its feature list is
+        // authoritative — the client only shows those toggles as a locked preview,
+        // so the submitted `features` array is ignored to prevent tampering.
+        $allKeys     = array_keys(config('features.list', []));
+        $sourceKeys  = $package ? ($package->features ?? []) : ($validated['features'] ?? []);
+        $enabledKeys = array_fill_keys($sourceKeys, true);
         $features    = [];
         foreach ($allKeys as $k) {
             $features[$k] = isset($enabledKeys[$k]);
         }
         $features['account_management'] = true;
-        if (! $features['stock_management'] || ! $features['product_management']) {
-            $features['point_of_sale'] = false;
-        }
         $business->setSetting('business.features', $features);
 
         return response()->json([
