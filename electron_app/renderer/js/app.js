@@ -29401,8 +29401,10 @@ async function loadRentalScheduleTab(rentalId) {
   const schedule = data.schedule || [];
 
   function statusBadge(row) {
-    if (row.paid)
+    if (row.paid && row.paid_via_ledger)
       return `<span class="bd-sched-badge bd-sched-paid"><i class="fa fa-check-circle"></i> Paid</span>`;
+    if (row.paid)
+      return `<span class="bd-sched-badge bd-sched-paid"><i class="fa fa-check-circle"></i> Paid (external)</span>`;
     if (row.past_due_unpaid)
       return `<span class="bd-sched-badge bd-sched-overdue"><i class="fa fa-circle-exclamation"></i> ${escHtml(row.status_label)}</span>`;
     return `<span class="bd-sched-badge bd-sched-await"><i class="fa fa-circle-info"></i> Outstanding</span>`;
@@ -29573,11 +29575,25 @@ let _rpmCurrentRentalId = null;
 $('#rpm-close').addEventListener('click',       () => { $('#rental-pay-modal').style.display = 'none'; });
 $('#rental-pay-modal').addEventListener('click', e => { if (e.target === $('#rental-pay-modal')) $('#rental-pay-modal').style.display = 'none'; });
 
+// Toggle account picker visibility based on recording option
+document.querySelectorAll('input[name="rpm-option"]').forEach(r => {
+  r.addEventListener('change', () => {
+    const isLedger = $('#rpm-opt-ledger').checked;
+    $('#rpm-account-wrap').style.display = isLedger ? '' : 'none';
+    $('#rpm-note').textContent = isLedger
+      ? 'Creates a ledger row for this billing date and reduces the selected account balance by the rent amount.'
+      : 'Marks this billing date as already paid. No ledger row or account deduction is created.';
+  });
+});
+
 async function openRentalPayModal(rentalId, rowData) {
   _rpmCurrentRentalId = rentalId;
   const { due, amt } = rowData;
   $('#rpm-due-date').textContent = due || '—';
   $('#rpm-amount').textContent   = amt ? `LKR ${amt}` : '—';
+  $('#rpm-opt-ledger').checked   = true;
+  $('#rpm-account-wrap').style.display = '';
+  $('#rpm-note').textContent = 'Creates a ledger row for this billing date and reduces the selected account balance by the rent amount.';
   $('#rpm-error').style.display  = 'none';
   $('#rpm-confirm-btn').disabled = false;
   $('#rpm-confirm-btn').innerHTML= '<i class="fa fa-circle-check"></i> Confirm payment';
@@ -29595,9 +29611,10 @@ async function openRentalPayModal(rentalId, rowData) {
 }
 
 $('#rpm-confirm-btn').addEventListener('click', async () => {
-  const accountId = parseInt($('#rpm-account-select').value);
+  const isLedger = $('#rpm-opt-ledger').checked;
+  const accountId = isLedger ? parseInt($('#rpm-account-select').value) : null;
   const errEl = $('#rpm-error');
-  if (!accountId) {
+  if (isLedger && !accountId) {
     errEl.textContent = 'Please select a debit account.';
     errEl.style.display = ''; return;
   }
@@ -29606,8 +29623,9 @@ $('#rpm-confirm-btn').addEventListener('click', async () => {
   btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
 
   const res = await API.payRental(_rpmCurrentRentalId, {
-    due_date:   $('#rpm-due-date').textContent,
-    account_id: accountId,
+    due_date:         $('#rpm-due-date').textContent,
+    recording_option: isLedger ? 'ledger' : 'external',
+    account_id:       accountId,
   });
   if (res.status === 200) {
     $('#rental-pay-modal').style.display = 'none';
@@ -29636,8 +29654,9 @@ $('#rental-submit').addEventListener('click', submitRentalForm);
 async function openRentalCreateModal() {
   // Reset form
   ['rc-property-type','rc-purpose','rc-key-money','rc-owner-name','rc-owner-email',
-   'rc-owner-phone','rc-owner-address','rc-owner-bank','rc-owner-notes',
-   'rc-cost','rc-remind','rc-due-date','rc-first-install','rc-notes'].forEach(id => {
+   'rc-owner-phone','rc-owner-address',
+   'rc-owner-bank-name','rc-owner-bank-branch','rc-owner-bank-acc-name','rc-owner-bank-acc-no',
+   'rc-owner-notes','rc-cost','rc-remind','rc-due-date','rc-first-install','rc-notes'].forEach(id => {
     const el = $('#' + id);
     if (el) el.value = '';
   });
@@ -29661,6 +29680,19 @@ async function openRentalCreateModal() {
   setTimeout(() => $('#rc-property-type').focus(), 80);
 }
 
+function buildOwnerBankDetails() {
+  const bankName = $('#rc-owner-bank-name').value.trim();
+  const branch   = $('#rc-owner-bank-branch').value.trim();
+  const accName  = $('#rc-owner-bank-acc-name').value.trim();
+  const accNo    = $('#rc-owner-bank-acc-no').value.trim();
+  const parts = [];
+  if (bankName) parts.push(`Bank: ${bankName}`);
+  if (branch)   parts.push(`Branch: ${branch}`);
+  if (accName)  parts.push(`Account name: ${accName}`);
+  if (accNo)    parts.push(`Account no: ${accNo}`);
+  return parts.length ? parts.join('\n') : null;
+}
+
 async function submitRentalForm() {
   const alertEl = $('#rental-modal-alert');
   alertEl.style.display = 'none';
@@ -29674,7 +29706,7 @@ async function submitRentalForm() {
     owner_email:                $('#rc-owner-email').value.trim() || null,
     owner_phone:                $('#rc-owner-phone').value.trim() || null,
     owner_address:              $('#rc-owner-address').value.trim() || null,
-    owner_bank_details:         $('#rc-owner-bank').value.trim() || null,
+    owner_bank_details:         buildOwnerBankDetails(),
     owner_notes:                $('#rc-owner-notes').value.trim() || null,
     deduct_account_id:          $('#rc-account').value || null,
     recurring_cost:             $('#rc-cost').value || null,

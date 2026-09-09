@@ -143,6 +143,9 @@ class RentalService
         if (! $rental->relationLoaded('ledgerTransactions')) {
             $rental->load('ledgerTransactions');
         }
+        if (! $rental->relationLoaded('externalBillingMarks')) {
+            $rental->load('externalBillingMarks');
+        }
 
         $leaseEnd = $this->rentalLeaseEndInclusive($rental);
         $due = $anchor->copy()->startOfDay();
@@ -155,7 +158,7 @@ class RentalService
             if ($due->gt($today)) {
                 break;
             }
-            if (! $this->rentalHasLedgerOnDate($rental, $due)) {
+            if (! $this->rentalHasLedgerOnDate($rental, $due) && ! $this->rentalHasExternalPaidMarkOnDate($rental, $due)) {
                 return true;
             }
             $this->addCadence($due, $rental->recurring_type);
@@ -166,9 +169,9 @@ class RentalService
     }
 
     /**
-     * Scheduled billing dates through agreement end, with ledger match per due date.
+     * Scheduled billing dates through agreement end, with ledger / external-paid status per due date.
      *
-     * @return BaseCollection<int, array{period: int, due: Carbon, due_ymd: string, amount: float, amount_formatted: string, paid: bool, past_due_unpaid: bool, status_label: string, ledger: ?LedgerTransaction}>
+     * @return BaseCollection<int, array{period: int, due: Carbon, due_ymd: string, amount: float, amount_formatted: string, paid: bool, paid_via_ledger: bool, paid_outside_ledger_only: bool, past_due_unpaid: bool, status_label: string, ledger: ?LedgerTransaction}>
      */
     public function rentalBillingScheduleWithPaymentStatus(Rental $rental, ?Carbon $asOf = null): BaseCollection
     {
@@ -177,6 +180,9 @@ class RentalService
 
         if (! $rental->relationLoaded('ledgerTransactions')) {
             $rental->load(['ledgerTransactions.deductAccount.bank', 'ledgerTransactions.deductAccount.bankType']);
+        }
+        if (! $rental->relationLoaded('externalBillingMarks')) {
+            $rental->load('externalBillingMarks');
         }
 
         $amount = (float) $rental->recurring_cost;
@@ -187,11 +193,15 @@ class RentalService
         foreach ($schedule as $due) {
             $period++;
             $d = $due->copy()->startOfDay();
-            $paid = $this->rentalHasLedgerOnDate($rental, $d);
+            $paidViaLedger = $this->rentalHasLedgerOnDate($rental, $d);
+            $paidOutsideLedgerOnly = ! $paidViaLedger && $this->rentalHasExternalPaidMarkOnDate($rental, $d);
+            $paid = $paidViaLedger || $paidOutsideLedgerOnly;
             $pastDueUnpaid = $d->lte($today) && ! $paid;
 
-            if ($paid) {
+            if ($paidViaLedger) {
                 $statusLabel = 'Paid';
+            } elseif ($paidOutsideLedgerOnly) {
+                $statusLabel = 'Already paid (outside ledger)';
             } elseif ($pastDueUnpaid) {
                 $statusLabel = $d->isSameDay($today)
                     ? 'Due today · unpaid'
@@ -201,7 +211,7 @@ class RentalService
             }
 
             $ledgerTx = null;
-            if ($paid) {
+            if ($paidViaLedger) {
                 foreach ($rental->ledgerTransactions as $ledgerRow) {
                     if ($ledgerRow->occurrence_date === null) {
                         continue;
@@ -220,6 +230,8 @@ class RentalService
                 'amount' => $amount,
                 'amount_formatted' => $amountFormatted,
                 'paid' => $paid,
+                'paid_via_ledger' => $paidViaLedger,
+                'paid_outside_ledger_only' => $paidOutsideLedgerOnly,
                 'past_due_unpaid' => $pastDueUnpaid,
                 'status_label' => $statusLabel,
                 'ledger' => $ledgerTx,
@@ -235,7 +247,7 @@ class RentalService
         $map = [];
         $rentals = Rental::query()
             ->where('business_id', $business->id)
-            ->with('ledgerTransactions')
+            ->with(['ledgerTransactions', 'externalBillingMarks'])
             ->get();
 
         foreach ($rentals as $rental) {
@@ -249,7 +261,7 @@ class RentalService
     {
         $rentals = Rental::query()
             ->where('business_id', $business->id)
-            ->with('ledgerTransactions')
+            ->with(['ledgerTransactions', 'externalBillingMarks'])
             ->get();
 
         foreach ($rentals as $rental) {
@@ -346,6 +358,19 @@ class RentalService
                 continue;
             }
             if (Carbon::parse($row->occurrence_date)->toDateString() === $needle) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function rentalHasExternalPaidMarkOnDate(Rental $rental, Carbon $day): bool
+    {
+        $needle = $day->toDateString();
+
+        foreach ($rental->externalBillingMarks as $mark) {
+            if ($mark->due_date?->toDateString() === $needle) {
                 return true;
             }
         }

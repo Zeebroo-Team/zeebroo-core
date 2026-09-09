@@ -10,6 +10,7 @@ use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Modules\Account\Models\Rental;
 use Modules\Account\Services\AddressBookService;
+use Modules\Account\Services\RentalExternalPaymentMarkService;
 use Modules\Account\Services\RentalService;
 use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesPosBusinessForApi;
 use Modules\Transaction\Services\RentalManualRentSettlementService;
@@ -21,6 +22,7 @@ class PosRentalApiController extends Controller
     public function __construct(
         private readonly RentalService $rentalService,
         private readonly RentalManualRentSettlementService $settlementService,
+        private readonly RentalExternalPaymentMarkService $externalMarkService,
         private readonly AddressBookService $addressBookService,
     ) {}
 
@@ -28,7 +30,7 @@ class PosRentalApiController extends Controller
     {
         $business = $this->businessOrAbort($request);
 
-        $rentals = Rental::with(['deductAccount.bank', 'deductAccount.bankType', 'ledgerTransactions'])
+        $rentals = Rental::with(['deductAccount.bank', 'deductAccount.bankType', 'ledgerTransactions', 'externalBillingMarks'])
             ->where('business_id', $business->id)
             ->latest()
             ->get();
@@ -132,6 +134,7 @@ class PosRentalApiController extends Controller
             'deductAccount.bank',
             'deductAccount.bankType',
             'ledgerTransactions',
+            'externalBillingMarks',
             'bills',
             'landlord',
             'warehouse',
@@ -150,6 +153,7 @@ class PosRentalApiController extends Controller
                     'due_ymd'          => $row['due_ymd'],
                     'amount_formatted' => $row['amount_formatted'],
                     'paid'             => $row['paid'],
+                    'paid_via_ledger'  => $row['paid_via_ledger'],
                     'past_due_unpaid'  => $row['past_due_unpaid'],
                     'status_label'     => $row['status_label'],
                 ])->values(),
@@ -187,18 +191,30 @@ class PosRentalApiController extends Controller
         $this->abortUnlessPerm($request, $business, 'fin_assets');
 
         $validated = $request->validate([
-            'due_date'   => ['required', 'date'],
-            'account_id' => ['required', 'integer'],
+            'due_date'         => ['required', 'date'],
+            'recording_option' => ['required', 'in:ledger,external'],
+            'account_id'       => ['required_if:recording_option,ledger', 'nullable', 'integer'],
         ]);
 
+        $user = $request->user();
+
         try {
-            $this->settlementService->settle(
-                $rental,
-                $business,
-                $request->user(),
-                $validated['due_date'],
-                (int) $validated['account_id'],
-            );
+            if ($validated['recording_option'] === 'ledger') {
+                $this->settlementService->settle(
+                    $rental,
+                    $business,
+                    $user,
+                    $validated['due_date'],
+                    (int) $validated['account_id'],
+                );
+            } else {
+                $this->externalMarkService->mark(
+                    $rental,
+                    $business,
+                    $user,
+                    $validated['due_date'],
+                );
+            }
         } catch (ValidationException $e) {
             return response()->json(['message' => collect($e->errors())->flatten()->first()], 422);
         }
