@@ -402,24 +402,28 @@ function _escposBuffer(receipt, paperWidth) {
   line();
 
   // Totals
-  const cur = receipt.currency ? ' ' + receipt.currency : '';
-  rowLR('Subtotal:', parseFloat(receipt.subtotal || 0).toFixed(2) + cur);
+  const money = (amount) => {
+    const num = parseFloat(amount || 0).toFixed(2);
+    if (!receipt.currency) return num;
+    return receipt.currencyPosition === 'before' ? `${receipt.currency} ${num}` : `${num} ${receipt.currency}`;
+  };
+  rowLR('Subtotal:', money(receipt.subtotal));
   if (parseFloat(receipt.discount) > 0) {
     const dl = 'Discount' + (receipt.discountPct ? ' (' + receipt.discountPct + '%)' : '') + ':';
-    rowLR(dl, '-' + parseFloat(receipt.discount).toFixed(2) + cur);
+    rowLR(dl, '-' + money(receipt.discount));
   }
   for (const tax of (receipt.taxes || [])) {
-    rowLR(String(tax.name) + ':', '+' + parseFloat(tax.amount).toFixed(2) + cur);
+    rowLR(String(tax.name) + ':', '+' + money(tax.amount));
   }
 
   dline();
   boldOn();
-  rowLR('TOTAL:', parseFloat(receipt.total || 0).toFixed(2) + cur);
+  rowLR('TOTAL:', money(receipt.total));
   boldOff();
 
-  rowLR('Paid (' + (receipt.paymentMethod || 'Cash') + '):', parseFloat(receipt.paid || 0).toFixed(2) + cur);
+  rowLR('Paid (' + (receipt.paymentMethod || 'Cash') + '):', money(receipt.paid));
   if (parseFloat(receipt.change) > 0.005) {
-    rowLR('Change:', parseFloat(receipt.change || 0).toFixed(2) + cur);
+    rowLR('Change:', money(receipt.change));
   }
 
   // Notes

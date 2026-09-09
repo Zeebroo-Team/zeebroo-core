@@ -55,6 +55,20 @@ let bodyPos = '', pgStack = '', lhLayer = '';
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => document.querySelectorAll(sel);
 
+// ── Currency formatting ───────────────────────────────────────────────────
+// Formats an amount with the business's currency code, placed before or
+// after the number per Settings → Business → Currency Position.
+function currencyPosition() {
+  const v = state.receiptSettings?.currency_position;
+  return v === 'before' ? 'before' : 'after';
+}
+function formatMoney(amount, opts = {}) {
+  const { decimals = 2, currency = state.currency } = opts;
+  const num = (Number(amount) || 0).toFixed(decimals);
+  if (!currency) return num;
+  return currencyPosition() === 'before' ? `${currency} ${num}` : `${num} ${currency}`;
+}
+
 function toast(msg, type = 'info', onClick = null) {
   if (type === 'success' && !onClick) return;
   const el = document.createElement('div');
@@ -901,7 +915,7 @@ function _subsRenderStats() {
 }
 
 function _subsRenderList() {
-  const cur = state.currency ? ' ' + state.currency : '';
+  const cur = state.currency || '';
   if (!_subs.list.length) {
     $('#subs-body').innerHTML = `<div class="qt-empty">
       <i class="fa fa-repeat"></i>
@@ -945,7 +959,7 @@ function _subsRenderList() {
       <td class="qt-tbl-customer">${escHtml(s.customer_name || '—')}</td>
       <td>${escHtml(s.product_name || '—')}</td>
       <td class="qt-tbl-muted">${periodLabels[s.recurring_period] || escHtml(s.recurring_period)}</td>
-      <td class="qt-tbl-amt">${parseFloat(s.price || 0).toFixed(2)}${cur}</td>
+      <td class="qt-tbl-amt">${formatMoney(parseFloat(s.price || 0), {currency: cur})}</td>
       <td><span class="so-badge" style="background:${color}20;color:${color};border-color:${color}40">${escHtml(s.status_label)}</span></td>
       <td class="qt-tbl-muted">${(() => {
         const extra = `${_subsDueBadge(s)}${s.last_notified_at ? `<span class="subs-notified-hint">${fmtNotified(s.last_notified_at)}</span>` : ''}`;
@@ -1004,7 +1018,7 @@ function _subsAddCadence(date, period) {
 
 function _subsBuildSchedule(s) {
   if (!s.started_at) return [];
-  const cur = state.currency ? ' ' + state.currency : '';
+  const cur = state.currency || '';
   const fmtMonth = d => d.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
   const fmtDay   = d => d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
   const today = new Date(); today.setHours(0, 0, 0, 0);
@@ -1036,7 +1050,7 @@ function _subsBuildSchedule(s) {
       futureShown++;
     }
 
-    rows.push({ label: fmtMonth(cursor), date: fmtDay(cursor), amount: `${parseFloat(s.price || 0).toFixed(2)}${cur}`, status, statusColor });
+    rows.push({ label: fmtMonth(cursor), date: fmtDay(cursor), amount: `${formatMoney(parseFloat(s.price || 0), {currency: cur})}`, status, statusColor });
 
     if (nextBilling && cursor >= nextBilling && futureShown >= FUTURE_CYCLES_TO_SHOW) break;
     if (!nextBilling && rows.length >= 6) break;
@@ -1051,7 +1065,7 @@ function _subsOpenDetail(s) {
   const statusColors = { trial: '#8b5cf6', active: '#22c55e', paused: '#f59e0b', cancelled: '#ef4444' };
   const periodLabels = { weekly: 'Weekly', monthly: 'Monthly', quarterly: 'Quarterly', yearly: 'Yearly' };
   const color = statusColors[s.status] || '#8b5cf6';
-  const cur = state.currency ? ' ' + state.currency : '';
+  const cur = state.currency || '';
   const fmtDate = d => d ? new Date(d + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
   const fmtDateTime = d => d ? new Date(d).toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : '—';
 
@@ -1068,7 +1082,7 @@ function _subsOpenDetail(s) {
     `<tr><td class="inv-dt-label">${escHtml(label)}</td><td class="inv-dt-val">${val}</td></tr>`).join('');
 
   const subRows = [
-    ['Price',    `<strong>${parseFloat(s.price || 0).toFixed(2)}${cur}</strong>`],
+    ['Price',    `<strong>${formatMoney(parseFloat(s.price || 0), {currency: cur})}</strong>`],
     ['Quantity', escHtml(String(s.quantity ?? 1))],
     ['Product',  escHtml(s.product_name || '—') + (s.product_sku ? ` <span style="color:var(--text-muted)">(${escHtml(s.product_sku)})</span>` : '')],
     ['Sale',     s.sale_number ? escHtml(s.sale_number) : '—'],
@@ -1197,7 +1211,7 @@ async function loadPendingCredits() {
 }
 
 function _pcRender() {
-  const cur    = state.currency ? ' ' + state.currency : '';
+  const cur    = state.currency || '';
   const body   = $('#sal-credits-body');
   const kpiEl  = $('#sal-credits-kpi');
   const q      = _pcSearch.toLowerCase();
@@ -1224,11 +1238,11 @@ function _pcRender() {
       </div>
       <div class="pc-kpi">
         <div class="pc-kpi-label">Total Outstanding</div>
-        <div class="pc-kpi-value">${totalOwed.toFixed(2)}${cur}</div>
+        <div class="pc-kpi-value">${formatMoney(totalOwed, {currency: cur})}</div>
       </div>
       <div class="pc-kpi overdue">
         <div class="pc-kpi-label">Overdue</div>
-        <div class="pc-kpi-value">${totalOverdue.toFixed(2)}${cur}</div>
+        <div class="pc-kpi-value">${formatMoney(totalOverdue, {currency: cur})}</div>
       </div>
       <div class="pc-kpi overdue">
         <div class="pc-kpi-label">Overdue Customers</div>
@@ -1260,7 +1274,7 @@ function _pcRender() {
         <td style="font-weight:700">${escHtml(s.sale_number || String(s.id))}</td>
         <td>${fmtTime(s.sold_at)}</td>
         <td>${dueDateHtml}</td>
-        <td style="text-align:right;font-weight:700">${s.total.toFixed(2)}${cur}</td>
+        <td style="text-align:right;font-weight:700">${formatMoney(s.total, {currency: cur})}</td>
       </tr>`;
     }).join('');
 
@@ -1272,8 +1286,8 @@ function _pcRender() {
           <div class="pc-customer-meta">${g.customer_phone ? escHtml(g.customer_phone) + ' · ' : ''}${g.sale_count} sale${g.sale_count !== 1 ? 's' : ''}</div>
         </div>
         <div class="pc-customer-right">
-          <div class="pc-customer-total">${g.total_owed.toFixed(2)}${cur}</div>
-          ${hasBadge ? `<div class="pc-overdue-badge"><i class="fa fa-triangle-exclamation"></i> Overdue ${g.overdue_amount.toFixed(2)}${cur}</div>` : ''}
+          <div class="pc-customer-total">${formatMoney(g.total_owed, {currency: cur})}</div>
+          ${hasBadge ? `<div class="pc-overdue-badge"><i class="fa fa-triangle-exclamation"></i> Overdue ${formatMoney(g.overdue_amount, {currency: cur})}</div>` : ''}
         </div>
         <i class="fa fa-chevron-down pc-customer-chevron"></i>
       </div>
@@ -1310,7 +1324,7 @@ function _salApplyFilters() {
 }
 
 function _salRenderList() {
-  const cur = state.currency ? ' ' + state.currency : '';
+  const cur = state.currency || '';
   const list = _sal.filtered;
 
   // KPI bar
@@ -1330,7 +1344,7 @@ function _salRenderList() {
       </div>
       <div class="sal-kpi-item">
         <span class="sal-kpi-label">Revenue</span>
-        <span class="sal-kpi-val accent">${revenue.toFixed(2)}${cur}</span>
+        <span class="sal-kpi-val accent">${formatMoney(revenue, {currency: cur})}</span>
       </div>`;
   } else {
     kpiBar.style.display = 'none';
@@ -1362,7 +1376,7 @@ function _salRenderList() {
         <td><span class="sal-channel-chip ${ch}">${chLbl}</span></td>
         <td class="td-muted">${escHtml(s.payment_method || '—')}</td>
         <td><span class="bs-sales-badge ${cls}">${lbl}</span></td>
-        <td class="td-amt">${parseFloat(s.total || 0).toFixed(2)}${cur}</td>
+        <td class="td-amt">${formatMoney(parseFloat(s.total || 0), {currency: cur})}</td>
       </tr>`;
     }).join('')}
     </tbody>
@@ -1388,7 +1402,7 @@ async function _salSelectSale(id) {
   _sal.activeSale = sale;
 
   const num     = sale.sale_number || String(sale.id);
-  const cur     = state.currency ? ' ' + state.currency : '';
+  const cur     = state.currency || '';
   const isVoided = sale.status === 'voided';
 
   $('#sal-detail-title').textContent = `Sale #${num}`;
@@ -1408,8 +1422,8 @@ async function _salSelectSale(id) {
     return `<tr>
     <td>${escHtml(i.product_name || '—')}${wtyBadge}</td>
     <td class="td-r">${parseFloat(i.quantity) % 1 === 0 ? parseInt(i.quantity) : parseFloat(i.quantity).toFixed(2)}</td>
-    <td class="td-r">${parseFloat(i.unit_sell_price || 0).toFixed(2)}${cur}</td>
-    <td class="td-r"><strong>${parseFloat(i.line_total || 0).toFixed(2)}${cur}</strong></td>
+    <td class="td-r">${formatMoney(parseFloat(i.unit_sell_price || 0), {currency: cur})}</td>
+    <td class="td-r"><strong>${formatMoney(parseFloat(i.line_total || 0), {currency: cur})}</strong></td>
   </tr>`;
   }).join('');
 
@@ -1417,15 +1431,15 @@ async function _salSelectSale(id) {
   const change   = parseFloat(sale.change_amount || 0);
 
   let totalsHTML = `
-    <div class="sal-total-row"><span class="label">Subtotal</span><span>${parseFloat(sale.subtotal || 0).toFixed(2)}${cur}</span></div>`;
+    <div class="sal-total-row"><span class="label">Subtotal</span><span>${formatMoney(parseFloat(sale.subtotal || 0), {currency: cur})}</span></div>`;
   if (discount > 0) {
-    totalsHTML += `<div class="sal-total-row"><span class="label">Discount</span><span>-${discount.toFixed(2)}${cur}</span></div>`;
+    totalsHTML += `<div class="sal-total-row"><span class="label">Discount</span><span>-${formatMoney(discount, {currency: cur})}</span></div>`;
   }
   totalsHTML += `
-    <div class="sal-total-row grand"><span class="label">Total</span><span>${parseFloat(sale.total || 0).toFixed(2)}${cur}</span></div>
-    <div class="sal-total-row"><span class="label">Paid (${escHtml(sale.payment_method_label || sale.payment_method || '')})</span><span>${parseFloat(sale.amount_paid || sale.total || 0).toFixed(2)}${cur}</span></div>`;
+    <div class="sal-total-row grand"><span class="label">Total</span><span>${formatMoney(parseFloat(sale.total || 0), {currency: cur})}</span></div>
+    <div class="sal-total-row"><span class="label">Paid (${escHtml(sale.payment_method_label || sale.payment_method || '')})</span><span>${formatMoney(parseFloat(sale.amount_paid || sale.total || 0), {currency: cur})}</span></div>`;
   if (change > 0) {
-    totalsHTML += `<div class="sal-total-row"><span class="label">Change</span><span>${change.toFixed(2)}${cur}</span></div>`;
+    totalsHTML += `<div class="sal-total-row"><span class="label">Change</span><span>${formatMoney(change, {currency: cur})}</span></div>`;
   }
 
   $('#sal-detail-body').innerHTML = `
@@ -1604,7 +1618,7 @@ async function loadSalesHistory(page) {
 }
 
 function _salHistRenderKPIs(summary) {
-  const cur  = state.currency ? ' ' + state.currency : '';
+  const cur  = state.currency || '';
   const bar  = $('#sal-hist-kpi');
   const avg  = summary.completed_count > 0 ? summary.completed_total / summary.completed_count : 0;
   bar.style.display = '';
@@ -1623,11 +1637,11 @@ function _salHistRenderKPIs(summary) {
     </div>
     <div class="sal-kpi-item">
       <span class="sal-kpi-label">Revenue</span>
-      <span class="sal-kpi-val accent">${parseFloat(summary.completed_total ?? 0).toFixed(2)}${cur}</span>
+      <span class="sal-kpi-val accent">${formatMoney(parseFloat(summary.completed_total ?? 0), {currency: cur})}</span>
     </div>
     <div class="sal-kpi-item">
       <span class="sal-kpi-label">Avg Order</span>
-      <span class="sal-kpi-val">${avg.toFixed(2)}${cur}</span>
+      <span class="sal-kpi-val">${formatMoney(avg, {currency: cur})}</span>
     </div>`;
 }
 
@@ -1699,7 +1713,7 @@ function _salHistRenderChart(chartData, dates) {
 }
 
 function _salHistRenderTable(data) {
-  const cur = state.currency ? ' ' + state.currency : '';
+  const cur = state.currency || '';
   if (!data.length) {
     $('#sal-hist-table-wrap').innerHTML = '<div class="finance-loading">No transactions for this period.</div>';
     return;
@@ -1720,7 +1734,7 @@ function _salHistRenderTable(data) {
         <td><span class="sal-channel-chip ${ch}">${s.channel === 'online' ? 'Online' : 'POS'}</span></td>
         <td class="td-muted">${escHtml(s.payment_method || '—')}</td>
         <td><span class="bs-sales-badge ${cls}">${cls === 'voided' ? 'Voided' : 'Completed'}</span></td>
-        <td class="td-amt">${parseFloat(s.total || 0).toFixed(2)}${cur}</td>
+        <td class="td-amt">${formatMoney(parseFloat(s.total || 0), {currency: cur})}</td>
       </tr>`;
     }).join('')}
     </tbody>
@@ -1812,8 +1826,8 @@ async function _eodLoad() {
   }
 
   const d         = eodRes.body;
-  const currency  = d.currency ? ' ' + d.currency : '';
-  const fmt       = v => (v ?? 0).toFixed(2) + currency;
+  const currency  = d.currency || '';
+  const fmt       = v => formatMoney(v ?? 0, {currency});
   const eodSum    = d.summary   || {};
   const unsettled = d.unsettled || [];
   const history   = d.history   || [];
@@ -1904,7 +1918,7 @@ async function _eodLoad() {
             <td style="color:var(--text-muted)">${t2}</td>
             <td style="color:var(--text-muted)">${escHtml(s.customer_name || '—')}</td>
             ${isCredit ? `<td style="color:var(--text-muted)">${fmtDue(s.credit_due_date)}</td>` : ''}
-            <td style="text-align:right;font-weight:700">${s.total.toFixed(2)}${currency}</td>
+            <td style="text-align:right;font-weight:700">${fmt(s.total)}</td>
           </tr>`;
         });
         html += `</tbody><tfoot><tr>
@@ -1947,7 +1961,7 @@ async function _eodLoad() {
           return `<tr>
             <td style="color:var(--text-muted)">${t}</td>
             <td>${escHtml(w.note || '—')}</td>
-            <td style="text-align:right;font-weight:700">${w.amount.toFixed(2)}${currency}</td>
+            <td style="text-align:right;font-weight:700">${fmt(w.amount)}</td>
           </tr>`;
         }).join('')}
         </tbody>
@@ -1995,7 +2009,7 @@ async function _eodLoad() {
             <td style="color:var(--text-muted)">${t}</td>
             <td><span class="${badge}">${label}</span></td>
             <td style="color:var(--text-muted);font-size:11px">${escHtml(s.account_label || '—')}</td>
-            <td style="text-align:right;font-weight:700">${s.total.toFixed(2)}${currency}</td>
+            <td style="text-align:right;font-weight:700">${fmt(s.total)}</td>
           </tr>`;
         }).join('')}
         </tbody>
@@ -2022,7 +2036,7 @@ async function _eodLoad() {
       return `<div class="eod-history-row">
         <span class="eod-history-date">${dt}</span>
         <span class="eod-history-count">${r.sale_count} sale${r.sale_count !== 1 ? 's' : ''}</span>
-        <span class="eod-history-total">${r.total.toFixed(2)}${currency}</span>
+        <span class="eod-history-total">${fmt(r.total)}</span>
       </div>`;
     }).join('');
     html += `</div></div>`;
@@ -2123,15 +2137,15 @@ $('#cash-withdraw-fill-max').addEventListener('click', () => {
 });
 
 function _openCashWithdrawModal(balance = null) {
-  const cur = state.currency ? ' ' + state.currency : '';
+  const cur = state.currency || '';
   const amtInput = $('#cash-withdraw-amount');
   amtInput.value = '';
-  amtInput.placeholder = balance !== null ? `Max: ${balance.toFixed(2)}${cur}` : '0.00';
+  amtInput.placeholder = balance !== null ? `Max: ${formatMoney(balance, {currency: cur})}` : '0.00';
   amtInput.max = balance !== null ? balance : '';
 
   const balEl = $('#cash-withdraw-balance-hint');
   if (balEl) {
-    balEl.textContent = balance !== null ? `Available balance: ${balance.toFixed(2)}${cur}` : '';
+    balEl.textContent = balance !== null ? `Available balance: ${formatMoney(balance, {currency: cur})}` : '';
     balEl.style.display = balance !== null ? 'block' : 'none';
   }
 
@@ -2156,9 +2170,9 @@ $('#cash-withdraw-confirm').addEventListener('click', async () => {
   if (res.status === 200) {
     const newBalance = res.body?.data?.balance ?? null;
     $('#cash-withdraw-overlay').style.display = 'none';
-    const cur = state.currency ? ' ' + state.currency : '';
-    const balMsg = newBalance !== null ? ` — balance: ${newBalance.toFixed(2)}${cur}` : '';
-    toast(`Withdrawal of ${amount.toFixed(2)}${cur} recorded${balMsg}.`, 'success');
+    const cur = state.currency || '';
+    const balMsg = newBalance !== null ? ` — balance: ${formatMoney(newBalance, {currency: cur})}` : '';
+    toast(`Withdrawal of ${formatMoney(amount, {currency: cur})} recorded${balMsg}.`, 'success');
     if (_eod.open) _eodLoad();
     _loadPosRibbonStats();
   } else {
@@ -2170,8 +2184,8 @@ async function _loadPosRibbonStats() {
   if (!el) return;
   el.innerHTML = '<div class="prs-spin"><i class="fa fa-spinner fa-spin"></i></div>';
 
-  const cur = state.currency ? ' ' + state.currency : '';
-  const fmt = v => (v ?? 0).toFixed(2) + cur;
+  const cur = state.currency || '';
+  const fmt = v => formatMoney(v ?? 0, {currency: cur});
 
   const [sumRes, drawerRes] = await Promise.all([
     API.todaySummary(),
@@ -2254,7 +2268,7 @@ async function loadQuotesList() {
 }
 
 function _qtRenderList() {
-  const cur = state.currency ? ' ' + state.currency : '';
+  const cur = state.currency || '';
   if (!_qt.list.length) {
     $('#qt-list-body').innerHTML = `<div class="qt-empty">
       <i class="fa fa-file-circle-question"></i>
@@ -2274,7 +2288,7 @@ function _qtRenderList() {
     <div class="qt-stat blue"><span class="qt-stat-val">${counts.sent}</span><span class="qt-stat-lbl">Sent</span></div>
     <div class="qt-stat green"><span class="qt-stat-val">${counts.accepted}</span><span class="qt-stat-lbl">Accepted</span></div>
     <div class="qt-stat"><span class="qt-stat-val">${counts.draft}</span><span class="qt-stat-lbl">Draft</span></div>
-    <div class="qt-stat" style="flex:2"><span class="qt-stat-val" style="font-size:16px">${totalVal.toFixed(2)}${cur}</span><span class="qt-stat-lbl">Total Value</span></div>
+    <div class="qt-stat" style="flex:2"><span class="qt-stat-val" style="font-size:16px">${formatMoney(totalVal, {currency: cur})}</span><span class="qt-stat-lbl">Total Value</span></div>
   </div>
   <div class="qt-tbl-wrap"><table class="qt-tbl">
     <thead><tr>
@@ -2298,7 +2312,7 @@ function _qtRenderList() {
       <td class="qt-tbl-muted">${expiry}</td>
       <td><span class="qt-badge qt-badge-${q.status}">${escHtml(q.status_label)}</span></td>
       <td style="text-align:center">${proposalCell}</td>
-      <td class="qt-tbl-amt">${parseFloat(q.total || 0).toFixed(2)}${cur}</td>
+      <td class="qt-tbl-amt">${formatMoney(parseFloat(q.total || 0), {currency: cur})}</td>
       <td class="qt-tbl-chevron"><i class="fa fa-chevron-right"></i></td>
     </tr>`;
   });
@@ -2325,7 +2339,7 @@ async function _qtOpenDetail(id) {
   }
 
   const q   = res.body?.data;
-  const cur = state.currency ? ' ' + state.currency : '';
+  const cur = state.currency || '';
   $('#qt-detail-title').textContent = q.quote_number;
 
   // Actions in topbar
@@ -2348,8 +2362,8 @@ async function _qtOpenDetail(id) {
     <td class="qt-item-n">${idx + 1}</td>
     <td>${escHtml(item.description || '—')}</td>
     <td class="td-r">${parseFloat(item.quantity) % 1 === 0 ? parseInt(item.quantity) : parseFloat(item.quantity).toFixed(2)}</td>
-    <td class="td-r">${parseFloat(item.unit_price).toFixed(2)}${cur}</td>
-    <td class="td-r qt-item-total">${parseFloat(item.line_total).toFixed(2)}${cur}</td>
+    <td class="td-r">${formatMoney(parseFloat(item.unit_price), {currency: cur})}</td>
+    <td class="td-r qt-item-total">${formatMoney(parseFloat(item.line_total), {currency: cur})}</td>
   </tr>`).join('');
 
   const body = `<div class="qt-doc">
@@ -2388,10 +2402,10 @@ async function _qtOpenDetail(id) {
 
       <div class="qt-doc-totals-wrap">
         <div class="qt-doc-totals">
-          <div class="qt-doc-total-line"><span>Subtotal</span><span>${q.subtotal.toFixed(2)}${cur}</span></div>
-          ${q.discount_amount > 0 ? `<div class="qt-doc-total-line"><span>Discount</span><span>-${q.discount_amount.toFixed(2)}${cur}</span></div>` : ''}
-          ${q.tax_amount > 0      ? `<div class="qt-doc-total-line"><span>Tax</span><span>+${q.tax_amount.toFixed(2)}${cur}</span></div>` : ''}
-          <div class="qt-doc-total-line grand"><span>Total</span><span>${q.total.toFixed(2)}${cur}</span></div>
+          <div class="qt-doc-total-line"><span>Subtotal</span><span>${formatMoney(q.subtotal, {currency: cur})}</span></div>
+          ${q.discount_amount > 0 ? `<div class="qt-doc-total-line"><span>Discount</span><span>-${formatMoney(q.discount_amount, {currency: cur})}</span></div>` : ''}
+          ${q.tax_amount > 0      ? `<div class="qt-doc-total-line"><span>Tax</span><span>+${formatMoney(q.tax_amount, {currency: cur})}</span></div>` : ''}
+          <div class="qt-doc-total-line grand"><span>Total</span><span>${formatMoney(q.total, {currency: cur})}</span></div>
         </div>
       </div>
 
@@ -2455,7 +2469,7 @@ async function _fetchLetterhead() {
 // ── Print (with optional letterhead) ─────────────────────────────────────
 async function _qtPrint(q) {
   const lhFull = await _fetchLetterhead();
-  await window.electronAPI.openQuotePrint({ quote: q, letterhead: lhFull, currency: state.currency });
+  await window.electronAPI.openQuotePrint({ quote: q, letterhead: lhFull, currency: state.currency, currencyPosition: currencyPosition() });
 }
 
 // ── Form (Create / Edit) ──────────────────────────────────────────────────
@@ -2879,7 +2893,7 @@ async function loadInvoicesList() {
     return;
   }
 
-  const cur = state.currency ? ' ' + state.currency : '';
+  const cur = state.currency || '';
 
   // KPI stats
   const counts = { draft: 0, sent: 0, paid: 0, overdue: 0, cancelled: 0 };
@@ -2895,7 +2909,7 @@ async function loadInvoicesList() {
     <div class="qt-stat blue"><span class="qt-stat-val">${counts.sent}</span><span class="qt-stat-lbl">Sent</span></div>
     <div class="qt-stat green"><span class="qt-stat-val">${counts.paid}</span><span class="qt-stat-lbl">Paid</span></div>
     <div class="qt-stat" style="--val-col:#ef4444"><span class="qt-stat-val" style="color:#ef4444">${counts.overdue}</span><span class="qt-stat-lbl">Overdue</span></div>
-    <div class="qt-stat" style="flex:2"><span class="qt-stat-val" style="font-size:16px">${totalVal.toFixed(2)}${cur}</span><span class="qt-stat-lbl">Total Value</span></div>
+    <div class="qt-stat" style="flex:2"><span class="qt-stat-val" style="font-size:16px">${formatMoney(totalVal, {currency: cur})}</span><span class="qt-stat-lbl">Total Value</span></div>
   </div>
   <div class="qt-tbl-wrap"><table class="qt-tbl">
     <thead><tr>
@@ -2922,7 +2936,7 @@ async function loadInvoicesList() {
       <td class="qt-tbl-muted" ${overdueClass}>${dueDate}</td>
       <td><span class="qt-badge qt-badge-${statusKey}">${escHtml(inv.status_label)}</span></td>
       <td style="text-align:center">${proposalCell}</td>
-      <td class="qt-tbl-amt">${parseFloat(inv.total || 0).toFixed(2)}${cur}</td>
+      <td class="qt-tbl-amt">${formatMoney(parseFloat(inv.total || 0), {currency: cur})}</td>
       <td class="qt-tbl-chevron"><i class="fa fa-chevron-right"></i></td>
     </tr>`;
   });
@@ -2960,7 +2974,7 @@ async function _invOpenDetail(id) {
     $('#sinv-detail-body').innerHTML = '<div class="qt-empty"><i class="fa fa-circle-exclamation"></i> Invalid response from server.</div>';
     return;
   }
-  const cur  = state.currency ? ' ' + state.currency : '';
+  const cur  = state.currency || '';
   $('#sinv-detail-title').textContent = inv.invoice_number;
 
   // Action buttons
@@ -3029,7 +3043,7 @@ async function _invOpenDetail(id) {
     let discCell = '—';
     if (discVal > 0) {
       const discLabel = discType === 'flat'
-        ? `−${discAmt.toFixed(2)}${cur}`
+        ? `−${formatMoney(discAmt, {currency: cur})}`
         : `${discVal}%`;
       discCell = `<span class="invd-adj-badge invd-disc-badge">${discLabel}</span>`;
     }
@@ -3043,7 +3057,7 @@ async function _invOpenDetail(id) {
       );
       const taxLabel = matchRule
         ? escHtml(matchRule.name) + (taxType !== 'flat' ? ' ' + taxVal + '%' : '')
-        : (taxType === 'flat' ? taxAmt.toFixed(2) + cur : taxVal + '%');
+        : (taxType === 'flat' ? formatMoney(taxAmt, {currency: cur}) : taxVal + '%');
       taxCell = `<span class="invd-adj-badge invd-tax-badge">${taxLabel}</span>`;
     }
 
@@ -3051,10 +3065,10 @@ async function _invOpenDetail(id) {
       <td class="qt-item-n">${idx + 1}</td>
       <td>${escHtml(item.description || '—')}</td>
       <td class="td-r">${qty % 1 === 0 ? parseInt(qty) : qty.toFixed(2)}</td>
-      <td class="td-r">${price.toFixed(2)}${cur}</td>
+      <td class="td-r">${formatMoney(price, {currency: cur})}</td>
       <td class="td-r">${discCell}</td>
       <td class="td-r">${taxCell}</td>
-      <td class="td-r qt-item-total">${parseFloat(item.line_total).toFixed(2)}${cur}</td>
+      <td class="td-r qt-item-total">${formatMoney(parseFloat(item.line_total), {currency: cur})}</td>
     </tr>`;
   }).join('');
 
@@ -3065,21 +3079,21 @@ async function _invOpenDetail(id) {
 
   let summaryHtml = '';
   if (hasPerLineAdj) {
-    summaryHtml += `<div class="qt-doc-total-line"><span>Gross Subtotal</span><span>${rawSubtotal.toFixed(2)}${cur}</span></div>`;
+    summaryHtml += `<div class="qt-doc-total-line"><span>Gross Subtotal</span><span>${formatMoney(rawSubtotal, {currency: cur})}</span></div>`;
     if (perLineDiscTotal > 0.001)
-      summaryHtml += `<div class="qt-doc-total-line invd-tot-disc"><span>Item Discounts</span><span>−${perLineDiscTotal.toFixed(2)}${cur}</span></div>`;
+      summaryHtml += `<div class="qt-doc-total-line invd-tot-disc"><span>Item Discounts</span><span>−${formatMoney(perLineDiscTotal, {currency: cur})}</span></div>`;
     if (perLineTaxTotal > 0.001)
-      summaryHtml += `<div class="qt-doc-total-line invd-tot-tax"><span>Item Taxes</span><span>+${perLineTaxTotal.toFixed(2)}${cur}</span></div>`;
+      summaryHtml += `<div class="qt-doc-total-line invd-tot-tax"><span>Item Taxes</span><span>+${formatMoney(perLineTaxTotal, {currency: cur})}</span></div>`;
     if (hasHeaderDisc || hasHeaderTax)
-      summaryHtml += `<div class="qt-doc-total-line invd-tot-sub"><span>Line Subtotal</span><span>${parseFloat(inv.subtotal).toFixed(2)}${cur}</span></div>`;
+      summaryHtml += `<div class="qt-doc-total-line invd-tot-sub"><span>Line Subtotal</span><span>${formatMoney(parseFloat(inv.subtotal), {currency: cur})}</span></div>`;
   } else {
-    summaryHtml += `<div class="qt-doc-total-line"><span>Subtotal</span><span>${parseFloat(inv.subtotal).toFixed(2)}${cur}</span></div>`;
+    summaryHtml += `<div class="qt-doc-total-line"><span>Subtotal</span><span>${formatMoney(parseFloat(inv.subtotal), {currency: cur})}</span></div>`;
   }
   if (hasHeaderDisc)
-    summaryHtml += `<div class="qt-doc-total-line invd-tot-disc"><span>Discount</span><span>−${parseFloat(inv.discount_amount).toFixed(2)}${cur}</span></div>`;
+    summaryHtml += `<div class="qt-doc-total-line invd-tot-disc"><span>Discount</span><span>−${formatMoney(parseFloat(inv.discount_amount), {currency: cur})}</span></div>`;
   if (hasHeaderTax)
-    summaryHtml += `<div class="qt-doc-total-line invd-tot-tax"><span>Tax</span><span>+${parseFloat(inv.tax_amount).toFixed(2)}${cur}</span></div>`;
-  summaryHtml += `<div class="qt-doc-total-line grand"><span>Total</span><span>${parseFloat(inv.total).toFixed(2)}${cur}</span></div>`;
+    summaryHtml += `<div class="qt-doc-total-line invd-tot-tax"><span>Tax</span><span>+${formatMoney(parseFloat(inv.tax_amount), {currency: cur})}</span></div>`;
+  summaryHtml += `<div class="qt-doc-total-line grand"><span>Total</span><span>${formatMoney(parseFloat(inv.total), {currency: cur})}</span></div>`;
 
   let body;
   try {
@@ -3118,7 +3132,7 @@ async function _invOpenDetail(id) {
           </div>` : ''}
           <div class="qt-field">
             <span class="qt-label">Amount Due</span>
-            <div class="invd-view-val invd-view-amt">${totalAmt}${cur}</div>
+            <div class="invd-view-val invd-view-amt">${formatMoney(totalAmt, {currency: cur})}</div>
           </div>
         </div>
       </div>
@@ -4147,7 +4161,7 @@ async function loadSalesOrderList() {
 }
 
 function _soRenderList() {
-  const cur = state.currency ? ' ' + state.currency : '';
+  const cur = state.currency || '';
   if (!_so.list.length) {
     $('#so-list-body').innerHTML = `<div class="qt-empty">
       <i class="fa fa-box-open"></i>
@@ -4167,7 +4181,7 @@ function _soRenderList() {
     <div class="qt-stat blue"><span class="qt-stat-val">${counts.confirmed}</span><span class="qt-stat-lbl">Confirmed</span></div>
     <div class="qt-stat" style="--sc:#8b5cf6"><span class="qt-stat-val">${counts.processing}</span><span class="qt-stat-lbl">Processing</span></div>
     <div class="qt-stat green"><span class="qt-stat-val">${counts.completed}</span><span class="qt-stat-lbl">Completed</span></div>
-    <div class="qt-stat" style="flex:2"><span class="qt-stat-val" style="font-size:16px">${totalVal.toFixed(2)}${cur}</span><span class="qt-stat-lbl">Total Value</span></div>
+    <div class="qt-stat" style="flex:2"><span class="qt-stat-val" style="font-size:16px">${formatMoney(totalVal, {currency: cur})}</span><span class="qt-stat-lbl">Total Value</span></div>
   </div>
   <div class="qt-tbl-wrap"><table class="qt-tbl">
     <thead><tr>
@@ -4186,7 +4200,7 @@ function _soRenderList() {
       <td class="qt-tbl-muted">${delivery}</td>
       <td><span class="so-badge" style="background:${o.status_color}20;color:${o.status_color};border-color:${o.status_color}40">${escHtml(o.status_label)}</span></td>
       <td style="text-align:right;color:var(--muted)">${o.item_count || 0}</td>
-      <td class="qt-tbl-amt">${parseFloat(o.total || 0).toFixed(2)}${cur}</td>
+      <td class="qt-tbl-amt">${formatMoney(parseFloat(o.total || 0), {currency: cur})}</td>
       <td class="qt-tbl-chevron"><i class="fa fa-chevron-right"></i></td>
     </tr>`;
   });
@@ -4223,7 +4237,7 @@ async function _soOpenDetail(id) {
   }
 
   const o   = res.body?.data;
-  const cur = state.currency ? ' ' + state.currency : '';
+  const cur = state.currency || '';
   $('#so-detail-title').textContent = o.order_number;
 
   // Action buttons
@@ -4271,7 +4285,7 @@ async function _soOpenDetail(id) {
 
     let discCell = '—';
     if (discVal > 0) {
-      const discLabel = discType === 'flat' ? `−${discAmt.toFixed(2)}${cur}` : `${discVal}%`;
+      const discLabel = discType === 'flat' ? `−${formatMoney(discAmt, {currency: cur})}` : `${discVal}%`;
       discCell = `<span class="invd-adj-badge invd-disc-badge">${discLabel}</span>`;
     }
 
@@ -4283,7 +4297,7 @@ async function _soOpenDetail(id) {
       );
       const taxLabel = matchRule
         ? escHtml(matchRule.name) + (taxType !== 'flat' ? ' ' + taxVal + '%' : '')
-        : (taxType === 'flat' ? taxAmt.toFixed(2) + cur : taxVal + '%');
+        : (taxType === 'flat' ? formatMoney(taxAmt, {currency: cur}) : taxVal + '%');
       taxCell = `<span class="invd-adj-badge invd-tax-badge">${taxLabel}</span>`;
     }
 
@@ -4291,10 +4305,10 @@ async function _soOpenDetail(id) {
     <td class="qt-item-n">${idx + 1}</td>
     <td>${escHtml(item.description || '—')}</td>
     <td class="td-r">${qty % 1 === 0 ? parseInt(qty) : qty.toFixed(3)}</td>
-    <td class="td-r">${price.toFixed(2)}${cur}</td>
+    <td class="td-r">${formatMoney(price, {currency: cur})}</td>
     <td class="td-r">${discCell}</td>
     <td class="td-r">${taxCell}</td>
-    <td class="td-r qt-item-total">${parseFloat(item.line_total).toFixed(2)}${cur}</td>
+    <td class="td-r qt-item-total">${formatMoney(parseFloat(item.line_total), {currency: cur})}</td>
   </tr>`;
   }).join('');
 
@@ -4329,10 +4343,10 @@ async function _soOpenDetail(id) {
       <tbody>${itemRows}</tbody>
     </table>
     <div class="qt-doc-totals">
-      <div class="qt-doc-total-line"><span>Subtotal</span><span>${parseFloat(o.subtotal).toFixed(2)}${cur}</span></div>
-      ${parseFloat(o.discount_amount) > 0 ? `<div class="qt-doc-total-line"><span>Discount</span><span>-${parseFloat(o.discount_amount).toFixed(2)}${cur}</span></div>` : ''}
-      ${parseFloat(o.tax_amount) > 0 ? `<div class="qt-doc-total-line"><span>Tax</span><span>${parseFloat(o.tax_amount).toFixed(2)}${cur}</span></div>` : ''}
-      <div class="qt-doc-total-line qt-doc-total-bold"><span>Total</span><span>${parseFloat(o.total).toFixed(2)}${cur}</span></div>
+      <div class="qt-doc-total-line"><span>Subtotal</span><span>${formatMoney(parseFloat(o.subtotal), {currency: cur})}</span></div>
+      ${parseFloat(o.discount_amount) > 0 ? `<div class="qt-doc-total-line"><span>Discount</span><span>-${formatMoney(parseFloat(o.discount_amount), {currency: cur})}</span></div>` : ''}
+      ${parseFloat(o.tax_amount) > 0 ? `<div class="qt-doc-total-line"><span>Tax</span><span>${formatMoney(parseFloat(o.tax_amount), {currency: cur})}</span></div>` : ''}
+      <div class="qt-doc-total-line qt-doc-total-bold"><span>Total</span><span>${formatMoney(parseFloat(o.total), {currency: cur})}</span></div>
     </div>
     ${o.notes ? `<div class="qt-doc-notes"><strong>Notes:</strong> ${escHtml(o.notes)}</div>` : ''}
   </div>`;
@@ -4588,13 +4602,13 @@ function _soLineTotal(item) {
 }
 
 function _soCalcTotals() {
-  const cur      = state.currency ? ' ' + state.currency : '';
+  const cur      = state.currency || '';
   const subtotal = _so.items.reduce((s, i) => s + _soLineTotal(i), 0);
   const discount = parseFloat($('#so-f-discount').value) || 0;
   const tax      = parseFloat($('#so-f-tax').value)      || 0;
   const total    = Math.max(0, subtotal - discount + tax);
-  $('#so-f-subtotal').textContent = subtotal.toFixed(2) + cur;
-  $('#so-f-total').textContent    = total.toFixed(2) + cur;
+  $('#so-f-subtotal').textContent = formatMoney(subtotal, {currency: cur});
+  $('#so-f-total').textContent    = formatMoney(total, {currency: cur});
 }
 
 async function _soOpenForm(order) {
@@ -7778,7 +7792,7 @@ async function _ctbUpdateToday() {
       const revenue = res.body?.data?.sales?.revenue;
       if (revenue !== undefined && revenue !== null) {
         const cur = state.currency || '';
-        el.textContent = cur ? `${cur} ${Number(revenue).toFixed(2)}` : Number(revenue).toFixed(2);
+        el.textContent = cur ? `${formatMoney(Number(revenue), {currency: cur})}` : Number(revenue).toFixed(2);
         return;
       }
     }
@@ -9773,7 +9787,7 @@ function _tdsDrawChart(canvasId, values, color, label) {
 // ── Today Summary ──────────────────────────────────────────────────────────
 async function loadTodaySummary() {
   const body = $('#tds-body');
-  const cur  = state.currency ? ' ' + state.currency : '';
+  const cur  = state.currency || '';
   if (!body) return;
 
   const dateStr = new Date().toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
@@ -9806,7 +9820,7 @@ async function loadTodaySummary() {
       <div class="tds-kpi-card">
         <div class="tds-kpi-icon" style="background:rgba(34,197,94,.12);color:#22c55e"><i class="fa fa-dollar-sign"></i></div>
         <div class="tds-kpi-body">
-          <div class="tds-kpi-val">${sales.revenue.toFixed(2)}${cur}</div>
+          <div class="tds-kpi-val">${formatMoney(sales.revenue, {currency: cur})}</div>
           <div class="tds-kpi-lbl">Revenue</div>
         </div>
       </div>
@@ -9877,7 +9891,7 @@ async function loadTodaySummary() {
         <div class="tds-top-icon" style="color:${color}"><i class="fa ${icon}"></i></div>
         <div class="tds-top-name">${escHtml(it.name)}</div>
         <div class="tds-top-qty">${it.qty % 1 === 0 ? it.qty : it.qty.toFixed(2)} units</div>
-        <div class="tds-top-rev">${it.revenue.toFixed(2)}${cur}</div>
+        <div class="tds-top-rev">${formatMoney(it.revenue, {currency: cur})}</div>
       </div>`).join('');
   };
 
@@ -9894,7 +9908,7 @@ async function loadTodaySummary() {
             <div class="tds-sale-num">${escHtml(s.sale_number || '#' + s.id)}</div>
             <div class="tds-sale-meta">${time} · ${s.items_count} item${s.items_count !== 1 ? 's' : ''}</div>
           </div>
-          <div class="tds-sale-total">${s.total.toFixed(2)}${cur}</div>
+          <div class="tds-sale-total">${formatMoney(s.total, {currency: cur})}</div>
         </div>`;
     }).join('');
   };
@@ -10130,7 +10144,7 @@ function _expDrawMultiLine(canvasId, months, series) {
 // ── Expenses View ──────────────────────────────────────────────────────────
 async function loadExpensesView() {
   const body = $('#exp-body');
-  const cur  = state.currency ? ' ' + state.currency : '';
+  const cur  = state.currency || '';
   if (!body) return;
   body.innerHTML = '<div class="inv-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</div>';
 
@@ -10161,7 +10175,7 @@ async function loadExpensesView() {
       <div class="exp-kpi-card">
         <div class="exp-kpi-icon" style="background:rgba(239,68,68,.12);color:#ef4444"><i class="fa fa-file-invoice-dollar"></i></div>
         <div class="exp-kpi-body">
-          <div class="exp-kpi-val">${sum.total_monthly.toFixed(2)}${cur}</div>
+          <div class="exp-kpi-val">${formatMoney(sum.total_monthly, {currency: cur})}</div>
           <div class="exp-kpi-lbl">Monthly Total</div>
         </div>
       </div>
@@ -10182,14 +10196,14 @@ async function loadExpensesView() {
       <div class="exp-kpi-card">
         <div class="exp-kpi-icon" style="background:rgba(139,92,246,.12);color:#8b5cf6"><i class="fa fa-building"></i></div>
         <div class="exp-kpi-body">
-          <div class="exp-kpi-val">${sum.rentals_monthly.toFixed(2)}${cur}</div>
+          <div class="exp-kpi-val">${formatMoney(sum.rentals_monthly, {currency: cur})}</div>
           <div class="exp-kpi-lbl">Rentals / Mo</div>
         </div>
       </div>
       <div class="exp-kpi-card">
         <div class="exp-kpi-icon" style="background:rgba(16,185,129,.12);color:#10b981"><i class="fa fa-screwdriver-wrench"></i></div>
         <div class="exp-kpi-body">
-          <div class="exp-kpi-val">${sum.mods_total.toFixed(2)}${cur}</div>
+          <div class="exp-kpi-val">${formatMoney(sum.mods_total, {currency: cur})}</div>
           <div class="exp-kpi-lbl">Modifications</div>
         </div>
       </div>
@@ -10239,7 +10253,7 @@ async function loadExpensesView() {
                 <div class="exp-bill-meta">${escHtml(b.category_label)} · ${escHtml(modeLabel)}${b.due_date_fmt ? ' · Due ' + escHtml(b.due_date_fmt) : ''}</div>
               </div>
               ${badge}
-              <div class="exp-bill-amount" style="color:${col}">${b.amount_varies ? '—' : b.amount.toFixed(2) + cur}</div>
+              <div class="exp-bill-amount" style="color:${col}">${b.amount_varies ? '—' : formatMoney(b.amount, {currency: cur})}</div>
             </div>`;
         }).join('')}
       </div>`;
@@ -10257,7 +10271,7 @@ async function loadExpensesView() {
           <div class="exp-simple-row">
             <div class="exp-simple-icon" style="color:#8b5cf6"><i class="fa fa-door-open"></i></div>
             <div class="exp-simple-name">${escHtml(r.name)}</div>
-            <div class="exp-simple-amount">${r.amount.toFixed(2)}${cur}</div>
+            <div class="exp-simple-amount">${formatMoney(r.amount, {currency: cur})}</div>
           </div>`).join('')}
       </div>`;
   }
@@ -10272,7 +10286,7 @@ async function loadExpensesView() {
           <div class="exp-simple-row">
             <div class="exp-simple-icon" style="color:#10b981"><i class="fa fa-wrench"></i></div>
             <div class="exp-simple-name">${escHtml(m.name)}</div>
-            <div class="exp-simple-amount">${m.amount.toFixed(2)}${cur}</div>
+            <div class="exp-simple-amount">${formatMoney(m.amount, {currency: cur})}</div>
           </div>`).join('')}
       </div>`;
   }
@@ -10290,7 +10304,7 @@ async function loadExpensesView() {
               <div class="exp-pay-title">${escHtml(p.source_title)}</div>
               <div class="exp-pay-meta">${escHtml(p.source_label)} · ${escHtml(p.date_fmt)}</div>
             </div>
-            <div class="exp-pay-amount">${p.amount.toFixed(2)}${cur}</div>
+            <div class="exp-pay-amount">${formatMoney(p.amount, {currency: cur})}</div>
           </div>`).join('')}
       </div>`;
   }
@@ -10364,7 +10378,7 @@ $('#exp-refresh')?.addEventListener('click', loadExpensesView);
 // ── Profit Report ──────────────────────────────────────────────────────────
 async function loadProfitReport() {
   const body   = $('#prf-body');
-  const cur    = state.currency ? ' ' + state.currency : '';
+  const cur    = state.currency || '';
   if (!body) return;
   body.innerHTML = '<div class="inv-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</div>';
 
@@ -10402,14 +10416,14 @@ async function loadProfitReport() {
         <div class="exp-kpi-card">
           <div class="exp-kpi-icon" style="background:rgba(59,130,246,.12);color:#3b82f6"><i class="fa fa-circle-dollar-to-slot"></i></div>
           <div class="exp-kpi-body">
-            <div class="exp-kpi-val">${sum.revenue.toFixed(2)}${cur}</div>
+            <div class="exp-kpi-val">${formatMoney(sum.revenue, {currency: cur})}</div>
             <div class="exp-kpi-lbl">Revenue</div>
           </div>
         </div>
         <div class="exp-kpi-card">
           <div class="exp-kpi-icon" style="background:rgba(249,115,22,.12);color:#f97316"><i class="fa fa-box"></i></div>
           <div class="exp-kpi-body">
-            <div class="exp-kpi-val">${sum.cogs.toFixed(2)}${cur}</div>
+            <div class="exp-kpi-val">${formatMoney(sum.cogs, {currency: cur})}</div>
             <div class="exp-kpi-lbl">COGS</div>
           </div>
         </div>
@@ -10423,21 +10437,21 @@ async function loadProfitReport() {
         <div class="exp-kpi-card">
           <div class="exp-kpi-icon" style="background:rgba(34,197,94,.12);color:#22c55e"><i class="fa fa-arrow-trend-up"></i></div>
           <div class="exp-kpi-body">
-            <div class="exp-kpi-val" style="color:${gpColor}">${sum.gross_profit.toFixed(2)}${cur}</div>
+            <div class="exp-kpi-val" style="color:${gpColor}">${formatMoney(sum.gross_profit, {currency: cur})}</div>
             <div class="exp-kpi-lbl">Gross Profit</div>
           </div>
         </div>
         <div class="exp-kpi-card">
           <div class="exp-kpi-icon" style="background:rgba(239,68,68,.12);color:#ef4444"><i class="fa fa-file-invoice-dollar"></i></div>
           <div class="exp-kpi-body">
-            <div class="exp-kpi-val">${sum.expenses.toFixed(2)}${cur}</div>
+            <div class="exp-kpi-val">${formatMoney(sum.expenses, {currency: cur})}</div>
             <div class="exp-kpi-lbl">Expenses Paid</div>
           </div>
         </div>
         <div class="exp-kpi-card">
           <div class="exp-kpi-icon" style="background:rgba(99,102,241,.12);color:#6366f1"><i class="fa fa-sack-dollar"></i></div>
           <div class="exp-kpi-body">
-            <div class="exp-kpi-val" style="color:${npColor}">${sum.net_profit.toFixed(2)}${cur}</div>
+            <div class="exp-kpi-val" style="color:${npColor}">${formatMoney(sum.net_profit, {currency: cur})}</div>
             <div class="exp-kpi-lbl">Net Profit</div>
           </div>
         </div>
@@ -10464,7 +10478,7 @@ async function loadProfitReport() {
               <div class="prf-product-bar-wrap"><div class="prf-product-bar" style="width:${barW}%"></div></div>
             </div>
             <div class="prf-product-stats">
-              <div class="prf-product-gp" style="color:${mColor}">${p.gp.toFixed(2)}${cur}</div>
+              <div class="prf-product-gp" style="color:${mColor}">${formatMoney(p.gp, {currency: cur})}</div>
               <div class="prf-product-margin" style="color:${mColor}">${p.margin}%</div>
             </div>
           </div>`;
@@ -10507,7 +10521,7 @@ $('#prf-period-select')?.addEventListener('change', loadProfitReport);
 // ── Payroll Overview ───────────────────────────────────────────────────────
 async function loadPayrollView() {
   const body = $('#prl-body');
-  const cur  = state.currency ? ' ' + state.currency : '';
+  const cur  = state.currency || '';
   if (!body) return;
   body.innerHTML = '<div class="inv-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</div>';
 
@@ -10550,21 +10564,21 @@ async function loadPayrollView() {
         <div class="exp-kpi-card">
           <div class="exp-kpi-icon" style="background:rgba(34,197,94,.12);color:#22c55e"><i class="fa fa-money-check-dollar"></i></div>
           <div class="exp-kpi-body">
-            <div class="exp-kpi-val">${sum.last_cycle_net.toFixed(2)}${cur}</div>
+            <div class="exp-kpi-val">${formatMoney(sum.last_cycle_net, {currency: cur})}</div>
             <div class="exp-kpi-lbl">Net Pay ${cycleLabel}</div>
           </div>
         </div>
         <div class="exp-kpi-card">
           <div class="exp-kpi-icon" style="background:rgba(99,102,241,.12);color:#6366f1"><i class="fa fa-circle-dollar-to-slot"></i></div>
           <div class="exp-kpi-body">
-            <div class="exp-kpi-val">${sum.last_cycle_gross.toFixed(2)}${cur}</div>
+            <div class="exp-kpi-val">${formatMoney(sum.last_cycle_gross, {currency: cur})}</div>
             <div class="exp-kpi-lbl">Gross Earnings</div>
           </div>
         </div>
         <div class="exp-kpi-card">
           <div class="exp-kpi-icon" style="background:rgba(239,68,68,.12);color:#ef4444"><i class="fa fa-minus-circle"></i></div>
           <div class="exp-kpi-body">
-            <div class="exp-kpi-val">${sum.last_cycle_deductions.toFixed(2)}${cur}</div>
+            <div class="exp-kpi-val">${formatMoney(sum.last_cycle_deductions, {currency: cur})}</div>
             <div class="exp-kpi-lbl">Deductions</div>
           </div>
         </div>
@@ -10607,8 +10621,8 @@ async function loadPayrollView() {
               <div class="prl-cycle-meta">${c.emp_count} employees${c.period_start ? ' · ' + c.period_start : ''}</div>
             </div>
             <div class="prl-cycle-amounts">
-              <div class="prl-cycle-net">${c.net.toFixed(2)}${cur}</div>
-              <div class="prl-cycle-gross">Gross ${c.gross.toFixed(2)}${cur}</div>
+              <div class="prl-cycle-net">${formatMoney(c.net, {currency: cur})}</div>
+              <div class="prl-cycle-gross">Gross ${formatMoney(c.gross, {currency: cur})}</div>
             </div>
             ${statusBadge(c.status)}
           </div>`).join('');
@@ -10626,8 +10640,8 @@ async function loadPayrollView() {
                <div class="prf-product-bar-wrap"><div class="prf-product-bar" style="width:${barW}%;background:#22c55e"></div></div>
              </div>
              <div class="prf-product-stats">
-               <div class="prf-product-gp" style="color:#22c55e">${e.net.toFixed(2)}${cur}</div>
-               <div class="prf-product-margin" style="color:var(--text-muted)">-${e.deductions.toFixed(2)}${cur}</div>
+               <div class="prf-product-gp" style="color:#22c55e">${formatMoney(e.net, {currency: cur})}</div>
+               <div class="prf-product-margin" style="color:var(--text-muted)">-${formatMoney(e.deductions, {currency: cur})}</div>
              </div>
            </div>`;
          }).join('')}`
@@ -12366,7 +12380,7 @@ function _poRenderTable() {
       <td><strong>${po.po_number}</strong></td>
       <td>${po.supplier_name || '—'}</td>
       <td>${po.purchase_date || '—'}</td>
-      <td>${cur}${(po.total || 0).toFixed(2)}</td>
+      <td>${formatMoney((po.total || 0), {currency: cur})}</td>
       <td>${_poStatusBadge(po.status, po.status_label)}</td>
       <td><button class="po-dv-action-btn" data-action="view" data-id="${po.id}" style="padding:3px 8px;font-size:10px"><i class="fa fa-eye"></i></button></td>
     </tr>`;
@@ -12435,12 +12449,12 @@ function _poRenderDetail(po) {
       <td>${it.product_name || '—'}</td>
       <td style="color:var(--text-muted);font-size:10px">${it.sku || '—'}</td>
       <td>${it.quantity}</td>
-      <td>${cur}${it.unit_cost.toFixed(2)}</td>
-      <td>${cur}${it.line_total.toFixed(2)}</td>
+      <td>${formatMoney(it.unit_cost, {currency: cur})}</td>
+      <td>${formatMoney(it.line_total, {currency: cur})}</td>
     </tr>`).join('');
 
   // Totals
-  $('#po-dv-totals').innerHTML = `<span>Total</span><strong>${cur}${(po.total || 0).toFixed(2)}</strong>`;
+  $('#po-dv-totals').innerHTML = `<span>Total</span><strong>${formatMoney((po.total || 0), {currency: cur})}</strong>`;
 
   // Notes
   const notesEl = $('#po-dv-notes');
@@ -12450,7 +12464,7 @@ function _poRenderDetail(po) {
 
 async function _poPrint(po) {
   const lhFull = await _fetchLetterhead();
-  await window.electronAPI.openPoPrint({ po, letterhead: lhFull, currency: state.currency });
+  await window.electronAPI.openPoPrint({ po, letterhead: lhFull, currency: state.currency, currencyPosition: currencyPosition() });
 }
 
 async function _poAction(id, action) {
@@ -12497,8 +12511,8 @@ async function _poOpenModal() {
   $('#po-f-notes').value = '';
   $('#po-form-items-tbody').innerHTML = '';
   const cur = state.currency || '$';
-  $('#po-form-total').textContent       = cur + '0.00';
-  $('#po-summary-subtotal').textContent = cur + '0.00';
+  $('#po-form-total').textContent       = formatMoney(0, {currency: cur});
+  $('#po-summary-subtotal').textContent = formatMoney(0, {currency: cur});
   $('#po-summary-items').textContent    = '0';
   const emEl = $('#po-items-empty'); if (emEl) emEl.style.display = 'flex';
 
@@ -12519,7 +12533,7 @@ function _poAddFormItem(productId, productName, qty, cost) {
     </td>
     <td class="po-td-num"><input type="number" class="po-item-num po-item-qty" value="${qty}" min="0.001" step="any"></td>
     <td class="po-td-num"><input type="number" class="po-item-num po-item-cost" value="${parseFloat(cost).toFixed(2)}" min="0" step="0.01"></td>
-    <td class="po-td-total po-item-line-total">${cur}${(qty * cost).toFixed(2)}</td>
+    <td class="po-td-total po-item-line-total">${formatMoney((qty * cost), {currency: cur})}</td>
     <td style="text-align:center"><button class="po-item-del-btn" title="Remove"><i class="fa fa-xmark"></i></button></td>
   `;
   const qtyEl  = row.querySelector('.po-item-qty');
@@ -12553,7 +12567,7 @@ function _poAimUpdateTotal() {
   const qty  = parseFloat($('#po-aim-qty').value)  || 0;
   const cost = parseFloat($('#po-aim-cost').value) || 0;
   const cur  = state.currency || '$';
-  $('#po-aim-total').textContent = qty > 0 && cost > 0 ? `${cur}${(qty * cost).toFixed(2)}` : '—';
+  $('#po-aim-total').textContent = qty > 0 && cost > 0 ? `${formatMoney((qty * cost), {currency: cur})}` : '—';
 }
 
 async function _poAimRenderDd(q) {
@@ -12573,7 +12587,7 @@ async function _poAimRenderDd(q) {
   }
   dd.innerHTML = products.map(p => {
     const stock    = p.stock_quantity ?? 0;
-    const sellDisp = p.unit_sell_price != null ? `${cur}${parseFloat(p.unit_sell_price).toFixed(2)}` : '';
+    const sellDisp = p.unit_sell_price != null ? `${formatMoney(parseFloat(p.unit_sell_price), {currency: cur})}` : '';
     return `<div class="po-ac-item" tabindex="0"
         data-id="${p.id}" data-name="${p.name.replace(/"/g,'&quot;')}" data-cost="0">
       <div class="po-ac-name">${escHtml(p.name)}</div>
@@ -12675,7 +12689,7 @@ function _poUpdateRowTotal(row) {
   const qty  = parseFloat(row.querySelector('.po-item-qty').value)  || 0;
   const cost = parseFloat(row.querySelector('.po-item-cost').value) || 0;
   const cur  = state.currency || '$';
-  row.querySelector('.po-item-line-total').textContent = cur + (qty * cost).toFixed(2);
+  row.querySelector('.po-item-line-total').textContent = formatMoney(qty * cost, {currency: cur});
   _poCalcFormTotal();
 }
 
@@ -12688,8 +12702,8 @@ function _poCalcFormTotal() {
     count++;
   });
   const cur = state.currency || '$';
-  $('#po-form-total').textContent       = cur + total.toFixed(2);
-  $('#po-summary-subtotal').textContent = cur + total.toFixed(2);
+  $('#po-form-total').textContent       = formatMoney(total, {currency: cur});
+  $('#po-summary-subtotal').textContent = formatMoney(total, {currency: cur});
   $('#po-summary-items').textContent    = count;
   const emptyEl = $('#po-items-empty');
   if (emptyEl) emptyEl.style.display = count > 0 ? 'none' : 'flex';
@@ -12876,7 +12890,7 @@ function _grnRenderList() {
       <td>${g.po_number || '—'}</td>
       <td>${g.supplier_name || '—'}</td>
       <td>${g.received_date || '—'}</td>
-      <td style="text-align:right">${cur}${(g.total||0).toFixed(2)}</td>
+      <td style="text-align:right">${formatMoney((g.total||0), {currency: cur})}</td>
       <td>${_grnPayBadge(g)}</td>
       <td style="text-align:center">
         ${g.payment_status !== 'paid_full' && g.payment_status !== 'no_amount'
@@ -12987,9 +13001,9 @@ function _grnRenderDetail(g) {
     <div class="po-dv-summary">
       <div><div class="po-dv-sf-label">Status</div><div class="po-dv-sf-val">${_grnPayBadge(g)}</div></div>
       ${approvalCard}
-      <div><div class="po-dv-sf-label">Total</div><div class="po-dv-sf-val">${cur}${(g.total||0).toFixed(2)}</div></div>
-      <div><div class="po-dv-sf-label">Paid</div><div class="po-dv-sf-val">${cur}${(g.amount_paid||0).toFixed(2)}</div></div>
-      <div><div class="po-dv-sf-label">Outstanding</div><div class="po-dv-sf-val">${cur}${(g.amount_outstanding||0).toFixed(2)}</div></div>
+      <div><div class="po-dv-sf-label">Total</div><div class="po-dv-sf-val">${formatMoney((g.total||0), {currency: cur})}</div></div>
+      <div><div class="po-dv-sf-label">Paid</div><div class="po-dv-sf-val">${formatMoney((g.amount_paid||0), {currency: cur})}</div></div>
+      <div><div class="po-dv-sf-label">Outstanding</div><div class="po-dv-sf-val">${formatMoney((g.amount_outstanding||0), {currency: cur})}</div></div>
       ${g.payment_method ? `<div><div class="po-dv-sf-label">Pay method</div><div class="po-dv-sf-val">${g.payment_method}</div></div>` : ''}
       ${creditTermsCard}${creditDueCard}
       ${g.reference ? `<div><div class="po-dv-sf-label">Reference</div><div class="po-dv-sf-val">${g.reference}</div></div>` : ''}
@@ -13058,13 +13072,13 @@ function _grnRenderDetail(g) {
           + `<td>${it.product_name || '—'}</td>`
           + `<td>${it.sku || '—'}</td>`
           + `<td style="text-align:right">${qtyStr}</td>`
-          + `<td style="text-align:right">${cur}${cost.toFixed(2)}</td>`
+          + `<td style="text-align:right">${formatMoney(cost, {currency: cur})}</td>`
           + (showUc   ? `<td style="text-align:right">${it.units_per_case ?? '—'}</td>` : '')
           + (showUom  ? `<td>${it.uom || '—'}</td>` : '')
           + (showDisc ? `<td style="text-align:right">${disc > 0 ? disc + '%' : '—'}</td>` : '')
           + (showNgv
-              ? `<td style="text-align:right">${cur}${gross.toFixed(2)}</td><td style="text-align:right;color:var(--accent);font-weight:600">${cur}${net.toFixed(2)}</td>`
-              : `<td style="text-align:right">${cur}${(it.line_total||0).toFixed(2)}</td>`)
+              ? `<td style="text-align:right">${formatMoney(gross, {currency: cur})}</td><td style="text-align:right;color:var(--accent);font-weight:600">${formatMoney(net, {currency: cur})}</td>`
+              : `<td style="text-align:right">${formatMoney((it.line_total||0), {currency: cur})}</td>`)
           + '</tr>';
       }).join('')
     : `<tr><td colspan="${colSpan}" style="text-align:center;color:var(--text-muted)">No items</td></tr>`;
@@ -13073,14 +13087,14 @@ function _grnRenderDetail(g) {
   const payments = g.payments || [];
   $('#grn-dv-payments').innerHTML = payments.length
     ? `<div class="grn-dv-table-scroll"><table class="po-items-table"><thead><tr><th>Date</th><th>Account</th><th style="text-align:right">Amount</th></tr></thead><tbody>
-        ${payments.map(p => `<tr><td>${p.date||'—'}</td><td>${p.account||'—'}</td><td style="text-align:right">${cur}${(p.amount||0).toFixed(2)}</td></tr>`).join('')}
+        ${payments.map(p => `<tr><td>${p.date||'—'}</td><td>${p.account||'—'}</td><td style="text-align:right">${formatMoney((p.amount||0), {currency: cur})}</td></tr>`).join('')}
        </tbody></table></div>`
     : `<div class="grn-dv-no-data"><i class="fa fa-money-bill-wave"></i> No payments recorded</div>`;
 
   // Totals breakdown (subtotal → expenses → grand total)
   const expLines  = g.expense_lines || [];
   const subtotalV = (g.subtotal || 0);
-  let totalsHtml = `<div class="grn-dv-br-row"><span>Subtotal</span><span>${cur}${subtotalV.toFixed(2)}</span></div>`;
+  let totalsHtml = `<div class="grn-dv-br-row"><span>Subtotal</span><span>${formatMoney(subtotalV, {currency: cur})}</span></div>`;
   if (expLines.length) {
     totalsHtml += `<div class="grn-dv-br-divider"></div>`;
     expLines.forEach(e => {
@@ -13089,11 +13103,11 @@ function _grnRenderDetail(g) {
       const lbl = e.type === 'pct' ? `${val}%` : 'Flat';
       totalsHtml += `<div class="grn-dv-br-row grn-dv-br-exp">
         <span><i class="fa fa-receipt" style="font-size:10px;margin-right:5px;opacity:.55"></i>${escHtml(e.name)}<em>${escHtml(lbl)}</em></span>
-        <span>+${cur}${amt.toFixed(2)}</span>
+        <span>+${formatMoney(amt, {currency: cur})}</span>
       </div>`;
     });
   }
-  totalsHtml += `<div class="grn-dv-br-total"><span>Total</span><strong>${cur}${(g.total||0).toFixed(2)}</strong></div>`;
+  totalsHtml += `<div class="grn-dv-br-total"><span>Total</span><strong>${formatMoney((g.total||0), {currency: cur})}</strong></div>`;
   $('#grn-dv-totals').innerHTML = totalsHtml;
 
   $('#grn-dv-notes').innerHTML = g.notes
@@ -13110,6 +13124,7 @@ async function _grnPrint(g) {
     grn:          g,
     letterhead:   lhFull,
     currency:     state.currency,
+    currencyPosition: currencyPosition(),
     lineItemCols: Object.assign({}, _grnLineItems),
     fieldHide:    Object.assign({}, _grnFieldHide),
     bizSettings:  {
@@ -13755,9 +13770,9 @@ function _grnRenderFormItems() {
       <td class="grn-td-num grn-col-uc"><input type="number" class="grn-item-uc" data-idx="${idx}" value="" min="0" step="1" placeholder="—"></td>
       <td class="grn-col-uom"><input type="text" class="grn-item-uom" data-idx="${idx}" value="" placeholder="pcs"></td>
       <td class="grn-td-num grn-col-disc"><input type="number" class="grn-item-disc" data-idx="${idx}" value="" min="0" max="100" step="0.01" placeholder="0"></td>
-      <td class="grn-td-num grn-col-gross grn-item-gross">${cur}${gross.toFixed(2)}</td>
-      <td class="grn-td-num grn-col-net grn-item-net">${cur}${gross.toFixed(2)}</td>
-      <td class="grn-td-num grn-item-linetotal grn-th-total">${cur}${gross.toFixed(2)}</td>
+      <td class="grn-td-num grn-col-gross grn-item-gross">${formatMoney(gross, {currency: cur})}</td>
+      <td class="grn-td-num grn-col-net grn-item-net">${formatMoney(gross, {currency: cur})}</td>
+      <td class="grn-td-num grn-item-linetotal grn-th-total">${formatMoney(gross, {currency: cur})}</td>
     </tr>`;
   }).join('');
 
@@ -13771,9 +13786,9 @@ function _grnRenderFormItems() {
       const cur2 = window._activeSession?.currency || '';
       const gross = qty * cost;
       const net   = gross * (1 - disc / 100);
-      row.querySelector('.grn-item-linetotal').textContent = `${cur2}${gross.toFixed(2)}`;
-      row.querySelector('.grn-item-gross').textContent     = `${cur2}${gross.toFixed(2)}`;
-      row.querySelector('.grn-item-net').textContent       = `${cur2}${net.toFixed(2)}`;
+      row.querySelector('.grn-item-linetotal').textContent = formatMoney(gross, {currency: cur2});
+      row.querySelector('.grn-item-gross').textContent     = formatMoney(gross, {currency: cur2});
+      row.querySelector('.grn-item-net').textContent       = formatMoney(net, {currency: cur2});
       _grnCalcFormTotal();
     });
   });
@@ -13792,7 +13807,7 @@ function _calcExpenses(subtotal, cur, expenses) {
     const typeLabel = exp.type === 'pct' ? `${val}%` : `Flat`;
     expHtml += `<div class="po-summary-row grn-exp-row">
       <span><i class="fa fa-receipt" style="font-size:10px;opacity:.6;margin-right:4px"></i>${escHtml(exp.name)}<span class="grn-exp-type">${escHtml(typeLabel)}</span></span>
-      <span>${cur}${amt.toFixed(2)}</span>
+      <span>${formatMoney(amt, {currency: cur})}</span>
     </div>`;
   });
   return { expHtml, grandTotal: subtotal + expTotal };
@@ -13819,9 +13834,9 @@ function _grnCalcFormTotal() {
   const elExpLines = $('#grn-expense-lines');
   const elTotal    = $('#grn-summary-total');
   if (elItems)    elItems.textContent    = items;
-  if (elSubtotal) elSubtotal.textContent = `${cur}${subtotal.toFixed(2)}`;
+  if (elSubtotal) elSubtotal.textContent = `${formatMoney(subtotal, {currency: cur})}`;
   if (elExpLines) elExpLines.innerHTML   = expHtml;
-  if (elTotal)    elTotal.textContent    = `${cur}${grandTotal.toFixed(2)}`;
+  if (elTotal)    elTotal.textContent    = `${formatMoney(grandTotal, {currency: cur})}`;
 }
 
 async function _grnSubmitCreate() {
@@ -13886,10 +13901,10 @@ function _grnOpenPayModal(grnId, g) {
   _grn.payGrnId = grnId;
   const cur = window._activeSession?.currency || '';
   $('#grn-pay-modal').style.display = 'flex';
-  $('#grn-pay-subtitle').textContent = `Outstanding: ${cur}${(g.amount_outstanding||g.total||0).toFixed(2)}`;
-  $('#grn-pay-total').textContent       = `${cur}${(g.total||0).toFixed(2)}`;
-  $('#grn-pay-paid').textContent        = `${cur}${(g.amount_paid||0).toFixed(2)}`;
-  $('#grn-pay-outstanding').textContent = `${cur}${(g.amount_outstanding||g.total||0).toFixed(2)}`;
+  $('#grn-pay-subtitle').textContent = `Outstanding: ${formatMoney((g.amount_outstanding||g.total||0), {currency: cur})}`;
+  $('#grn-pay-total').textContent       = `${formatMoney((g.total||0), {currency: cur})}`;
+  $('#grn-pay-paid').textContent        = `${formatMoney((g.amount_paid||0), {currency: cur})}`;
+  $('#grn-pay-outstanding').textContent = `${formatMoney((g.amount_outstanding||g.total||0), {currency: cur})}`;
   // populate accounts
   const sel = $('#grn-pay-account');
   sel.innerHTML = _grn.accounts.length
@@ -14162,9 +14177,9 @@ function _dgrnCalcTotal() {
   const sumExpLines = $('#grn-direct-expense-lines');
   const sumTotal    = $('#grn-direct-summary-total');
   if (sumItems)    sumItems.textContent    = count;
-  if (sumSubtotal) sumSubtotal.textContent = `${cur}${subtotal.toFixed(2)}`;
+  if (sumSubtotal) sumSubtotal.textContent = `${formatMoney(subtotal, {currency: cur})}`;
   if (sumExpLines) sumExpLines.innerHTML   = expHtml;
-  if (sumTotal)    sumTotal.textContent    = `${cur}${grandTotal.toFixed(2)}`;
+  if (sumTotal)    sumTotal.textContent    = `${formatMoney(grandTotal, {currency: cur})}`;
 }
 
 function _dgrnAddItemRow() {
@@ -14425,7 +14440,7 @@ async function _chqLoad() {
 function _chqRenderSummary(s) {
   const cur = window._activeSession?.currency || '';
   const el = id => $(id);
-  if (el('#chq-stat-amount'))  el('#chq-stat-amount').textContent  = `${cur}${(s.pending_amount||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}`;
+  if (el('#chq-stat-amount'))  el('#chq-stat-amount').textContent  = formatMoney(s.pending_amount || 0, {currency: cur});
   if (el('#chq-stat-pending')) el('#chq-stat-pending').textContent = s.pending ?? '—';
   if (el('#chq-stat-overdue')) el('#chq-stat-overdue').textContent = s.overdue ?? '—';
   if (el('#chq-stat-cleared')) el('#chq-stat-cleared').textContent = s.cleared ?? '—';
@@ -14455,7 +14470,7 @@ function _chqRenderList() {
       <td>${_chqBadge(c.status)}</td>
       <td><strong>${c.cheque_number || '—'}</strong></td>
       <td class="${c.status === 'overdue' ? 'chq-overdue-date' : ''}">${c.due_date || '—'}</td>
-      <td style="text-align:right;font-weight:600">${cur}${(c.amount||0).toFixed(2)}</td>
+      <td style="text-align:right;font-weight:600">${formatMoney((c.amount||0), {currency: cur})}</td>
       <td>${c.grn_number || '—'}</td>
       <td><div style="font-size:11px;font-weight:600">${c.po_number||'—'}</div><div style="font-size:10px;color:var(--text-muted)">${c.supplier_name||''}</div></td>
       <td style="font-size:11px;color:var(--text-muted)">${c.account||'—'}</td>
@@ -14489,7 +14504,7 @@ async function _chqOpenClearModal(id, chequeNum, amount, grnNum, supplierName) {
   $('#chq-clear-info').innerHTML = `
     <strong>${chequeNum}</strong>
     <div style="margin-top:6px;display:flex;gap:16px">
-      <span><span style="color:var(--text-muted)">Amount</span> <strong>${cur}${amount.toFixed(2)}</strong></span>
+      <span><span style="color:var(--text-muted)">Amount</span> <strong>${formatMoney(amount, {currency: cur})}</strong></span>
       <span><span style="color:var(--text-muted)">GRN</span> ${grnNum}</span>
       <span style="color:var(--text-muted)">${supplierName}</span>
     </div>`;
@@ -15627,7 +15642,7 @@ function _discRender() {
   tbody.innerHTML = _disc.list.map(d => {
     const typeLabel = d.discount_type === 'percentage'
       ? `${d.discount_value}%`
-      : `${state.currency}${d.discount_value.toFixed(2)}`;
+      : formatMoney(d.discount_value);
     return `<tr>
       <td style="font-weight:600">${escHtml(d.name)}</td>
       <td>${escHtml(d.product_name)}</td>
@@ -15881,7 +15896,7 @@ function _scDiscountSummary(c) {
     if (c.discount_type == null || c.discount_value == null) return 'No discount set';
     return c.discount_type === 'percentage'
       ? `${c.discount_value}% off everything`
-      : `${state.currency}${Number(c.discount_value).toFixed(2)} off everything`;
+      : `${formatMoney(Number(c.discount_value))} off everything`;
   }
   const n = c.item_count ?? c.items?.length ?? 0;
   return `${n} product${n !== 1 ? 's' : ''}`;
@@ -15943,7 +15958,7 @@ function _scSelect(id) {
     { label: 'Type',       val: c.mode === 'storewide' ? 'Full Campaign' : 'Individual Products' },
     { label: 'Discount',   val: _scDiscountSummary(c) },
     c.mode === 'individual' && c.discount_value != null
-      ? { label: 'Default Discount', val: c.discount_type === 'percentage' ? `${c.discount_value}%` : `${state.currency}${Number(c.discount_value).toFixed(2)}` }
+      ? { label: 'Default Discount', val: c.discount_type === 'percentage' ? `${c.discount_value}%` : formatMoney(Number(c.discount_value)) }
       : null,
     { label: 'Duration',   val: _scDurationSummary(c) },
     { label: 'Description',val: c.description },
@@ -15959,13 +15974,13 @@ function _scSelect(id) {
     itemsEl.innerHTML = `<div class="cm-dv-history-title"><i class="fa fa-list-check"></i> Products in this campaign</div>` +
       c.items.map(it => {
         const price = Number(it.product_price) || 0;
-        const discLabel = it.discount_type === 'percentage' ? `${it.discount_value}%` : `${state.currency}${Number(it.discount_value).toFixed(2)}`;
+        const discLabel = it.discount_type === 'percentage' ? `${it.discount_value}%` : formatMoney(Number(it.discount_value));
         const final = _scItemFinalPrice({ price, discount_value: it.discount_value, discount_type: it.discount_type });
         return `<div class="cm-dv-sale-row">
           <span class="cm-dv-sale-num">${escHtml(it.product_name)}</span>
           <span class="sc-dv-item-disc-tag">-${escHtml(discLabel)}</span>
-          ${price ? `<span class="sc-camp-item-price">${escHtml(state.currency)}${price.toFixed(2)}</span>` : ''}
-          <span class="cm-dv-sale-amt">${final != null ? `${escHtml(state.currency)}${final.toFixed(2)}` : escHtml(discLabel)}</span>
+          ${price ? `<span class="sc-camp-item-price">${formatMoney(price)}</span>` : ''}
+          <span class="cm-dv-sale-amt">${final != null ? formatMoney(final) : escHtml(discLabel)}</span>
         </div>`;
       }).join('');
   } else if (c.mode === 'individual') {
@@ -16095,7 +16110,7 @@ function _scRenderItems() {
       <div class="sc-camp-item-top">
         <span class="prod-bundle-item-idx">${i + 1}</span>
         <span class="prod-bundle-item-name" title="${escHtml(item.name)}">${escHtml(item.name)}</span>
-        ${price ? `<span class="sc-camp-item-price">${escHtml(state.currency)}${price.toFixed(2)}</span>` : ''}
+        ${price ? `<span class="sc-camp-item-price">${formatMoney(price)}</span>` : ''}
         <button class="prod-bundle-item-rm" data-idx="${i}" type="button" title="Remove"><i class="fa fa-xmark"></i></button>
       </div>
       <div class="sc-camp-item-bottom sc-item-controls">
@@ -16104,7 +16119,7 @@ function _scRenderItems() {
           <button type="button" class="sc-item-type-btn${item.discount_type === 'flat' ? ' active' : ''}" data-idx="${i}" data-type="flat" title="Flat amount"><i class="fa fa-minus"></i></button>
         </div>
         <input type="number" class="sc-item-value${item.discount_value ? '' : ' sc-item-value-empty'}" min="0.01" step="0.01" placeholder="e.g. 10" value="${item.discount_value ?? ''}" data-idx="${i}" onwheel="this.blur()">
-        <span class="sc-camp-item-final${final == null ? ' sc-camp-item-final-empty' : ''}" id="sc-item-final-${i}">${final != null ? `→ ${escHtml(state.currency)}${final.toFixed(2)}` : (price ? 'Set a discount' : '')}</span>
+        <span class="sc-camp-item-final${final == null ? ' sc-camp-item-final-empty' : ''}" id="sc-item-final-${i}">${final != null ? `→ ${formatMoney(final)}` : (price ? 'Set a discount' : '')}</span>
       </div>
     </div>`;
   }).join('');
@@ -16130,7 +16145,7 @@ function _scRenderItems() {
       const price = Number(item.price) || 0;
       const final = _scItemFinalPrice(item);
       finalEl.classList.toggle('sc-camp-item-final-empty', final == null);
-      finalEl.textContent = final != null ? `→ ${state.currency}${final.toFixed(2)}` : (price ? 'Set a discount' : '');
+      finalEl.textContent = final != null ? `→ ${formatMoney(final)}` : (price ? 'Set a discount' : '');
     });
   });
   list.querySelectorAll('.prod-bundle-item-rm').forEach(btn => {
@@ -16201,7 +16216,7 @@ function _scWireItemSearch() {
       const price = Number(p.selling_price) || 0;
       return `<div class="bundle-dd-item${i === 0 && !added ? ' focused' : ''}" data-id="${p.id}" data-name="${escHtml(p.name)}" data-price="${price}">
         <span class="bundle-dd-item-name">${escHtml(p.name)}</span>
-        ${price ? `<span class="sc-camp-item-price">${escHtml(state.currency)}${price.toFixed(2)}</span>` : ''}
+        ${price ? `<span class="sc-camp-item-price">${formatMoney(price)}</span>` : ''}
         ${added
           ? `<span class="bundle-dd-item-added"><i class="fa fa-check"></i> Added</span>`
           : `<button class="bundle-add-btn" type="button"><i class="fa fa-plus"></i> Add</button>`}
@@ -16365,7 +16380,7 @@ $('#sc-idef-apply-all')?.addEventListener('click', () => {
   if (!_sc.items.length) { toast('Add products to this campaign first', 'error'); return; }
   _sc.items.forEach(it => { it.discount_type = _sc.idefDiscountType; it.discount_value = v; });
   _scRenderItems();
-  toast(`Applied ${_sc.idefDiscountType === 'percentage' ? v + '%' : state.currency + v.toFixed(2)} to ${_sc.items.length} product${_sc.items.length !== 1 ? 's' : ''}`, 'success');
+  toast(`Applied ${_sc.idefDiscountType === 'percentage' ? v + '%' : formatMoney(v)} to ${_sc.items.length} product${_sc.items.length !== 1 ? 's' : ''}`, 'success');
 });
 $('#sc-f-long-term')?.addEventListener('change', _scToggleLongTerm);
 
@@ -16616,7 +16631,8 @@ async function _bcOpenStockModal(productId, productName, productSku, productQty,
     const qtyLeft  = parseFloat(h.quantity_remaining || 0);
     const qtyIn    = parseFloat(h.quantity_received  || 0);
     const batchSku = h.batch_sku || productSku || String(productId);
-    const sell     = h.selling_unit_price != null ? parseFloat(h.selling_unit_price).toFixed(2) : '';
+    const sellNum  = h.selling_unit_price != null ? parseFloat(h.selling_unit_price) : null;
+    const sell     = sellNum != null ? formatMoney(sellNum, {currency: cur}) : '';
     const date     = h.received_at ? new Date(h.received_at).toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }) : '—';
     const qtyStatusCls = qtyLeft <= 0 ? 'srh-qty-depleted' : qtyLeft < qtyIn ? 'srh-qty-partial' : 'srh-qty-full';
     let srcBadge;
@@ -16624,7 +16640,7 @@ async function _bcOpenStockModal(productId, productName, productSku, productQty,
     else if (src === 'po')       srcBadge = `<span class="inv-src-badge inv-src-po"><i class="fa fa-file-invoice"></i> PO — ${escHtml(h.po_number||'')}</span>`;
     else if (src === 'transfer') srcBadge = `<span class="inv-src-badge inv-src-transfer"><i class="fa fa-right-left"></i> Transfer from ${escHtml(h.from_branch_name||'—')}</span>`;
     else                          srcBadge = `<span class="inv-src-badge inv-src-grn"><i class="fa fa-truck-ramp-box"></i> GRN — ${escHtml(h.grn_number||'')}</span>`;
-    const price = sell ? `${cur}${sell}` : '';
+    const price = sell;
     return `<div class="bc-stock-row">
       <div class="bc-stock-row-info">
         <div class="bc-stock-row-badges">
@@ -16641,7 +16657,7 @@ async function _bcOpenStockModal(productId, productName, productSku, productQty,
             <span class="bc-batch-stat-lbl">Received</span>
             <span class="bc-batch-stat-val">${qtyIn % 1 === 0 ? qtyIn : qtyIn.toFixed(2)}</span>
           </div>
-          ${sell ? `<div class="bc-batch-stat"><span class="bc-batch-stat-lbl">Sell Price</span><span class="bc-batch-stat-val">${cur}${sell}</span></div>` : ''}
+          ${sell ? `<div class="bc-batch-stat"><span class="bc-batch-stat-lbl">Sell Price</span><span class="bc-batch-stat-val">${sell}</span></div>` : ''}
         </div>
       </div>
       <div class="bc-stock-row-action">
@@ -17154,10 +17170,10 @@ function _rfndRenderList() {
   el.innerHTML = _rfnd.list.map(s => {
     const date = s.sold_at ? s.sold_at.substring(0, 10) : '';
     const num  = s.sale_number || `#${s.id}`;
-    const total = parseFloat(s.total || 0).toFixed(2);
+    const total = parseFloat(s.total || 0);
     const active = s.id === _rfnd.activeSaleId ? ' active' : '';
     return `<div class="rfnd-sale-item${active}" data-id="${s.id}">
-      <div class="rfnd-si-num">${num} <span class="rfnd-si-total">${cur}${total}</span></div>
+      <div class="rfnd-si-num">${num} <span class="rfnd-si-total">${formatMoney(total, {currency: cur})}</span></div>
       <div class="rfnd-si-meta">${date} &bull; ${s.customer_name || 'Walk-in'}</div>
     </div>`;
   }).join('');
@@ -17202,7 +17218,7 @@ function _rfndRenderDetail(sale) {
   $('#rfnd-sale-summary').innerHTML = `
     <div class="rfnd-sum-field"><div class="rfnd-sum-label">Sale</div><div class="rfnd-sum-val">${num}</div></div>
     <div class="rfnd-sum-field"><div class="rfnd-sum-label">Date</div><div class="rfnd-sum-val">${date}</div></div>
-    <div class="rfnd-sum-field"><div class="rfnd-sum-label">Total</div><div class="rfnd-sum-val amount">${cur}${parseFloat(sale.total||0).toFixed(2)}</div></div>
+    <div class="rfnd-sum-field"><div class="rfnd-sum-label">Total</div><div class="rfnd-sum-val amount">${formatMoney(parseFloat(sale.total||0), {currency: cur})}</div></div>
     <div class="rfnd-sum-field"><div class="rfnd-sum-label">Customer</div><div class="rfnd-sum-val">${sale.customer_name || 'Walk-in'}</div></div>
     <div class="rfnd-sum-field"><div class="rfnd-sum-label">Payment</div><div class="rfnd-sum-val">${sale.payment_method || '—'}</div></div>
     <div class="rfnd-sum-field"><div class="rfnd-sum-label">Status</div><div class="rfnd-sum-val">${sale.status || '—'}</div></div>
@@ -17216,7 +17232,7 @@ function _rfndRenderDetail(sale) {
   el.innerHTML = items.map(it => {
     const returnable = (it.quantity || 0) - (it.returned_quantity || 0);
     const exhausted  = returnable <= 0 ? ' exhausted' : '';
-    const price      = parseFloat(it.unit_sell_price || 0).toFixed(2);
+    const price      = formatMoney(parseFloat(it.unit_sell_price || 0), {currency: cur});
     return `<div class="rfnd-item-row${exhausted}" data-id="${it.id}" data-max="${returnable}" data-price="${it.unit_sell_price || 0}">
       <input type="checkbox" class="rfnd-item-check" ${returnable <= 0 ? 'disabled' : ''}>
       <div style="flex:1;min-width:0">
@@ -17227,7 +17243,7 @@ function _rfndRenderDetail(sale) {
         <span class="rfnd-item-qty-label">Qty</span>
         <input type="number" class="rfnd-item-qty" value="${returnable > 0 ? 1 : 0}" min="1" max="${returnable}" ${returnable <= 0 ? 'disabled' : ''}>
       </div>
-      <div class="rfnd-item-price">${cur}${price}</div>
+      <div class="rfnd-item-price">${price}</div>
     </div>`;
   }).join('');
 
@@ -17259,7 +17275,7 @@ function _rfndCalcTotal() {
     }
   });
   const cur = state.currency || '$';
-  $('#rfnd-total-display').textContent = cur + total.toFixed(2);
+  $('#rfnd-total-display').textContent = formatMoney(total, {currency: cur});
   $('#rfnd-submit').disabled = total <= 0;
 }
 
@@ -19411,9 +19427,9 @@ function renderProductDetail(p, stockHistory = []) {
   const profit     = (sellingPrice != null && costPrice != null) ? (sellingPrice - costPrice) : null;
   const marginPct  = (profit != null && costPrice > 0) ? ((profit / costPrice) * 100).toFixed(1) : null;
 
-  const cur = state.currency ? ' ' + state.currency : '';
+  const cur = state.currency || '';
 
-  const _fmt = v => v != null ? parseFloat(v).toFixed(2) + cur : null;
+  const _fmt = v => v != null ? formatMoney(parseFloat(v), {currency: cur}) : null;
 
   const priceRows = [
     ['Cost Price',       costPrice    != null ? `<strong style="font-size:16px">${_fmt(costPrice)}</strong>` : '<span style="color:var(--text-muted)">—</span>'],
@@ -19667,7 +19683,7 @@ function renderProductDetail(p, stockHistory = []) {
   const deliveryTabBtn = $('#inv-tab-delivery');
   if (deliveryTabBtn) deliveryTabBtn.style.display = deliveryMethods.length ? '' : 'none';
   if (deliveryMethods.length) {
-    const deliveryCur = state.currency ? ' ' + state.currency : '';
+    const deliveryCur = state.currency || '';
     $('#inv-pane-delivery').innerHTML = `
       <div class="inv-section">
         <div class="inv-section-title"><i class="fa fa-truck"></i> Delivery Partners (${deliveryMethods.length})</div>
@@ -19678,7 +19694,7 @@ function renderProductDetail(p, stockHistory = []) {
             <div class="inv-delivery-row">
               <div class="inv-delivery-row-icon"><i class="fa ${meta.icon}"></i></div>
               <div class="inv-delivery-row-name">${escHtml(meta.name)}</div>
-              <div class="inv-delivery-row-price">${m.price != null ? parseFloat(m.price).toFixed(2) + deliveryCur : '—'}</div>
+              <div class="inv-delivery-row-price">${m.price != null ? formatMoney(parseFloat(m.price), {currency: deliveryCur}) : '—'}</div>
             </div>`;
           }).join('')}
         </div>
@@ -20208,7 +20224,7 @@ function _ssRender(q) {
 
   const shown  = matches.slice(0, MAX_SUGGEST);
   const more   = matches.length - shown.length;
-  const cur    = state.currency ? ' ' + state.currency : '';
+  const cur    = state.currency || '';
 
   box.innerHTML = shown.map((p, idx) => {
     const price      = parseFloat(p.discounted_sell_price ?? p.unit_sell_price ?? 0);
@@ -20227,7 +20243,7 @@ function _ssRender(q) {
         ${metaParts.length ? `<div class="ss-meta">${escHtml(metaParts.join(' · '))}</div>` : ''}
       </div>
       <div class="ss-right">
-        <span class="ss-price">${price.toFixed(2)}${cur}</span>
+        <span class="ss-price">${formatMoney(price, {currency: cur})}</span>
         ${outOfStock
           ? '<span class="ss-out-badge">Out of stock</span>'
           : (p.stock_quantity != null ? `<span class="ss-stock">${p.stock_quantity} in stock</span>` : '')}
@@ -20466,7 +20482,7 @@ function buildServiceGrid(services) {
     grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:60px;color:var(--text-muted)"><i class="fa fa-screwdriver-wrench" style="font-size:32px;display:block;margin-bottom:10px;opacity:.3"></i>No services found</div>';
     return;
   }
-  const cur      = state.currency ? ' ' + state.currency : '';
+  const cur      = state.currency || '';
   const featured = services.filter(s => s.is_featured);
   const rest     = services.filter(s => !s.is_featured);
 
@@ -20476,7 +20492,7 @@ function buildServiceGrid(services) {
       <div class="svc-icon"><i class="fa fa-screwdriver-wrench"></i></div>
       <div class="svc-name">${escHtml(s.name)}</div>
       ${s.duration_label && s.duration_label !== '—' ? `<div class="svc-dur"><i class="fa fa-clock"></i> ${escHtml(s.duration_label)}</div>` : ''}
-      <div class="svc-price">${s.price > 0 ? parseFloat(s.price).toFixed(2) + cur : 'Free'}</div>
+      <div class="svc-price">${s.price > 0 ? formatMoney(parseFloat(s.price), {currency: cur}) : 'Free'}</div>
       ${s.has_warranty ? '<div class="svc-wty-badge"><i class="fa fa-shield-halved"></i></div>' : ''}
       ${s.custom_requirement_enabled ? '<div class="svc-creq-badge"><i class="fa fa-list-check"></i></div>' : ''}
     </div>`;
@@ -20769,7 +20785,7 @@ function openParkedSalesModal() {
   if (!state.parkedSales.length) {
     list.innerHTML = '<div class="park-empty"><i class="fa fa-inbox"></i><span>No held sales</span></div>';
   } else {
-    const cur = state.currency ? ' ' + state.currency : '';
+    const cur = state.currency || '';
     list.innerHTML = state.parkedSales.map(ps => {
       const total = ps.cart.reduce((s, i) => s + i.price * i.qty, 0);
       const items = ps.cart.reduce((s, i) => s + i.qty, 0);
@@ -20779,7 +20795,7 @@ function openParkedSalesModal() {
           <span class="park-row-label">${escHtml(ps.label)}</span>
           <span class="park-row-meta">${items} item${items !== 1 ? 's' : ''} &middot; ${time}</span>
         </div>
-        <div class="park-row-total">${total.toFixed(2)}${cur}</div>
+        <div class="park-row-total">${formatMoney(total, {currency: cur})}</div>
         <button class="park-row-recall" data-id="${ps.id}" title="Recall"><i class="fa fa-rotate-left"></i></button>
         <button class="park-row-del" data-id="${ps.id}" title="Discard"><i class="fa fa-trash"></i></button>
       </div>`;
@@ -22057,7 +22073,7 @@ async function loadPosAccounts() {
 
 function renderPosAccounts() {
   const list = $('#pos-account-list');
-  const cur = state.currency ? ' ' + state.currency : '';
+  const cur = state.currency || '';
   const accounts = _posAccountsCache;
 
   if (!accounts || accounts.length === 0) {
@@ -22068,8 +22084,8 @@ function renderPosAccounts() {
 
   const canSeeBalance = state.memberIsOwner;
   list.innerHTML = accounts.map(a => {
-    const balance = parseFloat(a.current_balance || 0).toFixed(2);
-    const balHtml = canSeeBalance ? balance + cur : '<span class="acct-balance-blur">••••••</span>';
+    const balance = parseFloat(a.current_balance || 0);
+    const balHtml = canSeeBalance ? formatMoney(balance, {currency: cur}) : '<span class="acct-balance-blur">••••••</span>';
     return `<div class="pos-acct-row">
       <div class="pos-acct-info">
         <div class="pos-acct-name">${escHtml(a.account_name || '')}</div>
@@ -22082,7 +22098,7 @@ function renderPosAccounts() {
   const total = accounts.reduce((s, a) => s + parseFloat(a.current_balance || 0), 0);
   const totalEl = $('#pos-account-total');
   if (canSeeBalance) {
-    totalEl.textContent = total.toFixed(2) + cur;
+    totalEl.textContent = formatMoney(total, {currency: cur});
     totalEl.classList.remove('acct-balance-blur');
   } else {
     totalEl.textContent = '••••••';
@@ -23788,7 +23804,7 @@ function _invBuildActualDoc(inv, tpl, mg, cur, lhDataUrl = null) {
   const a    = tpl.accent;
   const biz  = escHtml(state.receiptSettings?.business_name        || 'Your Business');
   const addr = escHtml(state.receiptSettings?.receipt_address_line || '');
-  const c    = cur ? ' ' + cur : '';
+  const money = n => formatMoney(n, { currency: cur });
   const fmt  = n => parseFloat(n || 0).toFixed(2);
 
   const invNum  = escHtml(inv.invoice_number || '');
@@ -23846,7 +23862,7 @@ function _invBuildActualDoc(inv, tpl, mg, cur, lhDataUrl = null) {
       const g  = parseFloat(it.quantity) * parseFloat(it.unit_price);
       const da = dt === 'flat' ? Math.min(dv, g) : (g * dv / 100);
       discTd = dv > 0
-        ? `<td class="r" style="color:#ef4444;font-size:10px">${dt === 'flat' ? `−${da.toFixed(2)}${c}` : `${dv}%`}</td>`
+        ? `<td class="r" style="color:#ef4444;font-size:10px">${dt === 'flat' ? `−${money(da.toFixed(2))}` : `${dv}%`}</td>`
         : `<td class="r" style="color:#94a3b8">—</td>`;
     }
 
@@ -23860,7 +23876,7 @@ function _invBuildActualDoc(inv, tpl, mg, cur, lhDataUrl = null) {
         );
         const lbl = match
           ? escHtml(match.name) + (tt !== 'flat' ? ' ' + tv + '%' : '')
-          : (tt === 'flat' ? tv.toFixed(2) + c : tv + '%');
+          : (tt === 'flat' ? money(tv) : tv + '%');
         taxTd = `<td class="r" style="color:#10b981;font-size:10px">${lbl}</td>`;
       } else {
         taxTd = `<td class="r" style="color:#94a3b8">—</td>`;
@@ -23871,22 +23887,22 @@ function _invBuildActualDoc(inv, tpl, mg, cur, lhDataUrl = null) {
       ? `<div style="font-size:9px;color:#0891b2;font-weight:600;margin-top:2px">🛡 ${escHtml(_warrantyLabel(it.warranty_type, it.warranty_expires_at, it.warranty_days))}</div>`
       : '';
 
-    return `<tr><td class="n">${n}</td><td><b>${escHtml(it.description || '')}</b>${wtyLine}</td><td class="r">${qty}</td><td class="r">${up}${c}</td>${discTd}${taxTd}<td class="r b">${lt}${c}</td></tr>`;
+    return `<tr><td class="n">${n}</td><td><b>${escHtml(it.description || '')}</b>${wtyLine}</td><td class="r">${qty}</td><td class="r">${money(up)}</td>${discTd}${taxTd}<td class="r b">${money(lt)}</td></tr>`;
   }).join('\n    ');
 
   // ── Summary rows ──────────────────────────────────────────────────────────
   const hasPlAdj = plDiscTot > 0.001 || plTaxTot > 0.001;
   let totRows = '';
   if (hasPlAdj) {
-    totRows += `<div class="tr"><span>Gross Subtotal</span><span>${rawSub.toFixed(2)}${c}</span></div>`;
-    if (plDiscTot > 0.001) totRows += `<div class="tr"><span>Item Discounts</span><span style="color:#ef4444">−${plDiscTot.toFixed(2)}${c}</span></div>`;
-    if (plTaxTot  > 0.001) totRows += `<div class="tr"><span>Item Taxes</span><span style="color:#10b981">+${plTaxTot.toFixed(2)}${c}</span></div>`;
-    if (disc > 0 || tax > 0) totRows += `<div class="tr" style="font-weight:700"><span>Line Subtotal</span><span>${fmt(inv.subtotal)}${c}</span></div>`;
+    totRows += `<div class="tr"><span>Gross Subtotal</span><span>${money(rawSub.toFixed(2))}</span></div>`;
+    if (plDiscTot > 0.001) totRows += `<div class="tr"><span>Item Discounts</span><span style="color:#ef4444">−${money(plDiscTot.toFixed(2))}</span></div>`;
+    if (plTaxTot  > 0.001) totRows += `<div class="tr"><span>Item Taxes</span><span style="color:#10b981">+${money(plTaxTot.toFixed(2))}</span></div>`;
+    if (disc > 0 || tax > 0) totRows += `<div class="tr" style="font-weight:700"><span>Line Subtotal</span><span>${money(fmt(inv.subtotal))}</span></div>`;
   } else {
-    totRows += `<div class="tr"><span>Subtotal</span><span>${sub}${c}</span></div>`;
+    totRows += `<div class="tr"><span>Subtotal</span><span>${money(sub)}</span></div>`;
   }
-  if (disc > 0) totRows += `<div class="tr"><span>Discount</span><span style="color:#ef4444">−${disc.toFixed(2)}${c}</span></div>`;
-  if (tax  > 0) totRows += `<div class="tr"><span>Tax</span><span style="color:#10b981">+${tax.toFixed(2)}${c}</span></div>`;
+  if (disc > 0) totRows += `<div class="tr"><span>Discount</span><span style="color:#ef4444">−${money(disc.toFixed(2))}</span></div>`;
+  if (tax  > 0) totRows += `<div class="tr"><span>Tax</span><span style="color:#10b981">+${money(tax.toFixed(2))}</span></div>`;
   // kept for backwards compatibility with callers that inject _taxBreakdown
   const discRow = ''; const taxRow = '';
 
@@ -23943,7 +23959,7 @@ td.n{color:#94a3b8;text-align:center;width:22px}td.r{text-align:right}td.b{font-
   <div class="sb-row"><div class="sb-dk">Issue Date</div><div class="sb-dv">${issDate}</div></div>
   <div class="sb-row"><div class="sb-dk">Due Date</div><div class="sb-dv">${dueDate}</div></div>
   <div class="sb-hr" style="margin-top:12px"></div>
-  <div class="sb-row"><div class="sb-dk">Amount Due</div><div class="sb-amt">${tot}${c}</div></div>
+  <div class="sb-row"><div class="sb-dk">Amount Due</div><div class="sb-amt">${money(tot)}</div></div>
 </div>
 <div class="ct">
   <div class="bt"><div class="btl">Billed To</div><div class="btn">${cust}</div></div>
@@ -23951,7 +23967,7 @@ td.n{color:#94a3b8;text-align:center;width:22px}td.r{text-align:right}td.b{font-
   <tbody>${rows(false)}</tbody></table>
   <div class="tot"><div class="ti">
     ${totRows}
-    <div class="tr gr"><span>Total Due</span><span>${tot}${c}</span></div>
+    <div class="tr gr"><span>Total Due</span><span>${money(tot)}</span></div>
   </div></div>
 </div></div></body></html>`;
   }
@@ -24000,7 +24016,7 @@ td.n{color:#94a3b8;text-align:center;width:26px}td.r{text-align:right}td.b{font-
     <div class="nb"><div class="nl">Notes</div><div class="nt">${notesText}</div></div>
     <div class="tc">
       ${totRows}
-      <div class="tr gr"><span>Total Due</span><span>${tot}${c}</span></div>
+      <div class="tr gr"><span>Total Due</span><span>${money(tot)}</span></div>
     </div>
   </div>
 </div></div></body></html>`;
@@ -24056,7 +24072,7 @@ td.n{color:#d1d5db;text-align:center;width:26px;font-style:italic}td.r{text-alig
   <div>
     ${totRows}
     <div class="rule2"></div>
-    <div class="gr"><span>Total</span><span>${tot}${c}</span></div>
+    <div class="gr"><span>Total</span><span>${money(tot)}</span></div>
   </div>
 </div>
 <div class="ft">Invoice ${invNum} &nbsp;·&nbsp; ${biz} &nbsp;·&nbsp; ${issDate}</div>
@@ -24103,7 +24119,7 @@ td.n{color:#94a3b8;text-align:center;width:26px}td.r{text-align:right}td.b{font-
   <div class="gc"><div class="gcl">Issue Date</div><div class="gcv">${issDate}</div></div>
   <div class="gc"><div class="gcl">Due Date</div><div class="gcv">${dueDate}</div></div>
   <div class="gc"><div class="gcl">Status</div><div class="gcv" style="color:${sColor}">${sLabel}</div></div>
-  <div class="gc"><div class="gcl">Amount</div><div class="gcv" style="color:${a}">${tot}${c}</div></div>
+  <div class="gc"><div class="gcl">Amount</div><div class="gcv" style="color:${a}">${money(tot)}</div></div>
 </div>
 <table><thead><tr><th style="width:26px;text-align:center">#</th><th>Description</th><th class="r" style="width:50px">Qty</th><th class="r" style="width:100px">Unit Price</th>${extraTh}<th class="r" style="width:100px">Total</th></tr></thead>
 <tbody>${rows(false)}</tbody></table>
@@ -24111,7 +24127,7 @@ td.n{color:#94a3b8;text-align:center;width:26px}td.r{text-align:right}td.b{font-
   <div class="nb"><div class="nl">Notes</div><div class="nt">${notesText}</div></div>
   <div class="tc">
     ${totRows}
-    <div class="tr gr"><span>Total Due</span><span>${tot}${c}</span></div>
+    <div class="tr gr"><span>Total Due</span><span>${money(tot)}</span></div>
   </div>
 </div>
 <div class="ft"><span>${invNum} · ${biz}</span><span>${issDate}</span></div>
@@ -24176,7 +24192,7 @@ td.n{color:#94a3b8;text-align:center;width:26px}td.r{text-align:right}td.b{font-
     <div class="nb"><div class="nl">Notes</div><div class="nt">${notesText}</div></div>
     <div>
       ${totRows}
-      <div class="tr gr"><span>Total Due</span><span>${tot}${c}</span></div>
+      <div class="tr gr"><span>Total Due</span><span>${money(tot)}</span></div>
     </div>
   </div>
   <div class="ft"><span>${invNum} · ${biz}</span><span>${biz}</span></div>
@@ -24233,7 +24249,7 @@ td.n{color:#94a3b8;text-align:center;width:26px}td.r{text-align:right}td.b{font-
   <div class="nb"><div class="nl">Notes</div><div class="nt">${notesText}</div></div>
   <div>
     ${totRows}
-    <div class="tr gr"><span>Total Due</span><span>${tot}${c}</span></div>
+    <div class="tr gr"><span>Total Due</span><span>${money(tot)}</span></div>
   </div>
 </div>
 <div class="ft"><span>${invNum} · ${biz}</span><span>${biz}</span></div>
@@ -24643,10 +24659,10 @@ function _psmRenderTaxRules() {
     return;
   }
   if (empty) empty.style.display = 'none';
-  const cur = state.currency ? ' ' + state.currency : '';
+  const cur = state.currency || '';
   list.innerHTML = _psmTaxRules.map((r, i) => {
     const valStr = r.type === 'flat'
-      ? parseFloat(r.value).toFixed(2) + cur
+      ? formatMoney(parseFloat(r.value), {currency: cur})
       : parseFloat(r.value) + '%';
     const badge  = r.type === 'flat' ? 'Flat' : 'Percentage';
     return `<div class="psm-tax-rule-row">
@@ -24729,6 +24745,15 @@ function _psmBizLogoRender() {
   }
 }
 
+function _psmUpdateCurrencyPosPreview() {
+  const code = ($('#psm-currency')?.value || 'LKR').trim().toUpperCase() || 'LKR';
+  const beforeEl = $('#psm-currpos-before-preview');
+  const afterEl  = $('#psm-currpos-after-preview');
+  if (beforeEl) beforeEl.textContent = `${code} 400.00`;
+  if (afterEl)  afterEl.textContent  = `400.00 ${code}`;
+}
+$('#psm-currency')?.addEventListener('input', _psmUpdateCurrencyPosPreview);
+
 async function openPosSettings() {
   const modal = $('#pos-settings-modal');
   modal.style.display = 'flex';
@@ -24764,6 +24789,9 @@ async function openPosSettings() {
   _psmBizLogoRender();
   $('#psm-currency').value  = s.currency ?? '';
   $('#psm-timezone').value  = s.timezone ?? '';
+  const currPos = s.currency_position === 'before' ? 'before' : 'after';
+  $(`#psm-currpos-${currPos}`).checked = true;
+  _psmUpdateCurrencyPosPreview();
 
   // Branches
   const multiWh = !!s.multi_warehouse_branch;
@@ -25070,6 +25098,7 @@ $('#psm-save').addEventListener('click', async () => {
     business_name:               $('#psm-biz-name').value.trim(),
     business_logo_url:           _psmBizLogoUrl || null,
     currency:                    $('#psm-currency').value.trim(),
+    currency_position:           $('input[name="psm-currency-position"]:checked')?.value || 'after',
     timezone:                    $('#psm-timezone').value.trim(),
     display_theme:               $('#psm-theme').value,
     receipt_mode:                $('#psm-receipt-mode').value,
@@ -25124,7 +25153,7 @@ $('#psm-save').addEventListener('click', async () => {
 
   // Sync relevant settings into state so in-session logic stays current
   const saved = res.body?.data || {};
-  const syncKeys = ['dont_settle_to_account', 'stock_selection_mode', 'choose_price', 'receipt_mode', 'tax_enabled', 'tax_rules'];
+  const syncKeys = ['dont_settle_to_account', 'stock_selection_mode', 'choose_price', 'receipt_mode', 'tax_enabled', 'tax_rules', 'currency_position'];
   syncKeys.forEach(k => {
     if (saved[k] !== undefined) state.receiptSettings = { ...state.receiptSettings, [k]: saved[k] };
   });
@@ -25448,7 +25477,6 @@ const _RCPT_SAMPLE = {
 
 function buildReceiptHTML(sale, overrides = {}) {
   const s   = state.receiptSettings || {};
-  const cur = state.currency ? ' ' + state.currency : '';
 
   const lang     = 'receipt_language' in overrides ? overrides.receipt_language : (s.receipt_language || 'en');
   const lbl      = _RCPT_LABELS[lang] || _RCPT_LABELS.en;
@@ -25500,21 +25528,21 @@ function buildReceiptHTML(sale, overrides = {}) {
     ? sale._taxBreakdown
     : _coGetTaxBreakdown(afterDiscount);
 
-  let totalsHTML = `<div class="rcpt-total-row"><span>${lbl.subtotal}</span><span>${parseFloat(sale.subtotal).toFixed(2)}${cur}</span></div>`;
+  let totalsHTML = `<div class="rcpt-total-row"><span>${lbl.subtotal}</span><span>${formatMoney(sale.subtotal)}</span></div>`;
   if (discount > 0) {
-    totalsHTML += `<div class="rcpt-total-row"><span>${lbl.discount}${sale.discount_percent ? ' (' + sale.discount_percent + '%)' : ''}</span><span>-${discount.toFixed(2)}${cur}</span></div>`;
+    totalsHTML += `<div class="rcpt-total-row"><span>${lbl.discount}${sale.discount_percent ? ' (' + sale.discount_percent + '%)' : ''}</span><span>-${formatMoney(discount)}</span></div>`;
   }
   rcptTaxes.forEach(t => {
     const lx = escHtml(t.name) + (t.type === 'flat' ? '' : ' ' + t.value + '%');
-    totalsHTML += `<div class="rcpt-total-row"><span>${lx}</span><span>+${t.amount.toFixed(2)}${cur}</span></div>`;
+    totalsHTML += `<div class="rcpt-total-row"><span>${lx}</span><span>+${formatMoney(t.amount)}</span></div>`;
   });
   totalsHTML += `
     <hr class="rcpt-divider-solid">
-    <div class="rcpt-total-row grand"><span>${lbl.grandTotal}</span><span>${parseFloat(sale.total).toFixed(2)}${cur}</span></div>`;
+    <div class="rcpt-total-row grand"><span>${lbl.grandTotal}</span><span>${formatMoney(sale.total)}</span></div>`;
   if (showAcct) {
-    totalsHTML += `<div class="rcpt-total-row"><span>${lbl.paid} (${escHtml(sale.payment_method_label || sale.payment_method || '')})</span><span>${parseFloat(sale.amount_paid || sale.total).toFixed(2)}${cur}</span></div>`;
+    totalsHTML += `<div class="rcpt-total-row"><span>${lbl.paid} (${escHtml(sale.payment_method_label || sale.payment_method || '')})</span><span>${formatMoney(sale.amount_paid || sale.total)}</span></div>`;
     if (change > 0.005) {
-      totalsHTML += `<div class="rcpt-total-row change"><span>${lbl.change}</span><span>${change.toFixed(2)}${cur}</span></div>`;
+      totalsHTML += `<div class="rcpt-total-row change"><span>${lbl.change}</span><span>${formatMoney(change)}</span></div>`;
     }
   }
 
@@ -25657,6 +25685,7 @@ function _buildEscposReceiptData(sale) {
     header:        s.receipt_header || '',
     footer:        s.receipt_footer || 'Thank you for your purchase!',
     currency:      state.currency || '',
+    currencyPosition: currencyPosition(),
     saleNumber:    sale?.sale_number || '',
     date:          sale?.sold_at
       ? new Date(sale.sold_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })
@@ -26862,12 +26891,12 @@ $('#pos-to-quote')?.addEventListener('click', () => {
       return `<tr>
         <td>${escHtml(i.name)}</td>
         <td class="r">${qtyStr}</td>
-        <td class="r">${cur}${price.toFixed(2)}</td>
-        <td class="r">${cur}${line.toFixed(2)}</td>
+        <td class="r">${formatMoney(price, {currency: cur})}</td>
+        <td class="r">${formatMoney(line, {currency: cur})}</td>
       </tr>`;
     }).join('');
 
-    $('#so-confirm-total').textContent = cur + subtotal.toFixed(2);
+    $('#so-confirm-total').textContent = formatMoney(subtotal, {currency: cur});
 
     // Reset optional fields
     $('#so-confirm-delivery').value = '';
@@ -26974,7 +27003,6 @@ function _coRenderItems() {
   const badge = $('#co-items-badge');
   const ftrTotal = $('#co-items-ftr-total');
   if (!list || !tab) return;
-  const cur = state.currency ? ' ' + state.currency : '';
   const items = tab.cart;
   if (badge) badge.textContent = items.length;
 
@@ -27025,7 +27053,7 @@ function _coRenderItems() {
     </div>`;
   }).join('');
   _coSubtotal = _coComputeSubtotal();
-  if (ftrTotal) ftrTotal.textContent = _coSubtotal.toFixed(2) + cur;
+  if (ftrTotal) ftrTotal.textContent = formatMoney(_coSubtotal);
 }
 
 function _coGetAfterDiscount() {
@@ -27088,12 +27116,11 @@ function _coRefresh() {
   const taxTotal  = Math.round(taxes.reduce((s, t) => s + t.amount, 0) * 100) / 100;
   const total     = Math.round((afterDisc + taxTotal) * 100) / 100;
   const saved     = Math.round((_coSubtotal - afterDisc) * 100) / 100;
-  const cur       = state.currency ? ' ' + state.currency : '';
   const amount    = parseFloat(_coAmount) || 0;
   const change    = Math.round((amount - total) * 100) / 100;
 
-  if ($('#co-subtotal')) $('#co-subtotal').textContent = _coSubtotal.toFixed(2) + cur;
-  if ($('#co-saved'))    $('#co-saved').textContent    = saved > 0 ? saved.toFixed(2) + cur : '—';
+  if ($('#co-subtotal')) $('#co-subtotal').textContent = formatMoney(_coSubtotal);
+  if ($('#co-saved'))    $('#co-saved').textContent    = saved > 0 ? formatMoney(saved) : '—';
 
   const taxRowsEl = $('#co-tax-rows');
   if (taxRowsEl) {
@@ -27101,19 +27128,21 @@ function _coRefresh() {
       const lbl = escHtml(t.name) + (t.type === 'flat' ? '' : ' ' + t.value + '%');
       return `<div class="co-sum-row">
         <span style="color:var(--text-muted);font-size:12px">${lbl}</span>
-        <strong style="color:#f59e0b;font-size:12px">+${t.amount.toFixed(2)}${cur}</strong>
+        <strong style="color:#f59e0b;font-size:12px">+${formatMoney(t.amount)}</strong>
       </div>`;
     }).join('');
   }
 
   if ($('#co-total'))    $('#co-total').textContent    = total.toFixed(2);
+  const gtRow = $('#co-currency')?.closest('.co-gt-row');
+  if (gtRow) gtRow.classList.toggle('cur-before', currencyPosition() === 'before');
   if ($('#co-currency')) $('#co-currency').textContent = state.currency || '';
   const amountEl = $('#co-amount');
   if (amountEl) amountEl.value = _coAmount || '';
-  if ($('#co-amount-due')) $('#co-amount-due').textContent = total.toFixed(2) + cur;
+  if ($('#co-amount-due')) $('#co-amount-due').textContent = formatMoney(total);
   const changeEl = $('#co-change');
   if (changeEl) {
-    changeEl.textContent  = change.toFixed(2) + cur;
+    changeEl.textContent  = formatMoney(change);
     changeEl.className    = change >= 0 ? 'co-change-pos' : 'co-change-neg';
   }
 }
@@ -27262,9 +27291,9 @@ $('#co-items-list').addEventListener('input', e => {
   const totalEl = inp.closest('.co-ir')?.querySelector('.co-ir-total');
   if (totalEl) totalEl.textContent = _itemLineNet(item).toFixed(2);
   _coSubtotal = _coComputeSubtotal();
-  const cur = state.currency ? ' ' + state.currency : '';
+  const cur = state.currency || '';
   const ftrEl = $('#co-items-ftr-total');
-  if (ftrEl) ftrEl.textContent = _coSubtotal.toFixed(2) + cur;
+  if (ftrEl) ftrEl.textContent = formatMoney(_coSubtotal, {currency: cur});
   _coRefresh();
 });
 
@@ -31241,7 +31270,7 @@ async function rstLoadOrders(search, status, page) {
       <div class="rst-order-num">${escHtml(order.order_number)}</div>
       <span class="rst-order-type-lbl">${escHtml(order.type_label)}</span>
       <div class="rst-order-info">${custLine}${tableLine}</div>
-      <div class="rst-order-total">${_rst.currency} ${order.total.toFixed(2)}</div>
+      <div class="rst-order-total">${formatMoney(order.total, {currency: _rst.currency})}</div>
       <span class="rst-status-badge" style="background:${badgeColor}">${escHtml(order.status)}</span>
       <div class="rst-order-time">${_rstTimeAgo(order.created_at)}</div>`;
     row.addEventListener('click', () => rstOpenDetail(order));
@@ -31273,7 +31302,7 @@ function rstOpenDetail(order) {
     <div class="rst-od-item-row">
       <div class="rst-od-item-name">${escHtml(i.name)}</div>
       <div class="rst-od-item-qty">× ${i.quantity}</div>
-      <div class="rst-od-item-price">${cur} ${i.line_total.toFixed(2)}</div>
+      <div class="rst-od-item-price">${formatMoney(i.line_total, {currency: cur})}</div>
     </div>`).join('');
 
   // Status transition buttons
@@ -31382,7 +31411,7 @@ function _rstRenderMenuGrid(items) {
   items.forEach(item => {
     const card = document.createElement('div');
     card.className = 'rst-om-menu-item';
-    card.innerHTML = `<div class="rst-om-menu-item-name">${escHtml(item.name)}</div><div class="rst-om-menu-item-price">${_rst.currency} ${item.price.toFixed(2)}</div>`;
+    card.innerHTML = `<div class="rst-om-menu-item-name">${escHtml(item.name)}</div><div class="rst-om-menu-item-price">${formatMoney(item.price, {currency: _rst.currency})}</div>`;
     card.addEventListener('click', () => _rstAddLine(item.id, item.name, item.price));
     grid.appendChild(card);
   });
@@ -31417,7 +31446,7 @@ function _rstRenderLines() {
     row.innerHTML = `
       <div style="flex:1;min-width:0">
         <div class="rst-om-line-name">${escHtml(line.name)}</div>
-        <div class="rst-om-line-sub">${_rst.currency} ${line.price.toFixed(2)} each · ${_rst.currency} ${lineTotal.toFixed(2)}</div>
+        <div class="rst-om-line-sub">${formatMoney(line.price, {currency: _rst.currency})} each · ${formatMoney(lineTotal, {currency: _rst.currency})}</div>
       </div>
       <div class="rst-om-qty-wrap">
         <button class="rst-om-qty-btn" data-action="minus" data-idx="${idx}">−</button>
@@ -31846,7 +31875,7 @@ function _rstPosRenderCart() {
           <div class="rst-poi-row1">
             <span class="rst-poi-name">${escHtml(item.name)}</span>
             <span class="rst-poi-qty">×${item.qty}</span>
-            <span class="rst-poi-price">${_rstPos.currency} ${lineTotal.toFixed(2)}</span>
+            <span class="rst-poi-price">${formatMoney(lineTotal, {currency: _rstPos.currency})}</span>
           </div>
           <div>
             <span class="rst-poi-status-badge ${cls}"><i class="fa ${icon}"></i> ${label}</span>
@@ -31880,7 +31909,7 @@ function _rstPosRenderCart() {
               <span class="rst-poi-qty">${item.qty}</span>
               <button class="rst-poi-qbtn plus" data-key="${escHtml(key)}">+</button>
             </div>
-            <span class="rst-poi-price">${_rstPos.currency} ${lineTotal.toFixed(2)}</span>
+            <span class="rst-poi-price">${formatMoney(lineTotal, {currency: _rstPos.currency})}</span>
           </div>
           <div class="rst-poi-notes-row">
             <input type="text" class="rst-poi-notes-input" data-key="${escHtml(key)}"
@@ -31991,7 +32020,7 @@ function _rstPosRenderGrid(items) {
     card.innerHTML = `${thumbHtml}
       <div class="rst-pos-card-name">${escHtml(item.name)}</div>
       <div class="rst-pos-card-cat">${escHtml(item.catName || '')}</div>
-      <div class="rst-pos-card-price">${_rstPos.currency} ${item.price.toFixed(2)}</div>`;
+      <div class="rst-pos-card-price">${formatMoney(item.price, {currency: _rstPos.currency})}</div>`;
     card.addEventListener('click', () => _rstPosAddItem(item));
     grid.appendChild(card);
   });
@@ -32127,12 +32156,12 @@ function _rstPosOpenPayment(orderIds, items, total) {
       items.map(i =>
         `<div class="rst-pay-summary-item">
            <span>${escHtml(i.name)} ×${i.qty}</span>
-           <span>${_rstPos.currency} ${(i.price * i.qty).toFixed(2)}</span>
+           <span>${formatMoney((i.price * i.qty), {currency: _rstPos.currency})}</span>
          </div>`
       ).join('') +
       `<div class="rst-pay-summary-total">
          <span>Total</span>
-         <strong>${_rstPos.currency} ${total.toFixed(2)}</strong>
+         <strong>${formatMoney(total, {currency: _rstPos.currency})}</strong>
        </div>`;
   }
 
@@ -32176,7 +32205,7 @@ function _rstPayUpdateDisplay() {
   const changeRow = $('#rst-pay-change-row');
   const changeLbl = $('#rst-pay-change');
   if (changeRow) changeRow.style.display = change > 0 ? '' : 'none';
-  if (changeLbl) changeLbl.textContent = `${_rstPos.currency} ${Math.max(0, change).toFixed(2)}`;
+  if (changeLbl) changeLbl.textContent = `${formatMoney(Math.max(0, change), {currency: _rstPos.currency})}`;
 }
 
 $('#rst-pay-numpad')?.addEventListener('click', e => {
@@ -32294,15 +32323,15 @@ function _rstPosShowReceipt(items, total, method, amountTendered) {
       ${items.map(i =>
         `<div class="rst-receipt-line">
            <span>${escHtml(i.name)} ×${i.qty}</span>
-           <span>${_rstPos.currency} ${(i.price * i.qty).toFixed(2)}</span>
+           <span>${formatMoney((i.price * i.qty), {currency: _rstPos.currency})}</span>
          </div>`
       ).join('')}
-      <div class="rst-receipt-line total"><span>TOTAL</span><span>${_rstPos.currency} ${total.toFixed(2)}</span></div>
+      <div class="rst-receipt-line total"><span>TOTAL</span><span>${formatMoney(total, {currency: _rstPos.currency})}</span></div>
       <hr class="rst-receipt-divider">
       <div class="rst-receipt-line"><span>Method</span><span>${escHtml(method.charAt(0).toUpperCase() + method.slice(1))}</span></div>
       ${method === 'cash' ? `
-        <div class="rst-receipt-line"><span>Received</span><span>${_rstPos.currency} ${amountTendered.toFixed(2)}</span></div>
-        <div class="rst-receipt-line"><span>Change</span><span>${_rstPos.currency} ${change.toFixed(2)}</span></div>
+        <div class="rst-receipt-line"><span>Received</span><span>${formatMoney(amountTendered, {currency: _rstPos.currency})}</span></div>
+        <div class="rst-receipt-line"><span>Change</span><span>${formatMoney(change, {currency: _rstPos.currency})}</span></div>
       ` : ''}
       <hr class="rst-receipt-divider">
       <div style="text-align:center;font-size:11px;color:var(--text-muted);margin-top:8px">Thank you!</div>`;
@@ -33611,7 +33640,7 @@ function _rstPoRenderList() {
         <td><strong>${escHtml(po.po_number)}</strong></td>
         <td style="color:var(--text-muted);font-size:11px">${po.purchase_date || '—'}</td>
         <td>${po.supplier_name ? escHtml(po.supplier_name) : '<span style="color:var(--text-muted)">—</span>'}</td>
-        <td style="text-align:right">${cur} ${po.total.toFixed(2)}</td>
+        <td style="text-align:right">${formatMoney(po.total, {currency: cur})}</td>
         <td><span class="rst-po-status-badge" style="background:${po.status_color}20;color:${po.status_color};border-color:${po.status_color}40">${escHtml(po.status_label)}</span></td>
       </tr>`;
     }).join('');
@@ -33659,7 +33688,7 @@ function _rstPoRenderDetail(po) {
       <div><span style="color:var(--text-muted)">Status</span><br><strong>
         <span style="color:${po.status_color}">${escHtml(po.status_label)}</span>
       </strong></div>
-      <div><span style="color:var(--text-muted)">Total</span><br><strong>${cur} ${po.total.toFixed(2)}</strong></div>
+      <div><span style="color:var(--text-muted)">Total</span><br><strong>${formatMoney(po.total, {currency: cur})}</strong></div>
       ${po.supplier ? `<div><span style="color:var(--text-muted)">Supplier</span><br>${escHtml(po.supplier.name)}</div>` : ''}
       ${po.expected_delivery_date ? `<div><span style="color:var(--text-muted)">Expected Delivery</span><br>${escHtml(po.expected_delivery_date)}</div>` : ''}
     `;
@@ -33676,8 +33705,8 @@ function _rstPoRenderDetail(po) {
         <td style="text-align:right">${i.quantity} ${i.ingredient_unit}</td>
         <td style="text-align:right;color:${i.qty_received > 0 ? '#16a34a' : 'var(--text-muted)'}">${i.qty_received} ${i.ingredient_unit}</td>
         <td style="text-align:right;color:${i.qty_remaining > 0 ? '#d97706' : '#6b7280'}">${i.qty_remaining} ${i.ingredient_unit}</td>
-        <td style="text-align:right">${cur} ${i.unit_cost.toFixed(4)}</td>
-        <td style="text-align:right;font-weight:600">${cur} ${i.line_total.toFixed(2)}</td>
+        <td style="text-align:right">${formatMoney(i.unit_cost, {decimals:4, currency: cur})}</td>
+        <td style="text-align:right;font-weight:600">${formatMoney(i.line_total, {currency: cur})}</td>
       </tr>`).join('');
     }
   }
@@ -33686,7 +33715,7 @@ function _rstPoRenderDetail(po) {
   if (totalTfoot) {
     totalTfoot.innerHTML = `<tr style="font-weight:700;border-top:2px solid var(--border)">
       <td colspan="5" style="text-align:right;padding-right:8px">Total</td>
-      <td style="text-align:right">${cur} ${po.total.toFixed(2)}</td>
+      <td style="text-align:right">${formatMoney(po.total, {currency: cur})}</td>
     </tr>`;
   }
 
@@ -33699,7 +33728,7 @@ function _rstPoRenderDetail(po) {
       <td><strong>${escHtml(g.grn_number)}</strong></td>
       <td style="color:var(--text-muted)">${g.received_date || '—'}</td>
       <td style="color:var(--text-muted)">${escHtml(g.payment_label)}</td>
-      <td style="text-align:right;font-weight:600">${cur} ${g.total.toFixed(2)}</td>
+      <td style="text-align:right;font-weight:600">${formatMoney(g.total, {currency: cur})}</td>
     </tr>`).join('');
   }
 
@@ -33841,7 +33870,7 @@ function _rstPoRenderLines() {
       <td style="text-align:right;font-size:11px;color:var(--text-muted)">
         <span class="rst-po-line-total">
           ${(parseFloat(line.qty) > 0 && parseFloat(line.unitCost) >= 0)
-            ? (_rstPo.currency + ' ' + (parseFloat(line.qty) * parseFloat(line.unitCost)).toFixed(2))
+            ? formatMoney(parseFloat(line.qty) * parseFloat(line.unitCost), {currency: _rstPo.currency})
             : '—'}
         </span>
       </td>
@@ -33888,7 +33917,7 @@ function _rstPoSyncLine(el) {
   const qty      = parseFloat(line.qty) || 0;
   const cost     = parseFloat(line.unitCost) || 0;
   const totalEl  = row.querySelector('.rst-po-line-total');
-  if (totalEl) totalEl.textContent = qty > 0 ? `${_rstPo.currency} ${(qty * cost).toFixed(2)}` : '—';
+  if (totalEl) totalEl.textContent = qty > 0 ? formatMoney(qty * cost, {currency: _rstPo.currency}) : '—';
 }
 
 $('#rst-po-add-line')?.addEventListener('click', () => {
@@ -34665,6 +34694,7 @@ async function loadPayrollCycleDetail(cycleId) {
   // ── Overview pane ─────────────────────────────────────────────────────
   const s   = c.summary || {};
   const cur = c.currency || 'LKR';
+  const fmtP = v => currencyPosition() === 'before' ? `${cur} ${v}` : `${v} ${cur}`;
   const isFinalized = c.status === 'finalized';
   const isPaid      = !!c.is_paid;
 
@@ -34672,29 +34702,29 @@ async function loadPayrollCycleDetail(cycleId) {
     <div class="lm-stats-row">
       <div class="lm-stat-block">
         <span class="lm-stat-block-label">GROSS EARNINGS</span>
-        <span class="lm-stat-block-val">${cur} ${s.gross_earnings_fmt || '0.00'}</span>
+        <span class="lm-stat-block-val">${fmtP(s.gross_earnings_fmt || '0.00')}</span>
       </div>
       <div class="lm-stat-block">
         <span class="lm-stat-block-label">TOTAL DEDUCTIONS</span>
-        <span class="lm-stat-block-val">${cur} ${s.total_deductions_fmt || '0.00'}</span>
+        <span class="lm-stat-block-val">${fmtP(s.total_deductions_fmt || '0.00')}</span>
       </div>
       <div class="lm-stat-block">
         <span class="lm-stat-block-label">NET PAY</span>
-        <span class="lm-balance">${cur} ${s.net_pay_fmt || '0.00'}</span>
+        <span class="lm-balance">${fmtP(s.net_pay_fmt || '0.00')}</span>
       </div>
     </div>
     <div class="lm-stats-row">
       <div class="lm-stat-block">
         <span class="lm-stat-block-label">EPF (EMPLOYEE)</span>
-        <span class="lm-stat-block-val">${cur} ${s.epf_employee_fmt || '0.00'}</span>
+        <span class="lm-stat-block-val">${fmtP(s.epf_employee_fmt || '0.00')}</span>
       </div>
       <div class="lm-stat-block">
         <span class="lm-stat-block-label">ETF (EMPLOYER)</span>
-        <span class="lm-stat-block-val">${cur} ${s.etf_employer_fmt || '0.00'}</span>
+        <span class="lm-stat-block-val">${fmtP(s.etf_employer_fmt || '0.00')}</span>
       </div>
       <div class="lm-stat-block">
         <span class="lm-stat-block-label">APIT</span>
-        <span class="lm-stat-block-val">${cur} ${s.apit_fmt || '0.00'}</span>
+        <span class="lm-stat-block-val">${fmtP(s.apit_fmt || '0.00')}</span>
       </div>
     </div>`;
 
@@ -34855,6 +34885,7 @@ function renderPayrollEmployeesTab(cycle, items) {
 
   const isFinalized = cycle.status === 'finalized';
   const cur = cycle.currency || 'LKR';
+  const fmtP = v => currencyPosition() === 'before' ? `${cur} ${v}` : `${v} ${cur}`;
 
   const rows = items.map(it => {
     const errBadge = it.has_errors
@@ -34881,11 +34912,11 @@ function renderPayrollEmployeesTab(cycle, items) {
     return `<tr class="inv-row">
       <td>${statusBadge}</td>
       <td><strong>${escHtml(it.employee_name || '—')}</strong><br><span style="font-size:11px;color:var(--text-muted);font-family:monospace">${escHtml(it.employee_code || '')}</span></td>
-      <td class="inv-price" style="color:var(--text)">${cur} ${escHtml(it.basic_salary_fmt)}</td>
-      <td class="inv-price" style="color:var(--text)">${cur} ${escHtml(it.overtime_amount_fmt)}</td>
-      <td class="inv-price" style="color:var(--text)">${cur} ${escHtml(it.gross_earnings_fmt)}</td>
-      <td class="inv-price" style="color:#dc2626">${cur} ${escHtml(it.total_deductions_fmt)}</td>
-      <td class="inv-price" style="color:var(--accent);font-weight:800">${cur} ${escHtml(it.net_pay_fmt)}</td>
+      <td class="inv-price" style="color:var(--text)">${fmtP(escHtml(it.basic_salary_fmt))}</td>
+      <td class="inv-price" style="color:var(--text)">${fmtP(escHtml(it.overtime_amount_fmt))}</td>
+      <td class="inv-price" style="color:var(--text)">${fmtP(escHtml(it.gross_earnings_fmt))}</td>
+      <td class="inv-price" style="color:#dc2626">${fmtP(escHtml(it.total_deductions_fmt))}</td>
+      <td class="inv-price" style="color:var(--accent);font-weight:800">${fmtP(escHtml(it.net_pay_fmt))}</td>
       <td style="text-align:right">${recomputeBtn}</td>
     </tr>${errRow}`;
   }).join('');
@@ -36348,7 +36379,7 @@ async function loadSvcRequests() {
 
 function _svcRenderRequestRows() {
   const tbody = $('#svc-req-tbody');
-  const cur   = state.currency ? ' ' + state.currency : '';
+  const cur   = state.currency || '';
   const pmOn  = state.features?.has('project_management');
 
   const rows = _svcReqStatus
@@ -36367,7 +36398,7 @@ function _svcRenderRequestRows() {
       ? new Date(r.scheduled_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })
       : '<span style="color:var(--text-light)">—</span>';
     const price = r.total_price != null
-      ? `<strong>${r.total_price.toFixed(2)}</strong>${cur}`
+      ? (currencyPosition() === 'before' ? `${cur} <strong>${r.total_price.toFixed(2)}</strong>` : `<strong>${r.total_price.toFixed(2)}</strong> ${cur}`)
       : '<span style="color:var(--text-light)">—</span>';
     const badge = `<span class="svc-status-badge" style="background:${r.status_color}18;color:${r.status_color};border:1px solid ${r.status_color}35">${escHtml(r.status_label)}</span>`;
     const svcSub = r.service_item ? `<div class="svc-req-sub"><i class="fa fa-screwdriver-wrench" style="margin-right:3px;opacity:.6"></i>${escHtml(r.service_item.name)}</div>` : '';
@@ -36720,7 +36751,7 @@ async function loadSvcCatalog() {
     return;
   }
   const items = res.body?.data || [];
-  const cur   = state.currency ? ' ' + state.currency : '';
+  const cur   = state.currency || '';
 
   if (!items.length) {
     tbody.innerHTML = `<tr><td colspan="7" class="svc-tbl-placeholder"><i class="fa fa-screwdriver-wrench svc-tbl-empty-icon"></i>No services found</td></tr>`;
@@ -36753,7 +36784,9 @@ async function loadSvcCatalog() {
       <td class="svc-list-desc">${desc}</td>
       <td><div style="display:flex;flex-wrap:wrap;gap:4px">${cats}</div></td>
       <td style="font-size:12px;color:var(--text-muted)">${dur}</td>
-      <td style="text-align:right;font-weight:600;font-size:13px">${parseFloat(i.price).toFixed(2)}<span style="font-size:11px;font-weight:400;color:var(--text-muted);margin-left:2px">${cur}</span></td>
+      <td style="text-align:right;font-weight:600;font-size:13px">${currencyPosition() === 'before'
+        ? `<span style="font-size:11px;font-weight:400;color:var(--text-muted);margin-right:2px">${cur}</span>${parseFloat(i.price).toFixed(2)}`
+        : `${parseFloat(i.price).toFixed(2)}<span style="font-size:11px;font-weight:400;color:var(--text-muted);margin-left:2px">${cur}</span>`}</td>
       <td style="text-align:center">${badge}</td>
     </tr>`;
   }).join('');
@@ -36799,7 +36832,7 @@ function _svcOpenItemDetail(id) {
       return;
     }
     const d   = res.body.data;
-    const cur = state.currency ? ' ' + state.currency : '';
+    const cur = state.currency || '';
     const color   = _svcItmColor(d.name);
     const initial = d.name.trim().charAt(0).toUpperCase();
 
@@ -36812,14 +36845,14 @@ function _svcOpenItemDetail(id) {
       ? `<span class="svc-cat-badge svc-cat-badge--active"><i class="fa fa-circle" style="font-size:6px"></i> Active</span>`
       : `<span class="svc-cat-badge svc-cat-badge--inactive"><i class="fa fa-circle" style="font-size:6px"></i> Inactive</span>`;
     $('#svc-detail-meta').innerHTML = `
-      <span class="svc-detail-meta-pill"><i class="fa fa-tag"></i> ${parseFloat(d.price).toFixed(2)}${cur}</span>
+      <span class="svc-detail-meta-pill"><i class="fa fa-tag"></i> ${formatMoney(parseFloat(d.price), {currency: cur})}</span>
       ${d.duration_label && d.duration_label !== '—' ? `<span class="svc-detail-meta-pill"><i class="fa fa-clock"></i> ${escHtml(d.duration_label)}</span>` : ''}
     `;
 
     // Overview tab
     $('#svc-detail-desc').textContent = d.description || 'No description provided.';
     $('#svc-detail-kv').innerHTML = `
-      <div class="svc-detail-kv-item"><span class="svc-detail-kv-key">Price</span><span class="svc-detail-kv-val">${parseFloat(d.price).toFixed(2)}${cur}</span></div>
+      <div class="svc-detail-kv-item"><span class="svc-detail-kv-key">Price</span><span class="svc-detail-kv-val">${formatMoney(parseFloat(d.price), {currency: cur})}</span></div>
       <div class="svc-detail-kv-item"><span class="svc-detail-kv-key">Duration</span><span class="svc-detail-kv-val">${escHtml(d.duration_label || '—')}</span></div>
       <div class="svc-detail-kv-item"><span class="svc-detail-kv-key">Status</span><span class="svc-detail-kv-val">${d.is_active ? 'Active' : 'Inactive'}</span></div>
       <div class="svc-detail-kv-item"><span class="svc-detail-kv-key">Featured</span><span class="svc-detail-kv-val" style="${d.is_featured ? 'color:#f59e0b' : ''}">${d.is_featured ? '<i class="fa fa-star"></i> Yes' : 'No'}</span></div>

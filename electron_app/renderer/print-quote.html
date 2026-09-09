@@ -230,7 +230,7 @@ body {
       .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
 
-  function buildQuoteHtml(q, cur) {
+  function buildQuoteHtml(q, money) {
     var docType   = q.doc_type || 'Quotation';
     var isInvoice = docType === 'Invoice';
     // Support both quotation (quote_date/expiry_date) and invoice (issue_date/due_date) field names
@@ -251,30 +251,30 @@ body {
       var discPerUnit = parseFloat(item.item_discount_per_unit || 0);
       var discCell = hasItemDisc
         ? (discPerUnit > 0
-            ? '<td class="r disc-cell">&minus;' + (discPerUnit * qty).toFixed(2) + cur + '</td>'
+            ? '<td class="r disc-cell">&minus;' + money(discPerUnit * qty) + '</td>'
             : '<td class="r disc-cell" style="color:#94a3b8">&mdash;</td>')
         : '';
       return '<tr>'
         + '<td class="n">' + (i + 1) + '</td>'
         + '<td>' + escH(item.description || '—') + '</td>'
         + '<td class="r">' + qtyStr + '</td>'
-        + '<td class="r">' + parseFloat(item.unit_price).toFixed(2) + cur + '</td>'
+        + '<td class="r">' + money(item.unit_price) + '</td>'
         + discCell
-        + '<td class="r bd">' + parseFloat(item.line_total).toFixed(2) + cur + '</td>'
+        + '<td class="r bd">' + money(item.line_total) + '</td>'
         + '</tr>';
     }).join('');
 
     var statusCls = 'pq-badge-' + (q.status || 'draft');
 
     var totals = ''
-      + '<div class="pq-total-row"><span>Subtotal</span><span>' + parseFloat(q.subtotal || 0).toFixed(2) + cur + '</span></div>';
+      + '<div class="pq-total-row"><span>Subtotal</span><span>' + money(q.subtotal || 0) + '</span></div>';
     if (parseFloat(q.discount_amount) > 0) {
-      totals += '<div class="pq-total-row"><span>Discount</span><span>&minus;' + parseFloat(q.discount_amount).toFixed(2) + cur + '</span></div>';
+      totals += '<div class="pq-total-row"><span>Discount</span><span>&minus;' + money(q.discount_amount) + '</span></div>';
     }
     if (parseFloat(q.tax_amount) > 0) {
-      totals += '<div class="pq-total-row"><span>Tax</span><span>+' + parseFloat(q.tax_amount).toFixed(2) + cur + '</span></div>';
+      totals += '<div class="pq-total-row"><span>Tax</span><span>+' + money(q.tax_amount) + '</span></div>';
     }
-    totals += '<div class="pq-total-row grand"><span>Total</span><span>' + parseFloat(q.total || 0).toFixed(2) + cur + '</span></div>';
+    totals += '<div class="pq-total-row grand"><span>Total</span><span>' + money(q.total || 0) + '</span></div>';
 
     return ''
       + '<div class="pq-hdr">'
@@ -337,10 +337,16 @@ body {
   async function render(data) {
     var q   = data.quote;
     var lh  = data.letterhead;
-    var cur = data.currency ? ' ' + data.currency : '';
+    var cur = data.currency || '';
+    var curBefore = data.currencyPosition === 'before';
+    var money = function(v) {
+      var num = parseFloat(v || 0).toFixed(2);
+      if (!cur) return num;
+      return curBefore ? (cur + ' ' + num) : (num + ' ' + cur);
+    };
 
     document.getElementById('pq-topbar-title').textContent = q.quote_number + ' — ' + (q.doc_type || 'Quotation');
-    document.getElementById('pq-content').innerHTML = buildQuoteHtml(q, cur);
+    document.getElementById('pq-content').innerHTML = buildQuoteHtml(q, money);
 
     if (lh && lh.canvas_json) {
       var imgData = await renderLetterhead(lh.canvas_json, lh.width, lh.height);
