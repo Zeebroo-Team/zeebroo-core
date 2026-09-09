@@ -71,7 +71,7 @@ body {
   padding: 24px; padding-top: 78px; min-height: 100vh;
 }
 
-/* ── A4 page shell ── */
+/* ── Page shell (sized dynamically from the invoice's paper geometry) ── */
 .pi-page {
   position: relative;
   width: 794px;
@@ -102,12 +102,8 @@ body {
   }
   .pi-page {
     box-shadow: none !important;
-    width: 794px; min-height: 1123px;
     overflow: visible !important;
     break-before: avoid;
-  }
-  .pi-frame {
-    width: 794px; height: 1123px;
   }
 }
 </style>
@@ -161,6 +157,12 @@ body {
 
     var frame = document.getElementById('pi-frame');
     frame.srcdoc = data.html || '';
+
+    var page = document.getElementById('pi-page');
+    var w = data.width  || 794;
+    var h = data.height || 1400; // continuous roll paper: fall back to a tall preview box
+    if (page)  { page.style.width  = w + 'px'; page.style.minHeight = h + 'px'; }
+    if (frame) { frame.style.width = w + 'px'; frame.style.height   = h + 'px'; }
 
     document.getElementById('pi-loading').style.display = 'none';
     document.getElementById('pi-topbar').style.display  = 'flex';
