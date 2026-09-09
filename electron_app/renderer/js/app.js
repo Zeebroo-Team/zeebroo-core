@@ -50,6 +50,9 @@ const state = {
 // Template-literal sentinels used by invoice template builders.
 // Defaults are empty; _invBuildActualDoc overrides them with const-shadowing.
 let bodyPos = '', pgStack = '', lhLayer = '';
+// Extra sentinels driving Invoice Setup's paper size / orientation / header
+// layout / corner logo placement. Same const-shadowing pattern as above.
+let geomW = 794, geomMinH = 'min-height:1123px;', hdrCss = '', lhCorner = '';
 
 // ── DOM helpers ────────────────────────────────────────────────────────────
 const $ = (sel) => document.querySelector(sel);
@@ -3593,6 +3596,7 @@ document.addEventListener('DOMContentLoaded', () => {
 // ── Invoice preview modal (shows the invoice before/instead of printing) ──────
 let _invpFitSc = 0.5, _invpZoom = 1, _invpPanX = 0, _invpPanY = 0;
 let _invpCurrentInv = null;
+let _invpLastGeom = { wPx: 794, hPx: 1123, thermal: false };
 
 function _invpApplyTransform() {
   const sc = $('#invp-scaler');
@@ -3608,10 +3612,11 @@ function _invpResetView() {
   if (!bg) return;
   const w = bg.clientWidth, h = bg.clientHeight;
   if (!w || !h) return;
-  _invpFitSc = Math.min((w - 40) / 794, (h - 40) / 1123);
+  const pw = _invpLastGeom.wPx, ph = _invpLastGeom.hPx || INV_THERMAL_PREVIEW_H;
+  _invpFitSc = Math.min((w - 40) / pw, (h - 40) / ph);
   _invpZoom  = 1;
-  _invpPanX  = (w - 794 * _invpFitSc) / 2;
-  _invpPanY  = (h - 1123 * _invpFitSc) / 2;
+  _invpPanX  = (w - pw * _invpFitSc) / 2;
+  _invpPanY  = (h - ph * _invpFitSc) / 2;
   _invpApplyTransform();
   _invpUpdateZoomLabel();
 }
@@ -3644,12 +3649,17 @@ async function showInvoicePreviewModal(inv) {
   }
 
   const ic    = _isetupGetCfg();
-  const tpl   = _isetupResolveTpl(ic.template, ic.color);
-  const mg    = { top: ic.mgTop, bot: ic.mgBot, left: ic.mgLeft, right: ic.mgRight };
+  const geom  = _isetupGeom(ic);
   const frame = document.getElementById('invp-frame');
 
+  _invpLastGeom = geom;
+  const pageH  = geom.hPx || INV_THERMAL_PREVIEW_H;
+  const scaler = document.getElementById('invp-scaler');
+  if (scaler) { scaler.style.width = geom.wPx + 'px'; scaler.style.height = pageH + 'px'; }
+  if (frame)  { frame.style.width  = geom.wPx + 'px'; frame.style.height  = pageH + 'px'; }
+
   // Show immediately without letterhead so the modal opens instantly
-  if (frame) frame.srcdoc = _invBuildActualDoc(inv, tpl, mg, state.currency || '');
+  if (frame) frame.srcdoc = _invBuildActualDoc(inv, ic, state.currency || '');
   modal.style.display = 'flex';
   setTimeout(_invpResetView, 50);
 
@@ -3662,14 +3672,13 @@ async function showInvoicePreviewModal(inv) {
       lhFull.width  || 794,
       lhFull.height || 1123
     );
-    if (lhDataUrl) frame.srcdoc = _invBuildActualDoc(inv, tpl, mg, state.currency || '', lhDataUrl);
+    if (lhDataUrl) frame.srcdoc = _invBuildActualDoc(inv, ic, state.currency || '', lhDataUrl);
   }
 }
 
 async function _invPrint(inv) {
   const ic     = _isetupGetCfg();
-  const tpl    = _isetupResolveTpl(ic.template, ic.color);
-  const mg     = { top: ic.mgTop, bot: ic.mgBot, left: ic.mgLeft, right: ic.mgRight };
+  const geom   = _isetupGeom(ic);
   const lhFull = ic.lhEnabled ? await _fetchLetterhead() : null;
   let   lhDataUrl = null;
   if (lhFull && lhFull.canvas_json) {
@@ -3679,12 +3688,14 @@ async function _invPrint(inv) {
       lhFull.height || 1123
     );
   }
-  const html = _invBuildActualDoc(inv, tpl, mg, state.currency || '', lhDataUrl);
+  const html = _invBuildActualDoc(inv, ic, state.currency || '', lhDataUrl);
   await window.electronAPI.openInvoicePrint({
     html,
     number:      inv.invoice_number || '',
     status:      inv.status         || '',
     statusLabel: inv.status_label   || '',
+    width:       geom.wPx,
+    height:      geom.hPx || null,
   });
 }
 
@@ -23346,6 +23357,74 @@ function _isetupResolveTpl(id, colorOverride) {
   return colorOverride ? { ...base, accent: colorOverride } : base;
 }
 
+// ── Paper size / orientation / printer type → page geometry ────────────────
+const INV_PAPER_MM = {
+  a4:     { w: 210, h: 297 },
+  a5:     { w: 148, h: 210 },
+  letter: { w: 216, h: 279 },
+  legal:  { w: 216, h: 356 },
+};
+const INV_MM_PX = 96 / 25.4;
+// Fallback preview height (px) for thermal roll paper, which has no fixed length.
+const INV_THERMAL_PREVIEW_H = 1400;
+
+// Resolves the effective page geometry (mm + px) from printer/paper/orientation.
+// Thermal printers use their fixed roll width with an unbounded (auto) length —
+// paper size and orientation don't apply to continuous roll paper.
+function _isetupGeom(cfg) {
+  const thermal = cfg.printer === 'thermal_80' || cfg.printer === 'thermal_58';
+  if (thermal) {
+    const wMm = cfg.printer === 'thermal_58' ? 58 : 80;
+    return { wMm, hMm: null, wPx: Math.round(wMm * INV_MM_PX), hPx: null, thermal: true };
+  }
+  const base = INV_PAPER_MM[cfg.paper] || INV_PAPER_MM.a4;
+  const land = cfg.orientation === 'landscape';
+  const wMm  = land ? base.h : base.w;
+  const hMm  = land ? base.w : base.h;
+  return { wMm, hMm, wPx: Math.round(wMm * INV_MM_PX), hPx: Math.round(hMm * INV_MM_PX), thermal: false };
+}
+
+// Shared header-layout override, applied uniformly to every template's
+// two-column header container (business block + invoice-number block).
+function _isetupHdrCss(hdrLayout) {
+  const sel = '.top,.banner,.hdr-top,.topbar';
+  if (hdrLayout === 'num-left')   return `${sel}{flex-direction:row-reverse}`;
+  if (hdrLayout === 'num-center') return `${sel}{justify-content:center;gap:48px}`;
+  return '';
+}
+
+// @page rule so the actual print output matches the configured paper size.
+function _isetupPageAtCss(geom) {
+  const size = geom.thermal ? `${geom.wMm}mm auto` : `${geom.wMm}mm ${geom.hMm}mm`;
+  return `@page{size:${size};margin:0}`;
+}
+
+// Builds the letterhead HTML for either a full-width header banner ('header')
+// or a small corner badge ('top-left' / 'top-right'), per the configured
+// logo/letterhead position. Corner mode keeps the template's own business
+// name visible (the badge doesn't cover the header), banner mode hides it.
+function _isetupLhHtml(dataUrl, contentHeight, logoPos, geom, mg) {
+  if (!dataUrl) return { banner: '', corner: '' };
+  const pageW  = geom.wPx;
+  const pageH  = geom.hPx || Math.round(pageW * 1123 / 794);
+  const stripH = contentHeight > 0 ? Math.ceil(contentHeight) + 6 : 150;
+  if (logoPos === 'top-left' || logoPos === 'top-right') {
+    const side   = logoPos === 'top-left' ? 'left' : 'right';
+    const inset  = side === 'left' ? mg.left : mg.right;
+    const badgeW = Math.max(80, Math.min(220, Math.round(pageW * 0.32)));
+    const scale  = badgeW / pageW;
+    const badgeH = Math.round(stripH * scale);
+    return {
+      banner: '',
+      corner: `<div style="position:absolute;top:${mg.top}mm;${side}:${inset}mm;width:${badgeW}px;height:${badgeH}px;overflow:hidden;z-index:2;box-shadow:0 1px 4px rgba(0,0,0,.12)"><img src="${dataUrl}" style="position:absolute;top:0;left:0;width:${Math.round(pageW * scale)}px;height:${Math.round(pageH * scale)}px;display:block;pointer-events:none;object-fit:fill;image-rendering:auto;" alt=""></div>`,
+    };
+  }
+  return {
+    banner: `<div style="width:${pageW}px;height:${stripH}px;overflow:hidden;position:relative;"><img src="${dataUrl}" style="position:absolute;top:0;left:0;width:${pageW}px;height:${pageH}px;display:block;pointer-events:none;object-fit:fill;image-rendering:auto;" alt=""></div>`,
+    corner: '',
+  };
+}
+
 function _isetupBuildPreviewDoc(tpl, mg, cur) {
   const fn = { classic: _iTPLClassic, sidebar: _iTPLSidebar, bold: _iTPLBold, minimal: _iTPLMinimal, compact: _iTPLCompact, executive: _iTPLExecutive }[tpl.id] || _iTPLClassic;
   return fn(tpl, mg, cur);
@@ -23367,7 +23446,7 @@ function _iTPLClassic(tpl, mg, cur) {
   return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{font-family:Inter,Arial,sans-serif;font-size:12px;color:#0f172a;background:#fff;${bodyPos}}
-.pg{width:794px;padding:${mg.top}mm ${mg.right}mm ${mg.bot}mm ${mg.left}mm;${pgStack}}
+.pg{width:${geomW}px;position:relative;padding:${mg.top}mm ${mg.right}mm ${mg.bot}mm ${mg.left}mm;${pgStack}}
 .top{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:20px;border-bottom:2.5px solid ${a};margin-bottom:24px}
 .bn{font-size:21px;font-weight:900;color:${a}}.bi{font-size:10px;color:#64748b;margin-top:5px;line-height:1.6}
 .it{font-size:30px;font-weight:900;text-transform:uppercase;color:${a};text-align:right}
@@ -23394,7 +23473,7 @@ td.n{color:#94a3b8;text-align:center;width:26px}td.r{text-align:right}td.b{font-
 .gr{font-size:15px;font-weight:900;border-top:2.5px solid ${a};margin-top:4px;padding-top:9px}
 .gr span:last-child{color:${a}}
 .ft{margin-top:22px;padding-top:12px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:10px;color:#94a3b8}
-</style></head><body>${lhLayer}<div class="pg">
+${hdrCss}</style></head><body>${lhLayer}<div class="pg">${lhCorner}
 <div class="top">
   <div>${bizBlock}</div>
   <div><div class="it">Invoice</div><div class="in">INV-0024 · 01 Aug 2026</div></div>
@@ -23436,7 +23515,7 @@ function _iTPLSidebar(tpl, mg, cur) {
   return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{font-family:Inter,Arial,sans-serif;font-size:12px;color:#0f172a;background:#fff;${bodyPos}}
-.pg{width:794px;min-height:1123px;display:flex;${pgStack}}
+.pg{width:${geomW}px;${geomMinH}position:relative;display:flex;${pgStack}}
 .sb{width:195px;background:${a};padding:30px 16px;flex-shrink:0;display:flex;flex-direction:column}
 .sb-biz{font-size:14px;font-weight:900;color:#fff;line-height:1.2;margin-bottom:4px}
 .sb-addr{font-size:9px;color:rgba(255,255,255,.55);line-height:1.6;margin-bottom:20px}
@@ -23465,7 +23544,7 @@ td.n{color:#94a3b8;text-align:center;width:22px}td.r{text-align:right}td.b{font-
 .tr:last-child{border-bottom:none}.tr span:first-child{color:#64748b}
 .gr{font-size:14px;font-weight:900;border-top:2.5px solid ${a};margin-top:4px;padding-top:9px}
 .gr span:last-child{color:${a}}
-</style></head><body>${lhLayer}<div class="pg">
+${hdrCss}</style></head><body>${lhLayer}<div class="pg">${lhCorner}
 <div class="sb">
   <div class="sb-biz">${biz}</div>
   <div class="sb-addr">${addr}<br>invoices@example.com</div>
@@ -23508,7 +23587,7 @@ function _iTPLBold(tpl, mg, cur) {
   return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{font-family:Inter,Arial,sans-serif;font-size:12px;color:#0f172a;background:#fff;${bodyPos}}
-.pg{width:794px;min-height:1123px;display:flex;flex-direction:column;${pgStack}}
+.pg{width:${geomW}px;${geomMinH}position:relative;display:flex;flex-direction:column;${pgStack}}
 .banner{background:${a};padding:28px ${mg.right}mm 26px ${mg.left}mm;display:flex;justify-content:space-between;align-items:flex-end}
 .b-biz{font-size:20px;font-weight:900;color:#fff}
 .b-addr{font-size:10px;color:rgba(255,255,255,.7);margin-top:4px;line-height:1.5}
@@ -23535,7 +23614,7 @@ td.n{color:#94a3b8;text-align:center;width:26px}td.r{text-align:right}td.b{font-
 .tr:last-child{border-bottom:none}.tr span:first-child{color:#64748b}
 .gr{background:${a};color:#fff!important;font-weight:900;font-size:14px}
 .gr span{color:#fff!important}
-</style></head><body>${lhLayer}<div class="pg">
+${hdrCss}</style></head><body>${lhLayer}<div class="pg">${lhCorner}
 <div class="banner">
   <div>${bizBlock}</div>
   <div><div class="b-lbl">Invoice</div><div class="b-num">INV-0024</div></div>
@@ -23576,7 +23655,7 @@ function _iTPLMinimal(tpl, mg, cur) {
   return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{font-family:Georgia,'Times New Roman',serif;font-size:12px;color:#1a1a1a;background:#fff;${bodyPos}}
-.pg{width:794px;padding:${mg.top}mm ${mg.right}mm ${mg.bot}mm ${mg.left}mm;${pgStack}}
+.pg{width:${geomW}px;position:relative;padding:${mg.top}mm ${mg.right}mm ${mg.bot}mm ${mg.left}mm;${pgStack}}
 .top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:30px}
 .bn{font-size:18px;font-weight:700;font-family:Georgia,serif}
 .bi{font-size:10px;color:#6b7280;margin-top:5px;line-height:1.7;font-family:Arial,sans-serif}
@@ -23602,7 +23681,7 @@ td.n{color:#d1d5db;text-align:center;width:26px;font-style:italic}td.r{text-alig
 .rule2{height:1px;background:#e5e7eb;margin:4px 0}
 .gr{display:flex;justify-content:space-between;font-size:16px;font-weight:700;padding-top:8px;font-family:Georgia,serif;color:#1a1a1a;border-top:1.5px solid #1a1a1a;margin-top:4px}
 .ft{margin-top:28px;padding-top:12px;border-top:1px solid #e5e7eb;font-size:9px;color:#9ca3af;text-align:center;letter-spacing:.06em;font-family:Arial,sans-serif;text-transform:uppercase}
-</style></head><body>${lhLayer}<div class="pg">
+${hdrCss}</style></head><body>${lhLayer}<div class="pg">${lhCorner}
 <div class="top">
   <div>${bizBlock}</div>
   <div><div class="inv-word">INVOICE</div><div class="inv-ref">INV-0024 / 01 Aug 2026</div></div>
@@ -23648,7 +23727,7 @@ function _iTPLCompact(tpl, mg, cur) {
   return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{font-family:Inter,Arial,sans-serif;font-size:12px;color:#0f172a;background:#fff;${bodyPos}}
-.pg{width:794px;padding:${mg.top}mm ${mg.right}mm ${mg.bot}mm ${mg.left}mm;${pgStack}}
+.pg{width:${geomW}px;position:relative;padding:${mg.top}mm ${mg.right}mm ${mg.bot}mm ${mg.left}mm;${pgStack}}
 .topbar{background:${a};border-radius:9px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
 .tb-biz{font-size:18px;font-weight:900;color:#fff}
 .tb-addr{font-size:10px;color:rgba(255,255,255,.72);margin-top:3px}
@@ -23676,7 +23755,7 @@ td.n{color:#94a3b8;text-align:center;width:26px}td.r{text-align:right}td.b{font-
 .gr{background:${a};font-weight:900;font-size:14px}
 .gr span{color:#fff!important}
 .ft{margin-top:16px;padding-top:10px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:10px;color:#94a3b8}
-</style></head><body>${lhLayer}<div class="pg">
+${hdrCss}</style></head><body>${lhLayer}<div class="pg">${lhCorner}
 <div class="topbar">
   <div>${bizBlock}</div>
   <div><div class="tb-il">Invoice</div><div class="tb-in">INV-0024</div></div>
@@ -23725,7 +23804,7 @@ function _iTPLExecutive(tpl, mg, cur) {
   return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{font-family:Inter,Arial,sans-serif;font-size:12px;color:#0f172a;background:#fff;${bodyPos}}
-.pg{width:794px;min-height:1123px;display:flex;flex-direction:column;${pgStack}}
+.pg{width:${geomW}px;${geomMinH}position:relative;display:flex;flex-direction:column;${pgStack}}
 .hdr{background:${dk};padding:30px ${mg.right}mm 26px ${mg.left}mm}
 .hdr-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px}
 .biz-n{font-size:22px;font-weight:900;color:#fff;letter-spacing:-.01em}
@@ -23758,7 +23837,7 @@ td.n{color:#94a3b8;text-align:center;width:26px}td.r{text-align:right}td.b{font-
 .gr{font-size:15px;font-weight:900;border-top:2px solid ${a};margin-top:4px;padding-top:9px}
 .gr span:last-child{color:${a}}
 .ft{margin-top:22px;padding-top:12px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:10px;color:#94a3b8}
-</style></head><body>${lhLayer}<div class="pg">
+${hdrCss}</style></head><body>${lhLayer}<div class="pg">${lhCorner}
 <div class="hdr">
   <div class="hdr-top">
     <div>${bizBlock}</div>
@@ -23800,7 +23879,9 @@ td.n{color:#94a3b8;text-align:center;width:26px}td.r{text-align:right}td.b{font-
 // ── Invoice document builder with REAL invoice data ───────────────────────
 // Builds the same HTML as the 6 template builders but populated with actual
 // invoice fields (invoice_number, customer_name, items, totals, etc.)
-function _invBuildActualDoc(inv, tpl, mg, cur, lhDataUrl = null) {
+function _invBuildActualDoc(inv, ic, cur, lhDataUrl = null) {
+  const tpl  = _isetupResolveTpl(ic.template, ic.color);
+  const mg   = { top: ic.mgTop, bot: ic.mgBot, left: ic.mgLeft, right: ic.mgRight };
   const a    = tpl.accent;
   const biz  = escHtml(state.receiptSettings?.business_name        || 'Your Business');
   const addr = escHtml(state.receiptSettings?.receipt_address_line || '');
@@ -23906,27 +23987,34 @@ function _invBuildActualDoc(inv, tpl, mg, cur, lhDataUrl = null) {
   // kept for backwards compatibility with callers that inject _taxBreakdown
   const discRow = ''; const taxRow = '';
 
-  // Letterhead: normal-flow block pinned to the top of the page (position 0);
-  // the invoice content below is a sibling element, so it always starts right
-  // after the letterhead with no manual margin tuning and no overlap.
-  const lhUrl = lhDataUrl && typeof lhDataUrl === 'object' ? lhDataUrl.dataUrl : lhDataUrl;
-  const lhH   = lhDataUrl && typeof lhDataUrl === 'object' && lhDataUrl.contentHeight > 0
-    ? Math.ceil(lhDataUrl.contentHeight) + 6
-    : (lhUrl ? 150 : 0);
-  const lhLayer   = lhUrl
-    ? `<div style="width:794px;height:${lhH}px;overflow:hidden;position:relative;"><img src="${lhUrl}" style="position:absolute;top:0;left:0;width:794px;height:1123px;display:block;pointer-events:none;object-fit:fill;image-rendering:auto;" alt=""></div>`
-    : '';
+  // Page geometry (printer/paper/orientation) + header layout, threaded into
+  // every sub-template's <style> block via the shared sentinels below.
+  const geom      = _isetupGeom(ic);
+  const geomW     = geom.wPx;
+  const geomMinH  = geom.thermal ? '' : `min-height:${geom.hPx}px;`;
+  const hdrCss    = _isetupHdrCss(ic.hdrLayout) + _isetupPageAtCss(geom);
+
+  // Letterhead: either a normal-flow banner pinned to the top of the page
+  // (the invoice content below is a sibling element, so it always starts
+  // right after it with no manual margin tuning) or a small corner badge
+  // that leaves the template's own header untouched.
+  const lhUrl   = lhDataUrl && typeof lhDataUrl === 'object' ? lhDataUrl.dataUrl : lhDataUrl;
+  const lhCh    = lhDataUrl && typeof lhDataUrl === 'object' ? lhDataUrl.contentHeight : 0;
+  const lh      = _isetupLhHtml(lhUrl, lhCh, ic.logoPos, geom, mg);
+  const lhLayer = lh.banner;
+  const lhCorner= lh.corner;
   const bodyPos   = '';
   const pgStack   = '';
-  // A letterhead already carries the business name/logo, so drop the
-  // template's own business-name block to avoid showing it twice.
-  const hideBiz   = !!lhUrl;
+  // A full-width letterhead banner already carries the business name/logo,
+  // so drop the template's own business-name block to avoid showing it
+  // twice. A corner badge leaves the header alone, so the name still shows.
+  const hideBiz   = !!lhLayer;
 
   if (tpl.id === 'sidebar') {
     return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{font-family:Inter,Arial,sans-serif;font-size:12px;color:#0f172a;background:#fff;${bodyPos}}
-.pg{width:794px;min-height:1123px;display:flex;${pgStack}}
+.pg{width:${geomW}px;${geomMinH}position:relative;display:flex;${pgStack}}
 .sb{width:195px;background:${a};padding:30px 16px;flex-shrink:0;display:flex;flex-direction:column}
 .sb-biz{font-size:14px;font-weight:900;color:#fff;line-height:1.2;margin-bottom:4px}
 .sb-addr{font-size:9px;color:rgba(255,255,255,.55);line-height:1.6;margin-bottom:20px}
@@ -23950,7 +24038,7 @@ td.n{color:#94a3b8;text-align:center;width:22px}td.r{text-align:right}td.b{font-
 .tr:last-child{border-bottom:none}.tr span:first-child{color:#64748b}
 .gr{font-size:14px;font-weight:900;border-top:2.5px solid ${a};margin-top:4px;padding-top:9px}
 .gr span:last-child{color:${a}}
-</style></head><body>${lhLayer}<div class="pg">
+${hdrCss}</style></head><body>${lhLayer}<div class="pg">${lhCorner}
 <div class="sb">
   <div class="sb-biz">${biz}</div><div class="sb-addr">${addr}</div>
   <div class="sb-hr"></div>
@@ -23977,7 +24065,7 @@ td.n{color:#94a3b8;text-align:center;width:22px}td.r{text-align:right}td.b{font-
     return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{font-family:Inter,Arial,sans-serif;font-size:12px;color:#0f172a;background:#fff;${bodyPos}}
-.pg{width:794px;min-height:1123px;display:flex;flex-direction:column;${pgStack}}
+.pg{width:${geomW}px;${geomMinH}position:relative;display:flex;flex-direction:column;${pgStack}}
 .banner{background:${a};padding:28px ${mg.right}mm 26px ${mg.left}mm;display:flex;justify-content:space-between;align-items:flex-end}
 .b-biz{font-size:20px;font-weight:900;color:#fff}.b-addr{font-size:10px;color:rgba(255,255,255,.7);margin-top:4px;line-height:1.5}
 .b-num{font-size:38px;font-weight:900;color:#fff;letter-spacing:-.02em;line-height:1;text-align:right}
@@ -24000,7 +24088,7 @@ td.n{color:#94a3b8;text-align:center;width:26px}td.r{text-align:right}td.b{font-
 .tr{display:flex;justify-content:space-between;font-size:11px;padding:8px 13px;border-bottom:1px solid #f1f5f9;color:#475569}
 .tr:last-child{border-bottom:none}.tr span:first-child{color:#64748b}
 .gr{background:${a};color:#fff!important;font-weight:900;font-size:14px}.gr span{color:#fff!important}
-</style></head><body>${lhLayer}<div class="pg">
+${hdrCss}</style></head><body>${lhLayer}<div class="pg">${lhCorner}
 <div class="banner">
   <div>${bizBlock}</div>
   <div><div class="b-lbl">Invoice</div><div class="b-num">${invNum}</div></div>
@@ -24027,7 +24115,7 @@ td.n{color:#94a3b8;text-align:center;width:26px}td.r{text-align:right}td.b{font-
     return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{font-family:Georgia,'Times New Roman',serif;font-size:12px;color:#1a1a1a;background:#fff;${bodyPos}}
-.pg{width:794px;padding:${mg.top}mm ${mg.right}mm ${mg.bot}mm ${mg.left}mm;${pgStack}}
+.pg{width:${geomW}px;position:relative;padding:${mg.top}mm ${mg.right}mm ${mg.bot}mm ${mg.left}mm;${pgStack}}
 .top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:30px}
 .bn{font-size:18px;font-weight:700;font-family:Georgia,serif}
 .bi{font-size:10px;color:#6b7280;margin-top:5px;line-height:1.7;font-family:Arial,sans-serif}
@@ -24051,7 +24139,7 @@ td.n{color:#d1d5db;text-align:center;width:26px;font-style:italic}td.r{text-alig
 .rule2{height:1px;background:#e5e7eb;margin:4px 0}
 .gr{display:flex;justify-content:space-between;font-size:16px;font-weight:700;padding-top:8px;font-family:Georgia,serif;color:#1a1a1a;border-top:1.5px solid #1a1a1a;margin-top:4px}
 .ft{margin-top:28px;padding-top:12px;border-top:1px solid #e5e7eb;font-size:9px;color:#9ca3af;text-align:center;letter-spacing:.06em;font-family:Arial,sans-serif;text-transform:uppercase}
-</style></head><body>${lhLayer}<div class="pg">
+${hdrCss}</style></head><body>${lhLayer}<div class="pg">${lhCorner}
 <div class="top">
   <div>${bizBlock}</div>
   <div><div class="inv-word">INVOICE</div><div class="inv-ref">${invNum} / ${issDate}</div></div>
@@ -24084,7 +24172,7 @@ td.n{color:#d1d5db;text-align:center;width:26px;font-style:italic}td.r{text-alig
     return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{font-family:Inter,Arial,sans-serif;font-size:12px;color:#0f172a;background:#fff;${bodyPos}}
-.pg{width:794px;padding:${mg.top}mm ${mg.right}mm ${mg.bot}mm ${mg.left}mm;${pgStack}}
+.pg{width:${geomW}px;position:relative;padding:${mg.top}mm ${mg.right}mm ${mg.bot}mm ${mg.left}mm;${pgStack}}
 .topbar{background:${a};border-radius:9px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
 .tb-biz{font-size:18px;font-weight:900;color:#fff}.tb-addr{font-size:10px;color:rgba(255,255,255,.72);margin-top:3px}
 .tb-il{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:rgba(255,255,255,.65);margin-bottom:3px;text-align:right}
@@ -24109,7 +24197,7 @@ td.n{color:#94a3b8;text-align:center;width:26px}td.r{text-align:right}td.b{font-
 .tr:last-child{border-bottom:none}.tr span:first-child{color:#64748b}
 .gr{background:${a};font-weight:900;font-size:14px}.gr span{color:#fff!important}
 .ft{margin-top:16px;padding-top:10px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:10px;color:#94a3b8}
-</style></head><body>${lhLayer}<div class="pg">
+${hdrCss}</style></head><body>${lhLayer}<div class="pg">${lhCorner}
 <div class="topbar">
   <div>${bizBlock}</div>
   <div><div class="tb-il">Invoice</div><div class="tb-in">${invNum}</div></div>
@@ -24140,7 +24228,7 @@ td.n{color:#94a3b8;text-align:center;width:26px}td.r{text-align:right}td.b{font-
     return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{font-family:Inter,Arial,sans-serif;font-size:12px;color:#0f172a;background:#fff;${bodyPos}}
-.pg{width:794px;min-height:1123px;display:flex;flex-direction:column;${pgStack}}
+.pg{width:${geomW}px;${geomMinH}position:relative;display:flex;flex-direction:column;${pgStack}}
 .hdr{background:${dk};padding:30px ${mg.right}mm 26px ${mg.left}mm}
 .hdr-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px}
 .biz-n{font-size:22px;font-weight:900;color:#fff;letter-spacing:-.01em}
@@ -24171,7 +24259,7 @@ td.n{color:#94a3b8;text-align:center;width:26px}td.r{text-align:right}td.b{font-
 .gr{font-size:15px;font-weight:900;border-top:2px solid ${a};margin-top:4px;padding-top:9px}
 .gr span:last-child{color:${a}}
 .ft{margin-top:22px;padding-top:12px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:10px;color:#94a3b8}
-</style></head><body>${lhLayer}<div class="pg">
+${hdrCss}</style></head><body>${lhLayer}<div class="pg">${lhCorner}
 <div class="hdr">
   <div class="hdr-top">
     <div>${bizBlock}</div>
@@ -24204,7 +24292,7 @@ td.n{color:#94a3b8;text-align:center;width:26px}td.r{text-align:right}td.b{font-
   return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{font-family:Inter,Arial,sans-serif;font-size:12px;color:#0f172a;background:#fff;${bodyPos}}
-.pg{width:794px;padding:${mg.top}mm ${mg.right}mm ${mg.bot}mm ${mg.left}mm;${pgStack}}
+.pg{width:${geomW}px;position:relative;padding:${mg.top}mm ${mg.right}mm ${mg.bot}mm ${mg.left}mm;${pgStack}}
 .top{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:20px;border-bottom:2.5px solid ${a};margin-bottom:24px}
 .bn{font-size:21px;font-weight:900;color:${a}}.bi{font-size:10px;color:#64748b;margin-top:5px;line-height:1.6}
 .it{font-size:30px;font-weight:900;text-transform:uppercase;color:${a};text-align:right}
@@ -24230,7 +24318,7 @@ td.n{color:#94a3b8;text-align:center;width:26px}td.r{text-align:right}td.b{font-
 .gr{font-size:15px;font-weight:900;border-top:2.5px solid ${a};margin-top:4px;padding-top:9px}
 .gr span:last-child{color:${a}}
 .ft{margin-top:22px;padding-top:12px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:10px;color:#94a3b8}
-</style></head><body>${lhLayer}<div class="pg">
+${hdrCss}</style></head><body>${lhLayer}<div class="pg">${lhCorner}
 <div class="top">
   <div>${bizBlock}</div>
   <div><div class="it">Invoice</div><div class="in">${invNum} · ${issDate}</div></div>
@@ -24265,11 +24353,26 @@ function _isetupReadMg() {
   };
 }
 
+// Reads the printer/paper/orientation/header/logo fields currently showing
+// in the modal (which may not be saved yet) so the preview stays live.
+function _isetupReadLive() {
+  const mg = _isetupReadMg();
+  return {
+    printer:     $('#isetup-printer')?.value    || 'laser_a4',
+    paper:       $('#isetup-paper')?.value      || 'a4',
+    orientation: document.querySelector('input[name="isetup-orient"]:checked')?.value || 'portrait',
+    hdrLayout:   $('#isetup-hdr-layout')?.value || 'num-left',
+    logoPos:     $('#isetup-logo-pos')?.value   || 'header',
+    mgTop: mg.top, mgBot: mg.bot, mgLeft: mg.left, mgRight: mg.right,
+  };
+}
+
 // Pan / zoom state
 let _isetupFitSc = 0.5;
 let _isetupZoom  = 1.0;
 let _isetupPanX  = 0;
 let _isetupPanY  = 0;
+let _isetupLastGeom = { wPx: 794, hPx: 1123, thermal: false };
 
 function _isetupApplyTransform() {
   const sc = $('#isetup-prev-scaler');
@@ -24288,10 +24391,11 @@ function _isetupResetView() {
   if (!bg) return;
   const w = bg.clientWidth, h = bg.clientHeight;
   if (!w || !h) return;
-  _isetupFitSc = Math.min((w - 40) / 794, (h - 40) / 1123);
+  const pw = _isetupLastGeom.wPx, ph = _isetupLastGeom.hPx || INV_THERMAL_PREVIEW_H;
+  _isetupFitSc = Math.min((w - 40) / pw, (h - 40) / ph);
   _isetupZoom  = 1;
-  _isetupPanX  = (w - 794 * _isetupFitSc) / 2;
-  _isetupPanY  = (h - 1123 * _isetupFitSc) / 2;
+  _isetupPanX  = (w - pw * _isetupFitSc) / 2;
+  _isetupPanY  = (h - ph * _isetupFitSc) / 2;
   _isetupApplyTransform();
   _isetupUpdateZoomLabel();
 }
@@ -24316,18 +24420,34 @@ let _isetupLhDataUrl = null;
 
 function _isetupUpdatePreview() {
   const tpl    = _isetupResolveTpl(_isetupActiveTpl, _isetupActiveColor);
-  const mg     = _isetupReadMg();
+  const live   = _isetupReadLive();
+  const mg     = { top: live.mgTop, bot: live.mgBot, left: live.mgLeft, right: live.mgRight };
+  const geom   = _isetupGeom(live);
   const iframe = $('#isetup-prev-frame');
   if (!iframe) return;
-  // Temporarily borrow the module-level letterhead vars so _iTPL* functions render with letterhead
+
+  // Temporarily borrow the module-level sentinels so _iTPL* functions render
+  // with the live paper size / header layout / letterhead placement.
+  geomW    = geom.wPx;
+  geomMinH = geom.thermal ? '' : `min-height:${geom.hPx}px;`;
+  hdrCss   = _isetupHdrCss(live.hdrLayout) + _isetupPageAtCss(geom);
+  _isetupLastGeom = geom;
+
   const lhEnabled = $('#isetup-lh-enabled')?.checked !== false;
   if (lhEnabled && _isetupLhDataUrl) {
-    const lhH = _isetupLhDataUrl.contentHeight > 0 ? Math.ceil(_isetupLhDataUrl.contentHeight) + 6 : 150;
-    lhLayer = `<div style="width:794px;height:${lhH}px;overflow:hidden;position:relative;"><img src="${_isetupLhDataUrl.dataUrl}" style="position:absolute;top:0;left:0;width:794px;height:1123px;display:block;pointer-events:none;object-fit:fill;image-rendering:auto;" alt=""></div>`;
+    const lh = _isetupLhHtml(_isetupLhDataUrl.dataUrl, _isetupLhDataUrl.contentHeight, live.logoPos, geom, mg);
+    lhLayer = lh.banner; lhCorner = lh.corner;
   }
   iframe.srcdoc = _isetupBuildPreviewDoc(tpl, mg, state.currency || '');
+
+  const pageH  = geom.hPx || INV_THERMAL_PREVIEW_H;
+  const scaler = $('#isetup-prev-scaler');
+  if (scaler) { scaler.style.width = geomW + 'px'; scaler.style.height = pageH + 'px'; }
+  iframe.style.width = geomW + 'px'; iframe.style.height = pageH + 'px';
+
   // Always reset so normal preview-builder calls remain unaffected
-  lhLayer = ''; bodyPos = ''; pgStack = '';
+  lhLayer = ''; lhCorner = ''; hdrCss = ''; bodyPos = ''; pgStack = '';
+  geomW = 794; geomMinH = 'min-height:1123px;';
   setTimeout(_isetupResetView, 40);
 }
 
@@ -24377,6 +24497,21 @@ function _isetupRenderColors() {
     </label>`;
 }
 
+// Thermal roll paper has no fixed sheet size or orientation, so those fields
+// are meaningless (and disabled) while a thermal printer type is selected.
+function _isetupSyncThermalUI() {
+  const thermal   = ($('#isetup-printer')?.value || '').startsWith('thermal_');
+  const paperFld  = $('#isetup-paper')?.closest('.isetup-field');
+  const orientFld = document.querySelector('input[name="isetup-orient"]')?.closest('.isetup-field');
+  if ($('#isetup-paper')) $('#isetup-paper').disabled = thermal;
+  document.querySelectorAll('input[name="isetup-orient"]').forEach(r => { r.disabled = thermal; });
+  [paperFld, orientFld].forEach(f => {
+    if (!f) return;
+    f.style.opacity = thermal ? '.5' : '';
+    f.style.pointerEvents = thermal ? 'none' : '';
+  });
+}
+
 async function openInvoiceSetup() {
   const modal = $('#isetup-modal');
   if (!modal) return;
@@ -24396,6 +24531,7 @@ async function openInvoiceSetup() {
   if ($('#isetup-lh-enabled')) $('#isetup-lh-enabled').checked = cfg.lhEnabled;
   const orientEl = document.querySelector(`input[name="isetup-orient"][value="${cfg.orientation}"]`);
   if (orientEl) orientEl.checked = true;
+  _isetupSyncThermalUI();
 
   _isetupLhDataUrl = null; // clear stale cache from previous open
   _isetupRenderTpls();
@@ -24462,6 +24598,19 @@ $('#isetup-color-list')?.addEventListener('input', e => {
   if (el) { el.addEventListener('change', _isetupUpdatePreview); el.addEventListener('input', _isetupUpdatePreview); }
 });
 document.querySelectorAll('input[name="isetup-orient"]').forEach(r => r.addEventListener('change', _isetupUpdatePreview));
+
+// Printer type gates the Paper Size / Orientation fields (roll paper has
+// neither) and seeds a matching sheet size when switching to a laser printer.
+// Registered after the generic preview-update listener above, so re-run the
+// preview here too — otherwise it would render with the stale paper value.
+$('#isetup-printer')?.addEventListener('change', e => {
+  _isetupSyncThermalUI();
+  const v = e.target.value;
+  if ((v === 'laser_a4' || v === 'laser_a5') && $('#isetup-paper')) {
+    $('#isetup-paper').value = v === 'laser_a5' ? 'a5' : 'a4';
+  }
+  _isetupUpdatePreview();
+});
 
 $('#isetup-lh-enabled')?.addEventListener('change', e => {
   if (e.target.checked && !_isetupLhDataUrl) _isetupLoadLetterhead();
@@ -38023,13 +38172,14 @@ const DS_TEMPLATES = [
     build: () => ({
       version: '5.3.0', background: '#ffffff',
       objects: [
-        { type: 'rect', left: 0, top: 0, width: 170, height: 1123, fill: '#7c3aed' },
-        { type: 'circle', left: 45, top: 50, radius: 40, fill: 'rgba(255,255,255,.2)' },
-        { type: 'textbox', text: 'CO', left: 55, top: 76, width: 60, fontSize: 26, fontWeight: 'bold', fill: '#ffffff', fontFamily: 'Montserrat', textAlign: 'center' },
-        { type: 'textbox', text: 'Your Company', left: 20, top: 950, width: 130, fontSize: 13, fontWeight: 'bold', fill: '#ffffff', fontFamily: 'Inter', textAlign: 'center' },
-        { type: 'textbox', text: 'Your Company Name', left: 210, top: 70, width: 500, fontSize: 26, fontWeight: 'bold', fill: '#1f2430', fontFamily: 'Montserrat' },
-        { type: 'i-text', text: 'Dear [Recipient Name],', left: 210, top: 230, fontSize: 15, fill: '#111827', fontFamily: 'Inter' },
-        { type: 'i-text', text: 'Start typing your letter here…', left: 210, top: 270, width: 520, fontSize: 13, fontStyle: 'italic', fill: '#6b7280', fontFamily: 'Inter' },
+        { type: 'rect', left: 0, top: 0, width: 794, height: 140, fill: '#7c3aed' },
+        { type: 'circle', left: 48, top: 35, radius: 35, fill: 'rgba(255,255,255,.2)' },
+        { type: 'textbox', text: 'CO', left: 58, top: 58, width: 60, fontSize: 24, fontWeight: 'bold', fill: '#ffffff', fontFamily: 'Montserrat', textAlign: 'center' },
+        { type: 'textbox', text: 'Your Company Name', left: 140, top: 42, width: 500, fontSize: 26, fontWeight: 'bold', fill: '#ffffff', fontFamily: 'Montserrat' },
+        { type: 'textbox', text: 'Elegant tagline goes here', left: 140, top: 84, width: 500, fontSize: 13, fill: 'rgba(255,255,255,.85)', fontFamily: 'Inter' },
+        { type: 'i-text', text: 'Dear [Recipient Name],', left: 48, top: 200, fontSize: 15, fill: '#111827', fontFamily: 'Inter' },
+        { type: 'i-text', text: 'Start typing your letter here…', left: 48, top: 240, width: 680, fontSize: 13, fontStyle: 'italic', fill: '#6b7280', fontFamily: 'Inter' },
+        { type: 'rect', left: 0, top: 1113, width: 794, height: 10, fill: '#7c3aed' },
       ],
     }),
   },
@@ -38052,11 +38202,12 @@ const DS_TEMPLATES = [
     build: () => ({
       version: '5.3.0', background: '#ffffff',
       objects: [
-        { type: 'rect', left: 0, top: 0, width: 6, height: 1123, fill: '#10b981' },
-        { type: 'textbox', text: 'Your Company Name', left: 60, top: 60, width: 600, fontSize: 24, fill: '#1f2430', fontFamily: 'Inter' },
-        { type: 'textbox', text: 'hello@yourcompany.com', left: 60, top: 100, width: 400, fontSize: 12, fill: '#6b7280', fontFamily: 'Inter' },
-        { type: 'i-text', text: 'Dear [Recipient Name],', left: 60, top: 220, fontSize: 15, fill: '#111827', fontFamily: 'Inter' },
-        { type: 'i-text', text: 'Start typing your letter here…', left: 60, top: 260, width: 650, fontSize: 13, fontStyle: 'italic', fill: '#6b7280', fontFamily: 'Inter' },
+        { type: 'rect', left: 0, top: 0, width: 794, height: 4, fill: '#10b981' },
+        { type: 'textbox', text: 'Your Company Name', left: 48, top: 40, width: 600, fontSize: 24, fill: '#1f2430', fontFamily: 'Inter' },
+        { type: 'textbox', text: 'hello@yourcompany.com', left: 48, top: 78, width: 400, fontSize: 12, fill: '#6b7280', fontFamily: 'Inter' },
+        { type: 'rect', left: 48, top: 112, width: 698, height: 1, fill: '#e5e7eb' },
+        { type: 'i-text', text: 'Dear [Recipient Name],', left: 48, top: 150, fontSize: 15, fill: '#111827', fontFamily: 'Inter' },
+        { type: 'i-text', text: 'Start typing your letter here…', left: 48, top: 190, width: 680, fontSize: 13, fontStyle: 'italic', fill: '#6b7280', fontFamily: 'Inter' },
       ],
     }),
   },
@@ -38510,7 +38661,7 @@ function switchDesignView(type) {
   }
 
   if (propView)   propView.style.display   = 'none';
-  if (listView)   listView.style.display   = '';
+  if (listView)   listView.style.display   = 'flex';
   if (singletons) singletons.style.display = '';
   _dsAllData = [];
   loadDesigns();
