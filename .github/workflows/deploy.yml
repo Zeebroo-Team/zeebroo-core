@@ -56,6 +56,11 @@ jobs:
             echo "==> Deploying commit ${DEPLOY_SHA}"
             php artisan down --retry=15 --render="errors::503" || true
 
+            # Guarantee the app is brought back up even if a step below fails
+            # (a failed `migrate` used to abort the script and leave prod in
+            # maintenance mode indefinitely).
+            trap 'php artisan up || true' EXIT
+
             # Update code
             git fetch --all --prune
             git reset --hard "${DEPLOY_SHA}"
