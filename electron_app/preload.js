@@ -39,6 +39,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   showInFolder:     (p)                  => ipcRenderer.invoke('show-in-folder', p),
   restartApp:       ()                   => ipcRenderer.invoke('restart-app'),
   openExternal:    (url)                => ipcRenderer.invoke('open-external', url),
+  copyToClipboard: (text)               => ipcRenderer.invoke('clipboard-write-text', text),
 
   // Design Studio editor window
   openEditor:        (design)            => ipcRenderer.invoke('open-editor', design),

@@ -444,6 +444,8 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
     Route::post  ('crm/projects/{project}/forms',                      [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'createForm'])      ->name('crm.forms.store');
     Route::get   ('crm/projects/{project}/forms/{form}',               [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'getForm'])         ->name('crm.forms.show');
     Route::put   ('crm/projects/{project}/forms/{form}',               [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'updateForm'])      ->name('crm.forms.update');
+    Route::post  ('crm/projects/{project}/forms/{form}/default',       [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'setDefaultForm'])  ->name('crm.forms.set-default');
+    Route::post  ('crm/projects/{project}/forms/{form}/submit-lead',   [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'submitFormLead']) ->name('crm.forms.submit-lead');
     Route::post  ('crm/projects/{project}/forms/{form}/publish',       [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'publishForm'])     ->name('crm.forms.publish');
     Route::post  ('crm/projects/{project}/forms/{form}/unpublish',     [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'unpublishForm'])   ->name('crm.forms.unpublish');
     Route::delete('crm/projects/{project}/forms/{form}',               [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'deleteForm'])      ->name('crm.forms.destroy');

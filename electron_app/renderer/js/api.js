@@ -499,6 +499,8 @@ const API = (() => {
     crmCreateForm:        (projectId, body)           => request('POST',   `/crm/projects/${projectId}/forms`, body),
     crmGetForm:           (projectId, formId)         => request('GET',    `/crm/projects/${projectId}/forms/${formId}`),
     crmUpdateForm:        (projectId, formId, body)   => request('PUT',    `/crm/projects/${projectId}/forms/${formId}`, body),
+    crmSetDefaultForm:    (projectId, formId)         => request('POST',   `/crm/projects/${projectId}/forms/${formId}/default`),
+    crmSubmitFormLead:    (projectId, formId, body)   => request('POST',   `/crm/projects/${projectId}/forms/${formId}/submit-lead`, body),
     crmPublishForm:       (projectId, formId)         => request('POST',   `/crm/projects/${projectId}/forms/${formId}/publish`),
     crmUnpublishForm:     (projectId, formId)         => request('POST',   `/crm/projects/${projectId}/forms/${formId}/unpublish`),
     crmDeleteForm:        (projectId, formId)         => request('DELETE', `/crm/projects/${projectId}/forms/${formId}`),

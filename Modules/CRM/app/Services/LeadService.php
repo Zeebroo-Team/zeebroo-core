@@ -204,6 +204,7 @@ class LeadService
         $lead = Lead::create([
             'business_id'         => $project->business_id,
             'project_id'          => $project->id,
+            'form_id'             => $this->nullableInt($data['form_id'] ?? null),
             'name'                => $data['name'],
             'company'             => filled($data['company'] ?? '') ? $data['company'] : null,
             'email'               => filled($data['email'] ?? '') ? $data['email'] : null,

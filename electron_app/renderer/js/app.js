@@ -72,6 +72,34 @@ function formatMoney(amount, opts = {}) {
   return currencyPosition() === 'before' ? `${currency} ${num}` : `${num} ${currency}`;
 }
 
+// The main process denies every permission except 'media' (see main.js), which silently
+// blocks navigator.clipboard — so copy actions go through Electron's native clipboard via
+// IPC instead. Falls back to navigator.clipboard when running outside Electron (e.g. a
+// plain browser tab), so this still works there too.
+function copyToClipboard(text) {
+  if (window.electronAPI?.copyToClipboard) return window.electronAPI.copyToClipboard(text);
+  return navigator.clipboard?.writeText(text) ?? Promise.reject(new Error('Clipboard unavailable'));
+}
+
+// Small "Copied!" tooltip that pops up above `anchorEl` and fades out — used after
+// copyToClipboard() so the action is visibly confirmed even for icon-only buttons where a
+// toast (which this app suppresses for plain 'success' toasts) wouldn't be noticed.
+function flashCopiedBadge(anchorEl, text = 'Copied!') {
+  if (!anchorEl) return;
+  const rect  = anchorEl.getBoundingClientRect();
+  const badge = document.createElement('div');
+  badge.className = 'copied-badge';
+  badge.textContent = text;
+  badge.style.left = `${rect.left + rect.width / 2}px`;
+  badge.style.top  = `${rect.top}px`;
+  document.body.appendChild(badge);
+  requestAnimationFrame(() => badge.classList.add('is-visible'));
+  setTimeout(() => {
+    badge.classList.remove('is-visible');
+    setTimeout(() => badge.remove(), 200);
+  }, 1100);
+}
+
 function toast(msg, type = 'info', onClick = null) {
   if (type === 'success' && !onClick) return;
   const el = document.createElement('div');
@@ -3367,7 +3395,7 @@ async function _invShowSendModal(inv) {
   document.getElementById('invd-send-copy')?.addEventListener('click', async () => {
     if (!shareUrl) return;
     try {
-      await navigator.clipboard.writeText(shareUrl);
+      await copyToClipboard(shareUrl);
       const btn = document.getElementById('invd-send-copy');
       if (btn) { btn.innerHTML = '<i class="fa fa-check"></i> Copied!'; btn.classList.add('copied'); }
       setTimeout(() => {
@@ -20106,13 +20134,13 @@ function buildCampaignSections(campaigns) {
 
   copyName.addEventListener('click', () => {
     if (!_ctxCard) return;
-    navigator.clipboard.writeText(_ctxCard.dataset.name || '').then(() => toast('Product name copied', 'success'));
+    copyToClipboard(_ctxCard.dataset.name || '').then(() => toast('Product name copied', 'success'));
     hideMenu();
   });
 
   copySku.addEventListener('click', () => {
     if (!_ctxCard || !_ctxCard.dataset.sku) return;
-    navigator.clipboard.writeText(_ctxCard.dataset.sku).then(() => toast('SKU copied', 'success'));
+    copyToClipboard(_ctxCard.dataset.sku).then(() => toast('SKU copied', 'success'));
     hideMenu();
   });
 })();
@@ -41910,9 +41938,21 @@ async function submitDsCreate() {
   let _crmRelationSearch = '';
   let _crmDetailTab     = 'dashboard';
   let _crmDetailLoaded  = { forms: false };
+  let _crmLeadFormId    = null;   // id of the default form backing the open lead modal, or null when using the fallback fields
+  let _crmLeadFormBlocks = [];    // blocks currently rendered in the open lead modal (New or Edit)
+  let _crmLeadFormCustomFields = {}; // custom field defs for the open lead modal, keyed by id
+
+  // No default form configured: Edit Lead (which must work for pre-existing leads too) falls
+  // back to these core fields instead of refusing to render anything.
+  const CRM_FALLBACK_LEAD_BLOCKS = [
+    { type: 'field', field: 'name',    label: 'Name',    required: true },
+    { type: 'field', field: 'company', label: 'Company' },
+    { type: 'field', field: 'email',   label: 'Email' },
+    { type: 'field', field: 'phone',   label: 'Phone' },
+  ];
 
   // ── View switch ──────────────────────────────────────────────────────────
-  function switchCrmView(view) {
+  function switchCrmView(view, opts = {}) {
     _crmView = view;
     $('#crm-overview-view').style.display = view === 'overview' ? 'flex' : 'none';
     $('#crm-relation-view').style.display = view === 'relation' ? 'flex' : 'none';
@@ -41920,6 +41960,10 @@ async function submitDsCreate() {
     $('#crm-tasks-view').style.display    = view === 'tasks'    ? 'flex' : 'none';
     $('#crm-builder-view').style.display  = view === 'builder'  ? 'flex' : 'none';
     $$('[data-crmsub]').forEach(b => b.classList.toggle('active', b.dataset.crmsub === view));
+    // skipLoad: caller is about to open a specific relation's detail pane itself —
+    // running loadCrmRelationsView() here would race with it and call closeRelationDetail()
+    // after the detail pane is shown, bouncing the user back to the relations list.
+    if (opts.skipLoad) return;
     if (view === 'overview') loadCrmOverview();
     if (view === 'relation') loadCrmRelationsView();
     if (view === 'contacts') loadCrmContacts();
@@ -41969,7 +42013,7 @@ async function submitDsCreate() {
     }
     empty.style.display = 'none';
     grid.style.display  = '';
-    recent.forEach(p => grid.appendChild(_crmRelationCardEl(p, () => { switchCrmView('relation'); openRelationDetail(p.id); })));
+    recent.forEach(p => grid.appendChild(_crmRelationCardEl(p, () => { switchCrmView('relation', { skipLoad: true }); openRelationDetail(p.id); })));
   }
 
   $('#crm-ov-new-relation-btn')?.addEventListener('click', () => _openProjectModal());
@@ -42127,8 +42171,18 @@ async function submitDsCreate() {
       return;
     }
     _crmPipeline = res.body.data;
+    _updateNewLeadBtnState();
     _renderBoard();
     _crmRenderDashboardPane();
+  }
+
+  // Pipeline leads are always created from the project's default form, so both the ribbon
+  // "New Lead" button and the per-column "+" buttons stay disabled until one is set.
+  function _updateNewLeadBtnState() {
+    const hasDefault = !!(_crmPipeline && _crmPipeline.default_form);
+    const title = hasDefault ? '' : 'Set a default form in the Forms tab before adding leads';
+    const btn = $('#crm-relation-new-lead-btn');
+    if (btn) { btn.disabled = !hasDefault; btn.title = title; }
   }
 
   let _dragLeadId  = null;
@@ -42162,7 +42216,7 @@ async function submitDsCreate() {
           <span class="crm-col-name">${escHtml(col.name)}</span>
           <span class="crm-col-count">${col.leads_count}</span>
           ${!col.is_won && !col.is_lost
-            ? `<button class="crm-card-btn" data-add-stage="${col.id}" title="Add lead to this stage" style="opacity:1;margin-left:2px"><i class="fa fa-plus"></i></button>`
+            ? `<button class="crm-card-btn" data-add-stage="${col.id}" title="${_crmPipeline.default_form ? 'Add lead (via default form)' : 'Set a default form in the Forms tab before adding leads'}" style="opacity:1;margin-left:2px"${_crmPipeline.default_form ? '' : ' disabled'}><i class="fa fa-plus"></i></button>`
             : ''}
         </div>
         ${valueLine}
@@ -42218,7 +42272,7 @@ async function submitDsCreate() {
     board.querySelectorAll('[data-add-stage]').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
-        _openNewLeadModal(parseInt(btn.dataset.addStage));
+        _openNewLeadModal();
       });
     });
 
@@ -42260,19 +42314,117 @@ async function submitDsCreate() {
     return null;
   }
 
-  // ── New Lead Modal ────────────────────────────────────────────────────────
-  function _openNewLeadModal(preStageId = null) {
+  // ── New Lead Modal ───────────────────────────────────────────────────────
+  // Leads are always created through the project's default form (Forms tab), so every
+  // "New Lead" entry point ends up here, and the lead lands on that form's default stage.
+  async function _openNewLeadModal() {
     if (!_crmPipeline) return;
-    _populateStageSelect('#crm-lead-stage', preStageId);
-    $('#crm-lead-name').value = '';
-    $('#crm-lead-company').value = '';
-    $('#crm-lead-email').value = '';
-    $('#crm-lead-phone').value = '';
-    $('#crm-lead-value').value = '';
-    $('#crm-lead-notes').value = '';
+    const defaultForm = _crmPipeline.default_form;
+    if (!defaultForm) {
+      toast('Set a default form in the Forms tab before adding leads.', 'error');
+      return;
+    }
+
+    _crmLeadFormId = defaultForm.id;
+    $('#crm-lead-modal-title').textContent = defaultForm.name;
     $('#crm-lead-alert').style.display = 'none';
+    $('#crm-lead-form-fields').innerHTML = '<span style="color:var(--text-muted);font-size:12px">Loading form…</span>';
+    $('#crm-lead-modal-save').disabled = true;
     $('#crm-lead-modal').style.display = 'flex';
-    $('#crm-lead-name').focus();
+
+    const blocks = await _crmLoadLeadFormBlocks(defaultForm.id);
+    if (blocks === null) {
+      $('#crm-lead-form-fields').innerHTML = '<span style="color:var(--text-muted);font-size:12px">Failed to load form.</span>';
+      return;
+    }
+    $('#crm-lead-form-fields').innerHTML = blocks.length
+      ? blocks.map((b, i) => _crmLeadFormBlockHtml(b, i)).join('')
+      : '<span style="color:var(--text-muted);font-size:12px">This form has no fields yet. Add fields to it in the Forms tab.</span>';
+    $('#crm-lead-modal-save').disabled = false;
+    $('#crm-lead-form-fields').querySelector('.crm-lead-field-input')?.focus();
+  }
+
+  // Shared by the New Lead and Edit Lead modals: loads a form's blocks + custom field defs
+  // (or the core-fields fallback when formId is null, e.g. editing a lead with no default
+  // form set) into module state, and returns the blocks to render. Returns null on failure.
+  async function _crmLoadLeadFormBlocks(formId) {
+    _crmLeadFormBlocks = [];
+    _crmLeadFormCustomFields = {};
+    if (!formId) {
+      _crmLeadFormBlocks = CRM_FALLBACK_LEAD_BLOCKS;
+      return _crmLeadFormBlocks;
+    }
+    const res = await API.crmGetForm(_crmProjectId, formId);
+    if (res.status !== 200) return null;
+    (res.body.data.custom_fields || []).forEach(cf => { _crmLeadFormCustomFields[cf.id] = cf; });
+    _crmLeadFormBlocks = res.body.data.blocks || [];
+    return _crmLeadFormBlocks;
+  }
+
+  // Renders one form builder block as a lead-modal field, pre-filled with `value` when
+  // editing. Blocks are a flat list here (the desktop form builder has no row/column
+  // nesting), so a block's array index IS its path — matching
+  // LeadForm::fieldBlocksWithPaths() on the server for un-nested blocks.
+  function _crmLeadFormBlockHtml(block, idx, value = '') {
+    const path = String(idx);
+    if (block.type === 'heading') {
+      const size = block.size === 'sm' ? '13px' : block.size === 'lg' ? '16px' : '14px';
+      return `<div style="font-size:${size};font-weight:700">${escHtml(block.text || '')}</div>`;
+    }
+    if (block.type === 'text') {
+      return `<div style="font-size:12px;color:var(--text-muted)">${escHtml(block.text || '')}</div>`;
+    }
+    if (block.type === 'divider') {
+      return '<hr style="border:none;border-top:1px solid var(--border,#e5e7eb);margin:2px 0">';
+    }
+    if (block.type !== 'field') return '';
+
+    const field       = String(block.field || '');
+    const label       = block.label || field || 'Field';
+    const req         = block.required ? ' <span class="po-required">*</span>' : '';
+    const placeholder = escHtml(block.placeholder || '');
+    const val         = escHtml(value || '');
+    let input;
+
+    if (field === 'email') {
+      input = `<input type="email" class="po-field-input crm-lead-field-input" data-path="${path}" value="${val}" placeholder="${placeholder}" maxlength="255">`;
+    } else if (field.startsWith('custom:')) {
+      const cf   = _crmLeadFormCustomFields[field.slice(7)];
+      const type = cf?.type || 'text';
+      if (type === 'textarea') {
+        input = `<textarea class="po-field-input crm-lead-field-input" data-path="${path}" rows="2" placeholder="${placeholder}" style="resize:vertical">${val}</textarea>`;
+      } else if (type === 'select') {
+        const opts = (cf?.options || []).map(o => `<option value="${escHtml(o)}"${o === value ? ' selected' : ''}>${escHtml(o)}</option>`).join('');
+        input = `<select class="po-field-input crm-lead-field-input" data-path="${path}" style="appearance:auto"><option value=""></option>${opts}</select>`;
+      } else if (type === 'checkbox') {
+        input = `<select class="po-field-input crm-lead-field-input" data-path="${path}" style="appearance:auto"><option value=""></option><option value="Yes"${value === 'Yes' ? ' selected' : ''}>Yes</option><option value="No"${value === 'No' ? ' selected' : ''}>No</option></select>`;
+      } else if (type === 'date') {
+        input = `<input type="date" class="po-field-input crm-lead-field-input" data-path="${path}" value="${val}">`;
+      } else if (type === 'number') {
+        input = `<input type="number" class="po-field-input crm-lead-field-input" data-path="${path}" value="${val}" placeholder="${placeholder}">`;
+      } else {
+        input = `<input type="text" class="po-field-input crm-lead-field-input" data-path="${path}" value="${val}" placeholder="${placeholder}" maxlength="2000">`;
+      }
+    } else {
+      input = `<input type="text" class="po-field-input crm-lead-field-input" data-path="${path}" value="${val}" placeholder="${placeholder}" maxlength="255">`;
+    }
+
+    const help = block.help_text ? `<span style="font-size:11px;color:var(--text-muted)">${escHtml(block.help_text)}</span>` : '';
+    return `<div class="po-field">${label !== '' ? `<label class="po-field-label">${escHtml(label)}${req}</label>` : ''}${input}${help}</div>`;
+  }
+
+  // Reads a lead's current value for a form field block, used to pre-fill Edit Lead.
+  function _crmLeadFieldValue(block, lead) {
+    const field = String(block.field || '');
+    if (field === 'name')    return lead.name    || '';
+    if (field === 'company') return lead.company || '';
+    if (field === 'email')   return lead.email   || '';
+    if (field === 'phone')   return lead.phone   || '';
+    if (field.startsWith('custom:')) {
+      const v = lead.custom_fields ? lead.custom_fields[field.slice(7)] : null;
+      return v != null ? String(v) : '';
+    }
+    return '';
   }
 
   function _populateStageSelect(selector, selectedId = null) {
@@ -42289,43 +42441,57 @@ async function submitDsCreate() {
   $('#crm-lead-modal')?.addEventListener('click', e => { if (e.target === $('#crm-lead-modal')) $('#crm-lead-modal').style.display = 'none'; });
 
   $('#crm-lead-modal-save')?.addEventListener('click', async () => {
-    const name = $('#crm-lead-name').value.trim();
-    if (!name) { $('#crm-lead-alert').textContent = 'Name is required.'; $('#crm-lead-alert').style.display = ''; return; }
+    if (!_crmLeadFormId) return;
     const btn = $('#crm-lead-modal-save');
     btn.disabled = true;
-    const res = await API.crmCreateLead(_crmProjectId, {
-      name,
-      company:             $('#crm-lead-company').value.trim() || null,
-      email:               $('#crm-lead-email').value.trim() || null,
-      phone:               $('#crm-lead-phone').value.trim() || null,
-      stage_id:            $('#crm-lead-stage').value || null,
-      estimated_value:     $('#crm-lead-value').value || null,
-      notes:               $('#crm-lead-notes').value.trim() || null,
+    $('#crm-lead-alert').style.display = 'none';
+
+    const input = {};
+    $('#crm-lead-form-fields').querySelectorAll('.crm-lead-field-input').forEach(el => {
+      input[el.dataset.path] = el.value.trim();
     });
+
+    const res = await API.crmSubmitFormLead(_crmProjectId, _crmLeadFormId, input);
     btn.disabled = false;
     if (res.status === 201) {
       $('#crm-lead-modal').style.display = 'none';
       toast('Lead created.', 'success');
       loadCrmPipeline();
     } else {
-      $('#crm-lead-alert').textContent = res.body?.message || 'Failed to create lead.';
+      const firstError = res.body?.errors ? Object.values(res.body.errors)[0]?.[0] : null;
+      $('#crm-lead-alert').textContent = firstError || res.body?.message || 'Failed to create lead.';
       $('#crm-lead-alert').style.display = '';
     }
   });
 
   // ── Edit Lead Modal ───────────────────────────────────────────────────────
-  function _openEditLeadModal(lead) {
+  // Shows the fields of whichever form the lead was actually created from (falling back to
+  // the project's current default form, then to core fields, if the lead has none recorded
+  // — e.g. it predates this tracking, or that form was since deleted). This is deliberate:
+  // if the default form is later swapped for a different one, older leads must keep showing
+  // (and stay editable on) the fields their data was actually captured with, not whatever
+  // form happens to be default today.
+  async function _openEditLeadModal(lead) {
     _populateStageSelect('#crm-lead-edit-stage', lead.stage_id);
     $('#crm-lead-edit-id').value      = lead.id;
-    $('#crm-lead-edit-name').value    = lead.name || '';
-    $('#crm-lead-edit-company').value = lead.company || '';
-    $('#crm-lead-edit-email').value   = lead.email || '';
-    $('#crm-lead-edit-phone').value   = lead.phone || '';
     $('#crm-lead-edit-value').value   = lead.estimated_value || '';
     $('#crm-lead-edit-notes').value   = lead.notes || '';
     $('#crm-lead-edit-alert').style.display = 'none';
+    $('#crm-lead-edit-form-fields').innerHTML = '<span style="color:var(--text-muted);font-size:12px">Loading…</span>';
+    $('#crm-lead-edit-save').disabled = true;
     $('#crm-lead-edit-modal').style.display = 'flex';
-    $('#crm-lead-edit-name').focus();
+
+    const formId = lead.form_id || _crmPipeline?.default_form?.id || null;
+    const blocks = await _crmLoadLeadFormBlocks(formId);
+    if (blocks === null) {
+      $('#crm-lead-edit-form-fields').innerHTML = '<span style="color:var(--text-muted);font-size:12px">Failed to load form.</span>';
+      return;
+    }
+    $('#crm-lead-edit-form-fields').innerHTML = blocks.length
+      ? blocks.map((b, i) => _crmLeadFormBlockHtml(b, i, _crmLeadFieldValue(b, lead))).join('')
+      : '<span style="color:var(--text-muted);font-size:12px">This form has no fields yet. Add fields to it in the Forms tab.</span>';
+    $('#crm-lead-edit-save').disabled = false;
+    $('#crm-lead-edit-form-fields').querySelector('.crm-lead-field-input')?.focus();
   }
 
   $('#crm-lead-edit-close')?.addEventListener('click',  () => { $('#crm-lead-edit-modal').style.display = 'none'; });
@@ -42333,19 +42499,31 @@ async function submitDsCreate() {
   $('#crm-lead-edit-modal')?.addEventListener('click', e => { if (e.target === $('#crm-lead-edit-modal')) $('#crm-lead-edit-modal').style.display = 'none'; });
 
   $('#crm-lead-edit-save')?.addEventListener('click', async () => {
-    const id   = parseInt($('#crm-lead-edit-id').value);
-    const name = $('#crm-lead-edit-name').value.trim();
-    if (!name) { $('#crm-lead-edit-alert').textContent = 'Name is required.'; $('#crm-lead-edit-alert').style.display = ''; return; }
+    const id = parseInt($('#crm-lead-edit-id').value);
+
+    const core = { name: '', company: '', email: '', phone: '' };
+    const customFields = {};
+    $('#crm-lead-edit-form-fields').querySelectorAll('.crm-lead-field-input').forEach(el => {
+      const block = _crmLeadFormBlocks[parseInt(el.dataset.path)];
+      const field = String(block?.field || '');
+      const value = el.value.trim();
+      if (field in core) core[field] = value;
+      else if (field.startsWith('custom:')) customFields[field.slice(7)] = value;
+    });
+
+    if (!core.name) { $('#crm-lead-edit-alert').textContent = 'Name is required.'; $('#crm-lead-edit-alert').style.display = ''; return; }
+
     const btn = $('#crm-lead-edit-save');
     btn.disabled = true;
     const res = await API.crmUpdateLead(id, {
-      name,
-      company:         $('#crm-lead-edit-company').value.trim() || null,
-      email:           $('#crm-lead-edit-email').value.trim() || null,
-      phone:           $('#crm-lead-edit-phone').value.trim() || null,
+      name:            core.name,
+      company:         core.company || null,
+      email:           core.email || null,
+      phone:           core.phone || null,
       stage_id:        $('#crm-lead-edit-stage').value || null,
       estimated_value: $('#crm-lead-edit-value').value || null,
       notes:           $('#crm-lead-edit-notes').value.trim() || null,
+      custom_fields:   customFields,
     });
     btn.disabled = false;
     if (res.status === 200) {
@@ -42382,7 +42560,7 @@ async function submitDsCreate() {
       $('#crm-project-modal').style.display = 'none';
       toast('Relation created.', 'success');
       await loadCrmProjects();
-      switchCrmView('relation');
+      switchCrmView('relation', { skipLoad: true });
       openRelationDetail(res.body.data.id);
     } else {
       $('#crm-project-alert').textContent = res.body?.message || 'Failed to create relation.';
@@ -42521,7 +42699,7 @@ async function submitDsCreate() {
   // ── Ribbon buttons ────────────────────────────────────────────────────────
   function _crmRequireOpenRelation(then, tab = 'pipeline') {
     if (_crmProjectId) {
-      switchCrmView('relation');
+      switchCrmView('relation', { skipLoad: true });
       openRelationDetail(_crmProjectId).then(() => { _crmSwitchDetailTab(tab); then(); });
     } else {
       switchCrmView('relation');
@@ -42916,10 +43094,12 @@ async function submitDsCreate() {
         <div class="crm-form-icon"><i class="fa fa-wpforms"></i></div>
         <div class="crm-form-info">
           <div class="crm-form-name">${escHtml(f.name)}</div>
-          <div class="crm-form-meta">${f.blocks_count} block${f.blocks_count !== 1 ? 's' : ''}</div>
+          <div class="crm-form-meta">${f.blocks_count} block${f.blocks_count !== 1 ? 's' : ''}${f.default_stage_name ? ` &bull; Default stage: ${escHtml(f.default_stage_name)}` : ''}</div>
         </div>
+        ${f.is_default ? '<span class="crm-form-pill crm-form-pill--default">Default form</span>' : ''}
         <span class="crm-form-pill ${f.is_published ? 'crm-form-pill--pub' : 'crm-form-pill--unp'}">${f.is_published ? 'Published' : 'Draft'}</span>
         <div class="crm-form-actions">
+          <button class="crm-card-btn crm-card-btn--default${f.is_default ? ' is-active' : ''}" data-form-default="${f.id}" title="${f.is_default ? 'Default form (click to unset)' : 'Set as default form'}"><i class="fa${f.is_default ? '-solid' : ''} fa-star"></i></button>
           <button class="crm-card-btn" data-form-edit="${f.id}" title="Edit form"><i class="fa fa-pen"></i></button>
           <button class="crm-card-btn" data-form-url="${escHtml(f.public_url)}" title="Copy public URL"><i class="fa fa-link"></i></button>
           <button class="crm-card-btn" data-form-del="${f.id}" title="Delete form" style="color:#ef4444"><i class="fa fa-trash"></i></button>
@@ -42927,13 +43107,25 @@ async function submitDsCreate() {
       </div>
     `).join('');
 
+    list.querySelectorAll('[data-form-default]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const formId = parseInt(btn.dataset.formDefault);
+        const res = await API.crmSetDefaultForm(_crmFormsProjectId, formId);
+        if (res.status === 200) {
+          toast(res.body?.data?.is_default ? 'Default form set.' : 'Default form cleared.', 'success');
+          loadCrmForms();
+        } else {
+          toast(res.body?.message || 'Failed to update default form.', 'error');
+        }
+      });
+    });
     list.querySelectorAll('[data-form-edit]').forEach(btn => {
       btn.addEventListener('click', () => openFormBuilder(parseInt(btn.dataset.formEdit)));
     });
     list.querySelectorAll('[data-form-url]').forEach(btn => {
       btn.addEventListener('click', () => {
-        navigator.clipboard?.writeText(btn.dataset.formUrl);
-        toast('URL copied.', 'success');
+        copyToClipboard(btn.dataset.formUrl);
+        flashCopiedBadge(btn, 'Link copied!');
       });
     });
     list.querySelectorAll('[data-form-del]').forEach(btn => {
@@ -43053,8 +43245,19 @@ async function submitDsCreate() {
     _updatePubPill(d.is_published);
     $('#crm-builder-submit-text').value  = d.submit_button_text || 'Submit';
     $('#crm-builder-success-msg').value  = d.success_message    || 'Thanks for your submission.';
+    _renderBuilderDefaultStageSelect();
     _renderBuilderBlocks();
     _showBlockProps(null);
+  }
+
+  function _renderBuilderDefaultStageSelect() {
+    const sel = $('#crm-builder-default-stage');
+    if (!sel) return;
+    const d      = _crmBuilderData;
+    const stages = d.stages || [];
+    sel.innerHTML = '<option value="">Pipeline default</option>' + stages.map(s =>
+      `<option value="${s.id}"${s.id === d.default_stage_id ? ' selected' : ''}>${escHtml(s.name)}</option>`
+    ).join('');
   }
 
   function _updatePubPill(isPublished) {
@@ -43333,11 +43536,13 @@ async function submitDsCreate() {
     if (!_crmBuilderData || !_crmBuilderFormId) return;
     const btn = $('#crm-builder-save-btn');
     btn.disabled = true;
+    const defaultStageVal = $('#crm-builder-default-stage').value;
     const payload = {
       name:               _crmBuilderData.name,
       blocks:             _crmBuilderData.blocks,
       submit_button_text: $('#crm-builder-submit-text').value,
       success_message:    $('#crm-builder-success-msg').value,
+      default_stage_id:   defaultStageVal ? Number(defaultStageVal) : null,
     };
     const res = await API.crmUpdateForm(_crmFormsProjectId, _crmBuilderFormId, payload);
     btn.disabled = false;
@@ -43368,16 +43573,16 @@ async function submitDsCreate() {
   });
 
   // Copy URL button
-  $('#crm-builder-copy-url-btn')?.addEventListener('click', () => {
+  $('#crm-builder-copy-url-btn')?.addEventListener('click', (e) => {
     if (_crmBuilderData?.public_url) {
-      navigator.clipboard?.writeText(_crmBuilderData.public_url);
-      toast('URL copied.', 'success');
+      copyToClipboard(_crmBuilderData.public_url);
+      flashCopiedBadge(e.currentTarget, 'Link copied!');
     }
   });
 
   // Back to forms list (returns to the relation's Forms tab)
   $('#crm-builder-back-btn')?.addEventListener('click', () => {
-    switchCrmView('relation');
+    switchCrmView('relation', { skipLoad: true });
     openRelationDetail(_crmProjectId).then(() => _crmSwitchDetailTab('forms'));
   });
 
@@ -43977,7 +44182,7 @@ async function submitDsCreate() {
 
   $('#dev-token-reveal-close').addEventListener('click', () => { $('#dev-token-reveal').style.display = 'none'; });
   $('#dev-token-copy').addEventListener('click', () => {
-    navigator.clipboard.writeText($('#dev-token-value').textContent).then(() => {
+    copyToClipboard($('#dev-token-value').textContent).then(() => {
       const btn = $('#dev-token-copy');
       btn.innerHTML = '<i class="fa fa-check"></i> Copied';
       setTimeout(() => { btn.innerHTML = '<i class="fa fa-copy"></i> Copy'; }, 2000);

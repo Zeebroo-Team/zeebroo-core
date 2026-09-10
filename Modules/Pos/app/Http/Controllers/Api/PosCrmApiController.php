@@ -77,12 +77,14 @@ class PosCrmApiController extends Controller
 
         $project = Project::where('business_id', $business->id)->findOrFail($projectId);
 
-        $allStages = $this->stages->listForProject($project);
+        $allStages   = $this->stages->listForProject($project);
+        $defaultForm = $this->forms->defaultForProject($project);
 
         $leads = Lead::query()
             ->where('project_id', $project->id)
+            ->with('customFieldValues:id,lead_id,custom_field_id,value')
             ->orderByDesc('id')
-            ->get(['id', 'stage_id', 'name', 'company', 'email', 'phone', 'estimated_value', 'expected_close_date', 'notes']);
+            ->get(['id', 'stage_id', 'form_id', 'name', 'company', 'email', 'phone', 'estimated_value', 'expected_close_date', 'notes']);
 
         // Mark leads that already exist as customers (matched by email or phone)
         $emails = $leads->pluck('email')->filter()->unique()->values()->all();
@@ -98,7 +100,9 @@ class PosCrmApiController extends Controller
         $leads = $leads->map(function ($lead) use ($customerEmails, $customerPhones) {
             $byEmail = $lead->email && $customerEmails->has(strtolower($lead->email));
             $byPhone = $lead->phone && $customerPhones->has($lead->phone);
-            $lead->is_customer = $byEmail || $byPhone;
+            $lead->is_customer    = $byEmail || $byPhone;
+            $lead->custom_fields  = $lead->customFieldValues->pluck('value', 'custom_field_id');
+            unset($lead->customFieldValues);
             return $lead;
         });
 
@@ -120,9 +124,14 @@ class PosCrmApiController extends Controller
 
         return response()->json([
             'data' => [
-                'project' => ['id' => $project->id, 'name' => $project->name],
-                'columns' => $columns,
-                'stages'  => $allStages->map(fn ($s) => ['id' => $s->id, 'name' => $s->name, 'color' => $s->color]),
+                'project'      => ['id' => $project->id, 'name' => $project->name],
+                'columns'      => $columns,
+                'stages'       => $allStages->map(fn ($s) => ['id' => $s->id, 'name' => $s->name, 'color' => $s->color]),
+                'default_form' => $defaultForm ? [
+                    'id'               => $defaultForm->id,
+                    'name'             => $defaultForm->name,
+                    'default_stage_id' => $defaultForm->default_stage_id,
+                ] : null,
             ],
         ]);
     }
@@ -168,6 +177,8 @@ class PosCrmApiController extends Controller
             'estimated_value'     => ['nullable', 'numeric', 'min:0'],
             'expected_close_date' => ['nullable', 'date'],
             'notes'               => ['nullable', 'string', 'max:2000'],
+            'custom_fields'       => ['nullable', 'array'],
+            'custom_fields.*'     => ['nullable', 'string', 'max:2000'],
         ]);
 
         $lead = $this->leads->update($lead, $validated, $request->user()?->id);
@@ -514,9 +525,12 @@ class PosCrmApiController extends Controller
             'id'                 => $f->id,
             'name'               => $f->name,
             'is_published'       => $f->is_published,
+            'is_default'         => (bool) $f->is_default,
             'public_url'         => $f->publicUrl(),
             'submit_button_text' => $f->submit_button_text,
             'success_message'    => $f->success_message,
+            'default_stage_id'   => $f->default_stage_id,
+            'default_stage_name' => $f->defaultStage?->name,
             'blocks_count'       => count($f->blocks ?? []),
         ])]);
     }
@@ -538,11 +552,13 @@ class PosCrmApiController extends Controller
             'id'                 => $form->id,
             'name'               => $form->name,
             'is_published'       => $form->is_published,
+            'is_default'         => (bool) $form->is_default,
             'public_url'         => $form->publicUrl(),
             'blocks'             => $form->blocks,
             'style'              => $form->styleSettings(),
             'submit_button_text' => $form->submit_button_text,
             'success_message'    => $form->success_message,
+            'default_stage_id'   => $form->default_stage_id,
         ]], 201);
     }
 
@@ -553,20 +569,25 @@ class PosCrmApiController extends Controller
         $form     = LeadForm::where('project_id', $project->id)->findOrFail($formId);
 
         $customFields = $this->customFields->listForProject($project);
+        $stages       = $this->stages->listForProject($project)->where('is_won', false)->where('is_lost', false)->values();
 
         return response()->json(['data' => [
             'id'                 => $form->id,
             'name'               => $form->name,
             'is_published'       => $form->is_published,
+            'is_default'         => (bool) $form->is_default,
             'public_url'         => $form->publicUrl(),
             'blocks'             => $form->blocks ?? [],
             'style'              => $form->styleSettings(),
             'submit_button_text' => $form->submit_button_text,
             'success_message'    => $form->success_message,
+            'default_stage_id'   => $form->default_stage_id,
+            'stages'             => $stages->map(fn ($s) => ['id' => $s->id, 'name' => $s->name, 'color' => $s->color]),
             'custom_fields'      => $customFields->map(fn ($cf) => [
-                'id'    => $cf->id,
-                'name'  => $cf->name,
-                'type'  => $cf->type,
+                'id'      => $cf->id,
+                'name'    => $cf->name,
+                'type'    => $cf->type,
+                'options' => $cf->optionList(),
             ]),
             'templates'          => $this->forms->templateChoices(),
         ]]);
@@ -585,6 +606,7 @@ class PosCrmApiController extends Controller
             'style'              => ['nullable', 'array'],
             'submit_button_text' => ['nullable', 'string', 'max:60'],
             'success_message'    => ['nullable', 'string', 'max:500'],
+            'default_stage_id'   => ['nullable', 'integer', Rule::exists('crm_lead_stages', 'id')->where(fn ($q) => $q->where('project_id', $project->id))],
         ]);
 
         $form = $this->forms->update($form, $validated);
@@ -593,12 +615,54 @@ class PosCrmApiController extends Controller
             'id'                 => $form->id,
             'name'               => $form->name,
             'is_published'       => $form->is_published,
+            'is_default'         => (bool) $form->is_default,
             'public_url'         => $form->publicUrl(),
             'blocks'             => $form->blocks ?? [],
             'style'              => $form->styleSettings(),
             'submit_button_text' => $form->submit_button_text,
             'success_message'    => $form->success_message,
+            'default_stage_id'   => $form->default_stage_id,
         ]]);
+    }
+
+    /**
+     * Create a lead from the desktop "New Lead" flow, which fills out the project's default
+     * form. Reuses the same block-path validation and mapping as the public web form, so both
+     * entry points always agree on required fields and which stage a submission lands on.
+     */
+    public function submitFormLead(Request $request, int $projectId, int $formId): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'crm_pipeline');
+        $project  = Project::where('business_id', $business->id)->findOrFail($projectId);
+        $form     = LeadForm::where('project_id', $project->id)->findOrFail($formId);
+
+        $rules = [];
+        foreach ($form->fieldBlocksWithPaths() as $path => $block) {
+            $required     = (bool) ($block['required'] ?? false);
+            $rules[$path] = [$required ? 'required' : 'nullable', 'string', 'max:2000'];
+
+            if (($block['field'] ?? '') === 'email') {
+                $rules[$path][] = 'email';
+            }
+        }
+
+        $data = $request->validate($rules);
+        $lead = $this->forms->submit($form, $data, 'pipeline-form');
+
+        return response()->json(['data' => $lead->load('stage')], 201);
+    }
+
+    public function setDefaultForm(Request $request, int $projectId, int $formId): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'crm_forms');
+        $project  = Project::where('business_id', $business->id)->findOrFail($projectId);
+        $form     = LeadForm::where('project_id', $project->id)->findOrFail($formId);
+
+        $form = $this->forms->toggleDefault($form);
+
+        return response()->json(['data' => ['id' => $form->id, 'is_default' => (bool) $form->is_default]]);
     }
 
     public function publishForm(Request $request, int $projectId, int $formId): JsonResponse
