@@ -34,6 +34,9 @@ class AutomationRunnerService
             ->get();
 
         foreach ($flows as $flow) {
+            if (!$this->matchesTriggerConfig($flow, $payload)) {
+                continue;
+            }
             try {
                 $this->run($flow, $business, $payload);
             } catch (\Throwable $e) {
@@ -43,6 +46,23 @@ class AutomationRunnerService
                 ]);
             }
         }
+    }
+
+    /**
+     * A flow scoped to a specific CRM Relation (trigger_config.relation_id) only
+     * runs for payloads carrying that same relation/project id. Unscoped flows
+     * (no trigger_config) match every payload for the trigger key.
+     */
+    private function matchesTriggerConfig(AutomationFlow $flow, array $payload): bool
+    {
+        $relationId = $flow->trigger_config['relation_id'] ?? null;
+        if ($relationId === null) {
+            return true;
+        }
+
+        $payloadRelationId = $payload['relation']['id'] ?? $payload['lead']['project_id'] ?? null;
+
+        return $payloadRelationId !== null && (int) $payloadRelationId === (int) $relationId;
     }
 
     private function run(AutomationFlow $flow, Business $business, array $payload): void
@@ -379,7 +399,7 @@ class AutomationRunnerService
 
     private function evaluateCondition(array $config, array $payload): bool
     {
-        $field  = $config['field'] ?? '';
+        $field  = $this->stripPlaceholderBraces($config['field'] ?? '');
         $op     = $config['op']    ?? 'eq';
         $value  = $config['value'] ?? '';
         $actual = $this->dotGet($payload, $field);
@@ -402,6 +422,20 @@ class AutomationRunnerService
         return preg_replace_callback('/\{\{([^}]+)\}\}/', function ($m) use ($payload) {
             return (string) ($this->dotGet($payload, trim($m[1])) ?? $m[0]);
         }, $template);
+    }
+
+    /**
+     * The trigger's "View sample data" panel copies variables as {{lead.stage_name}},
+     * and users paste that straight into the Condition's Field/Variable box — so accept
+     * both that form and a bare dot path (lead.stage_name).
+     */
+    private function stripPlaceholderBraces(string $field): string
+    {
+        $field = trim($field);
+        if (str_starts_with($field, '{{') && str_ends_with($field, '}}')) {
+            $field = trim(substr($field, 2, -2));
+        }
+        return $field;
     }
 
     private function dotGet(array $data, string $path): mixed

@@ -425,10 +425,6 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
     Route::post  ('crm/projects/{project}/stages/reorder', [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'reorderStages'])->name('crm.projects.stages.reorder');
     Route::put   ('crm/projects/{project}/stages/{stage}', [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'updateStage'])  ->name('crm.projects.stages.update');
     Route::delete('crm/projects/{project}/stages/{stage}', [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'deleteStage'])  ->name('crm.projects.stages.destroy');
-    Route::get   ('crm/projects/{project}/stages/{stage}/automations',              [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'automations'])      ->name('crm.stages.automations.index');
-    Route::post  ('crm/projects/{project}/stages/{stage}/automations',              [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'createAutomation']) ->name('crm.stages.automations.store');
-    Route::put   ('crm/projects/{project}/stages/{stage}/automations/{automation}', [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'updateAutomation']) ->name('crm.stages.automations.update');
-    Route::delete('crm/projects/{project}/stages/{stage}/automations/{automation}', [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'deleteAutomation']) ->name('crm.stages.automations.destroy');
     Route::post  ('crm/projects/{project}/leads',      [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'createLead'])  ->name('crm.leads.store');
     Route::put   ('crm/leads/{lead}',                  [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'updateLead'])  ->name('crm.leads.update');
     Route::post  ('crm/leads/{lead}/move-stage',       [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'moveLead'])    ->name('crm.leads.move-stage');

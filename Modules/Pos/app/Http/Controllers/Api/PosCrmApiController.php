@@ -11,13 +11,11 @@ use Modules\CRM\Models\Lead;
 use Modules\CRM\Models\LeadCustomField;
 use Modules\CRM\Models\LeadForm;
 use Modules\CRM\Models\LeadStage;
-use Modules\CRM\Models\LeadStageAutomation;
 use Modules\CRM\Models\Project;
 use Modules\CRM\Models\Task;
 use Modules\CRM\Services\LeadCustomFieldService;
 use Modules\CRM\Services\LeadFormService;
 use Modules\CRM\Services\LeadService;
-use Modules\CRM\Services\LeadStageAutomationService;
 use Modules\CRM\Services\LeadStageService;
 use Modules\CRM\Services\ProjectService;
 use Modules\CRM\Services\TaskService;
@@ -33,7 +31,6 @@ class PosCrmApiController extends Controller
         private readonly LeadService                 $leads,
         private readonly LeadStageService            $stages,
         private readonly TaskService                 $tasks,
-        private readonly LeadStageAutomationService  $automations,
         private readonly LeadFormService             $forms,
         private readonly LeadCustomFieldService      $customFields,
     ) {}
@@ -428,88 +425,6 @@ class PosCrmApiController extends Controller
         $this->stages->reorder($project, $ids);
 
         return response()->json(['message' => 'Reordered.']);
-    }
-
-    // ── Stage Automations ─────────────────────────────────────────────────
-
-    public function automations(Request $request, int $projectId, int $stageId): JsonResponse
-    {
-        $business = $this->businessOrAbort($request);
-        $project  = Project::where('business_id', $business->id)->findOrFail($projectId);
-        $stage    = LeadStage::where('project_id', $project->id)->findOrFail($stageId);
-
-        $rows = $this->automations->listForStage($stage);
-
-        return response()->json(['data' => $rows->map(fn ($a) => [
-            'id'              => $a->id,
-            'is_active'       => (bool) $a->is_active,
-            'recipient_type'  => $a->recipient_type,
-            'recipient_email' => $a->recipient_email,
-            'recipient_label' => $a->recipientLabel(),
-            'subject'         => $a->subject,
-            'body'            => $a->body,
-        ])]);
-    }
-
-    public function createAutomation(Request $request, int $projectId, int $stageId): JsonResponse
-    {
-        $business = $this->businessOrAbort($request);
-        $this->abortUnlessPerm($request, $business, 'crm_pipeline');
-        $project  = Project::where('business_id', $business->id)->findOrFail($projectId);
-        $stage    = LeadStage::where('project_id', $project->id)->findOrFail($stageId);
-
-        $validated = $this->validateAutomation($request);
-
-        $automation = $this->automations->create($project, $stage, $validated);
-
-        return response()->json(['data' => $automation], 201);
-    }
-
-    public function updateAutomation(Request $request, int $projectId, int $stageId, int $automationId): JsonResponse
-    {
-        $business   = $this->businessOrAbort($request);
-        $this->abortUnlessPerm($request, $business, 'crm_pipeline');
-        $project    = Project::where('business_id', $business->id)->findOrFail($projectId);
-        $stage      = LeadStage::where('project_id', $project->id)->findOrFail($stageId);
-        $automation = LeadStageAutomation::where('stage_id', $stage->id)->findOrFail($automationId);
-
-        $validated = $this->validateAutomation($request);
-
-        $automation = $this->automations->update($automation, $validated);
-
-        return response()->json(['data' => $automation]);
-    }
-
-    public function deleteAutomation(Request $request, int $projectId, int $stageId, int $automationId): JsonResponse
-    {
-        $business   = $this->businessOrAbort($request);
-        $this->abortUnlessPerm($request, $business, 'crm_pipeline');
-        $project    = Project::where('business_id', $business->id)->findOrFail($projectId);
-        $stage      = LeadStage::where('project_id', $project->id)->findOrFail($stageId);
-        $automation = LeadStageAutomation::where('stage_id', $stage->id)->findOrFail($automationId);
-
-        $this->automations->delete($automation);
-
-        return response()->json(['message' => 'Automation deleted.']);
-    }
-
-    private function validateAutomation(Request $request): array
-    {
-        $data = $request->validate([
-            'recipient_type'  => ['required', 'string', Rule::in(array_keys(LeadStageAutomation::recipientTypes()))],
-            'recipient_email' => ['nullable', 'email', 'max:190'],
-            'subject'         => ['required', 'string', 'max:200'],
-            'body'            => ['required', 'string', 'max:5000'],
-            'is_active'       => ['nullable', 'boolean'],
-        ]);
-
-        if ($data['recipient_type'] === LeadStageAutomation::RECIPIENT_CUSTOM && !filled($data['recipient_email'] ?? '')) {
-            throw \Illuminate\Validation\ValidationException::withMessages([
-                'recipient_email' => ['Enter an email address for a custom recipient.'],
-            ]);
-        }
-
-        return $data;
     }
 
     // ── Forms ─────────────────────────────────────────────────────────────

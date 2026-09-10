@@ -15,7 +15,7 @@
     @endif
 
     <p class="muted" style="margin:0 0 14px;font-size:13px;line-height:1.45;">
-        Every email <strong style="color:var(--text);">{{ $business->name }}</strong> sends (lead stage automations, notifications, etc.) goes out through this configuration. Leave it on the platform default, or connect your own Resend account or SMTP server so mail comes from your own address.
+        Every email <strong style="color:var(--text);">{{ $business->name }}</strong> sends (automation flows, notifications, etc.) goes out through this configuration. Leave it on the platform default, or connect your own Resend account or SMTP server so mail comes from your own address.
     </p>
 
     <form method="POST" action="{{ route('mail.settings.update') }}" class="pcat-form-grid" id="mail-settings-form">

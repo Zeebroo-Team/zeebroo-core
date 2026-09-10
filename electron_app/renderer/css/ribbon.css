@@ -5532,6 +5532,17 @@ body.dark .sal-void-notice { color: #f87171; background: rgba(239,68,68,.12); bo
 }
 .psm-close:hover { background: var(--surface3, var(--surface2)); color: var(--text); }
 
+.psm-cancel, .psm-save {
+  display: flex; align-items: center; gap: 7px;
+  padding: 9px 18px; border-radius: 8px; font-size: 13px; font-weight: 600;
+  cursor: pointer; border: none; transition: background .15s, box-shadow .15s;
+}
+.psm-cancel { background: var(--hover); color: var(--text); }
+.psm-cancel:hover { background: var(--border); }
+.psm-save { background: #4e8ef7; color: #fff; box-shadow: 0 2px 8px rgba(78,142,247,.35); }
+.psm-save:hover { background: #3a7de8; }
+.psm-save:disabled, .psm-cancel:disabled { opacity: .6; cursor: not-allowed; }
+
 /* Layout: sidebar + content */
 .psm-layout { display: flex; flex: 1; overflow: hidden; }
 
