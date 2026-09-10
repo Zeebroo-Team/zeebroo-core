@@ -78,7 +78,11 @@
 .crm-col-body--dragover{background:color-mix(in srgb,var(--accent,#4e8ef7) 10%,transparent);border-radius:7px;outline:2px dashed var(--accent,#4e8ef7)}
 .crm-card-btn{background:none;border:none;cursor:pointer;padding:3px 5px;border-radius:5px;font-size:11px;color:var(--text-muted,#6b7280)}
 .crm-card-btn:hover{background:var(--border,#e5e7eb);color:var(--text,#111827)}
+.crm-card-btn:disabled{opacity:.35;cursor:not-allowed}
+.crm-card-btn:disabled:hover{background:none;color:var(--text-muted,#6b7280)}
 .crm-col-empty{font-size:11px;color:var(--text-muted,#6b7280);text-align:center;padding:12px 6px;margin:0}
+.copied-badge{position:fixed;z-index:99999;background:#111827;color:#fff;font-size:11px;font-weight:600;padding:4px 9px;border-radius:5px;pointer-events:none;opacity:0;transform:translate(-50%,-4px);transition:opacity .15s ease,transform .15s ease;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,.18)}
+.copied-badge.is-visible{opacity:1;transform:translate(-50%,-8px)}
 /* CRM contacts / tasks tables */
 .crm-table{width:100%;border-collapse:collapse;font-size:12px}
 .crm-table th{text-align:left;padding:7px 10px;font-size:11px;font-weight:700;color:var(--text-muted,#6b7280);border-bottom:2px solid var(--border,#e5e7eb);white-space:nowrap}
@@ -121,7 +125,11 @@
 .crm-form-pill{display:inline-flex;align-items:center;font-size:10px;font-weight:700;border-radius:999px;padding:1px 7px;flex-shrink:0}
 .crm-form-pill--pub{background:#d1fae5;color:#065f46}
 .crm-form-pill--unp{background:var(--border,#e5e7eb);color:var(--text-muted,#6b7280)}
+.crm-form-pill--default{background:#fef3c7;color:#92400e}
 .crm-form-actions{display:flex;gap:4px;flex-shrink:0}
+.crm-card-btn--default{color:#d1d5db}
+.crm-card-btn--default.is-active{color:#f59e0b}
+.crm-card-btn--default.is-active:hover{color:#d97706}
 /* CRM Builder */
 .crm-builder{display:flex;flex-direction:column;flex:1;overflow:hidden}
 .crm-builder-bar{display:flex;align-items:center;gap:8px;padding:7px 10px;border-bottom:1px solid var(--border,#e5e7eb);flex-shrink:0;background:var(--card,#fff)}
@@ -7960,6 +7968,12 @@
                 <label class="crm-prop-label">Success message</label>
                 <input type="text" id="crm-builder-success-msg" class="crm-prop-input" maxlength="500" placeholder="Thanks for your submission.">
               </div>
+              <div class="crm-prop-row">
+                <label class="crm-prop-label">Default stage</label>
+                <select id="crm-builder-default-stage" class="crm-prop-input" style="appearance:auto">
+                  <option value="">Pipeline default</option>
+                </select>
+              </div>
             </div>
           </div>
         </div>
@@ -9367,40 +9381,7 @@
       </div>
       <div class="po-aim-body" style="display:flex;flex-direction:column;gap:12px">
         <div id="crm-lead-alert" class="svc-form-alert" style="display:none"></div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-          <div class="po-field">
-            <label class="po-field-label">Name <span class="po-required">*</span></label>
-            <input type="text" id="crm-lead-name" class="po-field-input" placeholder="Lead / person name" maxlength="255">
-          </div>
-          <div class="po-field">
-            <label class="po-field-label">Company</label>
-            <input type="text" id="crm-lead-company" class="po-field-input" placeholder="Company name" maxlength="255">
-          </div>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-          <div class="po-field">
-            <label class="po-field-label">Email</label>
-            <input type="email" id="crm-lead-email" class="po-field-input" placeholder="email@example.com" maxlength="255">
-          </div>
-          <div class="po-field">
-            <label class="po-field-label">Phone</label>
-            <input type="text" id="crm-lead-phone" class="po-field-input" placeholder="+1 555 000 0000" maxlength="50">
-          </div>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-          <div class="po-field">
-            <label class="po-field-label">Stage</label>
-            <select id="crm-lead-stage" class="po-field-input" style="appearance:auto"></select>
-          </div>
-          <div class="po-field">
-            <label class="po-field-label">Est. Value</label>
-            <input type="number" id="crm-lead-value" class="po-field-input" min="0" step="0.01" placeholder="0.00">
-          </div>
-        </div>
-        <div class="po-field">
-          <label class="po-field-label">Notes</label>
-          <textarea id="crm-lead-notes" class="po-field-input" rows="3" placeholder="Any notes…" style="resize:vertical"></textarea>
-        </div>
+        <div id="crm-lead-form-fields" style="display:flex;flex-direction:column;gap:12px"></div>
       </div>
       <div class="po-aim-footer">
         <button class="po-btn-ghost" id="crm-lead-modal-cancel"><i class="fa fa-xmark"></i> Cancel</button>
@@ -9420,26 +9401,7 @@
       <div class="po-aim-body" style="display:flex;flex-direction:column;gap:12px">
         <div id="crm-lead-edit-alert" class="svc-form-alert" style="display:none"></div>
         <input type="hidden" id="crm-lead-edit-id">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-          <div class="po-field">
-            <label class="po-field-label">Name <span class="po-required">*</span></label>
-            <input type="text" id="crm-lead-edit-name" class="po-field-input" maxlength="255">
-          </div>
-          <div class="po-field">
-            <label class="po-field-label">Company</label>
-            <input type="text" id="crm-lead-edit-company" class="po-field-input" maxlength="255">
-          </div>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-          <div class="po-field">
-            <label class="po-field-label">Email</label>
-            <input type="email" id="crm-lead-edit-email" class="po-field-input" maxlength="255">
-          </div>
-          <div class="po-field">
-            <label class="po-field-label">Phone</label>
-            <input type="text" id="crm-lead-edit-phone" class="po-field-input" maxlength="50">
-          </div>
-        </div>
+        <div id="crm-lead-edit-form-fields" style="display:flex;flex-direction:column;gap:12px"></div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
           <div class="po-field">
             <label class="po-field-label">Stage</label>

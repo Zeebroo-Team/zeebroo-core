@@ -3,6 +3,7 @@
 namespace Modules\CRM\Services;
 
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Modules\CRM\Models\Lead;
 use Modules\CRM\Models\LeadForm;
 use Modules\CRM\Models\Project;
@@ -17,6 +18,7 @@ class LeadFormService
     {
         return LeadForm::query()
             ->where('project_id', $project->id)
+            ->with('defaultStage')
             ->orderByDesc('id')
             ->get();
     }
@@ -74,9 +76,34 @@ class LeadFormService
             'style'              => isset($data['style']) ? array_merge($form->styleSettings(), $data['style']) : $form->style,
             'submit_button_text' => filled($data['submit_button_text'] ?? '') ? $data['submit_button_text'] : $form->submit_button_text,
             'success_message'    => filled($data['success_message'] ?? '') ? $data['success_message'] : $form->success_message,
+            'default_stage_id'   => array_key_exists('default_stage_id', $data) ? $data['default_stage_id'] : $form->default_stage_id,
         ]);
 
         return $form->fresh();
+    }
+
+    /**
+     * Flip a form's default-form flag. Only one form per project may be the default at a
+     * time, so setting a form default clears the flag on every other form in that project;
+     * clicking the current default again clears it, leaving the project with no default.
+     */
+    public function toggleDefault(LeadForm $form): LeadForm
+    {
+        return DB::transaction(function () use ($form) {
+            if ($form->is_default) {
+                $form->update(['is_default' => false]);
+            } else {
+                LeadForm::query()
+                    ->where('project_id', $form->project_id)
+                    ->where('id', '!=', $form->id)
+                    ->where('is_default', true)
+                    ->update(['is_default' => false]);
+
+                $form->update(['is_default' => true]);
+            }
+
+            return $form->fresh();
+        });
     }
 
     public function publish(LeadForm $form): LeadForm
@@ -103,6 +130,14 @@ class LeadFormService
         return $form->project_id === $project->id ? $form : null;
     }
 
+    public function defaultForProject(Project $project): ?LeadForm
+    {
+        return LeadForm::query()
+            ->where('project_id', $project->id)
+            ->where('is_default', true)
+            ->first();
+    }
+
     public function findPublishedByToken(string $token): ?LeadForm
     {
         return LeadForm::query()
@@ -113,22 +148,28 @@ class LeadFormService
     }
 
     /**
-     * Create a Lead from a public form submission.
+     * Create a Lead from a form submission — either the public web form or the desktop
+     * "New Lead" flow, which reuses the same field-block mapping. The lead always lands on
+     * the form's own default stage, keeping both entry points consistent. Tagging the lead
+     * with form_id lets Edit Lead keep showing *this* form's fields later, even if a
+     * different form is made the project's default afterwards.
      *
      * @param  array<string, string>  $input  keyed by block path (see LeadForm::fieldBlocksWithPaths())
      */
-    public function submit(LeadForm $form, array $input): Lead
+    public function submit(LeadForm $form, array $input, string $source = 'public-form'): Lead
     {
         $mapped = $form->mapPathedInputsToLeadData($input);
         $name   = $mapped['core']['name'] ?: ($mapped['first_text'] ?: 'Website inquiry');
 
         return $this->leadService->create($form->project, [
+            'form_id'       => $form->id,
             'name'          => $name,
             'company'       => $mapped['core']['company'],
             'email'         => $mapped['core']['email'],
             'phone'         => $mapped['core']['phone'],
-            'source'        => 'public-form',
+            'source'        => $source,
             'custom_fields' => $mapped['custom_fields'],
+            'stage_id'      => $form->default_stage_id,
         ]);
     }
 

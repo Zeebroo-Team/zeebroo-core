@@ -96,6 +96,7 @@ class LeadFormController extends Controller
             'style.background_color'  => ['nullable', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
             'submit_button_text'       => ['nullable', 'string', 'max:60'],
             'success_message'          => ['nullable', 'string', 'max:1000'],
+            'default_stage_id'         => ['nullable', 'integer', Rule::exists('crm_lead_stages', 'id')->where(fn ($q) => $q->where('project_id', $project->id))],
         ]);
 
         $this->forms->update($form, $data);

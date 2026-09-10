@@ -22,6 +22,8 @@ class LeadForm extends Model
         'style',
         'submit_button_text',
         'success_message',
+        'default_stage_id',
+        'is_default',
         'is_published',
     ];
 
@@ -30,6 +32,7 @@ class LeadForm extends Model
         return [
             'blocks'       => 'array',
             'style'        => 'array',
+            'is_default'   => 'boolean',
             'is_published' => 'boolean',
         ];
     }
@@ -37,6 +40,11 @@ class LeadForm extends Model
     public function project(): BelongsTo
     {
         return $this->belongsTo(Project::class);
+    }
+
+    public function defaultStage(): BelongsTo
+    {
+        return $this->belongsTo(LeadStage::class);
     }
 
     public static function layouts(): array

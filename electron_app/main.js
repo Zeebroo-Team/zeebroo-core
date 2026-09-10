@@ -2,7 +2,7 @@
 
 const path = require('path');
 const fs   = require('fs');
-const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, clipboard } = require('electron');
 const { API_BASE_URL } = require('./config');
 
 let CONFIG_PATH;
@@ -181,6 +181,9 @@ ipcMain.on('window-narrow-auth', () => {
 // Always include the compiled-in API URL so the renderer can display/debug it
 ipcMain.handle('config-get', () => ({ ...config, api_base_url: API_BASE_URL, app_version: app.getVersion() }));
 ipcMain.handle('open-external', (_e, url) => shell.openExternal(url));
+// navigator.clipboard is blocked by the permission handler above (only 'media' is granted),
+// so renderer code copies via this IPC bridge to Electron's native clipboard instead.
+ipcMain.handle('clipboard-write-text', (_e, text) => clipboard.writeText(String(text ?? '')));
 ipcMain.handle('check-for-update', () => new Promise(resolve => {
   const https = require('https');
   const http  = require('http');

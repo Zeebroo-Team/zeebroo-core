@@ -16,6 +16,7 @@ class Lead extends Model
     protected $fillable = [
         'business_id',
         'project_id',
+        'form_id',
         'name',
         'company',
         'email',
@@ -45,6 +46,11 @@ class Lead extends Model
     public function project(): BelongsTo
     {
         return $this->belongsTo(Project::class);
+    }
+
+    public function form(): BelongsTo
+    {
+        return $this->belongsTo(LeadForm::class, 'form_id');
     }
 
     public function stage(): BelongsTo
