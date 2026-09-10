@@ -7711,29 +7711,150 @@
 
       <!-- Subnav -->
       <div class="fin-subnav">
-        <button class="fin-subnav-btn active" data-crmsub="pipeline"><i class="fa fa-table-columns"></i> Pipeline</button>
-        <button class="fin-subnav-btn"         data-crmsub="contacts"><i class="fa fa-address-book"></i> Contacts</button>
-        <button class="fin-subnav-btn"         data-crmsub="tasks"><i class="fa fa-list-check"></i> Tasks</button>
-        <button class="fin-subnav-btn"         data-crmsub="forms"><i class="fa fa-wpforms"></i> Forms</button>
+        <button class="fin-subnav-btn active" data-crmsub="overview"><i class="fa fa-house"></i> Overview</button>
+        <button class="fin-subnav-btn"         data-crmsub="relation"><i class="fa fa-handshake"></i> Relation</button>
+        <button class="fin-subnav-btn"         data-crmsub="contacts"><i class="fa fa-address-book"></i> Contact</button>
+        <button class="fin-subnav-btn"         data-crmsub="tasks"><i class="fa fa-list-check"></i> Task</button>
       </div>
 
-      <!-- ── Pipeline view ── -->
-      <div id="crm-pipeline-view" style="display:flex;flex-direction:column;flex:1;overflow:hidden">
-        <!-- Toolbar -->
-        <div class="finance-toolbar" style="gap:8px;flex-shrink:0">
-          <label style="font-size:12px;font-weight:600;color:var(--text-muted);white-space:nowrap"><i class="fa fa-folder-open" style="margin-right:4px"></i>Project:</label>
-          <select id="crm-project-select" class="svc-form-input" style="max-width:220px;appearance:auto;padding:5px 8px;font-size:12px"></select>
-          <button class="svc-form-btn" id="crm-new-project-btn" style="padding:5px 12px;font-size:12px;flex-shrink:0"><i class="fa fa-folder-plus"></i> New Project</button>
-          <div id="crm-pipeline-alert" class="svc-form-alert" style="display:none;margin-left:auto"></div>
+      <!-- ── Overview view ── -->
+      <div id="crm-overview-view" style="display:flex;flex-direction:column;flex:1;overflow-y:auto;padding:16px;gap:18px">
+        <div class="pm-welcome-card">
+          <div class="pm-welcome-icon"><i class="fa fa-handshake"></i></div>
+          <div class="pm-welcome-body">
+            <div class="pm-welcome-title">Welcome to CRM</div>
+            <div class="pm-welcome-desc">Group your leads into relations, track them through a pipeline, capture new ones with forms, and keep every contact and follow-up task in one place.</div>
+            <div class="pm-welcome-actions">
+              <button class="svc-form-btn svc-form-btn--primary" id="crm-ov-new-relation-btn"><i class="fa fa-plus"></i> Create New Relation</button>
+              <button class="pm-welcome-secondary-btn" id="crm-ov-viewall-relations-btn"><i class="fa fa-handshake"></i> View All Relations</button>
+            </div>
+          </div>
         </div>
-        <!-- Board -->
-        <div id="crm-pipeline-board" class="crm-board"></div>
-        <div id="crm-pipeline-no-projects" style="display:none;flex:1;align-items:center;justify-content:center;flex-direction:column;gap:10px">
-          <i class="fa fa-folder-open" style="font-size:36px;color:var(--text-muted)"></i>
-          <p style="color:var(--text-muted);font-size:13px;margin:0">Create a project to start tracking leads.</p>
-          <button class="svc-form-btn svc-form-btn--primary" id="crm-pipeline-first-project-btn"><i class="fa fa-plus"></i> Create First Project</button>
+
+        <div class="pm-stats-row" id="crm-ov-stats"></div>
+
+        <div>
+          <div class="pm-ov-section-head"><div class="pm-ov-section-head-left"><i class="fa fa-lightbulb"></i><span>Quick Tips</span></div></div>
+          <div class="pm-tips-row">
+            <div class="pm-tip-card">
+              <div class="pm-tip-icon"><i class="fa fa-handshake"></i></div>
+              <div class="pm-tip-body">
+                <div class="pm-tip-title">Track deals with Relations</div>
+                <div class="pm-tip-desc">Group leads into a relation and move them through your pipeline stage by stage.</div>
+              </div>
+            </div>
+            <div class="pm-tip-card">
+              <div class="pm-tip-icon"><i class="fa fa-wpforms"></i></div>
+              <div class="pm-tip-body">
+                <div class="pm-tip-title">Capture leads with Forms</div>
+                <div class="pm-tip-desc">Publish a form for a relation and new leads drop straight into its pipeline.</div>
+              </div>
+            </div>
+            <div class="pm-tip-card">
+              <div class="pm-tip-icon"><i class="fa fa-address-book"></i></div>
+              <div class="pm-tip-body">
+                <div class="pm-tip-title">Keep contacts organized</div>
+                <div class="pm-tip-desc">Every customer and lead you talk to shows up in Contact with their activity.</div>
+              </div>
+            </div>
+            <div class="pm-tip-card">
+              <div class="pm-tip-icon"><i class="fa fa-list-check"></i></div>
+              <div class="pm-tip-body">
+                <div class="pm-tip-title">Never miss a follow-up</div>
+                <div class="pm-tip-desc">Create tasks and track what's open, overdue or completed in Task.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="pm-ov-section-head">
+            <div class="pm-ov-section-head-left"><i class="fa fa-clock-rotate-left"></i><span>Recent Relations</span></div>
+            <button class="pm-ov-viewall-btn" id="crm-ov-viewall-btn">View all <i class="fa fa-arrow-right"></i></button>
+          </div>
+          <div id="crm-ov-recent-grid" class="pm-projects-grid"></div>
+          <div id="crm-ov-recent-empty" style="display:none;text-align:center;padding:40px 20px;color:var(--text-muted)">
+            <i class="fa fa-handshake" style="font-size:34px;margin-bottom:10px;display:block"></i>
+            <div style="font-size:13px">No relations yet. Click <strong>Create New Relation</strong> to get started.</div>
+          </div>
         </div>
       </div>
+
+      <!-- ── Relation view ── -->
+      <div id="crm-relation-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+
+        <!-- List -->
+        <div id="crm-relation-list" style="display:flex;flex-direction:column;flex:1;overflow:hidden">
+          <div class="finance-toolbar" style="gap:8px">
+            <div class="finance-search-wrap" style="max-width:240px">
+              <i class="fa fa-magnifying-glass"></i>
+              <input type="text" id="crm-relation-search" placeholder="Search relations…" autocomplete="off">
+            </div>
+            <button class="svc-form-btn svc-form-btn--primary" id="crm-relation-new-btn" style="margin-left:auto;padding:5px 12px;font-size:12px;flex-shrink:0"><i class="fa fa-plus"></i> Create New Relation</button>
+            <div id="crm-relation-alert" class="svc-form-alert" style="display:none"></div>
+          </div>
+          <div style="flex:1;overflow-y:auto;padding:12px">
+            <div id="crm-relation-grid" class="pm-projects-grid"></div>
+            <div id="crm-relation-empty" style="display:none;text-align:center;padding:60px 20px;color:var(--text-muted)">
+              <i class="fa fa-handshake" style="font-size:40px;margin-bottom:12px;display:block"></i>
+              <div style="font-size:14px;font-weight:600;margin-bottom:6px">No relations yet</div>
+              <div style="font-size:12px;margin-bottom:14px">Create a relation to start tracking leads.</div>
+              <button class="svc-form-btn svc-form-btn--primary" id="crm-relation-first-btn"><i class="fa fa-plus"></i> Create First Relation</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Detail (mirrors #pm-detail-view) -->
+        <div id="crm-relation-detail" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+          <div class="inv-detail-header">
+            <button class="inv-back-btn" id="crm-relation-back-btn"><i class="fa fa-arrow-left"></i> Relations</button>
+            <span class="inv-detail-breadcrumb" id="crm-relation-breadcrumb">Relation</span>
+          </div>
+
+          <div class="inv-hero" id="crm-relation-hero">
+            <div class="inv-hero-img" id="crm-relation-hero-img"><div class="inv-thumb-ph inv-thumb-lg"><i class="fa fa-handshake"></i></div></div>
+            <div class="inv-hero-info">
+              <div class="inv-hero-name" id="crm-relation-hero-name">—</div>
+              <div class="inv-hero-meta" id="crm-relation-hero-meta"></div>
+              <div class="inv-hero-badges" id="crm-relation-hero-badges"></div>
+            </div>
+          </div>
+
+          <div class="inv-tabs" id="crm-relation-tabs">
+            <button class="inv-tab active" data-crmdtab="dashboard">Dashboard</button>
+            <button class="inv-tab" data-crmdtab="pipeline">Pipeline</button>
+            <button class="inv-tab" data-crmdtab="forms">Forms</button>
+          </div>
+
+          <div class="inv-tab-body" id="crm-relation-tab-body">
+            <div class="inv-tab-pane active" id="crm-relation-pane-dashboard"></div>
+
+            <div class="inv-tab-pane" id="crm-relation-pane-pipeline">
+              <div class="finance-toolbar" style="gap:8px">
+                <button class="svc-form-btn svc-form-btn--primary" id="crm-relation-new-lead-btn" style="padding:5px 12px;font-size:12px;flex-shrink:0"><i class="fa fa-user-plus"></i> New Lead</button>
+                <button class="svc-form-btn" id="crm-relation-stages-btn" style="padding:5px 12px;font-size:12px;flex-shrink:0"><i class="fa fa-stairs"></i> Manage Stages</button>
+                <div id="crm-pipeline-alert" class="svc-form-alert" style="display:none;margin-left:auto"></div>
+              </div>
+              <div id="crm-pipeline-board" class="crm-board"></div>
+            </div>
+
+            <div class="inv-tab-pane" id="crm-relation-pane-forms">
+              <div class="finance-toolbar" style="gap:8px">
+                <button class="svc-form-btn svc-form-btn--primary" id="crm-forms-new-btn" style="padding:5px 12px;font-size:12px;flex-shrink:0"><i class="fa fa-plus"></i> New Form</button>
+                <div id="crm-forms-alert" class="svc-form-alert" style="display:none;margin-left:auto"></div>
+              </div>
+              <div id="crm-forms-list" style="display:flex;flex-direction:column;gap:8px">
+                <p style="text-align:center;color:var(--text-muted);font-size:12px;padding:24px 0">Loading…</p>
+              </div>
+              <div id="crm-forms-empty" style="display:none;flex-direction:column;align-items:center;gap:10px;padding:36px 0;text-align:center">
+                <i class="fa fa-wpforms" style="font-size:34px;color:var(--text-muted)"></i>
+                <p style="color:var(--text-muted);font-size:13px;margin:0">No forms yet — create one to start capturing leads from the web.</p>
+              </div>
+            </div>
+          </div>
+        </div><!-- /crm-relation-detail -->
+
+      </div><!-- /crm-relation-view -->
 
       <!-- ── Contacts view ── -->
       <div id="crm-contacts-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
@@ -7787,25 +7908,6 @@
               <tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:24px">Loading…</td></tr>
             </tbody>
           </table>
-        </div>
-      </div>
-
-      <!-- ── Forms list view ── -->
-      <div id="crm-forms-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
-        <div class="finance-toolbar" style="gap:8px">
-          <label style="font-size:12px;font-weight:600;color:var(--text-muted);white-space:nowrap"><i class="fa fa-folder-open" style="margin-right:4px"></i>Project:</label>
-          <select id="crm-forms-project-select" class="svc-form-input" style="max-width:220px;appearance:auto;padding:5px 8px;font-size:12px"></select>
-          <button class="svc-form-btn svc-form-btn--primary" id="crm-forms-new-btn" style="padding:5px 12px;font-size:12px;flex-shrink:0"><i class="fa fa-plus"></i> New Form</button>
-          <div id="crm-forms-alert" class="svc-form-alert" style="display:none;margin-left:auto"></div>
-        </div>
-        <div style="flex:1;overflow-y:auto;padding:10px">
-          <div id="crm-forms-list" style="display:flex;flex-direction:column;gap:8px">
-            <p style="text-align:center;color:var(--text-muted);font-size:12px;padding:24px 0">Loading…</p>
-          </div>
-          <div id="crm-forms-empty" style="display:none;flex-direction:column;align-items:center;gap:10px;padding:36px 0;text-align:center">
-            <i class="fa fa-wpforms" style="font-size:34px;color:var(--text-muted)"></i>
-            <p style="color:var(--text-muted);font-size:13px;margin:0">No forms yet — create one to start capturing leads from the web.</p>
-          </div>
         </div>
       </div>
 
@@ -9360,18 +9462,18 @@
     </div>
   </div>
 
-  <!-- ── CRM: New Project Modal ── -->
+  <!-- ── CRM: New Relation Modal ── -->
   <div class="modal-overlay" id="crm-project-modal" style="display:none">
     <div class="po-aim-shell" style="width:420px">
       <div class="po-aim-header">
-        <i class="fa fa-folder-plus" style="color:#7c3aed"></i>
-        <span>New Project</span>
+        <i class="fa fa-handshake" style="color:#7c3aed"></i>
+        <span>New Relation</span>
         <button class="psm-close" id="crm-project-modal-close"><i class="fa fa-xmark"></i></button>
       </div>
       <div class="po-aim-body" style="display:flex;flex-direction:column;gap:12px">
         <div id="crm-project-alert" class="svc-form-alert" style="display:none"></div>
         <div class="po-field">
-          <label class="po-field-label">Project Name <span class="po-required">*</span></label>
+          <label class="po-field-label">Relation Name <span class="po-required">*</span></label>
           <input type="text" id="crm-project-name" class="po-field-input" placeholder="e.g. Q3 Sales Pipeline" maxlength="255">
         </div>
         <div class="po-field">
@@ -9381,7 +9483,7 @@
       </div>
       <div class="po-aim-footer">
         <button class="po-btn-ghost" id="crm-project-modal-cancel"><i class="fa fa-xmark"></i> Cancel</button>
-        <button class="po-btn-primary" id="crm-project-modal-save"><i class="fa fa-check"></i> Create Project</button>
+        <button class="po-btn-primary" id="crm-project-modal-save"><i class="fa fa-check"></i> Create Relation</button>
       </div>
     </div>
   </div>

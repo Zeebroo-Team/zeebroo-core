@@ -450,9 +450,9 @@
       "tab": "crm",
       "groups": [
         {
-          "label": "Pipeline",
+          "label": "Relations",
           "items": [
-            { "type": "lg", "id": "rb-crm-pipeline",      "icon": "fa-chart-gantt",        "label": "Pipeline" },
+            { "type": "lg", "id": "rb-crm-pipeline",      "icon": "fa-handshake",          "label": "Relations" },
             { "type": "lg", "id": "rb-crm-new-lead",      "icon": "fa-user-plus",          "label": "New Lead",        "primary": true }
           ]
         },
@@ -479,7 +479,7 @@
         {
           "label": "Manage",
           "items": [
-            { "type": "lg", "id": "rb-crm-projects",      "icon": "fa-diagram-project",    "label": "Projects" },
+            { "type": "lg", "id": "rb-crm-projects",      "icon": "fa-plus",               "label": "New Relation" },
             { "type": "lg", "id": "rb-crm-stages",        "icon": "fa-stairs",             "label": "Stages" }
           ]
         },

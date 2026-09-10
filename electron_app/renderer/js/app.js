@@ -475,7 +475,7 @@ function activateTab(tabName) {
   if (tabName === 'restaurant') { switchRstView('orders'); }
   if (tabName === 'rst-pos')    { rstPosInit(); }
   if (tabName === 'mail')       { switchMailView('inbox'); }
-  if (tabName === 'crm')        { switchCrmView('pipeline'); }
+  if (tabName === 'crm')        { switchCrmView('overview'); }
   if (tabName === 'automations'){ loadAutomations(); }
   if (tabName === 'projects')    { switchPmView('overview'); }
   if (tabName === 'event-mgmt') { switchEvtView('brands'); }
@@ -41901,29 +41901,32 @@ async function submitDsCreate() {
 
 // ── CRM ────────────────────────────────────────────────────────────────────
 (function () {
-  let _crmView        = 'pipeline';
-  let _crmProjects    = [];
-  let _crmProjectId   = null;
-  let _crmPipeline    = null;  // { project, columns, stages }
-  let _crmTaskFilter  = 'open';
-  let _crmContactQ    = '';
+  let _crmView          = 'overview';
+  let _crmProjects      = [];
+  let _crmProjectId     = null;   // id of the relation currently open in detail view
+  let _crmPipeline      = null;   // { project, columns, stages }
+  let _crmTaskFilter    = 'open';
+  let _crmContactQ      = '';
+  let _crmRelationSearch = '';
+  let _crmDetailTab     = 'dashboard';
+  let _crmDetailLoaded  = { forms: false };
 
   // ── View switch ──────────────────────────────────────────────────────────
   function switchCrmView(view) {
     _crmView = view;
-    $('#crm-pipeline-view').style.display = view === 'pipeline' ? 'flex' : 'none';
+    $('#crm-overview-view').style.display = view === 'overview' ? 'flex' : 'none';
+    $('#crm-relation-view').style.display = view === 'relation' ? 'flex' : 'none';
     $('#crm-contacts-view').style.display = view === 'contacts' ? 'flex' : 'none';
     $('#crm-tasks-view').style.display    = view === 'tasks'    ? 'flex' : 'none';
-    $('#crm-forms-view').style.display    = view === 'forms'    ? 'flex' : 'none';
     $('#crm-builder-view').style.display  = view === 'builder'  ? 'flex' : 'none';
     $$('[data-crmsub]').forEach(b => b.classList.toggle('active', b.dataset.crmsub === view));
-    if (view === 'pipeline') loadCrmPipeline();
+    if (view === 'overview') loadCrmOverview();
+    if (view === 'relation') loadCrmRelationsView();
     if (view === 'contacts') loadCrmContacts();
     if (view === 'tasks')    loadCrmTasks();
-    if (view === 'forms')    loadCrmForms();
   }
 
-  // ── Projects ─────────────────────────────────────────────────────────────
+  // ── Projects (Relations) ─────────────────────────────────────────────────
   async function loadCrmProjects() {
     const res = await API.crmProjects();
     if (res.status !== 200) return [];
@@ -41931,46 +41934,201 @@ async function submitDsCreate() {
     return _crmProjects;
   }
 
-  function _rebuildProjectSelect() {
-    const sel = $('#crm-project-select');
-    if (!sel) return;
-    sel.innerHTML = _crmProjects.map(p =>
-      `<option value="${p.id}"${p.id === _crmProjectId ? ' selected' : ''}>${escHtml(p.name)}</option>`
-    ).join('');
-    if (!_crmProjectId && _crmProjects.length > 0) {
-      _crmProjectId = _crmProjects[0].id;
+  // ── Overview tab ─────────────────────────────────────────────────────────
+  async function loadCrmOverview() {
+    await loadCrmProjects();
+    const [contactsRes, tasksRes] = await Promise.all([API.crmContacts(''), API.crmTasks('open')]);
+    const contactsCount  = contactsRes.status === 200 ? (contactsRes.body?.data?.length || 0) : 0;
+    const openTasksCount = tasksRes.status    === 200 ? (tasksRes.body?.data?.length    || 0) : 0;
+    _renderCrmOverview(contactsCount, openTasksCount);
+  }
+
+  function _renderCrmOverview(contactsCount, openTasksCount) {
+    const statsEl = $('#crm-ov-stats');
+    const statTiles = [
+      { key: 'total',     icon: 'fa-handshake',    label: 'Relations',  value: _crmProjects.length },
+      { key: 'active',    icon: 'fa-address-book', label: 'Contacts',   value: contactsCount },
+      { key: 'completed', icon: 'fa-list-check',   label: 'Open Tasks', value: openTasksCount },
+    ];
+    if (statsEl) statsEl.innerHTML = statTiles.map(s => `
+      <div class="pm-stat-tile pm-stat-tile--${s.key}">
+        <div class="pm-stat-tile-icon"><i class="fa ${s.icon}"></i></div>
+        <div><div class="pm-stat-tile-value">${s.value}</div><div class="pm-stat-tile-label">${s.label}</div></div>
+      </div>
+    `).join('');
+
+    const grid  = $('#crm-ov-recent-grid');
+    const empty = $('#crm-ov-recent-empty');
+    if (!grid) return;
+    const recent = [..._crmProjects].sort((a, b) => b.id - a.id).slice(0, 6);
+    grid.innerHTML = '';
+    if (!recent.length) {
+      empty.style.display = 'block';
+      grid.style.display  = 'none';
+      return;
+    }
+    empty.style.display = 'none';
+    grid.style.display  = '';
+    recent.forEach(p => grid.appendChild(_crmRelationCardEl(p, () => { switchCrmView('relation'); openRelationDetail(p.id); })));
+  }
+
+  $('#crm-ov-new-relation-btn')?.addEventListener('click', () => _openProjectModal());
+  $('#crm-ov-viewall-btn')?.addEventListener('click', () => switchCrmView('relation'));
+  $('#crm-ov-viewall-relations-btn')?.addEventListener('click', () => switchCrmView('relation'));
+
+  // ── Relation tab (list) ──────────────────────────────────────────────────
+  async function loadCrmRelationsView() {
+    await loadCrmProjects();
+    closeRelationDetail();
+    renderCrmRelationsGrid();
+  }
+
+  function _crmRelationCardEl(relation, onClick) {
+    const count = relation.leads_count || 0;
+    const card = document.createElement('div');
+    card.className = 'crm-relation-card';
+    card.dataset.pid = relation.id;
+    card.innerHTML = `
+      <div class="crm-relation-card-icon"><i class="fa fa-handshake"></i></div>
+      <div class="crm-relation-card-body">
+        <div class="crm-relation-card-name" title="${escHtml(relation.name)}">${escHtml(relation.name)}</div>
+        <div class="crm-relation-card-desc">${relation.description ? escHtml(relation.description) : 'No description'}</div>
+      </div>
+      <div class="crm-relation-card-count"><i class="fa fa-user-group" style="margin-right:4px"></i>${count} lead${count !== 1 ? 's' : ''}</div>
+    `;
+    card.addEventListener('click', onClick || (() => openRelationDetail(relation.id)));
+    return card;
+  }
+
+  function renderCrmRelationsGrid() {
+    const grid  = $('#crm-relation-grid');
+    const empty = $('#crm-relation-empty');
+    if (!grid) return;
+    const q = _crmRelationSearch.trim().toLowerCase();
+    const list = _crmProjects.filter(p => !q || `${p.name} ${p.description || ''}`.toLowerCase().includes(q));
+    grid.innerHTML = '';
+    if (!list.length) {
+      empty.style.display = 'block';
+      grid.style.display  = 'none';
+      return;
+    }
+    empty.style.display = 'none';
+    grid.style.display  = '';
+    list.forEach(p => grid.appendChild(_crmRelationCardEl(p)));
+  }
+
+  let _crmRelationSearchTimer = null;
+  $('#crm-relation-search')?.addEventListener('input', e => {
+    clearTimeout(_crmRelationSearchTimer);
+    _crmRelationSearchTimer = setTimeout(() => { _crmRelationSearch = e.target.value; renderCrmRelationsGrid(); }, 220);
+  });
+  $('#crm-relation-new-btn')?.addEventListener('click',   () => _openProjectModal());
+  $('#crm-relation-first-btn')?.addEventListener('click', () => _openProjectModal());
+
+  // ── Relation detail page ─────────────────────────────────────────────────
+  async function openRelationDetail(id) {
+    _crmProjectId    = +id;
+    _crmDetailTab    = 'dashboard';
+    _crmDetailLoaded = { forms: false };
+    const list   = $('#crm-relation-list');
+    const detail = $('#crm-relation-detail');
+    if (list)   list.style.display   = 'none';
+    if (detail) detail.style.display = 'flex';
+    _crmRenderDetailHero();
+    await loadCrmPipeline(_crmProjectId);
+    _crmSwitchDetailTab('dashboard');
+  }
+  window.openRelationDetail = openRelationDetail;
+
+  function closeRelationDetail() {
+    const list   = $('#crm-relation-list');
+    const detail = $('#crm-relation-detail');
+    if (detail) detail.style.display = 'none';
+    if (list)   list.style.display   = 'flex';
+  }
+
+  function _crmRenderDetailHero() {
+    const relation = _crmProjects.find(p => p.id === _crmProjectId) || {};
+    const breadcrumb = $('#crm-relation-breadcrumb'); if (breadcrumb) breadcrumb.textContent = relation.name || '—';
+    const nameEl = $('#crm-relation-hero-name'); if (nameEl) nameEl.textContent = relation.name || '—';
+    const metaEl = $('#crm-relation-hero-meta');
+    if (metaEl) metaEl.innerHTML = relation.description ? `<span>${escHtml(relation.description)}</span>` : '';
+    const count = relation.leads_count || 0;
+    const badgesEl = $('#crm-relation-hero-badges');
+    if (badgesEl) badgesEl.innerHTML = `<span class="inv-badge inv-badge-blue">${count} lead${count !== 1 ? 's' : ''}</span>`;
+  }
+
+  function _crmRenderDashboardPane() {
+    const pane = $('#crm-relation-pane-dashboard');
+    if (!pane || !_crmPipeline) return;
+    const cols = _crmPipeline.columns || [];
+    const totalLeads = cols.reduce((s, c) => s + c.leads_count, 0);
+    const totalValue = cols.reduce((s, c) => s + c.value_total, 0);
+    const won  = cols.filter(c => c.is_won).reduce((s, c) => s + c.leads_count, 0);
+    const lost = cols.filter(c => c.is_lost).reduce((s, c) => s + c.leads_count, 0);
+    const relation = _crmProjects.find(p => p.id === _crmProjectId) || {};
+    pane.innerHTML = `
+      <div class="inv-section">
+        <div class="inv-section-title"><i class="fa fa-chart-simple"></i> Pipeline Overview</div>
+        <div class="inv-detail-grid">
+          <div class="inv-detail-cell"><div class="inv-detail-cell-label">Total Leads</div><div class="inv-detail-cell-value">${totalLeads}</div></div>
+          <div class="inv-detail-cell"><div class="inv-detail-cell-label">Total Value</div><div class="inv-detail-cell-value">${formatMoney(totalValue)}</div></div>
+          <div class="inv-detail-cell"><div class="inv-detail-cell-label">Won</div><div class="inv-detail-cell-value">${won}</div></div>
+          <div class="inv-detail-cell"><div class="inv-detail-cell-label">Lost</div><div class="inv-detail-cell-value">${lost}</div></div>
+        </div>
+      </div>
+      <div class="inv-section">
+        <div class="inv-section-title"><i class="fa fa-table-columns"></i> Stages</div>
+        <table class="inv-detail-table">
+          ${cols.length ? cols.map(c => `<tr><td class="inv-dt-label">${escHtml(c.name)}</td><td class="inv-dt-val">${c.leads_count} lead${c.leads_count !== 1 ? 's' : ''}${c.value_total ? ' · ' + formatMoney(c.value_total) : ''}</td></tr>`).join('') : '<tr><td class="inv-dt-val" colspan="2"><span class="inv-detail-none">No stages yet</span></td></tr>'}
+        </table>
+      </div>
+      <div class="inv-section">
+        <div class="inv-section-title"><i class="fa fa-circle-info"></i> Details</div>
+        <table class="inv-detail-table">
+          <tr><td class="inv-dt-label">Description</td><td class="inv-dt-val">${relation.description ? escHtml(relation.description) : '<span class="inv-detail-none">No description</span>'}</td></tr>
+        </table>
+      </div>
+    `;
+  }
+
+  function _crmSwitchDetailTab(tab) {
+    _crmDetailTab = tab;
+    $$('#crm-relation-tabs .inv-tab').forEach(b => b.classList.toggle('active', b.dataset.crmdtab === tab));
+    $$('#crm-relation-tab-body .inv-tab-pane').forEach(el => el.classList.remove('active'));
+    $(`#crm-relation-pane-${tab}`)?.classList.add('active');
+    if (tab === 'forms' && !_crmDetailLoaded.forms) {
+      _crmDetailLoaded.forms = true;
+      loadCrmForms();
     }
   }
 
+  $('#crm-relation-tabs')?.addEventListener('click', e => {
+    const btn = e.target.closest('.inv-tab');
+    if (btn) _crmSwitchDetailTab(btn.dataset.crmdtab);
+  });
+  $('#crm-relation-back-btn')?.addEventListener('click', () => closeRelationDetail());
+  $('#crm-relation-new-lead-btn')?.addEventListener('click', () => _openNewLeadModal());
+  $('#crm-relation-stages-btn')?.addEventListener('click',   () => openStagesModal());
+
   // ── Pipeline / Kanban ────────────────────────────────────────────────────
-  async function loadCrmPipeline() {
+  async function loadCrmPipeline(projectId = _crmProjectId) {
     const board = $('#crm-pipeline-board');
-    const noProj = $('#crm-pipeline-no-projects');
-    if (!board) return;
-
-    const projects = await loadCrmProjects();
-    if (projects.length === 0) {
-      board.style.display = 'none';
-      noProj.style.display = 'flex';
-      $('#crm-project-select').parentElement.style.display = 'none';
-      return;
-    }
-    board.style.display = 'flex';
-    noProj.style.display = 'none';
-    $('#crm-project-select').parentElement.style.display = '';
-
-    _rebuildProjectSelect();
-    if (!_crmProjectId) _crmProjectId = projects[0].id;
+    if (!board || !projectId) return;
 
     board.innerHTML = '<span style="color:var(--text-muted);padding:20px;font-size:12px">Loading…</span>';
 
-    const res = await API.crmPipeline(_crmProjectId);
+    const res = await API.crmPipeline(projectId);
     if (res.status !== 200) {
-      board.innerHTML = `<span style="color:var(--text-muted);padding:20px;font-size:12px">${escHtml(res.body?.message || 'Failed to load pipeline.')}</span>`;
+      const errMsg = escHtml(res.body?.message || 'Failed to load pipeline.');
+      board.innerHTML = `<span style="color:var(--text-muted);padding:20px;font-size:12px">${errMsg}</span>`;
+      const dashPane = $('#crm-relation-pane-dashboard');
+      if (dashPane) dashPane.innerHTML = `<div class="inv-section"><span style="color:var(--text-muted);padding:20px;font-size:12px;display:block">${errMsg}</span></div>`;
       return;
     }
     _crmPipeline = res.body.data;
     _renderBoard();
+    _crmRenderDashboardPane();
   }
 
   let _dragLeadId  = null;
@@ -41986,7 +42144,7 @@ async function submitDsCreate() {
           ${lead.is_customer ? `<div class="crm-card-customer-badge"><i class="fa fa-circle-check"></i> Already a Customer</div>` : ''}
           ${lead.company ? `<div class="crm-card-company"><i class="fa fa-building" style="margin-right:3px;opacity:.6"></i>${escHtml(lead.company)}</div>` : ''}
           <div class="crm-card-footer">
-            <span class="crm-card-value">${lead.estimated_value ? formatCurrency(lead.estimated_value) : ''}</span>
+            <span class="crm-card-value">${lead.estimated_value ? formatMoney(lead.estimated_value) : ''}</span>
             <div class="crm-card-actions">
               <button class="crm-card-btn crm-card-edit" data-lead-id="${lead.id}" title="Edit"><i class="fa fa-pen"></i></button>
               <button class="crm-card-btn crm-card-del" data-lead-id="${lead.id}" title="Delete"><i class="fa fa-trash"></i></button>
@@ -41995,7 +42153,7 @@ async function submitDsCreate() {
         </div>`).join('');
 
       const valueLine = col.value_total > 0
-        ? `<span style="font-size:10px;color:var(--text-muted);padding:2px 12px 6px;display:block">${formatCurrency(col.value_total)}</span>`
+        ? `<span style="font-size:10px;color:var(--text-muted);padding:2px 12px 6px;display:block">${formatMoney(col.value_total)}</span>`
         : '';
 
       return `<div class="crm-col" data-stage-id="${col.id}">
@@ -42222,11 +42380,12 @@ async function submitDsCreate() {
     btn.disabled = false;
     if (res.status === 201) {
       $('#crm-project-modal').style.display = 'none';
-      toast('Project created.', 'success');
-      _crmProjectId = res.body.data.id;
-      loadCrmPipeline();
+      toast('Relation created.', 'success');
+      await loadCrmProjects();
+      switchCrmView('relation');
+      openRelationDetail(res.body.data.id);
     } else {
-      $('#crm-project-alert').textContent = res.body?.message || 'Failed to create project.';
+      $('#crm-project-alert').textContent = res.body?.message || 'Failed to create relation.';
       $('#crm-project-alert').style.display = '';
     }
   });
@@ -42359,31 +42518,32 @@ async function submitDsCreate() {
     }
   });
 
-  // ── Project selector change ───────────────────────────────────────────────
-  $('#crm-project-select')?.addEventListener('change', e => {
-    _crmProjectId = parseInt(e.target.value);
-    loadCrmPipeline();
-  });
-
   // ── Ribbon buttons ────────────────────────────────────────────────────────
-  $('#rb-crm-pipeline')?.addEventListener('click',  () => { activateTab('crm'); switchCrmView('pipeline'); });
+  function _crmRequireOpenRelation(then, tab = 'pipeline') {
+    if (_crmProjectId) {
+      switchCrmView('relation');
+      openRelationDetail(_crmProjectId).then(() => { _crmSwitchDetailTab(tab); then(); });
+    } else {
+      switchCrmView('relation');
+      toast('Open a relation first.', 'info');
+    }
+  }
+
+  $('#rb-crm-pipeline')?.addEventListener('click',  () => { activateTab('crm'); switchCrmView('relation'); });
   $('#rb-crm-contacts')?.addEventListener('click',  () => { activateTab('crm'); switchCrmView('contacts'); });
   $('#rb-crm-tasks')?.addEventListener('click',     () => { activateTab('crm'); switchCrmView('tasks'); });
-  $('#rb-crm-new-lead')?.addEventListener('click',  () => { activateTab('crm'); switchCrmView('pipeline'); setTimeout(() => _openNewLeadModal(), 100); });
+  $('#rb-crm-new-lead')?.addEventListener('click',  () => { activateTab('crm'); _crmRequireOpenRelation(() => _openNewLeadModal()); });
   $('#rb-crm-new-task')?.addEventListener('click',  () => { activateTab('crm'); switchCrmView('tasks');    setTimeout(() => _openTaskModal(), 100); });
-  $('#rb-crm-projects')?.addEventListener('click',  () => { activateTab('crm'); switchCrmView('pipeline'); _openProjectModal(); });
+  $('#rb-crm-projects')?.addEventListener('click',  () => { activateTab('crm'); _openProjectModal(); });
   $('#rb-crm-refresh')?.addEventListener('click',   () => {
-    if (_crmView === 'pipeline') loadCrmPipeline();
+    if (_crmView === 'overview')      loadCrmOverview();
+    else if (_crmView === 'relation') { if ($('#crm-relation-detail').style.display === 'flex') loadCrmPipeline(); else loadCrmRelationsView(); }
     else if (_crmView === 'contacts') loadCrmContacts();
     else if (_crmView === 'tasks')    loadCrmTasks();
   });
 
   // ── Subnav ────────────────────────────────────────────────────────────────
   $$('[data-crmsub]').forEach(btn => btn.addEventListener('click', () => switchCrmView(btn.dataset.crmsub)));
-
-  // ── New project shortcut buttons ──────────────────────────────────────────
-  $('#crm-new-project-btn')?.addEventListener('click',          () => _openProjectModal());
-  $('#crm-pipeline-first-project-btn')?.addEventListener('click', () => _openProjectModal());
 
   // ── New task from tasks view ──────────────────────────────────────────────
   $('#crm-tasks-new-btn')?.addEventListener('click', () => _openTaskModal());
@@ -42574,8 +42734,7 @@ async function submitDsCreate() {
   // Ribbon button
   $('#rb-crm-stages')?.addEventListener('click', () => {
     activateTab('crm');
-    switchCrmView('pipeline');
-    setTimeout(() => openStagesModal(), 100);
+    _crmRequireOpenRelation(() => openStagesModal());
   });
 
   // ── Stage Automations ─────────────────────────────────────────────────────
@@ -42726,10 +42885,7 @@ async function submitDsCreate() {
   let _crmCfProjectId     = null;   // project id for custom field modal
 
   async function loadCrmForms() {
-    // Sync project dropdown with pipeline project
-    await _syncFormsProjectSelect();
-
-    _crmFormsProjectId = Number($('#crm-forms-project-select')?.value) || null;
+    _crmFormsProjectId = _crmProjectId;
     if (!_crmFormsProjectId) {
       _showFormsEmpty();
       return;
@@ -42739,19 +42895,6 @@ async function submitDsCreate() {
     if (res.status !== 200) return;
     _crmForms = res.body?.data || [];
     _renderFormsList();
-  }
-
-  async function _syncFormsProjectSelect() {
-    const projects = await loadCrmProjects();
-    const sel = $('#crm-forms-project-select');
-    if (!sel) return;
-    sel.innerHTML = projects.map(p =>
-      `<option value="${p.id}"${p.id === _crmProjectId ? ' selected' : ''}>${escHtml(p.name)}</option>`
-    ).join('');
-    if (!_crmFormsProjectId && projects.length > 0) {
-      _crmFormsProjectId = projects[0].id;
-    }
-    if (_crmProjectId) sel.value = _crmProjectId;
   }
 
   function _renderFormsList() {
@@ -42880,11 +43023,6 @@ async function submitDsCreate() {
   });
 
   $('#crm-forms-new-btn')?.addEventListener('click', () => { _openNewFormModal(); });
-  $('#crm-forms-project-select')?.addEventListener('change', () => {
-    _crmFormsProjectId = Number($('#crm-forms-project-select').value);
-    _crmProjectId = _crmFormsProjectId;
-    loadCrmForms();
-  });
 
   // ── Form Builder ──────────────────────────────────────────────────────────
 
@@ -43237,9 +43375,10 @@ async function submitDsCreate() {
     }
   });
 
-  // Back to forms list
+  // Back to forms list (returns to the relation's Forms tab)
   $('#crm-builder-back-btn')?.addEventListener('click', () => {
-    switchCrmView('forms');
+    switchCrmView('relation');
+    openRelationDetail(_crmProjectId).then(() => _crmSwitchDetailTab('forms'));
   });
 
   // ── Custom Field Modal ────────────────────────────────────────────────────
@@ -43291,11 +43430,10 @@ async function submitDsCreate() {
   });
 
   // Ribbon buttons for forms
-  $('#rb-crm-forms')?.addEventListener('click',    () => { activateTab('crm'); switchCrmView('forms'); });
+  $('#rb-crm-forms')?.addEventListener('click',    () => { activateTab('crm'); _crmRequireOpenRelation(() => {}, 'forms'); });
   $('#rb-crm-new-form')?.addEventListener('click', () => {
     activateTab('crm');
-    switchCrmView('forms');
-    setTimeout(() => _openNewFormModal(), 80);
+    _crmRequireOpenRelation(() => setTimeout(() => _openNewFormModal(), 80), 'forms');
   });
 
   // ── Pipeline card context menu ───────────────────────────────────────────
