@@ -248,6 +248,11 @@ input,select,button,textarea { font-family:inherit; font-size:inherit; }
   letter-spacing:.04em; flex-shrink:0;
 }
 .ae-sample-var-desc { color:var(--text-muted); font-size:11px; flex:1; min-width:0; }
+.ae-sample-var-copy {
+  background:none; border:none; cursor:pointer; color:var(--text-muted);
+  font-size:11px; padding:3px 7px; border-radius:4px; flex-shrink:0; transition:background .12s,color .12s;
+}
+.ae-sample-var-copy:hover { background:rgba(245,158,11,.15); color:#f59e0b; }
 .ae-sample-json-label {
   font-size:10px; font-weight:700; letter-spacing:.05em; text-transform:uppercase;
   color:var(--text-muted); margin-bottom:6px;
@@ -498,23 +503,46 @@ input,select,button,textarea { font-family:inherit; font-size:inherit; }
 'use strict';
 
 // ── Constants ──────────────────────────────────────────────────────────────
-const TRIGGERS = {
-  'sale.created':'Sale Created','sale.voided':'Sale Voided','sale.refunded':'Sale Refunded',
-  'invoice.created':'Invoice Created','invoice.paid':'Invoice Paid',
-  'product.created':'Product Created','product.updated':'Product Updated',
-  'stock.updated':'Stock Updated','grn.created':'GRN Created',
-  'customer.created':'Customer Created','order.created':'Purchase Order Created',
-  'barcode.sheet.created':'Barcode Sheet Created',
-  'eod.withdraw':'Cash Withdrawal','eod.settled':'End-of-Day Settled to Bank',
-  'supplier.created':'Supplier Created',
-  'stock.audit.finalized':'Stock Audit Finalized',
-  'cheque.created':'Cheque Created','cheque.expired':'Cheque Expired / Overdue',
-  'bill.created':'Bill Created','bill.paid':'Bill Payment Settled',
-  'loan.created':'Loan Created','loan.installment.paid':'Loan Installment Paid',
-  'property.created':'Property Created',
-  'rental.created':'Rental Agreement Created','rental.paid':'Rental Payment Settled',
-  'manual':'Manual Trigger',
+// Mirrors Modules\AutomationEditor\app\Models\AutomationFlow::availableTriggerGroups()
+const TRIGGER_GROUPS = {
+  'Sales & Invoices': {
+    'sale.created':'Sale Created','sale.voided':'Sale Voided','sale.refunded':'Sale Refunded',
+    'invoice.created':'Invoice Created','invoice.paid':'Invoice Paid',
+  },
+  'Products & Stock': {
+    'product.created':'Product Created','product.updated':'Product Updated',
+    'stock.updated':'Stock Updated','barcode.sheet.created':'Barcode Sheet Created',
+    'stock.audit.finalized':'Stock Audit Finalized',
+  },
+  'Purchasing': {
+    'grn.created':'GRN Created','order.created':'Purchase Order Created',
+    'supplier.created':'Supplier Created','cheque.created':'Cheque Created',
+    'cheque.expired':'Cheque Expired / Overdue',
+  },
+  'Customers / CRM': {
+    'customer.created':'Customer Created','crm.lead.created':'Lead Created (in Relation)',
+    'crm.lead.stage_changed':'Lead Stage Changed (in Relation)',
+  },
+  'Cash & End of Day': {
+    'eod.withdraw':'Cash Withdrawal','eod.settled':'End-of-Day Settled to Bank',
+  },
+  'Finance — Bills': {
+    'bill.created':'Bill Created','bill.paid':'Bill Payment Settled',
+  },
+  'Finance — Loans': {
+    'loan.created':'Loan Created','loan.installment.paid':'Loan Installment Paid',
+  },
+  'Finance — Property & Rental': {
+    'property.created':'Property Created','rental.created':'Rental Agreement Created',
+    'rental.paid':'Rental Payment Settled',
+  },
+  'Manual': {
+    'manual':'Manual Trigger',
+  },
 };
+const TRIGGERS = Object.assign({}, ...Object.values(TRIGGER_GROUPS));
+// Trigger keys that fire per CRM Relation (Project) — needs a Relation picker.
+const RELATION_SCOPED_TRIGGERS = ['crm.lead.created', 'crm.lead.stage_changed'];
 const ACTIONS = {
   'send_email'       : 'Send Email',
   'send_webhook'     : 'Call Webhook',
@@ -691,6 +719,51 @@ const TRIGGER_SAMPLES = {
     sample: {
       event: 'customer.created',
       customer: { id: 22, name: 'John Silva', email: 'john@example.com', phone: '+94771234567', created_at: '2026-01-15T10:00:00Z' },
+    },
+  },
+  'crm.lead.created': {
+    desc: 'Fires when a new CRM lead is created inside a specific Relation (Project). Scope this flow to one Relation in the Trigger Settings panel.',
+    vars: [
+      { key: 'lead.id',         type: 'number', desc: 'Lead ID' },
+      { key: 'lead.name',       type: 'string', desc: 'Lead name' },
+      { key: 'lead.email',      type: 'string', desc: 'Email address' },
+      { key: 'lead.phone',      type: 'string', desc: 'Phone number' },
+      { key: 'lead.project_id', type: 'number', desc: 'Relation (Project) ID the lead belongs to' },
+      { key: 'lead.stage_id',   type: 'number', desc: 'Pipeline stage ID' },
+      { key: 'lead.stage_name', type: 'string', desc: 'Pipeline stage name' },
+      { key: 'lead.created_at', type: 'string', desc: 'ISO timestamp' },
+      { key: 'relation.id',     type: 'number', desc: 'Relation (Project) ID' },
+      { key: 'relation.name',   type: 'string', desc: 'Relation (Project) name' },
+    ],
+    sample: {
+      event: 'crm.lead.created',
+      lead: { id: 41, name: 'Nimal Perera', email: 'nimal@example.com', phone: '+94711234567', project_id: 3, stage_id: 7, stage_name: 'Qualified', created_at: '2026-01-15T10:00:00Z' },
+      relation: { id: 3, name: 'Relation_001' },
+    },
+  },
+  'crm.lead.stage_changed': {
+    desc: 'Fires when an existing CRM lead moves to a different pipeline stage (e.g. dragged to another column on the board) inside a specific Relation (Project). Scope this flow to one Relation in the Trigger Settings panel. Does not fire for the lead\'s initial stage on creation — use "Lead Created" for that.',
+    vars: [
+      { key: 'lead.id',         type: 'number', desc: 'Lead ID' },
+      { key: 'lead.name',       type: 'string', desc: 'Lead name' },
+      { key: 'lead.email',      type: 'string', desc: 'Email address' },
+      { key: 'lead.phone',      type: 'string', desc: 'Phone number' },
+      { key: 'lead.project_id', type: 'number', desc: 'Relation (Project) ID the lead belongs to' },
+      { key: 'lead.stage_id',   type: 'number', desc: 'Pipeline stage ID the lead just moved into' },
+      { key: 'lead.stage_name', type: 'string', desc: 'Pipeline stage name the lead just moved into' },
+      { key: 'from_stage.id',   type: 'number', desc: 'Stage ID the lead moved from' },
+      { key: 'from_stage.name', type: 'string', desc: 'Stage name the lead moved from' },
+      { key: 'to_stage.id',     type: 'number', desc: 'Stage ID the lead moved to (same as lead.stage_id)' },
+      { key: 'to_stage.name',   type: 'string', desc: 'Stage name the lead moved to (same as lead.stage_name)' },
+      { key: 'relation.id',     type: 'number', desc: 'Relation (Project) ID' },
+      { key: 'relation.name',   type: 'string', desc: 'Relation (Project) name' },
+    ],
+    sample: {
+      event: 'crm.lead.stage_changed',
+      lead: { id: 41, name: 'Nimal Perera', email: 'nimal@example.com', phone: '+94711234567', project_id: 3, stage_id: 8, stage_name: 'Contacted' },
+      from_stage: { id: 7, name: 'New' },
+      to_stage: { id: 8, name: 'Contacted' },
+      relation: { id: 3, name: 'Relation_001' },
     },
   },
   'order.created': {
@@ -946,6 +1019,14 @@ let flow = null;
 let _selectedNodeId = null;
 let _selectedConn   = null;   // { output_id, input_id, output_class, input_class }
 let _undo = [], _redo = [];
+let _relations = [];          // CRM Relations (Projects), for relation-scoped triggers
+
+function _triggerCategoryOf(triggerKey) {
+  for (const [cat, list] of Object.entries(TRIGGER_GROUPS)) {
+    if (triggerKey && Object.prototype.hasOwnProperty.call(list, triggerKey)) return cat;
+  }
+  return '';
+}
 
 // ── DOM helpers ────────────────────────────────────────────────────────────
 function $q(q, ctx) { return (ctx || document).querySelector(q); }
@@ -1102,13 +1183,30 @@ function _showInspectorNode(nodeId) {
 
 function _inspHtml(type, config, preset) {
   if (type === 'trigger') {
-    const opts = Object.entries(TRIGGERS).map(([k,v]) =>
-      `<option value="${k}"${config?.trigger === k ? ' selected' : ''}>${esc(v)}</option>`
+    const currentTrigger  = config?.trigger || '';
+    const currentCategory = _triggerCategoryOf(currentTrigger);
+    const catOpts = Object.keys(TRIGGER_GROUPS).map(g =>
+      `<option value="${esc(g)}"${g === currentCategory ? ' selected' : ''}>${esc(g)}</option>`
     ).join('');
-    const sampleBtn = config?.trigger
-      ? `<button class="ae-sample-link" data-sample-trigger="${esc(config.trigger)}"><i class="fa fa-eye"></i> View sample data</button>`
+    const trigOpts = currentCategory
+      ? Object.entries(TRIGGER_GROUPS[currentCategory]).map(([k,v]) =>
+          `<option value="${k}"${k === currentTrigger ? ' selected' : ''}>${esc(v)}</option>`
+        ).join('')
       : '';
-    return `<div class="ae-field"><label>Trigger Event</label><select id="fi-trigger"><option value="">— choose —</option>${opts}</select></div>${sampleBtn}`;
+    const relationScoped = RELATION_SCOPED_TRIGGERS.includes(currentTrigger);
+    const relationId     = config?.relation_id || '';
+    const relOpts = _relations.map(r =>
+      `<option value="${r.id}"${String(r.id) === String(relationId) ? ' selected' : ''}>${esc(r.name)}</option>`
+    ).join('');
+    const sampleBtn = currentTrigger
+      ? `<button class="ae-sample-link" data-sample-trigger="${esc(currentTrigger)}"><i class="fa fa-eye"></i> View sample data</button>`
+      : '';
+    return `
+      <div class="ae-field"><label>Trigger Category</label><select id="fi-trigger-cat"><option value="">— choose —</option>${catOpts}</select></div>
+      <div class="ae-field"><label>Trigger Event</label><select id="fi-trigger"${currentCategory ? '' : ' disabled'}><option value="">${currentCategory ? '— choose —' : '— choose category first —'}</option>${trigOpts}</select></div>
+      <div class="ae-field" id="fi-trigger-relation-field" style="display:${relationScoped ? '' : 'none'}"><label>Relation</label><select id="fi-trigger-relation"><option value="">— choose —</option>${relOpts}</select></div>
+      ${sampleBtn}
+    `;
   }
   if (type === 'condition') {
     const opOpts = Object.entries(COND_OPS).map(([k,v]) =>
@@ -1204,6 +1302,7 @@ function _showSampleModal(triggerKey) {
       <span class="ae-sample-var-key">{{${v.key}}}</span>
       <span class="ae-sample-var-type">${v.type}</span>
       <span class="ae-sample-var-desc">${v.desc}</span>
+      <button type="button" class="ae-sample-var-copy" data-copy-var="{{${esc(v.key)}}}" title="Copy variable"><i class="fa fa-copy"></i></button>
     </div>`).join('');
   $q('#ae-sample-json').innerHTML = _syntaxJson(info.sample);
   $q('#ae-sample-modal').style.display = 'flex';
@@ -1222,7 +1321,12 @@ function _applyInspector() {
   let newPreset = node.data.preset;
 
   if (type === 'trigger') {
-    newConfig = { trigger: $q('#fi-trigger')?.value };
+    const triggerVal = $q('#fi-trigger')?.value || '';
+    newConfig = { trigger: triggerVal };
+    if (RELATION_SCOPED_TRIGGERS.includes(triggerVal)) {
+      const relVal = $q('#fi-trigger-relation')?.value;
+      if (relVal) newConfig.relation_id = +relVal;
+    }
   } else if (type === 'condition') {
     newConfig = {
       label: $q('#fi-c-label')?.value,
@@ -1325,15 +1429,41 @@ $q('#ae-sample-modal').addEventListener('click', e => {
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && $q('#ae-sample-modal').style.display !== 'none') _hideSampleModal();
 });
+// Copy a {{var}} token to the clipboard
+$q('#ae-sample-vars').addEventListener('click', e => {
+  const btn = e.target.closest('[data-copy-var]');
+  if (!btn) return;
+  const text = btn.dataset.copyVar;
+  const copyPromise = window.electronAPI?.copyToClipboard
+    ? window.electronAPI.copyToClipboard(text)
+    : (navigator.clipboard?.writeText(text) ?? Promise.reject(new Error('Clipboard unavailable')));
+  copyPromise.then(() => toast(`Copied ${text}`)).catch(() => toast('Copy failed'));
+});
 // Delegate "view sample" button clicks from inspector (rendered dynamically)
 $q('#ae-insp-body').addEventListener('click', e => {
   const btn = e.target.closest('[data-sample-trigger]');
   if (btn) _showSampleModal(btn.dataset.sampleTrigger);
 });
-// Update sample button visibility when trigger select changes (before Apply)
+// Cascade the trigger inspector's category → trigger → relation selects (before Apply)
 $q('#ae-insp-body').addEventListener('change', e => {
+  if (e.target.id === 'fi-trigger-cat') {
+    const category = e.target.value;
+    const trigSel   = $q('#fi-trigger');
+    const relField  = $q('#fi-trigger-relation-field');
+    const opts = category
+      ? Object.entries(TRIGGER_GROUPS[category]).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join('')
+      : '';
+    trigSel.disabled  = !category;
+    trigSel.innerHTML = `<option value="">${category ? '— choose —' : '— choose category first —'}</option>${opts}`;
+    if (relField) relField.style.display = 'none';
+    const existing = $q('#ae-insp-body .ae-sample-link');
+    if (existing) existing.remove();
+    return;
+  }
+
   if (e.target.id !== 'fi-trigger') return;
   const val = e.target.value;
+
   const existing = $q('#ae-insp-body .ae-sample-link');
   if (existing) existing.remove();
   if (val) {
@@ -1342,6 +1472,19 @@ $q('#ae-insp-body').addEventListener('change', e => {
     btn.dataset.sampleTrigger = val;
     btn.innerHTML = '<i class="fa fa-eye"></i> View sample data';
     $q('#ae-insp-body').appendChild(btn);
+  }
+
+  const relField = $q('#fi-trigger-relation-field');
+  const relSel    = $q('#fi-trigger-relation');
+  if (relField && relSel) {
+    if (RELATION_SCOPED_TRIGGERS.includes(val)) {
+      relField.style.display = '';
+      relSel.innerHTML = '<option value="">— choose —</option>' +
+        _relations.map(r => `<option value="${r.id}">${esc(r.name)}</option>`).join('');
+    } else {
+      relField.style.display = 'none';
+      relSel.value = '';
+    }
   }
 });
 
@@ -1497,7 +1640,7 @@ async function _openRunLog() {
   body.innerHTML = '<div class="ae-runlog-empty"><i class="fa fa-spinner fa-spin"></i><div>Loading…</div></div>';
   try {
     const res  = await API.automationRuns(flow.id);
-    const runs = res?.data ?? [];
+    const runs = res?.body?.data ?? [];
     _renderRunLog(runs, body);
   } catch(e) {
     body.innerHTML = '<div class="ae-runlog-empty"><i class="fa fa-triangle-exclamation"></i><div>Failed to load runs</div></div>';
@@ -1645,6 +1788,11 @@ async function init() {
   const cfg = await window.electronAPI.getConfig?.() || {};
   if (cfg.dark_mode) document.documentElement.setAttribute('data-theme', 'dark');
 
+  try {
+    const relRes = await API.crmProjects();
+    _relations = relRes.status === 200 ? (relRes.body?.data || []) : [];
+  } catch { _relations = []; }
+
   flow = await window.electronAPI.getAutomationFlow();
   if (!flow) flow = { id: null, name: 'Untitled Flow', is_active: false, flow_data: {} };
 
@@ -1667,8 +1815,10 @@ async function init() {
   } else if (flow.trigger_type) {
     // Brand new flow — seed a trigger node at the canvas centre
     const rect = dfEl.getBoundingClientRect();
+    const triggerConfig = { trigger: flow.trigger_type };
+    if (flow.trigger_config?.relation_id) triggerConfig.relation_id = flow.trigger_config.relation_id;
     _addNode('trigger', rect.left + rect.width / 2, rect.top + rect.height / 2,
-             { trigger: flow.trigger_type }, null);
+             triggerConfig, null);
   }
 
   _updateZoomPct();

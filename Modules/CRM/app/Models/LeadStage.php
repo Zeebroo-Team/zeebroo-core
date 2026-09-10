@@ -38,11 +38,6 @@ class LeadStage extends Model
         return $this->hasMany(Lead::class, 'stage_id');
     }
 
-    public function automations(): HasMany
-    {
-        return $this->hasMany(LeadStageAutomation::class, 'stage_id')->orderBy('id');
-    }
-
     public function isTerminal(): bool
     {
         return $this->is_won || $this->is_lost;

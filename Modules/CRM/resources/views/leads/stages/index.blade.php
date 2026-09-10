@@ -53,10 +53,6 @@
                     </div>
                 </div>
                 <div class="pcat-card__actions">
-                    <a href="{{ route('crm.projects.stages.automations.index', [$project, $s]) }}"
-                       style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;font-size:12px;font-weight:700;border-radius:8px;border:1px solid var(--border);color:var(--text);text-decoration:none;">
-                        <i class="fa fa-bolt"></i> Automations
-                    </a>
                     <button type="button"
                             style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;font-size:12px;font-weight:700;border-radius:8px;border:1px solid color-mix(in srgb,var(--primary) 45%,var(--border));background:color-mix(in srgb,var(--primary) 12%,transparent);color:var(--text);cursor:pointer;"
                             onclick="stgOpenEdit({{ $s->id }},'{{ addslashes($s->name) }}','{{ $s->color }}',{{ $s->is_won ? 'true' : 'false' }},{{ $s->is_lost ? 'true' : 'false' }})">

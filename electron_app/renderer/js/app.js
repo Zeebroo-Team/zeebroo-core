@@ -42156,11 +42156,15 @@ async function submitDsCreate() {
   $('#crm-relation-stages-btn')?.addEventListener('click',   () => openStagesModal());
 
   // ── Pipeline / Kanban ────────────────────────────────────────────────────
-  async function loadCrmPipeline(projectId = _crmProjectId) {
+  async function loadCrmPipeline(projectId = _crmProjectId, { silent = false } = {}) {
     const board = $('#crm-pipeline-board');
     if (!board || !projectId) return;
 
-    board.innerHTML = '<span style="color:var(--text-muted);padding:20px;font-size:12px">Loading…</span>';
+    // Silent = background resync after an optimistic drag-and-drop move: the
+    // card already moved in the DOM, so don't blank the board and re-flash it.
+    if (!silent) {
+      board.innerHTML = '<span style="color:var(--text-muted);padding:20px;font-size:12px">Loading…</span>';
+    }
 
     const res = await API.crmPipeline(projectId);
     if (res.status !== 200) {
@@ -42185,8 +42189,19 @@ async function submitDsCreate() {
     if (btn) { btn.disabled = !hasDefault; btn.title = title; }
   }
 
-  let _dragLeadId  = null;
+  let _dragLeadId    = null;
   let _dragFromStage = null;
+  let _dragCardEl    = null;
+
+  // Keeps a column's lead-count badge and "No leads" empty state in sync after
+  // an optimistic drag-and-drop move, without a full board re-render.
+  function _crmAdjustColCount(stageId, delta, bodyEl) {
+    const countEl = $('#crm-pipeline-board')?.querySelector(`.crm-col[data-stage-id="${stageId}"] .crm-col-count`);
+    if (countEl) countEl.textContent = String(Math.max(0, (parseInt(countEl.textContent) || 0) + delta));
+    if (bodyEl && !bodyEl.querySelector('.crm-card') && !bodyEl.querySelector('.crm-col-empty')) {
+      bodyEl.insertAdjacentHTML('beforeend', '<p class="crm-col-empty">No leads</p>');
+    }
+  }
 
   function _renderBoard() {
     const board = $('#crm-pipeline-board');
@@ -42231,6 +42246,7 @@ async function submitDsCreate() {
       card.addEventListener('dragstart', e => {
         _dragLeadId    = parseInt(card.dataset.leadId);
         _dragFromStage = parseInt(card.dataset.stageId);
+        _dragCardEl    = card;
         e.dataTransfer.effectAllowed = 'move';
         e.dataTransfer.setData('text/plain', _dragLeadId);
         // Defer so the ghost renders before opacity collapses
@@ -42255,16 +42271,40 @@ async function submitDsCreate() {
       col.addEventListener('drop', async e => {
         e.preventDefault();
         col.classList.remove('crm-col-body--dragover');
-        const toStage = parseInt(col.dataset.dropStage);
-        if (!_dragLeadId || toStage === _dragFromStage) return;
-        const res = await API.crmMoveLead(_dragLeadId, toStage);
+        const toStage   = parseInt(col.dataset.dropStage);
+        const leadId    = _dragLeadId;
+        const fromStage = _dragFromStage;
+        const cardEl    = _dragCardEl;
+        _dragLeadId = _dragFromStage = _dragCardEl = null;
+        if (!leadId || toStage === fromStage || !cardEl) return;
+
+        // Move the card in the DOM immediately — don't wait on the network
+        // round trip (which now also runs the stage's automation flow, e.g. an
+        // outbound email, synchronously server-side and can take a while).
+        // Waiting for that before moving the card read as "did my drop even
+        // register?" to the user, so update optimistically and only revert
+        // if the server rejects the move.
+        const fromBody = board.querySelector(`.crm-col-body[data-drop-stage="${fromStage}"]`);
+        col.querySelector('.crm-col-empty')?.remove();
+        col.appendChild(cardEl);
+        cardEl.dataset.stageId = toStage;
+        _crmAdjustColCount(fromStage, -1, fromBody);
+        _crmAdjustColCount(toStage, 1, col);
+
+        const res = await API.crmMoveLead(leadId, toStage);
         if (res.status === 200) {
-          loadCrmPipeline();
+          // Resync in the background (value totals, won/lost badges, etc.)
+          // without blanking the board the optimistic move already updated.
+          loadCrmPipeline(_crmProjectId, { silent: true });
         } else {
+          // Revert: move the card back to its original column.
+          fromBody?.querySelector('.crm-col-empty')?.remove();
+          fromBody?.appendChild(cardEl);
+          cardEl.dataset.stageId = fromStage;
+          _crmAdjustColCount(toStage, -1, col);
+          _crmAdjustColCount(fromStage, 1, fromBody);
           toast(res.body?.message || 'Failed to move lead.', 'error');
         }
-        _dragLeadId    = null;
-        _dragFromStage = null;
       });
     });
 
@@ -42771,7 +42811,6 @@ async function submitDsCreate() {
         <span class="crm-stage-swatch" style="background:${escHtml(s.color || '#64748b')}"></span>
         <span class="crm-stage-name">${escHtml(s.name)}</span>
         ${wonTag}${lostTag}${countBadge}
-        <button class="crm-card-btn" data-auto-stage="${s.id}" data-auto-stage-name="${escHtml(s.name)}" title="Automations" style="flex-shrink:0;color:#7c3aed"><i class="fa fa-bolt"></i></button>
         <button class="crm-card-btn" data-edit-stage="${s.id}" title="Edit stage" style="flex-shrink:0"><i class="fa fa-pen"></i></button>
         <button class="crm-card-btn" data-del-stage="${s.id}" title="Delete stage" style="flex-shrink:0;color:#ef4444"><i class="fa fa-trash"></i></button>
       </div>`;
@@ -42819,13 +42858,6 @@ async function submitDsCreate() {
         $('#crm-stage-edit-alert').style.display = 'none';
         $('#crm-stage-edit-modal').style.display = 'flex';
         $('#crm-stage-edit-name').focus();
-      });
-    });
-
-    // Automations
-    list.querySelectorAll('[data-auto-stage]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        openAutoModal(parseInt(btn.dataset.autoStage), btn.dataset.autoStageName || 'Stage');
       });
     });
 
@@ -42914,143 +42946,6 @@ async function submitDsCreate() {
     activateTab('crm');
     _crmRequireOpenRelation(() => openStagesModal());
   });
-
-  // ── Stage Automations ─────────────────────────────────────────────────────
-
-  let _autoStageId   = null;
-  let _autoStageName = '';
-  let _autoEditId    = null;     // null = create mode, number = edit mode
-
-  async function openAutoModal(stageId, stageName) {
-    _autoStageId   = stageId;
-    _autoStageName = stageName;
-    _autoEditId    = null;
-    $('#crm-auto-modal-title').textContent = `Automations — ${stageName}`;
-    _autoResetForm();
-    $('#crm-auto-modal').style.display = 'flex';
-    await _loadAutoList();
-  }
-
-  function _autoResetForm() {
-    _autoEditId = null;
-    $('#crm-auto-edit-id').value        = '';
-    $('#crm-auto-recipient').value      = 'lead';
-    $('#crm-auto-custom-email').value   = '';
-    $('#crm-auto-subject').value        = '';
-    $('#crm-auto-body').value           = '';
-    $('#crm-auto-active').checked       = true;
-    $('#crm-auto-form-alert').style.display = 'none';
-    $('#crm-auto-form-heading').textContent = 'Add Automation';
-    $('#crm-auto-save-label').textContent   = 'Add Automation';
-    $('#crm-auto-cancel-edit').style.display = 'none';
-    _autoToggleCustomEmail();
-  }
-
-  function _autoToggleCustomEmail() {
-    const isCustom = $('#crm-auto-recipient').value === 'custom';
-    $('#crm-auto-custom-email-wrap').style.display = isCustom ? '' : 'none';
-  }
-
-  $('#crm-auto-recipient')?.addEventListener('change', _autoToggleCustomEmail);
-
-  async function _loadAutoList() {
-    const list = $('#crm-auto-list');
-    list.innerHTML = '<span style="font-size:12px;color:var(--text-muted)">Loading…</span>';
-    const res = await API.crmAutomations(_crmProjectId, _autoStageId);
-    if (res.status !== 200) { list.innerHTML = '<span style="font-size:12px;color:var(--text-muted)">Failed to load.</span>'; return; }
-    const autos = res.body?.data || [];
-    if (autos.length === 0) {
-      list.innerHTML = '<p style="font-size:12px;color:var(--text-muted);margin:0">No automations yet — add one below.</p>';
-      return;
-    }
-    list.innerHTML = autos.map(a => `
-      <div class="crm-auto-card${a.is_active ? '' : ' crm-auto-card--inactive'}" data-auto-id="${a.id}">
-        <span class="crm-auto-indicator crm-auto-indicator--${a.is_active ? 'on' : 'off'}" title="${a.is_active ? 'Active' : 'Inactive'}"></span>
-        <div class="crm-auto-info">
-          <div class="crm-auto-subject">${escHtml(a.subject)}</div>
-          <div class="crm-auto-meta"><i class="fa fa-paper-plane" style="margin-right:3px;opacity:.7"></i>${escHtml(a.recipient_label)}</div>
-        </div>
-        <div class="crm-auto-actions">
-          <button class="crm-card-btn crm-auto-edit-btn" data-auto-id="${a.id}" title="Edit"><i class="fa fa-pen"></i></button>
-          <button class="crm-card-btn crm-auto-del-btn" data-auto-id="${a.id}" title="Delete" style="color:#ef4444"><i class="fa fa-trash"></i></button>
-        </div>
-      </div>`).join('');
-
-    list.querySelectorAll('.crm-auto-edit-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const a = autos.find(x => x.id === parseInt(btn.dataset.autoId));
-        if (!a) return;
-        _autoEditId = a.id;
-        $('#crm-auto-edit-id').value      = a.id;
-        $('#crm-auto-recipient').value    = a.recipient_type;
-        $('#crm-auto-custom-email').value = a.recipient_email || '';
-        $('#crm-auto-subject').value      = a.subject;
-        $('#crm-auto-body').value         = a.body;
-        $('#crm-auto-active').checked     = a.is_active;
-        $('#crm-auto-form-heading').textContent = 'Edit Automation';
-        $('#crm-auto-save-label').textContent   = 'Save Changes';
-        $('#crm-auto-cancel-edit').style.display = '';
-        $('#crm-auto-form-alert').style.display = 'none';
-        _autoToggleCustomEmail();
-        $('#crm-auto-subject').focus();
-        // Scroll form into view
-        $('#crm-auto-form-heading')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      });
-    });
-
-    list.querySelectorAll('.crm-auto-del-btn').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        if (!confirm('Delete this automation?')) return;
-        const res = await API.crmDeleteAutomation(_crmProjectId, _autoStageId, parseInt(btn.dataset.autoId));
-        if (res.status === 200) { toast('Automation deleted.', 'success'); _autoResetForm(); await _loadAutoList(); }
-        else toast(res.body?.message || 'Failed to delete.', 'error');
-      });
-    });
-  }
-
-  $('#crm-auto-save-btn')?.addEventListener('click', async () => {
-    const subject = $('#crm-auto-subject').value.trim();
-    const body    = $('#crm-auto-body').value.trim();
-    if (!subject) { _autoShowAlert('Subject is required.'); return; }
-    if (!body)    { _autoShowAlert('Message body is required.'); return; }
-
-    const payload = {
-      recipient_type:  $('#crm-auto-recipient').value,
-      recipient_email: $('#crm-auto-recipient').value === 'custom' ? $('#crm-auto-custom-email').value.trim() : null,
-      subject,
-      body,
-      is_active: $('#crm-auto-active').checked,
-    };
-
-    const btn = $('#crm-auto-save-btn');
-    btn.disabled = true;
-    const res = _autoEditId
-      ? await API.crmUpdateAutomation(_crmProjectId, _autoStageId, _autoEditId, payload)
-      : await API.crmCreateAutomation(_crmProjectId, _autoStageId, payload);
-    btn.disabled = false;
-
-    if (res.status === 200 || res.status === 201) {
-      toast(_autoEditId ? 'Automation updated.' : 'Automation added.', 'success');
-      _autoResetForm();
-      await _loadAutoList();
-    } else {
-      const msg = res.body?.errors
-        ? Object.values(res.body.errors).flat().join(' ')
-        : (res.body?.message || 'Failed to save automation.');
-      _autoShowAlert(msg);
-    }
-  });
-
-  function _autoShowAlert(msg) {
-    const el = $('#crm-auto-form-alert');
-    el.textContent = msg;
-    el.style.display = '';
-  }
-
-  $('#crm-auto-cancel-edit')?.addEventListener('click', () => _autoResetForm());
-  $('#crm-auto-modal-close')?.addEventListener('click',  () => { $('#crm-auto-modal').style.display = 'none'; });
-  $('#crm-auto-modal-cancel')?.addEventListener('click', () => { $('#crm-auto-modal').style.display = 'none'; });
-  $('#crm-auto-modal')?.addEventListener('click', e => { if (e.target === $('#crm-auto-modal')) $('#crm-auto-modal').style.display = 'none'; });
 
   // ── Forms ─────────────────────────────────────────────────────────────────
 
@@ -43793,6 +43688,9 @@ async function submitDsCreate() {
 (function () {
   let _flows     = [];
   let _triggers  = {};
+  let _triggerGroups = {};
+  let _relationScopedTriggers = [];
+  let _relations = null; // lazy-loaded CRM relations (projects), cached
   let _selected  = null;
 
   async function loadAutomations() {
@@ -43803,8 +43701,10 @@ async function submitDsCreate() {
     const res = await API.automations();
     if (empty) { empty.innerHTML = '<i class="fa fa-bolt" style="font-size:40px;margin-bottom:12px;display:block;color:#f59e0b"></i><div style="font-size:14px;font-weight:600;margin-bottom:6px">No automation flows yet</div><div style="font-size:12px">Click <strong>New Flow</strong> in the ribbon to create your first automation.</div>'; }
     if (res.status !== 200) return;
-    _flows    = res.body?.data || [];
-    _triggers = res.body?.triggers || {};
+    _flows                 = res.body?.data || [];
+    _triggers              = res.body?.triggers || {};
+    _triggerGroups         = res.body?.trigger_groups || {};
+    _relationScopedTriggers = res.body?.relation_scoped_triggers || [];
     _renderGrid();
     _populateTriggerSelect();
   }
@@ -43824,7 +43724,12 @@ async function submitDsCreate() {
     empty.style.display = 'none';
 
     grid.innerHTML = list.map(f => {
-      const trigLabel = _triggers[f.trigger_type] || f.trigger_type || '—';
+      let trigLabel = _triggers[f.trigger_type] || f.trigger_type || '—';
+      const relationId = f.trigger_config?.relation_id;
+      if (relationId && _relations) {
+        const rel = _relations.find(r => +r.id === +relationId);
+        if (rel) trigLabel += ` · ${rel.name}`;
+      }
       const active    = f.is_active;
       const sel       = _selected === f.id ? ' auto-card--selected' : '';
       return `<div class="auto-card${sel}" data-id="${f.id}">
@@ -43852,10 +43757,61 @@ async function submitDsCreate() {
   }
 
   function _populateTriggerSelect() {
-    const sel = $('#auto-new-trigger');
-    if (!sel) return;
-    sel.innerHTML = '<option value="">— choose a trigger —</option>' +
-      Object.entries(_triggers).map(([k, v]) => `<option value="${k}">${escHtml(v)}</option>`).join('');
+    const catSel = $('#auto-new-category');
+    const trigSel = $('#auto-new-trigger');
+    if (!catSel || !trigSel) return;
+    catSel.innerHTML = '<option value="">— choose a category —</option>' +
+      Object.keys(_triggerGroups).map(g => `<option value="${escHtml(g)}">${escHtml(g)}</option>`).join('');
+    trigSel.disabled = true;
+    trigSel.innerHTML = '<option value="">— choose a category first —</option>';
+  }
+
+  function _populateTriggerOptionsForCategory(category) {
+    const trigSel = $('#auto-new-trigger');
+    if (!trigSel) return;
+    const triggers = _triggerGroups[category] || {};
+    if (!category) {
+      trigSel.disabled = true;
+      trigSel.innerHTML = '<option value="">— choose a category first —</option>';
+      return;
+    }
+    trigSel.disabled = false;
+    trigSel.innerHTML = '<option value="">— choose a trigger —</option>' +
+      Object.entries(triggers).map(([k, v]) => `<option value="${k}">${escHtml(v)}</option>`).join('');
+  }
+
+  $('#auto-new-category')?.addEventListener('change', e => {
+    _populateTriggerOptionsForCategory(e.target.value);
+    _toggleRelationField('');
+  });
+
+  $('#auto-new-trigger')?.addEventListener('change', e => {
+    _toggleRelationField(e.target.value);
+  });
+
+  async function _toggleRelationField(triggerKey) {
+    const field = $('#auto-new-relation-field');
+    const sel   = $('#auto-new-relation');
+    if (!field || !sel) return;
+
+    if (!_relationScopedTriggers.includes(triggerKey)) {
+      field.style.display = 'none';
+      sel.value = '';
+      return;
+    }
+
+    field.style.display = '';
+    sel.disabled = true;
+    sel.innerHTML = '<option value="">Loading relations…</option>';
+
+    if (_relations === null) {
+      const res = await API.crmProjects();
+      _relations = res.status === 200 ? (res.body?.data || []) : [];
+    }
+
+    sel.disabled = false;
+    sel.innerHTML = '<option value="">— choose a relation —</option>' +
+      _relations.map(r => `<option value="${r.id}">${escHtml(r.name)}</option>`).join('');
   }
 
   function _openEditor() {
@@ -43873,17 +43829,23 @@ async function submitDsCreate() {
     $('#auto-new-alert').style.display = 'none';
 
     // Open modal immediately so the user sees something right away
-    const sel = $('#auto-new-trigger');
-    if (sel) sel.innerHTML = '<option value="">Loading triggers…</option>';
+    const catSel = $('#auto-new-category');
+    const trigSel = $('#auto-new-trigger');
+    if (catSel) catSel.innerHTML = '<option value="">Loading categories…</option>';
+    if (trigSel) { trigSel.disabled = true; trigSel.innerHTML = '<option value="">— choose a category first —</option>'; }
+    $('#auto-new-relation-field').style.display = 'none';
+    $('#auto-new-relation').value = '';
     $('#auto-new-modal').style.display = 'flex';
     setTimeout(() => $('#auto-new-name')?.focus(), 50);
 
     // Fetch triggers from API if not yet loaded (user may not have visited the automations tab yet)
-    if (!Object.keys(_triggers).length) {
+    if (!Object.keys(_triggerGroups).length) {
       const res = await API.automations();
       if (res.status === 200) {
         if (!_flows.length) _flows = res.body?.data || [];
-        _triggers = res.body?.triggers || {};
+        _triggers               = res.body?.triggers || {};
+        _triggerGroups          = res.body?.trigger_groups || {};
+        _relationScopedTriggers = res.body?.relation_scoped_triggers || [];
       }
     }
 
@@ -43898,13 +43860,18 @@ async function submitDsCreate() {
   $('#auto-new-save').addEventListener('click', async () => {
     const alertEl = $('#auto-new-alert');
     alertEl.style.display = 'none';
-    const name    = $('#auto-new-name').value.trim();
-    const desc    = $('#auto-new-desc').value.trim();
-    const trigger = $('#auto-new-trigger').value;
+    const name       = $('#auto-new-name').value.trim();
+    const desc       = $('#auto-new-desc').value.trim();
+    const trigger    = $('#auto-new-trigger').value;
+    const relationId = $('#auto-new-relation').value;
     if (!name) { alertEl.textContent = 'Flow name is required.'; alertEl.style.display = ''; return; }
+    if (_relationScopedTriggers.includes(trigger) && !relationId) {
+      alertEl.textContent = 'Please choose a relation for this trigger.'; alertEl.style.display = ''; return;
+    }
+    const triggerConfig = relationId ? { relation_id: +relationId } : null;
     const btn = $('#auto-new-save');
     btn.disabled = true;
-    const res = await API.automationCreate({ name, description: desc || null, trigger_type: trigger || null });
+    const res = await API.automationCreate({ name, description: desc || null, trigger_type: trigger || null, trigger_config: triggerConfig });
     btn.disabled = false;
     if (res.status === 201) {
       _flows.unshift(res.body.data);

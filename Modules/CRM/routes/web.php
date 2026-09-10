@@ -7,7 +7,6 @@ use Modules\CRM\Http\Controllers\CrmImageController;
 use Modules\CRM\Http\Controllers\LeadController;
 use Modules\CRM\Http\Controllers\LeadCustomFieldController;
 use Modules\CRM\Http\Controllers\LeadFormController;
-use Modules\CRM\Http\Controllers\LeadStageAutomationController;
 use Modules\CRM\Http\Controllers\LeadStageController;
 use Modules\CRM\Http\Controllers\ProjectController;
 use Modules\CRM\Http\Controllers\PublicLeadFormController;
@@ -32,11 +31,6 @@ Route::middleware(['web', 'auth', 'verified'])->group(function () {
     Route::post('/crm/projects/{project}/stages/reorder',     [LeadStageController::class, 'reorder'])->name('crm.projects.stages.reorder');
     Route::put('/crm/projects/{project}/stages/{stage}',      [LeadStageController::class, 'update'] )->name('crm.projects.stages.update');
     Route::delete('/crm/projects/{project}/stages/{stage}',   [LeadStageController::class, 'destroy'])->name('crm.projects.stages.destroy');
-
-    Route::get('/crm/projects/{project}/stages/{stage}/automations',                  [LeadStageAutomationController::class, 'index']  )->name('crm.projects.stages.automations.index');
-    Route::post('/crm/projects/{project}/stages/{stage}/automations',                 [LeadStageAutomationController::class, 'store']  )->name('crm.projects.stages.automations.store');
-    Route::put('/crm/projects/{project}/stages/{stage}/automations/{automation}',     [LeadStageAutomationController::class, 'update'] )->name('crm.projects.stages.automations.update');
-    Route::delete('/crm/projects/{project}/stages/{stage}/automations/{automation}',  [LeadStageAutomationController::class, 'destroy'])->name('crm.projects.stages.automations.destroy');
 
     Route::get('/crm/projects/{project}/custom-fields',                 [LeadCustomFieldController::class, 'index']  )->name('crm.projects.custom-fields.index');
     Route::post('/crm/projects/{project}/custom-fields',                [LeadCustomFieldController::class, 'store']  )->name('crm.projects.custom-fields.store');

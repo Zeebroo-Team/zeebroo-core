@@ -29,8 +29,10 @@ class AutomationFlowApiController extends Controller
             ->map(fn ($f) => $this->format($f));
 
         return response()->json([
-            'data'     => $flows,
-            'triggers' => AutomationFlow::availableTriggers(),
+            'data'                     => $flows,
+            'triggers'                 => AutomationFlow::availableTriggers(),
+            'trigger_groups'           => AutomationFlow::availableTriggerGroups(),
+            'relation_scoped_triggers' => AutomationFlow::relationScopedTriggers(),
         ]);
     }
 
@@ -39,20 +41,22 @@ class AutomationFlowApiController extends Controller
         $business = $this->businessOrAbort($request);
 
         $validated = $request->validate([
-            'name'         => 'required|string|max:120',
-            'description'  => 'nullable|string|max:500',
-            'trigger_type' => 'nullable|string|max:60',
-            'flow_data'    => 'nullable|array',
-            'is_active'    => 'boolean',
+            'name'           => 'required|string|max:120',
+            'description'    => 'nullable|string|max:500',
+            'trigger_type'   => 'nullable|string|max:60',
+            'trigger_config' => 'nullable|array',
+            'flow_data'      => 'nullable|array',
+            'is_active'      => 'boolean',
         ]);
 
         $flow = AutomationFlow::create([
-            'business_id'  => $business->id,
-            'name'         => $validated['name'],
-            'description'  => $validated['description'] ?? null,
-            'trigger_type' => $validated['trigger_type'] ?? null,
-            'flow_data'    => $validated['flow_data'] ?? ['nodes' => [], 'edges' => []],
-            'is_active'    => $validated['is_active'] ?? false,
+            'business_id'    => $business->id,
+            'name'           => $validated['name'],
+            'description'    => $validated['description'] ?? null,
+            'trigger_type'   => $validated['trigger_type'] ?? null,
+            'trigger_config' => $validated['trigger_config'] ?? null,
+            'flow_data'      => $validated['flow_data'] ?? ['nodes' => [], 'edges' => []],
+            'is_active'      => $validated['is_active'] ?? false,
         ]);
 
         return response()->json(['data' => $this->format($flow)], 201);
@@ -72,21 +76,26 @@ class AutomationFlowApiController extends Controller
         $flow = AutomationFlow::where('business_id', $business->id)->where('id', $id)->firstOrFail();
 
         $validated = $request->validate([
-            'name'         => 'sometimes|string|max:120',
-            'description'  => 'nullable|string|max:500',
-            'trigger_type' => 'nullable|string|max:60',
-            'flow_data'    => 'nullable|array',
-            'is_active'    => 'sometimes|boolean',
+            'name'           => 'sometimes|string|max:120',
+            'description'    => 'nullable|string|max:500',
+            'trigger_type'   => 'nullable|string|max:60',
+            'trigger_config' => 'nullable|array',
+            'flow_data'      => 'nullable|array',
+            'is_active'      => 'sometimes|boolean',
         ]);
 
-        // Keep trigger_type in sync with what the trigger node has in the saved flow
+        // Keep trigger_type/trigger_config in sync with what the trigger node has in the saved flow
         if (isset($validated['flow_data'])) {
             $nodes = $validated['flow_data']['drawflow']['drawflow']['Home']['data'] ?? [];
             foreach ($nodes as $node) {
                 if (($node['data']['type'] ?? '') === 'trigger') {
-                    $t = $node['data']['config']['trigger'] ?? null;
+                    $config = $node['data']['config'] ?? [];
+                    $t = $config['trigger'] ?? null;
                     if ($t) {
-                        $validated['trigger_type'] = $t;
+                        $validated['trigger_type']   = $t;
+                        $validated['trigger_config'] = isset($config['relation_id'])
+                            ? ['relation_id' => $config['relation_id']]
+                            : null;
                     }
                     break;
                 }
@@ -186,8 +195,9 @@ class AutomationFlowApiController extends Controller
             'id'           => $f->id,
             'name'         => $f->name,
             'description'  => $f->description,
-            'trigger_type' => $f->trigger_type,
-            'is_active'    => $f->is_active,
+            'trigger_type'   => $f->trigger_type,
+            'trigger_config' => $f->trigger_config,
+            'is_active'      => $f->is_active,
             'run_count'    => $f->run_count,
             'last_run_at'  => $f->last_run_at?->toDateTimeString(),
             'updated_at'   => $f->updated_at?->toDateTimeString(),

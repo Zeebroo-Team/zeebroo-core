@@ -104,18 +104,6 @@
 .crm-stage-tag{font-size:10px;font-weight:700;border-radius:999px;padding:1px 7px;flex-shrink:0}
 .crm-stage-tag--won{background:#d1fae5;color:#065f46}
 .crm-stage-tag--lost{background:#fee2e2;color:#991b1b}
-/* CRM Automations */
-.crm-auto-card{border:1px solid var(--border,#e5e7eb);border-radius:9px;padding:10px 12px;display:flex;align-items:flex-start;gap:10px}
-.crm-auto-card--inactive{opacity:.55}
-.crm-auto-indicator{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:4px}
-.crm-auto-indicator--on{background:#10b981}
-.crm-auto-indicator--off{background:#d1d5db}
-.crm-auto-info{flex:1;min-width:0}
-.crm-auto-subject{font-size:12px;font-weight:700;color:var(--text,#111827);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.crm-auto-meta{font-size:11px;color:var(--text-muted,#6b7280);margin-top:2px}
-.crm-auto-actions{display:flex;gap:4px;flex-shrink:0}
-.crm-merge-help{font-size:11px;color:var(--text-muted,#6b7280);background:color-mix(in srgb,var(--border,#e5e7eb) 40%,transparent);border:1px solid var(--border,#e5e7eb);border-radius:7px;padding:7px 10px;line-height:1.7}
-.crm-merge-help code{background:var(--card,#fff);border:1px solid var(--border,#e5e7eb);border-radius:4px;padding:1px 4px;font-size:10px;font-family:monospace}
 /* CRM Forms list */
 .crm-form-card{border:1px solid var(--border,#e5e7eb);border-radius:10px;background:var(--card,#fff);padding:12px 14px;display:flex;align-items:center;gap:12px}
 .crm-form-icon{width:36px;height:36px;border-radius:8px;background:color-mix(in srgb,#7c3aed 14%,transparent);display:flex;align-items:center;justify-content:center;color:#7c3aed;font-size:16px;flex-shrink:0}
@@ -638,7 +626,7 @@
         <div class="sb-nav-item" data-tab="rst-pos"><i class="fa fa-cash-register"></i><span>RST POS</span></div>
         <div class="sb-nav-item has-sub" data-tab="mail"><i class="fa fa-envelope"></i><span>Mail</span><i class="fa fa-chevron-right sb-nav-chevron"></i></div>
         <div class="sb-nav-item has-sub" data-tab="crm"><i class="fa fa-handshake"></i><span>CRM</span><i class="fa fa-chevron-right sb-nav-chevron"></i></div>
-        <div class="sb-nav-item" data-tab="automations"><i class="fa fa-bolt"></i><span>Automations</span></div>
+        <div class="sb-nav-item" data-tab="automations" style="display:none"><i class="fa fa-bolt"></i><span>Automations</span></div>
         <div class="sb-nav-item has-sub" data-tab="projects"><i class="fa fa-diagram-project"></i><span>Projects</span><i class="fa fa-chevron-right sb-nav-chevron"></i></div>
         <div class="sb-nav-item" data-tab="event-mgmt" title="Event"><i class="fa fa-tag"></i><span>Event</span></div>
       </nav>
@@ -668,7 +656,7 @@
         <div class="ribbon-tab" data-tab="rst-pos">Restaurant POS</div>
         <div class="ribbon-tab" data-tab="mail">Mail</div>
         <div class="ribbon-tab" data-tab="crm">CRM</div>
-        <div class="ribbon-tab" data-tab="automations">Automations</div>
+        <div class="ribbon-tab" data-tab="automations" style="display:none">Automations</div>
         <div class="ribbon-tab" data-tab="projects">Projects</div>
         <div class="ribbon-tab" data-tab="event-mgmt">Event</div>
       </div>
@@ -9525,78 +9513,6 @@
     </div>
   </div>
 
-  <!-- ── CRM: Stage Automations Modal ── -->
-  <div class="modal-overlay" id="crm-auto-modal" style="display:none;z-index:1200">
-    <div class="po-aim-shell" style="width:580px;max-height:88vh;display:flex;flex-direction:column">
-      <div class="po-aim-header">
-        <i class="fa fa-bolt" style="color:#7c3aed"></i>
-        <span id="crm-auto-modal-title">Stage Automations</span>
-        <button class="psm-close" id="crm-auto-modal-close"><i class="fa fa-xmark"></i></button>
-      </div>
-
-      <div class="po-aim-body" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:14px">
-        <p style="font-size:12px;color:var(--text-muted);margin:0">
-          Send an email automatically whenever a lead enters this stage.
-        </p>
-
-        <!-- Existing automations list -->
-        <div id="crm-auto-list" style="display:flex;flex-direction:column;gap:8px">
-          <span style="font-size:12px;color:var(--text-muted)">Loading…</span>
-        </div>
-
-        <!-- Add / Edit form -->
-        <div style="border-top:1px solid var(--border);padding-top:14px">
-          <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px" id="crm-auto-form-heading">Add Automation</div>
-          <div id="crm-auto-form-alert" class="svc-form-alert" style="display:none;margin-bottom:8px"></div>
-          <input type="hidden" id="crm-auto-edit-id">
-
-          <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-bottom:10px">
-            <div class="po-field" style="flex:1;min-width:160px">
-              <label class="po-field-label">Send to <span class="po-required">*</span></label>
-              <select id="crm-auto-recipient" class="po-field-input" style="appearance:auto">
-                <option value="lead">Lead's email</option>
-                <option value="assigned_user">Assigned team member</option>
-                <option value="custom">Custom email address</option>
-              </select>
-            </div>
-            <div class="po-field" id="crm-auto-custom-email-wrap" style="flex:1;min-width:160px;display:none">
-              <label class="po-field-label">Custom email</label>
-              <input type="email" id="crm-auto-custom-email" class="po-field-input" placeholder="someone@example.com" maxlength="190">
-            </div>
-            <label style="display:flex;align-items:center;gap:5px;font-size:12px;white-space:nowrap;padding-bottom:2px">
-              <input type="checkbox" id="crm-auto-active" checked> Active
-            </label>
-          </div>
-
-          <div class="po-field" style="margin-bottom:8px">
-            <label class="po-field-label">Subject <span class="po-required">*</span></label>
-            <input type="text" id="crm-auto-subject" class="po-field-input" placeholder="e.g. Great news — let's talk next steps" maxlength="200">
-          </div>
-
-          <div class="po-field" style="margin-bottom:10px">
-            <label class="po-field-label">Message body <span class="po-required">*</span></label>
-            <textarea id="crm-auto-body" class="po-field-input" rows="5" placeholder="Hi {{lead.name}}, ..." style="resize:vertical"></textarea>
-          </div>
-
-          <div class="crm-merge-help" style="margin-bottom:10px">
-            Merge fields: <code>{{lead.name}}</code> <code>{{lead.company}}</code> <code>{{lead.email}}</code>
-            <code>{{lead.phone}}</code> <code>{{lead.estimated_value}}</code> <code>{{lead.stage_name}}</code>
-            <code>{{assigned_to.name}}</code> <code>{{project.name}}</code>
-          </div>
-
-          <div style="display:flex;gap:8px">
-            <button class="po-btn-primary" id="crm-auto-save-btn"><i class="fa fa-check"></i> <span id="crm-auto-save-label">Add Automation</span></button>
-            <button class="po-btn-ghost" id="crm-auto-cancel-edit" style="display:none"><i class="fa fa-xmark"></i> Cancel edit</button>
-          </div>
-        </div>
-      </div>
-
-      <div class="po-aim-footer">
-        <button class="po-btn-ghost" id="crm-auto-modal-cancel"><i class="fa fa-xmark"></i> Close</button>
-      </div>
-    </div>
-  </div>
-
   <!-- ── CRM: Edit Stage Modal ── -->
   <div class="modal-overlay" id="crm-stage-edit-modal" style="display:none">
     <div class="po-aim-shell" style="width:400px">
@@ -17066,9 +16982,21 @@
         <input type="text" id="auto-new-desc" class="po-field-input" placeholder="What does this automation do?" maxlength="500">
       </div>
       <div class="po-field">
+        <label class="po-field-label">Trigger Category</label>
+        <select id="auto-new-category" class="po-field-input">
+          <option value="">— choose a category —</option>
+        </select>
+      </div>
+      <div class="po-field">
         <label class="po-field-label">Trigger</label>
-        <select id="auto-new-trigger" class="po-field-input">
-          <option value="">— choose a trigger —</option>
+        <select id="auto-new-trigger" class="po-field-input" disabled>
+          <option value="">— choose a category first —</option>
+        </select>
+      </div>
+      <div class="po-field" id="auto-new-relation-field" style="display:none">
+        <label class="po-field-label">Relation</label>
+        <select id="auto-new-relation" class="po-field-input">
+          <option value="">— choose a relation —</option>
         </select>
       </div>
     </div>

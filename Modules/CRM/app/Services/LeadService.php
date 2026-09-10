@@ -16,7 +16,6 @@ class LeadService
 {
     public function __construct(
         private readonly LeadStageService $stages,
-        private readonly LeadStageAutomationService $stageAutomations,
     ) {}
 
     public function listForProject(
@@ -219,8 +218,40 @@ class LeadService
 
         $this->syncCustomFieldValues($lead, $data['custom_fields'] ?? []);
         $this->logStageChange($lead, null, $stageId, $userId);
+        $this->dispatchLeadCreatedAutomation($lead);
 
         return $lead;
+    }
+
+    /**
+     * Fire the "Lead Created (in Relation)" automation trigger. Lives here — the single
+     * place all lead-creation entry points (desktop New Lead form, public web form, JSON
+     * API) funnel through — so no entry point can silently skip it.
+     */
+    private function dispatchLeadCreatedAutomation(Lead $lead): void
+    {
+        try {
+            $lead->loadMissing('stage', 'project');
+
+            app(\Modules\AutomationEditor\Services\AutomationRunnerService::class)->dispatch(
+                'crm.lead.created',
+                $lead->project->business,
+                [
+                    'event' => 'crm.lead.created',
+                    'lead'  => [
+                        'id'         => $lead->id,
+                        'name'       => $lead->name,
+                        'email'      => $lead->email,
+                        'phone'      => $lead->phone,
+                        'project_id' => $lead->project_id,
+                        'stage_id'   => $lead->stage_id,
+                        'stage_name' => $lead->stage?->name,
+                        'created_at' => $lead->created_at?->toIso8601String(),
+                    ],
+                    'relation' => ['id' => $lead->project->id, 'name' => $lead->project->name],
+                ],
+            );
+        } catch (\Throwable) {}
     }
 
     public function update(Lead $lead, array $data, ?int $userId = null): Lead
@@ -358,12 +389,49 @@ class LeadService
             'changed_by'    => $userId,
         ]);
 
-        if ($toStageId !== null) {
-            $toStage = LeadStage::find($toStageId);
-            if ($toStage) {
-                $this->stageAutomations->runForStageChange($lead, $toStage);
-            }
+        if ($fromStageId !== null && $toStageId !== null) {
+            $this->dispatchLeadStageChangedAutomation($lead, $fromStageId, $toStageId);
         }
+    }
+
+    /**
+     * Fire the "Lead Stage Changed (in Relation)" automation trigger whenever an
+     * existing lead moves between two stages — e.g. dragged to another column on
+     * the Pipeline board. Deliberately skipped for the lead's initial stage
+     * assignment at creation (fromStageId null) — dispatchLeadCreatedAutomation()
+     * already covers that moment.
+     */
+    private function dispatchLeadStageChangedAutomation(Lead $lead, int $fromStageId, int $toStageId): void
+    {
+        try {
+            $lead->loadMissing('project');
+
+            $fromStage = LeadStage::find($fromStageId);
+            $toStage   = LeadStage::find($toStageId);
+            if (!$toStage) {
+                return;
+            }
+
+            app(\Modules\AutomationEditor\Services\AutomationRunnerService::class)->dispatch(
+                'crm.lead.stage_changed',
+                $lead->project->business,
+                [
+                    'event' => 'crm.lead.stage_changed',
+                    'lead'  => [
+                        'id'         => $lead->id,
+                        'name'       => $lead->name,
+                        'email'      => $lead->email,
+                        'phone'      => $lead->phone,
+                        'project_id' => $lead->project_id,
+                        'stage_id'   => $toStage->id,
+                        'stage_name' => $toStage->name,
+                    ],
+                    'from_stage' => ['id' => $fromStage?->id, 'name' => $fromStage?->name],
+                    'to_stage'   => ['id' => $toStage->id, 'name' => $toStage->name],
+                    'relation'   => ['id' => $lead->project->id, 'name' => $lead->project->name],
+                ],
+            );
+        } catch (\Throwable) {}
     }
 
     public function delete(Lead $lead): void
