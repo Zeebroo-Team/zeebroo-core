@@ -1692,7 +1692,7 @@
                 </div>
               </div>
 
-              <div class="hog-section">
+              <div class="hog-section" data-hog-feature="point_of_sale">
                 <div class="hog-section-head">
                   <div class="hog-section-icon hog-icon-blue"><i class="fa fa-cart-shopping"></i></div>
                   <div>
@@ -1720,7 +1720,7 @@
                 </div>
               </div>
 
-              <div class="hog-section">
+              <div class="hog-section" data-hog-feature="product_management stock_management">
                 <div class="hog-section-head">
                   <div class="hog-section-icon hog-icon-amber"><i class="fa fa-boxes-stacked"></i></div>
                   <div>
@@ -1752,7 +1752,7 @@
                 </div>
               </div>
 
-              <div class="hog-section">
+              <div class="hog-section" data-hog-feature="bill_management">
                 <div class="hog-section-head">
                   <div class="hog-section-icon hog-icon-rose"><i class="fa fa-file-invoice-dollar"></i></div>
                   <div>
@@ -1780,7 +1780,7 @@
                 </div>
               </div>
 
-              <div class="hog-section">
+              <div class="hog-section" data-hog-feature="human_resources">
                 <div class="hog-section-head">
                   <div class="hog-section-icon hog-icon-purple"><i class="fa fa-users"></i></div>
                   <div>
@@ -1804,7 +1804,7 @@
                 </div>
               </div>
 
-              <div class="hog-section">
+              <div class="hog-section" data-hog-feature="service_management">
                 <div class="hog-section-head">
                   <div class="hog-section-icon hog-icon-teal"><i class="fa fa-screwdriver-wrench"></i></div>
                   <div>
@@ -1925,7 +1925,7 @@
                   <div class="han-kpi-lbl">This Month</div>
                 </div>
               </div>
-              <div class="han-kpi-card">
+              <div class="han-kpi-card" id="han-kpi-bills-card">
                 <div class="han-kpi-icon han-icon-amber"><i class="fa fa-file-invoice-dollar"></i></div>
                 <div class="han-kpi-body">
                   <div class="han-kpi-val" id="han-kpi-bills">—</div>
@@ -2015,8 +2015,10 @@
               <div class="hov-kpis">
                 <div class="hov-kpi"><span id="hov-sales-count">—</span><span>Sales</span></div>
                 <div class="hov-kpi hov-kpi-green"><span id="hov-sales-rev">—</span><span>Revenue</span></div>
-                <div class="hov-kpi hov-kpi-purple"><span id="hov-po-count">—</span><span>Purchase Orders</span></div>
-                <div class="hov-kpi hov-kpi-amber"><span id="hov-po-pending">—</span><span>Pending POs</span></div>
+                <span id="hov-po-kpis" style="display:contents">
+                  <div class="hov-kpi hov-kpi-purple"><span id="hov-po-count">—</span><span>Purchase Orders</span></div>
+                  <div class="hov-kpi hov-kpi-amber"><span id="hov-po-pending">—</span><span>Pending POs</span></div>
+                </span>
               </div>
               <button class="home-act-refresh" id="hov-refresh"><i class="fa fa-arrows-rotate"></i> Refresh</button>
             </div>
@@ -2050,7 +2052,7 @@
               </div>
 
               <!-- Purchase Orders -->
-              <div class="hov-section">
+              <div class="hov-section" id="hov-po-section">
                 <div class="hov-section-hdr">
                   <span><i class="fa fa-truck"></i> Purchase Orders</span>
                   <div class="hov-section-filters">
@@ -9483,12 +9485,12 @@
         <div id="crm-stages-alert" class="svc-form-alert" style="display:none"></div>
 
         <!-- Pipeline automation toggle + shortcut -->
-        <div id="crm-stages-automation-row" style="display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid var(--border);border-radius:8px;padding:10px 12px;background:var(--bg-subtle,rgba(124,58,237,.05))">
-          <div style="display:flex;align-items:center;gap:10px;min-width:0">
+        <div id="crm-stages-automation-row" style="display:flex;flex-wrap:nowrap;align-items:center;justify-content:space-between;gap:10px;border:1px solid var(--border);border-radius:8px;padding:10px 12px;background:var(--bg-subtle,rgba(124,58,237,.05))">
+          <div style="display:flex;flex-wrap:nowrap;align-items:center;gap:10px;min-width:0;flex:1">
             <label class="psm-switch"><input type="checkbox" id="crm-stages-automation-toggle"><span class="psm-switch-track"></span></label>
-            <div style="min-width:0">
-              <div style="font-size:13px;font-weight:600">Pipeline Automation</div>
-              <div style="font-size:11px;color:var(--text-muted)" id="crm-stages-automation-status">Loading…</div>
+            <div style="min-width:0;overflow:hidden">
+              <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Pipeline Automation</div>
+              <div style="font-size:11px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" id="crm-stages-automation-status">Loading…</div>
             </div>
           </div>
           <button class="po-btn-ghost" id="crm-stages-automation-open" style="padding:5px 10px;font-size:12px;white-space:nowrap;flex-shrink:0">
@@ -11610,7 +11612,7 @@
           </select>
         </div>
 
-        <div class="isetup-field">
+        <div class="isetup-field" id="isetup-lh-field">
           <label class="isetup-toggle-row" for="isetup-lh-enabled">
             <span>Enable Letterhead</span>
             <input type="checkbox" id="isetup-lh-enabled" checked>
@@ -12641,7 +12643,7 @@
         <button class="psm-nav-item" data-tab="roles">
           <i class="fa fa-shield-halved"></i><span>Roles</span>
         </button>
-        <button class="psm-nav-item" data-tab="mail">
+        <button class="psm-nav-item psm-nav-item--mail-only" data-tab="mail">
           <i class="fa fa-envelope"></i><span>Mail</span>
         </button>
         <button class="psm-nav-item" data-tab="counters">
@@ -12825,7 +12827,7 @@
             </div>
           </div>
 
-          <div class="psm-section">
+          <div class="psm-section" id="psm-section-svc-products">
             <div class="psm-section-label"><i class="fa fa-boxes-stacked"></i> Catalog</div>
             <div class="psm-toggle-row">
               <div class="psm-toggle-info">
