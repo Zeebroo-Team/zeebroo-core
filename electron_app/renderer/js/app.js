@@ -42811,6 +42811,7 @@ async function submitDsCreate() {
         <span class="crm-stage-swatch" style="background:${escHtml(s.color || '#64748b')}"></span>
         <span class="crm-stage-name">${escHtml(s.name)}</span>
         ${wonTag}${lostTag}${countBadge}
+        <button class="crm-card-btn" data-mail-stage="${s.id}" title="Send email to leads in this stage" style="flex-shrink:0"><i class="fa fa-envelope"></i></button>
         <button class="crm-card-btn" data-edit-stage="${s.id}" title="Edit stage" style="flex-shrink:0"><i class="fa fa-pen"></i></button>
         <button class="crm-card-btn" data-del-stage="${s.id}" title="Delete stage" style="flex-shrink:0;color:#ef4444"><i class="fa fa-trash"></i></button>
       </div>`;
@@ -42876,7 +42877,150 @@ async function submitDsCreate() {
         }
       });
     });
+
+    // Send email (manual, per stage)
+    list.querySelectorAll('[data-mail-stage]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const s = _stageListData.find(s => s.id === parseInt(btn.dataset.mailStage));
+        if (!s) return;
+        openStageMailModal(s);
+      });
+    });
   }
+
+  // ── Stage mail template (manual send) ──────────────────────────────────
+
+  async function openStageMailModal(stage) {
+    $('#crm-stage-mail-project-id').value = _crmProjectId;
+    $('#crm-stage-mail-stage-id').value   = stage.id;
+    $('#crm-stage-mail-stage-name').textContent = stage.name;
+    $('#crm-stage-mail-lead-count').textContent = stage.leads_count || 0;
+    $('#crm-stage-mail-lead-count-s').textContent = (stage.leads_count === 1) ? '' : 's';
+    $('#crm-stage-mail-alert').style.display = 'none';
+    $('#crm-stage-mail-recipient-type').value = 'lead';
+    $('#crm-stage-mail-custom-email').value = '';
+    $('#crm-stage-mail-custom-email-wrap').style.display = 'none';
+    $('#crm-stage-mail-subject').value = '';
+    $('#crm-stage-mail-body').value = '';
+    $('#crm-stage-mail-delete').style.display = 'none';
+    $('#crm-stage-mail-modal').style.display = 'flex';
+
+    const res = await API.crmStageMailTemplate(_crmProjectId, stage.id);
+    if (res.status === 200) {
+      const t = res.body?.data?.template;
+      if (t) {
+        $('#crm-stage-mail-recipient-type').value = t.recipient_type || 'lead';
+        $('#crm-stage-mail-custom-email').value   = t.recipient_email || '';
+        $('#crm-stage-mail-custom-email-wrap').style.display = (t.recipient_type === 'custom') ? '' : 'none';
+        $('#crm-stage-mail-subject').value = t.subject || '';
+        $('#crm-stage-mail-body').value    = t.body || '';
+        $('#crm-stage-mail-delete').style.display = '';
+      }
+    }
+  }
+
+  $('#crm-stage-mail-recipient-type')?.addEventListener('change', () => {
+    const isCustom = $('#crm-stage-mail-recipient-type').value === 'custom';
+    $('#crm-stage-mail-custom-email-wrap').style.display = isCustom ? '' : 'none';
+  });
+
+  function _stageMailPayload() {
+    const recipientType = $('#crm-stage-mail-recipient-type').value;
+    const subject = $('#crm-stage-mail-subject').value.trim();
+    const body    = $('#crm-stage-mail-body').value.trim();
+    const customEmail = $('#crm-stage-mail-custom-email').value.trim();
+
+    if (!subject) { return { error: 'Subject is required.' }; }
+    if (!body)    { return { error: 'Body is required.' }; }
+    if (recipientType === 'custom' && !customEmail) { return { error: 'Enter an email address for a custom recipient.' }; }
+
+    return {
+      payload: {
+        recipient_type:  recipientType,
+        recipient_email: recipientType === 'custom' ? customEmail : null,
+        subject,
+        body,
+      },
+    };
+  }
+
+  function _stageMailAlert(msg) {
+    $('#crm-stage-mail-alert').textContent = msg;
+    $('#crm-stage-mail-alert').style.display = '';
+  }
+
+  $('#crm-stage-mail-close')?.addEventListener('click',  () => { $('#crm-stage-mail-modal').style.display = 'none'; });
+  $('#crm-stage-mail-cancel')?.addEventListener('click', () => { $('#crm-stage-mail-modal').style.display = 'none'; });
+  $('#crm-stage-mail-modal')?.addEventListener('click', e => { if (e.target === $('#crm-stage-mail-modal')) $('#crm-stage-mail-modal').style.display = 'none'; });
+
+  $('#crm-stage-mail-save')?.addEventListener('click', async () => {
+    const { payload, error } = _stageMailPayload();
+    if (error) { _stageMailAlert(error); return; }
+
+    const projectId = parseInt($('#crm-stage-mail-project-id').value);
+    const stageId   = parseInt($('#crm-stage-mail-stage-id').value);
+    const btn = $('#crm-stage-mail-save');
+    btn.disabled = true;
+    const res = await API.crmSaveStageMailTemplate(projectId, stageId, payload);
+    btn.disabled = false;
+
+    if (res.status === 200) {
+      $('#crm-stage-mail-delete').style.display = '';
+      toast('Template saved.', 'success');
+    } else {
+      _stageMailAlert(res.body?.message || 'Failed to save template.');
+    }
+  });
+
+  $('#crm-stage-mail-send')?.addEventListener('click', async () => {
+    const { payload, error } = _stageMailPayload();
+    if (error) { _stageMailAlert(error); return; }
+
+    const projectId = parseInt($('#crm-stage-mail-project-id').value);
+    const stageId   = parseInt($('#crm-stage-mail-stage-id').value);
+    const stage     = _stageListData.find(s => s.id === stageId);
+    const count     = stage?.leads_count || 0;
+
+    if (!confirm(`Send this email now to ${count} lead${count === 1 ? '' : 's'} currently in "${stage?.name || 'this stage'}"?`)) return;
+
+    const btn = $('#crm-stage-mail-send');
+    btn.disabled = true;
+
+    const saveRes = await API.crmSaveStageMailTemplate(projectId, stageId, payload);
+    if (saveRes.status !== 200) {
+      btn.disabled = false;
+      _stageMailAlert(saveRes.body?.message || 'Failed to save template.');
+      return;
+    }
+
+    const sendRes = await API.crmSendStageMail(projectId, stageId);
+    btn.disabled = false;
+
+    if (sendRes.status === 200) {
+      const r = sendRes.body?.data || {};
+      $('#crm-stage-mail-delete').style.display = '';
+      $('#crm-stage-mail-modal').style.display = 'none';
+      const parts = [`${r.sent || 0} sent`];
+      if (r.skipped) parts.push(`${r.skipped} skipped (no email)`);
+      if (r.failed)  parts.push(`${r.failed} failed`);
+      toast(parts.join(', ') + '.', r.failed ? 'error' : 'success');
+    } else {
+      _stageMailAlert(sendRes.body?.message || 'Failed to send email.');
+    }
+  });
+
+  $('#crm-stage-mail-delete')?.addEventListener('click', async () => {
+    if (!confirm('Remove this stage\'s mail template?')) return;
+    const projectId = parseInt($('#crm-stage-mail-project-id').value);
+    const stageId   = parseInt($('#crm-stage-mail-stage-id').value);
+    const res = await API.crmDeleteStageMailTemplate(projectId, stageId);
+    if (res.status === 200) {
+      $('#crm-stage-mail-modal').style.display = 'none';
+      toast('Template removed.', 'success');
+    } else {
+      _stageMailAlert(res.body?.message || 'Failed to remove template.');
+    }
+  });
 
   // Stage management modal close/open
   $('#crm-stages-modal-close')?.addEventListener('click',  () => { $('#crm-stages-modal').style.display = 'none'; });
