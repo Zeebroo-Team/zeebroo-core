@@ -397,6 +397,10 @@ input,select,button,textarea { font-family:inherit; font-size:inherit; }
         <div class="ae-pal-icon" style="background:#dcfce7;color:#15803d"><i class="fa-brands fa-whatsapp"></i></div>
         <div><div class="ae-pal-name">AI WhatsApp</div><div class="ae-pal-desc">AI writes &amp; sends WhatsApp</div></div>
       </div>
+      <div class="ae-palette-item" draggable="true" data-ntype="action" data-preset="ai_generate">
+        <div class="ae-pal-icon" style="background:#ede9fe;color:#7c3aed"><i class="fa fa-brain"></i></div>
+        <div><div class="ae-pal-name">AI Generate</div><div class="ae-pal-desc">AI writes text to reuse later</div></div>
+      </div>
     </div>
 
     <!-- Canvas area — Drawflow container -->
@@ -555,6 +559,7 @@ const ACTIONS = {
   'deduct_stock'        : 'Deduct Stock',
   'ai_send_email'       : 'AI Send Email',
   'ai_whatsapp_message' : 'AI WhatsApp',
+  'ai_generate'         : 'AI Generate',
 };
 const COND_OPS = { 'eq':'equals','neq':'not equals','gt':'greater than','lt':'less than','contains':'contains' };
 
@@ -1078,6 +1083,7 @@ function _nodeIcon(type, preset) {
     create_task:'fa-list-check', create_lead:'fa-bullseye',
     send_notification:'fa-bell', deduct_stock:'fa-boxes-stacked',
     ai_send_email:'fa-wand-magic-sparkles', ai_whatsapp_message:'fa-brands fa-whatsapp',
+    ai_generate:'fa-brain',
   };
   return icons[preset] || 'fa-bolt';
 }
@@ -1199,10 +1205,64 @@ function _showInspectorNode(nodeId) {
   $q('#ae-insp-node-view').style.display  = 'flex';
   $q('#ae-insp-conn-view').style.display  = 'none';
   $q('#ae-insp-title').textContent = _nodeKind(type) + ' Settings';
-  $q('#ae-insp-body').innerHTML    = _inspHtml(type, config, preset);
+  $q('#ae-insp-body').innerHTML    = _inspHtml(type, config, preset, nodeId);
 }
 
-function _inspHtml(type, config, preset) {
+// Mirrors AutomationRunnerService::sanitizeVarName() so the picker shows
+// the exact key the backend will actually merge into the payload.
+function _sanitizeVarName(name) {
+  let s = String(name || '').trim().toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
+  return s || 'ai_output';
+}
+
+// Walk backward through input connections from nodeId, collecting the
+// output variable name of every upstream "AI Generate" node found.
+function _upstreamAiVars(nodeId) {
+  const data = editor.drawflow?.drawflow?.Home?.data || {};
+  const seenNodes = new Set();
+  const seenVars  = new Set();
+  const result    = [];
+  const queue     = [String(nodeId)];
+
+  while (queue.length) {
+    const cur = data[queue.shift()];
+    if (!cur) continue;
+    (cur.inputs?.input_1?.connections || []).forEach(c => {
+      const srcId = String(c.node);
+      if (seenNodes.has(srcId)) return;
+      seenNodes.add(srcId);
+      const src = data[srcId];
+      if (!src) return;
+      const { type: srcType, config: srcConfig, preset: srcPreset } = src.data || {};
+      if (srcType === 'action' && (srcPreset === 'ai_generate' || srcConfig?.action === 'ai_generate')) {
+        const varName = _sanitizeVarName(srcConfig?.ai_generate_output_var || 'ai_output');
+        if (!seenVars.has(varName)) { seenVars.add(varName); result.push(varName); }
+      }
+      queue.push(srcId);
+    });
+  }
+  return result;
+}
+
+function _aiVarsFieldHtml(nodeId) {
+  const vars = _upstreamAiVars(nodeId);
+  if (!vars.length) return '';
+  return `
+    <div class="ae-field">
+      <label>AI Variables Available Here</label>
+      <div class="ae-sample-vars" style="margin-bottom:0">
+        ${vars.map(v => `
+          <div class="ae-sample-var-row">
+            <span class="ae-sample-var-key">{{${esc(v)}}}</span>
+            <span class="ae-sample-var-desc">From an upstream AI Generate node</span>
+            <button type="button" class="ae-sample-var-copy" data-copy-var="{{${esc(v)}}}" title="Copy variable"><i class="fa fa-copy"></i></button>
+          </div>`).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function _inspHtml(type, config, preset, nodeId) {
   if (type === 'trigger') {
     const currentTrigger  = config?.trigger || '';
     const currentCategory = _triggerCategoryOf(currentTrigger);
@@ -1250,6 +1310,7 @@ function _inspHtml(type, config, preset) {
       <div class="ae-field"><label>To</label><input id="fi-a-to" value="${esc(config?.to||'')}" placeholder="{{customer.email}}"></div>
       <div class="ae-field"><label>Subject</label><input id="fi-a-subject" value="${esc(config?.subject||'')}" placeholder="Your order summary"></div>
       <div class="ae-field"><label>Body</label><textarea id="fi-a-body" rows="4" placeholder="Hi {{customer.name}},…">${esc(config?.body||'')}</textarea></div>
+      ${_aiVarsFieldHtml(nodeId)}
     `;
     else if (p === 'send_webhook') extra = `
       <div class="ae-field"><label>URL</label><input type="url" id="fi-a-url" value="${esc(config?.url||'')}" placeholder="https://…"></div>
@@ -1267,6 +1328,7 @@ function _inspHtml(type, config, preset) {
     else if (p === 'send_notification') extra = `
       <div class="ae-field"><label>Title</label><input id="fi-a-notif-title" value="${esc(config?.notif_title||'')}" placeholder="New alert"></div>
       <div class="ae-field"><label>Message</label><textarea id="fi-a-message" rows="3" placeholder="Sale {{sale.reference}} completed for {{sale.total}}">${esc(config?.message||'')}</textarea></div>
+      ${_aiVarsFieldHtml(nodeId)}
     `;
     else if (p === 'deduct_stock') extra = `
       <div class="ae-field"><label>Product SKU</label><input id="fi-a-sku" value="${esc(config?.product_sku||'')}" placeholder="SKU-001 or {{product.sku}}"></div>
@@ -1282,6 +1344,11 @@ function _inspHtml(type, config, preset) {
       <div class="ae-field"><label>To (Phone)</label><input id="fi-a-wa-to" value="${esc(config?.whatsapp_to||'')}" placeholder="{{customer.phone}} or +94771234567"></div>
       <div class="ae-field"><label>AI Prompt</label><textarea id="fi-a-wa-prompt" rows="5" placeholder="Write a short WhatsApp message for {{customer.name}} confirming order {{sale.reference}} is ready for pickup…">${esc(config?.whatsapp_prompt||'')}</textarea></div>
       <div class="ae-field ae-field-hint"><i class="fa fa-circle-info"></i> AI generates the message. Set <b>whatsapp_phone_number_id</b> &amp; <b>whatsapp_access_token</b> in Business Settings first.</div>
+    `;
+    else if (p === 'ai_generate') extra = `
+      <div class="ae-field"><label>AI Prompt</label><textarea id="fi-a-gen-prompt" rows="5" placeholder="Write a personalized renewal reminder for {{customer.name}} about {{sale.reference}}…">${esc(config?.ai_generate_prompt||'')}</textarea></div>
+      <div class="ae-field"><label>Save Output As</label><input id="fi-a-gen-outvar" value="${esc(config?.ai_generate_output_var||'')}" placeholder="ai_output"></div>
+      <div class="ae-field ae-field-hint"><i class="fa fa-circle-info"></i> AI writes text from your prompt without sending it. Reference it in a later node as <b>{{your_var_name}}</b> (e.g. in Send Email's Body or Notification's Message).</div>
     `;
     return `
       <div class="ae-field"><label>Action Type</label><select id="fi-a-type"><option value="">— choose —</option>${actOpts}</select></div>
@@ -1385,6 +1452,9 @@ function _applyInspector() {
       // ai_whatsapp_message
       whatsapp_to:     $q('#fi-a-wa-to')?.value,
       whatsapp_prompt: $q('#fi-a-wa-prompt')?.value,
+      // ai_generate
+      ai_generate_prompt:     $q('#fi-a-gen-prompt')?.value,
+      ai_generate_output_var: $q('#fi-a-gen-outvar')?.value,
     };
   } else if (type === 'delay') {
     newConfig = { duration: $q('#fi-d-dur')?.value, unit: $q('#fi-d-unit')?.value };
@@ -1451,19 +1521,22 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && $q('#ae-sample-modal').style.display !== 'none') _hideSampleModal();
 });
 // Copy a {{var}} token to the clipboard
-$q('#ae-sample-vars').addEventListener('click', e => {
-  const btn = e.target.closest('[data-copy-var]');
-  if (!btn) return;
-  const text = btn.dataset.copyVar;
+function _copyVarToClipboard(text) {
   const copyPromise = window.electronAPI?.copyToClipboard
     ? window.electronAPI.copyToClipboard(text)
     : (navigator.clipboard?.writeText(text) ?? Promise.reject(new Error('Clipboard unavailable')));
   copyPromise.then(() => toast(`Copied ${text}`)).catch(() => toast('Copy failed'));
+}
+$q('#ae-sample-vars').addEventListener('click', e => {
+  const btn = e.target.closest('[data-copy-var]');
+  if (btn) _copyVarToClipboard(btn.dataset.copyVar);
 });
-// Delegate "view sample" button clicks from inspector (rendered dynamically)
+// Delegate "view sample" / "copy AI variable" button clicks from inspector (rendered dynamically)
 $q('#ae-insp-body').addEventListener('click', e => {
-  const btn = e.target.closest('[data-sample-trigger]');
-  if (btn) _showSampleModal(btn.dataset.sampleTrigger);
+  const sampleBtn = e.target.closest('[data-sample-trigger]');
+  if (sampleBtn) { _showSampleModal(sampleBtn.dataset.sampleTrigger); return; }
+  const copyBtn = e.target.closest('[data-copy-var]');
+  if (copyBtn) _copyVarToClipboard(copyBtn.dataset.copyVar);
 });
 // Cascade the trigger inspector's category → trigger → relation selects (before Apply)
 $q('#ae-insp-body').addEventListener('change', e => {
