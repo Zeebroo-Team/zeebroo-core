@@ -1902,8 +1902,11 @@ async function init() {
     // New Drawflow format
     editor.import(fd.drawflow);
     _fixNodeIdCounter();
+    // Re-render node HTML from data.config — covers nodes seeded server-side
+    // (e.g. the pipeline automation trigger) whose stored html may be stale/blank.
+    Object.keys(editor.drawflow?.drawflow?.Home?.data || {}).forEach(id => _refreshNodeHtml(Number(id)));
     _renderMinimap();
-  } else if (fd.nodes && Array.isArray(fd.nodes)) {
+  } else if (fd.nodes && Array.isArray(fd.nodes) && fd.nodes.length) {
     // Old custom-canvas format — migrate automatically
     _importOldFormat(fd.nodes, fd.edges || []);
     _fixNodeIdCounter();
