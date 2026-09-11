@@ -55,11 +55,58 @@ class AutomationFlowApiController extends Controller
             'description'    => $validated['description'] ?? null,
             'trigger_type'   => $validated['trigger_type'] ?? null,
             'trigger_config' => $validated['trigger_config'] ?? null,
-            'flow_data'      => $validated['flow_data'] ?? ['nodes' => [], 'edges' => []],
+            'flow_data'      => $validated['flow_data']
+                ?? $this->seedTriggerFlowData($validated['trigger_type'] ?? null, $validated['trigger_config'] ?? null),
             'is_active'      => $validated['is_active'] ?? false,
         ]);
 
         return response()->json(['data' => $this->format($flow)], 201);
+    }
+
+    /**
+     * Build a Drawflow payload containing just a pre-configured trigger node,
+     * so a flow created with a known trigger_type is runnable immediately —
+     * without requiring the user to open the editor and manually pick + save
+     * the trigger. Mirrors the shape the editor itself saves (flow_data.drawflow
+     * .drawflow.Home.data), consumed by AutomationRunnerService::extractNodes().
+     */
+    private function seedTriggerFlowData(?string $triggerType, ?array $triggerConfig): array
+    {
+        if (!$triggerType) {
+            return ['nodes' => [], 'edges' => []];
+        }
+
+        $config = array_filter([
+            'trigger'     => $triggerType,
+            'relation_id' => $triggerConfig['relation_id'] ?? null,
+        ], fn ($v) => $v !== null);
+
+        return [
+            'drawflow' => [
+                'drawflow' => [
+                    'Home' => [
+                        'data' => [
+                            '1' => [
+                                'id'       => 1,
+                                'name'     => 'trigger',
+                                'data'     => [
+                                    'type'   => 'trigger',
+                                    'config' => $config,
+                                    'preset' => null,
+                                ],
+                                'class'    => 'ae-node ae-node--trigger',
+                                'html'     => '',
+                                'typenode' => false,
+                                'inputs'   => (object) [],
+                                'outputs'  => ['output_1' => ['connections' => []]],
+                                'pos_x'    => 100,
+                                'pos_y'    => 100,
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ];
     }
 
     public function show(Request $request, int $id): JsonResponse
