@@ -354,14 +354,19 @@ class PosCrmApiController extends Controller
 
         $stages = $this->stages->listForProject($project)->loadCount('leads');
 
+        $stageIdsWithTemplate = LeadStageMailTemplate::where('project_id', $project->id)
+            ->pluck('stage_id')
+            ->all();
+
         return response()->json(['data' => $stages->map(fn ($s) => [
-            'id'          => $s->id,
-            'name'        => $s->name,
-            'color'       => $s->color,
-            'is_won'      => (bool) $s->is_won,
-            'is_lost'     => (bool) $s->is_lost,
-            'sort_order'  => $s->sort_order,
-            'leads_count' => (int) $s->leads_count,
+            'id'                 => $s->id,
+            'name'               => $s->name,
+            'color'              => $s->color,
+            'is_won'             => (bool) $s->is_won,
+            'is_lost'            => (bool) $s->is_lost,
+            'sort_order'         => $s->sort_order,
+            'leads_count'        => (int) $s->leads_count,
+            'has_mail_template'  => in_array($s->id, $stageIdsWithTemplate, true),
         ])]);
     }
 

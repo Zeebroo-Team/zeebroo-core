@@ -106,4 +106,21 @@ class AutomationFlow extends Model
     {
         return ['crm.lead.created', 'crm.lead.stage_changed'];
     }
+
+    /**
+     * Whether the desktop "Pipeline Automation" toggle is switched on for a
+     * given relation — i.e. an active crm.lead.stage_changed flow scoped to
+     * it exists. While on, that flow owns stage-entry side effects (including
+     * any emailing it's configured to do); while off, the stage mail template
+     * auto-send feature takes over instead, so the two never both fire.
+     */
+    public static function pipelineAutomationActive(int $businessId, int $relationId): bool
+    {
+        return self::query()
+            ->where('business_id', $businessId)
+            ->where('trigger_type', 'crm.lead.stage_changed')
+            ->where('is_active', true)
+            ->get()
+            ->contains(fn (self $f) => (int) ($f->trigger_config['relation_id'] ?? 0) === $relationId);
+    }
 }

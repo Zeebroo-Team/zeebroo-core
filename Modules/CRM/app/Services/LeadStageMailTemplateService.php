@@ -41,9 +41,7 @@ class LeadStageMailTemplateService
 
     /**
      * Manually send the stage's mail template to every lead currently sitting
-     * in that stage. Unlike the old auto-fire-on-stage-change behaviour this
-     * only ever runs when a user explicitly clicks "Send", so there's no risk
-     * of it firing unexpectedly on lead creation or an unrelated stage move.
+     * in that stage. Triggered only when a user explicitly clicks "Send".
      *
      * @return array{sent: int, skipped: int, failed: int, errors: array<int, string>}
      */
@@ -57,21 +55,11 @@ class LeadStageMailTemplateService
         $leads = Lead::where('stage_id', $stage->id)->get();
 
         foreach ($leads as $lead) {
-            $to = $this->resolveRecipient($template, $lead);
-            if (!filled($to)) {
+            $result = $this->deliverTo($template, $lead);
+
+            if ($result['skipped']) {
                 $skipped++;
-                continue;
-            }
-
-            $subject = $this->renderTemplate($template->subject, $lead);
-            // Lead-supplied fields (name, company, ...) can come from a public
-            // form submission, so they're escaped before landing in the email
-            // body rather than trusted as raw HTML.
-            $bodyHtml = nl2br(e($this->renderTemplate($template->body, $lead)));
-
-            $result = $this->businessMailer->send($lead->business, new AutomationMail($subject, $bodyHtml), $to);
-
-            if ($result['success']) {
+            } elseif ($result['success']) {
                 $sent++;
             } else {
                 $failed++;
@@ -80,6 +68,43 @@ class LeadStageMailTemplateService
         }
 
         return ['sent' => $sent, 'skipped' => $skipped, 'failed' => $failed, 'errors' => $errors];
+    }
+
+    /**
+     * Send the stage's mail template to a single lead — used when a lead
+     * enters the stage automatically while Pipeline Automation is OFF for
+     * its relation, as opposed to sendNow()'s manual whole-stage blast.
+     *
+     * @return array{success: bool, skipped: bool, error: ?string}
+     */
+    public function sendToLead(Lead $lead, LeadStageMailTemplate $template): array
+    {
+        return $this->deliverTo($template, $lead);
+    }
+
+    /**
+     * @return array{success: bool, skipped: bool, error: ?string}
+     */
+    private function deliverTo(LeadStageMailTemplate $template, Lead $lead): array
+    {
+        $to = $this->resolveRecipient($template, $lead);
+        if (!filled($to)) {
+            return ['success' => false, 'skipped' => true, 'error' => null];
+        }
+
+        $subject = $this->renderTemplate($template->subject, $lead);
+        // Lead-supplied fields (name, company, ...) can come from a public
+        // form submission, so they're escaped before landing in the email
+        // body rather than trusted as raw HTML.
+        $bodyHtml = nl2br(e($this->renderTemplate($template->body, $lead)));
+
+        $result = $this->businessMailer->send($lead->business, new AutomationMail($subject, $bodyHtml), $to);
+
+        return [
+            'success' => $result['success'],
+            'skipped' => false,
+            'error'   => $result['success'] ? null : $result['error'],
+        ];
     }
 
     private function resolveRecipient(LeadStageMailTemplate $template, Lead $lead): ?string

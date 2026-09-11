@@ -5,6 +5,7 @@ namespace Modules\CRM\Services;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
+use Modules\AutomationEditor\Models\AutomationFlow;
 use Modules\CRM\Models\Lead;
 use Modules\CRM\Models\LeadCustomFieldValue;
 use Modules\CRM\Models\LeadStage;
@@ -16,6 +17,7 @@ class LeadService
 {
     public function __construct(
         private readonly LeadStageService $stages,
+        private readonly LeadStageMailTemplateService $stageMailTemplates,
     ) {}
 
     public function listForProject(
@@ -220,6 +222,16 @@ class LeadService
         $this->logStageChange($lead, null, $stageId, $userId);
         $this->dispatchLeadCreatedAutomation($lead);
 
+        // logStageChange() skips the auto-send-mail check for a brand-new lead's
+        // initial stage (fromStageId is null there), so cover that moment here —
+        // a lead landing straight into a templated stage should mail it too.
+        if ($stageId) {
+            $lead->loadMissing('stage');
+            if ($lead->stage) {
+                $this->autoSendStageMail($lead, $lead->stage);
+            }
+        }
+
         return $lead;
     }
 
@@ -391,7 +403,41 @@ class LeadService
 
         if ($fromStageId !== null && $toStageId !== null) {
             $this->dispatchLeadStageChangedAutomation($lead, $fromStageId, $toStageId);
+
+            $toStage = LeadStage::find($toStageId);
+            if ($toStage) {
+                $this->autoSendStageMail($lead, $toStage);
+            }
         }
+    }
+
+    /**
+     * When Pipeline Automation is OFF for the lead's relation and the stage
+     * it just entered has an active mail template, send it to just that
+     * lead. While Pipeline Automation is ON, the linked flow owns stage-entry
+     * side effects instead — the two are mutually exclusive so a lead never
+     * gets emailed twice for the same stage move.
+     */
+    private function autoSendStageMail(Lead $lead, LeadStage $toStage): void
+    {
+        try {
+            $lead->loadMissing('project');
+            if (!$lead->project) {
+                return;
+            }
+
+            $pipelineActive = AutomationFlow::pipelineAutomationActive($lead->project->business_id, $lead->project->id);
+            if ($pipelineActive) {
+                return;
+            }
+
+            $template = $this->stageMailTemplates->forStage($toStage);
+            if (!$template || !$template->is_active) {
+                return;
+            }
+
+            $this->stageMailTemplates->sendToLead($lead, $template);
+        } catch (\Throwable) {}
     }
 
     /**
