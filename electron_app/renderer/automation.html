@@ -193,7 +193,9 @@ input,select,button,textarea { font-family:inherit; font-size:inherit; }
 .ae-insp-foot  { padding:10px 14px; border-top:1px solid var(--border); flex-shrink:0; display:flex; gap:8px; align-items:center; }
 .ae-field { display:flex; flex-direction:column; gap:4px; }
 .ae-field label { font-size:10px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:.04em; }
-.ae-field-hint { font-size:11px; color:var(--text-muted); background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:6px 8px; gap:5px; flex-direction:row; align-items:flex-start; }
+.ae-field-hint { font-size:11px; line-height:1.5; color:var(--text-muted); background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:6px 8px; gap:5px; flex-direction:row; align-items:flex-start; }
+.ae-field-hint i { flex-shrink:0; margin-top:1px; }
+.ae-field-hint span { flex:1; min-width:0; }
 .ae-field input,
 .ae-field select,
 .ae-field textarea { border:1px solid var(--border); border-radius:6px; padding:6px 8px; background:var(--surface2); color:var(--text); outline:none; transition:border-color .12s; resize:vertical; font-size:12px; }
@@ -1338,17 +1340,17 @@ function _inspHtml(type, config, preset, nodeId) {
       <div class="ae-field"><label>To</label><input id="fi-a-to" value="${esc(config?.to||'')}" placeholder="{{customer.email}}"></div>
       <div class="ae-field"><label>Subject</label><input id="fi-a-subject" value="${esc(config?.subject||'')}" placeholder="Your update from {{business.name}}"></div>
       <div class="ae-field"><label>AI Prompt</label><textarea id="fi-a-ai-prompt" rows="5" placeholder="Write a friendly follow-up email for {{customer.name}} who just purchased {{sale.total}}…">${esc(config?.ai_prompt||'')}</textarea></div>
-      <div class="ae-field ae-field-hint"><i class="fa fa-circle-info"></i> AI writes the email body from your prompt. Use {{placeholders}} for dynamic data.</div>
+      <div class="ae-field ae-field-hint"><i class="fa fa-circle-info"></i><span>AI writes the email body from your prompt. Use {{placeholders}} for dynamic data.</span></div>
     `;
     else if (p === 'ai_whatsapp_message') extra = `
       <div class="ae-field"><label>To (Phone)</label><input id="fi-a-wa-to" value="${esc(config?.whatsapp_to||'')}" placeholder="{{customer.phone}} or +94771234567"></div>
       <div class="ae-field"><label>AI Prompt</label><textarea id="fi-a-wa-prompt" rows="5" placeholder="Write a short WhatsApp message for {{customer.name}} confirming order {{sale.reference}} is ready for pickup…">${esc(config?.whatsapp_prompt||'')}</textarea></div>
-      <div class="ae-field ae-field-hint"><i class="fa fa-circle-info"></i> AI generates the message. Set <b>whatsapp_phone_number_id</b> &amp; <b>whatsapp_access_token</b> in Business Settings first.</div>
+      <div class="ae-field ae-field-hint"><i class="fa fa-circle-info"></i><span>AI generates the message. Set <b>whatsapp_phone_number_id</b> &amp; <b>whatsapp_access_token</b> in Business Settings first.</span></div>
     `;
     else if (p === 'ai_generate') extra = `
       <div class="ae-field"><label>AI Prompt</label><textarea id="fi-a-gen-prompt" rows="5" placeholder="Write a personalized renewal reminder for {{customer.name}} about {{sale.reference}}…">${esc(config?.ai_generate_prompt||'')}</textarea></div>
       <div class="ae-field"><label>Save Output As</label><input id="fi-a-gen-outvar" value="${esc(config?.ai_generate_output_var||'')}" placeholder="ai_output"></div>
-      <div class="ae-field ae-field-hint"><i class="fa fa-circle-info"></i> AI writes text from your prompt without sending it. Reference it in a later node as <b>{{your_var_name}}</b> (e.g. in Send Email's Body or Notification's Message).</div>
+      <div class="ae-field ae-field-hint"><i class="fa fa-circle-info"></i><span>AI writes text from your prompt without sending it. Reference it in a later node as <b>{{your_var_name}}</b> (e.g. in Send Email's Body or Notification's Message).</span></div>
     `;
     return `
       <div class="ae-field"><label>Action Type</label><select id="fi-a-type"><option value="">— choose —</option>${actOpts}</select></div>
