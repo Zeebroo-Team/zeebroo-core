@@ -536,6 +536,9 @@ const TRIGGER_GROUPS = {
     'property.created':'Property Created','rental.created':'Rental Agreement Created',
     'rental.paid':'Rental Payment Settled',
   },
+  'Notifications': {
+    'notification.created':'Notification Created',
+  },
   'Manual': {
     'manual':'Manual Trigger',
   },
@@ -780,6 +783,24 @@ const TRIGGER_SAMPLES = {
       order: { id: 77, reference: 'PO-077', total: 36000.00, created_at: '2026-01-15T11:00:00Z',
                items: [{ product_id: 201, name: 'Widget Pro', qty: 300, unit_price: 120.00 }] },
       supplier: { id: 3, name: 'Tech Supplies Ltd' },
+    },
+  },
+  'notification.created': {
+    desc: 'Fires when a new in-app notification is generated (low/out of stock, overdue bill/loan/rental, expired property, cheque overdue, large sale, purchase order received, etc.).',
+    vars: [
+      { key: 'notification.id',      type: 'number', desc: 'Notification ID' },
+      { key: 'notification.type',    type: 'string', desc: 'stock_low / stock_out / bill_overdue / loan_overdue / rental_overdue / property_expired / purchase_order_overdue / cheque_overdue / purchase_order_received / sale_large' },
+      { key: 'notification.title',   type: 'string', desc: 'Notification title' },
+      { key: 'notification.message', type: 'string', desc: 'Notification message body' },
+    ],
+    sample: {
+      event: 'notification.created',
+      notification: {
+        id: 501, type: 'stock_low', title: '3 products low on stock',
+        message: 'Product A, Product B, Product C.',
+        reference_type: 'stock_summary', reference_id: 2,
+        read: false, created_at: '2026-01-15T09:00:00Z',
+      },
     },
   },
   'manual': {

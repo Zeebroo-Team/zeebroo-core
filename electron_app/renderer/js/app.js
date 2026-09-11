@@ -8149,6 +8149,7 @@ const _notifIconMap = {
   cheque_overdue:          { icon: 'fa-money-check-dollar',   cls: 'danger'  },
   purchase_order_received: { icon: 'fa-circle-check',         cls: 'success' },
   sale_large:              { icon: 'fa-sack-dollar',          cls: 'info'    },
+  automation:              { icon: 'fa-bolt',                 cls: 'info'    },
 };
 
 function _notifTimeAgo(dateStr) {
