@@ -3,6 +3,7 @@
 namespace Modules\Pos\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
@@ -12,6 +13,7 @@ use Modules\Account\Models\Rental;
 use Modules\Account\Services\AddressBookService;
 use Modules\Account\Services\RentalExternalPaymentMarkService;
 use Modules\Account\Services\RentalService;
+use Modules\Budget\Services\BudgetLimitGuard;
 use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesPosBusinessForApi;
 use Modules\Transaction\Services\RentalManualRentSettlementService;
 
@@ -200,6 +202,16 @@ class PosRentalApiController extends Controller
 
         try {
             if ($validated['recording_option'] === 'ledger') {
+                $budgetCheck = BudgetLimitGuard::evaluate(
+                    $business->id,
+                    'rental',
+                    (float) $rental->recurring_cost,
+                    Carbon::parse($validated['due_date'])
+                );
+                if (! $budgetCheck['allowed']) {
+                    throw ValidationException::withMessages(['budget' => $budgetCheck['message']]);
+                }
+
                 $this->settlementService->settle(
                     $rental,
                     $business,

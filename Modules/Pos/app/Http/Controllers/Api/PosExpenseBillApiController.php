@@ -11,6 +11,7 @@ use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Modules\Account\Models\Bill;
 use Modules\Account\Services\BillService;
+use Modules\Budget\Services\BudgetLimitGuard;
 use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesPosBusinessForApi;
 use Modules\Transaction\Services\BillManualPaymentSettlementService;
 
@@ -295,6 +296,13 @@ class PosExpenseBillApiController extends Controller
                 if (collect($lines)->pluck('deduct_account_id')->unique()->count() < 2) {
                     throw ValidationException::withMessages(['split_rows' => 'Pick a different debit account on each split line.']);
                 }
+            }
+
+            $budgetCategory = $billModel->modification_id ? 'renovation' : 'bill';
+            $attemptedTotal = round(array_sum(array_column($lines, 'amount')), 2);
+            $budgetCheck    = BudgetLimitGuard::evaluate($business->id, $budgetCategory, $attemptedTotal, $day);
+            if (! $budgetCheck['allowed']) {
+                throw ValidationException::withMessages(['budget' => $budgetCheck['message']]);
             }
 
             $created = $this->settlementService->settlePaymentLines(

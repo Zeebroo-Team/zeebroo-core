@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Modules\Account\Models\Account;
 use Modules\Account\Services\AccountService;
+use Modules\Budget\Services\BudgetLimitGuard;
 use Modules\Business\Models\Business;
 use Modules\HRManagement\Models\PayrollCycle;
 use Modules\Transaction\Models\LedgerTransaction;
@@ -65,6 +66,11 @@ final class PayrollCyclePaymentService
                 throw ValidationException::withMessages([
                     'deduct_account_id' => __('Total net pay for this cycle is zero; nothing to pay.'),
                 ]);
+            }
+
+            $budgetCheck = BudgetLimitGuard::evaluate($business->id, 'payroll', $amount);
+            if (! $budgetCheck['allowed']) {
+                throw ValidationException::withMessages(['budget' => $budgetCheck['message']]);
             }
 
             $account = Account::query()

@@ -198,6 +198,20 @@ const API = (() => {
     createModification: (body)         => request('POST',   '/expenses/modifications', body),
     deleteModification: (id)           => request('DELETE', `/expenses/modifications/${id}`),
 
+    budgets:              ()           => request('GET',    '/budgets'),
+    budget:                (id)        => request('GET',    `/budgets/${id}`),
+    createBudget:           (body)     => request('POST',   '/budgets', body),
+    updateBudget:           (id, body) => request('PUT',     `/budgets/${id}`, body),
+    updateBudgetItems:      (id, body) => request('PUT',     `/budgets/${id}/items`, body),
+    updateBudgetViewPeriod: (id, body) => request('PATCH',   `/budgets/${id}/view-period`, body),
+    activateBudget:         (id)       => request('POST',   `/budgets/${id}/activate`),
+    deactivateBudget:       (id)       => request('POST',   `/budgets/${id}/deactivate`),
+    deleteBudget:           (id)       => request('DELETE', `/budgets/${id}`),
+    budgetSpending:         (id)       => request('GET',    `/budgets/${id}/spending`),
+    budgetActuals:          (id)       => request('GET',    `/budgets/${id}/actuals`),
+    createBudgetActual:     (id, body) => request('POST',   `/budgets/${id}/actuals`, body),
+    deleteBudgetActual:     (id, actualId) => request('DELETE', `/budgets/${id}/actuals/${actualId}`),
+
     // HR
     employees:      ()     => request('GET',  '/hr/employees'),
     employee:       (id)   => request('GET',  `/hr/employees/${id}`),

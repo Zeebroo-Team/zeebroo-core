@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Modules\Account\Models\Account;
 use Modules\Account\Services\AccountService;
+use Modules\Budget\Services\BudgetLimitGuard;
 use Modules\Business\Models\Business;
 use Modules\Purchase\Models\GoodsReceiveNote;
 use Modules\Purchase\Models\Purchase;
@@ -167,6 +168,16 @@ class GrnPaymentSettlementService
                 throw ValidationException::withMessages([
                     'pay_amount' => 'Payment cannot exceed the outstanding amount ('.number_format($outstanding, 2, '.', ',').').',
                 ]);
+            }
+
+            $budgetCheck = BudgetLimitGuard::evaluate(
+                $business->id,
+                'purchasing',
+                $payAmount,
+                $grn->received_date
+            );
+            if (! $budgetCheck['allowed']) {
+                throw ValidationException::withMessages(['budget' => $budgetCheck['message']]);
             }
 
             $account = Account::query()
