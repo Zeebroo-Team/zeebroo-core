@@ -9550,6 +9550,61 @@
     </div>
   </div>
 
+  <!-- ── CRM: Stage Mail Template Modal (manual send) ── -->
+  <div class="modal-overlay" id="crm-stage-mail-modal" style="display:none">
+    <div class="po-aim-shell" style="width:480px;max-height:85vh;display:flex;flex-direction:column">
+      <div class="po-aim-header">
+        <i class="fa fa-envelope" style="color:#7c3aed"></i>
+        <span>Send Email — <span id="crm-stage-mail-stage-name">Stage</span></span>
+        <button class="psm-close" id="crm-stage-mail-close"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div class="po-aim-body" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:12px">
+        <div id="crm-stage-mail-alert" class="svc-form-alert" style="display:none"></div>
+        <input type="hidden" id="crm-stage-mail-project-id">
+        <input type="hidden" id="crm-stage-mail-stage-id">
+
+        <div style="font-size:12px;color:var(--text-muted)">
+          Configure a template once, then send it on demand to every lead currently sitting in this stage
+          (<span id="crm-stage-mail-lead-count">0</span> lead<span id="crm-stage-mail-lead-count-s">s</span>).
+          This is a manual, one-off send — it does not fire automatically on stage changes.
+        </div>
+
+        <div class="po-field">
+          <label class="po-field-label">Send to</label>
+          <select id="crm-stage-mail-recipient-type" class="po-field-input">
+            <option value="lead">Lead's email</option>
+            <option value="assigned_user">Assigned team member</option>
+            <option value="custom">Custom email address</option>
+          </select>
+        </div>
+        <div class="po-field" id="crm-stage-mail-custom-email-wrap" style="display:none">
+          <label class="po-field-label">Custom email <span class="po-required">*</span></label>
+          <input type="email" id="crm-stage-mail-custom-email" class="po-field-input" placeholder="someone@example.com">
+        </div>
+
+        <div class="po-field">
+          <label class="po-field-label">Subject <span class="po-required">*</span></label>
+          <input type="text" id="crm-stage-mail-subject" class="po-field-input" maxlength="200" placeholder="e.g. You're now in Negotiation">
+        </div>
+        <div class="po-field">
+          <label class="po-field-label">Body <span class="po-required">*</span></label>
+          <textarea id="crm-stage-mail-body" class="po-field-input" rows="7" maxlength="5000" style="resize:vertical" placeholder="Hi {{lead.name}}, ..."></textarea>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:4px">
+            Merge fields: {{lead.name}}, {{lead.company}}, {{lead.email}}, {{lead.phone}}, {{lead.estimated_value}}, {{lead.stage_name}}, {{assigned_to.name}}, {{project.name}}
+          </div>
+        </div>
+      </div>
+      <div class="po-aim-footer" style="justify-content:space-between">
+        <button class="po-btn-ghost" id="crm-stage-mail-delete" style="color:#ef4444;display:none"><i class="fa fa-trash"></i> Remove Template</button>
+        <div style="display:flex;gap:8px;margin-left:auto">
+          <button class="po-btn-ghost" id="crm-stage-mail-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+          <button class="po-btn-ghost" id="crm-stage-mail-save"><i class="fa fa-check"></i> Save Template</button>
+          <button class="po-btn-primary" id="crm-stage-mail-send"><i class="fa fa-paper-plane"></i> Save &amp; Send Now</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- ── CRM: New Form Modal ── -->
   <div class="modal-overlay" id="crm-form-modal" style="display:none">
     <div class="po-aim-shell" style="width:540px">

@@ -11,11 +11,13 @@ use Modules\CRM\Models\Lead;
 use Modules\CRM\Models\LeadCustomField;
 use Modules\CRM\Models\LeadForm;
 use Modules\CRM\Models\LeadStage;
+use Modules\CRM\Models\LeadStageMailTemplate;
 use Modules\CRM\Models\Project;
 use Modules\CRM\Models\Task;
 use Modules\CRM\Services\LeadCustomFieldService;
 use Modules\CRM\Services\LeadFormService;
 use Modules\CRM\Services\LeadService;
+use Modules\CRM\Services\LeadStageMailTemplateService;
 use Modules\CRM\Services\LeadStageService;
 use Modules\CRM\Services\ProjectService;
 use Modules\CRM\Services\TaskService;
@@ -33,6 +35,7 @@ class PosCrmApiController extends Controller
         private readonly TaskService                 $tasks,
         private readonly LeadFormService             $forms,
         private readonly LeadCustomFieldService      $customFields,
+        private readonly LeadStageMailTemplateService $stageMailTemplates,
     ) {}
 
     // ── Projects ─────────────────────────────────────────────────────────
@@ -425,6 +428,80 @@ class PosCrmApiController extends Controller
         $this->stages->reorder($project, $ids);
 
         return response()->json(['message' => 'Reordered.']);
+    }
+
+    // ── Stage mail templates (manual send) ──────────────────────────────────
+
+    public function stageMailTemplate(Request $request, int $projectId, int $stageId): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $project  = Project::where('business_id', $business->id)->findOrFail($projectId);
+        $stage    = LeadStage::where('project_id', $project->id)->findOrFail($stageId);
+
+        $template = $this->stageMailTemplates->forStage($stage);
+
+        return response()->json([
+            'data' => [
+                'template'        => $template,
+                'recipient_types' => LeadStageMailTemplate::recipientTypes(),
+            ],
+        ]);
+    }
+
+    public function saveStageMailTemplate(Request $request, int $projectId, int $stageId): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'crm_pipeline');
+        $project  = Project::where('business_id', $business->id)->findOrFail($projectId);
+        $stage    = LeadStage::where('project_id', $project->id)->findOrFail($stageId);
+
+        $validated = $request->validate([
+            'recipient_type'  => ['required', 'string', Rule::in(array_keys(LeadStageMailTemplate::recipientTypes()))],
+            'recipient_email' => ['nullable', 'email', 'max:190'],
+            'subject'         => ['required', 'string', 'max:200'],
+            'body'            => ['required', 'string', 'max:5000'],
+            'is_active'       => ['nullable', 'boolean'],
+        ]);
+
+        if ($validated['recipient_type'] === LeadStageMailTemplate::RECIPIENT_CUSTOM && !filled($validated['recipient_email'] ?? '')) {
+            return response()->json(['message' => 'Enter an email address for a custom recipient.'], 422);
+        }
+
+        $template = $this->stageMailTemplates->save($project, $stage, $validated);
+
+        return response()->json(['data' => $template]);
+    }
+
+    public function deleteStageMailTemplate(Request $request, int $projectId, int $stageId): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'crm_pipeline');
+        $project  = Project::where('business_id', $business->id)->findOrFail($projectId);
+        $stage    = LeadStage::where('project_id', $project->id)->findOrFail($stageId);
+
+        $template = $this->stageMailTemplates->forStage($stage);
+        if ($template) {
+            $this->stageMailTemplates->delete($template);
+        }
+
+        return response()->json(['message' => 'Mail template removed.']);
+    }
+
+    public function sendStageMail(Request $request, int $projectId, int $stageId): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'crm_pipeline');
+        $project  = Project::where('business_id', $business->id)->findOrFail($projectId);
+        $stage    = LeadStage::where('project_id', $project->id)->findOrFail($stageId);
+
+        $template = $this->stageMailTemplates->forStage($stage);
+        if (!$template) {
+            return response()->json(['message' => 'Set up a mail template for this stage first.'], 422);
+        }
+
+        $result = $this->stageMailTemplates->sendNow($stage, $template);
+
+        return response()->json(['data' => $result]);
     }
 
     // ── Forms ─────────────────────────────────────────────────────────────
