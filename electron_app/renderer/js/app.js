@@ -251,6 +251,7 @@ const _sbSubItems = {
     { view:'rentals',        icon:'fa-house',                label:'Rentals' },
     { view:'properties',     icon:'fa-building',             label:'Properties' },
     { view:'modifications',  icon:'fa-screwdriver-wrench',   label:'Modifications' },
+    { view:'budget',         icon:'fa-table-cells',          label:'Budget' },
   ],
   hr: [
     { view:'employees',      icon:'fa-users',                label:'Employees' },
@@ -5363,7 +5364,8 @@ function applyFeatureVisibility() {
   const fin_bills      = bf('bill_management') && mp('fin_bills');
   const fin_assets     = bf('bill_management') && mp('fin_assets');
   const fin_reports    = bf('bill_management') && mp('fin_reports');
-  const fin_any        = fin_bills || fin_assets || fin_reports;
+  const fin_budget     = bf('bill_management') && mp('fin_budget');
+  const fin_any        = fin_bills || fin_assets || fin_reports || fin_budget;
 
   // ── HR ──
   const hr_employees   = bf('human_resources') && mp('hr_employees');
@@ -5531,7 +5533,7 @@ function applyFeatureVisibility() {
   grp('#rb-inv-barcodes', inv_barcodes || inv_campaigns);
 
   // ── Finance sub-nav visibility ──
-  const billFinViews = ['bills', 'loans', 'rentals', 'properties', 'modifications'];
+  const billFinViews = ['bills', 'loans', 'rentals', 'properties', 'modifications', 'budget'];
   billFinViews.forEach(v => {
     const btn = $(`#panel-finance .fin-subnav-btn[data-fin="${v}"]`);
     if (btn) btn.style.display = fin_any ? '' : 'none';
@@ -5829,7 +5831,7 @@ function applyFeatureVisibility() {
     if (finGrps[1]) finGrps[1].style.display = (mp('fin_btn_rentals')||mp('fin_btn_properties')) ? '' : 'none';
     if (finGrps[2]) finGrps[2].style.display = (mp('fin_btn_profit')||mp('fin_btn_sales')) ? '' : 'none'; }
   // ── Finance panel: sub-nav tab gating with fallback ──
-  { const _finTabPerms = { flow: mp('fin_tab_flow'), bills: mp('fin_tab_bills'), loans: mp('fin_tab_loans'), rentals: mp('fin_tab_rentals'), properties: mp('fin_tab_properties'), modifications: mp('fin_tab_modifications') };
+  { const _finTabPerms = { flow: mp('fin_tab_flow'), bills: mp('fin_tab_bills'), loans: mp('fin_tab_loans'), rentals: mp('fin_tab_rentals'), properties: mp('fin_tab_properties'), modifications: mp('fin_tab_modifications'), budget: mp('fin_tab_budget') };
     $$('#panel-finance .fin-subnav-btn[data-fin]').forEach(b => { b.style.display = _finTabPerms[b.dataset.fin] ? '' : 'none'; });
     const _finActive = $('#panel-finance .fin-subnav-btn.active');
     if (_finActive && !_finTabPerms[_finActive.dataset.fin]) {
@@ -29405,18 +29407,21 @@ function switchFinView(view) {
   $('#loan-detail-view').style.display           = 'none';
   $('#rental-detail-view').style.display         = 'none';
   $('#modification-detail-view').style.display   = 'none';
+  $('#budget-detail-view').style.display         = 'none';
   $('#finance-flow-view').style.display          = view === 'flow'          ? '' : 'none';
   $('#finance-list-view').style.display          = view === 'bills'         ? '' : 'none';
   $('#loans-list-view').style.display            = view === 'loans'         ? '' : 'none';
   $('#rentals-list-view').style.display          = view === 'rentals'       ? '' : 'none';
   $('#properties-list-view').style.display       = view === 'properties'    ? '' : 'none';
   $('#modifications-list-view').style.display    = view === 'modifications' ? '' : 'none';
+  $('#budget-list-view').style.display           = view === 'budget'        ? '' : 'none';
   if (view === 'flow')          loadFinanceFlow();
   if (view === 'bills')         loadFinance();
   if (view === 'loans')         loadLoans();
   if (view === 'rentals')       loadRentals();
   if (view === 'properties')    loadProperties();
   if (view === 'modifications') loadModifications();
+  if (view === 'budget')        loadBudgets();
 }
 
 $$('#panel-finance .fin-subnav-btn[data-fin]').forEach(btn => {
@@ -31441,6 +31446,598 @@ async function submitModificationForm() {
 
 function showMcError(msg) {
   const el = $('#mc-modal-alert');
+  el.textContent = msg;
+  el.style.display = '';
+  el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+// ── Budget Panel ─────────────────────────────────────────────────────────
+
+let budgetSearchFilter = '';
+let _budgetsAll     = [];
+let _currentBudget  = null;
+
+const BUDGET_TYPE_LABEL = { monthly: 'Monthly', yearly: 'Yearly' };
+
+async function loadBudgets(search) {
+  if (search !== undefined) budgetSearchFilter = search;
+  const area = $('#budget-cards-area');
+  area.innerHTML = '<div class="finance-loading"><i class="fa fa-spinner fa-spin"></i> Loading budgets…</div>';
+  const res = await API.budgets();
+  _budgetsAll = (res.status === 200 && res.body) ? (res.body.data || []) : [];
+  renderBudgetCards();
+}
+
+function renderBudgetCards() {
+  const area = $('#budget-cards-area');
+  const q    = budgetSearchFilter.trim().toLowerCase();
+  const list = q ? _budgetsAll.filter(b => (b.name || '').toLowerCase().includes(q)) : _budgetsAll;
+
+  $('#budget-count').textContent = `${list.length} budget${list.length !== 1 ? 's' : ''}`;
+
+  const statsBar = $('#budget-stats-bar');
+  if (_budgetsAll.length > 0) {
+    $('#bg-total-count').textContent = _budgetsAll.length;
+    const active = _budgetsAll.find(b => b.is_active);
+    $('#bg-active-name').textContent = active ? active.name : 'None';
+    statsBar.style.display = '';
+  } else {
+    statsBar.style.display = 'none';
+  }
+
+  if (!list.length) {
+    area.innerHTML = `
+      <div class="finance-empty">
+        <div class="finance-empty-icon"><i class="fa fa-table-cells"></i></div>
+        <p>${q ? 'No budgets match your search' : 'No budgets yet'}</p>
+        <span>${q ? 'Try a different term' : 'Click Add Budget to create your first one'}</span>
+      </div>`;
+    return;
+  }
+  area.innerHTML = list.map(buildBudgetCard).join('');
+}
+
+function buildBudgetCard(b) {
+  const typeLabel = BUDGET_TYPE_LABEL[b.type] || b.type || '—';
+  const activeBadge = b.is_active
+    ? `<span class="lm-pill" style="background:#d1fae5;color:#065f46"><i class="fa fa-circle-check"></i> Active</span>`
+    : '';
+
+  return `
+    <div class="lm-card bg-card" data-budget-id="${b.id}">
+      <div class="lm-card-header">
+        <div class="lm-card-icon" style="background:#eef2ff;color:#4f46e5;font-size:18px">
+          <i class="fa fa-table-cells"></i>
+        </div>
+        <div class="lm-card-title-wrap">
+          <span class="lm-card-name">${escHtml(b.name)}</span>
+          <div class="lm-card-pills">
+            <span class="lm-pill lm-pill-cadence"><i class="fa fa-tag"></i> ${escHtml(typeLabel)}</span>
+            ${activeBadge}
+          </div>
+        </div>
+        <button class="lm-remove-btn" data-budget-id="${b.id}" title="Remove budget">
+          <i class="fa fa-trash"></i> Remove
+        </button>
+      </div>
+
+      <div class="lm-stats-row">
+        <div class="lm-stat-block">
+          <span class="lm-stat-block-label">MONTHLY</span>
+          <span class="lm-stat-block-val">${escHtml(b.total_monthly_fmt || '0.00')}</span>
+        </div>
+        <div class="lm-stat-block">
+          <span class="lm-stat-block-label">YEARLY</span>
+          <span class="lm-stat-block-val">${escHtml(b.total_yearly_fmt || '0.00')}</span>
+        </div>
+        <div class="lm-stat-block">
+          <span class="lm-stat-block-label">PERIOD</span>
+          <span class="lm-stat-block-val" style="font-size:11px">${escHtml(b.start_date || '—')} → ${escHtml(b.end_date || '—')}</span>
+        </div>
+      </div>
+    </div>`;
+}
+
+// Card area click — delete or open detail
+$('#budget-cards-area').addEventListener('click', async e => {
+  if (e.target.closest('.lm-remove-btn[data-budget-id]')) {
+    const btn  = e.target.closest('.lm-remove-btn');
+    const id   = btn.dataset.budgetId;
+    const card = btn.closest('.bg-card');
+    const name = card?.querySelector('.lm-card-name')?.textContent || 'this budget';
+    if (!confirm(`Remove "${name}"? This cannot be undone.`)) return;
+    btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i>';
+    const res = await API.deleteBudget(id);
+    if (res.status === 200) {
+      card.style.transition = 'opacity .2s, transform .2s';
+      card.style.opacity = '0'; card.style.transform = 'translateX(12px)';
+      setTimeout(() => {
+        _budgetsAll = _budgetsAll.filter(x => String(x.id) !== String(id));
+        renderBudgetCards();
+      }, 200);
+      toast('Budget removed', 'success');
+    } else {
+      btn.disabled = false; btn.innerHTML = '<i class="fa fa-trash"></i> Remove';
+      toast(res.body?.message || `Failed (${res.status})`, 'error');
+    }
+    return;
+  }
+  const card = e.target.closest('.bg-card[data-budget-id]');
+  if (!card) return;
+  const b = _budgetsAll.find(x => String(x.id) === String(card.dataset.budgetId));
+  if (b) openBudgetDetailPage(b);
+});
+
+// Search
+let _budgetSearchTimer;
+$('#budget-search').addEventListener('input', e => {
+  clearTimeout(_budgetSearchTimer);
+  budgetSearchFilter = e.target.value;
+  _budgetSearchTimer = setTimeout(renderBudgetCards, 250);
+});
+
+// ── Budget Detail Page (excel-like allocation sheet) ───────────────────────
+
+$('#budget-detail-back').addEventListener('click', () => {
+  $('#budget-detail-view').style.display = 'none';
+  $('.fin-subnav').style.display         = '';
+  $('#budget-list-view').style.display   = '';
+});
+
+async function openBudgetDetailPage(b) {
+  $('.fin-subnav').style.display           = 'none';
+  $('#budget-list-view').style.display     = 'none';
+  $('#budget-detail-view').style.display   = 'flex';
+
+  $('#bgd-breadcrumb').textContent = b.name || 'Budget';
+  _currentBudget = b;
+  _bgsOpenCat = null;
+  renderBudgetDetail(b);
+
+  const res = await API.budget(b.id);
+  if (res.status === 200 && res.body?.data) {
+    _currentBudget = res.body.data;
+    renderBudgetDetail(_currentBudget);
+  }
+
+  loadBudgetSpending();
+}
+
+function renderBudgetDetail(b) {
+  const typeLabel = BUDGET_TYPE_LABEL[b.type] || b.type || '—';
+
+  $('#bgd-hero-name').textContent = b.name || '—';
+  $('#bgd-hero-meta').innerHTML = `
+    <span><i class="fa fa-tag"></i> ${escHtml(typeLabel)}</span>
+    <span class="inv-sep">·</span>
+    <span><i class="fa fa-calendar"></i> ${escHtml(b.start_date || '—')} → ${escHtml(b.end_date || '—')}</span>`;
+
+  const badges = [`<span class="inv-badge inv-badge-blue">${escHtml(typeLabel)}</span>`];
+  if (b.is_active) badges.push(`<span class="inv-badge inv-badge-green">Active</span>`);
+  $('#bgd-hero-badges').innerHTML = badges.join('');
+
+  const activateBtn = $('#bgd-activate-btn');
+  activateBtn.disabled = false;
+  if (b.is_active) {
+    activateBtn.innerHTML = '<i class="fa fa-ban"></i> Deactivate Budget';
+  } else {
+    activateBtn.innerHTML = '<i class="fa fa-bolt"></i> Activate Budget';
+  }
+
+  $('#bg-items-tbody').innerHTML = (b.items || []).map(it => `
+    <tr data-category="${escHtml(it.category)}">
+      <td class="bd-sched-cell"><input type="text" class="bg-items-input bg-label-input" maxlength="100" placeholder="${escHtml(it.category_label)}" value="${escHtml(it.label || '')}"></td>
+      <td class="bd-sched-cell"><input type="number" class="bg-items-input bg-monthly-input" min="0" step="0.01" value="${it.monthly_amount}"></td>
+      <td class="bd-sched-cell"><input type="number" class="bg-items-input bg-yearly-input" min="0" step="0.01" value="${it.yearly_amount}"></td>
+    </tr>`).join('');
+
+  updateBudgetTotalsRow();
+
+  $$('#bg-view-toggle .bg-view-btn').forEach(btn =>
+    btn.classList.toggle('active', btn.dataset.period === b.view_period));
+}
+
+function updateBudgetTotalsRow() {
+  let totalMonthly = 0, totalYearly = 0;
+  $$('#bg-items-tbody tr').forEach(row => {
+    totalMonthly += parseFloat(row.querySelector('.bg-monthly-input').value) || 0;
+    totalYearly  += parseFloat(row.querySelector('.bg-yearly-input').value)  || 0;
+  });
+  $('#bg-total-monthly').textContent = totalMonthly.toFixed(2);
+  $('#bg-total-yearly').textContent  = totalYearly.toFixed(2);
+}
+
+// Bidirectional monthly ⇄ yearly calculation, like a spreadsheet
+$('#bg-items-tbody').addEventListener('input', e => {
+  const row = e.target.closest('tr');
+  if (!row) return;
+  if (e.target.classList.contains('bg-monthly-input')) {
+    const val = parseFloat(e.target.value);
+    row.querySelector('.bg-yearly-input').value = isNaN(val) ? '' : (val * 12).toFixed(2);
+  } else if (e.target.classList.contains('bg-yearly-input')) {
+    const val = parseFloat(e.target.value);
+    row.querySelector('.bg-monthly-input').value = isNaN(val) ? '' : (val / 12).toFixed(2);
+  }
+  updateBudgetTotalsRow();
+});
+
+$('#bg-items-save').addEventListener('click', async () => {
+  if (!_currentBudget) return;
+  const items = [];
+  $$('#bg-items-tbody tr').forEach(row => {
+    items.push({
+      category:       row.dataset.category,
+      label:          row.querySelector('.bg-label-input').value.trim() || null,
+      monthly_amount: parseFloat(row.querySelector('.bg-monthly-input').value) || 0,
+      yearly_amount:  parseFloat(row.querySelector('.bg-yearly-input').value)  || 0,
+    });
+  });
+  const btn = $('#bg-items-save');
+  btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
+  const res = await API.updateBudgetItems(_currentBudget.id, { items });
+  if (res.status === 200 && res.body?.data) {
+    _currentBudget = res.body.data;
+    renderBudgetDetail(_currentBudget);
+    const idx = _budgetsAll.findIndex(x => String(x.id) === String(_currentBudget.id));
+    if (idx >= 0) _budgetsAll[idx] = _currentBudget;
+    toast('Budget allocations saved', 'success');
+    loadBudgetSpending();
+  } else {
+    toast(res.body?.message || 'Failed to save allocations', 'error');
+  }
+  btn.disabled = false; btn.innerHTML = '<i class="fa fa-check"></i> Save allocations';
+});
+
+// Budget element view — daily / monthly / yearly
+$('#bg-view-toggle').addEventListener('click', async e => {
+  const btn = e.target.closest('.bg-view-btn');
+  if (!btn || !_currentBudget || btn.classList.contains('active')) return;
+  $$('#bg-view-toggle .bg-view-btn').forEach(b => b.classList.toggle('active', b === btn));
+  const res = await API.updateBudgetViewPeriod(_currentBudget.id, { view_period: btn.dataset.period });
+  if (res.status === 200 && res.body?.data) {
+    _currentBudget = res.body.data;
+    const idx = _budgetsAll.findIndex(x => String(x.id) === String(_currentBudget.id));
+    if (idx >= 0) _budgetsAll[idx] = _currentBudget;
+  } else {
+    toast(res.body?.message || 'Failed to update view', 'error');
+  }
+});
+
+// Activate / deactivate budget
+$('#bgd-activate-btn').addEventListener('click', async () => {
+  if (!_currentBudget) return;
+  const btn = $('#bgd-activate-btn');
+  const wasActive = _currentBudget.is_active;
+  btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i>';
+  const res = wasActive
+    ? await API.deactivateBudget(_currentBudget.id)
+    : await API.activateBudget(_currentBudget.id);
+  if (res.status === 200 && res.body?.data) {
+    _currentBudget = res.body.data;
+    _budgetsAll = _budgetsAll.map(x => (
+      String(x.id) === String(_currentBudget.id)
+        ? { ...x, is_active: _currentBudget.is_active }
+        : { ...x, is_active: wasActive ? x.is_active : false }
+    ));
+    renderBudgetDetail(_currentBudget);
+    toast(wasActive ? 'Budget deactivated' : 'Budget activated', 'success');
+  } else {
+    btn.disabled = false;
+    btn.innerHTML = wasActive ? '<i class="fa fa-ban"></i> Deactivate Budget' : '<i class="fa fa-bolt"></i> Activate Budget';
+    toast(res.body?.message || `Failed to ${wasActive ? 'deactivate' : 'activate'} budget`, 'error');
+  }
+});
+
+// Delete budget from detail page
+$('#bgd-delete-btn').addEventListener('click', async () => {
+  if (!_currentBudget) return;
+  if (!confirm(`Remove "${_currentBudget.name}"? This cannot be undone.`)) return;
+  const btn = $('#bgd-delete-btn');
+  btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i>';
+  const res = await API.deleteBudget(_currentBudget.id);
+  if (res.status === 200) {
+    _budgetsAll = _budgetsAll.filter(x => String(x.id) !== String(_currentBudget.id));
+    $('#budget-detail-back').click();
+    renderBudgetCards();
+    toast('Budget removed', 'success');
+  } else {
+    btn.disabled = false; btn.innerHTML = '<i class="fa fa-trash"></i> Remove';
+    toast(res.body?.message || 'Failed to remove', 'error');
+  }
+});
+
+// ── Budget Spending vs limit ────────────────────────────────────────────
+
+let _bgSpending    = null;
+let _bgActuals     = [];
+let _bgsOpenCat     = null;
+
+async function loadBudgetSpending() {
+  if (!_currentBudget) return;
+  const area = $('#bg-spending-area');
+  area.innerHTML = '<div class="finance-loading"><i class="fa fa-spinner fa-spin"></i> Loading spending…</div>';
+
+  const [spendRes, actualsRes] = await Promise.all([
+    API.budgetSpending(_currentBudget.id),
+    API.budgetActuals(_currentBudget.id),
+  ]);
+
+  _bgSpending = (spendRes.status === 200 && spendRes.body) ? spendRes.body : null;
+  _bgActuals  = (actualsRes.status === 200 && actualsRes.body?.data) ? actualsRes.body.data : [];
+  renderBudgetSpending();
+}
+
+function bgsProgressClass(pct) {
+  if (pct === null) return 'pf-ok';
+  if (pct >= 100) return 'pf-overdue';
+  if (pct >= 90)  return 'pf-urgent';
+  if (pct >= 75)  return 'pf-warn';
+  return 'pf-ok';
+}
+
+function bgsPctTone(pct) {
+  if (pct === null) return 'bgs-tone-ok';
+  if (pct >= 100) return 'bgs-tone-over';
+  if (pct >= 90)  return 'bgs-tone-urgent';
+  if (pct >= 75)  return 'bgs-tone-warn';
+  return 'bgs-tone-ok';
+}
+
+function bgsMoney(n) {
+  return (n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function renderBudgetSpending() {
+  const area = $('#bg-spending-area');
+  if (!_bgSpending || !_bgSpending.categories?.length) {
+    area.innerHTML = '<div class="finance-empty" style="padding:20px 0"><span>No spending data yet</span></div>';
+    return;
+  }
+
+  area.innerHTML = _bgSpending.categories.map(c => {
+    const pct       = c.percent_used;
+    const pctLabel  = pct === null ? '—' : `${pct}%`;
+    const fillWidth = pct === null ? 0 : Math.min(100, pct);
+    const cls       = bgsProgressClass(pct ?? 0);
+    const isOpen    = _bgsOpenCat === c.category;
+    const entries   = _bgActuals.filter(e => e.category === c.category);
+
+    const monthsRows = c.months.map(m => `
+      <tr>
+        <td class="bd-sched-cell">${escHtml(m.month_label)}</td>
+        <td class="bd-sched-cell" style="text-align:right">${bgsMoney(m.auto_amount)}</td>
+        <td class="bd-sched-cell" style="text-align:right">${bgsMoney(m.manual_amount)}</td>
+        <td class="bd-sched-cell" style="text-align:right;font-weight:600">${bgsMoney(m.spent)}</td>
+        <td class="bd-sched-cell" style="text-align:right${m.over_limit ? ';color:#dc2626;font-weight:700' : ''}">${bgsMoney(m.cumulative_spent)}</td>
+      </tr>`).join('');
+
+    const entriesRows = entries.length ? entries.map(e => `
+      <div class="bgs-entry-chip" data-actual-id="${e.id}">
+        <span>${escHtml(e.month)} · ${e.amount_fmt}${e.note ? ' · ' + escHtml(e.note) : ''}</span>
+        <button type="button" class="bgs-entry-del" data-actual-id="${e.id}" title="Remove entry"><i class="fa fa-xmark"></i></button>
+      </div>`).join('') : '<span style="font-size:11px;color:var(--text-muted)">No manual entries for this category.</span>';
+
+    const remainingLabel = c.over_limit
+      ? `${bgsMoney(Math.abs(c.remaining))} over budget`
+      : `${bgsMoney(c.remaining)} remaining`;
+
+    return `
+      <div class="bgs-cat-row${isOpen ? ' open' : ''}" data-category="${c.category}">
+        <div class="bgs-cat-head" data-toggle-cat="${c.category}">
+          <div class="bgs-cat-title">
+            <span class="bgs-cat-name">${escHtml(c.category_label)}</span>
+            ${!c.has_auto_source ? '<span class="bgs-manual-tag">manual only</span>' : ''}
+          </div>
+          <span class="bgs-cat-pct ${bgsPctTone(pct)}">${pctLabel} used</span>
+          <i class="fa fa-chevron-down bgs-cat-chevron"></i>
+        </div>
+        <div class="bd-progress-track"><div class="bd-progress-fill ${cls}" style="width:${fillWidth}%"></div></div>
+        <div class="bgs-cat-metrics">
+          <div class="bgs-metric-mini">
+            <span class="bgs-metric-lbl">Spent</span>
+            <span class="bgs-metric-val">${bgsMoney(c.total_spent)}</span>
+          </div>
+          <div class="bgs-metric-mini">
+            <span class="bgs-metric-lbl">Yearly limit</span>
+            <span class="bgs-metric-val">${bgsMoney(c.yearly_limit)}</span>
+          </div>
+          <div class="bgs-metric-mini">
+            <span class="bgs-metric-lbl">${c.over_limit ? 'Over budget' : 'Remaining'}</span>
+            <span class="bgs-metric-val${c.over_limit ? ' bgs-tone-over' : ''}">${remainingLabel}</span>
+          </div>
+        </div>
+        <div class="bgs-cat-detail" style="display:${isOpen ? 'block' : 'none'}">
+          <div class="bd-sched-scroll">
+            <table class="bd-sched-table">
+              <thead><tr><th>Month</th><th style="text-align:right">Auto</th><th style="text-align:right">Manual</th><th style="text-align:right">Spent</th><th style="text-align:right">Running total</th></tr></thead>
+              <tbody>${monthsRows}</tbody>
+            </table>
+          </div>
+          <div class="bgs-entries-hdr">Manually logged entries</div>
+          <div class="bgs-entries-wrap">${entriesRows}</div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+$('#bg-spending-area').addEventListener('click', async e => {
+  const delBtn = e.target.closest('.bgs-entry-del[data-actual-id]');
+  if (delBtn) {
+    if (!_currentBudget) return;
+    if (!confirm('Remove this manual spend entry?')) return;
+    const res = await API.deleteBudgetActual(_currentBudget.id, delBtn.dataset.actualId);
+    if (res.status === 200) {
+      toast('Entry removed', 'success');
+      await loadBudgetSpending();
+    } else {
+      toast(res.body?.message || 'Failed to remove entry', 'error');
+    }
+    return;
+  }
+  const head = e.target.closest('.bgs-cat-head[data-toggle-cat]');
+  if (head) {
+    const cat = head.dataset.toggleCat;
+    _bgsOpenCat = _bgsOpenCat === cat ? null : cat;
+    renderBudgetSpending();
+  }
+});
+
+const bgsActualClose = () => { $('#bgs-actual-modal').style.display = 'none'; };
+$('#bgs-actual-modal-close').addEventListener('click', bgsActualClose);
+$('#bgs-actual-cancel').addEventListener('click',      bgsActualClose);
+$('#bgs-actual-modal').addEventListener('click', e => {
+  if (e.target === $('#bgs-actual-modal')) bgsActualClose();
+});
+
+$('#bgs-add-actual-btn').addEventListener('click', () => {
+  if (!_currentBudget) return;
+  $('#bgs-actual-category').value = _bgsOpenCat || 'purchasing';
+  $('#bgs-actual-month').value    = new Date().toISOString().slice(0, 7);
+  $('#bgs-actual-amount').value   = '';
+  $('#bgs-actual-note').value     = '';
+  $('#bgs-actual-modal-alert').style.display = 'none';
+  $('#bgs-actual-submit').disabled = false;
+  $('#bgs-actual-submit').innerHTML = '<i class="fa fa-check"></i> Save entry';
+  $('#bgs-actual-modal').style.display = 'flex';
+});
+
+$('#bgs-actual-submit').addEventListener('click', async () => {
+  const alertEl = $('#bgs-actual-modal-alert');
+  alertEl.style.display = 'none';
+
+  const category = $('#bgs-actual-category').value;
+  const month    = $('#bgs-actual-month').value;
+  const amount   = parseFloat($('#bgs-actual-amount').value);
+
+  if (!month)                    { showBgsActualError('Month is required.');        return; }
+  if (isNaN(amount) || amount < 0) { showBgsActualError('A valid amount is required.'); return; }
+
+  const body = {
+    category,
+    month: `${month}-01`,
+    amount,
+    note: $('#bgs-actual-note').value.trim() || null,
+  };
+
+  const btn = $('#bgs-actual-submit');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
+
+  const res = await API.createBudgetActual(_currentBudget.id, body);
+  if (res.status === 201) {
+    bgsActualClose();
+    toast('Actual spend logged', 'success');
+    _bgsOpenCat = category;
+    await loadBudgetSpending();
+  } else {
+    const errData = res.body;
+    const msg = errData?.errors
+      ? Object.values(errData.errors)[0]?.[0] || errData.message || `Failed (${res.status})`
+      : errData?.message || `Failed (${res.status})`;
+    showBgsActualError(msg);
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fa fa-check"></i> Save entry';
+  }
+});
+
+function showBgsActualError(msg) {
+  const el = $('#bgs-actual-modal-alert');
+  el.textContent = msg;
+  el.style.display = '';
+}
+
+// ── Budget Create Modal ─────────────────────────────────────────────────
+
+function bgcComputeEndDate() {
+  const type     = $('#bgc-type').value;
+  const startVal = $('#bgc-start-date').value;
+  if (!startVal) { $('#bgc-end-date').value = ''; return; }
+  const start = new Date(startVal + 'T00:00:00');
+  const end   = new Date(start);
+  if (type === 'yearly') end.setFullYear(end.getFullYear() + 1);
+  else                   end.setMonth(end.getMonth() + 1);
+  end.setDate(end.getDate() - 1);
+  $('#bgc-end-date').value = end.toISOString().slice(0, 10);
+}
+
+$('#bgc-type').addEventListener('change', bgcComputeEndDate);
+$('#bgc-start-date').addEventListener('change', bgcComputeEndDate);
+
+const bgcClose = () => { $('#budget-create-modal').style.display = 'none'; };
+$('#bgc-modal-close').addEventListener('click', bgcClose);
+$('#bgc-cancel').addEventListener('click',      bgcClose);
+$('#budget-create-modal').addEventListener('click', e => {
+  if (e.target === $('#budget-create-modal')) bgcClose();
+});
+
+$('#btn-budget-create').addEventListener('click', () => openBudgetCreateModal());
+$('#bgd-edit-btn').addEventListener('click', () => { if (_currentBudget) openBudgetCreateModal(_currentBudget); });
+
+let _bgcEditingId = null;
+
+function openBudgetCreateModal(editBudget) {
+  _bgcEditingId = editBudget ? editBudget.id : null;
+
+  $('#bgc-modal-title').innerHTML = editBudget
+    ? '<i class="fa fa-pen"></i> Edit Budget'
+    : '<i class="fa fa-table-cells"></i> Add Budget';
+  $('#bgc-name').value = editBudget ? editBudget.name : '';
+  $('#bgc-type').value = editBudget ? editBudget.type : 'monthly';
+  $('#bgc-start-date').value = editBudget ? editBudget.start_date : new Date().toISOString().slice(0, 10);
+  bgcComputeEndDate();
+  $('#bgc-modal-alert').style.display = 'none';
+  $('#bgc-submit').disabled = false;
+  $('#bgc-submit').innerHTML = editBudget
+    ? '<i class="fa fa-check"></i> Save changes'
+    : '<i class="fa fa-check"></i> Create budget';
+  $('#budget-create-modal').style.display = 'flex';
+  setTimeout(() => $('#bgc-name').focus(), 80);
+}
+
+$('#bgc-submit').addEventListener('click', submitBudgetForm);
+
+async function submitBudgetForm() {
+  const alertEl = $('#bgc-modal-alert');
+  alertEl.style.display = 'none';
+
+  const name      = $('#bgc-name').value.trim();
+  const type      = $('#bgc-type').value;
+  const startDate = $('#bgc-start-date').value;
+
+  if (!name)      { showBgcError('Name is required.');       return; }
+  if (!startDate) { showBgcError('Start date is required.'); return; }
+
+  const body = { name, type, start_date: startDate };
+  const isEdit = !!_bgcEditingId;
+
+  const btn = $('#bgc-submit');
+  btn.disabled = true;
+  btn.innerHTML = `<i class="fa fa-spinner fa-spin"></i> ${isEdit ? 'Saving…' : 'Creating…'}`;
+
+  const res = isEdit ? await API.updateBudget(_bgcEditingId, body) : await API.createBudget(body);
+  if (res.status === 200 || res.status === 201) {
+    bgcClose();
+    if (isEdit && res.body?.data) {
+      _currentBudget = res.body.data;
+      const idx = _budgetsAll.findIndex(x => String(x.id) === String(_currentBudget.id));
+      if (idx >= 0) _budgetsAll[idx] = _currentBudget;
+      renderBudgetDetail(_currentBudget);
+    }
+    toast(isEdit ? 'Budget updated' : 'Budget created', 'success');
+    if (!isEdit) await loadBudgets();
+  } else {
+    const errData = res.body;
+    const msg = errData?.errors
+      ? Object.values(errData.errors)[0]?.[0] || errData.message || `Failed (${res.status})`
+      : errData?.message || `Failed (${res.status})`;
+    showBgcError(msg);
+    btn.disabled = false;
+    btn.innerHTML = isEdit ? '<i class="fa fa-check"></i> Save changes' : '<i class="fa fa-check"></i> Create budget';
+  }
+}
+
+function showBgcError(msg) {
+  const el = $('#bgc-modal-alert');
   el.textContent = msg;
   el.style.display = '';
   el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -40121,6 +40718,7 @@ async function submitDsCreate() {
       { key: 'fin_tab_rentals',       label: 'Tab: Rentals',       desc: 'Finance panel: Rentals sub-nav tab' },
       { key: 'fin_tab_properties',    label: 'Tab: Properties',    desc: 'Finance panel: Properties sub-nav tab' },
       { key: 'fin_tab_modifications', label: 'Tab: Modifications', desc: 'Finance panel: Modifications sub-nav tab' },
+      { key: 'fin_tab_budget',        label: 'Tab: Budget',        desc: 'Finance panel: Budget sub-nav tab' },
     ]},
     { key: 'point_of_sale', label: 'POS & Sales', icon: 'fa-cash-register', color: '#6366f1', items: [
       { key: 'pos_session',    label: 'Open / Close Session',  desc: 'Start and end cash register sessions' },
@@ -40143,6 +40741,7 @@ async function submitDsCreate() {
       { key: 'fin_bills',   label: 'Bills & Loans',       desc: 'Manage recurring bills, loan records and repayments' },
       { key: 'fin_assets',  label: 'Assets & Liabilities', desc: 'Track rentals, properties and business assets' },
       { key: 'fin_reports', label: 'Financial Reports',    desc: 'View cash flow, income statements and account ledgers' },
+      { key: 'fin_budget',  label: 'Budgets',              desc: 'Create budgets, set category allocations and activate them' },
     ]},
     { key: 'hr', label: 'HR & Payroll', icon: 'fa-people-group', color: '#f59e0b', items: [
       { key: 'hr_employees',   label: 'Employee Records',      desc: 'Add and manage employee profiles and documents' },

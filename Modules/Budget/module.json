@@ -1,0 +1,11 @@
+{
+    "name": "Budget",
+    "alias": "budget",
+    "description": "Budget planning: monthly/yearly budgets with per-category allocations.",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\Budget\\Providers\\BudgetServiceProvider"
+    ],
+    "files": []
+}

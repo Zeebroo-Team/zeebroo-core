@@ -22,6 +22,7 @@ use Modules\Pos\Http\Controllers\Api\PosLoanApiController;
 use Modules\Pos\Http\Controllers\Api\PosPropertyApiController;
 use Modules\Pos\Http\Controllers\Api\PosRentalApiController;
 use Modules\Pos\Http\Controllers\Api\PosExpenseModificationApiController;
+use Modules\Pos\Http\Controllers\Api\PosBudgetApiController;
 use Modules\Pos\Http\Controllers\Api\PosEndOfDayApiController;
 use Modules\Pos\Http\Controllers\Api\PosQuotationApiController;
 use Modules\Pos\Http\Controllers\Api\PosInvoiceApiController;
@@ -265,6 +266,20 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
     Route::post('expenses/modifications', [PosExpenseModificationApiController::class, 'store'])->name('expenses.modifications.store');
     Route::get('expenses/modifications/{modification}', [PosExpenseModificationApiController::class, 'show'])->name('expenses.modifications.show');
     Route::delete('expenses/modifications/{modification}', [PosExpenseModificationApiController::class, 'destroy'])->name('expenses.modifications.destroy');
+
+    Route::get('budgets', [PosBudgetApiController::class, 'index'])->name('budgets.index');
+    Route::post('budgets', [PosBudgetApiController::class, 'store'])->name('budgets.store');
+    Route::get('budgets/{budget}', [PosBudgetApiController::class, 'show'])->name('budgets.show');
+    Route::put('budgets/{budget}', [PosBudgetApiController::class, 'updateDetails'])->name('budgets.update');
+    Route::put('budgets/{budget}/items', [PosBudgetApiController::class, 'updateItems'])->name('budgets.items.update');
+    Route::patch('budgets/{budget}/view-period', [PosBudgetApiController::class, 'updateViewPeriod'])->name('budgets.view-period.update');
+    Route::post('budgets/{budget}/activate', [PosBudgetApiController::class, 'activate'])->name('budgets.activate');
+    Route::post('budgets/{budget}/deactivate', [PosBudgetApiController::class, 'deactivate'])->name('budgets.deactivate');
+    Route::get('budgets/{budget}/spending', [PosBudgetApiController::class, 'spending'])->name('budgets.spending');
+    Route::get('budgets/{budget}/actuals', [PosBudgetApiController::class, 'listActuals'])->name('budgets.actuals.index');
+    Route::post('budgets/{budget}/actuals', [PosBudgetApiController::class, 'storeActual'])->name('budgets.actuals.store');
+    Route::delete('budgets/{budget}/actuals/{actual}', [PosBudgetApiController::class, 'destroyActual'])->name('budgets.actuals.destroy');
+    Route::delete('budgets/{budget}', [PosBudgetApiController::class, 'destroy'])->name('budgets.destroy');
     Route::get('hr/employees', [\Modules\Pos\Http\Controllers\Api\PosHrEmployeeListApiController::class, 'index'])->name('hr.employees.index');
     Route::post('hr/employees', [\Modules\Pos\Http\Controllers\Api\PosHrEmployeeListApiController::class, 'store'])->name('hr.employees.store');
     Route::get('hr/employees/{employee}', [\Modules\Pos\Http\Controllers\Api\PosHrEmployeeListApiController::class, 'show'])->name('hr.employees.show');

@@ -9,6 +9,7 @@
     "AIBot": true,
     "AppConnection": true,
     "Modification": true,
+    "Budget": true,
     "Product": true,
     "FileManager": true,
     "Purchase": true,

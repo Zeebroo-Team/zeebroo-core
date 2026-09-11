@@ -4644,6 +4644,7 @@
         <button class="fin-subnav-btn" data-fin="rentals"><i class="fa fa-house"></i> Rentals</button>
         <button class="fin-subnav-btn" data-fin="properties"><i class="fa fa-building"></i> Properties</button>
         <button class="fin-subnav-btn" data-fin="modifications"><i class="fa fa-screwdriver-wrench"></i> Modifications</button>
+        <button class="fin-subnav-btn" data-fin="budget"><i class="fa fa-table-cells"></i> Budget</button>
       </div>
 
       <!-- ── Finance flow overview ── -->
@@ -4947,6 +4948,129 @@
           <div class="inv-tab-pane"        id="md-pane-bills"></div>
         </div>
 
+      </div>
+
+      <!-- ── Budget list view ── -->
+      <div id="budget-list-view" class="fin-view" style="display:none">
+        <div class="finance-toolbar">
+          <div class="finance-search-wrap">
+            <i class="fa fa-magnifying-glass"></i>
+            <input type="text" id="budget-search" placeholder="Search budgets…">
+          </div>
+          <button class="finance-create-btn" id="btn-budget-create">
+            <i class="fa fa-plus"></i> Add Budget
+          </button>
+        </div>
+        <!-- Stats bar -->
+        <div id="budget-stats-bar" class="lm-stats-bar" style="display:none">
+          <div class="lm-stat-item">
+            <span class="lm-stat-label"><i class="fa fa-layer-group"></i> Total Budgets</span>
+            <span class="lm-stat-val" id="bg-total-count">—</span>
+          </div>
+          <div class="lm-stat-sep"></div>
+          <div class="lm-stat-item">
+            <span class="lm-stat-label"><i class="fa fa-circle-check"></i> Active Budget</span>
+            <span class="lm-stat-val" id="bg-active-name">—</span>
+          </div>
+        </div>
+        <div class="finance-cards-wrap">
+          <div class="finance-cards-area" id="budget-cards-area">
+            <div class="finance-loading"><i class="fa fa-spinner fa-spin"></i> Loading budgets…</div>
+          </div>
+        </div>
+        <div class="finance-footer"><span id="budget-count">—</span></div>
+      </div>
+
+      <!-- ── Budget detail view (Excel-like allocation sheet) ── -->
+      <div id="budget-detail-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+
+        <div class="inv-detail-header">
+          <button class="inv-back-btn" id="budget-detail-back">
+            <i class="fa fa-arrow-left"></i> Budget
+          </button>
+          <span class="inv-detail-breadcrumb" id="bgd-breadcrumb">Budget Detail</span>
+        </div>
+
+        <div class="inv-hero">
+          <div class="inv-hero-img" id="bgd-hero-icon">
+            <div class="inv-thumb-ph inv-thumb-lg" style="background:#eef2ff;color:#4f46e5;font-size:28px">
+              <i class="fa fa-table-cells"></i>
+            </div>
+          </div>
+          <div class="inv-hero-info">
+            <div class="inv-hero-name"   id="bgd-hero-name">—</div>
+            <div class="inv-hero-meta"   id="bgd-hero-meta"></div>
+            <div class="inv-hero-badges" id="bgd-hero-badges"></div>
+          </div>
+          <button class="finance-create-btn" id="bgd-edit-btn" style="align-self:center;flex-shrink:0">
+            <i class="fa fa-pen"></i> Edit
+          </button>
+          <button class="bill-save-btn" id="bgd-activate-btn" style="align-self:center;flex-shrink:0">
+            <i class="fa fa-bolt"></i> Activate Budget
+          </button>
+        </div>
+
+        <div class="inv-tab-body" style="flex:1;overflow-y:auto;padding:16px 20px">
+
+          <div class="inv-section">
+            <div class="inv-section-title"><i class="fa fa-table-cells"></i> Category allocations</div>
+            <div class="bd-sched-scroll">
+              <table class="bd-sched-table bg-items-table">
+                <thead>
+                  <tr>
+                    <th>Category</th>
+                    <th>Monthly budget</th>
+                    <th>Yearly budget</th>
+                  </tr>
+                </thead>
+                <tbody id="bg-items-tbody"></tbody>
+                <tfoot>
+                  <tr class="bg-total-row">
+                    <td class="bd-sched-cell">Total</td>
+                    <td class="bd-sched-cell" id="bg-total-monthly">0.00</td>
+                    <td class="bd-sched-cell" id="bg-total-yearly">0.00</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;flex-wrap:wrap">
+              <span class="bill-save-hint">Enter a monthly or yearly amount — the other column is calculated automatically.</span>
+              <button class="bill-save-btn" id="bg-items-save"><i class="fa fa-check"></i> Save allocations</button>
+            </div>
+          </div>
+
+          <div class="inv-section" style="margin-top:14px">
+            <div class="inv-section-title"><i class="fa fa-chart-line"></i> Spending vs budget</div>
+            <div style="padding:12px 14px 0;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+              <span style="font-size:12px;color:var(--text-muted);max-width:520px;line-height:1.5">Actual spend is pulled automatically each month from bills, loans, rentals, payroll and purchasing — plus anything logged manually. Monthly totals can go up or down; what matters is the running total against the yearly limit.</span>
+              <button class="finance-create-btn" id="bgs-add-actual-btn"><i class="fa fa-plus"></i> Log actual spend</button>
+            </div>
+            <div id="bg-spending-area" style="padding:12px 14px 14px"></div>
+          </div>
+
+          <div class="inv-section" style="margin-top:14px">
+            <div class="inv-section-title"><i class="fa fa-calendar-days"></i> Budget element view</div>
+            <div style="padding:12px 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+              <span style="font-size:12px;color:var(--text-muted)">Show budget elements by:</span>
+              <div class="bg-view-toggle" id="bg-view-toggle">
+                <button type="button" class="bg-view-btn" data-period="daily">Daily</button>
+                <button type="button" class="bg-view-btn" data-period="monthly">Monthly</button>
+                <button type="button" class="bg-view-btn" data-period="yearly">Yearly</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="inv-section" style="margin-top:14px">
+            <div class="inv-section-title" style="color:#dc2626"><i class="fa fa-trash"></i> Delete budget</div>
+            <div style="padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:12px">
+              <span style="font-size:12px;color:var(--text-muted);line-height:1.5">Permanently removes this budget and its category allocations.</span>
+              <button class="bd-danger-btn" id="bgd-delete-btn" style="flex-shrink:0">
+                <i class="fa fa-trash"></i> Remove
+              </button>
+            </div>
+          </div>
+
+        </div>
       </div>
 
     </div>
@@ -11430,6 +11554,106 @@
       </button>
       <span class="bill-save-hint">Uses the business selected in the top navigation.</span>
       <button class="btn-secondary" id="mc-cancel" style="margin-left:auto">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Budget create modal ──────────────────────────────────────────────── -->
+<div class="modal-overlay" id="budget-create-modal" style="display:none">
+  <div class="modal bill-modal-inner">
+    <div class="bill-modal-header">
+      <h3 id="bgc-modal-title"><i class="fa fa-table-cells"></i> Add Budget</h3>
+      <button class="bill-modal-close" id="bgc-modal-close"><i class="fa fa-xmark"></i></button>
+    </div>
+
+    <div class="bill-modal-body">
+      <div class="bill-section">
+        <div class="bsec-hdr">
+          <div class="bsec-icon" style="--si:#4f46e5;--sb:#eef2ff"><i class="fa fa-table-cells"></i></div>
+          <span class="bsec-title">Budget details</span>
+        </div>
+        <div class="bf-group">
+          <label class="bf-label">NAME <span class="bf-req">*</span></label>
+          <input type="text" id="bgc-name" class="bf-input" placeholder="e.g. 2026 Operating Budget">
+        </div>
+        <div class="bf-row-2" style="margin-top:12px">
+          <div class="bf-group">
+            <label class="bf-label">TYPE <span class="bf-req">*</span></label>
+            <select id="bgc-type" class="bf-input">
+              <option value="monthly">Monthly</option>
+              <option value="yearly">Yearly</option>
+            </select>
+          </div>
+          <div class="bf-group">
+            <label class="bf-label">START DATE <span class="bf-req">*</span></label>
+            <input type="date" id="bgc-start-date" class="bf-input">
+          </div>
+        </div>
+        <div class="bf-group" style="margin-top:12px">
+          <label class="bf-label">END DATE <span class="bf-optional">auto-calculated from type + start date</span></label>
+          <input type="text" id="bgc-end-date" class="bf-input" placeholder="—" readonly style="background:var(--surface2);cursor:not-allowed">
+        </div>
+      </div>
+    </div>
+
+    <div id="bgc-modal-alert" class="alert alert-error" style="display:none;margin:0 20px 10px"></div>
+    <div class="bill-modal-footer">
+      <button class="bill-save-btn" id="bgc-submit">
+        <i class="fa fa-check"></i> Create budget
+      </button>
+      <span class="bill-save-hint">Uses the business selected in the top navigation.</span>
+      <button class="btn-secondary" id="bgc-cancel" style="margin-left:auto">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Budget: log actual spend modal ── -->
+<div class="modal-overlay" id="bgs-actual-modal" style="display:none">
+  <div class="modal bill-modal-inner">
+    <div class="bill-modal-header">
+      <h3><i class="fa fa-chart-line"></i> Log actual spend</h3>
+      <button class="bill-modal-close" id="bgs-actual-modal-close"><i class="fa fa-xmark"></i></button>
+    </div>
+
+    <div class="bill-modal-body">
+      <div class="bill-section">
+        <div class="bf-row-2">
+          <div class="bf-group">
+            <label class="bf-label">CATEGORY <span class="bf-req">*</span></label>
+            <select id="bgs-actual-category" class="bf-input">
+              <option value="purchasing">Purchasing</option>
+              <option value="sales">Sales</option>
+              <option value="renovation">Renovation</option>
+              <option value="payroll">Payroll</option>
+              <option value="bill">Bill</option>
+              <option value="loans">Loans</option>
+              <option value="marketing">Marketing</option>
+              <option value="rental">Rental</option>
+            </select>
+          </div>
+          <div class="bf-group">
+            <label class="bf-label">MONTH <span class="bf-req">*</span></label>
+            <input type="month" id="bgs-actual-month" class="bf-input">
+          </div>
+        </div>
+        <div class="bf-group" style="margin-top:12px">
+          <label class="bf-label">AMOUNT <span class="bf-req">*</span></label>
+          <input type="number" min="0" step="0.01" id="bgs-actual-amount" class="bf-input" placeholder="0.00">
+        </div>
+        <div class="bf-group" style="margin-top:12px">
+          <label class="bf-label">NOTE <span class="bf-optional">optional</span></label>
+          <input type="text" id="bgs-actual-note" class="bf-input" maxlength="255" placeholder="e.g. cash paid outside the system">
+        </div>
+      </div>
+    </div>
+
+    <div id="bgs-actual-modal-alert" class="alert alert-error" style="display:none;margin:0 20px 10px"></div>
+    <div class="bill-modal-footer">
+      <button class="bill-save-btn" id="bgs-actual-submit">
+        <i class="fa fa-check"></i> Save entry
+      </button>
+      <span class="bill-save-hint">Adds on top of any auto-tracked spend for that month.</span>
+      <button class="btn-secondary" id="bgs-actual-cancel" style="margin-left:auto">Cancel</button>
     </div>
   </div>
 </div>

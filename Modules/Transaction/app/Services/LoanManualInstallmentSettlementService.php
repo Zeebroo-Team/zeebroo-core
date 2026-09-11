@@ -10,6 +10,7 @@ use Modules\Account\Models\Account;
 use Modules\Account\Models\Loan;
 use Modules\Account\Services\AccountService;
 use Modules\Account\Services\LoanOverviewTooltipService;
+use Modules\Budget\Services\BudgetLimitGuard;
 use Modules\Business\Models\Business;
 use Modules\Transaction\Models\LedgerTransaction;
 
@@ -66,6 +67,11 @@ class LoanManualInstallmentSettlementService
             throw ValidationException::withMessages([
                 'occurrence_date' => 'Computed installment amount is zero; cannot settle.',
             ]);
+        }
+
+        $budgetCheck = BudgetLimitGuard::evaluate($business->id, 'loans', $amount, $occurrence);
+        if (! $budgetCheck['allowed']) {
+            throw ValidationException::withMessages(['budget' => $budgetCheck['message']]);
         }
 
         $result = DB::transaction(function () use ($loan, $user, $business, $occurrence, $deductAccountId, $amount, $periodNumber, $summary): LedgerTransaction {
