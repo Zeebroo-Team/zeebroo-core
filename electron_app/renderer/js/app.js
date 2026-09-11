@@ -481,6 +481,13 @@ function _renderRibbonFromJson(data) {
 
 // ── Ribbon tabs ────────────────────────────────────────────────────────────
 function activateTab(tabName) {
+  // Block opening a tab whose feature is uninstalled/not permitted, even when
+  // called directly (e.g. a Home Overview shortcut card), not just via the
+  // ribbon/sidebar click that applyFeatureVisibility() already hides.
+  const allowed = state._tabFeatures ? state._tabFeatures[tabName] : undefined;
+  if (allowed === false && tabName !== 'home') {
+    tabName = 'home';
+  }
   $$('.ribbon-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tabName));
   $$('.ribbon-page').forEach(p => p.classList.toggle('active', p.dataset.page === tabName));
 
@@ -2473,6 +2480,9 @@ async function _qtOpenDetail(id) {
 
 // ── Shared: fetch letterhead from server (works even if Design tab never visited) ──
 async function _fetchLetterhead() {
+  // Letterhead lives in the Design Studio (social_media_campaign feature) —
+  // don't apply it to prints anywhere once that feature is uninstalled.
+  if (!hasFeature('social_media_campaign')) return null;
   // Locate the stub. Use the cache only for the ID — never trust the cached
   // has_canvas flag, because the editor saves without notifying this window,
   // so the flag can be stale (false) even after the user just saved a canvas.
@@ -2583,7 +2593,7 @@ function _qtAddLine(desc = '', qty = 1, price = 0) {
     sugTimer = setTimeout(async () => {
       const [prodRes, svcRes] = await Promise.all([
         API.productSearch(q, 6),
-        API.serviceMgmtCatalog(q),
+        hasFeature('service_management') ? API.serviceMgmtCatalog(q) : Promise.resolve({ body: { data: [] } }),
       ]);
       const products = prodRes.body?.data || [];
       const services = svcRes.body?.data  || [];
@@ -2667,7 +2677,7 @@ async function _qtModalSearch(q) {
 
   const [prodRes, svcRes] = await Promise.all([
     API.productSearch(q, 12),
-    API.serviceMgmtCatalog(q),
+    hasFeature('service_management') ? API.serviceMgmtCatalog(q) : Promise.resolve({ body: { data: [] } }),
   ]);
   const products = prodRes.body?.data || [];
   const services = svcRes.body?.data  || [];
@@ -3896,7 +3906,7 @@ function _invAddLine(desc = '', qty = 1, price = 0, discType = 'pct', discValue 
     sugTimer = setTimeout(async () => {
       const [prodRes, svcRes] = await Promise.all([
         API.productSearch(q, 6),
-        API.serviceMgmtCatalog(q),
+        hasFeature('service_management') ? API.serviceMgmtCatalog(q) : Promise.resolve({ body: { data: [] } }),
       ]);
       const products = prodRes.body?.data || [];
       const services = svcRes.body?.data  || [];
@@ -5435,6 +5445,9 @@ function applyFeatureVisibility() {
     'event-mgmt': evt_enabled,
     users:        isAdminOrOwner,
   };
+  // Cache so activateTab() can guard against opening a hidden tab directly
+  // (e.g. a Home Overview shortcut card bypassing the ribbon/sidebar click).
+  state._tabFeatures = tabFeatures;
   $$('.ribbon-tab[data-tab]').forEach(tab => {
     const show = tabFeatures[tab.dataset.tab];
     const visible = (show === undefined || show);
@@ -5444,6 +5457,15 @@ function applyFeatureVisibility() {
   $$('.sb-nav-item[data-tab]').forEach(item => {
     const show = tabFeatures[item.dataset.tab];
     item.style.display = (show === undefined || show) ? '' : 'none';
+  });
+
+  // ── Home Overview shortcut cards — hide a whole section when its feature isn't installed ──
+  // data-hog-feature may list several space-separated keys (OR'd) for a
+  // section whose cards are covered by more than one feature (e.g. Inventory
+  // = product_management OR stock_management).
+  $$('#home-view-overview .hog-section[data-hog-feature]').forEach(sec => {
+    const keys = sec.dataset.hogFeature.split(/\s+/).filter(Boolean);
+    sec.style.display = keys.some(k => bf(k)) ? '' : 'none';
   });
 
   // ── Officer role: restrict to Event tab only ──
@@ -5573,11 +5595,12 @@ function applyFeatureVisibility() {
   // Ribbon – Operations group
   btn('#rb-home-orders',        mp('home_btn_orders'));
   btn('#rb-home-customers',     mp('home_btn_customers'));
-  btn('#rb-home-suppliers',     mp('home_btn_suppliers'));
+  // Suppliers is an Inventory concept — needs product_management or stock_management.
+  btn('#rb-home-suppliers',     (bf('product_management') || bf('stock_management')) && mp('home_btn_suppliers'));
   // Ribbon – Finance group
   btn('#rb-home-expenses',      mp('home_btn_expenses'));
   btn('#rb-home-profit',        mp('home_btn_profit'));
-  btn('#rb-home-payroll',       mp('home_btn_payroll'));
+  btn('#rb-home-payroll',       bf('human_resources') && mp('home_btn_payroll'));
   // Ribbon – Tools group
   btn('#rb-home-settings',      mp('home_btn_settings'));
   btn('#rb-home-help',          mp('home_btn_help'));
@@ -5591,7 +5614,7 @@ function applyFeatureVisibility() {
     const _hgOps = $('#rb-home-orders')?.closest('.ribbon-group');
     if (_hgOps) _hgOps.style.display = (mp('home_btn_orders') || mp('home_btn_customers') || mp('home_btn_suppliers')) ? '' : 'none';
     const _hgF = $('#rb-home-expenses')?.closest('.ribbon-group');
-    if (_hgF) _hgF.style.display = (mp('home_btn_expenses') || mp('home_btn_profit') || mp('home_btn_payroll')) ? '' : 'none';
+    if (_hgF) _hgF.style.display = (mp('home_btn_expenses') || mp('home_btn_profit') || (bf('human_resources') && mp('home_btn_payroll'))) ? '' : 'none';
     const _hgT = $('#rb-home-settings')?.closest('.ribbon-group');
     if (_hgT) _hgT.style.display = (mp('home_btn_settings') || mp('home_btn_help')) ? '' : 'none';
   }
@@ -5612,7 +5635,7 @@ function applyFeatureVisibility() {
       analytics: mp('home_tab_analytics'),
       expenses:  mp('home_tab_expenses'),
       profit:    mp('home_tab_profit'),
-      payroll:   mp('home_tab_payroll'),
+      payroll:   bf('human_resources') && mp('home_tab_payroll'),
       orders:    mp('home_tab_orders'),
     };
     let _hActiveOk = false, _hFirstVisible = null;
@@ -5642,15 +5665,24 @@ function applyFeatureVisibility() {
 
   // ── Home right panel sections ───────────────────────────────────────────────
   { const el = $('#hrp-section-today'); if (el) el.style.display = mp('home_rp_today') ? '' : 'none'; }
-  { const el = $('#hrp-section-bills'); if (el) el.style.display = mp('home_rp_bills') ? '' : 'none'; }
-  btn('#hrp-new-sale',    mp('home_rp_qa_new_sale'));
-  btn('#hrp-add-product', mp('home_rp_qa_add_product'));
-  btn('#hrp-new-bill',    mp('home_rp_qa_new_bill'));
-  btn('#hrp-view-orders', mp('home_rp_qa_orders'));
-  btn('#hrp-barcodes',    mp('home_rp_qa_barcodes'));
+  { const el = $('#hrp-section-bills'); if (el) el.style.display = (bf('bill_management') && mp('home_rp_bills')) ? '' : 'none'; }
+  // Each Quick Action opens a different module directly (some via a modal
+  // that isn't blocked by the activateTab() tab-guard), so it needs its own
+  // feature check, not just the activateTab() redirect.
+  btn('#hrp-new-sale',    bf('point_of_sale')                                && mp('home_rp_qa_new_sale'));
+  btn('#hrp-add-product', bf('product_management')                          && mp('home_rp_qa_add_product'));
+  btn('#hrp-new-bill',    bf('bill_management')                             && mp('home_rp_qa_new_bill'));
+  btn('#hrp-view-orders', bf('stock_management')                            && mp('home_rp_qa_orders'));
+  btn('#hrp-barcodes',    (bf('product_management') || bf('stock_management')) && mp('home_rp_qa_barcodes'));
   {
     const el = $('#hrp-section-actions');
-    if (el) el.style.display = (mp('home_rp_qa_new_sale') || mp('home_rp_qa_add_product') || mp('home_rp_qa_new_bill') || mp('home_rp_qa_orders') || mp('home_rp_qa_barcodes')) ? '' : 'none';
+    if (el) el.style.display = (
+      (bf('point_of_sale') && mp('home_rp_qa_new_sale')) ||
+      (bf('product_management') && mp('home_rp_qa_add_product')) ||
+      (bf('bill_management') && mp('home_rp_qa_new_bill')) ||
+      (bf('stock_management') && mp('home_rp_qa_orders')) ||
+      ((bf('product_management') || bf('stock_management')) && mp('home_rp_qa_barcodes'))
+    ) ? '' : 'none';
   }
 
   // ── POS ribbon: fine-grained per-element permission gating ──
@@ -5681,8 +5713,12 @@ function applyFeatureVisibility() {
   { const el = $('#pos-tab-add'); if (el) el.style.display = mp('pos_panel_tab_add') ? '' : 'none'; }
   { const el = $('.pos-mode-btn[data-mode="products"]');
     if (el) el.style.display = mp('pos_panel_mode_products') ? '' : 'none'; }
+  // Services mode also requires the Service Management feature — this
+  // per-element permission pass runs after the earlier svc_any gate (line
+  // ~5505) and was overwriting it back to visible for owners/admins whenever
+  // no permission restriction was set, even with the feature uninstalled.
   { const el = $('.pos-mode-btn[data-mode="services"]');
-    if (el) el.style.display = mp('pos_panel_mode_services') ? '' : 'none'; }
+    if (el) el.style.display = (svc_any && mp('pos_panel_mode_services')) ? '' : 'none'; }
   { const el = $('#product-search-bar'); if (el) el.style.display = mp('pos_panel_search') ? '' : 'none'; }
   { const el = $('#category-filter-wrap'); if (el) el.style.display = mp('pos_panel_categories') ? '' : 'none'; }
   { const el = $('#product-grid'); if (el) el.style.display = mp('pos_panel_product_grid') ? '' : 'none'; }
@@ -5728,23 +5764,50 @@ function applyFeatureVisibility() {
   btn('#rb-inv-categories',mp('inv_btn_categories'));
   btn('#rb-inv-units',     mp('inv_btn_units'));
   btn('#rb-inv-audit',     mp('inv_btn_audit'));
-  btn('#rb-inv-brands',    mp('inv_btn_brands'));
-  btn('#rb-inv-discounts', mp('inv_btn_discounts'));
+  // Brands & Discounts need product_management specifically — the enclosing
+  // ribbon group can also be shown by stock_management alone (inv_audit),
+  // so a permission-only check here would leak these when only Stock
+  // Management is installed.
+  btn('#rb-inv-brands',    bf('product_management') && mp('inv_btn_brands'));
+  btn('#rb-inv-discounts', bf('product_management') && mp('inv_btn_discounts'));
   btn('#rb-orders',        mp('inv_btn_orders'));
   btn('#rb-inv-grn',       mp('inv_btn_grn'));
   btn('#rb-inv-cheques',   mp('inv_btn_cheques'));
   btn('#rb-inv-suppliers', mp('inv_btn_suppliers'));
   btn('#rb-inv-barcodes',  mp('inv_btn_barcodes'));
-  btn('#rb-inv-sale-campaign', mp('inv_btn_sale_campaign'));
-  // Auto-hide Inventory ribbon groups when all their buttons are hidden
+  // Sale Campaigns are product discount promotions — require product_management
+  // specifically, not just the Inventory tab's broader product_management-OR-
+  // stock_management visibility.
+  btn('#rb-inv-sale-campaign', bf('product_management') && mp('inv_btn_sale_campaign'));
+  // Auto-hide Inventory ribbon groups when all their buttons are hidden.
+  // Each group also requires its underlying feature — this pass runs after
+  // the earlier bf()-aware grp() calls and would otherwise silently drop
+  // that feature check back to permission-only.
   { const invGrps = $$('[data-page="inventory"] .ribbon-group');
-    if (invGrps[0]) invGrps[0].style.display = (mp('inv_btn_products')||mp('inv_btn_refresh')||mp('inv_btn_clear')||mp('inv_btn_categories')||mp('inv_btn_units')) ? '' : 'none';
-    if (invGrps[1]) invGrps[1].style.display = (mp('inv_btn_audit')||mp('inv_btn_brands')||mp('inv_btn_discounts')) ? '' : 'none';
-    if (invGrps[2]) invGrps[2].style.display = (mp('inv_btn_orders')||mp('inv_btn_grn')||mp('inv_btn_cheques')) ? '' : 'none';
-    if (invGrps[3]) invGrps[3].style.display = mp('inv_btn_suppliers') ? '' : 'none';
-    if (invGrps[4]) invGrps[4].style.display = (mp('inv_btn_barcodes')||mp('inv_btn_sale_campaign')) ? '' : 'none'; }
+    const invEither = bf('product_management') || bf('stock_management');
+    if (invGrps[0]) invGrps[0].style.display = (bf('product_management') && (mp('inv_btn_products')||mp('inv_btn_refresh')||mp('inv_btn_clear')||mp('inv_btn_categories')||mp('inv_btn_units'))) ? '' : 'none';
+    if (invGrps[1]) invGrps[1].style.display = (invEither && (mp('inv_btn_audit')||mp('inv_btn_brands')||mp('inv_btn_discounts'))) ? '' : 'none';
+    if (invGrps[2]) invGrps[2].style.display = (bf('stock_management') && (mp('inv_btn_orders')||mp('inv_btn_grn')||mp('inv_btn_cheques'))) ? '' : 'none';
+    if (invGrps[3]) invGrps[3].style.display = (invEither && mp('inv_btn_suppliers')) ? '' : 'none';
+    if (invGrps[4]) invGrps[4].style.display = (invEither && (mp('inv_btn_barcodes')||mp('inv_btn_sale_campaign'))) ? '' : 'none'; }
   // ── Inventory panel: sub-nav tab gating with fallback ──
-  { const _invTabPerms = { products: mp('inv_tab_products'), po: mp('inv_tab_po'), grn: mp('inv_tab_grn'), cheques: mp('inv_tab_cheques'), audit: mp('inv_tab_audit'), transfer: mp('inv_tab_transfer'), categories: mp('inv_tab_categories'), units: mp('inv_tab_units'), discounts: mp('inv_tab_discounts'), brands: mp('inv_tab_brands'), barcodes: mp('inv_tab_barcodes') };
+  // Each view also requires its own feature (product_management and/or
+  // stock_management) — permission alone isn't enough, since the Inventory
+  // tab itself stays visible when only ONE of the two features is installed.
+  { const _invStockOrProd = bf('product_management') || bf('stock_management');
+    const _invTabPerms = {
+      products:   bf('product_management') && mp('inv_tab_products'),
+      po:         bf('stock_management')   && mp('inv_tab_po'),
+      grn:        bf('stock_management')   && mp('inv_tab_grn'),
+      cheques:    bf('stock_management')   && mp('inv_tab_cheques'),
+      audit:      _invStockOrProd          && mp('inv_tab_audit'),
+      transfer:   _invStockOrProd          && mp('inv_tab_transfer'),
+      categories: bf('product_management') && mp('inv_tab_categories'),
+      units:      bf('product_management') && mp('inv_tab_units'),
+      discounts:  bf('product_management') && mp('inv_tab_discounts'),
+      brands:     bf('product_management') && mp('inv_tab_brands'),
+      barcodes:   _invStockOrProd          && mp('inv_tab_barcodes'),
+    };
     $$('.inv-subnav-btn').forEach(b => { b.style.display = _invTabPerms[b.dataset.invView] ? '' : 'none'; });
     const _invActive = $('.inv-subnav-btn.active');
     if (_invActive && !_invTabPerms[_invActive.dataset.invView]) {
@@ -5943,6 +6006,15 @@ async function loadFeatures() {
   }
 
   applyFeatureVisibility();
+
+  // The Business Flow diagram renders at boot via requestAnimationFrame
+  // (showApp() -> activateTab('home')) well before this network round-trip
+  // resolves, so its first render used hasFeature()'s permissive "not loaded
+  // yet" default. Re-render now that the real feature set is known.
+  if (!state.cashierMode && document.getElementById('home-chart')) {
+    const storedBiz = state._bizName || $('#app-title')?.textContent.replace('Zeebroo POS — ', '').replace('Zeebroo POS', '').trim();
+    renderBusinessChart(storedBiz || 'Your Business');
+  }
 }
 
 /** Returns true if the current member has a given permission (or has full access). */
@@ -9519,77 +9591,94 @@ const _hogFmt = n => (n ?? 0).toLocaleString();
 // Fetches a live count/summary for each Overview shortcut card. Each source
 // is independent so one failing endpoint doesn't block the others.
 async function loadHomeOverviewStats() {
-  API.bootstrap('', 0, 1, {}).then(res => {
-    if (res.status !== 200) return;
-    const body = res.body?.data || res.body || {};
-    const meta = body.products_meta || body.meta || {};
-    _hogSetStat('products', `${_hogFmt(meta.total)} items`);
-  }).catch(() => {});
+  const productMgmt = hasFeature('product_management');
+  const stockMgmt   = hasFeature('stock_management');
 
-  API.categories('', '', 1).then(res => {
-    if (res.status !== 200) return;
-    _hogSetStat('categories', `${_hogFmt(res.body?.meta?.total)} total`);
-  }).catch(() => {});
+  if (productMgmt) {
+    API.bootstrap('', 0, 1, {}).then(res => {
+      if (res.status !== 200) return;
+      const body = res.body?.data || res.body || {};
+      const meta = body.products_meta || body.meta || {};
+      _hogSetStat('products', `${_hogFmt(meta.total)} items`);
+    }).catch(() => {});
 
-  API.suppliers('', 1).then(res => {
-    if (res.status !== 200) return;
-    _hogSetStat('suppliers', `${_hogFmt(res.body?.meta?.total)} total`);
-  }).catch(() => {});
+    API.categories('', '', 1).then(res => {
+      if (res.status !== 200) return;
+      _hogSetStat('categories', `${_hogFmt(res.body?.meta?.total)} total`);
+    }).catch(() => {});
+  }
 
-  API.purchaseOrders('', '').then(res => {
-    if (res.status !== 200) return;
-    const n = (res.body?.data || []).length;
-    _hogSetStat('purchase-orders', `${_hogFmt(n)} order${n !== 1 ? 's' : ''}`);
-  }).catch(() => {});
+  if (productMgmt || stockMgmt) {
+    API.suppliers('', 1).then(res => {
+      if (res.status !== 200) return;
+      _hogSetStat('suppliers', `${_hogFmt(res.body?.meta?.total)} total`);
+    }).catch(() => {});
+  }
 
-  API.stockAudits(1).then(res => {
-    if (res.status !== 200) return;
-    _hogSetStat('stock-audit', `${_hogFmt(res.body?.meta?.total)} audits`);
-  }).catch(() => {});
+  if (stockMgmt) {
+    API.purchaseOrders('', '').then(res => {
+      if (res.status !== 200) return;
+      const n = (res.body?.data || []).length;
+      _hogSetStat('purchase-orders', `${_hogFmt(n)} order${n !== 1 ? 's' : ''}`);
+    }).catch(() => {});
 
-  API.financeFlow().then(res => {
-    if (res.status !== 200) return;
-    _hogSetStat('bills',   `${_hogFmt((res.body?.bills   || []).length)} active`);
-    _hogSetStat('loans',   `${_hogFmt((res.body?.loans   || []).length)} active`);
-    _hogSetStat('rentals', `${_hogFmt((res.body?.rentals || []).length)} active`);
-  }).catch(() => {});
+    API.stockAudits(1).then(res => {
+      if (res.status !== 200) return;
+      _hogSetStat('stock-audit', `${_hogFmt(res.body?.meta?.total)} audits`);
+    }).catch(() => {});
+  }
 
-  API.employees().then(res => {
-    if (res.status !== 200) return;
-    _hogSetStat('employees', `${_hogFmt(res.body?.total_count ?? (res.body?.data || []).length)} staff`);
-  }).catch(() => {});
+  if (hasFeature('bill_management')) {
+    API.financeFlow().then(res => {
+      if (res.status !== 200) return;
+      _hogSetStat('bills',   `${_hogFmt((res.body?.bills   || []).length)} active`);
+      _hogSetStat('loans',   `${_hogFmt((res.body?.loans   || []).length)} active`);
+      _hogSetStat('rentals', `${_hogFmt((res.body?.rentals || []).length)} active`);
+    }).catch(() => {});
+  }
 
-  API.departments().then(res => {
-    if (res.status !== 200) return;
-    _hogSetStat('departments', `${_hogFmt((res.body?.data || []).length)} total`);
-  }).catch(() => {});
+  if (hasFeature('human_resources')) {
+    API.employees().then(res => {
+      if (res.status !== 200) return;
+      _hogSetStat('employees', `${_hogFmt(res.body?.total_count ?? (res.body?.data || []).length)} staff`);
+    }).catch(() => {});
 
-  API.payrollCycles().then(res => {
-    if (res.status !== 200) return;
-    _hogSetStat('payroll', `${_hogFmt((res.body?.data || []).length)} cycles`);
-  }).catch(() => {});
+    API.departments().then(res => {
+      if (res.status !== 200) return;
+      _hogSetStat('departments', `${_hogFmt((res.body?.data || []).length)} total`);
+    }).catch(() => {});
 
-  API.serviceRequests('', '').then(res => {
-    if (res.status !== 200) return;
-    _hogSetStat('svc-requests', `${_hogFmt((res.body?.data || []).length)} total`);
-  }).catch(() => {});
+    API.payrollCycles().then(res => {
+      if (res.status !== 200) return;
+      _hogSetStat('payroll', `${_hogFmt((res.body?.data || []).length)} cycles`);
+    }).catch(() => {});
+  }
 
-  API.serviceMgmtCatalog('').then(res => {
-    if (res.status !== 200) return;
-    _hogSetStat('svc-catalog', `${_hogFmt((res.body?.data || []).length)} services`);
-  }).catch(() => {});
+  if (hasFeature('service_management')) {
+    API.serviceRequests('', '').then(res => {
+      if (res.status !== 200) return;
+      _hogSetStat('svc-requests', `${_hogFmt((res.body?.data || []).length)} total`);
+    }).catch(() => {});
+
+    API.serviceMgmtCatalog('').then(res => {
+      if (res.status !== 200) return;
+      _hogSetStat('svc-catalog', `${_hogFmt((res.body?.data || []).length)} services`);
+    }).catch(() => {});
+  }
 
   API.customers('', 1).then(res => {
     if (res.status !== 200) return;
     _hogSetStat('customers', `${_hogFmt(res.body?.meta?.total)} total`);
   }).catch(() => {});
 
-  API.sales('').then(res => {
-    if (res.status !== 200) return;
-    const today = new Date().toISOString().slice(0, 10);
-    const todayCount = (res.body?.data || []).filter(s => (s.sold_at || '').slice(0, 10) === today).length;
-    _hogSetStat('today-summary', `${_hogFmt(todayCount)} today`);
-  }).catch(() => {});
+  if (hasFeature('point_of_sale')) {
+    API.sales('').then(res => {
+      if (res.status !== 200) return;
+      const today = new Date().toISOString().slice(0, 10);
+      const todayCount = (res.body?.data || []).filter(s => (s.sold_at || '').slice(0, 10) === today).length;
+      _hogSetStat('today-summary', `${_hogFmt(todayCount)} today`);
+    }).catch(() => {});
+  }
 }
 
 // ── Home Orders View ───────────────────────────────────────────────────────
@@ -9598,8 +9687,16 @@ async function loadOrdersView() {
   const poTbody    = $('#hov-po-tbody');
   if (!salesTbody || !poTbody) return;
 
+  // Purchase Orders belong to the Stock Management feature — hide that half
+  // of this combined Sales+PO view when it isn't installed.
+  const poEnabled = hasFeature('stock_management');
+  const poSection = $('#hov-po-section');
+  const poKpis    = $('#hov-po-kpis');
+  if (poSection) poSection.style.display = poEnabled ? '' : 'none';
+  if (poKpis)    poKpis.style.display    = poEnabled ? '' : 'none';
+
   salesTbody.innerHTML = '<tr><td colspan="5" class="hov-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</td></tr>';
-  poTbody.innerHTML    = '<tr><td colspan="5" class="hov-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</td></tr>';
+  if (poEnabled) poTbody.innerHTML = '<tr><td colspan="5" class="hov-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</td></tr>';
 
   const fromEl   = $('#hov-sales-from');
   const toEl     = $('#hov-sales-to');
@@ -9610,7 +9707,7 @@ async function loadOrdersView() {
 
   const [salesRes, poRes] = await Promise.all([
     API.sales('', 200),
-    API.purchaseOrders('', stQ),
+    poEnabled ? API.purchaseOrders('', stQ) : Promise.resolve({ status: 204, body: { data: [] } }),
   ]);
 
   // Sales
@@ -9699,6 +9796,7 @@ async function _homeRightPanelToday() {
 async function _homeRightPanelBills() {
   const el = $('#hrp-bills');
   if (!el) return;
+  if (!hasFeature('bill_management')) { el.innerHTML = '<div class="hrp-empty">No data</div>'; return; }
   const res = await API.financeFlow();
   if (res.status !== 200) { el.innerHTML = '<div class="hrp-empty">No data</div>'; return; }
   // Merge bills + rentals (overdue first), loans shown separately with cadence
@@ -10774,9 +10872,15 @@ $('#home-act-refresh')?.addEventListener('click', _homeActivityLoad);
 const _han = { period: 30, sales: null, flow: null };
 
 async function _homeAnalyticsLoad() {
-  const [sr, fr] = await Promise.all([API.sales(''), API.financeFlow()]);
+  const finEnabled = hasFeature('bill_management');
+  const [sr, fr] = await Promise.all([
+    API.sales(''),
+    finEnabled ? API.financeFlow() : Promise.resolve({ status: 204, body: null }),
+  ]);
   _han.sales = sr.status === 200 ? (sr.body?.data || []) : [];
   _han.flow  = fr.status === 200 ? fr.body : null;
+  const billsCard = $('#han-kpi-bills-card');
+  if (billsCard) billsCard.style.display = finEnabled ? '' : 'none';
   _hanKPIs();
   _hanLineChart();
   _hanBarChart();
@@ -10982,10 +11086,10 @@ $('#han-refresh')?.addEventListener('click', _homeAnalyticsLoad);
 
 // Right-panel quick actions
 $('#hrp-new-sale')?.addEventListener('click',    () => activateTab('pos'));
-$('#hrp-add-product')?.addEventListener('click', () => { activateTab('pos'); openAddProductModal(); });
-$('#hrp-new-bill')?.addEventListener('click',    () => { activateTab('finance'); switchFinView('bills'); openBillCreateModal(); });
-$('#hrp-view-orders')?.addEventListener('click', () => { activateTab('inventory'); switchInvView('po'); });
-$('#hrp-barcodes')?.addEventListener('click',    () => { activateTab('inventory'); switchInvView('barcodes'); });
+$('#hrp-add-product')?.addEventListener('click', () => { if (!hasFeature('product_management')) return; activateTab('pos'); openAddProductModal(); });
+$('#hrp-new-bill')?.addEventListener('click',    () => { if (!hasFeature('bill_management')) return; activateTab('finance'); switchFinView('bills'); openBillCreateModal(); });
+$('#hrp-view-orders')?.addEventListener('click', () => { if (!hasFeature('stock_management')) return; activateTab('inventory'); switchInvView('po'); });
+$('#hrp-barcodes')?.addEventListener('click',    () => { if (!hasFeature('product_management') && !hasFeature('stock_management')) return; activateTab('inventory'); switchInvView('barcodes'); });
 
 // Ribbon Home buttons
 $('#rb-home-pos').addEventListener('click',           () => activateTab('pos'));
@@ -11014,6 +11118,9 @@ function renderBusinessChart(bizName) {
   }
 
   const isDark = document.body.classList.contains('dark');
+  // Bills/Loans/Rentals/Assets are all part of the "Bill Management" feature —
+  // keep them off the diagram entirely when that feature isn't installed.
+  const finEnabled = hasFeature('bill_management');
   const C_ROOT = '#4e8ef7', C_EXP = '#dc2626', C_INC = '#16a34a';
   const { Handle, Position, Controls, MarkerType, useNodesState, useEdgesState } = RF;
   const ReactFlowComp = RF.ReactFlow;
@@ -11330,11 +11437,14 @@ function renderBusinessChart(bizName) {
     { id: 'root',   type: 'rootNode',      position: { x: 500, y: 400 }, data: { label: bizName } },
     { id: 'exp',    type: 'expHubNode',    position: { x: 270, y: 400 }, data: { label: 'Expenses' } },
     { id: 'inc',    type: 'incHubNode',    position: { x: 740, y: 200 }, data: { label: 'Income'   } },
-    { id: 'assets', type: 'assetsHubNode', position: { x: 740, y: 580 }, data: { expanded: false, count: 0 } },
-    // ── Expense sub-hubs — each aligned with its own y-band ───────────────────
-    { id: 'e2', type: 'billsHubNode',   position: { x:  90, y: 140 }, data: { label: 'Bills',   expanded: false, dueCount: 0 } },
-    { id: 'e0', type: 'loansHubNode',   position: { x:  90, y: 400 }, data: { expanded: false, count: 0 } },
-    { id: 'e1', type: 'rentalsHubNode', position: { x:  90, y: 660 }, data: { expanded: false, count: 0 } },
+    // ── Bill Management hubs (Bills/Loans/Rentals/Assets) — feature-gated ────
+    ...(finEnabled ? [
+      { id: 'assets', type: 'assetsHubNode', position: { x: 740, y: 580 }, data: { expanded: false, count: 0 } },
+      // ── Expense sub-hubs — each aligned with its own y-band ───────────────────
+      { id: 'e2', type: 'billsHubNode',   position: { x:  90, y: 140 }, data: { label: 'Bills',   expanded: false, dueCount: 0 } },
+      { id: 'e0', type: 'loansHubNode',   position: { x:  90, y: 400 }, data: { expanded: false, count: 0 } },
+      { id: 'e1', type: 'rentalsHubNode', position: { x:  90, y: 660 }, data: { expanded: false, count: 0 } },
+    ] : []),
     // ── Expense static leaves — spread above, connected via top handles ────────
     { id: 'e3', type: 'leafNode', position: { x:  30, y: -90 }, data: { label: 'Employee Salary', variant: 'exp', ts: 'bottom' } },
     { id: 'e4', type: 'leafNode', position: { x: 150, y:-110 }, data: { label: 'Modification',    variant: 'exp', ts: 'bottom' } },
@@ -11362,17 +11472,22 @@ function renderBusinessChart(bizName) {
     // Root → main hubs
     { id: 're',    source: 'root', sourceHandle: 'src-l',  target: 'exp',    targetHandle: 'tgt-r', type: ss, style: sGray,  markerEnd: mGray  },
     { id: 'ri',    source: 'root', sourceHandle: 'src-r',  target: 'inc',    targetHandle: 'tgt-l', type: ss, style: sGray,  markerEnd: mGray  },
-    { id: 'ra',    source: 'root', sourceHandle: 'src-b',  target: 'assets', targetHandle: 'tgt-t', type: ss, style: sAmber, markerEnd: mAmber },
+    // Root → Assets hub — feature-gated
+    ...(finEnabled ? [
+      { id: 'ra',    source: 'root', sourceHandle: 'src-b',  target: 'assets', targetHandle: 'tgt-t', type: ss, style: sAmber, markerEnd: mAmber },
+    ] : []),
     // Expenses → 5 static leaves via top handles (fan upward, no crossings)
     { id: 'ex-e3', source: 'exp',  sourceHandle: 'src-t0', target: 'e3',  targetHandle: 'tgt',   type: ss, style: sRed,   markerEnd: mRed   },
     { id: 'ex-e4', source: 'exp',  sourceHandle: 'src-t1', target: 'e4',  targetHandle: 'tgt',   type: ss, style: sRed,   markerEnd: mRed   },
     { id: 'ex-e5', source: 'exp',  sourceHandle: 'src-t2', target: 'e5',  targetHandle: 'tgt',   type: ss, style: sRed,   markerEnd: mRed   },
     { id: 'ex-e6', source: 'exp',  sourceHandle: 'src-t3', target: 'e6',  targetHandle: 'tgt',   type: ss, style: sRed,   markerEnd: mRed   },
     { id: 'ex-e7', source: 'exp',  sourceHandle: 'src-t4', target: 'e7',  targetHandle: 'tgt',   type: ss, style: sRed,   markerEnd: mRed   },
-    // Expenses → 3 sub-hubs via left handles (each in its own y-band)
-    { id: 'ex-e2', source: 'exp',  sourceHandle: 'src-l0', target: 'e2',  targetHandle: 'tgt',   type: ss, style: sRed,   markerEnd: mRed   },
-    { id: 'ex-e0', source: 'exp',  sourceHandle: 'src-l1', target: 'e0',  targetHandle: 'tgt',   type: ss, style: sRed,   markerEnd: mRed   },
-    { id: 'ex-e1', source: 'exp',  sourceHandle: 'src-l2', target: 'e1',  targetHandle: 'tgt',   type: ss, style: sRed,   markerEnd: mRed   },
+    // Expenses → 3 sub-hubs via left handles (each in its own y-band) — feature-gated
+    ...(finEnabled ? [
+      { id: 'ex-e2', source: 'exp',  sourceHandle: 'src-l0', target: 'e2',  targetHandle: 'tgt',   type: ss, style: sRed,   markerEnd: mRed   },
+      { id: 'ex-e0', source: 'exp',  sourceHandle: 'src-l1', target: 'e0',  targetHandle: 'tgt',   type: ss, style: sRed,   markerEnd: mRed   },
+      { id: 'ex-e1', source: 'exp',  sourceHandle: 'src-l2', target: 'e1',  targetHandle: 'tgt',   type: ss, style: sRed,   markerEnd: mRed   },
+    ] : []),
     // Income leaves
     { id: 'in-i0', source: 'inc',  sourceHandle: 'src-t0', target: 'i0',  targetHandle: 'tgt',   type: ss, style: sGreen, markerEnd: mGreen },
     { id: 'in-i1', source: 'inc',  sourceHandle: 'src-r0', target: 'i1',  targetHandle: 'tgt',   type: ss, style: sGreen, markerEnd: mGreen },
@@ -11397,7 +11512,7 @@ function renderBusinessChart(bizName) {
 
     // Load all bills, loans, rentals, properties and expand hub nodes
     React.useEffect(() => {
-      if (!rfInst) return;
+      if (!rfInst || !finEnabled) return;
       Promise.all([API.financeFlow(), API.propertyList()]).then(([flowRes, propRes]) => {
         if (flowRes.status !== 200) return;
         const { bills, loans, rentals } = flowRes.body;
@@ -23011,7 +23126,7 @@ function _sawAddLine(desc = '', qty = 1, price = 0, discType = 'pct', discValue 
     sugTimer = setTimeout(async () => {
       const [prodRes, svcRes] = await Promise.all([
         API.productSearch(q, 6),
-        API.serviceMgmtCatalog(q),
+        hasFeature('service_management') ? API.serviceMgmtCatalog(q) : Promise.resolve({ body: { data: [] } }),
       ]);
       const products = prodRes.body?.data || [];
       const services = svcRes.body?.data  || [];
@@ -24557,7 +24672,13 @@ async function openInvoiceSetup() {
   if ($('#isetup-mg-right'))   $('#isetup-mg-right').value   = cfg.mgRight;
   if ($('#isetup-hdr-layout')) $('#isetup-hdr-layout').value = cfg.hdrLayout;
   if ($('#isetup-logo-pos'))   $('#isetup-logo-pos').value   = cfg.logoPos;
-  if ($('#isetup-lh-enabled')) $('#isetup-lh-enabled').checked = cfg.lhEnabled;
+  // Letterhead comes from Design Studio (social_media_campaign feature) —
+  // hide the toggle entirely, and treat it as off, when that isn't installed.
+  const lhFeatureOn = hasFeature('social_media_campaign');
+  const lhField = $('#isetup-lh-field');
+  if (lhField) lhField.style.display = lhFeatureOn ? '' : 'none';
+  const lhEnabledEff = lhFeatureOn && cfg.lhEnabled;
+  if ($('#isetup-lh-enabled')) $('#isetup-lh-enabled').checked = lhEnabledEff;
   const orientEl = document.querySelector(`input[name="isetup-orient"][value="${cfg.orientation}"]`);
   if (orientEl) orientEl.checked = true;
   _isetupSyncThermalUI();
@@ -24568,7 +24689,7 @@ async function openInvoiceSetup() {
   modal.style.display = 'flex';
   // Show preview immediately (no letterhead), then fetch letterhead in background
   setTimeout(_isetupUpdatePreview, 80);
-  if (cfg.lhEnabled) _isetupLoadLetterhead();
+  if (lhEnabledEff) _isetupLoadLetterhead();
 }
 
 async function _isetupSave() {
@@ -24938,6 +25059,9 @@ async function openPosSettings() {
   // Show Cashier Management tab only when POS feature is enabled
   const cashierNavItem = $('.psm-nav-item--pos-only');
   if (cashierNavItem) cashierNavItem.style.display = hasFeature('point_of_sale') ? '' : 'none';
+  // Mail tab holds live SMTP credentials/test-send — only show it when the Mail feature is installed
+  const mailNavItem = $('.psm-nav-item--mail-only');
+  if (mailNavItem) mailNavItem.style.display = hasFeature('mail') ? '' : 'none';
   psmShowTab('business');
 
   const [sRes, aRes, bRes] = await Promise.all([API.settingsGet(), API.accounts(), API.branches()]);
@@ -25000,6 +25124,7 @@ async function openPosSettings() {
   $('#psm-discount-field').checked   = !!s.discount_field_enabled;
   $('#psm-checkout-modal').checked   = !!s.checkout_modal_enabled;
   $('#psm-service-products').checked = !!s.show_service_bound_products;
+  { const el = $('#psm-section-svc-products'); if (el) el.style.display = hasFeature('service_management') ? '' : 'none'; }
   $('#psm-stock-mode').value         = s.stock_selection_mode ?? 'fifo';
   $('#psm-choose-price').checked     = !!s.choose_price;
   $('#psm-featured-products').value  = s.featured_products_limit ?? 0;
@@ -39133,6 +39258,9 @@ let _dsEmailCustomers = [];     // cached for the dropdown
 function _dsShowCtx(e, designId) {
   e.preventDefault();
   _dsCtxDesignId = designId;
+  // "Send as Email" goes through the Mail feature's mailer — hide it when Mail isn't installed.
+  const emailItem = $('#ds-ctx-email');
+  if (emailItem) emailItem.style.display = hasFeature('mail') ? '' : 'none';
   const menu = $('#ds-ctx-menu');
   menu.style.display = 'block';
   // Keep within viewport
@@ -39158,7 +39286,7 @@ document.addEventListener('contextmenu', (e) => {
 
 $('#ds-ctx-email').addEventListener('click', async () => {
   _dsHideCtx();
-  if (!_dsCtxDesignId) return;
+  if (!_dsCtxDesignId || !hasFeature('mail')) return;
 
   // Always fetch fresh from server — cached has_canvas may be stale if the
   // user saved in the editor after the list was last loaded.
@@ -42783,7 +42911,14 @@ async function submitDsCreate() {
     $('#crm-stages-modal-title').textContent = `Manage Stages`;
     $('#crm-stages-alert').style.display = 'none';
     $('#crm-stages-modal').style.display = 'flex';
-    await Promise.all([_loadStagesList(), _loadPipelineAutomation()]);
+    // Pipeline Automation is a shortcut into the Automation Editor feature —
+    // hide it (and skip fetching/creating automation flows) when that
+    // feature isn't installed, same as the standalone Automations tab.
+    const autoEditorOn = hasFeature('automation_editor');
+    const autoRow = $('#crm-stages-automation-row');
+    if (autoRow) autoRow.style.display = autoEditorOn ? 'flex' : 'none';
+    if (!autoEditorOn) _pipelineFlow = null;
+    await Promise.all([_loadStagesList(), autoEditorOn ? _loadPipelineAutomation() : Promise.resolve()]);
     _renderStagesList(); // re-render once both loads have settled, regardless of which finished first
   }
 
@@ -42892,7 +43027,9 @@ async function submitDsCreate() {
       // While Pipeline Automation is on, matching stage templates fire automatically —
       // the manual send button is hidden so it isn't offered twice. When a template
       // exists the (visible, manual-mode) button gets a purple highlight.
-      const mailBtn = pipelineAutoActive ? '' : `<button class="crm-card-btn${s.has_mail_template ? ' crm-card-btn--mail-set' : ''}" data-mail-stage="${s.id}" title="${s.has_mail_template ? 'Send email to leads in this stage' : 'Set up a mail template for this stage'}" style="flex-shrink:0"><i class="fa fa-bolt"></i></button>`;
+      // Stage mail templates send through the Mail feature's mailer — hide the
+      // shortcut entirely when Mail isn't installed.
+      const mailBtn = (pipelineAutoActive || !hasFeature('mail')) ? '' : `<button class="crm-card-btn${s.has_mail_template ? ' crm-card-btn--mail-set' : ''}" data-mail-stage="${s.id}" title="${s.has_mail_template ? 'Send email to leads in this stage' : 'Set up a mail template for this stage'}" style="flex-shrink:0"><i class="fa fa-bolt"></i></button>`;
       return `<div class="crm-stage-row" draggable="true" data-stage-idx="${idx}" data-stage-id="${s.id}">
         <span class="crm-stage-handle"><i class="fa fa-grip-vertical"></i></span>
         <span class="crm-stage-swatch" style="background:${escHtml(s.color || '#64748b')}"></span>
@@ -42978,6 +43115,7 @@ async function submitDsCreate() {
   // ── Stage mail template (manual send) ──────────────────────────────────
 
   async function openStageMailModal(stage) {
+    if (!hasFeature('mail')) return;
     $('#crm-stage-mail-project-id').value = _crmProjectId;
     $('#crm-stage-mail-stage-id').value   = stage.id;
     $('#crm-stage-mail-stage-name').textContent = stage.name;
