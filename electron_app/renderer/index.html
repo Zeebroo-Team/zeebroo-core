@@ -118,6 +118,8 @@
 .crm-card-btn--default{color:#d1d5db}
 .crm-card-btn--default.is-active{color:#f59e0b}
 .crm-card-btn--default.is-active:hover{color:#d97706}
+.crm-card-btn--mail-set{background:#7c3aed;color:#fff}
+.crm-card-btn--mail-set:hover{background:#6d28d9;color:#fff}
 /* CRM Builder */
 .crm-builder{display:flex;flex-direction:column;flex:1;overflow:hidden}
 .crm-builder-bar{display:flex;align-items:center;gap:8px;padding:7px 10px;border-bottom:1px solid var(--border,#e5e7eb);flex-shrink:0;background:var(--card,#fff)}
@@ -9480,6 +9482,20 @@
       <div class="po-aim-body" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:14px">
         <div id="crm-stages-alert" class="svc-form-alert" style="display:none"></div>
 
+        <!-- Pipeline automation toggle + shortcut -->
+        <div id="crm-stages-automation-row" style="display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid var(--border);border-radius:8px;padding:10px 12px;background:var(--bg-subtle,rgba(124,58,237,.05))">
+          <div style="display:flex;align-items:center;gap:10px;min-width:0">
+            <label class="psm-switch"><input type="checkbox" id="crm-stages-automation-toggle"><span class="psm-switch-track"></span></label>
+            <div style="min-width:0">
+              <div style="font-size:13px;font-weight:600">Pipeline Automation</div>
+              <div style="font-size:11px;color:var(--text-muted)" id="crm-stages-automation-status">Loading…</div>
+            </div>
+          </div>
+          <button class="po-btn-ghost" id="crm-stages-automation-open" style="padding:5px 10px;font-size:12px;white-space:nowrap;flex-shrink:0">
+            <i class="fa fa-diagram-project"></i> Automation Flow
+          </button>
+        </div>
+
         <!-- Existing stages list -->
         <div>
           <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">
@@ -9490,25 +9506,47 @@
           </div>
         </div>
 
-        <!-- Add new stage form -->
-        <div style="border-top:1px solid var(--border);padding-top:14px">
-          <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Add Stage</div>
-          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-            <input type="text" id="crm-stage-new-name" class="po-field-input" placeholder="Stage name" maxlength="60" style="flex:1;min-width:130px">
-            <input type="color" id="crm-stage-new-color" value="#64748b" title="Stage colour" style="width:36px;height:34px;padding:2px 3px;border:1px solid var(--border);border-radius:7px;cursor:pointer;background:none">
-            <label style="display:flex;align-items:center;gap:4px;font-size:12px;white-space:nowrap">
-              <input type="checkbox" id="crm-stage-new-won"> Won
-            </label>
-            <label style="display:flex;align-items:center;gap:4px;font-size:12px;white-space:nowrap">
-              <input type="checkbox" id="crm-stage-new-lost"> Lost
-            </label>
-            <button class="po-btn-primary" id="crm-stage-add-btn" style="padding:6px 14px;white-space:nowrap"><i class="fa fa-plus"></i> Add</button>
-          </div>
-        </div>
       </div>
 
       <div class="po-aim-footer">
         <button class="po-btn-ghost" id="crm-stages-modal-cancel"><i class="fa fa-xmark"></i> Close</button>
+        <button class="po-btn-primary" id="crm-stage-add-open-btn"><i class="fa fa-plus"></i> Add Stage</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── CRM: Add Stage Modal ── -->
+  <div class="modal-overlay" id="crm-stage-add-modal" style="display:none">
+    <div class="po-aim-shell" style="width:400px">
+      <div class="po-aim-header">
+        <i class="fa fa-plus" style="color:#7c3aed"></i>
+        <span>Add Stage</span>
+        <button class="psm-close" id="crm-stage-add-close"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div class="po-aim-body" style="display:flex;flex-direction:column;gap:12px">
+        <div id="crm-stage-add-alert" class="svc-form-alert" style="display:none"></div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <div class="po-field" style="flex:1">
+            <label class="po-field-label">Name <span class="po-required">*</span></label>
+            <input type="text" id="crm-stage-new-name" class="po-field-input" placeholder="Stage name" maxlength="60">
+          </div>
+          <div class="po-field" style="flex-shrink:0">
+            <label class="po-field-label">Colour</label>
+            <input type="color" id="crm-stage-new-color" value="#64748b" title="Stage colour" style="width:48px;height:34px;padding:2px 3px;border:1px solid var(--border);border-radius:7px;cursor:pointer;background:none">
+          </div>
+        </div>
+        <div style="display:flex;gap:16px">
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px">
+            <input type="checkbox" id="crm-stage-new-won"> Mark as Won stage
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px">
+            <input type="checkbox" id="crm-stage-new-lost"> Mark as Lost stage
+          </label>
+        </div>
+      </div>
+      <div class="po-aim-footer">
+        <button class="po-btn-ghost" id="crm-stage-add-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+        <button class="po-btn-primary" id="crm-stage-add-btn"><i class="fa fa-check"></i> Add Stage</button>
       </div>
     </div>
   </div>
@@ -9552,7 +9590,7 @@
 
   <!-- ── CRM: Stage Mail Template Modal (manual send) ── -->
   <div class="modal-overlay" id="crm-stage-mail-modal" style="display:none">
-    <div class="po-aim-shell" style="width:480px;max-height:85vh;display:flex;flex-direction:column">
+    <div class="po-aim-shell" style="width:min(560px, 94vw);max-height:85vh;display:flex;flex-direction:column">
       <div class="po-aim-header">
         <i class="fa fa-envelope" style="color:#7c3aed"></i>
         <span>Send Email — <span id="crm-stage-mail-stage-name">Stage</span></span>
@@ -9594,9 +9632,9 @@
           </div>
         </div>
       </div>
-      <div class="po-aim-footer" style="justify-content:space-between">
+      <div class="po-aim-footer" style="justify-content:space-between;flex-wrap:wrap;row-gap:8px">
         <button class="po-btn-ghost" id="crm-stage-mail-delete" style="color:#ef4444;display:none"><i class="fa fa-trash"></i> Remove Template</button>
-        <div style="display:flex;gap:8px;margin-left:auto">
+        <div style="display:flex;gap:8px;margin-left:auto;flex-wrap:wrap;row-gap:8px;justify-content:flex-end">
           <button class="po-btn-ghost" id="crm-stage-mail-cancel"><i class="fa fa-xmark"></i> Cancel</button>
           <button class="po-btn-ghost" id="crm-stage-mail-save"><i class="fa fa-check"></i> Save Template</button>
           <button class="po-btn-primary" id="crm-stage-mail-send"><i class="fa fa-paper-plane"></i> Save &amp; Send Now</button>

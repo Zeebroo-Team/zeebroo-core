@@ -42772,6 +42772,8 @@ async function submitDsCreate() {
   let _stageDragId   = null;
   let _stageDragIdx  = null;
   let _stageListData = [];
+  const PIPELINE_AUTOMATION_TRIGGER = 'crm.lead.stage_changed';
+  let _pipelineFlow = null; // automation flow linked to the currently-open relation, or null
 
   async function openStagesModal() {
     if (!_crmProjectId) {
@@ -42780,13 +42782,92 @@ async function submitDsCreate() {
     }
     $('#crm-stages-modal-title').textContent = `Manage Stages`;
     $('#crm-stages-alert').style.display = 'none';
-    $('#crm-stage-new-name').value  = '';
-    $('#crm-stage-new-color').value = '#64748b';
-    $('#crm-stage-new-won').checked  = false;
-    $('#crm-stage-new-lost').checked = false;
     $('#crm-stages-modal').style.display = 'flex';
-    await _loadStagesList();
+    await Promise.all([_loadStagesList(), _loadPipelineAutomation()]);
+    _renderStagesList(); // re-render once both loads have settled, regardless of which finished first
   }
+
+  async function _loadPipelineAutomation() {
+    const statusEl = $('#crm-stages-automation-status');
+    const toggleEl = $('#crm-stages-automation-toggle');
+    statusEl.textContent = 'Loading…';
+    toggleEl.checked  = false;
+    toggleEl.disabled = true;
+    const res = await API.automations();
+    const flows = res.status === 200 ? (res.body?.data || []) : [];
+    _pipelineFlow = flows.find(f => f.trigger_config?.relation_id == _crmProjectId) || null;
+    toggleEl.disabled = false;
+    if (_pipelineFlow) {
+      toggleEl.checked  = !!_pipelineFlow.is_active;
+      statusEl.textContent = `${_pipelineFlow.is_active ? 'Active' : 'Inactive'} — "${_pipelineFlow.name}"`;
+    } else {
+      toggleEl.checked = false;
+      statusEl.textContent = 'No automation flow linked yet — click "Automation Flow" to create one.';
+    }
+  }
+
+  $('#crm-stages-automation-toggle')?.addEventListener('change', async e => {
+    const toggleEl = e.target;
+    if (!_pipelineFlow) {
+      // Nothing linked yet — create the flow already set to the requested state.
+      toggleEl.disabled = true;
+      await _createPipelineFlow(toggleEl.checked);
+      toggleEl.disabled = false;
+      return;
+    }
+    await _setPipelineFlowActive(toggleEl.checked);
+  });
+
+  async function _setPipelineFlowActive(active) {
+    const toggleEl = $('#crm-stages-automation-toggle');
+    const statusEl = $('#crm-stages-automation-status');
+    toggleEl.disabled = true;
+    const res = await API.automationUpdate(_pipelineFlow.id, { is_active: active });
+    toggleEl.disabled = false;
+    if (res.status === 200) {
+      _pipelineFlow = res.body.data;
+      toggleEl.checked = !!_pipelineFlow.is_active;
+      statusEl.textContent = `${_pipelineFlow.is_active ? 'Active' : 'Inactive'} — "${_pipelineFlow.name}"`;
+      toast(`Pipeline automation ${_pipelineFlow.is_active ? 'activated' : 'deactivated'}.`, 'success');
+      _renderStagesList();
+    } else {
+      toggleEl.checked = !!_pipelineFlow.is_active;
+      toast(res.body?.message || 'Failed to update automation flow.', 'error');
+    }
+  }
+
+  async function _createPipelineFlow(active = true) {
+    const statusEl = $('#crm-stages-automation-status');
+    statusEl.textContent = 'Creating automation flow…';
+    const relationName = _crmProjects.find(p => p.id === _crmProjectId)?.name || `Relation #${_crmProjectId}`;
+    const res = await API.automationCreate({
+      name: `Pipeline Automation — ${relationName}`,
+      description: 'Triggers when a lead changes stage in this pipeline.',
+      trigger_type: PIPELINE_AUTOMATION_TRIGGER,
+      trigger_config: { relation_id: _crmProjectId },
+      is_active: active,
+    });
+    if (res.status === 201) {
+      _pipelineFlow = res.body.data;
+      $('#crm-stages-automation-toggle').checked = !!_pipelineFlow.is_active;
+      statusEl.textContent = `${_pipelineFlow.is_active ? 'Active' : 'Inactive'} — "${_pipelineFlow.name}"`;
+      _renderStagesList();
+    } else {
+      statusEl.textContent = 'No automation flow linked yet — click "Automation Flow" to create one.';
+      toast(res.body?.message || 'Failed to create automation flow.', 'error');
+    }
+  }
+
+  $('#crm-stages-automation-open')?.addEventListener('click', async () => {
+    const btn = $('#crm-stages-automation-open');
+    btn.disabled = true;
+    if (!_pipelineFlow) await _createPipelineFlow();
+    if (_pipelineFlow) {
+      const full = await API.automationGet(_pipelineFlow.id);
+      if (full.status === 200) window.electronAPI.openAutomation(full.body.data);
+    }
+    btn.disabled = false;
+  });
 
   async function _loadStagesList() {
     const list = $('#crm-stages-list');
@@ -42803,16 +42884,21 @@ async function submitDsCreate() {
       list.innerHTML = '<p style="font-size:12px;color:var(--text-muted);text-align:center;padding:10px 0">No stages yet.</p>';
       return;
     }
+    const pipelineAutoActive = !!(_pipelineFlow && _pipelineFlow.is_active);
     list.innerHTML = _stageListData.map((s, idx) => {
       const wonTag  = s.is_won  ? '<span class="crm-stage-tag crm-stage-tag--won">Won</span>'  : '';
       const lostTag = s.is_lost ? '<span class="crm-stage-tag crm-stage-tag--lost">Lost</span>' : '';
       const countBadge = s.leads_count > 0 ? `<span class="crm-stage-badge">${s.leads_count} lead${s.leads_count > 1 ? 's' : ''}</span>` : '';
+      // While Pipeline Automation is on, matching stage templates fire automatically —
+      // the manual send button is hidden so it isn't offered twice. When a template
+      // exists the (visible, manual-mode) button gets a purple highlight.
+      const mailBtn = pipelineAutoActive ? '' : `<button class="crm-card-btn${s.has_mail_template ? ' crm-card-btn--mail-set' : ''}" data-mail-stage="${s.id}" title="${s.has_mail_template ? 'Send email to leads in this stage' : 'Set up a mail template for this stage'}" style="flex-shrink:0"><i class="fa fa-bolt"></i></button>`;
       return `<div class="crm-stage-row" draggable="true" data-stage-idx="${idx}" data-stage-id="${s.id}">
         <span class="crm-stage-handle"><i class="fa fa-grip-vertical"></i></span>
         <span class="crm-stage-swatch" style="background:${escHtml(s.color || '#64748b')}"></span>
         <span class="crm-stage-name">${escHtml(s.name)}</span>
         ${wonTag}${lostTag}${countBadge}
-        <button class="crm-card-btn" data-mail-stage="${s.id}" title="Send email to leads in this stage" style="flex-shrink:0"><i class="fa fa-envelope"></i></button>
+        ${mailBtn}
         <button class="crm-card-btn" data-edit-stage="${s.id}" title="Edit stage" style="flex-shrink:0"><i class="fa fa-pen"></i></button>
         <button class="crm-card-btn" data-del-stage="${s.id}" title="Delete stage" style="flex-shrink:0;color:#ef4444"><i class="fa fa-trash"></i></button>
       </div>`;
@@ -42968,10 +43054,16 @@ async function submitDsCreate() {
     if (res.status === 200) {
       $('#crm-stage-mail-delete').style.display = '';
       toast('Template saved.', 'success');
+      _markStageHasMailTemplate(stageId, true);
     } else {
       _stageMailAlert(res.body?.message || 'Failed to save template.');
     }
   });
+
+  function _markStageHasMailTemplate(stageId, hasTemplate) {
+    const stage = _stageListData.find(s => s.id === stageId);
+    if (stage) { stage.has_mail_template = hasTemplate; _renderStagesList(); }
+  }
 
   $('#crm-stage-mail-send')?.addEventListener('click', async () => {
     const { payload, error } = _stageMailPayload();
@@ -42993,6 +43085,7 @@ async function submitDsCreate() {
       _stageMailAlert(saveRes.body?.message || 'Failed to save template.');
       return;
     }
+    _markStageHasMailTemplate(stageId, true);
 
     const sendRes = await API.crmSendStageMail(projectId, stageId);
     btn.disabled = false;
@@ -43018,6 +43111,7 @@ async function submitDsCreate() {
     if (res.status === 200) {
       $('#crm-stage-mail-modal').style.display = 'none';
       toast('Template removed.', 'success');
+      _markStageHasMailTemplate(stageId, false);
     } else {
       _stageMailAlert(res.body?.message || 'Failed to remove template.');
     }
@@ -43028,10 +43122,29 @@ async function submitDsCreate() {
   $('#crm-stages-modal-cancel')?.addEventListener('click', () => { $('#crm-stages-modal').style.display = 'none'; });
   $('#crm-stages-modal')?.addEventListener('click', e => { if (e.target === $('#crm-stages-modal')) $('#crm-stages-modal').style.display = 'none'; });
 
+  // Add stage modal open/close
+  function _openStageAddModal() {
+    $('#crm-stage-add-alert').style.display = 'none';
+    $('#crm-stage-new-name').value  = '';
+    $('#crm-stage-new-color').value = '#64748b';
+    $('#crm-stage-new-won').checked  = false;
+    $('#crm-stage-new-lost').checked = false;
+    $('#crm-stage-add-modal').style.display = 'flex';
+    $('#crm-stage-new-name')?.focus();
+  }
+  $('#crm-stage-add-open-btn')?.addEventListener('click', _openStageAddModal);
+  $('#crm-stage-add-close')?.addEventListener('click',  () => { $('#crm-stage-add-modal').style.display = 'none'; });
+  $('#crm-stage-add-cancel')?.addEventListener('click', () => { $('#crm-stage-add-modal').style.display = 'none'; });
+  $('#crm-stage-add-modal')?.addEventListener('click', e => { if (e.target === $('#crm-stage-add-modal')) $('#crm-stage-add-modal').style.display = 'none'; });
+
   // Add stage
   $('#crm-stage-add-btn')?.addEventListener('click', async () => {
     const name = $('#crm-stage-new-name').value.trim();
-    if (!name) { toast('Stage name is required.', 'error'); return; }
+    if (!name) {
+      $('#crm-stage-add-alert').textContent = 'Stage name is required.';
+      $('#crm-stage-add-alert').style.display = '';
+      return;
+    }
     const btn = $('#crm-stage-add-btn');
     btn.disabled = true;
     const res = await API.crmCreateStage(_crmProjectId, {
@@ -43042,15 +43155,13 @@ async function submitDsCreate() {
     });
     btn.disabled = false;
     if (res.status === 201) {
-      $('#crm-stage-new-name').value  = '';
-      $('#crm-stage-new-color').value = '#64748b';
-      $('#crm-stage-new-won').checked  = false;
-      $('#crm-stage-new-lost').checked = false;
+      $('#crm-stage-add-modal').style.display = 'none';
       toast('Stage added.', 'success');
       await _loadStagesList();
       loadCrmPipeline();
     } else {
-      toast(res.body?.message || 'Failed to add stage.', 'error');
+      $('#crm-stage-add-alert').textContent = res.body?.message || 'Failed to add stage.';
+      $('#crm-stage-add-alert').style.display = '';
     }
   });
 

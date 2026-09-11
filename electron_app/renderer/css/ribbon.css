@@ -8153,6 +8153,7 @@ body.dark .han-icon-amber  { color: #fbbf24; }
   font-size: 13px; font-weight: 600; border-radius: 9px;
   border: 1.5px solid var(--border); color: var(--text-muted);
   background: transparent; cursor: pointer; transition: all .12s;
+  white-space: nowrap; flex-shrink: 0;
 }
 .po-btn-ghost:hover { border-color: var(--text-muted); color: var(--text); }
 .po-btn-outline {
@@ -8160,6 +8161,7 @@ body.dark .han-icon-amber  { color: #fbbf24; }
   font-size: 13px; font-weight: 700; border-radius: 9px;
   border: 1.5px solid var(--border); color: var(--text);
   background: var(--surface); cursor: pointer; transition: all .12s;
+  white-space: nowrap; flex-shrink: 0;
 }
 .po-btn-outline:hover { border-color: var(--accent); color: var(--accent); }
 .po-btn-primary {
@@ -8167,6 +8169,7 @@ body.dark .han-icon-amber  { color: #fbbf24; }
   font-size: 13px; font-weight: 700; border-radius: 9px;
   border: none; background: var(--accent); color: #fff;
   cursor: pointer; transition: opacity .12s, box-shadow .12s;
+  white-space: nowrap; flex-shrink: 0;
 }
 .po-btn-primary:hover { opacity: .9; box-shadow: 0 4px 14px var(--accent-light); }
 .po-btn-primary:disabled, .po-btn-outline:disabled { opacity: .5; cursor: default; }
