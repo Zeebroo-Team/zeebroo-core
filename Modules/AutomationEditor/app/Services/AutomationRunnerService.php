@@ -147,7 +147,13 @@ class AutomationRunnerService
         if ($type === 'action') {
             $res    = $this->executeAction($config, $payload, $business);
             $log[]  = ['node_id' => $node['id'], 'type' => $type, 'action' => $config['action'] ?? $config['preset'] ?? '', 'result' => $res];
-            $this->traverseNext($node, $nodes, $payload, $business, $log);
+
+            $nextPayload = $payload;
+            if (!empty($res['success']) && array_key_exists('output', $res) && !empty($res['output_var'])) {
+                $nextPayload[$res['output_var']] = $res['output'];
+            }
+
+            $this->traverseNext($node, $nodes, $nextPayload, $business, $log);
         } elseif ($type === 'condition') {
             $passes = $this->evaluateCondition($config, $payload);
             $port   = $passes ? 'output_1' : 'output_2';
@@ -172,6 +178,7 @@ class AutomationRunnerService
             'deduct_stock'    => $this->actionDeductStock($config, $payload, $business),
             'ai_send_email'       => $this->actionAiSendEmail($config, $payload, $business),
             'ai_whatsapp_message' => $this->actionAiWhatsappMessage($config, $payload, $business),
+            'ai_generate'         => $this->actionAiGenerate($config, $payload, $business),
             'send_notification'   => $this->actionSendNotification($config, $payload, $business),
             default           => ['success' => false, 'error' => "Action '{$action}' is not yet implemented."],
         };
@@ -381,6 +388,45 @@ class AutomationRunnerService
         return array_merge($result, ['ai_generated' => true, 'prompt_length' => strlen($prompt)]);
     }
 
+    /**
+     * Generates text via Gemini from a prompt and stores it under a named
+     * variable in the payload (no send/side effect) — downstream nodes can
+     * reference it as {{output_var}} in their own template fields.
+     */
+    private function actionAiGenerate(array $config, array $payload, Business $business): array
+    {
+        $prompt    = trim($this->render($config['ai_generate_prompt'] ?? '', $payload));
+        $outputVar = $this->sanitizeVarName($config['ai_generate_output_var'] ?? 'ai_output');
+
+        if ($prompt === '') {
+            return ['success' => false, 'error' => 'AI prompt is empty.'];
+        }
+
+        $apiKey = (string) config('aibot.gemini.api_key', '');
+        if ($apiKey === '') {
+            return ['success' => false, 'error' => 'GEMINI_API_KEY is not configured.'];
+        }
+
+        $gemini = app(GeminiGenerateContentClient::class);
+        $resp   = $gemini->generate([
+            'contents' => [
+                ['role' => 'user', 'parts' => [['text' => $prompt]]],
+            ],
+            'generationConfig' => ['temperature' => 0.7, 'maxOutputTokens' => 800],
+        ]);
+
+        if (!$resp->successful()) {
+            return ['success' => false, 'error' => 'Gemini API error: ' . $resp->status()];
+        }
+
+        $generated = $resp->json('candidates.0.content.parts.0.text') ?? '';
+        if (empty($generated)) {
+            return ['success' => false, 'error' => 'Gemini returned empty content.'];
+        }
+
+        return ['success' => true, 'output' => $generated, 'output_var' => $outputVar];
+    }
+
     private function actionSendNotification(array $config, array $payload, Business $business): array
     {
         $title   = $this->render($config['notif_title']   ?? 'Automation Alert', $payload);
@@ -440,6 +486,18 @@ class AutomationRunnerService
             $field = trim(substr($field, 2, -2));
         }
         return $field;
+    }
+
+    /**
+     * Turn a user-typed "Save Output As" field into a safe payload key
+     * (lowercase, alnum + underscore only) so it can be used as {{var}}.
+     */
+    private function sanitizeVarName(string $name): string
+    {
+        $name = strtolower(trim($name));
+        $name = preg_replace('/[^a-z0-9_]+/', '_', $name);
+        $name = trim($name, '_');
+        return $name !== '' ? $name : 'ai_output';
     }
 
     private function dotGet(array $data, string $path): mixed
