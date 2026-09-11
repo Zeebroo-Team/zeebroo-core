@@ -6,7 +6,6 @@ use Illuminate\Support\Facades\Log;
 use Modules\AIBot\Services\GeminiGenerateContentClient;
 use Modules\AutomationEditor\Mail\AutomationMail;
 use Modules\AutomationEditor\Models\AutomationFlow;
-use Modules\AutomationEditor\Models\AutomationNotification;
 use Modules\AutomationEditor\Models\AutomationRun;
 use Modules\AutomationEditor\Services\WhatsappSenderService;
 use Modules\Business\Models\Business;
@@ -14,10 +13,13 @@ use Modules\CRM\Models\Lead;
 use Modules\CRM\Models\Project;
 use Modules\CRM\Models\Task;
 use Modules\Mail\Services\BusinessMailerService;
+use Modules\Pos\Services\PosNotificationService;
 use Modules\Product\Models\Product;
 
 class AutomationRunnerService
 {
+    private ?int $currentFlowId = null;
+
     public function __construct(
         private readonly BusinessMailerService $mailer,
     ) {}
@@ -67,6 +69,8 @@ class AutomationRunnerService
 
     private function run(AutomationFlow $flow, Business $business, array $payload): void
     {
+        $this->currentFlowId = $flow->id;
+
         $run = AutomationRun::create([
             'flow_id'         => $flow->id,
             'status'          => 'running',
@@ -386,13 +390,13 @@ class AutomationRunnerService
             return ['success' => false, 'error' => 'Notification message is empty.'];
         }
 
-        $notif = AutomationNotification::create([
-            'business_id' => $business->id,
-            'flow_id'     => null,
-            'title'       => $title ?: null,
-            'message'     => $message,
-            'payload'     => $payload,
-        ]);
+        $notif = app(PosNotificationService::class)->notifyAutomation(
+            $business,
+            $this->currentFlowId,
+            $title ?: 'Automation Alert',
+            $message,
+            $payload,
+        );
 
         return ['success' => true, 'notification_id' => $notif->id, 'title' => $notif->title];
     }

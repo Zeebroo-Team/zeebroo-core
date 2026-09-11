@@ -134,10 +134,25 @@ class PosNotificationService
 
     // ---- Event-based notifications (fired once, at the point of action) ----
 
+    /** @param array<string, mixed> $payload */
+    public function notifyAutomation(Business $business, ?int $flowId, string $title, string $message, array $payload): PosNotification
+    {
+        return PosNotification::create([
+            'business_id' => $business->id,
+            'branch_id' => null,
+            'type' => PosNotification::TYPE_AUTOMATION,
+            'title' => $title,
+            'message' => $message,
+            'reference_type' => null,
+            'reference_id' => null,
+            'payload' => ['flow_id' => $flowId, 'trigger_payload' => $payload],
+        ]);
+    }
+
     public function notifyPurchaseOrderReceived(Purchase $purchase): void
     {
         $this->upsert(
-            business: (int) $purchase->business_id,
+            business: $purchase->business,
             branchId: $purchase->branch_id !== null ? (int) $purchase->branch_id : null,
             type: PosNotification::TYPE_PURCHASE_ORDER_RECEIVED,
             referenceType: 'purchase',
@@ -156,7 +171,7 @@ class PosNotificationService
         }
 
         $this->upsert(
-            business: (int) $business->id,
+            business: $business,
             branchId: $sale->branch_id !== null ? (int) $sale->branch_id : null,
             type: PosNotification::TYPE_SALE_LARGE,
             referenceType: 'sale',
@@ -222,7 +237,7 @@ class PosNotificationService
         $extra = $count > 3 ? ' and '.($count - 3).' more' : '';
 
         $this->upsert(
-            business: (int) $business->id,
+            business: $business,
             branchId: null,
             type: $type,
             referenceType: 'stock_summary',
@@ -249,7 +264,7 @@ class PosNotificationService
             }
             $overdueBillIds[] = $bill->id;
             $this->upsert(
-                business: (int) $business->id,
+                business: $business,
                 branchId: $bill->branch_id !== null ? (int) $bill->branch_id : null,
                 type: PosNotification::TYPE_BILL_OVERDUE,
                 referenceType: 'bill',
@@ -268,7 +283,7 @@ class PosNotificationService
             }
             $overdueLoanIds[] = $loan->id;
             $this->upsert(
-                business: (int) $business->id,
+                business: $business,
                 branchId: null,
                 type: PosNotification::TYPE_LOAN_OVERDUE,
                 referenceType: 'loan',
@@ -288,7 +303,7 @@ class PosNotificationService
             $overdueRentalIds[] = $rental->id;
             $label = $rental->purpose ?: ($rental->property_type ?: 'Rental');
             $this->upsert(
-                business: (int) $business->id,
+                business: $business,
                 branchId: $rental->branch_id !== null ? (int) $rental->branch_id : null,
                 type: PosNotification::TYPE_RENTAL_OVERDUE,
                 referenceType: 'rental',
@@ -309,7 +324,7 @@ class PosNotificationService
 
         foreach ($expiredProperties as $property) {
             $this->upsert(
-                business: (int) $business->id,
+                business: $business,
                 branchId: null,
                 type: PosNotification::TYPE_PROPERTY_EXPIRED,
                 referenceType: 'property',
@@ -338,7 +353,7 @@ class PosNotificationService
 
         foreach ($overdue as $purchase) {
             $this->upsert(
-                business: (int) $business->id,
+                business: $business,
                 branchId: $purchase->branch_id !== null ? (int) $purchase->branch_id : null,
                 type: PosNotification::TYPE_PURCHASE_ORDER_OVERDUE,
                 referenceType: 'purchase',
@@ -367,7 +382,7 @@ class PosNotificationService
 
         foreach ($overdue as $cheque) {
             $this->upsert(
-                business: (int) $business->id,
+                business: $business,
                 branchId: null,
                 type: PosNotification::TYPE_CHEQUE_OVERDUE,
                 referenceType: 'cheque',
@@ -389,7 +404,7 @@ class PosNotificationService
 
     /** @param array<string, mixed> $payload */
     private function upsert(
-        int $business,
+        Business $business,
         ?int $branchId,
         string $type,
         string $referenceType,
@@ -399,7 +414,7 @@ class PosNotificationService
         array $payload,
     ): void {
         $existing = PosNotification::query()
-            ->where('business_id', $business)
+            ->where('business_id', $business->id)
             ->where('type', $type)
             ->where('reference_type', $referenceType)
             ->where('reference_id', $referenceId)
@@ -417,9 +432,9 @@ class PosNotificationService
             }
         }
 
-        PosNotification::query()->updateOrCreate(
+        $notification = PosNotification::query()->updateOrCreate(
             [
-                'business_id' => $business,
+                'business_id' => $business->id,
                 'type' => $type,
                 'reference_type' => $referenceType,
                 'reference_id' => $referenceId,
@@ -433,6 +448,16 @@ class PosNotificationService
                 'read_at' => $existing && $existing->isDismissed() ? null : $existing?->read_at,
             ],
         );
+
+        // Only fire the automation trigger for a genuinely new alert, not every
+        // periodic re-sync of a condition that was already surfaced.
+        if ($notification->wasRecentlyCreated) {
+            app(\Modules\AutomationEditor\Services\AutomationRunnerService::class)->dispatch(
+                'notification.created',
+                $business,
+                ['notification' => $this->format($notification)],
+            );
+        }
     }
 
     /** @param array<int, int> $currentIds */

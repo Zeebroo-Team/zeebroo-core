@@ -89,6 +89,9 @@ class AutomationFlow extends Model
                 'rental.created'   => 'Rental Agreement Created',
                 'rental.paid'      => 'Rental Payment Settled',
             ],
+            'Notifications' => [
+                'notification.created' => 'Notification Created',
+            ],
             'Manual' => [
                 'manual' => 'Manual / Button Trigger',
             ],

@@ -29,6 +29,8 @@ class PosNotification extends Model
 
     public const TYPE_SALE_LARGE = 'sale_large';
 
+    public const TYPE_AUTOMATION = 'automation';
+
     protected $table = 'pos_notifications';
 
     protected $fillable = [
