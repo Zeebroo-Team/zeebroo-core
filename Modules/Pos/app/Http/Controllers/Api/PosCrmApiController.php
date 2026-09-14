@@ -124,16 +124,123 @@ class PosCrmApiController extends Controller
 
         return response()->json([
             'data' => [
-                'project'      => ['id' => $project->id, 'name' => $project->name],
-                'columns'      => $columns,
-                'stages'       => $allStages->map(fn ($s) => ['id' => $s->id, 'name' => $s->name, 'color' => $s->color]),
-                'default_form' => $defaultForm ? [
+                'project'            => ['id' => $project->id, 'name' => $project->name],
+                'columns'            => $columns,
+                'stages'             => $allStages->map(fn ($s) => ['id' => $s->id, 'name' => $s->name, 'color' => $s->color]),
+                'default_form'       => $defaultForm ? [
                     'id'               => $defaultForm->id,
                     'name'             => $defaultForm->name,
                     'default_stage_id' => $defaultForm->default_stage_id,
                 ] : null,
+                'custom_data_count'  => $this->leads->customDataLeadCount($project),
             ],
         ]);
+    }
+
+    /**
+     * Leads submitted through a "Custom Data Entry Form" (LeadForm::TYPE_CUSTOM_DATA) for this
+     * project, grouped by the form they came from — each form has its own set of fields, so the
+     * "Custom Data" tab renders one spreadsheet-style table per form (columns = that form's
+     * fields, one row per submission). These leads still also appear on the Pipeline.
+     */
+    public function customDataLeads(Request $request, int $projectId): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $project  = Project::where('business_id', $business->id)->findOrFail($projectId);
+
+        $groups = $this->leads->customDataLeadsForProject($project)
+            ->groupBy('form_id')
+            ->map(function ($leadsForForm) {
+                $form = $leadsForForm->first()->form;
+
+                return [
+                    'form' => [
+                        'id'     => $form?->id,
+                        'name'   => $form?->name ?? 'Deleted form',
+                        'blocks' => $form?->blocks ?? [],
+                    ],
+                    'leads' => $leadsForForm->map(fn (Lead $lead) => [
+                        'id'                  => $lead->id,
+                        'stage_id'            => $lead->stage_id,
+                        'stage_name'          => $lead->stage?->name,
+                        'form_id'             => $lead->form_id,
+                        'name'                => $lead->name,
+                        'company'             => $lead->company,
+                        'email'               => $lead->email,
+                        'phone'               => $lead->phone,
+                        'estimated_value'     => $lead->estimated_value,
+                        'expected_close_date' => $lead->expected_close_date,
+                        'notes'               => $lead->notes,
+                        'custom_fields'       => $lead->customFieldValues->pluck('value', 'custom_field_id'),
+                        'created_at'          => $lead->created_at?->toIso8601String(),
+                    ])->values(),
+                ];
+            })
+            ->values();
+
+        return response()->json(['data' => $groups]);
+    }
+
+    /**
+     * Contacts derived from this relation's own leads — one row per lead, since a lead already
+     * carries its own name/company/email/phone and doesn't have to be linked to a POS Customer
+     * to count as a contact here. Backs the relation detail "Contacts" tab (search + stage filter).
+     */
+    public function projectContacts(Request $request, int $projectId): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $project  = Project::where('business_id', $business->id)->findOrFail($projectId);
+
+        $search  = trim((string) $request->query('q', ''));
+        $stageId = $request->query('stage_id');
+
+        $leads = Lead::query()
+            ->where('project_id', $project->id)
+            ->when(filled($search), fn ($q) => $q->where(function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                  ->orWhere('company', 'like', "%{$search}%")
+                  ->orWhere('email', 'like', "%{$search}%")
+                  ->orWhere('phone', 'like', "%{$search}%");
+            }))
+            ->when(filled($stageId), fn ($q) => $q->where('stage_id', $stageId))
+            ->with('stage:id,name,color')
+            ->orderByDesc('id')
+            ->get(['id', 'stage_id', 'customer_id', 'name', 'company', 'email', 'phone']);
+
+        $leadIds = $leads->pluck('id');
+
+        $openTaskCounts = Task::query()
+            ->where('business_id', $business->id)
+            ->where('subject_type', Lead::class)
+            ->whereIn('subject_id', $leadIds)
+            ->where('status', Task::STATUS_PENDING)
+            ->selectRaw('subject_id, count(*) as open_tasks')
+            ->groupBy('subject_id')
+            ->pluck('open_tasks', 'subject_id');
+
+        $lastActivityAt = Activity::query()
+            ->where('business_id', $business->id)
+            ->where('subject_type', Lead::class)
+            ->whereIn('subject_id', $leadIds)
+            ->selectRaw('subject_id, max(occurred_at) as last_at')
+            ->groupBy('subject_id')
+            ->pluck('last_at', 'subject_id');
+
+        $data = $leads->map(fn (Lead $lead) => [
+            'id'            => $lead->id,
+            'name'          => $lead->name,
+            'company'       => $lead->company,
+            'email'         => $lead->email,
+            'phone'         => $lead->phone,
+            'is_customer'   => (bool) $lead->customer_id,
+            'stage_id'      => $lead->stage_id,
+            'stage_name'    => $lead->stage?->name,
+            'stage_color'   => $lead->stage?->color,
+            'open_tasks'    => (int) ($openTaskCounts[$lead->id] ?? 0),
+            'last_activity' => $lastActivityAt[$lead->id] ?? null,
+        ]);
+
+        return response()->json(['data' => $data]);
     }
 
     // ── Leads ─────────────────────────────────────────────────────────────
@@ -521,6 +628,7 @@ class PosCrmApiController extends Controller
         return response()->json(['data' => $rows->map(fn (LeadForm $f) => [
             'id'                 => $f->id,
             'name'               => $f->name,
+            'type'               => $f->type,
             'is_published'       => $f->is_published,
             'is_default'         => (bool) $f->is_default,
             'public_url'         => $f->publicUrl(),
@@ -539,15 +647,24 @@ class PosCrmApiController extends Controller
         $project  = Project::where('business_id', $business->id)->findOrFail($projectId);
 
         $validated = $request->validate([
-            'name'     => ['required', 'string', 'max:255'],
-            'template' => ['nullable', 'string', Rule::in(LeadFormService::templateKeys())],
+            'name'              => ['required', 'string', 'max:255'],
+            'type'              => ['nullable', 'string', Rule::in([LeadForm::TYPE_CUSTOMER, LeadForm::TYPE_SUPPLIER, LeadForm::TYPE_CUSTOM_DATA, LeadForm::TYPE_EMPLOYEE])],
+            'template'          => ['nullable', 'string', Rule::in(LeadFormService::templateKeys())],
+            'is_default'        => ['nullable', 'boolean'],
+            'success_message'   => ['nullable', 'string', 'max:500'],
+            'default_stage_id'  => ['nullable', 'integer', Rule::exists('crm_lead_stages', 'id')->where(fn ($q) => $q->where('project_id', $project->id))],
         ]);
 
         $form = $this->forms->create($project, $validated);
 
+        if ($validated['is_default'] ?? false) {
+            $form = $this->forms->toggleDefault($form);
+        }
+
         return response()->json(['data' => [
             'id'                 => $form->id,
             'name'               => $form->name,
+            'type'               => $form->type,
             'is_published'       => $form->is_published,
             'is_default'         => (bool) $form->is_default,
             'public_url'         => $form->publicUrl(),
@@ -571,6 +688,7 @@ class PosCrmApiController extends Controller
         return response()->json(['data' => [
             'id'                 => $form->id,
             'name'               => $form->name,
+            'type'               => $form->type,
             'is_published'       => $form->is_published,
             'is_default'         => (bool) $form->is_default,
             'public_url'         => $form->publicUrl(),
@@ -731,7 +849,10 @@ class PosCrmApiController extends Controller
             'type' => ['required', 'string', Rule::in(LeadCustomField::types())],
         ]);
 
-        $field = $this->customFields->create($project, $validated);
+        $field = $this->customFields->create($project, [
+            'label' => $validated['name'],
+            'type'  => $validated['type'],
+        ]);
 
         return response()->json(['data' => [
             'id'   => $field->id,

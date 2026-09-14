@@ -155,6 +155,15 @@
 .crm-tpl-icon{font-size:20px;color:var(--accent,#4e8ef7);margin-bottom:4px}
 .crm-tpl-name{font-size:12px;font-weight:700;color:var(--text,#111827)}
 .crm-tpl-desc{font-size:11px;color:var(--text-muted,#6b7280);margin-top:2px}
+/* Form wizard step indicator */
+.crm-wiz-steps{display:flex;align-items:center;gap:8px;padding:10px 16px;border-bottom:1px solid var(--border,#e5e7eb)}
+.crm-wiz-step{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:var(--text-muted,#6b7280)}
+.crm-wiz-step-num{width:18px;height:18px;border-radius:50%;background:var(--border,#e5e7eb);color:var(--text-muted,#6b7280);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0}
+.crm-wiz-step.is-active{color:var(--text,#111827)}
+.crm-wiz-step.is-active .crm-wiz-step-num{background:var(--accent,#4e8ef7);color:#fff}
+.crm-wiz-step.is-done .crm-wiz-step-num{background:#d1fae5;color:#065f46}
+.crm-wiz-step:not(:last-child)::after{content:'';flex:1;height:1px;background:var(--border,#e5e7eb);margin-left:6px;min-width:14px}
+.crm-wiz-panel{display:flex;flex-direction:column;gap:12px}
 </style>
 <script src="js/react.min.js"></script>
 <script src="js/react-dom.min.js"></script>
@@ -7837,7 +7846,7 @@
       <div class="fin-subnav">
         <button class="fin-subnav-btn active" data-crmsub="overview"><i class="fa fa-house"></i> Overview</button>
         <button class="fin-subnav-btn"         data-crmsub="relation"><i class="fa fa-handshake"></i> Relation</button>
-        <button class="fin-subnav-btn"         data-crmsub="contacts"><i class="fa fa-address-book"></i> Contact</button>
+        <button class="fin-subnav-btn" style="display:none" data-crmsub="contacts"><i class="fa fa-address-book"></i> Contact</button>
         <button class="fin-subnav-btn"         data-crmsub="tasks"><i class="fa fa-list-check"></i> Task</button>
       </div>
 
@@ -7948,6 +7957,8 @@
             <button class="inv-tab active" data-crmdtab="dashboard">Dashboard</button>
             <button class="inv-tab" data-crmdtab="pipeline">Pipeline</button>
             <button class="inv-tab" data-crmdtab="forms">Forms</button>
+            <button class="inv-tab" data-crmdtab="customdata" id="crm-tab-customdata" style="display:none">Custom Data</button>
+            <button class="inv-tab" data-crmdtab="contacts" id="crm-tab-relation-contacts" style="display:none">Contacts</button>
           </div>
 
           <div class="inv-tab-body" id="crm-relation-tab-body">
@@ -7973,6 +7984,59 @@
               <div id="crm-forms-empty" style="display:none;flex-direction:column;align-items:center;gap:10px;padding:36px 0;text-align:center">
                 <i class="fa fa-wpforms" style="font-size:34px;color:var(--text-muted)"></i>
                 <p style="color:var(--text-muted);font-size:13px;margin:0">No forms yet — create one to start capturing leads from the web.</p>
+              </div>
+            </div>
+
+            <div class="inv-tab-pane" id="crm-relation-pane-customdata">
+              <div class="finance-toolbar" style="gap:8px">
+                <div class="finance-search-wrap" style="flex:1;max-width:260px">
+                  <i class="fa fa-magnifying-glass"></i>
+                  <input type="text" id="crm-customdata-search" placeholder="Search entries…" autocomplete="off">
+                </div>
+                <select id="crm-customdata-form-filter" class="po-field-input" style="width:auto;max-width:220px;appearance:auto;font-size:12px;padding:5px 8px">
+                  <option value="">All forms</option>
+                </select>
+                <div id="crm-customdata-alert" class="svc-form-alert" style="display:none;margin-left:auto"></div>
+              </div>
+              <div id="crm-customdata-groups" style="display:flex;flex-direction:column;gap:16px">
+                <p style="text-align:center;color:var(--text-muted);font-size:12px;padding:24px 0">Loading…</p>
+              </div>
+              <div id="crm-customdata-empty" style="display:none;flex-direction:column;align-items:center;gap:10px;padding:36px 0;text-align:center">
+                <i class="fa fa-database" style="font-size:34px;color:var(--text-muted)"></i>
+                <p style="color:var(--text-muted);font-size:13px;margin:0">No custom data entries yet — submissions from a Custom Data Entry form will show up here.</p>
+              </div>
+            </div>
+
+            <div class="inv-tab-pane" id="crm-relation-pane-contacts">
+              <div class="finance-toolbar" style="gap:8px">
+                <div class="finance-search-wrap" style="flex:1;max-width:260px">
+                  <i class="fa fa-magnifying-glass"></i>
+                  <input type="text" id="crm-relation-contacts-search" placeholder="Search contacts…" autocomplete="off">
+                </div>
+                <select id="crm-relation-contacts-stage-filter" class="po-field-input" style="width:auto;max-width:200px;appearance:auto;font-size:12px;padding:5px 8px">
+                  <option value="">All stages</option>
+                </select>
+                <div id="crm-relation-contacts-alert" class="svc-form-alert" style="display:none;margin-left:auto"></div>
+              </div>
+              <div style="overflow-x:auto">
+                <table class="crm-table" id="crm-relation-contacts-table" style="display:none">
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Company</th>
+                      <th>Phone</th>
+                      <th>Email</th>
+                      <th>Stage</th>
+                      <th>Open Tasks</th>
+                      <th>Last Activity</th>
+                    </tr>
+                  </thead>
+                  <tbody id="crm-relation-contacts-body"></tbody>
+                </table>
+              </div>
+              <div id="crm-relation-contacts-empty" style="display:none;flex-direction:column;align-items:center;gap:10px;padding:36px 0;text-align:center">
+                <i class="fa fa-address-book" style="font-size:34px;color:var(--text-muted)"></i>
+                <p style="color:var(--text-muted);font-size:13px;margin:0">No contacts yet for this relation — leads added to this pipeline will show up here.</p>
               </div>
             </div>
           </div>
@@ -9769,30 +9833,70 @@
     </div>
   </div>
 
-  <!-- ── CRM: New Form Modal ── -->
+  <!-- ── CRM: New Form Modal (3-step wizard) ── -->
   <div class="modal-overlay" id="crm-form-modal" style="display:none">
-    <div class="po-aim-shell" style="width:540px">
+    <div class="po-aim-shell" style="width:560px">
       <div class="po-aim-header">
         <i class="fa fa-wpforms" style="color:#7c3aed"></i>
         <span>New Form</span>
         <button class="psm-close" id="crm-form-modal-close"><i class="fa fa-xmark"></i></button>
       </div>
+      <div class="crm-wiz-steps" id="crm-form-wiz-steps">
+        <div class="crm-wiz-step" data-wizstep="1"><span class="crm-wiz-step-num">1</span> Details</div>
+        <div class="crm-wiz-step" data-wizstep="2"><span class="crm-wiz-step-num">2</span> Template</div>
+        <div class="crm-wiz-step" data-wizstep="3"><span class="crm-wiz-step-num">3</span> Finish</div>
+      </div>
       <div class="po-aim-body" style="display:flex;flex-direction:column;gap:12px">
         <div id="crm-form-modal-alert" class="svc-form-alert" style="display:none"></div>
-        <div class="po-field">
-          <label class="po-field-label">Form name <span class="po-required">*</span></label>
-          <input type="text" id="crm-form-name-input" class="po-field-input" placeholder="e.g. Contact Us" maxlength="255">
+
+        <!-- Step 1: Details -->
+        <div id="crm-form-step-1" class="crm-wiz-panel">
+          <div class="po-field">
+            <label class="po-field-label">Form name <span class="po-required">*</span></label>
+            <input type="text" id="crm-form-name-input" class="po-field-input" placeholder="e.g. Contact Us" maxlength="255">
+          </div>
+          <div class="po-field">
+            <label class="po-field-label">Form type</label>
+            <select id="crm-form-type-select" class="po-field-input" style="appearance:auto">
+              <option value="customer">Customer Contact Form</option>
+              <option value="supplier">Supplier Registration Form</option>
+              <option value="generic">Custom Data Entry Form</option>
+              <option value="employee">Employee Registration Form</option>
+            </select>
+          </div>
+          <label class="crm-prop-check" style="margin-top:4px">
+            <input type="checkbox" id="crm-form-is-default" style="width:15px;height:15px;cursor:pointer;accent-color:var(--accent)">
+            Set as default form for this project
+          </label>
         </div>
-        <div>
+
+        <!-- Step 2: Template -->
+        <div id="crm-form-step-2" class="crm-wiz-panel" style="display:none">
           <label class="po-field-label" style="display:block;margin-bottom:8px">Start from a template</label>
           <div class="crm-tpl-grid" id="crm-form-tpl-grid">
             <!-- populated by JS -->
           </div>
         </div>
+
+        <!-- Step 3: Finish -->
+        <div id="crm-form-step-3" class="crm-wiz-panel" style="display:none">
+          <div class="po-field">
+            <label class="po-field-label">Default pipeline stage</label>
+            <select id="crm-form-default-stage-select" class="po-field-input" style="appearance:auto">
+              <option value="">Pipeline default</option>
+            </select>
+          </div>
+          <div class="po-field">
+            <label class="po-field-label">Success message</label>
+            <textarea id="crm-form-success-msg-input" class="po-field-input" rows="3" placeholder="Shown after a successful submission" maxlength="500" style="resize:vertical"></textarea>
+          </div>
+        </div>
       </div>
       <div class="po-aim-footer">
-        <button class="po-btn-ghost" id="crm-form-modal-cancel"><i class="fa fa-xmark"></i> Cancel</button>
-        <button class="po-btn-primary" id="crm-form-modal-create"><i class="fa fa-plus"></i> Create Form</button>
+        <button class="po-btn-ghost" id="crm-form-modal-cancel" style="margin-right:auto"><i class="fa fa-xmark"></i> Cancel</button>
+        <button class="po-btn-ghost" id="crm-form-modal-back" style="display:none"><i class="fa fa-arrow-left"></i> Back</button>
+        <button class="po-btn-primary" id="crm-form-modal-next"><i class="fa fa-arrow-right"></i> Next</button>
+        <button class="po-btn-primary" id="crm-form-modal-create" style="display:none"><i class="fa fa-plus"></i> Create Form</button>
       </div>
     </div>
   </div>

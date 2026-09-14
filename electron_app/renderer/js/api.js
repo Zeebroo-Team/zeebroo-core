@@ -489,6 +489,8 @@ const API = (() => {
     crmProjects:     ()                   => request('GET',    '/crm/projects'),
     crmCreateProject:(body)               => request('POST',   '/crm/projects', body),
     crmPipeline:     (projectId)          => request('GET',    `/crm/projects/${projectId}/pipeline`),
+    crmCustomDataLeads: (projectId)       => request('GET',    `/crm/projects/${projectId}/custom-data-leads`),
+    crmProjectContacts: (projectId, q, stageId) => request('GET', `/crm/projects/${projectId}/contacts?q=${encodeURIComponent(q||'')}&stage_id=${encodeURIComponent(stageId||'')}`),
     crmStages:       (projectId)          => request('GET',    `/crm/projects/${projectId}/stages`),
     crmCreateStage:  (projectId, body)    => request('POST',   `/crm/projects/${projectId}/stages`, body),
     crmUpdateStage:  (projectId, stageId, body) => request('PUT', `/crm/projects/${projectId}/stages/${stageId}`, body),
