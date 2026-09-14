@@ -42665,7 +42665,10 @@ async function submitDsCreate() {
   let _crmContactQ      = '';
   let _crmRelationSearch = '';
   let _crmDetailTab     = 'dashboard';
-  let _crmDetailLoaded  = { forms: false };
+  let _crmDetailLoaded  = { forms: false, customData: false, contacts: false };
+  let _crmRelationContacts       = [];   // rows for the relation-detail "Contacts" tab
+  let _crmRelationContactsSearch = '';
+  let _crmRelationContactsStage  = '';
   let _crmLeadFormId    = null;   // id of the default form backing the open lead modal, or null when using the fallback fields
   let _crmLeadFormBlocks = [];    // blocks currently rendered in the open lead modal (New or Edit)
   let _crmLeadFormCustomFields = {}; // custom field defs for the open lead modal, keyed by id
@@ -42801,7 +42804,7 @@ async function submitDsCreate() {
   async function openRelationDetail(id) {
     _crmProjectId    = +id;
     _crmDetailTab    = 'dashboard';
-    _crmDetailLoaded = { forms: false };
+    _crmDetailLoaded = { forms: false, customData: false, contacts: false };
     const list   = $('#crm-relation-list');
     const detail = $('#crm-relation-detail');
     if (list)   list.style.display   = 'none';
@@ -42873,6 +42876,14 @@ async function submitDsCreate() {
       _crmDetailLoaded.forms = true;
       loadCrmForms();
     }
+    if (tab === 'customdata' && !_crmDetailLoaded.customData) {
+      _crmDetailLoaded.customData = true;
+      loadCrmCustomData();
+    }
+    if (tab === 'contacts' && !_crmDetailLoaded.contacts) {
+      _crmDetailLoaded.contacts = true;
+      loadCrmRelationContacts();
+    }
   }
 
   $('#crm-relation-tabs')?.addEventListener('click', e => {
@@ -42906,6 +42917,34 @@ async function submitDsCreate() {
     _updateNewLeadBtnState();
     _renderBoard();
     _crmRenderDashboardPane();
+    _crmUpdateCustomDataTabVisibility();
+    _crmUpdateContactsTabVisibility();
+  }
+
+  // The "Custom Data" tab only makes sense once this relation has at least one lead
+  // submitted through a Custom Data Entry form — otherwise it stays hidden.
+  function _crmUpdateCustomDataTabVisibility() {
+    const tabBtn = $('#crm-tab-customdata');
+    if (!tabBtn) return;
+    const hasCustomData = !!(_crmPipeline && _crmPipeline.custom_data_count > 0);
+    tabBtn.style.display = hasCustomData ? '' : 'none';
+    // The tab we're currently on just got hidden out from under us (e.g. its last entry
+    // was deleted) — bounce back to Dashboard rather than leaving a blank active pane.
+    if (!hasCustomData && _crmDetailTab === 'customdata') {
+      _crmSwitchDetailTab('dashboard');
+    }
+  }
+
+  // Same idea as Custom Data: "Contacts" only makes sense once this relation has at
+  // least one lead on its pipeline — otherwise it stays hidden.
+  function _crmUpdateContactsTabVisibility() {
+    const tabBtn = $('#crm-tab-relation-contacts');
+    if (!tabBtn) return;
+    const hasContacts = !!(_crmPipeline && (_crmPipeline.columns || []).some(c => c.leads_count > 0));
+    tabBtn.style.display = hasContacts ? '' : 'none';
+    if (!hasContacts && _crmDetailTab === 'contacts') {
+      _crmSwitchDetailTab('dashboard');
+    }
   }
 
   // Pipeline leads are always created from the project's default form, so both the ribbon
@@ -43059,8 +43098,12 @@ async function submitDsCreate() {
         e.stopPropagation();
         if (!confirm('Delete this lead?')) return;
         const res = await API.crmDeleteLead(parseInt(btn.dataset.leadId));
-        if (res.status === 200) { toast('Lead deleted.', 'success'); loadCrmPipeline(); }
-        else toast(res.body?.message || 'Failed to delete.', 'error');
+        if (res.status === 200) {
+          toast('Lead deleted.', 'success');
+          loadCrmPipeline();
+          if (_crmDetailLoaded.customData) loadCrmCustomData();
+          if (_crmDetailLoaded.contacts) loadCrmRelationContacts();
+        } else toast(res.body?.message || 'Failed to delete.', 'error');
       });
     });
 
@@ -43298,6 +43341,8 @@ async function submitDsCreate() {
       $('#crm-lead-edit-modal').style.display = 'none';
       toast('Lead updated.', 'success');
       loadCrmPipeline();
+      if (_crmDetailLoaded.customData) loadCrmCustomData();
+      if (_crmDetailLoaded.contacts) loadCrmRelationContacts();
     } else {
       $('#crm-lead-edit-alert').textContent = res.body?.message || 'Failed to update lead.';
       $('#crm-lead-edit-alert').style.display = '';
@@ -44038,27 +44083,253 @@ async function submitDsCreate() {
     if (empty)   empty.style.display = 'flex';
   }
 
-  // ── New Form Modal ────────────────────────────────────────────────────────
+  // ── Custom Data (leads submitted via a "Custom Data Entry Form") ───────────
+  // Rendered as one small spreadsheet-style table per source form — each form has its own
+  // fields, so submissions only line up as columns within the same form. The same form
+  // submitted 10 times shows as 10 rows in that form's table.
 
+  let _crmCustomDataGroups     = [];   // [{ form: {id,name,blocks}, leads: [...] }]
+  let _crmCustomDataLeadById   = {};   // flat id -> lead, for opening the edit modal from a row
+  let _crmCustomDataSearch     = '';
+  let _crmCustomDataFormFilter = '';
+
+  async function loadCrmCustomData() {
+    if (!_crmProjectId) { _showCustomDataEmpty(); return; }
+
+    const res = await API.crmCustomDataLeads(_crmProjectId);
+    if (res.status !== 200) return;
+    _crmCustomDataGroups = res.body?.data || [];
+    _crmCustomDataLeadById = {};
+    _crmCustomDataGroups.forEach(g => g.leads.forEach(lead => { _crmCustomDataLeadById[lead.id] = lead; }));
+
+    const filterSelect = $('#crm-customdata-form-filter');
+    if (filterSelect) {
+      const current = filterSelect.value;
+      filterSelect.innerHTML = '<option value="">All forms</option>' +
+        _crmCustomDataGroups.map(g => `<option value="${g.form.id}">${escHtml(g.form.name)} (${g.leads.length})</option>`).join('');
+      filterSelect.value = _crmCustomDataGroups.some(g => String(g.form.id) === current) ? current : '';
+      _crmCustomDataFormFilter = filterSelect.value;
+    }
+
+    _renderCustomDataGroups();
+  }
+
+  function _renderCustomDataGroups() {
+    const container = $('#crm-customdata-groups');
+    const empty = $('#crm-customdata-empty');
+    if (!container) return;
+
+    if (_crmCustomDataGroups.length === 0) {
+      container.innerHTML = '';
+      container.style.display = 'none';
+      if (empty) empty.style.display = 'flex';
+      return;
+    }
+    if (empty) empty.style.display = 'none';
+    container.style.display = 'flex';
+
+    const q = _crmCustomDataSearch.trim().toLowerCase();
+    let visibleGroups = 0;
+
+    container.innerHTML = _crmCustomDataGroups.map(g => {
+      if (_crmCustomDataFormFilter && String(g.form.id) !== _crmCustomDataFormFilter) return '';
+
+      const fieldBlocks = (g.form.blocks || []).filter(b => b.type === 'field');
+      const rows = g.leads.map(lead => {
+        const cells = fieldBlocks.map(b => _crmLeadFieldValue(b, lead));
+        const submitted = lead.created_at ? new Date(lead.created_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
+        const searchText = [...cells, lead.stage_name, submitted].join(' ').toLowerCase();
+        if (q && !searchText.includes(q)) return '';
+        return `
+          <tr data-lead-id="${lead.id}" style="cursor:pointer">
+            ${cells.map(v => `<td>${v ? escHtml(v) : '<span style="color:var(--text-muted)">—</span>'}</td>`).join('')}
+            <td>${lead.stage_name ? escHtml(lead.stage_name) : '<span style="color:var(--text-muted)">Unstaged</span>'}</td>
+            <td style="color:var(--text-muted);font-size:11px;white-space:nowrap">${submitted}</td>
+            <td style="text-align:right"><button class="crm-card-btn" data-customdata-view="${lead.id}" title="View / edit"><i class="fa fa-pen"></i></button></td>
+          </tr>`;
+      }).join('');
+
+      if (!rows) return ''; // every row in this group was filtered out by the search box
+
+      visibleGroups++;
+      return `
+        <div>
+          <div class="inv-section-title" style="margin-bottom:6px"><i class="fa fa-database"></i> ${escHtml(g.form.name)} <span style="font-weight:400;color:var(--text-muted);font-size:11px">(${g.leads.length} submission${g.leads.length !== 1 ? 's' : ''})</span></div>
+          <div style="overflow-x:auto;border:1px solid var(--border,#e5e7eb);border-radius:8px">
+            <table class="crm-table">
+              <thead><tr>
+                ${fieldBlocks.map(b => `<th>${escHtml(b.label || b.field)}</th>`).join('')}
+                <th>Stage</th><th>Submitted</th><th></th>
+              </tr></thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>
+        </div>`;
+    }).join('');
+
+    if (visibleGroups === 0) {
+      container.innerHTML = '<p style="text-align:center;color:var(--text-muted);font-size:12px;padding:24px 0">No entries match your search.</p>';
+    }
+
+    container.querySelectorAll('tr[data-lead-id]').forEach(row => {
+      row.addEventListener('click', e => {
+        if (e.target.closest('[data-customdata-view]')) return; // button below opens it too — avoid double-open
+        const lead = _crmCustomDataLeadById[parseInt(row.dataset.leadId)];
+        if (lead) _openEditLeadModal(lead);
+      });
+    });
+    container.querySelectorAll('[data-customdata-view]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const lead = _crmCustomDataLeadById[parseInt(btn.dataset.customdataView)];
+        if (lead) _openEditLeadModal(lead);
+      });
+    });
+  }
+
+  function _showCustomDataEmpty() {
+    const container = $('#crm-customdata-groups');
+    const empty = $('#crm-customdata-empty');
+    if (container) { container.innerHTML = ''; container.style.display = 'none'; }
+    if (empty)   empty.style.display = 'flex';
+  }
+
+  let _crmCustomDataSearchTimer = null;
+  $('#crm-customdata-search')?.addEventListener('input', e => {
+    clearTimeout(_crmCustomDataSearchTimer);
+    _crmCustomDataSearchTimer = setTimeout(() => {
+      _crmCustomDataSearch = e.target.value;
+      _renderCustomDataGroups();
+    }, 180);
+  });
+  $('#crm-customdata-form-filter')?.addEventListener('change', e => {
+    _crmCustomDataFormFilter = e.target.value;
+    _renderCustomDataGroups();
+  });
+
+  // ── Relation Contacts tab ────────────────────────────────────────────────
+  // Contacts derived from this relation's own leads (each lead already carries its own
+  // name/company/email/phone) — filterable by search text and pipeline stage. The table
+  // only renders when there's at least one row; otherwise the empty state takes over.
+  function _populateRelationContactsStageFilter() {
+    const sel = $('#crm-relation-contacts-stage-filter');
+    if (!sel || !_crmPipeline) return;
+    const current = sel.value;
+    const stages  = _crmPipeline.stages || [];
+    sel.innerHTML = '<option value="">All stages</option>' +
+      stages.map(s => `<option value="${s.id}">${escHtml(s.name)}</option>`).join('');
+    sel.value = stages.some(s => String(s.id) === current) ? current : '';
+    _crmRelationContactsStage = sel.value;
+  }
+
+  async function loadCrmRelationContacts() {
+    if (!_crmProjectId) return;
+    _populateRelationContactsStageFilter();
+
+    const table = $('#crm-relation-contacts-table');
+    const body  = $('#crm-relation-contacts-body');
+    const empty = $('#crm-relation-contacts-empty');
+    const alert = $('#crm-relation-contacts-alert');
+
+    const res = await API.crmProjectContacts(_crmProjectId, _crmRelationContactsSearch, _crmRelationContactsStage);
+    if (res.status !== 200) {
+      _crmRelationContacts = [];
+      if (alert) { alert.textContent = res.body?.message || 'Failed to load contacts.'; alert.style.display = ''; }
+    } else {
+      _crmRelationContacts = res.body?.data || [];
+      if (alert) alert.style.display = 'none';
+    }
+
+    if (_crmRelationContacts.length === 0) {
+      if (table) table.style.display = 'none';
+      if (body)  body.innerHTML = '';
+      if (empty) empty.style.display = 'flex';
+      return;
+    }
+    if (empty) empty.style.display = 'none';
+    if (table) table.style.display = '';
+    if (body) {
+      body.innerHTML = _crmRelationContacts.map(c => `
+        <tr>
+          <td><strong>${escHtml(c.name)}</strong>${c.is_customer ? ' <i class="fa fa-circle-check" style="color:var(--accent);font-size:10px" title="Existing customer"></i>' : ''}</td>
+          <td>${c.company ? escHtml(c.company) : '<span style="color:var(--text-muted)">—</span>'}</td>
+          <td>${c.phone ? escHtml(c.phone) : '<span style="color:var(--text-muted)">—</span>'}</td>
+          <td>${c.email ? escHtml(c.email) : '<span style="color:var(--text-muted)">—</span>'}</td>
+          <td>${c.stage_name ? escHtml(c.stage_name) : '<span style="color:var(--text-muted)">Unstaged</span>'}</td>
+          <td>${c.open_tasks > 0 ? `<span class="crm-badge-open">${c.open_tasks}</span>` : '<span style="color:var(--text-muted)">—</span>'}</td>
+          <td style="color:var(--text-muted);font-size:11px">${c.last_activity ? new Date(c.last_activity).toLocaleDateString(undefined, {day:'numeric',month:'short',year:'numeric'}) : '—'}</td>
+        </tr>`).join('');
+    }
+  }
+
+  let _crmRelationContactsSearchTimer = null;
+  $('#crm-relation-contacts-search')?.addEventListener('input', e => {
+    clearTimeout(_crmRelationContactsSearchTimer);
+    _crmRelationContactsSearchTimer = setTimeout(() => {
+      _crmRelationContactsSearch = e.target.value.trim();
+      loadCrmRelationContacts();
+    }, 320);
+  });
+  $('#crm-relation-contacts-stage-filter')?.addEventListener('change', e => {
+    _crmRelationContactsStage = e.target.value;
+    loadCrmRelationContacts();
+  });
+
+  // ── New Form Modal (3-step wizard) ──────────────────────────────────────────
+
+  let _selectedTemplate = 'blank';
+  let _crmWizStep        = 1;
+  let _crmStagesForWiz   = [];
+
+  // Step-1 "Form type" values map to a template `kind` — step 2's grid is filtered to
+  // cards of that kind, plus "blank" (always offered as a fallback/starting point).
   async function _openNewFormModal() {
     // load templates if not loaded yet
     if (_crmFormTemplates.length === 0) {
       const res = await API.crmFormTemplates();
       _crmFormTemplates = res.body?.data || [];
     }
-    _selectedTemplate = 'blank';
-    _renderTemplatePicker();
+    const stagesRes = await API.crmStages(_crmFormsProjectId);
+    _crmStagesForWiz = (stagesRes.body?.data || []).filter(s => !s.is_won && !s.is_lost);
+
     $('#crm-form-name-input').value = '';
+    $('#crm-form-type-select').value = 'customer';
+    $('#crm-form-is-default').checked = false;
+    $('#crm-form-success-msg-input').value = '';
+    $('#crm-form-default-stage-select').innerHTML = '<option value="">Pipeline default</option>' +
+      _crmStagesForWiz.map(s => `<option value="${s.id}">${escHtml(s.name)}</option>`).join('');
+
+    _selectedTemplate = 'blank';
     $('#crm-form-modal-alert').style.display = 'none';
     $('#crm-form-modal').style.display = 'flex';
+    _crmGoToWizStep(1);
   }
 
-  let _selectedTemplate = 'blank';
+  function _crmGoToWizStep(step) {
+    _crmWizStep = step;
+    [1, 2, 3].forEach(n => {
+      const panel = $(`#crm-form-step-${n}`);
+      if (panel) panel.style.display = (n === step) ? 'flex' : 'none';
+    });
+    $('#crm-form-wiz-steps')?.querySelectorAll('.crm-wiz-step').forEach(el => {
+      const n = parseInt(el.dataset.wizstep);
+      el.classList.toggle('is-active', n === step);
+      el.classList.toggle('is-done', n < step);
+    });
+    $('#crm-form-modal-back').style.display   = step === 1 ? 'none' : '';
+    $('#crm-form-modal-next').style.display   = step === 3 ? 'none' : '';
+    $('#crm-form-modal-create').style.display = step === 3 ? '' : 'none';
+    if (step === 2) _renderTemplatePicker();
+  }
 
   function _renderTemplatePicker() {
     const grid = $('#crm-form-tpl-grid');
     if (!grid) return;
-    grid.innerHTML = _crmFormTemplates.map(t => `
+    const kind = $('#crm-form-type-select')?.value || 'generic';
+    const tpls = _crmFormTemplates.filter(t => t.kind === kind || t.key === 'blank');
+    if (!tpls.some(t => t.key === _selectedTemplate)) {
+      _selectedTemplate = tpls[0]?.key || 'blank';
+    }
+    grid.innerHTML = tpls.map(t => `
       <div class="crm-tpl-card${_selectedTemplate === t.key ? ' crm-tpl--selected' : ''}" data-tplkey="${t.key}">
         <div class="crm-tpl-icon"><i class="fa ${escHtml(t.icon)}"></i></div>
         <div class="crm-tpl-name">${escHtml(t.label)}</div>
@@ -44073,21 +44344,47 @@ async function submitDsCreate() {
     });
   }
 
-
   $('#crm-form-modal-close')?.addEventListener('click',  () => { $('#crm-form-modal').style.display = 'none'; });
   $('#crm-form-modal-cancel')?.addEventListener('click', () => { $('#crm-form-modal').style.display = 'none'; });
   $('#crm-form-modal')?.addEventListener('click', e => { if (e.target === $('#crm-form-modal')) $('#crm-form-modal').style.display = 'none'; });
 
+  $('#crm-form-modal-back')?.addEventListener('click', () => {
+    if (_crmWizStep > 1) _crmGoToWizStep(_crmWizStep - 1);
+  });
+
+  $('#crm-form-modal-next')?.addEventListener('click', () => {
+    if (_crmWizStep === 1) {
+      const name = $('#crm-form-name-input').value.trim();
+      if (!name) {
+        $('#crm-form-modal-alert').textContent = 'Please enter a form name.';
+        $('#crm-form-modal-alert').style.display = '';
+        return;
+      }
+      $('#crm-form-modal-alert').style.display = 'none';
+      _crmGoToWizStep(2);
+    } else if (_crmWizStep === 2) {
+      _crmGoToWizStep(3);
+    }
+  });
+
   $('#crm-form-modal-create')?.addEventListener('click', async () => {
     const name = $('#crm-form-name-input').value.trim();
     if (!name) {
+      _crmGoToWizStep(1);
       $('#crm-form-modal-alert').textContent = 'Please enter a form name.';
       $('#crm-form-modal-alert').style.display = '';
       return;
     }
     const btn = $('#crm-form-modal-create');
     btn.disabled = true;
-    const res = await API.crmCreateForm(_crmFormsProjectId, { name, template: _selectedTemplate });
+    const res = await API.crmCreateForm(_crmFormsProjectId, {
+      name,
+      type:              $('#crm-form-type-select')?.value || 'generic',
+      template:          _selectedTemplate,
+      is_default:        $('#crm-form-is-default').checked,
+      default_stage_id:  $('#crm-form-default-stage-select').value || null,
+      success_message:   $('#crm-form-success-msg-input').value.trim() || null,
+    });
     btn.disabled = false;
     if (res.status === 201) {
       $('#crm-form-modal').style.display = 'none';
@@ -44669,8 +44966,12 @@ async function submitDsCreate() {
       hideMenu();
       if (!confirm(`Delete lead "${lead.name}"? This cannot be undone.`)) return;
       const res = await API.crmDeleteLead(lead.id);
-      if (res.status === 200) { toast('Lead deleted.', 'success'); loadCrmPipeline(); }
-      else toast(res.body?.message || 'Failed to delete.', 'error');
+      if (res.status === 200) {
+        toast('Lead deleted.', 'success');
+        loadCrmPipeline();
+        if (_crmDetailLoaded.customData) loadCrmCustomData();
+        if (_crmDetailLoaded.contacts) loadCrmRelationContacts();
+      } else toast(res.body?.message || 'Failed to delete.', 'error');
     });
   }());
 

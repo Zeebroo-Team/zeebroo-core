@@ -14,9 +14,15 @@ class LeadForm extends Model
     const LAYOUT_SPLIT   = 'split';
     const LAYOUT_MINIMAL = 'minimal';
 
+    const TYPE_CUSTOMER    = 'customer';
+    const TYPE_SUPPLIER    = 'supplier';
+    const TYPE_CUSTOM_DATA = 'generic';
+    const TYPE_EMPLOYEE    = 'employee';
+
     protected $fillable = [
         'project_id',
         'name',
+        'type',
         'token',
         'blocks',
         'style',

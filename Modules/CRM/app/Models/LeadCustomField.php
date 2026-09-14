@@ -10,6 +10,8 @@ class LeadCustomField extends Model
 {
     protected $table = 'crm_lead_custom_fields';
 
+    protected $appends = ['name'];
+
     const TYPE_TEXT     = 'text';
     const TYPE_TEXTAREA = 'textarea';
     const TYPE_NUMBER   = 'number';
@@ -55,6 +57,11 @@ class LeadCustomField extends Model
             self::TYPE_SELECT   => 'Dropdown',
             self::TYPE_CHECKBOX => 'Yes / No',
         ];
+    }
+
+    public function getNameAttribute(): string
+    {
+        return $this->label;
     }
 
     public function typeLabel(): string

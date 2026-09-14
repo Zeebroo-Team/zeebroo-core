@@ -8,6 +8,7 @@ use Illuminate\Validation\ValidationException;
 use Modules\AutomationEditor\Models\AutomationFlow;
 use Modules\CRM\Models\Lead;
 use Modules\CRM\Models\LeadCustomFieldValue;
+use Modules\CRM\Models\LeadForm;
 use Modules\CRM\Models\LeadStage;
 use Modules\CRM\Models\LeadStageLog;
 use Modules\CRM\Models\Project;
@@ -58,6 +59,30 @@ class LeadService
     public function projectHasLeads(Project $project): bool
     {
         return Lead::query()->where('project_id', $project->id)->exists();
+    }
+
+    /**
+     * Leads submitted through a "Custom Data Entry Form" (LeadForm::TYPE_CUSTOM_DATA) — shown
+     * as a spreadsheet-style table (grouped by the form they came from, since each form has its
+     * own columns) in the Relation's "Custom Data" tab, separate from the kanban Pipeline view.
+     * These leads still also appear on the Pipeline like any other lead.
+     */
+    public function customDataLeadsForProject(Project $project): Collection
+    {
+        return Lead::query()
+            ->where('project_id', $project->id)
+            ->whereHas('form', fn ($q) => $q->where('type', LeadForm::TYPE_CUSTOM_DATA))
+            ->with(['stage', 'form', 'customFieldValues:id,lead_id,custom_field_id,value'])
+            ->orderByDesc('id')
+            ->get();
+    }
+
+    public function customDataLeadCount(Project $project): int
+    {
+        return Lead::query()
+            ->where('project_id', $project->id)
+            ->whereHas('form', fn ($q) => $q->where('type', LeadForm::TYPE_CUSTOM_DATA))
+            ->count();
     }
 
     public function pipelineSummary(Project $project): array

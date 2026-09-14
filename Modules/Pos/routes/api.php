@@ -435,6 +435,8 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
     Route::get   ('crm/projects',                      [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'projects'])    ->name('crm.projects.index');
     Route::post  ('crm/projects',                      [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'createProject'])->name('crm.projects.store');
     Route::get   ('crm/projects/{project}/pipeline',   [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'pipeline'])    ->name('crm.projects.pipeline');
+    Route::get   ('crm/projects/{project}/custom-data-leads', [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'customDataLeads'])->name('crm.projects.custom-data-leads');
+    Route::get   ('crm/projects/{project}/contacts',   [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'projectContacts'])->name('crm.projects.contacts');
     Route::get   ('crm/projects/{project}/stages',     [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'stages'])       ->name('crm.projects.stages.index');
     Route::post  ('crm/projects/{project}/stages',     [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'createStage'])  ->name('crm.projects.stages.store');
     Route::post  ('crm/projects/{project}/stages/reorder', [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'reorderStages'])->name('crm.projects.stages.reorder');
