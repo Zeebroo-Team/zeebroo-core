@@ -55,6 +55,7 @@ use Modules\Pos\Http\Controllers\Api\PosRegisterLockApiController;
 use Modules\Pos\Http\Controllers\Api\PosCashierApiController;
 use Modules\Pos\Http\Controllers\Api\PosNotificationApiController;
 use Modules\Pos\Http\Controllers\Api\PosSubscriptionApiController;
+use Modules\Pos\Http\Controllers\Api\PosProductRentalApiController;
 
 Route::prefix('v1/pos')->group(function (): void {
     Route::post('auth/token',             [PosAuthApiController::class, 'token'])->name('auth.token');
@@ -150,6 +151,11 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
     Route::post  ('subscriptions/{subscription}/resume',       [PosSubscriptionApiController::class, 'resume'])->name('subscriptions.resume');
     Route::post  ('subscriptions/{subscription}/renew',        [PosSubscriptionApiController::class, 'renew'] )->name('subscriptions.renew');
     Route::post  ('subscriptions/{subscription}/notify',       [PosSubscriptionApiController::class, 'notify'])->name('subscriptions.notify');
+
+    // Product Rentals
+    Route::get   ('product-rentals',                        [PosProductRentalApiController::class, 'index'] )->name('product-rentals.index');
+    Route::get   ('product-rentals/{productRental}',        [PosProductRentalApiController::class, 'show']  )->name('product-rentals.show');
+    Route::post  ('product-rentals/{productRental}/return', [PosProductRentalApiController::class, 'return'])->name('product-rentals.return');
 
     Route::get ('eod',            [PosEndOfDayApiController::class,    'status'])->name('eod.status');
     Route::post('eod/settle',     [PosEndOfDayApiController::class,    'settle'])->name('eod.settle');

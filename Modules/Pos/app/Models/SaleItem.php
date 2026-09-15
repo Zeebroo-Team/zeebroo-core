@@ -4,6 +4,7 @@ namespace Modules\Pos\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Modules\Product\Models\Product;
 use Modules\Product\Models\ProductStockLayer;
 use Modules\Service\Models\ServiceItem;
@@ -66,5 +67,10 @@ class SaleItem extends Model
     public function serviceItem(): BelongsTo
     {
         return $this->belongsTo(ServiceItem::class);
+    }
+
+    public function productRental(): HasOne
+    {
+        return $this->hasOne(ProductRental::class, 'pos_sale_item_id');
     }
 }

@@ -37,6 +37,7 @@ class PosOnlineApiService
         string $sort = 'name_asc',
         bool $recentSales = false,
         bool $discountOnly = false,
+        bool $rentalOnly = false,
     ): array {
         $currency = (string) (get_settings('business.currency', '', $business) ?: '');
         $catalogOptions = $this->catalogOptions->optionsForBusiness($business);
@@ -61,6 +62,7 @@ class PosOnlineApiService
             $sort,
             $recentSales,
             $discountOnly,
+            $rentalOnly,
         );
 
         $branches = $business->branches()->get()
@@ -182,7 +184,7 @@ class PosOnlineApiService
      */
     public function formatSale(Sale $sale): array
     {
-        $sale->loadMissing(['items.product', 'creditAccount', 'user', 'branch', 'customer', 'returns.items']);
+        $sale->loadMissing(['items.product', 'items.productRental', 'creditAccount', 'user', 'branch', 'customer', 'returns.items']);
 
         // Build returned-quantity map keyed by sale item id
         $returnedQtys = [];
@@ -238,6 +240,11 @@ class PosOnlineApiService
                 'warranty_days'       => $item->warranty_days,
                 'warranty_expires_at' => $item->warranty_expires_at?->toDateString(),
                 'custom_requirement_values' => $item->custom_requirement_values ?? [],
+                'rental_return_date'          => $item->productRental?->due_at?->toDateString(),
+                'rental_daily_rate'           => $item->productRental !== null ? round((float) $item->productRental->daily_rate, 2) : null,
+                'rental_late_fee_multiplier'  => $item->productRental !== null ? round((float) $item->productRental->late_fee_multiplier, 2) : null,
+                'rental_late_fee'             => $item->productRental !== null ? round((float) $item->productRental->late_fee, 2) : null,
+                'rental_status'               => $item->productRental?->status,
             ])->values()->all(),
         ];
     }

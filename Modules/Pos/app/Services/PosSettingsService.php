@@ -81,6 +81,9 @@ class PosSettingsService
     /** When false, purchase orders are skipped; GRNs are created directly. */
     public const KEY_PURCHASE_ORDER_ENABLED = 'pos.purchase_order_enabled';
 
+    /** When false, product rentals are hidden across POS, Sales, and the product form. */
+    public const KEY_RENTAL_ENABLED = 'pos.rental_enabled';
+
     public const KEY_CUSTOMER_REQUIRE_PHONE = 'pos.customer_require_phone';
 
     public const KEY_CUSTOMER_REQUIRE_EMAIL = 'pos.customer_require_email';
@@ -196,6 +199,8 @@ class PosSettingsService
             })(),
             // Purchasing
             'purchase_order_enabled' => (bool) $business->getSetting(self::KEY_PURCHASE_ORDER_ENABLED, true),
+            // Rentals
+            'rental_enabled' => (bool) $business->getSetting(self::KEY_RENTAL_ENABLED, true),
             // Customers
             'customer_require_phone'   => (bool) $business->getSetting(self::KEY_CUSTOMER_REQUIRE_PHONE, false),
             'customer_require_email'   => (bool) $business->getSetting(self::KEY_CUSTOMER_REQUIRE_EMAIL, false),
@@ -429,6 +434,11 @@ class PosSettingsService
         // Purchasing workflow
         if (array_key_exists('purchase_order_enabled', $data)) {
             $business->setSetting(self::KEY_PURCHASE_ORDER_ENABLED, filter_var($data['purchase_order_enabled'], FILTER_VALIDATE_BOOLEAN));
+        }
+
+        // Rentals
+        if (array_key_exists('rental_enabled', $data)) {
+            $business->setSetting(self::KEY_RENTAL_ENABLED, filter_var($data['rental_enabled'], FILTER_VALIDATE_BOOLEAN));
         }
 
         // Customers
