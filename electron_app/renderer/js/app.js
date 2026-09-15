@@ -35,6 +35,8 @@ const state = {
   memberIsOwner:     true,
   // POS mode: 'products' | 'services'
   posMode: 'products',
+  // Whether the Product Rental feature (POS Rental tab, Sales → Rentals, product Advanced tab) is enabled
+  rentalEnabled: true,
   services: [],
   serviceSearchQuery: '',
   serviceActiveCategory: 0,
@@ -865,6 +867,7 @@ function _salSwitchView(view) {
   const showInvoices = view === 'invoices';
   const showOrders   = view === 'orders';
   const showSubs     = view === 'subscriptions';
+  const showRentals  = view === 'rentals';
   $('#sal-list-view').style.display      = showTxn      ? '' : 'none';
   $('#sal-history-view').style.display   = showHist     ? '' : 'none';
   $('#sal-credits-view').style.display   = showCredits  ? 'flex' : 'none';
@@ -872,6 +875,7 @@ function _salSwitchView(view) {
   $('#sal-invoices-view').style.display  = showInvoices ? 'flex' : 'none';
   $('#sal-orders-view').style.display    = showOrders   ? 'flex' : 'none';
   $('#sal-subscriptions-view').style.display = showSubs ? 'flex' : 'none';
+  $('#sal-rentals-view').style.display   = showRentals  ? 'flex' : 'none';
   $('#sal-detail-view').style.display    = 'none';
   if (showTxn      && !_sal.all.length) loadSalesList();
   if (showHist)     loadSalesHistory();
@@ -880,6 +884,7 @@ function _salSwitchView(view) {
   if (showInvoices) loadInvoicesList();
   if (showOrders)   loadSalesOrderList();
   if (showSubs)     loadSubscriptionsList();
+  if (showRentals)  loadRentalsList();
 }
 
 // ── Subscriptions (Sales panel tab) ─────────────────────────────────────────
@@ -1215,6 +1220,283 @@ $('#subs-status-filter')?.addEventListener('change', () => {
   loadSubscriptionsList();
 });
 $('#subs-refresh')?.addEventListener('click', loadSubscriptionsList);
+
+// ── Product Rentals (Sales panel tab) ───────────────────────────────────────
+const _prental = { list: [], search: '', status: 'all', searchTimer: null };
+
+async function loadRentalsList() {
+  $('#prental-loading').style.display = '';
+  $('#prental-body').innerHTML = '';
+  $('#prental-count').textContent = '—';
+
+  const res = await API.productRentals(_prental.search, _prental.status);
+  $('#prental-loading').style.display = 'none';
+
+  if (res.status !== 200) {
+    $('#prental-body').innerHTML = '<div class="qt-empty"><i class="fa fa-circle-exclamation"></i> Failed to load rentals.</div>';
+    $('#prental-stats').innerHTML = '';
+    return;
+  }
+
+  _prental.list = res.body?.data || [];
+  $('#prental-count').textContent = `${_prental.list.length} rental${_prental.list.length !== 1 ? 's' : ''}`;
+  _prentalRenderStats();
+  _prentalRenderList();
+}
+
+function _prentalRenderStats() {
+  const el = $('#prental-stats');
+  if (!el) return;
+  if (!_prental.list.length) { el.innerHTML = ''; return; }
+
+  const counts = { active: 0, overdue: 0, returned: 0, cancelled: 0 };
+  let lateFeesOwed = 0;
+  _prental.list.forEach(r => {
+    if (counts[r.status] !== undefined) counts[r.status]++;
+    if (r.status === 'returned') lateFeesOwed += parseFloat(r.late_fee || 0);
+  });
+
+  const cur = state.currency || '';
+  const cards = [
+    { label: 'Active',    value: counts.active,    color: '#22c55e' },
+    { label: 'Overdue',   value: counts.overdue,   color: '#ef4444' },
+    { label: 'Returned',  value: counts.returned,  color: '#3b82f6' },
+    { label: 'Cancelled', value: counts.cancelled, color: '#94a3b8' },
+    { label: 'Late Fees Collected', value: formatMoney(lateFeesOwed, {currency: cur}), color: '#f97316' },
+  ];
+
+  el.innerHTML = cards.map(c => `
+    <div class="subs-stat-card">
+      <span class="subs-stat-dot" style="background:${c.color}"></span>
+      <span class="subs-stat-value">${c.value}</span>
+      <span class="subs-stat-label">${c.label}</span>
+    </div>`).join('');
+}
+
+function _prentalRenderList() {
+  const cur = state.currency || '';
+  if (!_prental.list.length) {
+    $('#prental-body').innerHTML = `<div class="qt-empty">
+      <i class="fa fa-calendar-days"></i>
+      <h4>No Rentals</h4>
+      <p>Rentals are created automatically when a rental-enabled product is checked out from the POS Rental tab.</p>
+    </div>`;
+    return;
+  }
+
+  const statusColors = { active: '#22c55e', overdue: '#ef4444', returned: '#3b82f6', cancelled: '#94a3b8' };
+  const fmtDate = d => d ? new Date(d + 'T00:00:00').toLocaleDateString(undefined, { month:'short', day:'numeric', year:'numeric' }) : '—';
+
+  let html = `<div class="qt-tbl-wrap"><table class="qt-tbl">
+    <thead><tr>
+      <th>Customer</th><th>Product</th><th style="text-align:right">Qty</th><th style="text-align:right">Daily Rate</th>
+      <th>Rented</th><th>Due</th><th>Status</th><th style="width:1%;white-space:nowrap">Actions</th>
+    </tr></thead><tbody>`;
+
+  _prental.list.forEach(r => {
+    const color = statusColors[r.status] || '#8b5cf6';
+    let actions = '';
+    if (r.status === 'active' || r.status === 'overdue') {
+      actions += `<button class="qt-act-btn subs-act-btn" data-prental-act="return" data-prental-id="${r.id}"><i class="fa fa-rotate-left"></i> Mark Returned</button>`;
+    }
+    html += `<tr class="subs-row" data-prental-row="${r.id}" style="cursor:pointer">
+      <td class="qt-tbl-customer">${escHtml(r.customer_name || '—')}</td>
+      <td>${escHtml(r.product_name || '—')}</td>
+      <td class="qt-tbl-amt">${escHtml(String(r.quantity ?? 1))}</td>
+      <td class="qt-tbl-amt">${formatMoney(parseFloat(r.daily_rate || 0), {currency: cur})}</td>
+      <td class="qt-tbl-muted">${fmtDate(r.rented_at)}</td>
+      <td class="qt-tbl-muted">${fmtDate(r.due_at)}</td>
+      <td><span class="so-badge" style="background:${color}20;color:${color};border-color:${color}40">${escHtml(r.status_label)}</span></td>
+      <td style="display:flex;gap:4px;flex-wrap:nowrap;white-space:nowrap">${actions}</td>
+    </tr>`;
+  });
+
+  html += '</tbody></table></div>';
+  $('#prental-body').innerHTML = html;
+
+  $$('#prental-body [data-prental-act]').forEach(b => {
+    b.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const id = Number(b.dataset.prentalId);
+      const act = b.dataset.prentalAct;
+      await _prentalRunAction(act, id, b);
+    });
+  });
+
+  $$('#prental-body [data-prental-row]').forEach(row => {
+    row.addEventListener('click', () => {
+      const r = _prental.list.find(x => x.id === Number(row.dataset.prentalRow));
+      if (r) _prentalOpenDetail(r);
+    });
+  });
+}
+
+async function _prentalRunAction(act, id, btn) {
+  const fns = { return: API.returnProductRental };
+  if (act === 'return') {
+    const row = _prental.list.find(x => x.id === id);
+    if (!(await _prentalOpenReturnConfirm(row))) return false;
+  }
+  if (btn) btn.disabled = true;
+  const res = await fns[act](id);
+  if (res.status === 200) {
+    toast(res.body?.message || 'Rental marked returned', 'success');
+    await loadRentalsList();
+    return true;
+  } else {
+    toast(res.body?.message || 'Action failed', 'error');
+    if (btn) btn.disabled = false;
+    return false;
+  }
+}
+
+// ── "Mark Returned" confirmation (replaces native confirm(), previews the late fee) ──
+let _prentalReturnResolve = null;
+function _prentalOpenReturnConfirm(r) {
+  const cur = state.currency || '';
+  const fmtDate = d => d ? new Date(d + 'T00:00:00').toLocaleDateString(undefined, { month:'short', day:'numeric', year:'numeric' }) : '—';
+
+  const daysLate    = Number(r?.days_late) || 0;
+  const dailyRate   = parseFloat(r?.daily_rate || 0);
+  const multiplier  = parseFloat(r?.late_fee_multiplier || 0);
+  const projected   = daysLate > 0 ? Math.round(daysLate * dailyRate * multiplier * 100) / 100 : 0;
+
+  $('#prtc-product-name').textContent  = r?.product_name || 'Rental';
+  $('#prtc-customer-name').textContent = r?.customer_name || '';
+  $('#prtc-box').classList.toggle('danger', daysLate > 0);
+  $('#prtc-icon').innerHTML = `<i class="fa ${daysLate > 0 ? 'fa-triangle-exclamation' : 'fa-rotate-left'}"></i>`;
+
+  const rows = [
+    ['Rented on',  fmtDate(r?.rented_at)],
+    ['Due back',   fmtDate(r?.due_at)],
+    ['Quantity',   escHtml(String(r?.quantity ?? 1)) + ' (restocked on return)'],
+    ['Daily rate', formatMoney(dailyRate, {currency: cur})],
+  ];
+  if (daysLate > 0) {
+    rows.push(['Days late', `<span style="color:#dc2626;font-weight:700">${daysLate} day${daysLate === 1 ? '' : 's'}</span>`]);
+    rows.push(['Late fee multiplier', `${multiplier}×`]);
+  }
+  $('#prtc-rows').innerHTML = rows.map(([label, val]) =>
+    `<tr><td class="inv-dt-label">${escHtml(label)}</td><td class="inv-dt-val">${val}</td></tr>`).join('');
+
+  const feeBox = $('#prtc-fee-box');
+  if (daysLate > 0) {
+    feeBox.style.background = 'rgba(239,68,68,.1)';
+    $('#prtc-fee-label').style.color = '#dc2626';
+    $('#prtc-fee-amount').style.color = '#dc2626';
+    $('#prtc-fee-label').textContent = 'Late fee to collect';
+    $('#prtc-fee-amount').textContent = formatMoney(projected, {currency: cur});
+  } else {
+    feeBox.style.background = 'rgba(16,185,129,.1)';
+    $('#prtc-fee-label').style.color = '#10b981';
+    $('#prtc-fee-amount').style.color = '#10b981';
+    $('#prtc-fee-label').textContent = 'Returned on time';
+    $('#prtc-fee-amount').textContent = 'No late fee';
+  }
+  $('#prtc-submit-btn').innerHTML = daysLate > 0
+    ? '<i class="fa fa-rotate-left"></i> Mark Returned &amp; Collect Fee'
+    : '<i class="fa fa-rotate-left"></i> Mark Returned';
+
+  return new Promise(resolve => {
+    _prentalReturnResolve = resolve;
+    $('#prental-return-modal').style.display = 'flex';
+    setTimeout(() => $('#prtc-submit-btn')?.focus(), 30);
+  });
+}
+function _prentalReturnClose(result) {
+  $('#prental-return-modal').style.display = 'none';
+  if (_prentalReturnResolve) { _prentalReturnResolve(result); _prentalReturnResolve = null; }
+}
+$('#prtc-cancel-btn')?.addEventListener('click', () => _prentalReturnClose(false));
+$('#prtc-submit-btn')?.addEventListener('click', () => _prentalReturnClose(true));
+$('#prental-return-modal')?.addEventListener('click', e => { if (e.target === e.currentTarget) _prentalReturnClose(false); });
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && $('#prental-return-modal')?.style.display === 'flex') _prentalReturnClose(false);
+});
+
+function _prentalOpenDetail(r) {
+  const statusColors = { active: '#22c55e', overdue: '#ef4444', returned: '#3b82f6', cancelled: '#94a3b8' };
+  const color = statusColors[r.status] || '#8b5cf6';
+  const cur = state.currency || '';
+  const fmtDate = d => d ? new Date(d + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
+
+  $('#prdm-product-name').textContent = r.product_name || 'Rental';
+  $('#prdm-customer-name').textContent = r.customer_name || '';
+
+  $('#prdm-badges').innerHTML = `
+    <span class="so-badge" style="background:${color}20;color:${color};border-color:${color}40">${escHtml(r.status_label)}</span>
+    ${r.late_fee > 0 ? `<span class="inv-badge" style="background:#ef444420;color:#ef4444;border-color:#ef444440">Late fee: ${formatMoney(parseFloat(r.late_fee), {currency: cur})}</span>` : ''}
+  `;
+
+  const rowsHtml = rows => rows.map(([label, val]) =>
+    `<tr><td class="inv-dt-label">${escHtml(label)}</td><td class="inv-dt-val">${val}</td></tr>`).join('');
+
+  const rentalRows = [
+    ['Product',    escHtml(r.product_name || '—') + (r.product_sku ? ` <span style="color:var(--text-muted)">(${escHtml(r.product_sku)})</span>` : '')],
+    ['Quantity',   escHtml(String(r.quantity ?? 1))],
+    ['Daily Rate', formatMoney(parseFloat(r.daily_rate || 0), {currency: cur})],
+    ['Sale',       r.sale_number ? escHtml(r.sale_number) : '—'],
+  ];
+
+  const custRows = [
+    ['Customer', escHtml(r.customer_name || '—')],
+    ['Phone',    escHtml(r.customer_phone || '—')],
+    ['Email',    escHtml(r.customer_email || '—')],
+  ];
+
+  const dateRows = [
+    ['Rented on',  fmtDate(r.rented_at)],
+    ['Due back',   fmtDate(r.due_at)],
+    ['Returned',   fmtDate(r.returned_at)],
+  ];
+  if (r.status === 'overdue' && !r.returned_at) dateRows.push(['Days late', String(r.days_late ?? 0)]);
+  if (r.status === 'active' && !r.returned_at)  dateRows.push(['Days remaining', String(r.days_remaining ?? 0)]);
+  if (r.late_fee > 0) dateRows.push(['Late fee', formatMoney(parseFloat(r.late_fee), {currency: cur})]);
+
+  $('#prdm-content').innerHTML = `
+    <div class="inv-section">
+      <div class="inv-section-title"><i class="fa fa-calendar-days"></i> Rental</div>
+      <table class="inv-detail-table">${rowsHtml(rentalRows)}</table>
+    </div>
+    <div class="inv-section" style="margin-top:14px">
+      <div class="inv-section-title"><i class="fa fa-user"></i> Customer</div>
+      <table class="inv-detail-table">${rowsHtml(custRows)}</table>
+    </div>
+    <div class="inv-section" style="margin-top:14px">
+      <div class="inv-section-title"><i class="fa fa-clock"></i> Dates</div>
+      <table class="inv-detail-table">${rowsHtml(dateRows)}</table>
+    </div>
+  `;
+
+  let actions = '';
+  if (r.status === 'active' || r.status === 'overdue') {
+    actions += `<button class="qt-act-btn subs-act-btn" data-prental-act="return" data-prental-id="${r.id}"><i class="fa fa-rotate-left"></i> Mark Returned</button>`;
+  }
+  $('#prdm-actions').innerHTML = actions;
+  $$('#prdm-actions [data-prental-act]').forEach(b => {
+    b.addEventListener('click', async () => {
+      const ok = await _prentalRunAction(b.dataset.prentalAct, Number(b.dataset.prentalId), b);
+      if (ok) $('#prental-detail-modal').style.display = 'none';
+    });
+  });
+
+  $('#prental-detail-modal').style.display = 'flex';
+}
+
+$('#prental-detail-modal-close')?.addEventListener('click', () => { $('#prental-detail-modal').style.display = 'none'; });
+$('#prental-detail-modal')?.addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) e.currentTarget.style.display = 'none';
+});
+
+$('#prental-search')?.addEventListener('input', () => {
+  clearTimeout(_prental.searchTimer);
+  _prental.searchTimer = setTimeout(() => { _prental.search = $('#prental-search').value; loadRentalsList(); }, 300);
+});
+$('#prental-status-filter')?.addEventListener('change', () => {
+  _prental.status = $('#prental-status-filter').value;
+  loadRentalsList();
+});
+$('#prental-refresh')?.addEventListener('click', loadRentalsList);
 
 async function loadSalesList() {
   _salCloseDetail();
@@ -5366,9 +5648,11 @@ function applyFeatureVisibility() {
   const sal_invoices_tab= bf('sales_management') && mp('sal_tab_invoices');
   const sal_orders_tab  = bf('sales_management') && mp('sal_tab_orders');
   const sal_subs_tab    = bf('sales_management') && mp('sal_tab_subscriptions');
+  const sal_rentals_tab = bf('sales_management') && mp('sal_tab_rentals');
   const sales_any       = sal_invoices || sal_quotations || sal_refresh || sal_all_sales || sal_pos_sales ||
                            sal_returns || sal_eod || sal_qt_new || sal_qt_refresh || sal_transactions ||
-                           sal_history || sal_quotes_tab || sal_invoices_tab || sal_orders_tab || sal_subs_tab;
+                           sal_history || sal_quotes_tab || sal_invoices_tab || sal_orders_tab || sal_subs_tab ||
+                           sal_rentals_tab;
 
   // ── Inventory ──
   const inv_products   = (bf('product_management'))                          && mp('inv_products');
@@ -5772,7 +6056,7 @@ function applyFeatureVisibility() {
     if (salGrps[4]) salGrps[4].style.display = (mp('sal_btn_qt_new')||mp('sal_btn_qt_refresh')) ? '' : 'none';
     if (salGrps[5]) salGrps[5].style.display = mp('sal_tab_orders') ? '' : 'none'; }
   // ── Sales panel: sub-nav tab gating with fallback ──
-  { const _salTabPerms = { transactions: mp('sal_tab_transactions'), history: mp('sal_tab_history'), credits: mp('sal_tab_transactions'), quotes: mp('sal_tab_quotes'), invoices: mp('sal_tab_invoices'), orders: mp('sal_tab_orders'), subscriptions: mp('sal_tab_subscriptions') };
+  { const _salTabPerms = { transactions: mp('sal_tab_transactions'), history: mp('sal_tab_history'), credits: mp('sal_tab_transactions'), quotes: mp('sal_tab_quotes'), invoices: mp('sal_tab_invoices'), orders: mp('sal_tab_orders'), subscriptions: mp('sal_tab_subscriptions'), rentals: mp('sal_tab_rentals') };
     $$('.sal-view-btn').forEach(b => { b.style.display = _salTabPerms[b.dataset.salView] ? '' : 'none'; });
     const _salActive = $('.sal-view-btn.active');
     if (_salActive && !_salTabPerms[_salActive.dataset.salView]) {
@@ -18558,7 +18842,8 @@ function _applyProdTabPrefs() {
   _PROD_FIELD_MAP.forEach(f => {
     const el = f.getEl();
     if (!el) return;
-    el.style.display = _prodFieldHide[f.id] ? 'none' : '';
+    const forceHidden = f.id === 'rental' && state.rentalEnabled === false;
+    el.style.display = (_prodFieldHide[f.id] || forceHidden) ? 'none' : '';
   });
 }
 
@@ -20037,6 +20322,11 @@ $('#inv-tabs').addEventListener('click', e => {
 
 // ── Products ───────────────────────────────────────────────────────────────
 async function loadProducts(search = '', catId = 0, page = 1) {
+  // Bail if the POS mode has since switched away from Products — a stale
+  // in-flight request (e.g. from before switching to Services/Rental) must
+  // not repaint and un-hide #product-grid out from under the active mode.
+  if (state.posMode !== 'products') return;
+
   // "Campaign" is a different layout (grouped sections), not the paginated grid —
   // delegate unless the user is actively searching, which always falls back to a plain search.
   if (state.filterCampaign && !search) {
@@ -20055,6 +20345,7 @@ async function loadProducts(search = '', catId = 0, page = 1) {
     recentSales: applyRecent,
     discountOnly: applyDiscount,
   });
+  if (state.posMode !== 'products') return;
   if (res.status !== 200) {
     grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:40px;color:#e74c3c"><i class="fa fa-circle-exclamation"></i> Failed to load products</div>`;
     setStatus('Error loading products');
@@ -20072,6 +20363,7 @@ async function loadProducts(search = '', catId = 0, page = 1) {
 
   // Apply purchase-order mode based on setting (default: enabled)
   _applyPurchaseOrderMode(settings.purchase_order_enabled !== false);
+  _applyRentalMode(settings.rental_enabled !== false);
 
   buildCategoryBar(categories, catId);
   buildProductGrid(products);
@@ -20599,16 +20891,24 @@ function switchPosMode(mode) {
     $('#product-search-bar'), $('#category-filter-wrap'),
     $('#product-grid'), $('#pos-pagination'),
   ];
-  const svcSection = $('#pos-service-section');
+  const svcSection    = $('#pos-service-section');
+  const rentalSection = $('#pos-rental-section');
 
   if (mode === 'products') {
     productEls.forEach(el => el && (el.style.display = ''));
     if (svcSection) svcSection.style.display = 'none';
+    if (rentalSection) rentalSection.style.display = 'none';
     loadProducts(state.searchQuery, state.activeCategory);
-  } else {
+  } else if (mode === 'services') {
     productEls.forEach(el => el && (el.style.display = 'none'));
     if (svcSection) { svcSection.style.display = 'flex'; svcSection.style.flexDirection = 'column'; }
+    if (rentalSection) rentalSection.style.display = 'none';
     loadServices(state.serviceSearchQuery, state.serviceActiveCategory);
+  } else { // 'rentals'
+    productEls.forEach(el => el && (el.style.display = 'none'));
+    if (svcSection) svcSection.style.display = 'none';
+    if (rentalSection) { rentalSection.style.display = 'flex'; rentalSection.style.flexDirection = 'column'; }
+    loadRentalProducts(state.rentalSearchQuery || '');
   }
 }
 
@@ -20744,6 +21044,183 @@ $('#service-search')?.addEventListener('input', e => {
   _svcSearchTimer = setTimeout(() => loadServices(state.serviceSearchQuery, state.serviceActiveCategory), 400);
 });
 $('#btn-refresh-services')?.addEventListener('click', () => loadServices(state.serviceSearchQuery, state.serviceActiveCategory));
+
+// ── Rental products ──────────────────────────────────────────────────────
+async function loadRentalProducts(search = '') {
+  const grid = $('#rental-grid');
+  if (!grid) return;
+  grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text-muted)"><i class="fa fa-spinner fa-spin" style="font-size:24px"></i></div>';
+  setStatus('Loading rental products…');
+
+  const res = await API.bootstrap(search, 0, 1, { rentalOnly: true, perPage: 100, sort: 'name_asc' });
+  if (res.status !== 200) {
+    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:#e74c3c"><i class="fa fa-circle-exclamation"></i> Failed to load rental products</div>';
+    setStatus('Error loading rental products');
+    return;
+  }
+
+  const { products = [] } = res.body?.data || res.body || {};
+  state.rentalProducts = products;
+  buildRentalGrid(products);
+  setStatus(`Rental · ${products.length} product${products.length === 1 ? '' : 's'}`);
+}
+
+function buildRentalGrid(products) {
+  const grid = $('#rental-grid');
+  if (!grid) return;
+  if (!products.length) {
+    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:60px;color:var(--text-muted)"><i class="fa fa-calendar-days" style="font-size:32px;display:block;margin-bottom:10px;opacity:.3"></i>No rental-enabled products.<br>Enable "Rental" on a product in Inventory → Advanced tab to see it here.</div>';
+    return;
+  }
+  grid.innerHTML = products.map(p => rentalCardHtml(p)).join('');
+  bindRentalCardClicks(grid);
+}
+
+function rentalCardHtml(p) {
+  const outOfStock = (parseFloat(p.stock_quantity) || 0) <= 0;
+  const dailyRate = parseFloat(p.rental_daily_rate) || 0;
+  const cur = state.currency || '';
+  const metaParts = [];
+  if (p.sku) metaParts.push(escHtml(p.sku));
+  if (p.stock_quantity != null) metaParts.push(`${p.stock_quantity} in stock`);
+
+  return `<div class="product-card${outOfStock ? ' is-out' : ''}" data-id="${p.id}">
+    ${p.image_url ? `<img src="${p.image_url}" alt="${escHtml(p.name)}" loading="lazy">` : `<div class="p-icon"><i class="fa fa-calendar-days"></i></div>`}
+    <div class="p-name">${escHtml(p.name)}</div>
+    ${metaParts.length ? `<div class="p-meta">${metaParts.join(' · ')}</div>` : ''}
+    <div class="p-price">${formatMoney(dailyRate, {currency: cur})} <span style="font-size:11px;font-weight:500;color:var(--text-muted)">/day</span></div>
+  </div>`;
+}
+
+function bindRentalCardClicks(container) {
+  container.querySelectorAll('.product-card:not(.is-out)').forEach(card => {
+    const p = state.rentalProducts.find(pr => pr.id === Number(card.dataset.id));
+    if (p) card.addEventListener('click', () => handleRentalProductClick(p));
+  });
+}
+
+async function handleRentalProductClick(p) {
+  if ((parseFloat(p.stock_quantity) || 0) <= 0) {
+    toast(`${p.name} is out of stock`, 'error');
+    return;
+  }
+  const result = await _askRentalReturn(p);
+  if (!result) return; // cancelled
+
+  const dailyRate = parseFloat(p.rental_daily_rate) || 0;
+  const totalPrice = round2(dailyRate * result.days);
+  addToCart({
+    id: p.id, layerId: null, layerLabel: null, name: p.name,
+    price: totalPrice,
+    stock: p.stock_quantity != null ? parseFloat(p.stock_quantity) : null,
+    _originalPrice: totalPrice,
+    _isRental: true, _rentalReturnDate: result.returnDate, _rentalMaxDays: p.rental_max_days,
+    _rentalDailyRate: dailyRate, _rentalDays: result.days,
+  });
+}
+
+// Rental search input
+let _rentalSearchTimer = null;
+$('#rental-search')?.addEventListener('input', e => {
+  clearTimeout(_rentalSearchTimer);
+  state.rentalSearchQuery = e.target.value;
+  _rentalSearchTimer = setTimeout(() => loadRentalProducts(state.rentalSearchQuery), 400);
+});
+$('#btn-refresh-rentals')?.addEventListener('click', () => loadRentalProducts(state.rentalSearchQuery || ''));
+
+// ── Rent Out prompt (customer + return date, on one screen) ─────────────────
+let _askRentalResolve = null;
+let _rentalCurrentProduct = null;
+
+function round2(n) { return Math.round((n + Number.EPSILON) * 100) / 100; }
+
+function _rentalDaysBetween(dateStr) {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const target = new Date(dateStr + 'T00:00:00');
+  return Math.max(1, Math.round((target - today) / 86400000));
+}
+
+function _updateRentalCustomerDisplay() {
+  const tab = activeTab();
+  const has = !!tab?._customer;
+  $('#pos-rental-customer-name').textContent = has ? tab._customer.name : 'No customer selected';
+  const btn = $('#pos-rental-pick-customer');
+  if (btn) btn.textContent = has ? 'Change' : 'Select…';
+}
+
+function _updateRentalPriceHint() {
+  const hint = $('#pos-rental-price-hint');
+  if (!hint || !_rentalCurrentProduct) return;
+  const date = $('#pos-rental-date').value;
+  if (!date) { hint.textContent = ''; return; }
+  const days = _rentalDaysBetween(date);
+  const dailyRate = parseFloat(_rentalCurrentProduct.rental_daily_rate) || 0;
+  const cur = state.currency || '';
+  hint.textContent = `${days} day${days === 1 ? '' : 's'} × ${formatMoney(dailyRate, {currency: cur})}/day = ${formatMoney(round2(dailyRate * days), {currency: cur})}`;
+}
+
+function _askRentalReturn(p) {
+  return new Promise(resolve => {
+    _askRentalResolve = resolve;
+    _rentalCurrentProduct = p;
+    const maxDays = parseInt(p.rental_max_days) || 0;
+    const today = new Date();
+    const maxDate = new Date(today);
+    maxDate.setDate(maxDate.getDate() + maxDays);
+    const todayIso = today.toISOString().slice(0, 10);
+    const maxIso = maxDate.toISOString().slice(0, 10);
+
+    $('#pos-rental-product-name').textContent = p.name;
+    $('#pos-rental-max-days').textContent = maxDays;
+    _updateRentalCustomerDisplay();
+    const dateInput = $('#pos-rental-date');
+    dateInput.min = todayIso;
+    dateInput.max = maxIso;
+    dateInput.value = maxIso;
+    _updateRentalPriceHint();
+    $('#pos-rental-overlay').style.display = 'flex';
+  });
+}
+
+function _rentalResolve(result) {
+  $('#pos-rental-overlay').style.display = 'none';
+  _rentalCurrentProduct = null;
+  if (_askRentalResolve) { const r = _askRentalResolve; _askRentalResolve = null; r(result); }
+}
+
+// Opening the customer picker from within the rental dialog hides the rental
+// overlay (they'd otherwise stack, since #cust-modal sits at a lower z-index)
+// without resolving/cancelling the rental flow — it reappears once the
+// customer picker closes, whether or not a customer was actually picked.
+$('#pos-rental-pick-customer')?.addEventListener('click', () => {
+  $('#pos-rental-overlay').style.display = 'none';
+  openCustomerModal(() => {
+    $('#pos-rental-overlay').style.display = 'flex';
+    _updateRentalCustomerDisplay();
+  });
+});
+
+$('#pos-rental-date')?.addEventListener('input', _updateRentalPriceHint);
+$('#pos-rental-date')?.addEventListener('keydown', e => {
+  if (e.key === 'Enter') $('#pos-rental-confirm').click();
+  if (e.key === 'Escape') _rentalResolve(null);
+});
+
+$('#pos-rental-confirm')?.addEventListener('click', () => {
+  const tab = activeTab();
+  if (!tab?._customer) { toast('Please select a customer for this rental.', 'error'); return; }
+  const date = $('#pos-rental-date').value;
+  if (!date) { toast('Please select a return date.', 'error'); return; }
+  if (date < $('#pos-rental-date').min) { toast('Return date cannot be in the past.', 'error'); return; }
+  if (date > $('#pos-rental-date').max) { toast('Return date exceeds the maximum rental period.', 'error'); return; }
+  _rentalResolve({ returnDate: date, days: _rentalDaysBetween(date) });
+});
+
+$('#pos-rental-cancel')?.addEventListener('click', () => _rentalResolve(null));
+$('#pos-rental-overlay')?.addEventListener('click', e => {
+  if (e.target === e.currentTarget) _rentalResolve(null);
+});
+// ── End Rent Out prompt ──────────────────────────────────────────────────
 
 // ── Product grid keyboard navigation ───────────────────────────────────────
 let _pgSelIdx = -1;
@@ -21074,15 +21551,27 @@ function renderCartCustomer() {
   }
 }
 
-function openCustomerModal() {
+// Optional one-shot hook fired when the customer modal closes, whether a
+// customer was picked/created (arg = customer) or the modal was dismissed
+// without one (arg = null) — lets a caller (e.g. the rental dialog) resume
+// after the customer picker without losing its own state.
+let _custModalOnResolve = null;
+
+function openCustomerModal(onResolve) {
   const modal = $('#cust-modal');
   if (!modal) return;
+  _custModalOnResolve = onResolve || null;
   modal.style.display = 'flex';
   const input = $('#cust-search-input');
   if (input) { input.value = ''; input.focus(); }
   $('#cust-results').innerHTML = '';
   $('#cust-new-form').style.display = 'none';
   _loadCustomerConfig();
+}
+
+function _closeCustModalWith(customerOrNull) {
+  $('#cust-modal').style.display = 'none';
+  if (_custModalOnResolve) { const cb = _custModalOnResolve; _custModalOnResolve = null; cb(customerOrNull); }
 }
 
 async function _searchCustomers(q) {
@@ -21109,7 +21598,7 @@ async function _searchCustomers(q) {
       if (!c) return;
       const tab = activeTab();
       if (tab) tab._customer = c;
-      $('#cust-modal').style.display = 'none';
+      _closeCustModalWith(c);
       renderCartCustomer();
       toast(`Customer: ${c.name}`, 'success');
     });
@@ -21131,8 +21620,8 @@ function _showCustomerCreateForm(prefill) {
   $('#cust-new-name').focus();
 }
 
-$('#cust-modal')?.addEventListener('click', e => { if (e.target === e.currentTarget) $('#cust-modal').style.display = 'none'; });
-$('#cust-modal-close')?.addEventListener('click', () => { $('#cust-modal').style.display = 'none'; });
+$('#cust-modal')?.addEventListener('click', e => { if (e.target === e.currentTarget) _closeCustModalWith(null); });
+$('#cust-modal-close')?.addEventListener('click', () => { _closeCustModalWith(null); });
 $('#cust-show-create')?.addEventListener('click', () => _showCustomerCreateForm(''));
 
 $('#cust-search-input')?.addEventListener('input', e => {
@@ -21143,7 +21632,7 @@ $('#cust-search-input')?.addEventListener('input', e => {
 });
 
 $('#cust-search-input')?.addEventListener('keydown', e => {
-  if (e.key === 'Escape') { $('#cust-modal').style.display = 'none'; e.preventDefault(); }
+  if (e.key === 'Escape') { _closeCustModalWith(null); e.preventDefault(); }
   if (e.key === 'Enter') {
     const first = $('#cust-results .cust-row');
     if (first) first.click();
@@ -21169,7 +21658,7 @@ $('#cust-new-save')?.addEventListener('click', async () => {
   if (!c) return;
   const tab = activeTab();
   if (tab) tab._customer = c;
-  $('#cust-modal').style.display = 'none';
+  _closeCustModalWith(c);
   renderCartCustomer();
   toast(`Customer "${c.name}" created and selected`, 'success');
 });
@@ -24139,7 +24628,16 @@ function _invBuildActualDoc(inv, ic, cur, lhDataUrl = null) {
       ? `<div style="font-size:9px;color:#0891b2;font-weight:600;margin-top:2px">🛡 ${escHtml(_warrantyLabel(it.warranty_type, it.warranty_expires_at, it.warranty_days))}</div>`
       : '';
 
-    return `<tr><td class="n">${n}</td><td><b>${escHtml(it.description || '')}</b>${wtyLine}</td><td class="r">${qty}</td><td class="r">${money(up)}</td>${discTd}${taxTd}<td class="r b">${money(lt)}</td></tr>`;
+    let rentalLine = '';
+    if (it.rental_return_date) {
+      const rDaily = parseFloat(it.rental_daily_rate) || 0;
+      const rMult  = parseFloat(it.rental_late_fee_multiplier) || 0;
+      const parts  = [`Return ${escHtml(it.rental_return_date)}`, `Daily ${money(rDaily.toFixed(2))}`];
+      if (rMult > 0) parts.push(`Late ${rMult}× rate/day`);
+      rentalLine = `<div style="font-size:9px;color:#b45309;font-weight:600;margin-top:2px">📅 ${parts.join(' · ')}</div>`;
+    }
+
+    return `<tr><td class="n">${n}</td><td><b>${escHtml(it.description || '')}</b>${wtyLine}${rentalLine}</td><td class="r">${qty}</td><td class="r">${money(up)}</td>${discTd}${taxTd}<td class="r b">${money(lt)}</td></tr>`;
   }).join('\n    ');
 
   // ── Summary rows ──────────────────────────────────────────────────────────
@@ -25258,6 +25756,12 @@ async function openPosSettings() {
   const poToggle  = $('#psm-purchase-order-enabled');
   if (poToggle) poToggle.checked = poEnabled;
   _applyPurchaseOrderMode(poEnabled);
+
+  // Product rentals
+  const rentalEnabled = s.rental_enabled !== false; // default true
+  const rentalToggle  = $('#psm-rental-enabled');
+  if (rentalToggle) rentalToggle.checked = rentalEnabled;
+  _applyRentalMode(rentalEnabled);
 }
 
 function psmShowTab(tab) {
@@ -25323,6 +25827,19 @@ function _applyPurchaseOrderMode(enabled) {
   // Direct GRN add button (shown only when PO is disabled)
   const grnDirectBtn = $('#grn-add-direct-btn');
   if (grnDirectBtn) grnDirectBtn.style.display = enabled ? 'none' : '';
+}
+
+// ── Product Rental feature toggle ──────────────────────────────────────────
+function _applyRentalMode(enabled) {
+  state.rentalEnabled = enabled;
+  // POS: Rental mode button
+  const rentalModeBtn = $('.pos-mode-btn[data-mode="rentals"]');
+  if (rentalModeBtn) rentalModeBtn.style.display = enabled ? '' : 'none';
+  if (!enabled && state.posMode === 'rentals') switchPosMode('products');
+  // Sales panel: Rental sub-nav tab
+  $$('[data-sal-view="rentals"]').forEach(el => { el.style.display = enabled ? '' : 'none'; });
+  // Product Add/Edit modal → Advanced tab: Rental field
+  if (typeof _applyProdTabPrefs === 'function') _applyProdTabPrefs();
 }
 
 $('#psm-close').addEventListener('click',  () => { $('#pos-settings-modal').style.display = 'none'; _bwzCheckResume(); });
@@ -25515,6 +26032,7 @@ $('#psm-save').addEventListener('click', async () => {
       }])
     ),
     purchase_order_enabled:      $('#psm-purchase-order-enabled')?.checked !== false,
+    rental_enabled:              $('#psm-rental-enabled')?.checked !== false,
   };
 
   const res = await API.settingsUpdate(payload);
@@ -25528,6 +26046,9 @@ $('#psm-save').addEventListener('click', async () => {
 
   // Apply purchase order mode immediately from the toggle
   _applyPurchaseOrderMode(!!$('#psm-purchase-order-enabled')?.checked);
+
+  // Apply rental mode immediately from the toggle
+  _applyRentalMode($('#psm-rental-enabled')?.checked !== false);
 
   // Apply display theme immediately from the dropdown
   await applyDisplayTheme($('#psm-theme').value);
@@ -26033,6 +26554,9 @@ async function _posCreateInvoiceFromSale(sale, customerId) {
           invItem.warranty_type          = srcItem?.warranty_type || null;
           invItem.warranty_expires_at    = srcItem?.warranty_expires_at || null;
           invItem.warranty_days          = srcItem?.warranty_days || null;
+          invItem.rental_return_date         = srcItem?.rental_return_date || null;
+          invItem.rental_daily_rate          = srcItem?.rental_daily_rate ?? null;
+          invItem.rental_late_fee_multiplier = srcItem?.rental_late_fee_multiplier ?? null;
         });
       }
       // Stamp tax breakdown for per-rule rendering in the invoice template
@@ -27081,7 +27605,8 @@ function addToCart(product) {
   _beep.play().catch(() => {});
   const tab = activeTab();
   if (!tab) return;
-  const key = product.layerId != null ? `${product.id}:${product.layerId}` : `${product.id}`;
+  let key = product.layerId != null ? `${product.id}:${product.layerId}` : `${product.id}`;
+  if (product._isRental) key += `:${product._rentalReturnDate || ''}`;
   const existing = tab.cart.find(i => i._key === key);
   if (existing) {
     existing.qty += 1;
@@ -27131,8 +27656,10 @@ function renderCart() {
       ? `<span class="warranty-badge"><i class="fa fa-shield-halved"></i> ${escHtml(_warrantyLabel(item.warrantyType, item.warrantyDate, null))}</span>` : '';
     const creqBadge = (item.customRequirementValues && item.customRequirementValues.length)
       ? `<span class="ci-badge ci-badge--creq"><i class="fa fa-list-check"></i> Details saved</span>` : '';
-    const extras = (discountBadge || noteBadge || typeBadge || warrantyBadge || creqBadge)
-      ? `<div class="ci-badges">${typeBadge}${discountBadge}${noteBadge}${warrantyBadge}${creqBadge}</div>` : '';
+    const rentalBadge = item._isRental
+      ? `<span class="ci-badge ci-badge--rental"><i class="fa fa-calendar-days"></i> Return: ${escHtml(item._rentalReturnDate || '')} (${item._rentalDays || 1}d)</span>` : '';
+    const extras = (discountBadge || noteBadge || typeBadge || warrantyBadge || creqBadge || rentalBadge)
+      ? `<div class="ci-badges">${typeBadge}${discountBadge}${noteBadge}${warrantyBadge}${creqBadge}${rentalBadge}</div>` : '';
     return `
     <div class="cart-item" data-key="${escHtml(item._key)}">
       <div class="ci-name">
@@ -27884,6 +28411,19 @@ $('#checkout-confirm').addEventListener('click', async () => {
     return;
   }
 
+  // Block checkout if rental products are in the cart but no customer is assigned
+  if (cart.some(i => i._isRental) && !tab?._customer) {
+    showAlert(alertEl, 'Rental products require a customer. Please assign a customer or add a customer to this bill before completing the sale.');
+    setTimeout(() => $('#co-cust-input')?.focus(), 60);
+    return;
+  }
+
+  // Every rental item must have a return date before checkout can proceed
+  if (cart.some(i => i._isRental && !i._rentalReturnDate)) {
+    showAlert(alertEl, 'One or more rental items are missing a return date.');
+    return;
+  }
+
   btn.disabled = true;
   btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Processing…';
   alertEl.style.display = 'none';
@@ -27914,6 +28454,7 @@ $('#checkout-confirm').addEventListener('click', async () => {
         warranty_date:          i.warrantyDate ?? undefined,
         item_discount_percent:  _itemEffectivePct(i) > 0 ? _itemEffectivePct(i) : undefined,
         item_tax_rule:          i.itemTaxRule ?? undefined,
+        rental_return_date:     i._isRental ? i._rentalReturnDate : undefined,
       })),
       ...serviceItems.map(i => ({
         item_type:              'service',
@@ -40747,6 +41288,7 @@ async function submitDsCreate() {
       { key: 'sal_tab_invoices',     label: 'Tab: Invoices',       desc: 'Sales panel: Invoices sub-nav tab' },
       { key: 'sal_tab_orders',       label: 'Tab: Sales Orders',   desc: 'Sales panel: Sales Orders sub-nav tab' },
       { key: 'sal_tab_subscriptions',label: 'Tab: Recurring Sales',  desc: 'Sales panel: Recurring Sales sub-nav tab' },
+      { key: 'sal_tab_rentals',      label: 'Tab: Rental',         desc: 'Sales panel: Rental sub-nav tab' },
     ]},
     { key: 'inv_ribbon', label: 'Inventory · Ribbon', icon: 'fa-boxes-stacked', color: '#8b5cf6', items: [
       { key: 'inv_btn_products',    label: 'Products',         desc: 'Ribbon Catalog: Products list button' },

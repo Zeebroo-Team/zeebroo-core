@@ -41,6 +41,7 @@ class PosCheckoutApiController extends Controller
             'items.*.product_selling_unit_id'=> ['nullable', 'integer', 'min:1'],
             'items.*.warranty_type'          => ['nullable', 'string', 'in:lifetime,date'],
             'items.*.warranty_date'          => ['nullable', 'date_format:Y-m-d'],
+            'items.*.rental_return_date'     => ['nullable', 'date_format:Y-m-d', 'after_or_equal:today'],
             'items.*.item_discount_percent'  => ['nullable', 'numeric', 'min:0', 'max:100'],
             'items.*.custom_requirement_values'          => ['nullable', 'array', 'max:20'],
             'items.*.custom_requirement_values.*.key'    => ['nullable', 'string', 'max:100'],
@@ -80,6 +81,12 @@ class PosCheckoutApiController extends Controller
                 return response()->json([
                     'message' => 'A customer must be assigned for subscription products.',
                     'errors'  => ['pos_customer_id' => ['A customer is required to sell a subscription product.']],
+                ], 422);
+            }
+            if ($productIds->isNotEmpty() && Product::query()->whereIn('id', $productIds)->where('is_rental', true)->exists()) {
+                return response()->json([
+                    'message' => 'A customer must be assigned for rental products.',
+                    'errors'  => ['pos_customer_id' => ['A customer is required to rent a product.']],
                 ], 422);
             }
         }

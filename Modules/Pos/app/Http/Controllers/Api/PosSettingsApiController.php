@@ -203,6 +203,8 @@ class PosSettingsApiController extends Controller
             'courier_services.*.charge'  => ['nullable', 'numeric', 'min:0'],
             // Purchasing workflow
             'purchase_order_enabled'     => ['nullable', 'boolean'],
+            // Rentals
+            'rental_enabled'             => ['nullable', 'boolean'],
             // Customers
             'customer_require_phone'     => ['nullable', 'boolean'],
             'customer_require_email'     => ['nullable', 'boolean'],

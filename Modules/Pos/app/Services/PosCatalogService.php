@@ -92,6 +92,7 @@ class PosCatalogService
         string $sort = 'name_asc',
         bool $recentSales = false,
         bool $discountOnly = false,
+        bool $rentalOnly = false,
     ): array {
         $page    = max(1, $page);
         $perPage = max(1, min(100, $perPage));
@@ -158,6 +159,11 @@ class PosCatalogService
                 $query->whereIn('id', $eligibleIds ?: [0]);
             }
             // If true, an active storewide campaign discounts every product — no filter needed.
+        }
+
+        // Rental-only filter — the POS "Rental" mode tab
+        if ($rentalOnly) {
+            $query->where('is_rental', true);
         }
 
         // Stock status filter (uses the stock_quantity column directly)
@@ -390,6 +396,11 @@ class PosCatalogService
             'is_subscription'              => (bool) $product->is_subscription,
             'subscription_recurring_period' => $product->subscription_recurring_period,
             'subscription_free_trial'      => (bool) $product->subscription_free_trial,
+            'is_rental'                    => (bool) $product->is_rental,
+            'rental_daily_rate'            => $product->rental_daily_rate !== null ? (float) $product->rental_daily_rate : null,
+            'rental_max_days'              => $product->rental_max_days !== null ? (int) $product->rental_max_days : null,
+            'rental_late_fee_multiplier'   => $product->rental_late_fee_multiplier !== null ? (float) $product->rental_late_fee_multiplier : null,
+            'rental_needs_cleaning'        => (bool) $product->rental_needs_cleaning,
         ];
     }
 

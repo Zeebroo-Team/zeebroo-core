@@ -31,6 +31,7 @@ class SaleService
         private readonly ServiceRequestService $serviceRequests,
         private readonly PosNotificationService $notifications,
         private readonly CustomerSubscriptionService $subscriptions,
+        private readonly ProductRentalService $rentals,
     ) {
     }
 
@@ -291,24 +292,42 @@ class SaleService
                     ? $this->stockConsumption->consumeFromLayer($product, (int) $layerId, $line['quantity'], $branchId, $branchStockSeparate)
                     : $this->stockConsumption->consumeFifo($product, $line['quantity'], $branchId, $branchStockSeparate);
 
+                $isRentalLine = (bool) $product->is_rental;
+                $rentalReturnDate = $isRentalLine
+                    ? ($line['rental_return_date'] ?? now()->addDays((int) $product->rental_max_days)->toDateString())
+                    : null;
+                // Rentals are billed as daily_rate × days, never for less than one day.
+                $rentalDays = $isRentalLine
+                    ? max(1, (int) now()->startOfDay()->diffInDays(\Carbon\Carbon::parse($rentalReturnDate)->startOfDay()))
+                    : null;
+
                 // Resolve the applicable discount for this line — when multiple
                 // sources (a manual per-product Discount and/or an active Sale
                 // Campaign) apply, pick whichever gives the customer the best price.
-                $productDiscounts = $activeDiscounts->where('product_id', $product->id);
-                $suId = $line['product_selling_unit_id'] ?? null;
-                $representativePrice = (float) ($allocations[0]['unit_sell_price'] ?? 0);
-                $suCandidates   = $suId !== null ? $productDiscounts->where('product_selling_unit_id', $suId) : collect();
-                $baseCandidates = $productDiscounts->where('product_selling_unit_id', null);
-                $discount = $suCandidates->isNotEmpty()
-                    ? PricingCandidates::pickBest($suCandidates, $representativePrice)
-                    : PricingCandidates::pickBest($baseCandidates, $representativePrice);
+                // Rentals are priced from the daily rate, not catalog discounts.
+                if ($isRentalLine) {
+                    $discount = null;
+                } else {
+                    $productDiscounts = $activeDiscounts->where('product_id', $product->id);
+                    $suId = $line['product_selling_unit_id'] ?? null;
+                    $representativePrice = (float) ($allocations[0]['unit_sell_price'] ?? 0);
+                    $suCandidates   = $suId !== null ? $productDiscounts->where('product_selling_unit_id', $suId) : collect();
+                    $baseCandidates = $productDiscounts->where('product_selling_unit_id', null);
+                    $discount = $suCandidates->isNotEmpty()
+                        ? PricingCandidates::pickBest($suCandidates, $representativePrice)
+                        : PricingCandidates::pickBest($baseCandidates, $representativePrice);
+                }
 
                 $subscriptionSaleItemId = null;
                 $subscriptionQty        = 0.0;
                 $subscriptionUnitPrice  = null;
+                $rentalSaleItemId       = null;
+                $rentalQty              = 0.0;
 
                 foreach ($allocations as $allocation) {
-                    $rawPrice = (float) $allocation['unit_sell_price'];
+                    $rawPrice = $isRentalLine
+                        ? round((float) $product->rental_daily_rate * $rentalDays, 2)
+                        : (float) $allocation['unit_sell_price'];
 
                     // Apply product discount server-side
                     $discountPerUnit = 0.0;
@@ -363,6 +382,11 @@ class SaleService
                         $subscriptionQty       += (float) $allocation['quantity'];
                         $subscriptionUnitPrice  = $finalSellPrice;
                     }
+
+                    if ($product->is_rental) {
+                        $rentalSaleItemId ??= $saleItem->id;
+                        $rentalQty        += (float) $allocation['quantity'];
+                    }
                 }
 
                 if ($product->is_subscription && $subscriptionQty > 0) {
@@ -374,6 +398,20 @@ class SaleService
                         $customerId,
                         (float) $subscriptionUnitPrice,
                         $subscriptionQty,
+                    );
+                }
+
+                if ($isRentalLine && $rentalQty > 0) {
+                    $this->rentals->createForSaleLine(
+                        $business,
+                        $product,
+                        $sale->id,
+                        $rentalSaleItemId,
+                        $customerId,
+                        $branchId,
+                        (float) $product->rental_daily_rate,
+                        $rentalQty,
+                        $rentalReturnDate,
                     );
                 }
             }
@@ -532,6 +570,9 @@ class SaleService
                         (float) $item->quantity,
                         $item->product,
                     );
+                    if ($item->product->is_rental) {
+                        $this->rentals->cancelForSaleItem($item->id);
+                    }
                     continue;
                 }
 
@@ -607,8 +648,9 @@ class SaleService
                 ? $row['warranty_type'] : null;
             $warrantyDate = ($warrantyType === 'date' && !empty($row['warranty_date']))
                 ? $row['warranty_date'] : null;
+            $rentalReturnDate = !empty($row['rental_return_date']) ? $row['rental_return_date'] : null;
 
-            $key = $productId.':'.($layerId ?? 'fifo').':'.($suId ?? '0');
+            $key = $productId.':'.($layerId ?? 'fifo').':'.($suId ?? '0').':'.($rentalReturnDate ?? '');
             if (! isset($merged[$key])) {
                 $merged[$key] = [
                     'product_id' => $productId,
@@ -619,6 +661,7 @@ class SaleService
                     'selling_unit_factor' => $sellingUnitFactor,
                     'warranty_type' => $warrantyType,
                     'warranty_date' => $warrantyDate,
+                    'rental_return_date' => $rentalReturnDate,
                     'item_discount_percent' => isset($row['item_discount_percent']) && (float) $row['item_discount_percent'] > 0
                         ? (float) $row['item_discount_percent'] : null,
                 ];
@@ -656,6 +699,15 @@ class SaleService
                 ]);
             }
 
+            if ($product->is_rental && !empty($row['rental_return_date'])) {
+                $maxDate = now()->addDays((int) $product->rental_max_days)->toDateString();
+                if ($row['rental_return_date'] > $maxDate) {
+                    throw ValidationException::withMessages([
+                        'items' => 'Return date for '.$product->name.' exceeds the maximum rental period.',
+                    ]);
+                }
+            }
+
             $layerId = $row['product_stock_layer_id'];
             if ($layerId !== null) {
                 $layer = ProductStockLayer::query()
@@ -687,6 +739,7 @@ class SaleService
                 'selling_unit_factor' => $row['selling_unit_factor'] ?? null,
                 'warranty_type' => $row['warranty_type'] ?? null,
                 'warranty_date' => $row['warranty_date'] ?? null,
+                'rental_return_date' => $row['rental_return_date'] ?? null,
                 'item_discount_percent' => $row['item_discount_percent'] ?? null,
             ];
         }

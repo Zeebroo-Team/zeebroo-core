@@ -40,6 +40,8 @@ const API = (() => {
       if (filters?.brandId)      p.set('brand_id',      filters.brandId);
       if (filters?.recentSales)  p.set('recent_sales',  '1');
       if (filters?.discountOnly) p.set('discount_only', '1');
+      if (filters?.rentalOnly)   p.set('rental_only',   '1');
+      if (filters?.perPage)      p.set('per_page',      filters.perPage);
       if (filters?.sort && filters.sort !== 'name_asc') p.set('sort', filters.sort);
       return request('GET', `/online/bootstrap?${p.toString()}`);
     },
@@ -108,6 +110,11 @@ const API = (() => {
     resumeSubscription:   (id)        => request('POST',   `/subscriptions/${id}/resume`),
     renewSubscription:    (id)        => request('POST',   `/subscriptions/${id}/renew`),
     notifySubscription:   (id)        => request('POST',   `/subscriptions/${id}/notify`),
+
+    // Product Rentals
+    productRentals:       (q, status) => request('GET',    `/product-rentals?q=${encodeURIComponent(q||'')}&status=${status||'all'}`),
+    productRental:        (id)        => request('GET',    `/product-rentals/${id}`),
+    returnProductRental:  (id)        => request('POST',   `/product-rentals/${id}/return`),
 
     // End of Day
     eodStatus:  () => request('GET',  '/eod'),
