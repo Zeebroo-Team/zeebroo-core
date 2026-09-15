@@ -18,6 +18,7 @@ return [
         'product_management'   => 'Product Management',
         'project_management'   => 'Project Management',
         'restaurant'           => 'Restaurant',
+        'sales_management'     => 'Sales Management',
         'service_management'   => 'Services',
         'social_media_campaign' => 'Social Media Campaign',
         'stock_management'     => 'Stock Management',

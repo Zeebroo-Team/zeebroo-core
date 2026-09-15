@@ -5039,7 +5039,7 @@ function showLogin() {
 
 let _obStep = 1;
 let _obSelectedCat = '';
-let _obFeatureSet  = new Set(['point_of_sale', 'product_management', 'stock_management']);
+let _obFeatureSet  = new Set(['point_of_sale', 'sales_management', 'product_management', 'stock_management']);
 let _obPackages = [];
 let _obSelectedPackage = null;
 
@@ -5107,6 +5107,7 @@ const _obStepSubs = {
 
 const _obFeatureDefs = [
   { key: 'point_of_sale',         img: 'img/features/point-of-sale.png',              name: 'Point of Sale',        desc: 'Sell products at a physical counter',  color: '#f59e0b' },
+  { key: 'sales_management',      img: 'img/features/point-of-sale.png',              name: 'Sales Management',     desc: 'Invoices, quotations & sales orders',  color: '#f59e0b' },
   { key: 'product_management',    img: 'img/features/product-management.svg',         name: 'Product Management',   desc: 'Manage products, variants & pricing',  color: '#3b82f6' },
   { key: 'stock_management',      img: 'img/features/stock-management.png',           name: 'Stock Management',     desc: 'Track inventory levels & movements',   color: '#0ea5e9' },
   { key: 'bill_management',       img: 'img/features/bill-management.png',            name: 'Bill Management',      desc: 'Record and pay supplier invoices',     color: '#ef4444' },
@@ -5349,6 +5350,26 @@ function applyFeatureVisibility() {
   const pos_quotations = bf('point_of_sale') && mp('pos_quotations');
   const pos_any        = pos_session || pos_checkout || pos_returns || pos_customers || pos_eod || pos_quotations;
 
+  // ── Sales (separate feature from POS) ──
+  const sal_invoices    = bf('sales_management') && mp('sal_btn_new_invoice');
+  const sal_quotations  = bf('sales_management') && mp('sal_btn_new_quotation');
+  const sal_refresh     = bf('sales_management') && mp('sal_btn_refresh');
+  const sal_all_sales   = bf('sales_management') && mp('sal_btn_all_sales');
+  const sal_pos_sales   = bf('sales_management') && mp('sal_btn_pos_sales');
+  const sal_returns     = bf('sales_management') && mp('sal_btn_returns');
+  const sal_eod         = bf('sales_management') && mp('sal_btn_eod');
+  const sal_qt_new      = bf('sales_management') && mp('sal_btn_qt_new');
+  const sal_qt_refresh  = bf('sales_management') && mp('sal_btn_qt_refresh');
+  const sal_transactions= bf('sales_management') && mp('sal_tab_transactions');
+  const sal_history     = bf('sales_management') && mp('sal_tab_history');
+  const sal_quotes_tab  = bf('sales_management') && mp('sal_tab_quotes');
+  const sal_invoices_tab= bf('sales_management') && mp('sal_tab_invoices');
+  const sal_orders_tab  = bf('sales_management') && mp('sal_tab_orders');
+  const sal_subs_tab    = bf('sales_management') && mp('sal_tab_subscriptions');
+  const sales_any       = sal_invoices || sal_quotations || sal_refresh || sal_all_sales || sal_pos_sales ||
+                           sal_returns || sal_eod || sal_qt_new || sal_qt_refresh || sal_transactions ||
+                           sal_history || sal_quotes_tab || sal_invoices_tab || sal_orders_tab || sal_subs_tab;
+
   // ── Inventory ──
   const inv_products   = (bf('product_management'))                          && mp('inv_products');
   const inv_audit      = (bf('product_management') || bf('stock_management'))&& mp('inv_audit');
@@ -5432,7 +5453,7 @@ function applyFeatureVisibility() {
   const isAdminOrOwner = state.memberIsOwner || state.memberRole === 'admin' || state.memberPermissions === null;
   const tabFeatures = {
     pos:        pos_any,
-    sales:      pos_any,
+    sales:      sales_any,
     inventory:  inv_any,
     finance:    fin_any,
     hr:         hr_any,
@@ -5495,10 +5516,10 @@ function applyFeatureVisibility() {
   // (defined after btn helper in Sales Create section)
 
   // ── Sales page ribbon groups ──
-  grp('#rb-sal-refresh',    pos_checkout);                           // Transactions
-  grp('#rb-sal-return',     pos_returns);                            // Returns
-  grp('#rb-eod-open',       pos_eod);                                // Settlement
-  grp('#rb-qt-new',         pos_quotations);                         // Quotations
+  grp('#rb-sal-refresh',    sal_refresh);                            // Transactions
+  grp('#rb-sal-return',     sal_returns);                            // Returns
+  grp('#rb-eod-open',       sal_eod);                                // Settlement
+  grp('#rb-qt-new',         sal_qt_new);                             // Quotations
 
   // ── Services ribbon groups ──
   grp('#rb-svc-requests',   svc_requests);
@@ -5582,9 +5603,9 @@ function applyFeatureVisibility() {
   btn('#rb-inv-cheques', inv_purchasing);
 
   // Sales Create group: invoice vs quotation are separate permissions
-  grp('#rb-sal-new-invoice', pos_checkout || pos_quotations);
-  btn('#rb-sal-new-invoice',   pos_checkout);
-  btn('#rb-sal-new-quotation', pos_quotations);
+  grp('#rb-sal-new-invoice', sal_invoices || sal_quotations);
+  btn('#rb-sal-new-invoice',   sal_invoices);
+  btn('#rb-sal-new-quotation', sal_quotations);
 
   // ── Home: fine-grained per-element permission gating ──────────────────────
   // Ribbon – Quick Actions group
@@ -8993,6 +9014,10 @@ const _featDefs = [
       'Receipts print automatically or can be sent by email/SMS, and every sale reconciles straight into Account Management and Stock Management, so your numbers and inventory stay in sync.',
       'Note: Point of Sale and Restaurant cover the same checkout role, so only one of the two can be installed at a time.',
     ], icon: 'fa-cash-register',      color: '#4caf7d', price: 'Free' },
+  { key: 'sales_management',     category: 'sales',         name: 'Sales Management',      img: 'img/features/pos.jpeg', desc: 'Invoices, quotations, sales orders & returns', longDesc: [
+      'Create invoices, quotations, and sales orders, and track every transaction — from POS sales to manually raised invoices — in one place, separate from the checkout counter.',
+      'Run end-of-day settlement, process returns, and manage sales customers here, whether or not the Point of Sale checkout screen itself is installed.',
+    ], icon: 'fa-receipt',            color: '#f59e0b', price: 'Free' },
   { key: 'product_management',   category: 'inventory',     name: 'Product Management',    img: 'img/features/product-management.svg', desc: 'Product catalog, categories & brands',     longDesc: [
       'Organize your entire product catalog — categories, brands, and variants — from a single screen. Bulk import, bulk price updates, and barcode printing make catalog maintenance fast even for large inventories.',
       'Changes here show up instantly at checkout and in your online listings, so pricing and descriptions never drift out of sync between channels.',

@@ -111,7 +111,7 @@ class PosSettingsApiController extends Controller
     public function features(Request $request): JsonResponse
     {
         $business = $this->businessOrAbort($request);
-        $all      = ['account_management','automation_editor','bill_management','crm','developers','event_management','human_resources','mail','point_of_sale','product_management','project_management','restaurant','service_management','social_media_campaign','stock_management'];
+        $all      = ['account_management','automation_editor','bill_management','crm','developers','event_management','human_resources','mail','point_of_sale','product_management','project_management','restaurant','sales_management','service_management','social_media_campaign','stock_management'];
         $allowed  = $business->effectiveFeatureKeys();
         $stored   = $business->getSetting('business.features') ?? [];
         $enabled  = array_values(array_filter($all, fn ($k) => in_array($k, $allowed, true) && ! empty($stored[$k])));
@@ -129,7 +129,7 @@ class PosSettingsApiController extends Controller
     public function updateFeatures(Request $request): JsonResponse
     {
         $business = $this->businessOrAbort($request);
-        $all      = ['account_management','automation_editor','bill_management','crm','developers','event_management','human_resources','mail','point_of_sale','product_management','project_management','restaurant','service_management','social_media_campaign','stock_management'];
+        $all      = ['account_management','automation_editor','bill_management','crm','developers','event_management','human_resources','mail','point_of_sale','product_management','project_management','restaurant','sales_management','service_management','social_media_campaign','stock_management'];
         $allowed  = $business->effectiveFeatureKeys();
         $validated = $request->validate([
             'features'   => ['required', 'array'],
