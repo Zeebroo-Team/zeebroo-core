@@ -25080,12 +25080,57 @@ function _psmUpdateCurrencyPosPreview() {
 }
 $('#psm-currency')?.addEventListener('input', _psmUpdateCurrencyPosPreview);
 
+// POS Receipt / Invoice Mode: which options are offered depends on which of the
+// Point of Sale / Sales Management features are enabled.
+//  - POS only     -> force "Bill Printing", hide "Invoice"
+//  - Sales only   -> force "Invoice", hide "Bill Printing"
+//  - Both enabled -> show both, let the user choose
+//  - Neither      -> hide the whole field, it doesn't apply
+function _psmUpdateReceiptModeRow() {
+  const row = $('#psm-receipt-mode-row');
+  const sel = $('#psm-receipt-mode');
+  const billOpt = sel?.querySelector('option[value="bill"]');
+  const invoiceOpt = sel?.querySelector('option[value="invoice"]');
+  if (!row || !sel || !billOpt || !invoiceOpt) return;
+
+  const posOn   = hasFeature('point_of_sale');
+  const salesOn = hasFeature('sales_management');
+
+  if (!posOn && !salesOn) {
+    row.style.display = 'none';
+    return;
+  }
+  row.style.display = '';
+
+  if (posOn && !salesOn) {
+    billOpt.hidden = false;
+    invoiceOpt.hidden = true;
+    sel.value = 'bill';
+    sel.disabled = true;
+  } else if (!posOn && salesOn) {
+    billOpt.hidden = true;
+    invoiceOpt.hidden = false;
+    sel.value = 'invoice';
+    sel.disabled = true;
+  } else {
+    billOpt.hidden = false;
+    invoiceOpt.hidden = false;
+    sel.disabled = false;
+  }
+}
+
 async function openPosSettings() {
   const modal = $('#pos-settings-modal');
   modal.style.display = 'flex';
-  // Show Cashier Management tab only when POS feature is enabled
-  const cashierNavItem = $('.psm-nav-item--pos-only');
-  if (cashierNavItem) cashierNavItem.style.display = hasFeature('point_of_sale') ? '' : 'none';
+  // Show POS-only tabs (Receipt, Cashier Management, Counters, Printer) only when POS feature is enabled
+  const posOnlyDisplay = hasFeature('point_of_sale') ? '' : 'none';
+  document.querySelectorAll('.psm-nav-item--pos-only').forEach(el => { el.style.display = posOnlyDisplay; });
+  // Tax applies to any sale — show it when either POS or Sales Management is enabled
+  const salesAnyDisplay = (hasFeature('point_of_sale') || hasFeature('sales_management')) ? '' : 'none';
+  document.querySelectorAll('.psm-nav-item--sales-any').forEach(el => { el.style.display = salesAnyDisplay; });
+  // Invoice numbering only matters when Sales Management (formal invoices) is enabled
+  const salesMgmtDisplay = hasFeature('sales_management') ? '' : 'none';
+  document.querySelectorAll('.psm-nav-item--sales-mgmt-only').forEach(el => { el.style.display = salesMgmtDisplay; });
   // Mail tab holds live SMTP credentials/test-send — only show it when the Mail feature is installed
   const mailNavItem = $('.psm-nav-item--mail-only');
   if (mailNavItem) mailNavItem.style.display = hasFeature('mail') ? '' : 'none';
@@ -25129,6 +25174,9 @@ async function openPosSettings() {
   $('#psm-branch-product').checked = !!s.branch_product_separate;
   $('#psm-branch-stock').checked   = !!s.branch_stock_separate;
   $('#psm-branch-pos').checked     = !!s.branch_pos_separate;
+  { const el = $('#psm-branch-product-row'); if (el) el.style.display = hasFeature('product_management') ? '' : 'none'; }
+  { const el = $('#psm-branch-stock-row');   if (el) el.style.display = hasFeature('stock_management')   ? '' : 'none'; }
+  { const el = $('#psm-branch-pos-row');     if (el) el.style.display = hasFeature('point_of_sale')      ? '' : 'none'; }
   const branchNavItem = $('.psm-nav-item--multi-branch');
   if (branchNavItem) branchNavItem.style.display = multiWh ? '' : 'none';
 
@@ -25147,11 +25195,14 @@ async function openPosSettings() {
   // General
   $('#psm-theme').value              = s.display_theme ?? 'inherit';
   $('#psm-receipt-mode').value       = s.receipt_mode ?? 'bill';
+  _psmUpdateReceiptModeRow();
   $('#psm-layout-mode').value        = state.config?.layout_mode || 'ribbon';
   $('#psm-discount-field').checked   = !!s.discount_field_enabled;
   $('#psm-checkout-modal').checked   = !!s.checkout_modal_enabled;
   $('#psm-service-products').checked = !!s.show_service_bound_products;
   { const el = $('#psm-section-svc-products'); if (el) el.style.display = hasFeature('service_management') ? '' : 'none'; }
+  { const el = $('#psm-section-checkout'); if (el) el.style.display = hasFeature('point_of_sale') ? '' : 'none'; }
+  { const el = $('#psm-section-purchasing'); if (el) el.style.display = hasFeature('stock_management') ? '' : 'none'; }
   $('#psm-stock-mode').value         = s.stock_selection_mode ?? 'fifo';
   $('#psm-choose-price').checked     = !!s.choose_price;
   $('#psm-featured-products').value  = s.featured_products_limit ?? 0;
