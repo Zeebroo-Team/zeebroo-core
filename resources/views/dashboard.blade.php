@@ -684,7 +684,7 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
         }
         .wiz-pkg-card--on .wiz-pkg-check{opacity:1;transform:scale(1);}
         .wiz-pkg-img-wrap{width:44px;height:44px;border-radius:10px;overflow:hidden;background:color-mix(in srgb,var(--primary) 6%,var(--bg));display:grid;place-items:center;flex-shrink:0;}
-        .wiz-pkg-img{width:100%;height:100%;object-fit:cover;}
+        .wiz-pkg-img{width:100%;height:100%;object-fit:contain;object-position:center;padding:5px;box-sizing:border-box;}
         .wiz-pkg-img--fallback{color:var(--primary);font-size:17px;}
         .wiz-pkg-name{font-size:13.5px;font-weight:700;color:var(--text);padding-right:20px;}
         .wiz-pkg-price-row{display:flex;align-items:baseline;gap:6px;}

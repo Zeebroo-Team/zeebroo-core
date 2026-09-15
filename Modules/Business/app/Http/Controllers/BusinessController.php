@@ -35,6 +35,7 @@ class BusinessController extends Controller
         'mail',
         'point_of_sale',
         'product_management',
+        'sales_management',
         'service_management',
         'social_media_campaign',
         'stock_management',
