@@ -5107,8 +5107,8 @@ const _obStepSubs = {
 
 const _obFeatureDefs = [
   { key: 'point_of_sale',         img: 'img/features/point-of-sale.png',              name: 'Point of Sale',        desc: 'Sell products at a physical counter',  color: '#f59e0b' },
-  { key: 'sales_management',      img: 'img/features/point-of-sale.png',              name: 'Sales Management',     desc: 'Invoices, quotations & sales orders',  color: '#f59e0b' },
-  { key: 'product_management',    img: 'img/features/product-management.svg',         name: 'Product Management',   desc: 'Manage products, variants & pricing',  color: '#3b82f6' },
+  { key: 'sales_management',      img: 'img/features/sale_managemenet.png',           name: 'Sales Management',     desc: 'Invoices, quotations & sales orders',  color: '#f59e0b' },
+  { key: 'product_management',    img: 'img/features/product_management.png',         name: 'Product Management',   desc: 'Manage products, variants & pricing',  color: '#3b82f6' },
   { key: 'stock_management',      img: 'img/features/stock-management.png',           name: 'Stock Management',     desc: 'Track inventory levels & movements',   color: '#0ea5e9' },
   { key: 'bill_management',       img: 'img/features/bill-management.png',            name: 'Bill Management',      desc: 'Record and pay supplier invoices',     color: '#ef4444' },
   { key: 'human_resources',       img: 'img/features/human-resource-management.png', name: 'Human Resources',      desc: 'Employees, payroll & departments',     color: '#8b5cf6' },
@@ -5118,9 +5118,9 @@ const _obFeatureDefs = [
   { key: 'mail',                  img: 'img/features/mail.png',                       name: 'Mail',                 desc: 'Business inbox, templates & scheduled sending', color: '#06b6d4' },
   { key: 'crm',                   img: 'img/features/social-media-campaign.png',       name: 'CRM',                  desc: 'Leads pipeline, contacts & follow-up tasks',    color: '#7c3aed' },
   { key: 'project_management',   img: 'img/features/account-management.png',          name: 'Projects',             desc: 'Projects, tasks, milestones & kanban boards',  color: '#0284c7' },
-  { key: 'automation_editor',    img: 'img/features/automation-editor.svg',            name: 'Automation Editor',    desc: 'Trigger-based workflows & automated sequences', color: '#f59e0b' },
-  { key: 'event_management',     img: 'img/features/account-management.png',           name: 'Event Advertising Agency', desc: 'Brands, jobs, reporters, officers & salary sheets', color: '#0ea5e9' },
-  { key: 'developers',           img: 'img/features/developers.svg',                  name: 'Developers',           desc: 'API keys, webhooks & third-party integrations', color: '#0f766e' },
+  { key: 'automation_editor',    img: 'img/features/Automation_flow.png',              name: 'Automation Editor',    desc: 'Trigger-based workflows & automated sequences', color: '#f59e0b' },
+  { key: 'event_management',     img: 'img/features/Marketer’s Campaign.png',          name: 'Event Advertising Agency', desc: 'Brands, jobs, reporters, officers & salary sheets', color: '#0ea5e9' },
+  { key: 'developers',           img: 'img/features/Developer.png',                   name: 'Developers',           desc: 'API keys, webhooks & third-party integrations', color: '#0f766e' },
 ];
 
 // Industries that switch to restaurant POS mode
@@ -5355,9 +5355,9 @@ function applyFeatureVisibility() {
   const sal_quotations  = bf('sales_management') && mp('sal_btn_new_quotation');
   const sal_refresh     = bf('sales_management') && mp('sal_btn_refresh');
   const sal_all_sales   = bf('sales_management') && mp('sal_btn_all_sales');
-  const sal_pos_sales   = bf('sales_management') && mp('sal_btn_pos_sales');
+  const sal_pos_sales   = bf('sales_management') && bf('point_of_sale') && mp('sal_btn_pos_sales');
   const sal_returns     = bf('sales_management') && mp('sal_btn_returns');
-  const sal_eod         = bf('sales_management') && mp('sal_btn_eod');
+  const sal_eod         = bf('sales_management') && bf('point_of_sale') && mp('sal_btn_eod');
   const sal_qt_new      = bf('sales_management') && mp('sal_btn_qt_new');
   const sal_qt_refresh  = bf('sales_management') && mp('sal_btn_qt_refresh');
   const sal_transactions= bf('sales_management') && mp('sal_tab_transactions');
@@ -5758,17 +5758,17 @@ function applyFeatureVisibility() {
   btn('#rb-sal-new-quotation', mp('sal_btn_new_quotation'));
   btn('#rb-sal-refresh',       mp('sal_btn_refresh'));
   btn('#rb-sal-all',           mp('sal_btn_all_sales'));
-  btn('#rb-sal-pos',           mp('sal_btn_pos_sales'));
+  btn('#rb-sal-pos',           bf('point_of_sale') && mp('sal_btn_pos_sales'));
   btn('#rb-sal-return',        mp('sal_btn_returns'));
-  btn('#rb-eod-open',          mp('sal_btn_eod'));
+  btn('#rb-eod-open',          bf('point_of_sale') && mp('sal_btn_eod'));
   btn('#rb-qt-new',            mp('sal_btn_qt_new'));
   btn('#rb-qt-refresh',        mp('sal_btn_qt_refresh'));
   // Auto-hide Sales ribbon groups when all their buttons are hidden
   { const salGrps = $$('[data-page="sales"] .ribbon-group');
     if (salGrps[0]) salGrps[0].style.display = (mp('sal_btn_new_invoice')||mp('sal_btn_new_quotation')) ? '' : 'none';
-    if (salGrps[1]) salGrps[1].style.display = (mp('sal_btn_refresh')||mp('sal_btn_all_sales')||mp('sal_btn_pos_sales')) ? '' : 'none';
+    if (salGrps[1]) salGrps[1].style.display = (mp('sal_btn_refresh')||mp('sal_btn_all_sales')||(bf('point_of_sale') && mp('sal_btn_pos_sales'))) ? '' : 'none';
     if (salGrps[2]) salGrps[2].style.display = mp('sal_btn_returns') ? '' : 'none';
-    if (salGrps[3]) salGrps[3].style.display = mp('sal_btn_eod') ? '' : 'none';
+    if (salGrps[3]) salGrps[3].style.display = (bf('point_of_sale') && mp('sal_btn_eod')) ? '' : 'none';
     if (salGrps[4]) salGrps[4].style.display = (mp('sal_btn_qt_new')||mp('sal_btn_qt_refresh')) ? '' : 'none';
     if (salGrps[5]) salGrps[5].style.display = mp('sal_tab_orders') ? '' : 'none'; }
   // ── Sales panel: sub-nav tab gating with fallback ──
@@ -9014,11 +9014,11 @@ const _featDefs = [
       'Receipts print automatically or can be sent by email/SMS, and every sale reconciles straight into Account Management and Stock Management, so your numbers and inventory stay in sync.',
       'Note: Point of Sale and Restaurant cover the same checkout role, so only one of the two can be installed at a time.',
     ], icon: 'fa-cash-register',      color: '#4caf7d', price: 'Free' },
-  { key: 'sales_management',     category: 'sales',         name: 'Sales Management',      img: 'img/features/pos.jpeg', desc: 'Invoices, quotations, sales orders & returns', longDesc: [
+  { key: 'sales_management',     category: 'sales',         name: 'Sales Management',      img: 'img/features/sale_managemenet.png', desc: 'Invoices, quotations, sales orders & returns', longDesc: [
       'Create invoices, quotations, and sales orders, and track every transaction — from POS sales to manually raised invoices — in one place, separate from the checkout counter.',
       'Run end-of-day settlement, process returns, and manage sales customers here, whether or not the Point of Sale checkout screen itself is installed.',
     ], icon: 'fa-receipt',            color: '#f59e0b', price: 'Free' },
-  { key: 'product_management',   category: 'inventory',     name: 'Product Management',    img: 'img/features/product-management.svg', desc: 'Product catalog, categories & brands',     longDesc: [
+  { key: 'product_management',   category: 'inventory',     name: 'Product Management',    img: 'img/features/product_management.png', desc: 'Product catalog, categories & brands',     longDesc: [
       'Organize your entire product catalog — categories, brands, and variants — from a single screen. Bulk import, bulk price updates, and barcode printing make catalog maintenance fast even for large inventories.',
       'Changes here show up instantly at checkout and in your online listings, so pricing and descriptions never drift out of sync between channels.',
     ], icon: 'fa-boxes-stacked',      color: '#0ea5e9', price: 'Free' },
@@ -9055,11 +9055,11 @@ const _featDefs = [
       'Track leads through a sales pipeline, from first contact to closed deal, and manage all your contacts in one address book shared across the team.',
       'Follow-up tasks and reminders make sure a promising lead never goes quiet just because everyone assumed someone else was handling it.',
     ], icon: 'fa-bullseye',   color: '#7c3aed', price: 'Free' },
-  { key: 'developers',           category: 'developer',     name: 'Developers',            img: 'img/features/developers.svg', desc: 'API keys & webhooks for third-party integrations', longDesc: [
+  { key: 'developers',           category: 'developer',     name: 'Developers',            img: 'img/features/Developer.png', desc: 'API keys & webhooks for third-party integrations', longDesc: [
       'Generate API keys and configure webhooks to connect your business data to third-party tools — accounting software, custom dashboards, automation platforms, and more.',
       'Meant for technical users: scoped keys can be revoked individually, and webhook delivery logs make it easy to debug an integration that isn\'t receiving events as expected.',
     ], icon: 'fa-code',    color: '#0f766e', price: 'Free' },
-  { key: 'automation_editor',    category: 'developer',     name: 'Automation Editor',     img: 'img/features/automation-editor.svg', desc: 'Visual workflow builder — triggers, conditions & actions', longDesc: [
+  { key: 'automation_editor',    category: 'developer',     name: 'Automation Editor',     img: 'img/features/Automation_flow.png', desc: 'Visual workflow builder — triggers, conditions & actions', longDesc: [
       'Build no-code automations with a visual, drag-and-drop editor — trigger actions based on events and conditions across your business data (a sale over a threshold, stock running low, a bill coming due).',
       'Combine triggers, conditions, and actions into a workflow once, then let it run in the background so your team doesn\'t have to remember to do it manually every time.',
     ], icon: 'fa-bolt',           color: '#f59e0b', price: 'Free' },
@@ -9067,7 +9067,7 @@ const _featDefs = [
       'Plan and track projects with tasks, milestones, and kanban boards built for small teams — no need for a separate project-management subscription.',
       'Assign tasks, set due dates, and watch a project move across the board from "To Do" through "In Progress" to "Done," with milestones marking the bigger checkpoints along the way.',
     ], icon: 'fa-diagram-project', color: '#0284c7', price: 'Free' },
-  { key: 'event_management',    category: 'marketing',     name: 'Event Advertising Agency', desc: 'Brands, jobs, reporters, officers & salary sheets',    longDesc: [
+  { key: 'event_management',    category: 'marketing',     name: 'Event Advertising Agency', img: 'img/features/Marketer’s Campaign.png', desc: 'Brands, jobs, reporters, officers & salary sheets',    longDesc: [
       'Run an event or advertising agency workflow — manage client brands, the jobs booked for them, and the reporters and officers assigned to cover each one.',
       'Salary sheets tie the work back to payroll, so agency-specific staffing and pay structures don\'t have to be shoehorned into a generic HR setup.',
     ], icon: 'fa-tag',            color: '#0ea5e9', price: 'Free' },
