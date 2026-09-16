@@ -495,6 +495,7 @@ const API = (() => {
     // CRM
     crmProjects:     ()                   => request('GET',    '/crm/projects'),
     crmCreateProject:(body)               => request('POST',   '/crm/projects', body),
+    crmDeleteProject:(projectId)          => request('DELETE', `/crm/projects/${projectId}`),
     crmPipeline:     (projectId)          => request('GET',    `/crm/projects/${projectId}/pipeline`),
     crmCustomDataLeads: (projectId)       => request('GET',    `/crm/projects/${projectId}/custom-data-leads`),
     crmProjectContacts: (projectId, q, stageId) => request('GET', `/crm/projects/${projectId}/contacts?q=${encodeURIComponent(q||'')}&stage_id=${encodeURIComponent(stageId||'')}`),
