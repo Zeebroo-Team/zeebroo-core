@@ -14,6 +14,8 @@ class BusinessCategory extends Model
     protected $fillable = [
         'slug',
         'name',
+        'icon',
+        'color',
         'sort_order',
         'is_active',
     ];
@@ -45,7 +47,7 @@ class BusinessCategory extends Model
             return BrandCompanyCategoryCatalog::defaultOptions();
         }
 
-        $rows = static::query()->active()->ordered()->get(['slug', 'name']);
+        $rows = static::query()->active()->ordered()->get(['slug', 'name', 'icon', 'color']);
         if ($rows->isEmpty()) {
             return BrandCompanyCategoryCatalog::defaultOptions();
         }
@@ -53,6 +55,8 @@ class BusinessCategory extends Model
         return $rows->map(static fn (self $row): array => [
             'value' => $row->slug,
             'label' => $row->name,
+            'icon' => $row->icon ?: 'fa-briefcase',
+            'color' => $row->color ?: '#4e8ef7',
         ])->all();
     }
 

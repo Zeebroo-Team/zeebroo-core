@@ -6,6 +6,7 @@ use Modules\Auth\Http\Controllers\AdminUserController;
 use Modules\Auth\Http\Controllers\AuthController;
 use Modules\Auth\Http\Controllers\EmployeeVerifyController;
 use Modules\Auth\Http\Controllers\GoogleAuthController;
+use Modules\Business\Http\Controllers\Admin\IndustryController;
 use Modules\Package\Http\Controllers\Admin\BusinessPackageController;
 use Modules\Package\Http\Controllers\Admin\PackageController;
 
@@ -52,4 +53,10 @@ Route::middleware(['auth', 'role:admin'])->prefix('admin')->name('admin.')->grou
 
     // Per-business package assignment & feature overrides
     Route::put('/businesses/{business}/package', [BusinessPackageController::class, 'update'])->name('businesses.package.update');
+
+    // Industries (business categories)
+    Route::get('/industries', [IndustryController::class, 'index'])->name('industries.index');
+    Route::post('/industries', [IndustryController::class, 'store'])->name('industries.store');
+    Route::put('/industries/{industry}', [IndustryController::class, 'update'])->name('industries.update');
+    Route::delete('/industries/{industry}', [IndustryController::class, 'destroy'])->name('industries.destroy');
 });

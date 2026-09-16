@@ -18,6 +18,8 @@ class BusinessCategorySeeder extends Seeder
                 ['slug' => $row['value']],
                 [
                     'name' => $row['label'],
+                    'icon' => $row['icon'],
+                    'color' => $row['color'],
                     'sort_order' => $sort,
                     'is_active' => true,
                 ]
