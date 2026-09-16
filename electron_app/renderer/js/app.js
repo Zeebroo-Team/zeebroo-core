@@ -5994,6 +5994,7 @@ function applyFeatureVisibility() {
       profit:    mp('home_tab_profit'),
       payroll:   bf('human_resources') && mp('home_tab_payroll'),
       orders:    mp('home_tab_orders'),
+      crm:       bf('crm') && mp('home_tab_crm'),
     };
     let _hActiveOk = false, _hFirstVisible = null;
     $$('.home-tab-btn[data-home-view]').forEach(tabBtn => {
@@ -9909,6 +9910,7 @@ function switchHomeView(view) {
   if (view === 'profit')    loadProfitReport();
   if (view === 'payroll')   loadPayrollView();
   if (view === 'orders')    loadOrdersView();
+  if (view === 'crm')       loadHomeCrmSummary();
 }
 
 $$('.home-tab-btn').forEach(btn => {
@@ -9942,6 +9944,10 @@ const HOG_ACTIONS = {
   'customers':       () => openCustomersModal(),
   'settings':        () => openPosSettings(),
   'shortcuts':       () => showShortcutsModal(),
+  'crm-relations':    () => { activateTab('crm'); window.switchCrmView?.('relation'); },
+  'crm-contacts':     () => { activateTab('crm'); window.switchCrmView?.('contacts'); },
+  'crm-tasks':        () => { activateTab('crm'); window.switchCrmView?.('tasks'); },
+  'crm-new-relation': () => { activateTab('crm'); window.switchCrmView?.('relation'); },
 };
 $('#home-view-overview')?.addEventListener('click', e => {
   const card = e.target.closest('[data-hog-action]');
@@ -10038,6 +10044,26 @@ async function loadHomeOverviewStats() {
     _hogSetStat('customers', `${_hogFmt(res.body?.meta?.total)} total`);
   }).catch(() => {});
 
+  if (hasFeature('crm')) {
+    API.crmProjects().then(res => {
+      if (res.status !== 200) return;
+      const n = (res.body?.data || res.body || []).length;
+      _hogSetStat('crm-relations', `${_hogFmt(n)} total`);
+    }).catch(() => {});
+
+    API.crmContacts('').then(res => {
+      if (res.status !== 200) return;
+      const n = (res.body?.data || res.body || []).length;
+      _hogSetStat('crm-contacts', `${_hogFmt(n)} total`);
+    }).catch(() => {});
+
+    API.crmTasks('open').then(res => {
+      if (res.status !== 200) return;
+      const n = (res.body?.data || res.body || []).length;
+      _hogSetStat('crm-tasks', `${_hogFmt(n)} open`);
+    }).catch(() => {});
+  }
+
   if (hasFeature('point_of_sale')) {
     API.sales('').then(res => {
       if (res.status !== 200) return;
@@ -10046,6 +10072,125 @@ async function loadHomeOverviewStats() {
       _hogSetStat('today-summary', `${_hogFmt(todayCount)} today`);
     }).catch(() => {});
   }
+}
+
+// ── Home CRM Summary tab ─────────────────────────────────────────────────
+const CRM_HOME_ACTIONS = {
+  'relations':    () => { activateTab('crm'); window.switchCrmView?.('relation'); },
+  'contacts':     () => { activateTab('crm'); window.switchCrmView?.('contacts'); },
+  'tasks':        () => { activateTab('crm'); window.switchCrmView?.('tasks'); },
+  'new-relation': () => { activateTab('crm'); window.switchCrmView?.('relation'); },
+};
+$('#home-view-crm')?.addEventListener('click', e => {
+  const card = e.target.closest('[data-crmhog-action]');
+  if (!card) return;
+  CRM_HOME_ACTIONS[card.dataset.crmhogAction]?.();
+});
+
+$('#home-crm-viewall-btn')?.addEventListener('click', () => { activateTab('crm'); window.switchCrmView?.('relation'); });
+
+function _homeCrmRelationCardEl(relation) {
+  const count = relation.leads_count || 0;
+  const card = document.createElement('div');
+  card.className = 'crm-relation-card';
+  card.innerHTML = `
+    <div class="crm-relation-card-icon"><i class="fa fa-handshake"></i></div>
+    <div class="crm-relation-card-body">
+      <div class="crm-relation-card-name" title="${escHtml(relation.name)}">${escHtml(relation.name)}</div>
+      <div class="crm-relation-card-desc">${relation.description ? escHtml(relation.description) : 'No description'}</div>
+    </div>
+    <div class="crm-relation-card-count"><i class="fa fa-user-group" style="margin-right:4px"></i>${count} lead${count !== 1 ? 's' : ''}</div>
+  `;
+  card.addEventListener('click', () => { activateTab('crm'); window.switchCrmView?.('relation'); });
+  return card;
+}
+
+function _homeCrmBarRow(label, count, pct, color) {
+  return `
+    <div style="display:flex;flex-direction:column;gap:3px">
+      <div style="display:flex;align-items:center;justify-content:space-between;font-size:11.5px">
+        <span style="color:var(--text)"><i class="fa fa-circle" style="color:${color};font-size:6px;margin-right:6px"></i>${escHtml(label)}</span>
+        <span style="font-weight:700;color:var(--text)">${_hogFmt(count)}</span>
+      </div>
+      <div class="pm-progress-bar-wrap"><div class="pm-progress-bar-fill" style="width:${pct}%;background:${color}"></div></div>
+    </div>`;
+}
+
+function _renderHomeCrmTaskBreakdown(overdueCount, upcomingCount, completedCount) {
+  const el = $('#home-crm-task-breakdown');
+  if (!el) return;
+  const total = overdueCount + upcomingCount + completedCount;
+  if (!total) {
+    el.innerHTML = `<div style="text-align:center;padding:18px 8px;color:var(--text-muted);font-size:12px"><i class="fa fa-list-check" style="font-size:20px;margin-bottom:8px;display:block"></i>No tasks yet</div>`;
+    return;
+  }
+  const pct = n => Math.round((n / total) * 100);
+  el.innerHTML = [
+    _homeCrmBarRow('Overdue',   overdueCount,   pct(overdueCount),   '#ef4444'),
+    _homeCrmBarRow('Upcoming',  upcomingCount,  pct(upcomingCount),  '#f59e0b'),
+    _homeCrmBarRow('Completed', completedCount, pct(completedCount), '#22c55e'),
+  ].join('');
+}
+
+function _renderHomeCrmTopRelations(projects) {
+  const el = $('#home-crm-top-relations');
+  if (!el) return;
+  const top = [...projects].sort((a, b) => (b.leads_count || 0) - (a.leads_count || 0)).slice(0, 5);
+  if (!top.length || !top.some(p => p.leads_count)) {
+    el.innerHTML = `<div style="text-align:center;padding:18px 8px;color:var(--text-muted);font-size:12px"><i class="fa fa-handshake" style="font-size:20px;margin-bottom:8px;display:block"></i>No leads yet</div>`;
+    return;
+  }
+  el.innerHTML = top.map((p, i) => `
+    <div class="tds-top-row">
+      <div class="tds-top-rank">#${i + 1}</div>
+      <div class="tds-top-icon"><i class="fa fa-handshake"></i></div>
+      <div class="tds-top-name" title="${escHtml(p.name)}">${escHtml(p.name)}</div>
+      <div class="tds-top-qty">${_hogFmt(p.leads_count || 0)} lead${(p.leads_count || 0) !== 1 ? 's' : ''}</div>
+    </div>`).join('');
+}
+
+async function loadHomeCrmSummary() {
+  const [projRes, contactsRes, openRes, overdueRes, completedRes] = await Promise.all([
+    API.crmProjects().catch(() => ({ status: 0 })),
+    API.crmContacts('').catch(() => ({ status: 0 })),
+    API.crmTasks('open').catch(() => ({ status: 0 })),
+    API.crmTasks('overdue').catch(() => ({ status: 0 })),
+    API.crmTasks('completed').catch(() => ({ status: 0 })),
+  ]);
+
+  const projects = projRes.status === 200 ? (projRes.body?.data || []) : [];
+  const contactsCount  = contactsRes.status   === 200 ? (contactsRes.body?.data?.length   || 0) : 0;
+  const openCount      = openRes.status       === 200 ? (openRes.body?.data?.length       || 0) : 0;
+  const overdueCount   = overdueRes.status    === 200 ? (overdueRes.body?.data?.length    || 0) : 0;
+  const completedCount = completedRes.status  === 200 ? (completedRes.body?.data?.length  || 0) : 0;
+  const upcomingCount  = Math.max(0, openCount - overdueCount);
+  const leadsCount     = projects.reduce((sum, p) => sum + (p.leads_count || 0), 0);
+
+  const setText = (id, val) => { const el = $(`#${id}`); if (el) el.textContent = val; };
+  setText('home-crm-stat-relations', _hogFmt(projects.length));
+  setText('home-crm-stat-leads',     _hogFmt(leadsCount));
+  setText('home-crm-stat-contacts',  _hogFmt(contactsCount));
+  setText('home-crm-stat-tasks',     _hogFmt(openCount));
+  setText('home-crm-card-relations', `${_hogFmt(projects.length)} total`);
+  setText('home-crm-card-contacts',  `${_hogFmt(contactsCount)} total`);
+  setText('home-crm-card-tasks',     `${_hogFmt(openCount)} open`);
+
+  _renderHomeCrmTaskBreakdown(overdueCount, upcomingCount, completedCount);
+  _renderHomeCrmTopRelations(projects);
+
+  const grid  = $('#home-crm-recent-grid');
+  const empty = $('#home-crm-recent-empty');
+  if (!grid) return;
+  const recent = [...projects].sort((a, b) => b.id - a.id).slice(0, 6);
+  grid.innerHTML = '';
+  if (!recent.length) {
+    if (empty) empty.style.display = 'block';
+    grid.style.display = 'none';
+    return;
+  }
+  if (empty) empty.style.display = 'none';
+  grid.style.display = '';
+  recent.forEach(p => grid.appendChild(_homeCrmRelationCardEl(p)));
 }
 
 // ── Home Orders View ───────────────────────────────────────────────────────
@@ -41285,6 +41430,7 @@ async function submitDsCreate() {
       { key: 'home_tab_profit',        label: 'Tab: Profit Report',    desc: 'Dashboard: Profit Report tab' },
       { key: 'home_tab_payroll',       label: 'Tab: Payroll',          desc: 'Dashboard: Payroll summary tab' },
       { key: 'home_tab_orders',        label: 'Tab: Orders',           desc: 'Dashboard: Orders history tab' },
+      { key: 'home_tab_crm',           label: 'Tab: CRM',              desc: 'Dashboard: CRM summary & shortcuts tab' },
       // ── Right panel ─────────────────────────────────────────────────────────
       { key: 'home_rp_today',          label: 'Panel: Today Summary',  desc: "Right panel: Today's sales figures section" },
       { key: 'home_rp_bills',          label: 'Panel: Upcoming Bills', desc: 'Right panel: Upcoming bills section' },

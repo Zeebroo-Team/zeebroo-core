@@ -15678,6 +15678,7 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
 .hog-icon-purple { background: #8b5cf614; color: #8b5cf6; }
 .hog-icon-teal   { background: #14b8a614; color: #14b8a6; }
 .hog-icon-green  { background: #22c55e14; color: #22c55e; }
+.hog-icon-indigo { background: #6366f114; color: #6366f1; }
 
 .hog-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; }
 .hog-card {
