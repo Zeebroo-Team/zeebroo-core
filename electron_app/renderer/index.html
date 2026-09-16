@@ -1677,6 +1677,7 @@
         <button class="home-tab-btn" data-home-view="profit"><i class="fa fa-sack-dollar"></i> Profit</button>
         <button class="home-tab-btn" data-home-view="payroll"><i class="fa fa-user-tie"></i> Payroll</button>
         <button class="home-tab-btn" data-home-view="orders"><i class="fa fa-receipt"></i> Orders</button>
+        <button class="home-tab-btn" data-home-view="crm"><i class="fa fa-handshake"></i> CRM</button>
         <div class="home-subnav-right">
           <button id="home-subnav-setup-wizard" class="home-subnav-action-btn" title="Business setup wizard"><i class="fa fa-wand-magic-sparkles"></i></button>
           <button id="home-subnav-gear" class="home-subnav-gear-btn" title="Customize tabs"><i class="fa fa-gear"></i></button>
@@ -1829,6 +1830,34 @@
                   <button type="button" class="hog-card" data-hog-action="svc-catalog">
                     <div class="hog-card-top"><div class="hog-card-icon hog-icon-teal"><i class="fa fa-book"></i></div><span class="hog-card-stat" data-hog-stat="svc-catalog">—</span></div>
                     <div class="hog-card-body"><div class="hog-card-name">Service Catalog<i class="fa fa-chevron-right hog-card-arrow"></i></div><div class="hog-card-desc">Manage the services you offer, along with their pricing and descriptions.</div><div class="hog-card-path">Services &rsaquo; Catalog</div></div>
+                  </button>
+                </div>
+              </div>
+
+              <div class="hog-section" data-hog-feature="crm">
+                <div class="hog-section-head">
+                  <div class="hog-section-icon hog-icon-indigo"><i class="fa fa-handshake"></i></div>
+                  <div>
+                    <div class="hog-section-title">CRM</div>
+                    <div class="hog-section-desc">Leads pipeline, contacts and follow-up tasks</div>
+                  </div>
+                </div>
+                <div class="hog-grid">
+                  <button type="button" class="hog-card" data-hog-action="crm-relations">
+                    <div class="hog-card-top"><div class="hog-card-icon hog-icon-indigo"><i class="fa fa-handshake"></i></div><span class="hog-card-stat" data-hog-stat="crm-relations">—</span></div>
+                    <div class="hog-card-body"><div class="hog-card-name">Relations &amp; Pipeline<i class="fa fa-chevron-right hog-card-arrow"></i></div><div class="hog-card-desc">Browse every relation and move leads through pipeline stages.</div><div class="hog-card-path">CRM &rsaquo; Relation</div></div>
+                  </button>
+                  <button type="button" class="hog-card" data-hog-action="crm-contacts">
+                    <div class="hog-card-top"><div class="hog-card-icon hog-icon-indigo"><i class="fa fa-address-book"></i></div><span class="hog-card-stat" data-hog-stat="crm-contacts">—</span></div>
+                    <div class="hog-card-body"><div class="hog-card-name">Contacts<i class="fa fa-chevron-right hog-card-arrow"></i></div><div class="hog-card-desc">Every customer and lead you've talked to, with their activity history.</div><div class="hog-card-path">CRM &rsaquo; Contact</div></div>
+                  </button>
+                  <button type="button" class="hog-card" data-hog-action="crm-tasks">
+                    <div class="hog-card-top"><div class="hog-card-icon hog-icon-indigo"><i class="fa fa-list-check"></i></div><span class="hog-card-stat" data-hog-stat="crm-tasks">—</span></div>
+                    <div class="hog-card-body"><div class="hog-card-name">Tasks<i class="fa fa-chevron-right hog-card-arrow"></i></div><div class="hog-card-desc">Never miss a follow-up — see what's open, overdue or completed.</div><div class="hog-card-path">CRM &rsaquo; Task</div></div>
+                  </button>
+                  <button type="button" class="hog-card" data-hog-action="crm-new-relation">
+                    <div class="hog-card-top"><div class="hog-card-icon hog-icon-indigo"><i class="fa fa-plus"></i></div></div>
+                    <div class="hog-card-body"><div class="hog-card-name">New Relation<i class="fa fa-chevron-right hog-card-arrow"></i></div><div class="hog-card-desc">Start tracking a new deal — create a relation and add leads to its pipeline.</div><div class="hog-card-path">CRM &rsaquo; Relation &rsaquo; New</div></div>
                   </button>
                 </div>
               </div>
@@ -2094,6 +2123,97 @@
             </div><!-- /hov-body -->
           </div>
           </div><!-- /home-view-orders -->
+
+          <!-- CRM Summary view -->
+          <div id="home-view-crm" class="home-view" style="display:none;flex-direction:column">
+          <div class="han-container">
+            <div class="hog-scroll">
+
+              <div class="hog-hero">
+                <div class="hog-hero-icon"><i class="fa fa-handshake"></i></div>
+                <div class="hog-hero-text">
+                  <div class="hog-hero-title">CRM at a Glance</div>
+                  <div class="hog-hero-sub">A one-look summary of your leads, relations, contacts and follow-up tasks — with shortcuts straight into the CRM.</div>
+                </div>
+              </div>
+
+              <div class="pm-stats-row" id="home-crm-stats">
+                <div class="pm-stat-tile pm-stat-tile--total">
+                  <div class="pm-stat-tile-icon"><i class="fa fa-handshake"></i></div>
+                  <div><div class="pm-stat-tile-value" id="home-crm-stat-relations">—</div><div class="pm-stat-tile-label">Relations</div></div>
+                </div>
+                <div class="pm-stat-tile pm-stat-tile--active">
+                  <div class="pm-stat-tile-icon"><i class="fa fa-user-group"></i></div>
+                  <div><div class="pm-stat-tile-value" id="home-crm-stat-leads">—</div><div class="pm-stat-tile-label">Leads</div></div>
+                </div>
+                <div class="pm-stat-tile pm-stat-tile--on_hold">
+                  <div class="pm-stat-tile-icon"><i class="fa fa-address-book"></i></div>
+                  <div><div class="pm-stat-tile-value" id="home-crm-stat-contacts">—</div><div class="pm-stat-tile-label">Contacts</div></div>
+                </div>
+                <div class="pm-stat-tile pm-stat-tile--completed">
+                  <div class="pm-stat-tile-icon"><i class="fa fa-list-check"></i></div>
+                  <div><div class="pm-stat-tile-value" id="home-crm-stat-tasks">—</div><div class="pm-stat-tile-label">Open Tasks</div></div>
+                </div>
+              </div>
+
+              <div class="tds-mid-row">
+                <div class="tds-col">
+                  <div class="tds-section-title"><i class="fa fa-chart-pie"></i> Task Breakdown</div>
+                  <div id="home-crm-task-breakdown" style="display:flex;flex-direction:column;gap:10px;margin-top:4px">
+                    <div class="inv-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</div>
+                  </div>
+                </div>
+                <div class="tds-col">
+                  <div class="tds-section-title"><i class="fa fa-ranking-star"></i> Top Relations by Leads</div>
+                  <div id="home-crm-top-relations" style="display:flex;flex-direction:column;margin-top:2px">
+                    <div class="inv-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="hog-section">
+                <div class="hog-section-head">
+                  <div class="hog-section-icon hog-icon-blue"><i class="fa fa-handshake"></i></div>
+                  <div>
+                    <div class="hog-section-title">Customer Relationship Management</div>
+                    <div class="hog-section-desc">Group leads into relations, move them through a pipeline, and follow up with contacts and tasks</div>
+                  </div>
+                </div>
+                <div class="hog-grid">
+                  <button type="button" class="hog-card" data-crmhog-action="relations">
+                    <div class="hog-card-top"><div class="hog-card-icon hog-icon-blue"><i class="fa fa-handshake"></i></div><span class="hog-card-stat" id="home-crm-card-relations">—</span></div>
+                    <div class="hog-card-body"><div class="hog-card-name">Relations &amp; Pipeline<i class="fa fa-chevron-right hog-card-arrow"></i></div><div class="hog-card-desc">Browse every relation, move leads through pipeline stages, and open a deal's dashboard.</div><div class="hog-card-path">CRM &rsaquo; Relation</div></div>
+                  </button>
+                  <button type="button" class="hog-card" data-crmhog-action="contacts">
+                    <div class="hog-card-top"><div class="hog-card-icon hog-icon-blue"><i class="fa fa-address-book"></i></div><span class="hog-card-stat" id="home-crm-card-contacts">—</span></div>
+                    <div class="hog-card-body"><div class="hog-card-name">Contacts<i class="fa fa-chevron-right hog-card-arrow"></i></div><div class="hog-card-desc">Every customer and lead you've talked to, with their activity history in one place.</div><div class="hog-card-path">CRM &rsaquo; Contact</div></div>
+                  </button>
+                  <button type="button" class="hog-card" data-crmhog-action="tasks">
+                    <div class="hog-card-top"><div class="hog-card-icon hog-icon-blue"><i class="fa fa-list-check"></i></div><span class="hog-card-stat" id="home-crm-card-tasks">—</span></div>
+                    <div class="hog-card-body"><div class="hog-card-name">Tasks<i class="fa fa-chevron-right hog-card-arrow"></i></div><div class="hog-card-desc">Never miss a follow-up — see what's open, overdue or completed.</div><div class="hog-card-path">CRM &rsaquo; Task</div></div>
+                  </button>
+                  <button type="button" class="hog-card" data-crmhog-action="new-relation">
+                    <div class="hog-card-top"><div class="hog-card-icon hog-icon-blue"><i class="fa fa-plus"></i></div></div>
+                    <div class="hog-card-body"><div class="hog-card-name">New Relation<i class="fa fa-chevron-right hog-card-arrow"></i></div><div class="hog-card-desc">Start tracking a new deal — create a relation and add leads to its pipeline.</div><div class="hog-card-path">CRM &rsaquo; Relation &rsaquo; New</div></div>
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <div class="pm-ov-section-head">
+                  <div class="pm-ov-section-head-left"><i class="fa fa-clock-rotate-left"></i><span>Recent Relations</span></div>
+                  <button type="button" class="pm-ov-viewall-btn" id="home-crm-viewall-btn">View all <i class="fa fa-arrow-right"></i></button>
+                </div>
+                <div id="home-crm-recent-grid" class="pm-projects-grid"></div>
+                <div id="home-crm-recent-empty" style="display:none;text-align:center;padding:40px 20px;color:var(--text-muted)">
+                  <i class="fa fa-handshake" style="font-size:34px;margin-bottom:10px;display:block"></i>
+                  <div style="font-size:13px">No relations yet. Create one to start tracking leads.</div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+          </div><!-- /home-view-crm -->
         </div>
 
         <!-- Right panel -->

@@ -99,6 +99,7 @@ class BusinessMember extends Model
                     ['key' => 'home_tab_profit',         'label' => 'Tab: Profit Report',     'desc' => 'Dashboard: Profit Report tab'],
                     ['key' => 'home_tab_payroll',        'label' => 'Tab: Payroll',           'desc' => 'Dashboard: Payroll summary tab'],
                     ['key' => 'home_tab_orders',         'label' => 'Tab: Orders',            'desc' => 'Dashboard: Orders history tab'],
+                    ['key' => 'home_tab_crm',            'label' => 'Tab: CRM',               'desc' => 'Dashboard: CRM summary & shortcuts tab'],
                     // ── Right panel ──────────────────────────────────────────────
                     ['key' => 'home_rp_today',           'label' => 'Panel: Today Summary',   'desc' => "Right panel: Today's sales figures section"],
                     ['key' => 'home_rp_bills',           'label' => 'Panel: Upcoming Bills',  'desc' => 'Right panel: Upcoming bills section'],

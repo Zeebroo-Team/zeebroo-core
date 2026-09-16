@@ -21,6 +21,7 @@
     profit:    'Profit and margin breakdown',
     payroll:   'Staff payroll overview',
     orders:    'Order status and history',
+    crm:       'CRM summary — relations, contacts & tasks',
   };
 
   const $q  = (s, p) => (p || document).querySelector(s);
