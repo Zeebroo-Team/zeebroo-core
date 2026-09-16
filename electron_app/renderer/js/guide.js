@@ -495,6 +495,32 @@
     }
   }
 
+  // Opens the Design Studio editor with a fresh poster canvas and hands it
+  // the command list the AI agent generated, reusing the same
+  // autoApplyCommands convention editor.html already supports.
+  async function _openGeneratedPoster(commands) {
+    try {
+      // Match the app's normal "new design" flow — the editor never creates
+      // records itself, it only opens/saves ones that already have a real id.
+      const createRes = await API.createDesign({
+        title: 'AI Generated Poster',
+        type: 'sales-campaign',
+        width: 794,
+        height: 1123,
+      });
+      if (createRes.status !== 201 || !createRes.body?.data) {
+        console.error('[AI poster] failed to create design record:', createRes);
+        return;
+      }
+
+      window.electronAPI?.openEditor({
+        ...createRes.body.data,
+        canvas_json: null,
+        autoApplyCommands: commands,
+      });
+    } catch (e) { /* Design Studio unavailable — reply text already shown */ }
+  }
+
   /* ════════════════════════════════════════════════════════════════════════
      SEND / RECEIVE
      fromVoice=true means the message came from the Voice Listening Worker.
@@ -534,10 +560,13 @@
         isHtml       = !!res.body.isHtml;
         if (res.body.conversation_id) _conversationId = res.body.conversation_id;
 
-        // Data-query HTML reply — show immediately, then handle voice resume
+        // Data-query / agent HTML reply — show immediately, then handle voice resume
         if (isHtml) {
           _reopenWithReply(reply, true);
           _busy = false;
+          if (Array.isArray(res.body.posterCommands) && res.body.posterCommands.length > 0) {
+            _openGeneratedPoster(res.body.posterCommands);
+          }
           if (fromVoice && _voiceActive) {
             await _ttsSpeak(_stripHtml(reply));
             _voiceResumeAfterReply();
@@ -841,6 +870,10 @@
     if (!_bubbleOpen) _openBubble(false);
     _showInputState();
     _reopenWithReply(reply);
+
+    if (Array.isArray(body.posterCommands) && body.posterCommands.length > 0) {
+      _openGeneratedPoster(body.posterCommands);
+    }
 
     // ── Resolve walkthrough — body.walkthrough is a string ID, not an object ──
     let match = null;

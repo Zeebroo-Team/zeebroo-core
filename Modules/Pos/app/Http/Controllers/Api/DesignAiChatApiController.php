@@ -19,7 +19,7 @@ class DesignAiChatApiController extends Controller
 {
     use ResolvesPosBusinessForApi;
 
-    private const BASE_SYSTEM_PROMPT = <<<'PROMPT'
+    public const BASE_SYSTEM_PROMPT = <<<'PROMPT'
 You are an expert AI design assistant inside Zeebroo Design Studio (Fabric.js canvas).
 A canvas dimension header is prepended — use those exact pixel values for ALL coordinates and sizes.
 
