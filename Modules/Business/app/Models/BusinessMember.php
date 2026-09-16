@@ -362,6 +362,33 @@ class BusinessMember extends Model
                     ['key' => 'crm_forms',    'label' => 'Lead Capture Forms', 'desc' => 'Design and manage web forms for capturing leads from your website'],
                 ],
             ],
+            [
+                'key'   => 'automations',
+                'label' => 'Automations',
+                'icon'  => 'fa-robot',
+                'color' => '#f97316',
+                'items' => [
+                    ['key' => 'automations_access', 'label' => 'Access Automations', 'desc' => 'View and manage automation workflows'],
+                ],
+            ],
+            [
+                'key'   => 'projects',
+                'label' => 'Projects',
+                'icon'  => 'fa-diagram-project',
+                'color' => '#0891b2',
+                'items' => [
+                    ['key' => 'projects_access', 'label' => 'Access Projects', 'desc' => 'View and manage projects and tasks'],
+                ],
+            ],
+            [
+                'key'   => 'event',
+                'label' => 'Event',
+                'icon'  => 'fa-calendar-days',
+                'color' => '#d946ef',
+                'items' => [
+                    ['key' => 'event_access', 'label' => 'Access Event Management', 'desc' => 'View and manage event bookings and schedules'],
+                ],
+            ],
         ];
     }
 
