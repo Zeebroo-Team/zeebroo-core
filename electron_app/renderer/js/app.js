@@ -488,8 +488,10 @@ function activateTab(tabName) {
   // called directly (e.g. a Home Overview shortcut card), not just via the
   // ribbon/sidebar click that applyFeatureVisibility() already hides.
   const allowed = state._tabFeatures ? state._tabFeatures[tabName] : undefined;
-  if (allowed === false && tabName !== 'home') {
-    tabName = 'home';
+  if (allowed === false) {
+    const tf = state._tabFeatures;
+    const firstAllowed = tf && Object.keys(tf).find(k => tf[k]);
+    tabName = firstAllowed || 'home';
   }
   $$('.ribbon-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tabName));
   $$('.ribbon-page').forEach(p => p.classList.toggle('active', p.dataset.page === tabName));
@@ -5751,10 +5753,13 @@ function applyFeatureVisibility() {
   const crm_forms    = bf('crm') && mp('crm_forms');
   const crm_any      = crm_pipeline || crm_contacts || crm_tasks || crm_forms;
 
+  // ── Home ──
+  const home_any = (state.memberPermissions == null) || state.memberPermissions.some(k => k.startsWith('home_'));
+
   const dev_enabled  = bf('developers');
-  const auto_enabled = bf('automation_editor');
-  const pm_enabled   = bf('project_management');
-  const evt_enabled  = bf('event_management');
+  const auto_enabled = bf('automation_editor') && mp('automations_access');
+  const pm_enabled   = bf('project_management') && mp('projects_access');
+  const evt_enabled  = bf('event_management') && mp('event_access');
 
   // ── Cashier mode: POS-only ──
   if (state.cashierMode) {
@@ -5778,6 +5783,7 @@ function applyFeatureVisibility() {
   // ── Ribbon tabs ──
   const isAdminOrOwner = state.memberIsOwner || state.memberRole === 'admin' || state.memberPermissions === null;
   const tabFeatures = {
+    home:       home_any,
     pos:        pos_any,
     sales:      sales_any,
     inventory:  inv_any,
@@ -5858,11 +5864,13 @@ function applyFeatureVisibility() {
   const svcModeBtn = $('.pos-mode-btn[data-mode="services"]');
   if (svcModeBtn) svcModeBtn.style.display = svc_any ? '' : 'none';
 
-  // ── If currently on a hidden tab, go home ──
+  // ── If currently on a hidden tab, go home (or the first tab still allowed) ──
+  if (!home_any  && _activeTab() === 'home')     activateTab('home');
   if (!svc_any  && _activeTab() === 'services') activateTab('home');
   if (!mail_any && _activeTab() === 'mail')     activateTab('home');
   if (!crm_any   && _activeTab() === 'crm')        activateTab('home');
   if (!evt_enabled && _activeTab() === 'event-mgmt') activateTab('home');
+  if (!pm_enabled && _activeTab() === 'projects') activateTab('home');
 
   // ── Developers (account dropdown entry) ──
   const tpmDev = $('#tpm-developers');
@@ -41435,6 +41443,15 @@ async function submitDsCreate() {
       { key: 'crm_tasks',    label: 'Tasks',              desc: 'Create and manage CRM tasks and follow-ups' },
       { key: 'crm_forms',    label: 'Lead Capture Forms', desc: 'Design and manage web forms for capturing leads from your website' },
     ]},
+    { key: 'automations', label: 'Automations', icon: 'fa-robot', color: '#f97316', items: [
+      { key: 'automations_access', label: 'Access Automations', desc: 'View and manage automation workflows' },
+    ]},
+    { key: 'projects', label: 'Projects', icon: 'fa-diagram-project', color: '#0891b2', items: [
+      { key: 'projects_access', label: 'Access Projects', desc: 'View and manage projects and tasks' },
+    ]},
+    { key: 'event', label: 'Event', icon: 'fa-calendar-days', color: '#d946ef', items: [
+      { key: 'event_access', label: 'Access Event Management', desc: 'View and manage event bookings and schedules' },
+    ]},
   ];
 
   // Tab structure: which accordion groups belong to each app-section tab
@@ -41450,6 +41467,9 @@ async function submitDsCreate() {
     { key: 'mail',       label: 'Mail',       icon: 'fa-envelope',           groups: ['mail'] },
     { key: 'crm',        label: 'CRM',        icon: 'fa-handshake',          groups: ['crm'] },
     { key: 'design',     label: 'Design',     icon: 'fa-palette',            groups: ['design'] },
+    { key: 'automations',label: 'Automations',icon: 'fa-robot',              groups: ['automations'] },
+    { key: 'projects',   label: 'Projects',   icon: 'fa-diagram-project',    groups: ['projects'] },
+    { key: 'event',      label: 'Event',      icon: 'fa-calendar-days',      groups: ['event'] },
   ];
 
   let PERM_GROUPS = PERM_GROUPS_DEFAULT.slice();  // never starts empty
