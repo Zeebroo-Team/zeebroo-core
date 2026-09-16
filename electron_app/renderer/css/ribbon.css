@@ -17935,6 +17935,7 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
 
 /* ── CRM: Relation cards ─────────────────────────────────────────────────── */
 .crm-relation-card {
+  position: relative;
   background: var(--surface);
   border: 1.5px solid var(--border);
   border-radius: 10px;
@@ -17946,6 +17947,25 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
   gap: 8px;
 }
 .crm-relation-card:hover { box-shadow: 0 6px 18px rgba(0,0,0,.12); transform: translateY(-2px); border-color: var(--accent); }
+.crm-relation-card-delete {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  background: var(--surface);
+  border: 1px solid transparent;
+  opacity: 0;
+  transition: opacity .12s, background .12s, color .12s, border-color .12s;
+  z-index: 2;
+}
+.crm-relation-card:hover .crm-relation-card-delete { opacity: 1; }
+.crm-relation-card-delete:hover { background: rgba(239,68,68,.12); color: #ef4444; border-color: rgba(239,68,68,.35); }
 .crm-relation-card-icon {
   width: 38px; height: 38px; border-radius: 9px;
   display: flex; align-items: center; justify-content: center;

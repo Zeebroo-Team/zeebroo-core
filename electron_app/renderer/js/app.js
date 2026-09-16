@@ -43450,6 +43450,7 @@ async function submitDsCreate() {
     card.className = 'crm-relation-card';
     card.dataset.pid = relation.id;
     card.innerHTML = `
+      <button class="crm-relation-card-delete" data-del-relation="${relation.id}" title="Delete relation"><i class="fa fa-trash"></i></button>
       <div class="crm-relation-card-icon"><i class="fa fa-handshake"></i></div>
       <div class="crm-relation-card-body">
         <div class="crm-relation-card-name" title="${escHtml(relation.name)}">${escHtml(relation.name)}</div>
@@ -43458,7 +43459,35 @@ async function submitDsCreate() {
       <div class="crm-relation-card-count"><i class="fa fa-user-group" style="margin-right:4px"></i>${count} lead${count !== 1 ? 's' : ''}</div>
     `;
     card.addEventListener('click', onClick || (() => openRelationDetail(relation.id)));
+    card.querySelector('[data-del-relation]')?.addEventListener('click', e => {
+      e.stopPropagation();
+      _deleteCrmRelation(relation);
+    });
     return card;
+  }
+
+  async function _deleteCrmRelation(relation) {
+    const count = relation.leads_count || 0;
+    const ok = await appConfirm({
+      title: 'Delete this relation?',
+      message: count
+        ? `"${relation.name}" has ${count} lead${count !== 1 ? 's' : ''} attached. Move or remove those leads before this relation can be deleted.`
+        : `This permanently deletes "${relation.name}". This cannot be undone.`,
+      confirmText: '<i class="fa fa-trash"></i> Delete Relation',
+      icon: 'fa-triangle-exclamation',
+      danger: true,
+    });
+    if (!ok) return;
+
+    const res = await API.crmDeleteProject(relation.id);
+    if (res.status === 200) {
+      toast('Relation deleted.', 'success');
+      if (_crmProjectId === relation.id) closeRelationDetail();
+      if (_crmView === 'relation') loadCrmRelationsView();
+      else loadCrmOverview();
+    } else {
+      toast(res.body?.message || 'Failed to delete relation.', 'error');
+    }
   }
 
   function renderCrmRelationsGrid() {
@@ -43579,6 +43608,10 @@ async function submitDsCreate() {
   $('#crm-relation-back-btn')?.addEventListener('click', () => closeRelationDetail());
   $('#crm-relation-new-lead-btn')?.addEventListener('click', () => _openNewLeadModal());
   $('#crm-relation-stages-btn')?.addEventListener('click',   () => openStagesModal());
+  $('#crm-relation-delete-btn')?.addEventListener('click',  () => {
+    const relation = _crmProjects.find(p => p.id === _crmProjectId);
+    if (relation) _deleteCrmRelation(relation);
+  });
 
   // ── Pipeline / Kanban ────────────────────────────────────────────────────
   async function loadCrmPipeline(projectId = _crmProjectId, { silent = false } = {}) {

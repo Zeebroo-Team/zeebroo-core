@@ -70,6 +70,21 @@ class PosCrmApiController extends Controller
         return response()->json(['data' => $project], 201);
     }
 
+    public function deleteProject(Request $request, int $projectId): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'crm_pipeline');
+        $project  = Project::where('business_id', $business->id)->findOrFail($projectId);
+
+        try {
+            $this->projects->delete($project);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['message' => $e->errors()['project'][0] ?? 'Cannot delete relation.'], 422);
+        }
+
+        return response()->json(['message' => 'Relation deleted.']);
+    }
+
     // ── Pipeline ─────────────────────────────────────────────────────────
 
     public function pipeline(Request $request, int $projectId): JsonResponse
