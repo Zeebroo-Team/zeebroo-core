@@ -29,6 +29,38 @@
         </div>
         @error($path)<div style="color:#f87171;font-size:12px;margin-top:4px;">{{ $message }}</div>@enderror
     </div>
+@elseif($customField && $customField->type === \Modules\CRM\Models\LeadCustomField::TYPE_RADIO)
+    <div class="pcat-field">
+        <label>{{ $label }} @if($required)<span style="color:#ef4444;">*</span>@endif</label>
+        <div style="display:flex;flex-direction:column;gap:6px;">
+            @foreach($customField->optionList() as $opt)
+                <label style="display:flex;align-items:center;gap:8px;font-size:13px;">
+                    <input type="radio" name="{{ $path }}" value="{{ $opt }}" @checked($oldValue === $opt) @if($required) required @endif>
+                    {{ $opt }}
+                </label>
+            @endforeach
+        </div>
+        @error($path)<div style="color:#f87171;font-size:12px;margin-top:4px;">{{ $message }}</div>@enderror
+    </div>
+@elseif($customField && $customField->type === \Modules\CRM\Models\LeadCustomField::TYPE_CHECKBOX_GROUP)
+    @php
+        $checkedVals = old($path);
+        if ($checkedVals === null) {
+            $checkedVals = \Modules\CRM\Models\LeadCustomField::splitStoredValue($existingValue);
+        }
+    @endphp
+    <div class="pcat-field">
+        <label>{{ $label }} @if($required)<span style="color:#ef4444;">*</span>@endif</label>
+        <div style="display:flex;flex-direction:column;gap:6px;">
+            @foreach($customField->optionList() as $opt)
+                <label style="display:flex;align-items:center;gap:8px;font-size:13px;">
+                    <input type="checkbox" name="{{ $path }}[]" value="{{ $opt }}" @checked(in_array($opt, (array) $checkedVals, true))>
+                    {{ $opt }}
+                </label>
+            @endforeach
+        </div>
+        @error($path)<div style="color:#f87171;font-size:12px;margin-top:4px;">{{ $message }}</div>@enderror
+    </div>
 @else
     <div class="pcat-field" @if($customField && $customField->type === \Modules\CRM\Models\LeadCustomField::TYPE_TEXTAREA) style="grid-column:1/-1;" @endif>
         <label for="bf-{{ $path }}">{{ $label }} @if($required)<span style="color:#ef4444;">*</span>@endif</label>

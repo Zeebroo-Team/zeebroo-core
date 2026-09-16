@@ -141,7 +141,13 @@ class LeadForm extends Model
         $firstText    = null;
 
         foreach ($this->fieldBlocksWithPaths() as $path => $block) {
-            $raw   = trim((string) ($input[$path] ?? ''));
+            $rawInput = $input[$path] ?? '';
+            // Checkbox-group fields submit an array of selected options (name="path[]");
+            // everything else submits a plain scalar. Store the array as a comma-joined
+            // string, since custom field values are single text columns.
+            $raw = is_array($rawInput)
+                ? implode(', ', array_values(array_filter(array_map(fn ($v) => trim((string) $v), $rawInput), fn ($v) => $v !== '')))
+                : trim((string) $rawInput);
             $field = (string) ($block['field'] ?? '');
 
             if ($raw !== '' && $firstText === null) {

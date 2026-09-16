@@ -303,7 +303,12 @@ class LeadService
             'phone'               => filled($data['phone'] ?? '') ? $data['phone'] : null,
             'source'              => filled($data['source'] ?? '') ? $data['source'] : null,
             'stage_id'            => $newStageId,
-            'estimated_value'     => $this->nullableDecimal($data['estimated_value'] ?? null),
+            // Desktop's Edit Lead modal doesn't expose this field, so its requests omit
+            // the key entirely — preserve the lead's current value rather than wiping it
+            // to null. Callers that do send the key (e.g. the web edit form) still control it.
+            'estimated_value'     => array_key_exists('estimated_value', $data)
+                ? $this->nullableDecimal($data['estimated_value'])
+                : $lead->estimated_value,
             'expected_close_date' => filled($data['expected_close_date'] ?? '') ? $data['expected_close_date'] : null,
             'notes'               => filled($data['notes'] ?? '') ? $data['notes'] : null,
             'assigned_to'         => $this->nullableInt($data['assigned_to'] ?? null),

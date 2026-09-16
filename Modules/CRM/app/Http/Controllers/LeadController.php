@@ -244,7 +244,7 @@ class LeadController extends Controller
         // Use array union (+), not array_merge(): field-block paths are numeric-string
         // keys ("2", "3", …), which PHP auto-casts to int keys — array_merge() would
         // renumber those instead of preserving them, silently corrupting the rules.
-        $validated = $request->validate($rules + $this->fieldBlockRules($leadForm));
+        $validated = $request->validate($rules + $this->fieldBlockRules($leadForm, $project));
 
         if ($leadForm) {
             $mapped       = $leadForm->mapPathedInputsToLeadData($validated);
@@ -274,22 +274,33 @@ class LeadController extends Controller
      * Validation rules for the lead form's own field blocks, keyed by the same flat
      * hyphen-path scheme used on the public form (see LeadForm::fieldBlocksWithPaths()).
      */
-    private function fieldBlockRules(?LeadForm $leadForm): array
+    private function fieldBlockRules(?LeadForm $leadForm, Project $project): array
     {
         if (!$leadForm) {
             return [];
         }
 
+        $customFields = $this->customFieldService->listKeyedById($project);
+
         $rules = [];
         foreach ($leadForm->fieldBlocksWithPaths() as $path => $block) {
-            if (($block['field'] ?? '') === 'name') {
+            $fieldKey = (string) ($block['field'] ?? '');
+            if ($fieldKey === 'name') {
                 continue; // Name has its own fixed input/rule above.
             }
 
-            $required     = (bool) ($block['required'] ?? false);
+            $required    = (bool) ($block['required'] ?? false);
+            $customField = str_starts_with($fieldKey, 'custom:') ? ($customFields[(int) substr($fieldKey, 7)] ?? null) : null;
+
+            if ($customField && $customField->isMultiValue()) {
+                $rules[$path]       = [$required ? 'required' : 'nullable', 'array'];
+                $rules["{$path}.*"] = ['string', 'max:200'];
+                continue;
+            }
+
             $rules[$path] = array_merge(
                 [$required ? 'required' : 'nullable'],
-                ($block['field'] ?? '') === 'email' ? ['email'] : ['string', 'max:2000'],
+                $fieldKey === 'email' ? ['email'] : ['string', 'max:2000'],
             );
         }
 

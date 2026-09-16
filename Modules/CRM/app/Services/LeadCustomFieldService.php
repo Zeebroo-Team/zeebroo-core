@@ -34,7 +34,7 @@ class LeadCustomFieldService
             'project_id'  => $project->id,
             'label'       => $data['label'],
             'type'        => $type,
-            'options'     => $type === LeadCustomField::TYPE_SELECT ? $this->parseOptions($data['options'] ?? '') : null,
+            'options'     => in_array($type, LeadCustomField::OPTION_TYPES, true) ? $this->parseOptions($data['options'] ?? '') : null,
             'is_required' => (bool) ($data['is_required'] ?? false),
             'sort_order'  => $nextOrder,
         ]);
@@ -47,7 +47,7 @@ class LeadCustomFieldService
         $field->update([
             'label'       => $data['label'],
             'type'        => $type,
-            'options'     => $type === LeadCustomField::TYPE_SELECT ? $this->parseOptions($data['options'] ?? '') : null,
+            'options'     => in_array($type, LeadCustomField::OPTION_TYPES, true) ? $this->parseOptions($data['options'] ?? '') : null,
             'is_required' => (bool) ($data['is_required'] ?? false),
         ]);
 

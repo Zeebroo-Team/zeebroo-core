@@ -33,6 +33,7 @@ body{margin:0;font-family:'Segoe UI',Arial,sans-serif;font-size:15px;color:#1e29
 .pf-field input:focus,.pf-field textarea:focus,.pf-field select:focus{outline:none;border-color:var(--pf-accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--pf-accent) 20%,transparent);}
 .pf-field textarea{min-height:80px;resize:vertical;}
 .pf-checkbox{display:flex;align-items:center;gap:8px;font-size:13px;color:#475569;}
+.pf-radio-group{display:flex;flex-direction:column;gap:8px;}
 .pf-help{font-size:11px;color:#94a3b8;margin-top:5px;line-height:1.4;}
 .pf-error{color:#ef4444;font-size:12px;margin-top:4px;}
 .pf-submit{width:100%;padding:12px 16px;font-size:14px;font-weight:700;border-radius:9px;border:none;background:var(--pf-accent);color:#fff;cursor:pointer;margin-top:8px;}

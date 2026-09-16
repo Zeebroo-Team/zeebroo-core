@@ -18,6 +18,16 @@ class LeadCustomField extends Model
     const TYPE_DATE     = 'date';
     const TYPE_SELECT   = 'select';
     const TYPE_CHECKBOX = 'checkbox';
+    const TYPE_RADIO    = 'radio';
+    const TYPE_CHECKBOX_GROUP = 'checkbox_group';
+
+    /**
+     * Field types whose value is chosen from a fixed `options` list rather than
+     * typed freely — these are the only types that need the options textarea in
+     * every "add/edit custom field" UI, and store multiple values as an array.
+     */
+    const MULTI_VALUE_TYPES = [self::TYPE_CHECKBOX_GROUP];
+    const OPTION_TYPES      = [self::TYPE_SELECT, self::TYPE_RADIO, self::TYPE_CHECKBOX_GROUP];
 
     protected $fillable = [
         'project_id',
@@ -55,7 +65,9 @@ class LeadCustomField extends Model
             self::TYPE_NUMBER   => 'Number',
             self::TYPE_DATE     => 'Date',
             self::TYPE_SELECT   => 'Dropdown',
-            self::TYPE_CHECKBOX => 'Yes / No',
+            self::TYPE_CHECKBOX => 'Checkbox (Yes/No)',
+            self::TYPE_RADIO    => 'Radio buttons',
+            self::TYPE_CHECKBOX_GROUP => 'Checkboxes (multiple choice)',
         ];
     }
 
@@ -72,5 +84,26 @@ class LeadCustomField extends Model
     public function optionList(): array
     {
         return array_values(array_filter((array) ($this->options ?? []), fn ($o) => trim((string) $o) !== ''));
+    }
+
+    public function isMultiValue(): bool
+    {
+        return in_array($this->type, self::MULTI_VALUE_TYPES, true);
+    }
+
+    public function hasOptions(): bool
+    {
+        return in_array($this->type, self::OPTION_TYPES, true);
+    }
+
+    /**
+     * Split a stored comma-joined multi-value (see LeadCustomFieldValue) back into
+     * its selected options, e.g. for re-checking boxes when editing a lead.
+     *
+     * @return array<int, string>
+     */
+    public static function splitStoredValue(?string $value): array
+    {
+        return array_values(array_filter(array_map('trim', explode(',', (string) $value)), fn ($v) => $v !== ''));
     }
 }

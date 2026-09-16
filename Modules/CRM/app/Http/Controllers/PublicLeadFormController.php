@@ -47,12 +47,26 @@ class PublicLeadFormController extends Controller
 
     private function validationRules(LeadForm $form): array
     {
+        $customFields = LeadCustomField::query()
+            ->where('project_id', $form->project_id)
+            ->get()
+            ->keyBy('id');
+
         $rules = [];
         foreach ($form->fieldBlocksWithPaths() as $path => $block) {
-            $required     = (bool) ($block['required'] ?? false);
+            $required = (bool) ($block['required'] ?? false);
+            $fieldKey = (string) ($block['field'] ?? '');
+            $customField = str_starts_with($fieldKey, 'custom:') ? ($customFields[(int) substr($fieldKey, 7)] ?? null) : null;
+
+            if ($customField && $customField->isMultiValue()) {
+                $rules[$path]         = [$required ? 'required' : 'nullable', 'array'];
+                $rules["{$path}.*"]   = ['string', 'max:200'];
+                continue;
+            }
+
             $rules[$path] = [$required ? 'required' : 'nullable', 'string', 'max:2000'];
 
-            if (($block['field'] ?? '') === 'email') {
+            if ($fieldKey === 'email') {
                 $rules[$path][] = 'email';
             }
         }

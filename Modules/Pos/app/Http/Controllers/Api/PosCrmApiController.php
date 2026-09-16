@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Modules\CRM\Models\Activity;
 use Modules\CRM\Models\Lead;
 use Modules\CRM\Models\LeadCustomField;
@@ -834,6 +835,7 @@ class PosCrmApiController extends Controller
             'id'         => $cf->id,
             'name'       => $cf->name,
             'type'       => $cf->type,
+            'options'    => $cf->optionList(),
             'sort_order' => $cf->sort_order,
         ])]);
     }
@@ -845,19 +847,26 @@ class PosCrmApiController extends Controller
         $project  = Project::where('business_id', $business->id)->findOrFail($projectId);
 
         $validated = $request->validate([
-            'name' => ['required', 'string', 'max:80'],
-            'type' => ['required', 'string', Rule::in(LeadCustomField::types())],
+            'name'    => ['required', 'string', 'max:80'],
+            'type'    => ['required', 'string', Rule::in(array_keys(LeadCustomField::types()))],
+            'options' => ['nullable', 'string', 'max:2000'],
         ]);
 
+        if (in_array($validated['type'], LeadCustomField::OPTION_TYPES, true) && !filled($validated['options'] ?? '')) {
+            throw ValidationException::withMessages(['options' => 'Add at least one option, one per line.']);
+        }
+
         $field = $this->customFields->create($project, [
-            'label' => $validated['name'],
-            'type'  => $validated['type'],
+            'label'   => $validated['name'],
+            'type'    => $validated['type'],
+            'options' => $validated['options'] ?? '',
         ]);
 
         return response()->json(['data' => [
-            'id'   => $field->id,
-            'name' => $field->name,
-            'type' => $field->type,
+            'id'      => $field->id,
+            'name'    => $field->name,
+            'type'    => $field->type,
+            'options' => $field->optionList(),
         ]], 201);
     }
 
