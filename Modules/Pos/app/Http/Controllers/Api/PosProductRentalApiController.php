@@ -67,6 +67,16 @@ class PosProductRentalApiController extends Controller
         $status = $r->effectiveStatus();
         $today = now()->startOfDay();
         $dueAt = $r->due_at;
+        $rentedAt = $r->rented_at;
+
+        $durationDays = ($rentedAt !== null && $dueAt !== null)
+            ? max(1, (int) $rentedAt->diffInDays($dueAt))
+            : 1;
+        $baseTotal = round((float) $r->daily_rate * (float) $r->quantity * $durationDays, 2);
+
+        $daysLate = ($dueAt !== null && $r->returned_at === null && $today->gt($dueAt)) ? (int) $dueAt->diffInDays($today) : 0;
+        $projectedLateFee = $daysLate > 0 ? round($daysLate * (float) $r->daily_rate * (float) $r->late_fee_multiplier, 2) : 0.0;
+        $effectiveLateFee = $r->returned_at !== null ? (float) $r->late_fee : $projectedLateFee;
 
         return [
             'id'               => $r->id,
@@ -82,14 +92,18 @@ class PosProductRentalApiController extends Controller
             'branch_id'        => $r->branch_id,
             'daily_rate'       => (float) $r->daily_rate,
             'quantity'         => (float) $r->quantity,
-            'rented_at'        => $r->rented_at?->toDateString(),
+            'rented_at'        => $rentedAt?->toDateString(),
             'due_at'           => $dueAt?->toDateString(),
             'returned_at'      => $r->returned_at?->toDateString(),
+            'duration_days'    => $durationDays,
+            'base_total'       => $baseTotal,
             'late_fee'         => (float) $r->late_fee,
             'late_fee_multiplier' => (float) $r->late_fee_multiplier,
+            'projected_late_fee' => $projectedLateFee,
+            'total_amount'     => round($baseTotal + $effectiveLateFee, 2),
             'status'           => $status,
             'status_label'     => ProductRental::statusLabels()[$status] ?? ucfirst($status),
-            'days_late'        => ($dueAt !== null && $r->returned_at === null && $today->gt($dueAt)) ? (int) $dueAt->diffInDays($today) : 0,
+            'days_late'        => $daysLate,
             'days_remaining'   => ($dueAt !== null && $r->returned_at === null && $today->lte($dueAt)) ? (int) $today->diffInDays($dueAt) : 0,
         ];
     }

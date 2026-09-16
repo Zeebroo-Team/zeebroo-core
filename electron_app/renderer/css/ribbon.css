@@ -12921,6 +12921,7 @@ body.dark .bc-main-preview-body { background: #1a1a1a; }
 .qt-tbl tr:last-child td { border-bottom: none; }
 .qt-tbl tbody tr { cursor: pointer; transition: background .1s; }
 .qt-tbl tbody tr:hover td { background: color-mix(in srgb, var(--accent) 4%, transparent); }
+.qt-tbl-wrap.qt-tbl-no-hover .qt-tbl tbody tr:hover td { background: transparent; }
 .qt-tbl-num { font-size: 12px; font-weight: 700; color: var(--accent); font-family: monospace; }
 .qt-tbl-customer { font-weight: 600; }
 .qt-tbl-muted { color: var(--text-muted); font-size: 12px; }

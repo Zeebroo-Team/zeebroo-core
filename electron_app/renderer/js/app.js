@@ -1290,7 +1290,7 @@ function _prentalRenderList() {
   let html = `<div class="qt-tbl-wrap"><table class="qt-tbl">
     <thead><tr>
       <th>Customer</th><th>Product</th><th style="text-align:right">Qty</th><th style="text-align:right">Daily Rate</th>
-      <th>Rented</th><th>Due</th><th>Status</th><th style="width:1%;white-space:nowrap">Actions</th>
+      <th>Rented</th><th>Due</th><th style="text-align:right">Duration</th><th style="text-align:right">Total</th><th>Status</th><th style="width:1%;white-space:nowrap">Actions</th>
     </tr></thead><tbody>`;
 
   _prental.list.forEach(r => {
@@ -1298,7 +1298,13 @@ function _prentalRenderList() {
     let actions = '';
     if (r.status === 'active' || r.status === 'overdue') {
       actions += `<button class="qt-act-btn subs-act-btn" data-prental-act="return" data-prental-id="${r.id}"><i class="fa fa-rotate-left"></i> Mark Returned</button>`;
+    } else {
+      actions = '<span class="qt-tbl-muted" style="display:inline-flex;align-items:center;padding:5px 10px;font-size:11px;line-height:1.4">—</span>';
     }
+    const duration = Number(r.duration_days) || 1;
+    const total = formatMoney(parseFloat(r.total_amount || 0), {currency: cur});
+    const totalTitle = `${formatMoney(parseFloat(r.daily_rate || 0), {currency: cur})} × ${escHtml(String(r.quantity ?? 1))} × ${duration}d`
+      + (parseFloat(r.late_fee || r.projected_late_fee || 0) > 0 ? ` + ${formatMoney(parseFloat(r.late_fee || r.projected_late_fee || 0), {currency: cur})} late fee` : '');
     html += `<tr class="subs-row" data-prental-row="${r.id}" style="cursor:pointer">
       <td class="qt-tbl-customer">${escHtml(r.customer_name || '—')}</td>
       <td>${escHtml(r.product_name || '—')}</td>
@@ -1306,13 +1312,24 @@ function _prentalRenderList() {
       <td class="qt-tbl-amt">${formatMoney(parseFloat(r.daily_rate || 0), {currency: cur})}</td>
       <td class="qt-tbl-muted">${fmtDate(r.rented_at)}</td>
       <td class="qt-tbl-muted">${fmtDate(r.due_at)}</td>
+      <td class="qt-tbl-amt">${duration}d</td>
+      <td class="qt-tbl-amt" title="${totalTitle}">${total}</td>
       <td><span class="so-badge" style="background:${color}20;color:${color};border-color:${color}40">${escHtml(r.status_label)}</span></td>
-      <td style="display:flex;gap:4px;flex-wrap:nowrap;white-space:nowrap">${actions}</td>
+      <td style="display:flex;align-items:center;gap:4px;flex-wrap:nowrap;white-space:nowrap">${actions}</td>
     </tr>`;
   });
 
   html += '</tbody></table></div>';
   $('#prental-body').innerHTML = html;
+
+  // Rows can reorder/change on refresh (e.g. after "Mark Returned"), which would
+  // otherwise leave the hover highlight on whatever row ends up under the stationary
+  // cursor. Suppress hover until the mouse actually moves again.
+  const _wrap = $('#prental-body .qt-tbl-wrap');
+  if (_wrap) {
+    _wrap.classList.add('qt-tbl-no-hover');
+    document.addEventListener('mousemove', () => _wrap.classList.remove('qt-tbl-no-hover'), { once: true });
+  }
 
   $$('#prental-body [data-prental-act]').forEach(b => {
     b.addEventListener('click', async (e) => {
@@ -1360,6 +1377,8 @@ function _prentalOpenReturnConfirm(r) {
   const dailyRate   = parseFloat(r?.daily_rate || 0);
   const multiplier  = parseFloat(r?.late_fee_multiplier || 0);
   const projected   = daysLate > 0 ? Math.round(daysLate * dailyRate * multiplier * 100) / 100 : 0;
+  const duration    = Number(r?.duration_days) || 1;
+  const baseTotal   = r?.base_total != null ? parseFloat(r.base_total) : dailyRate * parseFloat(r?.quantity ?? 1) * duration;
 
   $('#prtc-product-name').textContent  = r?.product_name || 'Rental';
   $('#prtc-customer-name').textContent = r?.customer_name || '';
@@ -1371,6 +1390,7 @@ function _prentalOpenReturnConfirm(r) {
     ['Due back',   fmtDate(r?.due_at)],
     ['Quantity',   escHtml(String(r?.quantity ?? 1)) + ' (restocked on return)'],
     ['Daily rate', formatMoney(dailyRate, {currency: cur})],
+    ['Rental amount', `${formatMoney(dailyRate, {currency: cur})} × ${escHtml(String(r?.quantity ?? 1))} × ${duration}d = ${formatMoney(baseTotal, {currency: cur})} <span style="color:var(--text-muted);font-weight:400">(already charged at checkout)</span>`],
   ];
   if (daysLate > 0) {
     rows.push(['Days late', `<span style="color:#dc2626;font-weight:700">${daysLate} day${daysLate === 1 ? '' : 's'}</span>`]);
@@ -1444,14 +1464,32 @@ function _prentalOpenDetail(r) {
     ['Email',    escHtml(r.customer_email || '—')],
   ];
 
+  const duration = Number(r.duration_days) || 1;
+  const dailyRate = parseFloat(r.daily_rate || 0);
+  const qty = parseFloat(r.quantity ?? 1);
+  const baseTotal = r.base_total != null ? parseFloat(r.base_total) : dailyRate * qty * duration;
+  const lateFee = parseFloat(r.returned_at ? (r.late_fee || 0) : (r.projected_late_fee || 0));
+  const lateFeeIsProjected = !r.returned_at && lateFee > 0;
+
   const dateRows = [
     ['Rented on',  fmtDate(r.rented_at)],
     ['Due back',   fmtDate(r.due_at)],
     ['Returned',   fmtDate(r.returned_at)],
+    ['Duration',   `${duration} day${duration === 1 ? '' : 's'}`],
   ];
   if (r.status === 'overdue' && !r.returned_at) dateRows.push(['Days late', String(r.days_late ?? 0)]);
   if (r.status === 'active' && !r.returned_at)  dateRows.push(['Days remaining', String(r.days_remaining ?? 0)]);
-  if (r.late_fee > 0) dateRows.push(['Late fee', formatMoney(parseFloat(r.late_fee), {currency: cur})]);
+
+  const costRows = [
+    ['Daily rate × qty × days', `${formatMoney(dailyRate, {currency: cur})} × ${escHtml(String(r.quantity ?? 1))} × ${duration}d = <strong>${formatMoney(baseTotal, {currency: cur})}</strong>`],
+  ];
+  if (lateFee > 0) {
+    costRows.push([
+      lateFeeIsProjected ? 'Late fee (if returned today)' : 'Late fee charged',
+      `${r.days_late ?? 0}d late × ${formatMoney(dailyRate, {currency: cur})} × ${parseFloat(r.late_fee_multiplier || 0)}× = <strong>${formatMoney(lateFee, {currency: cur})}</strong>`,
+    ]);
+  }
+  costRows.push(['Total' + (lateFeeIsProjected ? ' (estimated)' : ''), `<strong style="font-size:14px">${formatMoney(baseTotal + lateFee, {currency: cur})}</strong>`]);
 
   $('#prdm-content').innerHTML = `
     <div class="inv-section">
@@ -1465,6 +1503,10 @@ function _prentalOpenDetail(r) {
     <div class="inv-section" style="margin-top:14px">
       <div class="inv-section-title"><i class="fa fa-clock"></i> Dates</div>
       <table class="inv-detail-table">${rowsHtml(dateRows)}</table>
+    </div>
+    <div class="inv-section" style="margin-top:14px">
+      <div class="inv-section-title"><i class="fa fa-calculator"></i> Cost Breakdown</div>
+      <table class="inv-detail-table">${rowsHtml(costRows)}</table>
     </div>
   `;
 
