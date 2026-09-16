@@ -43895,6 +43895,17 @@ async function submitDsCreate() {
         input = `<select class="po-field-input crm-lead-field-input" data-path="${path}" style="appearance:auto"><option value=""></option>${opts}</select>`;
       } else if (type === 'checkbox') {
         input = `<select class="po-field-input crm-lead-field-input" data-path="${path}" style="appearance:auto"><option value=""></option><option value="Yes"${value === 'Yes' ? ' selected' : ''}>Yes</option><option value="No"${value === 'No' ? ' selected' : ''}>No</option></select>`;
+      } else if (type === 'radio') {
+        input = (cf?.options || []).map(o => {
+          const checked = o === value ? ' checked' : '';
+          return `<label style="display:flex;align-items:center;gap:8px;font-size:13px;margin:4px 0 0"><input type="radio" class="crm-lead-field-radio" name="crm-lead-radio-${path}" data-path="${path}" value="${escHtml(o)}"${checked}> ${escHtml(o)}</label>`;
+        }).join('') || `<span style="font-size:12px;color:var(--text-muted)">No options configured.</span>`;
+      } else if (type === 'checkbox_group') {
+        const selectedVals = String(value || '').split(',').map(s => s.trim()).filter(Boolean);
+        input = (cf?.options || []).map(o => {
+          const checked = selectedVals.includes(o) ? ' checked' : '';
+          return `<label style="display:flex;align-items:center;gap:8px;font-size:13px;margin:4px 0 0"><input type="checkbox" class="crm-lead-field-checkbox-group" data-path="${path}" value="${escHtml(o)}"${checked}> ${escHtml(o)}</label>`;
+        }).join('') || `<span style="font-size:12px;color:var(--text-muted)">No options configured.</span>`;
       } else if (type === 'date') {
         input = `<input type="date" class="po-field-input crm-lead-field-input" data-path="${path}" value="${val}">`;
       } else if (type === 'number') {
@@ -43908,6 +43919,31 @@ async function submitDsCreate() {
 
     const help = block.help_text ? `<span style="font-size:11px;color:var(--text-muted)">${escHtml(block.help_text)}</span>` : '';
     return `<div class="po-field">${label !== '' ? `<label class="po-field-label">${escHtml(label)}${req}</label>` : ''}${input}${help}</div>`;
+  }
+
+  // Reads submitted values for every field block out of a lead-modal's DOM, keyed by
+  // block path. Radio/checkbox-group blocks render as several inputs sharing one
+  // data-path, so they can't be read the same way as the single-input types.
+  function _crmCollectLeadFieldValues(container) {
+    const values = {};
+    _crmLeadFormBlocks.forEach((block, idx) => {
+      if (block.type !== 'field') return;
+      const path  = String(idx);
+      const field = String(block.field || '');
+      const cf    = field.startsWith('custom:') ? _crmLeadFormCustomFields[field.slice(7)] : null;
+      const type  = cf?.type || 'text';
+      if (type === 'radio') {
+        const checked = container.querySelector(`.crm-lead-field-radio[data-path="${path}"]:checked`);
+        values[path] = checked ? checked.value : '';
+      } else if (type === 'checkbox_group') {
+        const checked = container.querySelectorAll(`.crm-lead-field-checkbox-group[data-path="${path}"]:checked`);
+        values[path] = Array.from(checked).map(el => el.value).join(', ');
+      } else {
+        const el = container.querySelector(`.crm-lead-field-input[data-path="${path}"]`);
+        values[path] = el ? el.value.trim() : '';
+      }
+    });
+    return values;
   }
 
   // Reads a lead's current value for a form field block, used to pre-fill Edit Lead.
@@ -43943,10 +43979,7 @@ async function submitDsCreate() {
     btn.disabled = true;
     $('#crm-lead-alert').style.display = 'none';
 
-    const input = {};
-    $('#crm-lead-form-fields').querySelectorAll('.crm-lead-field-input').forEach(el => {
-      input[el.dataset.path] = el.value.trim();
-    });
+    const input = _crmCollectLeadFieldValues($('#crm-lead-form-fields'));
 
     const res = await API.crmSubmitFormLead(_crmProjectId, _crmLeadFormId, input);
     btn.disabled = false;
@@ -43971,7 +44004,6 @@ async function submitDsCreate() {
   async function _openEditLeadModal(lead) {
     _populateStageSelect('#crm-lead-edit-stage', lead.stage_id);
     $('#crm-lead-edit-id').value      = lead.id;
-    $('#crm-lead-edit-value').value   = lead.estimated_value || '';
     $('#crm-lead-edit-notes').value   = lead.notes || '';
     $('#crm-lead-edit-alert').style.display = 'none';
     $('#crm-lead-edit-form-fields').innerHTML = '<span style="color:var(--text-muted);font-size:12px">Loading…</span>';
@@ -44000,10 +44032,11 @@ async function submitDsCreate() {
 
     const core = { name: '', company: '', email: '', phone: '' };
     const customFields = {};
-    $('#crm-lead-edit-form-fields').querySelectorAll('.crm-lead-field-input').forEach(el => {
-      const block = _crmLeadFormBlocks[parseInt(el.dataset.path)];
-      const field = String(block?.field || '');
-      const value = el.value.trim();
+    const values = _crmCollectLeadFieldValues($('#crm-lead-edit-form-fields'));
+    _crmLeadFormBlocks.forEach((block, idx) => {
+      if (block.type !== 'field') return;
+      const field = String(block.field || '');
+      const value = values[String(idx)] || '';
       if (field in core) core[field] = value;
       else if (field.startsWith('custom:')) customFields[field.slice(7)] = value;
     });
@@ -44018,7 +44051,6 @@ async function submitDsCreate() {
       email:           core.email || null,
       phone:           core.phone || null,
       stage_id:        $('#crm-lead-edit-stage').value || null,
-      estimated_value: $('#crm-lead-edit-value').value || null,
       notes:           $('#crm-lead-edit-notes').value.trim() || null,
       custom_fields:   customFields,
     });
@@ -45299,6 +45331,7 @@ async function submitDsCreate() {
         { val: 'phone',   label: 'Phone' },
         { val: 'company', label: 'Company' },
         ..._crmBuilderCustomFields.map(cf => ({ val: `custom:${cf.id}`, label: `${cf.name} (custom)` })),
+        { val: '__new__', label: '+ Add new field…' },
       ];
       return `
         <div class="crm-prop-row">
@@ -45358,11 +45391,29 @@ async function submitDsCreate() {
     };
     bind('prop-text',       'text');
     bind('prop-size',       'size',        false, true);
-    bind('prop-field',      'field',       false, true);
     bind('prop-label',      'label');
     bind('prop-placeholder','placeholder');
     bind('prop-help_text',  'help_text');
     bind('prop-required',   'required',    true,  true);
+
+    // "Maps to" needs special handling: "+ Add new field…" opens the create-field
+    // modal instead of being stored as the block's field value.
+    const propField = document.getElementById('prop-field');
+    if (propField) {
+      propField.addEventListener('change', () => {
+        if (propField.value === '__new__') {
+          propField.value = block.field || 'name';
+          _crmCfProjectId = _crmFormsProjectId;
+          _openCfModal(idx);
+          return;
+        }
+        block.field = propField.value;
+        _crmSelectedBlockIdx = idx;
+        _renderBuilderBlocks();
+        const rows = $$('.crm-block-row');
+        if (rows[idx]) rows[idx].classList.add('crm-block--selected');
+      });
+    }
   }
 
   // Add block buttons
@@ -45386,20 +45437,11 @@ async function submitDsCreate() {
   });
 
   function _openAddCustomFieldOrPick() {
-    // If there are already custom fields, we add a field block targeting one of them
-    if (_crmBuilderCustomFields.length > 0) {
-      // Add field block with first custom field
-      const cf = _crmBuilderCustomFields[0];
-      const block = { type: 'field', field: `custom:${cf.id}`, label: cf.name, placeholder: '', help_text: '', required: false };
-      _crmBuilderData.blocks.push(block);
-      _crmSelectedBlockIdx = _crmBuilderData.blocks.length - 1;
-      _renderBuilderBlocks();
-      _showBlockProps(_crmSelectedBlockIdx);
-    } else {
-      // Open create custom field modal
-      _crmCfProjectId = _crmFormsProjectId;
-      _openCfModal();
-    }
+    // Always open the create-field modal so the user can pick a name and type
+    // (Text, Dropdown, Radio buttons, etc.) for a brand new field. Reusing an
+    // existing custom field is done via the Field block's "Maps to" dropdown.
+    _crmCfProjectId = _crmFormsProjectId;
+    _openCfModal();
   }
 
   // Builder Save
@@ -45459,12 +45501,23 @@ async function submitDsCreate() {
 
   // ── Custom Field Modal ────────────────────────────────────────────────────
 
-  function _openCfModal() {
+  const CRM_CF_OPTION_TYPES = ['select', 'radio', 'checkbox_group'];
+  let _crmCfAssignToBlockIdx = null; // set when opened from a Field block's "+ Add new field…"
+
+  function _openCfModal(assignToBlockIdx) {
+    _crmCfAssignToBlockIdx = assignToBlockIdx === undefined ? null : assignToBlockIdx;
     $('#crm-cf-name').value = '';
     $('#crm-cf-type').value = 'text';
+    $('#crm-cf-options').value = '';
+    $('#crm-cf-options-wrap').style.display = 'none';
     $('#crm-cf-alert').style.display = 'none';
     $('#crm-cf-modal').style.display = 'flex';
   }
+
+  $('#crm-cf-type')?.addEventListener('change', () => {
+    const wrap = $('#crm-cf-options-wrap');
+    if (wrap) wrap.style.display = CRM_CF_OPTION_TYPES.includes($('#crm-cf-type').value) ? '' : 'none';
+  });
 
   $('#crm-cf-modal-close')?.addEventListener('click',  () => { $('#crm-cf-modal').style.display = 'none'; });
   $('#crm-cf-cancel')?.addEventListener('click',       () => { $('#crm-cf-modal').style.display = 'none'; });
@@ -45473,29 +45526,44 @@ async function submitDsCreate() {
   $('#crm-cf-save')?.addEventListener('click', async () => {
     const name = $('#crm-cf-name').value.trim();
     const type = $('#crm-cf-type').value;
+    const options = $('#crm-cf-options').value.trim();
     if (!name) {
       $('#crm-cf-alert').textContent = 'Enter a field name.';
+      $('#crm-cf-alert').style.display = '';
+      return;
+    }
+    if (CRM_CF_OPTION_TYPES.includes(type) && !options) {
+      $('#crm-cf-alert').textContent = 'Add at least one option, one per line.';
       $('#crm-cf-alert').style.display = '';
       return;
     }
     const btn = $('#crm-cf-save');
     btn.disabled = true;
     const projectId = _crmCfProjectId || _crmFormsProjectId;
-    const res = await API.crmCreateCustomField(projectId, { name, type });
+    const res = await API.crmCreateCustomField(projectId, { name, type, options });
     btn.disabled = false;
     if (res.status === 201) {
       const cf = res.body.data;
       _crmBuilderCustomFields.push(cf);
       $('#crm-cf-modal').style.display = 'none';
       toast(`Custom field "${cf.name}" created.`, 'success');
-      // Add the field block pointing to the new custom field
-      if (_crmBuilderData) {
+      if (_crmBuilderData && _crmCfAssignToBlockIdx !== null && _crmBuilderData.blocks[_crmCfAssignToBlockIdx]) {
+        // Opened from an existing Field block's "+ Add new field…" — map that block to it.
+        const blk = _crmBuilderData.blocks[_crmCfAssignToBlockIdx];
+        blk.field = `custom:${cf.id}`;
+        if (!blk.label) blk.label = cf.name;
+        _crmSelectedBlockIdx = _crmCfAssignToBlockIdx;
+        _renderBuilderBlocks();
+        _showBlockProps(_crmSelectedBlockIdx);
+      } else if (_crmBuilderData) {
+        // Opened from the "Custom field" button in ADD BLOCK — append a new block.
         const block = { type: 'field', field: `custom:${cf.id}`, label: cf.name, placeholder: '', help_text: '', required: false };
         _crmBuilderData.blocks.push(block);
         _crmSelectedBlockIdx = _crmBuilderData.blocks.length - 1;
         _renderBuilderBlocks();
         _showBlockProps(_crmSelectedBlockIdx);
       }
+      _crmCfAssignToBlockIdx = null;
     } else {
       const msg = res.body?.errors
         ? Object.values(res.body.errors).flat().join(' ')

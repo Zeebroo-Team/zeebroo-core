@@ -128,8 +128,8 @@ class LeadCustomFieldController extends Controller
             'is_required' => ['nullable', 'boolean'],
         ]);
 
-        if ($data['type'] === LeadCustomField::TYPE_SELECT && !filled($data['options'] ?? '')) {
-            throw \Illuminate\Validation\ValidationException::withMessages(['options' => 'Add at least one option for a dropdown field, one per line.']);
+        if (in_array($data['type'], LeadCustomField::OPTION_TYPES, true) && !filled($data['options'] ?? '')) {
+            throw \Illuminate\Validation\ValidationException::withMessages(['options' => 'Add at least one option, one per line.']);
         }
 
         return $data;

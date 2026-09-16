@@ -41,6 +41,27 @@
                     <input type="checkbox" name="{{ $inputName }}" value="1">
                     {{ $label }}@if($required) *@endif
                 </label>
+            @elseif($customField && $customField->type === 'radio')
+                <label>{{ $label }}@if($required) <span style="color:#ef4444;">*</span>@endif</label>
+                <div class="pf-radio-group">
+                    @foreach($customField->optionList() as $opt)
+                        <label class="pf-checkbox">
+                            <input type="radio" name="{{ $inputName }}" value="{{ $opt }}" @checked(old($inputName) === $opt) @if($required) required @endif>
+                            {{ $opt }}
+                        </label>
+                    @endforeach
+                </div>
+            @elseif($customField && $customField->type === 'checkbox_group')
+                @php $checkedVals = (array) old($inputName, []); @endphp
+                <label>{{ $label }}@if($required) <span style="color:#ef4444;">*</span>@endif</label>
+                <div class="pf-radio-group">
+                    @foreach($customField->optionList() as $opt)
+                        <label class="pf-checkbox">
+                            <input type="checkbox" name="{{ $inputName }}[]" value="{{ $opt }}" @checked(in_array($opt, $checkedVals, true))>
+                            {{ $opt }}
+                        </label>
+                    @endforeach
+                </div>
             @else
                 <label for="pf-field-{{ $path }}">{{ $label }}@if($required) <span style="color:#ef4444;">*</span>@endif</label>
                 @if($customField && $customField->type === 'select')

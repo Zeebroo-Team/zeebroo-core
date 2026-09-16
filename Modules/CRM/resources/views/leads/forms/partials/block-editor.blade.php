@@ -57,7 +57,9 @@
             <option value="number">Number</option>
             <option value="date">Date</option>
             <option value="select">Select (dropdown)</option>
-            <option value="checkbox">Switch (yes/no)</option>
+            <option value="radio">Radio buttons</option>
+            <option value="checkbox_group">Checkboxes (multiple choice)</option>
+            <option value="checkbox">Checkbox (Yes/No)</option>
         </select>
         <div data-lf-new-field-options-wrap style="margin-top:8px;" hidden>
             <label class="lf-mini-label">Options <span class="muted" style="font-weight:400;text-transform:none;">one per line</span></label>

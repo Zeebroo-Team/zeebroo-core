@@ -50,7 +50,7 @@
                         @if($f->is_required)
                             <span class="pcat-badge pcat-badge--on">Required</span>
                         @endif
-                        @if($f->type === 'select' && $f->optionList())
+                        @if($f->hasOptions() && $f->optionList())
                             <span class="muted">{{ implode(', ', $f->optionList()) }}</span>
                         @endif
                     </div>
@@ -184,7 +184,7 @@
         var select = document.querySelector('[data-cf-type-select="' + scope + '"]');
         var wrap   = document.querySelector('[data-cf-options-wrap="' + scope + '"]');
         if (!select || !wrap) return;
-        wrap.hidden = select.value !== 'select';
+        wrap.hidden = !['select', 'radio', 'checkbox_group'].includes(select.value);
     }
 
     ['add', 'edit'].forEach(function (scope) {

@@ -411,7 +411,7 @@
         + ".pf-divider{border:none;border-top:1px solid #e2e8f0;margin:18px 0;}.pf-field{margin:0 0 14px;}.pf-field label{display:block;font-size:12px;font-weight:700;color:#475569;margin-bottom:6px;}"
         + ".pf-field input,.pf-field textarea,.pf-field select{width:100%;box-sizing:border-box;padding:10px 12px;font-size:14px;border-radius:8px;border:1px solid #cbd5e1;background:#fff;color:#0f172a;font-family:inherit;}"
         + ".pf-field input:focus,.pf-field textarea:focus,.pf-field select:focus{outline:none;border-color:var(--pf-accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--pf-accent) 20%,transparent);}"
-        + ".pf-field textarea{min-height:70px;resize:vertical;}.pf-checkbox{display:flex;align-items:center;gap:8px;font-size:13px;color:#475569;}"
+        + ".pf-field textarea{min-height:70px;resize:vertical;}.pf-checkbox{display:flex;align-items:center;gap:8px;font-size:13px;color:#475569;}.pf-radio-group{display:flex;flex-direction:column;gap:8px;}"
         + ".pf-help{font-size:11px;color:#94a3b8;margin-top:5px;line-height:1.4;}"
         + ".pf-submit{width:100%;padding:12px 16px;font-size:14px;font-weight:700;border-radius:9px;border:none;background:var(--pf-accent);color:#fff;cursor:default;margin-top:8px;}"
         + ".pf-footer{text-align:center;margin-top:16px;font-size:11px;color:#94a3b8;}"
@@ -697,6 +697,19 @@
             if (custom && custom.type === 'checkbox') {
                 return '<div class="pf-field"><label class="pf-checkbox"><input type="checkbox" disabled> ' + escapeHtml(label) + (required ? ' *' : '') + '</label>' + helpHtml + '</div>';
             }
+            if (custom && custom.type === 'radio') {
+                var radioName = 'preview-radio-' + (fieldKey.slice(7) || Math.random());
+                var radioItems = (custom.options || []).map(function (o) {
+                    return '<label class="pf-checkbox"><input type="radio" name="' + radioName + '" disabled> ' + escapeHtml(o) + '</label>';
+                }).join('');
+                return '<div class="pf-field"><label>' + escapeHtml(label) + star + '</label>' + radioItems + helpHtml + '</div>';
+            }
+            if (custom && custom.type === 'checkbox_group') {
+                var groupItems = (custom.options || []).map(function (o) {
+                    return '<label class="pf-checkbox"><input type="checkbox" disabled> ' + escapeHtml(o) + '</label>';
+                }).join('');
+                return '<div class="pf-field"><label>' + escapeHtml(label) + star + '</label><div class="pf-radio-group">' + groupItems + '</div>' + helpHtml + '</div>';
+            }
             var input;
             if (custom && custom.type === 'select') {
                 input = '<select disabled><option>— Select —</option>' + (custom.options || []).map(function (o) { return '<option>' + escapeHtml(o) + '</option>'; }).join('') + '</select>';
@@ -945,7 +958,7 @@
     propsBody.addEventListener('change', function (e) {
         if (e.target.matches('[data-lf-new-field-type]')) {
             var optionsWrap = propsBody.querySelector('[data-lf-new-field-options-wrap]');
-            if (optionsWrap) optionsWrap.hidden = e.target.value !== 'select';
+            if (optionsWrap) optionsWrap.hidden = !['select', 'radio', 'checkbox_group'].includes(e.target.value);
         }
     });
 
@@ -978,7 +991,7 @@
         if (errorEl) { errorEl.hidden = true; errorEl.textContent = ''; }
 
         if (!label) { showError('Enter a label for the new field.'); return; }
-        if (type === 'select' && !options.trim()) { showError('Add at least one option, one per line.'); return; }
+        if (['select', 'radio', 'checkbox_group'].includes(type) && !options.trim()) { showError('Add at least one option, one per line.'); return; }
 
         if (createBtn) { createBtn.disabled = true; createBtn.textContent = 'Adding…'; }
 
