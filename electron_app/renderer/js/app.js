@@ -5457,8 +5457,8 @@ const _SVC_CATS = new Set(['healthcare', 'professional_services', 'creative_medi
 function _obBuildCatGrid(cats) {
   const grid = $('#ob-cat-grid');
   grid.innerHTML = cats.map(o => {
-    const iconCls = _obCatIcons[o.value] || 'fa-briefcase';
-    const color   = _obCatColors[o.value] || '#4e8ef7';
+    const iconCls = o.icon || _obCatIcons[o.value] || 'fa-briefcase';
+    const color   = o.color || _obCatColors[o.value] || '#4e8ef7';
     return `<div class="ob-cat-card" data-cat="${escHtml(o.value)}" style="--cat-color:${color}">
       <div class="ob-cat-icon"><i class="fa ${escHtml(iconCls)}"></i></div>
       <span class="ob-cat-name">${escHtml(o.label)}</span>
@@ -5487,9 +5487,9 @@ function _obBuildCatGrid(cats) {
 
 const OB_PKG_FALLBACK_IMG = 'data:image/svg+xml;utf8,' + encodeURIComponent(
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-     <rect width="64" height="64" rx="14" fill="#4e8ef7" fill-opacity=".12"/>
-     <path d="M32 13l17 9v20l-17 9-17-9V22l17-9z" fill="none" stroke="#4e8ef7" stroke-width="2.5" stroke-linejoin="round"/>
-     <path d="M15 22l17 9 17-9M32 31v20" fill="none" stroke="#4e8ef7" stroke-width="2.5" stroke-linejoin="round"/>
+     <rect width="64" height="64" rx="14" fill="#f59e0b" fill-opacity=".12"/>
+     <path d="M32 13l17 9v20l-17 9-17-9V22l17-9z" fill="none" stroke="#f59e0b" stroke-width="2.5" stroke-linejoin="round"/>
+     <path d="M15 22l17 9 17-9M32 31v20" fill="none" stroke="#f59e0b" stroke-width="2.5" stroke-linejoin="round"/>
    </svg>`
 );
 
@@ -6404,14 +6404,20 @@ async function _syncTick() {
 
   // POS product grid — silent refresh (no spinner)
   if (productsChanged) {
-    const r2 = await API.bootstrap(state.searchQuery || '', state.activeCategory || 0, state.activePage || 1, {});
-    if (r2.status === 200) {
-      const { products = [], categories = [], currency = '' } = r2.body?.data || r2.body || {};
-      state.products   = products;
-      state.categories = categories;
-      if (currency) state.currency = currency;
-      buildCategoryBar(categories, state.activeCategory || 0);
-      buildProductGrid(products);
+    // Only repaint #product-grid while the POS Products mode is actually
+    // active — buildProductGrid() clears the grid's inline style, which
+    // would undo the display:none that switchPosMode() applies when the
+    // user is on the Services/Rental tab and make it reappear underneath.
+    if (state.posMode === 'products') {
+      const r2 = await API.bootstrap(state.searchQuery || '', state.activeCategory || 0, state.activePage || 1, {});
+      if (r2.status === 200 && state.posMode === 'products') {
+        const { products = [], categories = [], currency = '' } = r2.body?.data || r2.body || {};
+        state.products   = products;
+        state.categories = categories;
+        if (currency) state.currency = currency;
+        buildCategoryBar(categories, state.activeCategory || 0);
+        buildProductGrid(products);
+      }
     }
     if (tab === 'inventory') loadInventory();
     if (tab === 'home') loadHomeKPIs();
@@ -23102,8 +23108,8 @@ function _bbwzClose() {
 function _bbwzBuildCatGrid() {
   const grid = $('#bbwz-cat-grid');
   grid.innerHTML = _bbwz.cats.map(o => {
-    const iconCls = _obCatIcons[o.value] || 'fa-briefcase';
-    const color   = _obCatColors[o.value] || '#4e8ef7';
+    const iconCls = o.icon || _obCatIcons[o.value] || 'fa-briefcase';
+    const color   = o.color || _obCatColors[o.value] || '#4e8ef7';
     const active  = o.value === _bbwz.selectedCat ? ' active' : '';
     return `<div class="bbwz-cat-item${active}" data-cat="${escHtml(o.value)}" style="--cat-color:${color}">
       <div class="bbwz-cat-icon"><i class="fa ${escHtml(iconCls)}"></i></div>
