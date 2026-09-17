@@ -1,7 +1,9 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Modules\Pos\Http\Middleware\EnsureSubscriptionSettled;
 use Modules\Pos\Http\Controllers\Api\PosAuthApiController;
+use Modules\Pos\Http\Controllers\Api\PosPaymentApiController;
 use Modules\Pos\Http\Controllers\Api\PosBusinessesApiController;
 use Modules\Pos\Http\Controllers\Api\PosBranchesApiController;
 use Modules\Pos\Http\Controllers\Api\PosApiDocsController;
@@ -69,15 +71,20 @@ Route::prefix('v1/pos')->group(function (): void {
     Route::get('docs/readme', [PosApiDocsController::class, 'readme'])->name('pos.docs.readme');
 });
 
-Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(function (): void {
-    Route::get ('auth/me',       [PosAuthApiController::class, 'me'])->name('auth.me');
-    Route::put ('auth/profile',  [PosAuthApiController::class, 'updateProfile'])->name('auth.profile.update');
-    Route::put ('auth/password', [PosAuthApiController::class, 'updatePassword'])->name('auth.password.update');
-    Route::post('auth/revoke',   [PosAuthApiController::class, 'revoke'])->name('auth.revoke');
-    Route::get ('businesses', [PosBusinessesApiController::class, 'index'])->name('businesses.index');
-    Route::post('businesses', [PosBusinessesApiController::class, 'store'])->name('businesses.store');
-    Route::get('online/bootstrap', PosOnlineBootstrapApiController::class)->name('online.bootstrap');
-    Route::get('online/branches', PosBranchesApiController::class)->name('online.branches');
+Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v1/pos')->name('pos.')->group(function (): void {
+    Route::get ('auth/me',       [PosAuthApiController::class, 'me'])->name('auth.me')->withoutMiddleware(EnsureSubscriptionSettled::class);
+    Route::put ('auth/profile',  [PosAuthApiController::class, 'updateProfile'])->name('auth.profile.update')->withoutMiddleware(EnsureSubscriptionSettled::class);
+    Route::put ('auth/password', [PosAuthApiController::class, 'updatePassword'])->name('auth.password.update')->withoutMiddleware(EnsureSubscriptionSettled::class);
+    Route::post('auth/revoke',   [PosAuthApiController::class, 'revoke'])->name('auth.revoke')->withoutMiddleware(EnsureSubscriptionSettled::class);
+    Route::post('auth/payment/checkout-session', [PosPaymentApiController::class, 'checkoutSession'])->name('auth.payment.checkout-session')->withoutMiddleware(EnsureSubscriptionSettled::class);
+    Route::get ('auth/payment/history',          [PosPaymentApiController::class, 'history'])->name('auth.payment.history')->withoutMiddleware(EnsureSubscriptionSettled::class);
+    Route::get ('auth/payment/{payment}/status', [PosPaymentApiController::class, 'status'])->name('auth.payment.status')->withoutMiddleware(EnsureSubscriptionSettled::class);
+    Route::get ('auth/payment/{payment}/receipt', [PosPaymentApiController::class, 'receipt'])->name('auth.payment.receipt')->withoutMiddleware(EnsureSubscriptionSettled::class);
+    Route::get ('auth/payment/{payment}',        [PosPaymentApiController::class, 'show'])->name('auth.payment.show')->withoutMiddleware(EnsureSubscriptionSettled::class);
+    Route::get ('businesses', [PosBusinessesApiController::class, 'index'])->name('businesses.index')->withoutMiddleware(EnsureSubscriptionSettled::class);
+    Route::post('businesses', [PosBusinessesApiController::class, 'store'])->name('businesses.store')->withoutMiddleware(EnsureSubscriptionSettled::class);
+    Route::get('online/bootstrap', PosOnlineBootstrapApiController::class)->name('online.bootstrap')->withoutMiddleware(EnsureSubscriptionSettled::class);
+    Route::get('online/branches', PosBranchesApiController::class)->name('online.branches')->withoutMiddleware(EnsureSubscriptionSettled::class);
 
     Route::get('online/categories', [PosCatalogApiController::class, 'categories'])->name('online.categories');
     Route::get('online/sale-campaigns/products', [PosSaleCampaignApiController::class, 'products'])->name('online.sale-campaigns.products');
@@ -329,15 +336,16 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
 
     Route::get('finance/flow', [PosFinanceFlowApiController::class, 'index'])->name('finance.flow');
 
-    // Notifications
-    Route::get('notifications', [PosNotificationApiController::class, 'index'])->name('notifications.index');
-    Route::post('notifications/read-all', [PosNotificationApiController::class, 'markAllRead'])->name('notifications.read-all');
-    Route::get('notifications/settings', [PosNotificationApiController::class, 'settingsShow'])->name('notifications.settings.show');
-    Route::put('notifications/settings', [PosNotificationApiController::class, 'settingsUpdate'])->name('notifications.settings.update');
-    Route::post('notifications/{id}/read', [PosNotificationApiController::class, 'markRead'])->name('notifications.read');
-    Route::post('notifications/{id}/unread', [PosNotificationApiController::class, 'markUnread'])->name('notifications.unread');
-    Route::delete('notifications/clear-all', [PosNotificationApiController::class, 'clearAll'])->name('notifications.clear-all');
-    Route::delete('notifications/{id}', [PosNotificationApiController::class, 'destroy'])->whereNumber('id')->name('notifications.destroy');
+    // Notifications — kept reachable even while subscription-locked, so the
+    // desktop app can still show the overdue-payment notification itself.
+    Route::get('notifications', [PosNotificationApiController::class, 'index'])->name('notifications.index')->withoutMiddleware(EnsureSubscriptionSettled::class);
+    Route::post('notifications/read-all', [PosNotificationApiController::class, 'markAllRead'])->name('notifications.read-all')->withoutMiddleware(EnsureSubscriptionSettled::class);
+    Route::get('notifications/settings', [PosNotificationApiController::class, 'settingsShow'])->name('notifications.settings.show')->withoutMiddleware(EnsureSubscriptionSettled::class);
+    Route::put('notifications/settings', [PosNotificationApiController::class, 'settingsUpdate'])->name('notifications.settings.update')->withoutMiddleware(EnsureSubscriptionSettled::class);
+    Route::post('notifications/{id}/read', [PosNotificationApiController::class, 'markRead'])->name('notifications.read')->withoutMiddleware(EnsureSubscriptionSettled::class);
+    Route::post('notifications/{id}/unread', [PosNotificationApiController::class, 'markUnread'])->name('notifications.unread')->withoutMiddleware(EnsureSubscriptionSettled::class);
+    Route::delete('notifications/clear-all', [PosNotificationApiController::class, 'clearAll'])->name('notifications.clear-all')->withoutMiddleware(EnsureSubscriptionSettled::class);
+    Route::delete('notifications/{id}', [PosNotificationApiController::class, 'destroy'])->whereNumber('id')->name('notifications.destroy')->withoutMiddleware(EnsureSubscriptionSettled::class);
 
     Route::get('properties', [PosPropertyApiController::class, 'index'])->name('properties.index');
     Route::post('properties', [PosPropertyApiController::class, 'store'])->name('properties.store');

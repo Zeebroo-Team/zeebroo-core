@@ -36,6 +36,7 @@ use Modules\HRManagement\Models\PayrollRuleSet;
 use Modules\Modification\Models\Modification;
 use Modules\Package\Models\BusinessFeatureOverride;
 use Modules\Package\Models\Package;
+use Modules\Payment\Models\Payment;
 use Modules\Settings\Concerns\HasSettings;
 
 class Business extends Model
@@ -151,6 +152,26 @@ class Business extends Model
     public function featureOverrides(): HasMany
     {
         return $this->hasMany(BusinessFeatureOverride::class);
+    }
+
+    public function payments(): HasMany
+    {
+        return $this->hasMany(Payment::class)->orderByDesc('created_at');
+    }
+
+    /**
+     * The subscription payment (if any) that's past its `due_at` deadline —
+     * used to gate POS access until it's settled. Null when nothing is overdue.
+     */
+    public function overdueSubscriptionPayment(): ?Payment
+    {
+        return $this->payments()
+            ->where('payment_type', Payment::TYPE_SUBSCRIPTION)
+            ->whereIn('payment_status', [Payment::STATUS_PENDING, Payment::STATUS_FAILED, Payment::STATUS_CANCELED])
+            ->whereNotNull('due_at')
+            ->where('due_at', '<', now())
+            ->latest('due_at')
+            ->first();
     }
 
     /**

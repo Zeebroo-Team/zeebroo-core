@@ -2956,6 +2956,7 @@ body.dark .loan-lp-hint { color: #fcd34d; }
 #login-body {
   flex: 1; display: flex; align-items: center; justify-content: center;
   background: #fff;
+  min-height: 0; /* prevent flex-item content (signup wizard) from blowing out past the window's bottom edge */
 }
 
 .login-card {
@@ -3036,7 +3037,8 @@ body.dark .alert-error { background: #3b1515; color: #fca5a5; border-color: #6b2
   display: flex;
   flex-direction: column;
   padding: 32px 28px 24px;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .ob-sidebar-brand {
@@ -3224,6 +3226,7 @@ body.dark .alert-error { background: #3b1515; color: #fca5a5; border-color: #6b2
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 16px;
   padding: 14px 64px;
   border-top: 1px solid var(--border-light);
   background: var(--surface);
@@ -3255,6 +3258,7 @@ body.dark .alert-error { background: #3b1515; color: #fca5a5; border-color: #6b2
 }
 .ob-pkg-summary {
   display: none;
+  flex-shrink: 0;
   align-items: center; gap: 8px;
   padding: 6px 14px;
   border: 1px solid var(--border);
@@ -3273,13 +3277,65 @@ body.dark .alert-error { background: #3b1515; color: #fca5a5; border-color: #6b2
   .ob-bottom-bar { flex-wrap: wrap; row-gap: 8px; }
   .ob-pkg-summary { order: 3; flex-basis: 100%; justify-content: center; }
 }
+
+/* ── Panel 6: payment summary & waiting-for-confirmation states ── */
+.ob-pay-summary {
+  border: 1.5px solid var(--border);
+  border-radius: 14px;
+  padding: 16px 18px;
+  background: var(--card-bg);
+  margin-bottom: 16px;
+}
+.ob-pay-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 7px 0;
+  font-size: 13px;
+}
+.ob-pay-row-label { color: var(--text-muted); }
+.ob-pay-row-value { color: var(--text); font-weight: 700; text-align: right; }
+.ob-pay-divider { height: 1px; background: var(--border); margin: 6px 0; }
+.ob-pay-row--total .ob-pay-row-label { color: var(--text); font-weight: 700; font-size: 14.5px; }
+.ob-pay-row--total .ob-pay-row-value { font-size: 20px; color: var(--accent); }
+.ob-pay-cycle-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  margin-top: 10px; padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--accent-light);
+  color: var(--accent-dark);
+  font-size: 11.5px; font-weight: 700;
+}
+.ob-pay-gateway {
+  border: 1.5px dashed var(--border);
+  border-radius: 14px;
+  padding: 14px 16px;
+}
+.ob-pay-gateway-head {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13.5px; font-weight: 700;
+  color: var(--text);
+}
+.ob-pay-gateway-sub { margin: 6px 0 0; font-size: 12px; color: var(--text-muted); line-height: 1.6; }
+
+.ob-pay-waiting-spinner {
+  font-size: 34px;
+  color: var(--accent);
+  text-align: center;
+  padding: 28px 0;
+}
+.ob-pay-waiting-actions {
+  display: flex; align-items: center; justify-content: center; gap: 18px;
+  margin-top: 10px;
+}
+
 .ob-continue-btn {
+  flex-shrink: 0;
   height: 40px;
   padding: 0 24px;
   background: #1a1a2e;
   color: #fff;
   border: none; border-radius: 8px;
   font-size: 14px; font-weight: 700;
+  white-space: nowrap;
   cursor: pointer;
   display: flex; align-items: center; gap: 8px;
   transition: background .15s, transform .1s;
@@ -7911,7 +7967,7 @@ body.dark .han-icon-amber  { color: #fbbf24; }
   flex-shrink: 0;
 }
 .po-aim-header .psm-close { margin-left: auto; }
-.po-aim-body   { padding: 16px; display: flex; flex-direction: column; gap: 0; overflow-y: auto; flex: 1 1 auto; min-height: 0; }
+.po-aim-body   { padding: 16px; display: flex; flex-direction: column; gap: 0; overflow-y: auto; overscroll-behavior: contain; flex: 1 1 auto; min-height: 0; }
 .po-aim-row2   { display: flex; gap: 10px; }
 .po-aim-preview {
   display: flex; justify-content: space-between; align-items: center;
@@ -7940,6 +7996,108 @@ body.dark .han-icon-amber  { color: #fbbf24; }
 
 /* Clean line-item rows (no inline search input) */
 .po-row-product-name { font-size: 12px; font-weight: 500; }
+
+/* ── Billing & Payments modal ── */
+.pm-summary {
+  display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between;
+  padding: 14px 16px; background: var(--surface2); border-radius: 10px; margin-bottom: 16px;
+}
+.pm-summary-left { display: flex; flex-direction: column; gap: 4px; }
+.pm-summary-plan { font-size: 15px; font-weight: 700; }
+.pm-summary-renewal { font-size: 12px; color: var(--text-muted); }
+.pm-list { display: flex; flex-direction: column; gap: 6px; }
+.pm-row {
+  display: flex; align-items: center; gap: 12px; padding: 12px 14px;
+  border: 1px solid var(--border); border-radius: 10px; cursor: pointer;
+  transition: background .08s, border-color .08s;
+}
+.pm-row:hover { background: var(--surface2); border-color: var(--accent); }
+.pm-row-icon {
+  width: 34px; height: 34px; border-radius: 8px; display: flex; align-items: center;
+  justify-content: center; font-size: 14px; flex-shrink: 0;
+}
+.pm-row-body { flex: 1 1 auto; min-width: 0; }
+.pm-row-plan { font-size: 13px; font-weight: 600; }
+.pm-row-meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+.pm-row-amount { font-size: 14px; font-weight: 700; white-space: nowrap; }
+.pm-row-chevron { color: var(--text-muted); font-size: 12px; }
+.pm-empty, .pm-loading {
+  padding: 32px 16px; text-align: center; color: var(--text-muted); font-size: 13px;
+}
+.pm-badge {
+  display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 999px;
+  font-size: 11px; font-weight: 700; text-transform: capitalize; white-space: nowrap;
+}
+.pm-badge.success { background: #dcfce7; color: #16a34a; }
+.pm-badge.danger   { background: #fee2e2; color: #dc2626; }
+.pm-badge.warning  { background: #fef3c7; color: #d97706; }
+.pm-badge.info     { background: #dbeafe; color: #2563eb; }
+.pm-detail-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 0; border-bottom: 1px solid var(--border);
+}
+.pm-detail-row:last-child { border-bottom: none; }
+.pm-detail-label { font-size: 12px; color: var(--text-muted); }
+.pm-detail-value { font-size: 13px; font-weight: 600; text-align: right; }
+.pm-detail-actions { display: flex; gap: 8px; margin-top: 18px; flex-wrap: wrap; }
+.pm-tabs { display: flex; gap: 4px; margin-bottom: 14px; border-bottom: 1px solid var(--border); }
+.pm-tab {
+  padding: 8px 4px; margin-right: 18px; background: none; border: none; cursor: pointer;
+  font-size: 13px; font-weight: 600; color: var(--text-muted); border-bottom: 2px solid transparent;
+  display: flex; align-items: center; gap: 6px;
+}
+.pm-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.pm-tab-count {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px;
+  padding: 0 5px; border-radius: 999px; background: var(--surface2); color: var(--text-muted);
+  font-size: 10px; font-weight: 700;
+}
+.pm-tab.active .pm-tab-count { background: var(--accent-light); color: var(--accent); }
+.pm-row-pay-btn { flex-shrink: 0; }
+
+/* Subscription payment-due banner (shown above the Home panel) */
+.billing-alert-bar {
+  display: flex; align-items: center; gap: 10px; padding: 10px 16px;
+  background: #fef3c7; color: #92400e; font-size: 13px; font-weight: 600;
+  border-bottom: 1px solid #fde68a;
+}
+.billing-alert-bar i.fa-triangle-exclamation { color: #d97706; }
+.billing-alert-bar #billing-alert-pay-btn { margin-left: auto; flex-shrink: 0; }
+.billing-alert-dismiss {
+  background: none; border: none; cursor: pointer; color: #92400e; opacity: .7;
+  padding: 4px; flex-shrink: 0;
+}
+.billing-alert-dismiss:hover { opacity: 1; }
+body.dark .billing-alert-bar { background: #451a03; color: #fde68a; border-bottom-color: #78350f; }
+body.dark .billing-alert-dismiss { color: #fde68a; }
+
+/* Full-screen lockout when a subscription payment is overdue — z-index sits
+   above the ribbon/content (so it truly blocks the app) but below
+   .modal-overlay (800), so Pay Now can still open Billing & Payments on top. */
+.subscription-locked-overlay {
+  position: fixed; inset: 0; z-index: 700;
+  background: rgba(17, 24, 39, .55);
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+}
+.subscription-locked-card {
+  background: var(--surface); border-radius: 16px; padding: 36px 32px;
+  max-width: 420px; width: 100%; text-align: center;
+  box-shadow: 0 20px 60px rgba(0,0,0,.35);
+}
+.subscription-locked-icon {
+  width: 56px; height: 56px; border-radius: 999px; margin: 0 auto 16px;
+  display: flex; align-items: center; justify-content: center;
+  background: #fee2e2; color: #dc2626; font-size: 24px;
+}
+.subscription-locked-card h2 { font-size: 17px; margin: 0 0 10px; color: var(--text); }
+.subscription-locked-card p { font-size: 13px; color: var(--text-muted); line-height: 1.6; margin: 0 0 18px; }
+.subscription-locked-card .po-btn-primary { width: 100%; justify-content: center; }
+.subscription-locked-signout {
+  display: block; width: 100%; margin-top: 14px; background: none; border: none;
+  color: var(--text-muted); font-size: 12px; cursor: pointer; text-decoration: underline;
+}
+.subscription-locked-signout:hover { color: var(--text); }
 
 /* ── PO Create Modal (redesigned) ── */
 .po-modal-shell {

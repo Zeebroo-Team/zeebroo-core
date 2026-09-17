@@ -18,6 +18,7 @@ use Modules\Business\Models\BusinessMember;
 use Modules\CRM\Models\Project as CrmProject;
 use Modules\FileManager\Models\FileManagerFile;
 use Modules\Package\Models\Package;
+use Modules\Payment\Models\Payment as PaymentModel;
 use Modules\Pos\Models\Customer;
 use Modules\Pos\Models\Sale;
 use Modules\Purchase\Models\Purchase;
@@ -45,6 +46,8 @@ class AdminUserController extends Controller
             'roles',
             'businesses' => fn ($query) => $query->orderByDesc('created_at'),
             'businesses.branches',
+            'businesses.payments' => fn ($query) => $query->orderByDesc('created_at'),
+            'businesses.payments.package',
             'accounts' => fn ($query) => $query->orderByDesc('created_at'),
             'accounts.business',
             'accounts.warehouse',
@@ -215,6 +218,37 @@ class AdminUserController extends Controller
                 'invoices_outstanding_total' => (float) Invoice::where('business_id', $business->id)
                     ->whereIn('status', [Invoice::STATUS_SENT, Invoice::STATUS_OVERDUE])
                     ->sum('total'),
+            ],
+            'payments' => [
+                'count' => $business->payments->count(),
+                // Payments are charged in the gateway's currency (Stripe = USD), which can
+                // differ from the business's local operating currency above — group by the
+                // payment's own currency instead of mislabeling totals with the wrong one.
+                'succeeded_totals' => $business->payments
+                    ->where('payment_status', PaymentModel::STATUS_SUCCEEDED)
+                    ->groupBy(fn (PaymentModel $payment) => strtoupper($payment->currency))
+                    ->map(fn ($group) => (float) $group->sum('amount')),
+                'active_subscription' => $business->payments->firstWhere('stripe_subscription_status', 'active') !== null,
+                'items' => $business->payments->map(fn (PaymentModel $payment) => [
+                    'id' => $payment->id,
+                    'package' => $payment->package?->name ?: '—',
+                    'payment_type' => $payment->payment_type,
+                    'payment_status' => $payment->payment_status,
+                    'billing_cycle' => $payment->billing_cycle,
+                    'gateway' => $payment->gateway,
+                    'amount' => (float) $payment->amount,
+                    'currency' => strtoupper($payment->currency),
+                    'stripe_customer_id' => $payment->stripe_customer_id,
+                    'stripe_checkout_session_id' => $payment->stripe_checkout_session_id,
+                    'stripe_subscription_id' => $payment->stripe_subscription_id,
+                    'stripe_payment_intent_id' => $payment->stripe_payment_intent_id,
+                    'stripe_invoice_id' => $payment->stripe_invoice_id,
+                    'stripe_subscription_status' => $payment->stripe_subscription_status,
+                    'paid_at' => $payment->paid_at?->format('d M Y, H:i:s'),
+                    'failure_reason' => $payment->failure_reason,
+                    'metadata' => $payment->metadata,
+                    'created_at' => $payment->created_at?->format('d M Y, H:i:s'),
+                ])->values(),
             ],
         ];
     }

@@ -9,6 +9,17 @@
             ->where('business_id', $business->id)
             ->exists()
         : false;
+    // Computed once here (not inside a single branch below) so the pending-payment
+    // banner can render regardless of whether the business has a bank account yet —
+    // a business created via the desktop app never goes through this wizard's bank
+    // account step, so it would otherwise never see this warning on the web dashboard.
+    $pendingPayment = $business
+        ? $business->payments()
+            ->where('payment_type', 'subscription')
+            ->whereIn('payment_status', ['pending', 'failed', 'canceled'])
+            ->latest()
+            ->first()
+        : null;
 
     $wizFeatureItems = [
         ['key' => 'account_management',   'label' => 'Account Management',   'icon' => 'fa-wallet',             'image' => 'account-management.png',        'desc' => 'Track bank accounts, income, expenses and ledgers',             'required' => true,
@@ -832,6 +843,18 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
         .wiz-storage-modal__actions .wiz-btn-primary{width:auto;flex:0 0 auto;margin-top:0;padding:10px 20px;font-size:14px;border-radius:10px;box-shadow:none;}
         .wiz-storage-modal__actions .wiz-btn-back{margin-top:0;padding:10px 18px;font-size:14px;border-radius:10px;}
         .wiz-storage-modal__actions .wiz-btn-primary[disabled]{opacity:.45;cursor:not-allowed;}
+        /* Step 7: Payment */
+        .wiz-pay-summary{border:1.5px solid var(--border);border-radius:14px;padding:16px 18px;background:var(--card);margin-bottom:16px;}
+        .wiz-pay-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:7px 0;font-size:13px;}
+        .wiz-pay-row-label{color:var(--muted);}
+        .wiz-pay-row-value{color:var(--text);font-weight:700;text-align:right;}
+        .wiz-pay-divider{height:1px;background:var(--border);margin:6px 0;}
+        .wiz-pay-row--total .wiz-pay-row-label{color:var(--text);font-weight:700;font-size:14.5px;}
+        .wiz-pay-row--total .wiz-pay-row-value{font-size:20px;color:var(--primary);}
+        .wiz-pay-cycle-badge{display:inline-flex;align-items:center;gap:6px;margin-top:10px;padding:6px 12px;border-radius:999px;background:color-mix(in srgb,var(--primary) 12%,transparent);color:var(--primary);font-size:11.5px;font-weight:700;}
+        .wiz-pay-gateway{border:1.5px dashed var(--border);border-radius:14px;padding:14px 16px;}
+        .wiz-pay-gateway-head{display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:700;color:var(--text);}
+        .wiz-pay-gateway-sub{margin:6px 0 0;font-size:12px;color:var(--muted);line-height:1.6;}
     </style>
 
     <div class="wiz-shell">
@@ -869,6 +892,11 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                 <div class="wiz-step-item">
                     <div class="wiz-step-dot" id="wizDot6">6</div>
                     <span class="wiz-step-lbl" id="wizLbl6">Storage</span>
+                </div>
+                <div class="wiz-step-connector" id="wizStepLine6"></div>
+                <div class="wiz-step-item">
+                    <div class="wiz-step-dot" id="wizDot7">7</div>
+                    <span class="wiz-step-lbl" id="wizLbl7">Payment</span>
                 </div>
             </div>
 
@@ -1302,6 +1330,55 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                         </div>
                     </div>
 
+                    {{-- Step 7: Payment --}}
+                    <div id="wizardStep7" style="display:none;">
+                        <h2 class="wiz-card-title">Confirm &amp; pay</h2>
+                        <p class="wiz-card-sub">Review your plan below, then complete payment to activate your subscription.</p>
+
+                        <div class="wiz-pay-summary" id="wizPaySummary">
+                            <div class="wiz-pay-row">
+                                <span class="wiz-pay-row-label">Business</span>
+                                <span class="wiz-pay-row-value" id="wizPaySummaryBusiness">—</span>
+                            </div>
+                            <div class="wiz-pay-row">
+                                <span class="wiz-pay-row-label">Category</span>
+                                <span class="wiz-pay-row-value" id="wizPaySummaryCategory">—</span>
+                            </div>
+                            <div class="wiz-pay-row">
+                                <span class="wiz-pay-row-label">Package</span>
+                                <span class="wiz-pay-row-value" id="wizPaySummaryPackage">—</span>
+                            </div>
+                            <div class="wiz-pay-row">
+                                <span class="wiz-pay-row-label">Data storage</span>
+                                <span class="wiz-pay-row-value" id="wizPaySummaryStorage">—</span>
+                            </div>
+                            <div class="wiz-pay-divider"></div>
+                            <div class="wiz-pay-row wiz-pay-row--total">
+                                <span class="wiz-pay-row-label">Total due today</span>
+                                <span class="wiz-pay-row-value" id="wizPaySummaryTotal">$0.00</span>
+                            </div>
+                            <div class="wiz-pay-cycle-badge" id="wizPaySummaryCycle">
+                                <i class="fa fa-rotate" aria-hidden="true"></i> Billed monthly — recurring subscription
+                            </div>
+                        </div>
+
+                        <div class="wiz-pay-gateway" id="wizPayGatewayNote">
+                            <div class="wiz-pay-gateway-head">
+                                <i class="fa fa-lock" aria-hidden="true"></i>
+                                <span>Secure payment powered by <strong>Stripe</strong></span>
+                            </div>
+                            <p class="wiz-pay-gateway-sub">You'll be redirected to Stripe's secure checkout to enter your card details. Your subscription renews automatically every month until you cancel.</p>
+                        </div>
+                        <div class="wiz-pay-gateway" id="wizPayFreeNote" style="display:none;">
+                            <div class="wiz-pay-gateway-head"><i class="fa fa-gift" aria-hidden="true"></i><span>No payment required</span></div>
+                            <p class="wiz-pay-gateway-sub">Your selected package is free — click Finish setup below to activate your workspace right away.</p>
+                        </div>
+
+                        @error('payment')
+                            <div class="wiz-field-error" style="margin-top:12px;">{{ $message }}</div>
+                        @enderror
+                    </div>
+
                     {{-- Fixed bottom action bar — outside the animated step divs so position:fixed
                          anchors to the viewport (an ancestor with `transform` creates a new
                          containing block for fixed descendants, which broke this before). --}}
@@ -1351,8 +1428,17 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                                 <i class="fa fa-arrow-left" aria-hidden="true"></i> Back
                             </button>
                             <div class="wiz-pkg-summary" style="display:none;"></div>
+                            <button type="button" class="wiz-btn-primary" id="wizToPaymentBtn" data-wiz-next="7">
+                                Continue <i class="fa fa-arrow-right" aria-hidden="true"></i>
+                            </button>
+                        </div>
+                        <div class="wiz-actions-row-inner" data-wiz-actions="7" style="display:none;">
+                            <button type="button" class="wiz-btn-back" data-wiz-back="6">
+                                <i class="fa fa-arrow-left" aria-hidden="true"></i> Back
+                            </button>
+                            <div class="wiz-pkg-summary" style="display:none;"></div>
                             <button type="submit" class="wiz-btn-primary" id="wizFinishBtn">
-                                Finish setup <i class="fa fa-check" aria-hidden="true"></i>
+                                <span id="wizFinishBtnLabel">Proceed to payment</span> <i class="fa fa-arrow-right" id="wizFinishBtnIcon" aria-hidden="true"></i>
                             </button>
                         </div>
                     </div>
@@ -1559,6 +1645,23 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
         <div class="account-notice-blob account-notice-blob--a" aria-hidden="true"></div>
         <div class="account-notice-blob account-notice-blob--b" aria-hidden="true"></div>
         <div class="account-notice-card">
+            @if($pendingPayment)
+                <div class="card" style="margin-bottom:14px;max-width:100%;padding:0;border:none;text-align:left;">
+                    <div style="display:flex;gap:12px;align-items:flex-start;padding:14px 16px;border-radius:14px;background:linear-gradient(135deg,#fef2f2,#fee2e2);border:1px solid #fca5a5;">
+                        <div style="width:28px;height:28px;border-radius:999px;background:#ef4444;color:#fff;display:grid;place-items:center;font-weight:700;flex-shrink:0;">!</div>
+                        <div style="flex:1;min-width:0;">
+                            <div style="color:#991b1b;font-weight:700;">Your subscription payment needs attention</div>
+                            <div style="color:#b91c1c;font-size:13px;margin-top:2px;">Complete payment to activate your monthly subscription.</div>
+                            <form method="post" action="{{ route('payment.checkout.resume', $pendingPayment) }}" style="margin-top:10px;">
+                                @csrf
+                                <button type="submit" style="padding:8px 16px;font-size:12.5px;font-weight:700;border-radius:8px;background:#ef4444;color:#fff;border:none;cursor:pointer;">
+                                    <i class="fa fa-credit-card" style="margin-right:6px;" aria-hidden="true"></i>Complete payment (${{ number_format((float) $pendingPayment->amount, 2) }}/mo)
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            @endif
             <div class="account-notice-icon"><i class="fa fa-building-columns" aria-hidden="true"></i></div>
             <h2 class="account-notice-title">No bank account yet</h2>
             <p class="account-notice-sub">
@@ -1601,6 +1704,25 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
     })();
     </script>
 @else
+    @if($errors->has('payment') || $pendingPayment)
+        <div class="card" style="margin-bottom:14px;max-width:100%;padding:0;border:none;">
+            <div style="display:flex;gap:12px;align-items:flex-start;padding:14px 16px;border-radius:14px;background:linear-gradient(135deg,#fef2f2,#fee2e2);border:1px solid #fca5a5;">
+                <div style="width:28px;height:28px;border-radius:999px;background:#ef4444;color:#fff;display:grid;place-items:center;font-weight:700;flex-shrink:0;">!</div>
+                <div style="flex:1;min-width:0;">
+                    <div style="color:#991b1b;font-weight:700;">{{ $errors->first('payment') ?: 'Your subscription payment needs attention' }}</div>
+                    @if($pendingPayment)
+                        <div style="color:#b91c1c;font-size:13px;margin-top:2px;">Your business setup is saved — complete payment to activate your monthly subscription.</div>
+                        <form method="post" action="{{ route('payment.checkout.resume', $pendingPayment) }}" style="margin-top:10px;">
+                            @csrf
+                            <button type="submit" style="padding:8px 16px;font-size:12.5px;font-weight:700;border-radius:8px;background:#ef4444;color:#fff;border:none;cursor:pointer;">
+                                <i class="fa fa-credit-card" style="margin-right:6px;" aria-hidden="true"></i>Complete payment (${{ number_format((float) $pendingPayment->amount, 2) }}/mo)
+                            </button>
+                        </form>
+                    @endif
+                </div>
+            </div>
+        </div>
+    @endif
     @if(session('status'))
         <div class="card" style="margin-bottom:14px;max-width:100%;padding:0;border:none;">
             <div style="display:flex;gap:12px;align-items:flex-start;padding:14px 16px;border-radius:14px;background:linear-gradient(135deg,#ecfdf5,#dcfce7);border:1px solid #86efac;">
@@ -1815,6 +1937,7 @@ function openWizStorageAgreementModal(type) {
         4: document.getElementById('wizardStep4'),
         5: document.getElementById('wizardStep5'),
         6: document.getElementById('wizardStep6'),
+        7: document.getElementById('wizardStep7'),
     };
     const dots = {
         1: document.getElementById('wizDot1'),
@@ -1823,6 +1946,7 @@ function openWizStorageAgreementModal(type) {
         4: document.getElementById('wizDot4'),
         5: document.getElementById('wizDot5'),
         6: document.getElementById('wizDot6'),
+        7: document.getElementById('wizDot7'),
     };
     const lbls = {
         1: document.getElementById('wizLbl1'),
@@ -1831,6 +1955,7 @@ function openWizStorageAgreementModal(type) {
         4: document.getElementById('wizLbl4'),
         5: document.getElementById('wizLbl5'),
         6: document.getElementById('wizLbl6'),
+        7: document.getElementById('wizLbl7'),
     };
     const lines = {
         1: document.getElementById('wizStepLine1'),
@@ -1838,6 +1963,7 @@ function openWizStorageAgreementModal(type) {
         3: document.getElementById('wizStepLine3'),
         4: document.getElementById('wizStepLine4'),
         5: document.getElementById('wizStepLine5'),
+        6: document.getElementById('wizStepLine6'),
     };
     const actionGroups = wizardForm.querySelectorAll('[data-wiz-actions]');
 
@@ -1879,12 +2005,13 @@ function openWizStorageAgreementModal(type) {
         });
     }
     const guideMessages = {
-        1: { step: 'Step 1 of 6', text: 'Hi there! What do you call your business? Use the name your customers already know.' },
-        2: { step: 'Step 2 of 6', text: 'Pick the category that best describes what you do — it helps me set up the right modules for you!' },
-        3: { step: 'Step 3 of 6', text: 'Pick a package — its features unlock automatically on the next step.' },
-        4: { step: 'Step 4 of 6', text: 'Here are the features included in your package. Required ones stay on — you can change plans any time later.' },
-        5: { step: 'Step 5 of 6', text: 'Almost done! Tell me where you operate — single location or multiple branches?' },
-        6: { step: 'Step 6 of 6', text: 'Last step! Choose how your data is stored — our secure cloud or your own server.' },
+        1: { step: 'Step 1 of 7', text: 'Hi there! What do you call your business? Use the name your customers already know.' },
+        2: { step: 'Step 2 of 7', text: 'Pick the category that best describes what you do — it helps me set up the right modules for you!' },
+        3: { step: 'Step 3 of 7', text: 'Pick a package — its features unlock automatically on the next step.' },
+        4: { step: 'Step 4 of 7', text: 'Here are the features included in your package. Required ones stay on — you can change plans any time later.' },
+        5: { step: 'Step 5 of 7', text: 'Almost done! Tell me where you operate — single location or multiple branches?' },
+        6: { step: 'Step 6 of 7', text: 'Choose how your data is stored — our secure cloud or your own server.' },
+        7: { step: 'Step 7 of 7', text: 'Last step! Review your total and complete payment to activate your monthly subscription.' },
     };
     function updateGuide(num) {
         if (!wizGuideBubble || !wizGuideBubbleText) return;
@@ -1951,6 +2078,9 @@ function openWizStorageAgreementModal(type) {
                 if (branchNameInput && bizNameInput && !branchNameInput.value.trim()) {
                     branchNameInput.value = bizNameInput.value.trim();
                 }
+            }
+            if (target === 7 && typeof populateWizPaymentSummary === 'function') {
+                populateWizPaymentSummary();
             }
             setWizStep(target, false);
         });
@@ -2083,6 +2213,63 @@ function openWizStorageAgreementModal(type) {
         if (pkgInput.value) {
             const preselected = wizardForm.querySelector('.wiz-pkg-card[data-pkg-id="' + pkgInput.value + '"]');
             if (preselected) selectPackage(preselected);
+        }
+    }
+
+    // Step 7 (Payment) summary — built from what was chosen on steps 1-6.
+    function populateWizPaymentSummary() {
+        const bizNameInput = wizardForm.querySelector('input[name="name"]');
+        const bizNameEl = document.getElementById('wizPaySummaryBusiness');
+        if (bizNameEl) bizNameEl.textContent = (bizNameInput && bizNameInput.value.trim()) || '—';
+
+        const catCard = wizardForm.querySelector('.wiz-cat-card--on');
+        const catNameEl = document.getElementById('wizPaySummaryCategory');
+        if (catNameEl) {
+            const catNameNode = catCard ? catCard.querySelector('.wiz-cat-name') : null;
+            catNameEl.textContent = catNameNode ? catNameNode.textContent.trim() : '—';
+        }
+
+        const pkgIdInput = document.getElementById('wizPackageIdInput');
+        const pkgCard = pkgIdInput && pkgIdInput.value
+            ? wizardForm.querySelector('.wiz-pkg-card[data-pkg-id="' + pkgIdInput.value + '"]')
+            : null;
+
+        const pkgNameEl   = document.getElementById('wizPaySummaryPackage');
+        const totalEl     = document.getElementById('wizPaySummaryTotal');
+        const cycleBadge  = document.getElementById('wizPaySummaryCycle');
+        const gatewayNote = document.getElementById('wizPayGatewayNote');
+        const freeNote    = document.getElementById('wizPayFreeNote');
+        const finishLabel = document.getElementById('wizFinishBtnLabel');
+        const finishIcon  = document.getElementById('wizFinishBtnIcon');
+
+        let isFree = true;
+        let amount = 0;
+        let pkgName = '—';
+
+        if (pkgCard) {
+            pkgName = pkgCard.getAttribute('data-pkg-name') || '—';
+            isFree = pkgCard.getAttribute('data-pkg-free') === '1';
+            const price    = parseFloat(pkgCard.getAttribute('data-pkg-price') || '0');
+            const discAttr = pkgCard.getAttribute('data-pkg-discounted');
+            const disc     = discAttr ? parseFloat(discAttr) : null;
+            amount = (disc !== null && !isNaN(disc) && disc < price) ? disc : price;
+            if (amount <= 0) isFree = true;
+        }
+
+        if (pkgNameEl) pkgNameEl.textContent = pkgCard ? (pkgName + (isFree ? ' (Free)' : '')) : '—';
+        if (totalEl)   totalEl.textContent   = isFree ? '$0.00' : ('$' + amount.toFixed(2) + ' / mo');
+        if (cycleBadge)  cycleBadge.style.display  = isFree ? 'none'  : 'inline-flex';
+        if (gatewayNote) gatewayNote.style.display = isFree ? 'none'  : 'block';
+        if (freeNote)    freeNote.style.display    = isFree ? 'block' : 'none';
+        if (finishLabel) finishLabel.textContent   = isFree ? 'Finish setup' : 'Proceed to payment';
+        if (finishIcon)  finishIcon.className      = isFree ? 'fa fa-check' : 'fa fa-arrow-right';
+
+        const storageType = document.getElementById('wizDataStorageType');
+        const storageEl   = document.getElementById('wizPaySummaryStorage');
+        if (storageEl) {
+            storageEl.textContent = (storageType && storageType.value === 'self_hosted')
+                ? 'Self-Hosted (your own server)'
+                : 'Online Storage (SociBiz Cloud)';
         }
     }
 

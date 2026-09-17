@@ -10,6 +10,7 @@
     "license": "MIT",
     "require": {
         "php": "^8.4",
+        "barryvdh/laravel-dompdf": "^3.1",
         "ezyang/htmlpurifier": "^4.19",
         "laravel/framework": "^13.0",
         "laravel/sanctum": "^4.3",
@@ -19,6 +20,7 @@
         "phpoffice/phpspreadsheet": "^5.7",
         "resend/resend-php": "^1.5",
         "spatie/laravel-permission": "^7.4",
+        "stripe/stripe-php": "^17.5",
         "webklex/php-imap": "^6.2"
     },
     "require-dev": {

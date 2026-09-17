@@ -3,6 +3,7 @@
 namespace Modules\Business\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Models\User;
 use Illuminate\Contracts\View\View as ViewContract;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -21,6 +22,9 @@ use Modules\Business\Services\GoogleBusinessProfileApiClient;
 use Modules\Business\Support\BrandCompanyCategoryCatalog;
 use Modules\Business\Support\LogoGenerationCatalog;
 use Modules\Package\Models\Package;
+use Modules\Payment\Models\Payment;
+use Modules\Payment\Services\PaymentProvisioningService;
+use Modules\Payment\Services\StripeSubscriptionService;
 use Modules\Settings\Services\SettingsService;
 use Illuminate\Validation\ValidationException;
 
@@ -47,6 +51,8 @@ class BusinessController extends Controller
         private readonly BusinessProfileSettingSync $businessProfileSettingSync,
         private readonly SettingsService $settingsService,
         private readonly GoogleBusinessProfileApiClient $googleBusinessProfileApiClient,
+        private readonly StripeSubscriptionService $stripeSubscriptionService,
+        private readonly PaymentProvisioningService $paymentProvisioningService,
     ) {}
 
     public function map(Request $request): ViewContract|RedirectResponse
@@ -509,8 +515,45 @@ class BusinessController extends Controller
         $bizId = $business->getKey();
         session()->put('warehouse_intro_ack.'.$bizId, true);
 
-        return redirect()->route('dashboard')
-            ->with('status', 'Business profile saved.');
+        return $this->finalizeOnboardingPayment($business, $package, $request->user());
+    }
+
+    /**
+     * Step 7 of the onboarding wizard: the selected package is billed as a
+     * monthly Stripe subscription. Free / no-package setups finish
+     * immediately; paid packages log a pending Payment row and redirect to
+     * Stripe Checkout — the row is only marked succeeded once Stripe
+     * confirms the charge (see PaymentController::success/webhook).
+     */
+    private function finalizeOnboardingPayment(Business $business, ?Package $package, User $user): RedirectResponse
+    {
+        $payment = $this->paymentProvisioningService->createInitialPayment($business, $package, $user);
+
+        if (! $payment || $payment->payment_type !== Payment::TYPE_SUBSCRIPTION) {
+            return redirect()->route('dashboard')->with('status', 'Business profile saved.');
+        }
+
+        $amount = (float) $payment->amount;
+
+        try {
+            $session = $this->stripeSubscriptionService->createSubscriptionCheckoutSession(
+                $payment,
+                $business,
+                $package,
+                $amount,
+                route('payment.checkout.success'),
+                route('payment.checkout.cancel', ['payment' => $payment->id]),
+            );
+        } catch (\Throwable $e) {
+            report($e);
+
+            return redirect()->route('dashboard')
+                ->withErrors(['payment' => 'Your business profile was saved, but we could not start Stripe checkout. Please try again.']);
+        }
+
+        $payment->update(['stripe_checkout_session_id' => $session->id]);
+
+        return redirect()->away($session->url);
     }
 
     public function updateFeatures(Request $request): JsonResponse

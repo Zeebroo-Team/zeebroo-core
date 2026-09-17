@@ -8,6 +8,7 @@ use Modules\Account\Services\BillService;
 use Modules\Account\Services\LoanService;
 use Modules\Account\Services\RentalService;
 use Modules\Business\Models\Business;
+use Modules\Payment\Models\Payment;
 use Modules\Pos\Models\PosNotification;
 use Modules\Pos\Models\Sale;
 use Modules\Product\Models\Product;
@@ -17,6 +18,8 @@ use Modules\Purchase\Models\Purchase;
 class PosNotificationService
 {
     private const LOW_STOCK_THRESHOLD = 5;
+
+    private const RENEWAL_REMINDER_DAYS = 7;
 
     private const SYNC_THROTTLE_SECONDS = 300;
 
@@ -40,6 +43,7 @@ class PosNotificationService
             $this->syncFinanceOverdueNotifications($business);
             $this->syncPurchaseOrderOverdueNotifications($business);
             $this->syncChequeOverdueNotifications($business);
+            $this->syncSubscriptionRenewalNotifications($business);
 
             return true;
         });
@@ -179,6 +183,50 @@ class PosNotificationService
             title: 'Large sale',
             message: "Sale {$sale->sale_number} totalled ".number_format((float) $sale->total, 2).'.',
             payload: ['sale_id' => $sale->id, 'sale_number' => $sale->sale_number, 'total' => (float) $sale->total],
+        );
+    }
+
+    public function notifyPaymentSucceeded(Business $business, Payment $payment): void
+    {
+        $plan = $payment->package?->name ?? 'subscription';
+
+        $this->upsert(
+            business: $business,
+            branchId: null,
+            type: PosNotification::TYPE_PAYMENT_SUCCEEDED,
+            referenceType: 'payment',
+            referenceId: (int) $payment->id,
+            title: 'Payment successful',
+            message: "Your payment of ".number_format((float) $payment->amount, 2)." ".strtoupper($payment->currency)." for {$plan} was successful.",
+            payload: [
+                'payment_id' => $payment->id,
+                'amount' => (float) $payment->amount,
+                'currency' => $payment->currency,
+                'plan' => $plan,
+                'paid_at' => $payment->paid_at?->toIso8601String(),
+            ],
+        );
+    }
+
+    public function notifyPaymentFailed(Business $business, Payment $payment): void
+    {
+        $plan = $payment->package?->name ?? 'subscription';
+
+        $this->upsert(
+            business: $business,
+            branchId: null,
+            type: PosNotification::TYPE_PAYMENT_FAILED,
+            referenceType: 'payment',
+            referenceId: (int) $payment->id,
+            title: 'Payment failed',
+            message: $payment->failure_reason ?: "Your payment for {$plan} could not be processed.",
+            payload: [
+                'payment_id' => $payment->id,
+                'amount' => (float) $payment->amount,
+                'currency' => $payment->currency,
+                'plan' => $plan,
+                'failure_reason' => $payment->failure_reason,
+            ],
         );
     }
 
@@ -397,6 +445,47 @@ class PosNotificationService
             PosNotification::TYPE_CHEQUE_OVERDUE,
             'cheque',
             $overdue->pluck('id')->all(),
+        );
+    }
+
+    private function syncSubscriptionRenewalNotifications(Business $business): void
+    {
+        $payment = Payment::query()
+            ->where('business_id', $business->id)
+            ->where('payment_type', Payment::TYPE_SUBSCRIPTION)
+            ->where('payment_status', Payment::STATUS_SUCCEEDED)
+            ->where('stripe_subscription_status', 'active')
+            ->whereNotNull('current_period_end')
+            ->orderByDesc('current_period_end')
+            ->first();
+
+        $dueSoon = $payment
+            && $payment->current_period_end->isFuture()
+            && $payment->current_period_end->lte(now()->addDays(self::RENEWAL_REMINDER_DAYS));
+
+        if (! $dueSoon) {
+            $this->prune((int) $business->id, PosNotification::TYPE_SUBSCRIPTION_RENEWAL_UPCOMING, 'payment', []);
+
+            return;
+        }
+
+        $plan = $payment->package?->name ?? 'subscription';
+
+        $this->upsert(
+            business: $business,
+            branchId: null,
+            type: PosNotification::TYPE_SUBSCRIPTION_RENEWAL_UPCOMING,
+            referenceType: 'payment',
+            referenceId: (int) $payment->id,
+            title: 'Subscription renews soon',
+            message: "Your {$plan} plan renews on {$payment->current_period_end->toFormattedDateString()} for ".number_format((float) $payment->amount, 2).' '.strtoupper($payment->currency).'.',
+            payload: [
+                'payment_id' => $payment->id,
+                'plan' => $plan,
+                'amount' => (float) $payment->amount,
+                'currency' => $payment->currency,
+                'renews_at' => $payment->current_period_end->toIso8601String(),
+            ],
         );
     }
 

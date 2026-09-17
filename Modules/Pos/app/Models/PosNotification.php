@@ -31,6 +31,12 @@ class PosNotification extends Model
 
     public const TYPE_AUTOMATION = 'automation';
 
+    public const TYPE_PAYMENT_SUCCEEDED = 'payment_succeeded';
+
+    public const TYPE_PAYMENT_FAILED = 'payment_failed';
+
+    public const TYPE_SUBSCRIPTION_RENEWAL_UPCOMING = 'subscription_renewal_upcoming';
+
     protected $table = 'pos_notifications';
 
     protected $fillable = [

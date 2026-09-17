@@ -299,6 +299,13 @@
               <span class="ob-step-lbl">FEATURES</span>
             </div>
           </div>
+          <div class="ob-step-vline" data-ob-vline="5"></div>
+          <div class="ob-step-item">
+            <div class="ob-step-row">
+              <div class="ob-step-circle" data-ob-dot="6"><span>6</span></div>
+              <span class="ob-step-lbl">PAYMENT</span>
+            </div>
+          </div>
         </nav>
 
         <p class="ob-sidebar-switch">Already have an account?<br><a href="#" id="go-signin">Sign in here</a></p>
@@ -360,15 +367,67 @@
             <p class="ob-main-subtitle" id="ob-panel-5-sub">These features are included in your selected package</p>
             <div class="ob-feature-list ob-feature-list-locked" id="ob-feature-list"></div>
           </div>
+
+          <!-- Panel 6: payment — review the monthly subscription, then pay (or finish, if free) -->
+          <div class="ob-panel ob-main-panel" id="ob-panel-6" style="display:none">
+            <div id="ob-pay-review">
+              <h1 class="ob-main-title">Confirm &amp; pay</h1>
+              <p class="ob-main-subtitle">Review your plan below, then complete payment to activate your subscription</p>
+
+              <div class="ob-pay-summary">
+                <div class="ob-pay-row">
+                  <span class="ob-pay-row-label">Business</span>
+                  <span class="ob-pay-row-value" id="ob-pay-business">—</span>
+                </div>
+                <div class="ob-pay-row">
+                  <span class="ob-pay-row-label">Category</span>
+                  <span class="ob-pay-row-value" id="ob-pay-category">—</span>
+                </div>
+                <div class="ob-pay-row">
+                  <span class="ob-pay-row-label">Package</span>
+                  <span class="ob-pay-row-value" id="ob-pay-package">—</span>
+                </div>
+                <div class="ob-pay-divider"></div>
+                <div class="ob-pay-row ob-pay-row--total">
+                  <span class="ob-pay-row-label">Total due today</span>
+                  <span class="ob-pay-row-value" id="ob-pay-total">$0.00</span>
+                </div>
+                <div class="ob-pay-cycle-badge" id="ob-pay-cycle-badge">
+                  <i class="fa fa-rotate"></i> Billed monthly — recurring subscription
+                </div>
+              </div>
+
+              <div class="ob-pay-gateway" id="ob-pay-gateway-note">
+                <div class="ob-pay-gateway-head"><i class="fa fa-lock"></i><span>Secure payment powered by Stripe</span></div>
+                <p class="ob-pay-gateway-sub">You'll be redirected to Stripe's secure checkout in your browser to enter your card details. Your subscription renews automatically every month until you cancel.</p>
+              </div>
+              <div class="ob-pay-gateway" id="ob-pay-free-note" style="display:none">
+                <div class="ob-pay-gateway-head"><i class="fa fa-gift"></i><span>No payment required</span></div>
+                <p class="ob-pay-gateway-sub">Your selected package is free — click below to activate your workspace right away.</p>
+              </div>
+            </div>
+
+            <div id="ob-pay-waiting" style="display:none">
+              <h1 class="ob-main-title">Waiting for payment confirmation…</h1>
+              <p class="ob-main-subtitle">Complete your payment in the browser window that just opened. This page will continue automatically once Stripe confirms it.</p>
+              <div class="ob-pay-waiting-spinner"><i class="fa fa-spinner fa-spin"></i></div>
+              <div id="ob-pay-waiting-error" class="alert alert-error" style="display:none"></div>
+              <div class="ob-pay-waiting-actions">
+                <button type="button" class="ob-back-link" id="ob-pay-cancel-btn"><i class="fa fa-arrow-left"></i> Cancel</button>
+                <button type="button" class="ob-continue-btn" id="ob-pay-retry-btn"><i class="fa fa-rotate"></i> I already paid — Check again</button>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- Fixed bottom action bar -->
-        <div class="ob-bottom-bar">
+        <div class="ob-bottom-bar" id="ob-bottom-bar">
           <div class="ob-bottom-left">
             <button class="ob-back-link" id="ob-back-2-btn" style="display:none"><i class="fa fa-arrow-left"></i> Back</button>
             <button class="ob-back-link" id="ob-back-3-btn" style="display:none"><i class="fa fa-arrow-left"></i> Back</button>
             <button class="ob-back-link" id="ob-back-4-btn" style="display:none"><i class="fa fa-arrow-left"></i> Back</button>
             <button class="ob-back-link" id="ob-back-5-btn" style="display:none"><i class="fa fa-arrow-left"></i> Back, choose another package</button>
+            <button class="ob-back-link" id="ob-back-6-btn" style="display:none"><i class="fa fa-arrow-left"></i> Back</button>
             <span class="ob-secure-badge"><i class="fa fa-lock"></i> Your data is secure and private.</span>
           </div>
           <div class="ob-pkg-summary" id="ob-pkg-summary" style="display:none"></div>
@@ -377,6 +436,7 @@
             <button class="ob-continue-btn" id="ob-next-2-btn" style="display:none">Continue <i class="fa fa-arrow-right"></i></button>
             <button class="ob-continue-btn" id="ob-next-3-btn" style="display:none">Continue <i class="fa fa-arrow-right"></i></button>
             <button class="ob-continue-btn" id="ob-next-4-btn" style="display:none" disabled>Continue <i class="fa fa-arrow-right"></i></button>
+            <button class="ob-continue-btn" id="ob-next-5-btn" style="display:none">Continue <i class="fa fa-arrow-right"></i></button>
             <button class="ob-continue-btn" id="signup-btn" style="display:none"><i class="fa fa-check"></i> Create Account</button>
           </div>
         </div>
@@ -577,6 +637,9 @@
           </button>
           <button class="tpm-item" id="tpm-integrations">
             <i class="fa fa-plug"></i> Integrations
+          </button>
+          <button class="tpm-item" id="tpm-payment">
+            <i class="fa fa-file-invoice-dollar"></i> Billing &amp; Payments
           </button>
           <button class="tpm-item" id="tpm-developers">
             <i class="fa fa-code"></i> Developers
@@ -1629,6 +1692,27 @@
 
   <!-- Content area -->
   <div id="content">
+
+    <!-- Subscription payment due banner -->
+    <div id="billing-alert-bar" class="billing-alert-bar" style="display:none">
+      <i class="fa fa-triangle-exclamation"></i>
+      <span id="billing-alert-text"></span>
+      <button class="po-btn-primary" id="billing-alert-pay-btn"><i class="fa fa-credit-card"></i> Pay Now</button>
+      <button class="billing-alert-dismiss" id="billing-alert-dismiss" title="Dismiss"><i class="fa fa-xmark"></i></button>
+    </div>
+
+    <!-- Subscription overdue — full lockout screen -->
+    <div id="subscription-locked-overlay" class="subscription-locked-overlay" style="display:none">
+      <div class="subscription-locked-card">
+        <div class="subscription-locked-icon"><i class="fa fa-lock"></i></div>
+        <h2>Subscription Payment Overdue</h2>
+        <p>Access to Zeebroo POS is on hold because your subscription payment wasn't settled in
+          time. Pay now to restore full access.</p>
+        <button class="po-btn-primary" id="subscription-locked-pay-btn"><i class="fa fa-credit-card"></i> Pay Now</button>
+        <p id="subscription-locked-contact" style="display:none">Contact your business owner to settle this payment.</p>
+        <button class="subscription-locked-signout" id="subscription-locked-signout">Sign Out</button>
+      </div>
+    </div>
 
     <!-- ── Home panel ── -->
     <div class="content-panel" id="panel-home">
@@ -16079,6 +16163,11 @@
         <div class="bwz-track-circle"><span>4</span></div>
         <span class="bwz-track-lbl">Review</span>
       </div>
+      <div class="bwz-track-line" data-bbwz-line="4"></div>
+      <div class="bwz-track-step" data-bbwz-dot="5">
+        <div class="bwz-track-circle"><span>5</span></div>
+        <span class="bwz-track-lbl">Payment</span>
+      </div>
     </div>
 
     <!-- Panel 1: name + category -->
@@ -16123,8 +16212,60 @@
       <div class="bbwz-review" id="bbwz-review"></div>
     </div>
 
+    <!-- Panel 5: payment — review the monthly subscription, then pay (or finish, if free) -->
+    <div class="bwz-panel" id="bbwz-panel-5" style="display:none">
+      <div id="bbwz-pay-review">
+        <div class="bwz-panel-icon" style="background:var(--accent);box-shadow:0 6px 18px rgba(78,142,247,.32)"><i class="fa fa-lock"></i></div>
+        <div class="bwz-panel-title">Confirm &amp; Pay</div>
+        <div class="bwz-panel-sub">Review your plan below, then complete payment to activate this business's subscription.</div>
+
+        <div class="ob-pay-summary">
+          <div class="ob-pay-row">
+            <span class="ob-pay-row-label">Business</span>
+            <span class="ob-pay-row-value" id="bbwz-pay-business">—</span>
+          </div>
+          <div class="ob-pay-row">
+            <span class="ob-pay-row-label">Industry</span>
+            <span class="ob-pay-row-value" id="bbwz-pay-category">—</span>
+          </div>
+          <div class="ob-pay-row">
+            <span class="ob-pay-row-label">Package</span>
+            <span class="ob-pay-row-value" id="bbwz-pay-package">—</span>
+          </div>
+          <div class="ob-pay-divider"></div>
+          <div class="ob-pay-row ob-pay-row--total">
+            <span class="ob-pay-row-label">Total due today</span>
+            <span class="ob-pay-row-value" id="bbwz-pay-total">$0.00</span>
+          </div>
+          <div class="ob-pay-cycle-badge" id="bbwz-pay-cycle-badge">
+            <i class="fa fa-rotate"></i> Billed monthly — recurring subscription
+          </div>
+        </div>
+
+        <div class="ob-pay-gateway" id="bbwz-pay-gateway-note">
+          <div class="ob-pay-gateway-head"><i class="fa fa-lock"></i><span>Secure payment powered by Stripe</span></div>
+          <p class="ob-pay-gateway-sub">You'll be redirected to Stripe's secure checkout in your browser to enter your card details. This subscription renews automatically every month until you cancel.</p>
+        </div>
+        <div class="ob-pay-gateway" id="bbwz-pay-free-note" style="display:none">
+          <div class="ob-pay-gateway-head"><i class="fa fa-gift"></i><span>No payment required</span></div>
+          <p class="ob-pay-gateway-sub">Your selected package is free — click below to create the business right away.</p>
+        </div>
+      </div>
+
+      <div id="bbwz-pay-waiting" style="display:none">
+        <div class="bwz-panel-title">Waiting for payment confirmation…</div>
+        <div class="bwz-panel-sub">Complete your payment in the browser window that just opened. This continues automatically once Stripe confirms it.</div>
+        <div class="ob-pay-waiting-spinner"><i class="fa fa-spinner fa-spin"></i></div>
+        <div id="bbwz-pay-waiting-error" class="alert alert-error" style="display:none"></div>
+        <div class="ob-pay-waiting-actions">
+          <button type="button" class="bwz-btn-skip" id="bbwz-pay-cancel-btn"><i class="fa fa-arrow-left"></i> Cancel</button>
+          <button type="button" class="bwz-btn-next" id="bbwz-pay-retry-btn"><i class="fa fa-rotate"></i> I already paid — Check again</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Footer -->
-    <div class="bwz-footer">
+    <div class="bwz-footer" id="bbwz-footer">
       <button class="bwz-btn-skip" id="bbwz-cancel-btn"><i class="fa fa-xmark"></i> Cancel</button>
       <div class="bbwz-pkg-summary" id="bbwz-pkg-summary" style="display:none"></div>
       <div class="bwz-footer-right">
@@ -16408,6 +16549,33 @@
     <div class="po-aim-footer">
       <button class="po-btn-ghost" id="my-profile-modal-cancel"><i class="fa fa-xmark"></i> Cancel</button>
       <button class="po-btn-primary" id="mp-save-profile" style="margin-left:auto"><i class="fa fa-check"></i> Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- Billing & Payments Modal -->
+<div id="payment-modal-overlay" class="modal-overlay" style="display:none">
+  <div class="po-aim-shell" style="width:70vw;max-width:980px;max-height:90vh">
+    <div class="po-aim-header">
+      <i class="fa fa-file-invoice-dollar" style="color:var(--accent)"></i>
+      <span>Billing &amp; Payments</span>
+      <button class="psm-close" id="payment-modal-close"><i class="fa fa-xmark"></i></button>
+    </div>
+    <div class="po-aim-body" style="max-height:78vh;overflow-y:auto">
+      <div id="pm-alert" class="qap-alert" style="display:none;margin-bottom:14px"></div>
+
+      <!-- List panel -->
+      <div id="pm-list-panel">
+        <div id="pm-summary"></div>
+        <div id="pm-tabs" class="pm-tabs"></div>
+        <div id="pm-list" class="pm-list"></div>
+      </div>
+
+      <!-- Detail panel -->
+      <div id="pm-detail-panel" style="display:none">
+        <button class="po-btn-ghost" id="pm-detail-back" style="margin-bottom:14px"><i class="fa fa-arrow-left"></i> Back to history</button>
+        <div id="pm-detail-body"></div>
+      </div>
     </div>
   </div>
 </div>

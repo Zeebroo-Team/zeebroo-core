@@ -69,6 +69,30 @@
 .ads-conn-item{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:10px 12px;border-radius:10px;background:color-mix(in srgb,var(--primary) 4%,transparent);border:1px solid color-mix(in srgb,var(--border) 60%,transparent);flex-wrap:wrap;}
 .ads-conn-provider{font-size:13px;font-weight:650;}
 .ads-conn-meta{font-size:11.5px;color:var(--muted);margin-top:1px;}
+.ads-pay-row{cursor:pointer;}
+.ads-pay-row:hover{background:color-mix(in srgb,var(--primary) 5%,transparent);}
+.ads-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:999px;font-size:10.5px;font-weight:700;text-transform:capitalize;}
+.ads-badge--succeeded{background:color-mix(in srgb,#22c55e 14%,transparent);color:#16a34a;}
+.ads-badge--pending,.ads-badge--processing{background:color-mix(in srgb,#f59e0b 15%,transparent);color:#b45309;}
+.ads-badge--failed,.ads-badge--canceled{background:color-mix(in srgb,#ef4444 14%,transparent);color:#dc2626;}
+.ads-badge--refunded{background:color-mix(in srgb,#64748b 15%,transparent);color:#64748b;}
+.ads-modal-overlay{position:fixed;inset:0;background:rgba(15,23,42,.55);display:none;align-items:center;justify-content:center;padding:20px;z-index:1000;}
+.ads-modal-overlay.is-open{display:flex;}
+.ads-modal{width:100%;max-width:520px;max-height:85vh;background:var(--card);border:1px solid var(--border);border-radius:16px;display:flex;flex-direction:column;overflow:hidden;}
+.ads-modal-header{padding:22px 24px 0;flex-shrink:0;position:relative;}
+.ads-modal-body{padding:0 24px 22px;overflow-y:auto;}
+.ads-modal-close{position:absolute;top:20px;right:22px;width:28px;height:28px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--muted);cursor:pointer;display:grid;place-items:center;z-index:1;}
+.ads-modal-close:hover{color:var(--text);background:color-mix(in srgb,var(--primary) 6%,transparent);}
+.ads-modal-title{margin:0 0 4px;font-size:16px;font-weight:800;display:flex;align-items:center;gap:8px;padding-right:36px;}
+.ads-modal-sub{margin:0 0 16px;font-size:12px;color:var(--muted);}
+.ads-modal-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 16px;}
+@media(max-width:480px){.ads-modal-grid{grid-template-columns:1fr;}}
+.ads-modal-field{min-width:0;}
+.ads-modal-field.full{grid-column:1/-1;}
+.ads-modal-label{margin:0;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);}
+.ads-modal-value{margin:3px 0 0;font-size:13px;font-weight:600;word-break:break-all;}
+.ads-modal-value.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;font-weight:500;}
+.ads-modal-divider{border:none;border-top:1px solid color-mix(in srgb,var(--border) 70%,transparent);margin:16px 0;}
 @media(max-width:640px){
     .ads-table thead{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;}
     .ads-table, .ads-table tbody, .ads-table tr, .ads-table td{display:block;width:100%;}
@@ -172,6 +196,7 @@
                             <button type="button" class="ads-biz-tab" data-tab="hr"><i class="fa fa-people-group"></i> HR</button>
                             <button type="button" class="ads-biz-tab" data-tab="crm"><i class="fa fa-bullseye"></i> CRM</button>
                             <button type="button" class="ads-biz-tab" data-tab="docs"><i class="fa fa-file-invoice-dollar"></i> Quotes &amp; Invoices</button>
+                            <button type="button" class="ads-biz-tab" data-tab="payments"><i class="fa fa-credit-card"></i> Payment</button>
                         </div>
 
                         <div class="ads-biz-panel" data-panel="overview">
@@ -277,6 +302,58 @@
                                     <p class="ads-mini-stat-value">{{ $stats['currency'] }} {{ number_format($stats['quotes_invoices']['invoices_outstanding_total'], 2) }}</p>
                                 </div>
                             </div>
+                        </div>
+
+                        <div class="ads-biz-panel" data-panel="payments" hidden>
+                            <div class="ads-stat-grid" style="margin-bottom:12px;">
+                                <div class="ads-mini-stat">
+                                    <p class="ads-mini-stat-label">Total payments</p>
+                                    <p class="ads-mini-stat-value">{{ $stats['payments']['count'] }}</p>
+                                </div>
+                                <div class="ads-mini-stat">
+                                    <p class="ads-mini-stat-label">Paid (succeeded)</p>
+                                    <p class="ads-mini-stat-value">
+                                        @forelse($stats['payments']['succeeded_totals'] as $currency => $total)
+                                            {{ $currency }} {{ number_format($total, 2) }}@if(! $loop->last)<br>@endif
+                                        @empty
+                                            —
+                                        @endforelse
+                                    </p>
+                                </div>
+                                <div class="ads-mini-stat">
+                                    <p class="ads-mini-stat-label">Subscription</p>
+                                    <p class="ads-mini-stat-value" style="font-size:14px;">{{ $stats['payments']['active_subscription'] ? 'Active' : 'Inactive' }}</p>
+                                </div>
+                            </div>
+
+                            @if($stats['payments']['items']->isEmpty())
+                                <p class="ads-empty-inline">No payments recorded for this business.</p>
+                            @else
+                                <div style="overflow-x:auto;border:1px solid var(--border);border-radius:10px;">
+                                    <table class="ads-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Package</th>
+                                                <th>Amount</th>
+                                                <th>Status</th>
+                                                <th>Gateway</th>
+                                                <th>Date</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach($stats['payments']['items'] as $payment)
+                                                <tr class="ads-pay-row" data-payment="{{ json_encode($payment) }}" title="Click to view full payment details">
+                                                    <td data-label="Package">{{ $payment['package'] }}</td>
+                                                    <td data-label="Amount">{{ $payment['currency'] }} {{ number_format($payment['amount'], 2) }}</td>
+                                                    <td data-label="Status"><span class="ads-badge ads-badge--{{ $payment['payment_status'] }}">{{ $payment['payment_status'] }}</span></td>
+                                                    <td data-label="Gateway" style="text-transform:capitalize;">{{ $payment['gateway'] }}</td>
+                                                    <td data-label="Date">{{ $payment['paid_at'] ?: $payment['created_at'] }}</td>
+                                                </tr>
+                                            @endforeach
+                                        </tbody>
+                                    </table>
+                                </div>
+                            @endif
                         </div>
                     </div>
                 @endforeach
@@ -506,6 +583,51 @@
     @endif
 </div>
 
+<div class="ads-modal-overlay" id="ads-payment-modal">
+    <div class="ads-modal" role="dialog" aria-modal="true" aria-labelledby="ads-payment-modal-title">
+        <div class="ads-modal-header">
+            <button type="button" class="ads-modal-close" id="ads-payment-modal-close" aria-label="Close"><i class="fa fa-xmark"></i></button>
+            <h3 class="ads-modal-title" id="ads-payment-modal-title"><i class="fa fa-credit-card" style="color:var(--primary);"></i> Payment details</h3>
+            <p class="ads-modal-sub">Payment #<span data-field="id"></span></p>
+        </div>
+        <div class="ads-modal-body">
+            <div class="ads-modal-grid">
+                <div class="ads-modal-field"><p class="ads-modal-label">Package</p><p class="ads-modal-value" data-field="package"></p></div>
+                <div class="ads-modal-field"><p class="ads-modal-label">Amount</p><p class="ads-modal-value" data-field="amount"></p></div>
+                <div class="ads-modal-field"><p class="ads-modal-label">Status</p><p class="ads-modal-value" data-field="payment_status" style="text-transform:capitalize;"></p></div>
+                <div class="ads-modal-field"><p class="ads-modal-label">Type</p><p class="ads-modal-value" data-field="payment_type" style="text-transform:capitalize;"></p></div>
+                <div class="ads-modal-field"><p class="ads-modal-label">Billing cycle</p><p class="ads-modal-value" data-field="billing_cycle" style="text-transform:capitalize;"></p></div>
+                <div class="ads-modal-field"><p class="ads-modal-label">Gateway</p><p class="ads-modal-value" data-field="gateway" style="text-transform:capitalize;"></p></div>
+                <div class="ads-modal-field"><p class="ads-modal-label">Paid at</p><p class="ads-modal-value" data-field="paid_at"></p></div>
+                <div class="ads-modal-field"><p class="ads-modal-label">Created</p><p class="ads-modal-value" data-field="created_at"></p></div>
+            </div>
+
+            <hr class="ads-modal-divider">
+
+            <div class="ads-modal-grid">
+                <div class="ads-modal-field full"><p class="ads-modal-label">Stripe customer ID</p><p class="ads-modal-value mono" data-field="stripe_customer_id"></p></div>
+                <div class="ads-modal-field full"><p class="ads-modal-label">Stripe checkout session ID</p><p class="ads-modal-value mono" data-field="stripe_checkout_session_id"></p></div>
+                <div class="ads-modal-field full"><p class="ads-modal-label">Stripe subscription ID</p><p class="ads-modal-value mono" data-field="stripe_subscription_id"></p></div>
+                <div class="ads-modal-field full"><p class="ads-modal-label">Stripe payment intent ID</p><p class="ads-modal-value mono" data-field="stripe_payment_intent_id"></p></div>
+                <div class="ads-modal-field full"><p class="ads-modal-label">Stripe invoice ID</p><p class="ads-modal-value mono" data-field="stripe_invoice_id"></p></div>
+                <div class="ads-modal-field"><p class="ads-modal-label">Subscription status</p><p class="ads-modal-value" data-field="stripe_subscription_status" style="text-transform:capitalize;"></p></div>
+            </div>
+
+            <div id="ads-payment-modal-failure" style="margin-top:14px;" hidden>
+                <hr class="ads-modal-divider">
+                <p class="ads-modal-label">Failure reason</p>
+                <p class="ads-modal-value" data-field="failure_reason"></p>
+            </div>
+
+            <div id="ads-payment-modal-metadata" style="margin-top:14px;" hidden>
+                <hr class="ads-modal-divider">
+                <p class="ads-modal-label">Metadata</p>
+                <pre class="ads-modal-value mono" data-field="metadata" style="white-space:pre-wrap;margin-top:6px;"></pre>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 document.querySelectorAll('.ads-biz-tab').forEach(function (tab) {
     tab.addEventListener('click', function () {
@@ -518,5 +640,76 @@ document.querySelectorAll('.ads-biz-tab').forEach(function (tab) {
         });
     });
 });
+
+(function () {
+    var modal = document.getElementById('ads-payment-modal');
+    if (! modal) return;
+
+    var closeBtn = document.getElementById('ads-payment-modal-close');
+    var failureBox = document.getElementById('ads-payment-modal-failure');
+    var metadataBox = document.getElementById('ads-payment-modal-metadata');
+
+    function fill(field, value) {
+        var el = modal.querySelector('[data-field="' + field + '"]');
+        if (el) el.textContent = (value === null || value === undefined || value === '') ? '—' : value;
+    }
+
+    function openModal(payment) {
+        fill('id', payment.id);
+        fill('package', payment.package);
+        fill('amount', payment.currency + ' ' + Number(payment.amount).toFixed(2));
+        fill('payment_status', payment.payment_status);
+        fill('payment_type', payment.payment_type);
+        fill('billing_cycle', payment.billing_cycle);
+        fill('gateway', payment.gateway);
+        fill('paid_at', payment.paid_at);
+        fill('created_at', payment.created_at);
+        fill('stripe_customer_id', payment.stripe_customer_id);
+        fill('stripe_checkout_session_id', payment.stripe_checkout_session_id);
+        fill('stripe_subscription_id', payment.stripe_subscription_id);
+        fill('stripe_payment_intent_id', payment.stripe_payment_intent_id);
+        fill('stripe_invoice_id', payment.stripe_invoice_id);
+        fill('stripe_subscription_status', payment.stripe_subscription_status);
+
+        if (payment.failure_reason) {
+            fill('failure_reason', payment.failure_reason);
+            failureBox.hidden = false;
+        } else {
+            failureBox.hidden = true;
+        }
+
+        if (payment.metadata && Object.keys(payment.metadata).length) {
+            fill('metadata', JSON.stringify(payment.metadata, null, 2));
+            metadataBox.hidden = false;
+        } else {
+            metadataBox.hidden = true;
+        }
+
+        modal.classList.add('is-open');
+    }
+
+    function closeModal() {
+        modal.classList.remove('is-open');
+    }
+
+    document.addEventListener('click', function (e) {
+        var row = e.target.closest('.ads-pay-row');
+        if (row) {
+            try {
+                openModal(JSON.parse(row.getAttribute('data-payment')));
+            } catch (err) {
+                console.error('Could not parse payment details', err);
+            }
+        }
+    });
+
+    closeBtn.addEventListener('click', closeModal);
+    modal.addEventListener('click', function (e) {
+        if (e.target === modal) closeModal();
+    });
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') closeModal();
+    });
+})();
 </script>
 @endsection

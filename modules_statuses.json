@@ -26,5 +26,6 @@
     "ProjectManage": true,
     "EventManagement": true,
     "AdvertisingAgency": true,
-    "Package": true
+    "Package": true,
+    "Payment": true
 }

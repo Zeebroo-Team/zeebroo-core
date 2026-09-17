@@ -85,11 +85,25 @@ function createWindow() {
 }
 
 // ── Deep-link: socibiz://auth?token=…&business_id=… ─────────────────────
-app.setAsDefaultProtocolClient('socibiz');
+//            or socibiz://payment?status=success|cancel|failed&payment_id=… ─
+// Running unpackaged (`electron .` via scripts/start.js), Electron sets
+// process.defaultApp — without passing execPath + the app dir explicitly,
+// Windows registers the protocol as bare "electron.exe %1", so the OS hands
+// the socibiz:// URL to Electron as if it were the app path to launch
+// ("Unable to find Electron app at ...socibiz:\..."). Packaged builds don't
+// need this — the installer's own exe path is already correct.
+if (process.defaultApp) {
+  if (process.argv.length >= 2) {
+    app.setAsDefaultProtocolClient('socibiz', process.execPath, [path.resolve(process.argv[1])]);
+  }
+} else {
+  app.setAsDefaultProtocolClient('socibiz');
+}
 
 function handleDeepLink(url) {
   try {
-    const parsed     = new URL(url);
+    const parsed = new URL(url);
+    if (parsed.host === 'payment') { handlePaymentDeepLink(parsed); return; }
     if (parsed.host !== 'auth') return;
     const token      = parsed.searchParams.get('token');
     const businessId = parsed.searchParams.get('business_id');
@@ -107,6 +121,28 @@ function handleDeepLink(url) {
       createWindow();
     }
   } catch (e) { console.error('[deep-link]', e); }
+}
+
+// Fired after the user finishes (or cancels) Stripe Checkout in the system
+// browser during desktop signup. The wizard is sitting on a "waiting for
+// payment" screen with in-memory state that a reload would destroy, so this
+// just forwards the result to the renderer via IPC instead of reloading —
+// app.js re-verifies the actual payment status against the API before
+// trusting it. If the app isn't open, the account/token were already saved
+// to config at registration time, so a normal boot logs the user straight in.
+function handlePaymentDeepLink(parsed) {
+  const status    = parsed.searchParams.get('status');
+  const paymentId = parsed.searchParams.get('payment_id');
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+    mainWindow.webContents.send('payment-deep-link', {
+      status,
+      paymentId: paymentId ? Number(paymentId) : null,
+    });
+  } else {
+    createWindow();
+  }
 }
 
 app.on('open-url', (event, url) => { event.preventDefault(); handleDeepLink(url); });
@@ -164,8 +200,8 @@ ipcMain.on('window-expand', () => {
 ipcMain.on('window-wide-auth', () => {
   if (!mainWindow) return;
   mainWindow.setResizable(true);
-  mainWindow.setMinimumSize(900, 580);
-  mainWindow.setSize(960, 620, true);
+  mainWindow.setMinimumSize(900, 680);
+  mainWindow.setSize(1000, 740, true);
   mainWindow.center();
 });
 
@@ -689,6 +725,63 @@ ipcMain.handle('api-request', async (_e, { method, path: p, body }) => {
     return await apiRequest(method, p, body, config.token, config.business_id, config.branch_id);
   } catch (err) {
     return { status: 0, body: { message: err.message } };
+  }
+});
+
+// Downloads a binary file (e.g. a PDF receipt) from the API and lets the user
+// save it to disk — apiRequest() always JSON.parses the response, which isn't
+// usable for binary payloads, so this builds the request separately.
+function apiDownloadFile(path_, token, businessId, branchId) {
+  return new Promise((resolve, reject) => {
+    const base = API_BASE_URL.replace(/\/$/, '');
+    const url  = new URL(base + path_);
+    const isHttps = url.protocol === 'https:';
+    const lib  = isHttps ? https : http;
+
+    const headers = { Accept: 'application/pdf' };
+    if (token)      headers['Authorization'] = `Bearer ${token}`;
+    if (businessId) headers['X-Business-Id'] = String(businessId);
+    if (branchId)   headers['X-Branch-Id']   = String(branchId);
+
+    const req = lib.request({
+      hostname: url.hostname,
+      port: url.port || (isHttps ? 443 : 80),
+      path: url.pathname + url.search,
+      method: 'GET',
+      headers,
+      timeout: 120000,
+    }, (res) => {
+      const chunks = [];
+      res.on('data', chunk => chunks.push(chunk));
+      res.on('end', () => resolve({ status: res.statusCode, buffer: Buffer.concat(chunks) }));
+    });
+
+    req.on('timeout', () => { req.destroy(new Error('Request timed out after 120s')); });
+    req.on('error', reject);
+    req.end();
+  });
+}
+
+ipcMain.handle('api-download-file', async (_e, { path: p, suggestedFilename }) => {
+  try {
+    const res = await apiDownloadFile(p, config.token, config.business_id, config.branch_id);
+    if (res.status !== 200) {
+      let message = `Download failed (HTTP ${res.status}).`;
+      try { message = JSON.parse(res.buffer.toString('utf8'))?.message || message; } catch (_) {}
+      return { status: res.status, message };
+    }
+
+    const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+      defaultPath: suggestedFilename || 'download.pdf',
+    });
+    if (canceled || !filePath) {
+      return { status: 0, canceled: true };
+    }
+
+    fs.writeFileSync(filePath, res.buffer);
+    return { status: 200, savedPath: filePath };
+  } catch (err) {
+    return { status: 0, message: err.message };
   }
 });
 
