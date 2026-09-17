@@ -3253,6 +3253,26 @@ body.dark .alert-error { background: #3b1515; color: #fca5a5; border-color: #6b2
   color: var(--text-light);
   display: flex; align-items: center; gap: 5px;
 }
+.ob-pkg-summary {
+  display: none;
+  align-items: center; gap: 8px;
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  border-radius: 20px;
+  font-size: 12px; font-weight: 600; color: var(--text-muted);
+  white-space: nowrap;
+}
+.ob-pkg-summary i { color: var(--accent); font-size: 12px; }
+.ob-pkg-summary-name { color: var(--text); }
+.ob-pkg-summary .ob-pkg-price-row { display: flex; align-items: baseline; gap: 5px; }
+.ob-pkg-summary .ob-pkg-price { font-size: 13px; }
+.ob-pkg-summary .ob-pkg-price-suffix { font-size: 10px; }
+.ob-pkg-summary .ob-pkg-price-strike { font-size: 10px; }
+@media (max-width: 900px) {
+  .ob-bottom-bar { flex-wrap: wrap; row-gap: 8px; }
+  .ob-pkg-summary { order: 3; flex-basis: 100%; justify-content: center; }
+}
 .ob-continue-btn {
   height: 40px;
   padding: 0 24px;
@@ -3513,6 +3533,7 @@ body.dark .alert-error { background: #3b1515; color: #fca5a5; border-color: #6b2
 }
 .ob-pkg-price-row { display: flex; align-items: baseline; gap: 6px; }
 .ob-pkg-price { font-size: 15px; font-weight: 800; color: var(--ob-amber); }
+.ob-pkg-price-suffix { font-size: 11px; font-weight: 600; color: var(--text-muted); margin-left: 2px; }
 .ob-pkg-price-strike { font-size: 11px; color: var(--text-muted); text-decoration: line-through; }
 .ob-pkg-desc {
   font-size: 11px;
@@ -4639,19 +4660,62 @@ body.dark .bwz-btn-next:hover { background: var(--accent-dark); }
 .bbwz-card {
   background: var(--surface);
   border-radius: 18px;
-  width: 680px;
+  width: 1040px;
   max-width: 96vw;
   max-height: 88vh;
-  overflow-y: auto;
   box-shadow: 0 24px 60px rgba(0,0,0,.28);
   position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
-/* Package + locked-feature grids reused inside the (already-scrolling) bbwz card
-   — drop their own scroll area so there's only one scrollbar for the whole card. */
+/* Step track and footer stay fixed; only the active panel scrolls. */
+.bbwz-card > .bwz-track,
+.bbwz-card > .bwz-footer {
+  flex: 0 0 auto;
+}
+.bbwz-card > .bwz-track {
+  padding-bottom: 22px;
+}
+.bbwz-card > .bwz-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+/* Package + locked-feature grids reused inside the (already-scrolling) panel
+   — drop their own scroll area so there's only one scrollbar per panel. */
 #bbwz-pkg-grid, #bbwz-feat-list {
   max-height: none;
   overflow-y: visible;
 }
+/* Cancel button: give it real button styling (was borderless/plain text) */
+.bbwz-card .bwz-footer #bbwz-cancel-btn {
+  height: 38px; padding: 0 18px;
+  background: var(--surface2); border: 1.5px solid var(--border);
+  border-radius: 8px; font-size: 13px; font-weight: 600; color: var(--text-muted);
+  cursor: pointer; display: flex; align-items: center; gap: 6px;
+  transition: border-color .15s, color .15s, background .15s;
+}
+.bbwz-card .bwz-footer #bbwz-cancel-btn:hover {
+  border-color: #ef4444; color: #ef4444;
+  background: color-mix(in srgb, #ef4444 8%, var(--surface2));
+}
+
+/* Selected-package summary chip, shown in the footer once a package is picked */
+.bbwz-pkg-summary {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  border-radius: 20px;
+  font-size: 12px; font-weight: 600; color: var(--text-muted);
+  white-space: nowrap;
+}
+.bbwz-pkg-summary i { color: var(--accent); font-size: 12px; }
+.bbwz-pkg-summary-name { color: var(--text); }
+.bbwz-pkg-summary .ob-pkg-price-row { display: flex; align-items: baseline; gap: 5px; }
+.bbwz-pkg-summary .ob-pkg-price { font-size: 13px; font-weight: 800; }
+.bbwz-pkg-summary .ob-pkg-price-strike { font-size: 10px; }
 
 /* category grid */
 .bbwz-cat-grid {

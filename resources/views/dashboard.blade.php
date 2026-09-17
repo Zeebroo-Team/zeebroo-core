@@ -402,6 +402,24 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
             width:auto;flex:0 0 auto;margin-top:0;
             padding:11px 22px;font-size:13.5px;border-radius:10px;
         }
+        .wiz-pkg-summary{
+            display:none;align-items:center;gap:8px;
+            padding:9px 16px;border-radius:999px;
+            border:1.5px solid var(--border);
+            background:color-mix(in srgb,var(--primary) 6%,var(--card));
+            font-size:13px;font-weight:700;color:var(--muted);
+            white-space:nowrap;
+        }
+        .wiz-pkg-summary i{color:var(--primary);font-size:12px;}
+        .wiz-pkg-summary-name{color:var(--text);}
+        .wiz-pkg-summary .wiz-pkg-price-row{display:flex;align-items:baseline;gap:5px;}
+        .wiz-pkg-summary .wiz-pkg-price{font-size:14px;}
+        .wiz-pkg-summary .wiz-pkg-price-suffix{font-size:10px;}
+        .wiz-pkg-summary .wiz-pkg-price-strike{font-size:10px;}
+        @media(max-width:640px){
+            .wiz-actions-row-inner{flex-wrap:wrap;row-gap:8px;}
+            .wiz-pkg-summary{order:3;flex-basis:100%;justify-content:center;}
+        }
 
         /* Guide character + bubble (right side) */
         .wiz-guide{
@@ -689,6 +707,7 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
         .wiz-pkg-name{font-size:13.5px;font-weight:700;color:var(--text);padding-right:20px;}
         .wiz-pkg-price-row{display:flex;align-items:baseline;gap:6px;}
         .wiz-pkg-price{font-size:16px;font-weight:800;color:var(--primary);}
+        .wiz-pkg-price-suffix{font-size:11px;font-weight:600;color:var(--muted);margin-left:2px;}
         .wiz-pkg-price-strike{font-size:11.5px;color:var(--muted);text-decoration:line-through;}
         .wiz-pkg-desc{font-size:11.5px;color:var(--muted);line-height:1.4;margin:0;}
         .wiz-pkg-feat-tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:2px;}
@@ -1012,6 +1031,10 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                                 <div class="wiz-pkg-card {{ (string) old('package_id') === (string) $pkg->id ? 'wiz-pkg-card--on' : '' }}"
                                      data-pkg-id="{{ $pkg->id }}"
                                      data-pkg-features="{{ json_encode($pkgFeatures) }}"
+                                     data-pkg-name="{{ $pkg->name }}"
+                                     data-pkg-free="{{ $pkg->is_free ? '1' : '0' }}"
+                                     data-pkg-price="{{ (float) $pkg->price }}"
+                                     data-pkg-discounted="{{ $pkg->discounted_price !== null ? (float) $pkg->discounted_price : '' }}"
                                      role="radio" aria-checked="{{ (string) old('package_id') === (string) $pkg->id ? 'true' : 'false' }}" tabindex="0">
                                     <div class="wiz-pkg-check" aria-hidden="true"><i class="fa fa-check"></i></div>
                                     <div class="wiz-pkg-img-wrap">
@@ -1026,10 +1049,10 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                                         @if($pkg->is_free)
                                             <span class="wiz-pkg-price">Free</span>
                                         @elseif($pkg->discounted_price !== null && (float) $pkg->discounted_price < (float) $pkg->price)
-                                            <span class="wiz-pkg-price">${{ number_format((float) $pkg->discounted_price, 2) }}</span>
+                                            <span class="wiz-pkg-price">${{ number_format((float) $pkg->discounted_price, 2) }}<span class="wiz-pkg-price-suffix">/mo</span></span>
                                             <span class="wiz-pkg-price-strike">${{ number_format((float) $pkg->price, 2) }}</span>
                                         @else
-                                            <span class="wiz-pkg-price">${{ number_format((float) $pkg->price, 2) }}</span>
+                                            <span class="wiz-pkg-price">${{ number_format((float) $pkg->price, 2) }}<span class="wiz-pkg-price-suffix">/mo</span></span>
                                         @endif
                                     </div>
                                     @if($pkg->description)
@@ -1300,6 +1323,7 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                             <button type="button" class="wiz-btn-back" data-wiz-back="2">
                                 <i class="fa fa-arrow-left" aria-hidden="true"></i> Back
                             </button>
+                            <div class="wiz-pkg-summary" style="display:none;"></div>
                             <button type="button" class="wiz-btn-primary" data-wiz-next="4">
                                 Continue <i class="fa fa-arrow-right" aria-hidden="true"></i>
                             </button>
@@ -1308,6 +1332,7 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                             <button type="button" class="wiz-btn-back" data-wiz-back="3">
                                 <i class="fa fa-arrow-left" aria-hidden="true"></i> Back
                             </button>
+                            <div class="wiz-pkg-summary" style="display:none;"></div>
                             <button type="button" class="wiz-btn-primary" data-wiz-next="5">
                                 Continue <i class="fa fa-arrow-right" aria-hidden="true"></i>
                             </button>
@@ -1316,6 +1341,7 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                             <button type="button" class="wiz-btn-back" data-wiz-back="4">
                                 <i class="fa fa-arrow-left" aria-hidden="true"></i> Back
                             </button>
+                            <div class="wiz-pkg-summary" style="display:none;"></div>
                             <button type="button" class="wiz-btn-primary" data-wiz-next="6">
                                 Continue <i class="fa fa-arrow-right" aria-hidden="true"></i>
                             </button>
@@ -1324,6 +1350,7 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                             <button type="button" class="wiz-btn-back" data-wiz-back="5">
                                 <i class="fa fa-arrow-left" aria-hidden="true"></i> Back
                             </button>
+                            <div class="wiz-pkg-summary" style="display:none;"></div>
                             <button type="submit" class="wiz-btn-primary" id="wizFinishBtn">
                                 Finish setup <i class="fa fa-check" aria-hidden="true"></i>
                             </button>
@@ -1999,6 +2026,39 @@ function openWizStorageAgreementModal(type) {
     // Package cards (step 3) → select + drive the step 4 feature preview
     const pkgInput = document.getElementById('wizPackageIdInput');
     if (pkgInput) {
+        function escPkg(s) {
+            return String(s ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+        function pkgPriceHtml(card) {
+            if (card.getAttribute('data-pkg-free') === '1') return '<span class="wiz-pkg-price">Free</span>';
+            const price = parseFloat(card.getAttribute('data-pkg-price') || '0');
+            const discAttr = card.getAttribute('data-pkg-discounted');
+            const disc = discAttr ? parseFloat(discAttr) : null;
+            if (disc !== null && !isNaN(disc) && disc < price) {
+                return '<span class="wiz-pkg-price">$' + disc.toFixed(2) + '<span class="wiz-pkg-price-suffix">/mo</span></span>'
+                    + '<span class="wiz-pkg-price-strike">$' + price.toFixed(2) + '</span>';
+            }
+            return '<span class="wiz-pkg-price">$' + price.toFixed(2) + '<span class="wiz-pkg-price-suffix">/mo</span></span>';
+        }
+        // Keeps the footer chip (shown on every step from Package onward) in
+        // sync with whichever package is currently selected.
+        function updateWizPkgSummary(card) {
+            const summaries = document.querySelectorAll('.wiz-pkg-summary');
+            if (!summaries.length) return;
+            const html = card
+                ? '<i class="fa fa-box-open" aria-hidden="true"></i>'
+                    + '<span class="wiz-pkg-summary-name">' + escPkg(card.getAttribute('data-pkg-name') || '') + '</span>'
+                    + '<div class="wiz-pkg-price-row">' + pkgPriceHtml(card) + '</div>'
+                : '';
+            summaries.forEach(function (el) {
+                el.innerHTML = html;
+                el.style.display = card ? 'flex' : 'none';
+            });
+        }
         function selectPackage(card) {
             wizardForm.querySelectorAll('.wiz-pkg-card').forEach(function (c) {
                 c.classList.toggle('wiz-pkg-card--on', c === card);
@@ -2010,6 +2070,7 @@ function openWizStorageAgreementModal(type) {
             let features = [];
             try { features = JSON.parse(card.getAttribute('data-pkg-features') || '[]'); } catch (e) {}
             applyPackageFeatures(features);
+            updateWizPkgSummary(card);
         }
         wizardForm.querySelectorAll('.wiz-pkg-card').forEach(function (card) {
             card.addEventListener('click', function () { selectPackage(card); });
