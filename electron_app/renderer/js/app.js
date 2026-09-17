@@ -5498,9 +5498,9 @@ function _obPkgPriceHtml(pkg) {
   const price = Number(pkg.price || 0);
   const disc  = pkg.discounted_price != null ? Number(pkg.discounted_price) : null;
   if (disc != null && disc < price) {
-    return `<span class="ob-pkg-price">$${disc.toFixed(2)}</span><span class="ob-pkg-price-strike">$${price.toFixed(2)}</span>`;
+    return `<span class="ob-pkg-price">$${disc.toFixed(2)}<span class="ob-pkg-price-suffix">/mo</span></span><span class="ob-pkg-price-strike">$${price.toFixed(2)}</span>`;
   }
-  return `<span class="ob-pkg-price">$${price.toFixed(2)}</span>`;
+  return `<span class="ob-pkg-price">$${price.toFixed(2)}<span class="ob-pkg-price-suffix">/mo</span></span>`;
 }
 
 // Shared renderer — a clickable package-selection grid. Used by both the
@@ -5572,7 +5572,19 @@ function _obBuildPkgGrid() {
     _obSelectedPackage = pkg;
     const nextBtn = $('#ob-next-4-btn');
     if (nextBtn) nextBtn.disabled = !pkg;
+    _obUpdatePkgSummary();
   });
+}
+
+// Keeps the bottom-bar chip in sync with the currently selected package —
+// visible on every step from Package onward, hidden before a pick is made.
+function _obUpdatePkgSummary() {
+  const el = $('#ob-pkg-summary');
+  if (!el) return;
+  const pkg = _obSelectedPackage;
+  if (!pkg || _obStep < 4) { el.style.display = 'none'; return; }
+  el.innerHTML = `<i class="fa fa-box-open"></i><span class="ob-pkg-summary-name">${escHtml(pkg.name)}</span><div class="ob-pkg-price-row">${_obPkgPriceHtml(pkg)}</div>`;
+  el.style.display = 'flex';
 }
 
 function _obBuildFeatureList() {
@@ -5627,6 +5639,8 @@ function _obSetStep(n) {
   const focusMap = { 1: '#su-email', 2: '#su-name' };
   const focusSel = focusMap[n];
   if (focusSel) setTimeout(() => $(focusSel)?.focus(), 50);
+
+  _obUpdatePkgSummary();
 }
 
 function showSignup() {
@@ -23223,6 +23237,7 @@ function _bbwzOpen() {
   $('#bbwz-alert').style.display = 'none';
   $('#bbwz-pkg-alert').style.display = 'none';
   $('#bbwz-submit-alert').style.display = 'none';
+  $('#bbwz-pkg-summary').style.display = 'none';
   const nextBtn = $('#bbwz-next-btn');
   if (nextBtn) nextBtn.disabled = false;
   _bbwzSetStep(1);
@@ -23287,7 +23302,19 @@ function _bbwzBuildCatGrid() {
 function _bbwzBuildPkgGrid() {
   _renderPkgGrid('#bbwz-pkg-grid', _bbwz.packages, _bbwz.selectedPackage ? _bbwz.selectedPackage.id : null, pkg => {
     _bbwz.selectedPackage = pkg;
+    _bbwzUpdatePkgSummary();
   });
+}
+
+// Keeps the footer chip in sync with the currently selected package —
+// visible on every step from Package onward, hidden before a pick is made.
+function _bbwzUpdatePkgSummary() {
+  const el = $('#bbwz-pkg-summary');
+  if (!el) return;
+  const pkg = _bbwz.selectedPackage;
+  if (!pkg || _bbwz.step < 2) { el.style.display = 'none'; return; }
+  el.innerHTML = `<i class="fa fa-box-open"></i><span class="bbwz-pkg-summary-name">${escHtml(pkg.name)}</span><div class="ob-pkg-price-row">${_obPkgPriceHtml(pkg)}</div>`;
+  el.style.display = 'flex';
 }
 
 function _bbwzBuildFeatList() {
@@ -23334,6 +23361,7 @@ function _bbwzSetStep(n) {
   $('#bbwz-back-btn').style.display   = n > 1 ? '' : 'none';
   $('#bbwz-next-btn').style.display   = n < 4 ? '' : 'none';
   $('#bbwz-submit-btn').style.display = n === 4 ? '' : 'none';
+  _bbwzUpdatePkgSummary();
 }
 
 $('#bbwz-next-btn').addEventListener('click', () => {
