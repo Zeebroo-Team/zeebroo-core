@@ -110,6 +110,16 @@
      ════════════════════════════════════════════════════════════════════════ */
   const _sleep = ms => new Promise(r => setTimeout(r, ms));
 
+  const _CHAR_ANIM_CLASSES = ['guide-walk-bounce','guide-arrive','guide-excited','guide-thinking','guide-wave'];
+
+  function _animChar(cls, durationMs) {
+    const img = document.getElementById('guide-char-img');
+    if (!img) return;
+    _CHAR_ANIM_CLASSES.forEach(c => img.classList.remove(c));
+    img.classList.add(cls);
+    setTimeout(() => img.classList.remove(cls), durationMs || 600);
+  }
+
   function _highlight(el)   { el?.classList.add('guide-target-pulse'); }
   function _unhighlight(el) { el?.classList.remove('guide-target-pulse'); }
 
@@ -201,7 +211,12 @@
 
       const img = document.getElementById('guide-char-img');
       img?.classList.add('guide-walk-bounce');
-      setTimeout(() => { img?.classList.remove('guide-walk-bounce'); resolve(); }, 680);
+      setTimeout(() => {
+        img?.classList.remove('guide-walk-bounce');
+        img?.classList.add('guide-arrive');
+        setTimeout(() => img?.classList.remove('guide-arrive'), 450);
+        resolve();
+      }, 680);
     });
   }
 
@@ -218,6 +233,7 @@
         wrap.style.transition = '';
         wrap.style.top = 'auto'; wrap.style.left   = 'auto';
         wrap.style.bottom = '24px'; wrap.style.right = '24px';
+        _animChar('guide-wave', 720);
         resolve();
       }, 700);
     });
@@ -552,6 +568,8 @@
     let geminiWorked = false;
     let isHtml       = false;
 
+    _animChar('guide-thinking', 20000);
+
     try {
       const res = await API.guideChat(message, _conversationId);
       if (res.status === 200 && res.body?.reply) {
@@ -562,6 +580,7 @@
 
         // Data-query / agent HTML reply — show immediately, then handle voice resume
         if (isHtml) {
+          _animChar('guide-excited', 700);
           _reopenWithReply(reply, true);
           _busy = false;
           if (Array.isArray(res.body.posterCommands) && res.body.posterCommands.length > 0) {
@@ -602,6 +621,7 @@
         : 'I\'m having trouble connecting right now. Please try again in a moment.';
     }
 
+    _animChar('guide-excited', 700);
     _reopenWithReply(reply);
     _busy = false;
 
