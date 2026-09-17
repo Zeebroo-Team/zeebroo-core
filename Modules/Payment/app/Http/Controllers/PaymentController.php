@@ -216,19 +216,13 @@ class PaymentController extends Controller
                 }
                 break;
 
-            case 'invoice.payment_failed':
-                $payment = Payment::query()->where('stripe_subscription_id', $object->subscription)->latest()->first();
-                if ($payment) {
-                    $payment->update([
-                        'payment_status' => Payment::STATUS_FAILED,
-                        'failure_reason' => 'Stripe invoice payment failed for subscription renewal.',
-                        'due_at' => now()->addDays(Payment::GRACE_PERIOD_DAYS),
-                    ]);
+            case 'invoice.paid':
+            case 'invoice.payment_succeeded':
+                $this->recordInvoicePaid($object);
+                break;
 
-                    if ($payment->business) {
-                        $this->notifications->notifyPaymentFailed($payment->business, $payment);
-                    }
-                }
+            case 'invoice.payment_failed':
+                $this->recordInvoiceFailed($object);
                 break;
 
             case 'customer.subscription.updated':
@@ -264,6 +258,115 @@ class PaymentController extends Controller
 
         if ($payment->business) {
             $this->notifications->notifyPaymentSucceeded($payment->business, $payment->refresh());
+        }
+    }
+
+    /**
+     * Records a paid Stripe invoice — the first invoice (`subscription_create`)
+     * was already recorded via checkout.session.completed, so that one just
+     * gets tagged with its invoice ID; every later renewal invoice
+     * (`subscription_cycle`) becomes its own new succeeded Payment row so the
+     * business's payment history actually accumulates month over month rather
+     * than only ever showing the original signup charge.
+     */
+    private function recordInvoicePaid(object $invoice): void
+    {
+        // Idempotent — Stripe can redeliver webhooks, and both invoice.paid and
+        // invoice.payment_succeeded can fire for the same invoice.
+        if (Payment::query()->where('stripe_invoice_id', $invoice->id)->exists()) {
+            return;
+        }
+
+        $anchor = Payment::query()
+            ->where('stripe_subscription_id', $invoice->subscription)
+            ->oldest()
+            ->first();
+
+        if (! $anchor) {
+            return;
+        }
+
+        if ($anchor->stripe_invoice_id === null && $invoice->billing_reason === 'subscription_create') {
+            $anchor->update(['stripe_invoice_id' => $invoice->id]);
+
+            return;
+        }
+
+        $paymentIntentId = is_object($invoice->payment_intent ?? null) ? $invoice->payment_intent->id : ($invoice->payment_intent ?? null);
+
+        $renewal = Payment::create([
+            'business_id' => $anchor->business_id,
+            'user_id' => $anchor->user_id,
+            'package_id' => $anchor->package_id,
+            'payment_type' => Payment::TYPE_SUBSCRIPTION,
+            'payment_status' => Payment::STATUS_SUCCEEDED,
+            'billing_cycle' => $anchor->billing_cycle,
+            'gateway' => 'stripe',
+            'amount' => $invoice->amount_paid / 100,
+            'currency' => strtolower($invoice->currency),
+            'stripe_customer_id' => $invoice->customer,
+            'stripe_subscription_id' => $invoice->subscription,
+            'stripe_invoice_id' => $invoice->id,
+            'stripe_payment_intent_id' => $paymentIntentId,
+            'stripe_subscription_status' => 'active',
+            'paid_at' => now(),
+        ]);
+
+        if ($renewal->business) {
+            $this->notifications->notifyPaymentSucceeded($renewal->business, $renewal);
+        }
+    }
+
+    /**
+     * Records a failed Stripe invoice. The first invoice failing flips the
+     * still-pending anchor row (nothing to preserve yet); a renewal charge
+     * failing becomes its own new failed Payment row instead, so a bad month
+     * doesn't overwrite — and erase the record of — a previously succeeded one.
+     */
+    private function recordInvoiceFailed(object $invoice): void
+    {
+        $anchor = Payment::query()
+            ->where('stripe_subscription_id', $invoice->subscription)
+            ->oldest()
+            ->first();
+
+        if (! $anchor) {
+            return;
+        }
+
+        if ($anchor->payment_status === Payment::STATUS_PENDING && $invoice->billing_reason === 'subscription_create') {
+            $target = $anchor;
+            $target->update([
+                'payment_status' => Payment::STATUS_FAILED,
+                'failure_reason' => 'Stripe invoice payment failed for subscription renewal.',
+                'due_at' => now()->addDays(Payment::GRACE_PERIOD_DAYS),
+                'stripe_invoice_id' => $invoice->id,
+            ]);
+        } else {
+            if (Payment::query()->where('stripe_invoice_id', $invoice->id)->exists()) {
+                return;
+            }
+
+            $target = Payment::create([
+                'business_id' => $anchor->business_id,
+                'user_id' => $anchor->user_id,
+                'package_id' => $anchor->package_id,
+                'payment_type' => Payment::TYPE_SUBSCRIPTION,
+                'payment_status' => Payment::STATUS_FAILED,
+                'billing_cycle' => $anchor->billing_cycle,
+                'gateway' => 'stripe',
+                'amount' => $invoice->amount_due / 100,
+                'currency' => strtolower($invoice->currency),
+                'stripe_customer_id' => $invoice->customer,
+                'stripe_subscription_id' => $invoice->subscription,
+                'stripe_invoice_id' => $invoice->id,
+                'failure_reason' => 'Stripe invoice payment failed for subscription renewal.',
+                'due_at' => now()->addDays(Payment::GRACE_PERIOD_DAYS),
+            ]);
+        }
+
+        if ($target->business) {
+            $this->notifications->notifyPaymentFailed($target->business, $target);
         }
     }
 }
