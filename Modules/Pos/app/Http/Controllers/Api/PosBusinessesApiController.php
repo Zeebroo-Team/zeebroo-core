@@ -11,9 +11,13 @@ use Modules\Business\Models\BusinessCategory;
 use Modules\Business\Models\BusinessMember;
 use Modules\HRManagement\Models\Employee;
 use Modules\Package\Models\Package;
+use Modules\Payment\Models\Payment;
+use Modules\Payment\Services\PaymentProvisioningService;
 
 class PosBusinessesApiController extends Controller
 {
+    public function __construct(private readonly PaymentProvisioningService $paymentProvisioningService) {}
+
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
@@ -103,8 +107,18 @@ class PosBusinessesApiController extends Controller
         $features['account_management'] = true;
         $business->setSetting('business.features', $features);
 
+        $payment = $this->paymentProvisioningService->createInitialPayment($business, $package, $user);
+        $requiresPayment = $payment !== null && $payment->payment_type === Payment::TYPE_SUBSCRIPTION;
+
         return response()->json([
             'data' => ['id' => (int) $business->id, 'name' => $business->name],
+            'payment' => [
+                'required' => $requiresPayment,
+                'id'       => $requiresPayment ? $payment->id : null,
+                'status'   => $requiresPayment ? $payment->payment_status : null,
+                'amount'   => $requiresPayment ? (float) $payment->amount : null,
+                'currency' => $requiresPayment ? $payment->currency : null,
+            ],
         ], 201);
     }
 }

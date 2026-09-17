@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   wideAuth:     () => ipcRenderer.send('window-wide-auth'),
   narrowAuth:   () => ipcRenderer.send('window-narrow-auth'),
   onWindowState: (cb) => ipcRenderer.on('window-state', (_e, state) => cb(state)),
+  onPaymentDeepLink: (cb) => ipcRenderer.on('payment-deep-link', (_e, payload) => cb(payload)),
 
   // Platform
   platform: process.platform,
@@ -22,6 +23,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // API
   apiRequest:      (method, path, body) => ipcRenderer.invoke('api-request', { method, path, body }),
+  downloadFile:    (path, suggestedFilename) => ipcRenderer.invoke('api-download-file', { path, suggestedFilename }),
   printReceipt:    ()                   => ipcRenderer.invoke('print-receipt'),
   getPrinters:         ()      => ipcRenderer.invoke('get-printers'),
   getPrinterConfig:    ()      => ipcRenderer.invoke('get-printer-config'),

@@ -15,10 +15,15 @@ use Modules\Auth\Services\AuthService;
 use Modules\Business\Models\Business;
 use Modules\Business\Models\BusinessCategory;
 use Modules\Package\Models\Package;
+use Modules\Payment\Models\Payment;
+use Modules\Payment\Services\PaymentProvisioningService;
 
 class PosAuthApiController extends Controller
 {
-    public function __construct(private readonly AuthService $authService) {}
+    public function __construct(
+        private readonly AuthService $authService,
+        private readonly PaymentProvisioningService $paymentProvisioningService,
+    ) {}
 
     public function token(Request $request): JsonResponse
     {
@@ -109,9 +114,13 @@ class PosAuthApiController extends Controller
         $features['account_management'] = true; // always on
         $business->setSetting('business.features', $features);
 
+        $payment = $this->paymentProvisioningService->createInitialPayment($business, $package, $user);
+
         $deviceName = $validated['device_name'] ?? 'pos-api-client';
         $token = $user->createToken($deviceName);
         UserActivityLog::record($user, UserActivityLog::PLATFORM_DESKTOP, UserActivityLog::EVENT_REGISTER, $request, $deviceName);
+
+        $requiresPayment = $payment !== null && $payment->payment_type === Payment::TYPE_SUBSCRIPTION;
 
         return response()->json([
             'token_type'   => 'Bearer',
@@ -120,6 +129,13 @@ class PosAuthApiController extends Controller
                 'id'    => (int) $user->id,
                 'name'  => $user->name,
                 'email' => $user->email,
+            ],
+            'payment' => [
+                'required' => $requiresPayment,
+                'id'       => $requiresPayment ? $payment->id : null,
+                'status'   => $requiresPayment ? $payment->payment_status : null,
+                'amount'   => $requiresPayment ? (float) $payment->amount : null,
+                'currency' => $requiresPayment ? $payment->currency : null,
             ],
         ], 201);
     }

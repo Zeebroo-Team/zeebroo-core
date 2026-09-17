@@ -5368,6 +5368,7 @@ let _obSelectedCat = '';
 let _obFeatureSet  = new Set(['point_of_sale', 'sales_management', 'product_management', 'stock_management']);
 let _obPackages = [];
 let _obSelectedPackage = null;
+let _obPendingPaymentId = null;
 
 const _obCatIcons = {
   education:              'fa-graduation-cap',
@@ -5609,24 +5610,24 @@ function _obSetStep(n) {
   });
 
   // Show/hide panels
-  ['1','2','3','4','5'].forEach(i => {
+  ['1','2','3','4','5','6'].forEach(i => {
     const p = $(`#ob-panel-${i}`);
     if (p) p.style.display = (String(n) === i) ? '' : 'none';
   });
 
   // Show/hide bottom-bar back buttons
-  const backIds = { 2: 'ob-back-2-btn', 3: 'ob-back-3-btn', 4: 'ob-back-4-btn', 5: 'ob-back-5-btn' };
+  const backIds = { 2: 'ob-back-2-btn', 3: 'ob-back-3-btn', 4: 'ob-back-4-btn', 5: 'ob-back-5-btn', 6: 'ob-back-6-btn' };
   Object.values(backIds).forEach(id => { const el = $(`#${id}`); if (el) el.style.display = 'none'; });
   if (backIds[n]) { const el = $(`#${backIds[n]}`); if (el) el.style.display = ''; }
 
   // Show/hide bottom-bar next/submit buttons
-  const nextIds = { 1:'ob-next-btn', 2:'ob-next-2-btn', 3:'ob-next-3-btn', 4:'ob-next-4-btn', 5:'signup-btn' };
+  const nextIds = { 1:'ob-next-btn', 2:'ob-next-2-btn', 3:'ob-next-3-btn', 4:'ob-next-4-btn', 5:'ob-next-5-btn', 6:'signup-btn' };
   Object.values(nextIds).forEach(id => { const el = $(`#${id}`); if (el) el.style.display = 'none'; });
   { const el = $(`#${nextIds[n]}`); if (el) el.style.display = ''; }
 
   // Update progress bar (hidden but JS still sets it)
   const pb = $('#ob-progress-bar');
-  if (pb) pb.style.width = `${n * 20}%`;
+  if (pb) pb.style.width = `${Math.round(n * 100 / 6)}%`;
 
   if (n === 5) {
     const sub = $('#ob-panel-5-sub');
@@ -5635,12 +5636,59 @@ function _obSetStep(n) {
       : 'These features are included in your selected package';
   }
 
+  if (n === 6) {
+    _obShowPayWaiting(false);
+    _obPopulatePaySummary();
+  }
+
   $('#signup-alert').style.display = 'none';
   const focusMap = { 1: '#su-email', 2: '#su-name' };
   const focusSel = focusMap[n];
   if (focusSel) setTimeout(() => $(focusSel)?.focus(), 50);
 
   _obUpdatePkgSummary();
+}
+
+// Fills panel 6's summary card from the wizard state chosen on steps 1-5 —
+// mirrors populateWizPaymentSummary() in the web onboarding wizard.
+function _obPopulatePaySummary() {
+  const biz = $('#su-biz')?.value.trim() || '—';
+  $('#ob-pay-business').textContent = biz;
+
+  const catCard = $(`.ob-cat-card[data-cat="${_obSelectedCat}"]`);
+  const catName = catCard?.querySelector('.ob-cat-name')?.textContent.trim() || '—';
+  $('#ob-pay-category').textContent = catName;
+
+  const pkg = _obSelectedPackage;
+  const price = pkg ? Number(pkg.price || 0) : 0;
+  const disc  = pkg && pkg.discounted_price != null ? Number(pkg.discounted_price) : null;
+  const amount = (disc != null && disc < price) ? disc : price;
+  const isFree = !pkg || pkg.is_free || amount <= 0;
+
+  $('#ob-pay-package').textContent = pkg ? `${pkg.name}${isFree ? ' (Free)' : ''}` : '—';
+  $('#ob-pay-total').textContent   = isFree ? '$0.00' : `$${amount.toFixed(2)} / mo`;
+  $('#ob-pay-cycle-badge').style.display  = isFree ? 'none'  : 'inline-flex';
+  $('#ob-pay-gateway-note').style.display = isFree ? 'none'  : '';
+  $('#ob-pay-free-note').style.display    = isFree ? ''      : 'none';
+
+  const btn = $('#signup-btn');
+  if (btn) btn.innerHTML = isFree
+    ? '<i class="fa fa-check"></i> Create Account'
+    : '<i class="fa fa-lock"></i> Pay &amp; Create Account';
+}
+
+// Toggles panel 6 between the review/summary state and the "waiting for
+// Stripe" state — the bottom action bar is hidden while waiting since that
+// panel owns its own Cancel / Check-again controls.
+function _obShowPayWaiting(show) {
+  const review  = $('#ob-pay-review');
+  const waiting = $('#ob-pay-waiting');
+  const bar     = $('#ob-bottom-bar');
+  if (review)  review.style.display  = show ? 'none' : '';
+  if (waiting) waiting.style.display = show ? '' : 'none';
+  if (bar)     bar.style.display     = (show && _obStep === 6) ? 'none' : '';
+  const err = $('#ob-pay-waiting-error');
+  if (err) err.style.display = 'none';
 }
 
 function showSignup() {
@@ -5658,6 +5706,8 @@ function showSignup() {
   _obFeatureSet  = new Set();
   _obPackages = [];
   _obSelectedPackage = null;
+  _obPendingPaymentId = null;
+  _obShowPayWaiting(false);
   const pkgNextBtn = $('#ob-next-4-btn');
   if (pkgNextBtn) pkgNextBtn.disabled = true;
   _obSetStep(1);
@@ -6506,6 +6556,8 @@ function showApp() {
   requestAnimationFrame(() => activateTab('home'));
   // Check if bank account / billing onboarding is needed
   _checkBankOnboarding();
+  // Warn if the business's subscription payment is pending/failed
+  _checkBillingAlert();
   // Load business + branch switchers
   _bizSwInit();
   // Apply feature-based tab and backstage visibility
@@ -8377,6 +8429,9 @@ $('#ob-back-5-btn').addEventListener('click', () => {
   _obBuildPkgGrid();
 });
 
+$('#ob-next-5-btn').addEventListener('click', () => _obSetStep(6));
+$('#ob-back-6-btn').addEventListener('click', () => _obSetStep(5));
+
 // Password visibility toggle
 $('#su-pw-toggle').addEventListener('click', () => {
   const inp = $('#su-password');
@@ -8385,10 +8440,39 @@ $('#su-pw-toggle').addEventListener('click', () => {
   else                         { inp.type = 'password'; ico.className = 'fa fa-eye'; }
 });
 
-// Sign-up — final step submit
-$('#signup-btn').addEventListener('click', doSignup);
+// Sign-up — final step (Payment) submit
+$('#signup-btn').addEventListener('click', doSignupOrPay);
+$('#ob-pay-cancel-btn').addEventListener('click', () => {
+  _obShowPayWaiting(false);
+  showAlert($('#signup-alert'), 'Payment canceled. Click Pay when you\'re ready, or go back to pick another package.');
+});
+$('#ob-pay-retry-btn').addEventListener('click', () => _obVerifyPaymentAndProceed(_obPendingPaymentId));
 
-async function doSignup() {
+// Fired by main.js after the system browser returns from Stripe Checkout
+// (socibiz://payment deep link). Never trust the link's status alone —
+// _obVerifyPaymentAndProceed() re-checks the real status against the API.
+window.electronAPI.onPaymentDeepLink?.(({ status, paymentId }) => {
+  if ($('#ob-pay-waiting')?.style.display === 'none') return; // stray/late event — ignore
+  if (status === 'success') {
+    _obVerifyPaymentAndProceed(paymentId || _obPendingPaymentId);
+  } else {
+    _obShowPayWaiting(false);
+    showAlert($('#signup-alert'), 'Payment was canceled. You can try again when ready.');
+  }
+});
+
+async function doSignupOrPay() {
+  // Registration already succeeded earlier in this session (e.g. the user
+  // canceled Checkout, or checkout-session creation failed and they're
+  // retrying) — don't call /auth/register again with the same email, just
+  // restart Stripe Checkout for the existing pending payment.
+  if (_obPendingPaymentId) {
+    const btn = $('#signup-btn');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Starting checkout…'; }
+    await _obStartPaymentCheckout();
+    return;
+  }
+
   const email    = $('#su-email').value.trim();
   const password = $('#su-password').value;
   const name     = $('#su-name').value.trim();
@@ -8404,17 +8488,22 @@ async function doSignup() {
   if (!category)  { _obSetStep(3); showAlert(alert, 'Please select your industry'); return; }
   if (!packageId) { _obSetStep(4); showAlert(alert, 'Please select a package'); return; }
 
+  const wasFree = !_obSelectedPackage || _obSelectedPackage.is_free;
   btn.disabled = true;
-  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Creating account…';
+  btn.innerHTML = wasFree
+    ? '<i class="fa fa-spinner fa-spin"></i> Creating account…'
+    : '<i class="fa fa-spinner fa-spin"></i> Starting checkout…';
   alert.style.display = 'none';
 
   const deviceName = state.config?.device_name || 'pos-desktop-1';
   const res = await API.register(name, biz, category, features, email, password, deviceName, packageId);
 
   btn.disabled = false;
-  btn.innerHTML = '<i class="fa fa-check"></i>&nbsp; Create Account';
 
   if (res.status !== 200 && res.status !== 201) {
+    btn.innerHTML = wasFree
+      ? '<i class="fa fa-check"></i> Create Account'
+      : '<i class="fa fa-lock"></i> Pay &amp; Create Account';
     const errs = res.body?.errors || {};
     const msg  = Object.keys(errs).length
       ? Object.values(errs).flat().join(' ')
@@ -8425,13 +8514,15 @@ async function doSignup() {
   }
 
   const token = res.body?.access_token || res.body?.token;
-  const suEmail = $('#su-email').value.trim();
-  state._userName  = res.body?.user?.name  || $('#su-name').value.trim() || null;
-  state._userEmail = res.body?.user?.email || suEmail;
+  state._userName  = res.body?.user?.name  || name || null;
+  state._userEmail = res.body?.user?.email || email;
   await window.electronAPI.setConfig({ token });
   state.config = await window.electronAPI.getConfig();
 
-  // Auto-select the newly created business
+  // Auto-select the newly created business — done for both free and paid
+  // signups so config.token/business_id are persisted before the browser
+  // opens, in case the app is closed mid-payment (see main.js's deep-link
+  // fallback for that case).
   const bizRes = await API.businesses();
   const businesses = bizRes.body?.data || [];
   if (businesses.length) {
@@ -8439,11 +8530,58 @@ async function doSignup() {
     await window.electronAPI.setConfig({ business_id: b.id, branch_id: null });
     state.config = await window.electronAPI.getConfig();
     state._bizName = b.name;
-    $('#app-title').textContent = `Zeebroo POS — ${b.name}`;
-    updateProfileUI(b.name, state._userEmail || email, state._userName);
-    $('#status-branch').innerHTML = `<i class="fa fa-building"></i> ${b.name}`;
   }
 
+  const payment = res.body?.payment;
+  if (!payment?.required) {
+    _obFinishSignupAndEnterApp();
+    return;
+  }
+
+  _obPendingPaymentId = payment.id;
+  await _obStartPaymentCheckout();
+}
+
+async function _obStartPaymentCheckout() {
+  const btn   = $('#signup-btn');
+  const alert = $('#signup-alert');
+
+  const res = await API.startPaymentCheckout(_obPendingPaymentId);
+  if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa fa-lock"></i> Pay &amp; Create Account'; }
+
+  const checkoutUrl = res.body?.data?.checkout_url;
+  if (res.status !== 200 || !checkoutUrl) {
+    showAlert(alert, res.body?.message || 'Could not start Stripe checkout. Please try again.');
+    return;
+  }
+
+  window.electronAPI.openExternal(checkoutUrl);
+  _obShowPayWaiting(true);
+}
+
+async function _obVerifyPaymentAndProceed(paymentId) {
+  if (!paymentId) return;
+  const res = await API.paymentStatus(paymentId);
+
+  if (res.status === 200 && res.body?.data?.payment_status === 'succeeded') {
+    _obFinishSignupAndEnterApp();
+    return;
+  }
+
+  const err = $('#ob-pay-waiting-error');
+  if (err) {
+    err.textContent = 'Payment not confirmed yet — finish it in the browser window, then check again.';
+    err.style.display = '';
+  }
+}
+
+function _obFinishSignupAndEnterApp() {
+  const b = state._bizName;
+  if (b) {
+    $('#app-title').textContent = `Zeebroo POS — ${b}`;
+    updateProfileUI(b, state._userEmail, state._userName);
+    $('#status-branch').innerHTML = `<i class="fa fa-building"></i> ${b}`;
+  }
   showApp();
 }
 
@@ -8584,6 +8722,10 @@ $('#tpm-notifications').addEventListener('click', () => {
   closeProfileMenu();
   openNotificationsModal();
 });
+$('#tpm-payment').addEventListener('click', () => {
+  closeProfileMenu();
+  openPaymentModal();
+});
 
 // ── Notifications ────────────────────────────────────────────────────────
 const _notif = { list: [], unread: 0, modalFilter: 'all', pollTimer: null };
@@ -8600,6 +8742,9 @@ const _notifIconMap = {
   purchase_order_received: { icon: 'fa-circle-check',         cls: 'success' },
   sale_large:              { icon: 'fa-sack-dollar',          cls: 'info'    },
   automation:              { icon: 'fa-bolt',                 cls: 'info'    },
+  payment_succeeded:              { icon: 'fa-circle-check',          cls: 'success' },
+  payment_failed:                 { icon: 'fa-triangle-exclamation',  cls: 'danger'  },
+  subscription_renewal_upcoming:  { icon: 'fa-calendar-days',         cls: 'warning' },
 };
 
 function _notifTimeAgo(dateStr) {
@@ -9016,6 +9161,423 @@ $('#about-check-updates').addEventListener('click', () => {
   openUpdateModal();
 });
 
+// ── Subscription payment-due banner ─────────────────────────────────────
+const _billingAlert = { dismissed: false, duePaymentId: null };
+
+const _pmDueReasons = {
+  failed:   'Your last subscription payment failed.',
+  canceled: 'Your subscription checkout was canceled before it completed.',
+  pending:  'Your subscription payment is pending.',
+};
+
+function _pmRemainingText(dueAtIso) {
+  if (!dueAtIso) return null;
+  const due = new Date(dueAtIso);
+  if (isNaN(due.getTime())) return null;
+  const ms = due.getTime() - Date.now();
+  if (ms <= 0) return null;
+  const hours = Math.ceil(ms / 3600000);
+  if (hours < 24) return `within ${hours} hour${hours === 1 ? '' : 's'}`;
+  const days = Math.ceil(hours / 24);
+  return `within ${days} day${days === 1 ? '' : 's'}`;
+}
+
+function _billingAlertApply(data) {
+  const bar = $('#billing-alert-bar');
+  const items = data?.items || [];
+  const due = items.find(p => p.payment_type === 'subscription' && _pmDueStatuses.includes(p.payment_status));
+  const inactive = !!data?.subscription_status && data.subscription_status !== 'active';
+
+  // Once overdue, the full lockout screen (_subscriptionLockApply) takes over.
+  if (!due || !inactive || _billingAlert.dismissed || due.is_overdue) {
+    bar.style.display = 'none';
+    _billingAlert.duePaymentId = null;
+    return;
+  }
+
+  _billingAlert.duePaymentId = due.id;
+  const reason = _pmDueReasons[due.payment_status] || 'Your subscription payment needs attention.';
+  const remaining = _pmRemainingText(due.due_at);
+  $('#billing-alert-text').textContent = remaining
+    ? `${reason} Please settle it ${remaining} to avoid service interruption.`
+    : `${reason} Please settle it to avoid service interruption.`;
+  bar.style.display = 'flex';
+}
+
+async function _checkBillingAlert() {
+  const res = await API.paymentHistory();
+  if (res.status === 200) {
+    const data = res.body?.data || {};
+    _billingAlertApply(data);
+    _subscriptionLockApply(data);
+  }
+}
+
+// ── Subscription overdue — full lockout screen ──────────────────────────
+const _subscriptionLock = { paymentId: null };
+
+function _subscriptionLockApply(data) {
+  const overlay = $('#subscription-locked-overlay');
+  const overdue = data?.overdue;
+
+  if (!overdue) {
+    overlay.style.display = 'none';
+    _subscriptionLock.paymentId = null;
+    return;
+  }
+
+  _subscriptionLock.paymentId = overdue.payment_id;
+  $('#subscription-locked-pay-btn').style.display = overdue.can_pay ? '' : 'none';
+  $('#subscription-locked-contact').style.display = overdue.can_pay ? 'none' : '';
+  overlay.style.display = 'flex';
+}
+
+async function _performSignOut() {
+  closeProfileMenu();
+  _syncStop();
+  await window.electronAPI.setConfig({ token: null, business_id: null, branch_id: null });
+  state.posTabs = []; state.activePosTabId = null; state._nextPosTabId = 1;
+  _billingAlert.dismissed = false;
+  showLogin();
+  toast('Signed out', 'info');
+}
+
+$('#subscription-locked-pay-btn').addEventListener('click', () => {
+  openPaymentModal();
+});
+$('#subscription-locked-signout').addEventListener('click', _performSignOut);
+
+// Reactive fallback: if the deadline passes mid-session, any gated endpoint
+// starts returning 402 immediately (see api.js) rather than waiting for the
+// next proactive poll.
+window.addEventListener('api-payment-overdue', (e) => {
+  const body = e.detail || {};
+  _subscriptionLockApply({
+    overdue: {
+      payment_id: body.payment_id,
+      due_at: body.due_at,
+      can_pay: !!body.can_pay,
+    },
+  });
+});
+
+$('#billing-alert-dismiss').addEventListener('click', () => {
+  _billingAlert.dismissed = true;
+  $('#billing-alert-bar').style.display = 'none';
+});
+
+$('#billing-alert-pay-btn').addEventListener('click', async () => {
+  if (!_billingAlert.duePaymentId) return;
+  const btn = $('#billing-alert-pay-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Starting checkout…';
+
+  const res = await API.startPaymentCheckout(_billingAlert.duePaymentId);
+
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fa fa-credit-card"></i> Pay Now';
+
+  const checkoutUrl = res.body?.data?.checkout_url;
+  if (res.status === 200 && checkoutUrl) window.electronAPI.openExternal(checkoutUrl);
+});
+
+// ── Billing & Payments modal ────────────────────────────────────────────
+const _pm = { items: [], detailId: null, tab: null };
+
+const _pmStatusMeta = {
+  succeeded:  { cls: 'success', label: 'Paid' },
+  pending:    { cls: 'warning', label: 'Pending' },
+  processing: { cls: 'warning', label: 'Processing' },
+  failed:     { cls: 'danger',  label: 'Failed' },
+  canceled:   { cls: 'danger',  label: 'Canceled' },
+  refunded:   { cls: 'info',    label: 'Refunded' },
+};
+
+function _pmMoney(amount, currency) {
+  return `${(Number(amount) || 0).toFixed(2)} ${String(currency || '').toUpperCase()}`;
+}
+
+function _pmDate(str, withTime = false) {
+  if (!str) return '—';
+  const d = new Date(str);
+  if (isNaN(d.getTime())) return '—';
+  return withTime
+    ? d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+    : d.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+}
+
+function _pmBadgeHtml(status) {
+  const meta = _pmStatusMeta[status] || { cls: 'info', label: status || 'Unknown' };
+  return `<span class="pm-badge ${meta.cls}">${escHtml(meta.label)}</span>`;
+}
+
+const _pmDueStatuses = ['pending', 'failed', 'canceled'];
+
+async function openPaymentModal() {
+  const overlay = $('#payment-modal-overlay');
+  overlay.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+  $('#pm-alert').style.display = 'none';
+  $('#pm-list-panel').style.display = '';
+  $('#pm-detail-panel').style.display = 'none';
+  $('#pm-summary').innerHTML = '';
+  $('#pm-tabs').innerHTML = '';
+  $('#pm-list').innerHTML = '<div class="pm-loading"><i class="fa fa-spinner fa-spin"></i> Loading payment history…</div>';
+  _pm.tab = null;
+
+  await _pmRefresh();
+}
+
+async function _pmRefresh() {
+  const res = await API.paymentHistory();
+  if (res.status !== 200) {
+    $('#pm-list').innerHTML = '';
+    showAlert($('#pm-alert'), res.body?.message || 'Could not load payment history.');
+    return;
+  }
+
+  const data = res.body?.data || {};
+  _pm.items = data.items || [];
+  _billingAlertApply(data);
+  _subscriptionLockApply(data);
+  _pmRenderSummary(data);
+
+  const hasDue = _pm.items.some(p => _pmDueStatuses.includes(p.payment_status));
+  if (!_pm.tab) _pm.tab = hasDue ? 'due' : 'paid';
+  _pmRenderTabs();
+  _pmRenderList();
+}
+
+function _pmRenderTabs() {
+  const dueCount = _pm.items.filter(p => _pmDueStatuses.includes(p.payment_status)).length;
+  const paidCount = _pm.items.length - dueCount;
+
+  $('#pm-tabs').innerHTML = `
+    <button class="pm-tab ${_pm.tab === 'paid' ? 'active' : ''}" data-pm-tab="paid">
+      Paid <span class="pm-tab-count">${paidCount}</span>
+    </button>
+    <button class="pm-tab ${_pm.tab === 'due' ? 'active' : ''}" data-pm-tab="due">
+      Due &amp; Upcoming <span class="pm-tab-count">${dueCount}</span>
+    </button>`;
+
+  $('#pm-tabs').querySelectorAll('[data-pm-tab]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      _pm.tab = btn.dataset.pmTab;
+      _pmRenderTabs();
+      _pmRenderList();
+    });
+  });
+}
+
+function _closePaymentModal() {
+  $('#payment-modal-overlay').style.display = 'none';
+  document.body.style.overflow = '';
+}
+
+$('#payment-modal-close').addEventListener('click', _closePaymentModal);
+$('#payment-modal-overlay').addEventListener('click', e => {
+  if (e.target === $('#payment-modal-overlay')) _closePaymentModal();
+});
+
+function _pmRenderSummary(data) {
+  const summary = $('#pm-summary');
+  if (!data.subscription_status && !data.next_renewal_at) {
+    summary.innerHTML = '';
+    return;
+  }
+  const rawStatus = data.subscription_status || 'unknown';
+  const statusLabel = rawStatus.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  summary.innerHTML = `
+    <div class="pm-summary">
+      <div class="pm-summary-left">
+        <div class="pm-summary-plan">Subscription: ${escHtml(statusLabel)}</div>
+        ${data.next_renewal_at ? `<div class="pm-summary-renewal">Next renewal on ${_pmDate(data.next_renewal_at)}</div>` : ''}
+      </div>
+    </div>`;
+}
+
+function _pmRowIconMeta(status) {
+  const meta = _pmStatusMeta[status] || { cls: 'info' };
+  const icons = { succeeded: 'fa-circle-check', failed: 'fa-triangle-exclamation', canceled: 'fa-xmark', pending: 'fa-clock', processing: 'fa-clock', refunded: 'fa-rotate-left' };
+  return { cls: meta.cls, icon: icons[status] || 'fa-file-invoice-dollar' };
+}
+
+function _pmRenderList() {
+  const list = $('#pm-list');
+  const items = _pm.items.filter(p => _pm.tab === 'due'
+    ? _pmDueStatuses.includes(p.payment_status)
+    : !_pmDueStatuses.includes(p.payment_status));
+
+  if (!items.length) {
+    list.innerHTML = `<div class="pm-empty">${_pm.tab === 'due' ? "Nothing due right now — you're all settled." : 'No paid payments yet.'}</div>`;
+    return;
+  }
+
+  list.innerHTML = items.map(p => {
+    const iconMeta = _pmRowIconMeta(p.payment_status);
+    const showPayBtn = _pmDueStatuses.includes(p.payment_status);
+    return `
+      <div class="pm-row" data-pm-id="${p.id}">
+        <div class="pm-row-icon ${iconMeta.cls}" style="background:var(--surface2)"><i class="fa ${iconMeta.icon}"></i></div>
+        <div class="pm-row-body">
+          <div class="pm-row-plan">${escHtml(p.plan || 'Subscription')}</div>
+          <div class="pm-row-meta">${_pmDate(p.created_at)}${p.billing_cycle ? ' · ' + escHtml(p.billing_cycle) : ''}</div>
+        </div>
+        ${_pmBadgeHtml(p.payment_status)}
+        <div class="pm-row-amount">${_pmMoney(p.amount, p.currency)}</div>
+        ${showPayBtn
+          ? `<button class="po-btn-primary pm-row-pay-btn" data-pm-pay="${p.id}"><i class="fa fa-credit-card"></i> Pay</button>`
+          : `<div class="pm-row-chevron"><i class="fa fa-chevron-right"></i></div>`}
+      </div>`;
+  }).join('');
+
+  list.querySelectorAll('[data-pm-id]').forEach(row => {
+    row.addEventListener('click', (e) => {
+      if (e.target.closest('[data-pm-pay]')) return;
+      _pmShowDetail(Number(row.dataset.pmId));
+    });
+  });
+  list.querySelectorAll('[data-pm-pay]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      _pmRowPayNow(Number(btn.dataset.pmPay), btn);
+    });
+  });
+}
+
+async function _pmRowPayNow(id, btn) {
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i>';
+
+  const res = await API.startPaymentCheckout(id);
+  const checkoutUrl = res.body?.data?.checkout_url;
+  if (res.status !== 200 || !checkoutUrl) {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fa fa-credit-card"></i> Pay';
+    showAlert($('#pm-alert'), res.body?.message || 'Could not start Stripe checkout. Please try again.');
+    return;
+  }
+
+  window.electronAPI.openExternal(checkoutUrl);
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fa fa-arrows-rotate"></i> Check status';
+  btn.onclick = async (e) => {
+    e.stopPropagation();
+    const chk = await API.paymentStatus(id);
+    if (chk.status === 200 && chk.body?.data?.payment_status === 'succeeded') {
+      await _pmRefresh();
+    } else {
+      showAlert($('#pm-alert'), 'Payment not confirmed yet — finish it in the browser window, then check again.');
+    }
+  };
+}
+
+async function _pmShowDetail(id) {
+  _pm.detailId = id;
+  $('#pm-list-panel').style.display = 'none';
+  $('#pm-detail-panel').style.display = '';
+  $('#pm-detail-body').innerHTML = '<div class="pm-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</div>';
+
+  const res = await API.paymentDetail(id);
+  if (res.status !== 200) {
+    $('#pm-detail-body').innerHTML = `<div class="pm-empty">${escHtml(res.body?.message || 'Could not load this payment.')}</div>`;
+    return;
+  }
+
+  _pmRenderDetail(res.body?.data || {});
+}
+
+function _pmRenderDetail(p) {
+  const rows = [
+    ['Plan', escHtml(p.plan || 'Subscription')],
+    ['Status', _pmBadgeHtml(p.payment_status)],
+    ['Amount', escHtml(_pmMoney(p.amount, p.currency))],
+    ['Billing cycle', escHtml(p.billing_cycle ? p.billing_cycle[0].toUpperCase() + p.billing_cycle.slice(1) : '—')],
+    ['Payment method', escHtml(p.gateway ? p.gateway[0].toUpperCase() + p.gateway.slice(1) : '—')],
+    ['Paid on', escHtml(p.paid_at ? _pmDate(p.paid_at, true) : '—')],
+  ];
+  if (p.current_period_end) rows.push(['Next renewal', escHtml(_pmDate(p.current_period_end))]);
+  if (p.failure_reason) rows.push(['Failure reason', escHtml(p.failure_reason)]);
+  rows.push(['Created', escHtml(_pmDate(p.created_at, true))]);
+
+  const rowsHtml = rows.map(([label, value]) => `
+    <div class="pm-detail-row">
+      <span class="pm-detail-label">${label}</span>
+      <span class="pm-detail-value">${value}</span>
+    </div>`).join('');
+
+  const canPay = _pmDueStatuses.includes(p.payment_status);
+  const canDownload = p.payment_status === 'succeeded';
+
+  $('#pm-detail-body').innerHTML = `
+    ${rowsHtml}
+    <div id="pm-detail-alert" class="qap-alert" style="display:none;margin-top:14px"></div>
+    <div class="pm-detail-actions">
+      ${canPay ? `<button class="po-btn-primary" id="pm-pay-now"><i class="fa fa-credit-card"></i> Pay Now</button>` : ''}
+      ${canDownload ? `<button class="po-btn-outline" id="pm-download-receipt"><i class="fa fa-download"></i> Download Receipt</button>` : ''}
+    </div>`;
+
+  if (canPay) {
+    $('#pm-pay-now').addEventListener('click', () => _pmPayNow(p.id));
+  }
+  if (canDownload) {
+    $('#pm-download-receipt').addEventListener('click', () => _pmDownloadReceipt(p.id));
+  }
+}
+
+async function _pmPayNow(id) {
+  const btn = $('#pm-pay-now');
+  const alert = $('#pm-detail-alert');
+  alert.style.display = 'none';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Starting checkout…'; }
+
+  const res = await API.startPaymentCheckout(id);
+  const checkoutUrl = res.body?.data?.checkout_url;
+  if (res.status !== 200 || !checkoutUrl) {
+    showAlert(alert, res.body?.message || 'Could not start Stripe checkout. Please try again.');
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa fa-credit-card"></i> Pay Now'; }
+    return;
+  }
+
+  window.electronAPI.openExternal(checkoutUrl);
+  if (btn) {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fa fa-arrows-rotate"></i> Check payment status';
+    btn.onclick = () => _pmCheckPaymentStatus(id);
+  }
+  showAlert(alert, 'Complete the payment in your browser, then click "Check payment status".');
+}
+
+async function _pmCheckPaymentStatus(id) {
+  const alert = $('#pm-detail-alert');
+  const res = await API.paymentStatus(id);
+  if (res.status === 200 && res.body?.data?.payment_status === 'succeeded') {
+    await _pmRefresh();
+    await _pmShowDetail(id);
+    return;
+  }
+  showAlert(alert, 'Payment not confirmed yet — finish it in the browser window, then check again.');
+}
+
+async function _pmDownloadReceipt(id) {
+  const btn = $('#pm-download-receipt');
+  const alert = $('#pm-detail-alert');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Downloading…'; }
+
+  const res = await window.electronAPI.downloadFile(`/auth/payment/${id}/receipt`, `receipt-${id}.pdf`);
+
+  if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa fa-download"></i> Download Receipt'; }
+  if (res.canceled) return;
+  if (res.status !== 200) {
+    showAlert(alert, res.message || 'Could not download the receipt.');
+  }
+}
+
+$('#pm-detail-back').addEventListener('click', () => {
+  $('#pm-detail-panel').style.display = 'none';
+  $('#pm-list-panel').style.display = '';
+});
+
 // ── My Profile modal ────────────────────────────────────────────────────
 function _mpShowAlert(el, msg, isError = true) {
   el.textContent = msg;
@@ -9349,14 +9911,7 @@ async function _autoCheckForUpdate() {
     openUpdateModal(true); // forced — triggered by app launch / login, not a manual check
   } catch (_) { /* silent — user can still check manually from the About modal */ }
 }
-$('#tpm-logout').addEventListener('click', async () => {
-  closeProfileMenu();
-  _syncStop();
-  await window.electronAPI.setConfig({ token: null, business_id: null, branch_id: null });
-  state.posTabs = []; state.activePosTabId = null; state._nextPosTabId = 1;
-  showLogin();
-  toast('Signed out', 'info');
-});
+$('#tpm-logout').addEventListener('click', _performSignOut);
 
 // ── Feature Management Modal ───────────────────────────────────────────────
 const _featDefs = [
@@ -23225,7 +23780,7 @@ document.addEventListener('click', e => {
 // ── End business/branch switcher ──────────────────────────────────────────
 
 // ── Business onboarding wizard ─────────────────────────────────────────────
-const _bbwz = { step: 1, selectedCat: null, selectedFeatures: new Set(), cats: [], packages: [], selectedPackage: null };
+const _bbwz = { step: 1, selectedCat: null, selectedFeatures: new Set(), cats: [], packages: [], selectedPackage: null, pendingPaymentId: null, createdBusiness: null };
 
 function _bbwzOpen() {
   _bizSwClose();
@@ -23233,6 +23788,8 @@ function _bbwzOpen() {
   _bbwz.selectedCat = null;
   _bbwz.selectedFeatures = new Set();
   _bbwz.selectedPackage = null;
+  _bbwz.pendingPaymentId = null;
+  _bbwz.createdBusiness = null;
   $('#bbwz-name').value = '';
   $('#bbwz-alert').style.display = 'none';
   $('#bbwz-pkg-alert').style.display = 'none';
@@ -23240,6 +23797,7 @@ function _bbwzOpen() {
   $('#bbwz-pkg-summary').style.display = 'none';
   const nextBtn = $('#bbwz-next-btn');
   if (nextBtn) nextBtn.disabled = false;
+  _bbwzShowPayWaiting(false);
   _bbwzSetStep(1);
   if (_bbwz.cats.length) {
     _bbwzBuildCatGrid();
@@ -23350,7 +23908,7 @@ function _bbwzBuildReview() {
 
 function _bbwzSetStep(n) {
   _bbwz.step = n;
-  [1, 2, 3, 4].forEach(i => {
+  [1, 2, 3, 4, 5].forEach(i => {
     const dot  = $(`[data-bbwz-dot="${i}"]`);
     const line = $(`[data-bbwz-line="${i - 1}"]`);
     dot.classList.toggle('active', i === n);
@@ -23359,9 +23917,50 @@ function _bbwzSetStep(n) {
     $(`#bbwz-panel-${i}`).style.display = i === n ? '' : 'none';
   });
   $('#bbwz-back-btn').style.display   = n > 1 ? '' : 'none';
-  $('#bbwz-next-btn').style.display   = n < 4 ? '' : 'none';
-  $('#bbwz-submit-btn').style.display = n === 4 ? '' : 'none';
+  $('#bbwz-next-btn').style.display   = n < 5 ? '' : 'none';
+  $('#bbwz-submit-btn').style.display = n === 5 ? '' : 'none';
+  if (n === 5) {
+    _bbwzShowPayWaiting(false);
+    _bbwzPopulatePaySummary();
+  }
   _bbwzUpdatePkgSummary();
+}
+
+// Fills panel 5's summary card — same free/discounted/price math as
+// _obPopulatePaySummary(), sourced from this wizard's own state.
+function _bbwzPopulatePaySummary() {
+  $('#bbwz-pay-business').textContent = $('#bbwz-name').value.trim() || '—';
+
+  const catLabel = _bbwz.cats.find(c => c.value === _bbwz.selectedCat)?.label || _bbwz.selectedCat || '—';
+  $('#bbwz-pay-category').textContent = catLabel;
+
+  const pkg = _bbwz.selectedPackage;
+  const price = pkg ? Number(pkg.price || 0) : 0;
+  const disc  = pkg && pkg.discounted_price != null ? Number(pkg.discounted_price) : null;
+  const amount = (disc != null && disc < price) ? disc : price;
+  const isFree = !pkg || pkg.is_free || amount <= 0;
+
+  $('#bbwz-pay-package').textContent = pkg ? `${pkg.name}${isFree ? ' (Free)' : ''}` : '—';
+  $('#bbwz-pay-total').textContent   = isFree ? '$0.00' : `$${amount.toFixed(2)} / mo`;
+  $('#bbwz-pay-cycle-badge').style.display  = isFree ? 'none'  : 'inline-flex';
+  $('#bbwz-pay-gateway-note').style.display = isFree ? 'none'  : '';
+  $('#bbwz-pay-free-note').style.display    = isFree ? ''      : 'none';
+
+  const btn = $('#bbwz-submit-btn');
+  if (btn) btn.innerHTML = isFree
+    ? '<i class="fa fa-check"></i> Create Business'
+    : '<i class="fa fa-lock"></i> Pay &amp; Create Business';
+}
+
+function _bbwzShowPayWaiting(show) {
+  const review  = $('#bbwz-pay-review');
+  const waiting = $('#bbwz-pay-waiting');
+  const footer  = $('#bbwz-footer');
+  if (review)  review.style.display  = show ? 'none' : '';
+  if (waiting) waiting.style.display = show ? '' : 'none';
+  if (footer)  footer.style.display  = (show && _bbwz.step === 5) ? 'none' : '';
+  const err = $('#bbwz-pay-waiting-error');
+  if (err) err.style.display = 'none';
 }
 
 $('#bbwz-next-btn').addEventListener('click', () => {
@@ -23378,6 +23977,8 @@ $('#bbwz-next-btn').addEventListener('click', () => {
   } else if (_bbwz.step === 3) {
     _bbwzBuildReview();
     _bbwzSetStep(4);
+  } else if (_bbwz.step === 4) {
+    _bbwzSetStep(5);
   }
 });
 
@@ -23387,13 +23988,49 @@ $('#bbwz-back-btn').addEventListener('click', () => {
 
 $('#bbwz-cancel-btn').addEventListener('click', () => _bbwzClose());
 
-$('#bbwz-submit-btn').addEventListener('click', async () => {
+$('#bbwz-pay-cancel-btn').addEventListener('click', () => {
+  _bbwzShowPayWaiting(false);
+  showAlert($('#bbwz-submit-alert'), 'Payment canceled. Click Pay when you\'re ready, or go back to pick another package.');
+});
+$('#bbwz-pay-retry-btn').addEventListener('click', () => _bbwzVerifyPaymentAndProceed(_bbwz.pendingPaymentId));
+
+// Fired by main.js after the system browser returns from Stripe Checkout.
+// Both the signup wizard and this "Add Business" wizard listen for this
+// event — each only acts if its own waiting panel is the one visible.
+window.electronAPI.onPaymentDeepLink?.(({ status, paymentId }) => {
+  if ($('#bbwz-pay-waiting')?.style.display === 'none') return; // not this wizard's turn — ignore
+  if (status === 'success') {
+    _bbwzVerifyPaymentAndProceed(paymentId || _bbwz.pendingPaymentId);
+  } else {
+    _bbwzShowPayWaiting(false);
+    showAlert($('#bbwz-submit-alert'), 'Payment was canceled. You can try again when ready.');
+  }
+});
+
+$('#bbwz-submit-btn').addEventListener('click', doCreateBusinessOrPay);
+
+async function doCreateBusinessOrPay() {
+  // Business already created earlier in this session (canceled Checkout, or
+  // checkout-session creation failed and the user is retrying) — don't call
+  // createBusiness() again, just restart Stripe Checkout for the pending payment.
+  if (_bbwz.pendingPaymentId) {
+    const btn = $('#bbwz-submit-btn');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Starting checkout…'; }
+    await _bbwzStartPaymentCheckout();
+    return;
+  }
+
   const name = $('#bbwz-name').value.trim();
   if (!name) { _bbwzSetStep(1); $('#bbwz-name').focus(); return; }
   if (!_bbwz.selectedPackage) { _bbwzSetStep(2); return; }
+
+  const wasFree = !_bbwz.selectedPackage || _bbwz.selectedPackage.is_free;
   const btn = $('#bbwz-submit-btn');
   btn.disabled = true;
-  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Creating…';
+  btn.innerHTML = wasFree
+    ? '<i class="fa fa-spinner fa-spin"></i> Creating…'
+    : '<i class="fa fa-spinner fa-spin"></i> Starting checkout…';
+
   try {
     const res = await API.createBusiness({
       name,
@@ -23402,19 +24039,67 @@ $('#bbwz-submit-btn').addEventListener('click', async () => {
       features: [..._bbwz.selectedFeatures],
     });
     if (res.status >= 400) throw new Error(res.body?.message || `Error ${res.status}`);
-    const newBiz = res.body?.data;
-    if (newBiz) {
-      _bizSw.businesses.push(newBiz);
-      await _bizSwSwitchBiz(newBiz.id);
-    }
-    _bbwzClose();
-  } catch (err) {
-    showAlert($('#bbwz-submit-alert'), err.message || 'Failed to create business');
-  } finally {
+
+    _bbwz.createdBusiness = res.body?.data || null;
     btn.disabled = false;
-    btn.innerHTML = '<i class="fa fa-check"></i> Create Business';
+
+    const payment = res.body?.payment;
+    if (!payment?.required) {
+      await _bbwzFinishCreateAndClose();
+      return;
+    }
+
+    _bbwz.pendingPaymentId = payment.id;
+    await _bbwzStartPaymentCheckout();
+  } catch (err) {
+    btn.disabled = false;
+    btn.innerHTML = wasFree
+      ? '<i class="fa fa-check"></i> Create Business'
+      : '<i class="fa fa-lock"></i> Pay &amp; Create Business';
+    showAlert($('#bbwz-submit-alert'), err.message || 'Failed to create business');
   }
-});
+}
+
+async function _bbwzStartPaymentCheckout() {
+  const btn = $('#bbwz-submit-btn');
+
+  const res = await API.startPaymentCheckout(_bbwz.pendingPaymentId);
+  if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa fa-lock"></i> Pay &amp; Create Business'; }
+
+  const checkoutUrl = res.body?.data?.checkout_url;
+  if (res.status !== 200 || !checkoutUrl) {
+    showAlert($('#bbwz-submit-alert'), res.body?.message || 'Could not start Stripe checkout. Please try again.');
+    return;
+  }
+
+  window.electronAPI.openExternal(checkoutUrl);
+  _bbwzShowPayWaiting(true);
+}
+
+async function _bbwzVerifyPaymentAndProceed(paymentId) {
+  if (!paymentId) return;
+  const res = await API.paymentStatus(paymentId);
+
+  if (res.status === 200 && res.body?.data?.payment_status === 'succeeded') {
+    await _bbwzFinishCreateAndClose();
+    return;
+  }
+
+  const err = $('#bbwz-pay-waiting-error');
+  if (err) {
+    err.textContent = 'Payment not confirmed yet — finish it in the browser window, then check again.';
+    err.style.display = '';
+  }
+}
+
+async function _bbwzFinishCreateAndClose() {
+  const newBiz = _bbwz.createdBusiness;
+  if (newBiz) {
+    _bizSw.businesses.push(newBiz);
+    await _bizSwSwitchBiz(newBiz.id);
+  }
+  _bbwzClose();
+}
 
 $('#bbwz-overlay').addEventListener('click', e => {
   if (e.target === e.currentTarget) _bbwzClose();
