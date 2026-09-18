@@ -6,6 +6,11 @@ import '../../../core/theme/app_theme.dart';
 
 /// iOS-style frosted-glass top bar: blurred, near-white, sits above the
 /// scroll content instead of a solid Material AppBar.
+///
+/// Minimal two-line layout so greeting, name, business and branch are all
+/// visible at once without crowding the row: a small muted "Good afternoon,
+/// Name" line on top, and the bold, tappable "Business › Branch" line below
+/// it — plus the menu button and account avatar.
 class GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
   const GlassAppBar({
     super.key,
@@ -22,8 +27,8 @@ class GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
   final String initials;
   final VoidCallback onMenuTap;
 
-  /// e.g. "Nimal's Store · Main Branch" — the currently selected business
-  /// (and branch, when one is set). Null/empty hides the row entirely.
+  /// e.g. "Nimal's Store › Main Branch" — the currently selected business
+  /// (and branch, when one is set). Null/empty hides that line.
   final String? businessLabel;
   final VoidCallback? onBusinessTap;
 
@@ -31,15 +36,12 @@ class GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
   /// the appBar slot `MediaQuery.padding.top` of *extra* height on top of
   /// this automatically — that extra space is where [SafeArea] below lands,
   /// so this must stay a plain content height, never padding-inclusive.
-  static const _toolbarHeight = 64.0;
-  static const _toolbarHeightWithBusiness = 78.0;
+  static const _toolbarHeight = 62.0;
 
-  bool get _showBusinessRow => businessLabel != null && businessLabel!.isNotEmpty;
+  bool get _showBusinessLabel => businessLabel != null && businessLabel!.isNotEmpty;
 
   @override
-  Size get preferredSize => Size.fromHeight(
-    _showBusinessRow ? _toolbarHeightWithBusiness : _toolbarHeight,
-  );
+  Size get preferredSize => const Size.fromHeight(_toolbarHeight);
 
   @override
   Widget build(BuildContext context) => ClipRect(
@@ -61,11 +63,10 @@ class GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
               textScaler: MediaQuery.textScalerOf(context).clamp(maxScaleFactor: 1.15),
             ),
             child: SizedBox(
-              height: preferredSize.height,
+              height: _toolbarHeight,
               child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  const SizedBox(width: 6),
+                  const SizedBox(width: 2),
                   IconButton(
                     icon: const Icon(Icons.menu_rounded, color: AppColors.textDark),
                     tooltip: 'Menu',
@@ -73,46 +74,39 @@ class GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
                   ),
                   Expanded(
                     child: Column(
-                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.center,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          greeting,
+                          '$greeting, $name',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+                          style: const TextStyle(fontSize: 11.5, color: AppColors.textMuted),
                         ),
-                        Text(
-                          name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: AppColors.textDark),
-                        ),
-                        if (_showBusinessRow)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 3),
-                            child: GestureDetector(
-                              onTap: onBusinessTap,
-                              behavior: HitTestBehavior.opaque,
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Flexible(
-                                    child: Text(
-                                      businessLabel!,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: AppColors.textHint),
-                                    ),
+                        if (_showBusinessLabel) ...[
+                          const SizedBox(height: 1),
+                          InkWell(
+                            onTap: onBusinessTap,
+                            borderRadius: BorderRadius.circular(6),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    businessLabel!,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(fontSize: 15.5, fontWeight: FontWeight.w700, color: AppColors.textDark),
                                   ),
-                                  if (onBusinessTap != null) ...[
-                                    const SizedBox(width: 2),
-                                    const Icon(Icons.unfold_more_rounded, size: 13, color: AppColors.textHint),
-                                  ],
+                                ),
+                                if (onBusinessTap != null) ...[
+                                  const SizedBox(width: 2),
+                                  const Icon(Icons.expand_more_rounded, size: 16, color: AppColors.textMuted),
                                 ],
-                              ),
+                              ],
                             ),
                           ),
+                        ],
                       ],
                     ),
                   ),

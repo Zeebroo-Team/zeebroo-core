@@ -83,9 +83,12 @@ class _HomeShellState extends State<HomeShell> {
     final bottomFeatures = _bottomFeatures;
 
     final business = context.watch<BusinessState>();
-    final businessLabel =
-        business.branchName != null && business.branchName!.isNotEmpty
-        ? '${business.businessName} · ${business.branchName}'
+    final hasDistinctBranch =
+        business.branchName != null &&
+        business.branchName!.isNotEmpty &&
+        business.branchName != business.businessName;
+    final businessLabel = hasDistinctBranch
+        ? '${business.businessName} › ${business.branchName}'
         : business.businessName;
 
     final tabs = <NavTabData>[

@@ -33,9 +33,12 @@ class AppSideDrawer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final business = context.watch<BusinessState>();
-    final businessSubtitle =
-        business.branchName != null && business.branchName!.isNotEmpty
-        ? '${business.businessName} · ${business.branchName}'
+    final hasDistinctBranch =
+        business.branchName != null &&
+        business.branchName!.isNotEmpty &&
+        business.branchName != business.businessName;
+    final businessSubtitle = hasDistinctBranch
+        ? '${business.businessName} › ${business.branchName}'
         : business.businessName;
 
     return Drawer(
