@@ -49,13 +49,13 @@ class _PropertiesTabState extends State<PropertiesTab> with AutomaticKeepAliveCl
     _load();
   }
 
-  Future<void> _load() async {
+  Future<void> _load({bool forceRefresh = false}) async {
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
-      final res = await ApiClient.instance.get(ApiEndpoints.financeProperties);
+      final res = await ApiClient.instance.get(ApiEndpoints.financeProperties, bypassCache: forceRefresh);
       final body = res.data;
       _properties = parseListData(body);
       _summary = body is Map ? Map<String, dynamic>.from(body) : {};
@@ -118,7 +118,7 @@ class _PropertiesTabState extends State<PropertiesTab> with AutomaticKeepAliveCl
     if (_properties.isEmpty) return const EmptyState(message: 'No properties yet.');
 
     return RefreshIndicator(
-      onRefresh: _load,
+      onRefresh: () => _load(forceRefresh: true),
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
         children: [

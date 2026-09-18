@@ -8,6 +8,8 @@ import '../../../core/business/business_state.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../business/screens/select_business_screen.dart';
 import '../../finance/screens/finance_screen.dart';
+import '../../notifications/screens/notifications_screen.dart';
+import '../../pos/screens/pos_screen.dart';
 import '../models/feature_entry.dart';
 import '../widgets/app_side_drawer.dart';
 import '../widgets/glass_app_bar.dart';
@@ -33,11 +35,13 @@ class _HomeShellState extends State<HomeShell> {
   final _scaffoldKey = GlobalKey<ScaffoldState>();
   int _tabIndex = 0;
   List<FeatureEntry> _enabledFeatures = [];
+  int _unreadNotifications = 0;
 
   @override
   void initState() {
     super.initState();
     _loadFeatures();
+    _loadUnreadCount();
   }
 
   Future<void> _loadFeatures() async {
@@ -51,6 +55,25 @@ class _HomeShellState extends State<HomeShell> {
       // Bottom bar simply falls back to Home-only; the side menu (and its
       // own retry-by-reopen) isn't essential to get to today's overview.
     }
+  }
+
+  Future<void> _loadUnreadCount() async {
+    try {
+      final res = await ApiClient.instance.get(
+        ApiEndpoints.notifications,
+        params: {'status': 'unread', 'limit': 1},
+      );
+      final count = (res.data is Map ? res.data['unread_count'] : null) as num?;
+      if (mounted) setState(() => _unreadNotifications = count?.toInt() ?? 0);
+    } catch (_) {}
+  }
+
+  void _openNotifications() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+    );
+    // Refresh count after returning from notifications
+    _loadUnreadCount();
   }
 
   List<FeatureEntry> get _bottomFeatures =>
@@ -111,6 +134,7 @@ class _HomeShellState extends State<HomeShell> {
         email: email,
         initials: _initials(name),
         features: _enabledFeatures,
+        unreadNotifications: _unreadNotifications,
       ),
       appBar: GlassAppBar(
         greeting: _greeting(),
@@ -121,6 +145,8 @@ class _HomeShellState extends State<HomeShell> {
         onBusinessTap: () => Navigator.of(context).push(
           MaterialPageRoute(builder: (_) => const SelectBusinessScreen()),
         ),
+        unreadNotifications: _unreadNotifications,
+        onNotificationTap: _openNotifications,
       ),
       extendBody: true,
       body: IndexedStack(
@@ -135,6 +161,9 @@ class _HomeShellState extends State<HomeShell> {
         tabs: tabs,
         currentIndex: safeIndex,
         onTap: (i) => setState(() => _tabIndex = i),
+        onPosTap: () => Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const PosScreen()),
+        ),
       ),
     );
   }

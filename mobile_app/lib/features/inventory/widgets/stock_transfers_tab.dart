@@ -40,7 +40,7 @@ class _StockTransfersTabState extends State<StockTransfersTab> with AutomaticKee
     super.dispose();
   }
 
-  Future<void> _load() async {
+  Future<void> _load({bool forceRefresh = false}) async {
     setState(() {
       _loading = true;
       _error = null;
@@ -50,6 +50,7 @@ class _StockTransfersTabState extends State<StockTransfersTab> with AutomaticKee
       final res = await ApiClient.instance.get(
         ApiEndpoints.stockTransfers,
         params: {'q': _searchController.text.trim(), 'page': 1},
+        bypassCache: forceRefresh,
       );
       final body = res.data;
       final meta = (body is Map ? body['meta'] : null) as Map?;
@@ -136,7 +137,7 @@ class _StockTransfersTabState extends State<StockTransfersTab> with AutomaticKee
     if (_error != null && _items.isEmpty) return ErrorState(error: _error!, onRetry: _load);
     if (_items.isEmpty) return const EmptyState(message: 'No stock transfers found.');
     return RefreshIndicator(
-      onRefresh: _load,
+      onRefresh: () => _load(forceRefresh: true),
       child: ListView.separated(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
         itemCount: _items.length + (_page < _lastPage ? 1 : 0),

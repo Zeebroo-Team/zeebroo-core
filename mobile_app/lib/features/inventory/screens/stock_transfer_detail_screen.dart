@@ -28,13 +28,13 @@ class _StockTransferDetailScreenState extends State<StockTransferDetailScreen> {
     _load();
   }
 
-  Future<void> _load() async {
+  Future<void> _load({bool forceRefresh = false}) async {
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
-      final res = await ApiClient.instance.get(ApiEndpoints.stockTransfer(widget.transferId));
+      final res = await ApiClient.instance.get(ApiEndpoints.stockTransfer(widget.transferId), bypassCache: forceRefresh);
       final body = res.data;
       _transfer = (body is Map ? body['data'] as Map? : null)?.cast<String, dynamic>();
     } catch (e) {
@@ -113,7 +113,7 @@ class _StockTransferDetailScreenState extends State<StockTransferDetailScreen> {
     final toBranch = (t['toBranch'] as Map?)?['name'] ?? t['to_branch_id'];
 
     return RefreshIndicator(
-      onRefresh: _load,
+      onRefresh: () => _load(forceRefresh: true),
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
         children: [

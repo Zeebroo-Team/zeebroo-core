@@ -48,7 +48,7 @@ class _PurchaseOrdersTabState extends State<PurchaseOrdersTab> with AutomaticKee
     super.dispose();
   }
 
-  Future<void> _load() async {
+  Future<void> _load({bool forceRefresh = false}) async {
     setState(() {
       _loading = true;
       _error = null;
@@ -57,6 +57,7 @@ class _PurchaseOrdersTabState extends State<PurchaseOrdersTab> with AutomaticKee
       final res = await ApiClient.instance.get(
         ApiEndpoints.purchaseOrders,
         params: {'q': _searchController.text.trim(), 'status': _statusFilter},
+        bypassCache: forceRefresh,
       );
       _items = parseListData(res.data);
     } catch (e) {
@@ -142,7 +143,7 @@ class _PurchaseOrdersTabState extends State<PurchaseOrdersTab> with AutomaticKee
     if (_error != null && _items.isEmpty) return ErrorState(error: _error!, onRetry: _load);
     if (_items.isEmpty) return const EmptyState(message: 'No purchase orders found.');
     return RefreshIndicator(
-      onRefresh: _load,
+      onRefresh: () => _load(forceRefresh: true),
       child: ListView.separated(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
         itemCount: _items.length,

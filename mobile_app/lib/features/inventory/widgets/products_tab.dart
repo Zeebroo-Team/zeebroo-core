@@ -47,7 +47,7 @@ class _ProductsTabState extends State<ProductsTab>
     super.dispose();
   }
 
-  Future<void> _load() async {
+  Future<void> _load({bool forceRefresh = false}) async {
     setState(() {
       _loading = true;
       _error = null;
@@ -62,6 +62,7 @@ class _ProductsTabState extends State<ProductsTab>
           'page': 1,
           'per_page': 40,
         },
+        bypassCache: forceRefresh,
       );
       final body = res.data;
       final meta = (body is Map ? body['meta'] : null) as Map?;
@@ -210,7 +211,7 @@ class _ProductsTabState extends State<ProductsTab>
       );
     }
     return RefreshIndicator(
-      onRefresh: _load,
+      onRefresh: () => _load(forceRefresh: true),
       child: ListView.separated(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
         itemCount: _products.length + (_page < _lastPage ? 1 : 0),

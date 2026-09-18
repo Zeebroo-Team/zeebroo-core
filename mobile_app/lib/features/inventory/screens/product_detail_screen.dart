@@ -31,7 +31,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     _load();
   }
 
-  Future<void> _load() async {
+  Future<void> _load({bool forceRefresh = false}) async {
     setState(() {
       _loading = true;
       _error = null;
@@ -39,6 +39,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     try {
       final res = await ApiClient.instance.get(
         ApiEndpoints.product(widget.productId),
+        bypassCache: forceRefresh,
       );
       final body = res.data;
       _product = (body is Map ? body['data'] as Map? : body as Map?)
@@ -204,7 +205,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     final isActive = (p['is_active'] as bool?) ?? true;
 
     return RefreshIndicator(
-      onRefresh: _load,
+      onRefresh: () => _load(forceRefresh: true),
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
         children: [

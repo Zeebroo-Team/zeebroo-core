@@ -190,12 +190,13 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
     Route::get ('profit-report',      [PosProfitReportApiController::class,     'show'])->name('profit-report');
     Route::get ('payroll-overview',   [PosPayrollOverviewApiController::class,  'show'])->name('payroll-overview');
 
-    Route::get('sales',                  [PosSaleApiController::class, 'index']          )->name('sales.index');
-    Route::get('sales/history',          [PosSaleApiController::class, 'history']         )->name('sales.history');
-    Route::get('sales/pending-credits',  [PosSaleApiController::class, 'pendingCredits']  )->name('sales.pending-credits');
-    Route::get('sales/{sale}',           [PosSaleApiController::class, 'show']            )->name('sales.show');
-    Route::post('sales/{sale}/void', [PosSaleApiController::class, 'void'])->name('sales.void');
-    Route::post('sales/{sale}/return', [PosSaleReturnApiController::class, 'store'])->name('sales.return');
+    Route::get  ('sales',                  [PosSaleApiController::class, 'index']          )->name('sales.index');
+    Route::post ('sales',                  [PosSaleApiController::class, 'store']          )->name('sales.store');
+    Route::get  ('sales/history',          [PosSaleApiController::class, 'history']         )->name('sales.history');
+    Route::get  ('sales/pending-credits',  [PosSaleApiController::class, 'pendingCredits']  )->name('sales.pending-credits');
+    Route::get  ('sales/{sale}',           [PosSaleApiController::class, 'show']            )->name('sales.show');
+    Route::post ('sales/{sale}/void',      [PosSaleApiController::class, 'void']            )->name('sales.void');
+    Route::post ('sales/{sale}/return',    [PosSaleReturnApiController::class, 'store']     )->name('sales.return');
     Route::get('online/return-reasons', [PosReturnReasonsApiController::class, 'index'])->name('online.return-reasons');
 
     // Product Units

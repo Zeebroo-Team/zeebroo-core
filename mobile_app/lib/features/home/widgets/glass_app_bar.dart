@@ -20,6 +20,8 @@ class GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
     required this.onMenuTap,
     this.businessLabel,
     this.onBusinessTap,
+    this.unreadNotifications = 0,
+    this.onNotificationTap,
   });
 
   final String greeting;
@@ -31,6 +33,9 @@ class GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
   /// (and branch, when one is set). Null/empty hides that line.
   final String? businessLabel;
   final VoidCallback? onBusinessTap;
+
+  final int unreadNotifications;
+  final VoidCallback? onNotificationTap;
 
   /// Toolbar content height, excluding the status-bar inset. Scaffold grants
   /// the appBar slot `MediaQuery.padding.top` of *extra* height on top of
@@ -125,6 +130,46 @@ class GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
                               ),
                             ),
                           ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    // Notification bell
+                    GestureDetector(
+                      onTap: onNotificationTap,
+                      child: Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          Container(
+                            width: 38,
+                            height: 38,
+                            decoration: BoxDecoration(
+                              color: unreadNotifications > 0 ? AppColors.primaryLt : const Color(0xFFF1F5F9),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Icon(
+                              unreadNotifications > 0 ? Icons.notifications_rounded : Icons.notifications_none_rounded,
+                              size: 20,
+                              color: unreadNotifications > 0 ? AppColors.primary : AppColors.textMuted,
+                            ),
+                          ),
+                          if (unreadNotifications > 0)
+                            Positioned(
+                              top: -3,
+                              right: -3,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                decoration: BoxDecoration(
+                                  color: AppColors.error,
+                                  borderRadius: BorderRadius.circular(7),
+                                  border: Border.all(color: Colors.white, width: 1),
+                                ),
+                                child: Text(
+                                  unreadNotifications > 99 ? '99+' : '$unreadNotifications',
+                                  style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w800),
+                                ),
+                              ),
+                            ),
                         ],
                       ),
                     ),

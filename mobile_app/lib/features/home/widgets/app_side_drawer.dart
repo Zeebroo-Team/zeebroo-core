@@ -10,6 +10,7 @@ import '../../business/screens/business_screen.dart';
 import '../../business/screens/select_business_screen.dart';
 import '../../finance/screens/finance_screen.dart';
 import '../../inventory/screens/inventory_screen.dart';
+import '../../notifications/screens/notifications_screen.dart';
 import '../../profile/screens/profile_screen.dart';
 import '../models/feature_entry.dart';
 import '../screens/feature_placeholder_screen.dart';
@@ -24,12 +25,14 @@ class AppSideDrawer extends StatelessWidget {
     required this.email,
     required this.initials,
     required this.features,
+    this.unreadNotifications = 0,
   });
 
   final String name;
   final String email;
   final String initials;
   final List<FeatureEntry> features;
+  final int unreadNotifications;
 
   @override
   Widget build(BuildContext context) {
@@ -94,7 +97,7 @@ class AppSideDrawer extends StatelessWidget {
                     const SizedBox(height: 8),
                     _GroupedCard(
                       children: [
-                        for (final f in features)
+                        for (final f in features.where((f) => f.key != 'event_management'))
                           _Row(
                             icon: f.icon,
                             label: f.label,
@@ -117,6 +120,19 @@ class AppSideDrawer extends StatelessWidget {
                   const SizedBox(height: 8),
                   _GroupedCard(
                     children: [
+                      _Row(
+                        icon: Icons.notifications_outlined,
+                        label: 'Notifications',
+                        badge: unreadNotifications > 0 ? '$unreadNotifications' : null,
+                        onTap: () {
+                          Navigator.of(context).pop();
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const NotificationsScreen(),
+                            ),
+                          );
+                        },
+                      ),
                       _Row(
                         icon: Icons.swap_horiz_rounded,
                         label: 'Switch Business',
@@ -342,6 +358,7 @@ class _Row extends StatelessWidget {
     this.color = AppColors.textDark,
     this.showDivider = true,
     this.subtitle,
+    this.badge,
   });
 
   final IconData icon;
@@ -350,6 +367,7 @@ class _Row extends StatelessWidget {
   final Color color;
   final bool showDivider;
   final String? subtitle;
+  final String? badge;
 
   @override
   Widget build(BuildContext context) => Column(
@@ -388,6 +406,19 @@ class _Row extends StatelessWidget {
                   ],
                 ),
               ),
+              if (badge != null)
+                Container(
+                  margin: const EdgeInsets.only(right: 6),
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: AppColors.error,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    badge!,
+                    style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800),
+                  ),
+                ),
               if (color != AppColors.error)
                 const Icon(
                   Icons.chevron_right_rounded,

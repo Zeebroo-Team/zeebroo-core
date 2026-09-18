@@ -140,4 +140,18 @@ class ApiEndpoints {
   static const String financeModifications = '/v1/pos/expenses/modifications';
   static String financeModification(int id) =>
       '/v1/pos/expenses/modifications/$id';
+
+  // Notifications
+  static const String notifications = '/v1/pos/notifications';
+  static const String notificationsReadAll = '/v1/pos/notifications/read-all';
+  static const String notificationsClearAll = '/v1/pos/notifications/clear-all';
+  static String notificationRead(int id) => '/v1/pos/notifications/$id/read';
+  static String notificationDelete(int id) => '/v1/pos/notifications/$id';
+
+  // POS — point of sale
+  static const String customers = '/v1/pos/customers';
+  static String customer(int id) => '/v1/pos/customers/$id';
+  static const String sales = '/v1/pos/sales';
+  static String sale(int id) => '/v1/pos/sales/$id';
+  static String saleReceipt(int id) => '/v1/pos/sales/$id/receipt';
 }

@@ -21,6 +21,69 @@ class PosSaleApiController extends Controller
     ) {
     }
 
+    public function store(Request $request): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $user     = $request->user();
+
+        $data = $request->validate([
+            'items'                  => ['required', 'array', 'min:1'],
+            'items.*.product_id'     => ['required', 'integer'],
+            'items.*.qty'            => ['required', 'numeric', 'min:0.001'],
+            'items.*.item_discount_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'payment_method'         => ['required', 'string'],
+            'customer_id'            => ['nullable', 'integer'],
+            'amount_paid'            => ['nullable', 'numeric', 'min:0'],
+            'amount_tendered'        => ['nullable', 'numeric', 'min:0'],
+            'discount_percent'       => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'discount_flat'          => ['nullable', 'numeric', 'min:0'],
+            'notes'                  => ['nullable', 'string', 'max:2000'],
+            'credit_due_date'        => ['nullable', 'date_format:Y-m-d'],
+        ]);
+
+        $items = array_map(fn ($i) => [
+            'product_id'             => (int) $i['product_id'],
+            'quantity'               => (float) $i['qty'],
+            'item_discount_percent'  => isset($i['item_discount_percent']) ? (float) $i['item_discount_percent'] : null,
+        ], $data['items']);
+
+        $paymentMethod = match (strtolower((string) ($data['payment_method'] ?? 'cash'))) {
+            'card', 'transfer' => Sale::PAYMENT_CARD,
+            'credit'           => Sale::PAYMENT_CREDIT,
+            default            => Sale::PAYMENT_CASH,
+        };
+
+        try {
+            $sale = $this->sales->checkout(
+                business:        $business,
+                user:            $user,
+                items:           $items,
+                paymentMethod:   $paymentMethod,
+                creditAccountId: null,
+                amountPaid:      isset($data['amount_paid']) ? (float) $data['amount_paid'] : null,
+                notes:           $data['notes'] ?? null,
+                channel:         Sale::CHANNEL_RETAIL,
+                discountPercent: isset($data['discount_percent']) ? (float) $data['discount_percent'] : null,
+                amountTendered:  isset($data['amount_tendered']) ? (float) $data['amount_tendered'] : null,
+                customerId:      isset($data['customer_id']) ? (int) $data['customer_id'] : null,
+                creditDueDate:   $data['credit_due_date'] ?? null,
+                discountFlat:    isset($data['discount_flat']) ? (float) $data['discount_flat'] : null,
+            );
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'message' => $e->getMessage() ?: 'Validation failed.',
+                'errors'  => $e->errors(),
+            ], 422);
+        }
+
+        $sale->load(['items.product', 'creditAccount', 'user']);
+
+        return response()->json([
+            'message' => 'Sale '.$sale->sale_number.' completed.',
+            'data'    => $this->api->formatSale($sale),
+        ], 201);
+    }
+
     public function index(Request $request): JsonResponse
     {
         $business = $this->businessOrAbort($request);

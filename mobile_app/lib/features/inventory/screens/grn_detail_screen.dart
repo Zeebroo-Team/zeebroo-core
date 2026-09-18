@@ -31,13 +31,13 @@ class _GrnDetailScreenState extends State<GrnDetailScreen> {
     _load();
   }
 
-  Future<void> _load() async {
+  Future<void> _load({bool forceRefresh = false}) async {
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
-      final res = await ApiClient.instance.get(ApiEndpoints.grn(widget.grnId));
+      final res = await ApiClient.instance.get(ApiEndpoints.grn(widget.grnId), bypassCache: forceRefresh);
       final body = res.data;
       _grn = (body is Map ? body['data'] as Map? : null)?.cast<String, dynamic>();
     } catch (e) {
@@ -133,7 +133,7 @@ class _GrnDetailScreenState extends State<GrnDetailScreen> {
     final approvalStatus = grn['approval_status'] as String?;
 
     return RefreshIndicator(
-      onRefresh: _load,
+      onRefresh: () => _load(forceRefresh: true),
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
         children: [

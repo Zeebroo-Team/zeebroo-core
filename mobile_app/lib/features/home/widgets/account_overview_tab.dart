@@ -16,7 +16,11 @@ class AccountOverviewTab extends StatefulWidget {
   State<AccountOverviewTab> createState() => _AccountOverviewTabState();
 }
 
-class _AccountOverviewTabState extends State<AccountOverviewTab> {
+class _AccountOverviewTabState extends State<AccountOverviewTab>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
   bool _loading = true;
   String? _error;
   List<Map<String, dynamic>> _accounts = [];
@@ -31,16 +35,16 @@ class _AccountOverviewTabState extends State<AccountOverviewTab> {
     _load();
   }
 
-  Future<void> _load() async {
+  Future<void> _load({bool forceRefresh = false}) async {
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
       final results = await Future.wait([
-        ApiClient.instance.get(ApiEndpoints.accounts),
-        ApiClient.instance.get(ApiEndpoints.expensesOverview),
-        ApiClient.instance.get(ApiEndpoints.businessSettings),
+        ApiClient.instance.get(ApiEndpoints.accounts, bypassCache: forceRefresh),
+        ApiClient.instance.get(ApiEndpoints.expensesOverview, bypassCache: forceRefresh),
+        ApiClient.instance.get(ApiEndpoints.businessSettings, bypassCache: forceRefresh),
       ]);
 
       final accRaw = results[0].data;
@@ -196,8 +200,10 @@ class _AccountOverviewTabState extends State<AccountOverviewTab> {
   }
 
   @override
-  Widget build(BuildContext context) => RefreshIndicator(
-    onRefresh: _load,
+  Widget build(BuildContext context) {
+    super.build(context);
+    return RefreshIndicator(
+    onRefresh: () => _load(forceRefresh: true),
     child: ListView(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 120),
       children: [
@@ -216,6 +222,7 @@ class _AccountOverviewTabState extends State<AccountOverviewTab> {
       ],
     ),
   );
+  }
 
   Widget _buildBalanceCard() {
     final hasAccounts = _accounts.isNotEmpty;

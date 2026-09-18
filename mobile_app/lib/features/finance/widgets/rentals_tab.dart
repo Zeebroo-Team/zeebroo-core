@@ -39,13 +39,13 @@ class _RentalsTabState extends State<RentalsTab> with AutomaticKeepAliveClientMi
     _load();
   }
 
-  Future<void> _load() async {
+  Future<void> _load({bool forceRefresh = false}) async {
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
-      final res = await ApiClient.instance.get(ApiEndpoints.financeRentals);
+      final res = await ApiClient.instance.get(ApiEndpoints.financeRentals, bypassCache: forceRefresh);
       final body = res.data;
       _rentals = parseListData(body);
       _summary = body is Map ? Map<String, dynamic>.from(body) : {};
@@ -61,7 +61,7 @@ class _RentalsTabState extends State<RentalsTab> with AutomaticKeepAliveClientMi
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => const _AddRentalSheet(),
+      builder: (_) => const AddRentalSheet(),
     );
     if (created == true) _load();
   }
@@ -123,7 +123,7 @@ class _RentalsTabState extends State<RentalsTab> with AutomaticKeepAliveClientMi
     if (_rentals.isEmpty) return const EmptyState(message: 'No rentals yet.');
 
     return RefreshIndicator(
-      onRefresh: _load,
+      onRefresh: () => _load(forceRefresh: true),
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
         children: [
@@ -220,14 +220,14 @@ class _RentalCard extends StatelessWidget {
   }
 }
 
-class _AddRentalSheet extends StatefulWidget {
-  const _AddRentalSheet();
+class AddRentalSheet extends StatefulWidget {
+  const AddRentalSheet();
 
   @override
-  State<_AddRentalSheet> createState() => _AddRentalSheetState();
+  State<AddRentalSheet> createState() => AddRentalSheetState();
 }
 
-class _AddRentalSheetState extends State<_AddRentalSheet> {
+class AddRentalSheetState extends State<AddRentalSheet> {
   final _formKey = GlobalKey<FormState>();
   final _propertyTypeCtrl = TextEditingController();
   final _purposeCtrl = TextEditingController();

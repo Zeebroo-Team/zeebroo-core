@@ -84,13 +84,13 @@ class _BillsTabState extends State<BillsTab> with AutomaticKeepAliveClientMixin 
     _load();
   }
 
-  Future<void> _load() async {
+  Future<void> _load({bool forceRefresh = false}) async {
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
-      final res = await ApiClient.instance.get(ApiEndpoints.financeBills);
+      final res = await ApiClient.instance.get(ApiEndpoints.financeBills, bypassCache: forceRefresh);
       _bills = parseListData(res.data);
     } catch (e) {
       _error = apiErrorMessage(e);
@@ -104,7 +104,7 @@ class _BillsTabState extends State<BillsTab> with AutomaticKeepAliveClientMixin 
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => const _AddBillSheet(),
+      builder: (_) => const AddBillSheet(),
     );
     if (created == true) _load();
   }
@@ -171,7 +171,7 @@ class _BillsTabState extends State<BillsTab> with AutomaticKeepAliveClientMixin 
         .fold<double>(0, (sum, b) => sum + ((b['amount'] as num?)?.toDouble() ?? 0));
 
     return RefreshIndicator(
-      onRefresh: _load,
+      onRefresh: () => _load(forceRefresh: true),
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
         children: [
@@ -281,14 +281,14 @@ class _BillCard extends StatelessWidget {
 
 /// Create-bill sheet — mirrors the desktop Bill form, including the
 /// assignment picker (`GET expenses/bill-assignment-targets`).
-class _AddBillSheet extends StatefulWidget {
-  const _AddBillSheet();
+class AddBillSheet extends StatefulWidget {
+  const AddBillSheet();
 
   @override
-  State<_AddBillSheet> createState() => _AddBillSheetState();
+  State<AddBillSheet> createState() => AddBillSheetState();
 }
 
-class _AddBillSheetState extends State<_AddBillSheet> {
+class AddBillSheetState extends State<AddBillSheet> {
   final _formKey = GlobalKey<FormState>();
   final _nameCtrl = TextEditingController();
   final _categoryOtherCtrl = TextEditingController();

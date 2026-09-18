@@ -40,13 +40,13 @@ class _ChequesTabState extends State<ChequesTab> with AutomaticKeepAliveClientMi
     _load();
   }
 
-  Future<void> _load() async {
+  Future<void> _load({bool forceRefresh = false}) async {
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
-      final res = await ApiClient.instance.get(ApiEndpoints.cheques, params: {'filter': _filter});
+      final res = await ApiClient.instance.get(ApiEndpoints.cheques, params: {'filter': _filter}, bypassCache: forceRefresh);
       final body = res.data;
       _items = parseListData(body);
       _summary = (body is Map ? body['summary'] as Map? : null)?.cast<String, dynamic>() ?? {};
@@ -122,7 +122,7 @@ class _ChequesTabState extends State<ChequesTab> with AutomaticKeepAliveClientMi
     if (_error != null && _items.isEmpty) return ErrorState(error: _error!, onRetry: _load);
     if (_items.isEmpty) return const EmptyState(message: 'No cheques found.');
     return RefreshIndicator(
-      onRefresh: _load,
+      onRefresh: () => _load(forceRefresh: true),
       child: ListView.separated(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
         itemCount: _items.length,

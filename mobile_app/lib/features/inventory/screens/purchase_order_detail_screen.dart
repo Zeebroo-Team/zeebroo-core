@@ -30,13 +30,13 @@ class _PurchaseOrderDetailScreenState extends State<PurchaseOrderDetailScreen> {
     _load();
   }
 
-  Future<void> _load() async {
+  Future<void> _load({bool forceRefresh = false}) async {
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
-      final res = await ApiClient.instance.get(ApiEndpoints.purchaseOrder(widget.purchaseOrderId));
+      final res = await ApiClient.instance.get(ApiEndpoints.purchaseOrder(widget.purchaseOrderId), bypassCache: forceRefresh);
       final body = res.data;
       _po = (body is Map ? body['data'] as Map? : null)?.cast<String, dynamic>();
     } catch (e) {
@@ -113,7 +113,7 @@ class _PurchaseOrderDetailScreenState extends State<PurchaseOrderDetailScreen> {
     final items = (po['items'] as List? ?? []).whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
 
     return RefreshIndicator(
-      onRefresh: _load,
+      onRefresh: () => _load(forceRefresh: true),
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
         children: [

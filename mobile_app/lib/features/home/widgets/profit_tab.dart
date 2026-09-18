@@ -24,7 +24,11 @@ class ProfitTab extends StatefulWidget {
   State<ProfitTab> createState() => _ProfitTabState();
 }
 
-class _ProfitTabState extends State<ProfitTab> {
+class _ProfitTabState extends State<ProfitTab>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
   bool _loading = true;
   String? _error;
   Map<String, dynamic>? _data;
@@ -36,13 +40,13 @@ class _ProfitTabState extends State<ProfitTab> {
     _load();
   }
 
-  Future<void> _load() async {
+  Future<void> _load({bool forceRefresh = false}) async {
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
-      final res = await ApiClient.instance.get(ApiEndpoints.profitReport, params: {'period': _period});
+      final res = await ApiClient.instance.get(ApiEndpoints.profitReport, params: {'period': _period}, bypassCache: forceRefresh);
       final raw = res.data;
       _data = (raw is Map ? raw['data'] : raw) as Map<String, dynamic>?;
     } catch (e) {
@@ -53,25 +57,28 @@ class _ProfitTabState extends State<ProfitTab> {
   }
 
   @override
-  Widget build(BuildContext context) => RefreshIndicator(
-    onRefresh: _load,
-    child: ListView(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 120),
-      children: [
-        _buildPeriodSelector(),
-        const SizedBox(height: 18),
-        if (_loading)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 60),
-            child: Center(child: CircularProgressIndicator()),
-          )
-        else if (_error != null)
-          _ErrorCard(message: _error!, onRetry: _load)
-        else
-          ..._buildContent(),
-      ],
-    ),
-  );
+  Widget build(BuildContext context) {
+    super.build(context);
+    return RefreshIndicator(
+      onRefresh: () => _load(forceRefresh: true),
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 120),
+        children: [
+          _buildPeriodSelector(),
+          const SizedBox(height: 18),
+          if (_loading)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 60),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else if (_error != null)
+            _ErrorCard(message: _error!, onRetry: _load)
+          else
+            ..._buildContent(),
+        ],
+      ),
+    );
+  }
 
   Widget _buildPeriodSelector() => Row(
     children: [

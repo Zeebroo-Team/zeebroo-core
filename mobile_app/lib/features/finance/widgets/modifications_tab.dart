@@ -49,13 +49,13 @@ class _ModificationsTabState extends State<ModificationsTab> with AutomaticKeepA
     _load();
   }
 
-  Future<void> _load() async {
+  Future<void> _load({bool forceRefresh = false}) async {
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
-      final res = await ApiClient.instance.get(ApiEndpoints.financeModifications);
+      final res = await ApiClient.instance.get(ApiEndpoints.financeModifications, bypassCache: forceRefresh);
       final body = res.data;
       _modifications = parseListData(body);
       _summary = body is Map ? Map<String, dynamic>.from(body) : {};
@@ -71,7 +71,7 @@ class _ModificationsTabState extends State<ModificationsTab> with AutomaticKeepA
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => const _AddModificationSheet(),
+      builder: (_) => const AddModificationSheet(),
     );
     if (created == true) _load();
   }
@@ -118,7 +118,7 @@ class _ModificationsTabState extends State<ModificationsTab> with AutomaticKeepA
     if (_modifications.isEmpty) return const EmptyState(message: 'No modifications yet.');
 
     return RefreshIndicator(
-      onRefresh: _load,
+      onRefresh: () => _load(forceRefresh: true),
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
         children: [
@@ -221,14 +221,14 @@ class _ModificationCard extends StatelessWidget {
   }
 }
 
-class _AddModificationSheet extends StatefulWidget {
-  const _AddModificationSheet();
+class AddModificationSheet extends StatefulWidget {
+  const AddModificationSheet();
 
   @override
-  State<_AddModificationSheet> createState() => _AddModificationSheetState();
+  State<AddModificationSheet> createState() => AddModificationSheetState();
 }
 
-class _AddModificationSheetState extends State<_AddModificationSheet> {
+class AddModificationSheetState extends State<AddModificationSheet> {
   final _formKey = GlobalKey<FormState>();
   final _nameCtrl = TextEditingController();
   final _estimatedCostCtrl = TextEditingController();

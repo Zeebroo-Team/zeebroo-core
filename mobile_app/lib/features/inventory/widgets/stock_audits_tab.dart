@@ -33,14 +33,14 @@ class _StockAuditsTabState extends State<StockAuditsTab> with AutomaticKeepAlive
     _load();
   }
 
-  Future<void> _load() async {
+  Future<void> _load({bool forceRefresh = false}) async {
     setState(() {
       _loading = true;
       _error = null;
       _page = 1;
     });
     try {
-      final res = await ApiClient.instance.get(ApiEndpoints.stockAudits, params: {'page': 1});
+      final res = await ApiClient.instance.get(ApiEndpoints.stockAudits, params: {'page': 1}, bypassCache: forceRefresh);
       final body = res.data;
       final meta = (body is Map ? body['meta'] : null) as Map?;
       _items = parseListData(body);
@@ -189,7 +189,7 @@ class _StockAuditsTabState extends State<StockAuditsTab> with AutomaticKeepAlive
     if (_error != null && _items.isEmpty) return ErrorState(error: _error!, onRetry: _load);
     if (_items.isEmpty) return const EmptyState(message: 'No stock audits yet.');
     return RefreshIndicator(
-      onRefresh: _load,
+      onRefresh: () => _load(forceRefresh: true),
       child: ListView.separated(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
         itemCount: _items.length + (_page < _lastPage ? 1 : 0),

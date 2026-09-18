@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 
 import '../auth/auth_storage.dart';
 import '../business/business_storage.dart';
+import 'api_cache.dart';
 import 'api_endpoints.dart';
 
 class ApiClient {
@@ -52,6 +53,8 @@ class ApiClient {
       ),
     );
 
+    dio.interceptors.add(CachingInterceptor());
+
     if (kDebugMode) {
       dio.interceptors.add(
         LogInterceptor(requestBody: true, responseBody: true),
@@ -65,10 +68,14 @@ class ApiClient {
     String path, {
     Map<String, dynamic>? params,
     Map<String, dynamic>? headers,
+    bool bypassCache = false,
   }) => _dio.get(
     path,
     queryParameters: params,
-    options: headers != null ? Options(headers: headers) : null,
+    options: Options(
+      headers: headers,
+      extra: {'bypass_cache': bypassCache},
+    ),
   );
 
   Future<Response> post(String path, {dynamic data}) =>

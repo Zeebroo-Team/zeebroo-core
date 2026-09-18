@@ -39,13 +39,13 @@ class _LoansTabState extends State<LoansTab> with AutomaticKeepAliveClientMixin 
     _load();
   }
 
-  Future<void> _load() async {
+  Future<void> _load({bool forceRefresh = false}) async {
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
-      final res = await ApiClient.instance.get(ApiEndpoints.financeLoans);
+      final res = await ApiClient.instance.get(ApiEndpoints.financeLoans, bypassCache: forceRefresh);
       final body = res.data;
       _loans = parseListData(body);
       _summary = body is Map ? Map<String, dynamic>.from(body) : {};
@@ -61,7 +61,7 @@ class _LoansTabState extends State<LoansTab> with AutomaticKeepAliveClientMixin 
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => const _AddLoanSheet(),
+      builder: (_) => const AddLoanSheet(),
     );
     if (created == true) _load();
   }
@@ -123,7 +123,7 @@ class _LoansTabState extends State<LoansTab> with AutomaticKeepAliveClientMixin 
     if (_loans.isEmpty) return const EmptyState(message: 'No loans yet.');
 
     return RefreshIndicator(
-      onRefresh: _load,
+      onRefresh: () => _load(forceRefresh: true),
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
         children: [
@@ -222,14 +222,14 @@ class _LoanCard extends StatelessWidget {
   }
 }
 
-class _AddLoanSheet extends StatefulWidget {
-  const _AddLoanSheet();
+class AddLoanSheet extends StatefulWidget {
+  const AddLoanSheet();
 
   @override
-  State<_AddLoanSheet> createState() => _AddLoanSheetState();
+  State<AddLoanSheet> createState() => AddLoanSheetState();
 }
 
-class _AddLoanSheetState extends State<_AddLoanSheet> {
+class AddLoanSheetState extends State<AddLoanSheet> {
   final _formKey = GlobalKey<FormState>();
   final _nameCtrl = TextEditingController();
   final _descriptionCtrl = TextEditingController();
