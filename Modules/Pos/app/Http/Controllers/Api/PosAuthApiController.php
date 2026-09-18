@@ -74,11 +74,14 @@ class PosAuthApiController extends Controller
             'email'             => ['required', 'email', 'max:255', 'unique:users,email'],
             'password'          => ['required', 'confirmed', Password::min(8)],
             'device_name'       => ['nullable', 'string', 'max:120'],
+            'platform'          => ['nullable', 'string', Rule::in(['desktop', 'mobile'])],
         ]);
+
+        $platform = $validated['platform'] ?? 'desktop';
 
         $package = null;
         if (isset($validated['package_id'])) {
-            $package = Package::query()->where('is_active', true)->find($validated['package_id']);
+            $package = Package::query()->where('is_active', true)->visibleForPlatform($platform)->find($validated['package_id']);
             if (! $package) {
                 throw ValidationException::withMessages([
                     'package_id' => ['The selected package is no longer available.'],
@@ -147,10 +150,13 @@ class PosAuthApiController extends Controller
         ]);
     }
 
-    public function packages(): JsonResponse
+    public function packages(Request $request): JsonResponse
     {
+        $platform = $request->query('platform') === 'mobile' ? 'mobile' : 'desktop';
+
         $packages = Package::query()
             ->where('is_active', true)
+            ->visibleForPlatform($platform)
             ->orderBy('sort_order')
             ->get()
             ->map(fn (Package $package) => [

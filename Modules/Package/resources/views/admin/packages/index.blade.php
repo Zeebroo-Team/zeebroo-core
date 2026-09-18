@@ -34,6 +34,8 @@
 .pkg-price-strike{font-size:11.5px;color:var(--muted);text-decoration:line-through;}
 .pkg-free-badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;
     background:color-mix(in srgb,#3b82f6 14%,transparent);color:#2563eb;}
+.pkg-mobile-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;
+    background:color-mix(in srgb,#a855f7 14%,transparent);color:#9333ea;}
 .pkg-feat-list{display:flex;flex-wrap:wrap;gap:4px;}
 .pkg-feat-chip{font-size:9.5px;font-weight:600;padding:1.5px 7px;border-radius:999px;border:1px solid var(--border);color:var(--muted);}
 .pkg-feat-more{font-size:9.5px;color:var(--muted);font-style:italic;padding:1.5px 3px;}
@@ -166,6 +168,10 @@
             </span>
           </div>
 
+          @if($package->is_mobile_only)
+            <span class="pkg-mobile-badge"><i class="fa fa-mobile-screen" style="font-size:9px"></i> Mobile App Only</span>
+          @endif
+
           @if($package->description)
             <p class="pkg-card-desc">{{ $package->description }}</p>
           @endif
@@ -204,6 +210,7 @@
                     data-discounted-price="{{ $package->discounted_price }}"
                     data-is-free="{{ $package->is_free ? '1' : '0' }}"
                     data-is-active="{{ $package->is_active ? '1' : '0' }}"
+                    data-is-mobile-only="{{ $package->is_mobile_only ? '1' : '0' }}"
                     data-sort-order="{{ $package->sort_order }}"
                     data-image="{{ $package->image ? asset('storage/' . $package->image) : '' }}"
                     data-features="{{ json_encode($package->features ?? []) }}">
@@ -299,6 +306,14 @@
         </div>
 
         <div class="pkg-field">
+          <label class="pkg-check-row" style="text-transform:none;letter-spacing:0;font-weight:normal;cursor:pointer">
+            <input type="checkbox" name="is_mobile_only" id="pkg-f-is-mobile-only" value="1" {{ old('is_mobile_only') ? 'checked' : '' }}>
+            <span><strong>Mobile app only</strong> — hidden on POS desktop and web onboarding; selectable only in the mobile app</span>
+          </label>
+          @error('is_mobile_only')<p class="pkg-field-err">{{ $message }}</p>@enderror
+        </div>
+
+        <div class="pkg-field">
           <label>Features</label>
           <div class="pkg-feat-grid">
             @foreach($features as $key => $label)
@@ -347,6 +362,7 @@
   var discPriceEl  = document.getElementById('pkg-f-discounted-price');
   var sortOrderEl  = document.getElementById('pkg-f-sort-order');
   var isActiveEl   = document.getElementById('pkg-f-is-active');
+  var isMobileOnlyEl = document.getElementById('pkg-f-is-mobile-only');
   var featureBoxes = document.querySelectorAll('.pkg-f-feature');
 
   function openModal() { modal.classList.add('is-open'); modal.scrollTop = 0; document.body.style.overflow = 'hidden'; }
@@ -381,6 +397,7 @@
     discPriceEl.value = '';
     sortOrderEl.value = 0;
     isActiveEl.checked = true;
+    isMobileOnlyEl.checked = false;
     featureBoxes.forEach(function (cb) { cb.checked = false; });
     togglePriceFields();
   }
@@ -420,6 +437,7 @@
       discPriceEl.value = btn.getAttribute('data-discounted-price') || '';
       sortOrderEl.value = btn.getAttribute('data-sort-order') || 0;
       isActiveEl.checked = btn.getAttribute('data-is-active') === '1';
+      isMobileOnlyEl.checked = btn.getAttribute('data-is-mobile-only') === '1';
       togglePriceFields();
 
       var selected = [];
