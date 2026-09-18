@@ -7,6 +7,7 @@ import '../../../core/auth/auth_state.dart';
 import '../../../core/business/business_state.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../business/screens/select_business_screen.dart';
+import '../../finance/screens/finance_screen.dart';
 import '../models/feature_entry.dart';
 import '../widgets/app_side_drawer.dart';
 import '../widgets/glass_app_bar.dart';
@@ -126,7 +127,8 @@ class _HomeShellState extends State<HomeShell> {
         index: safeIndex,
         children: [
           const HomeContent(),
-          for (final f in bottomFeatures) FeaturePlaceholderBody(feature: f),
+          for (final f in bottomFeatures)
+            f.key == 'bill_management' ? const FinanceBody() : FeaturePlaceholderBody(feature: f),
         ],
       ),
       bottomNavigationBar: GlassBottomNav(

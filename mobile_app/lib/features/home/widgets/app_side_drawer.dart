@@ -8,6 +8,7 @@ import '../../../core/business/business_state.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../business/screens/business_screen.dart';
 import '../../business/screens/select_business_screen.dart';
+import '../../finance/screens/finance_screen.dart';
 import '../../inventory/screens/inventory_screen.dart';
 import '../../profile/screens/profile_screen.dart';
 import '../models/feature_entry.dart';
@@ -101,8 +102,9 @@ class AppSideDrawer extends StatelessWidget {
                               Navigator.of(context).pop();
                               Navigator.of(context).push(
                                 MaterialPageRoute(
-                                  builder: (_) =>
-                                      FeaturePlaceholderScreen(feature: f),
+                                  builder: (_) => f.key == 'bill_management'
+                                      ? const FinanceScreen()
+                                      : FeaturePlaceholderScreen(feature: f),
                                 ),
                               );
                             },
