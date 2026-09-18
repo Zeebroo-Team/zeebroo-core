@@ -459,7 +459,11 @@ class PosNotificationService
             ->orderByDesc('current_period_end')
             ->first();
 
-        $dueSoon = $payment
+        // whereNotNull() above only excludes SQL NULLs — an empty-string value
+        // in the column (seen in production once) still passes that filter but
+        // casts to a null Carbon instance, so guard here too before calling
+        // methods on it.
+        $dueSoon = $payment?->current_period_end !== null
             && $payment->current_period_end->isFuture()
             && $payment->current_period_end->lte(now()->addDays(self::RENEWAL_REMINDER_DAYS));
 

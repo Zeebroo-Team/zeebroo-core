@@ -7,6 +7,7 @@ use Modules\Package\Models\Package;
 use Modules\Payment\Models\Payment;
 use Stripe\Checkout\Session as CheckoutSession;
 use Stripe\Event;
+use Stripe\Invoice;
 use Stripe\StripeClient;
 use Stripe\Webhook;
 
@@ -87,5 +88,18 @@ class StripeSubscriptionService
     public function constructWebhookEvent(string $payload, string $sigHeader, string $secret): Event
     {
         return Webhook::constructEvent($payload, $sigHeader, $secret);
+    }
+
+    /**
+     * Invoice-related webhook payloads vary in how much they carry inline —
+     * an `invoice.paid`/`invoice.payment_failed` event's object already has
+     * `subscription`/`customer`/`billing_reason`, but the newer InvoicePayment
+     * object (`invoice_payment.paid`) only references its parent invoice by
+     * ID. Always retrieving the full Invoice here keeps the webhook handler
+     * logic identical regardless of which event triggered it.
+     */
+    public function retrieveInvoice(string $invoiceId): Invoice
+    {
+        return $this->client()->invoices->retrieve($invoiceId);
     }
 }
