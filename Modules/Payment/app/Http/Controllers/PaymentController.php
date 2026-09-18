@@ -221,15 +221,30 @@ class PaymentController extends Controller
                 $this->recordInvoicePaid($object);
                 break;
 
+            case 'invoice_payment.paid':
+                // Newer API versions report renewal success on this InvoicePayment
+                // object instead of (or alongside) invoice.paid/payment_succeeded —
+                // it only references its parent Invoice by ID, not inline, so the
+                // real Invoice (with subscription/customer/billing_reason) has to
+                // be fetched before it can be recorded the same way.
+                try {
+                    $invoice = $this->stripe->retrieveInvoice($object->invoice);
+                } catch (\Throwable $e) {
+                    report($e);
+                    break;
+                }
+                $this->recordInvoicePaid($invoice);
+                break;
+
             case 'invoice.payment_failed':
                 $this->recordInvoiceFailed($object);
                 break;
 
             case 'customer.subscription.updated':
             case 'customer.subscription.deleted':
-                $currentPeriodEnd = isset($object->current_period_end)
-                    ? Carbon::createFromTimestamp($object->current_period_end)
-                    : null;
+                $rawPeriodEnd = $object->current_period_end
+                    ?? ($object->items->data[0]->current_period_end ?? null);
+                $currentPeriodEnd = $rawPeriodEnd !== null ? Carbon::createFromTimestamp($rawPeriodEnd) : null;
 
                 Payment::query()->where('stripe_subscription_id', $object->id)
                     ->update([
@@ -271,22 +286,21 @@ class PaymentController extends Controller
      */
     private function recordInvoicePaid(object $invoice): void
     {
-        // Idempotent — Stripe can redeliver webhooks, and both invoice.paid and
-        // invoice.payment_succeeded can fire for the same invoice.
+        // Idempotent — Stripe can redeliver webhooks, and invoice.paid,
+        // invoice.payment_succeeded and invoice_payment.paid can all fire for
+        // the same underlying invoice.
         if (Payment::query()->where('stripe_invoice_id', $invoice->id)->exists()) {
             return;
         }
 
-        $anchor = Payment::query()
-            ->where('stripe_subscription_id', $invoice->subscription)
-            ->oldest()
-            ->first();
-
+        $anchor = $this->resolveAnchorPayment($invoice);
         if (! $anchor) {
             return;
         }
 
-        if ($anchor->stripe_invoice_id === null && $invoice->billing_reason === 'subscription_create') {
+        $billingReason = $invoice->billing_reason ?? null;
+
+        if ($anchor->stripe_invoice_id === null && $billingReason === 'subscription_create') {
             $anchor->update(['stripe_invoice_id' => $invoice->id]);
 
             return;
@@ -302,10 +316,10 @@ class PaymentController extends Controller
             'payment_status' => Payment::STATUS_SUCCEEDED,
             'billing_cycle' => $anchor->billing_cycle,
             'gateway' => 'stripe',
-            'amount' => $invoice->amount_paid / 100,
-            'currency' => strtolower($invoice->currency),
-            'stripe_customer_id' => $invoice->customer,
-            'stripe_subscription_id' => $invoice->subscription,
+            'amount' => ($invoice->amount_paid ?? 0) / 100,
+            'currency' => strtolower($invoice->currency ?? $anchor->currency),
+            'stripe_customer_id' => $invoice->customer ?? $anchor->stripe_customer_id,
+            'stripe_subscription_id' => $this->invoiceSubscriptionId($invoice) ?? $anchor->stripe_subscription_id,
             'stripe_invoice_id' => $invoice->id,
             'stripe_payment_intent_id' => $paymentIntentId,
             'stripe_subscription_status' => 'active',
@@ -325,16 +339,14 @@ class PaymentController extends Controller
      */
     private function recordInvoiceFailed(object $invoice): void
     {
-        $anchor = Payment::query()
-            ->where('stripe_subscription_id', $invoice->subscription)
-            ->oldest()
-            ->first();
-
+        $anchor = $this->resolveAnchorPayment($invoice);
         if (! $anchor) {
             return;
         }
 
-        if ($anchor->payment_status === Payment::STATUS_PENDING && $invoice->billing_reason === 'subscription_create') {
+        $billingReason = $invoice->billing_reason ?? null;
+
+        if ($anchor->payment_status === Payment::STATUS_PENDING && $billingReason === 'subscription_create') {
             $target = $anchor;
             $target->update([
                 'payment_status' => Payment::STATUS_FAILED,
@@ -355,10 +367,10 @@ class PaymentController extends Controller
                 'payment_status' => Payment::STATUS_FAILED,
                 'billing_cycle' => $anchor->billing_cycle,
                 'gateway' => 'stripe',
-                'amount' => $invoice->amount_due / 100,
-                'currency' => strtolower($invoice->currency),
-                'stripe_customer_id' => $invoice->customer,
-                'stripe_subscription_id' => $invoice->subscription,
+                'amount' => ($invoice->amount_due ?? (float) $anchor->amount * 100) / 100,
+                'currency' => strtolower($invoice->currency ?? $anchor->currency),
+                'stripe_customer_id' => $invoice->customer ?? $anchor->stripe_customer_id,
+                'stripe_subscription_id' => $this->invoiceSubscriptionId($invoice) ?? $anchor->stripe_subscription_id,
                 'stripe_invoice_id' => $invoice->id,
                 'failure_reason' => 'Stripe invoice payment failed for subscription renewal.',
                 'due_at' => now()->addDays(Payment::GRACE_PERIOD_DAYS),
@@ -368,5 +380,58 @@ class PaymentController extends Controller
         if ($target->business) {
             $this->notifications->notifyPaymentFailed($target->business, $target);
         }
+    }
+
+    /**
+     * Finds the original signup Payment row for an invoice's subscription.
+     * Prefers the payment_id stashed in the subscription's own metadata (set
+     * at checkout time) since that's exact — the stripe_subscription_id
+     * fallback only works once the anchor row has actually been tagged with
+     * it, which happens in markSucceeded(), so an early/racing webhook could
+     * otherwise find nothing.
+     */
+    private function resolveAnchorPayment(object $invoice): ?Payment
+    {
+        $metaPaymentId = $this->invoiceSubscriptionMetadata($invoice)['payment_id'] ?? null;
+        if ($metaPaymentId) {
+            $byMeta = Payment::find($metaPaymentId);
+            if ($byMeta) {
+                return $byMeta;
+            }
+        }
+
+        $subscriptionId = $this->invoiceSubscriptionId($invoice);
+
+        return $subscriptionId
+            ? Payment::query()->where('stripe_subscription_id', $subscriptionId)->oldest()->first()
+            : null;
+    }
+
+    /**
+     * The Invoice object's subscription reference moved from a top-level
+     * `subscription` field to `parent.subscription_details.subscription` in
+     * newer Stripe API versions — check both.
+     */
+    private function invoiceSubscriptionId(object $invoice): ?string
+    {
+        return $invoice->subscription ?? ($invoice->parent?->subscription_details?->subscription ?? null);
+    }
+
+    /**
+     * Metadata comes back as a Stripe SDK object (backed by protected internal
+     * properties), not a plain array — a raw `(array)` cast exposes the SDK's
+     * internal implementation details instead of the actual key/value pairs,
+     * so this goes through the SDK's own toArray() instead.
+     *
+     * @return array<string, mixed>
+     */
+    private function invoiceSubscriptionMetadata(object $invoice): array
+    {
+        $metadata = $invoice->parent?->subscription_details?->metadata ?? null;
+        if ($metadata === null) {
+            return [];
+        }
+
+        return method_exists($metadata, 'toArray') ? $metadata->toArray() : (array) $metadata;
     }
 }
