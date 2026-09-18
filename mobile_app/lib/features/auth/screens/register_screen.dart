@@ -3,7 +3,6 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/api/api_client.dart';
-import '../../../core/api/api_endpoints.dart';
 import '../../../core/auth/auth_state.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_button.dart';
@@ -41,26 +40,10 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
   // Step 1
   final _form1 = GlobalKey<FormState>();
   final _businessName = TextEditingController();
-  String? _businessCategory;
-  List<Map<String, dynamic>> _categories = [];
-  bool _loadingCategories = false;
-
-  static const _categoryIcons = <String, IconData>{
-    'retail': Icons.shopping_bag_outlined,
-    'restaurant': Icons.restaurant_outlined,
-    'services': Icons.construction_outlined,
-    'wholesale': Icons.inventory_2_outlined,
-    'healthcare': Icons.medical_services_outlined,
-    'education': Icons.school_outlined,
-    'technology': Icons.computer_outlined,
-    'other': Icons.more_horiz,
-  };
-
-  @override
-  void initState() {
-    super.initState();
-    _loadCategories();
-  }
+  // The business-type picker is hidden on mobile (see _buildStep1) — every
+  // sign-up defaults to the "other" category, which the desktop/admin side
+  // can refine later from the business profile.
+  final String _businessCategory = 'other';
 
   @override
   void dispose() {
@@ -70,20 +53,6 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
     _confirm.dispose();
     _businessName.dispose();
     super.dispose();
-  }
-
-  Future<void> _loadCategories() async {
-    setState(() => _loadingCategories = true);
-    try {
-      final res = await ApiClient.instance.get(ApiEndpoints.businessCategories);
-      final data = res.data;
-      final raw = (data is Map ? data['data'] : data) as List? ?? [];
-      if (mounted) setState(() => _categories = raw.cast<Map<String, dynamic>>());
-    } catch (_) {
-      // Non-fatal — the user can still type a free-text category if this fails.
-    } finally {
-      if (mounted) setState(() => _loadingCategories = false);
-    }
   }
 
   void _goToStep(int step) {
@@ -99,10 +68,6 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
 
   Future<void> _submit() async {
     if (!_form1.currentState!.validate()) return;
-    if (_businessCategory == null || _businessCategory!.isEmpty) {
-      setState(() => _error = 'Please select your business type');
-      return;
-    }
     setState(() {
       _loading = true;
       _error = null;
@@ -113,7 +78,7 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
             email: _email.text.trim(),
             password: _password.text,
             businessName: _businessName.text.trim(),
-            businessCategory: _businessCategory!,
+            businessCategory: _businessCategory,
           );
       if (mounted) _goToStep(2);
       // AuthState is now authenticated → GoRouter redirect takes it to /home.
@@ -272,60 +237,6 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
         const Text('This becomes your business profile',
             style: TextStyle(fontSize: 13, color: AppColors.textMuted)),
         const SizedBox(height: 24),
-        const _FieldLabel('Business type'),
-        if (_loadingCategories)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 12),
-            child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
-          )
-        else if (_categories.isEmpty)
-          TextFormField(
-            decoration: const InputDecoration(
-              hintText: 'e.g. Retail, Restaurant, Services…',
-              prefixIcon: Icon(Icons.business_outlined, size: 18),
-            ),
-            onChanged: (v) => _businessCategory = v.trim().toLowerCase(),
-            validator: (v) => (v == null || v.trim().isEmpty) ? 'Business type is required' : null,
-          )
-        else
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: _categories.map((cat) {
-              final slug = cat['value']?.toString() ?? '';
-              final label = cat['label']?.toString() ?? '';
-              final selected = _businessCategory == slug;
-              return GestureDetector(
-                onTap: () => setState(() {
-                  _businessCategory = slug;
-                  _error = null;
-                }),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 180),
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-                  decoration: BoxDecoration(
-                    color: selected ? AppColors.primary : Colors.white,
-                    border: Border.all(color: selected ? AppColors.primary : AppColors.border, width: 1.5),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(_categoryIcons[slug] ?? Icons.business_outlined,
-                          size: 17, color: selected ? Colors.white : AppColors.primary),
-                      const SizedBox(width: 6),
-                      Text(label,
-                          style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: selected ? Colors.white : AppColors.textMid)),
-                    ],
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
-        const SizedBox(height: 20),
         const _FieldLabel('Business name'),
         TextFormField(
           controller: _businessName,

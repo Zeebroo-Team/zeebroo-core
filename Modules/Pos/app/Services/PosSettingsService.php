@@ -2,6 +2,8 @@
 
 namespace Modules\Pos\Services;
 
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Modules\Account\Models\Account;
 use Modules\Business\Models\Business;
@@ -133,7 +135,7 @@ class PosSettingsService
                 return in_array($v, ['before', 'after'], true) ? $v : 'after';
             })(),
             'timezone'         => (string) ($business->getSetting('business.timezone', '') ?: ''),
-            'business_logo_url' => (string) ($business->getSetting(self::KEY_BUSINESS_LOGO_URL, '') ?: ''),
+            'business_logo_url' => $this->corsSafeMediaUrl((string) ($business->getSetting(self::KEY_BUSINESS_LOGO_URL, '') ?: ''), $business->id),
             // POS
             'default_deposit_account_id' => $accountId,
             'discount_field_enabled' => (bool) $business->getSetting(self::KEY_DISCOUNT_FIELD_ENABLED, false),
@@ -159,7 +161,7 @@ class PosSettingsService
                 return in_array($v, ['fifo', 'choose', 'last_price'], true) ? $v : 'fifo';
             })(),
             'choose_price'               => (bool) $business->getSetting(self::KEY_CHOOSE_PRICE, false),
-            'receipt_logo_url'           => (string) ($business->getSetting(self::KEY_RECEIPT_LOGO_URL, '') ?: ''),
+            'receipt_logo_url'           => $this->corsSafeMediaUrl((string) ($business->getSetting(self::KEY_RECEIPT_LOGO_URL, '') ?: ''), $business->id),
             'receipt_mode'               => (function () use ($business) {
                 $v = strtolower(trim((string) ($business->getSetting(self::KEY_RECEIPT_MODE, 'bill') ?: 'bill')));
                 return in_array($v, ['bill', 'invoice'], true) ? $v : 'bill';
@@ -478,5 +480,57 @@ class PosSettingsService
         if (array_key_exists('timezone', $data)) {
             $business->setSetting('business.timezone', trim((string) ($data['timezone'] ?? '')));
         }
+    }
+
+    /** Stores an uploaded logo file for the business and returns its public URL. */
+    public function uploadBusinessLogo(Business $business, UploadedFile $file): string
+    {
+        $oldUrl  = (string) ($business->getSetting(self::KEY_BUSINESS_LOGO_URL, '') ?: '');
+        $oldPath = $this->businessLogoPathFromUrl($oldUrl, $business->id);
+
+        $path     = $file->store('business-logos/'.$business->id, 'public');
+        $filename = basename($path);
+        // Routed through PosMediaApiController rather than the raw `storage/` symlink so the
+        // response carries CORS headers — the symlinked path is served directly by the
+        // webserver and never reaches Laravel, which breaks Flutter Web's cross-origin fetch.
+        $url = route('api.media.business-logo', ['business' => $business->id, 'filename' => $filename]);
+        $business->setSetting(self::KEY_BUSINESS_LOGO_URL, $url);
+
+        if ($oldPath && Storage::disk('public')->exists($oldPath)) {
+            Storage::disk('public')->delete($oldPath);
+        }
+
+        return $url;
+    }
+
+    /** Maps a previously-uploaded logo URL back to its storage path, or null if it wasn't one we stored. */
+    private function businessLogoPathFromUrl(string $url, int $businessId): ?string
+    {
+        if ($url === '' || ! preg_match('#/business-logos/'.$businessId.'/([A-Za-z0-9._-]+)$#', $url, $m)) {
+            return null;
+        }
+
+        return 'business-logos/'.$businessId.'/'.$m[1];
+    }
+
+    /**
+     * Rewrites a stored logo/image URL that points at the raw `storage/` symlink into the
+     * CORS-safe media proxy. Older uploads (e.g. picked via the file manager, before the
+     * dedicated logo endpoint existed) were saved as direct `/storage/...` links, which the
+     * webserver serves without CORS headers — that breaks Flutter Web's cross-origin image
+     * fetch even though the file loads fine natively or via `<img>`. URLs already served
+     * through `/api/media/...` (new uploads, or external links) pass through unchanged.
+     */
+    private function corsSafeMediaUrl(string $url, int $businessId): string
+    {
+        if ($url === '' || str_contains($url, '/api/media/')) {
+            return $url;
+        }
+
+        if (! preg_match('#/storage/([A-Za-z0-9_-]+/'.$businessId.'/.+)$#', $url, $m)) {
+            return $url;
+        }
+
+        return route('api.media.business-file', ['business' => $businessId, 'path' => $m[1]]);
     }
 }

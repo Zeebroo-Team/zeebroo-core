@@ -15,6 +15,9 @@ dependencies:
   # HTTP
   dio: ^5.7.0
 
+  # Picking an image from the gallery (e.g. business logo upload)
+  image_picker: ^1.1.2
+
   # Secure token storage
   flutter_secure_storage: ^9.2.2
 
@@ -23,6 +26,10 @@ dependencies:
 
   # Navigation
   go_router: ^14.6.2
+
+  # DEV MOBILE PREVIEW — shows a phone frame when running in a browser.
+  # Remove this dependency (and its usage in lib/main.dart) once development is done.
+  device_preview: ^1.2.0
 
 dev_dependencies:
   flutter_test:

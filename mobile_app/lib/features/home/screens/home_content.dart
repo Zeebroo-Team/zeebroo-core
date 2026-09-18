@@ -1,20 +1,21 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 
 import '../../../core/api/api_client.dart';
 import '../../../core/api/api_endpoints.dart';
-import '../../../core/auth/auth_state.dart';
 import '../../../core/theme/app_theme.dart';
-import '../widgets/stat_tile.dart';
+import '../../dashboard/widgets/stat_tile.dart';
 
-class DashboardScreen extends StatefulWidget {
-  const DashboardScreen({super.key});
+/// The "Home" tab content inside [HomeShell] — today's business overview.
+/// The shell owns the header (greeting/avatar) and navigation chrome, so
+/// this widget is just the scrollable body.
+class HomeContent extends StatefulWidget {
+  const HomeContent({super.key});
 
   @override
-  State<DashboardScreen> createState() => _DashboardScreenState();
+  State<HomeContent> createState() => _HomeContentState();
 }
 
-class _DashboardScreenState extends State<DashboardScreen> {
+class _HomeContentState extends State<HomeContent> {
   bool _loading = true;
   String? _error;
   Map<String, dynamic>? _summary;
@@ -42,58 +43,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    final user = context.watch<AuthState>().user;
-    final firstName = (user?['name'] as String?)?.split(' ').first ?? 'there';
-
-    return Scaffold(
-      body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: _load,
-          child: ListView(
-            padding: const EdgeInsets.all(20),
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('Welcome back',
-                            style: TextStyle(fontSize: 13, color: AppColors.textMuted)),
-                        Text(firstName,
-                            style: const TextStyle(
-                                fontSize: 24, fontWeight: FontWeight.w800, color: AppColors.textDark)),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: 'Log out',
-                    icon: const Icon(Icons.logout, color: AppColors.textMid),
-                    onPressed: () => context.read<AuthState>().logout(),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
-              const Text("Today's overview",
-                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.textDark)),
-              const SizedBox(height: 12),
-              if (_loading)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 40),
-                  child: Center(child: CircularProgressIndicator()),
-                )
-              else if (_error != null)
-                _ErrorCard(message: _error!, onRetry: _load)
-              else
-                _buildStats(),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => RefreshIndicator(
+    onRefresh: _load,
+    child: ListView(
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 120),
+      children: [
+        const Text("Today's overview",
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: AppColors.textDark)),
+        const SizedBox(height: 4),
+        const Text('A quick look at how business is going today.',
+            style: TextStyle(fontSize: 13, color: AppColors.textMuted)),
+        const SizedBox(height: 18),
+        if (_loading)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 40),
+            child: Center(child: CircularProgressIndicator()),
+          )
+        else if (_error != null)
+          _ErrorCard(message: _error!, onRetry: _load)
+        else
+          _buildStats(),
+      ],
+    ),
+  );
 
   Widget _buildStats() {
     final sales = (_summary?['sales'] as Map?) ?? {};
@@ -105,9 +77,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       crossAxisCount: 2,
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      mainAxisSpacing: 12,
-      crossAxisSpacing: 12,
-      childAspectRatio: 1.3,
+      mainAxisSpacing: 14,
+      crossAxisSpacing: 14,
+      childAspectRatio: 1.25,
       children: [
         StatTile(
           label: 'Sales today',
@@ -146,9 +118,9 @@ class _ErrorCard extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.all(16),
     decoration: BoxDecoration(
-      color: AppColors.card,
-      borderRadius: BorderRadius.circular(14),
-      border: Border.all(color: AppColors.border),
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      boxShadow: const [BoxShadow(color: AppColors.shadow, blurRadius: 16, offset: Offset(0, 4))],
     ),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,

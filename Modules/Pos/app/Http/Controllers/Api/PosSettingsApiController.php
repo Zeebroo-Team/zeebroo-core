@@ -223,6 +223,22 @@ class PosSettingsApiController extends Controller
         ]);
     }
 
+    public function updateLogo(Request $request): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+
+        $validated = $request->validate([
+            'logo' => ['required', 'image', 'mimes:jpeg,png,gif,webp', 'max:2048'],
+        ]);
+
+        $this->posSettings->uploadBusinessLogo($business, $validated['logo']);
+
+        return response()->json([
+            'message' => 'Business logo updated.',
+            'data' => $this->posSettings->forBusiness($business),
+        ]);
+    }
+
     public function syncStatus(Request $request): JsonResponse
     {
         $business = $this->businessOrAbort($request);

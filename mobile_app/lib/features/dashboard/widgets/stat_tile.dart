@@ -18,30 +18,30 @@ class StatTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(16),
+    padding: const EdgeInsets.all(18),
     decoration: BoxDecoration(
-      color: AppColors.card,
-      borderRadius: BorderRadius.circular(14),
-      border: Border.all(color: AppColors.border),
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(20),
+      boxShadow: const [BoxShadow(color: AppColors.shadow, blurRadius: 20, offset: Offset(0, 6))],
     ),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Container(
-          width: 34,
-          height: 34,
+          width: 36,
+          height: 36,
           decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(9),
+            color: color.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(11),
           ),
           alignment: Alignment.center,
-          child: Icon(icon, size: 17, color: color),
+          child: Icon(icon, size: 18, color: color),
         ),
-        const SizedBox(height: 14),
+        const Spacer(),
         Text(value,
-            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: AppColors.textDark)),
+            style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w800, color: AppColors.textDark)),
         const SizedBox(height: 2),
-        Text(label, style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
+        Text(label, style: const TextStyle(fontSize: 12.5, color: AppColors.textMuted)),
       ],
     ),
   );

@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
 import '../auth/auth_storage.dart';
+import '../business/business_storage.dart';
 import 'api_endpoints.dart';
 
 class ApiClient {
@@ -11,37 +12,76 @@ class ApiClient {
   late final Dio _dio = _build();
 
   Dio _build() {
-    final dio = Dio(BaseOptions(
-      baseUrl: ApiEndpoints.baseUrl,
-      connectTimeout: const Duration(seconds: 15),
-      receiveTimeout: const Duration(seconds: 20),
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-      },
-    ));
+    final dio = Dio(
+      BaseOptions(
+        baseUrl: ApiEndpoints.baseUrl,
+        connectTimeout: const Duration(seconds: 15),
+        receiveTimeout: const Duration(seconds: 20),
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+      ),
+    );
 
-    dio.interceptors.add(InterceptorsWrapper(
-      onRequest: (options, handler) async {
-        final token = await AuthStorage.getToken();
-        if (token != null) {
-          options.headers['Authorization'] = 'Bearer $token';
-        }
-        handler.next(options);
-      },
-    ));
+    dio.interceptors.add(
+      InterceptorsWrapper(
+        onRequest: (options, handler) async {
+          final token = await AuthStorage.getToken();
+          if (token != null) {
+            options.headers['Authorization'] = 'Bearer $token';
+          }
+          // Same header the desktop app sends — tells the server which
+          // business/branch to resolve data for. A caller that already set
+          // one explicitly (e.g. previewing branches for a business that
+          // isn't the current selection yet) wins over the stored default.
+          if (!options.headers.containsKey('X-Business-Id')) {
+            final businessId = await BusinessStorage.getBusinessId();
+            if (businessId != null) {
+              options.headers['X-Business-Id'] = businessId.toString();
+            }
+          }
+          if (!options.headers.containsKey('X-Branch-Id')) {
+            final branchId = await BusinessStorage.getBranchId();
+            if (branchId != null) {
+              options.headers['X-Branch-Id'] = branchId.toString();
+            }
+          }
+          handler.next(options);
+        },
+      ),
+    );
 
     if (kDebugMode) {
-      dio.interceptors.add(LogInterceptor(requestBody: true, responseBody: true));
+      dio.interceptors.add(
+        LogInterceptor(requestBody: true, responseBody: true),
+      );
     }
 
     return dio;
   }
 
-  Future<Response> get(String path, {Map<String, dynamic>? params}) =>
-      _dio.get(path, queryParameters: params);
+  Future<Response> get(
+    String path, {
+    Map<String, dynamic>? params,
+    Map<String, dynamic>? headers,
+  }) => _dio.get(
+    path,
+    queryParameters: params,
+    options: headers != null ? Options(headers: headers) : null,
+  );
 
-  Future<Response> post(String path, {dynamic data}) => _dio.post(path, data: data);
+  Future<Response> post(String path, {dynamic data}) =>
+      _dio.post(path, data: data);
+
+  Future<Response> put(String path, {dynamic data}) =>
+      _dio.put(path, data: data);
+
+  Future<Response> postMultipart(String path, FormData data) => _dio.post(
+    path,
+    data: data,
+    options: Options(contentType: 'multipart/form-data'),
+  );
 }
 
 /// Turns a [DioException] (or any error) into a user-facing message.
