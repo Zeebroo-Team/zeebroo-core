@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Modules\Account\Models\Account;
+use Modules\Account\Models\Bank;
 use Modules\Account\Models\BankType;
 use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesPosBusinessForApi;
 
@@ -56,12 +57,13 @@ class PosAccountApiController extends Controller
             'category'            => 'required|in:operating,savings,petty_cash,credit_card,payroll,investment,loan',
             'bank_type_id'        => 'required|exists:bank_types,id',
             'bank_id'             => 'nullable|exists:banks,id',
-            'bank_name'           => 'nullable|string|max:255',
             'bank_account_number' => 'nullable|string|max:255',
             'branch'              => 'nullable|string|max:255',
             'current_balance'     => 'required|numeric|min:0',
             'notes'               => 'nullable|string|max:2000',
         ]);
+
+        $bank = isset($validated['bank_id']) ? Bank::find($validated['bank_id']) : null;
 
         $account = Account::create([
             'user_id'             => $request->user()->id,
@@ -70,7 +72,7 @@ class PosAccountApiController extends Controller
             'category'            => $validated['category'],
             'bank_type_id'        => $validated['bank_type_id'],
             'bank_id'             => $validated['bank_id'] ?? null,
-            'bank_name'           => $validated['bank_name'] ?? null,
+            'bank_name'           => $bank?->name,
             'bank_account_number' => $validated['bank_account_number'] ?? null,
             'branch'              => $validated['branch'] ?? null,
             'current_balance'     => $validated['current_balance'],

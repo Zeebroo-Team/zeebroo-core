@@ -64,68 +64,92 @@ class GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
             ),
             child: SizedBox(
               height: _toolbarHeight,
-              child: Row(
-                children: [
-                  const SizedBox(width: 2),
-                  IconButton(
-                    icon: const Icon(Icons.menu_rounded, color: AppColors.textDark),
-                    tooltip: 'Menu',
-                    onPressed: onMenuTap,
-                  ),
-                  Expanded(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '$greeting, $name',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 11.5, color: AppColors.textMuted),
-                        ),
-                        if (_showBusinessLabel) ...[
-                          const SizedBox(height: 1),
-                          InkWell(
-                            onTap: onBusinessTap,
-                            borderRadius: BorderRadius.circular(6),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Flexible(
-                                  child: Text(
-                                    businessLabel!,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(fontSize: 15.5, fontWeight: FontWeight.w700, color: AppColors.textDark),
-                                  ),
-                                ),
-                                if (onBusinessTap != null) ...[
-                                  const SizedBox(width: 2),
-                                  const Icon(Icons.expand_more_rounded, size: 16, color: AppColors.textMuted),
-                                ],
-                              ],
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                  InkWell(
-                    onTap: onMenuTap,
-                    customBorder: const CircleBorder(),
-                    child: Container(
-                      width: 36,
-                      height: 36,
-                      margin: const EdgeInsets.only(right: 14),
-                      decoration: const BoxDecoration(color: AppColors.primaryLt, shape: BoxShape.circle),
-                      alignment: Alignment.center,
-                      child: Text(
-                        initials,
-                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.primaryDk),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 38,
+                      height: 38,
+                      child: IconButton(
+                        padding: EdgeInsets.zero,
+                        splashRadius: 19,
+                        icon: const Icon(Icons.menu_rounded, size: 22, color: AppColors.textMuted),
+                        tooltip: 'Menu',
+                        onPressed: onMenuTap,
                       ),
                     ),
-                  ),
-                ],
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '$greeting, $name',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w500,
+                              color: AppColors.textMuted,
+                              letterSpacing: 0.1,
+                            ),
+                          ),
+                          if (_showBusinessLabel) ...[
+                            const SizedBox(height: 2),
+                            InkWell(
+                              onTap: onBusinessTap,
+                              borderRadius: BorderRadius.circular(6),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      businessLabel!,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        fontSize: 15.5,
+                                        fontWeight: FontWeight.w700,
+                                        color: AppColors.primaryDk,
+                                        letterSpacing: -0.1,
+                                      ),
+                                    ),
+                                  ),
+                                  if (onBusinessTap != null) ...[
+                                    const SizedBox(width: 3),
+                                    Icon(Icons.expand_more_rounded, size: 17, color: AppColors.primaryDk.withValues(alpha: 0.55)),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    InkWell(
+                      onTap: onMenuTap,
+                      customBorder: const CircleBorder(),
+                      child: Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          color: AppColors.primaryLt,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 1.5),
+                          boxShadow: const [BoxShadow(color: AppColors.shadow, blurRadius: 6, offset: Offset(0, 2))],
+                        ),
+                        alignment: Alignment.center,
+                        child: Text(
+                          initials,
+                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.primaryDk),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/api/api_client.dart';
-import '../../../core/api/api_endpoints.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../dashboard/widgets/stat_tile.dart';
+import '../widgets/account_overview_tab.dart';
+import '../widgets/expenses_tab.dart';
+import '../widgets/profit_tab.dart';
 
-/// The "Home" tab content inside [HomeShell] — today's business overview.
-/// The shell owns the header (greeting/avatar) and navigation chrome, so
-/// this widget is just the scrollable body.
+/// The "Home" tab content inside [HomeShell] — three sub-tabs covering
+/// account balances, expenses and profit. The shell owns the header
+/// (greeting/avatar) and bottom navigation chrome, so this widget is just
+/// the tab bar plus the scrollable body for whichever sub-tab is active.
 class HomeContent extends StatefulWidget {
   const HomeContent({super.key});
 
@@ -15,124 +16,51 @@ class HomeContent extends StatefulWidget {
   State<HomeContent> createState() => _HomeContentState();
 }
 
-class _HomeContentState extends State<HomeContent> {
-  bool _loading = true;
-  String? _error;
-  Map<String, dynamic>? _summary;
+class _HomeContentState extends State<HomeContent> with SingleTickerProviderStateMixin {
+  static const _tabLabels = ['Account overview', 'Expenses', 'Profit'];
+
+  late final TabController _tabController = TabController(length: _tabLabels.length, vsync: this);
 
   @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      final res = await ApiClient.instance.get(ApiEndpoints.todaySummary);
-      final data = res.data;
-      _summary = (data is Map ? data['data'] : data) as Map<String, dynamic>?;
-    } catch (e) {
-      _error = apiErrorMessage(e);
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) => RefreshIndicator(
-    onRefresh: _load,
-    child: ListView(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 120),
-      children: [
-        const Text("Today's overview",
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: AppColors.textDark)),
-        const SizedBox(height: 4),
-        const Text('A quick look at how business is going today.',
-            style: TextStyle(fontSize: 13, color: AppColors.textMuted)),
-        const SizedBox(height: 18),
-        if (_loading)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 40),
-            child: Center(child: CircularProgressIndicator()),
-          )
-        else if (_error != null)
-          _ErrorCard(message: _error!, onRetry: _load)
-        else
-          _buildStats(),
-      ],
-    ),
-  );
-
-  Widget _buildStats() {
-    final sales = (_summary?['sales'] as Map?) ?? {};
-    final services = (_summary?['service_requests'] as Map?) ?? {};
-
-    String money(dynamic v) => (v as num? ?? 0).toStringAsFixed(2);
-
-    return GridView.count(
-      crossAxisCount: 2,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      mainAxisSpacing: 14,
-      crossAxisSpacing: 14,
-      childAspectRatio: 1.25,
-      children: [
-        StatTile(
-          label: 'Sales today',
-          value: '${sales['count'] ?? 0}',
-          icon: Icons.receipt_long_outlined,
+  Widget build(BuildContext context) => Column(
+    children: [
+      Container(
+        color: AppColors.surface,
+        width: double.infinity,
+        child: TabBar(
+          controller: _tabController,
+          isScrollable: true,
+          tabAlignment: TabAlignment.start,
+          padding: EdgeInsets.zero,
+          labelPadding: const EdgeInsets.symmetric(horizontal: 12),
+          indicatorSize: TabBarIndicatorSize.label,
+          indicatorColor: AppColors.primary,
+          indicatorWeight: 2,
+          dividerColor: Colors.transparent,
+          labelColor: AppColors.primary,
+          unselectedLabelColor: AppColors.textMuted,
+          labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+          unselectedLabelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+          tabs: [for (final label in _tabLabels) Tab(height: 34, text: label)],
         ),
-        StatTile(
-          label: 'Revenue',
-          value: money(sales['revenue']),
-          icon: Icons.payments_outlined,
-          color: AppColors.success,
+      ),
+      const Divider(height: 1, color: AppColors.border),
+      Expanded(
+        child: TabBarView(
+          controller: _tabController,
+          children: const [
+            AccountOverviewTab(),
+            ExpensesTab(),
+            ProfitTab(),
+          ],
         ),
-        StatTile(
-          label: 'Gross profit',
-          value: money(sales['gross_profit']),
-          icon: Icons.trending_up_rounded,
-          color: AppColors.warning,
-        ),
-        StatTile(
-          label: 'Pending services',
-          value: '${services['pending'] ?? 0}',
-          icon: Icons.build_outlined,
-          color: AppColors.error,
-        ),
-      ],
-    );
-  }
-}
-
-class _ErrorCard extends StatelessWidget {
-  const _ErrorCard({required this.message, required this.onRetry});
-  final String message;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(16),
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(16),
-      boxShadow: const [BoxShadow(color: AppColors.shadow, blurRadius: 16, offset: Offset(0, 4))],
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(message, style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
-        const SizedBox(height: 10),
-        TextButton.icon(
-          onPressed: onRetry,
-          icon: const Icon(Icons.refresh, size: 16),
-          label: const Text('Retry'),
-        ),
-      ],
-    ),
+      ),
+    ],
   );
 }

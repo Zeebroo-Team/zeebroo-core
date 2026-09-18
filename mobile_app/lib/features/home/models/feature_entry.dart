@@ -70,8 +70,8 @@ class FeatureCatalog {
     ),
     FeatureEntry(
       key: 'bill_management',
-      label: 'Bills',
-      description: 'Track bills, expenses and payments.',
+      label: 'Financial',
+      description: 'Bills, loans, rentals, properties and modifications.',
       icon: Icons.receipt_long_outlined,
       activeIcon: Icons.receipt_long_rounded,
     ),
