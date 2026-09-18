@@ -31,6 +31,7 @@ use Modules\Pos\Http\Controllers\Api\PosInvoiceApiController;
 use Modules\Pos\Http\Controllers\Api\PosSalesOrderApiController;
 use Modules\Pos\Http\Controllers\Api\PosFeatureReviewApiController;
 use Modules\Pos\Http\Controllers\Api\PosSettingsApiController;
+use Modules\Pos\Http\Controllers\Api\PosMediaApiController;
 use Modules\Pos\Http\Controllers\Api\PosCustomerApiController;
 use Modules\Pos\Http\Controllers\Api\PosCustomerCategoryApiController;
 use Modules\Pos\Http\Controllers\Api\PosSupplierApiController;
@@ -69,6 +70,19 @@ Route::prefix('v1/pos')->group(function (): void {
     Route::get('docs/openapi.yaml', [PosApiDocsController::class, 'openapi'])->name('pos.docs.openapi');
     Route::get('docs/openapi.json', [PosApiDocsController::class, 'openapiJson'])->name('pos.docs.openapi.json');
     Route::get('docs/readme', [PosApiDocsController::class, 'readme'])->name('pos.docs.readme');
+
+    // Served through the router (not the `storage/` symlink) so the response can carry
+    // CORS headers — Flutter Web's image fetch is cross-origin from the API's own port.
+    Route::get('media/business-logos/{business}/{filename}', [PosMediaApiController::class, 'businessLogo'])
+        ->where(['business' => '[0-9]+', 'filename' => '[A-Za-z0-9._-]+'])
+        ->name('media.business-logo');
+
+    // Generic CORS-safe proxy for any other business-scoped file already stored under the
+    // `public` disk (e.g. logos picked via the file manager before the dedicated logo upload
+    // endpoint existed) — same rationale as media.business-logo above.
+    Route::get('media/business-file/{business}/{path}', [PosMediaApiController::class, 'businessFile'])
+        ->where(['business' => '[0-9]+', 'path' => '[A-Za-z0-9._\/-]+'])
+        ->name('media.business-file');
 });
 
 Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v1/pos')->name('pos.')->group(function (): void {
@@ -116,6 +130,7 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
     Route::get('online/settings', [PosSettingsApiController::class, 'show'])->name('online.settings.show');
     Route::put('online/settings', [PosSettingsApiController::class, 'update'])->name('online.settings.update');
     Route::patch('online/settings', [PosSettingsApiController::class, 'update']);
+    Route::post('online/settings/logo', [PosSettingsApiController::class, 'updateLogo'])->name('online.settings.logo.update');
 
     // Invoices
     Route::get   ('invoices',                          [PosInvoiceApiController::class, 'index']          )->name('invoices.index');

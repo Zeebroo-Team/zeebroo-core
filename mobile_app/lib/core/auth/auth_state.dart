@@ -39,11 +39,14 @@ class AuthState extends ChangeNotifier {
 
   // ── Login ────────────────────────────────────────────────────────────────
   Future<void> login(String email, String password) async {
-    final res = await ApiClient.instance.post(ApiEndpoints.login, data: {
-      'email': email,
-      'password': password,
-      'device_name': 'zeebroo-mobile',
-    });
+    final res = await ApiClient.instance.post(
+      ApiEndpoints.login,
+      data: {
+        'email': email,
+        'password': password,
+        'device_name': 'zeebroo-mobile',
+      },
+    );
     await _applyAuthResponse(res.data);
   }
 
@@ -71,24 +74,28 @@ class AuthState extends ChangeNotifier {
       lastInstalledPackageName = null;
     }
 
-    final res = await ApiClient.instance.post(ApiEndpoints.register, data: {
-      'name': name,
-      'email': email,
-      'password': password,
-      'password_confirmation': password,
-      'business_name': businessName,
-      'business_category': businessCategory,
-      if (packageId != null) 'package_id': packageId,
-      'platform': 'mobile',
-      'device_name': 'zeebroo-mobile',
-    });
+    final res = await ApiClient.instance.post(
+      ApiEndpoints.register,
+      data: {
+        'name': name,
+        'email': email,
+        'password': password,
+        'password_confirmation': password,
+        'business_name': businessName,
+        'business_category': businessCategory,
+        if (packageId != null) 'package_id': packageId,
+        'platform': 'mobile',
+        'device_name': 'zeebroo-mobile',
+      },
+    );
     await _applyAuthResponse(res.data);
   }
 
   Future<Map<String, dynamic>?> _findMobileOnlyPackage() async {
-    final res = await ApiClient.instance.get(ApiEndpoints.packages, params: {
-      'platform': 'mobile',
-    });
+    final res = await ApiClient.instance.get(
+      ApiEndpoints.packages,
+      params: {'platform': 'mobile'},
+    );
     final list = (res.data is Map ? res.data['data'] : res.data) as List?;
     if (list == null) return null;
     for (final item in list) {
@@ -99,11 +106,42 @@ class AuthState extends ChangeNotifier {
     return null;
   }
 
+  // ── Profile ──────────────────────────────────────────────────────────────
+  Future<void> updateProfile({
+    required String name,
+    required String email,
+  }) async {
+    final res = await ApiClient.instance.put(
+      ApiEndpoints.profile,
+      data: {'name': name, 'email': email},
+    );
+    final data = res.data;
+    final updated = (data is Map ? data['data'] : data) as Map?;
+    if (updated != null) {
+      _user = {...?_user, ...updated.cast<String, dynamic>()};
+      notifyListeners();
+    }
+  }
+
+  Future<void> updatePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) => ApiClient.instance.put(
+    ApiEndpoints.password,
+    data: {
+      'current_password': currentPassword,
+      'password': newPassword,
+      'password_confirmation': newPassword,
+    },
+  );
+
   // ── Logout ───────────────────────────────────────────────────────────────
   Future<void> logout() async {
     try {
       await ApiClient.instance.post(ApiEndpoints.revoke);
-    } catch (_) {/* Token may already be invalid server-side — clear local state regardless. */}
+    } catch (_) {
+      /* Token may already be invalid server-side — clear local state regardless. */
+    }
     await AuthStorage.clear();
     _user = null;
     _status = AuthStatus.unauthenticated;
