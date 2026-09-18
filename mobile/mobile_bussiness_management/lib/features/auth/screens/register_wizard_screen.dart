@@ -106,6 +106,7 @@ class _RegisterWizardScreenState extends State<RegisterWizardScreen>
         'password_confirmation': _confirm.text,
         'business_name':     _bizName.text.trim(),
         'business_category': _bizCategory,   // slug e.g. "retail"
+        'platform':          'mobile',
       });
       if (mounted) _animateTo(2);
       // AuthState notifies → GoRouter redirect takes over automatically

@@ -425,7 +425,7 @@ class BusinessController extends Controller
 
         $package = null;
         if (isset($validated['package_id'])) {
-            $package = Package::query()->where('is_active', true)->find($validated['package_id']);
+            $package = Package::query()->where('is_active', true)->visibleForPlatform('desktop')->find($validated['package_id']);
             if (! $package) {
                 throw ValidationException::withMessages([
                     'package_id' => ['The selected package is no longer available.'],

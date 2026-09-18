@@ -5,6 +5,7 @@ namespace Modules\Pos\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Modules\Business\Models\Business;
 use Modules\Business\Models\BusinessCategory;
@@ -71,11 +72,14 @@ class PosBusinessesApiController extends Controller
             'package_id' => ['nullable', 'integer', 'exists:packages,id'],
             'features'   => ['nullable', 'array'],
             'features.*' => ['string'],
+            'platform'   => ['nullable', 'string', Rule::in(['desktop', 'mobile'])],
         ]);
+
+        $platform = $validated['platform'] ?? 'desktop';
 
         $package = null;
         if (isset($validated['package_id'])) {
-            $package = Package::query()->where('is_active', true)->find($validated['package_id']);
+            $package = Package::query()->where('is_active', true)->visibleForPlatform($platform)->find($validated['package_id']);
             if (! $package) {
                 throw ValidationException::withMessages([
                     'package_id' => ['The selected package is no longer available.'],
