@@ -22,7 +22,7 @@ class JobService
             }))
             ->when($status, fn ($query) => $query->where('status', $status))
             ->when($reporterId, fn ($query) => $query->where('reporter_id', $reporterId))
-            ->orderByDesc('created_at')
+            ->orderBy('created_at')
             ->get()
             ->map(fn ($j) => [
                 'id'                => $j->id,

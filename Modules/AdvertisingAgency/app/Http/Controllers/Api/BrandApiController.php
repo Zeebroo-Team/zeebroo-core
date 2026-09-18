@@ -32,7 +32,7 @@ class BrandApiController extends Controller
         $validated = $request->validate([
             'name'           => ['required', 'string', 'max:150'],
             'short_code'     => ['required', 'string', 'size:3', 'regex:/^[A-Za-z]{3}$/'],
-            'email'          => ['required', 'email', 'max:150'],
+            'email'          => ['nullable', 'email', 'max:150'],
             'phone'          => ['nullable', 'string', 'max:40'],
             'company_name'   => ['nullable', 'string', 'max:150'],
             'contact_person' => ['nullable', 'string', 'max:150'],
@@ -62,7 +62,7 @@ class BrandApiController extends Controller
         $validated = $request->validate([
             'name'           => ['required', 'string', 'max:150'],
             'short_code'     => ['required', 'string', 'size:3', 'regex:/^[A-Za-z]{3}$/'],
-            'email'          => ['required', 'email', 'max:150'],
+            'email'          => ['nullable', 'email', 'max:150'],
             'phone'          => ['nullable', 'string', 'max:40'],
             'company_name'   => ['nullable', 'string', 'max:150'],
             'contact_person' => ['nullable', 'string', 'max:150'],
@@ -93,7 +93,7 @@ class BrandApiController extends Controller
             'rows'                  => ['required', 'array', 'min:1', 'max:500'],
             'rows.*.name'           => ['required', 'string', 'max:150'],
             'rows.*.short_code'     => ['required', 'string', 'size:3', 'regex:/^[A-Za-z]{3}$/'],
-            'rows.*.email'          => ['required', 'email', 'max:150'],
+            'rows.*.email'          => ['nullable', 'email', 'max:150'],
             'rows.*.phone'          => ['nullable', 'string', 'max:40'],
             'rows.*.company_name'   => ['nullable', 'string', 'max:150'],
             'rows.*.contact_person' => ['nullable', 'string', 'max:150'],

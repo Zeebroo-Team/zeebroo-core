@@ -48168,7 +48168,7 @@ async function submitDsCreate() {
     const body = {
       name:           ($('#brd-name').value || '').trim(),
       short_code:     shortCode,
-      email:          ($('#brd-email').value || '').trim(),
+      email:          ($('#brd-email').value || '').trim() || null,
       phone:          ($('#brd-phone').value || '').trim() || null,
       company_name:   ($('#brd-company-name').value || '').trim() || null,
       contact_person: ($('#brd-contact-person').value || '').trim() || null,
@@ -48176,7 +48176,7 @@ async function submitDsCreate() {
     };
     if (!body.name)                           { _brdAlert('Brand name is required.', false); return; }
     if (!/^[A-Z]{3}$/.test(body.short_code)) { _brdAlert('Short code must be exactly 3 uppercase letters (A–Z).', false); return; }
-    if (!body.email)                          { _brdAlert('Email address is required.', false); return; }
+    if (body.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.email)) { _brdAlert('Please enter a valid email address.', false); return; }
 
     const saveBtn = $('#brd-modal-save');
     if (saveBtn) saveBtn.disabled = true;
@@ -49488,13 +49488,16 @@ async function submitDsCreate() {
         row.bank_branch   = promo.bank_branch  || '';
         row.bank_account  = promo.bank_account || '';
 
-        // Auto-fill position from the promoter's position field
-        if (promo.position) {
+        // Auto-fill position only when the row has none set — preserves any
+        // position already on the row so promoters can serve any position.
+        if (promo.position && !row.position) {
           row.position = promo.position;
+        }
 
-          // If a matching position rule exists, also apply its daily rate & transport
+        // Apply position-rule rates for the row's current position
+        if (row.position) {
           const rule = (_ssCurrentSheet?.position_rules || [])
-            .find(r => r.position_name.toLowerCase() === promo.position.toLowerCase());
+            .find(r => r.position_name.toLowerCase() === row.position.toLowerCase());
           if (rule) {
             row.daily_rate          = parseFloat(rule.daily_rate)          || 0;
             row.transport_allowance = parseFloat(rule.transport_allowance)  || 0;
@@ -49513,7 +49516,7 @@ async function submitDsCreate() {
           patch('bank_name',    row.bank_name);
           patch('bank_branch',  row.bank_branch);
           patch('bank_account', row.bank_account);
-          if (promo.position) patch('position', row.position);
+          patch('position',     row.position);
         }
 
         // Recalculate if daily_rate or transport changed
@@ -50213,8 +50216,8 @@ async function submitDsCreate() {
     const id   = $('#crd-id').value;
     const body = {
       name:        ($('#crd-name').value        || '').trim(),
-      nic:         ($('#crd-nic').value         || '').trim(),
-      phone:       ($('#crd-phone').value       || '').trim(),
+      nic:         ($('#crd-nic').value         || '').trim() || null,
+      phone:       ($('#crd-phone').value       || '').trim() || null,
       status:      $('#crd-status').value       || '',
       bank_name:   ($('#crd-bank-name').value   || '').trim(),
       bank_branch: ($('#crd-bank-branch').value || '').trim(),
@@ -50225,8 +50228,6 @@ async function submitDsCreate() {
     const showErr = msg => { if (alertEl) { alertEl.textContent = msg; alertEl.style.display = ''; alertEl.style.color = '#ef4444'; } };
 
     if (!body.name)         { showErr('Coordinator name is required.');     return; }
-    if (!body.nic)          { showErr('NIC number is required.');           return; }
-    if (!body.phone)        { showErr('Phone number is required.');         return; }
     if (!body.status)       { showErr('Status is required.');               return; }
     if (!body.bank_name)    { showErr('Bank name is required.');            return; }
     if (!body.bank_branch)  { showErr('Bank branch name is required.');     return; }

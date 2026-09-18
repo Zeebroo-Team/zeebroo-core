@@ -31,8 +31,8 @@ class CoordinatorApiController extends Controller
         $business  = $this->businessOrAbort($request);
         $validated = $request->validate([
             'name'         => ['required', 'string', 'max:150'],
-            'nic'          => ['required', 'string', 'max:50'],
-            'phone'        => ['required', 'string', 'max:30'],
+            'nic'          => ['nullable', 'string', 'max:50'],
+            'phone'        => ['nullable', 'string', 'max:30'],
             'status'       => ['required', 'string', 'in:active,inactive'],
             'bank_name'    => ['required', 'string', 'max:100'],
             'bank_branch'  => ['required', 'string', 'max:100'],
@@ -50,8 +50,8 @@ class CoordinatorApiController extends Controller
         $coordinator = Coordinator::where('business_id', $business->id)->findOrFail($id);
         $validated   = $request->validate([
             'name'         => ['required', 'string', 'max:150'],
-            'nic'          => ['required', 'string', 'max:50'],
-            'phone'        => ['required', 'string', 'max:30'],
+            'nic'          => ['nullable', 'string', 'max:50'],
+            'phone'        => ['nullable', 'string', 'max:30'],
             'status'       => ['required', 'string', 'in:active,inactive'],
             'bank_name'    => ['required', 'string', 'max:100'],
             'bank_branch'  => ['required', 'string', 'max:100'],
