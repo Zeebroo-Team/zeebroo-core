@@ -168,6 +168,7 @@ class PosAuthApiController extends Controller
                 'price'            => (float) $package->price,
                 'discounted_price' => $package->discounted_price !== null ? (float) $package->discounted_price : null,
                 'is_free'          => $package->is_free,
+                'is_mobile_only'   => $package->is_mobile_only,
                 'features'         => $package->features ?? [],
                 'feature_labels'   => $package->featureLabels(),
             ])
