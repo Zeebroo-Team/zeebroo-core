@@ -1,11 +1,17 @@
-/// All API endpoint paths. Change [baseUrl] to point at your Laravel server.
+/// All API endpoint paths.
 ///
-/// - Android emulator reaching a host machine's `localhost` server: use `10.0.2.2`.
-/// - iOS simulator / physical device on the same network: use the machine's LAN IP.
+/// Development (default):  http://localhost:8000/api
+/// Production APK build:   flutter build apk --dart-define=BASE_URL=https://platform.zeebroo.com/api
+///
+/// - Android emulator reaching the host machine's server: use `http://10.0.2.2:8000/api`.
+/// - iOS simulator / physical device on the same LAN: use the machine's LAN IP.
 class ApiEndpoints {
   ApiEndpoints._();
 
-  static const String baseUrl = 'http://localhost:8000/api';
+  static const String baseUrl = String.fromEnvironment(
+    'BASE_URL',
+    defaultValue: 'http://localhost:8000/api',
+  );
 
   // Auth (public)
   static const String login = '/v1/pos/auth/token';
