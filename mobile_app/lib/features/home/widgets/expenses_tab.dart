@@ -8,11 +8,18 @@ import '../../finance/widgets/bills_tab.dart';
 import '../../finance/widgets/loans_tab.dart';
 import '../../finance/widgets/modifications_tab.dart';
 import '../../finance/widgets/rentals_tab.dart';
+import 'expense_breakdown_chart.dart';
 
-/// Second home tab — bills, rentals and recent payments, mirroring the
-/// desktop admin panel's Expenses view (`GET /v1/pos/expenses/overview`).
+/// Second home tab — a period-filtered breakdown of everything paid out
+/// (`GET /v1/pos/expenses/breakdown`), then bills, loans, rentals and recent
+/// payments (`GET /v1/pos/expenses/overview`), mirroring the desktop admin
+/// panel's Expenses view.
 class ExpensesTab extends StatefulWidget {
-  const ExpensesTab({super.key});
+  const ExpensesTab({super.key, this.refreshSignal});
+
+  /// Notifies when something outside the tab changed its data (e.g. a bill
+  /// added from the home quick actions) so it should reload from the server.
+  final Listenable? refreshSignal;
 
   @override
   State<ExpensesTab> createState() => _ExpensesTabState();
@@ -24,16 +31,35 @@ class _ExpensesTabState extends State<ExpensesTab>
   bool get wantKeepAlive => true;
 
   bool _loading = true;
+  bool _loaded = false;
   String? _error;
   Map<String, dynamic>? _data;
   List<Map<String, dynamic>> _loans = [];
   List<Map<String, dynamic>> _rentals = [];
+  List<Map<String, dynamic>> _modifications = [];
+
+  String _period = _kPeriods.first.$1;
+  bool _breakdownLoading = true;
+  String? _breakdownError;
+  Map<String, dynamic>? _breakdown;
 
   @override
   void initState() {
     super.initState();
-    _load();
+    widget.refreshSignal?.addListener(_onRefreshSignal);
+    _reloadAll();
   }
+
+  @override
+  void dispose() {
+    widget.refreshSignal?.removeListener(_onRefreshSignal);
+    super.dispose();
+  }
+
+  void _onRefreshSignal() => _reloadAll(force: true);
+
+  Future<void> _reloadAll({bool force = false}) =>
+      Future.wait([_load(forceRefresh: force), _loadBreakdown(force: force)]);
 
   Future<void> _load({bool forceRefresh = false}) async {
     setState(() {
@@ -45,35 +71,94 @@ class _ExpensesTabState extends State<ExpensesTab>
         ApiClient.instance.get(ApiEndpoints.expensesOverview, bypassCache: forceRefresh),
         ApiClient.instance.get(ApiEndpoints.financeLoans, bypassCache: forceRefresh),
         ApiClient.instance.get(ApiEndpoints.financeRentals, bypassCache: forceRefresh),
+        ApiClient.instance.get(ApiEndpoints.financeModifications, bypassCache: forceRefresh),
       ]);
       final raw = results[0].data;
       _data = (raw is Map ? raw['data'] : raw) as Map<String, dynamic>?;
       _loans = _parseList(results[1].data);
       _rentals = _parseList(results[2].data);
+      _modifications = _parseList(results[3].data);
     } catch (e) {
       _error = apiErrorMessage(e);
     } finally {
+      _loaded = true;
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  Future<void> _loadBreakdown({bool force = false}) async {
+    final period = _period;
+    setState(() {
+      _breakdownLoading = true;
+      _breakdownError = null;
+    });
+    try {
+      final res = await ApiClient.instance.get(ApiEndpoints.expensesBreakdown, params: {'period': period}, bypassCache: force);
+      if (period != _period) return;
+      final raw = res.data;
+      _breakdown = (raw is Map ? raw['data'] : raw) as Map<String, dynamic>?;
+    } catch (e) {
+      if (period == _period) _breakdownError = apiErrorMessage(e);
+    } finally {
+      if (mounted && period == _period) setState(() => _breakdownLoading = false);
+    }
+  }
+
+  void _setPeriod(String period) {
+    if (period == _period) return;
+    setState(() => _period = period);
+    _loadBreakdown();
   }
 
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final firstLoad = _loading && !_loaded;
     return RefreshIndicator(
-      onRefresh: () => _load(forceRefresh: true),
+      onRefresh: () => _reloadAll(force: true),
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 120),
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 120),
         children: [
-          if (_loading)
+          if (firstLoad)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 60),
               child: Center(child: CircularProgressIndicator()),
             )
           else if (_error != null)
-            _ErrorCard(message: _error!, onRetry: _load)
+            _ErrorCard(message: _error!, onRetry: _reloadAll)
           else
             ..._buildContent(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildChart(Map summary) {
+    if (_breakdownError != null) {
+      return _ChartMessageCard(message: _breakdownError!, onRetry: () => _loadBreakdown(force: true));
+    }
+    final breakdown = _breakdown;
+    if (breakdown == null) return const _ChartLoadingCard();
+
+    final items = ((breakdown['items'] as List?) ?? []).whereType<Map>();
+    final range = breakdown['range_label'] as String?;
+
+    return AnimatedOpacity(
+      duration: const Duration(milliseconds: 150),
+      opacity: _breakdownLoading ? 0.45 : 1,
+      child: ExpenseBreakdownChart(
+        key: ValueKey(breakdown['period']),
+        overdueCount: (summary['overdue_count'] as num?)?.toInt() ?? 0,
+        footnote: range == null || range.isEmpty ? null : 'Solid = paid, light = still due · $range',
+        emptyMessage: 'No expenses in this period. Add a bill, loan, rental or modification below.',
+        slices: [
+          for (final i in items)
+            ExpenseSlice(
+              label: i['label'] as String? ?? '',
+              value: _toDouble(i['total']),
+              due: _toDouble(i['due']),
+              color: _kindMeta(i['key'] as String?).color,
+            ),
         ],
       ),
     );
@@ -82,12 +167,14 @@ class _ExpensesTabState extends State<ExpensesTab>
   List<Widget> _buildContent() {
     final summary = (_data?['summary'] as Map?) ?? {};
     final bills = ((_data?['bills'] as List?) ?? []).whereType<Map>().toList();
-    final recent = ((_data?['recent_payments'] as List?) ?? []).whereType<Map>().toList();
+    final payments = ((_breakdown?['payments'] as List?) ?? []).whereType<Map>().toList();
 
     return [
-      _SummaryCard(summary: summary),
+      _PeriodChips(selected: _period, onSelected: _setPeriod),
       const SizedBox(height: 16),
-      _ShortcutRow(onCreated: _load),
+      _buildChart(summary),
+      const SizedBox(height: 16),
+      _ShortcutRow(onCreated: _reloadAll),
       const SizedBox(height: 20),
       _SectionCard(
         title: 'Bills',
@@ -112,59 +199,82 @@ class _ExpensesTabState extends State<ExpensesTab>
             ),
         ],
       ),
-      if (_loans.isNotEmpty) ...[
-        const SizedBox(height: 20),
-        _SectionCard(
-          title: 'Loan settlements',
-          icon: Icons.account_balance_outlined,
-          empty: false,
-          emptyLabel: '',
-          children: [
-            for (final l in _loans)
-              _RowTile(
-                leadingIcon: Icons.account_balance_rounded,
-                leadingColor: const Color(0xFF0EA5E9),
-                title: l['name'] as String? ?? '',
-                subtitle: [
-                  l['cadence_label'] as String?,
-                  l['payment_formatted'] as String? ?? formatMoney(l['payment_amount']),
-                ].whereType<String>().where((s) => s.isNotEmpty).join(' · '),
-                trailing: (l['borrowed_amount_fmt'] as String?) ?? formatMoney(l['borrowed_amount']),
-                badge: () {
-                  final endDate = DateTime.tryParse((l['loan_ending_date'] as String?) ?? '');
-                  final done = endDate != null && endDate.isBefore(DateTime.now());
-                  return _Badge(label: done ? 'DONE' : 'ACTIVE', color: done ? AppColors.textMuted : AppColors.success);
-                }(),
-              ),
-          ],
-        ),
-      ],
-      if (_rentals.isNotEmpty) ...[
-        const SizedBox(height: 20),
-        _SectionCard(
-          title: 'Rental settlements',
-          icon: Icons.apartment_outlined,
-          empty: false,
-          emptyLabel: '',
-          children: [
-            for (final r in _rentals)
-              _RowTile(
-                leadingIcon: Icons.villa_outlined,
-                leadingColor: const Color(0xFF10B981),
-                title: (r['property_type'] as String?) ?? (r['name'] as String?) ?? '',
-                subtitle: [
-                  r['cadence_label'] as String?,
-                  r['due_date_fmt'] as String?,
-                ].whereType<String>().where((s) => s.isNotEmpty).join(' · Due '),
-                trailing: (r['recurring_cost_fmt'] as String?) ?? formatMoney(r['recurring_cost']),
-                badge: (r['overdue'] as bool? ?? false)
-                    ? const _Badge(label: 'OVERDUE', color: AppColors.error)
-                    : const _Badge(label: 'ACTIVE', color: AppColors.success),
-              ),
-          ],
-        ),
-      ],
-      if (recent.isNotEmpty) ...[
+      const SizedBox(height: 20),
+      _SectionCard(
+        title: 'Loan settlements',
+        icon: Icons.account_balance_outlined,
+        empty: _loans.isEmpty,
+        emptyLabel: 'No loans yet.',
+        children: [
+          for (final l in _loans)
+            _RowTile(
+              leadingIcon: Icons.account_balance_rounded,
+              leadingColor: _kindMeta('loans').color,
+              title: l['name'] as String? ?? '',
+              subtitle: [
+                l['cadence_label'] as String?,
+                l['payment_formatted'] as String? ?? formatMoney(l['payment_amount']),
+              ].whereType<String>().where((s) => s.isNotEmpty).join(' · '),
+              trailing: (l['borrowed_amount_fmt'] as String?) ?? formatMoney(l['borrowed_amount']),
+              badge: () {
+                final endDate = DateTime.tryParse((l['loan_ending_date'] as String?) ?? '');
+                final done = endDate != null && endDate.isBefore(DateTime.now());
+                return _Badge(label: done ? 'DONE' : 'ACTIVE', color: done ? AppColors.textMuted : AppColors.success);
+              }(),
+            ),
+        ],
+      ),
+      const SizedBox(height: 20),
+      _SectionCard(
+        title: 'Rental settlements',
+        icon: Icons.apartment_outlined,
+        empty: _rentals.isEmpty,
+        emptyLabel: 'No rentals yet.',
+        children: [
+          for (final r in _rentals)
+            _RowTile(
+              leadingIcon: Icons.villa_outlined,
+              leadingColor: _kindMeta('rentals').color,
+              title: (r['property_type'] as String?) ?? (r['name'] as String?) ?? '',
+              subtitle: [
+                r['cadence_label'] as String?,
+                r['due_date_fmt'] as String?,
+              ].whereType<String>().where((s) => s.isNotEmpty).join(' · Due '),
+              trailing: (r['recurring_cost_fmt'] as String?) ?? formatMoney(r['recurring_cost']),
+              badge: (r['overdue'] as bool? ?? false)
+                  ? const _Badge(label: 'OVERDUE', color: AppColors.error)
+                  : const _Badge(label: 'ACTIVE', color: AppColors.success),
+            ),
+        ],
+      ),
+      const SizedBox(height: 20),
+      _SectionCard(
+        title: 'Modifications',
+        icon: Icons.tune_rounded,
+        empty: _modifications.isEmpty,
+        emptyLabel: 'No modifications yet.',
+        children: [
+          for (final m in _modifications)
+            _RowTile(
+              leadingIcon: Icons.tune_rounded,
+              leadingColor: _kindMeta('modifications').color,
+              title: m['name'] as String? ?? '',
+              subtitle: [
+                m['assignment_display'] as String?,
+                m['work_type_label'] as String?,
+                m['duration'] as String?,
+              ].whereType<String>().where((s) => s.isNotEmpty).join(' · '),
+              trailing: (m['estimated_cost_fmt'] as String?) ?? formatMoney(m['estimated_cost']),
+              badge: () {
+                final bills = (m['bills_count'] as num?)?.toInt() ?? 0;
+                return bills > 0
+                    ? _Badge(label: '$bills ${bills == 1 ? 'BILL' : 'BILLS'}', color: AppColors.primary)
+                    : const _Badge(label: 'PLANNED', color: AppColors.textMuted);
+              }(),
+            ),
+        ],
+      ),
+      if (payments.isNotEmpty) ...[
         const SizedBox(height: 20),
         _SectionCard(
           title: 'Recent payments',
@@ -172,10 +282,10 @@ class _ExpensesTabState extends State<ExpensesTab>
           empty: false,
           emptyLabel: '',
           children: [
-            for (final p in recent)
+            for (final p in payments)
               _RowTile(
-                leadingIcon: Icons.check_circle_outline_rounded,
-                leadingColor: AppColors.success,
+                leadingIcon: _kindMeta(p['kind'] as String?).icon,
+                leadingColor: _kindMeta(p['kind'] as String?).color,
                 title: p['source_title'] as String? ?? p['source_label'] as String? ?? '',
                 subtitle: [p['source_label'], p['date_fmt']]
                     .whereType<String>()
@@ -188,6 +298,103 @@ class _ExpensesTabState extends State<ExpensesTab>
       ],
     ];
   }
+}
+
+double _toDouble(dynamic v) => v is num ? v.toDouble() : double.tryParse('${v ?? ''}') ?? 0;
+
+const _kPeriods = [
+  ('month', 'This month'),
+  ('6m', '6 months'),
+  ('year', 'Year'),
+];
+
+class _KindMeta {
+  const _KindMeta(this.icon, this.color);
+  final IconData icon;
+  final Color color;
+}
+
+// Shared by the chart slices and the payment rows so a type keeps one colour.
+const _kKinds = <String, _KindMeta>{
+  'bills': _KindMeta(Icons.receipt_long_rounded, Color(0xFF6366F1)),
+  'loans': _KindMeta(Icons.account_balance_rounded, Color(0xFF0EA5E9)),
+  'rentals': _KindMeta(Icons.apartment_rounded, Color(0xFF10B981)),
+  'modifications': _KindMeta(Icons.tune_rounded, Color(0xFFF59E0B)),
+  'payroll': _KindMeta(Icons.groups_rounded, Color(0xFFEC4899)),
+  'purchases': _KindMeta(Icons.shopping_cart_rounded, Color(0xFF14B8A6)),
+};
+
+_KindMeta _kindMeta(String? key) => _kKinds[key] ?? const _KindMeta(Icons.payments_rounded, Color(0xFF64748B));
+
+class _PeriodChips extends StatelessWidget {
+  const _PeriodChips({required this.selected, required this.onSelected});
+  final String selected;
+  final ValueChanged<String> onSelected;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      for (final p in _kPeriods)
+        Padding(
+          padding: const EdgeInsets.only(right: 8),
+          child: ChoiceChip(
+            label: Text(p.$2),
+            selected: selected == p.$1,
+            onSelected: (_) => onSelected(p.$1),
+            labelStyle: TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w700,
+              color: selected == p.$1 ? Colors.white : AppColors.textMuted,
+            ),
+            selectedColor: AppColors.primary,
+            backgroundColor: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: const BorderSide(color: AppColors.border)),
+            showCheckmark: false,
+          ),
+        ),
+    ],
+  );
+}
+
+class _ChartLoadingCard extends StatelessWidget {
+  const _ChartLoadingCard();
+
+  @override
+  Widget build(BuildContext context) => Container(
+    height: 180,
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      boxShadow: const [BoxShadow(color: AppColors.shadow, blurRadius: 16, offset: Offset(0, 4))],
+    ),
+    alignment: Alignment.center,
+    child: const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.4)),
+  );
+}
+
+class _ChartMessageCard extends StatelessWidget {
+  const _ChartMessageCard({required this.message, required this.onRetry});
+  final String message;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      boxShadow: const [BoxShadow(color: AppColors.shadow, blurRadius: 16, offset: Offset(0, 4))],
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(message, style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
+        const SizedBox(height: 10),
+        TextButton.icon(onPressed: onRetry, icon: const Icon(Icons.refresh, size: 16), label: const Text('Retry')),
+      ],
+    ),
+  );
 }
 
 List<Map<String, dynamic>> _parseList(dynamic body) {
@@ -343,119 +550,6 @@ class _ShortcutCardState extends State<_ShortcutCard>
   );
 }
 
-// ── Summary card ──────────────────────────────────────────────────────────
-
-class _SummaryCard extends StatelessWidget {
-  const _SummaryCard({required this.summary});
-  final Map summary;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(22),
-    decoration: BoxDecoration(
-      borderRadius: BorderRadius.circular(24),
-      gradient: const LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [AppColors.primaryDk, AppColors.primary],
-      ),
-      boxShadow: [
-        BoxShadow(color: AppColors.primaryDk.withValues(alpha: 0.28), blurRadius: 24, offset: const Offset(0, 10)),
-      ],
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Container(
-              width: 34,
-              height: 34,
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.18),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              alignment: Alignment.center,
-              child: const Icon(Icons.receipt_long_outlined, size: 18, color: Colors.white),
-            ),
-            const SizedBox(width: 10),
-            const Expanded(
-              child: Text('Expenses overview',
-                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13.5)),
-            ),
-          ],
-        ),
-        const SizedBox(height: 22),
-        const Text('Monthly total', style: TextStyle(color: Colors.white70, fontSize: 12.5)),
-        const SizedBox(height: 6),
-        Text(
-          formatMoney(summary['bills_monthly']),
-          style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.w800, letterSpacing: -0.5),
-        ),
-        const SizedBox(height: 18),
-        Row(
-          children: [
-            _StatChip(
-              icon: Icons.description_outlined,
-              label: 'Bills',
-              value: '${summary['bills_count'] ?? 0}',
-            ),
-            const SizedBox(width: 10),
-            _StatChip(
-              icon: Icons.warning_amber_rounded,
-              label: 'Overdue',
-              value: '${summary['overdue_count'] ?? 0}',
-              highlight: (summary['overdue_count'] as num? ?? 0) > 0,
-            ),
-            const SizedBox(width: 10),
-            _StatChip(
-              icon: Icons.apartment_outlined,
-              label: 'Rentals / mo',
-              value: formatMoney(summary['rentals_monthly']),
-            ),
-          ],
-        ),
-      ],
-    ),
-  );
-}
-
-class _StatChip extends StatelessWidget {
-  const _StatChip({required this.icon, required this.label, required this.value, this.highlight = false});
-  final IconData icon;
-  final String label;
-  final String value;
-  final bool highlight;
-
-  @override
-  Widget build(BuildContext context) => Expanded(
-    child: Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: highlight
-            ? AppColors.warning.withValues(alpha: 0.22)
-            : Colors.white.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, size: 13, color: Colors.white70),
-          const SizedBox(height: 4),
-          Text(value,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w800)),
-          Text(label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: Colors.white60, fontSize: 9.5)),
-        ],
-      ),
-    ),
-  );
-}
-
 class _SectionCard extends StatelessWidget {
   const _SectionCard({
     required this.title,
@@ -484,6 +578,7 @@ class _SectionCard extends StatelessWidget {
       ),
       const SizedBox(height: 10),
       Container(
+        width: double.infinity,
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),

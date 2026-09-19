@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart' show DioException;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -7,6 +8,7 @@ import '../../../core/api/api_client.dart';
 import '../../../core/api/api_endpoints.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/money.dart';
+import 'barcode_scanner_screen.dart';
 
 // ── Models ───────────────────────────────────────────────────────────────────
 
@@ -53,6 +55,7 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
   List<Map<String, dynamic>> _products = [];
   List<Map<String, dynamic>> _categories = [];
   int _selectedCategoryId = 0;
+  int _productRequestId = 0;
 
   // Cart
   final List<_CartItem> _cart = [];
@@ -114,24 +117,33 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
     } catch (_) {}
   }
 
-  Future<void> _loadProducts({String query = '', bool forceRefresh = false}) async {
-    setState(() { _loadingProducts = true; _productError = null; });
+  Future<void> _loadProducts({String? query, bool forceRefresh = false}) async {
+    final search = query ?? _searchCtrl.text.trim();
+    final category = _selectedCategoryId;
+    // Only the newest request may update the list — a slow, older response
+    // (e.g. the first unfiltered load) must not overwrite a search or filter.
+    final requestId = ++_productRequestId;
+    setState(() {
+      _loadingProducts = true;
+      _productError = null;
+    });
     try {
       final params = <String, dynamic>{'per_page': 60};
-      if (query.isNotEmpty) params['q'] = query;
-      if (_selectedCategoryId > 0) params['product_category_ids[]'] = _selectedCategoryId;
+      if (search.isNotEmpty) params['q'] = search;
+      if (category > 0) params['category'] = category;
       final res = await ApiClient.instance.get(
         ApiEndpoints.products,
         params: params,
-        bypassCache: query.isNotEmpty || forceRefresh,
+        bypassCache: search.isNotEmpty || forceRefresh,
       );
+      if (requestId != _productRequestId) return;
       final body = res.data;
       final list = (body is Map ? (body['data'] ?? []) : body) as List? ?? [];
       _products = list.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
     } catch (e) {
-      _productError = _apiMsg(e);
+      if (requestId == _productRequestId) _productError = apiErrorMessage(e);
     } finally {
-      if (mounted) setState(() => _loadingProducts = false);
+      if (mounted && requestId == _productRequestId) setState(() => _loadingProducts = false);
     }
   }
 
@@ -154,23 +166,76 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
 
   void _onSearchChanged(String value) {
     _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 400), () => _loadProducts(query: value.trim()));
+    _debounce = Timer(const Duration(milliseconds: 350), () => _loadProducts(query: value.trim()));
+  }
+
+  /// Enter in the search box. A barcode scanner that types like a keyboard sends
+  /// the code then Enter, so a code that matches a SKU goes straight to the cart;
+  /// anything else is a normal search.
+  Future<void> _onSearchSubmitted(String value) async {
+    _debounce?.cancel();
+    final text = value.trim();
+    if (text.isNotEmpty && !text.contains(RegExp(r'\s'))) {
+      final outcome = await _addByCode(text);
+      if (!mounted) return;
+      if (outcome.ok) {
+        _searchCtrl.clear();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(outcome.message), backgroundColor: AppColors.success, duration: const Duration(seconds: 2)),
+        );
+        _loadProducts(query: '');
+        return;
+      }
+    }
+    _loadProducts(query: text);
   }
 
   void _selectCategory(int id) {
     setState(() => _selectedCategoryId = id);
-    _loadProducts(query: _searchCtrl.text.trim());
+    _loadProducts();
   }
+
+  // ── Barcode ───────────────────────────────────────────────────────────────
+
+  /// Looks a scanned/typed code up as a product or batch SKU and adds it to the
+  /// cart. Never throws — the outcome says what to tell the cashier.
+  Future<ScanOutcome> _addByCode(String code) async {
+    try {
+      final res = await ApiClient.instance.get(ApiEndpoints.productBySku(code), bypassCache: true);
+      final body = res.data;
+      final data = body is Map ? body['data'] : null;
+      if (data is! Map) return ScanOutcome.failed('No product found for "$code"');
+
+      final product = Map<String, dynamic>.from(data);
+      final name = (product['name'] as String?) ?? code;
+      if (!_addToCart(product, quiet: true)) return ScanOutcome.failed('$name is out of stock');
+
+      final inCart = _cart.firstWhere((c) => c.id == (product['id'] as num).toInt()).qty;
+      return ScanOutcome.added(inCart > 1 ? '$name · $inCart in cart' : '$name added');
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) return ScanOutcome.failed('No product found for "$code"');
+      return ScanOutcome.failed(apiErrorMessage(e));
+    } catch (e) {
+      return ScanOutcome.failed(apiErrorMessage(e));
+    }
+  }
+
+  Future<void> _openScanner() => Navigator.of(context).push(
+    MaterialPageRoute(fullscreenDialog: true, builder: (_) => BarcodeScannerScreen(onCode: _addByCode)),
+  );
 
   // ── Cart ──────────────────────────────────────────────────────────────────
 
-  void _addToCart(Map<String, dynamic> product) {
+  /// Returns false (and, unless [quiet], says why) when the product can't be added.
+  bool _addToCart(Map<String, dynamic> product, {bool quiet = false}) {
     final stock = (product['stock_quantity'] as num?)?.toDouble();
     if (stock != null && stock <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${product['name']} is out of stock'), backgroundColor: AppColors.error),
-      );
-      return;
+      if (!quiet) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${product['name']} is out of stock'), backgroundColor: AppColors.error),
+        );
+      }
+      return false;
     }
     setState(() {
       final idx = _cart.indexWhere((c) => c.id == (product['id'] as num).toInt());
@@ -182,6 +247,7 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
     });
     _cartPulse.forward().then((_) => _cartPulse.reverse());
     HapticFeedback.lightImpact();
+    return true;
   }
 
   void _removeFromCart(int id) => setState(() => _cart.removeWhere((c) => c.id == id));
@@ -433,7 +499,20 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
       ),
       body: Column(
         children: [
-          _SearchBar(controller: _searchCtrl, onChanged: _onSearchChanged),
+          _SearchBar(
+            controller: _searchCtrl,
+            onChanged: _onSearchChanged,
+            onSubmitted: _onSearchSubmitted,
+            onScan: _openScanner,
+          ),
+          SizedBox(height: 2, child: _loadingProducts ? const LinearProgressIndicator(minHeight: 2) : null),
+          if (_productError != null && _products.isNotEmpty)
+            Container(
+              width: double.infinity,
+              color: AppColors.error.withValues(alpha: 0.08),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              child: Text(_productError!, style: const TextStyle(color: AppColors.error, fontSize: 12)),
+            ),
           if (_categories.isNotEmpty) _CategoryChips(
             categories: _categories,
             selected: _selectedCategoryId,
@@ -646,32 +725,52 @@ class _PosAppBar extends StatelessWidget implements PreferredSizeWidget {
 // ── Search bar ────────────────────────────────────────────────────────────────
 
 class _SearchBar extends StatelessWidget {
-  const _SearchBar({required this.controller, required this.onChanged});
+  const _SearchBar({required this.controller, required this.onChanged, required this.onSubmitted, required this.onScan});
   final TextEditingController controller;
   final ValueChanged<String> onChanged;
+  final ValueChanged<String> onSubmitted;
+  final VoidCallback onScan;
 
   @override
   Widget build(BuildContext context) => Container(
     color: AppColors.surface,
-    padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
-    child: TextField(
-      controller: controller,
-      onChanged: onChanged,
-      decoration: InputDecoration(
-        hintText: 'Search products...',
-        prefixIcon: const Icon(Icons.search_rounded, color: AppColors.textHint, size: 20),
-        suffixIcon: controller.text.isNotEmpty
-            ? IconButton(
-                icon: const Icon(Icons.close_rounded, size: 18),
-                onPressed: () { controller.clear(); onChanged(''); },
-              )
-            : null,
-        contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.border)),
-        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.border)),
-        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.primary, width: 1.5)),
-        filled: true,
-        fillColor: const Color(0xFFF8FAFC),
+    padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+    child: ValueListenableBuilder<TextEditingValue>(
+      valueListenable: controller,
+      builder: (context, value, _) => TextField(
+        controller: controller,
+        onChanged: onChanged,
+        onSubmitted: onSubmitted,
+        textInputAction: TextInputAction.search,
+        decoration: InputDecoration(
+          hintText: 'Search name or SKU, or scan',
+          prefixIcon: const Icon(Icons.search_rounded, color: AppColors.textHint, size: 20),
+          suffixIcon: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (value.text.isNotEmpty)
+                IconButton(
+                  tooltip: 'Clear',
+                  icon: const Icon(Icons.close_rounded, size: 18),
+                  onPressed: () {
+                    controller.clear();
+                    onChanged('');
+                  },
+                ),
+              IconButton(
+                tooltip: 'Scan barcode',
+                icon: const Icon(Icons.qr_code_scanner_rounded, size: 22, color: AppColors.primary),
+                onPressed: onScan,
+              ),
+            ],
+          ),
+          contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.border)),
+          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.border)),
+          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.primary, width: 1.5)),
+          filled: true,
+          fillColor: const Color(0xFFF8FAFC),
+        ),
       ),
     ),
   );

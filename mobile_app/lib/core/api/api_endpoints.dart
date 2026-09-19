@@ -28,6 +28,7 @@ class ApiEndpoints {
   // Dashboard
   static const String todaySummary = '/v1/pos/today-summary';
   static const String expensesOverview = '/v1/pos/expenses/overview';
+  static const String expensesBreakdown = '/v1/pos/expenses/breakdown';
   static const String profitReport = '/v1/pos/profit-report';
 
   // Accounts (bank accounts / balances — home "Account overview" tab)
@@ -50,6 +51,7 @@ class ApiEndpoints {
   // Catalog — product list + full CRUD (Inventory > Products tab)
   static const String products = '/v1/pos/online/products';
   static String product(int id) => '/v1/pos/online/products/$id';
+  static String productBySku(String sku) => '/v1/pos/online/products/sku/${Uri.encodeComponent(sku)}';
   static String productStockLayerBarcode(int productId, int layerId) =>
       '/v1/pos/online/products/$productId/stock-layers/$layerId/barcode';
 

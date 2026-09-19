@@ -174,9 +174,9 @@ class PosCatalogService
             default       => null,
         };
 
-        $term = trim((string) $search);
-        if ($term !== '') {
-            $like = '%'.addcslashes($term, '%_\\').'%';
+        // Every word must match the name or SKU, in any order ("activewear 3252").
+        foreach (preg_split('/\s+/', trim((string) $search), -1, PREG_SPLIT_NO_EMPTY) as $word) {
+            $like = '%'.addcslashes($word, '%_\\').'%';
             $query->where(function ($builder) use ($like) {
                 $builder->where('name', 'like', $like)
                     ->orWhere('sku', 'like', $like);

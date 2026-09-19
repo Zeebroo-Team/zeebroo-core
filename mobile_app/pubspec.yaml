@@ -33,6 +33,7 @@ dependencies:
   # DEV MOBILE PREVIEW — shows a phone frame when running in a browser.
   # Remove this dependency (and its usage in lib/main.dart) once development is done.
   device_preview: ^1.2.0
+  mobile_scanner: ^7.4.2
 
 dev_dependencies:
   flutter_test:

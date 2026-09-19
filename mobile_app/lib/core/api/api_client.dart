@@ -57,7 +57,11 @@ class ApiClient {
 
     if (kDebugMode) {
       dio.interceptors.add(
-        LogInterceptor(requestBody: true, responseBody: true),
+        LogInterceptor(
+          requestBody: true,
+          responseBody: true,
+          logPrint: (line) => debugPrint(redactSecrets(line.toString())),
+        ),
       );
     }
 
@@ -98,6 +102,14 @@ class ApiClient {
 }
 
 /// Turns a [DioException] (or any error) into a user-facing message.
+/// Masks credentials in debug HTTP logs: passwords, bearer tokens and the
+/// `token` the auth endpoint returns.
+@visibleForTesting
+String redactSecrets(String line) => line
+    .replaceAllMapped(RegExp(r'(password\w*\s*[:=]\s*)[^,}\n]+', caseSensitive: false), (m) => '${m[1]}***')
+    .replaceAllMapped(RegExp(r'(Bearer\s+)[^\s"]+', caseSensitive: false), (m) => '${m[1]}***')
+    .replaceAllMapped(RegExp(r'("?token"?\s*[:=]\s*"?)[^",}\s]+', caseSensitive: false), (m) => '${m[1]}***');
+
 String apiErrorMessage(Object err) {
   if (err is DioException) {
     final data = err.response?.data;

@@ -6,11 +6,18 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/money.dart';
 import 'add_account_sheet.dart';
 
-/// First home tab — a balance "card" for the business's bank accounts
-/// (switchable from its corner avatar, with a quick add-account action)
-/// followed by a recent-transactions feed sourced from bill/rental payments.
+/// First home tab — a compact balance row for the business's bank accounts
+/// (tap to switch or add an account), the caller's [belowBalance] content
+/// (today's sales + quick actions), then a recent-transactions feed sourced
+/// from bill/rental payments.
 class AccountOverviewTab extends StatefulWidget {
-  const AccountOverviewTab({super.key});
+  const AccountOverviewTab({super.key, this.belowBalance, this.onPullRefresh});
+
+  /// Rendered directly under the balance row, scrolling with the list.
+  final Widget? belowBalance;
+
+  /// Called when the user pulls to refresh, alongside the tab's own reload.
+  final VoidCallback? onPullRefresh;
 
   @override
   State<AccountOverviewTab> createState() => _AccountOverviewTabState();
@@ -22,6 +29,7 @@ class _AccountOverviewTabState extends State<AccountOverviewTab>
   bool get wantKeepAlive => true;
 
   bool _loading = true;
+  bool _loaded = false;
   String? _error;
   List<Map<String, dynamic>> _accounts = [];
   List<Map<String, dynamic>> _recentTxns = [];
@@ -66,6 +74,7 @@ class _AccountOverviewTabState extends State<AccountOverviewTab>
     } catch (e) {
       _error = apiErrorMessage(e);
     } finally {
+      _loaded = true;
       if (mounted) setState(() => _loading = false);
     }
   }
@@ -202,134 +211,113 @@ class _AccountOverviewTabState extends State<AccountOverviewTab>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final firstLoad = _loading && !_loaded;
     return RefreshIndicator(
-    onRefresh: () => _load(forceRefresh: true),
-    child: ListView(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 120),
-      children: [
-        if (_loading)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 60),
-            child: Center(child: CircularProgressIndicator()),
-          )
-        else if (_error != null)
-          _ErrorCard(message: _error!, onRetry: _load)
-        else ...[
-          _buildBalanceCard(),
-          const SizedBox(height: 26),
-          _buildRecentTransactions(),
+      onRefresh: () {
+        widget.onPullRefresh?.call();
+        return _load(forceRefresh: true);
+      },
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 120),
+        children: [
+          if (firstLoad)
+            const SizedBox(
+              height: 52,
+              child: Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2.4))),
+            )
+          else if (_error != null)
+            _ErrorCard(message: _error!, onRetry: _load)
+          else
+            _buildBalanceRow(),
+          if (widget.belowBalance != null) ...[
+            const SizedBox(height: 8),
+            const Divider(height: 1, color: Color(0xFFE5E7EB)),
+            const SizedBox(height: 14),
+            widget.belowBalance!,
+          ],
+          if (!firstLoad && _error == null) ...[
+            const SizedBox(height: 26),
+            _buildRecentTransactions(),
+          ],
         ],
-      ],
-    ),
-  );
+      ),
+    );
   }
 
-  Widget _buildBalanceCard() {
+  Widget _buildBalanceRow() {
     final hasAccounts = _accounts.isNotEmpty;
     final account = hasAccounts ? _accounts[_selected] : null;
     final balance = formatMoney(account?['current_balance']);
     final name = account?['account_name'] as String? ?? 'No account yet';
     final bank = account?['bank_name'] as String?;
+    final isDefault = account != null && (account['id'] as num?)?.toInt() == _defaultAccountId;
+    final subtitle = hasAccounts
+        ? [
+            if (bank != null && bank.isNotEmpty) bank,
+            if (_accounts.length > 1) '${_accounts.length} accounts',
+          ].join(' · ')
+        : 'Tap to add a bank account';
 
-    return Container(
-      padding: const EdgeInsets.all(22),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [AppColors.primaryDk, AppColors.primary],
-        ),
-        boxShadow: [
-          BoxShadow(color: AppColors.primaryDk.withValues(alpha: 0.28), blurRadius: 24, offset: const Offset(0, 10)),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 34,
-                height: 34,
-                decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.18), borderRadius: BorderRadius.circular(10)),
-                alignment: Alignment.center,
-                child: const Icon(Icons.account_balance_wallet_rounded, size: 18, color: Colors.white),
-              ),
-              const SizedBox(width: 10),
-              const Expanded(
-                child: Text('Account overview',
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13.5)),
-              ),
-              InkWell(
-                onTap: hasAccounts ? _pickAccount : _openAddAccount,
-                customBorder: const CircleBorder(),
-                child: Container(
-                  width: 34,
-                  height: 34,
-                  decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.18), shape: BoxShape.circle),
-                  alignment: Alignment.center,
-                  child: Text(
-                    hasAccounts ? _initialsFor(name) : '+',
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              InkWell(
-                onTap: _openAddAccount,
-                customBorder: const CircleBorder(),
-                child: Container(
-                  width: 34,
-                  height: 34,
-                  decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.18), shape: BoxShape.circle),
-                  alignment: Alignment.center,
-                  child: const Icon(Icons.add_rounded, size: 20, color: Colors.white),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 26),
-          const Text('Current balance', style: TextStyle(color: Colors.white70, fontSize: 12.5)),
-          const SizedBox(height: 6),
-          Text(balance,
-              style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.w800, letterSpacing: -0.5)),
-          const SizedBox(height: 18),
-          Row(
-            children: [
-              Expanded(
-                child: Row(
-                  children: [
-                    Flexible(
-                      child: Text(name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14.5)),
-                    ),
-                    if (account != null && (account['id'] as num?)?.toInt() == _defaultAccountId) ...[
-                      const SizedBox(width: 6),
-                      const Icon(Icons.star_rounded, size: 14, color: AppColors.warning),
+    return InkWell(
+      onTap: hasAccounts ? _pickAccount : _openAddAccount,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: const BoxDecoration(color: AppColors.primaryLt, shape: BoxShape.circle),
+              alignment: Alignment.center,
+              child: hasAccounts
+                  ? Text(_initialsFor(name), style: const TextStyle(color: AppColors.primaryDk, fontWeight: FontWeight.w800, fontSize: 12.5))
+                  : const Icon(Icons.add_rounded, size: 20, color: AppColors.primaryDk),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5, color: AppColors.textDark)),
+                      ),
+                      if (isDefault) ...[
+                        const SizedBox(width: 5),
+                        const Icon(Icons.star_rounded, size: 14, color: AppColors.warning),
+                      ],
                     ],
+                  ),
+                  if (subtitle.isNotEmpty)
+                    Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11.5, color: AppColors.textMuted)),
+                ],
+              ),
+            ),
+            if (hasAccounts) ...[
+              const SizedBox(width: 10),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 150),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerRight,
+                      child: Text(balance, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.textDark, letterSpacing: -0.2)),
+                    ),
+                    const Text('Current balance', style: TextStyle(fontSize: 10.5, color: AppColors.textMuted)),
                   ],
                 ),
               ),
-              if (bank != null && bank.isNotEmpty)
-                Text(bank, style: const TextStyle(color: Colors.white70, fontSize: 12.5)),
             ],
-          ),
-          if (_accounts.length > 1) ...[
-            const SizedBox(height: 10),
-            Text('${_accounts.length} accounts · tap the avatar to switch',
-                style: const TextStyle(color: Colors.white60, fontSize: 11)),
-          ] else if (!hasAccounts) ...[
-            const SizedBox(height: 10),
-            GestureDetector(
-              onTap: _openAddAccount,
-              child: const Text('+ Add a bank account',
-                  style: TextStyle(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.w700)),
-            ),
+            const SizedBox(width: 2),
+            Icon(hasAccounts ? Icons.unfold_more_rounded : Icons.chevron_right_rounded, size: 18, color: AppColors.textHint),
           ],
-        ],
+        ),
       ),
     );
   }
