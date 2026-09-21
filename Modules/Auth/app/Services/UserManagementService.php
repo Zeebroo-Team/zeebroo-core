@@ -7,13 +7,41 @@ use Illuminate\Pagination\LengthAwarePaginator;
 
 class UserManagementService
 {
-    public function paginate(int $perPage = 20): LengthAwarePaginator
+    /**
+     * @param  array{search?: ?string, role?: ?string, status?: ?string}  $filters
+     */
+    public function paginate(int $perPage = 20, array $filters = []): LengthAwarePaginator
     {
+        $search = trim((string) ($filters['search'] ?? ''));
+        $role = $filters['role'] ?? null;
+        $status = $filters['status'] ?? null;
+        $package = $filters['package'] ?? null;
+        $owns = $filters['owns'] ?? null;
+        $from = $filters['from'] ?? null;
+        $to = $filters['to'] ?? null;
+        $sort = $filters['sort'] ?? 'newest';
+
         return User::query()
             ->with(['roles', 'businesses.package', 'businesses.featureOverrides'])
             ->withCount(['businesses', 'accounts'])
-            ->orderByDesc('created_at')
-            ->paginate($perPage);
+            ->when($search !== '', fn ($q) => $q->where(fn ($w) => $w
+                ->where('name', 'like', "%{$search}%")
+                ->orWhere('email', 'like', "%{$search}%")))
+            ->when($role, fn ($q) => $q->whereHas('roles', fn ($r) => $r->where('name', $role)))
+            ->when($status === 'active', fn ($q) => $q->where('is_active', true))
+            ->when($status === 'inactive', fn ($q) => $q->where('is_active', false))
+            ->when($package === 'none', fn ($q) => $q->whereDoesntHave('businesses', fn ($b) => $b->whereNotNull('package_id')))
+            ->when($package && $package !== 'none', fn ($q) => $q->whereHas('businesses', fn ($b) => $b->where('package_id', $package)))
+            ->when($owns === 'business', fn ($q) => $q->has('businesses'))
+            ->when($owns === 'no_business', fn ($q) => $q->doesntHave('businesses'))
+            ->when($owns === 'accounts', fn ($q) => $q->has('accounts'))
+            ->when($from, fn ($q) => $q->whereDate('created_at', '>=', $from))
+            ->when($to, fn ($q) => $q->whereDate('created_at', '<=', $to))
+            ->when($sort === 'oldest', fn ($q) => $q->orderBy('created_at'))
+            ->when($sort === 'name', fn ($q) => $q->orderBy('name'))
+            ->when(! in_array($sort, ['oldest', 'name'], true), fn ($q) => $q->orderByDesc('created_at'))
+            ->paginate($perPage)
+            ->withQueryString();
     }
 
     public function create(array $data): User

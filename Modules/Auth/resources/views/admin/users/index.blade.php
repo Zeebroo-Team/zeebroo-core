@@ -10,6 +10,13 @@
     border:1px solid color-mix(in srgb,var(--btn-bg) 55%,var(--border));background:var(--btn-bg);
     color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:.15s ease;}
 .adu-add-btn:hover{background:var(--btn-hover);color:#111827;}
+.adu-filters{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px;}
+.adu-filter-date{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);}
+.adu-filters select,.adu-filters input[type=date],.adu-filter-search input{padding:9px 13px;border-radius:11px;border:1px solid var(--border);background:color-mix(in srgb,var(--card) 94%,transparent);color:var(--text);font-size:13px;font-family:inherit;}
+.adu-filters .adu-act-btn{padding:9px 14px;font-size:13px;}
+.adu-filter-search{position:relative;flex:1;min-width:220px;max-width:360px;}
+.adu-filter-search i{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:12px;}
+.adu-filter-search input{width:100%;box-sizing:border-box;padding-left:34px;}
 .adu-card{border:1px solid var(--border);border-radius:16px;overflow:hidden;background:var(--card);}
 .adu-table{width:100%;border-collapse:collapse;}
 .adu-table th{padding:11px 16px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);background:color-mix(in srgb,var(--card) 88%,var(--border));text-align:left;border-bottom:1px solid var(--border);}
@@ -122,6 +129,49 @@
         </div>
         <button type="button" class="adu-add-btn" id="aduOpenCreate"><i class="fa fa-user-plus"></i> Add User</button>
     </div>
+
+    @php $hasFilters = collect(['search','role','status','package','owns','from','to'])->contains(fn ($k) => request()->filled($k)) || in_array(request('sort'), ['oldest','name'], true); @endphp
+    <form method="GET" action="{{ route('admin.users.index') }}" class="adu-filters">
+        <div class="adu-filter-search">
+            <i class="fa fa-magnifying-glass"></i>
+            <input type="text" name="search" value="{{ request('search') }}" placeholder="Search name or email…">
+        </div>
+        <select name="role" onchange="this.form.submit()">
+            <option value="">All roles</option>
+            @foreach($roles as $r)
+                <option value="{{ $r }}" @selected(request('role') === $r)>{{ ucfirst($r) }}</option>
+            @endforeach
+        </select>
+        <select name="status" onchange="this.form.submit()">
+            <option value="">All statuses</option>
+            <option value="active" @selected(request('status') === 'active')>Active</option>
+            <option value="inactive" @selected(request('status') === 'inactive')>Inactive</option>
+        </select>
+        <select name="package" onchange="this.form.submit()">
+            <option value="">All packages</option>
+            <option value="none" @selected(request('package') === 'none')>No package</option>
+            @foreach($packages as $p)
+                <option value="{{ $p->id }}" @selected((string) request('package') === (string) $p->id)>{{ $p->name }}</option>
+            @endforeach
+        </select>
+        <select name="owns" onchange="this.form.submit()">
+            <option value="">Any ownership</option>
+            <option value="business" @selected(request('owns') === 'business')>Has business</option>
+            <option value="no_business" @selected(request('owns') === 'no_business')>No business</option>
+            <option value="accounts" @selected(request('owns') === 'accounts')>Has accounts</option>
+        </select>
+        <label class="adu-filter-date">From <input type="date" name="from" value="{{ request('from') }}" onchange="this.form.submit()"></label>
+        <label class="adu-filter-date">To <input type="date" name="to" value="{{ request('to') }}" onchange="this.form.submit()"></label>
+        <select name="sort" onchange="this.form.submit()">
+            <option value="newest" @selected(request('sort', 'newest') === 'newest')>Newest first</option>
+            <option value="oldest" @selected(request('sort') === 'oldest')>Oldest first</option>
+            <option value="name" @selected(request('sort') === 'name')>Name A–Z</option>
+        </select>
+        <button type="submit" class="adu-act-btn"><i class="fa fa-magnifying-glass"></i> Search</button>
+        @if($hasFilters)
+            <a href="{{ route('admin.users.index') }}" class="adu-act-btn" style="text-decoration:none;"><i class="fa fa-xmark"></i> Clear</a>
+        @endif
+    </form>
 
     <div class="adu-card">
         <table class="adu-table">
