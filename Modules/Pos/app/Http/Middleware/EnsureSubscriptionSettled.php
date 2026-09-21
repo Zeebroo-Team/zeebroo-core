@@ -40,6 +40,13 @@ class EnsureSubscriptionSettled
             ], 402);
         }
 
+        if ($business->subscriptionHasEnded()) {
+            return response()->json([
+                'message' => 'Your subscription has ended. Renew it to continue using Zeebroo POS.',
+                'code' => 'subscription_ended',
+            ], 402);
+        }
+
         return $next($request);
     }
 }

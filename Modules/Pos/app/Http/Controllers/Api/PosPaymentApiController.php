@@ -41,8 +41,10 @@ class PosPaymentApiController extends Controller
             fn (Payment $p) => $p->payment_type === Payment::TYPE_SUBSCRIPTION
                 && $p->isSucceeded()
                 && $p->stripe_subscription_status === 'active'
-                && $p->current_period_end !== null
         );
+        if ($activeSubscription) {
+            $this->syncPeriodFromStripe($activeSubscription);
+        }
 
         $overdue = $business->overdueSubscriptionPayment();
         $requester = $request->user();
@@ -52,12 +54,108 @@ class PosPaymentApiController extends Controller
                 'subscription_status' => $activeSubscription?->stripe_subscription_status
                     ?? $business->getSetting('business.subscription_status'),
                 'next_renewal_at' => $activeSubscription?->current_period_end?->toIso8601String(),
+                'cancel_at_period_end' => (bool) $activeSubscription?->cancel_at_period_end,
+                'access_until' => $activeSubscription?->cancel_at_period_end
+                    ? $activeSubscription->current_period_end?->toIso8601String()
+                    : null,
+                'can_manage_subscription' => $activeSubscription !== null
+                    && $requester instanceof User
+                    && (int) $activeSubscription->user_id === (int) $requester->id,
+                'subscription_ended' => $business->subscriptionHasEnded(),
                 'overdue' => $overdue ? [
                     'payment_id' => $overdue->id,
                     'due_at' => $overdue->due_at?->toIso8601String(),
                     'can_pay' => $requester instanceof User && (int) $overdue->user_id === (int) $requester->id,
                 ] : null,
                 'items' => $payments->map(fn (Payment $p) => $this->formatPayment($p))->all(),
+            ],
+        ]);
+    }
+
+    /**
+     * Rows created before period tracking (or before the webhook arrived) have
+     * no renewal date — pull it from Stripe once so the billing screen and the
+     * cancel flow have a real "access until" date.
+     */
+    private function syncPeriodFromStripe(Payment $payment): void
+    {
+        if ($payment->current_period_end !== null || ! $payment->stripe_subscription_id) {
+            return;
+        }
+
+        try {
+            $sub = $this->stripe->retrieveSubscription($payment->stripe_subscription_id);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return;
+        }
+
+        $end = $sub->current_period_end ?? ($sub->items->data[0]->current_period_end ?? null);
+
+        Payment::query()->where('stripe_subscription_id', $payment->stripe_subscription_id)->update([
+            'current_period_end' => $end !== null ? \Illuminate\Support\Carbon::createFromTimestamp($end) : null,
+            'cancel_at_period_end' => (bool) ($sub->cancel_at_period_end ?? false) || ($sub->cancel_at ?? null) !== null,
+        ]);
+        $payment->refresh();
+    }
+
+    /**
+     * Cancel at the end of the paid period: the business keeps full access
+     * until `current_period_end` and is not charged again. Reversible via resume().
+     */
+    public function cancelSubscription(Request $request): JsonResponse
+    {
+        return $this->changeCancellation($request, true);
+    }
+
+    /** Undo a scheduled cancellation while the paid period is still running. */
+    public function resumeSubscription(Request $request): JsonResponse
+    {
+        return $this->changeCancellation($request, false);
+    }
+
+    private function changeCancellation(Request $request, bool $cancel): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+
+        $payment = $business->payments()
+            ->where('payment_type', Payment::TYPE_SUBSCRIPTION)
+            ->where('payment_status', Payment::STATUS_SUCCEEDED)
+            ->where('stripe_subscription_status', 'active')
+            ->whereNotNull('stripe_subscription_id')
+            ->latest('paid_at')
+            ->first();
+
+        if (! $payment) {
+            return response()->json(['message' => 'There is no active subscription to change.'], 422);
+        }
+
+        abort_unless((int) $payment->user_id === (int) $request->user()->id, 403);
+
+        if ($payment->cancel_at_period_end === $cancel) {
+            return response()->json(['message' => $cancel
+                ? 'This subscription is already set to cancel.'
+                : 'This subscription is not scheduled to cancel.'], 422);
+        }
+
+        try {
+            $this->stripe->setCancelAtPeriodEnd($payment->stripe_subscription_id, $cancel);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return response()->json(['message' => 'Could not update your subscription. Please try again later.'], 502);
+        }
+
+        // Every billing row of this Stripe subscription shares the flag.
+        Payment::query()
+            ->where('stripe_subscription_id', $payment->stripe_subscription_id)
+            ->update(['cancel_at_period_end' => $cancel]);
+
+        return response()->json([
+            'data' => [
+                'cancel_at_period_end' => $cancel,
+                'access_until' => $payment->current_period_end?->toIso8601String(),
             ],
         ]);
     }

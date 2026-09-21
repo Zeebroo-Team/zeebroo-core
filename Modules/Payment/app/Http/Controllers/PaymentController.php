@@ -250,6 +250,7 @@ class PaymentController extends Controller
                     ->update([
                         'stripe_subscription_status' => $object->status ?? 'canceled',
                         'current_period_end' => $currentPeriodEnd,
+                        'cancel_at_period_end' => (bool) ($object->cancel_at_period_end ?? false) || ($object->cancel_at ?? null) !== null,
                     ]);
                 break;
         }

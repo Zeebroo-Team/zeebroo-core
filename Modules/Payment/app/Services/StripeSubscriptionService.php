@@ -78,6 +78,22 @@ class StripeSubscriptionService
         ]);
     }
 
+    /**
+     * Schedule (or undo) cancellation at the end of the paid period — the
+     * customer keeps access until then and is not charged again.
+     */
+    public function setCancelAtPeriodEnd(string $subscriptionId, bool $cancel): \Stripe\Subscription
+    {
+        return $this->client()->subscriptions->update($subscriptionId, [
+            'cancel_at_period_end' => $cancel,
+        ]);
+    }
+
+    public function retrieveSubscription(string $subscriptionId): \Stripe\Subscription
+    {
+        return $this->client()->subscriptions->retrieve($subscriptionId);
+    }
+
     public function retrieveSession(string $sessionId): CheckoutSession
     {
         return $this->client()->checkout->sessions->retrieve($sessionId, [
