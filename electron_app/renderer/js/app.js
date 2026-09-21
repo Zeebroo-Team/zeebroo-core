@@ -8736,6 +8736,7 @@ const _notifIconMap = {
   bill_overdue:            { icon: 'fa-file-invoice-dollar',  cls: 'danger'  },
   loan_overdue:            { icon: 'fa-hand-holding-dollar',  cls: 'danger'  },
   rental_overdue:          { icon: 'fa-house',                cls: 'danger'  },
+  investment_overdue:      { icon: 'fa-chart-line',           cls: 'danger'  },
   property_expired:        { icon: 'fa-building',             cls: 'warning' },
   purchase_order_overdue:  { icon: 'fa-truck-fast',           cls: 'warning' },
   cheque_overdue:          { icon: 'fa-money-check-dollar',   cls: 'danger'  },
@@ -8860,6 +8861,10 @@ function _notifNavigate(n) {
     case 'rental_overdue':
       activateTab('finance');
       switchFinView('rentals');
+      break;
+    case 'investment_overdue':
+      activateTab('finance');
+      switchFinView('investments');
       break;
     case 'property_expired':
       activateTab('finance');
