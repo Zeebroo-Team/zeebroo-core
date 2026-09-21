@@ -176,6 +176,27 @@ class Business extends Model
     }
 
     /**
+     * True once a cancelled subscription has run past its paid period — the
+     * customer chose to cancel and no other subscription is still active.
+     */
+    public function subscriptionHasEnded(): bool
+    {
+        $subs = $this->payments()
+            ->where('payment_type', Payment::TYPE_SUBSCRIPTION)
+            ->whereNotNull('stripe_subscription_id')
+            ->get();
+
+        if ($subs->isEmpty() || $subs->contains(fn (Payment $p) => in_array($p->stripe_subscription_status, ['active', 'trialing', 'past_due'], true))) {
+            return false;
+        }
+
+        $latest = $subs->sortByDesc('id')->first();
+
+        return $latest->stripe_subscription_status === 'canceled'
+            && ($latest->current_period_end === null || $latest->current_period_end->isPast());
+    }
+
+    /**
      * The feature keys an admin allows this business to use: every key when
      * unlimited access is granted, the assigned package's feature list with
      * per-business overrides applied on top, or every key (unrestricted) when

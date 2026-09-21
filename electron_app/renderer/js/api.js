@@ -9,6 +9,9 @@ const API = (() => {
     if (res.status === 402 && res.body?.code === 'subscription_payment_overdue') {
       window.dispatchEvent(new CustomEvent('api-payment-overdue', { detail: res.body }));
     }
+    if (res.status === 402 && res.body?.code === 'subscription_ended') {
+      window.dispatchEvent(new CustomEvent('api-subscription-ended'));
+    }
     return res;
   }
 
@@ -31,6 +34,8 @@ const API = (() => {
     startPaymentCheckout: (paymentId) => request('POST', '/auth/payment/checkout-session', { payment_id: paymentId }),
     paymentStatus:        (paymentId) => request('GET', `/auth/payment/${paymentId}/status`),
     paymentHistory:       () => request('GET', '/auth/payment/history'),
+    cancelBillingSubscription: () => request('POST', '/auth/payment/subscription/cancel'),
+    resumeBillingSubscription: () => request('POST', '/auth/payment/subscription/resume'),
     paymentDetail:        (paymentId) => request('GET', `/auth/payment/${paymentId}`),
     updateProfile:      (body) => request('PUT', '/auth/profile', body),
     updatePassword:     (body) => request('PUT', '/auth/password', body),

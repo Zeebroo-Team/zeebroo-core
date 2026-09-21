@@ -9182,7 +9182,22 @@ function _pmRemainingText(dueAtIso) {
   return `within ${days} day${days === 1 ? '' : 's'}`;
 }
 
+// Title-bar chip shown while a cancelled subscription is still inside its paid period.
+function _tbSubChipApply(data) {
+  const chip = $('#tb-sub-chip');
+  if (!chip) return;
+  const until = data?.cancel_at_period_end ? (data.access_until || data.next_renewal_at) : null;
+  if (!until) {
+    chip.style.display = 'none';
+    return;
+  }
+  chip.innerHTML = `<i class="fa fa-triangle-exclamation"></i>Subscription cancelled · access until ${escHtml(_pmDate(until))}`;
+  chip.style.display = '';
+}
+$('#tb-sub-chip')?.addEventListener('click', openPaymentModal);
+
 function _billingAlertApply(data) {
+  _tbSubChipApply(data);
   const bar = $('#billing-alert-bar');
   const items = data?.items || [];
   const due = items.find(p => p.payment_type === 'subscription' && _pmDueStatuses.includes(p.payment_status));
@@ -9220,6 +9235,19 @@ function _subscriptionLockApply(data) {
   const overlay = $('#subscription-locked-overlay');
   const overdue = data?.overdue;
 
+  if (data?.subscription_ended && !overdue) {
+    _subscriptionLock.paymentId = null;
+    $('#subscription-locked-title').textContent = 'Subscription Ended';
+    $('#subscription-locked-text').textContent = 'Your subscription was cancelled and its paid period has ended. Contact Zeebroo to reactivate your account.';
+    $('#subscription-locked-pay-btn').style.display = 'none';
+    $('#subscription-locked-contact').style.display = 'none';
+    overlay.style.display = 'flex';
+    return;
+  }
+
+  $('#subscription-locked-title').textContent = 'Subscription Payment Overdue';
+  $('#subscription-locked-text').textContent = "Access to Zeebroo POS is on hold because your subscription payment wasn't settled in time. Pay now to restore full access.";
+
   if (!overdue) {
     overlay.style.display = 'none';
     _subscriptionLock.paymentId = null;
@@ -9250,6 +9278,8 @@ $('#subscription-locked-signout').addEventListener('click', _performSignOut);
 // Reactive fallback: if the deadline passes mid-session, any gated endpoint
 // starts returning 402 immediately (see api.js) rather than waiting for the
 // next proactive poll.
+window.addEventListener('api-subscription-ended', () => _subscriptionLockApply({ subscription_ended: true }));
+
 window.addEventListener('api-payment-overdue', (e) => {
   const body = e.detail || {};
   _subscriptionLockApply({
@@ -9387,13 +9417,62 @@ function _pmRenderSummary(data) {
   }
   const rawStatus = data.subscription_status || 'unknown';
   const statusLabel = rawStatus.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  const cancelling = !!data.cancel_at_period_end;
+  const accessUntil = data.access_until || data.next_renewal_at;
+  const canManage = !!data.can_manage_subscription && rawStatus === 'active';
+
+  let noteHtml = '';
+  if (cancelling) {
+    noteHtml = `<div class="pm-summary-cancel"><i class="fa fa-triangle-exclamation"></i> You've cancelled your subscription. You can use Zeebroo until <strong>${_pmDate(accessUntil)}</strong> — you won't be charged again.</div>`;
+  } else if (data.next_renewal_at) {
+    noteHtml = `<div class="pm-summary-renewal">Next renewal on ${_pmDate(data.next_renewal_at)}</div>`;
+  }
+
+  let actionHtml = '';
+  if (canManage) {
+    actionHtml = cancelling
+      ? `<button class="po-btn-primary" id="pm-resume-sub"><i class="fa fa-rotate-left"></i> Keep subscription</button>`
+      : `<button class="po-btn-outline pm-cancel-sub-btn" id="pm-cancel-sub"><i class="fa fa-ban"></i> Cancel subscription</button>`;
+  }
+
   summary.innerHTML = `
     <div class="pm-summary">
       <div class="pm-summary-left">
-        <div class="pm-summary-plan">Subscription: ${escHtml(statusLabel)}</div>
-        ${data.next_renewal_at ? `<div class="pm-summary-renewal">Next renewal on ${_pmDate(data.next_renewal_at)}</div>` : ''}
+        <div class="pm-summary-plan">Subscription: ${escHtml(cancelling ? 'Cancels on ' + _pmDate(accessUntil) : statusLabel)}</div>
+        ${noteHtml}
       </div>
+      ${actionHtml}
     </div>`;
+
+  $('#pm-cancel-sub')?.addEventListener('click', () => _pmChangeCancellation(true, accessUntil));
+  $('#pm-resume-sub')?.addEventListener('click', () => _pmChangeCancellation(false, accessUntil));
+}
+
+async function _pmChangeCancellation(cancel, accessUntil) {
+  const ok = await appConfirm(cancel
+    ? {
+        title: 'Cancel subscription?',
+        message: `You'll keep full access to Zeebroo until ${_pmDate(accessUntil)}. After that your access ends and you won't be charged again. You can undo this any time before then.`,
+        confirmText: '<i class="fa fa-ban"></i> Cancel subscription',
+        cancelText: 'Keep it',
+        icon: 'fa-triangle-exclamation',
+        danger: true,
+      }
+    : {
+        title: 'Keep your subscription?',
+        message: `Your subscription will continue and renew on ${_pmDate(accessUntil)} as normal.`,
+        confirmText: '<i class="fa fa-rotate-left"></i> Keep subscription',
+        icon: 'fa-rotate-left',
+      });
+  if (!ok) return;
+
+  const res = cancel ? await API.cancelBillingSubscription() : await API.resumeBillingSubscription();
+  if (res.status !== 200) {
+    showAlert($('#pm-alert'), res.body?.message || 'Could not update your subscription. Please try again.');
+    return;
+  }
+  toast(cancel ? `Subscription cancelled — access until ${_pmDate(accessUntil)}` : 'Subscription resumed', cancel ? 'info' : 'success');
+  await _pmRefresh();
 }
 
 function _pmRowIconMeta(status) {

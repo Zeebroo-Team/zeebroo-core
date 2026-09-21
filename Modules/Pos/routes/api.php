@@ -93,6 +93,8 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
     Route::post('auth/revoke',   [PosAuthApiController::class, 'revoke'])->name('auth.revoke')->withoutMiddleware(EnsureSubscriptionSettled::class);
     Route::post('auth/payment/checkout-session', [PosPaymentApiController::class, 'checkoutSession'])->name('auth.payment.checkout-session')->withoutMiddleware(EnsureSubscriptionSettled::class);
     Route::get ('auth/payment/history',          [PosPaymentApiController::class, 'history'])->name('auth.payment.history')->withoutMiddleware(EnsureSubscriptionSettled::class);
+    Route::post('auth/payment/subscription/cancel', [PosPaymentApiController::class, 'cancelSubscription'])->name('auth.payment.subscription.cancel')->withoutMiddleware(EnsureSubscriptionSettled::class);
+    Route::post('auth/payment/subscription/resume', [PosPaymentApiController::class, 'resumeSubscription'])->name('auth.payment.subscription.resume')->withoutMiddleware(EnsureSubscriptionSettled::class);
     Route::get ('auth/payment/{payment}/status', [PosPaymentApiController::class, 'status'])->name('auth.payment.status')->withoutMiddleware(EnsureSubscriptionSettled::class);
     Route::get ('auth/payment/{payment}/receipt', [PosPaymentApiController::class, 'receipt'])->name('auth.payment.receipt')->withoutMiddleware(EnsureSubscriptionSettled::class);
     Route::get ('auth/payment/{payment}',        [PosPaymentApiController::class, 'show'])->name('auth.payment.show')->withoutMiddleware(EnsureSubscriptionSettled::class);

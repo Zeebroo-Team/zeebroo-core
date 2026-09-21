@@ -524,6 +524,7 @@
 
     <!-- Center: document / business title (draggable) -->
     <div class="tb-title" id="app-title">Zeebroo POS</div>
+    <button class="tb-sub-chip" id="tb-sub-chip" style="display:none" title="Open Billing & Payments"></button>
 
     <!-- Right: search + profile dropdown + fullscreen + separator + window controls -->
     <div class="tb-right">
@@ -1705,8 +1706,8 @@
     <div id="subscription-locked-overlay" class="subscription-locked-overlay" style="display:none">
       <div class="subscription-locked-card">
         <div class="subscription-locked-icon"><i class="fa fa-lock"></i></div>
-        <h2>Subscription Payment Overdue</h2>
-        <p>Access to Zeebroo POS is on hold because your subscription payment wasn't settled in
+        <h2 id="subscription-locked-title">Subscription Payment Overdue</h2>
+        <p id="subscription-locked-text">Access to Zeebroo POS is on hold because your subscription payment wasn't settled in
           time. Pay now to restore full access.</p>
         <button class="po-btn-primary" id="subscription-locked-pay-btn"><i class="fa fa-credit-card"></i> Pay Now</button>
         <p id="subscription-locked-contact" style="display:none">Contact your business owner to settle this payment.</p>

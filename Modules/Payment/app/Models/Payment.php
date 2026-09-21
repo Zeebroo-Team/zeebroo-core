@@ -40,6 +40,7 @@ class Payment extends Model
         'stripe_invoice_id',
         'stripe_subscription_status',
         'current_period_end',
+        'cancel_at_period_end',
         'paid_at',
         'failure_reason',
         'due_at',
@@ -50,6 +51,7 @@ class Payment extends Model
         'amount' => 'decimal:2',
         'paid_at' => 'datetime',
         'current_period_end' => 'datetime',
+        'cancel_at_period_end' => 'boolean',
         'due_at' => 'datetime',
         'metadata' => 'array',
     ];
