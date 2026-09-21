@@ -3,8 +3,10 @@
 namespace Modules\Pos\Services;
 
 use Illuminate\Support\Facades\Cache;
+use Modules\Account\Models\Investment;
 use Modules\Account\Models\Property;
 use Modules\Account\Services\BillService;
+use Modules\Account\Services\InvestmentService;
 use Modules\Account\Services\LoanService;
 use Modules\Account\Services\RentalService;
 use Modules\Business\Models\Business;
@@ -33,6 +35,7 @@ class PosNotificationService
         private readonly BillService $bills,
         private readonly LoanService $loans,
         private readonly RentalService $rentals,
+        private readonly InvestmentService $investments,
     ) {
     }
 
@@ -362,6 +365,30 @@ class PosNotificationService
             );
         }
         $this->prune((int) $business->id, PosNotification::TYPE_RENTAL_OVERDUE, 'rental', $overdueRentalIds);
+
+        $overdueInvestmentIds = [];
+        $investments = Investment::query()
+            ->with('ledgerTransactions')
+            ->where('business_id', $business->id)
+            ->where('status', Investment::STATUS_ACTIVE)
+            ->get();
+        foreach ($investments as $investment) {
+            if ($this->investments->summary($investment)['overdue_count'] <= 0) {
+                continue;
+            }
+            $overdueInvestmentIds[] = $investment->id;
+            $this->upsert(
+                business: $business,
+                branchId: null,
+                type: PosNotification::TYPE_INVESTMENT_OVERDUE,
+                referenceType: 'investment',
+                referenceId: (int) $investment->id,
+                title: 'Investment overdue',
+                message: "Investment \"{$investment->name}\" has an overdue contribution.",
+                payload: ['investment_id' => $investment->id, 'name' => $investment->name],
+            );
+        }
+        $this->prune((int) $business->id, PosNotification::TYPE_INVESTMENT_OVERDUE, 'investment', $overdueInvestmentIds);
 
         $expiredProperties = Property::query()
             ->where('business_id', $business->id)

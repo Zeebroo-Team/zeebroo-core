@@ -19,6 +19,8 @@ class PosNotification extends Model
 
     public const TYPE_RENTAL_OVERDUE = 'rental_overdue';
 
+    public const TYPE_INVESTMENT_OVERDUE = 'investment_overdue';
+
     public const TYPE_PROPERTY_EXPIRED = 'property_expired';
 
     public const TYPE_PURCHASE_ORDER_OVERDUE = 'purchase_order_overdue';

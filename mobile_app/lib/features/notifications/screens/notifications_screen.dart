@@ -423,6 +423,7 @@ class _NotificationCard extends StatelessWidget {
         'bill_overdue' => (Icons.receipt_outlined, AppColors.error),
         'loan_overdue' => (Icons.account_balance_outlined, AppColors.error),
         'rental_overdue' => (Icons.home_outlined, AppColors.error),
+        'investment_overdue' => (Icons.show_chart_rounded, AppColors.error),
         'property_expired' => (Icons.apartment_outlined, const Color(0xFF8B5CF6)),
         'purchase_order_overdue' => (Icons.shopping_cart_outlined, AppColors.warning),
         'purchase_order_received' => (Icons.local_shipping_outlined, AppColors.success),
