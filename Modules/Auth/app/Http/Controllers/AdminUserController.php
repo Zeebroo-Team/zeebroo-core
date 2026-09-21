@@ -30,10 +30,10 @@ class AdminUserController extends Controller
 {
     public function __construct(private readonly UserManagementService $users) {}
 
-    public function index(): View
+    public function index(Request $request): View
     {
         return view('auth::admin.users.index', [
-            'users' => $this->users->paginate(),
+            'users' => $this->users->paginate(20, $request->only(['search', 'role', 'status', 'package', 'owns', 'from', 'to', 'sort'])),
             'roles' => Role::orderBy('name')->pluck('name'),
             'packages' => Package::where('is_active', true)->orderBy('sort_order')->orderBy('name')->get(),
             'featureCatalog' => config('features.list', []),

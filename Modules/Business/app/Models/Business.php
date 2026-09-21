@@ -97,6 +97,7 @@ class Business extends Model
             'google_location_linked_at' => 'datetime',
             'brand_features' => 'array',
             'has_unlimited_access' => 'boolean',
+            'has_manual_features' => 'boolean',
         ];
     }
 
@@ -192,7 +193,8 @@ class Business extends Model
             ? $this->package
             : $this->package()->first();
 
-        $allowed = $base?->features ?? $catalog;
+        // Manual mode: no package, only the features an admin explicitly ticked.
+        $allowed = $this->has_manual_features ? [] : ($base?->features ?? $catalog);
 
         $overrides = ($this->relationLoaded('featureOverrides') ? $this->featureOverrides : $this->featureOverrides()->get())
             ->pluck('enabled', 'feature_key');

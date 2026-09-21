@@ -14,6 +14,11 @@ class BusinessPackageController extends Controller
 
     public function update(Request $request, Business $business): RedirectResponse
     {
+        $manual = $request->input('package_id') === 'manual';
+        if ($manual) {
+            $request->merge(['package_id' => null]);
+        }
+
         $data = $request->validate([
             'package_id'            => ['nullable', 'integer', 'exists:packages,id'],
             'has_unlimited_access'  => ['boolean'],
@@ -26,6 +31,7 @@ class BusinessPackageController extends Controller
             $data['package_id'] ?? null,
             $request->boolean('has_unlimited_access'),
             $data['features'] ?? [],
+            $manual,
         );
 
         return redirect()->back()
