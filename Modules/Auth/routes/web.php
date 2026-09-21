@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use Modules\AppConnection\Http\Controllers\Admin\AppReleaseController;
+use Modules\Auth\Http\Controllers\AdminLogController;
 use Modules\Auth\Http\Controllers\AdminUserController;
 use Modules\Auth\Http\Controllers\AuthController;
 use Modules\Auth\Http\Controllers\EmployeeVerifyController;
@@ -53,6 +54,9 @@ Route::middleware(['auth', 'role:admin'])->prefix('admin')->name('admin.')->grou
 
     // Per-business package assignment & feature overrides
     Route::put('/businesses/{business}/package', [BusinessPackageController::class, 'update'])->name('businesses.package.update');
+
+    // Error log preview
+    Route::get('/logs', [AdminLogController::class, 'index'])->name('logs.index');
 
     // Industries (business categories)
     Route::get('/industries', [IndustryController::class, 'index'])->name('industries.index');
