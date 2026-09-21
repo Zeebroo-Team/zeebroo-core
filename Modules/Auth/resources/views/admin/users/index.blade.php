@@ -239,6 +239,7 @@
                                             'name' => $b->name,
                                             'package_id' => $b->package_id,
                                             'unlimited' => (bool) $b->has_unlimited_access,
+                                            'manual' => (bool) $b->has_manual_features,
                                             'features' => $b->effectiveFeatureKeys(),
                                         ])->values();
                                     @endphp
@@ -357,6 +358,7 @@
                     <label for="adpPackage">Package</label>
                     <select id="adpPackage" name="package_id">
                         <option value="">No package (unrestricted — all features)</option>
+                        <option value="manual">Manual — choose features individually</option>
                         @foreach($packages as $package)
                             <option value="{{ $package->id }}" data-features="{{ json_encode($package->features ?? []) }}">{{ $package->name }}</option>
                         @endforeach
@@ -534,7 +536,7 @@
     // the form at that specific business's assignment endpoint.
     function applyBusiness(business) {
         form.action = '/admin/businesses/' + business.id + '/package';
-        packageEl.value = business.package_id ? String(business.package_id) : '';
+        packageEl.value = business.manual ? 'manual' : (business.package_id ? String(business.package_id) : '');
         unlimitedEl.checked = !!business.unlimited;
         featureBoxes.forEach(function (cb) { cb.checked = business.features.indexOf(cb.value) !== -1; });
         applyUnlimitedState();
@@ -543,6 +545,8 @@
     unlimitedEl.addEventListener('change', applyUnlimitedState);
 
     packageEl.addEventListener('change', function () {
+        // Manual keeps the current ticks so the admin can adjust them freely.
+        if (packageEl.value === 'manual') return;
         var opt = packageEl.options[packageEl.selectedIndex];
         var features = [];
         try { features = JSON.parse(opt.getAttribute('data-features') || '[]'); } catch (e) {}

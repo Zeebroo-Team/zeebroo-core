@@ -13,10 +13,13 @@ class BusinessPackageService
      * and store only the feature keys that differ from the package's own
      * default list as per-business overrides.
      */
-    public function assign(Business $business, ?int $packageId, bool $unlimitedAccess, array $selectedFeatures): void
+    public function assign(Business $business, ?int $packageId, bool $unlimitedAccess, array $selectedFeatures, bool $manual = false): void
     {
+        $packageId = $manual ? null : $packageId;
+
         $business->package_id = $packageId;
         $business->has_unlimited_access = $unlimitedAccess;
+        $business->has_manual_features = $manual;
         $business->save();
 
         $packageFeatures = $packageId
