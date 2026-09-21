@@ -216,6 +216,11 @@ const API = (() => {
     modification:       (id)           => request('GET',    `/expenses/modifications/${id}`),
     createModification: (body)         => request('POST',   '/expenses/modifications', body),
     deleteModification: (id)           => request('DELETE', `/expenses/modifications/${id}`),
+    investments:        ()             => request('GET',    '/expenses/investments'),
+    investment:         (id)           => request('GET',    `/expenses/investments/${id}`),
+    createInvestment:   (body)         => request('POST',   '/expenses/investments', body),
+    contributeInvestment: (id, body)   => request('POST',   `/expenses/investments/${id}/contribute`, body),
+    deleteInvestment:   (id)           => request('DELETE', `/expenses/investments/${id}`),
 
     budgets:              ()           => request('GET',    '/budgets'),
     budget:                (id)        => request('GET',    `/budgets/${id}`),

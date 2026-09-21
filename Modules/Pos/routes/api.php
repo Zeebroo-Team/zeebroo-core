@@ -23,6 +23,7 @@ use Modules\Pos\Http\Controllers\Api\PosFinanceFlowApiController;
 use Modules\Pos\Http\Controllers\Api\PosLoanApiController;
 use Modules\Pos\Http\Controllers\Api\PosPropertyApiController;
 use Modules\Pos\Http\Controllers\Api\PosRentalApiController;
+use Modules\Pos\Http\Controllers\Api\PosExpenseInvestmentApiController;
 use Modules\Pos\Http\Controllers\Api\PosExpenseModificationApiController;
 use Modules\Pos\Http\Controllers\Api\PosBudgetApiController;
 use Modules\Pos\Http\Controllers\Api\PosEndOfDayApiController;
@@ -299,6 +300,11 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
     Route::post('expenses/modifications', [PosExpenseModificationApiController::class, 'store'])->name('expenses.modifications.store');
     Route::get('expenses/modifications/{modification}', [PosExpenseModificationApiController::class, 'show'])->name('expenses.modifications.show');
     Route::delete('expenses/modifications/{modification}', [PosExpenseModificationApiController::class, 'destroy'])->name('expenses.modifications.destroy');
+    Route::get('expenses/investments', [PosExpenseInvestmentApiController::class, 'index'])->name('expenses.investments.index');
+    Route::post('expenses/investments', [PosExpenseInvestmentApiController::class, 'store'])->name('expenses.investments.store');
+    Route::get('expenses/investments/{investment}', [PosExpenseInvestmentApiController::class, 'show'])->name('expenses.investments.show');
+    Route::post('expenses/investments/{investment}/contribute', [PosExpenseInvestmentApiController::class, 'contribute'])->name('expenses.investments.contribute');
+    Route::delete('expenses/investments/{investment}', [PosExpenseInvestmentApiController::class, 'destroy'])->name('expenses.investments.destroy');
 
     Route::get('budgets', [PosBudgetApiController::class, 'index'])->name('budgets.index');
     Route::post('budgets', [PosBudgetApiController::class, 'store'])->name('budgets.store');
