@@ -83,6 +83,11 @@ class PosSettingsService
     /** When false, purchase orders are skipped; GRNs are created directly. */
     public const KEY_PURCHASE_ORDER_ENABLED = 'pos.purchase_order_enabled';
 
+    /** Purchasing workflow: po_only (PO → GRN), direct_only (GRN without PO), or both. */
+    public const KEY_PURCHASING_MODE = 'pos.purchasing_mode';
+
+    public const PURCHASING_MODES = ['po_only', 'direct_only', 'both'];
+
     /** When false, product rentals are hidden across POS, Sales, and the product form. */
     public const KEY_RENTAL_ENABLED = 'pos.rental_enabled';
 
@@ -200,7 +205,8 @@ class PosSettingsService
                 return $out;
             })(),
             // Purchasing
-            'purchase_order_enabled' => (bool) $business->getSetting(self::KEY_PURCHASE_ORDER_ENABLED, true),
+            'purchasing_mode'        => $this->resolvePurchasingMode($business),
+            'purchase_order_enabled' => $this->resolvePurchasingMode($business) !== 'direct_only',
             // Rentals
             'rental_enabled' => (bool) $business->getSetting(self::KEY_RENTAL_ENABLED, true),
             // Customers
@@ -220,6 +226,17 @@ class PosSettingsService
      *
      * @return list<string>
      */
+    /** Current purchasing mode, falling back to the legacy purchase_order_enabled flag. */
+    private function resolvePurchasingMode(Business $business): string
+    {
+        $mode = $business->getSetting(self::KEY_PURCHASING_MODE);
+        if (is_string($mode) && in_array($mode, self::PURCHASING_MODES, true)) {
+            return $mode;
+        }
+
+        return (bool) $business->getSetting(self::KEY_PURCHASE_ORDER_ENABLED, true) ? 'po_only' : 'direct_only';
+    }
+
     public function enabledDeliveryMethodKeys(Business $business): array
     {
         if (! (bool) $business->getSetting(self::KEY_DELIVERY_ENABLED, false)) {
@@ -434,8 +451,14 @@ class PosSettingsService
         }
 
         // Purchasing workflow
-        if (array_key_exists('purchase_order_enabled', $data)) {
-            $business->setSetting(self::KEY_PURCHASE_ORDER_ENABLED, filter_var($data['purchase_order_enabled'], FILTER_VALIDATE_BOOLEAN));
+        if (array_key_exists('purchasing_mode', $data) && in_array($data['purchasing_mode'], self::PURCHASING_MODES, true)) {
+            $business->setSetting(self::KEY_PURCHASING_MODE, $data['purchasing_mode']);
+            $business->setSetting(self::KEY_PURCHASE_ORDER_ENABLED, $data['purchasing_mode'] !== 'direct_only');
+        } elseif (array_key_exists('purchase_order_enabled', $data)) {
+            // Legacy clients: true → PO only, false → direct GRN only.
+            $enabled = filter_var($data['purchase_order_enabled'], FILTER_VALIDATE_BOOLEAN);
+            $business->setSetting(self::KEY_PURCHASE_ORDER_ENABLED, $enabled);
+            $business->setSetting(self::KEY_PURCHASING_MODE, $enabled ? 'po_only' : 'direct_only');
         }
 
         // Rentals
