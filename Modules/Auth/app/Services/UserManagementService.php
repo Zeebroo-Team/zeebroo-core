@@ -22,7 +22,7 @@ class UserManagementService
         $sort = $filters['sort'] ?? 'newest';
 
         return User::query()
-            ->with(['roles', 'businesses.package', 'businesses.featureOverrides'])
+            ->with(['roles', 'businesses.package', 'businesses.featureOverrides', 'businesses.payments' => fn ($q) => $q->latest('created_at')])
             ->withCount(['businesses', 'accounts'])
             ->when($search !== '', fn ($q) => $q->where(fn ($w) => $w
                 ->where('name', 'like', "%{$search}%")
