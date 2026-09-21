@@ -38,6 +38,7 @@ class PosOnlineBootstrapApiController extends Controller
         $recentSales = filter_var($request->query('recent_sales', false), FILTER_VALIDATE_BOOLEAN);
         $discountOnly = filter_var($request->query('discount_only', false), FILTER_VALIDATE_BOOLEAN);
         $rentalOnly  = filter_var($request->query('rental_only', false), FILTER_VALIDATE_BOOLEAN);
+        $dynamicOnly = filter_var($request->query('dynamic_only', false), FILTER_VALIDATE_BOOLEAN);
 
         // PosCashier tokens are not App\Models\User — pass null so the service
         // skips user-scoped account filtering and returns all business accounts.
@@ -58,6 +59,7 @@ class PosOnlineBootstrapApiController extends Controller
                 $recentSales,
                 $discountOnly,
                 $rentalOnly,
+                $dynamicOnly,
             ),
         ]);
     }

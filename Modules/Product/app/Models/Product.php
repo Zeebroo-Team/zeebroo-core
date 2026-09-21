@@ -51,6 +51,8 @@ class Product extends Model
         'subscription_free_trial',
         'item_wise_tax',
         'item_wise_discount',
+        'is_dynamic_pricing',
+        'dynamic_price_qty_linked',
     ];
 
     protected function casts(): array
@@ -80,6 +82,8 @@ class Product extends Model
             'subscription_free_trial'    => 'boolean',
             'item_wise_tax'              => 'boolean',
             'item_wise_discount'         => 'boolean',
+            'is_dynamic_pricing'         => 'boolean',
+            'dynamic_price_qty_linked'   => 'boolean',
         ];
     }
 

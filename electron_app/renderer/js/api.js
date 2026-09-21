@@ -53,6 +53,7 @@ const API = (() => {
       if (filters?.recentSales)  p.set('recent_sales',  '1');
       if (filters?.discountOnly) p.set('discount_only', '1');
       if (filters?.rentalOnly)   p.set('rental_only',   '1');
+      if (filters?.dynamicOnly)  p.set('dynamic_only',  '1');
       if (filters?.perPage)      p.set('per_page',      filters.perPage);
       if (filters?.sort && filters.sort !== 'name_asc') p.set('sort', filters.sort);
       return request('GET', `/online/bootstrap?${p.toString()}`);

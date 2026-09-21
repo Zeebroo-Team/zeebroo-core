@@ -19206,6 +19206,8 @@ async function _prodOpenModal(editId) {
   $('#prod-f-subscription').checked       = false;
   $('#prod-f-subscription-period').value      = 'monthly';
   $('#prod-f-subscription-free-trial').checked = false;
+  $('#prod-f-dynamic-pricing').checked    = false;
+  $('#prod-f-dynamic-linked').checked     = false;
   $('#prod-f-item-tax').checked           = false;
   $('#prod-f-item-discount').checked      = false;
 
@@ -19279,6 +19281,8 @@ async function _prodOpenModal(editId) {
     $('#prod-f-subscription').checked       = !!p.is_subscription;
     $('#prod-f-subscription-period').value      = p.subscription_recurring_period || 'monthly';
     $('#prod-f-subscription-free-trial').checked = !!p.subscription_free_trial;
+    $('#prod-f-dynamic-pricing').checked    = !!p.is_dynamic_pricing;
+    $('#prod-f-dynamic-linked').checked     = !!p.dynamic_price_qty_linked;
     $('#prod-f-item-tax').checked           = !!p.item_wise_tax;
     $('#prod-f-item-discount').checked      = !!p.item_wise_discount;
 
@@ -19529,6 +19533,8 @@ async function _prodSave(andNew = false) {
     is_subscription:       $('#prod-f-subscription').checked,
     subscription_recurring_period: $('#prod-f-subscription').checked ? $('#prod-f-subscription-period').value : null,
     subscription_free_trial:       $('#prod-f-subscription').checked ? $('#prod-f-subscription-free-trial').checked : false,
+    is_dynamic_pricing:            $('#prod-f-dynamic-pricing').checked,
+    dynamic_price_qty_linked:      $('#prod-f-dynamic-pricing').checked ? $('#prod-f-dynamic-linked').checked : false,
     item_wise_tax:         $('#prod-f-item-tax').checked,
     item_wise_discount:    $('#prod-f-item-discount').checked,
   };
@@ -19666,7 +19672,8 @@ const _PROD_FIELD_MAP = [
   { id: 'customer-required', label: 'Customer Required',  icon: 'fa-user-check',     section: 'Advanced', getEl() { return document.getElementById('prod-f-customer-required')?.closest('.prod-adv-card'); } },
   { id: 'rental',            label: 'Rental',             icon: 'fa-key',            section: 'Advanced', getEl() { return document.getElementById('prod-f-rental')?.closest('.prod-adv-card'); } },
   { id: 'subscription',      label: 'Subscription',       icon: 'fa-repeat',         section: 'Advanced', getEl() { return document.getElementById('prod-f-subscription')?.closest('.prod-adv-card'); } },
-  { id: 'item-tax',          label: 'Item Wise Tax',      icon: 'fa-percent',        section: 'Advanced', getEl() { return document.getElementById('prod-f-item-tax')?.closest('.prod-adv-card'); } },
+  { id: 'dynamic-pricing',   label: 'Dynamic Pricing',    icon: 'fa-wand-magic-sparkles', section: 'Advanced', getEl() { return document.getElementById('prod-f-dynamic-pricing')?.closest('.prod-adv-card'); } },
+  { id: 'item-tax',          label: 'Item Wise Tax',     icon: 'fa-percent',        section: 'Advanced', getEl() { return document.getElementById('prod-f-item-tax')?.closest('.prod-adv-card'); } },
   { id: 'item-discount',     label: 'Item Wise Discount', icon: 'fa-tag',            section: 'Advanced', getEl() { return document.getElementById('prod-f-item-discount')?.closest('.prod-adv-card'); } },
 ];
 
@@ -19919,6 +19926,9 @@ $('#prod-f-subscription')?.addEventListener('change', function () {
     $('#prod-f-subscription-period').value = 'monthly';
     $('#prod-f-subscription-free-trial').checked = false;
   }
+});
+$('#prod-f-dynamic-pricing')?.addEventListener('change', function () {
+  if (!this.checked) $('#prod-f-dynamic-linked').checked = false;
 });
 $('#prod-f-warranty-duration')?.addEventListener('input', _prodSyncWarrantyChips);
 $$('#prod-warranty-duration-row .warranty-chip').forEach(chip => {
@@ -21476,6 +21486,8 @@ function _ssOpen() {
 
 // Add product directly to cart without showing layer picker (barcode scanner mode)
 async function _addToCartDirectly(p) {
+  // Dynamic-pricing products always ask for the amount first
+  if (p.is_dynamic_pricing) { await handleDynamicProductClick(p); return; }
   const layers = p.layers || [];
   const layer  = layers.find(l => parseFloat(l.quantity_remaining) > 0) || null;
   let cartItem;
@@ -21629,6 +21641,11 @@ async function _tryBatchSkuApiAdd(q) {
   if (res.status !== 200) return false;
   const p = res.body?.data || res.body;
   if (!p || !p.id) return false;
+  if (p.is_dynamic_pricing) {
+    await handleDynamicProductClick(p);
+    $('#product-search').value = ''; state.searchQuery = ''; _ssClose(); clearTimeout(searchTimer);
+    return true;
+  }
   const layerId = p.matched_layer_id ?? null;
   const matchedLayer = layerId && p.layers ? p.layers.find(l => l.id === layerId) : null;
   const price = matchedLayer
@@ -21747,6 +21764,8 @@ function switchPosMode(mode) {
   ];
   const svcSection    = $('#pos-service-section');
   const rentalSection = $('#pos-rental-section');
+  const dynamicSection = $('#pos-dynamic-section');
+  if (dynamicSection) dynamicSection.style.display = 'none';
 
   if (mode === 'products') {
     productEls.forEach(el => el && (el.style.display = ''));
@@ -21758,6 +21777,12 @@ function switchPosMode(mode) {
     if (svcSection) { svcSection.style.display = 'flex'; svcSection.style.flexDirection = 'column'; }
     if (rentalSection) rentalSection.style.display = 'none';
     loadServices(state.serviceSearchQuery, state.serviceActiveCategory);
+  } else if (mode === 'dynamic') {
+    productEls.forEach(el => el && (el.style.display = 'none'));
+    if (svcSection) svcSection.style.display = 'none';
+    if (rentalSection) rentalSection.style.display = 'none';
+    if (dynamicSection) { dynamicSection.style.display = 'flex'; dynamicSection.style.flexDirection = 'column'; }
+    loadDynamicProducts(state.dynamicSearchQuery || '');
   } else { // 'rentals'
     productEls.forEach(el => el && (el.style.display = 'none'));
     if (svcSection) svcSection.style.display = 'none';
@@ -21981,6 +22006,139 @@ $('#rental-search')?.addEventListener('input', e => {
   _rentalSearchTimer = setTimeout(() => loadRentalProducts(state.rentalSearchQuery), 400);
 });
 $('#btn-refresh-rentals')?.addEventListener('click', () => loadRentalProducts(state.rentalSearchQuery || ''));
+
+// ── Dynamic-pricing products ─────────────────────────────────────────────
+async function loadDynamicProducts(search = '') {
+  const grid = $('#dynamic-grid');
+  if (!grid) return;
+  grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text-muted)"><i class="fa fa-spinner fa-spin" style="font-size:24px"></i></div>';
+  setStatus('Loading dynamic-price products…');
+
+  const res = await API.bootstrap(search, 0, 1, { dynamicOnly: true, perPage: 100, sort: 'name_asc' });
+  if (res.status !== 200) {
+    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:#e74c3c"><i class="fa fa-circle-exclamation"></i> Failed to load dynamic-price products</div>';
+    setStatus('Error loading dynamic-price products');
+    return;
+  }
+
+  const { products = [] } = res.body?.data || res.body || {};
+  state.dynamicProducts = products;
+  buildDynamicGrid(products);
+  setStatus(`Dynamic · ${products.length} product${products.length === 1 ? '' : 's'}`);
+}
+
+function buildDynamicGrid(products) {
+  const grid = $('#dynamic-grid');
+  if (!grid) return;
+  if (!products.length) {
+    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:60px;color:var(--text-muted)"><i class="fa fa-wand-magic-sparkles" style="font-size:32px;display:block;margin-bottom:10px;opacity:.3"></i>No dynamic-pricing products.<br>Enable "Dynamic Pricing" on a product in Inventory → Advanced tab to see it here.</div>';
+    return;
+  }
+  grid.innerHTML = products.map(p => dynamicCardHtml(p)).join('');
+  grid.querySelectorAll('.product-card:not(.is-out)').forEach(card => {
+    const p = state.dynamicProducts.find(pr => pr.id === Number(card.dataset.id));
+    if (p) card.addEventListener('click', () => handleDynamicProductClick(p));
+  });
+}
+
+function dynamicCardHtml(p) {
+  const stock = parseFloat(p.stock_quantity) || 0;
+  const metaParts = [];
+  if (p.sku) metaParts.push(escHtml(p.sku));
+  metaParts.push(p.dynamic_price_qty_linked ? `${stock} balance` : `${stock} in stock`);
+  return `<div class="product-card${stock <= 0 ? ' is-out' : ''}" data-id="${p.id}">
+    ${p.image_url ? `<img src="${p.image_url}" alt="${escHtml(p.name)}" loading="lazy">` : `<div class="p-icon"><i class="fa fa-wand-magic-sparkles"></i></div>`}
+    <div class="p-name">${escHtml(p.name)}</div>
+    <div class="p-meta">${metaParts.join(' · ')}</div>
+    <div class="p-price" style="font-size:12px;font-weight:600;color:var(--text-muted)">Enter amount</div>
+  </div>`;
+}
+
+async function handleDynamicProductClick(p) {
+  const stock = parseFloat(p.stock_quantity) || 0;
+  if (stock <= 0) { toast(`${p.name} is out of stock`, 'error'); return; }
+  const linked = !!p.dynamic_price_qty_linked;
+  const unit = 1; // linked mode: 1 unit = 1.00, so amount = quantity
+
+  const amount = await _askDynamicAmount(p, linked, unit, stock);
+  if (amount === null) return; // cancelled
+
+  const base = {
+    id: p.id, layerId: null, layerLabel: null, name: p.name,
+    stock, _isDynamic: true, _dynLinked: linked, _dynKey: `${p.id}:dyn:${Date.now()}`,
+  };
+  if (linked) {
+    // Price and quantity move together: Rs 350 at 1.00/unit = 350 units.
+    addToCart({ ...base, price: 1, _originalPrice: 1, _dynQty: amount });
+  } else {
+    addToCart({ ...base, price: amount, _originalPrice: amount, _dynQty: 1 });
+  }
+}
+
+let _askDynamicResolve = null;
+let _dynamicCurrent = null;
+
+function _updateDynamicHint() {
+  const hint = $('#pos-dynamic-hint');
+  if (!hint || !_dynamicCurrent) return;
+  const amount = parseFloat($('#pos-dynamic-amount').value) || 0;
+  const { linked, unit, stock } = _dynamicCurrent;
+  const cur = state.currency || '';
+  if (!linked) { hint.textContent = amount > 0 ? `Sell 1 × ${formatMoney(amount, {currency: cur})}` : ''; return; }
+  const qty = unit > 0 ? Math.round((amount / unit) * 1000) / 1000 : 0;
+  hint.textContent = amount > 0
+    ? `${qty} unit${qty === 1 ? '' : 's'} deducted · balance after: ${round2(stock - qty)}`
+    : `Available balance: ${stock}`;
+}
+
+function _askDynamicAmount(p, linked, unit, stock) {
+  return new Promise(resolve => {
+    _askDynamicResolve = resolve;
+    _dynamicCurrent = { p, linked, unit, stock };
+    $('#pos-dynamic-product-name').textContent = p.name;
+    $('#pos-dynamic-amount-label').textContent = linked ? 'Amount' : 'Price';
+    const input = $('#pos-dynamic-amount');
+    input.value = '';
+    _updateDynamicHint();
+    $('#pos-dynamic-overlay').style.display = 'flex';
+    setTimeout(() => input.focus(), 30);
+  });
+}
+
+function _dynamicResolve(result) {
+  $('#pos-dynamic-overlay').style.display = 'none';
+  _dynamicCurrent = null;
+  if (_askDynamicResolve) { const r = _askDynamicResolve; _askDynamicResolve = null; r(result); }
+}
+
+$('#pos-dynamic-amount')?.addEventListener('input', _updateDynamicHint);
+$('#pos-dynamic-amount')?.addEventListener('keydown', e => {
+  if (e.key === 'Enter') $('#pos-dynamic-confirm').click();
+  if (e.key === 'Escape') _dynamicResolve(null);
+});
+$('#pos-dynamic-confirm')?.addEventListener('click', () => {
+  const amount = round2(parseFloat($('#pos-dynamic-amount').value) || 0);
+  if (amount <= 0) { toast('Enter an amount greater than zero.', 'error'); return; }
+  const c = _dynamicCurrent;
+  if (c?.linked && c.unit > 0 && amount / c.unit > c.stock) {
+    toast(`Amount exceeds the available balance (${c.stock}).`, 'error');
+    return;
+  }
+  _dynamicResolve(amount);
+});
+$('#pos-dynamic-cancel')?.addEventListener('click', () => _dynamicResolve(null));
+$('#pos-dynamic-overlay')?.addEventListener('click', e => {
+  if (e.target === e.currentTarget) _dynamicResolve(null);
+});
+
+let _dynamicSearchTimer = null;
+$('#dynamic-search')?.addEventListener('input', e => {
+  clearTimeout(_dynamicSearchTimer);
+  state.dynamicSearchQuery = e.target.value;
+  _dynamicSearchTimer = setTimeout(() => loadDynamicProducts(state.dynamicSearchQuery), 400);
+});
+$('#btn-refresh-dynamic')?.addEventListener('click', () => loadDynamicProducts(state.dynamicSearchQuery || ''));
+// ── End dynamic-pricing products ─────────────────────────────────────────
 
 // ── Rent Out prompt (customer + return date, on one screen) ─────────────────
 let _askRentalResolve = null;
@@ -28506,6 +28664,8 @@ function posPickStockLayer(product, layers) {
 }
 
 async function handleProductClick(p) {
+  // Dynamic-pricing products always ask for the amount first
+  if (p.is_dynamic_pricing) { await handleDynamicProductClick(p); return; }
   const layers  = p.layers || [];
   const inStock = layers.filter(l => parseFloat(l.quantity_remaining) > 0);
   const stockMode = state.receiptSettings?.stock_selection_mode ?? 'fifo';
@@ -28613,11 +28773,13 @@ function addToCart(product) {
   if (!tab) return;
   let key = product.layerId != null ? `${product.id}:${product.layerId}` : `${product.id}`;
   if (product._isRental) key += `:${product._rentalReturnDate || ''}`;
+  // Each dynamic-price entry is its own line (e.g. two separate Rs 350 reloads).
+  if (product._isDynamic) key = product._dynKey;
   const existing = tab.cart.find(i => i._key === key);
   if (existing) {
     existing.qty += 1;
   } else {
-    tab.cart.push({ ...product, qty: 1, _key: key, _basePrice: product._originalPrice ?? product.price, _discountPct: null, _note: null, _retailPrice: product._retailPrice ?? product.price, _wholesalePrice: product._wholesalePrice ?? null });
+    tab.cart.push({ ...product, qty: product._isDynamic ? product._dynQty : 1, _key: key, _basePrice: product._originalPrice ?? product.price, _discountPct: null, _note: null, _retailPrice: product._retailPrice ?? product.price, _wholesalePrice: product._wholesalePrice ?? null });
   }
   renderCart();
   renderPosTabBar();
@@ -28664,8 +28826,10 @@ function renderCart() {
       ? `<span class="ci-badge ci-badge--creq"><i class="fa fa-list-check"></i> Details saved</span>` : '';
     const rentalBadge = item._isRental
       ? `<span class="ci-badge ci-badge--rental"><i class="fa fa-calendar-days"></i> Return: ${escHtml(item._rentalReturnDate || '')} (${item._rentalDays || 1}d)</span>` : '';
-    const extras = (discountBadge || noteBadge || typeBadge || warrantyBadge || creqBadge || rentalBadge)
-      ? `<div class="ci-badges">${typeBadge}${discountBadge}${noteBadge}${warrantyBadge}${creqBadge}${rentalBadge}</div>` : '';
+    const dynamicBadge = item._isDynamic
+      ? `<span class="ci-badge ci-badge--service"><i class="fa fa-wand-magic-sparkles"></i> Dynamic · ${Number(item.price).toFixed(2)} × ${item.qty}</span>` : '';
+    const extras = (discountBadge || noteBadge || typeBadge || warrantyBadge || creqBadge || rentalBadge || dynamicBadge)
+      ? `<div class="ci-badges">${typeBadge}${dynamicBadge}${discountBadge}${noteBadge}${warrantyBadge}${creqBadge}${rentalBadge}</div>` : '';
     return `
     <div class="cart-item" data-key="${escHtml(item._key)}">
       <div class="ci-name">
@@ -28675,7 +28839,7 @@ function renderCart() {
       </div>
       <div class="ci-qty">
         <button class="ci-qty-btn" data-action="dec" data-idx="${idx}">-</button>
-        <input class="ci-qty-input" type="number" data-idx="${idx}" value="${item.qty}" min="1" data-key="${escHtml(item._key)}">
+        <input class="ci-qty-input" type="number" data-idx="${idx}" value="${item.qty}" min="1"${item._dynLinked ? ' step="any"' : ''} data-key="${escHtml(item._key)}">
         <button class="ci-qty-btn" data-action="inc" data-idx="${idx}">+</button>
       </div>
       <div class="ci-price">${(item.price * item.qty).toFixed(2)}</div>
@@ -28710,8 +28874,10 @@ function renderCart() {
       const t = activeTab();
       if (!t) return;
       const idx = Number(input.dataset.idx);
-      const val = parseInt(input.value) || 1;
-      t.cart[idx].qty = Math.max(1, val);
+      const val = t.cart[idx]._dynLinked
+        ? Math.round((parseFloat(input.value) || 1) * 1000) / 1000
+        : parseInt(input.value) || 1;
+      t.cart[idx].qty = Math.max(t.cart[idx]._dynLinked ? 0.001 : 1, val);
       renderCart();
       renderPosTabBar();
     });
@@ -29461,6 +29627,7 @@ $('#checkout-confirm').addEventListener('click', async () => {
         item_discount_percent:  _itemEffectivePct(i) > 0 ? _itemEffectivePct(i) : undefined,
         item_tax_rule:          i.itemTaxRule ?? undefined,
         rental_return_date:     i._isRental ? i._rentalReturnDate : undefined,
+        custom_unit_price:      (i._isDynamic && !i._dynLinked) ? i.price : undefined,
       })),
       ...serviceItems.map(i => ({
         item_type:              'service',
@@ -29696,6 +29863,7 @@ $('#rb-barcode').addEventListener('click', async () => {
   const res = await API.productBySku(sku.trim());
   if (res.status !== 200) { toast('Product not found', 'error'); return; }
   const p = res.body?.data || res.body;
+  if (p.is_dynamic_pricing) { await handleDynamicProductClick(p); return; }
   const layerId = p.matched_layer_id ?? null;
   const matchedLayer = layerId && p.layers ? p.layers.find(l => l.id === layerId) : null;
   const price = matchedLayer

@@ -305,7 +305,8 @@ class SaleService
                 // sources (a manual per-product Discount and/or an active Sale
                 // Campaign) apply, pick whichever gives the customer the best price.
                 // Rentals are priced from the daily rate, not catalog discounts.
-                if ($isRentalLine) {
+                $customUnitPrice = $line['custom_unit_price'] ?? null;
+                if ($isRentalLine || $customUnitPrice !== null) {
                     $discount = null;
                 } else {
                     $productDiscounts = $activeDiscounts->where('product_id', $product->id);
@@ -327,7 +328,7 @@ class SaleService
                 foreach ($allocations as $allocation) {
                     $rawPrice = $isRentalLine
                         ? round((float) $product->rental_daily_rate * $rentalDays, 2)
-                        : (float) $allocation['unit_sell_price'];
+                        : ($customUnitPrice ?? (float) $allocation['unit_sell_price']);
 
                     // Apply product discount server-side
                     $discountPerUnit = 0.0;
@@ -649,8 +650,10 @@ class SaleService
             $warrantyDate = ($warrantyType === 'date' && !empty($row['warranty_date']))
                 ? $row['warranty_date'] : null;
             $rentalReturnDate = !empty($row['rental_return_date']) ? $row['rental_return_date'] : null;
+            $customUnitPrice  = isset($row['custom_unit_price']) && (float) $row['custom_unit_price'] > 0
+                ? round((float) $row['custom_unit_price'], 2) : null;
 
-            $key = $productId.':'.($layerId ?? 'fifo').':'.($suId ?? '0').':'.($rentalReturnDate ?? '');
+            $key = $productId.':'.($layerId ?? 'fifo').':'.($suId ?? '0').':'.($rentalReturnDate ?? '').':'.($customUnitPrice ?? '');
             if (! isset($merged[$key])) {
                 $merged[$key] = [
                     'product_id' => $productId,
@@ -662,6 +665,7 @@ class SaleService
                     'warranty_type' => $warrantyType,
                     'warranty_date' => $warrantyDate,
                     'rental_return_date' => $rentalReturnDate,
+                    'custom_unit_price' => $customUnitPrice,
                     'item_discount_percent' => isset($row['item_discount_percent']) && (float) $row['item_discount_percent'] > 0
                         ? (float) $row['item_discount_percent'] : null,
                 ];
@@ -708,6 +712,16 @@ class SaleService
                 }
             }
 
+            // Dynamic-pricing products: when price and quantity are linked, 1 unit is
+            // always sold at 1.00 (so Rs 100 = qty 100); otherwise the cashier-entered
+            // price is used. Everything else is priced from stock (the batch price).
+            $customUnitPrice = null;
+            if ($product->is_dynamic_pricing) {
+                $customUnitPrice = $product->dynamic_price_qty_linked
+                    ? 1.0
+                    : ($row['custom_unit_price'] ?? null);
+            }
+
             $layerId = $row['product_stock_layer_id'];
             if ($layerId !== null) {
                 $layer = ProductStockLayer::query()
@@ -740,6 +754,7 @@ class SaleService
                 'warranty_type' => $row['warranty_type'] ?? null,
                 'warranty_date' => $row['warranty_date'] ?? null,
                 'rental_return_date' => $row['rental_return_date'] ?? null,
+                'custom_unit_price' => $customUnitPrice,
                 'item_discount_percent' => $row['item_discount_percent'] ?? null,
             ];
         }

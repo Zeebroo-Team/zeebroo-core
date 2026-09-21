@@ -125,6 +125,8 @@ class PosProductApiController extends Controller
                 if ($request->has('subscription_free_trial')) $fill['subscription_free_trial'] = $request->boolean('subscription_free_trial');
                 if ($request->has('item_wise_tax'))          $fill['item_wise_tax']        = $request->boolean('item_wise_tax');
                 if ($request->has('item_wise_discount'))     $fill['item_wise_discount']   = $request->boolean('item_wise_discount');
+                if ($request->has('is_dynamic_pricing'))     $fill['is_dynamic_pricing']   = $request->boolean('is_dynamic_pricing');
+                if ($request->has('dynamic_price_qty_linked')) $fill['dynamic_price_qty_linked'] = $request->boolean('dynamic_price_qty_linked');
                 if ($fill) $product->fill($fill)->save();
 
                 if ($request->has('product_category_ids')) {
@@ -154,6 +156,11 @@ class PosProductApiController extends Controller
                     if ($qty <= 0) continue;
                     $cost     = isset($batch['cost_price'])      && $batch['cost_price']      !== null ? (float) $batch['cost_price']      : (float) ($product->cost_price ?? 0);
                     $selling  = isset($batch['selling_price'])   && $batch['selling_price']   !== null ? (float) $batch['selling_price']   : null;
+                    // Linked dynamic pricing (1 unit = 1.00): the batch is always sold at 1.00,
+                    // not at the default cost-plus-markup price.
+                    if ($selling === null && $request->boolean('is_dynamic_pricing') && $request->boolean('dynamic_price_qty_linked')) {
+                        $selling = 1.0;
+                    }
                     $wholesale = isset($batch['wholesale_price']) && $batch['wholesale_price'] !== null ? (float) $batch['wholesale_price'] : ($product->wholesale_price !== null ? (float) $product->wholesale_price : null);
                     $this->stockLayers->createManualLayer($business, $product, $qty, $cost, $selling, $wholesale);
                 }
@@ -211,6 +218,8 @@ class PosProductApiController extends Controller
             'subscription_free_trial'   => 'boolean',
             'item_wise_tax'             => 'boolean',
             'item_wise_discount'        => 'boolean',
+            'is_dynamic_pricing'        => 'boolean',
+            'dynamic_price_qty_linked'  => 'boolean',
             'product_category_ids'      => 'nullable|array',
             'product_category_ids.*'    => 'integer',
             'product_brand_ids'         => 'nullable|array',
@@ -245,6 +254,8 @@ class PosProductApiController extends Controller
         if ($request->has('subscription_free_trial')) $data['subscription_free_trial'] = $request->boolean('subscription_free_trial');
         if ($request->has('item_wise_tax'))          $data['item_wise_tax']        = $request->boolean('item_wise_tax');
         if ($request->has('item_wise_discount'))     $data['item_wise_discount']   = $request->boolean('item_wise_discount');
+        if ($request->has('is_dynamic_pricing'))     $data['is_dynamic_pricing']   = $request->boolean('is_dynamic_pricing');
+        if ($request->has('dynamic_price_qty_linked')) $data['dynamic_price_qty_linked'] = $request->boolean('dynamic_price_qty_linked');
 
         $this->productService->update($product, $data);
 
