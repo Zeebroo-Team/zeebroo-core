@@ -13489,12 +13489,14 @@
 
           <div class="psm-section" id="psm-section-purchasing">
             <div class="psm-section-label"><i class="fa fa-file-invoice"></i> Purchasing</div>
-            <div class="psm-toggle-row">
-              <div class="psm-toggle-info">
-                <span class="psm-toggle-name">Purchase Order workflow</span>
-                <span class="psm-toggle-desc">When enabled, goods must be received against a purchase order. Disable to allow creating Goods Receive Notes directly without a purchase order.</span>
-              </div>
-              <label class="psm-switch"><input type="checkbox" id="psm-purchase-order-enabled" checked><span class="psm-switch-track"></span></label>
+            <div class="psm-field-row">
+              <label class="psm-field-label" for="psm-purchasing-mode">Purchasing workflow</label>
+              <select id="psm-purchasing-mode" class="psm-select">
+                <option value="po_only">Purchase Order workflow — create a Purchase Order first, then Goods Receive</option>
+                <option value="direct_only">Direct Goods Receive — receive goods without a Purchase Order</option>
+                <option value="both">Both — use Purchase Orders or receive goods directly</option>
+              </select>
+              <span class="psm-hint">Choose how stock is received from suppliers</span>
             </div>
           </div>
 

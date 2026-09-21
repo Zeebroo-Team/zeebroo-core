@@ -21211,7 +21211,7 @@ async function loadProducts(search = '', catId = 0, page = 1) {
   if (business?.name) state._bizName = state._bizName || business.name;
 
   // Apply purchase-order mode based on setting (default: enabled)
-  _applyPurchaseOrderMode(settings.purchase_order_enabled !== false);
+  _applyPurchaseOrderMode(_resolvePurchasingMode(settings));
   _applyRentalMode(settings.rental_enabled !== false);
 
   buildCategoryBar(categories, catId);
@@ -26745,10 +26745,10 @@ async function openPosSettings() {
   });
 
   // Purchasing workflow
-  const poEnabled = s.purchase_order_enabled !== false; // default true
-  const poToggle  = $('#psm-purchase-order-enabled');
-  if (poToggle) poToggle.checked = poEnabled;
-  _applyPurchaseOrderMode(poEnabled);
+  const purchasingMode = _resolvePurchasingMode(s);
+  const purchasingSel  = $('#psm-purchasing-mode');
+  if (purchasingSel) purchasingSel.value = purchasingMode;
+  _applyPurchaseOrderMode(purchasingMode);
 
   // Product rentals
   const rentalEnabled = s.rental_enabled !== false; // default true
@@ -26811,15 +26811,23 @@ $$('[data-cour]').forEach(input => {
 });
 
 // ── Purchase Order mode ────────────────────────────────────────────────────
-function _applyPurchaseOrderMode(enabled) {
+// mode: 'po_only' | 'direct_only' | 'both'
+function _resolvePurchasingMode(s) {
+  if (['po_only', 'direct_only', 'both'].includes(s?.purchasing_mode)) return s.purchasing_mode;
+  return s?.purchase_order_enabled === false ? 'direct_only' : 'po_only';
+}
+
+function _applyPurchaseOrderMode(mode) {
+  const showPo     = mode !== 'direct_only';
+  const showDirect = mode !== 'po_only';
   // Ribbon: Purchase Orders button
   const rbOrders = $('#rb-orders');
-  if (rbOrders) rbOrders.style.display = enabled ? '' : 'none';
+  if (rbOrders) rbOrders.style.display = showPo ? '' : 'none';
   // Purchasing sub-nav tab
-  $$('[data-inv-view="po"]').forEach(el => { el.style.display = enabled ? '' : 'none'; });
-  // Direct GRN add button (shown only when PO is disabled)
+  $$('[data-inv-view="po"]').forEach(el => { el.style.display = showPo ? '' : 'none'; });
+  // Direct GRN add button (shown when direct receiving is allowed)
   const grnDirectBtn = $('#grn-add-direct-btn');
-  if (grnDirectBtn) grnDirectBtn.style.display = enabled ? 'none' : '';
+  if (grnDirectBtn) grnDirectBtn.style.display = showDirect ? '' : 'none';
 }
 
 // ── Product Rental feature toggle ──────────────────────────────────────────
@@ -27024,7 +27032,7 @@ $('#psm-save').addEventListener('click', async () => {
         charge:  parseFloat($(`#dm-cour-charge-${k}`)?.value) || 0,
       }])
     ),
-    purchase_order_enabled:      $('#psm-purchase-order-enabled')?.checked !== false,
+    purchasing_mode:             $('#psm-purchasing-mode')?.value || 'po_only',
     rental_enabled:              $('#psm-rental-enabled')?.checked !== false,
   };
 
@@ -27037,8 +27045,8 @@ $('#psm-save').addEventListener('click', async () => {
     return;
   }
 
-  // Apply purchase order mode immediately from the toggle
-  _applyPurchaseOrderMode(!!$('#psm-purchase-order-enabled')?.checked);
+  // Apply purchasing mode immediately from the dropdown
+  _applyPurchaseOrderMode($('#psm-purchasing-mode')?.value || 'po_only');
 
   // Apply rental mode immediately from the toggle
   _applyRentalMode($('#psm-rental-enabled')?.checked !== false);
