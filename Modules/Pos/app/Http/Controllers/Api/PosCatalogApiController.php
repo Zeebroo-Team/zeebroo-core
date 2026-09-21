@@ -186,6 +186,8 @@ class PosCatalogApiController extends Controller
                 'subscription_free_trial'       => (bool) $product->subscription_free_trial,
                 'item_wise_tax'      => (bool) $product->item_wise_tax,
                 'item_wise_discount' => (bool) $product->item_wise_discount,
+                'is_dynamic_pricing'       => (bool) $product->is_dynamic_pricing,
+                'dynamic_price_qty_linked' => (bool) $product->dynamic_price_qty_linked,
                 'unit_price'   => (float) $product->unit_price,
                 'cost_price'   => $product->cost_price !== null
                     ? (float) $product->cost_price

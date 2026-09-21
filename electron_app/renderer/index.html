@@ -2353,6 +2353,7 @@
             <button class="pos-mode-btn active" data-mode="products"><i class="fa fa-box"></i> Products</button>
             <button class="pos-mode-btn" data-mode="services"><i class="fa fa-screwdriver-wrench"></i> Services</button>
             <button class="pos-mode-btn" data-mode="rentals"><i class="fa fa-calendar-days"></i> Rental</button>
+            <button class="pos-mode-btn" data-mode="dynamic"><i class="fa fa-wand-magic-sparkles"></i> Dynamic</button>
           </div>
           <div id="product-search-bar">
             <i class="fa fa-magnifying-glass" style="color:var(--text-muted)"></i>
@@ -2408,6 +2409,20 @@
               <div style="grid-column:1/-1;text-align:center;padding:60px;color:var(--text-muted)">
                 <i class="fa fa-calendar-days" style="font-size:28px;display:block;margin-bottom:10px;opacity:.3"></i>
                 Switch to Rental mode to browse
+              </div>
+            </div>
+          </div>
+          <!-- Dynamic pricing section (hidden until mode=dynamic) -->
+          <div id="pos-dynamic-section" style="display:none">
+            <div id="dynamic-search-bar">
+              <i class="fa fa-magnifying-glass" style="color:var(--text-muted)"></i>
+              <input type="text" id="dynamic-search" placeholder="Search dynamic-price products…" autocomplete="off">
+              <button class="sb-icon-btn" id="btn-refresh-dynamic" title="Refresh"><i class="fa fa-arrows-rotate"></i></button>
+            </div>
+            <div id="dynamic-grid">
+              <div style="grid-column:1/-1;text-align:center;padding:60px;color:var(--text-muted)">
+                <i class="fa fa-wand-magic-sparkles" style="font-size:28px;display:block;margin-bottom:10px;opacity:.3"></i>
+                Switch to Dynamic mode to browse
               </div>
             </div>
           </div>
@@ -3448,6 +3463,24 @@
                     <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-xs);background:var(--surface)">
                       <input type="checkbox" id="prod-f-subscription-free-trial" style="accent-color:var(--accent);cursor:pointer">
                       <span style="font-size:12px;color:var(--text)"><i class="fa fa-gift" style="color:var(--accent);margin-right:4px"></i> Free trial (first recurring cycle not charged)</span>
+                    </label>
+                  </div>
+                </div>
+                <!-- Dynamic Pricing -->
+                <div class="prod-adv-card">
+                  <input type="checkbox" id="prod-f-dynamic-pricing" class="prod-adv-card-chk">
+                  <label class="prod-adv-card-top" for="prod-f-dynamic-pricing">
+                    <div class="prod-adv-card-icon"><i class="fa fa-wand-magic-sparkles"></i></div>
+                    <div class="prod-adv-card-text">
+                      <span class="prod-adv-card-name">Dynamic Pricing</span>
+                      <span class="prod-adv-card-desc">Cashier enters the price at POS (e.g. mobile reload)</span>
+                    </div>
+                    <div class="prod-adv-card-sw"><div class="prod-adv-card-knob"></div></div>
+                  </label>
+                  <div class="prod-adv-card-fields" id="prod-dynamic-terms-row">
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-xs);background:var(--surface)">
+                      <input type="checkbox" id="prod-f-dynamic-linked" style="accent-color:var(--accent);cursor:pointer">
+                      <span style="font-size:12px;color:var(--text)"><i class="fa fa-link" style="color:var(--accent);margin-right:4px"></i> Similar price &amp; quantity (1 unit = 1.00, so Rs 350 sells 350 units and reduces stock by 350)</span>
                     </label>
                   </div>
                 </div>
@@ -13379,6 +13412,29 @@
     <div class="eod-modal-footer">
       <button class="psm-btn-cancel" id="pos-warranty-cancel">Cancel</button>
       <button class="eod-settle-btn" id="pos-warranty-confirm"><i class="fa fa-check"></i> Add to Cart</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Dynamic price modal (amount entry) ───────────────────────────────── -->
+<div id="pos-dynamic-overlay" class="bwz-overlay" style="display:none" role="dialog" aria-modal="true">
+  <div class="eod-modal" style="width:360px">
+    <div class="eod-modal-header">
+      <span><i class="fa fa-wand-magic-sparkles"></i> Enter Amount</span>
+    </div>
+    <div class="eod-modal-body">
+      <p id="pos-dynamic-product-name" style="font-size:13px;font-weight:700;color:var(--text);margin:0 0 14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></p>
+      <div class="psm-field-row" style="margin:0">
+        <label class="psm-field-label" for="pos-dynamic-amount" id="pos-dynamic-amount-label">Price</label>
+        <div style="margin-top:4px">
+          <input type="number" id="pos-dynamic-amount" class="psm-input" min="0.01" step="0.01" placeholder="0.00" style="max-width:180px">
+        </div>
+        <div id="pos-dynamic-hint" style="margin-top:8px;font-size:12px;color:var(--text-muted)"></div>
+      </div>
+    </div>
+    <div class="eod-modal-footer">
+      <button class="psm-btn-cancel" id="pos-dynamic-cancel">Cancel</button>
+      <button class="eod-settle-btn" id="pos-dynamic-confirm"><i class="fa fa-check"></i> Add to Cart</button>
     </div>
   </div>
 </div>

@@ -93,6 +93,7 @@ class PosCatalogService
         bool $recentSales = false,
         bool $discountOnly = false,
         bool $rentalOnly = false,
+        bool $dynamicOnly = false,
     ): array {
         $page    = max(1, $page);
         $perPage = max(1, min(100, $perPage));
@@ -164,6 +165,11 @@ class PosCatalogService
         // Rental-only filter — the POS "Rental" mode tab
         if ($rentalOnly) {
             $query->where('is_rental', true);
+        }
+
+        // Dynamic-pricing filter — the POS "Dynamic" mode tab
+        if ($dynamicOnly) {
+            $query->where('is_dynamic_pricing', true);
         }
 
         // Stock status filter (uses the stock_quantity column directly)
@@ -401,6 +407,8 @@ class PosCatalogService
             'rental_max_days'              => $product->rental_max_days !== null ? (int) $product->rental_max_days : null,
             'rental_late_fee_multiplier'   => $product->rental_late_fee_multiplier !== null ? (float) $product->rental_late_fee_multiplier : null,
             'rental_needs_cleaning'        => (bool) $product->rental_needs_cleaning,
+            'is_dynamic_pricing'           => (bool) $product->is_dynamic_pricing,
+            'dynamic_price_qty_linked'     => (bool) $product->dynamic_price_qty_linked,
         ];
     }
 

@@ -38,6 +38,7 @@ class PosOnlineApiService
         bool $recentSales = false,
         bool $discountOnly = false,
         bool $rentalOnly = false,
+        bool $dynamicOnly = false,
     ): array {
         $currency = (string) (get_settings('business.currency', '', $business) ?: '');
         $catalogOptions = $this->catalogOptions->optionsForBusiness($business);
@@ -63,6 +64,7 @@ class PosOnlineApiService
             $recentSales,
             $discountOnly,
             $rentalOnly,
+            $dynamicOnly,
         );
 
         $branches = $business->branches()->get()
