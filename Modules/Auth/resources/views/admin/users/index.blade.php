@@ -34,6 +34,15 @@
 .adu-role--admin{background:color-mix(in srgb,#6366f1 13%,transparent);color:#6366f1;}
 .adu-role--user{background:color-mix(in srgb,#64748b 13%,transparent);color:#64748b;}
 .adu-owns{font-size:12px;color:var(--muted);}
+.adu-pkg{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:4px;}
+.adu-pkg:last-child{margin-bottom:0;}
+.adu-pkg-name{font-size:13px;font-weight:650;color:var(--text);}
+.adu-pkg-biz{flex-basis:100%;font-size:11px;color:var(--muted);}
+.adu-sub-badge{display:inline-flex;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:700;white-space:nowrap;}
+.adu-sub-badge--ok{background:color-mix(in srgb,#16a34a 13%,transparent);color:#16a34a;}
+.adu-sub-badge--warn{background:color-mix(in srgb,#d97706 13%,transparent);color:#d97706;}
+.adu-sub-badge--bad{background:color-mix(in srgb,#ef4444 13%,transparent);color:#ef4444;}
+.adu-sub-badge--muted{background:color-mix(in srgb,#64748b 13%,transparent);color:#64748b;}
 .adu-act-btn{padding:5px 10px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;}
 .adu-act-btn:hover{border-color:color-mix(in srgb,var(--primary) 45%,var(--border));background:color-mix(in srgb,var(--primary) 7%,transparent);}
 .adu-act-btn--danger:hover{border-color:color-mix(in srgb,#ef4444 45%,var(--border));background:color-mix(in srgb,#ef4444 7%,transparent);color:#b91c1c;}
@@ -180,6 +189,7 @@
                     <th>User</th>
                     <th>Role</th>
                     <th>Owns</th>
+                    <th>Package &amp; Subscription</th>
                     <th>Joined</th>
                     <th>Status</th>
                     <th></th>
@@ -208,6 +218,42 @@
                             @else
                                 <span class="adu-owns">—</span>
                             @endif
+                        </td>
+                        <td data-label="Package &amp; Subscription">
+                            @forelse($u->businesses as $b)
+                                @php
+                                    $pay = $b->payments->first();
+                                    if ($b->has_unlimited_access) {
+                                        $pkgLabel = 'Unlimited access';
+                                    } elseif ($b->has_manual_features) {
+                                        $pkgLabel = 'Manual features';
+                                    } else {
+                                        $pkgLabel = $b->package?->name ?? 'No package';
+                                    }
+                                    if (! $pay) {
+                                        [$subLabel, $subTone] = ['No payment', 'muted'];
+                                    } elseif ($pay->payment_type === \Modules\Payment\Models\Payment::TYPE_FREE) {
+                                        [$subLabel, $subTone] = ['Free', 'muted'];
+                                    } else {
+                                        $raw = $pay->stripe_subscription_status ?: $pay->payment_status;
+                                        $subLabel = ucfirst(str_replace('_', ' ', $raw));
+                                        $subTone = match ($raw) {
+                                            'active', 'trialing', 'succeeded' => 'ok',
+                                            'pending', 'processing', 'past_due', 'incomplete' => 'warn',
+                                            default => 'bad',
+                                        };
+                                    }
+                                @endphp
+                                <div class="adu-pkg">
+                                    <span class="adu-pkg-name">{{ $pkgLabel }}</span>
+                                    <span class="adu-sub-badge adu-sub-badge--{{ $subTone }}">{{ $subLabel }}</span>
+                                    @if($u->businesses->count() > 1)
+                                        <div class="adu-pkg-biz">{{ $b->name }}</div>
+                                    @endif
+                                </div>
+                            @empty
+                                <span class="adu-owns">—</span>
+                            @endforelse
                         </td>
                         <td data-label="Joined" style="font-size:12px;color:var(--muted);white-space:nowrap;"
                             title="{{ $u->created_at?->format('d M Y, H:i:s') }}">
@@ -264,7 +310,7 @@
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="6">
+                        <td colspan="7">
                             <div class="adu-empty">
                                 <div class="adu-empty-icon"><i class="fa fa-users"></i></div>
                                 <p class="adu-empty-title">No users yet</p>
