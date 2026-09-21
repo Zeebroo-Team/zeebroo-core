@@ -253,6 +253,7 @@ class BusinessMember extends Model
                     ['key' => 'fin_tab_rentals',       'label' => 'Tab: Rentals',       'desc' => 'Finance panel: Rentals sub-nav tab'],
                     ['key' => 'fin_tab_properties',    'label' => 'Tab: Properties',    'desc' => 'Finance panel: Properties sub-nav tab'],
                     ['key' => 'fin_tab_modifications', 'label' => 'Tab: Modifications', 'desc' => 'Finance panel: Modifications sub-nav tab'],
+                    ['key' => 'fin_tab_investments',   'label' => 'Tab: Investments',   'desc' => 'Finance panel: Investments sub-nav tab'],
                 ],
             ],
             [

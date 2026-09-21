@@ -5952,7 +5952,7 @@ function applyFeatureVisibility() {
   grp('#rb-inv-barcodes', inv_barcodes || inv_campaigns);
 
   // ── Finance sub-nav visibility ──
-  const billFinViews = ['bills', 'loans', 'rentals', 'properties', 'modifications', 'budget'];
+  const billFinViews = ['bills', 'loans', 'rentals', 'properties', 'modifications', 'investments', 'budget'];
   billFinViews.forEach(v => {
     const btn = $(`#panel-finance .fin-subnav-btn[data-fin="${v}"]`);
     if (btn) btn.style.display = fin_any ? '' : 'none';
@@ -6251,7 +6251,7 @@ function applyFeatureVisibility() {
     if (finGrps[1]) finGrps[1].style.display = (mp('fin_btn_rentals')||mp('fin_btn_properties')) ? '' : 'none';
     if (finGrps[2]) finGrps[2].style.display = (mp('fin_btn_profit')||mp('fin_btn_sales')) ? '' : 'none'; }
   // ── Finance panel: sub-nav tab gating with fallback ──
-  { const _finTabPerms = { flow: mp('fin_tab_flow'), bills: mp('fin_tab_bills'), loans: mp('fin_tab_loans'), rentals: mp('fin_tab_rentals'), properties: mp('fin_tab_properties'), modifications: mp('fin_tab_modifications'), budget: mp('fin_tab_budget') };
+  { const _finTabPerms = { flow: mp('fin_tab_flow'), bills: mp('fin_tab_bills'), loans: mp('fin_tab_loans'), rentals: mp('fin_tab_rentals'), properties: mp('fin_tab_properties'), modifications: mp('fin_tab_modifications'), investments: mp('fin_tab_investments'), budget: mp('fin_tab_budget') };
     $$('#panel-finance .fin-subnav-btn[data-fin]').forEach(b => { b.style.display = _finTabPerms[b.dataset.fin] ? '' : 'none'; });
     const _finActive = $('#panel-finance .fin-subnav-btn.active');
     if (_finActive && !_finTabPerms[_finActive.dataset.fin]) {
@@ -31025,6 +31025,7 @@ function switchFinView(view) {
   $('#loan-detail-view').style.display           = 'none';
   $('#rental-detail-view').style.display         = 'none';
   $('#modification-detail-view').style.display   = 'none';
+  $('#investment-detail-view').style.display     = 'none';
   $('#budget-detail-view').style.display         = 'none';
   $('#finance-flow-view').style.display          = view === 'flow'          ? '' : 'none';
   $('#finance-list-view').style.display          = view === 'bills'         ? '' : 'none';
@@ -31032,6 +31033,7 @@ function switchFinView(view) {
   $('#rentals-list-view').style.display          = view === 'rentals'       ? '' : 'none';
   $('#properties-list-view').style.display       = view === 'properties'    ? '' : 'none';
   $('#modifications-list-view').style.display    = view === 'modifications' ? '' : 'none';
+  $('#investments-list-view').style.display      = view === 'investments'   ? '' : 'none';
   $('#budget-list-view').style.display           = view === 'budget'        ? '' : 'none';
   if (view === 'flow')          loadFinanceFlow();
   if (view === 'bills')         loadFinance();
@@ -31039,6 +31041,7 @@ function switchFinView(view) {
   if (view === 'rentals')       loadRentals();
   if (view === 'properties')    loadProperties();
   if (view === 'modifications') loadModifications();
+  if (view === 'investments')   loadInvestments();
   if (view === 'budget')        loadBudgets();
 }
 
@@ -33068,6 +33071,562 @@ function showMcError(msg) {
   el.style.display = '';
   el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
+
+// ── Investments Panel ─────────────────────────────────────────────────────
+
+const IV_REC_LABEL = { per_day: 'Daily', per_month: 'Monthly', per_year: 'Yearly' };
+const IV_TYPE_ICON = {
+  bank_investment: 'fa-building-columns', fixed_deposit: 'fa-vault', savings_plan: 'fa-piggy-bank',
+  insurance: 'fa-shield-heart', retirement: 'fa-umbrella-beach', shares: 'fa-chart-line',
+  unit_trust: 'fa-chart-pie', gold: 'fa-ring', real_estate: 'fa-map-location-dot', other: 'fa-seedling',
+};
+
+let investmentsSearchFilter = '';
+let _investmentsAll   = [];
+let _investmentsStats = { active_count: 0, overdue_count: 0, total_invested_fmt: '0.00' };
+let _investmentTypes  = {};
+let _ivAccounts       = [];
+
+async function loadInvestments(search) {
+  if (search !== undefined) investmentsSearchFilter = search;
+  const area = $('#investments-cards-area');
+  area.innerHTML = '<div class="finance-loading"><i class="fa fa-spinner fa-spin"></i> Loading investments…</div>';
+  const res = await API.investments();
+  if (res.status === 200 && res.body) {
+    _investmentsAll   = res.body.data || [];
+    _investmentTypes  = res.body.types || {};
+    _investmentsStats = {
+      active_count:       res.body.active_count       ?? 0,
+      overdue_count:      res.body.overdue_count      ?? 0,
+      total_invested_fmt: res.body.total_invested_fmt ?? '0.00',
+    };
+  } else {
+    _investmentsAll   = [];
+    _investmentsStats = { active_count: 0, overdue_count: 0, total_invested_fmt: '0.00' };
+  }
+  renderInvestmentCards();
+}
+
+function ivStatusBadge(iv) {
+  if (iv.status === 'matured') return '<span class="inv-badge inv-badge-blue">Matured</span>';
+  if (iv.status === 'closed')  return '<span class="inv-badge inv-badge-gray">Closed</span>';
+  if (iv.is_overdue)           return '<span class="inv-badge inv-badge-red">Overdue</span>';
+  if (iv.periods_total > 0 && iv.periods_paid >= iv.periods_total) return '<span class="inv-badge inv-badge-green">Fully funded</span>';
+  return '<span class="inv-badge inv-badge-green">Active</span>';
+}
+
+function renderInvestmentCards() {
+  const area = $('#investments-cards-area');
+  const q    = investmentsSearchFilter.trim().toLowerCase();
+  const list = q
+    ? _investmentsAll.filter(i =>
+        (i.name || '').toLowerCase().includes(q) ||
+        (i.type_label || '').toLowerCase().includes(q) ||
+        (i.provider || '').toLowerCase().includes(q))
+    : _investmentsAll;
+
+  $('#investments-count').textContent = `${list.length} investment${list.length !== 1 ? 's' : ''}`;
+
+  const statsBar = $('#investments-stats-bar');
+  if (_investmentsAll.length > 0) {
+    $('#ivs-active-count').textContent   = _investmentsStats.active_count;
+    $('#ivs-overdue-count').textContent  = _investmentsStats.overdue_count;
+    $('#ivs-total-invested').textContent = _investmentsStats.total_invested_fmt;
+    statsBar.style.display = '';
+  } else {
+    statsBar.style.display = 'none';
+  }
+
+  if (!list.length) {
+    area.innerHTML = `
+      <div class="finance-empty">
+        <div class="finance-empty-icon"><i class="fa fa-chart-line"></i></div>
+        <p>${q ? 'No investments match your search' : 'No investments yet'}</p>
+        <span>${q ? 'Try a different term' : 'Click Add Investment to track your first plan'}</span>
+      </div>`;
+    return;
+  }
+  area.innerHTML = list.map(buildInvestmentCard).join('');
+}
+
+function buildInvestmentCard(iv) {
+  const icon    = IV_TYPE_ICON[iv.investment_type] || 'fa-seedling';
+  const cadence = iv.payment_mode === 'one_time' ? 'One-time' : (IV_REC_LABEL[iv.recurring_type] || 'Recurring');
+  const info = (icon2, key, val) => val
+    ? `<div class="lm-info-row"><span class="lm-info-key"><i class="fa ${icon2}"></i> ${key}</span><span class="lm-info-val">${escHtml(val)}</span></div>`
+    : '';
+
+  return `
+    <div class="lm-card iv-card" data-iv-id="${iv.id}">
+      <div class="lm-card-header">
+        <div class="lm-card-icon" style="background:#f0fdfa;color:#0d9488;font-size:18px"><i class="fa ${icon}"></i></div>
+        <div class="lm-card-title-wrap">
+          <span class="lm-card-name">${escHtml(iv.name)}</span>
+          <div class="lm-card-pills">
+            <span class="lm-pill lm-pill-cadence"><i class="fa fa-tag"></i> ${escHtml(iv.type_label)}</span>
+            <span class="lm-pill"><i class="fa fa-rotate"></i> ${cadence}</span>
+            ${ivStatusBadge(iv)}
+          </div>
+        </div>
+        <button class="lm-remove-btn" data-iv-id="${iv.id}" title="Remove investment"><i class="fa fa-trash"></i> Remove</button>
+      </div>
+
+      <div class="lm-stats-row">
+        <div class="lm-stat-block">
+          <span class="lm-stat-block-label">CONTRIBUTION</span>
+          <span class="lm-stat-block-val">${escHtml(iv.contribution_amount_fmt)}</span>
+        </div>
+        <div class="lm-stat-block">
+          <span class="lm-stat-block-label">INVESTED</span>
+          <span class="lm-stat-block-val">${escHtml(iv.total_invested_fmt)}</span>
+        </div>
+        <div class="lm-stat-block">
+          <span class="lm-stat-block-label">PROGRESS</span>
+          <span class="lm-stat-block-val">${iv.progress_pct}%</span>
+        </div>
+      </div>
+
+      <div class="lm-info-rows">
+        ${info('fa-building-columns', 'Provider', iv.provider)}
+        ${info('fa-calendar-day', 'Next payment', iv.next_due_ymd)}
+        ${info('fa-flag-checkered', 'Matures', iv.maturity_date)}
+        ${info('fa-wallet', 'Account', iv.account_name)}
+      </div>
+    </div>`;
+}
+
+$('#investments-cards-area').addEventListener('click', async e => {
+  const rm = e.target.closest('.lm-remove-btn[data-iv-id]');
+  if (rm) {
+    const id   = rm.dataset.ivId;
+    const card = rm.closest('.iv-card');
+    const name = card?.querySelector('.lm-card-name')?.textContent || 'this investment';
+    if (!confirm(`Remove "${name}"? Its plan is deleted; ledger rows in Transactions are kept for history.`)) return;
+    rm.disabled = true; rm.innerHTML = '<i class="fa fa-spinner fa-spin"></i>';
+    const res = await API.deleteInvestment(id);
+    if (res.status === 200) {
+      toast('Investment removed', 'success');
+      await loadInvestments();
+    } else {
+      rm.disabled = false; rm.innerHTML = '<i class="fa fa-trash"></i> Remove';
+      toast(res.body?.message || `Failed (${res.status})`, 'error');
+    }
+    return;
+  }
+  const card = e.target.closest('.iv-card[data-iv-id]');
+  if (!card) return;
+  const iv = _investmentsAll.find(x => String(x.id) === String(card.dataset.ivId));
+  if (iv) openInvestmentDetailPage(iv);
+});
+
+let _ivSearchTimer;
+$('#investments-search').addEventListener('input', e => {
+  clearTimeout(_ivSearchTimer);
+  investmentsSearchFilter = e.target.value;
+  _ivSearchTimer = setTimeout(renderInvestmentCards, 250);
+});
+
+// ── Investment detail page ────────────────────────────────────────────────
+
+let _ivDetailId = null;
+
+$('#investment-detail-back').addEventListener('click', () => {
+  _ivDetailId = null;
+  $('#investment-detail-view').style.display  = 'none';
+  $('.fin-subnav').style.display              = '';
+  $('#investments-list-view').style.display   = '';
+  loadInvestments();
+});
+
+$('#ivd-inv-tabs').addEventListener('click', e => {
+  const tab = e.target.closest('.inv-tab');
+  if (!tab) return;
+  $$('#ivd-inv-tabs .inv-tab').forEach(t => t.classList.toggle('active', t === tab));
+  $$('.inv-tab-pane[id^="ivd-pane-"]').forEach(p => p.classList.toggle('active', p.id === `ivd-pane-${tab.dataset.tab}`));
+  if (tab.dataset.tab === 'contributions') loadInvestmentContributionsTab(_ivDetailId);
+});
+
+async function openInvestmentDetailPage(listRow) {
+  _ivDetailId = listRow.id;
+
+  $('.fin-subnav').style.display              = 'none';
+  $('#investments-list-view').style.display  = 'none';
+  $('#investment-detail-view').style.display = 'flex';
+
+  $$('#ivd-inv-tabs .inv-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === 'overview'));
+  $$('.inv-tab-pane[id^="ivd-pane-"]').forEach(p => p.classList.toggle('active', p.id === 'ivd-pane-overview'));
+  $('#ivd-pane-contributions').innerHTML = '';
+  $('#ivd-pane-overview').innerHTML =
+    `<div class="inv-pane-loading"><i class="fa fa-spinner fa-spin" style="font-size:22px;opacity:.4"></i></div>`;
+
+  await renderInvestmentOverview(listRow.id, listRow);
+}
+
+async function renderInvestmentOverview(id, fallback) {
+  const res = await API.investment(id);
+  const iv  = (res.status === 200 && res.body?.data) || fallback;
+  if (_ivDetailId !== id) return;
+
+  const icon    = IV_TYPE_ICON[iv.investment_type] || 'fa-seedling';
+  const cadence = iv.payment_mode === 'one_time' ? 'One-time' : (IV_REC_LABEL[iv.recurring_type] || 'Recurring');
+
+  $('#ivd-breadcrumb').textContent = iv.name;
+  $('#ivd-hero-icon').innerHTML = `
+    <div class="inv-thumb-ph inv-thumb-lg" style="background:#f0fdfa;color:#0d9488;font-size:28px"><i class="fa ${icon}"></i></div>`;
+  $('#ivd-hero-name').textContent = iv.name;
+  const meta = [`<span><i class="fa ${icon}"></i> ${escHtml(iv.type_label)}</span>`, `<span><i class="fa fa-rotate"></i> ${cadence}</span>`];
+  if (iv.provider) meta.push(`<span><i class="fa fa-building-columns"></i> ${escHtml(iv.provider)}</span>`);
+  $('#ivd-hero-meta').innerHTML = meta.join('<span class="inv-sep">·</span>');
+
+  const badges = [ivStatusBadge(iv)];
+  if (iv.payment_mode === 'recurring') badges.push('<span class="inv-badge inv-badge-blue">Recurring</span>');
+  if (iv.schedule_valid_until_year && iv.payment_mode === 'recurring') badges.push(`<span class="inv-badge inv-badge-gray">Through ${iv.schedule_valid_until_year}</span>`);
+  $('#ivd-hero-badges').innerHTML = badges.join('');
+
+  const rowsHtml = rows => rows.map(([l, v]) =>
+    `<tr><td class="inv-dt-label">${escHtml(l)}</td><td class="inv-dt-val">${v}</td></tr>`).join('');
+
+  const pct = iv.progress_pct || 0;
+  const pfClass = pct >= 100 ? 'pf-ok' : pct >= 50 ? 'pf-warn' : 'pf-ok';
+
+  const summaryRows = [
+    ['Total invested',  `<strong>${escHtml(iv.total_invested_fmt)}</strong>`],
+    ['Goal',            escHtml(iv.goal_amount_fmt || '—') + (iv.target_amount ? ' <span style="color:var(--text-muted)">(target)</span>' : ' <span style="color:var(--text-muted)">(planned total)</span>')],
+    ['Payments made',   `${iv.periods_paid} of ${iv.periods_total}`],
+    ['Next payment',    iv.is_overdue
+      ? `<span style="color:#dc2626;font-weight:600">${escHtml(iv.next_due_ymd || '—')}</span> <span class="inv-badge inv-badge-red" style="font-size:10px">Overdue</span>`
+      : escHtml(iv.next_due_ymd || '—')],
+  ];
+  if (iv.expected_annual_return_fmt) summaryRows.push(['Expected yearly return', `≈ ${escHtml(iv.expected_annual_return_fmt)} <span style="color:var(--text-muted)">at ${iv.expected_return_rate}%</span>`]);
+
+  const detailRows = [
+    ['Type',          `<span class="inv-badge inv-badge-gray">${escHtml(iv.type_label)}</span>`],
+    ['Payment',       escHtml(cadence)],
+    ['Contribution',  `<strong>${escHtml(iv.contribution_amount_fmt)}</strong>`],
+    ['First payment', escHtml(iv.start_date || '—')],
+  ];
+  if (iv.maturity_date)        detailRows.push(['Maturity date', escHtml(iv.maturity_date)]);
+  if (iv.expected_return_rate != null) detailRows.push(['Expected return', `${iv.expected_return_rate}% per year`]);
+  if (iv.reference_number)     detailRows.push(['Reference no.', escHtml(iv.reference_number)]);
+  if (iv.account_name)         detailRows.push(['Debit account', escHtml(iv.account_name) + (iv.account_category === 'petty_cash' ? ' <span class="inv-badge inv-badge-amber" style="font-size:10px">Petty cash</span>' : '')]);
+  if (iv.remind_before_days)   detailRows.push(['Reminder', `${iv.remind_before_days} day(s) before payment`]);
+  const note = [iv.description, iv.notes].filter(Boolean).join('\n\n');
+  if (note) detailRows.push(['Notes', `<span style="white-space:pre-wrap">${escHtml(note)}</span>`]);
+
+  $('#ivd-pane-overview').innerHTML = `
+    ${iv.is_overdue ? `<div class="bd-alert" style="margin-bottom:14px"><i class="fa fa-circle-exclamation"></i>
+      <div><strong>Contribution overdue</strong> — ${iv.overdue_count} scheduled payment(s) on or before today have not been recorded.</div></div>` : ''}
+    <div class="inv-section">
+      <div class="inv-section-title"><i class="fa fa-chart-line"></i> Performance</div>
+      <table class="inv-detail-table">${rowsHtml(summaryRows)}</table>
+      <div style="padding:10px 14px 12px">
+        <div style="display:flex;justify-content:space-between;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);margin-bottom:4px">
+          <span>Progress to goal</span><span>${pct}%</span>
+        </div>
+        <div style="height:5px;border-radius:4px;background:var(--surface3);overflow:hidden">
+          <div class="bd-progress-fill ${pfClass}" style="width:${pct}%;height:100%;border-radius:4px;transition:width .4s ease"></div>
+        </div>
+      </div>
+    </div>
+    <div class="inv-section" style="margin-top:14px">
+      <div class="inv-section-title"><i class="fa fa-circle-info"></i> Details</div>
+      <table class="inv-detail-table">${rowsHtml(detailRows)}</table>
+    </div>
+    <div class="inv-section" style="margin-top:14px">
+      <div class="inv-section-title" style="color:#dc2626"><i class="fa fa-trash"></i> Remove investment</div>
+      <div style="padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:12px">
+        <span style="font-size:12px;color:var(--text-muted);line-height:1.5">Deletes this plan and its schedule. Existing ledger rows in Transactions are kept for history.</span>
+        <button class="bd-danger-btn" id="ivd-delete-btn" style="flex-shrink:0"><i class="fa fa-trash"></i> Remove</button>
+      </div>
+    </div>`;
+
+  $('#ivd-delete-btn').addEventListener('click', async () => {
+    if (!confirm(`Delete "${iv.name}"? This cannot be undone.`)) return;
+    const btn = $('#ivd-delete-btn');
+    btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i>';
+    const r = await API.deleteInvestment(iv.id);
+    if (r.status === 200) {
+      $('#investment-detail-back').click();
+      toast('Investment deleted', 'success');
+    } else {
+      btn.disabled = false; btn.innerHTML = '<i class="fa fa-trash"></i> Remove';
+      toast(r.body?.message || 'Failed to delete', 'error');
+    }
+  });
+}
+
+async function loadInvestmentContributionsTab(id) {
+  const pane = $('#ivd-pane-contributions');
+  pane.innerHTML = `<div class="inv-pane-loading"><i class="fa fa-spinner fa-spin" style="font-size:22px;opacity:.4"></i></div>`;
+  const res = await API.investment(id);
+  if (res.status !== 200) {
+    pane.innerHTML = `<div class="inv-pane-empty"><i class="fa fa-circle-exclamation"></i><p>Could not load contributions.</p></div>`;
+    return;
+  }
+  const data     = res.body?.data || {};
+  const schedule = data.schedule || [];
+  const ledger   = data.ledger   || [];
+
+  const badge = row => {
+    if (row.paid)           return `<span class="bd-sched-badge bd-sched-paid"><i class="fa fa-check-circle"></i> Paid</span>`;
+    if (row.past_due_unpaid && row.partially_paid) return `<span class="bd-sched-badge bd-sched-partial"><i class="fa fa-circle-half-stroke"></i> Past due · partial</span>`;
+    if (row.past_due_unpaid) return `<span class="bd-sched-badge bd-sched-overdue"><i class="fa fa-circle-exclamation"></i> ${escHtml(row.status_label)}</span>`;
+    if (row.partially_paid)  return `<span class="bd-sched-badge bd-sched-partial"><i class="fa fa-circle-half-stroke"></i> Partially paid</span>`;
+    return `<span class="bd-sched-badge bd-sched-await"><i class="fa fa-circle-info"></i> Upcoming</span>`;
+  };
+
+  const schedRows = schedule.map(row => `
+    <tr class="${row.past_due_unpaid && !row.paid ? 'bd-sched-row-due' : ''}">
+      <td class="bd-sched-num">${row.period}</td>
+      <td class="bd-sched-cell">${escHtml(row.due_ymd)}</td>
+      <td class="bd-sched-cell" style="font-variant-numeric:tabular-nums">${escHtml(row.amount_formatted)}</td>
+      <td class="bd-sched-cell">${badge(row)}</td>
+      <td class="bd-sched-cell bd-sched-paid-col">${row.paid_total > 0 ? escHtml(row.paid_total_formatted) : '—'}</td>
+      <td class="bd-sched-cell">${row.paid
+        ? '<span style="color:var(--text-muted);font-size:11px">—</span>'
+        : `<button class="bd-pay-btn iv-pay-btn" data-due="${escHtml(row.due_ymd)}" data-outstanding="${row.outstanding}">
+             <i class="fa fa-money-bill-wave"></i> Make payment</button>`}</td>
+    </tr>`).join('');
+
+  const schedHtml = schedule.length
+    ? `<div class="bd-sched-scroll"><table class="bd-sched-table">
+        <thead><tr><th class="bd-sched-num">#</th><th>Payment date</th><th>Amount</th><th>Status</th><th>Paid</th><th>Actions</th></tr></thead>
+        <tbody>${schedRows}</tbody></table></div>`
+    : `<div class="inv-pane-empty" style="padding:30px 14px"><p>No payment dates generated.</p></div>`;
+
+  const ledgerHtml = ledger.length
+    ? `<table class="bd-sched-table">
+        <thead><tr><th>Date posted</th><th>Payment date</th><th style="text-align:right">Amount</th><th>Account</th></tr></thead>
+        <tbody>${ledger.map(tx => `<tr>
+          <td class="bd-sched-cell">${escHtml(tx.created_at || '—')}</td>
+          <td class="bd-sched-cell">${escHtml(tx.occurrence_date || '—')}</td>
+          <td class="bd-sched-cell" style="text-align:right;font-weight:600">${parseFloat(tx.amount).toFixed(2)}</td>
+          <td class="bd-sched-cell">${escHtml(tx.account_name || '—')}${tx.bank_name ? ` <span style="color:var(--text-muted);font-size:11px">· ${escHtml(tx.bank_name)}</span>` : ''}</td>
+        </tr>`).join('')}</tbody></table>`
+    : `<div class="inv-pane-empty" style="padding:24px 14px"><i class="fa fa-receipt"></i><p>No contributions in the ledger yet. Record them from the schedule above.</p></div>`;
+
+  pane.innerHTML = `
+    <div class="inv-section">
+      <div class="inv-section-title"><i class="fa fa-calendar-days"></i> Contribution schedule &amp; status</div>
+      ${schedHtml}
+    </div>
+    <div class="inv-section" style="margin-top:14px">
+      <div class="inv-section-title"><i class="fa fa-receipt"></i> Ledger contributions logged</div>
+      ${ledgerHtml}
+    </div>`;
+
+  pane.onclick = e => {
+    const btn = e.target.closest('.iv-pay-btn');
+    if (btn) openInvestmentPayModal(id, data.deduct_account_id, btn.dataset);
+  };
+}
+
+// ── Contribution modal ────────────────────────────────────────────────────
+
+const ivAccountLabel = a => {
+  const parts = [a.account_name || a.name || String(a.id)];
+  if (a.category === 'petty_cash') parts.push('Petty cash');
+  else if (a.bank_name) parts.push(a.bank_name);
+  if (a.current_balance != null) parts.push(`Balance ${parseFloat(a.current_balance).toFixed(2)}`);
+  return parts.join(' · ');
+};
+
+let _ivDrawer = null;
+
+function ivAccountOptions(accts, withDrawer = false) {
+  const opt   = a => `<option value="${a.id}">${escHtml(ivAccountLabel(a))}</option>`;
+  const petty = accts.filter(a => a.category === 'petty_cash');
+  const bank  = accts.filter(a => a.category !== 'petty_cash');
+  let drawer = '';
+  if (withDrawer) {
+    drawer = _ivDrawer?.is_opened
+      ? `<option value="cash_drawer">Cash drawer (till) · Balance ${parseFloat(_ivDrawer.balance).toFixed(2)}</option>`
+      : `<option value="cash_drawer" disabled>Cash drawer (till) · not opened today</option>`;
+    drawer = `<optgroup label="Cashier till">${drawer}</optgroup>`;
+  }
+  return (bank.length  ? `<optgroup label="Bank accounts">${bank.map(opt).join('')}</optgroup>` : '')
+       + (petty.length ? `<optgroup label="Petty cash">${petty.map(opt).join('')}</optgroup>` : '')
+       + drawer;
+}
+
+async function ivLoadAccounts() {
+  const [res, dr] = await Promise.all([API.accounts(), API.cashDrawer()]);
+  _ivAccounts = res.status === 200 ? (res.body?.data || []) : [];
+  _ivDrawer   = dr.status === 200 ? (dr.body?.data || null) : null;
+  return _ivAccounts;
+}
+
+async function openInvestmentPayModal(ivId, defaultAccountId, row) {
+  const modal = $('#investment-pay-modal');
+  modal.dataset.ivId = ivId;
+  modal.dataset.due  = row.due;
+  $('#ivp-date').textContent        = row.due || '—';
+  $('#ivp-outstanding').textContent = parseFloat(row.outstanding).toFixed(2);
+  $('#ivp-amount').value            = parseFloat(row.outstanding).toFixed(2);
+  $('#ivp-error').style.display     = 'none';
+  $('#ivp-confirm').disabled        = false;
+  $('#ivp-confirm').innerHTML       = '<i class="fa fa-check"></i> Confirm contribution';
+  modal.style.display = 'flex';
+
+  const accts = await ivLoadAccounts();
+  $('#ivp-account').innerHTML = accts.length
+    ? '<option value="">Select account</option>' + ivAccountOptions(accts, true)
+    : '<option value="">No accounts found</option>';
+  if (defaultAccountId) $('#ivp-account').value = String(defaultAccountId);
+}
+
+['#ivp-close', '#ivp-cancel'].forEach(sel =>
+  $(sel).addEventListener('click', () => { $('#investment-pay-modal').style.display = 'none'; }));
+$('#investment-pay-modal').addEventListener('click', e => {
+  if (e.target === $('#investment-pay-modal')) $('#investment-pay-modal').style.display = 'none';
+});
+
+$('#ivp-confirm').addEventListener('click', async () => {
+  const modal = $('#investment-pay-modal');
+  const errEl = $('#ivp-error');
+  errEl.style.display = 'none';
+
+  const selected = $('#ivp-account').value;
+  const fromTill = selected === 'cash_drawer';
+  const acct     = parseInt(selected);
+  const amount   = parseFloat($('#ivp-amount').value);
+  if (!fromTill && !acct) { errEl.textContent = 'Select a debit account.'; errEl.style.display = ''; return; }
+  if (!amount || amount <= 0) { errEl.textContent = 'Enter a valid amount.'; errEl.style.display = ''; return; }
+
+  const btn = $('#ivp-confirm');
+  btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Processing…';
+
+  const id  = modal.dataset.ivId;
+  const res = await API.contributeInvestment(id, fromTill
+    ? { occurrence_date: modal.dataset.due, pay_from: 'cash_drawer', amount }
+    : { occurrence_date: modal.dataset.due, deduct_account_id: acct, amount });
+  if (res.status === 200) {
+    modal.style.display = 'none';
+    toast(res.body?.message || 'Contribution recorded.', 'success');
+    loadInvestmentContributionsTab(id);
+    renderInvestmentOverview(Number(id), _investmentsAll.find(x => String(x.id) === String(id)));
+  } else {
+    const errs = res.body?.errors || {};
+    errEl.textContent = Object.values(errs)[0]?.[0] || res.body?.message || 'Contribution failed.';
+    errEl.style.display = '';
+    btn.disabled = false; btn.innerHTML = '<i class="fa fa-check"></i> Confirm contribution';
+  }
+});
+
+// ── Investment create modal ───────────────────────────────────────────────
+
+const IV_FALLBACK_TYPES = {
+  bank_investment: 'Bank investment', fixed_deposit: 'Fixed deposit', savings_plan: 'Savings plan',
+  insurance: 'Insurance', retirement: 'Retirement / pension fund', shares: 'Shares / stocks',
+  unit_trust: 'Unit trust / mutual fund', gold: 'Gold / precious metals',
+  real_estate: 'Real estate / land', other: 'Other (specify)',
+};
+
+function ivSyncMode(mode) {
+  const rec = mode === 'recurring';
+  $('#ivm-rec-type-wrap').style.display   = rec ? '' : 'none';
+  $('#ivm-valid-year-wrap').style.display = rec ? '' : 'none';
+  $('#ivm-start-label').innerHTML = (rec ? 'FIRST PAYMENT DATE' : 'PAYMENT DATE') + ' <span class="bf-req">*</span>';
+}
+
+document.querySelectorAll('input[name="ivm-mode"]').forEach(r =>
+  r.addEventListener('change', () => ivSyncMode(r.value)));
+$('#ivm-type').addEventListener('change', () => {
+  $('#ivm-type-other-wrap').style.display = $('#ivm-type').value === 'other' ? '' : 'none';
+});
+
+const ivmClose = () => { $('#investment-modal').style.display = 'none'; };
+$('#ivm-close').addEventListener('click',  ivmClose);
+$('#ivm-cancel').addEventListener('click', ivmClose);
+$('#investment-modal').addEventListener('click', e => { if (e.target === $('#investment-modal')) ivmClose(); });
+
+$('#btn-investment-create').addEventListener('click', openInvestmentCreateModal);
+
+async function openInvestmentCreateModal() {
+  ['ivm-name', 'ivm-type-other', 'ivm-provider', 'ivm-reference', 'ivm-description', 'ivm-amount',
+   'ivm-start-date', 'ivm-maturity-date', 'ivm-return-rate', 'ivm-target', 'ivm-remind-days', 'ivm-notes']
+    .forEach(id => { $('#' + id).value = ''; });
+
+  const types = Object.keys(_investmentTypes).length ? _investmentTypes : IV_FALLBACK_TYPES;
+  $('#ivm-type').innerHTML = '<option value="">Select an investment type…</option>' +
+    Object.entries(types).map(([k, v]) => `<option value="${escHtml(k)}">${escHtml(v)}</option>`).join('');
+  $('#ivm-type-other-wrap').style.display = 'none';
+  document.querySelector('input[name="ivm-mode"][value="recurring"]').checked = true;
+  $('#ivm-rec-type').value   = 'per_month';
+  $('#ivm-valid-year').value = new Date().getFullYear() + 1;
+  $('#ivm-alert').style.display = 'none';
+  $('#ivm-submit').disabled  = false;
+  $('#ivm-submit').innerHTML = '<i class="fa fa-check"></i> Save investment';
+  ivSyncMode('recurring');
+
+  $('#investment-modal').style.display = 'flex';
+  $('#ivm-name').focus();
+
+  $('#ivm-account').innerHTML = '<option value="">Loading…</option>';
+  const accts = await ivLoadAccounts();
+  $('#ivm-account').innerHTML = '<option value="">None — pick when recording each contribution</option>' +
+    ivAccountOptions(accts);
+}
+
+function ivShowError(msg) {
+  const el = $('#ivm-alert');
+  el.textContent = msg;
+  el.style.display = 'block';
+  el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+$('#ivm-submit').addEventListener('click', async () => {
+  $('#ivm-alert').style.display = 'none';
+
+  const name   = $('#ivm-name').value.trim();
+  const type   = $('#ivm-type').value;
+  const mode   = document.querySelector('input[name="ivm-mode"]:checked')?.value || 'recurring';
+  const amount = parseFloat($('#ivm-amount').value);
+  const year   = parseInt($('#ivm-valid-year').value) || null;
+  const start  = $('#ivm-start-date').value;
+  const other  = $('#ivm-type-other').value.trim();
+  const num    = id => { const v = parseFloat($(id).value); return isNaN(v) ? null : v; };
+
+  if (!name)  return ivShowError('Enter a plan name.');
+  if (!type)  return ivShowError('Select an investment type.');
+  if (type === 'other' && !other) return ivShowError('Describe the investment type.');
+  if (!amount || amount <= 0) return ivShowError('Enter the contribution amount.');
+  if (!start) return ivShowError(mode === 'recurring' ? 'Enter the first payment date.' : 'Enter the payment date.');
+  if (mode === 'recurring' && !year) return ivShowError('Enter the schedule-through year.');
+
+  const body = {
+    name,
+    investment_type:       type,
+    investment_type_other: type === 'other' ? other : null,
+    provider:              $('#ivm-provider').value.trim() || null,
+    reference_number:      $('#ivm-reference').value.trim() || null,
+    description:           $('#ivm-description').value.trim() || null,
+    payment_mode:          mode,
+    recurring_type:        mode === 'recurring' ? $('#ivm-rec-type').value : null,
+    schedule_valid_until_year: mode === 'recurring' ? year : null,
+    contribution_amount:   amount,
+    start_date:            start,
+    maturity_date:         $('#ivm-maturity-date').value || null,
+    expected_return_rate:  num('#ivm-return-rate'),
+    target_amount:         num('#ivm-target'),
+    deduct_account_id:     parseInt($('#ivm-account').value) || null,
+    remind_before_days:    parseInt($('#ivm-remind-days').value) || null,
+    notes:                 $('#ivm-notes').value.trim() || null,
+  };
+
+  const btn = $('#ivm-submit');
+  btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
+
+  const res = await API.createInvestment(body);
+  if (res.status === 201) {
+    ivmClose();
+    toast('Investment added', 'success');
+    await loadInvestments();
+  } else {
+    ivShowError(Object.values(res.body?.errors || {})[0]?.[0] || res.body?.message || `Failed (${res.status})`);
+    btn.disabled = false; btn.innerHTML = '<i class="fa fa-check"></i> Save investment';
+  }
+});
 
 // ── Budget Panel ─────────────────────────────────────────────────────────
 
@@ -42338,6 +42897,7 @@ async function submitDsCreate() {
       { key: 'fin_tab_rentals',       label: 'Tab: Rentals',       desc: 'Finance panel: Rentals sub-nav tab' },
       { key: 'fin_tab_properties',    label: 'Tab: Properties',    desc: 'Finance panel: Properties sub-nav tab' },
       { key: 'fin_tab_modifications', label: 'Tab: Modifications', desc: 'Finance panel: Modifications sub-nav tab' },
+      { key: 'fin_tab_investments',   label: 'Tab: Investments',   desc: 'Finance panel: Investments sub-nav tab' },
       { key: 'fin_tab_budget',        label: 'Tab: Budget',        desc: 'Finance panel: Budget sub-nav tab' },
     ]},
     { key: 'point_of_sale', label: 'POS & Sales', icon: 'fa-cash-register', color: '#6366f1', items: [

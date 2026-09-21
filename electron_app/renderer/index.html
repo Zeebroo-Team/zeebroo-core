@@ -4943,6 +4943,7 @@
         <button class="fin-subnav-btn" data-fin="rentals"><i class="fa fa-house"></i> Rentals</button>
         <button class="fin-subnav-btn" data-fin="properties"><i class="fa fa-building"></i> Properties</button>
         <button class="fin-subnav-btn" data-fin="modifications"><i class="fa fa-screwdriver-wrench"></i> Modifications</button>
+        <button class="fin-subnav-btn" data-fin="investments"><i class="fa fa-chart-line"></i> Investments</button>
         <button class="fin-subnav-btn" data-fin="budget"><i class="fa fa-table-cells"></i> Budget</button>
       </div>
 
@@ -5245,6 +5246,74 @@
         <div class="inv-tab-body" style="flex:1;overflow-y:auto">
           <div class="inv-tab-pane active" id="md-pane-overview"></div>
           <div class="inv-tab-pane"        id="md-pane-bills"></div>
+        </div>
+
+      </div>
+
+      <!-- ── Investments list view ── -->
+      <div id="investments-list-view" class="fin-view" style="display:none">
+        <div class="finance-toolbar">
+          <div class="finance-search-wrap">
+            <i class="fa fa-magnifying-glass"></i>
+            <input type="text" id="investments-search" placeholder="Search investments…">
+          </div>
+          <button class="finance-create-btn" id="btn-investment-create">
+            <i class="fa fa-plus"></i> Add Investment
+          </button>
+        </div>
+        <div id="investments-stats-bar" class="lm-stats-bar" style="display:none">
+          <div class="lm-stat-item">
+            <span class="lm-stat-label"><i class="fa fa-layer-group"></i> Active Plans</span>
+            <span class="lm-stat-val" id="ivs-active-count">—</span>
+          </div>
+          <div class="lm-stat-sep"></div>
+          <div class="lm-stat-item">
+            <span class="lm-stat-label"><i class="fa fa-circle-exclamation"></i> Overdue Plans</span>
+            <span class="lm-stat-val" id="ivs-overdue-count">—</span>
+          </div>
+          <div class="lm-stat-sep"></div>
+          <div class="lm-stat-item">
+            <span class="lm-stat-label"><i class="fa fa-coins"></i> Total Invested</span>
+            <span class="lm-stat-val" id="ivs-total-invested">—</span>
+          </div>
+        </div>
+        <div class="finance-cards-wrap">
+          <div class="finance-cards-area" id="investments-cards-area">
+            <div class="finance-loading"><i class="fa fa-spinner fa-spin"></i> Loading investments…</div>
+          </div>
+        </div>
+        <div class="finance-footer"><span id="investments-count">—</span></div>
+      </div>
+
+      <!-- ── Investment detail view ── -->
+      <div id="investment-detail-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+
+        <div class="inv-detail-header">
+          <button class="inv-back-btn" id="investment-detail-back">
+            <i class="fa fa-arrow-left"></i> Investments
+          </button>
+          <span class="inv-detail-breadcrumb" id="ivd-breadcrumb">Investment Detail</span>
+        </div>
+
+        <div class="inv-hero">
+          <div class="inv-hero-img" id="ivd-hero-icon">
+            <div class="inv-thumb-ph inv-thumb-lg"><i class="fa fa-chart-line"></i></div>
+          </div>
+          <div class="inv-hero-info">
+            <div class="inv-hero-name"   id="ivd-hero-name">—</div>
+            <div class="inv-hero-meta"   id="ivd-hero-meta"></div>
+            <div class="inv-hero-badges" id="ivd-hero-badges"></div>
+          </div>
+        </div>
+
+        <div class="inv-tabs" id="ivd-inv-tabs">
+          <button class="inv-tab active" data-tab="overview">Overview</button>
+          <button class="inv-tab" data-tab="contributions"><i class="fa fa-receipt"></i> Contribution details</button>
+        </div>
+
+        <div class="inv-tab-body" style="flex:1;overflow-y:auto">
+          <div class="inv-tab-pane active" id="ivd-pane-overview"></div>
+          <div class="inv-tab-pane"        id="ivd-pane-contributions"></div>
         </div>
 
       </div>
@@ -11684,6 +11753,204 @@
     <div style="display:flex;gap:10px;margin-top:20px">
       <button class="btn-secondary" id="bpm-cancel-btn" style="flex:1">Cancel</button>
       <button class="btn-primary" id="bpm-confirm-btn" style="flex:2"><i class="fa fa-check"></i> Confirm payment</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Investment create modal ────────────────────────────────────────────── -->
+<div class="modal-overlay" id="investment-modal" style="display:none">
+  <div class="modal bill-modal-inner">
+    <div class="bill-modal-header">
+      <h3><i class="fa fa-chart-line"></i> Add Investment</h3>
+      <button class="bill-modal-close" id="ivm-close"><i class="fa fa-xmark"></i></button>
+    </div>
+
+    <div class="bill-modal-body">
+
+      <div class="bill-section">
+        <div class="bsec-hdr">
+          <div class="bsec-icon" style="--si:#0d9488;--sb:#ccfbf1"><i class="fa fa-chart-line"></i></div>
+          <span class="bsec-title">Investment plan</span>
+        </div>
+
+        <div class="bf-group">
+          <label class="bf-label">PLAN NAME <span class="bf-req">*</span></label>
+          <input type="text" id="ivm-name" class="bf-input" placeholder="e.g. NSB 5-year fixed deposit">
+        </div>
+
+        <div class="bf-group">
+          <label class="bf-label">INVESTMENT TYPE <span class="bf-req">*</span></label>
+          <select id="ivm-type" class="bf-input"></select>
+        </div>
+
+        <div class="bf-group" id="ivm-type-other-wrap" style="display:none">
+          <label class="bf-label">SPECIFY TYPE <span class="bf-when">when Other</span></label>
+          <input type="text" id="ivm-type-other" class="bf-input" placeholder="e.g. Cryptocurrency, Treasury bills">
+        </div>
+
+        <div class="bf-row-2">
+          <div class="bf-group">
+            <label class="bf-label">PROVIDER <span class="bf-optional">optional</span></label>
+            <input type="text" id="ivm-provider" class="bf-input" placeholder="Bank, insurer or broker">
+          </div>
+          <div class="bf-group">
+            <label class="bf-label">POLICY / REFERENCE NO. <span class="bf-optional">optional</span></label>
+            <input type="text" id="ivm-reference" class="bf-input" placeholder="Account or policy number">
+          </div>
+        </div>
+
+        <div class="bf-group">
+          <label class="bf-label">DESCRIPTION <span class="bf-optional">optional</span></label>
+          <textarea id="ivm-description" class="bf-input bf-textarea" rows="2" placeholder="Purpose of this investment"></textarea>
+        </div>
+
+        <div class="bf-group">
+          <label class="bf-label">PAYMENT PATTERN <span class="bf-req">*</span></label>
+          <p class="bf-hint">Recurring plans contribute on a schedule you control. One-time is a single lump-sum with a payment date.</p>
+          <div class="bill-mode-cards">
+            <label class="bill-mode-card">
+              <input type="radio" name="ivm-mode" value="recurring" checked>
+              <div class="bmc-body">
+                <div class="bmc-icon"><i class="fa fa-rotate"></i></div>
+                <div class="bmc-text">
+                  <strong>Recurring</strong>
+                  <span>Cycles until the schedule end year &middot; set cadence (month / year / day)</span>
+                </div>
+                <div class="bmc-dot"></div>
+              </div>
+            </label>
+            <label class="bill-mode-card">
+              <input type="radio" name="ivm-mode" value="one_time">
+              <div class="bmc-body">
+                <div class="bmc-icon"><i class="fa fa-calendar-check"></i></div>
+                <div class="bmc-text">
+                  <strong>One-time payment</strong>
+                  <span>One payment total &middot; requires a payment date</span>
+                </div>
+                <div class="bmc-dot"></div>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <div class="bf-group" id="ivm-valid-year-wrap">
+          <label class="bf-label">SCHEDULE THROUGH (YEAR) <span class="bf-req">*</span></label>
+          <input type="number" id="ivm-valid-year" class="bf-input" placeholder="2027" min="2000" max="2100">
+        </div>
+      </div>
+
+      <div class="bill-section">
+        <div class="bsec-hdr">
+          <div class="bsec-icon" style="--si:#f59e0b;--sb:#fef3c7"><i class="fa fa-wallet"></i></div>
+          <span class="bsec-title">Payment</span>
+        </div>
+
+        <div class="bf-group">
+          <label class="bf-label">DEBIT ACCOUNT / PETTY CASH</label>
+          <select id="ivm-account" class="bf-input">
+            <option value="">None — pick when recording each contribution</option>
+          </select>
+        </div>
+
+        <div class="bf-group">
+          <label class="bf-label">CONTRIBUTION AMOUNT <span class="bf-req">*</span> <span class="bf-sub">per payment</span></label>
+          <input type="number" id="ivm-amount" class="bf-input" placeholder="0.00" step="0.01" min="0">
+        </div>
+
+        <div class="bf-group" id="ivm-rec-type-wrap">
+          <label class="bf-label">BILLING CADENCE <span class="bf-req">*</span></label>
+          <select id="ivm-rec-type" class="bf-input">
+            <option value="per_day">Per day</option>
+            <option value="per_month" selected>Per month</option>
+            <option value="per_year">Per year</option>
+          </select>
+        </div>
+
+        <div class="bf-row-2">
+          <div class="bf-group">
+            <label class="bf-label" id="ivm-start-label">FIRST PAYMENT DATE <span class="bf-req">*</span></label>
+            <input type="date" id="ivm-start-date" class="bf-input">
+          </div>
+          <div class="bf-group">
+            <label class="bf-label">MATURITY DATE <span class="bf-optional">optional</span></label>
+            <input type="date" id="ivm-maturity-date" class="bf-input">
+          </div>
+        </div>
+
+        <div class="bf-row-2">
+          <div class="bf-group">
+            <label class="bf-label">EXPECTED RETURN <span class="bf-sub">% per year</span> <span class="bf-optional">optional</span></label>
+            <input type="number" id="ivm-return-rate" class="bf-input" placeholder="e.g. 9.5" step="0.01" min="0">
+          </div>
+          <div class="bf-group">
+            <label class="bf-label">TARGET AMOUNT <span class="bf-optional">optional</span></label>
+            <input type="number" id="ivm-target" class="bf-input" placeholder="Goal to reach" step="0.01" min="0">
+          </div>
+        </div>
+
+        <div class="bf-group">
+          <label class="bf-label">REMIND BEFORE <span class="bf-sub">days before payment date</span></label>
+          <input type="number" id="ivm-remind-days" class="bf-input" placeholder="e.g. 7 — blank for none" min="0" max="366">
+        </div>
+      </div>
+
+      <div class="bill-section">
+        <div class="bsec-hdr">
+          <div class="bsec-icon" style="--si:#f59e0b;--sb:#fef3c7"><i class="fa fa-note-sticky"></i></div>
+          <span class="bsec-title">Notes</span>
+        </div>
+        <div class="bf-group">
+          <label class="bf-label">INTERNAL NOTES</label>
+          <textarea id="ivm-notes" class="bf-input bf-textarea" rows="3" placeholder="Nominee, terms, reminders"></textarea>
+        </div>
+      </div>
+
+    </div>
+
+    <div id="ivm-alert" class="alert alert-error" style="display:none;margin:0 20px 10px"></div>
+    <div class="bill-modal-footer">
+      <button class="bill-save-btn" id="ivm-submit">
+        <i class="fa fa-check"></i> Save investment
+      </button>
+      <span class="bill-save-hint">Creates an investment plan for the selected business.</span>
+      <button class="btn-secondary" id="ivm-cancel" style="margin-left:auto">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Record investment contribution modal -->
+<div class="modal-overlay" id="investment-pay-modal" style="display:none">
+  <div class="modal" style="max-width:480px;width:100%">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+      <h3 style="margin:0;font-size:16px;font-weight:700"><i class="fa fa-money-bill-wave"></i> Record contribution</h3>
+      <button class="bill-modal-close" id="ivp-close"><i class="fa fa-xmark"></i></button>
+    </div>
+
+    <div class="bpm-info-block">
+      <div class="bpm-info-label">PAYMENT DATE</div>
+      <div class="bpm-info-value" id="ivp-date">—</div>
+    </div>
+    <div class="bpm-info-block" style="margin-top:10px">
+      <div class="bpm-info-label">STILL OUTSTANDING</div>
+      <div class="bpm-info-value" id="ivp-outstanding">—</div>
+    </div>
+
+    <div style="margin-top:16px">
+      <label class="bpm-label">AMOUNT</label>
+      <input type="number" id="ivp-amount" class="bpm-input" min="0.01" step="0.01">
+      <p class="bpm-hint">Defaults to the full outstanding amount. Enter less to record a partial contribution.</p>
+    </div>
+
+    <div style="margin-top:14px">
+      <label class="bpm-label">DEBIT ACCOUNT / PETTY CASH</label>
+      <select id="ivp-account" class="bpm-select"><option value="">Loading accounts…</option></select>
+    </div>
+
+    <div id="ivp-error" class="bpm-error" style="display:none"></div>
+
+    <div style="display:flex;gap:10px;margin-top:20px">
+      <button class="btn-secondary" id="ivp-cancel" style="flex:1">Cancel</button>
+      <button class="btn-primary" id="ivp-confirm" style="flex:2"><i class="fa fa-check"></i> Confirm contribution</button>
     </div>
   </div>
 </div>

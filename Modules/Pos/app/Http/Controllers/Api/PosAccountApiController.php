@@ -20,13 +20,14 @@ class PosAccountApiController extends Controller
 
         $accounts = Account::where('business_id', $business->id)
             ->orderBy('account_name')
-            ->get(['id', 'account_name', 'bank_name', 'current_balance']);
+            ->get(['id', 'account_name', 'bank_name', 'category', 'current_balance']);
 
         return response()->json([
             'data' => $accounts->map(fn (Account $a) => [
                 'id'              => $a->id,
                 'account_name'    => $a->account_name,
                 'bank_name'       => $a->bank_name,
+                'category'        => $a->category,
                 'current_balance' => (float) $a->current_balance,
             ])->values(),
         ]);

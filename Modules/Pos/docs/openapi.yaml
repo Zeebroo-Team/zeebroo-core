@@ -2118,6 +2118,84 @@ paths:
         '200':
           description: Deleted
 
+  /expenses/investments:
+    get:
+      tags: [Expense investments]
+      summary: List investment plans with portfolio totals and the available type list
+      responses:
+        '200':
+          description: Investment list
+    post:
+      tags: [Expense investments]
+      summary: Create an investment plan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, investment_type, payment_mode, contribution_amount, start_date]
+              properties:
+                name:                      { type: string }
+                investment_type:           { type: string, enum: [bank_investment, fixed_deposit, savings_plan, insurance, retirement, shares, unit_trust, gold, real_estate, other] }
+                investment_type_other:     { type: string, description: Required when investment_type is other }
+                provider:                  { type: string }
+                reference_number:          { type: string }
+                payment_mode:              { type: string, enum: [recurring, one_time] }
+                recurring_type:            { type: string, enum: [per_day, per_month, per_year], description: Required when recurring }
+                schedule_valid_until_year: { type: integer, description: Required when recurring }
+                contribution_amount:       { $ref: '#/components/schemas/MoneyAmount' }
+                start_date:                { type: string, format: date }
+                maturity_date:             { type: string, format: date }
+                expected_return_rate:      { type: number, description: Percent per year }
+                target_amount:             { $ref: '#/components/schemas/MoneyAmount' }
+                deduct_account_id:         { type: integer, description: Debit account or petty cash account }
+                remind_before_days:        { type: integer }
+                notes:                     { type: string }
+      responses:
+        '201':
+          description: Created
+
+  /expenses/investments/{investment}:
+    get:
+      tags: [Expense investments]
+      summary: Get investment detail with contribution schedule and ledger
+      parameters:
+        - { name: investment, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Investment detail
+    delete:
+      tags: [Expense investments]
+      summary: Delete an investment plan
+      parameters:
+        - { name: investment, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Deleted
+
+  /expenses/investments/{investment}/contribute:
+    post:
+      tags: [Expense investments]
+      summary: Record a contribution against a scheduled date and debit the chosen account
+      parameters:
+        - { name: investment, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [occurrence_date]
+              properties:
+                occurrence_date:   { type: string, format: date }
+                pay_from:          { type: string, enum: [account, cash_drawer], description: 'cash_drawer records a till withdrawal and needs today''s drawer opened' }
+                deduct_account_id: { type: integer, description: Required unless pay_from is cash_drawer }
+                amount:            { $ref: '#/components/schemas/MoneyAmount' }
+      responses:
+        '200':
+          description: Recorded
+
   # ─────────────────────────── END OF DAY ───────────────────────────
 
   /eod:

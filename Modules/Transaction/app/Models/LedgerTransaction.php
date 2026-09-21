@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Modules\Account\Models\Account;
 use Modules\Account\Models\Bill;
+use Modules\Account\Models\Investment;
 use Modules\Account\Models\Loan;
 use Modules\Account\Models\Rental;
 use Modules\Business\Models\Business;
@@ -71,6 +72,9 @@ class LedgerTransaction extends Model
         if ($subject instanceof Bill) {
             return 'Bill';
         }
+        if ($subject instanceof Investment) {
+            return 'Investment';
+        }
         if ($subject instanceof PayrollCycle) {
             return 'Payroll';
         }
@@ -109,6 +113,11 @@ class LedgerTransaction extends Model
             $name = trim((string) $subject->name);
 
             return $name !== '' ? $name : ('Bill #'.$subject->getKey());
+        }
+        if ($subject instanceof Investment) {
+            $name = trim((string) $subject->name);
+
+            return $name !== '' ? $name : ('Investment #'.$subject->getKey());
         }
         if ($subject instanceof PayrollCycle) {
             $name = trim((string) $subject->name);
