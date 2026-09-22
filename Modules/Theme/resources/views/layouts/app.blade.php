@@ -353,7 +353,7 @@
         $businessFeatures = $navBusiness
             ? (function () use ($navBusiness) {
                 $saved = (array) ($navBusiness->getSetting('business.features', []) ?: []);
-                $defaults = ['account_management' => true, 'bill_management' => true, 'human_resources' => true, 'mail' => true, 'point_of_sale' => true, 'product_management' => true, 'service_management' => true, 'social_media_campaign' => true, 'stock_management' => true];
+                $defaults = array_fill_keys(array_keys(config('features.list', [])), true);
                 return !empty($saved) ? array_merge($defaults, array_map('boolval', $saved)) : $defaults;
             })()
             : [];
@@ -429,8 +429,8 @@
             || $showSidebarQuotationsLink || $showSidebarInvoicesLink || ($navBusiness && $posFeatureOn);
         $showSidebarPosHubLink = $navBusiness && Route::has('pos.index') && $showSidebarPosSection;
 
-        $showSidebarCrmLink = $navBusiness && Route::has('crm.projects.index');
-        $showSidebarProjectManageLink = $navBusiness && Route::has('pm.projects.index');
+        $showSidebarCrmLink = $navBusiness && Route::has('crm.projects.index') && $featureOn('crm');
+        $showSidebarProjectManageLink = $navBusiness && Route::has('pm.projects.index') && $featureOn('project_management');
         $mailFeatureOn = $navBusiness && $featureOn('mail');
         $showSidebarMailLink = $navBusiness && Route::has('mail.inbox.index') && $mailFeatureOn;
         $sidebarMailUnreadCount = $showSidebarMailLink
@@ -440,9 +440,9 @@
         $showSidebarFilesLink = $navBusiness && (
             $navBusiness->fileManagerFiles()->exists() || $navBusiness->fileManagerFolders()->exists()
         );
-        $showSidebarDesignStudioLink = $navBusiness && Route::has('designstudio.index');
+        $showSidebarDesignStudioLink = $navBusiness && Route::has('designstudio.index') && $featureOn('social_media_campaign');
         $showSidebarServiceLink = $navBusiness && Route::has('service.catalog.index') && $featureOn('service_management');
-        $showSidebarRestaurantLink = $navBusiness && Route::has('restaurant.orders.index');
+        $showSidebarRestaurantLink = $navBusiness && Route::has('restaurant.orders.index') && $featureOn('restaurant');
         $showSidebarDocumentationLink = $navBusiness
             && Route::has('documentation.documents.index')
             && \Modules\Documentation\Models\Document::where('business_id', $navBusiness->id)->exists();
@@ -513,11 +513,13 @@
             $showSidebarPosSection = false;
             $showSidebarQuotationsLink = false;
             $showSidebarCrmLink = false;
+            $showSidebarProjectManageLink = false;
             $showSidebarMailLink = false;
             $showSidebarFilesLink = false;
             $showSidebarPropertiesLink = false;
             $showSidebarModificationsLink = false;
             $showSidebarDesignStudioLink = false;
+            $showSidebarRestaurantLink = false;
             $showSidebarDocumentationLink = false;
             $sidebarLoanDueHighlight = false;
             $sidebarRentalDueHighlight = false;
@@ -1144,7 +1146,7 @@
                         </div>
                         <div class="menu-row">
                             <span><i class="fa fa-box" style="margin-right:6px;"></i>Purchased Package</span>
-                            <span class="pkg-badge">Free Trial</span>
+                            <span class="pkg-badge">{{ $navBusiness?->package?->name ?? 'Free Trial' }}</span>
                         </div>
                         @if(auth()->check())
                             <div class="menu-row" style="display:block;">
@@ -1347,37 +1349,160 @@
     })();
 </script>
 @if($navBusiness)
+@php
+    $bfmCategories = [
+        ['key' => 'all',           'name' => 'All Features',    'icon' => 'fa-grip'],
+        ['key' => 'sales',         'name' => 'Sales & Checkout','icon' => 'fa-cash-register'],
+        ['key' => 'inventory',     'name' => 'Inventory',       'icon' => 'fa-boxes-stacked'],
+        ['key' => 'finance',       'name' => 'Finance',         'icon' => 'fa-building-columns'],
+        ['key' => 'hr',            'name' => 'HR & Staff',      'icon' => 'fa-users'],
+        ['key' => 'marketing',     'name' => 'Marketing',       'icon' => 'fa-bullhorn'],
+        ['key' => 'communication', 'name' => 'Communication',   'icon' => 'fa-envelope'],
+        ['key' => 'developer',     'name' => 'Developer Tools', 'icon' => 'fa-code'],
+        ['key' => 'productivity',  'name' => 'Productivity',    'icon' => 'fa-diagram-project'],
+    ];
+
+    // Feature keys the assigned package (plus any per-business admin overrides) actually
+    // permits — everything else renders locked as "Not in your package" regardless of the
+    // business's own saved on/off toggle. Mirrors the pos-desktop Feature Management modal,
+    // which reads the same Business::effectiveFeatureKeys() via the POS settings API.
+    $bfmAllowedKeys = $navBusiness->effectiveFeatureKeys();
+
+    $bfmDefs = [
+        ['key' => 'account_management', 'category' => 'finance', 'name' => 'Account Management', 'img' => asset('features/account-management.png'), 'color' => '#4e8ef7', 'desc' => 'Financial accounts & bank management', 'locked' => true, 'long' => [
+            'Track ledgers, bank accounts, and financial movements across your business from one place. Every sale, bill, and payroll run posts here automatically, so your books stay current without manual entry.',
+            'This module powers the numbers behind every other feature, so it is always included and cannot be turned off.',
+        ]],
+        ['key' => 'point_of_sale', 'category' => 'sales', 'name' => 'Point of Sale', 'img' => asset('features/point-of-sale.png'), 'color' => '#4caf7d', 'desc' => 'Cashier checkout interface & quick sales', 'long' => [
+            'A fast, touch-friendly checkout screen for ringing up sales, applying discounts, and taking payments. Barcode scanning, quick-add favorites, and split payments are all one tap away.',
+            'Every sale reconciles straight into Account Management and Stock Management, so your numbers and inventory stay in sync.',
+            'Needs Stock Management and Product Management enabled. Point of Sale and Restaurant cover the same checkout role, so only one of the two can be enabled at a time.',
+        ]],
+        ['key' => 'sales_management', 'category' => 'sales', 'name' => 'Sales Management', 'img' => asset('features/sales-management.png'), 'color' => '#f59e0b', 'desc' => 'Invoices, quotations, sales orders & returns', 'long' => [
+            'Create invoices, quotations, and sales orders, and track every transaction — from POS sales to manually raised invoices — in one place.',
+            'Run end-of-day settlement, process returns, and manage sales customers here, whether or not the Point of Sale checkout screen is enabled.',
+        ]],
+        ['key' => 'product_management', 'category' => 'inventory', 'name' => 'Product Management', 'img' => asset('features/product-management.png'), 'color' => '#0ea5e9', 'desc' => 'Product catalog, categories & brands', 'long' => [
+            'Organize your entire product catalog — categories, brands, and variants — from a single screen. Bulk import, bulk price updates, and barcode printing make catalog maintenance fast even for large inventories.',
+            'Changes here show up instantly at checkout, so pricing and descriptions never drift out of sync.',
+        ]],
+        ['key' => 'stock_management', 'category' => 'inventory', 'name' => 'Stock Management', 'img' => asset('features/stock-management.png'), 'color' => '#64748b', 'desc' => 'Stock audits & inventory adjustments', 'long' => [
+            'Keep inventory counts accurate with stock audits, manual adjustments, and layer-level tracking across branches and warehouses.',
+            'Low-stock alerts and audit history give you a clear trail of what changed, when, and who made the change.',
+        ]],
+        ['key' => 'bill_management', 'category' => 'finance', 'name' => 'Bill Management', 'img' => asset('features/bill-management.png'), 'color' => '#9c6ef7', 'desc' => 'Bills, loans & expense tracking', 'long' => [
+            'Record bills, loans, and recurring expenses, and track what is due, paid, and overdue at a glance.',
+            'Everything posts to your accounts automatically, so your expense picture in Account Management is always up to date.',
+        ]],
+        ['key' => 'human_resources', 'category' => 'hr', 'name' => 'Human Resources', 'img' => asset('features/human-resource-management.png'), 'color' => '#f7a54e', 'desc' => 'Employees, departments & payroll', 'long' => [
+            'Manage employees, departments, and attendance, and run payroll without leaving the app.',
+            'Employee records, attendance logs, and payroll history stay linked for quick lookups.',
+        ]],
+        ['key' => 'service_management', 'category' => 'sales', 'name' => 'Services', 'img' => asset('features/service.png'), 'color' => '#f0a030', 'desc' => 'Service-bound products & job management', 'long' => [
+            'Sell service-bound products — repairs, installations, consultations — and schedule the jobs that come with them.',
+            'Works alongside Point of Sale, so a service can be sold at the counter just like a physical product.',
+        ]],
+        ['key' => 'social_media_campaign', 'category' => 'marketing', 'name' => 'Social Media Campaign', 'img' => asset('features/social-media-campaign.png'), 'color' => '#e040fb', 'desc' => 'Design studio & marketing assets', 'long' => [
+            'A built-in design studio for creating social posts, flyers, and other marketing assets — no separate design software required.',
+            'Start from a template or a blank canvas, drop in your logo and product photos, and export the result ready to post or print.',
+        ]],
+        ['key' => 'restaurant', 'category' => 'sales', 'name' => 'Restaurant', 'img' => asset('features/restaurant.jpeg'), 'color' => '#f97316', 'desc' => 'Restaurant POS, orders, menu & kitchen', 'long' => [
+            'A dedicated restaurant workflow with table management, order tickets, a live kitchen display, and menu management for dine-in and takeaway service.',
+            'Point of Sale and Restaurant cover the same checkout role, so only one of the two can be enabled at a time.',
+        ]],
+        ['key' => 'mail', 'category' => 'communication', 'name' => 'Mail', 'img' => asset('features/mail.png'), 'color' => '#06b6d4', 'desc' => 'Business inbox, templates & scheduled sending', 'long' => [
+            'A shared business inbox with reusable templates and scheduled sending, so your team can email customers without leaving the app.',
+            'Templates keep tone and formatting consistent, and scheduled sends let you queue a campaign or reminder ahead of time.',
+        ]],
+        ['key' => 'crm', 'category' => 'marketing', 'name' => 'CRM', 'img' => asset('features/crm.jpeg'), 'color' => '#7c3aed', 'desc' => 'Leads pipeline, contacts & follow-up tasks', 'long' => [
+            'Track leads through a sales pipeline, from first contact to closed deal, and manage all your contacts in one address book.',
+            'Follow-up tasks and reminders make sure a promising lead never goes quiet.',
+        ]],
+        ['key' => 'developers', 'category' => 'developer', 'name' => 'Developer Tools', 'img' => asset('features/developer.png'), 'color' => '#0f766e', 'desc' => 'API keys & webhooks for third-party integrations', 'long' => [
+            'Generate API keys and configure webhooks to connect your business data to third-party tools — accounting software, dashboards, automation platforms, and more.',
+            'Scoped keys can be revoked individually, and webhook delivery logs make it easy to debug an integration.',
+        ]],
+        ['key' => 'automation_editor', 'category' => 'developer', 'name' => 'Automation Editor', 'img' => asset('features/automation-flow.png'), 'color' => '#f59e0b', 'desc' => 'Visual workflow builder — triggers, conditions & actions', 'long' => [
+            'Build no-code automations with a visual, drag-and-drop editor — trigger actions based on events and conditions across your business data.',
+            'Combine triggers, conditions, and actions into a workflow once, then let it run in the background.',
+        ]],
+        ['key' => 'project_management', 'category' => 'productivity', 'name' => 'Project Management', 'img' => asset('features/project-management.jpeg'), 'color' => '#0284c7', 'desc' => 'Projects, tasks, milestones & kanban boards', 'long' => [
+            'Plan and track projects with tasks, milestones, and kanban boards built for small teams.',
+            'Assign tasks, set due dates, and watch a project move across the board from "To Do" through "In Progress" to "Done".',
+        ]],
+        ['key' => 'event_management', 'category' => 'marketing', 'name' => 'Event Management', 'img' => asset('features/event-management.png'), 'color' => '#0ea5e9', 'desc' => 'Brands, jobs, reporters, officers & salary sheets', 'long' => [
+            'Run an event or advertising agency workflow — manage client brands, the jobs booked for them, and the staff assigned to cover each one.',
+            "Salary sheets tie the work back to payroll, so agency-specific staffing and pay don't have to be shoehorned into a generic HR setup.",
+        ]],
+    ];
+@endphp
 <style>
 .bfm-overlay{position:fixed;inset:0;z-index:400;display:none;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;}
 .bfm-overlay.bfm-open{display:flex;}
 .bfm-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.48);backdrop-filter:blur(3px);}
 :is(html[data-theme="light"],html[data-theme="light_blue"]) .bfm-backdrop{background:rgba(15,23,42,.35);}
-.bfm-card{position:relative;z-index:1;width:100%;max-width:680px;background:var(--card);border:1px solid var(--border);border-radius:16px;box-shadow:0 24px 56px rgba(0,0,0,.32);display:flex;flex-direction:column;max-height:min(90vh,700px);overflow:hidden;}
-.bfm-head{padding:20px 20px 14px;border-bottom:1px solid var(--border);flex-shrink:0;position:relative;}
-.bfm-title{margin:0 0 4px;font-size:18px;font-weight:800;letter-spacing:-.02em;color:var(--text);}
+.bfm-shell{position:relative;z-index:1;width:100%;max-width:1180px;height:min(88vh,860px);background:var(--card);border:1px solid var(--border);border-radius:16px;box-shadow:0 24px 56px rgba(0,0,0,.32);display:flex;flex-direction:column;overflow:hidden;}
+.bfm-head{padding:18px 20px 14px;border-bottom:1px solid var(--border);flex-shrink:0;position:relative;}
+.bfm-title{margin:0 0 4px;font-size:18px;font-weight:800;letter-spacing:-.02em;color:var(--text);display:flex;align-items:center;gap:8px;}
+.bfm-title i{color:var(--primary);}
 .bfm-sub{margin:0;font-size:13px;color:var(--muted);}
-.bfm-close{position:absolute;top:16px;right:16px;width:30px;height:30px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;display:grid;place-items:center;font-size:16px;line-height:1;padding:0;}
+.bfm-close{position:absolute;top:14px;right:16px;width:30px;height:30px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;display:grid;place-items:center;font-size:16px;line-height:1;padding:0;}
 .bfm-close:hover{border-color:var(--primary);color:var(--text);}
-.bfm-body{padding:18px 20px;overflow-y:auto;flex:1;min-height:0;}
-.bfm-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px;}
-.bfm-card-item{border:2px solid var(--border);border-radius:13px;padding:14px 12px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;transition:all .18s ease;user-select:none;background:var(--card);position:relative;}
-.bfm-card-item:hover{transform:translateY(-2px);border-color:var(--primary);box-shadow:0 6px 16px color-mix(in srgb,var(--primary) 16%,transparent);}
-.bfm-card-item.bfm-enabled{border-color:var(--primary);background:color-mix(in srgb,var(--primary) 6%,var(--card));}
-.bfm-card-item.bfm-disabled{opacity:.52;filter:grayscale(.8);border-color:color-mix(in srgb,var(--border) 80%,transparent);}
-.bfm-feat-img{width:52px;height:52px;object-fit:contain;pointer-events:none;}
-.bfm-feat-name{font-size:12.5px;font-weight:700;color:var(--text);text-align:center;line-height:1.25;pointer-events:none;}
-.bfm-feat-badge{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:2px 8px;border-radius:999px;pointer-events:none;}
-.bfm-feat-badge.bfm-badge-on{background:color-mix(in srgb,#22c55e 14%,transparent);color:#16a34a;}
-.bfm-feat-badge.bfm-badge-off{background:color-mix(in srgb,var(--muted) 14%,transparent);color:var(--muted);}
-.bfm-feat-badge.bfm-badge-required{background:color-mix(in srgb,#6366f1 14%,transparent);color:#4f46e5;}
-html[data-theme="light"] .bfm-feat-badge.bfm-badge-on,html[data-theme="light_blue"] .bfm-feat-badge.bfm-badge-on{background:#dcfce7;color:#15803d;}
-html[data-theme="light"] .bfm-feat-badge.bfm-badge-off,html[data-theme="light_blue"] .bfm-feat-badge.bfm-badge-off{background:#f3f4f6;color:#6b7280;}
-html[data-theme="light"] .bfm-feat-badge.bfm-badge-required,html[data-theme="light_blue"] .bfm-feat-badge.bfm-badge-required{background:#ede9fe;color:#4338ca;}
-.bfm-card-item.bfm-required{cursor:default;}
-.bfm-card-item.bfm-required:hover{border-color:var(--border);transform:none;}
-.bfm-card-item.bfm-dep-blocked{opacity:.45;filter:grayscale(.6);border-style:dashed;}
-.bfm-card-item.bfm-dep-blocked:hover{border-color:color-mix(in srgb,#f59e0b 55%,var(--border));transform:none;}
-.bfm-dep-hint{font-size:10px;font-weight:600;color:#b45309;margin-top:3px;text-align:center;pointer-events:none;}
+.bfm-body-wrap{flex:1;display:flex;flex-direction:row;min-height:0;overflow:hidden;}
+.bfm-sidebar{width:200px;flex-shrink:0;border-right:1px solid var(--border);padding:14px 10px;overflow-y:auto;}
+.bfm-sidebar-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding:4px 10px 8px;}
+.bfm-cat-list{display:flex;flex-direction:column;gap:2px;}
+.bfm-cat-item{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:9px;cursor:pointer;font-size:13px;font-weight:600;color:var(--text);user-select:none;}
+.bfm-cat-item i{width:16px;text-align:center;color:var(--muted);font-size:12px;}
+.bfm-cat-item:hover{background:color-mix(in srgb,var(--primary) 8%,transparent);}
+.bfm-cat-item.active{background:color-mix(in srgb,var(--primary) 14%,transparent);color:var(--primary);}
+.bfm-cat-item.active i{color:var(--primary);}
+.bfm-cat-item-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.bfm-cat-count{font-size:11px;font-weight:700;color:var(--muted);background:color-mix(in srgb,var(--muted) 14%,transparent);border-radius:999px;padding:1px 7px;}
+.bfm-cat-item.active .bfm-cat-count{color:var(--primary);background:color-mix(in srgb,var(--primary) 16%,transparent);}
+.bfm-main{flex:1;display:flex;flex-direction:column;min-width:0;overflow:hidden;}
+.bfm-toolbar{display:flex;align-items:center;gap:14px;padding:14px 20px;border-bottom:1px solid var(--border);flex-wrap:wrap;flex-shrink:0;}
+.bfm-search-wrap{position:relative;flex:1;min-width:180px;max-width:320px;}
+.bfm-search-wrap i{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:12px;}
+.bfm-search-wrap input{width:100%;padding:8px 10px 8px 30px;border-radius:9px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;box-sizing:border-box;}
+.bfm-search-wrap input:focus{outline:none;border-color:var(--primary);}
+.bfm-toolbar-hint{font-size:12px;color:var(--muted);flex:2;min-width:160px;}
+.bfm-sort-wrap{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);white-space:nowrap;}
+.bfm-sort-wrap select{padding:6px 8px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:12.5px;}
+.bfm-body{padding:16px 20px 20px;overflow-y:auto;flex:1;min-height:0;}
+.bfm-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;}
+.bfm-empty{padding:40px 0;text-align:center;color:var(--muted);font-size:13px;}
+.bfm-card{border:1px solid var(--border);border-radius:16px;background:var(--card);display:flex;flex-direction:column;cursor:pointer;transition:all .15s ease;padding:14px;}
+.bfm-card:hover{transform:translateY(-2px);border-color:var(--primary);box-shadow:0 8px 20px color-mix(in srgb,var(--primary) 14%,transparent);}
+.bfm-card-banner{position:relative;width:100%;aspect-ratio:1.3/1;flex-shrink:0;border-radius:12px;margin-bottom:12px;display:flex;align-items:center;justify-content:center;overflow:hidden;background:color-mix(in srgb,var(--muted) 10%,var(--card));}
+.bfm-card-banner-img{width:100%;height:100%;object-fit:cover;pointer-events:none;}
+.bfm-card-banner-badge{position:absolute;top:8px;right:8px;}
+.bfm-card-body{display:flex;flex-direction:column;gap:6px;flex:1;}
+.bfm-card-name{font-size:13.5px;font-weight:700;color:var(--text);}
+.bfm-card-desc{font-size:12px;color:var(--muted);line-height:1.4;flex:1;}
+.bfm-card-footer{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:4px;}
+.bfm-feat-badge{font-size:10px;font-weight:700;padding:3px 9px;border-radius:7px;pointer-events:none;letter-spacing:.02em;background:color-mix(in srgb,var(--card) 88%,transparent);backdrop-filter:blur(2px);border:1px solid var(--border);color:var(--muted);}
+.bfm-feat-badge.bfm-badge-required{color:var(--muted);}
+.bfm-feat-badge.bfm-badge-disallowed{color:#fff;border-color:rgba(0,0,0,.15);background:#b91c1c;backdrop-filter:none;display:inline-flex;align-items:center;gap:5px;box-shadow:0 1px 4px rgba(0,0,0,.25);}
+.bfm-card-disallowed{opacity:.6;filter:grayscale(.5);cursor:default;}
+.bfm-card-disallowed:hover{transform:none;box-shadow:none;border-color:var(--border);}
+.bfm-card-disallowed .bfm-card-banner{filter:grayscale(.3);}
+.bfm-install-btn{border:1px solid transparent;background:var(--primary);color:#fff;font-size:11.5px;font-weight:700;padding:7px 14px;border-radius:8px;cursor:pointer;white-space:nowrap;}
+.bfm-install-btn:hover{filter:brightness(1.08);}
+.bfm-install-btn.bfm-installed{background:transparent;border-color:var(--border);color:var(--muted);}
+.bfm-readmore-btn{background:none;border:none;color:var(--primary);font-size:11.5px;font-weight:700;cursor:pointer;padding:6px 2px;}
+.bfm-required-label{font-size:11.5px;font-weight:700;color:var(--muted);display:flex;align-items:center;gap:5px;}
+.bfm-disallowed-label{font-size:11.5px;font-weight:700;color:#dc2626;display:flex;align-items:center;gap:5px;}
+.bfm-detail-view{flex:1;display:none;flex-direction:column;min-height:0;overflow-y:auto;padding:18px 24px 24px;}
+.bfm-detail-back{align-self:flex-start;background:none;border:none;color:var(--primary);font-size:13px;font-weight:700;cursor:pointer;padding:6px 0;margin-bottom:14px;}
+.bfm-detail-head{display:flex;align-items:center;gap:16px;margin-bottom:16px;}
+.bfm-detail-icon{width:88px;height:68px;border-radius:12px;overflow:hidden;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.bfm-detail-icon img{width:100%;height:100%;object-fit:cover;}
+.bfm-detail-name{font-size:19px;font-weight:800;color:var(--text);margin:0 0 4px;}
+.bfm-detail-desc{font-size:13px;color:var(--muted);margin:0;}
+.bfm-detail-body p{font-size:13px;line-height:1.6;color:var(--text);margin:0 0 12px;}
+.bfm-detail-foot{display:flex;align-items:center;gap:10px;margin-top:8px;}
+.bfm-dep-hint{font-size:10.5px;font-weight:600;color:#b45309;margin-top:2px;}
 html[data-theme="light"] .bfm-dep-hint,html[data-theme="light_blue"] .bfm-dep-hint{color:#92400e;}
 .bfm-foot{padding:14px 20px;border-top:1px solid var(--border);display:flex;align-items:center;gap:10px;justify-content:flex-end;flex-shrink:0;}
 .bfm-cancel{background:transparent;border:1px solid var(--border);color:var(--text);padding:9px 16px;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;}
@@ -1386,66 +1511,45 @@ html[data-theme="light"] .bfm-dep-hint,html[data-theme="light_blue"] .bfm-dep-hi
 .bfm-status{font-size:12px;font-weight:600;margin-right:auto;display:none;}
 .bfm-status.bfm-ok{color:#16a34a;display:block;}
 .bfm-status.bfm-err{color:#dc2626;display:block;}
+@media (max-width:760px){.bfm-sidebar{display:none;}.bfm-toolbar-hint{display:none;}}
 </style>
 <div id="bizFeaturesModal" class="bfm-overlay" role="dialog" aria-modal="true" aria-labelledby="bfm-title" aria-hidden="true">
     <div class="bfm-backdrop" id="bfmBackdrop"></div>
-    <div class="bfm-card">
+    <div class="bfm-shell">
         <div class="bfm-head">
-            <h2 class="bfm-title" id="bfm-title">Business Features</h2>
+            <h2 class="bfm-title" id="bfm-title"><i class="fa fa-sliders"></i> Business Features</h2>
             <p class="bfm-sub">Enable or disable features for <strong>{{ $navBusiness->name }}</strong>. Changes are saved immediately.</p>
             <button type="button" class="bfm-close" id="bfmCloseBtn" aria-label="Close modal" @if(session('open_features_modal')) style="display:none;" @endif>&times;</button>
         </div>
-        <div class="bfm-body">
-            <div class="bfm-grid" id="bfmGrid">
-                @php
-                    $bfmItems = [
-                        ['key' => 'account_management',   'label' => 'Account Management',   'img' => 'features/account-management.png'],
-                        ['key' => 'bill_management',      'label' => 'Bill Management',       'img' => 'features/bill-management.png'],
-                        ['key' => 'human_resources',      'label' => 'Human Resources',       'img' => 'features/human-resource-management.png'],
-                        ['key' => 'mail',                 'label' => 'Mail',                   'img' => 'features/mail.png'],
-                        ['key' => 'point_of_sale',        'label' => 'Point of Sale',         'img' => 'features/point-of-sale.png'],
-                        ['key' => 'product_management',   'label' => 'Product Management',    'img' => 'features/product-management.svg'],
-                        ['key' => 'service_management',   'label' => 'Service Management',    'img' => 'features/service.png'],
-                        ['key' => 'social_media_campaign','label' => 'Social Media Campaign', 'img' => 'features/social-media-campaign.png'],
-                        ['key' => 'stock_management',     'label' => 'Stock Management',      'img' => 'features/stock-management.png'],
-                    ];
-                @endphp
-                @foreach($bfmItems as $bfmItem)
-                    @php
-                        $bfmRequired       = $bfmItem['key'] === 'account_management';
-                        $bfmOn = $bfmRequired ? true : ($businessFeatures[$bfmItem['key']] ?? true);
-                    @endphp
-                    @if($bfmRequired)
-                    <div class="bfm-card-item bfm-enabled bfm-required"
-                         data-feature="{{ $bfmItem['key'] }}"
-                         role="checkbox"
-                         aria-checked="true"
-                         aria-disabled="true"
-                         tabindex="0"
-                         title="Account Management is always required and cannot be disabled."
-                         onkeydown="">
-                        <img src="{{ asset($bfmItem['img']) }}" class="bfm-feat-img" alt="{{ $bfmItem['label'] }}">
-                        <div class="bfm-feat-name">{{ $bfmItem['label'] }}</div>
-                        <span class="bfm-feat-badge bfm-badge-required">Required</span>
+        <div id="bfmGridView" class="bfm-body-wrap">
+            <aside class="bfm-sidebar">
+                <div class="bfm-sidebar-title">Categories</div>
+                <nav id="bfmCategories" class="bfm-cat-list"></nav>
+            </aside>
+            <div class="bfm-main">
+                <div class="bfm-toolbar">
+                    <div class="bfm-search-wrap">
+                        <i class="fa fa-magnifying-glass"></i>
+                        <input type="text" id="bfmSearch" placeholder="Search features…">
                     </div>
-                    @else
-                    <div class="bfm-card-item {{ $bfmOn ? 'bfm-enabled' : 'bfm-disabled' }}"
-                         data-feature="{{ $bfmItem['key'] }}"
-                         role="checkbox"
-                         aria-checked="{{ $bfmOn ? 'true' : 'false' }}"
-                         tabindex="0"
-                         onclick="bfmToggle(this)"
-                         onkeydown="if(event.key===' '||event.key==='Enter'){event.preventDefault();bfmToggle(this);}">
-                        <img src="{{ asset($bfmItem['img']) }}" class="bfm-feat-img" alt="{{ $bfmItem['label'] }}">
-                        <div class="bfm-feat-name">{{ $bfmItem['label'] }}</div>
-                        <span class="bfm-feat-badge {{ $bfmOn ? 'bfm-badge-on' : 'bfm-badge-off' }}">{{ $bfmOn ? 'Enabled' : 'Disabled' }}</span>
-                        @if($bfmItem['key'] === 'point_of_sale')
-                            <span class="bfm-dep-hint" id="bfmPosDepHint" style="display:none;">Needs Stock + Product</span>
-                        @endif
+                    <span class="bfm-toolbar-hint">Enable or disable features for this business. Changes apply immediately.</span>
+                    <div class="bfm-sort-wrap">
+                        <label for="bfmSort">Sort by</label>
+                        <select id="bfmSort">
+                            <option value="relevant">Most relevant</option>
+                            <option value="name">Name (A–Z)</option>
+                            <option value="installed">Installed first</option>
+                        </select>
                     </div>
-                    @endif
-                @endforeach
+                </div>
+                <div class="bfm-body">
+                    <div class="bfm-grid" id="bfmGrid"></div>
+                </div>
             </div>
+        </div>
+        <div id="bfmDetailView" class="bfm-detail-view">
+            <button type="button" class="bfm-detail-back" id="bfmDetailBack"><i class="fa fa-arrow-left"></i> Back to all features</button>
+            <div id="bfmDetailBody"></div>
         </div>
         <div class="bfm-foot">
             <span class="bfm-status" id="bfmStatus"></span>
@@ -1463,7 +1567,207 @@ html[data-theme="light"] .bfm-dep-hint,html[data-theme="light_blue"] .bfm-dep-hi
     var saveBtn = document.getElementById('bfmSaveBtn');
     var backdrop= document.getElementById('bfmBackdrop');
     var status  = document.getElementById('bfmStatus');
+    var gridView  = document.getElementById('bfmGridView');
+    var detailView= document.getElementById('bfmDetailView');
     if (!modal || !openBtn) return;
+
+    var BFM_DEFS = @json($bfmDefs);
+    var BFM_CATEGORIES = @json($bfmCategories);
+    var BFM_SAVED = @json($businessFeatures);
+    var BFM_ALLOWED = @json($bfmAllowedKeys);
+    var BFM_MUTUAL_EXCL = { restaurant: 'point_of_sale', point_of_sale: 'restaurant' };
+    var BFM_POS_DEPS = ['stock_management', 'product_management'];
+
+    var bfmState = {};
+    BFM_DEFS.forEach(function (f) {
+        bfmState[f.key] = f.locked ? true : (BFM_SAVED.hasOwnProperty(f.key) ? !!BFM_SAVED[f.key] : true);
+    });
+
+    function fmIsAllowed(key) { return BFM_ALLOWED.indexOf(key) !== -1; }
+
+    var _fmSearch = '';
+    var _fmCategory = 'all';
+    var _fmSort = 'relevant';
+    var _fmDetailKey = null;
+
+    function fmIsOn(key) { return !!bfmState[key]; }
+
+    function fmEsc(s) {
+        return String(s).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+
+    function fmDefsInCategory(cat) {
+        return cat === 'all' ? BFM_DEFS : BFM_DEFS.filter(function (f) { return f.category === cat; });
+    }
+
+    function fmPosDepsOk() {
+        return BFM_POS_DEPS.every(function (f) { return fmIsOn(f); });
+    }
+
+    function renderCategories() {
+        var nav = document.getElementById('bfmCategories');
+        nav.innerHTML = BFM_CATEGORIES.map(function (c) {
+            var count = fmDefsInCategory(c.key).length;
+            var active = c.key === _fmCategory ? ' active' : '';
+            return '<div class="bfm-cat-item' + active + '" data-cat="' + c.key + '">' +
+                '<i class="fa ' + c.icon + '"></i>' +
+                '<span class="bfm-cat-item-name">' + fmEsc(c.name) + '</span>' +
+                '<span class="bfm-cat-count">' + count + '</span>' +
+            '</div>';
+        }).join('');
+        nav.querySelectorAll('[data-cat]').forEach(function (el) {
+            el.addEventListener('click', function () {
+                _fmCategory = el.dataset.cat;
+                renderCategories();
+                renderGrid();
+            });
+        });
+    }
+
+    function renderGrid() {
+        var grid = document.getElementById('bfmGrid');
+        var term = _fmSearch.trim().toLowerCase();
+        var defs = fmDefsInCategory(_fmCategory);
+        if (term) {
+            defs = defs.filter(function (f) {
+                return f.name.toLowerCase().indexOf(term) !== -1 || f.desc.toLowerCase().indexOf(term) !== -1;
+            });
+        }
+        defs = defs.slice();
+        if (_fmSort === 'name') {
+            defs.sort(function (a, b) { return a.name.localeCompare(b.name); });
+        } else if (_fmSort === 'installed') {
+            defs.sort(function (a, b) { return (fmIsOn(b.key) ? 1 : 0) - (fmIsOn(a.key) ? 1 : 0); });
+        }
+
+        if (!defs.length) {
+            grid.innerHTML = '<div class="bfm-empty">' + (term ? ('No features match "' + fmEsc(_fmSearch) + '".') : 'No features in this category.') + '</div>';
+            return;
+        }
+
+        grid.innerHTML = defs.map(function (f) {
+            var isOn = fmIsOn(f.key);
+            var allowed = f.locked || fmIsAllowed(f.key);
+            var badge = !allowed
+                ? '<span class="bfm-feat-badge bfm-badge-disallowed"><i class="fa fa-lock"></i> Not in your package</span>'
+                : f.locked
+                    ? '<span class="bfm-feat-badge bfm-badge-required">Always On</span>'
+                    : '<span class="bfm-feat-badge">Free</span>';
+            var footer = !allowed
+                ? '<span class="bfm-disallowed-label"><i class="fa fa-lock"></i> Contact admin to enable</span>'
+                : f.locked
+                    ? '<span class="bfm-required-label"><i class="fa fa-check"></i> Included</span>'
+                    : ('<button type="button" class="bfm-install-btn' + (isOn ? ' bfm-installed' : '') + '" data-toggle="' + f.key + '">' +
+                        (isOn ? '<i class="fa fa-check"></i> Installed' : '<i class="fa fa-download"></i> Install') + '</button>');
+            var depHint = (allowed && f.key === 'point_of_sale' && !fmPosDepsOk())
+                ? '<div class="bfm-dep-hint">Needs Stock + Product</div>' : '';
+            return '<div class="bfm-card' + (allowed ? '' : ' bfm-card-disallowed') + '" data-card="' + f.key + '">' +
+                '<div class="bfm-card-banner">' +
+                    '<img src="' + f.img + '" alt="' + fmEsc(f.name) + '" class="bfm-card-banner-img">' +
+                    '<div class="bfm-card-banner-badge">' + badge + '</div>' +
+                '</div>' +
+                '<div class="bfm-card-body">' +
+                    '<div class="bfm-card-name">' + fmEsc(f.name) + '</div>' +
+                    '<div class="bfm-card-desc">' + fmEsc(f.desc) + '</div>' +
+                    depHint +
+                    '<div class="bfm-card-footer">' + footer + '<button type="button" class="bfm-readmore-btn" data-detail="' + f.key + '">Read more</button></div>' +
+                '</div>' +
+            '</div>';
+        }).join('');
+
+        grid.querySelectorAll('[data-toggle]').forEach(function (btn) {
+            btn.addEventListener('click', function (e) { e.stopPropagation(); fmToggle(btn.dataset.toggle); });
+        });
+        grid.querySelectorAll('[data-detail]').forEach(function (el) {
+            el.addEventListener('click', function (e) { e.stopPropagation(); openDetail(el.dataset.detail); });
+        });
+        grid.querySelectorAll('.bfm-card').forEach(function (card) {
+            card.addEventListener('click', function () { openDetail(card.dataset.card); });
+        });
+    }
+
+    function fmToggle(key) {
+        var def = BFM_DEFS.find(function (f) { return f.key === key; });
+        if (!def || def.locked) return;
+        if (!fmIsAllowed(key)) {
+            showToast('This feature is not included in your package. Contact an admin to enable it.', 'warning');
+            return;
+        }
+        var turningOn = !fmIsOn(key);
+
+        if (turningOn && key === 'point_of_sale' && !fmPosDepsOk()) {
+            showToast('Point of Sale requires Stock Management and Product Management to be enabled first.', 'warning');
+            return;
+        }
+
+        bfmState[key] = turningOn;
+
+        var rival = BFM_MUTUAL_EXCL[key];
+        if (rival && turningOn && bfmState[rival]) {
+            bfmState[rival] = false;
+            showToast('Point of Sale and Restaurant cover the same checkout role, so the other one was turned off.', 'warning');
+        }
+
+        if (!turningOn && BFM_POS_DEPS.indexOf(key) !== -1 && bfmState['point_of_sale']) {
+            bfmState['point_of_sale'] = false;
+            showToast('Point of Sale was disabled because it requires ' +
+                (key === 'stock_management' ? 'Stock Management' : 'Product Management') + '.', 'warning');
+        }
+
+        renderGrid();
+        if (_fmDetailKey) renderDetail(_fmDetailKey);
+        syncSidebarFromModal();
+    }
+
+    function openDetail(key) {
+        _fmDetailKey = key;
+        renderDetail(key);
+        gridView.style.display = 'none';
+        detailView.style.display = 'flex';
+    }
+
+    function renderDetail(key) {
+        var f = BFM_DEFS.find(function (d) { return d.key === key; });
+        if (!f) return;
+        var isOn = fmIsOn(f.key);
+        var allowed = f.locked || fmIsAllowed(f.key);
+        var badge = !allowed
+            ? '<span class="bfm-feat-badge bfm-badge-disallowed"><i class="fa fa-lock"></i> Not in your package</span>'
+            : f.locked
+                ? '<span class="bfm-feat-badge bfm-badge-required">Always On</span>'
+                : '<span class="bfm-feat-badge">Free</span>';
+        var actionHtml = !allowed
+            ? '<span class="bfm-disallowed-label"><i class="fa fa-lock"></i> Contact admin to enable this feature</span>'
+            : f.locked
+                ? '<span class="bfm-required-label"><i class="fa fa-check"></i> Always on for every business</span>'
+                : ('<button type="button" class="bfm-install-btn' + (isOn ? ' bfm-installed' : '') + '" id="bfmDetailToggleBtn">' +
+                    (isOn ? '<i class="fa fa-check"></i> Installed — click to uninstall' : '<i class="fa fa-download"></i> Install this feature') + '</button>');
+        var paras = f.long.map(function (p) { return '<p>' + fmEsc(p) + '</p>'; }).join('');
+        document.getElementById('bfmDetailBody').innerHTML =
+            '<div class="bfm-detail-head">' +
+                '<div class="bfm-detail-icon" style="background:' + f.color + '22"><img src="' + f.img + '" alt="' + fmEsc(f.name) + '"></div>' +
+                '<div><h3 class="bfm-detail-name">' + fmEsc(f.name) + '</h3><p class="bfm-detail-desc">' + fmEsc(f.desc) + '</p></div>' +
+                '<div style="margin-left:auto">' + badge + '</div>' +
+            '</div>' +
+            paras +
+            '<div class="bfm-detail-foot">' + actionHtml + '</div>';
+
+        var btn = document.getElementById('bfmDetailToggleBtn');
+        if (btn) btn.addEventListener('click', function () { fmToggle(f.key); });
+    }
+
+    document.getElementById('bfmDetailBack').addEventListener('click', function () {
+        detailView.style.display = 'none';
+        gridView.style.display = 'flex';
+        _fmDetailKey = null;
+    });
+
+    function syncSidebarFromModal() {
+        var posPreview = document.getElementById('sidebar-pos-wizard-preview');
+        if (posPreview) posPreview.style.display = fmIsOn('point_of_sale') ? 'block' : 'none';
+    }
 
     function openModal() {
         modal.classList.add('bfm-open');
@@ -1473,10 +1777,13 @@ html[data-theme="light"] .bfm-dep-hint,html[data-theme="light_blue"] .bfm-dep-hi
         status.textContent = '';
         var userMenu = document.getElementById('userDropdownMenu');
         if (userMenu) userMenu.classList.remove('open');
-        bfmUpdateDepStates();
-        // Focus first card
-        var first = modal.querySelector('.bfm-card-item');
-        if (first) setTimeout(function(){ first.focus(); }, 60);
+        document.getElementById('bfmSearch').value = '';
+        document.getElementById('bfmSort').value = 'relevant';
+        _fmSearch = ''; _fmCategory = 'all'; _fmSort = 'relevant'; _fmDetailKey = null;
+        detailView.style.display = 'none';
+        gridView.style.display = 'flex';
+        renderCategories();
+        renderGrid();
     }
 
     function closeModal() {
@@ -1500,94 +1807,18 @@ html[data-theme="light"] .bfm-dep-hint,html[data-theme="light_blue"] .bfm-dep-hi
     setTimeout(openModal, 0);
     @endif
 
-    // POS dependencies: both must be enabled to allow POS
-    var BFM_POS_DEPS = ['stock_management', 'product_management'];
-
-    function bfmIsEnabled(feature) {
-        var c = modal.querySelector('[data-feature="' + feature + '"]');
-        return c && c.classList.contains('bfm-enabled');
-    }
-
-    function bfmSetCard(feature, enable) {
-        var c = modal.querySelector('[data-feature="' + feature + '"]');
-        if (!c || c.classList.contains('bfm-required')) return;
-        var b = c.querySelector('.bfm-feat-badge');
-        if (enable) {
-            c.classList.replace('bfm-disabled', 'bfm-enabled');
-            c.setAttribute('aria-checked', 'true');
-            if (b) { b.textContent = 'Enabled'; b.className = 'bfm-feat-badge bfm-badge-on'; }
-        } else {
-            c.classList.replace('bfm-enabled', 'bfm-disabled');
-            c.setAttribute('aria-checked', 'false');
-            if (b) { b.textContent = 'Disabled'; b.className = 'bfm-feat-badge bfm-badge-off'; }
-        }
-    }
-
-    function bfmPosDepsOk() {
-        return BFM_POS_DEPS.every(function(f) { return bfmIsEnabled(f); });
-    }
-
-    function bfmUpdateDepStates() {
-        var posCard = modal.querySelector('[data-feature="point_of_sale"]');
-        var hint    = document.getElementById('bfmPosDepHint');
-        if (!posCard) return;
-        var depsOk = bfmPosDepsOk();
-        if (depsOk) {
-            posCard.classList.remove('bfm-dep-blocked');
-            if (hint) hint.style.display = 'none';
-        } else {
-            posCard.classList.add('bfm-dep-blocked');
-            if (hint) hint.style.display = 'block';
-        }
-    }
-
-    window.bfmToggle = function(card) {
-        if (card.classList.contains('bfm-required')) return;
-        var feature = card.dataset.feature;
-        var isOn    = card.classList.contains('bfm-enabled');
-        var badge   = card.querySelector('.bfm-feat-badge');
-
-        // Block enabling POS when dependencies are not met
-        if (!isOn && feature === 'point_of_sale' && !bfmPosDepsOk()) {
-            showToast('Point of Sale requires Stock Management and Product Management to be enabled first.', 'warning');
-            return;
-        }
-
-        if (isOn) {
-            card.classList.replace('bfm-enabled', 'bfm-disabled');
-            card.setAttribute('aria-checked', 'false');
-            if (badge) { badge.textContent = 'Disabled'; badge.className = 'bfm-feat-badge bfm-badge-off'; }
-        } else {
-            card.classList.replace('bfm-disabled', 'bfm-enabled');
-            card.setAttribute('aria-checked', 'true');
-            if (badge) { badge.textContent = 'Enabled'; badge.className = 'bfm-feat-badge bfm-badge-on'; }
-        }
-
-        // Auto-disable POS if one of its dependencies is being turned off
-        if (isOn && BFM_POS_DEPS.indexOf(feature) !== -1 && bfmIsEnabled('point_of_sale')) {
-            bfmSetCard('point_of_sale', false);
-            showToast('Point of Sale was disabled because it requires ' +
-                (feature === 'stock_management' ? 'Stock Management' : 'Product Management') + '.', 'warning');
-        }
-
-        bfmUpdateDepStates();
-        syncSidebarFromModal();
-    };
-
-    function syncSidebarFromModal() {
-        var posPreview = document.getElementById('sidebar-pos-wizard-preview');
-        if (!posPreview) return;
-        var posCard = modal.querySelector('[data-feature="point_of_sale"]');
-        if (!posCard) return;
-        posPreview.style.display = posCard.classList.contains('bfm-enabled') ? 'block' : 'none';
-    }
+    document.getElementById('bfmSort').addEventListener('change', function (e) {
+        _fmSort = e.target.value;
+        renderGrid();
+    });
+    document.getElementById('bfmSearch').addEventListener('input', function (e) {
+        _fmSearch = e.target.value;
+        renderGrid();
+    });
 
     saveBtn.addEventListener('click', function() {
-        var cards = modal.querySelectorAll('.bfm-card-item[data-feature]');
         var features = {};
-        cards.forEach(function(card) {
-            features[card.dataset.feature] = card.classList.contains('bfm-enabled') ? 1 : 0;
-        });
+        BFM_DEFS.forEach(function (f) { features[f.key] = fmIsOn(f.key) ? 1 : 0; });
         features['account_management'] = 1; // always required
 
         saveBtn.disabled = true;
