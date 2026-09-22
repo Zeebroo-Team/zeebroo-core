@@ -167,6 +167,8 @@ class PosAuthApiController extends Controller
                 'image_url'        => $package->image ? asset('storage/' . $package->image) : null,
                 'price'            => (float) $package->price,
                 'discounted_price' => $package->discounted_price !== null ? (float) $package->discounted_price : null,
+                'currency'         => $package->currency,
+                'currency_symbol'  => $package->currencySymbol(),
                 'is_free'          => $package->is_free,
                 'is_mobile_only'   => $package->is_mobile_only,
                 'features'         => $package->features ?? [],

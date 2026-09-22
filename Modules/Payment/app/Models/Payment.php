@@ -80,4 +80,13 @@ class Payment extends Model
     {
         return $this->due_at !== null && $this->due_at->isPast();
     }
+
+    public function currencySymbol(): string
+    {
+        return match (strtoupper($this->currency ?? 'USD')) {
+            'USD'   => '$',
+            'LKR'   => 'Rs.',
+            default => strtoupper($this->currency ?? 'USD') . ' ',
+        };
+    }
 }

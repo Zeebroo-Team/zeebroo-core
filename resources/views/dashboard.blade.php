@@ -1058,6 +1058,7 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                                      data-pkg-free="{{ $pkg->is_free ? '1' : '0' }}"
                                      data-pkg-price="{{ (float) $pkg->price }}"
                                      data-pkg-discounted="{{ $pkg->discounted_price !== null ? (float) $pkg->discounted_price : '' }}"
+                                     data-pkg-currency-symbol="{{ $pkg->currencySymbol() }}"
                                      role="radio" aria-checked="{{ (string) old('package_id') === (string) $pkg->id ? 'true' : 'false' }}" tabindex="0">
                                     <div class="wiz-pkg-check" aria-hidden="true"><i class="fa fa-check"></i></div>
                                     <div class="wiz-pkg-img-wrap">
@@ -1072,10 +1073,10 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                                         @if($pkg->is_free)
                                             <span class="wiz-pkg-price">Free</span>
                                         @elseif($pkg->discounted_price !== null && (float) $pkg->discounted_price < (float) $pkg->price)
-                                            <span class="wiz-pkg-price">${{ number_format((float) $pkg->discounted_price, 2) }}<span class="wiz-pkg-price-suffix">/mo</span></span>
-                                            <span class="wiz-pkg-price-strike">${{ number_format((float) $pkg->price, 2) }}</span>
+                                            <span class="wiz-pkg-price">{{ $pkg->currencySymbol() }}{{ number_format((float) $pkg->discounted_price, 2) }}<span class="wiz-pkg-price-suffix">/mo</span></span>
+                                            <span class="wiz-pkg-price-strike">{{ $pkg->currencySymbol() }}{{ number_format((float) $pkg->price, 2) }}</span>
                                         @else
-                                            <span class="wiz-pkg-price">${{ number_format((float) $pkg->price, 2) }}<span class="wiz-pkg-price-suffix">/mo</span></span>
+                                            <span class="wiz-pkg-price">{{ $pkg->currencySymbol() }}{{ number_format((float) $pkg->price, 2) }}<span class="wiz-pkg-price-suffix">/mo</span></span>
                                         @endif
                                     </div>
                                     @if($pkg->description)
@@ -1650,7 +1651,7 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                             <form method="post" action="{{ route('payment.checkout.resume', $pendingPayment) }}" style="margin-top:10px;">
                                 @csrf
                                 <button type="submit" style="padding:8px 16px;font-size:12.5px;font-weight:700;border-radius:8px;background:#ef4444;color:#fff;border:none;cursor:pointer;">
-                                    <i class="fa fa-credit-card" style="margin-right:6px;" aria-hidden="true"></i>Complete payment (${{ number_format((float) $pendingPayment->amount, 2) }}/mo)
+                                    <i class="fa fa-credit-card" style="margin-right:6px;" aria-hidden="true"></i>Complete payment ({{ $pendingPayment->currencySymbol() }}{{ number_format((float) $pendingPayment->amount, 2) }}/mo)
                                 </button>
                             </form>
                         </div>
@@ -1710,7 +1711,7 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                         <form method="post" action="{{ route('payment.checkout.resume', $pendingPayment) }}" style="margin-top:10px;">
                             @csrf
                             <button type="submit" style="padding:8px 16px;font-size:12.5px;font-weight:700;border-radius:8px;background:#ef4444;color:#fff;border:none;cursor:pointer;">
-                                <i class="fa fa-credit-card" style="margin-right:6px;" aria-hidden="true"></i>Complete payment (${{ number_format((float) $pendingPayment->amount, 2) }}/mo)
+                                <i class="fa fa-credit-card" style="margin-right:6px;" aria-hidden="true"></i>Complete payment ({{ $pendingPayment->currencySymbol() }}{{ number_format((float) $pendingPayment->amount, 2) }}/mo)
                             </button>
                         </form>
                     @endif
@@ -2175,14 +2176,15 @@ function openWizStorageAgreementModal(type) {
         }
         function pkgPriceHtml(card) {
             if (card.getAttribute('data-pkg-free') === '1') return '<span class="wiz-pkg-price">Free</span>';
+            const symbol = escPkg(card.getAttribute('data-pkg-currency-symbol') || '$');
             const price = parseFloat(card.getAttribute('data-pkg-price') || '0');
             const discAttr = card.getAttribute('data-pkg-discounted');
             const disc = discAttr ? parseFloat(discAttr) : null;
             if (disc !== null && !isNaN(disc) && disc < price) {
-                return '<span class="wiz-pkg-price">$' + disc.toFixed(2) + '<span class="wiz-pkg-price-suffix">/mo</span></span>'
-                    + '<span class="wiz-pkg-price-strike">$' + price.toFixed(2) + '</span>';
+                return '<span class="wiz-pkg-price">' + symbol + disc.toFixed(2) + '<span class="wiz-pkg-price-suffix">/mo</span></span>'
+                    + '<span class="wiz-pkg-price-strike">' + symbol + price.toFixed(2) + '</span>';
             }
-            return '<span class="wiz-pkg-price">$' + price.toFixed(2) + '<span class="wiz-pkg-price-suffix">/mo</span></span>';
+            return '<span class="wiz-pkg-price">' + symbol + price.toFixed(2) + '<span class="wiz-pkg-price-suffix">/mo</span></span>';
         }
         // Keeps the footer chip (shown on every step from Package onward) in
         // sync with whichever package is currently selected.
@@ -2255,10 +2257,12 @@ function openWizStorageAgreementModal(type) {
         let isFree = true;
         let amount = 0;
         let pkgName = '—';
+        let symbol = '$';
 
         if (pkgCard) {
             pkgName = pkgCard.getAttribute('data-pkg-name') || '—';
             isFree = pkgCard.getAttribute('data-pkg-free') === '1';
+            symbol = pkgCard.getAttribute('data-pkg-currency-symbol') || '$';
             const price    = parseFloat(pkgCard.getAttribute('data-pkg-price') || '0');
             const discAttr = pkgCard.getAttribute('data-pkg-discounted');
             const disc     = discAttr ? parseFloat(discAttr) : null;
@@ -2267,7 +2271,7 @@ function openWizStorageAgreementModal(type) {
         }
 
         if (pkgNameEl) pkgNameEl.textContent = pkgCard ? (pkgName + (isFree ? ' (Free)' : '')) : '—';
-        if (totalEl)   totalEl.textContent   = isFree ? '$0.00' : ('$' + amount.toFixed(2) + ' / mo');
+        if (totalEl)   totalEl.textContent   = isFree ? (symbol + '0.00') : (symbol + amount.toFixed(2) + ' / mo');
         if (cycleBadge)  cycleBadge.style.display  = isFree ? 'none'  : 'inline-flex';
         if (gatewayNote) gatewayNote.style.display = isFree ? 'none'  : 'block';
         if (freeNote)    freeNote.style.display    = isFree ? 'block' : 'none';

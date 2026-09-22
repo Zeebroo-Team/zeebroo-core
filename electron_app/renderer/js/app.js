@@ -5494,14 +5494,20 @@ const OB_PKG_FALLBACK_IMG = 'data:image/svg+xml;utf8,' + encodeURIComponent(
    </svg>`
 );
 
+function _obCurrencySymbol(pkg) {
+  if (pkg.currency_symbol) return pkg.currency_symbol;
+  return pkg.currency === 'LKR' ? 'Rs.' : '$';
+}
+
 function _obPkgPriceHtml(pkg) {
   if (pkg.is_free) return `<span class="ob-pkg-price">Free</span>`;
+  const symbol = escHtml(_obCurrencySymbol(pkg));
   const price = Number(pkg.price || 0);
   const disc  = pkg.discounted_price != null ? Number(pkg.discounted_price) : null;
   if (disc != null && disc < price) {
-    return `<span class="ob-pkg-price">$${disc.toFixed(2)}<span class="ob-pkg-price-suffix">/mo</span></span><span class="ob-pkg-price-strike">$${price.toFixed(2)}</span>`;
+    return `<span class="ob-pkg-price">${symbol}${disc.toFixed(2)}<span class="ob-pkg-price-suffix">/mo</span></span><span class="ob-pkg-price-strike">${symbol}${price.toFixed(2)}</span>`;
   }
-  return `<span class="ob-pkg-price">$${price.toFixed(2)}<span class="ob-pkg-price-suffix">/mo</span></span>`;
+  return `<span class="ob-pkg-price">${symbol}${price.toFixed(2)}<span class="ob-pkg-price-suffix">/mo</span></span>`;
 }
 
 // Shared renderer — a clickable package-selection grid. Used by both the
@@ -5664,9 +5670,10 @@ function _obPopulatePaySummary() {
   const disc  = pkg && pkg.discounted_price != null ? Number(pkg.discounted_price) : null;
   const amount = (disc != null && disc < price) ? disc : price;
   const isFree = !pkg || pkg.is_free || amount <= 0;
+  const symbol = pkg ? _obCurrencySymbol(pkg) : '$';
 
   $('#ob-pay-package').textContent = pkg ? `${pkg.name}${isFree ? ' (Free)' : ''}` : '—';
-  $('#ob-pay-total').textContent   = isFree ? '$0.00' : `$${amount.toFixed(2)} / mo`;
+  $('#ob-pay-total').textContent   = isFree ? `${symbol}0.00` : `${symbol}${amount.toFixed(2)} / mo`;
   $('#ob-pay-cycle-badge').style.display  = isFree ? 'none'  : 'inline-flex';
   $('#ob-pay-gateway-note').style.display = isFree ? 'none'  : '';
   $('#ob-pay-free-note').style.display    = isFree ? ''      : 'none';
@@ -24189,9 +24196,10 @@ function _bbwzPopulatePaySummary() {
   const disc  = pkg && pkg.discounted_price != null ? Number(pkg.discounted_price) : null;
   const amount = (disc != null && disc < price) ? disc : price;
   const isFree = !pkg || pkg.is_free || amount <= 0;
+  const symbol = pkg ? _obCurrencySymbol(pkg) : '$';
 
   $('#bbwz-pay-package').textContent = pkg ? `${pkg.name}${isFree ? ' (Free)' : ''}` : '—';
-  $('#bbwz-pay-total').textContent   = isFree ? '$0.00' : `$${amount.toFixed(2)} / mo`;
+  $('#bbwz-pay-total').textContent   = isFree ? `${symbol}0.00` : `${symbol}${amount.toFixed(2)} / mo`;
   $('#bbwz-pay-cycle-badge').style.display  = isFree ? 'none'  : 'inline-flex';
   $('#bbwz-pay-gateway-note').style.display = isFree ? 'none'  : '';
   $('#bbwz-pay-free-note').style.display    = isFree ? ''      : 'none';

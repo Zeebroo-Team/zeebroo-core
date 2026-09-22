@@ -48,7 +48,7 @@ class PaymentProvisioningService
             'payment_status' => Payment::STATUS_PENDING,
             'billing_cycle' => 'monthly',
             'amount' => $amount,
-            'currency' => 'usd',
+            'currency' => strtolower($package->currency),
             'due_at' => now()->addDays(Payment::GRACE_PERIOD_DAYS),
         ]);
 
@@ -67,7 +67,7 @@ class PaymentProvisioningService
             'payment_status' => Payment::STATUS_SUCCEEDED,
             'billing_cycle' => null,
             'amount' => 0,
-            'currency' => 'usd',
+            'currency' => strtolower($package->currency),
             'paid_at' => now(),
         ]);
 

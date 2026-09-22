@@ -181,10 +181,10 @@
               <span class="pkg-free-badge"><i class="fa fa-gift" style="font-size:10px"></i> Free</span>
             @else
               @if($package->discounted_price !== null)
-                <span class="pkg-price">${{ number_format((float) $package->discounted_price, 2) }}</span>
-                <span class="pkg-price-strike">${{ number_format((float) $package->price, 2) }}</span>
+                <span class="pkg-price">{{ $package->currencySymbol() }}{{ number_format((float) $package->discounted_price, 2) }}</span>
+                <span class="pkg-price-strike">{{ $package->currencySymbol() }}{{ number_format((float) $package->price, 2) }}</span>
               @else
-                <span class="pkg-price">${{ number_format((float) $package->price, 2) }}</span>
+                <span class="pkg-price">{{ $package->currencySymbol() }}{{ number_format((float) $package->price, 2) }}</span>
               @endif
             @endif
           </div>
@@ -208,6 +208,7 @@
                     data-description="{{ $package->description }}"
                     data-price="{{ $package->price }}"
                     data-discounted-price="{{ $package->discounted_price }}"
+                    data-currency="{{ $package->currency }}"
                     data-is-free="{{ $package->is_free ? '1' : '0' }}"
                     data-is-active="{{ $package->is_active ? '1' : '0' }}"
                     data-is-mobile-only="{{ $package->is_mobile_only ? '1' : '0' }}"
@@ -279,14 +280,23 @@
           </label>
         </div>
 
+        <div class="pkg-field" id="pkg-currency-field">
+          <label>Currency <span style="color:#ef4444">*</span></label>
+          <select name="currency" id="pkg-f-currency" required>
+            <option value="LKR" {{ old('currency', 'LKR') === 'LKR' ? 'selected' : '' }}>LKR — Sri Lankan Rupee (Rs.)</option>
+            <option value="USD" {{ old('currency') === 'USD' ? 'selected' : '' }}>USD — US Dollar ($)</option>
+          </select>
+          @error('currency')<p class="pkg-field-err">{{ $message }}</p>@enderror
+        </div>
+
         <div class="pkg-field-row" id="pkg-price-fields">
           <div class="pkg-field">
-            <label>Price ($) <span style="color:#ef4444">*</span></label>
+            <label>Price (<span id="pkg-price-symbol-1">Rs.</span>) <span style="color:#ef4444">*</span></label>
             <input type="number" step="0.01" min="0" name="price" id="pkg-f-price" value="{{ old('price', 0) }}" required>
             @error('price')<p class="pkg-field-err">{{ $message }}</p>@enderror
           </div>
           <div class="pkg-field">
-            <label>Discounted Price ($)</label>
+            <label>Discounted Price (<span id="pkg-price-symbol-2">Rs.</span>)</label>
             <input type="number" step="0.01" min="0" name="discounted_price" id="pkg-f-discounted-price" value="{{ old('discounted_price') }}">
             @error('discounted_price')<p class="pkg-field-err">{{ $message }}</p>@enderror
           </div>
@@ -360,6 +370,10 @@
   var priceFields  = document.getElementById('pkg-price-fields');
   var priceEl      = document.getElementById('pkg-f-price');
   var discPriceEl  = document.getElementById('pkg-f-discounted-price');
+  var currencyEl   = document.getElementById('pkg-f-currency');
+  var currencySym1 = document.getElementById('pkg-price-symbol-1');
+  var currencySym2 = document.getElementById('pkg-price-symbol-2');
+  var CURRENCY_SYMBOLS = { LKR: 'Rs.', USD: '$' };
   var sortOrderEl  = document.getElementById('pkg-f-sort-order');
   var isActiveEl   = document.getElementById('pkg-f-is-active');
   var isMobileOnlyEl = document.getElementById('pkg-f-is-mobile-only');
@@ -380,6 +394,12 @@
     priceFields.style.display = isFreeEl.checked ? 'none' : '';
   }
 
+  function updateCurrencySymbol() {
+    var symbol = CURRENCY_SYMBOLS[currencyEl.value] || currencyEl.value;
+    currencySym1.textContent = symbol;
+    currencySym2.textContent = symbol;
+  }
+
   function setCreateMode() {
     methodEl.value = 'POST';
     form.action = '{{ route('admin.packages.store') }}';
@@ -395,14 +415,17 @@
     isFreeEl.checked = false;
     priceEl.value = 0;
     discPriceEl.value = '';
+    currencyEl.value = 'LKR';
     sortOrderEl.value = 0;
     isActiveEl.checked = true;
     isMobileOnlyEl.checked = false;
     featureBoxes.forEach(function (cb) { cb.checked = false; });
     togglePriceFields();
+    updateCurrencySymbol();
   }
 
   isFreeEl.addEventListener('change', togglePriceFields);
+  currencyEl.addEventListener('change', updateCurrencySymbol);
   imageEl.addEventListener('change', function () {
     if (imageEl.files && imageEl.files[0]) {
       setPreview(URL.createObjectURL(imageEl.files[0]));
@@ -435,10 +458,12 @@
       isFreeEl.checked = btn.getAttribute('data-is-free') === '1';
       priceEl.value = btn.getAttribute('data-price');
       discPriceEl.value = btn.getAttribute('data-discounted-price') || '';
+      currencyEl.value = btn.getAttribute('data-currency') || 'LKR';
       sortOrderEl.value = btn.getAttribute('data-sort-order') || 0;
       isActiveEl.checked = btn.getAttribute('data-is-active') === '1';
       isMobileOnlyEl.checked = btn.getAttribute('data-is-mobile-only') === '1';
       togglePriceFields();
+      updateCurrencySymbol();
 
       var selected = [];
       try { selected = JSON.parse(btn.getAttribute('data-features') || '[]'); } catch (e) {}
