@@ -22,6 +22,11 @@ class DashboardController extends Controller
             return redirect()->route('admin.panel');
         }
 
+        $redirect = $this->redirectIfNeedsPlatformChoice($request);
+        if ($redirect instanceof RedirectResponse) {
+            return $redirect;
+        }
+
         $redirect = $this->redirectIfSingleLocationNeedsBranch($request->user());
         if ($redirect instanceof RedirectResponse) {
             return $redirect;
@@ -39,6 +44,32 @@ class DashboardController extends Controller
             ])
             ->header('Cache-Control', 'private, no-store, no-cache, must-revalidate')
             ->header('Pragma', 'no-cache');
+    }
+
+    private function redirectIfNeedsPlatformChoice(Request $request): ?RedirectResponse
+    {
+        $user = $request->user();
+        if (!$user) {
+            return null;
+        }
+
+        // A payment error/cancel redirect also lands here via route('dashboard')
+        // with a flashed error — let that render on the normal dashboard instead
+        // of silently swallowing it behind the platform-choice redirect.
+        if ($request->session()->has('errors')) {
+            return null;
+        }
+
+        $business = $user->businesses()->latest()->first();
+        if (!$business instanceof Business) {
+            return null;
+        }
+
+        if ($business->platform_choice_shown_at !== null) {
+            return null;
+        }
+
+        return redirect()->route('business.platform-choice');
     }
 
     private function redirectIfSingleLocationNeedsBranch(?User $user): ?RedirectResponse

@@ -48,6 +48,9 @@ Route::middleware(['auth'])->group(function (): void {
     Route::get('/business/setup-location', [BranchController::class, 'singleLocationSetup'])
         ->name('business.single-branch.setup');
 
+    Route::get('/business/get-started', [BusinessController::class, 'platformChoice'])
+        ->name('business.platform-choice');
+
     Route::get('/branches', [BranchController::class, 'index'])->name('business.branches.index');
     Route::post('/branches', [BranchController::class, 'store'])->name('business.branches.store');
     Route::get('/branches/{branch}/edit', [BranchController::class, 'edit'])->name('business.branches.edit');

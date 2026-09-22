@@ -55,6 +55,39 @@ class BusinessController extends Controller
         private readonly PaymentProvisioningService $paymentProvisioningService,
     ) {}
 
+    /**
+     * Shown exactly once, right after onboarding finishes (free finish or paid
+     * checkout success) — marked immediately so refreshing or coming back to
+     * this URL later never shows it again. Existing businesses were backfilled
+     * by the migration that added this column, so only freshly created ones
+     * ever land here.
+     */
+    public function platformChoice(Request $request): ViewContract|RedirectResponse
+    {
+        $business = Business::currentForNavbar($request->user());
+        if (! $business instanceof Business) {
+            return redirect()->route('dashboard');
+        }
+
+        if ($business->platform_choice_shown_at === null) {
+            $business->forceFill(['platform_choice_shown_at' => now()])->save();
+        }
+
+        $latestDesktopRelease = \Modules\AppConnection\Models\AppRelease::query()
+            ->where('channel', 'stable')
+            ->where('is_latest', true)
+            ->first()
+            ?? \Modules\AppConnection\Models\AppRelease::query()
+                ->where('channel', 'stable')
+                ->orderByDesc('id')
+                ->first();
+
+        return view('business::platform-choice', [
+            'latestDesktopRelease' => $latestDesktopRelease,
+            'currentPackage' => $business->package,
+        ]);
+    }
+
     public function map(Request $request): ViewContract|RedirectResponse
     {
         $business = Business::currentForNavbar($request->user());
@@ -530,7 +563,7 @@ class BusinessController extends Controller
         $payment = $this->paymentProvisioningService->createInitialPayment($business, $package, $user);
 
         if (! $payment || $payment->payment_type !== Payment::TYPE_SUBSCRIPTION) {
-            return redirect()->route('dashboard')->with('status', 'Business profile saved.');
+            return redirect()->route('business.platform-choice')->with('status', 'Business profile saved.');
         }
 
         $amount = (float) $payment->amount;
