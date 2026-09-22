@@ -10091,14 +10091,14 @@ function _featMgmtIsOn(key) {
 }
 
 // Whether an admin has permitted this business to use the feature at all (package +
-// per-business overrides). Disallowed features are hidden from Feature Management
-// entirely, not just shown as "not installed".
+// per-business overrides). Disallowed features still show their card in Feature
+// Management — they're rendered locked/disabled instead of being hidden.
 function _featMgmtIsAllowed(key) {
   return !state.allowedFeatures || state.allowedFeatures.has(key);
 }
 
 function _fmVisibleDefs() {
-  return _featDefs.filter(f => _featMgmtIsAllowed(f.key));
+  return _featDefs;
 }
 
 async function openFeatureMgmtModal() {
@@ -10171,16 +10171,21 @@ function _featMgmtRenderGrid() {
 
   grid.innerHTML = defs.map(f => {
     const isOn = _featMgmtIsOn(f.key);
+    const allowed = f.locked || _featMgmtIsAllowed(f.key);
     const iconBg = f.color + '22';
-    const badge = f.locked
-      ? '<span class="fm-badge fm-badge-locked">Always On</span>'
-      : `<span class="fm-badge fm-badge-price">${escHtml(f.price || 'Free')}</span>`;
-    const actionHtml = f.locked
-      ? '<span class="fm-installed-label"><i class="fa fa-check"></i> Included</span>'
-      : `<button class="fm-install-btn${isOn ? ' installed' : ''}" data-fm-key="${f.key}">
-           <span class="fm-install-btn-label">${isOn ? '<i class="fa fa-check"></i> Installed' : '<i class="fa fa-download"></i> Install'}</span>
-           <div class="fm-progress-wrap"><div class="fm-progress-fill"></div></div>
-         </button>`;
+    const badge = !allowed
+      ? '<span class="fm-badge fm-badge-disallowed"><i class="fa fa-lock"></i> Not in your package</span>'
+      : f.locked
+        ? '<span class="fm-badge fm-badge-locked">Always On</span>'
+        : `<span class="fm-badge fm-badge-price">${escHtml(f.price || 'Free')}</span>`;
+    const actionHtml = !allowed
+      ? '<span class="fm-disallowed-label"><i class="fa fa-lock"></i> Contact admin to enable</span>'
+      : f.locked
+        ? '<span class="fm-installed-label"><i class="fa fa-check"></i> Included</span>'
+        : `<button class="fm-install-btn${isOn ? ' installed' : ''}" data-fm-key="${f.key}">
+             <span class="fm-install-btn-label">${isOn ? '<i class="fa fa-check"></i> Installed' : '<i class="fa fa-download"></i> Install'}</span>
+             <div class="fm-progress-wrap"><div class="fm-progress-fill"></div></div>
+           </button>`;
     const rev = _fmReviewSummary[f.key];
     const ratingHtml = rev && rev.count > 0
       ? `<div class="fm-card-rating">
@@ -10191,7 +10196,7 @@ function _featMgmtRenderGrid() {
     const bannerInner = f.img
       ? `<img src="${escHtml(f.img)}" alt="${escHtml(f.name)}" class="fm-card-banner-img">`
       : `<div class="fm-card-banner-icon" style="color:${f.color}"><i class="fa ${f.icon}"></i></div>`;
-    return `<div class="fm-card" data-fm-card="${f.key}">
+    return `<div class="fm-card${allowed ? '' : ' fm-card-disallowed'}" data-fm-card="${f.key}">
       <div class="fm-card-banner" style="background:${iconBg}">
         ${bannerInner}
         <div class="fm-card-banner-badge">${badge}</div>
@@ -10237,7 +10242,7 @@ $('#feat-mgmt-search').addEventListener('input', e => {
 
 async function _featMgmtToggle(key, btnEl) {
   const def = _featDefs.find(f => f.key === key);
-  if (!def || def.locked) return;
+  if (!def || def.locked || !_featMgmtIsAllowed(key)) return;
   const installing = !_featMgmtIsOn(key);
   const label = btnEl.querySelector('.fm-install-btn-label');
   const fill  = btnEl.querySelector('.fm-progress-fill');
@@ -10286,21 +10291,24 @@ function _featMgmtOpenDetail(key) {
 
 function _featMgmtRenderDetail(f) {
   const isOn = _featMgmtIsOn(f.key);
+  const allowed = f.locked || _featMgmtIsAllowed(f.key);
   const iconBg = f.color + '22';
-  const actionHtml = f.locked
-    ? '<span class="fm-installed-label"><i class="fa fa-check"></i> Included</span>'
-    : (isOn
-        ? `<div class="fm-detail-actions">
-             <span class="fm-installed-pill"><i class="fa fa-check"></i> Installed</span>
-             <button class="fm-uninstall-btn" data-fm-key="${f.key}">
-               <span class="fm-install-btn-label"><i class="fa fa-trash"></i> Uninstall</span>
-               <div class="fm-progress-wrap"><div class="fm-progress-fill"></div></div>
-             </button>
-           </div>`
-        : `<button class="fm-install-btn fm-install-btn-lg" data-fm-key="${f.key}">
-             <span class="fm-install-btn-label"><i class="fa fa-download"></i> Install</span>
-             <div class="fm-progress-wrap"><div class="fm-progress-fill"></div></div>
-           </button>`);
+  const actionHtml = !allowed
+    ? '<span class="fm-disallowed-label fm-disallowed-label-lg"><i class="fa fa-lock"></i> Not available on your plan — ask your admin to enable it</span>'
+    : (f.locked
+        ? '<span class="fm-installed-label"><i class="fa fa-check"></i> Included</span>'
+        : (isOn
+            ? `<div class="fm-detail-actions">
+                 <span class="fm-installed-pill"><i class="fa fa-check"></i> Installed</span>
+                 <button class="fm-uninstall-btn" data-fm-key="${f.key}">
+                   <span class="fm-install-btn-label"><i class="fa fa-trash"></i> Uninstall</span>
+                   <div class="fm-progress-wrap"><div class="fm-progress-fill"></div></div>
+                 </button>
+               </div>`
+            : `<button class="fm-install-btn fm-install-btn-lg" data-fm-key="${f.key}">
+                 <span class="fm-install-btn-label"><i class="fa fa-download"></i> Install</span>
+                 <div class="fm-progress-wrap"><div class="fm-progress-fill"></div></div>
+               </button>`));
 
   const bannerInner = f.img
     ? `<img src="${escHtml(f.img)}" alt="" class="fm-detail-banner-bg" aria-hidden="true">
@@ -10313,7 +10321,7 @@ function _featMgmtRenderDetail(f) {
       <div class="fm-detail-heroinfo">
         <div class="fm-detail-name">${escHtml(f.name)}</div>
         <div class="fm-detail-badges">
-          ${f.locked ? '<span class="fm-badge fm-badge-locked">Always On</span>' : `<span class="fm-badge fm-badge-price">${escHtml(f.price || 'Free')}</span>`}
+          ${!allowed ? '<span class="fm-badge fm-badge-disallowed"><i class="fa fa-lock"></i> Not in your package</span>' : (f.locked ? '<span class="fm-badge fm-badge-locked">Always On</span>' : `<span class="fm-badge fm-badge-price">${escHtml(f.price || 'Free')}</span>`)}
         </div>
       </div>
       ${actionHtml}

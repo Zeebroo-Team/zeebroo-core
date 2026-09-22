@@ -40,7 +40,7 @@ class DashboardController extends Controller
                 'loanOverviewTooltip' => $loanOverviewTooltip,
                 'needsWarehouseBranchIntro' => $needsWarehouseBranchIntro,
                 'businessCategoryOptions' => BusinessCategory::optionsForSelect(),
-                'packages' => Package::query()->where('is_active', true)->orderBy('sort_order')->get(),
+                'packages' => Package::query()->where('is_active', true)->visibleForPlatform('web')->orderBy('sort_order')->get(),
             ])
             ->header('Cache-Control', 'private, no-store, no-cache, must-revalidate')
             ->header('Pragma', 'no-cache');
