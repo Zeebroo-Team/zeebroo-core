@@ -603,7 +603,7 @@ class BusinessController extends Controller
         ]);
 
         $features = [];
-        foreach (self::FEATURE_KEYS as $key) {
+        foreach (array_keys(config('features.list', self::FEATURE_KEYS)) as $key) {
             $features[$key] = (bool) ($validated['features'][$key] ?? false);
         }
         $features['account_management'] = true; // always required

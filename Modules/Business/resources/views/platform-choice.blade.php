@@ -25,6 +25,10 @@
         position:absolute;left:50%;transform:translateX(-50%);
     }
     .plat-topbar-dot{opacity:.5;}
+    @media(max-width:640px){
+        .plat-topbar{flex-wrap:wrap;row-gap:8px;}
+        .plat-topbar-center{position:static;transform:none;order:3;flex-basis:100%;justify-content:center;}
+    }
     .plat-logout-form{margin:0;}
     .plat-logout-btn{
         display:inline-flex;align-items:center;gap:7px;padding:8px 16px;border-radius:9px;
