@@ -359,30 +359,25 @@
             : [];
         $featureOn = fn (string $key) => (bool) ($businessFeatures[$key] ?? true);
 
-        $showSidebarLoansLink = $navBusiness && $navBusiness->loans()->exists();
+        $billFeatureOn = $navBusiness && $featureOn('bill_management');
+        $showSidebarLoansLink = $navBusiness && $billFeatureOn && $navBusiness->loans()->exists();
         $sidebarLoanDueHighlight = $showSidebarLoansLink && $navBusiness
             ? app(\Modules\Account\Services\LoanOverviewTooltipService::class)->businessHasOverdueLoanInstallments($navBusiness)
             : false;
-        $showSidebarRentalsLink = $navBusiness && $navBusiness->rentals()->exists();
+        $showSidebarRentalsLink = $navBusiness && $billFeatureOn && $navBusiness->rentals()->exists();
         $sidebarRentalDueHighlight = $showSidebarRentalsLink && $navBusiness
             ? app(\Modules\Account\Services\RentalService::class)->businessHasOverdueRentalPayments($navBusiness)
             : false;
-        $showSidebarBillsLink = $navBusiness && $navBusiness->bills()->exists();
+        $showSidebarBillsLink = $navBusiness && $billFeatureOn && $navBusiness->bills()->exists();
 
-        // Catalog — always visible when Product Management feature is enabled.
+        // Catalog — only visible when Product Management feature is enabled.
         $productFeatureOn = $navBusiness && $featureOn('product_management');
-        $showSidebarProductBrandsLink = $navBusiness && Route::has('product.brands.index')
-            && ($productFeatureOn || $navBusiness->productBrands()->exists());
-        $showSidebarProductCategoriesLink = $navBusiness && Route::has('product.categories.index')
-            && ($productFeatureOn || $navBusiness->productCategories()->exists());
-        $showSidebarProductUnitsLink = $navBusiness && Route::has('product.units.index')
-            && ($productFeatureOn || $navBusiness->productUnits()->exists());
-        $showSidebarProductsLink = $navBusiness && Route::has('product.index')
-            && ($productFeatureOn || $navBusiness->products()->exists());
-        $showSidebarBarcodesLink = $navBusiness && Route::has('product.barcodes.index')
-            && ($productFeatureOn || $navBusiness->productBarcodeSheets()->exists());
-        $showSidebarDiscountsLink = $navBusiness && Route::has('product.discounts.index')
-            && ($productFeatureOn || $navBusiness->productDiscounts()->exists());
+        $showSidebarProductBrandsLink = $navBusiness && Route::has('product.brands.index') && $productFeatureOn;
+        $showSidebarProductCategoriesLink = $navBusiness && Route::has('product.categories.index') && $productFeatureOn;
+        $showSidebarProductUnitsLink = $navBusiness && Route::has('product.units.index') && $productFeatureOn;
+        $showSidebarProductsLink = $navBusiness && Route::has('product.index') && $productFeatureOn;
+        $showSidebarBarcodesLink = $navBusiness && Route::has('product.barcodes.index') && $productFeatureOn;
+        $showSidebarDiscountsLink = $navBusiness && Route::has('product.discounts.index') && $productFeatureOn;
         $showSidebarProductSection = $showSidebarProductBrandsLink
             || $showSidebarProductCategoriesLink
             || $showSidebarProductUnitsLink
@@ -390,43 +385,34 @@
             || $showSidebarBarcodesLink
             || $showSidebarDiscountsLink;
 
-        // Stock Management — always visible when Stock Management feature is enabled.
+        // Stock Management — only visible when Stock Management feature is enabled.
         $stockFeatureOn = $navBusiness && $featureOn('stock_management');
-        $showSidebarPurchasesLink = $navBusiness && Route::has('purchase.index')
-            && ($stockFeatureOn || $navBusiness->purchases()->exists());
-        $showSidebarGrnLink = $navBusiness && Route::has('purchase.grn.index')
-            && ($stockFeatureOn || $navBusiness->goodsReceiveNotes()->exists());
-        $showSidebarSuppliersLink = $navBusiness && Route::has('purchase.suppliers.index')
-            && ($stockFeatureOn || $navBusiness->suppliers()->exists());
-        $showSidebarChequesLink = $navBusiness && Route::has('purchase.cheques.index')
-            && ($stockFeatureOn || $navBusiness->chequePayments()->exists());
-        $showSidebarStockAuditLink = $navBusiness && Route::has('pos.stock-audits.index')
-            && ($stockFeatureOn || \Modules\Pos\Models\StockAudit::query()->where('business_id', $navBusiness->id)->exists());
+        $showSidebarPurchasesLink = $navBusiness && Route::has('purchase.index') && $stockFeatureOn;
+        $showSidebarGrnLink = $navBusiness && Route::has('purchase.grn.index') && $stockFeatureOn;
+        $showSidebarSuppliersLink = $navBusiness && Route::has('purchase.suppliers.index') && $stockFeatureOn;
+        $showSidebarChequesLink = $navBusiness && Route::has('purchase.cheques.index') && $stockFeatureOn;
+        $showSidebarStockAuditLink = $navBusiness && Route::has('pos.stock-audits.index') && $stockFeatureOn;
         $showSidebarPurchaseSection = $showSidebarPurchasesLink
             || $showSidebarGrnLink
             || $showSidebarSuppliersLink
             || $showSidebarChequesLink
             || $showSidebarStockAuditLink;
 
-        // POS — always visible when Point of Sale feature is enabled.
+        // POS — only visible when Point of Sale feature is enabled.
         $posFeatureOn = $navBusiness && $featureOn('point_of_sale');
-        $showSidebarPosRegisterLink = $navBusiness && Route::has('pos.online')
-            && ($posFeatureOn || $navBusiness->products()->where('is_active', true)->where('is_bundle', false)->exists());
-        $showSidebarPosSalesLink = $navBusiness && Route::has('pos.sales.index')
-            && ($posFeatureOn || $navBusiness->sales()->exists());
-        $showSidebarPosEodLink = $navBusiness && Route::has('pos.end-of-day')
-            && ($posFeatureOn || $navBusiness->sales()->where('is_settled', false)->exists());
-        $showSidebarPosCustomersLink = $navBusiness && Route::has('pos.customers.index')
-            && ($posFeatureOn || \Modules\Pos\Models\Customer::query()->where('business_id', $navBusiness->id)->exists());
-        $showSidebarPosReturnsLink = $navBusiness && Route::has('pos.returns.index')
-            && ($posFeatureOn || \Modules\Pos\Models\SaleReturn::query()->where('business_id', $navBusiness->id)->exists());
-        // Sales Quotations and Invoices (always show when module is active)
-        $showSidebarQuotationsLink = $navBusiness && Route::has('sales.quotations.index');
-        $showSidebarInvoicesLink   = $navBusiness && Route::has('sales.invoices.index');
+        $showSidebarPosRegisterLink = $navBusiness && Route::has('pos.online') && $posFeatureOn;
+        $showSidebarPosSalesLink = $navBusiness && Route::has('pos.sales.index') && $posFeatureOn;
+        $showSidebarPosEodLink = $navBusiness && Route::has('pos.end-of-day') && $posFeatureOn;
+        $showSidebarPosCustomersLink = $navBusiness && Route::has('pos.customers.index') && $posFeatureOn;
+        $showSidebarPosReturnsLink = $navBusiness && Route::has('pos.returns.index') && $posFeatureOn;
+        // Sales Quotations and Invoices — only visible when Sales Management feature is enabled.
+        $salesFeatureOn = $navBusiness && $featureOn('sales_management');
+        $showSidebarQuotationsLink = $navBusiness && Route::has('sales.quotations.index') && $salesFeatureOn;
+        $showSidebarInvoicesLink   = $navBusiness && Route::has('sales.invoices.index') && $salesFeatureOn;
 
-        // Hub link shows whenever the Sales section is visible (feature on, or data-driven links are showing).
+        // Hub link shows whenever the Sales section is visible.
         $showSidebarPosSection = $showSidebarPosRegisterLink || $showSidebarPosSalesLink
-            || $showSidebarQuotationsLink || $showSidebarInvoicesLink || ($navBusiness && $posFeatureOn);
+            || $showSidebarQuotationsLink || $showSidebarInvoicesLink;
         $showSidebarPosHubLink = $navBusiness && Route::has('pos.index') && $showSidebarPosSection;
 
         $showSidebarCrmLink = $navBusiness && Route::has('crm.projects.index') && $featureOn('crm');
@@ -792,6 +778,14 @@
                             <i class="fa fa-share-nodes"></i><span>Social Media</span>
                         </a>
                     @endif
+                    @if(Route::has('designstudio.index'))
+                        <a href="{{ route('designstudio.index') }}#letterhead">
+                            <i class="fa fa-file-lines"></i><span>Letterhead</span>
+                        </a>
+                        <a href="{{ route('designstudio.index') }}#company-profile">
+                            <i class="fa fa-building"></i><span>Company Profile</span>
+                        </a>
+                    @endif
                 </div>
             @endif
             @if($showSidebarServiceLink)
@@ -817,6 +811,11 @@
                     <a href="{{ route('restaurant.orders.index') }}" @class(['active' => request()->routeIs('restaurant.orders.index')])>
                         <i class="fa fa-receipt"></i><span>Orders</span>
                     </a>
+                    @if(Route::has('restaurant.kitchen'))
+                        <a href="{{ route('restaurant.kitchen') }}" @class(['active' => request()->routeIs('restaurant.kitchen')])>
+                            <i class="fa fa-kitchen-set"></i><span>Kitchen Display</span>
+                        </a>
+                    @endif
                     <a href="{{ route('restaurant.tables.index') }}" @class(['active' => request()->routeIs('restaurant.tables.*')])>
                         <i class="fa fa-chair"></i><span>Tables</span>
                     </a>
@@ -837,7 +836,7 @@
             @if($showSidebarDocumentationLink)
                 <a href="{{ route('documentation.documents.index') }}" class="{{ request()->routeIs('documentation.*') ? 'active' : '' }}"><i class="fa fa-book-open"></i><span>Documentation</span></a>
             @endif
-            @if($navBusiness && ($hrFeatureOn || $hrPayrollOptedIn))
+            @if($navBusiness && $hrFeatureOn)
                 <div class="menu-group-title">
                     <i class="fa fa-users-gear"></i><span>HR</span>
                 </div>
@@ -898,6 +897,9 @@
                     @endif
                     @if(Route::has('app-connection.index'))
                         <a href="{{ route('app-connection.index') }}" class="{{ request()->routeIs('app-connection.*') ? 'active' : '' }}"><i class="fa fa-plug"></i><span>App connections</span></a>
+                    @endif
+                    @if(Route::has('data-vault.settings'))
+                        <a href="{{ route('data-vault.settings') }}" class="{{ request()->routeIs('data-vault.settings') ? 'active' : '' }}"><i class="fa fa-shield-halved"></i><span>Data Vault</span></a>
                     @endif
                 </div>
             @endif
@@ -1582,8 +1584,38 @@ html[data-theme="light"] .bfm-dep-hint,html[data-theme="light_blue"] .bfm-dep-hi
     BFM_DEFS.forEach(function (f) {
         bfmState[f.key] = f.locked ? true : (BFM_SAVED.hasOwnProperty(f.key) ? !!BFM_SAVED[f.key] : true);
     });
+    var bfmDirty = false;
 
     function fmIsAllowed(key) { return BFM_ALLOWED.indexOf(key) !== -1; }
+
+    function fmFeaturesPayload() {
+        var features = {};
+        BFM_DEFS.forEach(function (f) { features[f.key] = fmIsOn(f.key) ? 1 : 0; });
+        features['account_management'] = 1; // always required
+        return features;
+    }
+
+    function fmPersist(onDone) {
+        fetch('{{ route('business.features.update') }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content ?? '',
+                'Accept': 'application/json',
+            },
+            body: JSON.stringify({ features: fmFeaturesPayload() }),
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+            if (!data.ok) throw new Error(data.error || 'Save failed.');
+            bfmDirty = true;
+            if (onDone) onDone(true);
+        })
+        .catch(function(err) {
+            showToast(err.message || 'Could not save changes.', 'error');
+            if (onDone) onDone(false);
+        });
+    }
 
     var _fmSearch = '';
     var _fmCategory = 'all';
@@ -1702,6 +1734,8 @@ html[data-theme="light"] .bfm-dep-hint,html[data-theme="light_blue"] .bfm-dep-hi
             return;
         }
 
+        var prevState = Object.assign({}, bfmState);
+
         bfmState[key] = turningOn;
 
         var rival = BFM_MUTUAL_EXCL[key];
@@ -1719,6 +1753,15 @@ html[data-theme="light"] .bfm-dep-hint,html[data-theme="light_blue"] .bfm-dep-hi
         renderGrid();
         if (_fmDetailKey) renderDetail(_fmDetailKey);
         syncSidebarFromModal();
+
+        fmPersist(function (ok) {
+            if (!ok) {
+                bfmState = prevState;
+                renderGrid();
+                if (_fmDetailKey) renderDetail(_fmDetailKey);
+                syncSidebarFromModal();
+            }
+        });
     }
 
     function openDetail(key) {
@@ -1787,6 +1830,10 @@ html[data-theme="light"] .bfm-dep-hint,html[data-theme="light_blue"] .bfm-dep-hi
     }
 
     function closeModal() {
+        if (bfmDirty) {
+            window.location.reload();
+            return;
+        }
         modal.classList.remove('bfm-open');
         modal.setAttribute('aria-hidden', 'true');
         document.body.style.overflow = '';

@@ -942,7 +942,33 @@ window.addEventListener('DOMContentLoaded', function() {
         if (isMultiPage) { updatePagesPanel(); updatePageCounter(); }
     }
 
-    if (canvasJson) {
+    /* Check for a gallery/wizard-picked template (Start from a template, company
+       profile, letterhead, etc.) FIRST — like Canva, picking a template always
+       shows that template, even over a previously saved canvas, until the user
+       explicitly hits Save. */
+    var wzTemplate = null;
+    try {
+        var wzRaw = sessionStorage.getItem('dsWizardTemplate');
+        if (wzRaw) { wzTemplate = JSON.parse(wzRaw); sessionStorage.removeItem('dsWizardTemplate'); }
+    } catch(e) {}
+
+    if (wzTemplate && Array.isArray(wzTemplate) && wzTemplate.length) {
+        if (isMultiPage) {
+            /* Multi-page design: load all pages from wizard */
+            pages = wzTemplate;
+            currentPage = 0;
+            inHistory = true;
+            canvas.loadFromJSON(pages[0].json, function() {
+                canvas.renderAll(); afterLoad();
+            });
+        } else {
+            /* Single-page design (e.g. letterhead): load first page JSON */
+            inHistory = true;
+            canvas.loadFromJSON(wzTemplate[0].json, function() {
+                canvas.renderAll(); afterLoad();
+            });
+        }
+    } else if (canvasJson) {
         var parsedCj;
         try { parsedCj = JSON.parse(canvasJson); } catch(e) { parsedCj = null; }
 
@@ -965,35 +991,10 @@ window.addEventListener('DOMContentLoaded', function() {
             });
         }
     } else {
-        /* Check for wizard-generated template (company profile, letterhead, etc.) */
-        var wzTemplate = null;
-        try {
-            var wzRaw = sessionStorage.getItem('dsWizardTemplate');
-            if (wzRaw) { wzTemplate = JSON.parse(wzRaw); sessionStorage.removeItem('dsWizardTemplate'); }
-        } catch(e) {}
-
-        if (wzTemplate && Array.isArray(wzTemplate) && wzTemplate.length) {
-            if (isMultiPage) {
-                /* Multi-page design: load all pages from wizard */
-                pages = wzTemplate;
-                currentPage = 0;
-                inHistory = true;
-                canvas.loadFromJSON(pages[0].json, function() {
-                    canvas.renderAll(); afterLoad();
-                });
-            } else {
-                /* Single-page design (e.g. letterhead): load first page JSON */
-                inHistory = true;
-                canvas.loadFromJSON(wzTemplate[0].json, function() {
-                    canvas.renderAll(); afterLoad();
-                });
-            }
-        } else {
-            if (isMultiPage) { pages = [{ json: null, thumb: null }]; }
-            saveHist();
-            requestAnimationFrame(function(){ edZoomFit(); canvas.calcOffset(); });
-            if (isMultiPage) { updatePagesPanel(); updatePageCounter(); }
-        }
+        if (isMultiPage) { pages = [{ json: null, thumb: null }]; }
+        saveHist();
+        requestAnimationFrame(function(){ edZoomFit(); canvas.calcOffset(); });
+        if (isMultiPage) { updatePagesPanel(); updatePageCounter(); }
     }
 
     document.addEventListener('keydown', onKeyDown);
