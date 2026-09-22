@@ -30,6 +30,15 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
     Route::get('/design-studio/social-media', [DesignStudioController::class, 'socialMedia'])
         ->name('designstudio.social-media.index');
 
+    Route::get('/design-studio/letterhead', [DesignStudioController::class, 'letterhead'])
+        ->name('designstudio.letterhead.index');
+
+    Route::get('/design-studio/company-profile', [DesignStudioController::class, 'companyProfile'])
+        ->name('designstudio.company-profile.index');
+
+    Route::get('/design-studio/type/{type}', [DesignStudioController::class, 'typeIndex'])
+        ->name('designstudio.type.index');
+
     // Facebook Page OAuth
     Route::get('/design-studio/facebook/connect',     [FacebookConnectionController::class, 'redirect'])
         ->name('designstudio.facebook.redirect');

@@ -778,12 +778,28 @@
                             <i class="fa fa-share-nodes"></i><span>Social Media</span>
                         </a>
                     @endif
-                    @if(Route::has('designstudio.index'))
-                        <a href="{{ route('designstudio.index') }}#letterhead">
+                    @if(Route::has('designstudio.letterhead.index'))
+                        <a href="{{ route('designstudio.letterhead.index') }}" @class(['active' => request()->routeIs('designstudio.letterhead.index')])>
                             <i class="fa fa-file-lines"></i><span>Letterhead</span>
                         </a>
-                        <a href="{{ route('designstudio.index') }}#company-profile">
+                    @endif
+                    @if(Route::has('designstudio.company-profile.index'))
+                        <a href="{{ route('designstudio.company-profile.index') }}" @class(['active' => request()->routeIs('designstudio.company-profile.index')])>
                             <i class="fa fa-building"></i><span>Company Profile</span>
+                        </a>
+                    @endif
+                    @if(Route::has('designstudio.type.index'))
+                        <a href="{{ route('designstudio.type.index', 'business-card') }}" @class(['active' => request()->routeIs('designstudio.type.index') && request()->route('type') === 'business-card'])>
+                            <i class="fa fa-id-card"></i><span>Business Card</span>
+                        </a>
+                        <a href="{{ route('designstudio.type.index', 'custom') }}" @class(['active' => request()->routeIs('designstudio.type.index') && request()->route('type') === 'custom'])>
+                            <i class="fa fa-paintbrush"></i><span>Custom Design</span>
+                        </a>
+                        <a href="{{ route('designstudio.type.index', 'sales-campaign') }}" @class(['active' => request()->routeIs('designstudio.type.index') && request()->route('type') === 'sales-campaign'])>
+                            <i class="fa fa-bullhorn"></i><span>Sales Campaign</span>
+                        </a>
+                        <a href="{{ route('designstudio.type.index', 'hire-designer') }}" @class(['active' => request()->routeIs('designstudio.type.index') && request()->route('type') === 'hire-designer'])>
+                            <i class="fa fa-user-tie"></i><span>Hire a Designer</span>
                         </a>
                     @endif
                 </div>
