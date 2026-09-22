@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>POS — Zeebroo POS Lite</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<link rel="stylesheet" href="css/pos.css" />
+</head>
+<body>
+  <div id="app">
+    <div class="topbar">
+      <div class="left">
+        <button class="icon-btn" id="back-btn"><i class="fa-solid fa-arrow-left"></i> Dashboard</button>
+        <div class="brand"><i class="fa-solid fa-cash-register"></i> POS</div>
+      </div>
+      <div class="who">
+        <span>Business: <b id="who-business">—</b></span>
+        <span>User: <b id="who-user">—</b></span>
+        <button class="icon-btn" id="logout-btn"><i class="fa-solid fa-right-from-bracket"></i> Logout</button>
+      </div>
+    </div>
+
+    <div class="body">
+      <div class="products-pane">
+        <div class="search-row">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input id="search-input" type="text" placeholder="Search products by name or SKU…" />
+        </div>
+        <div class="product-grid" id="product-grid">
+          <div class="loading-state">Loading products…</div>
+        </div>
+      </div>
+
+      <div class="cart-pane">
+        <div class="cart-header">
+          <span><i class="fa-solid fa-cart-shopping"></i>Cart</span>
+          <a id="clear-cart">Clear</a>
+        </div>
+        <div class="cart-items" id="cart-items">
+          <div class="cart-empty">Cart is empty. Click a product to add it.</div>
+        </div>
+        <div class="cart-footer">
+          <div class="summary-row"><span>Items</span><span id="sum-items">0</span></div>
+          <div class="summary-row total"><span>Total</span><span id="sum-total">$0.00</span></div>
+
+          <div class="payment-methods">
+            <button class="pm-btn active" data-method="cash"><i class="fa-solid fa-money-bill"></i> Cash</button>
+            <button class="pm-btn" data-method="card"><i class="fa-solid fa-credit-card"></i> Card</button>
+          </div>
+
+          <button class="checkout-btn" id="checkout-btn" disabled>Complete Sale</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="js/api.js"></script>
+  <script src="js/pos.js"></script>
+</body>
+</html>

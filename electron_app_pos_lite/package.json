@@ -1,0 +1,17 @@
+{
+  "name": "zeebroo-pos-lite",
+  "version": "1.0.0",
+  "description": "Zeebroo POS Lite — simple Electron POS client (login/sign up → main POS window)",
+  "author": {
+    "name": "Zeebroo",
+    "email": "support@zeebroo.com"
+  },
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^40.10.6"
+  }
+}

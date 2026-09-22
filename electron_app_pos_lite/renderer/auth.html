@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Zeebroo POS Lite</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<link rel="stylesheet" href="css/auth.css" />
+</head>
+<body>
+  <div class="card">
+    <div class="brand"><i class="fa-solid fa-cash-register"></i><span>Zeebroo POS Lite</span></div>
+    <p class="subtitle">Sign in to your business, or create a new one</p>
+
+    <div class="tabs">
+      <button class="tab-btn active" id="tab-login" type="button">Login</button>
+      <button class="tab-btn" id="tab-signup" type="button">Sign Up</button>
+    </div>
+
+    <div class="error-box" id="login-error"></div>
+    <form class="form active" id="login-form">
+      <div class="field">
+        <label for="login-email">Email</label>
+        <input id="login-email" type="email" autocomplete="username" required placeholder="you@business.com" />
+      </div>
+      <div class="field">
+        <label for="login-password">Password</label>
+        <input id="login-password" type="password" autocomplete="current-password" required placeholder="••••••••" />
+      </div>
+      <button class="submit-btn" id="login-submit" type="submit">Log In</button>
+    </form>
+
+    <div class="error-box" id="signup-error"></div>
+    <form class="form" id="signup-form">
+      <div class="field">
+        <label for="su-name">Your Name</label>
+        <input id="su-name" type="text" required placeholder="Jane Silva" />
+      </div>
+      <div class="field">
+        <label for="su-business">Business Name</label>
+        <input id="su-business" type="text" required placeholder="Jane's Store" />
+      </div>
+      <div class="field">
+        <label for="su-category">Business Category</label>
+        <select id="su-category" required>
+          <option value="">Loading…</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="su-email">Email</label>
+        <input id="su-email" type="email" autocomplete="username" required placeholder="you@business.com" />
+      </div>
+      <div class="row-2">
+        <div class="field">
+          <label for="su-password">Password</label>
+          <input id="su-password" type="password" autocomplete="new-password" required placeholder="At least 8 chars" />
+        </div>
+        <div class="field">
+          <label for="su-password2">Confirm</label>
+          <input id="su-password2" type="password" autocomplete="new-password" required placeholder="Repeat" />
+        </div>
+      </div>
+      <button class="submit-btn" id="signup-submit" type="submit">Create Account</button>
+    </form>
+
+    <p class="switch-line" id="line-login">Don't have an account? <a id="go-signup">Sign up</a></p>
+    <p class="switch-line" id="line-signup" style="display:none;">Already have an account? <a id="go-login">Log in</a></p>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/auth.js"></script>
+</body>
+</html>

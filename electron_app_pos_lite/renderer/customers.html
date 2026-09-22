@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Customers — Zeebroo POS Lite</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<link rel="stylesheet" href="css/customers.css" />
+</head>
+<body>
+  <div id="app">
+    <div class="topbar">
+      <div class="left">
+        <button class="icon-btn" id="back-btn"><i class="fa-solid fa-arrow-left"></i> Dashboard</button>
+        <div class="brand"><i class="fa-solid fa-users"></i> Customers</div>
+      </div>
+      <div class="who">
+        <span>Business: <b id="who-business">—</b></span>
+        <span>User: <b id="who-user">—</b></span>
+        <button class="icon-btn" id="logout-btn"><i class="fa-solid fa-right-from-bracket"></i> Logout</button>
+      </div>
+    </div>
+
+    <div class="content">
+      <div class="toolbar">
+        <div class="search-box">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input id="search-input" type="text" placeholder="Search by name, phone, or email…" />
+        </div>
+        <select class="filter-select" id="category-filter">
+          <option value="">All categories</option>
+        </select>
+        <select class="filter-select" id="type-filter">
+          <option value="">All types</option>
+          <option value="retail">Retail</option>
+          <option value="wholesale">Wholesale</option>
+        </select>
+        <span class="count-pill" id="count-pill"></span>
+        <button class="primary-btn" id="add-btn"><i class="fa-solid fa-plus"></i> Add Customer</button>
+      </div>
+
+      <div class="table-card">
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Contact</th>
+              <th>Type</th>
+              <th>Category</th>
+              <th>Sales</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="customer-rows">
+            <tr><td colspan="6" class="loading-state">Loading customers…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Customer modal -->
+  <div class="modal-backdrop" id="add-modal">
+    <div class="modal">
+      <div class="modal-head">
+        <h2>Add Customer</h2>
+        <button class="modal-close" data-close="add-modal"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="error-box" id="add-error"></div>
+        <div class="field">
+          <label for="f-name">Name *</label>
+          <input id="f-name" type="text" placeholder="Customer name" />
+        </div>
+        <div class="row-2">
+          <div class="field">
+            <label for="f-phone">Phone</label>
+            <input id="f-phone" type="text" placeholder="+1 555 0100" />
+          </div>
+          <div class="field">
+            <label for="f-email">Email</label>
+            <input id="f-email" type="email" placeholder="name@example.com" />
+          </div>
+        </div>
+        <div class="field">
+          <label for="f-address">Address</label>
+          <input id="f-address" type="text" placeholder="Optional" />
+        </div>
+        <div class="row-2">
+          <div class="field">
+            <label for="f-type">Customer Type</label>
+            <select id="f-type">
+              <option value="retail">Retail</option>
+              <option value="wholesale">Wholesale</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="f-category">Category</label>
+            <select id="f-category"><option value="">None</option></select>
+          </div>
+        </div>
+        <div class="field">
+          <label for="f-notes">Notes</label>
+          <textarea id="f-notes" placeholder="Optional"></textarea>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="ghost-btn" data-close="add-modal">Cancel</button>
+        <button class="primary-btn" id="add-save-btn">Save Customer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- View Customer modal -->
+  <div class="modal-backdrop" id="view-modal">
+    <div class="modal">
+      <div class="modal-head">
+        <h2 id="view-name">Customer</h2>
+        <button class="modal-close" data-close="view-modal"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body" id="view-body"></div>
+      <div class="modal-foot">
+        <button class="ghost-btn danger-text" id="view-delete-btn"><i class="fa-solid fa-trash"></i> Delete</button>
+        <button class="primary-btn" data-close="view-modal">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="js/api.js"></script>
+  <script src="js/customers.js"></script>
+</body>
+</html>
