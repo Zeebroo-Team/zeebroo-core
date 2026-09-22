@@ -42,7 +42,7 @@ class PaymentController extends Controller
         }
 
         if ($payment->isSucceeded()) {
-            return redirect()->route('dashboard')->with('status', 'Payment successful — your monthly subscription is now active.');
+            return redirect()->route('business.platform-choice')->with('status', 'Payment successful — your monthly subscription is now active.');
         }
 
         return redirect()->route('dashboard')->withErrors(['payment' => 'Payment was not completed.']);

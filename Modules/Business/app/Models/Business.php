@@ -87,6 +87,7 @@ class Business extends Model
         'google_location_title_cache',
         'logo_path',
         'warehouse_branch_intro_acknowledged_at',
+        'platform_choice_shown_at',
         'package_id',
     ];
 
@@ -94,6 +95,7 @@ class Business extends Model
     {
         return [
             'warehouse_branch_intro_acknowledged_at' => 'datetime',
+            'platform_choice_shown_at' => 'datetime',
             'google_location_linked_at' => 'datetime',
             'brand_features' => 'array',
             'has_unlimited_access' => 'boolean',

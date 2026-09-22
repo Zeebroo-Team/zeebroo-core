@@ -347,7 +347,7 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
         #wizardStep2{
             max-width:900px;margin:0 auto;
         }
-        #wizardStep3,#wizardStep4{
+        #wizardStep3,#wizardStep4,#wizardStep5,#wizardStep6,#wizardStep7{
             max-width:1160px;margin:0 auto;
         }
         .wiz-card-eyebrow{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--primary);margin:0 0 8px;text-align:center;}
@@ -677,7 +677,7 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
         .wiz-cat-mod--on{background:color-mix(in srgb,var(--primary) 13%,transparent);color:var(--primary);}
         .wiz-cat-card--on .wiz-cat-mod--on{background:color-mix(in srgb,var(--primary) 20%,transparent);}
         /* Card action buttons */
-        .wiz-cat-actions{display:flex;gap:7px;padding:10px 12px;}
+        .wiz-cat-actions{display:flex;gap:7px;padding:10px 12px;margin-top:auto;}
         .wiz-cat-btn-detail{
             flex:1;padding:7px 8px;border-radius:9px;border:1.5px solid var(--border);
             background:transparent;color:var(--muted);font-size:11.5px;font-weight:700;
@@ -1011,11 +1011,6 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                                             </span>
                                         </div>
                                         <p class="wiz-cat-desc">{{ $meta['desc'] }}</p>
-                                        <div class="wiz-cat-modules">
-                                            @foreach($wizFeatShortLabels as $modKey => $modLabel)
-                                                <span class="wiz-cat-mod {{ in_array($modKey, $mods) ? 'wiz-cat-mod--on' : '' }}">{{ $modLabel }}</span>
-                                            @endforeach
-                                        </div>
                                         <div class="wiz-cat-actions">
                                             <button type="button" class="wiz-cat-btn-detail"
                                                 data-cat-slug="{{ $slug }}"
@@ -1966,6 +1961,7 @@ function openWizStorageAgreementModal(type) {
         6: document.getElementById('wizStepLine6'),
     };
     const actionGroups = wizardForm.querySelectorAll('[data-wiz-actions]');
+    let wizStorageAdvancePending = false;
 
     function setWizStep(num, goingBack) {
         Object.keys(steps).forEach(function (key) {
@@ -2079,8 +2075,22 @@ function openWizStorageAgreementModal(type) {
                     branchNameInput.value = bizNameInput.value.trim();
                 }
             }
-            if (target === 7 && typeof populateWizPaymentSummary === 'function') {
-                populateWizPaymentSummary();
+            if (target === 7) {
+                const typeInput = document.getElementById('wizDataStorageType');
+                const agreeInput = document.getElementById('wizDataAgreementAccepted');
+                if (!typeInput || !typeInput.value) {
+                    const noSelErr = document.getElementById('wizStorageNoSelErr');
+                    if (noSelErr) noSelErr.classList.add('is-visible');
+                    return;
+                }
+                if (typeInput.value === 'online' && (!agreeInput || agreeInput.value !== '1')) {
+                    wizStorageAdvancePending = true;
+                    openWizStorageAgreementModal('online');
+                    return;
+                }
+                if (typeof populateWizPaymentSummary === 'function') {
+                    populateWizPaymentSummary();
+                }
             }
             setWizStep(target, false);
         });
@@ -2503,9 +2513,10 @@ function openWizStorageAgreementModal(type) {
         var modalErr   = document.getElementById('wizStorageModalErr');
         if (!modal) return;
 
-        function closeAgreementModal() {
+        function closeAgreementModal(cancelled) {
             modal.hidden = true;
             document.body.style.overflow = '';
+            if (cancelled) wizStorageAdvancePending = false;
         }
 
         function confirmAgreement() {
@@ -2536,18 +2547,23 @@ function openWizStorageAgreementModal(type) {
             }
             if (noSelErr) noSelErr.classList.remove('is-visible');
             closeAgreementModal();
+            if (wizStorageAdvancePending) {
+                wizStorageAdvancePending = false;
+                if (typeof populateWizPaymentSummary === 'function') populateWizPaymentSummary();
+                setWizStep(7, false);
+            }
         }
 
         modalCheck && modalCheck.addEventListener('change', function () {
             if (confirmBtn) confirmBtn.disabled = !this.checked;
             if (modalErr)   modalErr.classList.toggle('is-visible', !this.checked);
         });
-        closeBtn   && closeBtn.addEventListener('click',   closeAgreementModal);
-        cancelBtn  && cancelBtn.addEventListener('click',  closeAgreementModal);
-        backdrop   && backdrop.addEventListener('click',   closeAgreementModal);
+        closeBtn   && closeBtn.addEventListener('click',   function () { closeAgreementModal(true); });
+        cancelBtn  && cancelBtn.addEventListener('click',  function () { closeAgreementModal(true); });
+        backdrop   && backdrop.addEventListener('click',   function () { closeAgreementModal(true); });
         confirmBtn && confirmBtn.addEventListener('click', confirmAgreement);
         document.addEventListener('keydown', function (e) {
-            if (e.key === 'Escape' && !modal.hidden) closeAgreementModal();
+            if (e.key === 'Escape' && !modal.hidden) closeAgreementModal(true);
         });
     })();
 
