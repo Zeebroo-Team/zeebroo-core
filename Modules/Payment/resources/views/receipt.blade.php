@@ -17,9 +17,8 @@
   $periodStart = $paidAt ?? $payment->created_at;
   $periodEnd = $payment->current_period_end;
 
-  $currency = strtoupper($payment->currency ?? 'USD');
-  $symbol = $currency === 'USD' ? '$' : '';
-  $amountText = $symbol . number_format((float) $payment->amount, 2) . ' ' . $currency;
+  $symbol = $payment->currencySymbol();
+  $amountText = $symbol . number_format((float) $payment->amount, 2);
 
   // This receipt is issued by the platform for the business's subscription
   // payment — the business (and its owner) is the paying customer, not the seller.

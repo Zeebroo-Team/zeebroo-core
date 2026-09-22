@@ -14,6 +14,7 @@ class Package extends Model
         'image',
         'price',
         'discounted_price',
+        'currency',
         'is_free',
         'features',
         'is_active',
@@ -50,5 +51,14 @@ class Package extends Model
             ->map(fn ($key) => $catalog[$key] ?? $key)
             ->values()
             ->all();
+    }
+
+    public function currencySymbol(): string
+    {
+        return match ($this->currency) {
+            'USD'   => '$',
+            'LKR'   => 'Rs.',
+            default => $this->currency . ' ',
+        };
     }
 }
