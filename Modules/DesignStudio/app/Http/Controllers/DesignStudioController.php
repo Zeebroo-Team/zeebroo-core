@@ -21,7 +21,7 @@ class DesignStudioController extends Controller
             return $business;
         }
 
-        $quickstartTypes = ['letterhead', 'company-profile', 'social-media', 'business-card'];
+        $quickstartTypes = ['letterhead', 'company-profile', 'social-media', 'business-card', 'custom', 'sales-campaign', 'hire-designer'];
 
         // My Designs: only free designs (not linked to a quickstart card)
         $designs = Design::query()
@@ -114,6 +114,116 @@ class DesignStudioController extends Controller
             'designs'       => $designs,
             'facebookPages' => $facebookPages,
         ]);
+    }
+
+    public function letterhead(Request $request): View|RedirectResponse
+    {
+        $business = $this->resolveBusiness($request);
+        if ($business instanceof RedirectResponse) {
+            return $business;
+        }
+
+        $letterhead = Design::query()
+            ->where('business_id', $business->id)
+            ->where('type', 'letterhead')
+            ->latest('updated_at')
+            ->first();
+
+        return view('designstudio::hub.letterhead', [
+            'business'   => $business,
+            'letterhead' => $letterhead,
+        ]);
+    }
+
+    public function companyProfile(Request $request): View|RedirectResponse
+    {
+        $business = $this->resolveBusiness($request);
+        if ($business instanceof RedirectResponse) {
+            return $business;
+        }
+
+        $companyProfile = Design::query()
+            ->where('business_id', $business->id)
+            ->where('type', 'company-profile')
+            ->latest('updated_at')
+            ->first();
+
+        return view('designstudio::hub.company-profile', [
+            'business'       => $business,
+            'companyProfile' => $companyProfile,
+        ]);
+    }
+
+    public function typeIndex(Request $request, string $type): View|RedirectResponse
+    {
+        $business = $this->resolveBusiness($request);
+        if ($business instanceof RedirectResponse) {
+            return $business;
+        }
+
+        $config = self::typePageConfig()[$type] ?? null;
+        abort_if($config === null, 404);
+
+        $designs = Design::query()
+            ->where('business_id', $business->id)
+            ->where('type', $type)
+            ->orderByDesc('updated_at')
+            ->get();
+
+        return view('designstudio::hub.type', [
+            'business' => $business,
+            'designs'  => $designs,
+            'type'     => $type,
+            'config'   => $config,
+        ]);
+    }
+
+    /**
+     * Icon/color/preset-size config for the generic per-type design gallery
+     * pages, mirroring the Electron app's design-list view for these types.
+     */
+    public static function typePageConfig(): array
+    {
+        return [
+            'business-card' => [
+                'label' => 'Business Card',
+                'icon'  => 'fa-id-card',
+                'color' => '#f59e0b',
+                'desc'  => 'Professional business cards for networking and branding.',
+                'presets' => [
+                    ['label' => 'Standard Card', 'w' => 1050, 'h' => 600],
+                ],
+            ],
+            'custom' => [
+                'label' => 'Custom Design',
+                'icon'  => 'fa-paintbrush',
+                'color' => '#10b981',
+                'desc'  => 'Start from a blank canvas — posters, flyers, certificates and more.',
+                'presets' => [
+                    ['label' => 'Poster / Flyer', 'w' => 1200, 'h' => 1600],
+                    ['label' => 'Certificate',    'w' => 1600, 'h' => 1200],
+                    ['label' => 'Webinar Banner', 'w' => 1200, 'h' => 800],
+                ],
+            ],
+            'sales-campaign' => [
+                'label' => 'Sales Campaign',
+                'icon'  => 'fa-bullhorn',
+                'color' => '#ef4444',
+                'desc'  => 'Promos, discounts and offers for your sales campaigns.',
+                'presets' => [
+                    ['label' => 'Campaign Post', 'w' => 1080, 'h' => 1080],
+                ],
+            ],
+            'hire-designer' => [
+                'label' => 'Hire a Designer',
+                'icon'  => 'fa-user-tie',
+                'color' => '#0284c7',
+                'desc'  => 'Job posting posters to find your next design hire.',
+                'presets' => [
+                    ['label' => 'Job Poster', 'w' => 1200, 'h' => 1600],
+                ],
+            ],
+        ];
     }
 
     public function resolveBusiness(Request $request): Business|RedirectResponse
