@@ -1,0 +1,1431 @@
+@extends('theme::layouts.app', [
+    'title'           => $flow->name . ' — Automation Builder',
+    'minimalAppShell' => true,
+    'hideNavbar'      => true,
+])
+
+@section('content')
+<link rel="stylesheet" href="{{ asset('vendor/drawflow/drawflow.min.css') }}">
+
+<style>
+body { overflow: hidden !important; }
+.layout { height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
+.content--minimal { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; border-left: none !important; }
+.content-inner { padding: 0 !important; flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
+
+*,*::before,*::after { box-sizing: border-box; }
+input,select,button,textarea { font-family: inherit; font-size: inherit; }
+
+/* ── Layout ─────────────────────────────────────────────────────────────── */
+.ae { display:flex; flex-direction:column; height:100%; background:var(--bg); color:var(--text); }
+.ae-topbar { height:54px; background:var(--card); border-bottom:1px solid var(--border); display:flex; align-items:center; padding:0 14px; gap:6px; flex-shrink:0; z-index:200; }
+.ae-body   { display:flex; flex:1; overflow:hidden; }
+.ae-sidebar{ width:216px; flex-shrink:0; border-right:1px solid var(--border); background:var(--card); display:flex; flex-direction:column; overflow-y:auto; overflow-x:hidden; z-index:10; }
+.ae-canvas-wrap { flex:1; position:relative; overflow:hidden; }
+.ae-inspector { width:280px; flex-shrink:0; border-left:1px solid var(--border); background:var(--card); display:flex; flex-direction:column; overflow:hidden; z-index:10; }
+
+/* ── Drawflow container ─────────────────────────────────────────────────── */
+#drawflow {
+  width:100%; height:100%;
+  background-color: var(--bg);
+  background-image: radial-gradient(circle, var(--border) 1.2px, transparent 1.2px);
+  background-size: 24px 24px;
+}
+.drawflow .drawflow-node {
+  display:flex; align-items:stretch;
+  background: var(--card);
+  border: 2px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  padding: 0;
+  width: 210px;
+  min-height: 0;
+  box-shadow: 0 2px 8px rgba(0,0,0,.12);
+  cursor: default;
+  transition: box-shadow .12s, border-color .12s;
+  z-index: 2;
+}
+.drawflow .drawflow-node:hover { box-shadow: 0 4px 16px rgba(0,0,0,.18); }
+.drawflow .drawflow-node.selected {
+  background: var(--card) !important;
+  border-color: #f59e0b !important;
+  box-shadow: 0 0 0 3px rgba(245,158,11,.2) !important;
+}
+.drawflow .drawflow-node .drawflow_content_node { width: 100%; display: block; min-width: 0; }
+.drawflow .drawflow-node .inputs, .drawflow .drawflow-node .outputs {
+  display: flex; flex-direction: column; justify-content: center; width: 0; gap: 8px;
+}
+.drawflow .drawflow-node .inputs { align-items: flex-start; }
+.drawflow .drawflow-node .outputs { align-items: flex-end; }
+.drawflow .drawflow-node .input, .drawflow .drawflow-node .output {
+  width: 14px; height: 14px; border-radius: 50%; background: var(--card);
+  border: 2px solid #94a3b8; cursor: crosshair; margin-bottom: 0;
+  transition: border-color .1s, background .1s, transform .1s; position: relative; z-index: 1;
+}
+.drawflow .drawflow-node .input  { left: -8px; }
+.drawflow .drawflow-node .output { right: -8px; }
+.drawflow .drawflow-node .input:hover, .drawflow .drawflow-node .output:hover {
+  border-color: #f59e0b; background: #fff7ed; transform: scale(1.3);
+}
+.drawflow .connection .main-path { stroke: #94a3b8; stroke-width: 2.5px; fill: none; }
+.drawflow .connection .main-path:hover { stroke: #f59e0b; cursor: pointer; }
+.drawflow .connection .main-path.selected { stroke: #f59e0b; stroke-width: 3px; }
+.drawflow .connection .point { stroke: #94a3b8; stroke-width: 2; fill: var(--card); cursor: move; }
+.drawflow .connection .point:hover, .drawflow .connection .point.selected { fill: #f59e0b; stroke: #f59e0b; }
+.drawflow-delete {
+  background: #ef4444; color: #fff; border: 2px solid #fff; border-radius: 50%;
+  width: 22px; height: 22px; line-height: 18px; font-size: 11px; font-weight: 700;
+  text-align: center; cursor: pointer; z-index: 5;
+}
+
+/* ── Node type header colours ─────────────────────────────────────────── */
+.ae-node-hdr { display:flex; align-items:center; gap:8px; padding:9px 11px 8px; border-bottom:1px solid var(--border); border-radius:8px 8px 0 0; }
+.ae-node-ico { width:26px; height:26px; border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:12px; flex-shrink:0; }
+.ae-node-label { font-size:12px; font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; }
+.ae-node-kind  { font-size:10px; color:var(--muted); }
+.ae-node-body  { padding:7px 11px 9px; font-size:11px; color:var(--muted); line-height:1.45; }
+.ae-node-summary { color:var(--text); font-weight:500; }
+.ae-node-uncfg { font-style:italic; }
+
+.drawflow .ae-node--trigger   .ae-node-hdr { background:color-mix(in srgb,#f59e0b 14%,var(--card)); }
+.drawflow .ae-node--trigger   .ae-node-ico { background:color-mix(in srgb,#f59e0b 30%,var(--card)); color:#c2410c; }
+.drawflow .ae-node--condition .ae-node-hdr { background:color-mix(in srgb,#0ea5e9 14%,var(--card)); }
+.drawflow .ae-node--condition .ae-node-ico { background:color-mix(in srgb,#0ea5e9 30%,var(--card)); color:#0369a1; }
+.drawflow .ae-node--action    .ae-node-hdr { background:color-mix(in srgb,#22c55e 14%,var(--card)); }
+.drawflow .ae-node--action    .ae-node-ico { background:color-mix(in srgb,#22c55e 30%,var(--card)); color:#15803d; }
+.drawflow .ae-node--delay     .ae-node-hdr { background:color-mix(in srgb,#a855f7 14%,var(--card)); }
+.drawflow .ae-node--delay     .ae-node-ico { background:color-mix(in srgb,#a855f7 30%,var(--card)); color:#7c3aed; }
+
+.drawflow .ae-node--condition .output_1::before {
+  content: 'T'; position:absolute; right:18px; top:50%; transform:translateY(-50%);
+  font-size:9px; font-weight:700; color:#0369a1; pointer-events:none;
+}
+.drawflow .ae-node--condition .output_2::before {
+  content: 'F'; position:absolute; right:18px; top:50%; transform:translateY(-50%);
+  font-size:9px; font-weight:700; color:#dc2626; pointer-events:none;
+}
+
+/* ── Topbar ─────────────────────────────────────────────────────────────── */
+.ae-title { font-size:13px; font-weight:800; max-width:260px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.ae-btn { display:inline-flex; align-items:center; gap:5px; padding:6px 12px; border-radius:7px; border:none; cursor:pointer; font-size:12px; font-weight:700; transition:all .12s; flex-shrink:0; font-family:inherit; }
+.ae-btn-primary  { background:var(--primary); color:#fff; }
+.ae-btn-primary:hover  { background:color-mix(in srgb,var(--primary) 85%,#000); }
+.ae-btn-secondary { background:transparent; color:var(--text); border:1px solid var(--border); }
+.ae-btn-secondary:hover { background:color-mix(in srgb,var(--text) 6%,transparent); }
+.ae-btn-ghost { background:none; color:var(--muted); border:1px solid var(--border); text-decoration:none; }
+.ae-btn-ghost:hover { background:color-mix(in srgb,var(--text) 6%,transparent); color:var(--text); }
+.ae-btn-icon { padding:6px 9px; }
+.ae-sep { width:1px; height:22px; background:var(--border); flex-shrink:0; margin:0 2px; }
+.ae-status { display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:700; padding:4px 10px; border-radius:20px; flex-shrink:0; }
+.ae-status--on  { background:#d1fae5; color:#065f46; }
+.ae-status--off { background:color-mix(in srgb,var(--text) 8%,var(--card)); color:var(--muted); }
+
+/* ── Sidebar palette ─────────────────────────────────────────────────── */
+.ae-sidebar-section { font-size:10px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); padding:12px 12px 4px; }
+.ae-palette-item { display:flex; align-items:center; gap:9px; padding:7px 10px; cursor:grab; border-radius:6px; margin:1px 6px; transition:background .1s; }
+.ae-palette-item:hover { background:color-mix(in srgb,var(--text) 6%,transparent); }
+.ae-palette-item:active { cursor:grabbing; }
+.ae-pal-icon { width:28px; height:28px; border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:12px; flex-shrink:0; }
+.ae-pal-name { font-size:12px; font-weight:700; }
+.ae-pal-desc { font-size:10px; color:var(--muted); }
+
+/* ── Inspector ──────────────────────────────────────────────────────── */
+.ae-insp-hdr   { padding:12px 14px; border-bottom:1px solid var(--border); font-size:13px; font-weight:700; display:flex; align-items:center; gap:8px; flex-shrink:0; }
+.ae-insp-body  { flex:1; overflow-y:auto; padding:12px 14px; display:flex; flex-direction:column; gap:12px; }
+.ae-insp-empty { flex:1; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:8px; padding:20px; text-align:center; color:var(--muted); font-size:12px; }
+.ae-insp-foot  { padding:10px 14px; border-top:1px solid var(--border); flex-shrink:0; display:flex; gap:8px; align-items:center; }
+.ae-field { display:flex; flex-direction:column; gap:4px; }
+.ae-field label { font-size:10px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
+.ae-field-hint { font-size:11px; line-height:1.5; color:var(--muted); background:color-mix(in srgb,var(--text) 5%,var(--card)); border:1px solid var(--border); border-radius:6px; padding:6px 8px; gap:5px; flex-direction:row; align-items:flex-start; }
+.ae-field-hint i { flex-shrink:0; margin-top:1px; }
+.ae-field-hint span { flex:1; min-width:0; }
+.ae-field input, .ae-field select, .ae-field textarea {
+  border:1px solid var(--border); border-radius:6px; padding:6px 8px; background:var(--bg); color:var(--text);
+  outline:none; transition:border-color .12s; resize:vertical; font-size:12px;
+}
+.ae-field input:focus,.ae-field select:focus,.ae-field textarea:focus { border-color:#f59e0b; }
+.ae-del-btn { background:none; border:1px solid #fca5a5; color:#ef4444; border-radius:6px; padding:6px 11px; cursor:pointer; font-size:11px; font-weight:700; }
+.ae-del-btn:hover { background:rgba(239,68,68,.1); }
+
+/* ── Zoom controls + minimap ────────────────────────────────────────── */
+.ae-zoom { position:absolute; bottom:14px; right:14px; display:flex; flex-direction:column; gap:4px; z-index:20; }
+.ae-zoom-btn { width:28px; height:28px; border-radius:6px; border:1px solid var(--border); background:var(--card); color:var(--text); cursor:pointer; font-size:13px; display:flex; align-items:center; justify-content:center; }
+.ae-zoom-btn:hover { background:color-mix(in srgb,var(--text) 6%,transparent); }
+.ae-zoom-pct { text-align:center; font-size:10px; color:var(--muted); padding:2px 0; }
+#ae-minimap { position:absolute; bottom:14px; left:14px; width:130px; height:84px; border:1px solid var(--border); border-radius:6px; background:var(--card); z-index:20; }
+
+/* ── Toast ──────────────────────────────────────────────────────────── */
+.ae-toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:#1f2937; color:#fff; padding:8px 18px; border-radius:8px; font-size:12px; z-index:9999; pointer-events:none; }
+
+/* ── Sample Trigger Structure modal ────────────────────────────────── */
+.ae-sample-overlay { position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:2000; display:flex; align-items:center; justify-content:center; padding:20px; }
+.ae-sample-shell { background:var(--card); border-radius:12px; box-shadow:0 20px 60px rgba(0,0,0,.3); width:560px; max-width:100%; max-height:80vh; display:flex; flex-direction:column; overflow:hidden; }
+.ae-sample-hdr { display:flex; align-items:center; gap:10px; padding:14px 16px; border-bottom:1px solid var(--border); flex-shrink:0; }
+.ae-sample-hdr-icon { width:28px; height:28px; background:color-mix(in srgb,#f59e0b 20%,var(--card)); border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:12px; color:#c2410c; flex-shrink:0; }
+.ae-sample-hdr-title { font-size:13px; font-weight:700; flex:1; }
+.ae-sample-hdr-close { background:none; border:none; cursor:pointer; color:var(--muted); font-size:14px; padding:4px 6px; border-radius:4px; }
+.ae-sample-hdr-close:hover { background:color-mix(in srgb,var(--text) 6%,transparent); color:var(--text); }
+.ae-sample-desc { font-size:11px; color:var(--muted); padding:10px 16px 0; flex-shrink:0; line-height:1.5; }
+.ae-sample-body { flex:1; overflow-y:auto; padding:12px 16px 16px; }
+.ae-sample-vars { display:flex; flex-direction:column; gap:6px; margin-bottom:14px; }
+.ae-sample-var-row { display:flex; align-items:baseline; gap:8px; padding:5px 8px; background:color-mix(in srgb,var(--text) 5%,var(--card)); border-radius:6px; font-size:11px; }
+.ae-sample-var-key { font-family:'Consolas','Courier New',monospace; color:#f59e0b; font-weight:700; white-space:nowrap; flex-shrink:0; }
+.ae-sample-var-type { background:rgba(148,163,184,.15); color:var(--muted); border-radius:3px; padding:1px 5px; font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.04em; flex-shrink:0; }
+.ae-sample-var-desc { color:var(--muted); font-size:11px; flex:1; min-width:0; }
+.ae-sample-var-copy { background:none; border:none; cursor:pointer; color:var(--muted); font-size:11px; padding:3px 7px; border-radius:4px; flex-shrink:0; transition:background .12s,color .12s; }
+.ae-sample-var-copy:hover { background:rgba(245,158,11,.15); color:#f59e0b; }
+.ae-sample-json-label { font-size:10px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; color:var(--muted); margin-bottom:6px; }
+.ae-sample-json { background:#0f172a; color:#e2e8f0; border-radius:8px; padding:12px 14px; overflow-x:auto; font-family:'Consolas','Courier New',monospace; font-size:11.5px; line-height:1.7; white-space:pre; tab-size:2; }
+.ae-sample-json .jk  { color:#7dd3fc; }
+.ae-sample-json .jvs { color:#86efac; }
+.ae-sample-json .jvn { color:#fbbf24; }
+.ae-sample-json .jvb { color:#f472b6; }
+.ae-sample-link { display:inline-flex; align-items:center; gap:5px; margin-top:8px; font-size:11px; font-weight:700; color:#f59e0b; cursor:pointer; background:rgba(245,158,11,.08); border:1px solid rgba(245,158,11,.25); border-radius:6px; padding:5px 10px; transition:background .12s; }
+.ae-sample-link:hover { background:rgba(245,158,11,.18); }
+
+/* ── Run Log drawer ─────────────────────────────────────────────────── */
+.ae-runlog-overlay { position:fixed; inset:0; background:rgba(0,0,0,.35); z-index:1500; display:flex; justify-content:flex-end; }
+.ae-runlog-panel   { width:440px; max-width:100%; height:100%; background:var(--card); border-left:1px solid var(--border); display:flex; flex-direction:column; overflow:hidden; animation:ae-slide-in .18s ease-out; }
+@keyframes ae-slide-in { from { transform:translateX(100%); } to { transform:translateX(0); } }
+.ae-runlog-hdr  { height:50px; flex-shrink:0; display:flex; align-items:center; gap:8px; padding:0 14px; border-bottom:1px solid var(--border); font-weight:700; font-size:13px; }
+.ae-runlog-stats { display:flex; flex-shrink:0; border-bottom:1px solid var(--border); }
+.ae-runlog-stat  { flex:1; padding:8px 12px; text-align:center; border-right:1px solid var(--border); }
+.ae-runlog-stat:last-child { border-right:none; }
+.ae-runlog-stat-num { font-size:17px; font-weight:700; line-height:1.2; }
+.ae-runlog-stat-lbl { font-size:10px; color:var(--muted); margin-top:1px; }
+.ae-runlog-stat-num--ok  { color:#16a34a; }
+.ae-runlog-stat-num--err { color:#dc2626; }
+.ae-runlog-body  { flex:1; overflow-y:auto; padding:10px; }
+.ae-runlog-empty { display:flex; flex-direction:column; align-items:center; justify-content:center; height:200px; color:var(--muted); font-size:12px; gap:8px; }
+.ae-run-row     { border:1px solid var(--border); border-radius:8px; margin-bottom:8px; overflow:hidden; }
+.ae-run-summary { display:flex; align-items:center; gap:8px; padding:9px 12px; cursor:pointer; transition:background .1s; }
+.ae-run-summary:hover { background:color-mix(in srgb,var(--text) 5%,transparent); }
+.ae-run-badge   { width:22px; height:22px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:10px; flex-shrink:0; }
+.ae-run-badge--success { background:#dcfce7; color:#15803d; }
+.ae-run-badge--failed  { background:#fee2e2; color:#dc2626; }
+.ae-run-badge--running { background:#fef9c3; color:#ca8a04; }
+.ae-run-event   { font-size:12px; font-weight:600; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.ae-run-time    { font-size:11px; color:var(--muted); flex-shrink:0; }
+.ae-run-chevron { font-size:10px; color:var(--muted); flex-shrink:0; transition:transform .15s; }
+.ae-run-chevron.open { transform:rotate(180deg); }
+.ae-run-error   { padding:7px 12px; background:#fee2e2; color:#b91c1c; font-size:11px; border-top:1px solid #fecaca; }
+.ae-run-steps   { padding:8px 12px 10px; border-top:1px solid var(--border); display:none; }
+.ae-run-steps.open { display:block; }
+.ae-step { display:flex; align-items:flex-start; gap:8px; padding:7px 0; position:relative; }
+.ae-step::before { content:''; position:absolute; left:13px; top:28px; bottom:-7px; width:1px; background:var(--border); }
+.ae-step:last-child::before { display:none; }
+.ae-step-ico { width:26px; height:26px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:10px; flex-shrink:0; }
+.ae-step-ico--trigger { background:#fff7ed; color:#c2410c; }
+.ae-step-ico--ok      { background:#dcfce7; color:#15803d; }
+.ae-step-ico--err     { background:#fee2e2; color:#dc2626; }
+.ae-step-ico--cond    { background:#dbeafe; color:#1d4ed8; }
+.ae-step-ico--skip    { background:color-mix(in srgb,var(--text) 6%,var(--card)); color:var(--muted); }
+.ae-step-body   { flex:1; min-width:0; }
+.ae-step-label  { font-size:12px; font-weight:600; }
+.ae-step-detail { font-size:11px; color:var(--muted); margin-top:2px; word-break:break-all; }
+</style>
+
+<div class="ae">
+
+  <!-- ── Topbar ── -->
+  <div class="ae-topbar">
+    <i class="fa fa-bolt" style="color:#f59e0b;font-size:15px;flex-shrink:0"></i>
+    <span class="ae-title" id="ae-flow-name">{{ $flow->name }}</span>
+    <div class="ae-sep"></div>
+    <a href="{{ route('automations.index') }}" class="ae-btn ae-btn-ghost ae-btn-icon" title="Back to Automations"><i class="fa fa-xmark"></i></a>
+    <button class="ae-btn ae-btn-secondary ae-btn-icon" id="ae-undo" title="Undo Ctrl+Z"><i class="fa fa-rotate-left"></i></button>
+    <button class="ae-btn ae-btn-secondary ae-btn-icon" id="ae-redo" title="Redo Ctrl+Y"><i class="fa fa-rotate-right"></i></button>
+    <button class="ae-btn ae-btn-secondary ae-btn-icon" id="ae-fit"  title="Fit to canvas"><i class="fa fa-expand"></i></button>
+    <div style="flex:1"></div>
+    <button class="ae-btn ae-btn-secondary" id="ae-runnow-btn" style="display:none" title="Run this flow now"><i class="fa fa-play"></i> Run Now</button>
+    <button class="ae-btn ae-btn-secondary" id="ae-runlog-btn" title="Run Log"><i class="fa fa-clock-rotate-left"></i> Run Log</button>
+    <span class="ae-status ae-status--off" id="ae-status-pill"><i class="fa fa-circle" style="font-size:7px"></i> Inactive</span>
+    <button class="ae-btn ae-btn-secondary" id="ae-toggle-active"><i class="fa fa-toggle-off"></i> Toggle</button>
+    <button class="ae-btn ae-btn-primary"   id="ae-save"><i class="fa fa-floppy-disk"></i> Save</button>
+  </div>
+
+  <!-- ── Body ── -->
+  <div class="ae-body">
+
+    <!-- Sidebar palette -->
+    <div class="ae-sidebar">
+      <div class="ae-sidebar-section">Nodes</div>
+      <div class="ae-palette-item" draggable="true" data-ntype="trigger">
+        <div class="ae-pal-icon" style="background:#fed7aa;color:#c2410c"><i class="fa fa-play"></i></div>
+        <div><div class="ae-pal-name">Trigger</div><div class="ae-pal-desc">Start the flow</div></div>
+      </div>
+      <div class="ae-palette-item" draggable="true" data-ntype="condition">
+        <div class="ae-pal-icon" style="background:#bae6fd;color:#0369a1"><i class="fa fa-code-branch"></i></div>
+        <div><div class="ae-pal-name">Condition</div><div class="ae-pal-desc">If / Else branch</div></div>
+      </div>
+      <div class="ae-palette-item" draggable="true" data-ntype="action">
+        <div class="ae-pal-icon" style="background:#bbf7d0;color:#15803d"><i class="fa fa-bolt"></i></div>
+        <div><div class="ae-pal-name">Action</div><div class="ae-pal-desc">Do something</div></div>
+      </div>
+      <div class="ae-palette-item" draggable="true" data-ntype="delay">
+        <div class="ae-pal-icon" style="background:#e9d5ff;color:#7c3aed"><i class="fa fa-clock"></i></div>
+        <div><div class="ae-pal-name">Delay</div><div class="ae-pal-desc">Wait before next</div></div>
+      </div>
+
+      <div class="ae-sidebar-section" style="margin-top:6px">Actions Library</div>
+      <div class="ae-palette-item" draggable="true" data-ntype="action" data-preset="send_email">
+        <div class="ae-pal-icon" style="background:#bbf7d0;color:#15803d"><i class="fa fa-envelope"></i></div>
+        <div><div class="ae-pal-name">Send Email</div><div class="ae-pal-desc">Email a customer</div></div>
+      </div>
+      <div class="ae-palette-item" draggable="true" data-ntype="action" data-preset="send_webhook">
+        <div class="ae-pal-icon" style="background:#bbf7d0;color:#15803d"><i class="fa fa-arrow-up-right-from-square"></i></div>
+        <div><div class="ae-pal-name">Call Webhook</div><div class="ae-pal-desc">POST to URL</div></div>
+      </div>
+      <div class="ae-palette-item" draggable="true" data-ntype="action" data-preset="create_task">
+        <div class="ae-pal-icon" style="background:#bbf7d0;color:#15803d"><i class="fa fa-list-check"></i></div>
+        <div><div class="ae-pal-name">Create Task</div><div class="ae-pal-desc">Add a CRM task</div></div>
+      </div>
+      <div class="ae-palette-item" draggable="true" data-ntype="action" data-preset="create_lead">
+        <div class="ae-pal-icon" style="background:#bbf7d0;color:#15803d"><i class="fa fa-bullseye"></i></div>
+        <div><div class="ae-pal-name">Create Lead</div><div class="ae-pal-desc">Add a CRM lead</div></div>
+      </div>
+      <div class="ae-palette-item" draggable="true" data-ntype="action" data-preset="send_notification">
+        <div class="ae-pal-icon" style="background:#bbf7d0;color:#15803d"><i class="fa fa-bell"></i></div>
+        <div><div class="ae-pal-name">Notification</div><div class="ae-pal-desc">In-app alert</div></div>
+      </div>
+      <div class="ae-palette-item" draggable="true" data-ntype="action" data-preset="deduct_stock">
+        <div class="ae-pal-icon" style="background:#bbf7d0;color:#15803d"><i class="fa fa-boxes-stacked"></i></div>
+        <div><div class="ae-pal-name">Deduct Stock</div><div class="ae-pal-desc">Reduce product qty</div></div>
+      </div>
+      <div class="ae-palette-item" draggable="true" data-ntype="action" data-preset="ai_send_email">
+        <div class="ae-pal-icon" style="background:#ede9fe;color:#7c3aed"><i class="fa fa-wand-magic-sparkles"></i></div>
+        <div><div class="ae-pal-name">AI Send Email</div><div class="ae-pal-desc">AI writes &amp; sends email</div></div>
+      </div>
+      <div class="ae-palette-item" draggable="true" data-ntype="action" data-preset="ai_whatsapp_message">
+        <div class="ae-pal-icon" style="background:#dcfce7;color:#15803d"><i class="fa-brands fa-whatsapp"></i></div>
+        <div><div class="ae-pal-name">AI WhatsApp</div><div class="ae-pal-desc">AI writes &amp; sends WhatsApp</div></div>
+      </div>
+      <div class="ae-palette-item" draggable="true" data-ntype="action" data-preset="ai_generate">
+        <div class="ae-pal-icon" style="background:#ede9fe;color:#7c3aed"><i class="fa fa-brain"></i></div>
+        <div><div class="ae-pal-name">AI Generate</div><div class="ae-pal-desc">AI writes text to reuse later</div></div>
+      </div>
+    </div>
+
+    <!-- Canvas area — Drawflow container -->
+    <div class="ae-canvas-wrap">
+      <div id="drawflow"></div>
+
+      <div class="ae-zoom">
+        <button class="ae-zoom-btn" id="ae-zoom-in"><i class="fa fa-plus"></i></button>
+        <div class="ae-zoom-pct" id="ae-zoom-pct">100%</div>
+        <button class="ae-zoom-btn" id="ae-zoom-out"><i class="fa fa-minus"></i></button>
+      </div>
+      <canvas id="ae-minimap"></canvas>
+    </div>
+
+    <!-- Inspector -->
+    <div class="ae-inspector">
+      <div id="ae-insp-empty-view" style="display:flex;flex-direction:column;flex:1">
+        <div class="ae-insp-empty">
+          <i class="fa fa-arrow-pointer" style="font-size:26px;margin-bottom:6px;opacity:.4"></i>
+          <div>Click a node to configure it</div>
+          <div style="margin-top:4px;font-size:11px">Drag from an output port to connect nodes</div>
+        </div>
+      </div>
+      <div id="ae-insp-node-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+        <div class="ae-insp-hdr">
+          <i class="fa fa-sliders"></i>
+          <span id="ae-insp-title">Settings</span>
+        </div>
+        <div class="ae-insp-body" id="ae-insp-body"></div>
+        <div class="ae-insp-foot">
+          <button class="ae-del-btn" id="ae-insp-delete"><i class="fa fa-trash"></i> Delete</button>
+          <button class="ae-btn ae-btn-primary" id="ae-insp-apply" style="margin-left:auto"><i class="fa fa-check"></i> Apply</button>
+        </div>
+      </div>
+      <div id="ae-insp-conn-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+        <div class="ae-insp-hdr"><i class="fa fa-link"></i> Connection</div>
+        <div class="ae-insp-body" style="color:var(--muted);font-size:12px">
+          <p style="margin:0">This connection links two nodes. Delete it to remove it.</p>
+        </div>
+        <div class="ae-insp-foot">
+          <button class="ae-del-btn" id="ae-insp-conn-delete"><i class="fa fa-trash"></i> Delete Connection</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── Sample Trigger Structure modal ── -->
+<div class="ae-sample-overlay" id="ae-sample-modal" style="display:none" role="dialog" aria-modal="true">
+  <div class="ae-sample-shell">
+    <div class="ae-sample-hdr">
+      <div class="ae-sample-hdr-icon"><i class="fa fa-play"></i></div>
+      <div class="ae-sample-hdr-title" id="ae-sample-title">Sample Trigger Payload</div>
+      <button class="ae-sample-hdr-close" id="ae-sample-close" title="Close"><i class="fa fa-xmark"></i></button>
+    </div>
+    <p class="ae-sample-desc" id="ae-sample-desc"></p>
+    <div class="ae-sample-body">
+      <div class="ae-sample-vars" id="ae-sample-vars"></div>
+      <div class="ae-sample-json-label">Full sample payload</div>
+      <div class="ae-sample-json" id="ae-sample-json"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Run Log drawer ── -->
+<div class="ae-runlog-overlay" id="ae-runlog-overlay" style="display:none" role="dialog" aria-modal="true">
+  <div class="ae-runlog-panel">
+    <div class="ae-runlog-hdr">
+      <i class="fa fa-clock-rotate-left" style="color:#f59e0b"></i>
+      <span>Run Log</span>
+      <div style="flex:1"></div>
+      <button class="ae-btn ae-btn-ghost ae-btn-icon" id="ae-runlog-refresh" title="Refresh"><i class="fa fa-arrows-rotate"></i></button>
+      <button class="ae-btn ae-btn-ghost ae-btn-icon" id="ae-runlog-close"   title="Close"><i class="fa fa-xmark"></i></button>
+    </div>
+    <div class="ae-runlog-stats">
+      <div class="ae-runlog-stat">
+        <div class="ae-runlog-stat-num" id="ae-runlog-stat-total">—</div>
+        <div class="ae-runlog-stat-lbl">Total Runs</div>
+      </div>
+      <div class="ae-runlog-stat">
+        <div class="ae-runlog-stat-num ae-runlog-stat-num--ok" id="ae-runlog-stat-ok">—</div>
+        <div class="ae-runlog-stat-lbl">Succeeded</div>
+      </div>
+      <div class="ae-runlog-stat">
+        <div class="ae-runlog-stat-num ae-runlog-stat-num--err" id="ae-runlog-stat-fail">—</div>
+        <div class="ae-runlog-stat-lbl">Failed</div>
+      </div>
+    </div>
+    <div class="ae-runlog-body" id="ae-runlog-body">
+      <div class="ae-runlog-empty">
+        <i class="fa fa-clock-rotate-left" style="font-size:26px;opacity:.3"></i>
+        <div>Click refresh to load runs</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{{--
+    Blade's @json() directive splits its argument on every top-level comma
+    (see Illuminate\View\Compilers\Concerns\CompilesJson::compileJson), so it
+    can only ever wrap a single bare expression — never an array literal or a
+    multi-arg call. Precompute everything into plain variables first.
+--}}
+@php
+    $__aeRoutes = [
+        'update'  => route('automations.update', $flow),
+        'runs'    => route('automations.runs', $flow),
+        'trigger' => route('automations.trigger', $flow),
+    ];
+    $__aeFlow = [
+        'id'             => $flow->id,
+        'name'           => $flow->name,
+        'is_active'      => $flow->is_active,
+        'trigger_type'   => $flow->trigger_type,
+        'trigger_config' => $flow->trigger_config,
+        'flow_data'      => $flow->flow_data ?: ['nodes' => [], 'edges' => []],
+    ];
+    $__aeRelations = $relations->map(fn ($r) => ['id' => $r->id, 'name' => $r->name])->values();
+@endphp
+
+<script src="{{ asset('vendor/drawflow/drawflow.min.js') }}"></script>
+<script>
+'use strict';
+
+// ── Server-provided state ───────────────────────────────────────────────────
+const AE_ROUTES = @json($__aeRoutes);
+let flow = @json($__aeFlow);
+let _relations = @json($__aeRelations);
+</script>
+@verbatim
+<script>
+function aeCsrfToken() {
+  return document.querySelector('meta[name="csrf-token"]')?.content ?? '';
+}
+async function aeApi(url, method, body) {
+  const res = await fetch(url, {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'X-CSRF-TOKEN': aeCsrfToken(),
+    },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+  let json = null;
+  try { json = await res.json(); } catch (e) { /* no body */ }
+  return { status: res.status, body: json };
+}
+const API = {
+  automationUpdate: (data) => aeApi(AE_ROUTES.update, 'PATCH', data),
+  automationRuns:   ()     => aeApi(AE_ROUTES.runs, 'GET'),
+  automationTrigger:()     => aeApi(AE_ROUTES.trigger, 'POST', {}),
+};
+
+// ── Constants ──────────────────────────────────────────────────────────────
+// Mirrors Modules\AutomationEditor\app\Models\AutomationFlow::availableTriggerGroups()
+const TRIGGER_GROUPS = {
+  'Sales & Invoices': {
+    'sale.created':'Sale Created','sale.voided':'Sale Voided','sale.refunded':'Sale Refunded',
+    'invoice.created':'Invoice Created','invoice.paid':'Invoice Paid',
+  },
+  'Products & Stock': {
+    'product.created':'Product Created','product.updated':'Product Updated',
+    'stock.updated':'Stock Updated','barcode.sheet.created':'Barcode Sheet Created',
+    'stock.audit.finalized':'Stock Audit Finalized',
+  },
+  'Purchasing': {
+    'grn.created':'GRN Created','order.created':'Purchase Order Created',
+    'supplier.created':'Supplier Created','cheque.created':'Cheque Created',
+    'cheque.expired':'Cheque Expired / Overdue',
+  },
+  'Customers / CRM': {
+    'customer.created':'Customer Created','crm.lead.created':'Lead Created (in Relation)',
+    'crm.lead.stage_changed':'Lead Stage Changed (in Relation)',
+  },
+  'Cash & End of Day': {
+    'eod.withdraw':'Cash Withdrawal','eod.settled':'End-of-Day Settled to Bank',
+  },
+  'Finance — Bills': {
+    'bill.created':'Bill Created','bill.paid':'Bill Payment Settled',
+  },
+  'Finance — Loans': {
+    'loan.created':'Loan Created','loan.installment.paid':'Loan Installment Paid',
+  },
+  'Finance — Property & Rental': {
+    'property.created':'Property Created','rental.created':'Rental Agreement Created',
+    'rental.paid':'Rental Payment Settled',
+  },
+  'Notifications': {
+    'notification.created':'Notification Created',
+  },
+  'Manual': {
+    'manual':'Manual Trigger',
+  },
+};
+const TRIGGERS = Object.assign({}, ...Object.values(TRIGGER_GROUPS));
+const RELATION_SCOPED_TRIGGERS = ['crm.lead.created', 'crm.lead.stage_changed'];
+const ACTIONS = {
+  'send_email'       : 'Send Email',
+  'send_webhook'     : 'Call Webhook',
+  'create_task'      : 'Create Task',
+  'create_lead'      : 'Create Lead',
+  'send_notification': 'Send Notification',
+  'deduct_stock'        : 'Deduct Stock',
+  'ai_send_email'       : 'AI Send Email',
+  'ai_whatsapp_message' : 'AI WhatsApp',
+  'ai_generate'         : 'AI Generate',
+};
+const COND_OPS = { 'eq':'equals','neq':'not equals','gt':'greater than','lt':'less than','contains':'contains' };
+
+// ── Trigger sample payloads ────────────────────────────────────────────────
+const TRIGGER_SAMPLES = {
+  'sale.created': { desc: 'Fires when a new sale (invoice/receipt) is completed at the POS.',
+    vars: [ {key:'sale.id',type:'number',desc:'Unique sale ID'}, {key:'sale.reference',type:'string',desc:'Invoice reference number'}, {key:'sale.total',type:'number',desc:'Grand total amount'}, {key:'sale.subtotal',type:'number',desc:'Total before tax'}, {key:'sale.tax',type:'number',desc:'Tax amount'}, {key:'sale.payment_method',type:'string',desc:'cash / card / credit / …'}, {key:'sale.items',type:'array',desc:'Line items (product, qty, price)'}, {key:'customer.id',type:'number',desc:'Customer ID (if attached)'}, {key:'customer.name',type:'string',desc:'Customer full name'}, {key:'customer.email',type:'string',desc:'Customer email address'} ],
+    sample: { event:'sale.created', sale:{ id:1042, reference:'INV-1042', total:1250.00, subtotal:1116.07, tax:133.93, status:'completed', payment_method:'cash', created_at:'2026-01-15T10:30:00Z', items:[{product_id:5,name:'Product A',qty:2,unit_price:500.00,total:1000.00},{product_id:8,name:'Product B',qty:1,unit_price:116.07,total:116.07}] }, customer:{ id:22, name:'John Silva', email:'john@example.com', phone:'+94771234567' } } },
+  'sale.voided': { desc: 'Fires when a completed sale is voided / cancelled.',
+    vars: [ {key:'sale.id',type:'number',desc:'Sale ID that was voided'}, {key:'sale.reference',type:'string',desc:'Invoice reference'}, {key:'sale.total',type:'number',desc:'Original total'}, {key:'sale.voided_at',type:'string',desc:'ISO timestamp of void'}, {key:'customer.name',type:'string',desc:'Attached customer name'} ],
+    sample: { event:'sale.voided', sale:{ id:1042, reference:'INV-1042', total:1250.00, voided_at:'2026-01-15T11:00:00Z' }, customer:{ id:22, name:'John Silva', email:'john@example.com' } } },
+  'sale.refunded': { desc: 'Fires when a refund is processed against a sale.',
+    vars: [ {key:'sale.id',type:'number',desc:'Original sale ID'}, {key:'refund.amount',type:'number',desc:'Amount refunded'}, {key:'refund.reason',type:'string',desc:'Reason text (optional)'}, {key:'customer.email',type:'string',desc:'Customer email'} ],
+    sample: { event:'sale.refunded', sale:{ id:1042, reference:'INV-1042', total:1250.00 }, refund:{ amount:500.00, reason:'Damaged item', refunded_at:'2026-01-16T09:00:00Z' }, customer:{ id:22, name:'John Silva', email:'john@example.com' } } },
+  'invoice.created': { desc: 'Fires when a new invoice is created (before payment).',
+    vars: [ {key:'invoice.id',type:'number',desc:'Invoice ID'}, {key:'invoice.reference',type:'string',desc:'Invoice number'}, {key:'invoice.total',type:'number',desc:'Total amount due'}, {key:'invoice.due_date',type:'string',desc:'Payment due date'}, {key:'customer.name',type:'string',desc:'Billed customer name'}, {key:'customer.email',type:'string',desc:'Billed customer email'} ],
+    sample: { event:'invoice.created', invoice:{ id:88, reference:'INV-088', total:4500.00, due_date:'2026-02-01', created_at:'2026-01-15T08:00:00Z' }, customer:{ id:22, name:'John Silva', email:'john@example.com', phone:'+94771234567' } } },
+  'invoice.paid': { desc: 'Fires when an invoice is marked as fully paid.',
+    vars: [ {key:'invoice.id',type:'number',desc:'Invoice ID'}, {key:'invoice.total',type:'number',desc:'Total paid'}, {key:'invoice.paid_at',type:'string',desc:'ISO timestamp of payment'}, {key:'customer.name',type:'string',desc:'Customer name'}, {key:'customer.email',type:'string',desc:'Customer email'} ],
+    sample: { event:'invoice.paid', invoice:{ id:88, reference:'INV-088', total:4500.00, paid_at:'2026-01-28T14:22:00Z' }, customer:{ id:22, name:'John Silva', email:'john@example.com' } } },
+  'product.created': { desc: 'Fires when a new product is added to the catalogue.',
+    vars: [ {key:'product.id',type:'number',desc:'Product ID'}, {key:'product.name',type:'string',desc:'Product name'}, {key:'product.sku',type:'string',desc:'SKU code'}, {key:'product.price',type:'number',desc:'Selling price'}, {key:'product.category',type:'string',desc:'Category name'} ],
+    sample: { event:'product.created', product:{ id:201, name:'Widget Pro', sku:'WID-PRO-01', price:899.00, category:'Electronics', stock:50 } } },
+  'product.updated': { desc: 'Fires when a product\'s details or price are updated.',
+    vars: [ {key:'product.id',type:'number',desc:'Product ID'}, {key:'product.name',type:'string',desc:'Product name'}, {key:'product.price',type:'number',desc:'New selling price'}, {key:'product.old_price',type:'number',desc:'Previous selling price'} ],
+    sample: { event:'product.updated', product:{ id:201, name:'Widget Pro', price:799.00, old_price:899.00, sku:'WID-PRO-01' } } },
+  'stock.updated': { desc: 'Fires when a product\'s stock quantity changes (sale, adjustment, GRN).',
+    vars: [ {key:'product.id',type:'number',desc:'Product ID'}, {key:'product.name',type:'string',desc:'Product name'}, {key:'product.sku',type:'string',desc:'SKU code'}, {key:'stock.qty_before',type:'number',desc:'Stock before change'}, {key:'stock.qty_after',type:'number',desc:'Stock after change'}, {key:'stock.reason',type:'string',desc:'sale / grn / adjustment'} ],
+    sample: { event:'stock.updated', product:{ id:201, name:'Widget Pro', sku:'WID-PRO-01' }, stock:{ qty_before:50, qty_after:48, reason:'sale', reference:'INV-1042' } } },
+  'grn.created': { desc: 'Fires when a Goods Receipt Note is created (stock received from supplier).',
+    vars: [ {key:'grn.id',type:'number',desc:'GRN ID'}, {key:'grn.reference',type:'string',desc:'GRN reference number'}, {key:'grn.total_value',type:'number',desc:'Total cost value received'}, {key:'supplier.name',type:'string',desc:'Supplier name'}, {key:'grn.items',type:'array',desc:'Products received (qty, cost)'} ],
+    sample: { event:'grn.created', grn:{ id:15, reference:'GRN-015', total_value:12000.00, received_at:'2026-01-15T09:00:00Z', items:[{product_id:201,name:'Widget Pro',qty:100,unit_cost:120.00}] }, supplier:{ id:3, name:'Tech Supplies Ltd' } } },
+  'customer.created': { desc: 'Fires when a new customer account is created.',
+    vars: [ {key:'customer.id',type:'number',desc:'Customer ID'}, {key:'customer.name',type:'string',desc:'Full name'}, {key:'customer.email',type:'string',desc:'Email address'}, {key:'customer.phone',type:'string',desc:'Phone number'}, {key:'customer.created_at',type:'string',desc:'ISO timestamp'} ],
+    sample: { event:'customer.created', customer:{ id:22, name:'John Silva', email:'john@example.com', phone:'+94771234567', created_at:'2026-01-15T10:00:00Z' } } },
+  'crm.lead.created': { desc: 'Fires when a new CRM lead is created inside a specific Relation (Project). Scope this flow to one Relation in the Trigger Settings panel.',
+    vars: [ {key:'lead.id',type:'number',desc:'Lead ID'}, {key:'lead.name',type:'string',desc:'Lead name'}, {key:'lead.email',type:'string',desc:'Email address'}, {key:'lead.phone',type:'string',desc:'Phone number'}, {key:'lead.project_id',type:'number',desc:'Relation (Project) ID the lead belongs to'}, {key:'lead.stage_id',type:'number',desc:'Pipeline stage ID'}, {key:'lead.stage_name',type:'string',desc:'Pipeline stage name'}, {key:'lead.created_at',type:'string',desc:'ISO timestamp'}, {key:'relation.id',type:'number',desc:'Relation (Project) ID'}, {key:'relation.name',type:'string',desc:'Relation (Project) name'} ],
+    sample: { event:'crm.lead.created', lead:{ id:41, name:'Nimal Perera', email:'nimal@example.com', phone:'+94711234567', project_id:3, stage_id:7, stage_name:'Qualified', created_at:'2026-01-15T10:00:00Z' }, relation:{ id:3, name:'Relation_001' } } },
+  'crm.lead.stage_changed': { desc: 'Fires when an existing CRM lead moves to a different pipeline stage inside a specific Relation (Project). Scope this flow to one Relation in the Trigger Settings panel. Does not fire for the lead\'s initial stage on creation — use "Lead Created" for that.',
+    vars: [ {key:'lead.id',type:'number',desc:'Lead ID'}, {key:'lead.name',type:'string',desc:'Lead name'}, {key:'lead.email',type:'string',desc:'Email address'}, {key:'lead.phone',type:'string',desc:'Phone number'}, {key:'lead.project_id',type:'number',desc:'Relation (Project) ID the lead belongs to'}, {key:'lead.stage_id',type:'number',desc:'Pipeline stage ID the lead just moved into'}, {key:'lead.stage_name',type:'string',desc:'Pipeline stage name the lead just moved into'}, {key:'from_stage.id',type:'number',desc:'Stage ID the lead moved from'}, {key:'from_stage.name',type:'string',desc:'Stage name the lead moved from'}, {key:'to_stage.id',type:'number',desc:'Stage ID the lead moved to'}, {key:'to_stage.name',type:'string',desc:'Stage name the lead moved to'}, {key:'relation.id',type:'number',desc:'Relation (Project) ID'}, {key:'relation.name',type:'string',desc:'Relation (Project) name'} ],
+    sample: { event:'crm.lead.stage_changed', lead:{ id:41, name:'Nimal Perera', email:'nimal@example.com', phone:'+94711234567', project_id:3, stage_id:8, stage_name:'Contacted' }, from_stage:{ id:7, name:'New' }, to_stage:{ id:8, name:'Contacted' }, relation:{ id:3, name:'Relation_001' } } },
+  'order.created': { desc: 'Fires when a new Purchase Order is created.',
+    vars: [ {key:'order.id',type:'number',desc:'Purchase order ID'}, {key:'order.reference',type:'string',desc:'PO reference'}, {key:'order.total',type:'number',desc:'Total order value'}, {key:'order.items',type:'array',desc:'Ordered products'}, {key:'supplier.name',type:'string',desc:'Supplier name'} ],
+    sample: { event:'order.created', order:{ id:77, reference:'PO-077', total:36000.00, created_at:'2026-01-15T11:00:00Z', items:[{product_id:201,name:'Widget Pro',qty:300,unit_price:120.00}] }, supplier:{ id:3, name:'Tech Supplies Ltd' } } },
+  'notification.created': { desc: 'Fires when a new in-app notification is generated (low/out of stock, overdue bill/loan/rental, expired property, cheque overdue, large sale, purchase order received, etc.).',
+    vars: [ {key:'notification.id',type:'number',desc:'Notification ID'}, {key:'notification.type',type:'string',desc:'stock_low / stock_out / bill_overdue / loan_overdue / rental_overdue / investment_overdue / property_expired / purchase_order_overdue / cheque_overdue / purchase_order_received / sale_large'}, {key:'notification.title',type:'string',desc:'Notification title'}, {key:'notification.message',type:'string',desc:'Notification message body'} ],
+    sample: { event:'notification.created', notification:{ id:501, type:'stock_low', title:'3 products low on stock', message:'Product A, Product B, Product C.', reference_type:'stock_summary', reference_id:2, read:false, created_at:'2026-01-15T09:00:00Z' } } },
+  'manual': { desc: 'Triggered manually via a button click or API call. Use this for on-demand flows.',
+    vars: [ {key:'trigger.by',type:'string',desc:'User or system that triggered it'}, {key:'trigger.at',type:'string',desc:'ISO timestamp of trigger'}, {key:'payload',type:'object',desc:'Custom data passed at trigger time (optional)'} ],
+    sample: { event:'manual', trigger:{ by:'john@example.com', at:'2026-01-15T12:00:00Z' }, payload:{ custom_key:'custom_value' } } },
+  'barcode.sheet.created': { desc: 'Fires when a barcode label sheet is generated for one or more products.',
+    vars: [ {key:'sheet.id',type:'number',desc:'Barcode sheet ID'}, {key:'sheet.reference',type:'string',desc:'Sheet reference number'}, {key:'sheet.label_count',type:'number',desc:'Number of labels on the sheet'}, {key:'sheet.created_at',type:'string',desc:'ISO timestamp'}, {key:'product.id',type:'number',desc:'Product ID (if single-product sheet)'}, {key:'product.name',type:'string',desc:'Product name'} ],
+    sample: { event:'barcode.sheet.created', sheet:{ id:42, reference:'BCL-042', label_count:50, created_at:'2026-01-15T08:30:00Z' }, product:{ id:101, name:'Widget Pro', sku:'WP-001' } } },
+  'eod.withdraw': { desc: 'Fires when cash is withdrawn from the POS cash drawer.',
+    vars: [ {key:'withdrawal.id',type:'number',desc:'Withdrawal record ID'}, {key:'withdrawal.amount',type:'number',desc:'Amount withdrawn'}, {key:'withdrawal.note',type:'string',desc:'Withdrawal note or reason'}, {key:'withdrawal.date',type:'string',desc:'Register date (YYYY-MM-DD)'}, {key:'withdrawal.time',type:'string',desc:'ISO timestamp'} ],
+    sample: { event:'eod.withdraw', withdrawal:{ id:9, amount:5000.00, note:'Safe drop', date:'2026-01-15', time:'2026-01-15T14:00:00Z' } } },
+  'eod.settled': { desc: 'Fires when end-of-day settlement is completed and sales are posted to the bank account.',
+    vars: [ {key:'settled.count',type:'number',desc:'Number of sales settled'}, {key:'settled.total',type:'number',desc:'Total amount settled'}, {key:'settled.date',type:'string',desc:'Settlement date (YYYY-MM-DD)'}, {key:'business.id',type:'number',desc:'Business ID'}, {key:'business.name',type:'string',desc:'Business name'} ],
+    sample: { event:'eod.settled', settled:{ count:47, total:185600.00, date:'2026-01-15' }, business:{ id:1, name:'Main Store' } } },
+  'supplier.created': { desc: 'Fires when a new supplier is added to the system.',
+    vars: [ {key:'supplier.id',type:'number',desc:'Supplier ID'}, {key:'supplier.name',type:'string',desc:'Supplier company name'}, {key:'supplier.contact_name',type:'string',desc:'Primary contact person'}, {key:'supplier.email',type:'string',desc:'Supplier email address'}, {key:'supplier.phone',type:'string',desc:'Supplier phone number'}, {key:'supplier.created_at',type:'string',desc:'ISO timestamp'} ],
+    sample: { event:'supplier.created', supplier:{ id:12, name:'Global Parts Co.', contact_name:'Sara Lee', email:'sara@globalparts.com', phone:'+94112345678', created_at:'2026-01-15T09:00:00Z' } } },
+  'stock.audit.finalized': { desc: 'Fires when a stock audit is finalized and quantities are applied to products.',
+    vars: [ {key:'audit.id',type:'number',desc:'Stock audit ID'}, {key:'audit.reference',type:'string',desc:'Audit number (e.g. AUD-0012)'}, {key:'audit.audit_date',type:'string',desc:'Date of the audit'}, {key:'audit.finalized_at',type:'string',desc:'ISO timestamp of finalization'}, {key:'audit.lines_counted',type:'number',desc:'Number of lines with a counted quantity'}, {key:'audit.variance_count',type:'number',desc:'Lines where counted differs from expected'} ],
+    sample: { event:'stock.audit.finalized', audit:{ id:7, reference:'AUD-0007', audit_date:'2026-01-14', finalized_at:'2026-01-15T17:00:00Z', lines_counted:120, variance_count:8 } } },
+  'cheque.created': { desc: 'Fires when a cheque payment is recorded against a goods receipt.',
+    vars: [ {key:'cheque.id',type:'number',desc:'Cheque payment ID'}, {key:'cheque.cheque_number',type:'string',desc:'Cheque number'}, {key:'cheque.amount',type:'number',desc:'Cheque amount'}, {key:'cheque.due_date',type:'string',desc:'Cheque due date (YYYY-MM-DD)'}, {key:'cheque.status',type:'string',desc:'Current status (pending)'}, {key:'cheque.grn_number',type:'string',desc:'Linked GRN reference'}, {key:'cheque.created_at',type:'string',desc:'ISO timestamp'} ],
+    sample: { event:'cheque.created', cheque:{ id:5, cheque_number:'CHQ-00123', amount:45000.00, due_date:'2026-02-15', status:'pending', grn_id:15, grn_number:'GRN-015', created_at:'2026-01-15T10:00:00Z' } } },
+  'cheque.expired': { desc: 'Fires daily for each cheque payment that is overdue (due_date < today, status still pending).',
+    vars: [ {key:'cheque.id',type:'number',desc:'Cheque payment ID'}, {key:'cheque.cheque_number',type:'string',desc:'Cheque number'}, {key:'cheque.amount',type:'number',desc:'Cheque amount'}, {key:'cheque.due_date',type:'string',desc:'Due date (YYYY-MM-DD)'}, {key:'cheque.days_overdue',type:'number',desc:'Days past due date'}, {key:'cheque.grn_number',type:'string',desc:'Linked GRN reference'} ],
+    sample: { event:'cheque.expired', cheque:{ id:3, cheque_number:'CHQ-00099', amount:22500.00, due_date:'2026-01-01', days_overdue:14, grn_number:'GRN-008' } } },
+  'bill.created': { desc: 'Fires when a new bill (recurring or one-time) is added to the business.',
+    vars: [ {key:'bill.id',type:'number',desc:'Bill ID'}, {key:'bill.name',type:'string',desc:'Bill name or description'}, {key:'bill.recurring_cost',type:'number',desc:'Scheduled payment amount'}, {key:'bill.recurring_type',type:'string',desc:'Cadence: daily, monthly, yearly'}, {key:'bill.due_date',type:'string',desc:'First / only due date (YYYY-MM-DD)'}, {key:'bill.created_at',type:'string',desc:'ISO timestamp'} ],
+    sample: { event:'bill.created', bill:{ id:18, name:'Electricity Bill', recurring_cost:12500.00, recurring_type:'monthly', due_date:'2026-02-01', created_at:'2026-01-15T08:00:00Z' } } },
+  'bill.paid': { desc: 'Fires when a bill payment is recorded for a scheduled occurrence.',
+    vars: [ {key:'bill.id',type:'number',desc:'Bill ID'}, {key:'bill.name',type:'string',desc:'Bill name'}, {key:'bill.due_date',type:'string',desc:'Billing occurrence date (YYYY-MM-DD)'}, {key:'payment.total',type:'number',desc:'Total amount paid in this settlement'}, {key:'payment.paid_at',type:'string',desc:'ISO timestamp of payment'} ],
+    sample: { event:'bill.paid', bill:{ id:18, name:'Electricity Bill', due_date:'2026-02-01' }, payment:{ total:12500.00, paid_at:'2026-02-01T09:30:00Z' } } },
+  'loan.created': { desc: 'Fires when a new loan is recorded in the system.',
+    vars: [ {key:'loan.id',type:'number',desc:'Loan ID'}, {key:'loan.name',type:'string',desc:'Loan label / lender name'}, {key:'loan.borrowed_amount',type:'number',desc:'Principal amount borrowed'}, {key:'loan.interest_rate',type:'number',desc:'Annual interest rate (%)'}, {key:'loan.recurring_type',type:'string',desc:'Installment cadence'}, {key:'loan.created_at',type:'string',desc:'ISO timestamp'} ],
+    sample: { event:'loan.created', loan:{ id:4, name:'DFCC Vehicle Loan', borrowed_amount:2500000.00, interest_rate:14.5, recurring_type:'monthly', created_at:'2026-01-15T10:00:00Z' } } },
+  'loan.installment.paid': { desc: 'Fires when a loan installment is manually settled in the ledger.',
+    vars: [ {key:'loan.id',type:'number',desc:'Loan ID'}, {key:'loan.name',type:'string',desc:'Loan label'}, {key:'loan.borrowed_amount',type:'number',desc:'Original principal'}, {key:'installment.amount',type:'number',desc:'Amount paid this period'}, {key:'installment.period',type:'number',desc:'Period number (1-based)'}, {key:'installment.due_date',type:'string',desc:'Scheduled due date'}, {key:'installment.paid_at',type:'string',desc:'ISO timestamp of payment'} ],
+    sample: { event:'loan.installment.paid', loan:{ id:4, name:'DFCC Vehicle Loan', borrowed_amount:2500000.00 }, installment:{ amount:68500.00, period:3, due_date:'2026-04-15', paid_at:'2026-04-15T11:00:00Z' } } },
+  'property.created': { desc: 'Fires when a new business property asset is added.',
+    vars: [ {key:'property.id',type:'number',desc:'Property ID'}, {key:'property.property_name',type:'string',desc:'Property name or address'}, {key:'property.property_type',type:'string',desc:'Type (land, building, vehicle…)'}, {key:'property.cost',type:'number',desc:'Acquisition cost'}, {key:'property.has_expiry',type:'boolean',desc:'Whether the property has an expiry'}, {key:'property.expire_date',type:'string',desc:'Expiry date if applicable (YYYY-MM-DD)'}, {key:'property.created_at',type:'string',desc:'ISO timestamp'} ],
+    sample: { event:'property.created', property:{ id:2, property_name:'Colombo 3 Warehouse', property_type:'building', cost:15000000.00, has_expiry:false, expire_date:null, created_at:'2026-01-15T09:00:00Z' } } },
+  'rental.created': { desc: 'Fires when a new rental agreement is created.',
+    vars: [ {key:'rental.id',type:'number',desc:'Rental ID'}, {key:'rental.property_type',type:'string',desc:'Type of rented property'}, {key:'rental.purpose',type:'string',desc:'Purpose of the rental'}, {key:'rental.recurring_cost',type:'number',desc:'Monthly / periodic rent amount'}, {key:'rental.recurring_type',type:'string',desc:'Cadence: monthly, yearly, etc.'}, {key:'rental.due_date',type:'string',desc:'First rent due date (YYYY-MM-DD)'}, {key:'rental.key_money',type:'number',desc:'Key money / deposit paid'}, {key:'rental.created_at',type:'string',desc:'ISO timestamp'} ],
+    sample: { event:'rental.created', rental:{ id:3, property_type:'commercial', purpose:'Showroom', recurring_cost:85000.00, recurring_type:'monthly', due_date:'2026-02-01', key_money:250000.00, created_at:'2026-01-15T10:00:00Z' } } },
+  'rental.paid': { desc: 'Fires when a rental payment is recorded for a scheduled period.',
+    vars: [ {key:'rental.id',type:'number',desc:'Rental ID'}, {key:'rental.property_type',type:'string',desc:'Type of rented property'}, {key:'rental.purpose',type:'string',desc:'Purpose of the rental'}, {key:'payment.amount',type:'number',desc:'Rent amount paid'}, {key:'payment.due_date',type:'string',desc:'Period due date (YYYY-MM-DD)'}, {key:'payment.paid_at',type:'string',desc:'ISO timestamp of payment'} ],
+    sample: { event:'rental.paid', rental:{ id:3, property_type:'commercial', purpose:'Showroom' }, payment:{ amount:85000.00, due_date:'2026-02-01', paid_at:'2026-02-01T10:30:00Z' } } },
+};
+
+// ── State ──────────────────────────────────────────────────────────────────
+let _selectedNodeId = null;
+let _selectedConn   = null;
+let _undo = [], _redo = [];
+
+function _triggerCategoryOf(triggerKey) {
+  for (const [cat, list] of Object.entries(TRIGGER_GROUPS)) {
+    if (triggerKey && Object.prototype.hasOwnProperty.call(list, triggerKey)) return cat;
+  }
+  return '';
+}
+
+// ── DOM helpers ────────────────────────────────────────────────────────────
+function $q(q, ctx) { return (ctx || document).querySelector(q); }
+function esc(s)     { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function toast(msg) {
+  const el = document.createElement('div');
+  el.className = 'ae-toast'; el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 2200);
+}
+
+// ── Drawflow initialisation ────────────────────────────────────────────────
+const dfEl   = document.getElementById('drawflow');
+const editor = new Drawflow(dfEl);
+editor.reroute                = true;
+editor.reroute_fix_curvature  = true;
+editor.force_first_input      = false;
+editor.line_path              = 5;
+editor.start();
+
+// ── Node HTML templates ────────────────────────────────────────────────────
+function _nodeIcon(type, preset) {
+  if (type === 'trigger')   return 'fa-play';
+  if (type === 'condition') return 'fa-code-branch';
+  if (type === 'delay')     return 'fa-clock';
+  const icons = {
+    send_email:'fa-envelope', send_webhook:'fa-arrow-up-right-from-square',
+    create_task:'fa-list-check', create_lead:'fa-bullseye',
+    send_notification:'fa-bell', deduct_stock:'fa-boxes-stacked',
+    ai_send_email:'fa-wand-magic-sparkles', ai_whatsapp_message:'fa-brands fa-whatsapp',
+    ai_generate:'fa-brain',
+  };
+  return icons[preset] || 'fa-bolt';
+}
+function _nodeLabel(type, config, preset) {
+  if (type === 'trigger')   return TRIGGERS[config?.trigger] || 'Choose trigger…';
+  if (type === 'condition') return config?.label || 'Condition';
+  if (type === 'action')    return ACTIONS[preset || config?.action] || 'Choose action…';
+  if (type === 'delay')     return config?.duration ? `Wait ${config.duration} ${config.unit||'min'}` : 'Delay';
+  return type;
+}
+function _nodeKind(type) {
+  return { trigger:'Trigger', condition:'Condition', action:'Action', delay:'Delay' }[type] || type;
+}
+function _nodeBodyHtml(type, config) {
+  const lines = [];
+  if (type === 'trigger'   && config?.trigger)  lines.push(TRIGGERS[config.trigger] || config.trigger);
+  if (type === 'condition' && config?.field)     lines.push(`${config.field} ${COND_OPS[config.op]||config.op||''} ${config.value||''}`);
+  if (type === 'action'    && config?.notes)     lines.push(config.notes);
+  if (type === 'delay'     && config?.duration)  lines.push(`Wait ${config.duration} ${config.unit||'minutes'}`);
+  if (!lines.length) return `<div class="ae-node-body ae-node-uncfg">Click to configure…</div>`;
+  return `<div class="ae-node-body">${lines.map(l => `<div class="ae-node-summary">${esc(l)}</div>`).join('')}</div>`;
+}
+function _nodeHtml(type, config, preset) {
+  return `
+    <div class="ae-node-hdr">
+      <div class="ae-node-ico"><i class="fa ${_nodeIcon(type, preset)}"></i></div>
+      <div style="flex:1;min-width:0">
+        <div class="ae-node-label">${esc(_nodeLabel(type, config, preset))}</div>
+        <div class="ae-node-kind">${_nodeKind(type)}</div>
+      </div>
+    </div>
+    ${_nodeBodyHtml(type, config)}
+  `;
+}
+
+function _addNode(type, clientX, clientY, config, preset) {
+  _pushUndo();
+  const inputs  = (type === 'trigger')   ? 0 : 1;
+  const outputs = (type === 'condition') ? 2 : 1;
+  const data    = { type, config: config || {}, preset: preset || null };
+  const html    = _nodeHtml(type, config || {}, preset);
+  const cls     = `ae-node ae-node--${type}`;
+  const id      = editor.addNode(type, inputs, outputs, clientX, clientY, cls, data, html);
+  _renderMinimap();
+  return id;
+}
+
+function _refreshNodeHtml(nodeId) {
+  const node = editor.getNodeFromId(nodeId);
+  if (!node) return;
+  const { type, config, preset } = node.data;
+  const content = document.querySelector(`#node-${nodeId} .drawflow_content_node`);
+  if (content) content.innerHTML = _nodeHtml(type, config, preset);
+}
+
+// ── Undo / Redo ────────────────────────────────────────────────────────────
+function _pushUndo() {
+  _undo.push(editor.export());
+  if (_undo.length > 60) _undo.shift();
+  _redo = [];
+}
+function _fixNodeIdCounter() {
+  const data  = editor.drawflow?.drawflow?.Home?.data || {};
+  const maxId = Math.max(0, ...Object.keys(data).map(Number));
+  if (editor.nodeId <= maxId) editor.nodeId = maxId + 1;
+}
+function _undoAction() {
+  if (!_undo.length) return;
+  _redo.push(editor.export());
+  editor.import(_undo.pop());
+  _fixNodeIdCounter();
+  _selectedNodeId = null; _selectedConn = null;
+  _showInspectorEmpty();
+  _renderMinimap();
+}
+function _redoAction() {
+  if (!_redo.length) return;
+  _undo.push(editor.export());
+  editor.import(_redo.pop());
+  _fixNodeIdCounter();
+  _selectedNodeId = null; _selectedConn = null;
+  _showInspectorEmpty();
+  _renderMinimap();
+}
+
+// ── Zoom ───────────────────────────────────────────────────────────────────
+function _updateZoomPct() { $q('#ae-zoom-pct').textContent = Math.round(editor.zoom * 100) + '%'; }
+$q('#ae-zoom-in').addEventListener('click', () => { editor.zoom_in(); _updateZoomPct(); });
+$q('#ae-zoom-out').addEventListener('click', () => { editor.zoom_out(); _updateZoomPct(); });
+$q('#ae-fit').addEventListener('click', () => { editor.zoom_reset(); _updateZoomPct(); });
+
+// ── Inspector ──────────────────────────────────────────────────────────────
+function _showInspectorEmpty() {
+  $q('#ae-insp-empty-view').style.display = 'flex';
+  $q('#ae-insp-node-view').style.display  = 'none';
+  $q('#ae-insp-conn-view').style.display  = 'none';
+}
+function _showInspectorConn() {
+  $q('#ae-insp-empty-view').style.display = 'none';
+  $q('#ae-insp-node-view').style.display  = 'none';
+  $q('#ae-insp-conn-view').style.display  = 'flex';
+}
+function _showInspectorNode(nodeId) {
+  const node = editor.getNodeFromId(nodeId);
+  if (!node) { _showInspectorEmpty(); return; }
+  const { type, config, preset } = node.data;
+  $q('#ae-insp-empty-view').style.display = 'none';
+  $q('#ae-insp-node-view').style.display  = 'flex';
+  $q('#ae-insp-conn-view').style.display  = 'none';
+  $q('#ae-insp-title').textContent = _nodeKind(type) + ' Settings';
+  $q('#ae-insp-body').innerHTML    = _inspHtml(type, config, preset, nodeId);
+}
+
+function _sanitizeVarName(name) {
+  let s = String(name || '').trim().toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
+  return s || 'ai_output';
+}
+function _upstreamAiVars(nodeId) {
+  const data = editor.drawflow?.drawflow?.Home?.data || {};
+  const seenNodes = new Set();
+  const seenVars  = new Set();
+  const result    = [];
+  const queue     = [String(nodeId)];
+  while (queue.length) {
+    const cur = data[queue.shift()];
+    if (!cur) continue;
+    (cur.inputs?.input_1?.connections || []).forEach(c => {
+      const srcId = String(c.node);
+      if (seenNodes.has(srcId)) return;
+      seenNodes.add(srcId);
+      const src = data[srcId];
+      if (!src) return;
+      const { type: srcType, config: srcConfig, preset: srcPreset } = src.data || {};
+      if (srcType === 'action' && (srcPreset === 'ai_generate' || srcConfig?.action === 'ai_generate')) {
+        const varName = _sanitizeVarName(srcConfig?.ai_generate_output_var || 'ai_output');
+        if (!seenVars.has(varName)) { seenVars.add(varName); result.push(varName); }
+      }
+      queue.push(srcId);
+    });
+  }
+  return result;
+}
+function _aiVarsFieldHtml(nodeId) {
+  const vars = _upstreamAiVars(nodeId);
+  if (!vars.length) return '';
+  return `
+    <div class="ae-field">
+      <label>AI Variables Available Here</label>
+      <div class="ae-sample-vars" style="margin-bottom:0">
+        ${vars.map(v => `
+          <div class="ae-sample-var-row">
+            <span class="ae-sample-var-key">{{${esc(v)}}}</span>
+            <span class="ae-sample-var-desc">From an upstream AI Generate node</span>
+            <button type="button" class="ae-sample-var-copy" data-copy-var="{{${esc(v)}}}" title="Copy variable"><i class="fa fa-copy"></i></button>
+          </div>`).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function _inspHtml(type, config, preset, nodeId) {
+  if (type === 'trigger') {
+    const currentTrigger  = config?.trigger || '';
+    const currentCategory = _triggerCategoryOf(currentTrigger);
+    const catOpts = Object.keys(TRIGGER_GROUPS).map(g =>
+      `<option value="${esc(g)}"${g === currentCategory ? ' selected' : ''}>${esc(g)}</option>`
+    ).join('');
+    const trigOpts = currentCategory
+      ? Object.entries(TRIGGER_GROUPS[currentCategory]).map(([k,v]) =>
+          `<option value="${k}"${k === currentTrigger ? ' selected' : ''}>${esc(v)}</option>`
+        ).join('')
+      : '';
+    const relationScoped = RELATION_SCOPED_TRIGGERS.includes(currentTrigger);
+    const relationId     = config?.relation_id || '';
+    const relOpts = _relations.map(r =>
+      `<option value="${r.id}"${String(r.id) === String(relationId) ? ' selected' : ''}>${esc(r.name)}</option>`
+    ).join('');
+    const sampleBtn = currentTrigger
+      ? `<button class="ae-sample-link" data-sample-trigger="${esc(currentTrigger)}"><i class="fa fa-eye"></i> View sample data</button>`
+      : '';
+    return `
+      <div class="ae-field"><label>Trigger Category</label><select id="fi-trigger-cat"><option value="">— choose —</option>${catOpts}</select></div>
+      <div class="ae-field"><label>Trigger Event</label><select id="fi-trigger"${currentCategory ? '' : ' disabled'}><option value="">${currentCategory ? '— choose —' : '— choose category first —'}</option>${trigOpts}</select></div>
+      <div class="ae-field" id="fi-trigger-relation-field" style="display:${relationScoped ? '' : 'none'}"><label>Relation</label><select id="fi-trigger-relation"><option value="">— choose —</option>${relOpts}</select></div>
+      ${sampleBtn}
+    `;
+  }
+  if (type === 'condition') {
+    const opOpts = Object.entries(COND_OPS).map(([k,v]) =>
+      `<option value="${k}"${config?.op === k ? ' selected' : ''}>${v}</option>`
+    ).join('');
+    return `
+      <div class="ae-field"><label>Label</label><input id="fi-c-label" value="${esc(config?.label||'')}" placeholder="e.g. Amount check"></div>
+      <div class="ae-field"><label>Field / Variable</label><input id="fi-c-field" value="${esc(config?.field||'')}" placeholder="e.g. sale.total"></div>
+      <div class="ae-field"><label>Operator</label><select id="fi-c-op"><option value="">— choose —</option>${opOpts}</select></div>
+      <div class="ae-field"><label>Value</label><input id="fi-c-value" value="${esc(config?.value||'')}" placeholder="e.g. 100"></div>
+    `;
+  }
+  if (type === 'action') {
+    const p = preset || config?.action || '';
+    const actOpts = Object.entries(ACTIONS).map(([k,v]) =>
+      `<option value="${k}"${p === k ? ' selected' : ''}>${v}</option>`
+    ).join('');
+    let extra = '';
+    if (p === 'send_email') extra = `
+      <div class="ae-field"><label>To</label><input id="fi-a-to" value="${esc(config?.to||'')}" placeholder="{{customer.email}}"></div>
+      <div class="ae-field"><label>Subject</label><input id="fi-a-subject" value="${esc(config?.subject||'')}" placeholder="Your order summary"></div>
+      <div class="ae-field"><label>Body</label><textarea id="fi-a-body" rows="4" placeholder="Hi {{customer.name}},…">${esc(config?.body||'')}</textarea></div>
+      ${_aiVarsFieldHtml(nodeId)}
+    `;
+    else if (p === 'send_webhook') extra = `
+      <div class="ae-field"><label>URL</label><input type="url" id="fi-a-url" value="${esc(config?.url||'')}" placeholder="https://…"></div>
+    `;
+    else if (p === 'create_task') extra = `
+      <div class="ae-field"><label>Task Title</label><input id="fi-a-title" value="${esc(config?.title||'')}" placeholder="Follow up with {{customer.name}}"></div>
+      <div class="ae-field"><label>Description</label><input id="fi-a-desc" value="${esc(config?.desc||'')}" placeholder="Optional details"></div>
+      <div class="ae-field"><label>Due (days from now)</label><input type="number" id="fi-a-due" value="${esc(config?.due_days||'1')}" min="0" max="365"></div>
+    `;
+    else if (p === 'create_lead') extra = `
+      <div class="ae-field"><label>Lead Name</label><input id="fi-a-lead" value="${esc(config?.lead_name||'')}" placeholder="{{customer.name}}"></div>
+      <div class="ae-field"><label>Email</label><input id="fi-a-lead-email" value="${esc(config?.lead_email||'')}" placeholder="{{customer.email}}"></div>
+      <div class="ae-field"><label>Phone</label><input id="fi-a-lead-phone" value="${esc(config?.lead_phone||'')}" placeholder="{{customer.phone}}"></div>
+    `;
+    else if (p === 'send_notification') extra = `
+      <div class="ae-field"><label>Title</label><input id="fi-a-notif-title" value="${esc(config?.notif_title||'')}" placeholder="New alert"></div>
+      <div class="ae-field"><label>Message</label><textarea id="fi-a-message" rows="3" placeholder="Sale {{sale.reference}} completed for {{sale.total}}">${esc(config?.message||'')}</textarea></div>
+      ${_aiVarsFieldHtml(nodeId)}
+    `;
+    else if (p === 'deduct_stock') extra = `
+      <div class="ae-field"><label>Product SKU</label><input id="fi-a-sku" value="${esc(config?.product_sku||'')}" placeholder="SKU-001 or {{product.sku}}"></div>
+      <div class="ae-field"><label>Quantity to Deduct</label><input id="fi-a-qty" type="number" step="0.001" min="0.001" value="${esc(config?.qty||'1')}" placeholder="1"></div>
+    `;
+    else if (p === 'ai_send_email') extra = `
+      <div class="ae-field"><label>To</label><input id="fi-a-to" value="${esc(config?.to||'')}" placeholder="{{customer.email}}"></div>
+      <div class="ae-field"><label>Subject</label><input id="fi-a-subject" value="${esc(config?.subject||'')}" placeholder="Your update from {{business.name}}"></div>
+      <div class="ae-field"><label>AI Prompt</label><textarea id="fi-a-ai-prompt" rows="5" placeholder="Write a friendly follow-up email for {{customer.name}} who just purchased {{sale.total}}…">${esc(config?.ai_prompt||'')}</textarea></div>
+      <div class="ae-field ae-field-hint"><i class="fa fa-circle-info"></i><span>AI writes the email body from your prompt. Use {{placeholders}} for dynamic data.</span></div>
+    `;
+    else if (p === 'ai_whatsapp_message') extra = `
+      <div class="ae-field"><label>To (Phone)</label><input id="fi-a-wa-to" value="${esc(config?.whatsapp_to||'')}" placeholder="{{customer.phone}} or +94771234567"></div>
+      <div class="ae-field"><label>AI Prompt</label><textarea id="fi-a-wa-prompt" rows="5" placeholder="Write a short WhatsApp message for {{customer.name}} confirming order {{sale.reference}} is ready for pickup…">${esc(config?.whatsapp_prompt||'')}</textarea></div>
+      <div class="ae-field ae-field-hint"><i class="fa fa-circle-info"></i><span>AI generates the message. Set <b>whatsapp_phone_number_id</b> &amp; <b>whatsapp_access_token</b> in Business Settings first.</span></div>
+    `;
+    else if (p === 'ai_generate') extra = `
+      <div class="ae-field"><label>AI Prompt</label><textarea id="fi-a-gen-prompt" rows="5" placeholder="Write a personalized renewal reminder for {{customer.name}} about {{sale.reference}}…">${esc(config?.ai_generate_prompt||'')}</textarea></div>
+      <div class="ae-field"><label>Save Output As</label><input id="fi-a-gen-outvar" value="${esc(config?.ai_generate_output_var||'')}" placeholder="ai_output"></div>
+      <div class="ae-field ae-field-hint"><i class="fa fa-circle-info"></i><span>AI writes text from your prompt without sending it. Reference it in a later node as <b>{{your_var_name}}</b> (e.g. in Send Email's Body or Notification's Message).</span></div>
+    `;
+    return `
+      <div class="ae-field"><label>Action Type</label><select id="fi-a-type"><option value="">— choose —</option>${actOpts}</select></div>
+      <div class="ae-field"><label>Notes (optional)</label><input id="fi-a-notes" value="${esc(config?.notes||'')}" placeholder="Optional description"></div>
+      ${extra}
+    `;
+  }
+  if (type === 'delay') {
+    const units = ['minutes','hours','days'].map(u =>
+      `<option value="${u}"${config?.unit === u ? ' selected' : ''}>${u}</option>`
+    ).join('');
+    return `
+      <div class="ae-field"><label>Duration</label><input type="number" id="fi-d-dur" value="${esc(config?.duration||'5')}" min="1"></div>
+      <div class="ae-field"><label>Unit</label><select id="fi-d-unit">${units}</select></div>
+    `;
+  }
+  return '';
+}
+
+function _syntaxJson(obj) {
+  const raw = JSON.stringify(obj, null, 2);
+  return raw.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, m => {
+    if (/^"/.test(m)) {
+      if (/:$/.test(m)) return `<span class="jk">${m}</span>`;
+      return `<span class="jvs">${m}</span>`;
+    }
+    if (/true|false|null/.test(m)) return `<span class="jvb">${m}</span>`;
+    return `<span class="jvn">${m}</span>`;
+  });
+}
+
+function _showSampleModal(triggerKey) {
+  const info = TRIGGER_SAMPLES[triggerKey];
+  if (!info) return;
+  $q('#ae-sample-title').textContent = (TRIGGERS[triggerKey] || triggerKey) + ' — Sample Payload';
+  $q('#ae-sample-desc').textContent  = info.desc;
+  $q('#ae-sample-vars').innerHTML = info.vars.map(v => `
+    <div class="ae-sample-var-row">
+      <span class="ae-sample-var-key">{{${v.key}}}</span>
+      <span class="ae-sample-var-type">${v.type}</span>
+      <span class="ae-sample-var-desc">${v.desc}</span>
+      <button type="button" class="ae-sample-var-copy" data-copy-var="{{${esc(v.key)}}}" title="Copy variable"><i class="fa fa-copy"></i></button>
+    </div>`).join('');
+  $q('#ae-sample-json').innerHTML = _syntaxJson(info.sample);
+  $q('#ae-sample-modal').style.display = 'flex';
+}
+function _hideSampleModal() { $q('#ae-sample-modal').style.display = 'none'; }
+
+function _applyInspector() {
+  if (!_selectedNodeId) return;
+  const node = editor.getNodeFromId(_selectedNodeId);
+  if (!node) return;
+  const { type } = node.data;
+  let newConfig = {};
+  let newPreset = node.data.preset;
+
+  if (type === 'trigger') {
+    const triggerVal = $q('#fi-trigger')?.value || '';
+    newConfig = { trigger: triggerVal };
+    if (RELATION_SCOPED_TRIGGERS.includes(triggerVal)) {
+      const relVal = $q('#fi-trigger-relation')?.value;
+      if (relVal) newConfig.relation_id = +relVal;
+    }
+  } else if (type === 'condition') {
+    newConfig = {
+      label: $q('#fi-c-label')?.value,
+      field: $q('#fi-c-field')?.value,
+      op:    $q('#fi-c-op')?.value,
+      value: $q('#fi-c-value')?.value,
+    };
+  } else if (type === 'action') {
+    newPreset = $q('#fi-a-type')?.value || newPreset;
+    newConfig = {
+      action:       newPreset,
+      notes:        $q('#fi-a-notes')?.value,
+      to:           $q('#fi-a-to')?.value,
+      subject:      $q('#fi-a-subject')?.value,
+      body:         $q('#fi-a-body')?.value,
+      url:          $q('#fi-a-url')?.value,
+      title:        $q('#fi-a-title')?.value,
+      desc:         $q('#fi-a-desc')?.value,
+      due_days:     $q('#fi-a-due')?.value,
+      lead_name:    $q('#fi-a-lead')?.value,
+      lead_email:   $q('#fi-a-lead-email')?.value,
+      lead_phone:   $q('#fi-a-lead-phone')?.value,
+      notif_title:  $q('#fi-a-notif-title')?.value,
+      message:      $q('#fi-a-message')?.value,
+      product_sku:  $q('#fi-a-sku')?.value,
+      qty:          $q('#fi-a-qty')?.value,
+      ai_prompt:       $q('#fi-a-ai-prompt')?.value,
+      whatsapp_to:     $q('#fi-a-wa-to')?.value,
+      whatsapp_prompt: $q('#fi-a-wa-prompt')?.value,
+      ai_generate_prompt:     $q('#fi-a-gen-prompt')?.value,
+      ai_generate_output_var: $q('#fi-a-gen-outvar')?.value,
+    };
+  } else if (type === 'delay') {
+    newConfig = { duration: $q('#fi-d-dur')?.value, unit: $q('#fi-d-unit')?.value };
+  }
+
+  editor.updateNodeDataFromId(_selectedNodeId, { type, config: newConfig, preset: newPreset });
+  _refreshNodeHtml(_selectedNodeId);
+  _showInspectorNode(_selectedNodeId);
+  toast('Node updated');
+}
+
+// ── Drawflow events ────────────────────────────────────────────────────────
+editor.on('nodeSelected', id => {
+  _selectedNodeId = parseInt(id, 10);
+  _selectedConn   = null;
+  _showInspectorNode(_selectedNodeId);
+});
+editor.on('nodeUnselected', () => {
+  _selectedNodeId = null;
+  if (!_selectedConn) _showInspectorEmpty();
+});
+editor.on('connectionSelected', conn => {
+  _selectedConn   = conn;
+  _selectedNodeId = null;
+  _showInspectorConn();
+});
+editor.on('connectionUnselected', () => {
+  _selectedConn = null;
+  if (!_selectedNodeId) _showInspectorEmpty();
+});
+editor.on('nodeCreated',        () => _renderMinimap());
+editor.on('nodeRemoved',        () => { _renderMinimap(); _showInspectorEmpty(); _selectedNodeId = null; });
+editor.on('connectionCreated',  () => _renderMinimap());
+editor.on('connectionRemoved',  () => _renderMinimap());
+editor.on('nodeMoved',          () => _renderMinimap());
+
+$q('#ae-insp-apply').addEventListener('click', _applyInspector);
+$q('#ae-insp-delete').addEventListener('click', () => {
+  if (!_selectedNodeId) return;
+  _pushUndo();
+  editor.removeNodeId('node-' + _selectedNodeId);
+  _selectedNodeId = null;
+  _showInspectorEmpty();
+});
+$q('#ae-insp-conn-delete').addEventListener('click', () => {
+  if (!_selectedConn) return;
+  _pushUndo();
+  editor.removeSingleConnection(
+    _selectedConn.output_id, _selectedConn.input_id,
+    _selectedConn.output_class, _selectedConn.input_class
+  );
+  _selectedConn = null;
+  _showInspectorEmpty();
+});
+
+$q('#ae-sample-close').addEventListener('click', _hideSampleModal);
+$q('#ae-sample-modal').addEventListener('click', e => {
+  if (e.target === $q('#ae-sample-modal')) _hideSampleModal();
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && $q('#ae-sample-modal').style.display !== 'none') _hideSampleModal();
+});
+function _copyVarToClipboard(text) {
+  (navigator.clipboard?.writeText(text) ?? Promise.reject(new Error('Clipboard unavailable')))
+    .then(() => toast(`Copied ${text}`)).catch(() => toast('Copy failed'));
+}
+$q('#ae-sample-vars').addEventListener('click', e => {
+  const btn = e.target.closest('[data-copy-var]');
+  if (btn) _copyVarToClipboard(btn.dataset.copyVar);
+});
+$q('#ae-insp-body').addEventListener('click', e => {
+  const sampleBtn = e.target.closest('[data-sample-trigger]');
+  if (sampleBtn) { _showSampleModal(sampleBtn.dataset.sampleTrigger); return; }
+  const copyBtn = e.target.closest('[data-copy-var]');
+  if (copyBtn) _copyVarToClipboard(copyBtn.dataset.copyVar);
+});
+$q('#ae-insp-body').addEventListener('change', e => {
+  if (e.target.id === 'fi-trigger-cat') {
+    const category = e.target.value;
+    const trigSel   = $q('#fi-trigger');
+    const relField  = $q('#fi-trigger-relation-field');
+    const opts = category
+      ? Object.entries(TRIGGER_GROUPS[category]).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join('')
+      : '';
+    trigSel.disabled  = !category;
+    trigSel.innerHTML = `<option value="">${category ? '— choose —' : '— choose category first —'}</option>${opts}`;
+    if (relField) relField.style.display = 'none';
+    const existing = $q('#ae-insp-body .ae-sample-link');
+    if (existing) existing.remove();
+    return;
+  }
+
+  if (e.target.id !== 'fi-trigger') return;
+  const val = e.target.value;
+
+  const existing = $q('#ae-insp-body .ae-sample-link');
+  if (existing) existing.remove();
+  if (val) {
+    const btn = document.createElement('button');
+    btn.className = 'ae-sample-link';
+    btn.dataset.sampleTrigger = val;
+    btn.innerHTML = '<i class="fa fa-eye"></i> View sample data';
+    $q('#ae-insp-body').appendChild(btn);
+  }
+
+  const relField = $q('#fi-trigger-relation-field');
+  const relSel    = $q('#fi-trigger-relation');
+  if (relField && relSel) {
+    if (RELATION_SCOPED_TRIGGERS.includes(val)) {
+      relField.style.display = '';
+      relSel.innerHTML = '<option value="">— choose —</option>' +
+        _relations.map(r => `<option value="${r.id}">${esc(r.name)}</option>`).join('');
+    } else {
+      relField.style.display = 'none';
+      relSel.value = '';
+    }
+  }
+});
+
+// ── Palette drag-and-drop ──────────────────────────────────────────────────
+document.querySelectorAll('.ae-palette-item[draggable]').forEach(item => {
+  item.addEventListener('dragstart', e => {
+    e.dataTransfer.setData('ntype',  item.dataset.ntype  || '');
+    e.dataTransfer.setData('preset', item.dataset.preset || '');
+    e.dataTransfer.effectAllowed = 'copy';
+  });
+  item.addEventListener('click', () => {
+    const rect = dfEl.getBoundingClientRect();
+    _addNode(item.dataset.ntype, rect.left + rect.width / 2, rect.top + rect.height / 2, {}, item.dataset.preset || null);
+  });
+});
+dfEl.addEventListener('dragover', e => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
+dfEl.addEventListener('drop', e => {
+  e.preventDefault();
+  const type = e.dataTransfer.getData('ntype');
+  if (!type) return;
+  _addNode(type, e.clientX, e.clientY, {}, e.dataTransfer.getData('preset') || null);
+});
+
+// ── Keyboard shortcuts ─────────────────────────────────────────────────────
+window.addEventListener('keydown', e => {
+  const tag = document.activeElement?.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+  if (e.ctrlKey && e.key === 'z') { e.preventDefault(); _undoAction(); }
+  if (e.ctrlKey && (e.key === 'y' || (e.shiftKey && e.key === 'Z'))) { e.preventDefault(); _redoAction(); }
+  if (e.ctrlKey && e.key === 's') { e.preventDefault(); _save(); }
+  if (e.key === 'Escape') { editor.editor_mode = 'edit'; _showInspectorEmpty(); }
+});
+$q('#ae-undo').addEventListener('click', _undoAction);
+$q('#ae-redo').addEventListener('click', _redoAction);
+
+// ── Status pill helpers ────────────────────────────────────────────────────
+function _setActive(on) {
+  const p = $q('#ae-status-pill');
+  p.innerHTML = `<i class="fa fa-circle" style="font-size:7px"></i> ${on ? 'Active' : 'Inactive'}`;
+  p.className = 'ae-status ' + (on ? 'ae-status--on' : 'ae-status--off');
+  $q('#ae-toggle-active').innerHTML = `<i class="fa fa-toggle-${on ? 'on' : 'off'}"></i> Toggle`;
+}
+function _setRunNowVisibility() {
+  $q('#ae-runnow-btn').style.display = (flow.trigger_type === 'manual') ? 'inline-flex' : 'none';
+}
+
+// ── Save ───────────────────────────────────────────────────────────────────
+async function _save() {
+  const btn = $q('#ae-save');
+  btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
+  const dfData  = editor.export();
+  const res     = await API.automationUpdate({ flow_data: { drawflow: dfData } });
+  btn.disabled  = false; btn.innerHTML = '<i class="fa fa-floppy-disk"></i> Save';
+  if (res.status === 200) { flow = res.body.data; toast('Saved'); _setRunNowVisibility(); }
+  else toast('Save failed');
+}
+$q('#ae-save').addEventListener('click', _save);
+
+// ── Toggle active ──────────────────────────────────────────────────────────
+$q('#ae-toggle-active').addEventListener('click', async () => {
+  const res = await API.automationUpdate({ is_active: !flow.is_active });
+  if (res.status === 200) { flow = res.body.data; _setActive(flow.is_active); toast(flow.is_active ? 'Flow activated' : 'Flow deactivated'); }
+});
+
+// ── Run Now (manual trigger) ────────────────────────────────────────────────
+$q('#ae-runnow-btn').addEventListener('click', async () => {
+  const btn = $q('#ae-runnow-btn');
+  btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Running…';
+  const res = await API.automationTrigger();
+  btn.disabled = false; btn.innerHTML = '<i class="fa fa-play"></i> Run Now';
+  toast(res.status === 200 ? 'Flow triggered' : (res.body?.message || 'Trigger failed'));
+});
+
+// ── Minimap ────────────────────────────────────────────────────────────────
+function _renderMinimap() {
+  const mm  = document.getElementById('ae-minimap');
+  const ctx = mm.getContext('2d');
+  mm.width  = mm.clientWidth;
+  mm.height = mm.clientHeight;
+  ctx.clearRect(0, 0, mm.width, mm.height);
+  const exported = editor.export?.();
+  if (!exported) return;
+  const data = exported?.drawflow?.Home?.data || {};
+  const nodes = Object.values(data);
+  if (!nodes.length) return;
+  const xs = nodes.map(n => n.pos_x), ys = nodes.map(n => n.pos_y);
+  const x0 = Math.min(...xs) - 16, y0 = Math.min(...ys) - 16;
+  const x1 = Math.max(...xs) + 200 + 16, y1 = Math.max(...ys) + 80;
+  const sc = Math.min(mm.width / (x1 - x0 || 1), mm.height / (y1 - y0 || 1));
+  const ox = (mm.width  - (x1 - x0) * sc) / 2;
+  const oy = (mm.height - (y1 - y0) * sc) / 2;
+  const cols = { trigger:'#fb923c', condition:'#38bdf8', action:'#4ade80', delay:'#a78bfa' };
+  nodes.forEach(n => {
+    ctx.fillStyle = cols[n.name] || '#94a3b8';
+    ctx.beginPath();
+    ctx.roundRect((n.pos_x - x0) * sc + ox, (n.pos_y - y0) * sc + oy, 200 * sc, 55 * sc, 3 * sc);
+    ctx.fill();
+  });
+}
+
+// ── Run Log ────────────────────────────────────────────────────────────────
+async function _openRunLog() {
+  $q('#ae-runlog-overlay').style.display = 'flex';
+  const body = $q('#ae-runlog-body');
+  body.innerHTML = '<div class="ae-runlog-empty"><i class="fa fa-spinner fa-spin"></i><div>Loading…</div></div>';
+  try {
+    const res  = await API.automationRuns();
+    const runs = res?.body?.data ?? [];
+    _renderRunLog(runs, body);
+  } catch(e) {
+    body.innerHTML = '<div class="ae-runlog-empty"><i class="fa fa-triangle-exclamation"></i><div>Failed to load runs</div></div>';
+  }
+}
+function _renderRunLog(runs, body) {
+  const total = runs.length;
+  const ok    = runs.filter(r => r.status === 'success').length;
+  const fail  = runs.filter(r => r.status === 'failed').length;
+  $q('#ae-runlog-stat-total').textContent = total;
+  $q('#ae-runlog-stat-ok').textContent    = ok;
+  $q('#ae-runlog-stat-fail').textContent  = fail;
+
+  if (!total) {
+    body.innerHTML = `<div class="ae-runlog-empty">
+      <i class="fa fa-clock-rotate-left" style="font-size:26px;opacity:.3"></i>
+      <div>No runs yet</div>
+      <div style="font-size:11px">This flow has not been triggered yet</div>
+    </div>`;
+    return;
+  }
+
+  body.innerHTML = runs.map(r => _runRowHtml(r)).join('');
+
+  body.querySelectorAll('.ae-run-summary').forEach(el => {
+    el.addEventListener('click', () => {
+      const row   = el.closest('.ae-run-row');
+      const steps = row.querySelector('.ae-run-steps');
+      const chev  = el.querySelector('.ae-run-chevron');
+      const open  = steps.classList.toggle('open');
+      chev.classList.toggle('open', open);
+    });
+  });
+}
+function _runRowHtml(run) {
+  const badgeClass = { success:'ae-run-badge--success', failed:'ae-run-badge--failed' }[run.status] ?? 'ae-run-badge--running';
+  const badgeIcon  = { success:'fa-check', failed:'fa-xmark' }[run.status] ?? 'fa-spinner fa-spin';
+  const event      = run.trigger_payload?.event ?? '—';
+  const time       = _relTime(run.created_at);
+  const errHtml    = run.error ? `<div class="ae-run-error"><i class="fa fa-triangle-exclamation"></i> ${esc(run.error)}</div>` : '';
+  return `
+    <div class="ae-run-row">
+      <div class="ae-run-summary">
+        <div class="ae-run-badge ${badgeClass}"><i class="fa ${badgeIcon}"></i></div>
+        <div class="ae-run-event">${esc(event)}</div>
+        <div class="ae-run-time">${esc(time)}</div>
+        <i class="fa fa-chevron-down ae-run-chevron"></i>
+      </div>
+      ${errHtml}
+      <div class="ae-run-steps">${_stepsHtml(run)}</div>
+    </div>`;
+}
+function _stepsHtml(run) {
+  const steps = Array.isArray(run.result) ? run.result : [];
+  let html = '';
+  if (run.trigger_payload) {
+    const event = run.trigger_payload.event ?? '(trigger)';
+    html += `<div class="ae-step">
+      <div class="ae-step-ico ae-step-ico--trigger"><i class="fa fa-play"></i></div>
+      <div class="ae-step-body"><div class="ae-step-label">Trigger: ${esc(event)}</div></div>
+    </div>`;
+  }
+  if (!steps.length) {
+    html += '<div style="font-size:11px;color:var(--muted);padding:6px 0">No step data recorded</div>';
+    return html;
+  }
+  for (const step of steps) html += _stepHtml(step);
+  return html;
+}
+function _stepHtml(step) {
+  if (step.type === 'action') {
+    const ok       = step.result?.success !== false;
+    const icoClass = ok ? 'ae-step-ico--ok' : 'ae-step-ico--err';
+    const icon     = ok ? 'fa-check' : 'fa-xmark';
+    const label    = ACTIONS[step.action] || step.action || 'Action';
+    const detail   = ok ? _actionSummary(step.result) : (step.result?.error || '');
+    return `<div class="ae-step">
+      <div class="ae-step-ico ${icoClass}"><i class="fa ${icon}"></i></div>
+      <div class="ae-step-body">
+        <div class="ae-step-label">${esc(label)}</div>
+        ${detail ? `<div class="ae-step-detail">${esc(detail)}</div>` : ''}
+      </div>
+    </div>`;
+  }
+  if (step.type === 'condition') {
+    const passed = step.passed;
+    return `<div class="ae-step">
+      <div class="ae-step-ico ae-step-ico--cond"><i class="fa fa-code-branch"></i></div>
+      <div class="ae-step-body">
+        <div class="ae-step-label">Condition</div>
+        <div class="ae-step-detail" style="color:${passed ? '#16a34a' : '#dc2626'}">${passed ? 'Passed → True branch' : 'Failed → False branch'}</div>
+      </div>
+    </div>`;
+  }
+  if (step.type === 'delay') {
+    return `<div class="ae-step">
+      <div class="ae-step-ico ae-step-ico--skip"><i class="fa fa-clock"></i></div>
+      <div class="ae-step-body">
+        <div class="ae-step-label">Delay</div>
+        <div class="ae-step-detail">${esc(step.note || 'skipped')}</div>
+      </div>
+    </div>`;
+  }
+  return '';
+}
+function _actionSummary(r) {
+  if (!r) return '';
+  if (r.task_id)          return `Task #${r.task_id} — ${r.title || ''}`;
+  if (r.lead_id)          return `Lead #${r.lead_id} — ${r.name || ''}`;
+  if (r.notification_id)  return `Notification #${r.notification_id}`;
+  if (r.sku)              return `${r.sku}: ${r.qty_before} → ${r.qty_after} (deducted ${r.qty_deducted})`;
+  if (r.message_id)       return `Sent to ${r.to}`;
+  if (r.to)               return `Sent to ${r.to}`;
+  if (r.http_code)        return `HTTP ${r.http_code}`;
+  return '';
+}
+function _relTime(isoStr) {
+  if (!isoStr) return '';
+  const d    = new Date(isoStr.replace(' ', 'T'));
+  const diff = Date.now() - d.getTime();
+  if (diff < 60000)    return 'just now';
+  if (diff < 3600000)  return `${Math.floor(diff / 60000)}m ago`;
+  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+  return `${Math.floor(diff / 86400000)}d ago`;
+}
+
+$q('#ae-runlog-btn').addEventListener('click', _openRunLog);
+$q('#ae-runlog-close').addEventListener('click', () => { $q('#ae-runlog-overlay').style.display = 'none'; });
+$q('#ae-runlog-refresh').addEventListener('click', _openRunLog);
+$q('#ae-runlog-overlay').addEventListener('click', e => {
+  if (e.target.id === 'ae-runlog-overlay') $q('#ae-runlog-overlay').style.display = 'none';
+});
+
+// ── Old format migration ───────────────────────────────────────────────────
+// Converts {nodes:[], edges:[]} from the pre-Drawflow custom canvas into
+// Drawflow format. Kept for parity with any flow saved before the Drawflow
+// editor shipped — without this, opening such a flow here would show an
+// empty canvas and a Save would silently overwrite its real node data.
+function _importOldFormat(nodes, edges) {
+  const dfData = { drawflow: { Home: { data: {} } } };
+  const idMap  = {};
+
+  nodes.forEach((n, i) => { idMap[n.id] = i + 1; });
+
+  nodes.forEach((n, i) => {
+    const newId  = i + 1;
+    const inputs = (n.type === 'trigger') ? {} : { input_1: { connections: [] } };
+    const outs   = (n.type === 'condition')
+      ? { output_1: { connections: [] }, output_2: { connections: [] } }
+      : { output_1: { connections: [] } };
+
+    edges.forEach(ed => {
+      if (ed.from !== n.id) return;
+      const outKey = (ed.fromPort === 'out_f') ? 'output_2' : 'output_1';
+      const toId   = idMap[ed.to];
+      if (toId) outs[outKey].connections.push({ node: String(toId), output: 'input_1' });
+    });
+    if (n.type !== 'trigger') {
+      edges.forEach(ed => {
+        if (ed.to !== n.id) return;
+        const fromId  = idMap[ed.from];
+        const fromOut = (ed.fromPort === 'out_f') ? 'output_2' : 'output_1';
+        if (fromId) inputs.input_1.connections.push({ node: String(fromId), input: fromOut });
+      });
+    }
+
+    dfData.drawflow.Home.data[String(newId)] = {
+      id:       newId,
+      name:     n.type,
+      data:     { type: n.type, config: n.data || {}, preset: n.preset || null },
+      class:    `ae-node ae-node--${n.type}`,
+      html:     _nodeHtml(n.type, n.data || {}, n.preset),
+      typenode: false,
+      inputs,
+      outputs:  outs,
+      pos_x:    n.x || 100,
+      pos_y:    n.y || 100,
+    };
+  });
+
+  editor.import(dfData);
+  _fixNodeIdCounter();
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────
+function init() {
+  document.title = flow.name + ' — Automation Builder';
+  $q('#ae-flow-name').textContent = flow.name;
+  _setActive(flow.is_active);
+  _setRunNowVisibility();
+
+  const fd = flow.flow_data || {};
+
+  if (fd.drawflow) {
+    editor.import(fd.drawflow);
+    _fixNodeIdCounter();
+    Object.keys(editor.drawflow?.drawflow?.Home?.data || {}).forEach(id => _refreshNodeHtml(Number(id)));
+    _renderMinimap();
+  } else if (fd.nodes && Array.isArray(fd.nodes) && fd.nodes.length) {
+    _importOldFormat(fd.nodes, fd.edges || []);
+    _renderMinimap();
+  } else if (flow.trigger_type) {
+    const rect = dfEl.getBoundingClientRect();
+    const triggerConfig = { trigger: flow.trigger_type };
+    if (flow.trigger_config?.relation_id) triggerConfig.relation_id = flow.trigger_config.relation_id;
+    _addNode('trigger', rect.left + rect.width / 2, rect.top + rect.height / 2, triggerConfig, null);
+  }
+
+  _updateZoomPct();
+  _showInspectorEmpty();
+}
+
+init();
+</script>
+@endverbatim
+@endsection
