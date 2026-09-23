@@ -168,6 +168,7 @@ class PosSettingsApiController extends Controller
             'receipt_footer'              => ['nullable', 'string', 'max:200'],
             'show_business_name'          => ['nullable', 'boolean'],
             'show_business_address'       => ['nullable', 'boolean'],
+            'receipt_paper_width'         => ['nullable', 'string', 'in:58,80'],
             'receipt_address_line'        => ['nullable', 'string', 'max:300'],
             'receipt_language'            => ['nullable', 'string', 'in:en,si,ta'],
             'show_account_info'           => ['nullable', 'boolean'],

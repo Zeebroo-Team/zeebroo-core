@@ -18,6 +18,12 @@
 
     $showAccountInfo         = (bool) (($posSettings ?? [])['show_account_info'] ?? true);
     $showServiceBoundProducts = (bool) (($posSettings ?? [])['show_service_bound_products'] ?? true);
+    $showBusinessName        = (bool) (($posSettings ?? [])['show_business_name'] ?? true);
+    $showBusinessAddress     = (bool) (($posSettings ?? [])['show_business_address'] ?? true);
+    $receiptHeaderText       = (string) (($posSettings ?? [])['receipt_header'] ?? '');
+    $receiptFooterText       = (string) (($posSettings ?? [])['receipt_footer'] ?? '') ?: 'Thank you for your purchase!';
+    $receiptPaperWidth       = (string) (($posSettings ?? [])['receipt_paper_width'] ?? '80');
+    $receiptPaperWidth       = in_array($receiptPaperWidth, ['58', '80'], true) ? $receiptPaperWidth : '80';
 
     $saleCompletionData = [
         'saleId' => $completedSale->id,
@@ -25,6 +31,11 @@
         'businessPhone' => $business->phone ?? '',
         'businessEmail' => $business->email ?? '',
         'businessAddress' => $business->address ?? '',
+        'showBusinessName' => $showBusinessName,
+        'showBusinessAddress' => $showBusinessAddress,
+        'receiptHeader' => $receiptHeaderText,
+        'receiptFooter' => $receiptFooterText,
+        'paperWidth' => (int) $receiptPaperWidth,
         'saleNumber' => $completedSale->sale_number,
         'soldAt' => $completedSale->sold_at?->format('M j, Y g:i A') ?? '',
         'soldAtIso' => $completedSale->sold_at?->toIso8601String() ?? '',
@@ -110,12 +121,17 @@
             <div class="pos-sale-completed-modal__tab-content is-active" data-pos-tab-content="receipt">
                 <div class="pos-thermal-receipt-preview">
                     <div class="pos-thermal-receipt-header">
-                        <div class="pos-thermal-receipt-business">{{ $business->name }}</div>
-                        @if(filled($business->address))
+                        @if($showBusinessName)
+                            <div class="pos-thermal-receipt-business">{{ $business->name }}</div>
+                        @endif
+                        @if($showBusinessAddress && filled($business->address))
                             <div class="pos-thermal-receipt-meta">{{ $business->address }}</div>
                         @endif
                         @if(filled($business->phone))
                             <div class="pos-thermal-receipt-meta">{{ $business->phone }}</div>
+                        @endif
+                        @if(filled($receiptHeaderText))
+                            <div class="pos-thermal-receipt-meta" style="font-style:italic;margin-top:4px;">{{ $receiptHeaderText }}</div>
                         @endif
                     </div>
 
@@ -275,7 +291,7 @@
                     <div class="pos-thermal-receipt-divider"></div>
 
                     <div class="pos-thermal-receipt-footer">
-                        <div>Thank you for your purchase!</div>
+                        <div>{{ $receiptFooterText }}</div>
                         <div class="pos-thermal-footer-meta">{{ $completedSale->channelLabel() }}</div>
                     </div>
                 </div>
@@ -921,7 +937,7 @@
     // Thermal printer layout
     function buildThermalPrintHtml() {
         const cur = completionData.currency ? ' ' + completionData.currency : '';
-        const pageWidth = 80; // mm
+        const pageWidth = completionData.paperWidth === 58 ? 58 : 80; // mm
 
         let itemRows = '';
         (completionData.items || []).forEach(item => {
@@ -982,9 +998,12 @@
                 + '</div>';
         }
 
-        const businessInfo = (completionData.businessAddress ? completionData.businessAddress + '<br>' : '')
+        const businessInfo = (completionData.showBusinessAddress && completionData.businessAddress ? completionData.businessAddress + '<br>' : '')
             + (completionData.businessPhone ? completionData.businessPhone + '<br>' : '')
             + (completionData.businessEmail ? completionData.businessEmail : '');
+        const headerTextHtml = completionData.receiptHeader
+            ? '<div style="text-align:center;font-style:italic;margin-top:4px;">' + escHtml(completionData.receiptHeader) + '</div>'
+            : '';
 
         return '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + escHtml(completionData.saleNumber || 'Receipt') + '</title>'
             + '<style>'
@@ -998,11 +1017,12 @@
             + '.totals { margin: 8px 0; }'
             + '.footer { text-align: center; font-size: 10px; margin-top: 8px; }'
             + '.timestamp { font-size: 9px; color: #666; }'
-            + '@media print { body { margin: 0; padding: 0; width: 80mm; max-width: 80mm; } }'
+            + '@media print { body { margin: 0; padding: 0; width: ' + pageWidth + 'mm; max-width: ' + pageWidth + 'mm; } }'
             + '</style></head><body>'
-            + '<h1>' + escHtml(completionData.businessName) + '</h1>'
+            + (completionData.showBusinessName ? '<h1>' + escHtml(completionData.businessName) + '</h1>' : '')
             + '<div class="meta">'
             + (businessInfo ? '<div>' + businessInfo + '</div>' : '')
+            + headerTextHtml
             + '<div style="margin-top:4px;">' + escHtml(completionData.saleNumber) + ' · ' + escHtml(completionData.soldAt) + '</div>'
             + '<div>' + escHtml(completionData.payment) + (completionData.account ? ' · ' + escHtml(completionData.account) : '') + '</div>'
             + '</div>'
@@ -1016,7 +1036,7 @@
             + '<hr>'
             + (completionData.notes ? '<div style="font-size:10px;margin:6px 0;"><strong>Notes:</strong> ' + escHtml(completionData.notes) + '</div><hr>' : '')
             + '<div class="footer">'
-            + '<div>Thank you for your purchase!</div>'
+            + '<div>' + escHtml(completionData.receiptFooter || 'Thank you for your purchase!') + '</div>'
             + '<div style="margin-top:4px;">' + escHtml(completionData.channel) + '</div>'
             + '<div class="timestamp">Printed: ' + new Date().toLocaleString() + '</div>'
             + '</div>'

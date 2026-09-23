@@ -25,6 +25,9 @@ class PosSettingsService
 
     public const KEY_SHOW_BUSINESS_ADDRESS = 'pos.show_business_address';
 
+    /** @var string `58` | `80` — thermal receipt paper width in millimeters */
+    public const KEY_RECEIPT_PAPER_WIDTH = 'pos.receipt_paper_width';
+
     public const KEY_CHECKOUT_MODAL_ENABLED = 'pos.checkout_modal_enabled';
 
     public const KEY_SHOW_ACCOUNT_INFO = 'pos.show_account_info';
@@ -150,6 +153,10 @@ class PosSettingsService
             'receipt_footer' => (string) $business->getSetting(self::KEY_RECEIPT_FOOTER, 'Thank you for your purchase!'),
             'show_business_name' => (bool) $business->getSetting(self::KEY_SHOW_BUSINESS_NAME, true),
             'show_business_address' => (bool) $business->getSetting(self::KEY_SHOW_BUSINESS_ADDRESS, false),
+            'receipt_paper_width' => (function () use ($business) {
+                $v = (string) ($business->getSetting(self::KEY_RECEIPT_PAPER_WIDTH, '80') ?: '80');
+                return in_array($v, ['58', '80'], true) ? $v : '80';
+            })(),
             'receipt_address_line' => (string) ($business->getSetting(self::KEY_RECEIPT_ADDRESS, '') ?: ''),
             'receipt_language'    => (function () use ($business) {
                 $v = strtolower(trim((string) ($business->getSetting(self::KEY_RECEIPT_LANGUAGE, 'en') ?: 'en')));
@@ -315,6 +322,10 @@ class PosSettingsService
         }
         if (array_key_exists('show_account_info', $data)) {
             $business->setSetting(self::KEY_SHOW_ACCOUNT_INFO, filter_var($data['show_account_info'], FILTER_VALIDATE_BOOLEAN));
+        }
+        if (array_key_exists('receipt_paper_width', $data)) {
+            $width = (string) ($data['receipt_paper_width'] ?? '80');
+            $business->setSetting(self::KEY_RECEIPT_PAPER_WIDTH, in_array($width, ['58', '80'], true) ? $width : '80');
         }
         if (array_key_exists('receipt_address_line', $data)) {
             $business->setSetting(self::KEY_RECEIPT_ADDRESS, substr(trim((string) ($data['receipt_address_line'] ?? '')), 0, 300));
