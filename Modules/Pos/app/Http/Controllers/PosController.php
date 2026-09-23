@@ -155,6 +155,7 @@ class PosController extends Controller
             'show_business_name' => ['nullable'],
             'show_business_address' => ['nullable'],
             'show_account_info' => ['nullable'],
+            'receipt_paper_width' => ['nullable', 'string', 'in:58,80'],
             'payment_settlement_mode' => ['nullable', 'string', 'in:immediate,end_of_day'],
             'featured_products_limit' => ['nullable', 'integer', 'min:0'],
             'featured_categories_limit' => ['nullable', 'integer', 'min:0'],

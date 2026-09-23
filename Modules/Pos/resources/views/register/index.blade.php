@@ -111,6 +111,7 @@ body.pos-walking-active .pos-page__top-search .pos-search button{padding:6px 8px
             <div class="pos-page__top-actions">
                 <button type="button" class="pos-btn" data-pos-add-product-open title="Add product" aria-label="Add product"><i class="fa fa-plus"></i></button>
                 @include('pos::partials.pos-settings-modal', ['posSettings' => $posSettings, 'accounts' => $accounts, 'hasAccounts' => $hasAccounts])
+                @include('pos::partials.pos-receipt-editor-modal', ['posSettings' => $posSettings, 'business' => $business, 'currency' => $currency])
                 @include('pos::partials.pos-keyboard-shortcuts')
                 @include('pos::partials.pos-fullscreen-button')
                 @include('pos::partials.walking-customer-toggle')

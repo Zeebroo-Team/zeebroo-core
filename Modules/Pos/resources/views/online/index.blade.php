@@ -181,6 +181,7 @@ body.pos-walking-active .pos-online__top-fields .pos-online__scan-row button{pad
         <div class="pos-online__actions">
             <button type="button" class="pos-online__link" data-pos-add-product-open title="Add product" aria-label="Add product"><i class="fa fa-plus" aria-hidden="true"></i></button>
             @include('pos::partials.pos-settings-modal', ['posSettings' => $posSettings, 'accounts' => $accounts, 'hasAccounts' => $hasAccounts, 'branchNavOptions' => $branchNavOptions])
+            @include('pos::partials.pos-receipt-editor-modal', ['posSettings' => $posSettings, 'business' => $business, 'currency' => $currency])
             @include('pos::partials.pos-keyboard-shortcuts')
             @include('pos::partials.pos-fullscreen-button')
             @include('pos::partials.walking-customer-toggle')

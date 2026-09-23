@@ -209,70 +209,14 @@
                 {{-- ── Print Layout panel ───────────────────────────── --}}
                 <div class="psm-panel" id="psm-panel-print" role="tabpanel" aria-labelledby="psm-tab-print" hidden>
                     <div class="psm-section">
-                        <p class="psm-section__label"><i class="fa fa-align-left" aria-hidden="true"></i> Header &amp; Footer</p>
-                        <div class="psm-card">
-                            <div class="psm-field">
-                                <label class="psm-field__label" for="pos-settings-receipt-header">Receipt header text</label>
-                                <input type="text" name="receipt_header" id="pos-settings-receipt-header" class="psm-input" maxlength="200"
-                                    value="{{ $posSettings['receipt_header'] ?? '' }}"
-                                    placeholder="e.g. Welcome to our store!">
-                            </div>
-                            <div class="psm-field" style="margin-bottom:0;">
-                                <label class="psm-field__label" for="pos-settings-receipt-footer">Receipt footer text</label>
-                                <input type="text" name="receipt_footer" id="pos-settings-receipt-footer" class="psm-input" maxlength="200"
-                                    value="{{ $posSettings['receipt_footer'] ?? 'Thank you for your purchase!' }}"
-                                    placeholder="e.g. Thank you for your purchase!">
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="psm-section">
-                        <p class="psm-section__label"><i class="fa fa-building" aria-hidden="true"></i> Business info on receipt</p>
-                        <div class="psm-card">
-                            <div class="psm-row">
-                                <div class="psm-row__info">
-                                    <span class="psm-row__name">Show business name</span>
-                                    <span class="psm-row__desc">Print your business name at the top of the receipt</span>
-                                </div>
-                                <label class="psm-switch">
-                                    <input type="hidden" name="show_business_name" value="0">
-                                    <input type="checkbox" name="show_business_name" value="1" @checked($posSettings['show_business_name'] ?? true)>
-                                    <span class="psm-switch__track" aria-hidden="true"><span class="psm-switch__thumb"></span></span>
-                                </label>
-                            </div>
-                            <div class="psm-row psm-row--border">
-                                <div class="psm-row__info">
-                                    <span class="psm-row__name">Show business address</span>
-                                    <span class="psm-row__desc">Include your address on printed receipts</span>
-                                </div>
-                                <label class="psm-switch">
-                                    <input type="hidden" name="show_business_address" value="0">
-                                    <input type="checkbox" name="show_business_address" value="1" @checked($posSettings['show_business_address'] ?? true)>
-                                    <span class="psm-switch__track" aria-hidden="true"><span class="psm-switch__thumb"></span></span>
-                                </label>
-                            </div>
-                            <div class="psm-row psm-row--border">
-                                <div class="psm-row__info">
-                                    <span class="psm-row__name">Show account info</span>
-                                    <span class="psm-row__desc">Print the deposit or credit account name on the receipt</span>
-                                </div>
-                                <label class="psm-switch">
-                                    <input type="hidden" name="show_account_info" value="0">
-                                    <input type="checkbox" name="show_account_info" value="1" @checked($posSettings['show_account_info'] ?? true)>
-                                    <span class="psm-switch__track" aria-hidden="true"><span class="psm-switch__thumb"></span></span>
-                                </label>
-                            </div>
-                            <div class="psm-row psm-row--border">
-                                <div class="psm-row__info">
-                                    <span class="psm-row__name">Show service bound products</span>
-                                    <span class="psm-row__desc">List attached products under each service line on the receipt</span>
-                                </div>
-                                <label class="psm-switch">
-                                    <input type="hidden" name="show_service_bound_products" value="0">
-                                    <input type="checkbox" name="show_service_bound_products" value="1" @checked($posSettings['show_service_bound_products'] ?? true)>
-                                    <span class="psm-switch__track" aria-hidden="true"><span class="psm-switch__thumb"></span></span>
-                                </label>
-                            </div>
+                        <p class="psm-section__label"><i class="fa fa-receipt" aria-hidden="true"></i> Receipt layout</p>
+                        <div class="psm-card" style="padding:20px 16px;display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;">
+                            <p style="margin:0;font-size:12.5px;color:var(--muted);line-height:1.5;max-width:340px;">
+                                Design your receipt's header, footer, business info and paper width with a live preview of exactly what will print.
+                            </p>
+                            <button type="button" class="psm-btn psm-btn--primary" data-pos-receipt-editor-open data-pos-settings-close>
+                                <i class="fa fa-receipt" aria-hidden="true"></i> Open Receipt Editor
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -418,7 +362,7 @@ html.pos-settings-modal-open,html.pos-settings-modal-open body{overflow:hidden;}
     var tabDescriptions = {
         general: 'Appearance & display preferences',
         sales:   'Payment accounts & checkout options',
-        print:   'Receipt header, footer & business info'
+        print:   'Open the visual Receipt Editor'
     };
 
     function setOpen(open) {
