@@ -426,6 +426,7 @@
         $showSidebarFilesLink = $navBusiness && (
             $navBusiness->fileManagerFiles()->exists() || $navBusiness->fileManagerFolders()->exists()
         );
+        $showSidebarAutomationLink = $navBusiness && Route::has('automations.index') && $featureOn('automation_editor');
         $showSidebarDesignStudioLink = $navBusiness && Route::has('designstudio.index') && $featureOn('social_media_campaign');
         $showSidebarServiceLink = $navBusiness && Route::has('service.catalog.index') && $featureOn('service_management');
         $showSidebarRestaurantLink = $navBusiness && Route::has('restaurant.orders.index') && $featureOn('restaurant');
@@ -504,6 +505,7 @@
             $showSidebarFilesLink = false;
             $showSidebarPropertiesLink = false;
             $showSidebarModificationsLink = false;
+            $showSidebarAutomationLink = false;
             $showSidebarDesignStudioLink = false;
             $showSidebarRestaurantLink = false;
             $showSidebarDocumentationLink = false;
@@ -769,6 +771,9 @@
 
             @if($showSidebarFilesLink && Route::has('filemanager.index'))
                 <a href="{{ route('filemanager.index') }}" class="{{ request()->routeIs('filemanager.*') ? 'active' : '' }}"><i class="fa fa-folder-open"></i><span>Files</span></a>
+            @endif
+            @if($showSidebarAutomationLink)
+                <a href="{{ route('automations.index') }}" class="{{ request()->routeIs('automations.*') ? 'active' : '' }}"><i class="fa fa-bolt"></i><span>Automations</span></a>
             @endif
             @if($showSidebarDesignStudioLink)
                 <a href="{{ route('designstudio.index') }}" class="{{ request()->routeIs('designstudio.*') ? 'active' : '' }}"><i class="fa fa-palette"></i><span>Design Studio</span></a>
