@@ -764,6 +764,9 @@
                     <i class="fa fa-handshake"></i><span>CRM</span>
                 </div>
                 <div class="submenu" aria-label="CRM">
+                    <a href="{{ route('crm.overview') }}" @class(['active' => request()->routeIs('crm.overview')])>
+                        <i class="fa fa-house"></i><span>Overview</span>
+                    </a>
                     <a href="{{ route('crm.projects.index') }}" @class(['active' => request()->routeIs('crm.projects.*') || request()->routeIs('crm.leads.*')])>
                         <i class="fa fa-diagram-project"></i><span>Projects</span>
                     </a>

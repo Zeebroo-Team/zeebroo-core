@@ -233,6 +233,17 @@ class LeadFormService
             ->first();
     }
 
+    /**
+     * The form used to build the internal "New lead" modal and to validate lead
+     * submissions: the project's explicit default form, falling back to its most
+     * recently created form when no form has been marked default yet (e.g. a
+     * project created before multiple forms per project were supported).
+     */
+    public function defaultOrFirstForProject(Project $project): ?LeadForm
+    {
+        return $this->defaultForProject($project) ?? $this->listForProject($project)->first();
+    }
+
     public function findPublishedByToken(string $token): ?LeadForm
     {
         return LeadForm::query()

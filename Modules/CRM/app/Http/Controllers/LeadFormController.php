@@ -36,6 +36,7 @@ class LeadFormController extends Controller
             'project'   => $project,
             'forms'     => $this->forms->listForProject($project),
             'templates' => $this->forms->templateChoices(),
+            'stages'    => $project->stages,
         ]);
     }
 
@@ -46,17 +47,13 @@ class LeadFormController extends Controller
             return $business;
         }
 
-        if ($this->forms->listForProject($project)->isNotEmpty()) {
-            return redirect()->route('crm.projects.forms.index', $project)
-                ->withErrors(['name' => 'This project already has a lead form — only one form is allowed per project.']);
-        }
-
         $data = $request->validate([
             'name' => [
                 'required', 'string', 'max:150',
                 Rule::unique('crm_lead_forms', 'name')->where(fn ($q) => $q->where('project_id', $project->id)),
             ],
-            'template' => ['nullable', 'string', Rule::in(LeadFormService::templateKeys())],
+            'template'          => ['nullable', 'string', Rule::in(LeadFormService::templateKeys())],
+            'default_stage_id'  => ['nullable', 'integer', Rule::exists('crm_lead_stages', 'id')->where(fn ($q) => $q->where('project_id', $project->id))],
         ]);
 
         $form = $this->forms->create($project, $data);
@@ -77,6 +74,7 @@ class LeadFormController extends Controller
             'form'         => $form,
             'customFields' => $this->customFieldService->listForProject($project),
             'style'        => $form->styleSettings(),
+            'stages'       => $project->stages,
         ]);
     }
 
@@ -102,6 +100,19 @@ class LeadFormController extends Controller
         $this->forms->update($form, $data);
 
         return response()->json(['success' => true]);
+    }
+
+    public function toggleDefault(Request $request, Project $project, LeadForm $form): RedirectResponse
+    {
+        $business = $this->requireForm($request, $project, $form);
+        if ($business instanceof RedirectResponse) {
+            return $business;
+        }
+
+        $updated = $this->forms->toggleDefault($form);
+
+        return redirect()->route('crm.projects.forms.index', $project)
+            ->with('status', $updated->is_default ? 'Form "' . $updated->name . '" set as default.' : 'Form "' . $updated->name . '" is no longer the default.');
     }
 
     public function publish(Request $request, Project $project, LeadForm $form): RedirectResponse
