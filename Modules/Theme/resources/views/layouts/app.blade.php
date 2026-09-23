@@ -430,6 +430,7 @@
             $navBusiness->fileManagerFiles()->exists() || $navBusiness->fileManagerFolders()->exists()
         );
         $showSidebarAutomationLink = $navBusiness && Route::has('automations.index') && $featureOn('automation_editor');
+        $showSidebarDeveloperToolsLink = $navBusiness && Route::has('developers.index') && $featureOn('developers');
         $showSidebarDesignStudioLink = $navBusiness && Route::has('designstudio.index') && $featureOn('social_media_campaign');
         $showSidebarServiceLink = $navBusiness && Route::has('service.catalog.index') && $featureOn('service_management');
         $showSidebarRestaurantLink = $navBusiness && Route::has('restaurant.orders.index') && $featureOn('restaurant');
@@ -512,6 +513,7 @@
             $showSidebarPropertiesLink = false;
             $showSidebarModificationsLink = false;
             $showSidebarAutomationLink = false;
+            $showSidebarDeveloperToolsLink = false;
             $showSidebarDesignStudioLink = false;
             $showSidebarRestaurantLink = false;
             $showSidebarDocumentationLink = false;
@@ -973,6 +975,9 @@
                     @endif
                     @if(Route::has('data-vault.settings'))
                         <a href="{{ route('data-vault.settings') }}" class="{{ request()->routeIs('data-vault.settings') ? 'active' : '' }}"><i class="fa fa-shield-halved"></i><span>Data Vault</span></a>
+                    @endif
+                    @if($showSidebarDeveloperToolsLink)
+                        <a href="{{ route('developers.index') }}" class="{{ request()->routeIs('developers.*') ? 'active' : '' }}"><i class="fa fa-code"></i><span>Developer Tools</span></a>
                     @endif
                 </div>
             @endif
