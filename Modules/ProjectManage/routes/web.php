@@ -3,10 +3,13 @@
 use Illuminate\Support\Facades\Route;
 use Modules\ProjectManage\Http\Controllers\MilestoneController;
 use Modules\ProjectManage\Http\Controllers\MyTasksController;
+use Modules\ProjectManage\Http\Controllers\OverviewController;
 use Modules\ProjectManage\Http\Controllers\ProjectController;
 use Modules\ProjectManage\Http\Controllers\TaskController;
 
 Route::middleware(['web', 'auth', 'verified'])->group(function () {
+
+    Route::get('/pm', [OverviewController::class, 'index'])->name('pm.overview');
 
     // Projects
     Route::get('/pm/projects',               [ProjectController::class, 'index'])  ->name('pm.projects.index');
@@ -24,9 +27,10 @@ Route::middleware(['web', 'auth', 'verified'])->group(function () {
     Route::delete('/pm/projects/{project}/milestones/{milestone}',             [MilestoneController::class, 'destroy']) ->name('pm.projects.milestones.destroy');
 
     // Tasks (project-scoped)
-    Route::get('/pm/projects/{project}/tasks',  [TaskController::class, 'index']) ->name('pm.projects.tasks.index');
-    Route::get('/pm/projects/{project}/board',  [TaskController::class, 'board']) ->name('pm.projects.tasks.board');
-    Route::post('/pm/projects/{project}/tasks', [TaskController::class, 'store']) ->name('pm.projects.tasks.store');
+    Route::get('/pm/projects/{project}/tasks',    [TaskController::class, 'index']) ->name('pm.projects.tasks.index');
+    Route::get('/pm/projects/{project}/board',    [TaskController::class, 'board']) ->name('pm.projects.tasks.board');
+    Route::get('/pm/projects/{project}/my-tasks', [TaskController::class, 'mine'])  ->name('pm.projects.tasks.mine');
+    Route::post('/pm/projects/{project}/tasks',   [TaskController::class, 'store']) ->name('pm.projects.tasks.store');
 
     // Tasks (task-scoped)
     Route::get('/pm/tasks/{task}',             [TaskController::class, 'show'])    ->name('pm.tasks.show');

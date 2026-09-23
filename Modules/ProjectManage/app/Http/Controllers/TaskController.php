@@ -53,6 +53,28 @@ class TaskController extends Controller
         ]);
     }
 
+    public function mine(Request $request, Project $project): View|RedirectResponse
+    {
+        $business = $this->requireProject($request, $project);
+        if ($business instanceof RedirectResponse) {
+            return $business;
+        }
+
+        $filter = (string) $request->query('filter', 'open');
+        $tasks  = $this->taskService->listForProject($project, ['assigned_to' => (int) $request->user()?->id]);
+
+        $tasks = $filter === 'overdue'
+            ? $tasks->filter(fn (Task $t) => $t->isOverdue())->values()
+            : $tasks->filter(fn (Task $t) => !$t->isCompleted())->values();
+
+        return view('projectmanage::tasks.mine', [
+            'business' => $business,
+            'project'  => $project,
+            'tasks'    => $tasks,
+            'filter'   => $filter,
+        ]);
+    }
+
     public function board(Request $request, Project $project): View|RedirectResponse
     {
         $business = $this->requireProject($request, $project);

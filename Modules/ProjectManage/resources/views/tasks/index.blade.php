@@ -21,6 +21,8 @@
         <span>Tasks</span>
     </div>
 
+    @include('projectmanage::partials.pm-detail-nav')
+
     @if(session('status'))
         <div class="pcat-banner pcat-banner--ok" style="font-weight:600;">{{ session('status') }}</div>
     @endif
@@ -88,12 +90,6 @@
                 {{ $label }}
             </a>
         @endforeach
-        <div style="margin-left:auto;display:flex;gap:8px;align-items:center;">
-            <a href="{{ route('pm.projects.tasks.board', $project) }}" class="linkbtn"
-               style="padding:5px 12px;font-size:12px;background:transparent;border:1px solid var(--border);color:var(--text);text-decoration:none;display:inline-flex;align-items:center;gap:5px;">
-                <i class="fa fa-table-columns"></i> Board
-            </a>
-        </div>
     </div>
 
     @if($tasks->isEmpty())

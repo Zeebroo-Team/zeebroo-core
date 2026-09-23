@@ -37,16 +37,11 @@
         <span>Board</span>
     </div>
 
+    @include('projectmanage::partials.pm-detail-nav')
+
     @if(session('status'))
         <div class="pcat-banner pcat-banner--ok" style="font-weight:600;">{{ session('status') }}</div>
     @endif
-
-    <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center;">
-        <a href="{{ route('pm.projects.tasks.index', $project) }}" class="linkbtn"
-           style="padding:6px 12px;font-size:12px;background:transparent;border:1px solid var(--border);color:var(--text);text-decoration:none;display:inline-flex;align-items:center;gap:5px;">
-            <i class="fa fa-list"></i> List view
-        </a>
-    </div>
 
     <div class="pm-board">
         @foreach($colMeta as $status => $meta)

@@ -3,21 +3,111 @@
 namespace Modules\ProjectManage\Services;
 
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
+use Modules\Account\Models\Property;
+use Modules\Account\Models\Rental;
+use Modules\Business\Models\Branch;
 use Modules\Business\Models\Business;
+use Modules\HRManagement\Models\Department;
+use Modules\HRManagement\Models\Employee;
+use Modules\Modification\Models\Modification;
 use Modules\ProjectManage\Models\Project;
 
 class ProjectService
 {
-    public function listForBusiness(Business $business): Collection
+    /**
+     * @param array{status?: string, project_type?: string, search?: string} $filters
+     */
+    public function listForBusiness(Business $business, array $filters = []): Collection
     {
-        return Project::query()
+        $query = Project::query()
             ->where('business_id', $business->id)
             ->withCount('tasks')
-            ->with(['customer', 'branch', 'department', 'property', 'employee', 'modification', 'rental', 'imageFile'])
-            ->orderBy('status')
-            ->orderBy('name')
-            ->get();
+            ->with(['customer', 'branch', 'department', 'property', 'employee', 'modification', 'rental', 'imageFile']);
+
+        if (filled($filters['status'] ?? '')) {
+            $query->where('status', $filters['status']);
+        }
+
+        if (filled($filters['project_type'] ?? '')) {
+            $query->where('project_type', $filters['project_type']);
+        }
+
+        if (filled($filters['search'] ?? '')) {
+            $term = $filters['search'];
+            $query->where(function ($q) use ($term) {
+                $q->where('name', 'like', "%{$term}%")
+                    ->orWhere('client_name', 'like', "%{$term}%");
+            });
+        }
+
+        return $query->orderBy('status')->orderBy('name')->get();
+    }
+
+    /**
+     * Lists of assignable targets (branch/department/property/employee/modification/rental)
+     * for the "Assign To" fields, mirroring PosExpenseBillAssignmentApiController's targets.
+     *
+     * @return array<string, Collection>
+     */
+    public function assignableTargets(Business $business): array
+    {
+        $safe = function (callable $fn): Collection {
+            try {
+                return $fn() ?? collect();
+            } catch (\Throwable) {
+                return collect();
+            }
+        };
+
+        return [
+            'branches' => $safe(fn () => Branch::query()
+                ->where('business_id', $business->id)
+                ->orderBy('name')
+                ->get()
+                ->map(fn ($b) => (object) ['id' => $b->id, 'name' => $b->name])),
+
+            'departments' => $safe(function () use ($business) {
+                if (!Schema::hasTable('hr_departments')) {
+                    return collect();
+                }
+                return Department::query()->where('business_id', $business->id)->orderBy('name')->get()
+                    ->map(fn ($d) => (object) ['id' => $d->id, 'name' => $d->name]);
+            }),
+
+            'properties' => $safe(function () use ($business) {
+                if (!Schema::hasTable('properties')) {
+                    return collect();
+                }
+                return Property::query()->where('business_id', $business->id)->orderBy('property_name')->get()
+                    ->map(fn ($p) => (object) ['id' => $p->id, 'name' => $p->property_name.' · '.$p->property_type]);
+            }),
+
+            'employees' => $safe(function () use ($business) {
+                if (!Schema::hasTable('hr_employees')) {
+                    return collect();
+                }
+                return Employee::query()->where('business_id', $business->id)->orderBy('full_name')->get()
+                    ->map(fn ($e) => (object) ['id' => $e->id, 'name' => $e->full_name.($e->employee_id ? '  #'.$e->employee_id : '')]);
+            }),
+
+            'modifications' => $safe(function () use ($business) {
+                if (!Schema::hasTable('modifications')) {
+                    return collect();
+                }
+                return Modification::query()->where('business_id', $business->id)->orderBy('name')->get()
+                    ->map(fn ($m) => (object) ['id' => $m->id, 'name' => $m->name]);
+            }),
+
+            'rentals' => $safe(function () use ($business) {
+                if (!Schema::hasTable('rentals')) {
+                    return collect();
+                }
+                return Rental::query()->where('business_id', $business->id)->orderBy('property_type')->get()
+                    ->map(fn ($r) => (object) ['id' => $r->id, 'name' => $r->property_type.($r->purpose ? '  ·  '.$r->purpose : '')]);
+            }),
+        ];
     }
 
     public function businessHasProjects(Business $business): bool
