@@ -887,6 +887,7 @@ var designW      = {{ $design?->width  ?? (request()->integer('w', 1080)) }};
 var designH      = {{ $design?->height ?? (request()->integer('h', 1080)) }};
 var designType   = @json($design?->type ?? request('type', ''));
 var canvasJson   = @json($design?->canvas_json);
+var proposalGroup = @json($design?->proposal_group ?? null);
 
 /* multi-page */
 var isMultiPage  = (designType === 'company-profile');
@@ -1803,7 +1804,10 @@ function edSave() {
     .then(function(data) {
         if (!data.id) { throw new Error('No ID in response'); }
         designId = data.id;
-        if (designType && !isMultiPage) {
+        if (proposalGroup) {
+            showToast('Saved! Returning to proposal…', 'ok');
+            setTimeout(function(){ window.location.href = '/design-studio/proposals/' + proposalGroup; }, 900);
+        } else if (designType && !isMultiPage) {
             showToast('Saved! Returning to Studio…', 'ok');
             setTimeout(function(){ window.location.href = '/design-studio'; }, 900);
         } else {

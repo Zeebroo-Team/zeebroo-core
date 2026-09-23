@@ -830,6 +830,11 @@
                             <i class="fa fa-building"></i><span>Company Profile</span>
                         </a>
                     @endif
+                    @if(Route::has('designstudio.proposals.index'))
+                        <a href="{{ route('designstudio.proposals.index') }}" @class(['active' => request()->routeIs('designstudio.proposals.*')])>
+                            <i class="fa fa-file-invoice"></i><span>Proposals</span>
+                        </a>
+                    @endif
                     @if(Route::has('designstudio.type.index'))
                         <a href="{{ route('designstudio.type.index', 'business-card') }}" @class(['active' => request()->routeIs('designstudio.type.index') && request()->route('type') === 'business-card'])>
                             <i class="fa fa-id-card"></i><span>Business Card</span>
