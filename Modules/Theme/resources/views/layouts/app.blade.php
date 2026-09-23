@@ -360,6 +360,7 @@
         $featureOn = fn (string $key) => (bool) ($businessFeatures[$key] ?? true);
 
         $billFeatureOn = $navBusiness && $featureOn('bill_management');
+        $showSidebarFinanceOverviewLink = $navBusiness && $billFeatureOn && Route::has('account.finance.index');
         $showSidebarLoansLink = $navBusiness && $billFeatureOn && $navBusiness->loans()->exists();
         $sidebarLoanDueHighlight = $showSidebarLoansLink && $navBusiness
             ? app(\Modules\Account\Services\LoanOverviewTooltipService::class)->businessHasOverdueLoanInstallments($navBusiness)
@@ -450,6 +451,14 @@
         $sidebarBillDueHighlight = $showSidebarBillsLink && $navBusiness
             ? app(\Modules\Account\Services\BillService::class)->businessHasOverdueBillPayments($navBusiness)
             : false;
+        $showSidebarFinanceSection = $showSidebarFinanceOverviewLink
+            || $showSidebarBillsLink
+            || $showSidebarLoansLink
+            || $showSidebarRentalsLink
+            || $showSidebarPropertiesLink
+            || $showSidebarModificationsLink
+            || $showSidebarBudgetsLink
+            || $showSidebarInvestmentsLink;
         $hrFeatureOn = $navBusiness && $featureOn('human_resources');
         $hrPayrollOptedIn = $navBusiness
             ? (bool) get_settings('hr.payroll.opted_in', false, $navBusiness)
@@ -484,6 +493,8 @@
             $accounts = collect();
             $assignedAccount = null;
             $showSidebarSettingsSection = false;
+            $showSidebarFinanceOverviewLink = false;
+            $showSidebarFinanceSection = false;
             $showSidebarLoansLink = false;
             $showSidebarRentalsLink = false;
             $showSidebarBillsLink = false;
@@ -577,51 +588,61 @@
             <div class="menu-section">Main</div>
                 <a href="{{ route('dashboard') }}" class="{{ request()->routeIs('dashboard') ? 'active' : '' }}"><i class="fa fa-gauge-high"></i><span>Overview</span></a>
             <a href="{{ route('aibot.index') }}" class="{{ request()->routeIs('aibot.*') ? 'active' : '' }}"><i class="fa fa-robot"></i><span>AI Agent</span></a>
-            @if($showSidebarModificationsLink)
-                <a href="{{ route('modification.index') }}" class="{{ request()->routeIs('modification.*') ? 'active' : '' }}"><i class="fa fa-screwdriver-wrench"></i><span>Modification</span></a>
-            @endif
-            @if($showSidebarPropertiesLink && Route::has('account.properties.index'))
-                <a href="{{ route('account.properties.index') }}" class="{{ request()->routeIs('account.properties.*') ? 'active' : '' }}"><i class="fa fa-building"></i><span>Property</span></a>
-            @endif
-            @if($showSidebarLoansLink)
-                <a href="{{ route('account.loans.index') }}" @class([
-                    'menu-loan-mgmt',
-                    'active' => request()->routeIs('account.loans.*'),
-                    'menu-loan-mgmt--due' => $sidebarLoanDueHighlight,
-                ]) @if($sidebarLoanDueHighlight) title="At least one loan has a due date in the past without a ledger installment yet." @endif>
-                    <i class="fa fa-hand-holding-dollar" aria-hidden="true"></i><span>Loan management</span>
-                    @if($sidebarLoanDueHighlight)
-                        <span class="menu-loan-mgmt__pulse" aria-hidden="true"></span>
+            @if($showSidebarFinanceSection)
+                <div class="menu-group-title">
+                    <i class="fa fa-sack-dollar"></i><span>Finance</span>
+                </div>
+                <div class="submenu" aria-label="Finance">
+                    @if($showSidebarFinanceOverviewLink)
+                        <a href="{{ route('account.finance.index') }}" class="{{ request()->routeIs('account.finance.*') ? 'active' : '' }}"><i class="fa fa-diagram-project"></i><span>Overview</span></a>
                     @endif
-                </a>
-            @endif
-            @if($showSidebarRentalsLink)
-                <a href="{{ route('account.rentals.index') }}" @class([
-                    'active' => request()->routeIs('account.rentals.*'),
-                    'menu-rentals--due' => $sidebarRentalDueHighlight,
-                ]) @if($sidebarRentalDueHighlight) title="At least one rental has a billing date on or before today without a ledger payment logged for that date." @endif>
-                    <i class="fa fa-house"></i><span>Rentals</span>
-                    @if($sidebarRentalDueHighlight)
-                        <span class="menu-rentals__pulse" aria-hidden="true"></span>
+                    @if($showSidebarBillsLink)
+                        <a href="{{ route('account.bills.index') }}" @class([
+                            'active' => request()->routeIs('account.bills.*'),
+                            'menu-rentals--due' => $sidebarBillDueHighlight,
+                        ]) @if($sidebarBillDueHighlight) title="At least one bill has a due date on or before today without a ledger payment logged for that date." @endif>
+                            <i class="fa fa-file-invoice-dollar"></i><span>Bills</span>
+                            @if($sidebarBillDueHighlight)
+                                <span class="menu-rentals__pulse" aria-hidden="true"></span>
+                            @endif
+                        </a>
                     @endif
-                </a>
-            @endif
-            @if($showSidebarBillsLink)
-                <a href="{{ route('account.bills.index') }}" @class([
-                    'active' => request()->routeIs('account.bills.*'),
-                    'menu-rentals--due' => $sidebarBillDueHighlight,
-                ]) @if($sidebarBillDueHighlight) title="At least one bill has a due date on or before today without a ledger payment logged for that date." @endif>
-                    <i class="fa fa-file-invoice-dollar"></i><span>Bills</span>
-                    @if($sidebarBillDueHighlight)
-                        <span class="menu-rentals__pulse" aria-hidden="true"></span>
+                    @if($showSidebarLoansLink)
+                        <a href="{{ route('account.loans.index') }}" @class([
+                            'menu-loan-mgmt',
+                            'active' => request()->routeIs('account.loans.*'),
+                            'menu-loan-mgmt--due' => $sidebarLoanDueHighlight,
+                        ]) @if($sidebarLoanDueHighlight) title="At least one loan has a due date in the past without a ledger installment yet." @endif>
+                            <i class="fa fa-hand-holding-dollar" aria-hidden="true"></i><span>Loans</span>
+                            @if($sidebarLoanDueHighlight)
+                                <span class="menu-loan-mgmt__pulse" aria-hidden="true"></span>
+                            @endif
+                        </a>
                     @endif
-                </a>
-            @endif
-            @if($showSidebarBudgetsLink)
-                <a href="{{ route('budget.index') }}" class="{{ request()->routeIs('budget.*') ? 'active' : '' }}"><i class="fa fa-sack-dollar"></i><span>Budgets</span></a>
-            @endif
-            @if($showSidebarInvestmentsLink)
-                <a href="{{ route('account.investments.index') }}" class="{{ request()->routeIs('account.investments.*') ? 'active' : '' }}"><i class="fa fa-chart-line"></i><span>Investments</span></a>
+                    @if($showSidebarRentalsLink)
+                        <a href="{{ route('account.rentals.index') }}" @class([
+                            'active' => request()->routeIs('account.rentals.*'),
+                            'menu-rentals--due' => $sidebarRentalDueHighlight,
+                        ]) @if($sidebarRentalDueHighlight) title="At least one rental has a billing date on or before today without a ledger payment logged for that date." @endif>
+                            <i class="fa fa-house"></i><span>Rentals</span>
+                            @if($sidebarRentalDueHighlight)
+                                <span class="menu-rentals__pulse" aria-hidden="true"></span>
+                            @endif
+                        </a>
+                    @endif
+                    @if($showSidebarPropertiesLink && Route::has('account.properties.index'))
+                        <a href="{{ route('account.properties.index') }}" class="{{ request()->routeIs('account.properties.*') ? 'active' : '' }}"><i class="fa fa-building"></i><span>Properties</span></a>
+                    @endif
+                    @if($showSidebarModificationsLink)
+                        <a href="{{ route('modification.index') }}" class="{{ request()->routeIs('modification.*') ? 'active' : '' }}"><i class="fa fa-screwdriver-wrench"></i><span>Modifications</span></a>
+                    @endif
+                    @if($showSidebarInvestmentsLink)
+                        <a href="{{ route('account.investments.index') }}" class="{{ request()->routeIs('account.investments.*') ? 'active' : '' }}"><i class="fa fa-chart-line"></i><span>Investments</span></a>
+                    @endif
+                    @if($showSidebarBudgetsLink)
+                        <a href="{{ route('budget.index') }}" class="{{ request()->routeIs('budget.*') ? 'active' : '' }}"><i class="fa fa-calculator"></i><span>Budget</span></a>
+                    @endif
+                </div>
             @endif
             @if($showSidebarProductSection)
                 <div class="menu-group-title">
