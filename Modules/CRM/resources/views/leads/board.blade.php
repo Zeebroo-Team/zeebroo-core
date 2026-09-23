@@ -11,14 +11,24 @@
 .ld-board__count{font-size:11px;font-weight:700;color:var(--muted);background:color-mix(in srgb,var(--muted) 16%,transparent);border-radius:999px;padding:2px 8px;flex-shrink:0;}
 .ld-board__value{padding:0 12px 8px;font-size:11px;color:var(--muted);}
 .ld-board__body{flex:1;overflow-y:auto;padding:8px;display:flex;flex-direction:column;gap:8px;min-height:60px;}
-.ld-board__card{border:1px solid var(--border);border-radius:9px;padding:9px 10px;background:var(--card);}
+.ld-board__card{border:1px solid var(--border);border-radius:9px;padding:9px 10px;background:var(--card);position:relative;}
 .ld-board__card-top{display:flex;align-items:center;gap:6px;}
 .ld-board__card-top .pcat-drag-handle{width:20px;height:20px;flex-shrink:0;}
-.ld-board__card-name{font-size:13px;font-weight:700;color:var(--text);text-decoration:none;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ld-board__card-name{font-size:13px;font-weight:700;color:var(--text);text-decoration:none;min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .ld-board__card-name:hover{text-decoration:underline;}
 .ld-board__card-meta{display:flex;justify-content:space-between;align-items:center;margin-top:6px;margin-left:26px;font-size:11px;color:var(--muted);gap:6px;}
 .ld-board__card-meta span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .ld-board__empty{font-size:12px;color:var(--muted);text-align:center;padding:14px 6px;margin:0;}
+.ld-board__menu{flex-shrink:0;}
+.ld-board__menu summary{list-style:none;cursor:pointer;width:20px;height:20px;display:flex;align-items:center;justify-content:center;border-radius:6px;color:var(--muted);}
+.ld-board__menu summary::-webkit-details-marker{display:none;}
+.ld-board__menu summary:hover{background:color-mix(in srgb,var(--muted) 16%,transparent);color:var(--text);}
+.ld-board__menu[open] summary{background:color-mix(in srgb,var(--muted) 16%,transparent);}
+.ld-board__menu-panel{position:absolute;top:30px;right:8px;z-index:5;background:var(--card);border:1px solid var(--border);border-radius:9px;box-shadow:0 6px 18px rgba(0,0,0,.18);padding:4px;min-width:150px;display:flex;flex-direction:column;gap:2px;}
+.ld-board__menu-panel form,.ld-board__menu-panel a{margin:0;}
+.ld-board__menu-panel button,.ld-board__menu-panel a{width:100%;text-align:left;background:transparent;border:none;padding:7px 9px;font-size:12px;color:var(--text);border-radius:6px;cursor:pointer;display:flex;align-items:center;gap:7px;text-decoration:none;}
+.ld-board__menu-panel button:hover,.ld-board__menu-panel a:hover{background:color-mix(in srgb,var(--muted) 14%,transparent);}
+.ld-board__menu-panel .is-danger{color:#f97373;}
 </style>
 
 <div class="pcat-page-card card" style="max-width:100%;padding:14px;">
@@ -64,6 +74,33 @@
                                     <i class="fa fa-grip-vertical"></i>
                                 </span>
                                 <a href="{{ route('crm.leads.show', $lead) }}" class="ld-board__card-name">{{ $lead->name }}</a>
+                                <details class="ld-board__menu">
+                                    <summary title="Actions"><i class="fa fa-ellipsis-vertical"></i></summary>
+                                    <div class="ld-board__menu-panel">
+                                        <a href="{{ route('crm.leads.edit', $lead) }}"><i class="fa fa-pen"></i> Edit</a>
+                                        @if(!$stage->is_won && !$stage->is_lost)
+                                            <form method="POST" action="{{ route('crm.leads.convert', $lead) }}" onsubmit="return confirm('Convert this lead to a customer?');">
+                                                @csrf
+                                                <button type="submit"><i class="fa fa-check"></i> Convert to customer</button>
+                                            </form>
+                                            <form method="POST" action="{{ route('crm.leads.mark-lost', $lead) }}">
+                                                @csrf
+                                                <input type="hidden" name="lost_reason" value="">
+                                                <button type="submit" class="is-danger"><i class="fa fa-xmark"></i> Mark lost</button>
+                                            </form>
+                                        @elseif($stage->is_lost)
+                                            <form method="POST" action="{{ route('crm.leads.reopen', $lead) }}">
+                                                @csrf
+                                                <button type="submit"><i class="fa fa-rotate-left"></i> Reopen</button>
+                                            </form>
+                                        @endif
+                                        <form method="POST" action="{{ route('crm.leads.destroy', $lead) }}" onsubmit="return confirm('Delete this lead? This cannot be undone.');">
+                                            @csrf
+                                            @method('DELETE')
+                                            <button type="submit" class="is-danger"><i class="fa fa-trash"></i> Delete</button>
+                                        </form>
+                                    </div>
+                                </details>
                             </div>
                             @if($lead->company)
                                 <div class="muted" style="font-size:11px;margin:4px 0 0 26px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ $lead->company }}</div>
@@ -82,7 +119,7 @@
     </div>
 </div>
 
-<div style="margin-top:14px;">
+<div style="margin-top:14px;padding-left:14px;">
     <a href="{{ route('dashboard') }}" class="linkbtn"
        style="padding:7px 12px;font-size:12px;background:transparent;border:1px solid var(--border);color:var(--text);text-decoration:none;display:inline-flex;align-items:center;gap:6px;">
         <i class="fa fa-arrow-left"></i> Overview
@@ -112,6 +149,20 @@
         var head = dropzone.closest('.ld-board__col')?.querySelector('.ld-board__count');
         if (head) head.textContent = String(Math.max(0, parseInt(head.textContent, 10) + delta));
     }
+
+    document.addEventListener('click', function (e) {
+        document.querySelectorAll('.ld-board__menu[open]').forEach(function (d) {
+            if (!d.contains(e.target)) d.removeAttribute('open');
+        });
+    });
+    document.querySelectorAll('.ld-board__menu').forEach(function (d) {
+        d.addEventListener('toggle', function () {
+            if (!d.open) return;
+            document.querySelectorAll('.ld-board__menu[open]').forEach(function (other) {
+                if (other !== d) other.removeAttribute('open');
+            });
+        });
+    });
 
     document.querySelectorAll('[data-stage-dropzone]').forEach(function (col) {
         Sortable.create(col, {

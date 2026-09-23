@@ -223,6 +223,29 @@ class LeadService
             ->groupBy('stage_id');
     }
 
+    /**
+     * Leads submitted through any of the given (typically "generic"/custom-data)
+     * forms, grouped by form_id — one spreadsheet-style table per form, each with
+     * its own custom field values loaded for column rendering.
+     *
+     * @param  \Illuminate\Support\Collection<int, \Modules\CRM\Models\LeadForm>  $forms
+     * @return Collection<int, Collection<int, Lead>>
+     */
+    public function groupedByForm(Project $project, Collection $forms): Collection
+    {
+        if ($forms->isEmpty()) {
+            return collect();
+        }
+
+        return Lead::query()
+            ->where('project_id', $project->id)
+            ->whereIn('form_id', $forms->pluck('id'))
+            ->with('customFieldValues')
+            ->orderByDesc('id')
+            ->get()
+            ->groupBy('form_id');
+    }
+
     public function create(Project $project, array $data, ?int $userId = null): Lead
     {
         $stageId = $this->nullableInt($data['stage_id'] ?? null) ?? $this->stages->defaultOpenStage($project)?->id;

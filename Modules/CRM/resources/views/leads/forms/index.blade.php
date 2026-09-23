@@ -16,31 +16,26 @@
     @endif
 
     <p class="muted" style="margin:0 0 14px;font-size:13px;line-height:1.45;">
-        Build a public web page for <strong style="color:var(--text);">{{ $project->name }}</strong> that visitors can fill out — submissions become leads here automatically. Each project has a single lead form.
+        Build public web pages for <strong style="color:var(--text);">{{ $project->name }}</strong> that visitors can fill out — submissions become leads here automatically. A project can have several forms; star one as the default used for internally-created leads.
     </p>
 
     <div class="pcat-toolbar">
         <span class="muted" style="margin:0;font-size:13px;">
             @if(!$hasForms) Create your <strong style="color:var(--text);">first form</strong> below. @endif
         </span>
+        @if($hasForms)
+            <button type="button" id="lf-modal-open" class="linkbtn"
+                    style="padding:8px 16px;font-size:13px;display:inline-flex;align-items:center;gap:6px;">
+                <i class="fa fa-plus"></i> New form
+            </button>
+        @endif
     </div>
 
     @if(!$hasForms)
         <section class="pcat-inline">
             <h2>New form</h2>
             <p class="pcat-muted">e.g. "Contact us" or "Get a quote" — you'll design it with the drag-and-drop builder next.</p>
-            <form method="POST" action="{{ route('crm.projects.forms.store', $project) }}" class="pcat-form-grid" style="margin-top:14px;">
-                @csrf
-                <div class="pcat-field">
-                    <label for="lf-name">Form name</label>
-                    <input id="lf-name" name="name" maxlength="150" required placeholder="e.g. Contact us" autofocus>
-                    @error('name')<div style="color:#f87171;font-size:12px;margin-top:4px;">{{ $message }}</div>@enderror
-                </div>
-                @include('crm::leads.forms.partials.template-picker', ['templates' => $templates])
-                <div style="display:flex;justify-content:flex-end;">
-                    <button type="submit" class="linkbtn" style="padding:8px 16px;font-size:13px;">Create &amp; open builder</button>
-                </div>
-            </form>
+            @include('crm::leads.forms.partials.create-form', ['templates' => $templates, 'project' => $project, 'stages' => $stages])
         </section>
     @else
         <div class="pcat-table-wrap">
@@ -48,7 +43,9 @@
                 <thead>
                     <tr>
                         <th>Name</th>
+                        <th>Type</th>
                         <th>Status</th>
+                        <th>Default</th>
                         <th>Public link</th>
                         <th style="text-align:right;">Actions</th>
                     </tr>
@@ -57,12 +54,23 @@
                     @foreach($forms as $f)
                         <tr>
                             <td><strong style="color:var(--text);">{{ $f->name }}</strong></td>
+                            <td><span class="muted" style="font-size:12px;">{{ ucfirst($f->type ?? 'generic') }}</span></td>
                             <td>
                                 @if($f->is_published)
                                     <span class="pcat-badge pcat-badge--on">Published</span>
                                 @else
                                     <span class="pcat-badge pcat-badge--off">Draft</span>
                                 @endif
+                            </td>
+                            <td>
+                                <form method="POST" action="{{ route('crm.projects.forms.default', [$project, $f]) }}" style="margin:0;">
+                                    @csrf
+                                    <button type="submit" class="linkbtn"
+                                            style="padding:4px 10px;font-size:11px;{{ $f->is_default ? '' : 'background:transparent;border:1px solid var(--border);color:var(--muted);' }}"
+                                            title="{{ $f->is_default ? 'Default form' : 'Set as default' }}">
+                                        <i class="fa fa-star"></i> {{ $f->is_default ? 'Default' : 'Set default' }}
+                                    </button>
+                                </form>
                             </td>
                             <td>
                                 @if($f->is_published)
@@ -81,14 +89,45 @@
                 </tbody>
             </table>
         </div>
+
+        <div id="lf-modal"
+             class="pcat-modal {{ $errors->any() ? 'pcat-modal--open' : '' }}"
+             role="dialog" aria-modal="true" aria-labelledby="lf-modal-title"
+             aria-hidden="{{ $errors->any() ? 'false' : 'true' }}">
+            <div class="pcat-modal__backdrop" data-lf-modal-close tabindex="-1"></div>
+            <div class="pcat-modal__panel" style="max-width:min(94vw,640px);">
+                <div class="pcat-modal__head">
+                    <h2 id="lf-modal-title">New form</h2>
+                    <button type="button" class="pcat-modal__close" data-lf-modal-close aria-label="Close">&times;</button>
+                </div>
+                <div class="pcat-modal__body">
+                    @include('crm::leads.forms.partials.create-form', ['templates' => $templates, 'project' => $project, 'stages' => $stages])
+                </div>
+            </div>
+        </div>
     @endif
 </div>
 
-<div style="margin-top:14px;">
+<div style="margin-top:14px;padding-left:14px;">
     <a href="{{ route('crm.projects.leads.index', $project) }}" class="linkbtn"
        style="padding:7px 12px;font-size:12px;background:transparent;border:1px solid var(--border);color:var(--text);text-decoration:none;display:inline-flex;align-items:center;gap:6px;">
         <i class="fa fa-arrow-left"></i> Leads
     </a>
 </div>
 
+@if($hasForms)
+<script>
+(function () {
+    var modal  = document.getElementById('lf-modal');
+    var openBtn = document.getElementById('lf-modal-open');
+    function lock(on) { document.documentElement.classList.toggle('pcat-modal-open-html', Boolean(on)); }
+    function openM() { modal.classList.add('pcat-modal--open'); modal.setAttribute('aria-hidden','false'); lock(true); }
+    function closeM() { modal.classList.remove('pcat-modal--open'); modal.setAttribute('aria-hidden','true'); lock(false); openBtn?.focus(); }
+    openBtn?.addEventListener('click', openM);
+    modal?.querySelectorAll('[data-lf-modal-close]').forEach(el => el.addEventListener('click', closeM));
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && modal?.classList.contains('pcat-modal--open')) closeM(); });
+    if (modal?.classList.contains('pcat-modal--open')) lock(true);
+})();
+</script>
+@endif
 @endsection

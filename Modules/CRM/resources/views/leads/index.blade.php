@@ -112,7 +112,7 @@
             <section class="pcat-inline" style="text-align:center;padding:32px 20px;">
                 <i class="fa fa-file-circle-plus" style="font-size:26px;color:var(--muted);margin-bottom:10px;display:block;"></i>
                 <h2 style="margin:0 0 6px;">Before you add a lead, you should create a lead form first</h2>
-                <p class="pcat-muted" style="margin:0 0 16px;">
+                <p class="pcat-muted" style="margin:0 auto 16px;max-width:420px;">
                     A lead form defines the fields you'll capture prospects with — set one up, then come back to add your first lead.
                 </p>
                 <a href="{{ route('crm.projects.forms.index', $project) }}" class="linkbtn"
@@ -190,7 +190,7 @@
     @endif
 </div>
 
-<div style="margin-top:14px;">
+<div style="margin-top:14px;padding-left:14px;">
     <a href="{{ route('dashboard') }}" class="linkbtn"
        style="padding:7px 12px;font-size:12px;background:transparent;border:1px solid var(--border);color:var(--text);text-decoration:none;display:inline-flex;align-items:center;gap:6px;">
         <i class="fa fa-arrow-left"></i> Overview

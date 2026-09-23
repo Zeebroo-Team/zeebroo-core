@@ -8,11 +8,14 @@ use Modules\CRM\Http\Controllers\LeadController;
 use Modules\CRM\Http\Controllers\LeadCustomFieldController;
 use Modules\CRM\Http\Controllers\LeadFormController;
 use Modules\CRM\Http\Controllers\LeadStageController;
+use Modules\CRM\Http\Controllers\OverviewController;
 use Modules\CRM\Http\Controllers\ProjectController;
 use Modules\CRM\Http\Controllers\PublicLeadFormController;
 use Modules\CRM\Http\Controllers\TaskController;
 
 Route::middleware(['web', 'auth', 'verified'])->group(function () {
+    Route::get('/crm',                            [OverviewController::class, 'index'])   ->name('crm.overview');
+
     Route::get('/crm/projects',                  [ProjectController::class, 'index'])     ->name('crm.projects.index');
     Route::post('/crm/projects',                 [ProjectController::class, 'store'])     ->name('crm.projects.store');
     Route::get('/crm/projects/{project}',        [ProjectController::class, 'show'])       ->name('crm.projects.show');
@@ -24,6 +27,7 @@ Route::middleware(['web', 'auth', 'verified'])->group(function () {
 
     Route::get('/crm/projects/{project}/leads',          [LeadController::class, 'index']) ->name('crm.projects.leads.index');
     Route::get('/crm/projects/{project}/leads/board',    [LeadController::class, 'board']) ->name('crm.projects.leads.board');
+    Route::get('/crm/projects/{project}/custom-data',    [LeadController::class, 'customData'])->name('crm.projects.custom-data.index');
     Route::post('/crm/projects/{project}/leads',         [LeadController::class, 'store']) ->name('crm.projects.leads.store');
 
     Route::get('/crm/projects/{project}/stages',              [LeadStageController::class, 'index']  )->name('crm.projects.stages.index');
@@ -31,6 +35,7 @@ Route::middleware(['web', 'auth', 'verified'])->group(function () {
     Route::post('/crm/projects/{project}/stages/reorder',     [LeadStageController::class, 'reorder'])->name('crm.projects.stages.reorder');
     Route::put('/crm/projects/{project}/stages/{stage}',      [LeadStageController::class, 'update'] )->name('crm.projects.stages.update');
     Route::delete('/crm/projects/{project}/stages/{stage}',   [LeadStageController::class, 'destroy'])->name('crm.projects.stages.destroy');
+    Route::post('/crm/projects/{project}/stages/automation',  [LeadStageController::class, 'createAutomation'])->name('crm.projects.stages.automation');
 
     Route::get('/crm/projects/{project}/custom-fields',                 [LeadCustomFieldController::class, 'index']  )->name('crm.projects.custom-fields.index');
     Route::post('/crm/projects/{project}/custom-fields',                [LeadCustomFieldController::class, 'store']  )->name('crm.projects.custom-fields.store');
@@ -42,6 +47,7 @@ Route::middleware(['web', 'auth', 'verified'])->group(function () {
     Route::post('/crm/projects/{project}/forms',               [LeadFormController::class, 'store']    )->name('crm.projects.forms.store');
     Route::get('/crm/projects/{project}/forms/{form}/builder', [LeadFormController::class, 'builder']  )->name('crm.projects.forms.builder');
     Route::put('/crm/projects/{project}/forms/{form}',         [LeadFormController::class, 'update']   )->name('crm.projects.forms.update');
+    Route::post('/crm/projects/{project}/forms/{form}/default',   [LeadFormController::class, 'toggleDefault'])->name('crm.projects.forms.default');
     Route::post('/crm/projects/{project}/forms/{form}/publish',   [LeadFormController::class, 'publish']  )->name('crm.projects.forms.publish');
     Route::post('/crm/projects/{project}/forms/{form}/unpublish', [LeadFormController::class, 'unpublish'])->name('crm.projects.forms.unpublish');
     Route::delete('/crm/projects/{project}/forms/{form}',      [LeadFormController::class, 'destroy']   )->name('crm.projects.forms.destroy');

@@ -1,4 +1,9 @@
-@php $project = $project ?? null; @endphp
+@php
+    $project = $project ?? null;
+    $showCustomDataTab = $project
+        ? \Modules\CRM\Models\LeadForm::where('project_id', $project->id)->where('type', \Modules\CRM\Models\LeadForm::TYPE_CUSTOM_DATA)->exists()
+        : false;
+@endphp
 @if($project)
 @once('crm-project-tabs-style')
 <style>
@@ -41,6 +46,12 @@
            @class(['ps-tab', 'is-active' => request()->routeIs('crm.projects.forms.*')])>
             <i class="fa fa-window-restore"></i> Forms
         </a>
+        @if($showCustomDataTab)
+            <a href="{{ route('crm.projects.custom-data.index', $project) }}"
+               @class(['ps-tab', 'is-active' => request()->routeIs('crm.projects.custom-data.*')])>
+                <i class="fa fa-table"></i> Custom Data
+            </a>
+        @endif
         <a href="{{ route('crm.projects.edit', $project) }}"
            @class(['ps-tab', 'is-active' => request()->routeIs('crm.projects.edit')])>
             <i class="fa fa-gear"></i> Settings

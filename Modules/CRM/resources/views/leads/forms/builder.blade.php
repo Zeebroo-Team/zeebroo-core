@@ -326,6 +326,15 @@
                     <h4>Success message</h4>
                     <textarea id="lf-success-message" class="lf-block__input" rows="3">{{ $form->success_message }}</textarea>
                 </div>
+                <div class="lf-palette-card lf-settings">
+                    <h4>Default stage</h4>
+                    <select id="lf-default-stage" class="lf-block__input">
+                        <option value="">Use pipeline default</option>
+                        @foreach($stages as $stage)
+                            <option value="{{ $stage->id }}" @selected($form->default_stage_id === $stage->id)>{{ $stage->name }}</option>
+                        @endforeach
+                    </select>
+                </div>
             </section>
         </div>
 
@@ -1229,6 +1238,7 @@
                 style: getStyleSettings(),
                 submit_button_text: document.getElementById('lf-submit-text').value,
                 success_message: document.getElementById('lf-success-message').value,
+                default_stage_id: document.getElementById('lf-default-stage').value || null,
             }),
         })
         .then(function (res) { return res.json().then(function (d) { return { ok: res.ok, d: d }; }); })

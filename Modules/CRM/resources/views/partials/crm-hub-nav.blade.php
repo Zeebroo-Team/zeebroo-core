@@ -1,4 +1,7 @@
 <nav class="pcat-nav" style="margin-bottom:14px;">
+    <a href="{{ route('crm.overview') }}" @class(['is-active' => request()->routeIs('crm.overview')])>
+        <i class="fa fa-house"></i> Overview
+    </a>
     <a href="{{ route('crm.projects.index') }}" @class(['is-active' => request()->routeIs('crm.projects.*') || request()->routeIs('crm.leads.*')])>
         <i class="fa fa-diagram-project"></i> Projects
     </a>

@@ -41,7 +41,7 @@ class LeadController extends Controller
         $stageFilter  = $request->query('stage');
         $stageId      = filled($stageFilter) && $stageFilter !== 'all' ? (int) $stageFilter : null;
         $statusFilter = (string) $request->query('status', 'open');
-        $leadForm     = $this->formService->listForProject($project)->first();
+        $leadForm     = $this->formService->defaultOrFirstForProject($project);
 
         return view('crm::leads.index', [
             'business'        => $business,
@@ -76,6 +76,25 @@ class LeadController extends Controller
         ]);
     }
 
+    public function customData(Request $request, Project $project): View|RedirectResponse
+    {
+        $business = $this->requireProject($request, $project);
+        if ($business instanceof RedirectResponse) {
+            return $business;
+        }
+
+        $forms = $this->formService->listForProject($project)
+            ->filter(fn (LeadForm $f) => $f->type === LeadForm::TYPE_CUSTOM_DATA);
+
+        return view('crm::leads.custom-data.index', [
+            'business'      => $business,
+            'project'       => $project,
+            'forms'         => $forms,
+            'leadsByForm'   => $this->leadService->groupedByForm($project, $forms),
+            'customFields'  => $this->customFieldService->listKeyedById($project),
+        ]);
+    }
+
     public function store(Request $request, Project $project): RedirectResponse
     {
         $business = $this->requireProject($request, $project);
@@ -83,8 +102,8 @@ class LeadController extends Controller
             return $business;
         }
 
-        $leadForm = $this->formService->listForProject($project)->first();
-        $data     = $this->validated($request, $project, $leadForm);
+        $leadForm = $this->formService->defaultOrFirstForProject($project);
+        $data     = $this->validated($request, $project, $leadForm) + ['form_id' => $leadForm?->id];
         $lead     = $this->leadService->create($project, $data, $request->user()?->id);
 
         return redirect()->route('crm.leads.show', $lead)->with('status', 'Lead "' . $lead->name . '" created.');
@@ -121,7 +140,7 @@ class LeadController extends Controller
             'business'        => $business,
             'project'         => $project,
             'lead'            => $lead,
-            'leadForm'        => $this->formService->listForProject($project)->first(),
+            'leadForm'        => $lead->form ?? $this->formService->defaultOrFirstForProject($project),
             'stageOptions'    => $this->stageService->listForProject($project),
             'customFields'    => $this->customFieldService->listKeyedById($project),
             'assignableUsers' => $this->assignableUsers($business),
@@ -136,7 +155,7 @@ class LeadController extends Controller
         }
 
         $project  = $lead->project;
-        $leadForm = $this->formService->listForProject($project)->first();
+        $leadForm = $lead->form ?? $this->formService->defaultOrFirstForProject($project);
         $data     = $this->validated($request, $project, $leadForm, $lead);
         $this->leadService->update($lead, $data, $request->user()?->id);
 

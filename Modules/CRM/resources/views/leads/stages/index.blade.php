@@ -21,6 +21,47 @@
         Customize the stages leads move through for <strong style="color:var(--text);">{{ $project->name }}</strong>. Drag cards to reorder.
     </p>
 
+    @if($automationEnabled)
+        <div class="pcat-card" style="cursor:default;align-items:center;margin-bottom:16px;">
+            <i class="fa fa-bolt" style="font-size:16px;color:{{ $pipelineActive ? 'var(--primary)' : 'var(--muted)' }};flex-shrink:0;"></i>
+            <div class="pcat-card__body">
+                <div class="pcat-card__head">
+                    <h3 class="pcat-card__title">Pipeline Automation</h3>
+                    @if($pipelineActive)
+                        <span class="pcat-badge pcat-badge--on">Active</span>
+                    @elseif($pipelineFlow)
+                        <span class="pcat-badge pcat-badge--off">Inactive</span>
+                    @endif
+                </div>
+                <div class="pcat-card__meta">
+                    <span class="muted">
+                        @if($pipelineActive)
+                            A flow now owns stage-change side effects — per-stage mail templates won't auto-send while this is on.
+                        @else
+                            Run an Automation Editor flow whenever a lead's stage changes in this relation.
+                        @endif
+                    </span>
+                </div>
+            </div>
+            <div class="pcat-card__actions">
+                @if($pipelineFlow)
+                    <a href="{{ route('automations.edit', $pipelineFlow) }}"
+                       style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;font-size:12px;font-weight:700;border-radius:8px;border:1px solid color-mix(in srgb,var(--primary) 45%,var(--border));background:color-mix(in srgb,var(--primary) 12%,transparent);color:var(--text);text-decoration:none;">
+                        <i class="fa fa-arrow-up-right-from-square"></i> Open in Automation Editor
+                    </a>
+                @else
+                    <form method="POST" action="{{ route('crm.projects.stages.automation', $project) }}" style="margin:0;">
+                        @csrf
+                        <button type="submit"
+                                style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;font-size:12px;font-weight:700;border-radius:8px;border:1px solid color-mix(in srgb,var(--primary) 45%,var(--border));background:color-mix(in srgb,var(--primary) 12%,transparent);color:var(--text);cursor:pointer;">
+                            <i class="fa fa-plus"></i> Set up Pipeline Automation
+                        </button>
+                    </form>
+                @endif
+            </div>
+        </div>
+    @endif
+
     <div class="pcat-toolbar">
         <span class="muted" style="margin:0;font-size:13px;">
             {{ $stages->count() }} {{ $stages->count() === 1 ? 'stage' : 'stages' }}.
@@ -162,7 +203,7 @@
     </div>
 </div>
 
-<div style="margin-top:14px;">
+<div style="margin-top:14px;padding-left:14px;">
     <a href="{{ route('crm.projects.leads.index', $project) }}" class="linkbtn"
        style="padding:7px 12px;font-size:12px;background:transparent;border:1px solid var(--border);color:var(--text);text-decoration:none;display:inline-flex;align-items:center;gap:6px;">
         <i class="fa fa-arrow-left"></i> Leads
