@@ -369,6 +369,8 @@
             ? app(\Modules\Account\Services\RentalService::class)->businessHasOverdueRentalPayments($navBusiness)
             : false;
         $showSidebarBillsLink = $navBusiness && $billFeatureOn && $navBusiness->bills()->exists();
+        $showSidebarBudgetsLink = $navBusiness && $billFeatureOn && Route::has('budget.index');
+        $showSidebarInvestmentsLink = $navBusiness && $billFeatureOn && Route::has('account.investments.index');
 
         // Catalog — only visible when Product Management feature is enabled.
         $productFeatureOn = $navBusiness && $featureOn('product_management');
@@ -480,6 +482,8 @@
             $showSidebarLoansLink = false;
             $showSidebarRentalsLink = false;
             $showSidebarBillsLink = false;
+            $showSidebarBudgetsLink = false;
+            $showSidebarInvestmentsLink = false;
             $showSidebarProductBrandsLink = false;
             $showSidebarProductCategoriesLink = false;
             $showSidebarProductUnitsLink = false;
@@ -606,6 +610,12 @@
                         <span class="menu-rentals__pulse" aria-hidden="true"></span>
                     @endif
                 </a>
+            @endif
+            @if($showSidebarBudgetsLink)
+                <a href="{{ route('budget.index') }}" class="{{ request()->routeIs('budget.*') ? 'active' : '' }}"><i class="fa fa-sack-dollar"></i><span>Budgets</span></a>
+            @endif
+            @if($showSidebarInvestmentsLink)
+                <a href="{{ route('account.investments.index') }}" class="{{ request()->routeIs('account.investments.*') ? 'active' : '' }}"><i class="fa fa-chart-line"></i><span>Investments</span></a>
             @endif
             @if($showSidebarProductSection)
                 <div class="menu-group-title">
