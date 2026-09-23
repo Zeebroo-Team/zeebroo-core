@@ -416,6 +416,7 @@
         $showSidebarPosHubLink = $navBusiness && Route::has('pos.index') && $showSidebarPosSection;
 
         $showSidebarCrmLink = $navBusiness && Route::has('crm.projects.index') && $featureOn('crm');
+        $showSidebarBrandMgmtSection = $navBusiness && Route::has('pos.brand-mgmt.brands.index') && $featureOn('event_management');
         $showSidebarProjectManageLink = $navBusiness && Route::has('pm.projects.index') && $featureOn('project_management');
         $mailFeatureOn = $navBusiness && $featureOn('mail');
         $showSidebarMailLink = $navBusiness && Route::has('mail.inbox.index') && $mailFeatureOn;
@@ -500,6 +501,7 @@
             $showSidebarPosSection = false;
             $showSidebarQuotationsLink = false;
             $showSidebarCrmLink = false;
+            $showSidebarBrandMgmtSection = false;
             $showSidebarProjectManageLink = false;
             $showSidebarMailLink = false;
             $showSidebarFilesLink = false;
@@ -725,6 +727,41 @@
                     </a>
                     <a href="{{ route('crm.tasks.index') }}" @class(['active' => request()->routeIs('crm.tasks.*')])>
                         <i class="fa fa-list-check"></i><span>Tasks</span>
+                    </a>
+                </div>
+            @endif
+
+            @if($showSidebarBrandMgmtSection)
+                <div class="menu-group-title">
+                    <i class="fa fa-bullhorn"></i><span>Event Management</span>
+                </div>
+                <div class="submenu" aria-label="Event Management">
+                    <a href="{{ route('pos.brand-mgmt.brands.index') }}" @class(['active' => request()->routeIs('pos.brand-mgmt.brands.*')])>
+                        <i class="fa fa-tag"></i><span>Brands</span>
+                    </a>
+                    <a href="{{ route('pos.brand-mgmt.reporters.index') }}" @class(['active' => request()->routeIs('pos.brand-mgmt.reporters.*')])>
+                        <i class="fa fa-user-tie"></i><span>Reporters</span>
+                    </a>
+                    <a href="{{ route('pos.brand-mgmt.officers.index') }}" @class(['active' => request()->routeIs('pos.brand-mgmt.officers.*')])>
+                        <i class="fa fa-user-shield"></i><span>Officers</span>
+                    </a>
+                    <a href="{{ route('pos.brand-mgmt.coordinators.index') }}" @class(['active' => request()->routeIs('pos.brand-mgmt.coordinators.*')])>
+                        <i class="fa fa-people-arrows"></i><span>Coordinators</span>
+                    </a>
+                    <a href="{{ route('pos.brand-mgmt.promoters.index') }}" @class(['active' => request()->routeIs('pos.brand-mgmt.promoters.*')])>
+                        <i class="fa fa-user-group"></i><span>Promoters</span>
+                    </a>
+                    <a href="{{ route('pos.brand-mgmt.promoter-positions.index') }}" @class(['active' => request()->routeIs('pos.brand-mgmt.promoter-positions.*')])>
+                        <i class="fa fa-list"></i><span>Promoter Positions</span>
+                    </a>
+                    <a href="{{ route('pos.brand-mgmt.jobs.index') }}" @class(['active' => request()->routeIs('pos.brand-mgmt.jobs.*')])>
+                        <i class="fa fa-briefcase"></i><span>Jobs</span>
+                    </a>
+                    <a href="{{ route('pos.brand-mgmt.agencies.index') }}" @class(['active' => request()->routeIs('pos.brand-mgmt.agencies.*')])>
+                        <i class="fa fa-building"></i><span>Agencies</span>
+                    </a>
+                    <a href="{{ route('pos.brand-mgmt.salary-sheets.index') }}" @class(['active' => request()->routeIs('pos.brand-mgmt.salary-sheets.*')])>
+                        <i class="fa fa-money-check-dollar"></i><span>Salary Sheets</span>
                     </a>
                 </div>
             @endif
