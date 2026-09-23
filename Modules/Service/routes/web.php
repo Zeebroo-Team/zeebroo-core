@@ -5,9 +5,13 @@ use Modules\Service\Http\Controllers\ServiceBundleController;
 use Modules\Service\Http\Controllers\ServiceCategoryController;
 use Modules\Service\Http\Controllers\ServiceDiscountController;
 use Modules\Service\Http\Controllers\ServiceItemController;
+use Modules\Service\Http\Controllers\ServicePosController;
 use Modules\Service\Http\Controllers\ServiceRequestController;
 
 Route::middleware(['web', 'auth'])->group(function () {
+    Route::get('/service/pos',          [ServicePosController::class, 'index']   )->name('service.pos.index');
+    Route::post('/service/pos/checkout', [ServicePosController::class, 'checkout'])->name('service.pos.checkout');
+
     // Service categories
     Route::get('/service/categories',                         [ServiceCategoryController::class, 'index'])      ->name('service.categories.index');
     Route::post('/service/categories',                        [ServiceCategoryController::class, 'store'])      ->name('service.categories.store');

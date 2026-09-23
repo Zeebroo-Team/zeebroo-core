@@ -380,12 +380,14 @@
         $showSidebarProductsLink = $navBusiness && Route::has('product.index') && $productFeatureOn;
         $showSidebarBarcodesLink = $navBusiness && Route::has('product.barcodes.index') && $productFeatureOn;
         $showSidebarDiscountsLink = $navBusiness && Route::has('product.discounts.index') && $productFeatureOn;
+        $showSidebarCampaignsLink = $navBusiness && Route::has('product.campaigns.index') && $productFeatureOn;
         $showSidebarProductSection = $showSidebarProductBrandsLink
             || $showSidebarProductCategoriesLink
             || $showSidebarProductUnitsLink
             || $showSidebarProductsLink
             || $showSidebarBarcodesLink
-            || $showSidebarDiscountsLink;
+            || $showSidebarDiscountsLink
+            || $showSidebarCampaignsLink;
 
         // Stock Management — only visible when Stock Management feature is enabled.
         $stockFeatureOn = $navBusiness && $featureOn('stock_management');
@@ -411,10 +413,11 @@
         $salesFeatureOn = $navBusiness && $featureOn('sales_management');
         $showSidebarQuotationsLink = $navBusiness && Route::has('sales.quotations.index') && $salesFeatureOn;
         $showSidebarInvoicesLink   = $navBusiness && Route::has('sales.invoices.index') && $salesFeatureOn;
+        $showSidebarSalesOrdersLink = $navBusiness && Route::has('sales.orders.index') && $salesFeatureOn;
 
         // Hub link shows whenever the Sales section is visible.
         $showSidebarPosSection = $showSidebarPosRegisterLink || $showSidebarPosSalesLink
-            || $showSidebarQuotationsLink || $showSidebarInvoicesLink;
+            || $showSidebarQuotationsLink || $showSidebarInvoicesLink || $showSidebarSalesOrdersLink;
         $showSidebarPosHubLink = $navBusiness && Route::has('pos.index') && $showSidebarPosSection;
 
         $showSidebarCrmLink = $navBusiness && Route::has('crm.projects.index') && $featureOn('crm');
@@ -433,6 +436,7 @@
         $showSidebarDeveloperToolsLink = $navBusiness && Route::has('developers.index') && $featureOn('developers');
         $showSidebarDesignStudioLink = $navBusiness && Route::has('designstudio.index') && $featureOn('social_media_campaign');
         $showSidebarServiceLink = $navBusiness && Route::has('service.catalog.index') && $featureOn('service_management');
+        $showSidebarServicePosLink = $navBusiness && Route::has('service.pos.index') && $featureOn('service_management');
         $showSidebarRestaurantLink = $navBusiness && Route::has('restaurant.orders.index') && $featureOn('restaurant');
         $showSidebarDocumentationLink = $navBusiness
             && Route::has('documentation.documents.index')
@@ -641,6 +645,9 @@
                     @if($showSidebarDiscountsLink)
                         <a href="{{ route('product.discounts.index') }}" class="{{ request()->routeIs('product.discounts.*') ? 'active' : '' }}"><i class="fa fa-percent"></i><span>Discounts</span></a>
                     @endif
+                    @if($showSidebarCampaignsLink)
+                        <a href="{{ route('product.campaigns.index') }}" class="{{ request()->routeIs('product.campaigns.*') ? 'active' : '' }}"><i class="fa fa-bullhorn"></i><span>Campaigns</span></a>
+                    @endif
                     @if($showSidebarBarcodesLink)
                         <a href="{{ route('product.barcodes.index') }}" class="{{ request()->routeIs('product.barcodes.*') ? 'active' : '' }}"><i class="fa fa-barcode"></i><span>Barcodes</span></a>
                     @endif
@@ -721,6 +728,11 @@
                     @if($showSidebarInvoicesLink)
                         <a href="{{ route('sales.invoices.index') }}" @class(['active' => request()->routeIs('sales.invoices.*')])>
                             <i class="fa fa-file-invoice"></i><span>Invoices</span>
+                        </a>
+                    @endif
+                    @if($showSidebarSalesOrdersLink)
+                        <a href="{{ route('sales.orders.index') }}" @class(['active' => request()->routeIs('sales.orders.*')])>
+                            <i class="fa fa-cart-shopping"></i><span>Orders</span>
                         </a>
                     @endif
                 </div>
@@ -866,6 +878,11 @@
             @if($showSidebarServiceLink)
                 <a href="{{ route('service.catalog.index') }}" class="{{ request()->routeIs('service.*') ? 'active' : '' }}"><i class="fa fa-screwdriver-wrench"></i><span>Service Catalog</span></a>
                 <div class="submenu">
+                    @if($showSidebarServicePosLink)
+                        <a href="{{ route('service.pos.index') }}" @class(['active' => request()->routeIs('service.pos.*')])>
+                            <i class="fa fa-cash-register"></i><span>Service POS</span>
+                        </a>
+                    @endif
                     <a href="{{ route('service.catalog.index') }}" @class(['active' => request()->routeIs('service.catalog.*')])>
                         <i class="fa fa-list-check"></i><span>Services</span>
                     </a>

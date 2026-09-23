@@ -5,4 +5,7 @@
     <a href="{{ route('sales.invoices.index') }}" @class(['is-active' => request()->routeIs('sales.invoices.*')])>
         <i class="fa fa-file-invoice"></i> Invoices
     </a>
+    <a href="{{ route('sales.orders.index') }}" @class(['is-active' => request()->routeIs('sales.orders.*')])>
+        <i class="fa fa-cart-shopping"></i> Orders
+    </a>
 </nav>

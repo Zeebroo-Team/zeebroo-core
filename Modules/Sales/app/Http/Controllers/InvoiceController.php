@@ -346,8 +346,9 @@ class InvoiceController extends Controller
 
         $q     = trim((string) $request->query('q', ''));
         $limit = min(20, max(1, (int) $request->query('limit', 12)));
+        $type  = (string) $request->query('type', '');
 
-        $products = Product::where('business_id', $business->id)
+        $products = $type === 'service' ? collect() : Product::where('business_id', $business->id)
             ->where('is_active', true)
             ->when($q, fn ($qb) => $qb->where(fn ($w) => $w
                 ->where('name', 'like', "%{$q}%")
@@ -364,7 +365,7 @@ class InvoiceController extends Controller
                 'unit'  => $p->unit ?? '',
             ]);
 
-        $services = ServiceItem::where('business_id', $business->id)
+        $services = $type === 'product' ? collect() : ServiceItem::where('business_id', $business->id)
             ->where('is_active', true)
             ->when($q, fn ($qb) => $qb->where('name', 'like', "%{$q}%"))
             ->orderBy('name')
