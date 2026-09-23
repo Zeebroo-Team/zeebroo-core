@@ -1,4 +1,8 @@
 <nav class="pcat-nav" style="margin-bottom:14px;">
+    <a href="{{ route('pm.overview') }}"
+       @class(['is-active' => request()->routeIs('pm.overview')])>
+        <i class="fa fa-house"></i> Overview
+    </a>
     <a href="{{ route('pm.projects.index') }}"
        @class(['is-active' => request()->routeIs('pm.projects.*') || request()->routeIs('pm.tasks.*')])>
         <i class="fa fa-folder-open"></i> Projects

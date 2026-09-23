@@ -18,6 +18,18 @@
         'review'      => '#7c3aed',
         'done'        => '#16a34a',
     ];
+
+    $assignmentLabel = match (true) {
+        $project->project_type === 'customer' => $project->customer ? 'Customer: '.$project->customer->name : 'Customer project',
+        $project->assignment_type === 'branch'       => $project->branch ? 'Branch: '.$project->branch->name : null,
+        $project->assignment_type === 'department'   => $project->department ? 'Department: '.$project->department->name : null,
+        $project->assignment_type === 'property'     => $project->property ? 'Property: '.$project->property->property_name : null,
+        $project->assignment_type === 'employee'     => $project->employee ? 'Employee: '.$project->employee->full_name : null,
+        $project->assignment_type === 'modification' => $project->modification ? 'Modification: '.$project->modification->name : null,
+        $project->assignment_type === 'rental'       => $project->rental ? 'Rental: '.$project->rental->property_type : null,
+        $project->assignment_type === 'other'        => $project->assignment_reference,
+        default => null,
+    };
 @endphp
 
 @section('content')
@@ -37,6 +49,15 @@
 <div class="pcat-page-card card" style="max-width:100%;padding:14px;">
     @include('projectmanage::partials.pm-hub-nav')
 
+    {{-- Breadcrumb --}}
+    <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">
+        <span>{{ $project->name }}</span>
+        <span style="margin:0 4px;">/</span>
+        <span>Dashboard</span>
+    </div>
+
+    @include('projectmanage::partials.pm-detail-nav')
+
     @if(session('status'))
         <div class="pcat-banner pcat-banner--ok" style="font-weight:600;">{{ session('status') }}</div>
     @endif
@@ -48,6 +69,12 @@
 
     {{-- Meta bar --}}
     <div class="pm-meta-bar">
+        @if($project->imageFile)
+            <img src="{{ $project->imageFile->publicUrl() }}" alt="" style="width:32px;height:32px;border-radius:7px;object-fit:cover;flex-shrink:0;">
+        @endif
+        @if($assignmentLabel)
+            <span class="pm-meta-bar__item"><i class="fa fa-diagram-project"></i> {{ $assignmentLabel }}</span>
+        @endif
         @if($project->client_name)
             <span class="pm-meta-bar__item"><i class="fa fa-building"></i> {{ $project->client_name }}</span>
         @endif
@@ -83,14 +110,6 @@
 
     {{-- Action buttons --}}
     <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px;">
-        <a href="{{ route('pm.projects.tasks.board', $project) }}" class="linkbtn"
-           style="padding:8px 16px;font-size:13px;background:transparent;border:1px solid var(--border);color:var(--text);text-decoration:none;display:inline-flex;align-items:center;gap:6px;">
-            <i class="fa fa-table-columns"></i> View Board
-        </a>
-        <a href="{{ route('pm.projects.tasks.index', $project) }}" class="linkbtn"
-           style="padding:8px 16px;font-size:13px;background:transparent;border:1px solid var(--border);color:var(--text);text-decoration:none;display:inline-flex;align-items:center;gap:6px;">
-            <i class="fa fa-list"></i> View All Tasks
-        </a>
         <a href="{{ route('pm.projects.edit', $project) }}" class="linkbtn"
            style="padding:8px 16px;font-size:13px;background:transparent;border:1px solid var(--border);color:var(--text);text-decoration:none;display:inline-flex;align-items:center;gap:6px;">
             <i class="fa fa-edit"></i> Edit Project
