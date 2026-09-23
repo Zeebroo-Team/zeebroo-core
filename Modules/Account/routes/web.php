@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use Modules\Account\Http\Controllers\AccountController;
 use Modules\Account\Http\Controllers\BillController;
+use Modules\Account\Http\Controllers\FinanceOverviewController;
 use Modules\Account\Http\Controllers\InvestmentController;
 use Modules\Account\Http\Controllers\LoanController;
 use Modules\Account\Http\Controllers\PropertyController;
@@ -10,6 +11,7 @@ use Modules\Account\Http\Controllers\RentalController;
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('account/onboarding', [AccountController::class, 'onboarding'])->name('account.onboarding');
+    Route::get('finance/overview', [FinanceOverviewController::class, 'index'])->name('account.finance.index');
     Route::get('loans', [LoanController::class, 'index'])->name('account.loans.index');
     Route::get('loans/{loan}', [LoanController::class, 'show'])->name('account.loans.show');
     Route::post('loans/{loan}/installments/settle', [LoanController::class, 'settleInstallment'])->name('account.loans.installments.settle');
