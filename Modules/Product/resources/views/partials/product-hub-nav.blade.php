@@ -4,5 +4,6 @@
     <a href="{{ route('product.brands.index') }}" @class(['is-active' => request()->routeIs('product.brands.*')])><i class="fa fa-tag" style="margin-right:4px;"></i>Brands</a>
     <a href="{{ route('product.units.index') }}" @class(['is-active' => request()->routeIs('product.units.*')])><i class="fa fa-ruler" style="margin-right:4px;"></i>Units</a>
     <a href="{{ route('product.discounts.index') }}" @class(['is-active' => request()->routeIs('product.discounts.*')])><i class="fa fa-percent" style="margin-right:4px;"></i>Discounts</a>
+    <a href="{{ route('product.campaigns.index') }}" @class(['is-active' => request()->routeIs('product.campaigns.*')])><i class="fa fa-bullhorn" style="margin-right:4px;"></i>Campaigns</a>
     <a href="{{ route('product.barcodes.index') }}" @class(['is-active' => request()->routeIs('product.barcodes.*')])><i class="fa fa-barcode" style="margin-right:4px;"></i>Barcodes</a>
 </nav>

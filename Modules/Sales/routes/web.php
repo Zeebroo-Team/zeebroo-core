@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use Modules\Sales\Http\Controllers\InvoiceController;
 use Modules\Sales\Http\Controllers\QuotationController;
+use Modules\Sales\Http\Controllers\SalesOrderController;
 
 Route::middleware(['web'])->group(function () {
     Route::get('/invoice/share/{token}', [InvoiceController::class, 'publicView'])->name('sales.invoices.public');
@@ -21,6 +22,17 @@ Route::middleware(['web', 'auth'])->group(function () {
     Route::delete('/sales/quotations/{quotation}',             [QuotationController::class, 'destroy'])        ->name('sales.quotations.destroy');
 
     Route::get('/sales/line-items/search', [InvoiceController::class, 'lineItemSearch'])->name('sales.line-items.search');
+
+    Route::get('/sales/orders',                          [SalesOrderController::class, 'index']    )->name('sales.orders.index');
+    Route::post('/sales/orders',                         [SalesOrderController::class, 'store']    )->name('sales.orders.store');
+    Route::get('/sales/orders/{order}',                  [SalesOrderController::class, 'show']     )->name('sales.orders.show');
+    Route::get('/sales/orders/{order}/edit',              [SalesOrderController::class, 'edit']     )->name('sales.orders.edit');
+    Route::put('/sales/orders/{order}',                  [SalesOrderController::class, 'update']   )->name('sales.orders.update');
+    Route::post('/sales/orders/{order}/confirm',         [SalesOrderController::class, 'confirm']  )->name('sales.orders.confirm');
+    Route::post('/sales/orders/{order}/process',         [SalesOrderController::class, 'process']  )->name('sales.orders.process');
+    Route::post('/sales/orders/{order}/complete',        [SalesOrderController::class, 'complete'] )->name('sales.orders.complete');
+    Route::post('/sales/orders/{order}/cancel',          [SalesOrderController::class, 'cancel']   )->name('sales.orders.cancel');
+    Route::delete('/sales/orders/{order}',               [SalesOrderController::class, 'destroy']  )->name('sales.orders.destroy');
     Route::get('/sales/invoices',                              [InvoiceController::class, 'index'])             ->name('sales.invoices.index');
     Route::post('/sales/invoices',                             [InvoiceController::class, 'store'])             ->name('sales.invoices.store');
     Route::get('/sales/invoices/{invoice}',                    [InvoiceController::class, 'show'])              ->name('sales.invoices.show');

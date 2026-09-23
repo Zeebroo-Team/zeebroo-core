@@ -9,11 +9,18 @@ use Modules\Product\Http\Controllers\ProductController;
 use Modules\Product\Http\Controllers\ProductImageController;
 use Modules\Product\Http\Controllers\ProductSellingUnitController;
 use Modules\Product\Http\Controllers\ProductUnitController;
+use Modules\Product\Http\Controllers\SaleCampaignController;
 
 Route::middleware(['auth', 'verified'])->group(function (): void {
     Route::get('/products/discounts', [ProductDiscountController::class, 'index'])->name('product.discounts.index');
     Route::post('/products/discounts', [ProductDiscountController::class, 'store'])->name('product.discounts.store');
     Route::delete('/products/discounts/{discount}', [ProductDiscountController::class, 'destroy'])->name('product.discounts.destroy');
+
+    Route::get('/products/campaigns',                    [SaleCampaignController::class, 'index']  )->name('product.campaigns.index');
+    Route::post('/products/campaigns',                   [SaleCampaignController::class, 'store']  )->name('product.campaigns.store');
+    Route::get('/products/campaigns/{campaign}/edit',    [SaleCampaignController::class, 'edit']   )->name('product.campaigns.edit');
+    Route::put('/products/campaigns/{campaign}',         [SaleCampaignController::class, 'update'] )->name('product.campaigns.update');
+    Route::delete('/products/campaigns/{campaign}',      [SaleCampaignController::class, 'destroy'])->name('product.campaigns.destroy');
 
     Route::get('/products/barcodes', [ProductBarcodeSheetController::class, 'index'])->name('product.barcodes.index');
     Route::post('/products/barcodes', [ProductBarcodeSheetController::class, 'store'])->name('product.barcodes.store');

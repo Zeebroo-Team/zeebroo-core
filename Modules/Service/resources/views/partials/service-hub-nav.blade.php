@@ -1,4 +1,7 @@
 <nav class="pcat-nav" style="margin-bottom:14px;">
+    <a href="{{ route('service.pos.index') }}" @class(['is-active' => request()->routeIs('service.pos.*')])>
+        <i class="fa fa-cash-register"></i> Service POS
+    </a>
     <a href="{{ route('service.catalog.index') }}" @class(['is-active' => request()->routeIs('service.catalog.*')])>
         <i class="fa fa-list-check"></i> Services
     </a>
