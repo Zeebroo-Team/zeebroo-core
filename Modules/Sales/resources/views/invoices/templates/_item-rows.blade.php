@@ -21,6 +21,18 @@
             @if($item['sublabel'])
                 <span class="ds">{{ $item['sublabel'] }}</span>
             @endif
+            @if($item['rentalInfo'] ?? null)
+                <span class="ds" style="color:#0f766e;">
+                    &#128197; Return {{ $item['rentalInfo']['returnDate'] }} · Daily {{ $money($item['rentalInfo']['dailyRate']) }}
+                    @if($item['rentalInfo']['lateFeeMultiplier'] > 0) · Late {{ $fmtPct($item['rentalInfo']['lateFeeMultiplier']) }}&times; rate/day @endif
+                </span>
+            @endif
+            @if($item['warrantyLabel'] ?? null)
+                <span class="ds" style="color:#2563eb;">&#128737; {{ $item['warrantyLabel'] }}</span>
+            @endif
+            @if($item['subscriptionLabel'] ?? null)
+                <span class="ds" style="color:#7c3aed;">&#128257; {{ $item['subscriptionLabel'] }}</span>
+            @endif
         </td>
         <td class="r">{{ $fmtQty($item['qty']) }}</td>
         <td class="r">{{ $money($item['unitPrice']) }}</td>

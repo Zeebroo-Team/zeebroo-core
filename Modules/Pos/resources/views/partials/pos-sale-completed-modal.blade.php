@@ -50,6 +50,8 @@
         'saleNumber' => $completedSale->sale_number,
         'soldAt' => $completedSale->sold_at?->format('M j, Y g:i A') ?? '',
         'soldAtIso' => $completedSale->sold_at?->toIso8601String() ?? '',
+        'customerName' => $completedSale->customer?->name ?? '',
+        'customerPhone' => $completedSale->customer?->phone ?? '',
         'payment' => $completedSale->paymentMethodLabel(),
         'account' => $showAccountInfo ? ($completedSale->creditAccount?->deductOptionLabel() ?? '') : '',
         'channel' => $completedSale->channelLabel(),
@@ -172,6 +174,12 @@
                             <span>Payment</span>
                             <strong>{{ $completedSale->paymentMethodLabel() }}</strong>
                         </div>
+                        @if($completedSale->customer)
+                            <div class="pos-thermal-receipt-row">
+                                <span>Customer</span>
+                                <strong>{{ $completedSale->customer->name }}{{ filled($completedSale->customer->phone) ? ' · '.$completedSale->customer->phone : '' }}</strong>
+                            </div>
+                        @endif
                         @if($showAccountInfo && $completedSale->creditAccount)
                             <div class="pos-thermal-receipt-row">
                                 <span>Account</span>
@@ -375,6 +383,33 @@
                             <label>Channel</label>
                             <span>{{ $completedSale->channelLabel() }}</span>
                         </div>
+                    </div>
+
+                    <div class="pos-details-section">
+                        <h3>Customer</h3>
+                        @if($completedSale->customer)
+                            <div class="pos-details-row">
+                                <label>Name</label>
+                                <span>{{ $completedSale->customer->name }}</span>
+                            </div>
+                            @if(filled($completedSale->customer->phone))
+                                <div class="pos-details-row">
+                                    <label>Phone</label>
+                                    <span>{{ $completedSale->customer->phone }}</span>
+                                </div>
+                            @endif
+                            @if(filled($completedSale->customer->email))
+                                <div class="pos-details-row">
+                                    <label>Email</label>
+                                    <span>{{ $completedSale->customer->email }}</span>
+                                </div>
+                            @endif
+                        @else
+                            <div class="pos-details-row">
+                                <label>Name</label>
+                                <span>Walk-in Customer</span>
+                            </div>
+                        @endif
                     </div>
 
                     <div class="pos-details-section">
@@ -1096,6 +1131,7 @@
             + headerTextHtml
             + '<div style="margin-top:4px;">' + escHtml(completionData.saleNumber) + ' · ' + escHtml(completionData.soldAt) + '</div>'
             + '<div>' + escHtml(completionData.payment) + (completionData.account ? ' · ' + escHtml(completionData.account) : '') + '</div>'
+            + (completionData.customerName ? '<div>Customer: ' + escHtml(completionData.customerName) + (completionData.customerPhone ? ' · ' + escHtml(completionData.customerPhone) : '') + '</div>' : '')
             + '</div>'
             + '<hr>'
             + '<table>'

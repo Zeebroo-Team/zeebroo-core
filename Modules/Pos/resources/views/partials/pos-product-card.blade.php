@@ -21,6 +21,9 @@
     data-is-dynamic-pricing="{{ !empty($product['is_dynamic_pricing']) ? '1' : '0' }}"
     data-dynamic-qty-linked="{{ !empty($product['dynamic_price_qty_linked']) ? '1' : '0' }}"
     data-is-subscription="{{ !empty($product['is_subscription']) ? '1' : '0' }}"
+    data-subscription-period="{{ $product['subscription_recurring_period'] ?? '' }}"
+    data-has-warranty="{{ !empty($product['has_warranty']) ? '1' : '0' }}"
+    data-warranty-duration="{{ $product['warranty_duration'] ?? '' }}"
     @if($outOfStock) disabled @endif
 >
     @if($product['image_url'])

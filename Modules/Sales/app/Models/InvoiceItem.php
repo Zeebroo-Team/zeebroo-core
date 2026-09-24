@@ -22,14 +22,26 @@ class InvoiceItem extends Model
         'tax_type',
         'line_total',
         'sort_order',
+        'rental_daily_rate',
+        'rental_return_date',
+        'rental_late_fee_multiplier',
+        'warranty_type',
+        'warranty_date',
+        'is_subscription',
+        'subscription_period',
     ];
 
     protected $casts = [
-        'quantity'       => 'decimal:3',
-        'unit_price'     => 'decimal:2',
-        'discount_value' => 'decimal:2',
-        'tax_pct'        => 'decimal:2',
-        'line_total'     => 'decimal:2',
+        'quantity'                    => 'decimal:3',
+        'unit_price'                  => 'decimal:2',
+        'discount_value'              => 'decimal:2',
+        'tax_pct'                     => 'decimal:2',
+        'line_total'                  => 'decimal:2',
+        'rental_daily_rate'           => 'decimal:2',
+        'rental_return_date'          => 'date',
+        'rental_late_fee_multiplier'  => 'decimal:2',
+        'warranty_date'               => 'date',
+        'is_subscription'             => 'boolean',
     ];
 
     public function invoice(): BelongsTo

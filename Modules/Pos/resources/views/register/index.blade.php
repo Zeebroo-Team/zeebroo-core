@@ -55,6 +55,9 @@
             'is_dynamic_pricing'           => (bool) ($p['is_dynamic_pricing'] ?? false),
             'dynamic_price_qty_linked'     => (bool) ($p['dynamic_price_qty_linked'] ?? false),
             'is_subscription'              => (bool) ($p['is_subscription'] ?? false),
+            'subscription_recurring_period' => $p['subscription_recurring_period'] ?? null,
+            'has_warranty'                 => (bool) ($p['has_warranty'] ?? false),
+            'warranty_duration'            => $p['warranty_duration'] ?? null,
         ];
     })->all();
     $modeTabs = [
@@ -620,6 +623,7 @@ body.pos-walking-active .pos-page__top-search .pos-search button{padding:6px 8px
             if (row.isRental) subLine += ' · Return ' + row.rentalReturnDate + ' (' + row.rentalDays + 'd)';
             if (row.isDynamic) subLine += ' · Dynamic';
             if (row.warrantyType) subLine += ' · Warranty: ' + (row.warrantyType === 'lifetime' ? 'Lifetime' : row.warrantyDate);
+            if (row.isSubscription) subLine += ' · ' + (row.subscriptionPeriod ? row.subscriptionPeriod.charAt(0).toUpperCase() + row.subscriptionPeriod.slice(1) : 'Recurring') + ' subscription';
             if (row.itemType !== 'service') subLine += ' · stock ' + row.stock;
             wrap.querySelector('.pos-cart-row__sub').textContent = subLine;
 
@@ -979,8 +983,9 @@ body.pos-walking-active .pos-page__top-search .pos-search button{padding:6px 8px
         let reason = '';
         cart.forEach(function (row) {
             if (row.isRental) reason = reason || 'rental products';
+            if (row.warrantyType) reason = reason || 'warranty products';
             const catalogEntry = posProductCatalog[row.id];
-            if (catalogEntry && catalogEntry.is_subscription) reason = reason || 'subscription products';
+            if ((row.isSubscription || (catalogEntry && catalogEntry.is_subscription))) reason = reason || 'subscription products';
         });
         if (reason) {
             event.preventDefault();

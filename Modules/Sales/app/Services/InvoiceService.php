@@ -102,13 +102,20 @@ class InvoiceService
      */
     public function createFromPosSale(Sale $sale): Invoice
     {
-        $sale->loadMissing('items');
+        $sale->loadMissing(['items.productRental', 'items.subscription']);
 
         $items = $sale->items->map(fn ($item) => [
             'item_type'  => 'custom',
             'description' => $item->product_name,
             'quantity'    => (float) $item->quantity,
             'unit_price'  => (float) $item->unit_sell_price + (float) $item->discount_amount,
+            'rental_daily_rate'          => $item->productRental?->daily_rate,
+            'rental_return_date'         => $item->productRental?->due_at?->toDateString(),
+            'rental_late_fee_multiplier' => $item->productRental?->late_fee_multiplier,
+            'warranty_type'   => $item->warranty_type,
+            'warranty_date'   => $item->warranty_expires_at?->toDateString(),
+            'is_subscription' => (bool) $item->subscription,
+            'subscription_period' => $item->subscription?->recurring_period,
         ])->all();
 
         $itemDiscountsTotal = $sale->items->sum(fn ($item) => (float) $item->discount_amount * (float) $item->quantity);
@@ -323,6 +330,13 @@ class InvoiceService
                 'tax_type'        => $item['tax_type'],
                 'line_total'      => $item['line_total'],
                 'sort_order'      => $i,
+                'rental_daily_rate'          => $item['rental_daily_rate'],
+                'rental_return_date'         => $item['rental_return_date'],
+                'rental_late_fee_multiplier' => $item['rental_late_fee_multiplier'],
+                'warranty_type'   => $item['warranty_type'],
+                'warranty_date'   => $item['warranty_date'],
+                'is_subscription' => $item['is_subscription'],
+                'subscription_period' => $item['subscription_period'],
             ]);
         }
     }
@@ -355,6 +369,8 @@ class InvoiceService
                 : ($lineNet * $taxValue / 100);
             $lineTotal = round($lineNet + $taxAmt, 2);
 
+            $warrantyType = in_array($item['warranty_type'] ?? null, ['lifetime', 'date'], true) ? $item['warranty_type'] : null;
+
             $normalized[] = [
                 'product_id'      => $type === 'product' ? $this->nullableInt($item['product_id'] ?? null) : null,
                 'service_item_id' => $type === 'service' ? $this->nullableInt($item['service_item_id'] ?? null) : null,
@@ -366,6 +382,13 @@ class InvoiceService
                 'tax_pct'         => round($taxValue, 2),
                 'tax_type'        => $taxType,
                 'line_total'      => $lineTotal,
+                'rental_daily_rate'          => filled($item['rental_daily_rate'] ?? null) ? round((float) $item['rental_daily_rate'], 2) : null,
+                'rental_return_date'         => filled($item['rental_return_date'] ?? null) ? $item['rental_return_date'] : null,
+                'rental_late_fee_multiplier' => filled($item['rental_late_fee_multiplier'] ?? null) ? round((float) $item['rental_late_fee_multiplier'], 2) : null,
+                'warranty_type'   => $warrantyType,
+                'warranty_date'   => $warrantyType === 'date' && filled($item['warranty_date'] ?? null) ? $item['warranty_date'] : null,
+                'is_subscription' => (bool) ($item['is_subscription'] ?? false),
+                'subscription_period' => filled($item['subscription_period'] ?? null) ? $item['subscription_period'] : null,
             ];
         }
 

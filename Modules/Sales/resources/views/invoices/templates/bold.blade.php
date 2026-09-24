@@ -59,7 +59,6 @@ td.n{color:#94a3b8;text-align:center;width:26px}td.r{text-align:right}td.b{font-
     <div class="card">
         <div class="cl">Billed To</div>
         <div class="cn">{{ $doc['customerName'] }}</div>
-        @foreach($doc['customerLines'] as $line)<div class="ci">{{ $line }}</div>@endforeach
     </div>
     <div class="card"><div class="cl">Invoice Details</div><div class="ci" style="line-height:1.9"><b>Issue Date</b> &nbsp; {{ $doc['issueDate'] }}<br><b>Due Date</b> &nbsp;&nbsp; {{ $doc['dueDate'] }}<br><b>Status</b> &nbsp;&nbsp;&nbsp;&nbsp; <span style="color:{{ $doc['statusColor'] }};font-weight:700">{{ $doc['statusLabel'] }}</span></div></div>
   </div>

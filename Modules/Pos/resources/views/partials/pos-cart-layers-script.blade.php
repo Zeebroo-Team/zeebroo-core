@@ -4,6 +4,46 @@ window.posCartKey = window.posCartKey || function (productId, layerId) {
     return String(productId) + ':' + (layerId != null && layerId !== '' ? String(layerId) : 'fifo');
 };
 
+// Resolves a configured warranty duration string (e.g. "1 Year", "30 Days", "Lifetime")
+// into a { type, date } pair, mirroring the desktop app's warranty resolver.
+window.posResolveWarrantyFromDuration = function (duration) {
+    var d = String(duration || '').trim();
+    if (!d || d.toLowerCase() === 'lifetime') return { type: 'lifetime', date: null };
+    var m = d.match(/^(\d+(?:\.\d+)?)\s*(day|days|week|weeks|month|months|year|years)$/i);
+    if (m) {
+        var n = parseFloat(m[1]);
+        var unit = m[2].toLowerCase();
+        var exp = new Date();
+        if (unit.indexOf('day') === 0) exp.setDate(exp.getDate() + Math.round(n));
+        else if (unit.indexOf('week') === 0) exp.setDate(exp.getDate() + Math.round(n * 7));
+        else if (unit.indexOf('month') === 0) exp.setMonth(exp.getMonth() + Math.round(n));
+        else if (unit.indexOf('year') === 0) exp.setFullYear(exp.getFullYear() + Math.round(n));
+        return { type: 'date', date: exp.toISOString().split('T')[0] };
+    }
+    return { type: 'lifetime', date: null };
+};
+
+// Resolves the warranty {warrantyType, warrantyDate} for a product being added to
+// the cart — auto-computed from a configured duration, or prompted via the shared
+// service/warranty picker modal when no duration is preset. Returns null if the
+// product has no warranty configured, or if the user cancels the prompt.
+window.posResolveProductWarranty = async function (catalogEntry, productName) {
+    if (!catalogEntry || !catalogEntry.has_warranty) return {};
+    if (catalogEntry.warranty_duration) {
+        var resolved = window.posResolveWarrantyFromDuration(catalogEntry.warranty_duration);
+        return { warrantyType: resolved.type, warrantyDate: resolved.date };
+    }
+    if (typeof window.posPickServiceDetails !== 'function') return {};
+    var result = await window.posPickServiceDetails({
+        serviceName: productName || '',
+        hasWarranty: true,
+        customRequirementEnabled: false,
+        customRequirementFields: '[]',
+    });
+    if (!result) return null; // cancelled
+    return { warrantyType: result.warrantyType, warrantyDate: result.warrantyDate };
+};
+
 window.posParseProductLayers = function (source) {
     if (!source) return [];
     if (Array.isArray(source)) return source;
@@ -176,6 +216,21 @@ window.posAddProductWithUnit = async function (btn, cart, catalog, currencySuffi
         quantity:     0,
         stock:        stockInUnits,
     };
+
+    if (catalogEntry.has_warranty) {
+        var existingLine = cart.get(cartKey);
+        if (!existingLine) {
+            var warranty = await window.posResolveProductWarranty(catalogEntry, btn.dataset.productName);
+            if (warranty === null) return false; // warranty prompt cancelled
+            line.warrantyType = warranty.warrantyType || null;
+            line.warrantyDate = warranty.warrantyDate || null;
+        }
+    }
+
+    if (catalogEntry.is_subscription) {
+        line.isSubscription = true;
+        line.subscriptionPeriod = catalogEntry.subscription_recurring_period || null;
+    }
 
     return window.posAddCartLine(cart, line, 1);
 };
