@@ -12,6 +12,7 @@ use Modules\Pos\Http\Controllers\BrandMgmtReporterController;
 use Modules\Pos\Http\Controllers\BrandMgmtSalarySheetController;
 use Modules\Pos\Http\Controllers\CustomerController;
 use Modules\Pos\Http\Controllers\EndOfDayController;
+use Modules\Pos\Http\Controllers\NotificationController;
 use Modules\Pos\Http\Controllers\PosController;
 use Modules\Pos\Http\Controllers\PosProductController;
 use Modules\Pos\Http\Controllers\SaleController;
@@ -62,6 +63,18 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
     Route::get('/pos/rentals', [ProductRentalController::class, 'index'])->name('pos.rentals.index');
     Route::get('/pos/rentals/{productRental}', [ProductRentalController::class, 'show'])->name('pos.rentals.show');
     Route::post('/pos/rentals/{productRental}/return', [ProductRentalController::class, 'returnRental'])->name('pos.rentals.return');
+
+    // Notification bell in the app shell navbar — session-authenticated counterpart
+    // of the Sanctum-token /api/v1/pos/notifications endpoints the desktop/mobile
+    // clients use. Both share Modules\Pos\Services\PosNotificationService.
+    Route::get('/notifications', [NotificationController::class, 'index'])->name('pos.notifications.index');
+    Route::post('/notifications/read-all', [NotificationController::class, 'markAllRead'])->name('pos.notifications.read-all');
+    Route::get('/notifications/settings', [NotificationController::class, 'settingsShow'])->name('pos.notifications.settings.show');
+    Route::put('/notifications/settings', [NotificationController::class, 'settingsUpdate'])->name('pos.notifications.settings.update');
+    Route::post('/notifications/{id}/read', [NotificationController::class, 'markRead'])->whereNumber('id')->name('pos.notifications.read');
+    Route::post('/notifications/{id}/unread', [NotificationController::class, 'markUnread'])->whereNumber('id')->name('pos.notifications.unread');
+    Route::delete('/notifications/clear-all', [NotificationController::class, 'clearAll'])->name('pos.notifications.clear-all');
+    Route::delete('/notifications/{id}', [NotificationController::class, 'destroy'])->whereNumber('id')->name('pos.notifications.destroy');
 
     Route::get('/pos/register/drawer-status', [RegisterSessionController::class, 'drawerStatus'])->name('pos.register-session.drawer-status');
     Route::post('/pos/register/drawer-open', [RegisterSessionController::class, 'openDrawer'])->name('pos.register-session.drawer-open');

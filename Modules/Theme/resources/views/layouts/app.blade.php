@@ -205,6 +205,62 @@
         .menu-email{font-size:13px;color:var(--muted)}
         .menu-row{display:flex;justify-content:space-between;gap:12px;padding:8px 10px;font-size:14px}
         .pkg-badge{font-size:12px;border:1px solid var(--border);border-radius:999px;padding:3px 8px;color:var(--muted)}
+        /* ── Notification bell ─────────────────────────────────────────── */
+        .pos-notif-wrap{position:relative}
+        .pos-notif-btn{width:32px;height:32px;padding:0;position:relative;display:flex;align-items:center;justify-content:center;gap:0;flex-shrink:0;border-radius:9px}
+        .pos-notif-btn.has-unread{border-color:color-mix(in srgb,var(--primary) 45%,var(--border));color:var(--primary)}
+        .pos-notif-btn i{font-size:14px;line-height:1;display:block}
+        .pos-notif-icon-wrap{position:relative;display:inline-flex;align-items:center;justify-content:center}
+        .pos-notif-badge{position:absolute;top:0;right:0;transform:translate(55%,-55%);background:#dc2626;color:#fff;font-size:9px;font-weight:700;min-width:15px;height:15px;border-radius:999px;display:flex;align-items:center;justify-content:center;padding:0 4px;line-height:1;box-shadow:0 0 0 2px var(--card);z-index:1}
+        .pos-notif-menu{width:360px;padding:0;max-height:min(70vh,460px);display:none;flex-direction:column}
+        .pos-notif-menu.open{display:flex}
+        .pos-notif-menu-head{padding:12px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;font-size:13px;font-weight:700;color:var(--text);flex-shrink:0}
+        .pos-notif-head-actions{display:flex;align-items:center;gap:2px;flex-shrink:0}
+        .pos-notif-link{border:none;background:transparent;color:var(--primary);font-size:11px;font-weight:600;cursor:pointer;padding:4px 6px;border-radius:8px;white-space:nowrap}
+        .pos-notif-link:hover{background:color-mix(in srgb,var(--primary) 12%,transparent)}
+        .pos-notif-link.pos-notif-danger{color:#dc2626}
+        .pos-notif-link.pos-notif-danger:hover{background:#fee2e2}
+        .pos-notif-list{overflow-y:auto;flex:1;min-height:0}
+        .pos-notif-list-full{max-height:min(58vh,480px)}
+        .pos-notif-empty{padding:30px 14px;text-align:center;color:var(--muted);font-size:12.5px}
+        .pos-notif-row{padding:11px 14px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:flex-start;cursor:pointer;transition:background .12s}
+        .pos-notif-row:last-child{border-bottom:none}
+        .pos-notif-row:hover{background:color-mix(in srgb,var(--primary) 6%,transparent)}
+        .pos-notif-row.unread{background:color-mix(in srgb,var(--primary) 5%,transparent)}
+        .pos-notif-icon{width:30px;height:30px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:13px;background:color-mix(in srgb,var(--primary) 14%,transparent);color:var(--primary)}
+        .pos-notif-icon.danger{background:#fee2e2;color:#dc2626}
+        .pos-notif-icon.warning{background:#fef3c7;color:#d97706}
+        .pos-notif-icon.info{background:#dbeafe;color:#2563eb}
+        .pos-notif-icon.success{background:#dcfce7;color:#16a34a}
+        .pos-notif-body{flex:1;min-width:0}
+        .pos-notif-title{font-size:12.5px;font-weight:700;color:var(--text)}
+        .pos-notif-message{font-size:11.5px;color:var(--muted);margin-top:2px;line-height:1.4;word-break:break-word}
+        .pos-notif-time{font-size:10px;color:var(--muted);margin-top:4px}
+        .pos-notif-dot{width:8px;height:8px;border-radius:50%;background:var(--primary);flex-shrink:0;margin-top:4px}
+        .pos-notif-row-actions{display:flex;align-items:center;flex-shrink:0}
+        .pos-notif-row-toggle{border:none;background:transparent;color:var(--muted);cursor:pointer;font-size:11px;padding:5px;border-radius:8px}
+        .pos-notif-row-toggle:hover{background:color-mix(in srgb,var(--muted) 16%,transparent);color:var(--text)}
+        .pos-notif-menu-footer{padding:8px 10px;border-top:1px solid var(--border);flex-shrink:0}
+        .pos-notif-menu-footer button{width:100%;padding:8px 10px;border:none;background:transparent;color:var(--primary);font-size:12px;font-weight:600;cursor:pointer;border-radius:8px}
+        .pos-notif-menu-footer button:hover{background:color-mix(in srgb,var(--primary) 12%,transparent)}
+        .pos-notif-filters{display:flex;align-items:center;gap:6px;padding:12px 14px;border-bottom:1px solid var(--border);flex-shrink:0}
+        .pos-notif-filter-btn{border:1px solid var(--border);background:transparent;color:var(--muted);font-size:11.5px;font-weight:600;padding:5px 12px;border-radius:999px;cursor:pointer}
+        .pos-notif-filter-btn.active{background:var(--primary);color:#fff;border-color:var(--primary)}
+        .pos-notif-settings-btn{border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center}
+        .pos-notif-settings-btn:hover,.pos-notif-settings-btn.active{background:color-mix(in srgb,var(--primary) 12%,transparent);color:var(--primary);border-color:color-mix(in srgb,var(--primary) 45%,var(--border))}
+        .pos-notif-settings-panel{padding:12px 14px;border-bottom:1px solid var(--border);background:color-mix(in srgb,var(--muted) 6%,transparent);flex-shrink:0}
+        .pos-notif-overlay{position:fixed;inset:0;z-index:400;display:none;align-items:center;justify-content:center;padding:16px;box-sizing:border-box}
+        .pos-notif-overlay.open{display:flex}
+        .pos-notif-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.48);backdrop-filter:blur(3px)}
+        :is(html[data-theme="light"],html[data-theme="light_blue"]) .pos-notif-backdrop{background:rgba(15,23,42,.35)}
+        .pos-notif-modal{position:relative;z-index:1;width:100%;max-width:560px;max-height:min(85vh,640px);background:var(--card);border:1px solid var(--border);border-radius:16px;box-shadow:0 24px 56px rgba(0,0,0,.32);display:flex;flex-direction:column;overflow:hidden}
+        .pos-notif-modal-head{padding:18px 20px 14px;border-bottom:1px solid var(--border);flex-shrink:0;position:relative}
+        .pos-notif-modal-title{margin:0 0 4px;font-size:17px;font-weight:800;letter-spacing:-.02em;color:var(--text);display:flex;align-items:center;gap:8px}
+        .pos-notif-modal-title i{color:var(--primary)}
+        .pos-notif-modal-sub{margin:0;font-size:13px;color:var(--muted)}
+        .pos-notif-modal-close{position:absolute;top:14px;right:16px;width:30px;height:30px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;display:grid;place-items:center;font-size:16px;line-height:1;padding:0}
+        .pos-notif-modal-close:hover{border-color:var(--primary);color:var(--text)}
+        .pos-notif-modal-body{overflow-y:auto;flex:1;min-height:0}
         .dropdown-action-btn{
             width:100%;
             display:flex;
@@ -1274,6 +1330,31 @@
                         @endif
                     </div>
                 </div>
+                @if($navBusiness)
+                <div class="user-dropdown pos-notif-wrap" id="posNotifWrap">
+                    <button type="button" class="user-trigger pos-notif-btn" id="posNotifBtn" title="Notifications" aria-label="Notifications">
+                        <span class="pos-notif-icon-wrap">
+                            <i class="fa fa-bell"></i>
+                            <span class="pos-notif-badge" id="posNotifBadge" style="display:none">0</span>
+                        </span>
+                    </button>
+                    <div class="user-menu pos-notif-menu" id="posNotifMenu">
+                        <div class="pos-notif-menu-head">
+                            <span>Notifications</span>
+                            <div class="pos-notif-head-actions">
+                                <button type="button" class="pos-notif-link" id="posNotifMarkAllRead">Mark all read</button>
+                                <button type="button" class="pos-notif-link pos-notif-danger" id="posNotifClearAll">Clear all</button>
+                            </div>
+                        </div>
+                        <div class="pos-notif-list" id="posNotifList">
+                            <div class="pos-notif-empty"><i class="fa fa-spinner fa-spin"></i></div>
+                        </div>
+                        <div class="pos-notif-menu-footer">
+                            <button type="button" id="posNotifSeeAll">See all notifications</button>
+                        </div>
+                    </div>
+                </div>
+                @endif
                 @endunless
                 @if(auth()->user()?->hasRole('admin'))
                     <form method="post" action="{{ route('logout') }}">
@@ -1342,6 +1423,377 @@
             </div>
         </div>
         @endunless
+        @if(!$employeePortal && $navBusiness && !auth()->user()?->hasRole('admin'))
+        {{-- ── Notifications: full list modal ──────────────────────────────── --}}
+        <div id="posNotifOverlay" class="pos-notif-overlay" role="dialog" aria-modal="true" aria-labelledby="posNotifModalTitle">
+            <div class="pos-notif-backdrop" id="posNotifBackdrop"></div>
+            <div class="pos-notif-modal">
+                <div class="pos-notif-modal-head">
+                    <h3 class="pos-notif-modal-title" id="posNotifModalTitle"><i class="fa fa-bell"></i> Notifications</h3>
+                    <p class="pos-notif-modal-sub">Stock, finance, purchasing and sales alerts</p>
+                    <button type="button" class="pos-notif-modal-close" id="posNotifModalClose" title="Close" aria-label="Close"><i class="fa fa-xmark"></i></button>
+                </div>
+                <div class="pos-notif-filters">
+                    <button type="button" class="pos-notif-filter-btn active" data-notif-filter="all">All</button>
+                    <button type="button" class="pos-notif-filter-btn" data-notif-filter="unread">Unread</button>
+                    <button type="button" class="pos-notif-filter-btn" data-notif-filter="read">Read</button>
+                    <div style="margin-left:auto;display:flex;align-items:center;gap:2px">
+                        <button type="button" class="pos-notif-link" id="posNotifModalMarkAllRead">Mark all read</button>
+                        <button type="button" class="pos-notif-link pos-notif-danger" id="posNotifModalClearAll">Clear all</button>
+                        <button type="button" class="pos-notif-settings-btn" id="posNotifSettingsToggle" title="Notification settings"><i class="fa fa-gear"></i></button>
+                    </div>
+                </div>
+                <div class="pos-notif-settings-panel" id="posNotifSettingsPanel" style="display:none">
+                    <label for="posNotifThreshold" style="font-size:12px;font-weight:600;color:var(--text);display:block;margin-bottom:6px">Large-sale alert threshold</label>
+                    <div style="display:flex;gap:8px;align-items:center">
+                        <input type="number" id="posNotifThreshold" class="dropdown-select" min="0" step="0.01" placeholder="e.g. 1000" style="max-width:180px">
+                        <button type="button" class="pos-notif-link" id="posNotifSettingsSave" style="border:1px solid var(--border)">Save</button>
+                    </div>
+                    <p style="margin:8px 0 0;font-size:12px;color:var(--muted)">Alert when a completed sale's total is at or above this amount. Leave blank to disable.</p>
+                </div>
+                <div class="pos-notif-modal-body">
+                    <div class="pos-notif-list pos-notif-list-full" id="posNotifModalList"></div>
+                </div>
+            </div>
+        </div>
+
+        <script>
+        (function () {
+            const routes = {
+                index: '{{ route('pos.notifications.index') }}',
+                readAll: '{{ route('pos.notifications.read-all') }}',
+                settingsShow: '{{ route('pos.notifications.settings.show') }}',
+                settingsUpdate: '{{ route('pos.notifications.settings.update') }}',
+                read: '{{ route('pos.notifications.read', ['id' => '__ID__']) }}',
+                unread: '{{ route('pos.notifications.unread', ['id' => '__ID__']) }}',
+                clearAll: '{{ route('pos.notifications.clear-all') }}',
+                destroy: '{{ route('pos.notifications.destroy', ['id' => '__ID__']) }}',
+            };
+            const navTargets = {
+                stock_out: '{{ route('product.index') }}',
+                stock_low: '{{ route('product.index') }}',
+                bill_overdue: '{{ route('account.bills.index') }}',
+                loan_overdue: '{{ route('account.loans.index') }}',
+                rental_overdue: '{{ route('account.rentals.index') }}',
+                investment_overdue: '{{ route('account.investments.index') }}',
+                property_expired: '{{ route('account.properties.index') }}',
+                purchase_order_overdue: '{{ route('purchase.index') }}',
+                purchase_order_received: '{{ route('purchase.index') }}',
+                cheque_overdue: '{{ route('purchase.cheques.index') }}',
+                sale_large: '{{ route('pos.sales.index') }}',
+                payment_succeeded: '{{ route('pos.subscriptions.index') }}',
+                payment_failed: '{{ route('pos.subscriptions.index') }}',
+                subscription_renewal_upcoming: '{{ route('pos.subscriptions.index') }}',
+            };
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content ?? '';
+
+            const iconMap = {
+                stock_out:               { icon: 'fa-box',                 cls: 'danger'  },
+                stock_low:                { icon: 'fa-box',                 cls: 'warning' },
+                bill_overdue:             { icon: 'fa-file-invoice-dollar', cls: 'danger'  },
+                loan_overdue:             { icon: 'fa-hand-holding-dollar', cls: 'danger'  },
+                rental_overdue:           { icon: 'fa-house',               cls: 'danger'  },
+                investment_overdue:       { icon: 'fa-chart-line',          cls: 'danger'  },
+                property_expired:         { icon: 'fa-building',            cls: 'warning' },
+                purchase_order_overdue:   { icon: 'fa-truck-fast',          cls: 'warning' },
+                cheque_overdue:           { icon: 'fa-money-check-dollar',  cls: 'danger'  },
+                purchase_order_received:  { icon: 'fa-circle-check',        cls: 'success' },
+                sale_large:               { icon: 'fa-sack-dollar',         cls: 'info'    },
+                automation:               { icon: 'fa-bolt',                cls: 'info'    },
+                payment_succeeded:        { icon: 'fa-circle-check',        cls: 'success' },
+                payment_failed:           { icon: 'fa-triangle-exclamation',cls: 'danger'  },
+                subscription_renewal_upcoming: { icon: 'fa-calendar-days',  cls: 'warning' },
+            };
+
+            const state = { list: [], unread: 0, filter: 'all', pollTimer: null };
+
+            function escHtml(s) {
+                return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+            }
+
+            function timeAgo(dateStr) {
+                if (!dateStr) return '';
+                const then = new Date(String(dateStr).replace(' ', 'T'));
+                if (isNaN(then.getTime())) return '';
+                const mins = Math.floor((Date.now() - then.getTime()) / 60000);
+                if (mins < 1) return 'just now';
+                if (mins < 60) return mins + 'm ago';
+                const hrs = Math.floor(mins / 60);
+                if (hrs < 24) return hrs + 'h ago';
+                return Math.floor(hrs / 24) + 'd ago';
+            }
+
+            async function apiCall(url, method) {
+                try {
+                    const res = await fetch(url, {
+                        method: method || 'GET',
+                        headers: {
+                            'Accept': 'application/json',
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': csrfToken,
+                            'X-Requested-With': 'XMLHttpRequest',
+                        },
+                        credentials: 'same-origin',
+                    });
+                    const body = await res.json().catch(() => ({}));
+                    return { status: res.status, body };
+                } catch (e) {
+                    return { status: 0, body: {} };
+                }
+            }
+
+            function applyBadge() {
+                const badge = document.getElementById('posNotifBadge');
+                const btn = document.getElementById('posNotifBtn');
+                if (!badge || !btn) return;
+                const count = state.unread > 99 ? '99+' : String(state.unread);
+                badge.textContent = count;
+                badge.style.display = state.unread > 0 ? 'flex' : 'none';
+                btn.classList.toggle('has-unread', state.unread > 0);
+            }
+
+            function rowHtml(n, showToggle) {
+                const meta = iconMap[n.type] || { icon: 'fa-bell', cls: 'info' };
+                const dot = (!showToggle && !n.read) ? '<div class="pos-notif-dot"></div>' : '';
+                const toggleBtn = showToggle
+                    ? '<button type="button" class="pos-notif-row-toggle" data-notif-toggle="' + n.id + '" data-notif-was-read="' + (n.read ? 1 : 0) + '" title="' + (n.read ? 'Mark as unread' : 'Mark as read') + '"><i class="fa ' + (n.read ? 'fa-envelope-open' : 'fa-envelope') + '"></i></button>'
+                    : '';
+                const deleteBtn = '<button type="button" class="pos-notif-row-toggle" data-notif-delete="' + n.id + '" title="Dismiss"><i class="fa fa-xmark"></i></button>';
+                return '<div class="pos-notif-row ' + (n.read ? '' : 'unread') + '" data-notif-id="' + n.id + '" data-notif-type="' + escHtml(n.type) + '">'
+                    + '<div class="pos-notif-icon ' + meta.cls + '"><i class="fa ' + meta.icon + '"></i></div>'
+                    + '<div class="pos-notif-body">'
+                    + '<div class="pos-notif-title">' + escHtml(n.title) + '</div>'
+                    + '<div class="pos-notif-message">' + escHtml(n.message) + '</div>'
+                    + '<div class="pos-notif-time">' + timeAgo(n.created_at) + '</div>'
+                    + '</div>'
+                    + '<div class="pos-notif-row-actions">' + dot + toggleBtn + deleteBtn + '</div>'
+                    + '</div>';
+            }
+
+            function bindRows(container, sourceList) {
+                container.querySelectorAll('[data-notif-id]').forEach(function (row) {
+                    row.addEventListener('click', function (e) {
+                        if (e.target.closest('[data-notif-toggle], [data-notif-delete]')) return;
+                        openFromRow(Number(row.dataset.notifId), sourceList);
+                    });
+                });
+                container.querySelectorAll('[data-notif-toggle]').forEach(function (btn) {
+                    btn.addEventListener('click', async function (e) {
+                        e.stopPropagation();
+                        const id = Number(btn.dataset.notifToggle);
+                        const wasRead = btn.dataset.notifWasRead === '1';
+                        await apiCall((wasRead ? routes.unread : routes.read).replace('__ID__', id), 'POST');
+                        await loadModalList();
+                        loadDropdown();
+                    });
+                });
+                container.querySelectorAll('[data-notif-delete]').forEach(function (btn) {
+                    btn.addEventListener('click', async function (e) {
+                        e.stopPropagation();
+                        const id = Number(btn.dataset.notifDelete);
+                        await apiCall(routes.destroy.replace('__ID__', id), 'DELETE');
+                        await loadModalList();
+                        loadDropdown();
+                    });
+                });
+            }
+
+            function openFromRow(id, sourceList) {
+                const n = (sourceList || state.list).find(function (x) { return x.id === id; });
+                if (!n) return;
+                if (!n.read) {
+                    apiCall(routes.read.replace('__ID__', id), 'POST').catch(function () {});
+                    n.read = true;
+                    state.unread = Math.max(0, state.unread - 1);
+                    applyBadge();
+                }
+                document.getElementById('posNotifMenu')?.classList.remove('open');
+                document.getElementById('posNotifOverlay')?.classList.remove('open');
+                const target = navTargets[n.type];
+                if (target) window.location.href = target;
+            }
+
+            async function loadDropdown() {
+                const list = document.getElementById('posNotifList');
+                if (!list) return;
+                list.innerHTML = '<div class="pos-notif-empty"><i class="fa fa-spinner fa-spin"></i></div>';
+                const res = await apiCall(routes.index + '?limit=5');
+                if (res.status !== 200) {
+                    list.innerHTML = '<div class="pos-notif-empty">Failed to load notifications</div>';
+                    return;
+                }
+                state.list = res.body?.data ?? [];
+                state.unread = res.body?.unread_count ?? 0;
+                applyBadge();
+                if (!state.list.length) {
+                    list.innerHTML = '<div class="pos-notif-empty">You\'re all caught up</div>';
+                    return;
+                }
+                list.innerHTML = state.list.map(function (n) { return rowHtml(n, false); }).join('');
+                bindRows(list, state.list);
+            }
+
+            async function loadModalList() {
+                const list = document.getElementById('posNotifModalList');
+                if (!list) return;
+                list.innerHTML = '<div class="pos-notif-empty"><i class="fa fa-spinner fa-spin"></i></div>';
+                const res = await apiCall(routes.index + '?status=' + encodeURIComponent(state.filter) + '&limit=100');
+                if (res.status !== 200) {
+                    list.innerHTML = '<div class="pos-notif-empty">Failed to load notifications</div>';
+                    return;
+                }
+                const items = res.body?.data ?? [];
+                state.unread = res.body?.unread_count ?? state.unread;
+                applyBadge();
+                if (!items.length) {
+                    list.innerHTML = '<div class="pos-notif-empty">No notifications</div>';
+                    return;
+                }
+                list.innerHTML = items.map(function (n) { return rowHtml(n, true); }).join('');
+                bindRows(list, items);
+            }
+
+            async function refreshBadge() {
+                const res = await apiCall(routes.index + '?limit=1');
+                if (res.status !== 200) return;
+                state.unread = res.body?.unread_count ?? 0;
+                applyBadge();
+            }
+
+            function openModal() {
+                const overlay = document.getElementById('posNotifOverlay');
+                if (!overlay) return;
+                overlay.classList.add('open');
+                document.getElementById('posNotifSettingsPanel').style.display = 'none';
+                document.getElementById('posNotifSettingsToggle')?.classList.remove('active');
+                state.filter = 'all';
+                document.querySelectorAll('#posNotifOverlay .pos-notif-filter-btn').forEach(function (b) {
+                    b.classList.toggle('active', b.dataset.notifFilter === 'all');
+                });
+                loadModalList();
+            }
+
+            const notifBtn = document.getElementById('posNotifBtn');
+            const notifMenu = document.getElementById('posNotifMenu');
+            const notifWrap = document.getElementById('posNotifWrap');
+            if (notifBtn && notifMenu && notifWrap) {
+                notifBtn.addEventListener('click', function (e) {
+                    e.stopPropagation();
+                    const opening = !notifMenu.classList.contains('open');
+                    notifMenu.classList.toggle('open', opening);
+                    if (opening) loadDropdown();
+                });
+                document.addEventListener('click', function (e) {
+                    if (!notifWrap.contains(e.target)) notifMenu.classList.remove('open');
+                });
+            }
+
+            document.getElementById('posNotifMarkAllRead')?.addEventListener('click', async function (e) {
+                e.stopPropagation();
+                await apiCall(routes.readAll, 'POST');
+                state.list.forEach(function (n) { n.read = true; });
+                state.unread = 0;
+                applyBadge();
+                const list = document.getElementById('posNotifList');
+                list.innerHTML = state.list.length
+                    ? state.list.map(function (n) { return rowHtml(n, false); }).join('')
+                    : '<div class="pos-notif-empty">You\'re all caught up</div>';
+                bindRows(list, state.list);
+            });
+
+            document.getElementById('posNotifClearAll')?.addEventListener('click', async function (e) {
+                e.stopPropagation();
+                if (!window.confirm('Clear all notifications? Alerts for conditions that are still true (like low stock or an overdue bill) will reappear the next time they refresh.')) return;
+                await apiCall(routes.clearAll, 'DELETE');
+                state.list = [];
+                state.unread = 0;
+                applyBadge();
+                document.getElementById('posNotifList').innerHTML = '<div class="pos-notif-empty">You\'re all caught up</div>';
+                loadModalList();
+            });
+
+            document.getElementById('posNotifSeeAll')?.addEventListener('click', function (e) {
+                e.stopPropagation();
+                notifMenu?.classList.remove('open');
+                openModal();
+            });
+
+            document.querySelectorAll('#posNotifOverlay .pos-notif-filter-btn').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    state.filter = btn.dataset.notifFilter;
+                    document.querySelectorAll('#posNotifOverlay .pos-notif-filter-btn').forEach(function (b) {
+                        b.classList.toggle('active', b === btn);
+                    });
+                    loadModalList();
+                });
+            });
+
+            document.getElementById('posNotifModalClose')?.addEventListener('click', function () {
+                document.getElementById('posNotifOverlay').classList.remove('open');
+            });
+            document.getElementById('posNotifBackdrop')?.addEventListener('click', function () {
+                document.getElementById('posNotifOverlay').classList.remove('open');
+            });
+
+            document.getElementById('posNotifModalMarkAllRead')?.addEventListener('click', async function () {
+                await apiCall(routes.readAll, 'POST');
+                state.unread = 0;
+                applyBadge();
+                loadModalList();
+                loadDropdown();
+            });
+
+            document.getElementById('posNotifModalClearAll')?.addEventListener('click', async function () {
+                if (!window.confirm('Clear all notifications? Alerts for conditions that are still true (like low stock or an overdue bill) will reappear the next time they refresh.')) return;
+                await apiCall(routes.clearAll, 'DELETE');
+                state.list = [];
+                state.unread = 0;
+                applyBadge();
+                loadModalList();
+                loadDropdown();
+            });
+
+            document.getElementById('posNotifSettingsToggle')?.addEventListener('click', async function () {
+                const panel = document.getElementById('posNotifSettingsPanel');
+                const opening = panel.style.display === 'none';
+                panel.style.display = opening ? '' : 'none';
+                this.classList.toggle('active', opening);
+                if (opening) {
+                    const res = await apiCall(routes.settingsShow);
+                    if (res.status === 200) {
+                        const v = res.body?.data?.large_sale_threshold;
+                        document.getElementById('posNotifThreshold').value = (v === null || v === undefined) ? '' : v;
+                    }
+                }
+            });
+
+            document.getElementById('posNotifSettingsSave')?.addEventListener('click', async function () {
+                const raw = document.getElementById('posNotifThreshold').value;
+                const btn = this;
+                const res = await fetch(routes.settingsUpdate, {
+                    method: 'PUT',
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': csrfToken,
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({ large_sale_threshold: raw === '' ? null : raw }),
+                });
+                if (res.ok) {
+                    btn.textContent = 'Saved';
+                    setTimeout(function () { btn.textContent = 'Save'; }, 1500);
+                }
+            });
+
+            if (notifBtn) {
+                refreshBadge();
+                state.pollTimer = setInterval(refreshBadge, 60000);
+            }
+        })();
+        </script>
+        @endif
         <div class="content-inner{{ $chatWorkspace ? ' content-inner--chat-workspace' : '' }}">
             @yield('content')
         </div>
