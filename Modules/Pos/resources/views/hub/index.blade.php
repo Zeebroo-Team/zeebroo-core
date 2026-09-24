@@ -150,40 +150,64 @@ html.pdl-open,html.pdl-open body{overflow:hidden;}
             <div class="pdl-platforms">
 
                 {{-- Windows --}}
-                <a href="https://github.com/Zeebroo-Team/zeebroo-pos-desktop/releases/tag/v1.0.0#:~:text=ZeebrooPosDesktop%2D1.0.0%2Dwindows%2Dx64.zip" class="pdl-platform" aria-label="Download for Windows" target="_blank" rel="noopener">
+                @if($latestRelease?->windows_url)
+                    <a href="{{ $latestRelease->windows_url }}" class="pdl-platform" aria-label="Download for Windows" target="_blank" rel="noopener">
+                @else
+                    <span class="pdl-platform" aria-label="Windows build not available" style="opacity:.5;pointer-events:none;">
+                @endif
                     <div class="pdl-platform__icon pdl-platform__icon--win">
                         <i class="fa-brands fa-windows" aria-hidden="true"></i>
                     </div>
                     <span class="pdl-platform__name">Windows</span>
                     <span class="pdl-platform__meta">Windows 10 / 11<br>64-bit installer</span>
                     <span class="pdl-platform__dl">
-                        <i class="fa fa-download" aria-hidden="true"></i> Download .exe
+                        <i class="fa fa-download" aria-hidden="true"></i> {{ $latestRelease?->windows_url ? 'Download .exe' : 'Not available' }}
                     </span>
-                </a>
+                @if($latestRelease?->windows_url)
+                    </a>
+                @else
+                    </span>
+                @endif
 
                 {{-- macOS --}}
-                <a href="https://github.com/Zeebroo-Team/zeebroo-pos-desktop/releases/tag/v1.0.0#:~:text=ZeebrooPosDesktop%2D1.0.0%2Dmacos.zip" class="pdl-platform" aria-label="Download for macOS" target="_blank" rel="noopener">
+                @if($latestRelease?->macos_url)
+                    <a href="{{ $latestRelease->macos_url }}" class="pdl-platform" aria-label="Download for macOS" target="_blank" rel="noopener">
+                @else
+                    <span class="pdl-platform" aria-label="macOS build not available" style="opacity:.5;pointer-events:none;">
+                @endif
                     <div class="pdl-platform__icon pdl-platform__icon--mac">
                         <i class="fa-brands fa-apple" aria-hidden="true"></i>
                     </div>
                     <span class="pdl-platform__name">macOS</span>
                     <span class="pdl-platform__meta">macOS 12+<br>Apple Silicon &amp; Intel</span>
                     <span class="pdl-platform__dl">
-                        <i class="fa fa-download" aria-hidden="true"></i> Download .dmg
+                        <i class="fa fa-download" aria-hidden="true"></i> {{ $latestRelease?->macos_url ? 'Download .dmg' : 'Not available' }}
                     </span>
-                </a>
+                @if($latestRelease?->macos_url)
+                    </a>
+                @else
+                    </span>
+                @endif
 
                 {{-- Linux --}}
-                <a href="https://github.com/Zeebroo-Team/zeebroo-pos-desktop/releases/download/v1.0.0/ZeebrooPosDesktop-1.0.0-linux-x86_64.tar.gz" class="pdl-platform" aria-label="Download for Linux" target="_blank" rel="noopener">
+                @if($latestRelease?->linux_url)
+                    <a href="{{ $latestRelease->linux_url }}" class="pdl-platform" aria-label="Download for Linux" target="_blank" rel="noopener">
+                @else
+                    <span class="pdl-platform" aria-label="Linux build not available" style="opacity:.5;pointer-events:none;">
+                @endif
                     <div class="pdl-platform__icon pdl-platform__icon--linux">
                         <i class="fa-brands fa-linux" aria-hidden="true"></i>
                     </div>
                     <span class="pdl-platform__name">Linux</span>
                     <span class="pdl-platform__meta">Ubuntu / Debian<br>AppImage &amp; .deb</span>
                     <span class="pdl-platform__dl">
-                        <i class="fa fa-download" aria-hidden="true"></i> Download .deb
+                        <i class="fa fa-download" aria-hidden="true"></i> {{ $latestRelease?->linux_url ? 'Download .deb' : 'Not available' }}
                     </span>
-                </a>
+                @if($latestRelease?->linux_url)
+                    </a>
+                @else
+                    </span>
+                @endif
 
             </div>
 
@@ -214,7 +238,13 @@ html.pdl-open,html.pdl-open body{overflow:hidden;}
             </div>
 
             <div class="pdl-footer">
-                <p class="pdl-version">Current version: <strong>v1.0.0</strong> &nbsp;·&nbsp; Released June 2025</p>
+                <p class="pdl-version">
+                    @if($latestRelease)
+                        Current version: <strong>v{{ $latestRelease->version }}</strong> &nbsp;·&nbsp; Released {{ $latestRelease->release_date?->format('F Y') }}
+                    @else
+                        No desktop release has been published yet.
+                    @endif
+                </p>
                 <p class="pdl-version">All platforms sync with your <strong>{{ $business->name }}</strong> account automatically.</p>
             </div>
 

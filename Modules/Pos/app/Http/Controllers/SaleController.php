@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\View\View;
 use Modules\Pos\Http\Controllers\Concerns\ResolvesPosBusiness;
 use Modules\Account\Models\Account;
@@ -137,6 +138,89 @@ class SaleController extends Controller
         $hasReturns = SaleReturn::query()->where('business_id', $business->id)->exists();
 
         return view('pos::sales.returns', compact('business', 'currency', 'search', 'returns', 'hasReturns'));
+    }
+
+    public function pendingCredits(Request $request): View|RedirectResponse
+    {
+        $business = $this->requireBusiness($request);
+        if ($business instanceof RedirectResponse) {
+            return $business;
+        }
+
+        $currency = (string) (get_settings('business.currency', '', $business) ?: '');
+        $today    = now()->startOfDay();
+
+        $sales = $business->sales()
+            ->where('payment_method', Sale::PAYMENT_CREDIT)
+            ->where('status', Sale::STATUS_COMPLETED)
+            ->with('customer')
+            ->orderBy('sold_at', 'desc')
+            ->get();
+
+        $groups = $sales->groupBy(fn ($s) => $s->pos_customer_id ?? 0);
+
+        $customerGroups = $groups->map(function ($group) use ($today) {
+            $first      = $group->first();
+            $totalOwed  = round((float) $group->sum('total'), 2);
+            $overdueAmt = 0.0;
+            $hasOverdue = false;
+
+            $groupSales = $group->map(function ($s) use ($today, &$overdueAmt, &$hasOverdue) {
+                $isOverdue = $s->credit_due_date !== null && $s->credit_due_date->lt($today);
+                if ($isOverdue) {
+                    $overdueAmt += (float) $s->total;
+                    $hasOverdue  = true;
+                }
+
+                return [
+                    'id'              => $s->id,
+                    'sale_number'     => $s->sale_number,
+                    'total'           => round((float) $s->total, 2),
+                    'sold_at'         => $s->sold_at,
+                    'credit_due_date' => $s->credit_due_date,
+                    'is_overdue'      => $isOverdue,
+                ];
+            })->values();
+
+            return [
+                'customer_id'    => $first->pos_customer_id,
+                'customer_name'  => $first->customer?->name ?? 'Walk-in / Unknown',
+                'customer_phone' => $first->customer?->phone,
+                'total_owed'     => $totalOwed,
+                'overdue_amount' => round($overdueAmt, 2),
+                'has_overdue'    => $hasOverdue,
+                'sale_count'     => $groupSales->count(),
+                'sales'          => $groupSales,
+            ];
+        })
+            ->sortByDesc('has_overdue')
+            ->sortByDesc('overdue_amount')
+            ->values();
+
+        $totalOwed     = round((float) $customerGroups->sum('total_owed'), 2);
+        $totalOverdue  = round((float) $customerGroups->sum('overdue_amount'), 2);
+        $customerCount = $customerGroups->count();
+
+        $perPage    = 25;
+        $page       = (int) $request->query('page', 1);
+        $pagedItems = $customerGroups->slice(($page - 1) * $perPage, $perPage)->values();
+
+        $groupsPaginator = new LengthAwarePaginator(
+            $pagedItems,
+            $customerGroups->count(),
+            $perPage,
+            $page,
+            ['path' => $request->url(), 'query' => $request->query()],
+        );
+
+        return view('pos::sales.pending-credits', [
+            'business'      => $business,
+            'currency'      => $currency,
+            'groups'        => $groupsPaginator,
+            'totalOwed'     => $totalOwed,
+            'totalOverdue'  => $totalOverdue,
+            'customerCount' => $customerCount,
+        ]);
     }
 
     public function index(Request $request): View|RedirectResponse

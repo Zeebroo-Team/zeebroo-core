@@ -7,6 +7,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
+use Modules\AppConnection\Models\AppRelease;
 use Modules\Pos\Http\Controllers\Concerns\ResolvesPosBusiness;
 use Modules\Pos\Models\Sale;
 use Modules\Pos\Services\PosCatalogService;
@@ -43,6 +44,7 @@ class PosController extends Controller
             'today' => $today,
             'hasProducts' => $hasProducts,
             'hasSales' => $this->sales->businessHasSales($business),
+            'latestRelease' => AppRelease::latestStable(),
         ]);
     }
 
@@ -90,6 +92,10 @@ class PosController extends Controller
                 'nullable', 'integer', 'min:1',
                 Rule::exists('branches', 'id')->where(fn ($q) => $q->where('business_id', $business->id)),
             ],
+            'pos_counter_id' => [
+                'nullable', 'integer', 'min:1',
+                Rule::exists('pos_counters', 'id')->where(fn ($q) => $q->where('business_id', $business->id)),
+            ],
         ]);
 
         $channel = $validated['channel'] ?? Sale::CHANNEL_RETAIL;
@@ -111,6 +117,7 @@ class PosController extends Controller
             isset($validated['pos_customer_id']) ? (int) $validated['pos_customer_id'] : null,
             $deferSettlement,
             isset($validated['branch_id']) ? (int) $validated['branch_id'] : null,
+            posCounterId: isset($validated['pos_counter_id']) ? (int) $validated['pos_counter_id'] : null,
         );
 
         $redirectRoute = $channel === Sale::CHANNEL_ONLINE ? 'pos.online' : 'pos.register';
