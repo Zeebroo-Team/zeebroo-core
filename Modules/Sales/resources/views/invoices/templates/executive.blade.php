@@ -30,7 +30,7 @@ body{font-family:Inter,Arial,sans-serif;font-size:12px;color:#0f172a;background:
 .body{flex:1;padding:22px {{ $mg['right'] }}mm {{ $mg['bottom'] }}mm {{ $mg['left'] }}mm}
 .bt{margin-bottom:20px;padding:13px 15px;border:1px solid #e2e8f0;border-radius:6px;border-left:3px solid {{ $accent }}}
 .btl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#94a3b8;margin-bottom:5px}
-.btn{font-size:14px;font-weight:800;margin-bottom:3px}.bti{font-size:11px;color:#64748b;line-height:1.5}
+.btn{font-size:14px;font-weight:800;margin-bottom:3px}
 table{width:100%;border-collapse:collapse;margin-bottom:20px}
 thead th{background:#0f172a;color:{{ $accent }};font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:9px 6px}
 thead th.r{text-align:right}
@@ -83,7 +83,6 @@ td.n{color:#94a3b8;text-align:center;width:26px}td.r{text-align:right}td.b{font-
   <div class="bt">
       <div class="btl">Billed To</div>
       <div class="btn">{{ $doc['customerName'] }}</div>
-      @foreach($doc['customerLines'] as $line)<div class="bti">{{ $line }}</div>@endforeach
   </div>
   <table>
     <thead><tr><th style="width:26px;text-align:center">#</th><th>Description</th><th class="r" style="width:50px">Qty</th><th class="r" style="width:90px">Unit Price</th><th class="r" style="width:60px">Disc</th><th class="r" style="width:70px">Tax</th><th class="r" style="width:90px">Total</th></tr></thead>

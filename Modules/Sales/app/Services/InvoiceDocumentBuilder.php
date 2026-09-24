@@ -56,6 +56,19 @@ class InvoiceDocumentBuilder
                 'taxType'        => $item->tax_type ?: 'pct',
                 'taxValue'       => (float) $item->tax_pct,
                 'lineTotal'      => (float) $item->line_total,
+                'rentalInfo'     => $item->rental_daily_rate !== null ? [
+                    'dailyRate'         => (float) $item->rental_daily_rate,
+                    'returnDate'        => $item->rental_return_date?->format('M j, Y'),
+                    'lateFeeMultiplier' => (float) ($item->rental_late_fee_multiplier ?? 0),
+                ] : null,
+                'warrantyLabel'  => $item->warranty_type === 'lifetime'
+                    ? 'Lifetime warranty'
+                    : ($item->warranty_type === 'date' && $item->warranty_date
+                        ? 'Warranty until '.$item->warranty_date->format('M j, Y')
+                        : null),
+                'subscriptionLabel' => $item->is_subscription
+                    ? (filled($item->subscription_period) ? ucfirst($item->subscription_period).' subscription' : 'Subscription')
+                    : null,
             ];
         })->all();
 

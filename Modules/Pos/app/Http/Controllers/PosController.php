@@ -329,7 +329,7 @@ class PosController extends Controller
             $printSale = Sale::query()
                 ->where('business_id', $business->id)
                 ->whereKey((int) $printSaleId)
-                ->with(['items.serviceItem.products', 'items.productRental', 'items.subscription', 'creditAccount', 'user'])
+                ->with(['items.serviceItem.products', 'items.productRental', 'items.subscription', 'creditAccount', 'user', 'customer'])
                 ->first();
         }
 

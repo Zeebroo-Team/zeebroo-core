@@ -408,7 +408,7 @@ class HrEmployeePortalController extends Controller
             $printSale = Sale::query()
                 ->where('business_id', $business->id)
                 ->whereKey((int) $printSaleId)
-                ->with(['items', 'creditAccount', 'user'])
+                ->with(['items.serviceItem.products', 'items.productRental', 'items.subscription', 'creditAccount', 'user', 'customer'])
                 ->first();
         }
 

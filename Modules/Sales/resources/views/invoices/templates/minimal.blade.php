@@ -16,7 +16,6 @@ body{font-family:Georgia,'Times New Roman',serif;font-size:12px;color:#1a1a1a;ba
 .meta{display:flex;justify-content:space-between;margin-bottom:28px}
 .btl{font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.16em;color:#9ca3af;margin-bottom:5px;font-family:Arial,sans-serif}
 .btn{font-size:15px;font-weight:700;font-family:Georgia,serif;margin-bottom:3px}
-.bti{font-size:11px;color:#6b7280;font-family:Arial,sans-serif;line-height:1.6}
 .dts{text-align:right}
 .dr{display:flex;gap:18px;justify-content:flex-end;font-size:11px;padding:3px 0;font-family:Arial,sans-serif}
 .dk{color:#9ca3af}.dv{font-weight:700;color:#1a1a1a}
@@ -61,7 +60,6 @@ td.n{color:#d1d5db;text-align:center;width:26px;font-style:italic}td.r{text-alig
   <div>
       <div class="btl">Billed To</div>
       <div class="btn">{{ $doc['customerName'] }}</div>
-      @foreach($doc['customerLines'] as $line)<div class="bti">{{ $line }}</div>@endforeach
   </div>
   <div class="dts">
     <div class="dr"><span class="dk">Issued</span><span class="dv">{{ $doc['issueDate'] }}</span></div>

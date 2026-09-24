@@ -60,7 +60,6 @@ td.n{color:#94a3b8;text-align:center;width:26px}td.r{text-align:right}td.b{font-
   <div class="bt-cell">
       <div class="gcl">Billed To</div>
       <div style="font-size:14px;font-weight:800;margin-bottom:3px">{{ $doc['customerName'] }}</div>
-      @foreach($doc['customerLines'] as $line)<div class="ds">{{ $line }}</div>@endforeach
   </div>
   <div class="gc"><div class="gcl">Issue Date</div><div class="gcv">{{ $doc['issueDate'] }}</div></div>
   <div class="gc"><div class="gcl">Due Date</div><div class="gcv">{{ $doc['dueDate'] }}</div></div>
