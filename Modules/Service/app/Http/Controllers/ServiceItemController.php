@@ -142,12 +142,28 @@ class ServiceItemController extends Controller
     private function validated(Request $request, Business $business): array
     {
         $validated = $request->validate([
-            'name'                  => ['required', 'string', 'max:255'],
-            'description'           => ['nullable', 'string', 'max:5000'],
-            'price'                 => ['nullable', 'numeric', 'min:0'],
-            'duration_minutes'      => ['nullable', 'integer', 'min:1', 'max:99999'],
-            'is_active'             => ['nullable', 'boolean'],
-            'has_warranty'          => ['nullable', 'boolean'],
+            'name'                     => ['required', 'string', 'max:255'],
+            'barcode'                  => ['nullable', 'string', 'max:100'],
+            'description'              => ['nullable', 'string', 'max:5000'],
+            'tags'                     => ['nullable', 'array'],
+            'tags.*'                   => ['string', 'max:60'],
+            'price'                    => ['nullable', 'numeric', 'min:0'],
+            'cost_price'               => ['nullable', 'numeric', 'min:0'],
+            'wholesale_price'          => ['nullable', 'numeric', 'min:0'],
+            'allow_price_adjustment'   => ['nullable', 'boolean'],
+            'duration_minutes'         => ['nullable', 'integer', 'min:1', 'max:99999'],
+            'is_active'                => ['nullable', 'boolean'],
+            'is_featured'              => ['nullable', 'boolean'],
+            'has_warranty'             => ['nullable', 'boolean'],
+            'file_manager_file_id'     => [
+                'nullable', 'integer',
+                Rule::exists('file_manager_files', 'id')->where(fn ($q) => $q->where('business_id', $business->id)),
+            ],
+            'custom_requirement_enabled'      => ['nullable', 'boolean'],
+            'custom_requirement_fields'       => ['nullable', 'array'],
+            'custom_requirement_fields.*.label'       => ['nullable', 'string', 'max:255'],
+            'custom_requirement_fields.*.type'        => ['nullable', 'string', 'in:text,textarea,select,number,date,checkbox,radio'],
+            'custom_requirement_fields.*.options_csv' => ['nullable', 'string', 'max:2000'],
             'service_category_ids'  => ['nullable', 'array'],
             'service_category_ids.*'=> [
                 'integer',
@@ -178,7 +194,31 @@ class ServiceItemController extends Controller
 
         unset($validated['new_category_names']);
 
-        $validated['has_warranty'] = $request->boolean('has_warranty');
+        $validated['has_warranty']           = $request->boolean('has_warranty');
+        $validated['is_featured']            = $request->boolean('is_featured');
+        $validated['allow_price_adjustment'] = $request->boolean('allow_price_adjustment');
+        $validated['custom_requirement_enabled'] = $request->boolean('custom_requirement_enabled');
+
+        $validated['file_manager_file_id'] = filled($validated['file_manager_file_id'] ?? null)
+            ? (int) $validated['file_manager_file_id']
+            : null;
+
+        $validated['custom_requirement_fields'] = collect($validated['custom_requirement_fields'] ?? [])
+            ->map(function ($field) {
+                $options = array_values(array_filter(array_map(
+                    'trim',
+                    explode(',', (string) ($field['options_csv'] ?? ''))
+                ), fn ($opt) => $opt !== ''));
+
+                return [
+                    'label'   => trim((string) ($field['label'] ?? '')),
+                    'type'    => $field['type'] ?? 'text',
+                    'options' => $options,
+                ];
+            })
+            ->filter(fn ($field) => $field['label'] !== '')
+            ->values()
+            ->all();
 
         $validated['employee_ids'] = $request->boolean('assign_employees')
             ? array_map('intval', $validated['employee_ids'] ?? [])

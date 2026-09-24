@@ -88,15 +88,17 @@
                             <td>{{ $item->price !== null ? number_format($item->price, 2) : '—' }}</td>
                             <td class="muted">{{ $item->durationLabel() }}</td>
                             <td>
-                                <span style="display:inline-block;font-size:11px;font-weight:700;padding:2px 9px;border-radius:999px;
-                                    {{ $item->is_active ? 'background:color-mix(in srgb,#10b981 12%,transparent);border:1px solid color-mix(in srgb,#10b981 40%,var(--border));color:#10b981;' : 'background:color-mix(in srgb,var(--muted) 12%,transparent);border:1px solid var(--border);color:var(--muted);' }}">
-                                    {{ $item->is_active ? 'Active' : 'Inactive' }}
-                                </span>
-                                @if($item->has_warranty)
-                                    <span style="display:inline-block;font-size:11px;font-weight:700;padding:2px 9px;border-radius:999px;background:color-mix(in srgb,#3b82f6 12%,transparent);border:1px solid color-mix(in srgb,#3b82f6 35%,var(--border));color:#3b82f6;">
-                                        <i class="fa fa-shield-halved"></i> Warranty
+                                <div style="display:flex;flex-direction:column;align-items:flex-start;gap:4px;">
+                                    <span style="display:inline-block;font-size:11px;font-weight:700;padding:2px 9px;border-radius:999px;white-space:nowrap;
+                                        {{ $item->is_active ? 'background:color-mix(in srgb,#10b981 12%,transparent);border:1px solid color-mix(in srgb,#10b981 40%,var(--border));color:#10b981;' : 'background:color-mix(in srgb,var(--muted) 12%,transparent);border:1px solid var(--border);color:var(--muted);' }}">
+                                        {{ $item->is_active ? 'Active' : 'Inactive' }}
                                     </span>
-                                @endif
+                                    @if($item->has_warranty)
+                                        <span style="display:inline-block;font-size:11px;font-weight:700;padding:2px 9px;border-radius:999px;white-space:nowrap;background:color-mix(in srgb,#3b82f6 12%,transparent);border:1px solid color-mix(in srgb,#3b82f6 35%,var(--border));color:#3b82f6;">
+                                            <i class="fa fa-shield-halved"></i> Warranty
+                                        </span>
+                                    @endif
+                                </div>
                             </td>
                             <td style="text-align:right;">
                                 <a href="{{ route('service.catalog.edit', $item) }}" class="linkbtn" style="padding:5px 10px;font-size:12px;background:transparent;border:1px solid var(--border);color:var(--text);text-decoration:none;">Edit</a>
@@ -156,6 +158,23 @@ function svcModalOpen() {
     // ── reset category chips ──
     modal.querySelectorAll('[data-svc-cat-chips]').forEach(el => el.innerHTML = '');
     modal.querySelectorAll('[data-svc-cat-hidden]').forEach(el => el.innerHTML = '');
+
+    // ── reset tags chips ──
+    if (window.resetSvcTagsField) window.resetSvcTagsField(modal);
+
+    // ── reset image field ──
+    if (window.resetProductImageFields) window.resetProductImageFields(modal);
+
+    // ── reset featured / adjustable-price checkboxes ──
+    modal.querySelectorAll('[id$="-featured-chk"]').forEach(el => el.checked = false);
+    modal.querySelectorAll('[id$="-featured-section"]').forEach(el => el.classList.remove('is-on'));
+    modal.querySelectorAll('input[name="allow_price_adjustment"]').forEach(el => el.checked = false);
+
+    // ── reset custom requirement builder + collapse panel ──
+    if (window.resetSvcCreqField) window.resetSvcCreqField(modal);
+    modal.querySelectorAll('[id$="-creq-chk"]').forEach(el => el.checked = false);
+    modal.querySelectorAll('[id$="-creq-body"]').forEach(el => el.classList.remove('is-open'));
+    modal.querySelectorAll('[id$="-creq-section"]').forEach(el => el.classList.remove('is-on'));
 
     // ── reset employee chips + collapse panel ──
     modal.querySelectorAll('[data-svc-emp-chips]').forEach(el => el.innerHTML = '');
