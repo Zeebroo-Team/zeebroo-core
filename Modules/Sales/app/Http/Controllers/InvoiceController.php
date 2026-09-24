@@ -14,6 +14,8 @@ use Modules\Pos\Models\Customer;
 use Modules\Product\Models\Product;
 use Modules\Sales\Http\Controllers\Concerns\ResolvesSalesBusiness;
 use Modules\Sales\Models\Invoice;
+use Modules\Sales\Services\InvoiceAppearanceService;
+use Modules\Sales\Services\InvoiceDocumentBuilder;
 use Modules\Sales\Services\InvoiceService;
 use Modules\Service\Models\ServiceItem;
 
@@ -23,6 +25,8 @@ class InvoiceController extends Controller
 
     public function __construct(
         private readonly InvoiceService $invoiceService,
+        private readonly InvoiceAppearanceService $appearance,
+        private readonly InvoiceDocumentBuilder $documentBuilder,
     ) {}
 
     public function index(Request $request): View|RedirectResponse
@@ -200,48 +204,31 @@ class InvoiceController extends Controller
 
         $currency   = (string) (get_settings('business.currency', '', $business) ?: '');
         $mainBranch = $business->branches()->first();
-        $lhLinks    = (array) get_settings('design_studio.lh_links', ['po', 'grn', 'hr_payslip', 'hr_salary_sheet', 'sales_quotation', 'sales_invoice'], $business);
-        $letterhead = in_array('sales_invoice', $lhLinks) ? Design::query()
-            ->where('business_id', $business->id)
-            ->where('type', 'letterhead')
-            ->latest('updated_at')
-            ->first() : null;
+        $letterhead = $this->appearance->resolveLetterheadForInvoices($business);
 
-        $accentColor          = '#3B82F6';
-        $letterheadCanvasJson = null;
-        if ($letterhead) {
-            try {
-                $raw     = (string) $letterhead->canvas_json;
-                $decoded = json_decode($raw, true);
-                if (is_array($decoded)) {
-                    if (isset($decoded['objects'])) {
-                        $letterheadCanvasJson = $raw;
-                        $objs                 = $decoded['objects'];
-                    } elseif (!empty($decoded[0]['json'])) {
-                        $letterheadCanvasJson = $decoded[0]['json'];
-                        $objs                 = json_decode((string) $decoded[0]['json'], true)['objects'] ?? [];
-                    }
-                }
-                foreach ($objs ?? [] as $obj) {
-                    if (($obj['type'] ?? '') === 'rect'
-                        && (float) ($obj['top'] ?? 99) < 4
-                        && (float) ($obj['height'] ?? 99) <= 8
-                        && !empty($obj['fill'])
-                        && preg_match('/^#[0-9a-fA-F]{3,8}$/', (string) $obj['fill'])) {
-                        $accentColor = $obj['fill'];
-                        break;
-                    }
-                }
-            } catch (\Throwable) {}
-        }
-
+        $settings = $this->appearance->forBusiness($business);
+        $accent   = $this->appearance->resolveAccent($settings, $letterhead['accent']);
+        $geometry = $this->appearance->geometry($settings);
+        $hdrCss   = $this->appearance->headerLayoutCss($settings['header_layout']).$this->appearance->pageAtCss($geometry);
+        $margins  = [
+            'top'    => $settings['margin_top'],
+            'bottom' => $settings['margin_bottom'],
+            'left'   => $settings['margin_left'],
+            'right'  => $settings['margin_right'],
+        ];
         return view('sales::invoices.print', [
+            'template'             => $settings['template'],
+            'doc'                  => $this->documentBuilder->fromInvoice($invoice),
+            'accent'               => $accent,
+            'geomW'                => $geometry['w_px'],
+            'geomMinH'             => $geometry['min_height_css'],
+            'hdrCss'               => $hdrCss,
+            'mg'                   => $margins,
+            'letterheadCanvasJson' => $letterhead['canvasJson'],
             'business'             => $business,
-            'invoice'              => $invoice,
-            'currency'             => $currency,
             'mainBranch'           => $mainBranch,
-            'accentColor'          => $accentColor,
-            'letterheadCanvasJson' => $letterheadCanvasJson,
+            'currency'             => $currency,
+            'backUrl'              => route('sales.invoices.show', $invoice),
         ]);
     }
 

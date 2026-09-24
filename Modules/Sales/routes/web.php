@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use Modules\Sales\Http\Controllers\InvoiceController;
+use Modules\Sales\Http\Controllers\InvoiceSetupController;
 use Modules\Sales\Http\Controllers\QuotationController;
 use Modules\Sales\Http\Controllers\SalesOrderController;
 
@@ -22,6 +23,10 @@ Route::middleware(['web', 'auth'])->group(function () {
     Route::delete('/sales/quotations/{quotation}',             [QuotationController::class, 'destroy'])        ->name('sales.quotations.destroy');
 
     Route::get('/sales/line-items/search', [InvoiceController::class, 'lineItemSearch'])->name('sales.line-items.search');
+
+    Route::get('/sales/invoice-setup',         [InvoiceSetupController::class, 'edit'])   ->name('sales.invoice-setup.edit');
+    Route::post('/sales/invoice-setup',        [InvoiceSetupController::class, 'update']) ->name('sales.invoice-setup.update');
+    Route::get('/sales/invoice-setup/preview', [InvoiceSetupController::class, 'preview'])->name('sales.invoice-setup.preview');
 
     Route::get('/sales/orders',                          [SalesOrderController::class, 'index']    )->name('sales.orders.index');
     Route::post('/sales/orders',                         [SalesOrderController::class, 'store']    )->name('sales.orders.store');

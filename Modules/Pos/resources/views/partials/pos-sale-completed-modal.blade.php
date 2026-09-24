@@ -17,6 +17,17 @@
         : '';
 
     $showAccountInfo         = (bool) (($posSettings ?? [])['show_account_info'] ?? true);
+    $warrantyLabel = static function ($item): ?string {
+        if (!$item->warranty_type) {
+            return null;
+        }
+        if ($item->warranty_type === 'lifetime') {
+            return 'Lifetime warranty';
+        }
+        $exp = $item->warranty_expires_at?->format('M j, Y');
+        return $exp ? 'Warranty until '.$exp : 'Warranty';
+    };
+
     $showServiceBoundProducts = (bool) (($posSettings ?? [])['show_service_bound_products'] ?? true);
     $showBusinessName        = (bool) (($posSettings ?? [])['show_business_name'] ?? true);
     $showBusinessAddress     = (bool) (($posSettings ?? [])['show_business_address'] ?? true);
@@ -79,6 +90,17 @@
                     'qty'  => $formatQty(round((float) $bp->pivot->qty * (float) $item->quantity, 3)),
                 ])->all()
                 : [],
+            'warranty' => $warrantyLabel($item),
+            'rental' => $item->productRental ? [
+                'returnDate' => optional($item->productRental->due_at)->format('M j, Y'),
+                'dailyRate' => number_format((float) $item->productRental->daily_rate, 2, '.', ''),
+                'lateFeeMultiplier' => (float) $item->productRental->late_fee_multiplier,
+            ] : null,
+            'subscription' => $item->subscription ? [
+                'period' => ucfirst((string) $item->subscription->recurring_period),
+                'nextBillingAt' => optional($item->subscription->next_billing_at)->format('M j, Y'),
+            ] : null,
+            'custom_requirement_values' => $item->custom_requirement_values ?: [],
         ])->values()->all(),
         'showServiceBoundProducts' => $showServiceBoundProducts,
         'productDiscountTotal' => (function () use ($completedSale) {
@@ -225,6 +247,41 @@
                                         <td></td>
                                     </tr>
                                 @endforeach
+                                @if($warrantyLabel($item))
+                                    <tr>
+                                        <td colspan="4" style="font-size:9px;color:#6b7280;padding:0 2px 4px;">
+                                            &#128737; {{ $warrantyLabel($item) }}
+                                        </td>
+                                    </tr>
+                                @endif
+                                @if($item->productRental)
+                                    <tr>
+                                        <td colspan="4" style="font-size:9px;color:#0f766e;padding:0 2px 4px;">
+                                            &#128197; Return {{ optional($item->productRental->due_at)->format('M j, Y') }}
+                                            · Daily {{ number_format((float) $item->productRental->daily_rate, 2) }}{{ $currencyLabel }}
+                                            @if((float) $item->productRental->late_fee_multiplier > 0)
+                                                · Late {{ number_format((float) $item->productRental->late_fee_multiplier, 2) }}&times; rate/day
+                                            @endif
+                                        </td>
+                                    </tr>
+                                @endif
+                                @if($item->subscription)
+                                    <tr>
+                                        <td colspan="4" style="font-size:9px;color:#7c3aed;padding:0 2px 4px;">
+                                            &#128257; {{ ucfirst((string) $item->subscription->recurring_period) }} subscription
+                                            · Next billing {{ optional($item->subscription->next_billing_at)->format('M j, Y') }}
+                                        </td>
+                                    </tr>
+                                @endif
+                                @if(!empty($item->custom_requirement_values))
+                                    @foreach($item->custom_requirement_values as $creq)
+                                        <tr>
+                                            <td colspan="4" style="font-size:9px;color:#6b7280;padding:0 2px 4px;">
+                                                &#8627; {{ $creq['label'] ?? '' }}: {{ $creq['value'] ?? '' }}
+                                            </td>
+                                        </tr>
+                                    @endforeach
+                                @endif
                             @endforeach
                         </tbody>
                     </table>
@@ -967,6 +1024,20 @@
                     + '<td style="padding:2px 0;text-align:center;font-size:9px;color:#7c3aed;">' + escHtml(bp.qty) + '</td>'
                     + '<td></td>'
                     + '</tr>';
+            });
+            if (item.warranty) {
+                itemRows += '<tr><td colspan="4" style="font-size:9px;color:#6b7280;padding:0 2px 4px;">&#128737; ' + escHtml(item.warranty) + '</td></tr>';
+            }
+            if (item.rental) {
+                var rentalParts = ['Return ' + escHtml(item.rental.returnDate), 'Daily ' + escHtml(item.rental.dailyRate) + escHtml(cur)];
+                if (item.rental.lateFeeMultiplier > 0) rentalParts.push('Late ' + escHtml(String(item.rental.lateFeeMultiplier)) + '&times; rate/day');
+                itemRows += '<tr><td colspan="4" style="font-size:9px;color:#0f766e;padding:0 2px 4px;">&#128197; ' + rentalParts.join(' &middot; ') + '</td></tr>';
+            }
+            if (item.subscription) {
+                itemRows += '<tr><td colspan="4" style="font-size:9px;color:#7c3aed;padding:0 2px 4px;">&#128257; ' + escHtml(item.subscription.period) + ' subscription &middot; Next billing ' + escHtml(item.subscription.nextBillingAt) + '</td></tr>';
+            }
+            (item.custom_requirement_values || []).forEach(function (creq) {
+                itemRows += '<tr><td colspan="4" style="font-size:9px;color:#6b7280;padding:0 2px 4px;">&#8627; ' + escHtml(creq.label) + ': ' + escHtml(creq.value) + '</td></tr>';
             });
         });
 

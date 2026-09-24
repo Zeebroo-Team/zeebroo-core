@@ -94,28 +94,29 @@
     <p id="pos-pay-card-hint" class="pos-pay-hint" @if($selectedPayment !== 'card') hidden @endif>
         Card payment is recorded to your default deposit account from POS settings.
     </p>
-    <div id="pos-pay-credit-panel" class="pos-pay-cash-panel" @if($selectedPayment !== 'credit') hidden @endif>
+
+    <div class="pos-customer-field" id="pos-customer-field" style="margin-top:10px;">
+        <span class="pos-pay-field__label">Customer (optional)</span>
         <input type="hidden" name="pos_customer_id" id="pos-customer-id" value="">
 
-        <div class="pos-customer-field" id="pos-customer-field">
-            <p class="pos-pay-hint" style="margin-bottom:8px;">Credit sale — customer pays later. No ledger entry.</p>
-
-            <div id="pos-customer-selected" class="pos-customer-chip" hidden>
-                <span id="pos-customer-chip-label"></span>
-                <button type="button" id="pos-customer-clear" aria-label="Remove customer">&times;</button>
-            </div>
-
-            <div id="pos-customer-search-wrap" class="pos-customer-search-wrap">
-                <div style="position:relative;">
-                    <i class="fa fa-search" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:12px;pointer-events:none;"></i>
-                    <input type="text" id="pos-customer-search-input"
-                           class="pos-customer-search-input"
-                           placeholder="Search customer by name or phone…"
-                           autocomplete="off" spellcheck="false">
-                </div>
-                <div id="pos-customer-dropdown" class="pos-customer-dropdown" hidden></div>
-            </div>
+        <div id="pos-customer-selected" class="pos-customer-chip" hidden>
+            <span id="pos-customer-chip-label"></span>
+            <button type="button" id="pos-customer-clear" aria-label="Remove customer">&times;</button>
         </div>
+
+        <div id="pos-customer-search-wrap" class="pos-customer-search-wrap">
+            <div style="position:relative;">
+                <i class="fa fa-search" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:12px;pointer-events:none;"></i>
+                <input type="text" id="pos-customer-search-input"
+                       class="pos-customer-search-input"
+                       placeholder="Search customer by name or phone…"
+                       autocomplete="off" spellcheck="false">
+            </div>
+            <div id="pos-customer-dropdown" class="pos-customer-dropdown" hidden></div>
+        </div>
+        <p id="pos-pay-credit-panel" class="pos-pay-hint" style="margin-top:8px;" @if($selectedPayment !== 'credit') hidden @endif>
+            Credit sale — customer pays later. No ledger entry.
+        </p>
     </div>
 
 </div>
@@ -274,9 +275,6 @@ window.initPosPaymentField = function (options) {
         if (cashPanel) cashPanel.hidden = method !== 'cash';
         if (cardHintEl) cardHintEl.hidden = method !== 'card';
         if (creditPanelEl) creditPanelEl.hidden = method !== 'credit';
-        if (method !== 'credit') {
-            clearCustomerSelection();
-        }
         if (method === 'cash') {
             setNumpadTarget(cashInput);
         }

@@ -85,6 +85,7 @@
             .then((res) => {
                 const data = res.data || {};
                 lastStatus = data;
+                window.dispatchEvent(new CustomEvent('pos-drawer-status', { detail: data }));
                 if (data.is_opened) {
                     drawerPill.classList.remove('pos-rs-pill--closed');
                     drawerLabel.textContent = 'Balance ' + money(data.balance);

@@ -184,7 +184,7 @@ class SaleService
     }
 
     /**
-     * @return array{count: int, total: float, online_count: int, online_total: float}
+     * @return array{count: int, total: float, online_count: int, online_total: float, gross_profit: float, items_sold: int}
      */
     public function todaySummaryForBusiness(Business $business): array
     {
@@ -196,11 +196,17 @@ class SaleService
 
         $online = (clone $base)->where('channel', Sale::CHANNEL_ONLINE);
 
+        $total = round((float) (clone $base)->sum('total'), 2);
+        $items = (clone $base)->with('items')->get()->flatMap->items;
+        $cogs = round((float) $items->sum(fn ($i) => (float) $i->unit_cost * (float) $i->quantity), 2);
+
         return [
             'count' => (int) (clone $base)->count(),
-            'total' => round((float) (clone $base)->sum('total'), 2),
+            'total' => $total,
             'online_count' => (int) $online->count(),
             'online_total' => round((float) $online->sum('total'), 2),
+            'gross_profit' => round($total - $cogs, 2),
+            'items_sold' => (int) $items->sum('quantity'),
         ];
     }
 
