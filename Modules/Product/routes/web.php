@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Modules\Product\Http\Controllers\InventoryOverviewController;
 use Modules\Product\Http\Controllers\ProductBarcodeSheetController;
 use Modules\Product\Http\Controllers\ProductBrandController;
 use Modules\Product\Http\Controllers\ProductDiscountController;
@@ -12,6 +13,8 @@ use Modules\Product\Http\Controllers\ProductUnitController;
 use Modules\Product\Http\Controllers\SaleCampaignController;
 
 Route::middleware(['auth', 'verified'])->group(function (): void {
+    Route::get('/inventory', [InventoryOverviewController::class, 'index'])->name('inventory.overview');
+
     Route::get('/products/discounts', [ProductDiscountController::class, 'index'])->name('product.discounts.index');
     Route::post('/products/discounts', [ProductDiscountController::class, 'store'])->name('product.discounts.store');
     Route::delete('/products/discounts/{discount}', [ProductDiscountController::class, 'destroy'])->name('product.discounts.destroy');
@@ -57,7 +60,10 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
     Route::put('/products/{product}/selling-units/{sellingUnit}', [ProductSellingUnitController::class, 'update'])->name('product.selling-units.update');
     Route::delete('/products/{product}/selling-units/{sellingUnit}', [ProductSellingUnitController::class, 'destroy'])->name('product.selling-units.destroy');
     Route::get('/products/{product}', [ProductController::class, 'show'])->name('product.show');
-    Route::put('/products/{product}/stock-layers/{stockLayer}', [ProductController::class, 'updateStockLayer'])->name('product.stock-layers.update');
+    Route::patch('/products/{product}/stock-layers/{stockLayer}/selling-price', [ProductController::class, 'updateStockLayerSellingPrice'])->name('product.stock-layers.selling-price');
+    Route::patch('/products/{product}/stock-layers/{stockLayer}/cost-price', [ProductController::class, 'updateStockLayerCostPrice'])->name('product.stock-layers.cost-price');
+    Route::patch('/products/{product}/stock-layers/{stockLayer}/wholesale-price', [ProductController::class, 'updateStockLayerWholesalePrice'])->name('product.stock-layers.wholesale-price');
+    Route::patch('/products/{product}/stock-layers/{stockLayer}/barcode', [ProductController::class, 'updateStockLayerBarcode'])->name('product.stock-layers.barcode');
     Route::get('/products/{product}/edit', [ProductController::class, 'edit'])->name('product.edit');
     Route::put('/products/{product}', [ProductController::class, 'update'])->name('product.update');
     Route::delete('/products/{product}', [ProductController::class, 'destroy'])->name('product.destroy');

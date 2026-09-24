@@ -42,6 +42,7 @@
             'bundlePickerCatalog' => $bundlePickerCatalog,
             'branchProductSeparate' => $branchProductSeparate,
             'branchOptions' => $branchOptions,
+            'deliveryPartners' => $deliveryPartners,
         ])
         <div style="grid-column:1/-1;display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;margin-top:4px;">
             <a href="{{ route('product.show', $product) }}" class="linkbtn" style="padding:8px 14px;font-size:13px;background:transparent;border:1px solid var(--border);color:var(--text);text-decoration:none;">Cancel</a>

@@ -112,6 +112,22 @@
     },
     {
       "tab": "business",
+      "key": "business.currency_position",
+      "name": "Currency Position",
+      "type": "select",
+      "default": "after",
+      "options": [
+        { "label": "Before amount (LKR 400.00)", "value": "before" },
+        { "label": "After amount (400.00 LKR)", "value": "after" }
+      ],
+      "required": true,
+      "description": "Where the currency code appears on prices, receipts and invoices.",
+      "placeholder": "Select currency position",
+      "is_enabled": true,
+      "is_disabled": false
+    },
+    {
+      "tab": "business",
       "key": "business.logo",
       "name": "Business Logo",
       "type": "file",
@@ -198,6 +214,19 @@
       "required": true,
       "description": "Next invoice sequence number.",
       "placeholder": "Enter next number",
+      "is_enabled": true,
+      "is_disabled": false
+    },
+    {
+      "tab": "delivery",
+      "key": "delivery.enabled",
+      "name": "Enable Delivery Methods",
+      "type": "checkbox",
+      "default": false,
+      "options": [],
+      "required": false,
+      "description": "Allow customers to choose a delivery method at checkout.",
+      "placeholder": "Enable delivery methods",
       "is_enabled": true,
       "is_disabled": false
     },
