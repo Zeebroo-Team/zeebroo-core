@@ -159,12 +159,22 @@
             </div>
         </div>
         <div class="svcf-section__body">
-            <div class="svcf-field">
-                <label for="{{ $pfx }}-name">Service name <span class="svcf-req">*</span></label>
-                <input id="{{ $pfx }}-name" class="svcf-input" type="text" name="name"
-                       value="{{ old('name', $item->name ?? '') }}" maxlength="255" required
-                       placeholder="e.g. Oil Change, Web Design, Haircut…">
-                @error('name')<p class="svcf-err">{{ $message }}</p>@enderror
+            <div class="svcf-grid-2">
+                <div class="svcf-field">
+                    <label for="{{ $pfx }}-name">Service name <span class="svcf-req">*</span></label>
+                    <input id="{{ $pfx }}-name" class="svcf-input" type="text" name="name"
+                           value="{{ old('name', $item->name ?? '') }}" maxlength="255" required
+                           placeholder="e.g. Oil Change, Web Design, Haircut…">
+                    @error('name')<p class="svcf-err">{{ $message }}</p>@enderror
+                </div>
+
+                <div class="svcf-field">
+                    <label for="{{ $pfx }}-barcode">Service barcode <span class="svcf-opt">optional</span></label>
+                    <input id="{{ $pfx }}-barcode" class="svcf-input" type="text" name="barcode"
+                           value="{{ old('barcode', $item->barcode ?? '') }}" maxlength="100"
+                           placeholder="Scan or enter barcode…">
+                    @error('barcode')<p class="svcf-err">{{ $message }}</p>@enderror
+                </div>
             </div>
 
             <div class="svcf-field">
@@ -173,6 +183,13 @@
                           maxlength="5000" rows="3"
                           placeholder="What does this service include? Any special notes for the team…">{{ old('description', $item->description ?? '') }}</textarea>
                 @error('description')<p class="svcf-err">{{ $message }}</p>@enderror
+            </div>
+
+            <div class="svcf-field">
+                @include('service::catalog.partials.tags-field', [
+                    'fieldIdPrefix' => $pfx,
+                    'item'          => $item ?? null,
+                ])
             </div>
         </div>
     </div>
@@ -216,6 +233,43 @@
                 </div>
             </div>
 
+            <div class="svcf-grid-2">
+                <div class="svcf-field">
+                    <label for="{{ $pfx }}-cost-price">
+                        {{ $curr ? 'Cost price (' . $curr . ')' : 'Cost price' }}
+                        <span class="svcf-opt">optional</span>
+                    </label>
+                    <div class="svcf-price-wrap {{ $curr ? 'has-prefix' : '' }}">
+                        @if($curr)<span class="svcf-price-prefix">{{ $curr }}</span>@endif
+                        <input id="{{ $pfx }}-cost-price" class="svcf-input" type="number" name="cost_price"
+                               value="{{ old('cost_price', $item->cost_price ?? '') }}"
+                               min="0" step="0.01" inputmode="decimal" placeholder="0.00">
+                    </div>
+                    @error('cost_price')<p class="svcf-err">{{ $message }}</p>@enderror
+                </div>
+
+                <div class="svcf-field">
+                    <label for="{{ $pfx }}-wholesale-price">
+                        {{ $curr ? 'Wholesale price (' . $curr . ')' : 'Wholesale price' }}
+                        <span class="svcf-opt">optional</span>
+                    </label>
+                    <div class="svcf-price-wrap {{ $curr ? 'has-prefix' : '' }}">
+                        @if($curr)<span class="svcf-price-prefix">{{ $curr }}</span>@endif
+                        <input id="{{ $pfx }}-wholesale-price" class="svcf-input" type="number" name="wholesale_price"
+                               value="{{ old('wholesale_price', $item->wholesale_price ?? '') }}"
+                               min="0" step="0.01" inputmode="decimal" placeholder="0.00">
+                    </div>
+                    @error('wholesale_price')<p class="svcf-err">{{ $message }}</p>@enderror
+                </div>
+            </div>
+
+            <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:600;color:var(--text);">
+                <input type="checkbox" name="allow_price_adjustment" value="1"
+                       @checked(old('allow_price_adjustment', $item->allow_price_adjustment ?? false))
+                       style="width:15px;height:15px;accent-color:var(--primary);">
+                Allow staff to adjust the price at point of sale
+            </label>
+
             <div class="svcf-field">
                 <label>Status</label>
                 <div class="svcf-status-cards">
@@ -256,6 +310,23 @@
                 'fieldIdPrefix'     => $pfx,
                 'serviceCategories' => $serviceCategories ?? collect(),
                 'item'              => $item ?? null,
+            ])
+        </div>
+    </div>
+
+    {{-- ══ SECTION 4 — Media ══ --}}
+    <div class="svcf-section">
+        <div class="svcf-section__head">
+            <span class="svcf-section__icon"><i class="fa fa-image" aria-hidden="true"></i></span>
+            <div class="svcf-section__titles">
+                <div class="svcf-section__title">Media</div>
+                <div class="svcf-section__sub">A photo shown alongside this service in the catalog</div>
+            </div>
+        </div>
+        <div class="svcf-section__body">
+            @include('service::catalog.partials.image-field', [
+                'fieldIdPrefix' => $pfx,
+                'item'          => $item ?? null,
             ])
         </div>
     </div>
@@ -332,6 +403,52 @@
         </label>
     </div>
 
+    {{-- ══ OPTIONAL — Featured ══ --}}
+    @php $featuredOn = old('is_featured', $item->is_featured ?? false); @endphp
+    <div class="svcf-opt-section {{ $featuredOn ? 'is-on' : '' }}" id="{{ $pfx }}-featured-section">
+        <label class="svcf-opt-toggle" for="{{ $pfx }}-featured-chk">
+            <div class="svcf-opt-toggle__left">
+                <span class="svcf-opt-toggle__icon"><i class="fa fa-star" aria-hidden="true"></i></span>
+                <div>
+                    <div class="svcf-opt-toggle__text">Featured</div>
+                    <div class="svcf-opt-toggle__sub">Highlight this service in the catalog and booking pages</div>
+                </div>
+            </div>
+            <div class="svcf-opt-toggle__switch">
+                <input type="checkbox" id="{{ $pfx }}-featured-chk" name="is_featured" value="1"
+                       {{ $featuredOn ? 'checked' : '' }}>
+                <span class="svcf-switch-track"></span>
+                <span class="svcf-switch-thumb"></span>
+            </div>
+        </label>
+    </div>
+
+    {{-- ══ OPTIONAL — Custom Requirement ══ --}}
+    @php $creqOn = old('custom_requirement_enabled', $item->custom_requirement_enabled ?? false); @endphp
+    <div class="svcf-opt-section {{ $creqOn ? 'is-on' : '' }}" id="{{ $pfx }}-creq-section">
+        <label class="svcf-opt-toggle" for="{{ $pfx }}-creq-chk">
+            <div class="svcf-opt-toggle__left">
+                <span class="svcf-opt-toggle__icon"><i class="fa fa-list-check" aria-hidden="true"></i></span>
+                <div>
+                    <div class="svcf-opt-toggle__text">Custom Requirement</div>
+                    <div class="svcf-opt-toggle__sub">Ask customers for extra details when they request this service</div>
+                </div>
+            </div>
+            <div class="svcf-opt-toggle__switch">
+                <input type="checkbox" id="{{ $pfx }}-creq-chk" name="custom_requirement_enabled" value="1"
+                       {{ $creqOn ? 'checked' : '' }}>
+                <span class="svcf-switch-track"></span>
+                <span class="svcf-switch-thumb"></span>
+            </div>
+        </label>
+        <div class="svcf-opt-body {{ $creqOn ? 'is-open' : '' }}" id="{{ $pfx }}-creq-body">
+            @include('service::catalog.partials.custom-requirement-field', [
+                'fieldIdPrefix' => $pfx,
+                'item'          => $item ?? null,
+            ])
+        </div>
+    </div>
+
     {{-- ══ FOOTER ══ --}}
     <div class="svcf-footer">
         @if($isEdit)
@@ -368,6 +485,8 @@
         { chk: @json($pfx . '-emp-chk'),      body: @json($pfx . '-emp-body'),  section: @json($pfx . '-emp-section') },
         { chk: @json($pfx . '-prod-chk'),     body: @json($pfx . '-prod-body'), section: @json($pfx . '-prod-section') },
         { chk: @json($pfx . '-warranty-chk'), body: null,                       section: @json($pfx . '-warranty-section') },
+        { chk: @json($pfx . '-featured-chk'), body: null,                       section: @json($pfx . '-featured-section') },
+        { chk: @json($pfx . '-creq-chk'),     body: @json($pfx . '-creq-body'), section: @json($pfx . '-creq-section') },
     ].forEach(({ chk, body, section }) => {
         const chkEl  = document.getElementById(chk);
         const bodyEl = body ? document.getElementById(body) : null;
