@@ -109,6 +109,7 @@ body.pos-walking-active .pos-page__top-search .pos-search button{padding:6px 8px
                 @endif
             </form>
             <div class="pos-page__top-actions">
+                @include('pos::partials.pos-register-session-widget', ['currency' => $currency])
                 <button type="button" class="pos-btn" data-pos-add-product-open title="Add product" aria-label="Add product"><i class="fa fa-plus"></i></button>
                 @include('pos::partials.pos-settings-modal', ['posSettings' => $posSettings, 'accounts' => $accounts, 'hasAccounts' => $hasAccounts])
                 @include('pos::partials.pos-receipt-editor-modal', ['posSettings' => $posSettings, 'business' => $business, 'currency' => $currency])

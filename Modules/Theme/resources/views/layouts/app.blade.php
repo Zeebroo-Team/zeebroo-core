@@ -414,6 +414,9 @@
         $showSidebarPosEodLink = $navBusiness && Route::has('pos.end-of-day') && $posFeatureOn;
         $showSidebarPosCustomersLink = $navBusiness && Route::has('pos.customers.index') && $posFeatureOn;
         $showSidebarPosReturnsLink = $navBusiness && Route::has('pos.returns.index') && $posFeatureOn;
+        $showSidebarPosPendingCreditsLink = $navBusiness && Route::has('pos.pending-credits.index') && $posFeatureOn;
+        $showSidebarPosSubscriptionsLink = $navBusiness && Route::has('pos.subscriptions.index') && $posFeatureOn;
+        $showSidebarPosRentalsLink = $navBusiness && Route::has('pos.rentals.index') && $posFeatureOn;
         // Sales Quotations and Invoices — only visible when Sales Management feature is enabled.
         $salesFeatureOn = $navBusiness && $featureOn('sales_management');
         $showSidebarQuotationsLink = $navBusiness && Route::has('sales.quotations.index') && $salesFeatureOn;
@@ -523,6 +526,9 @@
             $showSidebarPosEodLink = false;
             $showSidebarPosCustomersLink = false;
             $showSidebarPosReturnsLink = false;
+            $showSidebarPosPendingCreditsLink = false;
+            $showSidebarPosSubscriptionsLink = false;
+            $showSidebarPosRentalsLink = false;
             $showSidebarPosSection = false;
             $showSidebarQuotationsLink = false;
             $showSidebarCrmLink = false;
@@ -744,6 +750,21 @@
                                 'active' => request()->routeIs('pos.returns.create') && request()->query('mode') === 'open',
                             ])><i class="fa fa-box-open"></i><span>Without sale reference</span></a>
                         </div>
+                    @endif
+                    @if($showSidebarPosPendingCreditsLink)
+                        <a href="{{ route('pos.pending-credits.index') }}" @class([
+                            'active' => request()->routeIs('pos.pending-credits.index'),
+                        ])><i class="fa fa-hand-holding-dollar"></i><span>Pending credits</span></a>
+                    @endif
+                    @if($showSidebarPosSubscriptionsLink)
+                        <a href="{{ route('pos.subscriptions.index') }}" @class([
+                            'active' => request()->routeIs('pos.subscriptions.*'),
+                        ])><i class="fa fa-rotate"></i><span>Recurring sales</span></a>
+                    @endif
+                    @if($showSidebarPosRentalsLink)
+                        <a href="{{ route('pos.rentals.index') }}" @class([
+                            'active' => request()->routeIs('pos.rentals.*'),
+                        ])><i class="fa fa-box-open"></i><span>Rental</span></a>
                     @endif
                     @if($showSidebarQuotationsLink)
                         <a href="{{ route('sales.quotations.index') }}" @class(['active' => request()->routeIs('sales.quotations.*')])>

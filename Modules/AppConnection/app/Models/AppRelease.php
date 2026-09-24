@@ -22,4 +22,10 @@ class AppRelease extends Model
         'is_latest'    => 'boolean',
         'notes'        => 'array',
     ];
+
+    public static function latestStable(): ?self
+    {
+        return static::where('channel', 'stable')->where('is_latest', true)->first()
+            ?? static::where('channel', 'stable')->orderByDesc('release_date')->orderByDesc('id')->first();
+    }
 }

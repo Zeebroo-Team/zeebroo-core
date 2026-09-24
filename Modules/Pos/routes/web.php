@@ -17,6 +17,10 @@ use Modules\Pos\Http\Controllers\PosProductController;
 use Modules\Pos\Http\Controllers\SaleController;
 use Modules\Pos\Http\Controllers\StockAuditController;
 use Modules\Pos\Http\Controllers\StockTransferController;
+use Modules\Pos\Http\Controllers\SubscriptionController;
+use Modules\Pos\Http\Controllers\ProductRentalController;
+use Modules\Pos\Http\Controllers\RegisterSessionController;
+use Modules\Pos\Http\Controllers\RegisterSettingsController;
 
 Route::middleware(['auth', 'verified'])->group(function (): void {
     Route::get('/pos', [PosController::class, 'index'])->name('pos.index');
@@ -36,6 +40,7 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
     Route::get('/pos/sale-lookup', [SaleController::class, 'saleLookup'])->name('pos.sale-lookup');
     Route::post('/pos/online/modal-return-open', [SaleController::class, 'onlineModalReturnOpen'])->name('pos.online.modal-return-open');
     Route::post('/pos/online/modal-return/{sale}', [SaleController::class, 'onlineModalReturn'])->name('pos.online.modal-return');
+    Route::get('/pos/pending-credits', [SaleController::class, 'pendingCredits'])->name('pos.pending-credits.index');
     Route::get('/pos/returns', [SaleController::class, 'returnsIndex'])->name('pos.returns.index');
     Route::get('/pos/returns/create', [SaleController::class, 'createReturn'])->name('pos.returns.create');
     Route::post('/pos/returns', [SaleController::class, 'storeOpenReturn'])->name('pos.returns.store-open');
@@ -46,6 +51,30 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
 
     Route::get('/pos/end-of-day', [EndOfDayController::class, 'index'])->name('pos.end-of-day');
     Route::post('/pos/end-of-day/settle', [EndOfDayController::class, 'settle'])->name('pos.end-of-day.settle');
+
+    Route::get('/pos/subscriptions', [SubscriptionController::class, 'index'])->name('pos.subscriptions.index');
+    Route::post('/pos/subscriptions/{subscription}/cancel', [SubscriptionController::class, 'cancel'])->name('pos.subscriptions.cancel');
+    Route::post('/pos/subscriptions/{subscription}/pause', [SubscriptionController::class, 'pause'])->name('pos.subscriptions.pause');
+    Route::post('/pos/subscriptions/{subscription}/resume', [SubscriptionController::class, 'resume'])->name('pos.subscriptions.resume');
+    Route::post('/pos/subscriptions/{subscription}/renew', [SubscriptionController::class, 'renew'])->name('pos.subscriptions.renew');
+    Route::post('/pos/subscriptions/{subscription}/notify', [SubscriptionController::class, 'notify'])->name('pos.subscriptions.notify');
+
+    Route::get('/pos/rentals', [ProductRentalController::class, 'index'])->name('pos.rentals.index');
+    Route::get('/pos/rentals/{productRental}', [ProductRentalController::class, 'show'])->name('pos.rentals.show');
+    Route::post('/pos/rentals/{productRental}/return', [ProductRentalController::class, 'returnRental'])->name('pos.rentals.return');
+
+    Route::get('/pos/register/drawer-status', [RegisterSessionController::class, 'drawerStatus'])->name('pos.register-session.drawer-status');
+    Route::post('/pos/register/drawer-open', [RegisterSessionController::class, 'openDrawer'])->name('pos.register-session.drawer-open');
+    Route::post('/pos/register/drawer-withdraw', [RegisterSessionController::class, 'withdraw'])->name('pos.register-session.drawer-withdraw');
+    Route::get('/pos/register/counters', [RegisterSessionController::class, 'counters'])->name('pos.register-session.counters');
+
+    Route::get('/pos/register-settings', [RegisterSettingsController::class, 'index'])->name('pos.register-settings.index');
+    Route::post('/pos/register-settings/counters', [RegisterSettingsController::class, 'storeCounter'])->name('pos.register-settings.counters.store');
+    Route::put('/pos/register-settings/counters/{counter}', [RegisterSettingsController::class, 'updateCounter'])->name('pos.register-settings.counters.update');
+    Route::delete('/pos/register-settings/counters/{counter}', [RegisterSettingsController::class, 'destroyCounter'])->name('pos.register-settings.counters.destroy');
+    Route::post('/pos/register-settings/cashiers', [RegisterSettingsController::class, 'storeCashier'])->name('pos.register-settings.cashiers.store');
+    Route::put('/pos/register-settings/cashiers/{cashier}', [RegisterSettingsController::class, 'updateCashier'])->name('pos.register-settings.cashiers.update');
+    Route::delete('/pos/register-settings/cashiers/{cashier}', [RegisterSettingsController::class, 'destroyCashier'])->name('pos.register-settings.cashiers.destroy');
 
     Route::get('/pos/stock-audits', [StockAuditController::class, 'index'])->name('pos.stock-audits.index');
     Route::get('/pos/stock-audits/create', [StockAuditController::class, 'create'])->name('pos.stock-audits.create');
