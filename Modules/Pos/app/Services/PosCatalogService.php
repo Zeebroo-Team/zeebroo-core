@@ -480,12 +480,17 @@ class PosCatalogService
             ->where('business_id', $business->id)
             ->where('is_active', true)
             ->orderBy('name')
-            ->get(['id', 'name', 'price'])
+            ->get(['id', 'name', 'price', 'duration_minutes', 'has_warranty', 'custom_requirement_enabled', 'custom_requirement_fields'])
             ->map(static fn (ServiceItem $s): array => [
                 'id'        => (int) $s->id,
                 'name'      => $s->name,
                 'price'     => round((float) $s->price, 2),
                 'item_type' => 'service',
+                'duration_minutes'            => $s->duration_minutes,
+                'duration_label'              => $s->durationLabel(),
+                'has_warranty'                => (bool) $s->has_warranty,
+                'custom_requirement_enabled'  => (bool) $s->custom_requirement_enabled,
+                'custom_requirement_fields'   => $s->custom_requirement_fields ?? [],
             ])
             ->all();
     }

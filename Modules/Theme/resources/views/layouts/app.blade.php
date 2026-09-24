@@ -410,6 +410,7 @@
         // POS — only visible when Point of Sale feature is enabled.
         $posFeatureOn = $navBusiness && $featureOn('point_of_sale');
         $showSidebarPosRegisterLink = $navBusiness && Route::has('pos.online') && $posFeatureOn;
+        $showSidebarPosTerminalLink = $navBusiness && Route::has('pos.register') && $posFeatureOn;
         $showSidebarPosSalesLink = $navBusiness && Route::has('pos.sales.index') && $posFeatureOn;
         $showSidebarPosEodLink = $navBusiness && Route::has('pos.end-of-day') && $posFeatureOn;
         $showSidebarPosCustomersLink = $navBusiness && Route::has('pos.customers.index') && $posFeatureOn;
@@ -707,6 +708,9 @@
                         <a href="{{ route('pos.stock-transfers.index') }}" @class(['active' => request()->routeIs('pos.stock-transfers.*')])><i class="fa fa-truck-arrow-right"></i><span>Stock transfer</span></a>
                     @endif
                 </div>
+            @endif
+            @if($showSidebarPosTerminalLink)
+                <a href="{{ route('pos.register') }}" @class(['active' => request()->routeIs('pos.register')])><i class="fa fa-cash-register"></i><span>POS</span></a>
             @endif
             @if($showSidebarPosSection)
                 <div class="menu-group-title">

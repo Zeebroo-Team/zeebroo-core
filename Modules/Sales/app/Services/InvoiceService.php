@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Modules\AutomationEditor\Services\AutomationRunnerService;
 use Modules\Business\Models\Business;
+use Modules\Pos\Models\Sale;
 use Modules\Pos\Services\CustomerSubscriptionService;
 use Modules\Pos\Services\SaleStockConsumptionService;
 use Modules\Sales\Models\Invoice;
@@ -87,6 +88,46 @@ class InvoiceService
 
         $invoice->loadMissing('customer');
         app(AutomationRunnerService::class)->dispatch('invoice.created', $business, $this->invoicePayload($invoice));
+
+        return $invoice;
+    }
+
+    /**
+     * Auto-creates a formal Invoice from a completed POS sale, mirroring the
+     * Electron app's "receipt_mode: invoice" flow (`_posCreateInvoiceFromSale`
+     * in `electron_app/renderer/js/app.js`): one custom line per sale item at
+     * its pre-discount unit price (so the discount is visible on the invoice
+     * totals), sale-level + folded per-item discounts as the header discount,
+     * and cash/card sales marked paid immediately.
+     */
+    public function createFromPosSale(Sale $sale): Invoice
+    {
+        $sale->loadMissing('items');
+
+        $items = $sale->items->map(fn ($item) => [
+            'item_type'  => 'custom',
+            'description' => $item->product_name,
+            'quantity'    => (float) $item->quantity,
+            'unit_price'  => (float) $item->unit_sell_price + (float) $item->discount_amount,
+        ])->all();
+
+        $itemDiscountsTotal = $sale->items->sum(fn ($item) => (float) $item->discount_amount * (float) $item->quantity);
+        $totalDiscount = round((float) $sale->discount_amount + $itemDiscountsTotal, 2);
+
+        $invoice = $this->create($sale->business, [
+            'customer_id'     => $sale->pos_customer_id,
+            'reference'       => $sale->sale_number,
+            'issue_date'      => now()->toDateString(),
+            'due_date'        => null,
+            'notes'           => $sale->notes,
+            'payment_method'  => $sale->payment_method,
+            'discount_amount' => $totalDiscount,
+            'tax_amount'      => 0,
+        ], $items);
+
+        if ($sale->payment_method !== Sale::PAYMENT_CREDIT) {
+            $invoice = $this->markPaid($invoice);
+        }
 
         return $invoice;
     }

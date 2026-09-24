@@ -267,6 +267,19 @@
                 {{-- ── Print Layout panel ───────────────────────────── --}}
                 <div class="psm-panel" id="psm-panel-print" role="tabpanel" aria-labelledby="psm-tab-print" hidden>
                     <div class="psm-section">
+                        <p class="psm-section__label"><i class="fa fa-file-invoice" aria-hidden="true"></i> Receipt / invoice mode</p>
+                        <div class="psm-card" style="padding:16px;">
+                            <label for="psm-receipt-mode" style="display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin-bottom:6px;">POS Receipt / Invoice Mode</label>
+                            <select name="receipt_mode" id="psm-receipt-mode" class="pos-field" style="width:100%;box-sizing:border-box;padding:8px 10px;font-size:13px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);">
+                                <option value="bill" @selected(($posSettings['receipt_mode'] ?? 'bill') === 'bill')>Bill Printing — thermal receipt after each sale</option>
+                                <option value="invoice" @selected(($posSettings['receipt_mode'] ?? 'bill') === 'invoice')>Invoice — create &amp; print a formal invoice after each sale</option>
+                            </select>
+                            <p style="margin:8px 0 0;font-size:11.5px;color:var(--muted);line-height:1.5;">
+                                Invoice mode uses the template configured under Sales &rarr; Invoice Setup.
+                            </p>
+                        </div>
+                    </div>
+                    <div class="psm-section">
                         <p class="psm-section__label"><i class="fa fa-receipt" aria-hidden="true"></i> Receipt layout</p>
                         <div class="psm-card" style="padding:20px 16px;display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;">
                             <p style="margin:0;font-size:12.5px;color:var(--muted);line-height:1.5;max-width:340px;">

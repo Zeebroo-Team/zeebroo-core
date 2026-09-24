@@ -73,4 +73,9 @@ class SaleItem extends Model
     {
         return $this->hasOne(ProductRental::class, 'pos_sale_item_id');
     }
+
+    public function subscription(): HasOne
+    {
+        return $this->hasOne(CustomerSubscription::class, 'pos_sale_item_id');
+    }
 }

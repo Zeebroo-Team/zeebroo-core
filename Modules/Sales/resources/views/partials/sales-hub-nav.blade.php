@@ -8,4 +8,7 @@
     <a href="{{ route('sales.orders.index') }}" @class(['is-active' => request()->routeIs('sales.orders.*')])>
         <i class="fa fa-cart-shopping"></i> Orders
     </a>
+    <a href="{{ route('sales.invoice-setup.edit') }}" @class(['is-active' => request()->routeIs('sales.invoice-setup.*')])>
+        <i class="fa fa-swatchbook"></i> Invoice Setup
+    </a>
 </nav>
