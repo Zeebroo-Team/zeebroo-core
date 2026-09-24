@@ -382,14 +382,6 @@
         $showSidebarBarcodesLink = $navBusiness && Route::has('product.barcodes.index') && $productFeatureOn;
         $showSidebarDiscountsLink = $navBusiness && Route::has('product.discounts.index') && $productFeatureOn;
         $showSidebarCampaignsLink = $navBusiness && Route::has('product.campaigns.index') && $productFeatureOn;
-        $showSidebarProductSection = $showSidebarProductBrandsLink
-            || $showSidebarProductCategoriesLink
-            || $showSidebarProductUnitsLink
-            || $showSidebarProductsLink
-            || $showSidebarBarcodesLink
-            || $showSidebarDiscountsLink
-            || $showSidebarCampaignsLink;
-
         // Stock Management — only visible when Stock Management feature is enabled.
         $stockFeatureOn = $navBusiness && $featureOn('stock_management');
         $showSidebarPurchasesLink = $navBusiness && Route::has('purchase.index') && $stockFeatureOn;
@@ -397,11 +389,23 @@
         $showSidebarSuppliersLink = $navBusiness && Route::has('purchase.suppliers.index') && $stockFeatureOn;
         $showSidebarChequesLink = $navBusiness && Route::has('purchase.cheques.index') && $stockFeatureOn;
         $showSidebarStockAuditLink = $navBusiness && Route::has('pos.stock-audits.index') && $stockFeatureOn;
-        $showSidebarPurchaseSection = $showSidebarPurchasesLink
+        $showSidebarStockTransferLink = $navBusiness && Route::has('pos.stock-transfers.index') && $stockFeatureOn;
+
+        // Inventory — unified group covering the Product Catalog and Stock Management features.
+        $showSidebarInventoryOverviewLink = $navBusiness && Route::has('inventory.overview') && ($productFeatureOn || $stockFeatureOn);
+        $showSidebarInventorySection = $showSidebarProductBrandsLink
+            || $showSidebarProductCategoriesLink
+            || $showSidebarProductUnitsLink
+            || $showSidebarProductsLink
+            || $showSidebarBarcodesLink
+            || $showSidebarDiscountsLink
+            || $showSidebarCampaignsLink
+            || $showSidebarPurchasesLink
             || $showSidebarGrnLink
             || $showSidebarSuppliersLink
             || $showSidebarChequesLink
-            || $showSidebarStockAuditLink;
+            || $showSidebarStockAuditLink
+            || $showSidebarStockTransferLink;
 
         // POS — only visible when Point of Sale feature is enabled.
         $posFeatureOn = $navBusiness && $featureOn('point_of_sale');
@@ -504,14 +508,15 @@
             $showSidebarProductCategoriesLink = false;
             $showSidebarProductUnitsLink = false;
             $showSidebarProductsLink = false;
-            $showSidebarProductSection = false;
             $stockFeatureOn = false;
             $showSidebarPurchasesLink = false;
             $showSidebarGrnLink = false;
             $showSidebarSuppliersLink = false;
             $showSidebarChequesLink = false;
             $showSidebarStockAuditLink = false;
-            $showSidebarPurchaseSection = false;
+            $showSidebarStockTransferLink = false;
+            $showSidebarInventoryOverviewLink = false;
+            $showSidebarInventorySection = false;
             $showSidebarPosRegisterLink = false;
             $showSidebarPosHubLink = false;
             $showSidebarPosSalesLink = false;
@@ -644,24 +649,27 @@
                     @endif
                 </div>
             @endif
-            @if($showSidebarProductSection)
+            @if($showSidebarInventorySection)
                 <div class="menu-group-title">
-                    <i class="fa fa-boxes-stacked"></i><span>Products Catalog</span>
+                    <i class="fa fa-boxes-stacked"></i><span>Inventory</span>
                 </div>
-                <div class="submenu" aria-label="Products Catalog">
-                    @if($showSidebarProductBrandsLink)
-                        <a href="{{ route('product.brands.index') }}" class="{{ request()->routeIs('product.brands.*') ? 'active' : '' }}"><i class="fa fa-tag"></i><span>Brands</span></a>
-                    @endif
-                    @if($showSidebarProductCategoriesLink)
-                        <a href="{{ route('product.categories.index') }}" class="{{ request()->routeIs('product.categories.*') ? 'active' : '' }}"><i class="fa fa-folder-tree"></i><span>Categories</span></a>
-                    @endif
-                    @if($showSidebarProductUnitsLink)
-                        <a href="{{ route('product.units.index') }}" class="{{ request()->routeIs('product.units.*') ? 'active' : '' }}"><i class="fa fa-ruler"></i><span>Units</span></a>
+                <div class="submenu" aria-label="Inventory">
+                    @if($showSidebarInventoryOverviewLink)
+                        <a href="{{ route('inventory.overview') }}" @class(['active' => request()->routeIs('inventory.overview')])><i class="fa fa-house"></i><span>Overview</span></a>
                     @endif
                     @if($showSidebarProductsLink)
                         <a href="{{ route('product.index') }}" @class([
                             'active' => request()->routeIs('product.index', 'product.store', 'product.show', 'product.edit', 'product.update', 'product.destroy', 'product.sku.*', 'product.images.*'),
                         ])><i class="fa fa-box"></i><span>Products</span></a>
+                    @endif
+                    @if($showSidebarProductCategoriesLink)
+                        <a href="{{ route('product.categories.index') }}" class="{{ request()->routeIs('product.categories.*') ? 'active' : '' }}"><i class="fa fa-folder-tree"></i><span>Categories</span></a>
+                    @endif
+                    @if($showSidebarProductBrandsLink)
+                        <a href="{{ route('product.brands.index') }}" class="{{ request()->routeIs('product.brands.*') ? 'active' : '' }}"><i class="fa fa-tag"></i><span>Brands</span></a>
+                    @endif
+                    @if($showSidebarProductUnitsLink)
+                        <a href="{{ route('product.units.index') }}" class="{{ request()->routeIs('product.units.*') ? 'active' : '' }}"><i class="fa fa-ruler"></i><span>Units</span></a>
                     @endif
                     @if($showSidebarDiscountsLink)
                         <a href="{{ route('product.discounts.index') }}" class="{{ request()->routeIs('product.discounts.*') ? 'active' : '' }}"><i class="fa fa-percent"></i><span>Discounts</span></a>
@@ -672,13 +680,6 @@
                     @if($showSidebarBarcodesLink)
                         <a href="{{ route('product.barcodes.index') }}" class="{{ request()->routeIs('product.barcodes.*') ? 'active' : '' }}"><i class="fa fa-barcode"></i><span>Barcodes</span></a>
                     @endif
-                </div>
-            @endif
-            @if($showSidebarPurchaseSection)
-                <div class="menu-group-title">
-                    <i class="fa fa-warehouse"></i><span>Stock management</span>
-                </div>
-                <div class="submenu" aria-label="Stock management">
                     @if($showSidebarPurchasesLink)
                         <a href="{{ route('purchase.index') }}" @class([
                             'active' => request()->routeIs('purchase.index', 'purchase.store', 'purchase.show', 'purchase.edit', 'purchase.update', 'purchase.place-order', 'purchase.receive', 'purchase.cancel', 'purchase.destroy'),
@@ -695,6 +696,9 @@
                     @endif
                     @if($showSidebarStockAuditLink)
                         <a href="{{ route('pos.stock-audits.index') }}" @class(['active' => request()->routeIs('pos.stock-audits.*')])><i class="fa fa-clipboard-check"></i><span>Stock audit</span></a>
+                    @endif
+                    @if($showSidebarStockTransferLink)
+                        <a href="{{ route('pos.stock-transfers.index') }}" @class(['active' => request()->routeIs('pos.stock-transfers.*')])><i class="fa fa-truck-arrow-right"></i><span>Stock transfer</span></a>
                     @endif
                 </div>
             @endif
@@ -2219,6 +2223,39 @@ window.showToast = (function() {
             }
         });
     }
+})();
+</script>
+<script>
+(function () {
+    // ── Preserve sidebar scroll position across page loads ─────────────
+    // Each nav click triggers a full page reload, so without this the
+    // sidebar snaps back to the top every time a link is clicked.
+    var sidebar = document.getElementById('appSidebar');
+    if (!sidebar) return;
+
+    var SCROLL_KEY = 'sb_scroll_pos';
+
+    function restoreScroll() {
+        var saved = sessionStorage.getItem(SCROLL_KEY);
+        if (saved !== null) sidebar.scrollTop = parseInt(saved, 10) || 0;
+    }
+    // Run now (DOM already parsed) and once more after layout settles,
+    // since collapsible groups above may still be adjusting heights.
+    restoreScroll();
+    requestAnimationFrame(restoreScroll);
+
+    function saveScroll() {
+        try { sessionStorage.setItem(SCROLL_KEY, String(sidebar.scrollTop)); } catch (e) {}
+    }
+    var saveTimer = null;
+    sidebar.addEventListener('scroll', function () {
+        if (saveTimer) clearTimeout(saveTimer);
+        saveTimer = setTimeout(saveScroll, 100);
+    }, { passive: true });
+    sidebar.addEventListener('click', function (e) {
+        if (e.target.closest('a[href]')) saveScroll();
+    });
+    window.addEventListener('beforeunload', saveScroll);
 })();
 </script>
 </body>

@@ -230,114 +230,22 @@
             ? round($statProfit / $statCostPrice * 100, 1)
             : null;
     @endphp
-    <div class="ps-stats" role="region" aria-label="Product summary">
-
-        {{-- Cost Price --}}
-        <div class="ps-stat">
-            <span class="ps-stat__lbl">Cost price @if(filled($currency??''))({{ $currency }})@endif</span>
-            @if($statCostPrice !== null)
-                <span class="ps-stat__val">{{ number_format($statCostPrice, 2) }}</span>
-            @else
-                <span class="ps-stat__val ps-stat__val--muted">—</span>
-            @endif
-        </div>
-
-        {{-- Selling Price --}}
-        <div class="ps-stat">
-            <span class="ps-stat__lbl">
-                @if($baseDiscount && $statSellingPrice !== null)Discounted price@else Selling price@endif
-                @if(filled($currency??'')) ({{ $currency }})@endif
-            </span>
-            @if($statSellingPrice !== null)
-                @if($baseDiscount)
-                    <span class="ps-stat__val">{{ number_format($statFinalPrice, 2) }}</span>
-                    <span style="display:flex;align-items:center;gap:5px;margin-top:3px;flex-wrap:wrap;">
-                        <span style="text-decoration:line-through;font-size:11px;color:var(--muted);">{{ number_format($statSellingPrice, 2) }}</span>
-                        <span style="display:inline-flex;align-items:center;gap:2px;padding:1px 6px;border-radius:999px;font-size:10px;font-weight:700;background:color-mix(in srgb,#f59e0b 12%,transparent);border:1px solid color-mix(in srgb,#f59e0b 30%,var(--border));color:#b45309;">
-                            @if($baseDiscount->discount_type === 'percentage')
-                                −{{ rtrim(rtrim(number_format((float)$baseDiscount->discount_value,2),'0'),'.') }}%
-                            @else
-                                −{{ number_format($statDiscountAmt, 2) }}
-                            @endif
-                        </span>
-                    </span>
-                    <span style="font-size:10px;color:var(--muted);margin-top:1px;">{{ $baseDiscount->name }}</span>
-                @else
-                    <span class="ps-stat__val">{{ number_format($statSellingPrice, 2) }}</span>
-                @endif
-            @else
-                <span class="ps-stat__val ps-stat__val--muted">—</span>
-            @endif
-        </div>
-
-        {{-- Wholesale Price --}}
-        <div class="ps-stat">
-            <span class="ps-stat__lbl">Wholesale price @if(filled($currency??''))({{ $currency }})@endif</span>
-            @if($statWholesalePrice !== null)
-                <span class="ps-stat__val">{{ number_format($statWholesalePrice, 2) }}</span>
-            @else
-                <span class="ps-stat__val ps-stat__val--muted">—</span>
-            @endif
-        </div>
-
-        {{-- Profit / Margin --}}
-        <div class="ps-stat ps-stat--profit @if($statProfit !== null && $statProfit < 0) ps-stat--loss @elseif($statProfit !== null) ps-stat--gain @endif">
-            <span class="ps-stat__lbl">Profit @if(filled($currency??''))({{ $currency }})@endif</span>
-            @if($statProfit !== null)
-                <span class="ps-stat__val">
-                    @if($statProfit >= 0)+@endif{{ number_format($statProfit, 2) }}
-                </span>
-                @if($statMarginPct !== null)
-                    <span style="font-size:10px;font-weight:700;margin-top:2px;opacity:.85;">
-                        @if($statMarginPct >= 0)+@endif{{ $statMarginPct }}% margin
-                    </span>
-                @endif
-            @else
-                <span class="ps-stat__val ps-stat__val--muted">—</span>
-                <span style="font-size:10px;color:var(--muted);margin-top:2px;">set cost &amp; selling price</span>
-            @endif
-        </div>
-
-        {{-- Stock --}}
-        <div class="ps-stat">
-            <span class="ps-stat__lbl">Stock</span>
-            <span class="ps-stat__val">{{ rtrim(rtrim(number_format((float) $product->stock_quantity, 3), '0'), '.') }}</span>
-        </div>
-
-        @if($product->sellingUnits->isNotEmpty())
-        <div class="ps-stat">
-            <span class="ps-stat__lbl">Selling units</span>
-            <span class="ps-stat__val">{{ $product->sellingUnits->count() }}</span>
-        </div>
-        @endif
-        <div class="ps-stat">
-            <span class="ps-stat__lbl">Images</span>
-            <span class="ps-stat__val">{{ $galleryCount }}</span>
-        </div>
-        @if(($summary['purchase_lines_count'] ?? 0) > 0)
-        <div class="ps-stat">
-            <span class="ps-stat__lbl">Purchase lines</span>
-            <span class="ps-stat__val">{{ (int) ($summary['purchase_lines_count'] ?? 0) }}</span>
-        </div>
-        @endif
-    </div>
-
     {{-- ── Tab bar ───────────────────────────────────────────────── --}}
     <nav class="ps-tabs" aria-label="Product sections">
         <a href="{{ $productTabUrl('overview') }}" class="ps-tab @if($activeTab === 'overview') is-active @endif" @if($activeTab === 'overview') aria-current="page" @endif>
             <i class="fa fa-circle-info" aria-hidden="true"></i> Overview
         </a>
-        <a href="{{ $productTabUrl('selling-units') }}" class="ps-tab @if($activeTab === 'selling-units') is-active @endif" @if($activeTab === 'selling-units') aria-current="page" @endif>
-            <i class="fa fa-cubes" aria-hidden="true"></i> Selling Units
-            @if($product->sellingUnits->isNotEmpty())
-                <span class="ps-tab__count">{{ $product->sellingUnits->count() }}</span>
-            @endif
+        <a href="{{ $productTabUrl('pricing') }}" class="ps-tab @if($activeTab === 'pricing') is-active @endif" @if($activeTab === 'pricing') aria-current="page" @endif>
+            <i class="fa fa-tag" aria-hidden="true"></i> Pricing
         </a>
         <a href="{{ $productTabUrl('stock') }}" class="ps-tab @if($activeTab === 'stock') is-active @endif" @if($activeTab === 'stock') aria-current="page" @endif>
             <i class="fa fa-warehouse" aria-hidden="true"></i> Stock
             @if(($summary['purchase_lines_count'] ?? 0) + ($summary['grn_lines_count'] ?? 0) > 0)
                 <span class="ps-tab__count">{{ (int)($summary['purchase_lines_count'] ?? 0) + (int)($summary['grn_lines_count'] ?? 0) }}</span>
             @endif
+        </a>
+        <a href="{{ $productTabUrl('advanced') }}" class="ps-tab @if($activeTab === 'advanced') is-active @endif" @if($activeTab === 'advanced') aria-current="page" @endif>
+            <i class="fa fa-sliders" aria-hidden="true"></i> Advanced
         </a>
         @if($product->is_bundle)
             <a href="{{ $productTabUrl('bundle') }}" class="ps-tab @if($activeTab === 'bundle') is-active @endif" @if($activeTab === 'bundle') aria-current="page" @endif>
@@ -347,10 +255,16 @@
         @endif
         @if($galleryCount > 0)
             <a href="{{ $productTabUrl('gallery') }}" class="ps-tab @if($activeTab === 'gallery') is-active @endif" @if($activeTab === 'gallery') aria-current="page" @endif>
-                <i class="fa fa-images" aria-hidden="true"></i> Gallery
+                <i class="fa fa-images" aria-hidden="true"></i> Images
                 <span class="ps-tab__count">{{ $galleryCount }}</span>
             </a>
         @endif
+        <a href="{{ $productTabUrl('selling-units') }}" class="ps-tab @if($activeTab === 'selling-units') is-active @endif" @if($activeTab === 'selling-units') aria-current="page" @endif>
+            <i class="fa fa-cubes" aria-hidden="true"></i> Variants
+            @if($product->sellingUnits->isNotEmpty())
+                <span class="ps-tab__count">{{ $product->sellingUnits->count() }}</span>
+            @endif
+        </a>
     </nav>
 
     {{-- ── Overview panel ───────────────────────────────────────── --}}
@@ -361,7 +275,58 @@
             'productOverviewUrl' => $productOverviewUrl,
         ])
 
-        {{-- Pricing section --}}
+        <p class="ps-label"><i class="fa fa-circle-info"></i> Details</p>
+        <dl class="ps-overview-grid">
+            <div class="ps-overview-cell">
+                <dt>SKU</dt>
+                <dd>{{ $product->sku ?: '—' }}</dd>
+            </div>
+            <div class="ps-overview-cell">
+                <dt>Status</dt>
+                <dd>{{ $product->is_active ? 'Active' : 'Inactive' }}</dd>
+            </div>
+            <div class="ps-overview-cell">
+                <dt>Type</dt>
+                <dd>{{ $product->is_bundle ? 'Bundle' : 'Single' }}</dd>
+            </div>
+            <div class="ps-overview-cell">
+                <dt>Categories</dt>
+                <dd>
+                    @if($product->categories->isNotEmpty())
+                        <span style="display:flex;flex-wrap:wrap;gap:3px;">
+                            @foreach($product->categories as $cat)
+                                <span class="ps-tag">{{ $cat->name }}</span>
+                            @endforeach
+                        </span>
+                    @else —@endif
+                </dd>
+            </div>
+            <div class="ps-overview-cell">
+                <dt>Brands</dt>
+                <dd>
+                    @if($product->brands->isNotEmpty())
+                        <span style="display:flex;flex-wrap:wrap;gap:3px;">
+                            @foreach($product->brands as $b)
+                                <span class="ps-tag">{{ $b->name }}</span>
+                            @endforeach
+                        </span>
+                    @else —@endif
+                </dd>
+            </div>
+            <div class="ps-overview-cell">
+                <dt>Business</dt>
+                <dd>{{ $business->name }}</dd>
+            </div>
+        </dl>
+
+        @if($product->description)
+            <p class="ps-label"><i class="fa fa-align-left"></i> Description</p>
+            <p class="ps-desc">{{ $product->description }}</p>
+        @endif
+    </section>
+
+    {{-- ── Pricing panel ────────────────────────────────────────── --}}
+    <section class="ps-panel" @if($activeTab !== 'pricing') hidden @endif>
         <p class="ps-label"><i class="fa fa-tag"></i> Pricing @if(filled($currency??''))<span style="font-weight:400;font-size:10px;color:var(--muted);">({{ $currency }})</span>@endif</p>
         <div class="ps-pricing-grid">
             <div class="ps-pricing-cell">
@@ -413,54 +378,103 @@
                 </span>
             </div>
         </div>
+        @if($baseDiscount)
+            <p class="muted" style="font-size:11px;margin-top:8px;">Active discount: <strong style="color:var(--text);">{{ $baseDiscount->name }}</strong></p>
+        @endif
+    </section>
 
-        <p class="ps-label" style="margin-top:14px;"><i class="fa fa-circle-info"></i> Details</p>
+    {{-- ── Advanced panel ───────────────────────────────────────── --}}
+    <section class="ps-panel" @if($activeTab !== 'advanced') hidden @endif>
+        @php
+            $advRows = [
+                ['Bundle product', $product->is_bundle, null],
+                ['Warranty', $product->has_warranty, $product->warranty_duration],
+                ['Expiration tracking', $product->track_expiry, $product->exp_date?->format('Y-m-d')],
+                ['Loyalty redeemable', $product->loyalty_redeemable, null],
+                ['Customer required', $product->is_customer_required, null],
+                ['Item wise tax', $product->item_wise_tax, null],
+                ['Item wise discount', $product->item_wise_discount, null],
+                ['Courier delivery', $product->courier_delivery, null],
+            ];
+        @endphp
+
+        <p class="ps-label"><i class="fa fa-sliders"></i> Feature toggles</p>
         <dl class="ps-overview-grid">
-            <div class="ps-overview-cell">
-                <dt>SKU</dt>
-                <dd>{{ $product->sku ?: '—' }}</dd>
-            </div>
-            <div class="ps-overview-cell">
-                <dt>Status</dt>
-                <dd>{{ $product->is_active ? 'Active' : 'Inactive' }}</dd>
-            </div>
-            <div class="ps-overview-cell">
-                <dt>Type</dt>
-                <dd>{{ $product->is_bundle ? 'Bundle' : 'Single' }}</dd>
-            </div>
-            <div class="ps-overview-cell">
-                <dt>Categories</dt>
-                <dd>
-                    @if($product->categories->isNotEmpty())
-                        <span style="display:flex;flex-wrap:wrap;gap:3px;">
-                            @foreach($product->categories as $cat)
-                                <span class="ps-tag">{{ $cat->name }}</span>
-                            @endforeach
-                        </span>
-                    @else —@endif
-                </dd>
-            </div>
-            <div class="ps-overview-cell">
-                <dt>Brands</dt>
-                <dd>
-                    @if($product->brands->isNotEmpty())
-                        <span style="display:flex;flex-wrap:wrap;gap:3px;">
-                            @foreach($product->brands as $b)
-                                <span class="ps-tag">{{ $b->name }}</span>
-                            @endforeach
-                        </span>
-                    @else —@endif
-                </dd>
-            </div>
-            <div class="ps-overview-cell">
-                <dt>Business</dt>
-                <dd>{{ $business->name }}</dd>
-            </div>
+            @foreach($advRows as [$label, $on, $detail])
+                <div class="ps-overview-cell">
+                    <dt>{{ $label }}</dt>
+                    <dd>
+                        <span class="ps-badge @if($on) ps-badge--on @else ps-badge--off @endif">{{ $on ? 'Yes' : 'No' }}</span>
+                        @if($on && filled($detail ?? null))
+                            <span class="muted" style="font-size:11px;margin-left:4px;">{{ $detail }}</span>
+                        @endif
+                    </dd>
+                </div>
+            @endforeach
         </dl>
 
-        @if($product->description)
-            <p class="ps-label"><i class="fa fa-align-left"></i> Description</p>
-            <p class="ps-desc">{{ $product->description }}</p>
+        @if($product->is_rental)
+            <p class="ps-label" style="margin-top:14px;"><i class="fa fa-key"></i> Rental terms</p>
+            <dl class="ps-overview-grid">
+                <div class="ps-overview-cell">
+                    <dt>Daily rate</dt>
+                    <dd>{{ $product->rental_daily_rate !== null ? number_format((float) $product->rental_daily_rate, 2) : '—' }}</dd>
+                </div>
+                <div class="ps-overview-cell">
+                    <dt>Max rental days</dt>
+                    <dd>{{ $product->rental_max_days ?? '—' }}</dd>
+                </div>
+                <div class="ps-overview-cell">
+                    <dt>Late fee multiplier</dt>
+                    <dd>{{ $product->rental_late_fee_multiplier !== null ? number_format((float) $product->rental_late_fee_multiplier, 2) : '—' }}</dd>
+                </div>
+                <div class="ps-overview-cell">
+                    <dt>Needs cleaning</dt>
+                    <dd>{{ $product->rental_needs_cleaning ? 'Yes' : 'No' }}</dd>
+                </div>
+            </dl>
+        @endif
+
+        @if($product->is_subscription)
+            <p class="ps-label" style="margin-top:14px;"><i class="fa fa-rotate"></i> Subscription terms</p>
+            <dl class="ps-overview-grid">
+                <div class="ps-overview-cell">
+                    <dt>Recurring period</dt>
+                    <dd>{{ $product->subscription_recurring_period ? ucfirst($product->subscription_recurring_period) : '—' }}</dd>
+                </div>
+                <div class="ps-overview-cell">
+                    <dt>Free trial</dt>
+                    <dd>{{ $product->subscription_free_trial ? 'Yes' : 'No' }}</dd>
+                </div>
+            </dl>
+        @endif
+
+        @if($product->is_dynamic_pricing)
+            <p class="ps-label" style="margin-top:14px;"><i class="fa fa-wand-magic-sparkles"></i> Dynamic pricing</p>
+            <dl class="ps-overview-grid">
+                <div class="ps-overview-cell">
+                    <dt>Price &amp; quantity linked</dt>
+                    <dd>{{ $product->dynamic_price_qty_linked ? 'Yes' : 'No' }}</dd>
+                </div>
+            </dl>
+        @endif
+
+        @if($product->courier_delivery && !empty($product->delivery_methods))
+            <p class="ps-label" style="margin-top:14px;"><i class="fa fa-truck"></i> Delivery methods</p>
+            <div style="display:flex;flex-wrap:wrap;gap:5px;">
+                @foreach($product->delivery_methods as $method)
+                    <span class="ps-tag">{{ ($deliveryPartnerLabels ?? [])[$method['key'] ?? ''] ?? ($method['key'] ?? '—') }}@if(isset($method['price'])) · {{ number_format((float) $method['price'], 2) }}@endif</span>
+                @endforeach
+            </div>
+        @endif
+
+        @if(!empty($product->tags))
+            <p class="ps-label" style="margin-top:14px;"><i class="fa fa-tags"></i> Tags</p>
+            <div style="display:flex;flex-wrap:wrap;gap:5px;">
+                @foreach($product->tags as $tag)
+                    <span class="ps-tag" style="opacity:.8;">#{{ $tag }}</span>
+                @endforeach
+            </div>
         @endif
     </section>
 

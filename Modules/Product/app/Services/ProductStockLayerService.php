@@ -271,9 +271,9 @@ class ProductStockLayerService
         }
     }
 
-    public function updateSellingPrice(ProductStockLayer $layer, float $sellingUnitPrice): ProductStockLayer
+    public function updateSellingPrice(ProductStockLayer $layer, ?float $sellingUnitPrice): ProductStockLayer
     {
-        $layer->selling_unit_price = round(max(0, $sellingUnitPrice), 2);
+        $layer->selling_unit_price = $sellingUnitPrice !== null ? round(max(0, $sellingUnitPrice), 2) : null;
         $layer->save();
 
         if ($layer->goods_receive_note_item_id) {
@@ -281,6 +281,30 @@ class ProductStockLayerService
                 ->whereKey($layer->goods_receive_note_item_id)
                 ->update(['selling_unit_price' => $layer->selling_unit_price]);
         }
+
+        return $layer->refresh();
+    }
+
+    public function updateCostPrice(ProductStockLayer $layer, float $unitCost): ProductStockLayer
+    {
+        $layer->unit_cost = round(max(0, $unitCost), 2);
+        $layer->save();
+
+        return $layer->refresh();
+    }
+
+    public function updateWholesalePrice(ProductStockLayer $layer, ?float $wholesaleUnitPrice): ProductStockLayer
+    {
+        $layer->wholesale_unit_price = $wholesaleUnitPrice !== null ? round(max(0, $wholesaleUnitPrice), 2) : null;
+        $layer->save();
+
+        return $layer->refresh();
+    }
+
+    public function updateBarcode(ProductStockLayer $layer, ?string $batchSku): ProductStockLayer
+    {
+        $layer->batch_sku = ($batchSku !== null && $batchSku !== '') ? $batchSku : null;
+        $layer->save();
 
         return $layer->refresh();
     }

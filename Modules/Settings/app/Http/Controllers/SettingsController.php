@@ -15,6 +15,7 @@ use Modules\Business\Models\Business;
 use Modules\Business\Services\BusinessProfileSettingSync;
 use Modules\Business\Support\BrandCompanyCategoryCatalog;
 use Modules\HRManagement\Services\HrPayrollSettingsService;
+use Modules\Pos\Services\PosSettingsService;
 use Modules\Settings\Services\SettingsService;
 
 class SettingsController extends Controller
@@ -329,9 +330,11 @@ class SettingsController extends Controller
 
         $businessHolidays = collect();
         $hrPayrollOptedIn = false;
+        $deliveryMethods = [];
         if ($scopeModel instanceof Business) {
             $businessHolidays = $scopeModel->hrHolidays()->orderBy('holiday_date')->orderBy('id')->get();
             $hrPayrollOptedIn = app(HrPayrollSettingsService::class)->optedIn($scopeModel);
+            $deliveryMethods = app(PosSettingsService::class)->forBusiness($scopeModel)['delivery_methods'] ?? [];
         }
 
         return view('settings::index', [
@@ -343,6 +346,7 @@ class SettingsController extends Controller
             'tabs' => $tabs,
             'businessHolidays' => $businessHolidays,
             'hrPayrollOptedIn' => $hrPayrollOptedIn,
+            'deliveryMethods' => $deliveryMethods,
         ]);
     }
 

@@ -172,6 +172,13 @@
                 'hrPayrollOptedIn' => $hrPayrollOptedIn ?? false,
             ])
         @endif
+
+        @if($scopeType === 'business' && $activeTab === 'delivery' && isset($scopeModel) && $scopeModel instanceof \Modules\Business\Models\Business)
+            @include('pos::settings.business-delivery-extras', [
+                'business' => $scopeModel,
+                'deliveryMethods' => $deliveryMethods ?? [],
+            ])
+        @endif
     @else
         <p style="margin-top:14px;" class="muted">No {{ $scopeType }} settings yet.</p>
     @endif

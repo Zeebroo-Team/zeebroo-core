@@ -160,6 +160,9 @@ class PosController extends Controller
             'featured_products_limit' => ['nullable', 'integer', 'min:0'],
             'featured_categories_limit' => ['nullable', 'integer', 'min:0'],
             'show_service_bound_products' => ['nullable'],
+            'delivery_enabled' => ['nullable'],
+            'delivery_methods' => ['nullable', 'array'],
+            'delivery_methods.*' => ['nullable', 'string'],
             'redirect' => ['nullable', 'string', 'max:2000'],
         ]);
 

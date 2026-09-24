@@ -16,6 +16,7 @@ use Modules\Pos\Http\Controllers\PosController;
 use Modules\Pos\Http\Controllers\PosProductController;
 use Modules\Pos\Http\Controllers\SaleController;
 use Modules\Pos\Http\Controllers\StockAuditController;
+use Modules\Pos\Http\Controllers\StockTransferController;
 
 Route::middleware(['auth', 'verified'])->group(function (): void {
     Route::get('/pos', [PosController::class, 'index'])->name('pos.index');
@@ -53,6 +54,13 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
     Route::put('/pos/stock-audits/{stockAudit}/lines', [StockAuditController::class, 'saveLines'])->name('pos.stock-audits.save-lines');
     Route::post('/pos/stock-audits/{stockAudit}/finalize', [StockAuditController::class, 'finalize'])->name('pos.stock-audits.finalize');
     Route::delete('/pos/stock-audits/{stockAudit}', [StockAuditController::class, 'destroy'])->name('pos.stock-audits.destroy');
+
+    Route::get('/pos/stock-transfers', [StockTransferController::class, 'index'])->name('pos.stock-transfers.index');
+    Route::get('/pos/stock-transfers/create', [StockTransferController::class, 'create'])->name('pos.stock-transfers.create');
+    Route::post('/pos/stock-transfers', [StockTransferController::class, 'store'])->name('pos.stock-transfers.store');
+    Route::get('/pos/stock-transfers/{stockTransfer}', [StockTransferController::class, 'show'])->name('pos.stock-transfers.show');
+    Route::post('/pos/stock-transfers/{stockTransfer}/receive', [StockTransferController::class, 'receive'])->name('pos.stock-transfers.receive');
+    Route::post('/pos/stock-transfers/{stockTransfer}/cancel', [StockTransferController::class, 'cancel'])->name('pos.stock-transfers.cancel');
 
     // Event / Staffing Management (Brands, Reporters, Officers, Coordinators, Promoters,
     // Promoter Positions, Jobs, Agencies, Salary Sheets) — web layer over the

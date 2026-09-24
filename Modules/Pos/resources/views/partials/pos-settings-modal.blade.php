@@ -29,6 +29,12 @@
                     <span class="psm-nav__item-arrow"><i class="fa fa-chevron-right" aria-hidden="true"></i></span>
                 </button>
                 <button type="button" class="psm-nav__item" role="tab" aria-selected="false"
+                    aria-controls="psm-panel-delivery" id="psm-tab-delivery" data-psm-tab="delivery">
+                    <span class="psm-nav__item-icon"><i class="fa fa-truck" aria-hidden="true"></i></span>
+                    <span class="psm-nav__item-label">Delivery</span>
+                    <span class="psm-nav__item-arrow"><i class="fa fa-chevron-right" aria-hidden="true"></i></span>
+                </button>
+                <button type="button" class="psm-nav__item" role="tab" aria-selected="false"
                     aria-controls="psm-panel-print" id="psm-tab-print" data-psm-tab="print">
                     <span class="psm-nav__item-icon"><i class="fa fa-print" aria-hidden="true"></i></span>
                     <span class="psm-nav__item-label">Print Layout</span>
@@ -206,6 +212,58 @@
                     </div>
                 </div>
 
+                {{-- ── Delivery panel ──────────────────────────────── --}}
+                <div class="psm-panel" id="psm-panel-delivery" role="tabpanel" aria-labelledby="psm-tab-delivery" hidden>
+                    <div class="psm-section">
+                        <p class="psm-section__label"><i class="fa fa-truck" aria-hidden="true"></i> Delivery</p>
+                        <div class="psm-card">
+                            <div class="psm-row">
+                                <div class="psm-row__info">
+                                    <span class="psm-row__name">Enable Delivery Methods</span>
+                                    <span class="psm-row__desc">Allow customers to choose a delivery method at checkout</span>
+                                </div>
+                                <label class="psm-switch" title="Toggle delivery methods">
+                                    <input type="hidden" name="delivery_enabled" value="0">
+                                    <input type="checkbox" name="delivery_enabled" id="psm-delivery-enabled" value="1" @checked($posSettings['delivery_enabled'] ?? false)>
+                                    <span class="psm-switch__track" aria-hidden="true"><span class="psm-switch__thumb"></span></span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    @php $enabledDeliveryMethods = $posSettings['delivery_methods'] ?? []; @endphp
+                    <div class="psm-section" id="psm-delivery-partners-section" @if(!($posSettings['delivery_enabled'] ?? false)) style="display:none;" @endif>
+                        <p class="psm-section__label"><i class="fa fa-list-check" aria-hidden="true"></i> Active delivery partners</p>
+                        <input type="hidden" name="delivery_methods[]" value="">
+                        <div class="psm-dm-grid">
+                            @foreach([
+                                ['key' => 'dhl', 'icon' => 'fa-globe', 'name' => 'DHL Express', 'desc' => 'International express courier with time-definite delivery worldwide.'],
+                                ['key' => 'fedex', 'icon' => 'fa-box-open', 'name' => 'FedEx', 'desc' => 'Fast and reliable global shipping with real-time package tracking.'],
+                                ['key' => 'uber', 'icon' => 'fa-car-side', 'name' => 'Uber', 'desc' => 'On-demand local delivery via the Uber courier network.'],
+                                ['key' => 'pickme', 'icon' => 'fa-motorcycle', 'name' => 'PickMe', 'desc' => "Sri Lanka's leading ride-hailing platform with parcel delivery."],
+                                ['key' => 'koobiyo', 'icon' => 'fa-bicycle', 'name' => 'Koobiyo', 'desc' => 'Last-mile e-commerce delivery built for Sri Lanka businesses.'],
+                                ['key' => 'pronto', 'icon' => 'fa-truck-fast', 'name' => 'Pronto Lanka', 'desc' => 'Scheduled and same-day delivery across Sri Lanka.'],
+                            ] as $partner)
+                                @php $isDmChecked = in_array($partner['key'], $enabledDeliveryMethods, true); @endphp
+                                <div class="psm-dm-card">
+                                    <div class="psm-dm-card__top">
+                                        <span class="psm-dm-card__icon"><i class="fa {{ $partner['icon'] }}" aria-hidden="true"></i></span>
+                                        <span class="psm-dm-card__name">{{ $partner['name'] }}</span>
+                                    </div>
+                                    <p class="psm-dm-card__desc">{{ $partner['desc'] }}</p>
+                                    <div class="psm-dm-card__footer">
+                                        <span class="psm-dm-card__status" data-dm-status>{{ $isDmChecked ? 'Enabled' : 'Disabled' }}</span>
+                                        <label class="psm-switch" title="Toggle {{ $partner['name'] }}">
+                                            <input type="checkbox" name="delivery_methods[]" value="{{ $partner['key'] }}" data-dm-toggle @checked($isDmChecked)>
+                                            <span class="psm-switch__track" aria-hidden="true"><span class="psm-switch__thumb"></span></span>
+                                        </label>
+                                    </div>
+                                </div>
+                            @endforeach
+                        </div>
+                    </div>
+                </div>
+
                 {{-- ── Print Layout panel ───────────────────────────── --}}
                 <div class="psm-panel" id="psm-panel-print" role="tabpanel" aria-labelledby="psm-tab-print" hidden>
                     <div class="psm-section">
@@ -329,6 +387,16 @@ html.pos-settings-modal-open,html.pos-settings-modal-open body{overflow:hidden;}
 .psm-btn--primary{background:var(--primary);border-color:var(--primary);color:#fff;}
 .psm-btn--primary:hover{opacity:.9;box-shadow:0 4px 14px color-mix(in srgb,var(--primary) 35%,transparent);}
 
+/* ── Delivery partner grid ─────────────────────────────────────── */
+.psm-dm-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.psm-dm-card{display:flex;flex-direction:column;gap:8px;padding:14px;border:1px solid var(--border);border-radius:12px;background:color-mix(in srgb,var(--card) 96%,var(--border) 4%);}
+.psm-dm-card__top{display:flex;align-items:center;gap:8px;}
+.psm-dm-card__icon{width:28px;height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:center;border-radius:8px;background:color-mix(in srgb,var(--primary) 12%,transparent);color:var(--primary);font-size:12px;}
+.psm-dm-card__name{font-size:13px;font-weight:700;color:var(--text);}
+.psm-dm-card__desc{margin:0;font-size:11px;color:var(--muted);line-height:1.45;flex:1;}
+.psm-dm-card__footer{display:flex;align-items:center;justify-content:space-between;padding-top:8px;border-top:1px solid var(--border);}
+.psm-dm-card__status{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);}
+
 /* ── Settlement mode toggle ─────────────────────────────────────── */
 .psm-settle-option{display:flex;flex-direction:column;align-items:center;gap:4px;padding:12px 10px;border-radius:10px;border:1px solid var(--border);background:color-mix(in srgb,var(--card) 94%,var(--border) 6%);cursor:pointer;transition:all .15s;text-align:center;}
 .psm-settle-option i{font-size:18px;color:var(--muted);}
@@ -350,6 +418,7 @@ html.pos-settings-modal-open,html.pos-settings-modal-open body{overflow:hidden;}
     .psm-content__head{padding:14px 16px 12px;}
     .psm-footer{padding:10px 16px;}
     .psm-grid{grid-template-columns:1fr;}
+    .psm-dm-grid{grid-template-columns:1fr;}
 }
 </style>
 
@@ -360,9 +429,10 @@ html.pos-settings-modal-open,html.pos-settings-modal-open body{overflow:hidden;}
     if (!modal) return;
 
     var tabDescriptions = {
-        general: 'Appearance & display preferences',
-        sales:   'Payment accounts & checkout options',
-        print:   'Open the visual Receipt Editor'
+        general:  'Appearance & display preferences',
+        sales:    'Payment accounts & checkout options',
+        delivery: 'Manage courier partners for checkout',
+        print:    'Open the visual Receipt Editor'
     };
 
     function setOpen(open) {
@@ -450,6 +520,21 @@ html.pos-settings-modal-open,html.pos-settings-modal-open body{overflow:hidden;}
 
     if (settleImmediate) settleImmediate.addEventListener('click', function () { applySettlementMode('immediate'); });
     if (settleEod) settleEod.addEventListener('click', function () { applySettlementMode('end_of_day'); });
+
+    // Delivery — toggle partner grid visibility, keep card status text in sync
+    var deliveryEnabled = document.getElementById('psm-delivery-enabled');
+    var deliveryPartnersSection = document.getElementById('psm-delivery-partners-section');
+    if (deliveryEnabled && deliveryPartnersSection) {
+        deliveryEnabled.addEventListener('change', function () {
+            deliveryPartnersSection.style.display = deliveryEnabled.checked ? '' : 'none';
+        });
+    }
+    modal.querySelectorAll('[data-dm-toggle]').forEach(function (cb) {
+        cb.addEventListener('change', function () {
+            var statusEl = cb.closest('.psm-dm-card')?.querySelector('[data-dm-status]');
+            if (statusEl) statusEl.textContent = cb.checked ? 'Enabled' : 'Disabled';
+        });
+    });
 
     // Branch selection — navigate immediately when branch changes
     var branchModalSelect = document.getElementById('psm-branch-select');

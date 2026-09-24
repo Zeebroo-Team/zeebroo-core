@@ -203,6 +203,7 @@ html.product-modal-open-html,html.product-modal-open-html body{overflow:hidden;}
                 'brands' => $brands,
                 'units' => $units,
                 'bundlePickerCatalog' => $bundlePickerCatalog,
+                'deliveryPartners' => $deliveryPartners,
             ])
         </section>
     @elseif($products->isEmpty())
@@ -381,6 +382,13 @@ html.product-modal-open-html,html.product-modal-open-html body{overflow:hidden;}
                                     <span class="product-switch-slider" aria-hidden="true"></span>
                                 </span>
                             </label>
+                            <label class="product-modal__feature-toggle" for="product-modal-advanced-toggle">
+                                <span class="product-modal__feature-toggle__lbl">Advanced</span>
+                                <span class="product-switch product-switch--sm">
+                                    <input type="checkbox" id="product-modal-advanced-toggle" data-product-modal-advanced-toggle role="switch" aria-checked="false">
+                                    <span class="product-switch-slider" aria-hidden="true"></span>
+                                </span>
+                            </label>
                         </div>
                     </div>
                     <button type="button" class="product-modal__close" data-product-modal-close aria-label="Close dialog">&times;</button>
@@ -394,6 +402,7 @@ html.product-modal-open-html,html.product-modal-open-html body{overflow:hidden;}
                         'brands' => $brands,
                         'units' => $units,
                         'bundlePickerCatalog' => $bundlePickerCatalog,
+                        'deliveryPartners' => $deliveryPartners,
                     ])
                 </div>
             </div>
@@ -489,6 +498,30 @@ html.product-modal-open-html,html.product-modal-open-html body{overflow:hidden;}
         }
     }
 
+    function getModalAdvancedField() {
+        return modal?.querySelector('[data-product-advanced-modal-field]');
+    }
+
+    function modalHasAdvancedFormState() {
+        const field = getModalAdvancedField();
+        if (!field) return false;
+        if (field.querySelector('.product-adv-card__err')) return true;
+        if (field.querySelector('input[type="checkbox"]:checked')) return true;
+        return false;
+    }
+
+    function setModalProductAdvancedEnabled(on) {
+        const toggle = modal?.querySelector('[data-product-modal-advanced-toggle]');
+        const field = getModalAdvancedField();
+        if (!field) return;
+        const enabled = Boolean(on);
+        if (toggle) {
+            toggle.checked = enabled;
+            toggle.setAttribute('aria-checked', enabled ? 'true' : 'false');
+        }
+        field.hidden = !enabled;
+    }
+
     function resetProductModalForm() {
         const form = modal?.querySelector('[data-product-modal-form]');
         if (!form) return;
@@ -569,6 +602,7 @@ html.product-modal-open-html,html.product-modal-open-html body{overflow:hidden;}
         document.documentElement.classList.remove('product-image-picker-open');
         setModalProductImageEnabled(false);
         setModalProductBundleEnabled(false);
+        setModalProductAdvancedEnabled(false);
     }
 
     function openProductModal() {
@@ -595,6 +629,7 @@ html.product-modal-open-html,html.product-modal-open-html body{overflow:hidden;}
         }
         setModalProductImageEnabled(modalHasImageFormState());
         setModalProductBundleEnabled(modalHasBundleFormState());
+        setModalProductAdvancedEnabled(modalHasAdvancedFormState());
 
         const first = document.getElementById('modal-name') || document.getElementById('product-name');
         window.requestAnimationFrame(function () {
@@ -618,6 +653,9 @@ html.product-modal-open-html,html.product-modal-open-html body{overflow:hidden;}
     modal?.querySelector('[data-product-modal-bundle-toggle]')?.addEventListener('change', function () {
         setModalProductBundleEnabled(this.checked);
     });
+    modal?.querySelector('[data-product-modal-advanced-toggle]')?.addEventListener('change', function () {
+        setModalProductAdvancedEnabled(this.checked);
+    });
     modal?.querySelectorAll('[data-product-modal-close]').forEach((el) =>
         el.addEventListener('click', () => closeProductModal()),
     );
@@ -635,6 +673,7 @@ html.product-modal-open-html,html.product-modal-open-html body{overflow:hidden;}
         }
         setModalProductImageEnabled(modalHasImageFormState());
         setModalProductBundleEnabled(modalHasBundleFormState());
+        setModalProductAdvancedEnabled(modalHasAdvancedFormState());
     }
 })();
 </script>

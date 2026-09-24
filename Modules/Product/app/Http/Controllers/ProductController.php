@@ -23,6 +23,19 @@ use Modules\Product\Services\ProductStockLayerService;
 
 class ProductController extends Controller
 {
+    /**
+     * Mirrors the delivery partner keys/labels configured under POS Settings → Delivery
+     * (see Modules\Pos\Services\PosSettingsService::DELIVERY_METHOD_KEYS).
+     */
+    private const DELIVERY_PARTNER_LABELS = [
+        'dhl' => 'DHL Express',
+        'fedex' => 'FedEx',
+        'uber' => 'Uber',
+        'pickme' => 'PickMe',
+        'koobiyo' => 'Koobiyo',
+        'pronto' => 'Pronto Lanka',
+    ];
+
     public function __construct(
         private readonly ProductService $productService,
         private readonly ProductCatalogOptionsService $catalogOptionsService,
@@ -125,6 +138,7 @@ class ProductController extends Controller
             'branchProductSeparate' => $branchProductSeparate,
             'branchOptions'        => $branchOptions,
             'baseDiscountByProduct' => $baseDiscountByProduct,
+            'deliveryPartners'     => $this->deliveryPartnersForBusiness($business),
         ]);
     }
 
@@ -190,7 +204,7 @@ class ProductController extends Controller
         $currency = (string) (get_settings('business.currency', '', $business) ?: '');
         $product = $this->productService->loadForShow($product);
         $activeTab = (string) $request->query('tab', 'overview');
-        $allowedTabs = ['overview', 'selling-units', 'stock', 'bundle', 'gallery'];
+        $allowedTabs = ['overview', 'pricing', 'selling-units', 'stock', 'advanced', 'bundle', 'gallery'];
         if (! in_array($activeTab, $allowedTabs, true)) {
             $activeTab = 'overview';
         }
@@ -236,15 +250,14 @@ class ProductController extends Controller
             'salesPeriod'          => $salesPeriod,
             'baseDiscount'         => $baseDiscount,
             'suDiscountById'       => $suDiscountById,
+            'deliveryPartnerLabels' => self::DELIVERY_PARTNER_LABELS,
         ], $stockActivity));
     }
 
-    public function updateStockLayer(Request $request, Product $product, ProductStockLayer $stockLayer): RedirectResponse
+    private function stockLayerOrAbort(Request $request, Product $product, ProductStockLayer $stockLayer): Business
     {
         $business = $this->resolveBusinessProduct($request, $product);
-        if (!$business) {
-            return redirect()->route('dashboard')->withErrors(['business' => 'Select or create a business first.']);
-        }
+        abort_unless($business !== null, 404);
 
         abort_unless(
             (int) $stockLayer->product_id === (int) $product->id
@@ -252,15 +265,76 @@ class ProductController extends Controller
             404,
         );
 
+        return $business;
+    }
+
+    public function updateStockLayerSellingPrice(Request $request, Product $product, ProductStockLayer $stockLayer): RedirectResponse
+    {
+        $this->stockLayerOrAbort($request, $product, $stockLayer);
+
         $validated = $request->validate([
-            'selling_unit_price' => ['required', 'numeric', 'min:0'],
+            'selling_unit_price' => ['nullable', 'numeric', 'min:0', 'max:9999999'],
         ]);
 
-        $this->productStockLayers->updateSellingPrice($stockLayer, (float) $validated['selling_unit_price']);
+        $this->productStockLayers->updateSellingPrice(
+            $stockLayer,
+            isset($validated['selling_unit_price']) ? (float) $validated['selling_unit_price'] : null,
+        );
 
         return redirect()
             ->route('product.show', ['product' => $product, 'tab' => 'stock', 'stock' => 'layers'])
             ->with('status', 'Selling price updated for this stock batch.');
+    }
+
+    public function updateStockLayerCostPrice(Request $request, Product $product, ProductStockLayer $stockLayer): RedirectResponse
+    {
+        $this->stockLayerOrAbort($request, $product, $stockLayer);
+
+        $validated = $request->validate([
+            'unit_cost' => ['required', 'numeric', 'min:0', 'max:9999999'],
+        ]);
+
+        $this->productStockLayers->updateCostPrice($stockLayer, (float) $validated['unit_cost']);
+
+        return redirect()
+            ->route('product.show', ['product' => $product, 'tab' => 'stock', 'stock' => 'layers'])
+            ->with('status', 'Cost price updated for this stock batch.');
+    }
+
+    public function updateStockLayerWholesalePrice(Request $request, Product $product, ProductStockLayer $stockLayer): RedirectResponse
+    {
+        $this->stockLayerOrAbort($request, $product, $stockLayer);
+
+        $validated = $request->validate([
+            'wholesale_unit_price' => ['nullable', 'numeric', 'min:0', 'max:9999999'],
+        ]);
+
+        $this->productStockLayers->updateWholesalePrice(
+            $stockLayer,
+            isset($validated['wholesale_unit_price']) ? (float) $validated['wholesale_unit_price'] : null,
+        );
+
+        return redirect()
+            ->route('product.show', ['product' => $product, 'tab' => 'stock', 'stock' => 'layers'])
+            ->with('status', 'Wholesale price updated for this stock batch.');
+    }
+
+    public function updateStockLayerBarcode(Request $request, Product $product, ProductStockLayer $stockLayer): RedirectResponse
+    {
+        $this->stockLayerOrAbort($request, $product, $stockLayer);
+
+        $validated = $request->validate([
+            'batch_sku' => [
+                'nullable', 'string', 'max:150',
+                Rule::unique('product_stock_layers', 'batch_sku')->ignore($stockLayer->id),
+            ],
+        ]);
+
+        $this->productStockLayers->updateBarcode($stockLayer, $validated['batch_sku'] ?? null);
+
+        return redirect()
+            ->route('product.show', ['product' => $product, 'tab' => 'stock', 'stock' => 'layers'])
+            ->with('status', 'Barcode updated for this stock batch.');
     }
 
     public function edit(Request $request, Product $product): View|RedirectResponse
@@ -286,6 +360,7 @@ class ProductController extends Controller
             'bundlePickerCatalog'  => $this->productBundleService->pickerCatalogForBusiness($business, $product),
             'branchProductSeparate' => $branchProductSeparate,
             'branchOptions'        => $branchOptions,
+            'deliveryPartners'     => $this->deliveryPartnersForBusiness($business),
         ]);
     }
 
@@ -378,6 +453,38 @@ class ProductController extends Controller
                 Rule::exists('products', 'id')->where(fn ($q) => $q->where('business_id', $business->id)),
             ],
             'bundle_items.*.quantity' => ['required', 'numeric', 'min:0.001', 'max:999999'],
+
+            // Basic — extended fields
+            'model_no' => ['nullable', 'string', 'max:120'],
+            'size' => ['nullable', 'string', 'max:120'],
+            'mfg_date' => ['nullable', 'date'],
+            'tags' => ['nullable', 'string', 'max:1000'],
+
+            // Advanced options
+            'has_warranty' => ['nullable', 'boolean'],
+            'warranty_duration' => ['nullable', 'string', 'max:60'],
+            'track_expiry' => ['nullable', 'boolean'],
+            'exp_date' => ['nullable', 'date'],
+            'loyalty_redeemable' => ['nullable', 'boolean'],
+            'is_customer_required' => ['nullable', 'boolean'],
+            'is_rental' => ['nullable', 'boolean'],
+            'rental_daily_rate' => ['nullable', 'numeric', 'min:0'],
+            'rental_max_days' => ['nullable', 'integer', 'min:0'],
+            'rental_late_fee_multiplier' => ['nullable', 'numeric', 'min:0'],
+            'rental_needs_cleaning' => ['nullable', 'boolean'],
+            'is_subscription' => ['nullable', 'boolean'],
+            'subscription_recurring_period' => ['nullable', Rule::in(['weekly', 'monthly', 'quarterly', 'yearly'])],
+            'subscription_free_trial' => ['nullable', 'boolean'],
+            'is_dynamic_pricing' => ['nullable', 'boolean'],
+            'dynamic_price_qty_linked' => ['nullable', 'boolean'],
+            'item_wise_tax' => ['nullable', 'boolean'],
+            'item_wise_discount' => ['nullable', 'boolean'],
+
+            // Delivery — keyed by enabled partner key, e.g. delivery_methods[dhl][selected/price]
+            'courier_delivery' => ['nullable', 'boolean'],
+            'delivery_methods' => ['nullable', 'array'],
+            'delivery_methods.*.selected' => ['nullable', 'boolean'],
+            'delivery_methods.*.price' => ['nullable', 'numeric', 'min:0'],
         ]);
 
         $rawFileIds = $request->input('file_manager_file_ids', []);
@@ -406,6 +513,40 @@ class ProductController extends Controller
         $validated['wholesale_price'] = isset($validated['wholesale_price']) ? (float) $validated['wholesale_price'] : null;
         $validated['stock_quantity']  = isset($validated['stock_quantity'])  ? (float) $validated['stock_quantity']  : 0;
 
+        $validated['tags'] = $this->parseTags($request->input('tags'));
+
+        $validated['has_warranty']         = $request->boolean('has_warranty');
+        $validated['track_expiry']         = $request->boolean('track_expiry');
+        $validated['loyalty_redeemable']   = $request->boolean('loyalty_redeemable');
+        $validated['is_customer_required'] = $request->boolean('is_customer_required');
+        $validated['is_rental']            = $request->boolean('is_rental');
+        $validated['rental_needs_cleaning'] = $request->boolean('rental_needs_cleaning');
+        $validated['is_subscription']      = $request->boolean('is_subscription');
+        $validated['subscription_free_trial'] = $request->boolean('subscription_free_trial');
+        $validated['is_dynamic_pricing']   = $request->boolean('is_dynamic_pricing');
+        $validated['dynamic_price_qty_linked'] = $request->boolean('dynamic_price_qty_linked');
+        $validated['item_wise_tax']        = $request->boolean('item_wise_tax');
+        $validated['item_wise_discount']   = $request->boolean('item_wise_discount');
+        $validated['courier_delivery']     = $request->boolean('courier_delivery');
+
+        $validated['rental_daily_rate']          = isset($validated['rental_daily_rate']) ? (float) $validated['rental_daily_rate'] : null;
+        $validated['rental_max_days']             = isset($validated['rental_max_days']) ? (int) $validated['rental_max_days'] : null;
+        $validated['rental_late_fee_multiplier']  = isset($validated['rental_late_fee_multiplier']) ? (float) $validated['rental_late_fee_multiplier'] : null;
+
+        $enabledDeliveryKeys = $this->deliveryPartnersForBusiness($business)->pluck('key')->all();
+        $rawDeliveryMethods = $request->input('delivery_methods', []);
+        $validated['delivery_methods'] = [];
+        foreach ($enabledDeliveryKeys as $key) {
+            $row = $rawDeliveryMethods[$key] ?? null;
+            if (! is_array($row) || empty($row['selected'])) {
+                continue;
+            }
+            $validated['delivery_methods'][] = [
+                'key' => $key,
+                'price' => isset($row['price']) && $row['price'] !== '' ? (float) $row['price'] : null,
+            ];
+        }
+
         $validated['product_category_ids'] = $validated['product_category_ids'] ?? [];
         $validated['product_brand_ids'] = $validated['product_brand_ids'] ?? [];
 
@@ -418,5 +559,44 @@ class ProductController extends Controller
         }
 
         return $validated;
+    }
+
+    /**
+     * Delivery partners enabled for this business under POS Settings → Delivery,
+     * as [{key, label}, ...] — only these can be picked as a product's delivery methods.
+     *
+     * @return \Illuminate\Support\Collection<int, array{key: string, label: string}>
+     */
+    private function deliveryPartnersForBusiness(Business $business): \Illuminate\Support\Collection
+    {
+        if (! (bool) get_settings('delivery.enabled', false, $business)) {
+            return collect();
+        }
+
+        $enabledKeys = (array) get_settings('delivery.methods', [], $business);
+
+        return collect(self::DELIVERY_PARTNER_LABELS)
+            ->only($enabledKeys)
+            ->map(fn (string $label, string $key) => ['key' => $key, 'label' => $label])
+            ->values();
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function parseTags(mixed $raw): array
+    {
+        if (is_array($raw)) {
+            $raw = implode(',', $raw);
+        }
+
+        if (!is_string($raw) || trim($raw) === '') {
+            return [];
+        }
+
+        return array_values(array_unique(array_filter(array_map(
+            static fn ($tag) => trim($tag),
+            preg_split('/[,\n]+/', $raw) ?: [],
+        ), static fn ($tag) => $tag !== '')));
     }
 }

@@ -20,6 +20,7 @@
     $currency = $currency ?? '';
     $branchProductSeparate = $branchProductSeparate ?? false;
     $branchOptions = $branchOptions ?? collect();
+    $deliveryPartners = $deliveryPartners ?? collect();
 @endphp
 <div class="product-field">
     <label for="{{ $idName }}">Product name</label>
@@ -181,6 +182,12 @@
     'product' => $productModel,
     'bundlePickerCatalog' => $bundlePickerCatalog,
     'currency' => $currency,
+])
+@include('product::products.partials.product-advanced-fields', [
+    'fieldIdPrefix' => $fieldIdPrefix ?? '',
+    'product' => $productModel,
+    'currency' => $currency,
+    'deliveryPartners' => $deliveryPartners,
 ])
 @unless(($fieldIdPrefix ?? '') === 'modal')
 <div class="product-field" style="grid-column:1/-1;">

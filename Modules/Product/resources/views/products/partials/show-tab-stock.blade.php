@@ -67,10 +67,11 @@
                         <th>GRN / source</th>
                         @if($branchStockSeparate)<th>Branch</th>@endif
                         <th>Qty left</th>
+                        <th>Barcode</th>
                         <th>Unit cost @if(filled($currency))({{ $currency }})@endif</th>
                         <th>Sell price @if(filled($currency))({{ $currency }})@endif</th>
+                        <th>Wholesale @if(filled($currency))({{ $currency }})@endif</th>
                         <th>Margin</th>
-                        <th style="text-align:right;">Update</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -78,6 +79,7 @@
                         @php
                             $grn = $layer->goodsReceiveNoteItem?->goodsReceiveNote;
                             $margin = $layer->marginAmount();
+                            $inlineInputStyle = 'width:100%;max-width:96px;box-sizing:border-box;padding:6px 8px;font-size:12px;border-radius:7px;border:1px solid var(--border);background:var(--card);color:var(--text);';
                         @endphp
                         <tr>
                             <td class="muted">{{ $layer->received_at?->format('M j, Y') ?? '—' }}</td>
@@ -98,21 +100,69 @@
                                 <strong style="color:var(--text);">{{ number_format((float) $layer->quantity_remaining, 3) }}</strong>
                                 <span class="muted" style="font-size:11px;"> / {{ number_format((float) $layer->quantity_received, 3) }}</span>
                             </td>
-                            <td class="muted">{{ number_format((float) $layer->unit_cost, 2) }}</td>
                             <td>
-                                <form method="post" action="{{ route('product.stock-layers.update', [$product, $layer]) }}" class="product-stock-layer-sell-form">
+                                <form method="post" action="{{ route('product.stock-layers.barcode', [$product, $layer]) }}" class="product-stock-layer-inline-form" style="display:flex;gap:5px;align-items:center;">
                                     @csrf
-                                    @method('PUT')
+                                    @method('PATCH')
+                                    <input
+                                        type="text"
+                                        name="batch_sku"
+                                        value="{{ old('batch_sku', $layer->batch_sku) }}"
+                                        maxlength="150"
+                                        placeholder="Barcode"
+                                        style="{{ $inlineInputStyle }}"
+                                    >
+                                    <button type="submit" class="linkbtn" style="padding:5px 8px;font-size:11px;" title="Save barcode"><i class="fa fa-check"></i></button>
+                                </form>
+                            </td>
+                            <td>
+                                <form method="post" action="{{ route('product.stock-layers.cost-price', [$product, $layer]) }}" class="product-stock-layer-inline-form" style="display:flex;gap:5px;align-items:center;">
+                                    @csrf
+                                    @method('PATCH')
                                     <input
                                         type="number"
-                                        name="selling_unit_price"
-                                        value="{{ $layer->selling_unit_price !== null ? number_format((float) $layer->selling_unit_price, 2, '.', '') : '' }}"
+                                        name="unit_cost"
+                                        value="{{ old('unit_cost', number_format((float) $layer->unit_cost, 2, '.', '')) }}"
                                         min="0"
                                         step="0.01"
                                         inputmode="decimal"
                                         required
-                                        style="width:100%;max-width:110px;box-sizing:border-box;padding:6px 8px;font-size:12px;border-radius:7px;border:1px solid var(--border);background:var(--card);color:var(--text);"
+                                        style="{{ $inlineInputStyle }}"
                                     >
+                                    <button type="submit" class="linkbtn" style="padding:5px 8px;font-size:11px;" title="Save cost price"><i class="fa fa-check"></i></button>
+                                </form>
+                            </td>
+                            <td>
+                                <form method="post" action="{{ route('product.stock-layers.selling-price', [$product, $layer]) }}" class="product-stock-layer-inline-form" style="display:flex;gap:5px;align-items:center;">
+                                    @csrf
+                                    @method('PATCH')
+                                    <input
+                                        type="number"
+                                        name="selling_unit_price"
+                                        value="{{ old('selling_unit_price', $layer->selling_unit_price !== null ? number_format((float) $layer->selling_unit_price, 2, '.', '') : '') }}"
+                                        min="0"
+                                        step="0.01"
+                                        inputmode="decimal"
+                                        style="{{ $inlineInputStyle }}"
+                                    >
+                                    <button type="submit" class="linkbtn" style="padding:5px 8px;font-size:11px;" title="Save selling price"><i class="fa fa-check"></i></button>
+                                </form>
+                            </td>
+                            <td>
+                                <form method="post" action="{{ route('product.stock-layers.wholesale-price', [$product, $layer]) }}" class="product-stock-layer-inline-form" style="display:flex;gap:5px;align-items:center;">
+                                    @csrf
+                                    @method('PATCH')
+                                    <input
+                                        type="number"
+                                        name="wholesale_unit_price"
+                                        value="{{ old('wholesale_unit_price', $layer->wholesale_unit_price !== null ? number_format((float) $layer->wholesale_unit_price, 2, '.', '') : '') }}"
+                                        min="0"
+                                        step="0.01"
+                                        inputmode="decimal"
+                                        style="{{ $inlineInputStyle }}"
+                                    >
+                                    <button type="submit" class="linkbtn" style="padding:5px 8px;font-size:11px;" title="Save wholesale price"><i class="fa fa-check"></i></button>
+                                </form>
                             </td>
                             <td class="muted">
                                 @if($margin !== null)
@@ -122,10 +172,6 @@
                                 @else
                                     —
                                 @endif
-                            </td>
-                            <td style="text-align:right;">
-                                    <button type="submit" class="linkbtn" style="padding:5px 10px;font-size:11px;">Save</button>
-                                </form>
                             </td>
                         </tr>
                     @endforeach
