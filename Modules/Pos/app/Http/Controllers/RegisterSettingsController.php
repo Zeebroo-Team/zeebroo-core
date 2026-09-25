@@ -35,6 +35,7 @@ class RegisterSettingsController extends Controller
             'business' => $business,
             'counters' => $counters,
             'cashiers' => $cashiers,
+            'branches' => $business->multiWarehouseBranchEnabled() ? $business->branches()->orderBy('name')->get() : collect(),
         ]);
     }
 
@@ -48,10 +49,15 @@ class RegisterSettingsController extends Controller
         $validated = $request->validate([
             'name'       => ['required', 'string', 'max:100'],
             'sort_order' => ['nullable', 'integer', 'min:0'],
+            'branch_id'  => [
+                'nullable', 'integer', 'min:1',
+                Rule::exists('branches', 'id')->where(fn ($q) => $q->where('business_id', $business->id)),
+            ],
         ]);
 
         PosCounter::create([
             'business_id' => $business->id,
+            'branch_id'   => $validated['branch_id'] ?? null,
             'name'        => trim($validated['name']),
             'sort_order'  => (int) ($validated['sort_order'] ?? 0),
             'is_active'   => true,
@@ -72,12 +78,17 @@ class RegisterSettingsController extends Controller
             'name'       => ['required', 'string', 'max:100'],
             'sort_order' => ['nullable', 'integer', 'min:0'],
             'is_active'  => ['nullable', 'boolean'],
+            'branch_id'  => [
+                'nullable', 'integer', 'min:1',
+                Rule::exists('branches', 'id')->where(fn ($q) => $q->where('business_id', $business->id)),
+            ],
         ]);
 
         $counter->update([
             'name'       => trim($validated['name']),
             'sort_order' => (int) ($validated['sort_order'] ?? $counter->sort_order),
             'is_active'  => $request->boolean('is_active'),
+            'branch_id'  => $validated['branch_id'] ?? null,
         ]);
 
         return back()->with('status', 'Counter updated.');

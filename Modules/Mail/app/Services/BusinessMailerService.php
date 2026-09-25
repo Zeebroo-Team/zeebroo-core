@@ -61,6 +61,122 @@ class BusinessMailerService
     }
 
     /**
+     * Checks the business's configured mail credentials are usable without actually sending an
+     * email: pings the Resend API with the saved key, or opens an SMTP connection and attempts
+     * AUTH LOGIN. Platform mail has nothing to verify.
+     *
+     * @return array{ok: bool, message: string}
+     */
+    public function verifyCredentials(Business $business): array
+    {
+        $settings = $this->config->get($business);
+        $provider = $settings['provider'] ?? BusinessMailConfig::PROVIDER_PLATFORM;
+
+        if ($provider === BusinessMailConfig::PROVIDER_PLATFORM) {
+            return ['ok' => true, 'message' => 'Using platform email — no credentials to verify.'];
+        }
+
+        if ($provider === BusinessMailConfig::PROVIDER_RESEND) {
+            return $this->verifyResendCredentials($settings);
+        }
+
+        return $this->verifySmtpCredentials($settings);
+    }
+
+    /** @return array{ok: bool, message: string} */
+    private function verifyResendCredentials(array $settings): array
+    {
+        $apiKey = $settings['resend_api_key'] ?? '';
+        if (! filled($apiKey)) {
+            return ['ok' => false, 'message' => 'No Resend API key saved. Save your settings first.'];
+        }
+
+        $ch = curl_init('https://api.resend.com/domains');
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => 8,
+            CURLOPT_HTTPHEADER     => ['Authorization: Bearer ' . $apiKey],
+        ]);
+        curl_exec($ch);
+        $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $err  = curl_error($ch);
+        curl_close($ch);
+
+        if ($err) {
+            return ['ok' => false, 'message' => 'Cannot reach Resend API: ' . $err];
+        }
+
+        return $http === 200
+            ? ['ok' => true, 'message' => 'Resend API key is valid.']
+            : ['ok' => false, 'message' => 'Resend API key rejected (HTTP ' . $http . '). Check your key.'];
+    }
+
+    /** @return array{ok: bool, message: string} */
+    private function verifySmtpCredentials(array $settings): array
+    {
+        $host       = $settings['smtp_host'] ?? '';
+        $port       = (int) ($settings['smtp_port'] ?? 587);
+        $username   = $settings['smtp_username'] ?? '';
+        $password   = $settings['smtp_password'] ?? '';
+        $encryption = $settings['smtp_encryption'] ?? 'tls';
+
+        if (! filled($host)) {
+            return ['ok' => false, 'message' => 'No SMTP host saved. Save your settings first.'];
+        }
+
+        try {
+            $address = ($encryption === 'ssl' ? 'ssl://' : '') . $host;
+            $socket  = @fsockopen($address, $port, $errno, $errstr, 10);
+
+            if (! $socket) {
+                return ['ok' => false, 'message' => "Cannot connect to {$host}:{$port} — {$errstr} ({$errno})"];
+            }
+
+            $read = fn () => fgets($socket, 512);
+            $send = function (string $cmd) use ($socket, $read): string {
+                fwrite($socket, $cmd . "\r\n");
+                return $read();
+            };
+
+            $read(); // banner
+            $send('EHLO posdesktop');
+
+            if ($encryption === 'tls') {
+                $tlsResp = $send('STARTTLS');
+                if (str_starts_with(trim($tlsResp), '220')) {
+                    stream_socket_enable_crypto($socket, true, STREAM_CRYPTO_METHOD_TLS_CLIENT);
+                    $send('EHLO posdesktop'); // re-handshake after TLS
+                }
+            }
+
+            $authMessage = 'SMTP server is reachable.';
+            if (filled($username) && filled($password)) {
+                $resp = $send('AUTH LOGIN');
+                if (str_starts_with(trim($resp), '334')) {
+                    $send(base64_encode($username));
+                    $passResp = $send(base64_encode($password));
+                    $authMessage = str_starts_with(trim($passResp), '235')
+                        ? 'SMTP credentials verified successfully.'
+                        : 'SMTP connected but authentication failed: ' . trim($passResp);
+                    if (! str_starts_with(trim($passResp), '235')) {
+                        fwrite($socket, "QUIT\r\n");
+                        fclose($socket);
+
+                        return ['ok' => false, 'message' => $authMessage];
+                    }
+                }
+            }
+
+            fwrite($socket, "QUIT\r\n");
+            fclose($socket);
+
+            return ['ok' => true, 'message' => $authMessage];
+        } catch (Throwable $e) {
+            return ['ok' => false, 'message' => 'Verification error: ' . $e->getMessage()];
+        }
+    }
+
+    /**
      * The two most common failures — an SMTP auth rejection and a Resend
      * "domain not verified" error — are protocol-level messages that aren't
      * actionable on their own. Point at the actual fix instead.

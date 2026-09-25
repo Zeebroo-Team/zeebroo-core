@@ -214,6 +214,11 @@ class PosController extends Controller
             'delivery_enabled' => ['nullable'],
             'delivery_methods' => ['nullable', 'array'],
             'delivery_methods.*' => ['nullable', 'string'],
+            'tax_rules' => ['nullable', 'array'],
+            'tax_rules.*.id' => ['nullable', 'string', 'max:36'],
+            'tax_rules.*.name' => ['nullable', 'string', 'max:50'],
+            'tax_rules.*.type' => ['nullable', 'string', 'in:percentage,flat'],
+            'tax_rules.*.value' => ['nullable', 'numeric', 'min:0'],
             'redirect' => ['nullable', 'string', 'max:2000'],
         ]);
 

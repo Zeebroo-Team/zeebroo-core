@@ -5,6 +5,7 @@ use Modules\Business\Http\Controllers\BranchController;
 use Modules\Business\Http\Controllers\BusinessController;
 use Modules\Business\Http\Controllers\BusinessGoogleBusinessProfileController;
 use Modules\Business\Http\Controllers\BusinessLogoGenerationController;
+use Modules\Business\Http\Controllers\BusinessRoleController;
 use Modules\Business\Http\Controllers\BusinessUserController;
 
 Route::middleware(['auth'])->group(function (): void {
@@ -42,6 +43,12 @@ Route::middleware(['auth'])->group(function (): void {
     Route::post('/business/users', [BusinessUserController::class, 'store'])->name('business.users.store');
     Route::put('/business/users/{member}', [BusinessUserController::class, 'update'])->name('business.users.update');
     Route::delete('/business/users/{member}', [BusinessUserController::class, 'destroy'])->name('business.users.destroy');
+
+    // Role management
+    Route::get('/business/roles', [BusinessRoleController::class, 'index'])->name('business.roles.index');
+    Route::post('/business/roles', [BusinessRoleController::class, 'store'])->name('business.roles.store');
+    Route::put('/business/roles/{role}', [BusinessRoleController::class, 'update'])->name('business.roles.update');
+    Route::delete('/business/roles/{role}', [BusinessRoleController::class, 'destroy'])->name('business.roles.destroy');
     Route::post('/business/warehouse-intro', [BusinessController::class, 'acknowledgeWarehouseIntro'])
         ->name('business.warehouse-intro.store');
 

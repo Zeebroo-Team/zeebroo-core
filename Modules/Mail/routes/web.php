@@ -11,6 +11,7 @@ Route::middleware(['web', 'auth', 'verified'])->group(function () {
     Route::get('/settings/mail', [MailSettingsController::class, 'edit'])->name('mail.settings.edit');
     Route::put('/settings/mail', [MailSettingsController::class, 'update'])->name('mail.settings.update');
     Route::post('/settings/mail/test', [MailSettingsController::class, 'sendTest'])->name('mail.settings.test');
+    Route::post('/settings/mail/verify', [MailSettingsController::class, 'verifyCredentials'])->name('mail.settings.verify');
     Route::post('/settings/mail/mailbox', [MailSettingsController::class, 'connectMailbox'])->name('mail.settings.mailbox.connect');
     Route::delete('/settings/mail/mailbox', [MailSettingsController::class, 'disconnectMailbox'])->name('mail.settings.mailbox.disconnect');
     Route::post('/settings/mail/mailbox/sync', [MailSettingsController::class, 'syncMailboxNow'])->name('mail.settings.mailbox.sync');

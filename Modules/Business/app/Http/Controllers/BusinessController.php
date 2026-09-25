@@ -85,7 +85,26 @@ class BusinessController extends Controller
         return view('business::platform-choice', [
             'latestDesktopRelease' => $latestDesktopRelease,
             'currentPackage' => $business->package,
+            'detectedOs' => $this->detectOsFromUserAgent($request->userAgent() ?? ''),
         ]);
+    }
+
+    /**
+     * Identifies the visitor's desktop OS from the request's User-Agent header
+     * so the "Download Desktop App" button can point at the right installer
+     * on first render, without waiting on client-side JS.
+     */
+    private function detectOsFromUserAgent(string $userAgent): string
+    {
+        if (preg_match('/Mac OS X|Macintosh/i', $userAgent)) {
+            return 'macos';
+        }
+
+        if (preg_match('/Linux/i', $userAgent) && ! preg_match('/Android/i', $userAgent)) {
+            return 'linux';
+        }
+
+        return 'windows';
     }
 
     public function map(Request $request): ViewContract|RedirectResponse

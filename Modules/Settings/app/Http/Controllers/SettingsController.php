@@ -290,6 +290,23 @@ class SettingsController extends Controller
                 ];
             }
 
+            if (($definition['key'] ?? '') === 'pos.default_deposit_account_id' && $scopeModel instanceof Business) {
+                $opts = [['label' => '— Not set —', 'value' => '']];
+                foreach (\Modules\Account\Models\Account::query()->where('business_id', $scopeModel->id)->orderBy('account_name')->get() as $account) {
+                    $opts[] = [
+                        'label' => (string) $account->account_name,
+                        'value' => (string) $account->getKey(),
+                    ];
+                }
+
+                return [
+                    ...$definition,
+                    'type' => 'select',
+                    'options' => $opts,
+                    'required' => false,
+                ];
+            }
+
             if (($definition['key'] ?? '') === 'hr.head_employee_id' && $scopeModel instanceof Business) {
                 $opts = [['label' => '— Not set —', 'value' => '']];
                 foreach ($scopeModel->employees()->orderBy('full_name')->orderBy('id')->get() as $emp) {
@@ -331,10 +348,13 @@ class SettingsController extends Controller
         $businessHolidays = collect();
         $hrPayrollOptedIn = false;
         $deliveryMethods = [];
+        $taxRules = [];
         if ($scopeModel instanceof Business) {
             $businessHolidays = $scopeModel->hrHolidays()->orderBy('holiday_date')->orderBy('id')->get();
             $hrPayrollOptedIn = app(HrPayrollSettingsService::class)->optedIn($scopeModel);
-            $deliveryMethods = app(PosSettingsService::class)->forBusiness($scopeModel)['delivery_methods'] ?? [];
+            $posSettingsForNav = app(PosSettingsService::class)->forBusiness($scopeModel);
+            $deliveryMethods = $posSettingsForNav['delivery_methods'] ?? [];
+            $taxRules = $posSettingsForNav['tax_rules'] ?? [];
         }
 
         return view('settings::index', [
@@ -347,6 +367,7 @@ class SettingsController extends Controller
             'businessHolidays' => $businessHolidays,
             'hrPayrollOptedIn' => $hrPayrollOptedIn,
             'deliveryMethods' => $deliveryMethods,
+            'taxRules' => $taxRules,
         ]);
     }
 

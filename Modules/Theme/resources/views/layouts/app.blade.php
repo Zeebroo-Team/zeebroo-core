@@ -654,9 +654,6 @@
                 <a href="{{ route('admin.logs.index') }}" class="{{ request()->routeIs('admin.logs.*') ? 'active' : '' }}"><i class="fa fa-bug"></i><span>Error Logs</span></a>
             @else
             <div class="menu-section">Main</div>
-                @if(Route::has('home.index'))
-                <a href="{{ route('home.index') }}" class="{{ request()->routeIs('home.index') ? 'active' : '' }}"><i class="fa fa-house"></i><span>Home</span></a>
-                @endif
                 <a href="{{ route('dashboard') }}" class="{{ request()->routeIs('dashboard') ? 'active' : '' }}"><i class="fa fa-gauge-high"></i><span>Overview</span></a>
             <a href="{{ route('aibot.index') }}" class="{{ request()->routeIs('aibot.*') ? 'active' : '' }}"><i class="fa fa-robot"></i><span>AI Agent</span></a>
             @if($showSidebarFinanceSection)
@@ -1094,6 +1091,7 @@
             @endif
             @if($navBusiness && (int) $navBusiness->user_id === (int) auth()->id())
                 <a href="{{ route('business.users.index') }}" class="{{ request()->routeIs('business.users.*') ? 'active' : '' }}"><i class="fa fa-users"></i><span>User Management</span></a>
+                <a href="{{ route('business.roles.index') }}" class="{{ request()->routeIs('business.roles.*') ? 'active' : '' }}"><i class="fa fa-user-shield"></i><span>Roles</span></a>
             @endif
             @if($showSidebarSettingsSection)
                 <div class="menu-section">Configuration</div>
