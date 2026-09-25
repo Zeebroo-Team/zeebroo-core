@@ -23,6 +23,8 @@ function esc(s) {
 
 // ── Header + back/logout ────────────────────────────────────────────────
 document.getElementById('back-btn').addEventListener('click', () => { window.location.href = 'dashboard.html'; });
+document.getElementById('reload-btn').addEventListener('click', () => { window.location.reload(); });
+document.getElementById('restart-btn').addEventListener('click', async () => { await window.electronAPI.restartApp(); });
 document.getElementById('logout-btn').addEventListener('click', async () => { await window.electronAPI.logout(); });
 
 (async () => {
@@ -32,7 +34,7 @@ document.getElementById('logout-btn').addEventListener('click', async () => { aw
 })();
 
 // ── Category filter options ─────────────────────────────────────────────
-async function loadCategories() {
+async function loadCategories(selectId = null) {
   const res = await API.customerCategories();
   if (res.status !== 200) return;
   const cats = res.body.data || [];
@@ -42,7 +44,52 @@ async function loadCategories() {
   const addSelect = document.getElementById('f-category');
   addSelect.innerHTML = '<option value="">None</option>' +
     cats.map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+  if (selectId) addSelect.value = String(selectId);
 }
+
+// ── New category (inline, from Add Customer modal) ────────────────────────
+const categoryError = document.getElementById('category-error');
+const categorySaveBtn = document.getElementById('category-save-btn');
+
+document.getElementById('add-category-inline-btn').addEventListener('click', () => {
+  document.getElementById('cat-name').value = '';
+  document.getElementById('cat-description').value = '';
+  categoryError.classList.remove('show');
+  openModal('category-modal');
+  document.getElementById('cat-name').focus();
+});
+
+categorySaveBtn.addEventListener('click', async () => {
+  const name = document.getElementById('cat-name').value.trim();
+  if (!name) {
+    categoryError.textContent = 'Category name is required.';
+    categoryError.classList.add('show');
+    return;
+  }
+
+  const payload = {
+    name,
+    description: document.getElementById('cat-description').value.trim() || null,
+  };
+
+  categorySaveBtn.disabled = true;
+  categorySaveBtn.textContent = 'Saving…';
+  try {
+    const res = await API.createCustomerCategory(payload);
+    if (res.status !== 201) {
+      const firstKey = res.body?.errors ? Object.keys(res.body.errors)[0] : null;
+      categoryError.textContent = firstKey ? res.body.errors[firstKey][0] : (res.body?.message || 'Could not save category.');
+      categoryError.classList.add('show');
+      return;
+    }
+    closeModal('category-modal');
+    showToast(`${res.body.data.name} added.`, 'success');
+    await loadCategories(res.body.data.id);
+  } finally {
+    categorySaveBtn.disabled = false;
+    categorySaveBtn.textContent = 'Save Category';
+  }
+});
 
 // ── List ────────────────────────────────────────────────────────────────
 function matchesTypeFilter(c) {

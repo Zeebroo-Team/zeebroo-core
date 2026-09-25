@@ -16,6 +16,8 @@
       <div class="who">
         <span>Business: <b id="who-business">—</b></span>
         <span>User: <b id="who-user">—</b></span>
+        <button class="icon-btn" id="reload-btn" title="Reload page"><i class="fa-solid fa-rotate-right"></i></button>
+        <button class="icon-btn" id="restart-btn" title="Restart app"><i class="fa-solid fa-power-off"></i></button>
         <button class="icon-btn" id="logout-btn"><i class="fa-solid fa-right-from-bracket"></i> Logout</button>
       </div>
     </div>
@@ -95,7 +97,10 @@
           </div>
           <div class="field">
             <label for="f-category">Category</label>
-            <select id="f-category"><option value="">None</option></select>
+            <div class="select-with-add">
+              <select id="f-category"><option value="">None</option></select>
+              <button type="button" class="add-inline-btn" id="add-category-inline-btn" title="Add category"><i class="fa-solid fa-plus"></i></button>
+            </div>
           </div>
         </div>
         <div class="field">
@@ -106,6 +111,31 @@
       <div class="modal-foot">
         <button class="ghost-btn" data-close="add-modal">Cancel</button>
         <button class="primary-btn" id="add-save-btn">Save Customer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- New Category modal -->
+  <div class="modal-backdrop" id="category-modal">
+    <div class="modal modal-sm">
+      <div class="modal-head">
+        <h2>New Category</h2>
+        <button class="modal-close" data-close="category-modal"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="error-box" id="category-error"></div>
+        <div class="field">
+          <label for="cat-name">Name *</label>
+          <input id="cat-name" type="text" placeholder="Category name" />
+        </div>
+        <div class="field">
+          <label for="cat-description">Description</label>
+          <textarea id="cat-description" placeholder="Optional"></textarea>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="ghost-btn" data-close="category-modal">Cancel</button>
+        <button class="primary-btn" id="category-save-btn">Save Category</button>
       </div>
     </div>
   </div>

@@ -33,6 +33,14 @@ document.getElementById('back-btn').addEventListener('click', () => {
   window.location.href = 'dashboard.html';
 });
 
+document.getElementById('reload-btn').addEventListener('click', () => {
+  window.location.reload();
+});
+
+document.getElementById('restart-btn').addEventListener('click', async () => {
+  await window.electronAPI.restartApp();
+});
+
 document.getElementById('logout-btn').addEventListener('click', async () => {
   await window.electronAPI.logout();
 });
