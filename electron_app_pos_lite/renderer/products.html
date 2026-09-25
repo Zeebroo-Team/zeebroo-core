@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Products & Categories — Zeebroo POS Lite</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<link rel="stylesheet" href="css/products.css" />
+</head>
+<body>
+  <div id="app">
+    <div class="topbar">
+      <div class="left">
+        <button class="icon-btn" id="back-btn"><i class="fa-solid fa-arrow-left"></i> Dashboard</button>
+        <div class="brand"><i class="fa-solid fa-tags"></i> Products & Categories</div>
+      </div>
+      <div class="who">
+        <span>Business: <b id="who-business">—</b></span>
+        <span>User: <b id="who-user">—</b></span>
+        <button class="icon-btn" id="reload-btn" title="Reload page"><i class="fa-solid fa-rotate-right"></i></button>
+        <button class="icon-btn" id="restart-btn" title="Restart app"><i class="fa-solid fa-power-off"></i></button>
+        <button class="icon-btn" id="logout-btn"><i class="fa-solid fa-right-from-bracket"></i> Logout</button>
+      </div>
+    </div>
+
+    <div class="content">
+      <!-- Sub-navigation cards -->
+      <div class="subnav" id="subnav">
+        <button class="subnav-card active" data-panel="products">
+          <div class="subnav-icon" style="--tint:#e7f6ee;--accent:#16a34a;"><i class="fa-solid fa-box"></i></div>
+          <div class="subnav-text">
+            <div class="subnav-title">Add Product</div>
+            <div class="subnav-desc">Browse &amp; add products</div>
+          </div>
+        </button>
+        <button class="subnav-card" data-panel="categories">
+          <div class="subnav-icon" style="--tint:#eef0ff;--accent:#4f46e5;"><i class="fa-solid fa-layer-group"></i></div>
+          <div class="subnav-text">
+            <div class="subnav-title">Categories</div>
+            <div class="subnav-desc">Group your products</div>
+          </div>
+        </button>
+        <button class="subnav-card" data-panel="brands">
+          <div class="subnav-icon" style="--tint:#fff1e0;--accent:#ea580c;"><i class="fa-solid fa-copyright"></i></div>
+          <div class="subnav-text">
+            <div class="subnav-title">Brands</div>
+            <div class="subnav-desc">Manage brand names</div>
+          </div>
+        </button>
+        <button class="subnav-card" data-panel="units">
+          <div class="subnav-icon" style="--tint:#fef3e0;--accent:#d97706;"><i class="fa-solid fa-ruler"></i></div>
+          <div class="subnav-text">
+            <div class="subnav-title">Units</div>
+            <div class="subnav-desc">pcs, kg, box…</div>
+          </div>
+        </button>
+      </div>
+
+      <!-- Products panel -->
+      <section class="panel active" id="panel-products">
+        <div id="product-list-view">
+          <div class="toolbar">
+            <div class="search-box">
+              <i class="fa-solid fa-magnifying-glass"></i>
+              <input id="product-search" type="text" placeholder="Search products…" />
+            </div>
+            <select class="filter-select" id="product-category-filter"><option value="">All categories</option></select>
+            <span class="count-pill" id="product-count-pill"></span>
+            <button class="primary-btn" id="add-product-btn"><i class="fa-solid fa-plus"></i> Add Product</button>
+          </div>
+          <div class="table-card">
+            <table>
+              <thead>
+                <tr>
+                  <th>Product</th>
+                  <th>Category</th>
+                  <th>Unit</th>
+                  <th>Price</th>
+                  <th>Stock</th>
+                  <th>Status</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="product-rows"><tr><td colspan="7" class="loading-state">Loading products…</td></tr></tbody>
+            </table>
+          </div>
+          <div class="table-pagination" id="product-pagination" style="display:none">
+            <button class="page-btn" id="product-page-prev" title="Previous page"><i class="fa-solid fa-chevron-left"></i></button>
+            <span class="page-info" id="product-page-info">Page 1 of 1</span>
+            <button class="page-btn" id="product-page-next" title="Next page"><i class="fa-solid fa-chevron-right"></i></button>
+          </div>
+        </div>
+
+        <!-- Product Detail view -->
+        <div id="product-detail-view" style="display:none">
+          <div class="inv-detail-header">
+            <button class="inv-back-btn" id="inv-back-btn"><i class="fa-solid fa-arrow-left"></i> Products</button>
+            <span class="inv-detail-breadcrumb" id="inv-detail-breadcrumb">Product Detail</span>
+            <div class="inv-detail-actions">
+              <button class="ghost-btn" id="prod-edit-btn"><i class="fa-solid fa-pen"></i> Edit</button>
+              <button class="ghost-btn danger" id="prod-delete-btn"><i class="fa-solid fa-trash"></i> Delete</button>
+            </div>
+          </div>
+
+          <div class="inv-hero" id="inv-hero">
+            <div class="inv-hero-img" id="inv-hero-img"><div class="inv-thumb-ph inv-thumb-lg"><i class="fa-solid fa-box"></i></div></div>
+            <div class="inv-hero-info">
+              <div class="inv-hero-name" id="inv-hero-name">—</div>
+              <div class="inv-hero-meta" id="inv-hero-meta"></div>
+              <div class="inv-hero-badges" id="inv-hero-badges"></div>
+            </div>
+          </div>
+
+          <div class="inv-tabs" id="inv-tabs">
+            <button class="inv-tab active" data-tab="overview">Overview</button>
+            <button class="inv-tab" data-tab="pricing">Pricing</button>
+            <button class="inv-tab" data-tab="stock">Stock</button>
+            <button class="inv-tab" data-tab="images">Images</button>
+            <button class="inv-tab" data-tab="variants">Variants</button>
+            <button class="inv-tab" data-tab="delivery" id="inv-tab-delivery" style="display:none"><i class="fa-solid fa-truck"></i> Delivery</button>
+            <button class="inv-tab" data-tab="rental" id="inv-tab-rental" style="display:none">Rental</button>
+          </div>
+
+          <div class="inv-tab-body" id="inv-tab-body">
+            <div class="inv-tab-pane active" id="inv-pane-overview"></div>
+            <div class="inv-tab-pane" id="inv-pane-pricing"></div>
+            <div class="inv-tab-pane" id="inv-pane-stock"></div>
+            <div class="inv-tab-pane" id="inv-pane-images"></div>
+            <div class="inv-tab-pane" id="inv-pane-variants"></div>
+            <div class="inv-tab-pane" id="inv-pane-delivery"></div>
+            <div class="inv-tab-pane" id="inv-pane-rental"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Categories panel -->
+      <section class="panel" id="panel-categories">
+        <div class="toolbar">
+          <div class="search-box">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <input id="category-search" type="text" placeholder="Search categories…" />
+          </div>
+          <span class="count-pill" id="category-count-pill"></span>
+          <button class="primary-btn" id="add-category-btn"><i class="fa-solid fa-plus"></i> Add Category</button>
+        </div>
+        <div class="table-card">
+          <table>
+            <thead><tr><th>Name</th><th>Parent</th><th>Products</th><th>Status</th><th></th></tr></thead>
+            <tbody id="category-rows"><tr><td colspan="5" class="loading-state">Loading categories…</td></tr></tbody>
+          </table>
+        </div>
+        <div class="table-pagination" id="category-pagination" style="display:none">
+          <button class="page-btn" id="category-page-prev" title="Previous page"><i class="fa-solid fa-chevron-left"></i></button>
+          <span class="page-info" id="category-page-info">Page 1 of 1</span>
+          <button class="page-btn" id="category-page-next" title="Next page"><i class="fa-solid fa-chevron-right"></i></button>
+        </div>
+      </section>
+
+      <!-- Brands panel -->
+      <section class="panel" id="panel-brands">
+        <div class="toolbar">
+          <div class="search-box">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <input id="brand-search" type="text" placeholder="Search brands…" />
+          </div>
+          <span class="count-pill" id="brand-count-pill"></span>
+          <button class="primary-btn" id="add-brand-btn"><i class="fa-solid fa-plus"></i> Add Brand</button>
+        </div>
+        <div class="table-card">
+          <table>
+            <thead><tr><th>Name</th><th>Website</th><th>Products</th><th>Status</th><th></th></tr></thead>
+            <tbody id="brand-rows"><tr><td colspan="5" class="loading-state">Loading brands…</td></tr></tbody>
+          </table>
+        </div>
+        <div class="table-pagination" id="brand-pagination" style="display:none">
+          <button class="page-btn" id="brand-page-prev" title="Previous page"><i class="fa-solid fa-chevron-left"></i></button>
+          <span class="page-info" id="brand-page-info">Page 1 of 1</span>
+          <button class="page-btn" id="brand-page-next" title="Next page"><i class="fa-solid fa-chevron-right"></i></button>
+        </div>
+      </section>
+
+      <!-- Units panel -->
+      <section class="panel" id="panel-units">
+        <div class="toolbar">
+          <div class="search-box">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <input id="unit-search" type="text" placeholder="Search units…" />
+          </div>
+          <span class="count-pill" id="unit-count-pill"></span>
+          <button class="primary-btn" id="add-unit-btn"><i class="fa-solid fa-plus"></i> Add Unit</button>
+        </div>
+        <div class="table-card">
+          <table>
+            <thead><tr><th>Name</th><th>Abbreviation</th><th>Products</th><th>Status</th><th></th></tr></thead>
+            <tbody id="unit-rows"><tr><td colspan="5" class="loading-state">Loading units…</td></tr></tbody>
+          </table>
+        </div>
+        <div class="table-pagination" id="unit-pagination" style="display:none">
+          <button class="page-btn" id="unit-page-prev" title="Previous page"><i class="fa-solid fa-chevron-left"></i></button>
+          <span class="page-info" id="unit-page-info">Page 1 of 1</span>
+          <button class="page-btn" id="unit-page-next" title="Next page"><i class="fa-solid fa-chevron-right"></i></button>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <!-- Add / Edit Product modal -->
+  <div class="modal-backdrop" id="product-modal">
+    <div class="modal modal-lg">
+      <div class="modal-head">
+        <h2 id="product-modal-title"><i class="fa-solid fa-box"></i> Add Product</h2>
+        <button class="modal-close" id="prod-modal-settings-btn" title="Form settings"><i class="fa-solid fa-gear"></i></button>
+        <button class="modal-close" data-close="product-modal"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+
+      <div class="modal-tabs" id="product-tabs">
+        <button type="button" class="modal-tab active" data-tab="basic"><i class="fa-solid fa-circle-info"></i> Basic</button>
+        <button type="button" class="modal-tab" data-tab="pricing"><i class="fa-solid fa-tag"></i> Pricing &amp; Stock</button>
+        <button type="button" class="modal-tab" data-tab="media"><i class="fa-regular fa-image"></i> Media</button>
+        <button type="button" class="modal-tab" data-tab="advanced"><i class="fa-solid fa-sliders"></i> Advanced</button>
+        <button type="button" class="modal-tab" data-tab="delivery"><i class="fa-solid fa-truck"></i> Delivery</button>
+      </div>
+
+      <div class="modal-body modal-body-tabs">
+        <div class="error-box" id="product-error"></div>
+
+        <!-- Basic -->
+        <div class="tab-pane active" data-pane="basic">
+          <div class="po-grid-2">
+            <div class="po-field">
+              <label class="po-field-label">Name <span class="po-required">*</span></label>
+              <input type="text" id="prod-f-name" class="po-field-input" placeholder="Product name" maxlength="255">
+            </div>
+            <div class="po-field">
+              <label class="po-field-label">Barcode / SKU</label>
+              <div style="display:flex;gap:6px">
+                <input type="text" id="prod-f-sku" class="po-field-input" placeholder="Barcode / SKU" maxlength="120" style="flex:1;min-width:0">
+                <button type="button" id="prod-sku-gen" class="po-btn-ghost" style="padding:0 10px;flex-shrink:0" title="Auto-generate Barcode / SKU"><i class="fa-solid fa-wand-magic-sparkles"></i></button>
+              </div>
+            </div>
+          </div>
+          <div class="po-grid-2">
+            <div class="po-field">
+              <label class="po-field-label">Model No</label>
+              <input type="text" id="prod-f-model-no" class="po-field-input" placeholder="e.g. ABC-2024" maxlength="120">
+            </div>
+            <div class="po-field">
+              <label class="po-field-label">Size</label>
+              <input type="text" id="prod-f-size" class="po-field-input" placeholder="e.g. XL, 500ml, 12cm" maxlength="120">
+            </div>
+          </div>
+          <div class="po-field" style="max-width:220px">
+            <label class="po-field-label">Mfg Date</label>
+            <input type="date" id="prod-f-mfg-date" class="po-field-input">
+          </div>
+          <div class="po-field">
+            <label class="po-field-label">Description</label>
+            <textarea id="prod-f-description" class="po-field-input" rows="4" placeholder="Optional product description…" maxlength="5000" style="resize:vertical;min-height:80px"></textarea>
+          </div>
+          <div class="po-field">
+            <label class="po-field-label">Tags</label>
+            <div class="tag-input-wrap" id="prod-tags-wrap">
+              <div id="prod-tags-tags" class="tag-input-tags"></div>
+              <input type="text" id="prod-tags-input" class="tag-input-field" placeholder="Type a tag and press Enter…" autocomplete="off" maxlength="60">
+            </div>
+          </div>
+          <div class="po-field" style="flex-direction:row;align-items:center;gap:10px">
+            <input type="checkbox" id="prod-f-active" checked style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent)">
+            <label for="prod-f-active" class="po-field-label" style="margin:0;cursor:pointer">Active</label>
+          </div>
+        </div>
+
+        <!-- Pricing & Stock -->
+        <div class="tab-pane" data-pane="pricing">
+          <div class="po-grid-3">
+            <div class="po-field">
+              <label class="po-field-label">Cost Price</label>
+              <input type="number" id="prod-f-cost-price" class="po-field-input" min="0" step="0.01" placeholder="0.00">
+            </div>
+            <div class="po-field">
+              <label class="po-field-label">Selling Price <span class="po-required">*</span></label>
+              <input type="number" id="prod-f-price" class="po-field-input" min="0" step="0.01" placeholder="0.00">
+            </div>
+            <div class="po-field">
+              <label class="po-field-label" title="Price offered to wholesale / bulk customers"><i class="fa-solid fa-tags" style="color:var(--accent);margin-right:4px"></i>Wholesale Price</label>
+              <input type="number" id="prod-f-wholesale-price" class="po-field-input" min="0" step="0.01" placeholder="optional">
+            </div>
+          </div>
+          <div class="po-field" style="max-width:220px">
+            <label class="po-field-label">Unit</label>
+            <div class="pick-row">
+              <select id="prod-f-unit" class="po-field-input"><option value="">— No unit —</option></select>
+              <button type="button" class="mini-add-btn" data-quick="unit" title="Add new unit"><i class="fa-solid fa-plus"></i></button>
+            </div>
+          </div>
+          <!-- Edit mode: single stock quantity -->
+          <div class="po-field" id="prod-stock-field" style="display:none;max-width:220px">
+            <label class="po-field-label">Stock Quantity</label>
+            <input type="number" id="prod-f-stock" class="po-field-input" min="0" step="0.001" placeholder="0">
+          </div>
+          <!-- Create mode: opening stock batch table -->
+          <div id="prod-batch-section">
+            <div class="prod-batch-hdr">
+              <div class="prod-batch-hdr-title"><i class="fa-solid fa-layer-group"></i> Opening Stock Batches</div>
+              <div style="display:flex;align-items:center;gap:10px">
+                <label class="prod-batch-pricing-lbl" title="Set different prices per batch">
+                  <input type="checkbox" id="prod-batch-pricing-chk">
+                  <span>Batch-wise pricing</span>
+                </label>
+                <button type="button" id="prod-batch-add-btn" class="po-btn-ghost" style="display:flex;align-items:center;gap:6px;font-size:12px"><i class="fa-solid fa-plus"></i> Add Batch</button>
+              </div>
+            </div>
+            <div id="prod-batch-wrap"></div>
+          </div>
+        </div>
+
+        <!-- Media -->
+        <div class="tab-pane" data-pane="media">
+          <div class="po-field">
+            <label class="po-field-label">Image</label>
+            <div class="prod-img-row">
+              <div class="prod-img-thumb" id="prod-img-thumb">
+                <i class="fa-regular fa-image" style="font-size:22px;color:var(--text-muted)"></i>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:6px">
+                <button type="button" id="prod-img-choose" class="po-btn-ghost" style="width:fit-content"><i class="fa-regular fa-folder-open"></i> Choose Image</button>
+                <button type="button" id="prod-img-remove" class="po-btn-ghost" style="display:none;width:fit-content;color:var(--danger)"><i class="fa-solid fa-trash"></i> Remove</button>
+              </div>
+            </div>
+          </div>
+          <div class="po-field">
+            <label class="po-field-label">Categories</label>
+            <div class="tag-input-wrap" id="prod-cat-wrap">
+              <div id="prod-cat-tags" class="tag-input-tags"></div>
+              <input type="text" id="prod-cat-input" class="tag-input-field" placeholder="Search categories…" autocomplete="off">
+            </div>
+            <div class="tag-input-dd" id="prod-cat-dd" style="display:none"></div>
+          </div>
+          <div class="po-field">
+            <label class="po-field-label">Brands</label>
+            <div class="tag-input-wrap" id="prod-brand-wrap">
+              <div id="prod-brand-tags" class="tag-input-tags"></div>
+              <input type="text" id="prod-brand-input" class="tag-input-field" placeholder="Search brands…" autocomplete="off">
+            </div>
+            <div class="tag-input-dd" id="prod-brand-dd" style="display:none"></div>
+          </div>
+        </div>
+
+        <!-- Advanced -->
+        <div class="tab-pane" data-pane="advanced">
+          <div class="prod-bundle-toggle-row">
+            <input type="checkbox" id="prod-f-bundle" class="prod-bundle-checkbox">
+            <label for="prod-f-bundle" class="prod-bundle-toggle-label">
+              <i class="fa-solid fa-cubes"></i> Bundle product
+              <span class="prod-bundle-toggle-hint">Combine multiple products into one</span>
+            </label>
+          </div>
+          <div id="prod-bundle-section" class="prod-bundle-section" style="display:none">
+            <div class="prod-bundle-search-row">
+              <div class="prod-bundle-search-wrap">
+                <i class="fa-solid fa-magnifying-glass prod-bundle-search-icon"></i>
+                <input type="text" id="prod-bundle-search" class="prod-bundle-search-input" placeholder="Search and add products to this bundle…" autocomplete="off">
+              </div>
+              <div id="prod-bundle-dd" class="tag-input-dd" style="display:none"></div>
+            </div>
+            <div id="prod-bundle-items" class="prod-bundle-list">
+              <div class="prod-bundle-empty"><i class="fa-solid fa-box-open"></i> No items yet — search above to add products</div>
+            </div>
+            <div class="prod-bundle-footer">
+              <span id="prod-bundle-count" class="prod-bundle-count-label">0 items in bundle</span>
+            </div>
+          </div>
+          <div class="prod-adv-cards">
+            <!-- Warranty -->
+            <div class="prod-adv-card">
+              <input type="checkbox" id="prod-f-warranty" class="prod-adv-card-chk">
+              <label class="prod-adv-card-top" for="prod-f-warranty">
+                <div class="prod-adv-card-icon"><i class="fa-solid fa-shield-halved"></i></div>
+                <div class="prod-adv-card-text">
+                  <span class="prod-adv-card-name">Warranty</span>
+                  <span class="prod-adv-card-desc">Product includes a seller or manufacturer warranty</span>
+                </div>
+                <div class="prod-adv-card-sw"><div class="prod-adv-card-knob"></div></div>
+              </label>
+              <div class="prod-adv-card-fields" id="prod-warranty-duration-row">
+                <div class="po-field-label" style="margin-bottom:6px"><i class="fa-solid fa-clock" style="color:var(--accent);margin-right:4px"></i> Warranty Duration</div>
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                  <input type="text" id="prod-f-warranty-duration" class="po-field-input" style="max-width:180px" placeholder="e.g. 1 Year">
+                  <div class="warranty-chips">
+                    <button type="button" class="warranty-chip" data-val="7 Days">7 Days</button>
+                    <button type="button" class="warranty-chip" data-val="30 Days">30 Days</button>
+                    <button type="button" class="warranty-chip" data-val="60 Days">60 Days</button>
+                    <button type="button" class="warranty-chip" data-val="1 Year">1 Year</button>
+                    <button type="button" class="warranty-chip" data-val="Lifetime"><i class="fa-solid fa-infinity"></i> Lifetime</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <!-- Expiration -->
+            <div class="prod-adv-card">
+              <input type="checkbox" id="prod-f-expiry" class="prod-adv-card-chk">
+              <label class="prod-adv-card-top" for="prod-f-expiry">
+                <div class="prod-adv-card-icon"><i class="fa-solid fa-calendar-xmark"></i></div>
+                <div class="prod-adv-card-text">
+                  <span class="prod-adv-card-name">Expiration</span>
+                  <span class="prod-adv-card-desc">Track and record this product's expiration date</span>
+                </div>
+                <div class="prod-adv-card-sw"><div class="prod-adv-card-knob"></div></div>
+              </label>
+              <div class="prod-adv-card-fields" id="prod-exp-date-row">
+                <div class="po-field-label" style="margin-bottom:6px"><i class="fa-solid fa-calendar-xmark" style="color:var(--accent);margin-right:4px"></i> Expiration Date</div>
+                <input type="date" id="prod-f-exp-date" class="po-field-input" style="max-width:100%">
+              </div>
+            </div>
+            <!-- Loyalty Redeemable -->
+            <div class="prod-adv-card">
+              <input type="checkbox" id="prod-f-loyalty" class="prod-adv-card-chk">
+              <label class="prod-adv-card-top" for="prod-f-loyalty">
+                <div class="prod-adv-card-icon"><i class="fa-solid fa-star"></i></div>
+                <div class="prod-adv-card-text">
+                  <span class="prod-adv-card-name">Loyalty Redeemable</span>
+                  <span class="prod-adv-card-desc">Customers can redeem loyalty points for this product</span>
+                </div>
+                <div class="prod-adv-card-sw"><div class="prod-adv-card-knob"></div></div>
+              </label>
+            </div>
+            <!-- Customer Required -->
+            <div class="prod-adv-card">
+              <input type="checkbox" id="prod-f-customer-required" class="prod-adv-card-chk">
+              <label class="prod-adv-card-top" for="prod-f-customer-required">
+                <div class="prod-adv-card-icon"><i class="fa-solid fa-user-check"></i></div>
+                <div class="prod-adv-card-text">
+                  <span class="prod-adv-card-name">Customer Required</span>
+                  <span class="prod-adv-card-desc">A customer must be selected before selling</span>
+                </div>
+                <div class="prod-adv-card-sw"><div class="prod-adv-card-knob"></div></div>
+              </label>
+            </div>
+            <!-- Rental -->
+            <div class="prod-adv-card">
+              <input type="checkbox" id="prod-f-rental" class="prod-adv-card-chk">
+              <label class="prod-adv-card-top" for="prod-f-rental">
+                <div class="prod-adv-card-icon"><i class="fa-solid fa-key"></i></div>
+                <div class="prod-adv-card-text">
+                  <span class="prod-adv-card-name">Rental</span>
+                  <span class="prod-adv-card-desc">This product can be rented instead of sold</span>
+                </div>
+                <div class="prod-adv-card-sw"><div class="prod-adv-card-knob"></div></div>
+              </label>
+              <div class="prod-adv-card-fields" id="prod-rental-terms-row">
+                <div class="po-field-label" style="margin-bottom:6px"><i class="fa-solid fa-sack-dollar" style="color:var(--accent);margin-right:4px"></i> Rental Terms</div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+                  <div style="flex:1;min-width:110px">
+                    <label style="display:block;font-size:11px;color:var(--text-muted);margin-bottom:4px">Daily Rate</label>
+                    <input type="number" id="prod-f-rental-daily-rate" class="po-field-input" min="0" step="0.01" placeholder="0.00">
+                  </div>
+                  <div style="flex:1;min-width:110px">
+                    <label style="display:block;font-size:11px;color:var(--text-muted);margin-bottom:4px">Max Rental Days</label>
+                    <input type="number" id="prod-f-rental-max-days" class="po-field-input" min="1" step="1" placeholder="e.g. 4">
+                  </div>
+                  <div style="flex:1;min-width:150px">
+                    <label style="display:block;font-size:11px;color:var(--text-muted);margin-bottom:4px">Late Fee (× daily rate/day)</label>
+                    <input type="number" id="prod-f-rental-late-fee-multiplier" class="po-field-input" min="0" step="0.1" placeholder="e.g. 1.5">
+                  </div>
+                </div>
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface)">
+                  <input type="checkbox" id="prod-f-rental-needs-cleaning" style="accent-color:var(--accent);cursor:pointer">
+                  <span style="font-size:12px;color:var(--text)"><i class="fa-solid fa-broom" style="color:var(--accent);margin-right:4px"></i> Requires cleaning/inspection before next rental</span>
+                </label>
+              </div>
+            </div>
+            <!-- Subscription -->
+            <div class="prod-adv-card">
+              <input type="checkbox" id="prod-f-subscription" class="prod-adv-card-chk">
+              <label class="prod-adv-card-top" for="prod-f-subscription">
+                <div class="prod-adv-card-icon"><i class="fa-solid fa-repeat"></i></div>
+                <div class="prod-adv-card-text">
+                  <span class="prod-adv-card-name">Subscription</span>
+                  <span class="prod-adv-card-desc">Sold as a recurring subscription product</span>
+                </div>
+                <div class="prod-adv-card-sw"><div class="prod-adv-card-knob"></div></div>
+              </label>
+              <div class="prod-adv-card-fields" id="prod-subscription-terms-row">
+                <div class="po-field-label" style="margin-bottom:6px"><i class="fa-solid fa-calendar-days" style="color:var(--accent);margin-right:4px"></i> Subscription Terms</div>
+                <div style="margin-bottom:10px;max-width:220px">
+                  <label style="display:block;font-size:11px;color:var(--text-muted);margin-bottom:4px">Recurring Period</label>
+                  <select id="prod-f-subscription-period" class="po-field-input">
+                    <option value="weekly">Weekly</option>
+                    <option value="monthly" selected>Monthly</option>
+                    <option value="quarterly">Quarterly</option>
+                    <option value="yearly">Yearly</option>
+                  </select>
+                </div>
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface)">
+                  <input type="checkbox" id="prod-f-subscription-free-trial" style="accent-color:var(--accent);cursor:pointer">
+                  <span style="font-size:12px;color:var(--text)"><i class="fa-solid fa-gift" style="color:var(--accent);margin-right:4px"></i> Free trial (first recurring cycle not charged)</span>
+                </label>
+              </div>
+            </div>
+            <!-- Dynamic Pricing -->
+            <div class="prod-adv-card">
+              <input type="checkbox" id="prod-f-dynamic-pricing" class="prod-adv-card-chk">
+              <label class="prod-adv-card-top" for="prod-f-dynamic-pricing">
+                <div class="prod-adv-card-icon"><i class="fa-solid fa-wand-magic-sparkles"></i></div>
+                <div class="prod-adv-card-text">
+                  <span class="prod-adv-card-name">Dynamic Pricing</span>
+                  <span class="prod-adv-card-desc">Cashier enters the price at POS (e.g. mobile reload)</span>
+                </div>
+                <div class="prod-adv-card-sw"><div class="prod-adv-card-knob"></div></div>
+              </label>
+              <div class="prod-adv-card-fields" id="prod-dynamic-terms-row">
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface)">
+                  <input type="checkbox" id="prod-f-dynamic-linked" style="accent-color:var(--accent);cursor:pointer">
+                  <span style="font-size:12px;color:var(--text)"><i class="fa-solid fa-link" style="color:var(--accent);margin-right:4px"></i> Similar price &amp; quantity (1 unit = 1.00, so Rs 350 sells 350 units and reduces stock by 350)</span>
+                </label>
+              </div>
+            </div>
+            <!-- Item Wise Tax -->
+            <div class="prod-adv-card">
+              <input type="checkbox" id="prod-f-item-tax" class="prod-adv-card-chk">
+              <label class="prod-adv-card-top" for="prod-f-item-tax">
+                <div class="prod-adv-card-icon"><i class="fa-solid fa-percent"></i></div>
+                <div class="prod-adv-card-text">
+                  <span class="prod-adv-card-name">Item Wise Tax</span>
+                  <span class="prod-adv-card-desc">Tax is calculated per item, not on the order total</span>
+                </div>
+                <div class="prod-adv-card-sw"><div class="prod-adv-card-knob"></div></div>
+              </label>
+            </div>
+            <!-- Item Wise Discount -->
+            <div class="prod-adv-card">
+              <input type="checkbox" id="prod-f-item-discount" class="prod-adv-card-chk">
+              <label class="prod-adv-card-top" for="prod-f-item-discount">
+                <div class="prod-adv-card-icon"><i class="fa-solid fa-tag"></i></div>
+                <div class="prod-adv-card-text">
+                  <span class="prod-adv-card-name">Item Wise Discount</span>
+                  <span class="prod-adv-card-desc">Discount is applied to each item individually</span>
+                </div>
+                <div class="prod-adv-card-sw"><div class="prod-adv-card-knob"></div></div>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Delivery -->
+        <div class="tab-pane" data-pane="delivery">
+          <div id="prod-delivery-disabled-msg" class="prod-delivery-disabled" style="display:none">
+            <i class="fa-solid fa-truck"></i>
+            <strong id="prod-delivery-disabled-title">Delivery methods are turned off</strong>
+            <span id="prod-delivery-disabled-text">Enable delivery methods from the Zeebroo web dashboard to offer courier delivery for this product.</span>
+          </div>
+          <div id="prod-delivery-partners" class="prod-delivery-partners"></div>
+        </div>
+      </div>
+
+      <div class="modal-foot">
+        <button class="ghost-btn" data-close="product-modal">Cancel</button>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;margin-left:auto">
+          <button class="primary-btn" id="product-save-btn">Save Product</button>
+          <button class="save-add-link" id="prod-modal-save-new" type="button" style="display:none"><i class="fa-solid fa-plus"></i> Save &amp; add another</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Image picker modal (upload or pick from the online file manager) -->
+  <div class="modal-backdrop" id="img-picker-modal">
+    <div class="modal">
+      <div class="modal-head">
+        <h2><i class="fa-regular fa-image"></i> Choose Image</h2>
+        <button class="modal-close" data-close="img-picker-modal"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="img-picker-tabs">
+        <button type="button" class="img-tab-btn active" data-tab="upload"><i class="fa-solid fa-upload"></i> Upload</button>
+        <button type="button" class="img-tab-btn" data-tab="fm"><i class="fa-regular fa-folder-open"></i> File Manager</button>
+      </div>
+      <div class="img-picker-body">
+        <div id="img-tab-upload" style="display:block">
+          <div class="img-upload-drop" id="img-upload-drop">
+            <i class="fa-solid fa-cloud-arrow-up" style="font-size:26px;color:var(--accent);margin-bottom:8px;display:block"></i>
+            Click to browse for an image
+          </div>
+          <div id="img-upload-preview" style="display:none;text-align:center">
+            <img id="img-upload-preview-img" src="" alt="" style="max-width:100%;max-height:220px;border-radius:8px;margin-bottom:8px">
+            <div id="img-upload-preview-name" style="font-size:12px;color:var(--muted);margin-bottom:10px"></div>
+            <button type="button" id="img-upload-confirm" class="primary-btn"><i class="fa-solid fa-upload"></i> Upload &amp; Use</button>
+          </div>
+        </div>
+        <div id="img-tab-fm" style="display:none">
+          <div class="img-fm-breadcrumb" id="img-fm-breadcrumb"></div>
+          <div class="img-fm-grid" id="img-fm-grid"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Category modal (also used as the "+" quick-add from the product form) -->
+  <div class="modal-backdrop" id="category-modal">
+    <div class="modal">
+      <div class="modal-head">
+        <h2>Add Category</h2>
+        <button class="modal-close" data-close="category-modal"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="error-box" id="category-error"></div>
+        <div class="field"><label for="c-name">Name *</label><input id="c-name" type="text" placeholder="e.g. Beverages" /></div>
+        <div class="field"><label for="c-parent">Parent Category</label><select id="c-parent"><option value="">None</option></select></div>
+        <div class="field"><label for="c-description">Description</label><textarea id="c-description" placeholder="Optional"></textarea></div>
+        <label class="check-row"><input type="checkbox" id="c-active" checked /> Active</label>
+      </div>
+      <div class="modal-foot">
+        <button class="ghost-btn" data-close="category-modal">Cancel</button>
+        <button class="primary-btn" id="category-save-btn">Save Category</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Brand modal (also used as the "+" quick-add from the product form) -->
+  <div class="modal-backdrop" id="brand-modal">
+    <div class="modal">
+      <div class="modal-head">
+        <h2>Add Brand</h2>
+        <button class="modal-close" data-close="brand-modal"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="error-box" id="brand-error"></div>
+        <div class="field"><label for="b-name">Name *</label><input id="b-name" type="text" placeholder="e.g. Nestlé" /></div>
+        <div class="field"><label for="b-website">Website</label><input id="b-website" type="text" placeholder="https://…" /></div>
+        <div class="field"><label for="b-description">Description</label><textarea id="b-description" placeholder="Optional"></textarea></div>
+        <label class="check-row"><input type="checkbox" id="b-active" checked /> Active</label>
+      </div>
+      <div class="modal-foot">
+        <button class="ghost-btn" data-close="brand-modal">Cancel</button>
+        <button class="primary-btn" id="brand-save-btn">Save Brand</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Unit modal (also used as the "+" quick-add from the product form) -->
+  <div class="modal-backdrop" id="unit-modal">
+    <div class="modal">
+      <div class="modal-head">
+        <h2>Add Unit</h2>
+        <button class="modal-close" data-close="unit-modal"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="error-box" id="unit-error"></div>
+        <div class="row-2">
+          <div class="field"><label for="u-name">Name *</label><input id="u-name" type="text" placeholder="e.g. Kilogram" /></div>
+          <div class="field"><label for="u-abbr">Abbreviation</label><input id="u-abbr" type="text" placeholder="e.g. kg" /></div>
+        </div>
+        <label class="check-row"><input type="checkbox" id="u-active" checked /> Active</label>
+      </div>
+      <div class="modal-foot">
+        <button class="ghost-btn" data-close="unit-modal">Cancel</button>
+        <button class="primary-btn" id="unit-save-btn">Save Unit</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="js/api.js"></script>
+  <script src="js/products.js"></script>
+</body>
+</html>

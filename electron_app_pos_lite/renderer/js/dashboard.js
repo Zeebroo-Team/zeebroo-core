@@ -11,6 +11,8 @@ const TILES = [
     title: 'Products & Categories',
     desc: 'Browse, add, and organize your product catalog.',
     tint: '#e7f6ee', accent: '#16a34a',
+    active: true,
+    href: 'products.html',
   },
   {
     key: 'barcodes',
@@ -39,6 +41,8 @@ const TILES = [
     title: 'Cashiers',
     desc: 'Manage cashier accounts and register access.',
     tint: '#ffe9ef', accent: '#e11d48',
+    active: true,
+    href: 'cashiers.html',
   },
   {
     key: 'customers',
@@ -95,6 +99,14 @@ grid.querySelectorAll('.tile').forEach((el) => {
     if (tile.active) window.location.href = tile.href;
     else showToast(`${tile.title} is coming soon.`);
   });
+});
+
+document.getElementById('reload-btn').addEventListener('click', () => {
+  window.location.reload();
+});
+
+document.getElementById('restart-btn').addEventListener('click', async () => {
+  await window.electronAPI.restartApp();
 });
 
 document.getElementById('logout-btn').addEventListener('click', async () => {

@@ -4,7 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const http = require('http');
 const https = require('https');
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const { API_BASE_URL } = require('./config');
 
 // ── Local config (token + selected business) ───────────────────────────────
@@ -124,6 +124,12 @@ ipcMain.handle('logout', () => {
   return true;
 });
 
+// Fully quits and relaunches the app (used by the Restart App button during dev).
+ipcMain.handle('app-restart', () => {
+  app.relaunch();
+  app.exit(0);
+});
+
 // ── API proxy (runs in the main process so the renderer never needs Node
 //    integration or has to fight the browser's CORS policy) ────────────────
 function apiRequest(method, path_, body, token, businessId, branchId) {
@@ -170,4 +176,57 @@ ipcMain.handle('api-request', async (_e, { method, path: p, body }) => {
   } catch (err) {
     return { status: 0, body: { message: err.message } };
   }
+});
+
+// ── Multipart file upload (e.g. product image → file manager) ──────────────
+const MIME_EXT = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml', pdf: 'application/pdf' };
+function extMime(filePath) {
+  const ext = path.extname(filePath).slice(1).toLowerCase();
+  return MIME_EXT[ext] || 'application/octet-stream';
+}
+function buildMultipart(boundary, files) {
+  const CRLF = '\r\n';
+  const parts = [];
+  for (const { fieldName, filePath, fileName, mime } of files) {
+    parts.push(Buffer.from(`--${boundary}${CRLF}Content-Disposition: form-data; name="${fieldName}"; filename="${fileName}"${CRLF}Content-Type: ${mime}${CRLF}${CRLF}`));
+    parts.push(fs.readFileSync(filePath));
+    parts.push(Buffer.from(CRLF));
+  }
+  parts.push(Buffer.from(`--${boundary}--${CRLF}`));
+  return Buffer.concat(parts);
+}
+ipcMain.handle('api-upload', async (_e, { path: apiPath, filePath }) => {
+  try {
+    const base = API_BASE_URL.replace(/\/$/, '');
+    const url = new URL(base + apiPath);
+    const lib = url.protocol === 'https:' ? https : http;
+    const boundary = 'PosBoundary' + Date.now();
+    const fileName = path.basename(filePath);
+    const body = buildMultipart(boundary, [{ fieldName: 'files[]', filePath, fileName, mime: extMime(filePath) }]);
+    const headers = {
+      'Content-Type': `multipart/form-data; boundary=${boundary}`,
+      'Content-Length': body.length,
+      'Accept': 'application/json',
+    };
+    if (config.token) headers['Authorization'] = `Bearer ${config.token}`;
+    if (config.business_id) headers['X-Business-Id'] = String(config.business_id);
+    if (config.branch_id) headers['X-Branch-Id'] = String(config.branch_id);
+    return await new Promise((resolve, reject) => {
+      const req = lib.request({ hostname: url.hostname, port: url.port || (url.protocol === 'https:' ? 443 : 80), path: url.pathname + url.search, method: 'POST', headers }, (res) => {
+        let data = '';
+        res.on('data', (c) => { data += c; });
+        res.on('end', () => { try { resolve({ status: res.statusCode, body: JSON.parse(data) }); } catch (_) { resolve({ status: res.statusCode, body: data }); } });
+      });
+      req.on('error', reject);
+      req.write(body);
+      req.end();
+    });
+  } catch (err) {
+    return { status: 0, body: { message: err.message } };
+  }
+});
+
+ipcMain.handle('show-open-dialog', async (_e, options) => {
+  if (!mainWindow) return { canceled: true, filePaths: [] };
+  return dialog.showOpenDialog(mainWindow, options);
 });

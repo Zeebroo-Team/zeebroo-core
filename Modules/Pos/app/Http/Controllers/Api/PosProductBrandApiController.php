@@ -39,6 +39,23 @@ class PosProductBrandApiController extends Controller
             $query->where('is_active', false);
         }
 
+        // Pagination is opt-in (only when `page` is passed) so callers that need the
+        // full unfiltered list — e.g. the brand picker in the product form — keep working.
+        if ($request->filled('page')) {
+            $perPage = max(1, min(100, (int) $request->query('per_page', 20)));
+            $brands  = $query->paginate($perPage);
+
+            return response()->json([
+                'data' => collect($brands->items())->map(fn ($b) => $this->format($b))->values(),
+                'meta' => [
+                    'current_page' => $brands->currentPage(),
+                    'last_page'    => $brands->lastPage(),
+                    'per_page'     => $brands->perPage(),
+                    'total'        => $brands->total(),
+                ],
+            ]);
+        }
+
         $brands = $query->get();
 
         return response()->json([

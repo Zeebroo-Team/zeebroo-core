@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Cashiers — Zeebroo POS Lite</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<link rel="stylesheet" href="css/cashiers.css" />
+</head>
+<body>
+  <div id="app">
+    <div class="topbar">
+      <div class="left">
+        <button class="icon-btn" id="back-btn"><i class="fa-solid fa-arrow-left"></i> Dashboard</button>
+        <div class="brand"><i class="fa-solid fa-id-badge"></i> Cashiers</div>
+      </div>
+      <div class="who">
+        <span>Business: <b id="who-business">—</b></span>
+        <span>User: <b id="who-user">—</b></span>
+        <button class="icon-btn" id="reload-btn" title="Reload page"><i class="fa-solid fa-rotate-right"></i></button>
+        <button class="icon-btn" id="restart-btn" title="Restart app"><i class="fa-solid fa-power-off"></i></button>
+        <button class="icon-btn" id="logout-btn"><i class="fa-solid fa-right-from-bracket"></i> Logout</button>
+      </div>
+    </div>
+
+    <div class="content">
+      <div class="toolbar">
+        <div class="search-box">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input id="search-input" type="text" placeholder="Search by name or username…" />
+        </div>
+        <select class="filter-select" id="status-filter">
+          <option value="">All statuses</option>
+          <option value="active">Active</option>
+          <option value="inactive">Inactive</option>
+        </select>
+        <span class="count-pill" id="count-pill"></span>
+        <button class="primary-btn" id="add-btn"><i class="fa-solid fa-plus"></i> Add Cashier</button>
+      </div>
+
+      <div class="table-card">
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Username</th>
+              <th>Status</th>
+              <th>Added</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="cashier-rows">
+            <tr><td colspan="5" class="loading-state">Loading cashiers…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add / Edit Cashier modal -->
+  <div class="modal-backdrop" id="cashier-modal">
+    <div class="modal">
+      <div class="modal-head">
+        <h2 id="cashier-modal-title">Add Cashier</h2>
+        <button class="modal-close" data-close="cashier-modal"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="error-box" id="cashier-error"></div>
+        <div class="field">
+          <label for="f-name">Name *</label>
+          <input id="f-name" type="text" placeholder="Cashier name" />
+        </div>
+        <div class="field">
+          <label for="f-username">Username *</label>
+          <input id="f-username" type="text" placeholder="Login username" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="f-password" id="f-password-label">Password *</label>
+          <input id="f-password" type="password" placeholder="Login password" autocomplete="new-password" />
+          <div class="field-hint" id="f-password-hint" style="display:none;">Leave blank to keep the current password.</div>
+        </div>
+        <div class="toggle-row" id="f-active-row" style="display:none;">
+          <label for="f-active">Active</label>
+          <label class="switch">
+            <input type="checkbox" id="f-active" checked />
+            <span class="slider"></span>
+          </label>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="ghost-btn danger-text" id="cashier-delete-btn" style="display:none;"><i class="fa-solid fa-trash"></i> Delete</button>
+        <button class="ghost-btn" data-close="cashier-modal">Cancel</button>
+        <button class="primary-btn" id="cashier-save-btn">Save Cashier</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="js/api.js"></script>
+  <script src="js/cashiers.js"></script>
+</body>
+</html>

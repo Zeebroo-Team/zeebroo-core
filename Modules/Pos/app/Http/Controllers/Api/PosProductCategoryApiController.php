@@ -23,14 +23,15 @@ class PosProductCategoryApiController extends Controller
     {
         $business = $this->businessOrAbort($request);
 
-        $q      = (string) $request->query('q', '');
-        $status = $request->query('status');
+        $q       = (string) $request->query('q', '');
+        $status  = $request->query('status');
+        $perPage = max(1, min(100, (int) $request->query('per_page', 20)));
 
         $categories = $this->service->searchFlatForBusiness(
             $business,
             $q,
             is_string($status) ? $status : null,
-            50,
+            $perPage,
         );
 
         return response()->json([
@@ -38,6 +39,7 @@ class PosProductCategoryApiController extends Controller
             'meta' => [
                 'current_page' => $categories->currentPage(),
                 'last_page'    => $categories->lastPage(),
+                'per_page'     => $categories->perPage(),
                 'total'        => $categories->total(),
             ],
         ]);
