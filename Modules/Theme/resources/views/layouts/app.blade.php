@@ -949,8 +949,13 @@
                 <a href="{{ route('automations.index') }}" class="{{ request()->routeIs('automations.*') ? 'active' : '' }}"><i class="fa fa-bolt"></i><span>Automations</span></a>
             @endif
             @if($showSidebarDesignStudioLink)
-                <a href="{{ route('designstudio.index') }}" class="{{ request()->routeIs('designstudio.*') ? 'active' : '' }}"><i class="fa fa-palette"></i><span>Design Studio</span></a>
-                <div class="submenu">
+                <div class="menu-group-title">
+                    <i class="fa fa-palette"></i><span>Design Studio</span>
+                </div>
+                <div class="submenu" aria-label="Design Studio">
+                    <a href="{{ route('designstudio.index') }}" @class(['active' => request()->routeIs('designstudio.index')])>
+                        <i class="fa fa-house"></i><span>Overview</span>
+                    </a>
                     @if(Route::has('designstudio.social-media.index'))
                         <a href="{{ route('designstudio.social-media.index') }}" @class(['active' => request()->routeIs('designstudio.social-media.*')])>
                             <i class="fa fa-share-nodes"></i><span>Social Media</span>
@@ -988,8 +993,10 @@
                 </div>
             @endif
             @if($showSidebarServiceLink)
-                <a href="{{ route('service.catalog.index') }}" class="{{ request()->routeIs('service.*') ? 'active' : '' }}"><i class="fa fa-screwdriver-wrench"></i><span>Service Catalog</span></a>
-                <div class="submenu">
+                <div class="menu-group-title">
+                    <i class="fa fa-screwdriver-wrench"></i><span>Service Catalog</span>
+                </div>
+                <div class="submenu" aria-label="Service Catalog">
                     @if($showSidebarServicePosLink)
                         <a href="{{ route('service.pos.index') }}" @class(['active' => request()->routeIs('service.pos.*')])>
                             <i class="fa fa-cash-register"></i><span>Service POS</span>
