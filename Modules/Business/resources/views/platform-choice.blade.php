@@ -131,6 +131,9 @@
         'linux'   => ['label' => 'Linux',   'icon' => 'fa-brands fa-linux',   'url' => $latestDesktopRelease?->linux_url],
     ];
     $platAnyDesktopUrl = collect($platOs)->pluck('url')->filter()->first();
+    $platDetectedOs = $platOs[$detectedOs ?? 'windows']['url'] ?? null ? ($detectedOs ?? 'windows') : null;
+    $platMainOsKey = $platDetectedOs ?? collect($platOs)->filter(fn ($os) => $os['url'])->keys()->first();
+    $platMainUrl = $platMainOsKey ? $platOs[$platMainOsKey]['url'] : null;
 
     // Purely decorative "dummy" QR code — a plausible-looking placeholder for
     // the coming-soon mobile app card, not a real scannable code.
@@ -201,13 +204,14 @@
                 <h3 class="plat-opt-title">Download Zeebroo Desktop App</h3>
                 <p class="plat-opt-desc">Faster performance, offline access and native OS integration — the best experience for daily use.</p>
                 @if($platAnyDesktopUrl)
-                    <a href="{{ $platAnyDesktopUrl }}" class="plat-btn" id="platDesktopBtn" target="_blank" rel="noopener">
-                        <i class="fa fa-download" aria-hidden="true"></i> <span id="platDesktopBtnLabel">Download for your OS</span>
+                    <a href="{{ $platMainUrl }}" class="plat-btn" id="platDesktopBtn" target="_blank" rel="noopener">
+                        <i class="fa fa-download" aria-hidden="true"></i>
+                        <span id="platDesktopBtnLabel">Download for {{ $platOs[$platMainOsKey]['label'] }}</span>
                     </a>
                     <div class="plat-os-row">
                         @foreach($platOs as $osKey => $os)
                             <a href="{{ $os['url'] ?? '#' }}" target="_blank" rel="noopener"
-                               class="plat-os-link" data-plat-os="{{ $osKey }}"
+                               class="plat-os-link{{ $osKey === $platMainOsKey ? ' is-active' : '' }}" data-plat-os="{{ $osKey }}"
                                aria-disabled="{{ $os['url'] ? 'false' : 'true' }}">
                                 <i class="{{ $os['icon'] }}" aria-hidden="true"></i> {{ $os['label'] }}
                             </a>
@@ -254,39 +258,11 @@
             <div class="plat-option plat-option--disabled">
                 <span class="plat-soon-pill" style="position:absolute;top:-11px;left:20px;"><i class="fa fa-clock" aria-hidden="true"></i> Coming Soon</span>
                 <div class="plat-icon"><i class="fa fa-feather" aria-hidden="true"></i></div>
-                <h3 class="plat-opt-title">Zeebroo Lite</h3>
+                <h3 class="plat-opt-title">Zeebroo POS Light</h3>
                 <p class="plat-opt-desc">A lightweight version for low-end devices — is on its way.</p>
                 <span class="plat-btn plat-btn--disabled"><i class="fa fa-clock" aria-hidden="true"></i> Notify me</span>
             </div>
         </div>
     </div>
 </div>
-<script>
-(function () {
-    var ua = navigator.userAgent || '';
-    var plat = navigator.platform || '';
-    var os = 'windows';
-    if (/Mac/i.test(plat) || /Mac OS X/i.test(ua)) os = 'macos';
-    else if (/Linux/i.test(plat) && !/Android/i.test(ua)) os = 'linux';
-    else if (/Win/i.test(plat)) os = 'windows';
-
-    var links = {};
-    document.querySelectorAll('[data-plat-os]').forEach(function (a) {
-        links[a.getAttribute('data-plat-os')] = a;
-    });
-
-    var mainBtn = document.getElementById('platDesktopBtn');
-    var mainLabel = document.getElementById('platDesktopBtnLabel');
-    var osLabels = { windows: 'Windows', macos: 'macOS', linux: 'Linux' };
-    var match = links[os];
-
-    if (mainBtn && match && match.getAttribute('aria-disabled') !== 'true') {
-        mainBtn.href = match.href;
-        match.classList.add('is-active');
-        if (mainLabel) mainLabel.textContent = 'Download for ' + osLabels[os];
-    } else if (mainBtn && mainLabel) {
-        mainLabel.textContent = 'Download for your OS';
-    }
-})();
-</script>
 @endsection

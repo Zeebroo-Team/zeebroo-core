@@ -46,19 +46,33 @@
                     <label>Sort order</label>
                     <input type="number" name="sort_order" class="rg-input" style="width:80px;" min="0" value="0">
                 </div>
+                @if($branches->isNotEmpty())
+                    <div class="rg-field" style="min-width:140px;">
+                        <label>Branch</label>
+                        <select name="branch_id" class="rg-input" style="width:100%;">
+                            <option value="">— Not assigned —</option>
+                            @foreach($branches as $branch)
+                                <option value="{{ $branch->id }}">{{ $branch->name }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                @endif
                 <button type="submit" class="linkbtn" style="padding:7px 14px;font-size:13px;">Add counter</button>
             </form>
 
             <div class="pcat-table-wrap">
                 <table class="pcat-table">
                     <thead>
-                        <tr><th>Name</th><th>Order</th><th>Status</th><th style="text-align:right;">Actions</th></tr>
+                        <tr><th>Name</th><th>Order</th>@if($branches->isNotEmpty())<th>Branch</th>@endif<th>Status</th><th style="text-align:right;">Actions</th></tr>
                     </thead>
                     <tbody>
                         @forelse($counters as $counter)
                             <tr>
                                 <td style="font-weight:600;color:var(--text);">{{ $counter->name }}</td>
                                 <td class="muted">{{ $counter->sort_order }}</td>
+                                @if($branches->isNotEmpty())
+                                    <td class="muted">{{ $branches->firstWhere('id', $counter->branch_id)?->name ?? '—' }}</td>
+                                @endif
                                 <td>
                                     <span class="rg-badge {{ $counter->is_active ? 'rg-badge--on' : 'rg-badge--off' }}">{{ $counter->is_active ? 'Active' : 'Inactive' }}</span>
                                 </td>
@@ -69,6 +83,7 @@
                                             @method('PUT')
                                             <input type="hidden" name="name" value="{{ $counter->name }}">
                                             <input type="hidden" name="sort_order" value="{{ $counter->sort_order }}">
+                                            <input type="hidden" name="branch_id" value="{{ $counter->branch_id }}">
                                             <input type="hidden" name="is_active" value="{{ $counter->is_active ? '0' : '1' }}">
                                             <button type="submit">{{ $counter->is_active ? 'Deactivate' : 'Activate' }}</button>
                                         </form>
@@ -81,7 +96,7 @@
                                 </td>
                             </tr>
                         @empty
-                            <tr><td colspan="4" class="muted" style="text-align:center;padding:20px;">No counters yet.</td></tr>
+                            <tr><td colspan="{{ $branches->isNotEmpty() ? 5 : 4 }}" class="muted" style="text-align:center;padding:20px;">No counters yet.</td></tr>
                         @endforelse
                     </tbody>
                 </table>

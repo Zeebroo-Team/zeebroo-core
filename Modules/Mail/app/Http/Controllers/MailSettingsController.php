@@ -174,4 +174,19 @@ class MailSettingsController extends Controller
         );
     }
 
+    public function verifyCredentials(Request $request): RedirectResponse
+    {
+        $business = $this->requireBusiness($request);
+        if ($business instanceof RedirectResponse) {
+            return $business;
+        }
+
+        $result = $this->mailer->verifyCredentials($business);
+
+        return redirect()->route('mail.settings.edit')->with(
+            $result['ok'] ? 'status' : 'error',
+            $result['message']
+        );
+    }
+
 }

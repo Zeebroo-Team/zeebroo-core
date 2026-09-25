@@ -121,6 +121,10 @@
             </div>
             <button type="submit" class="linkbtn" style="padding:8px 16px;font-size:13px;">Send test</button>
         </form>
+        <form method="POST" action="{{ route('mail.settings.verify') }}" style="margin-top:8px;">
+            @csrf
+            <button type="submit" class="linkbtn" style="padding:8px 16px;font-size:13px;">Verify credentials</button>
+        </form>
     </div>
 
     <div class="pcat-inline" style="margin-top:18px;" data-mail-provider-panel="resend" hidden>

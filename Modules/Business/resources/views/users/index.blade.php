@@ -2,7 +2,7 @@
 
 @section('content')
 <style>
-.bum-wrap{max-width:900px;margin:0 auto;}
+.bum-wrap{max-width:100%;}
 .bum-header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:24px;flex-wrap:wrap;}
 .bum-title{margin:0;font-size:22px;font-weight:800;letter-spacing:-.025em;}
 .bum-sub{margin:4px 0 0;font-size:13px;color:var(--muted);}
