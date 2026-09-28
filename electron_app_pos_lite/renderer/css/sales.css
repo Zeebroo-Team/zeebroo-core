@@ -492,8 +492,23 @@
 .qf-line-remove:hover:not(:disabled) { background: #fee2e2; color: var(--danger); }
 .qf-line-remove:disabled { opacity: 0.35; cursor: default; }
 
+.qf-line-empty { padding: 24px 12px; text-align: center; font-size: 12.5px; color: var(--muted); }
+
+.qf-line-desc-wrap { display: flex; flex-direction: column; gap: 4px; }
+.qf-line-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--accent);
+  width: fit-content;
+}
+
+.qf-add-line-row { display: flex; gap: 16px; margin-top: 10px; }
+
 .qf-add-line {
-  margin-top: 10px;
   border: none;
   background: transparent;
   color: var(--accent);
@@ -506,6 +521,96 @@
   padding: 4px 2px;
 }
 .qf-add-line:hover { color: var(--accent-dark); }
+.qf-add-line-custom { color: var(--muted); }
+.qf-add-line-custom:hover { color: var(--text); }
+
+/* ── "Add Product" picker: layered above the whole sales dialog ────────── */
+.qf-picker-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 260;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(20, 22, 34, 0.45);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.qf-picker-card {
+  width: 100%;
+  max-width: 640px;
+  max-height: calc(100vh - 80px);
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 30px 70px rgba(20, 24, 40, 0.3);
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: var(--text);
+}
+
+.qf-picker-head { display: flex; align-items: center; gap: 10px; padding: 16px 18px; flex-shrink: 0; }
+.qf-picker-head-icon {
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  font-size: 13px;
+  color: #fff;
+  background: linear-gradient(135deg, var(--accent), #14b8a6);
+}
+.qf-picker-title { font-size: 15px; font-weight: 800; flex: 1; }
+
+.qf-picker-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 18px 12px;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  flex-shrink: 0;
+}
+.qf-picker-search i { color: var(--muted); }
+.qf-picker-search input { border: none; outline: none; flex: 1; font-size: 13px; font-family: inherit; }
+
+.qf-picker-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; border-top: 1px solid var(--border); }
+.qf-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 18px;
+  border-bottom: 1px solid #f1f2f5;
+  cursor: pointer;
+}
+.qf-picker-row:hover { background: #fafbff; }
+.qf-picker-thumb {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: var(--surface2);
+  color: var(--muted);
+  overflow: hidden;
+}
+.qf-picker-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.qf-picker-info { flex: 1; min-width: 0; }
+.qf-picker-name { font-size: 13px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.qf-picker-sub { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); margin-top: 2px; }
+.qf-picker-badge { font-size: 10px; font-weight: 700; text-transform: uppercase; padding: 2px 7px; border-radius: 999px; }
+.qf-picker-badge.green { background: #dcfce7; color: var(--success); }
+.qf-picker-badge.red { background: #fee2e2; color: var(--danger); }
+.qf-picker-price { font-size: 13px; font-weight: 800; white-space: nowrap; }
+
+.qf-picker-foot { padding: 14px 18px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; flex-shrink: 0; }
 
 .qf-bottom { display: grid; grid-template-columns: 1.5fr 1fr; gap: 14px; }
 @media (max-width: 760px) { .qf-bottom { grid-template-columns: 1fr; } }
