@@ -146,6 +146,7 @@ const API = (() => {
       return request('GET', '/quotations?' + qs.toString());
     },
     quotation: (id) => request('GET', `/quotations/${id}`),
+    createQuotation: (payload) => request('POST', '/quotations', payload),
     markQuotationSent: (id) => request('POST', `/quotations/${id}/mark-sent`),
     markQuotationAccepted: (id) => request('POST', `/quotations/${id}/accept`),
     markQuotationRejected: (id) => request('POST', `/quotations/${id}/reject`),

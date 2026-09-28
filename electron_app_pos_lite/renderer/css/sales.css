@@ -3,9 +3,10 @@
    exported at the bottom of js/sales.js). Lives on top of dashboard.html, so
    every rule here is scoped under .salm-modal-card / #salm-modal-backdrop —
    nothing here should leak into the dashboard page underneath it.
-   Three swapped views inside the dialog body: home card grid, a section's
-   own list (Transactions / History / Quotations / Recurring Sales / Rental),
-   and a single record's detail. */
+   Two swapped views inside the dialog body: home card grid, and a section's
+   own list (Transactions / History / Quotations / Recurring Sales / Rental).
+   A single record's detail is a popup (.salm-detail-popup) layered on top
+   of whichever of those is active, not a third swapped view. */
 
 /* ── Dialog shell: backdrop + card + header (matches the Settings dialog
    look in js/navbar.js's openSettingsWindow / .sm-backdrop, .sm-card) ──── */
@@ -39,41 +40,52 @@
   --radius: 10px;
   --radius-sm: 8px;
 
-  width: 70vw;
-  max-width: 1100px;
-  min-width: 640px;
-  height: 82vh;
+  width: 54vw;
+  max-width: 760px;
+  min-width: 460px;
+  height: auto;
   max-height: calc(100vh - 60px);
   display: flex;
   flex-direction: column;
+  position: relative;
   background: var(--card);
   border-radius: 20px;
   box-shadow: 0 30px 70px rgba(20, 24, 40, 0.3);
   transform: translateY(14px) scale(0.96);
-  transition: transform 0.24s cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: transform 0.24s cubic-bezier(0.2, 0.8, 0.2, 1), width 0.22s ease, height 0.22s ease, max-width 0.22s ease, max-height 0.22s ease;
   color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   overflow: hidden;
 }
+
+/* Section list pages (Transactions / History / Quotations / Recurring
+   Sales / Rental) widen the dialog to near-fullscreen; the home tile grid
+   keeps the compact size above. */
+.salm-modal-card--wide {
+  width: calc(100vw - 40px);
+  max-width: none;
+  height: calc(100vh - 40px);
+  max-height: none;
+}
 .salm-modal-backdrop.open .salm-modal-card { transform: none; }
 
-.salm-modal-head { display: flex; align-items: flex-start; gap: 14px; padding: 22px 22px 18px; flex-shrink: 0; }
+.salm-modal-head { display: flex; align-items: flex-start; gap: 12px; padding: 18px 20px 14px; flex-shrink: 0; }
 .salm-modal-head-icon {
-  width: 44px;
-  height: 44px;
+  width: 38px;
+  height: 38px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 13px;
-  font-size: 19px;
+  border-radius: 11px;
+  font-size: 16px;
   color: #fff;
   background: linear-gradient(135deg, var(--accent), #14b8a6);
   box-shadow: 0 8px 18px rgba(13, 148, 136, 0.32);
 }
 .salm-modal-head-text { flex: 1; min-width: 0; }
-.salm-modal-head-text h2 { margin: 2px 0 3px; font-size: 17px; font-weight: 800; }
-.salm-modal-head-text p { margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--muted); }
+.salm-modal-head-text h2 { margin: 1px 0 2px; font-size: 15.5px; font-weight: 800; }
+.salm-modal-head-text p { margin: 0; font-size: 11.5px; line-height: 1.4; color: var(--muted); }
 .salm-modal-close {
   width: 30px;
   height: 30px;
@@ -90,12 +102,12 @@
 }
 .salm-modal-close:hover { background: var(--surface2); color: var(--text); }
 
-.salm-modal-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 4px 22px 24px; }
+.salm-modal-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 14px 20px 20px; }
 
 .salm-grid {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 16px;
+  gap: 12px;
 }
 .salm-grid .salm-tile { grid-column: span 2; }
 /* 5 tiles in a 6-col grid: last row (tiles 4-5) centered instead of left-stuck */
@@ -120,37 +132,38 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  min-height: 140px;
-  padding: 18px 18px 16px;
-  text-align: left;
+  align-items: center;
+  gap: 5px;
+  min-height: 104px;
+  padding: 13px 13px 11px;
+  text-align: center;
   font-family: inherit;
   color: inherit;
   cursor: pointer;
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: 12px;
   transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
 }
 .salm-tile:hover {
-  transform: translateY(-3px);
+  transform: translateY(-2px);
   border-color: var(--tile-accent);
-  box-shadow: 0 14px 28px var(--tile-glow);
+  box-shadow: 0 10px 20px var(--tile-glow);
 }
 .salm-tile-icon {
-  width: 42px;
-  height: 42px;
+  width: 32px;
+  height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 12px;
-  font-size: 17px;
+  border-radius: 9px;
+  font-size: 13.5px;
   color: #fff;
   background: linear-gradient(135deg, var(--tile-accent), var(--tile-accent-2));
 }
-.salm-tile-title { font-size: 14.5px; font-weight: 800; }
-.salm-tile-desc { margin: 0; font-size: 12px; line-height: 1.45; color: var(--muted); }
-.salm-tile-open { margin-top: auto; font-size: 12px; font-weight: 700; color: var(--tile-accent); display: flex; align-items: center; gap: 6px; }
+.salm-tile-title { font-size: 12.5px; font-weight: 800; }
+.salm-tile-desc { margin: 0; font-size: 10.5px; line-height: 1.35; color: var(--muted); }
+.salm-tile-open { margin-top: auto; font-size: 10.5px; font-weight: 700; color: var(--tile-accent); display: flex; align-items: center; justify-content: center; gap: 5px; }
 
 /* ── Section / detail shared header ─────────────────────────────────── */
 .inv-detail-header { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
@@ -323,8 +336,36 @@
 .salm-pagination button:hover:not(:disabled) { background: var(--surface2); }
 .salm-pagination button:disabled { opacity: 0.4; cursor: default; }
 
-/* ── Record detail view ─────────────────────────────────────────────── */
-#sales-detail-body { display: flex; flex-direction: column; gap: 10px; max-width: 620px; }
+/* ── Record detail popup: layered on top of the section/home view
+   underneath (still visible, dimmed), instead of replacing it ─────────── */
+.salm-detail-popup {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: none;
+  align-items: flex-start;
+  justify-content: center;
+  overflow-y: auto;
+  padding: 40px 22px;
+  background: rgba(20, 22, 34, 0.4);
+  border-radius: 20px;
+}
+.salm-detail-popup.open { display: flex; }
+
+.salm-detail-popup-card {
+  width: 100%;
+  max-width: 640px;
+  flex-shrink: 0;
+  background: var(--card);
+  border-radius: 16px;
+  box-shadow: 0 24px 60px rgba(20, 24, 40, 0.3);
+  padding: 20px 22px 22px;
+}
+
+.salm-detail-popup-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.salm-detail-popup-title { font-size: 16px; font-weight: 800; color: var(--text); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+#sales-detail-body { display: flex; flex-direction: column; gap: 10px; }
 
 .salm-view-row { display: flex; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid #f1f2f5; font-size: 13px; gap: 12px; }
 .salm-view-row span:first-child { color: var(--muted); flex-shrink: 0; }
@@ -339,11 +380,11 @@
 .salm-item-row .salm-item-meta { color: var(--muted); font-size: 11.5px; }
 .salm-item-row .salm-item-total { font-weight: 700; white-space: nowrap; }
 
-.salm-totals { border-top: 1px dashed var(--border); padding-top: 8px; margin-top: 2px; max-width: 620px; }
+.salm-totals { border-top: 1px dashed var(--border); padding-top: 8px; margin-top: 2px; }
 .salm-totals .salm-view-row.grand { border-bottom: none; padding-top: 6px; font-size: 15px; }
 .salm-totals .salm-view-row.grand span:last-child { color: var(--accent); }
 
-.salm-detail-foot { padding: 16px 0 4px; display: flex; gap: 8px; flex-wrap: wrap; max-width: 620px; }
+.salm-detail-foot { padding: 16px 0 4px; display: flex; gap: 8px; flex-wrap: wrap; }
 
 .salm-btn-primary {
   border: none;
@@ -375,6 +416,128 @@
 .salm-btn-ghost.danger { color: var(--danger); border-color: #f5c6c6; margin-right: auto; }
 .salm-btn-ghost.danger:hover { background: #fff5f5; }
 .salm-btn-ghost:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── New Quotation form (Quotations section, swapped in over the list) ── */
+.qf-form-header { margin-bottom: 16px; }
+
+.qf-card {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 18px;
+  margin-bottom: 14px;
+}
+.qf-card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--muted);
+  margin-bottom: 14px;
+}
+.qf-card-title i { color: var(--accent); }
+
+.qf-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+@media (max-width: 760px) { .qf-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+.qf-field { display: flex; flex-direction: column; gap: 6px; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px; color: var(--muted); }
+.qf-field select, .qf-field input {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 10px;
+  font-size: 13px;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--text);
+  background: #fff;
+  font-family: inherit;
+}
+
+.qf-line-table { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.qf-line-head, .qf-line-row {
+  display: grid;
+  grid-template-columns: 1fr 90px 120px 110px 40px;
+  gap: 10px;
+  align-items: center;
+  padding: 9px 12px;
+}
+.qf-line-head { background: var(--surface2); font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px; color: var(--muted); }
+.qf-line-row { border-top: 1px solid #f1f2f5; }
+.qf-line-row input {
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 7px 9px;
+  font-size: 12.5px;
+  color: var(--text);
+  font-family: inherit;
+  width: 100%;
+}
+.qf-line-total { font-weight: 700; text-align: right; font-size: 12.5px; }
+.qf-line-remove {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.qf-line-remove:hover:not(:disabled) { background: #fee2e2; color: var(--danger); }
+.qf-line-remove:disabled { opacity: 0.35; cursor: default; }
+
+.qf-add-line {
+  margin-top: 10px;
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 2px;
+}
+.qf-add-line:hover { color: var(--accent-dark); }
+
+.qf-bottom { display: grid; grid-template-columns: 1.5fr 1fr; gap: 14px; }
+@media (max-width: 760px) { .qf-bottom { grid-template-columns: 1fr; } }
+
+.qf-notes-card textarea {
+  width: 100%;
+  min-height: 90px;
+  resize: vertical;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--text);
+}
+
+.qf-summary-row { display: flex; align-items: center; justify-content: space-between; padding: 7px 0; font-size: 13px; gap: 10px; }
+.qf-summary-row > span:first-child { color: var(--muted); }
+.qf-summary-row input {
+  width: 100px;
+  text-align: right;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 6px 8px;
+  font-size: 12.5px;
+  font-family: inherit;
+  color: var(--text);
+}
+.qf-summary-row.qf-total { border-top: 1px dashed var(--border); margin-top: 4px; padding-top: 10px; font-size: 15px; font-weight: 800; }
+.qf-summary-row.qf-total span:last-child { color: var(--accent); }
+
+.qf-actions { display: flex; justify-content: flex-end; gap: 10px; padding-bottom: 4px; }
 
 /* ── Toast (own instance, matches the rest of the POS Lite chrome) ────── */
 .salm-toast {
