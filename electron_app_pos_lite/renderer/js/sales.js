@@ -6,15 +6,16 @@
 // the same pattern js/navbar.js uses for the Settings dialog
 // (openSettingsWindow / .sm-backdrop), so the two look and behave alike.
 //
-// Inside the dialog: three swapped views — a card-grid home (Transactions /
-// History / Quotations / Recurring Sales / Rental), each section's own list,
-// and a single record's detail — see #sales-home-view / #sales-section-view
-// / #sales-detail-view below.
+// Inside the dialog: two swapped views — a card-grid home (Transactions /
+// History / Quotations / Recurring Sales / Rental) and each section's own
+// list — see #sales-home-view / #sales-section-view below. A single record's
+// detail (#sales-detail-view) is a popup layered on top of whichever of
+// those is active, so opening it never navigates the user away from the list.
 //
 // Talks to the same Laravel POS API as every other POS Lite module
 // (Modules/Pos/routes/api.php, prefix /api/v1/pos) via js/api.js.
 (function () {
-  let homeView, sectionView, detailView;
+  let cardEl, homeView, sectionView, detailView;
   let sectionTitleEl, sectionDescEl, sectionBody;
   let detailTitleEl, detailBody, detailFoot;
   let toastEl;
@@ -104,18 +105,22 @@
     settingsLoaded = true;
   }
 
-  // ── View switching (home ↔ section list ↔ record detail) ───────────────
+  // ── View switching (home ↔ section list) ────────────────────────────────
+  // A record's detail is a popup layered on top of whichever view is
+  // active, not a third swapped view — see openDetail()/closeDetail() below.
+  // The card itself widens to near-fullscreen for the section list views
+  // (Transactions / History / Quotations / Recurring Sales / Rental) and
+  // shrinks back to the compact tile grid on the home view.
   function showView(name) {
     homeView.style.display = name === 'home' ? '' : 'none';
     sectionView.style.display = name === 'section' ? '' : 'none';
-    detailView.style.display = name === 'detail' ? '' : 'none';
+    cardEl.classList.toggle('salm-modal-card--wide', name === 'section');
     window.scrollTo(0, 0);
   }
 
-  function backToSection() { showView('section'); }
-
   // ── Home: card grid ─────────────────────────────────────────────────────
   function goHome() {
+    closeDetail();
     currentSectionKey = null;
     document.getElementById('sales-grid').innerHTML = SECTIONS.map((s) => `
       <button class="salm-tile" data-key="${s.key}" style="--tile-accent:${s.accent};--tile-accent-2:${lighten(s.accent, 0.35)};--tile-glow:${glow(s.accent, 0.25)}">
@@ -141,6 +146,7 @@
   };
 
   function openSection(key) {
+    closeDetail();
     const meta = SECTIONS.find((s) => s.key === key);
     currentSectionKey = key;
     sectionTitleEl.textContent = t(meta.title);
@@ -153,7 +159,11 @@
     detailTitleEl.textContent = title;
     detailBody.innerHTML = bodyHtml;
     detailFoot.innerHTML = footHtml || '';
-    showView('detail');
+    detailView.classList.add('open');
+  }
+
+  function closeDetail() {
+    detailView.classList.remove('open');
   }
 
   // ════════════════════════════════════════════════════════════════════════
@@ -304,7 +314,7 @@
       if (!await zeebrooConfirm(t('Void {label}? This cannot be undone.', { label: s.sale_number }), { okText: t('Void Sale'), tone: 'danger' })) return;
       const voidRes = await API.voidSale(id);
       if (voidRes.status !== 200) { showToast(t(voidRes.body?.message || 'Could not void sale.'), 'error'); return; }
-      backToSection();
+      closeDetail();
       showToast(t('{label} has been voided.', { label: s.sale_number }), 'success');
       loadTransactions();
     });
@@ -426,6 +436,7 @@
           <option value="expired">${t('Expired')}</option>
         </select>
         <button class="salm-icon-btn" id="quo-refresh"><i class="fa-solid fa-arrows-rotate"></i> ${t('Refresh')}</button>
+        <button class="salm-btn-primary" id="quo-new-btn" type="button"><i class="fa-solid fa-plus"></i> ${t('New Quote')}</button>
         <span class="salm-count-pill" id="quo-count"></span>
       </div>
       <div class="salm-table-card"><table class="salm-table">
@@ -436,6 +447,7 @@
     document.getElementById('quo-search').addEventListener('input', debounce(loadQuotations, 350));
     document.getElementById('quo-status').addEventListener('change', loadQuotations);
     document.getElementById('quo-refresh').addEventListener('click', loadQuotations);
+    document.getElementById('quo-new-btn').addEventListener('click', renderQuotationForm);
     loadQuotations();
   }
 
@@ -511,7 +523,7 @@
     async function runAction(apiCall, successMsg) {
       const res2 = await apiCall();
       if (res2.status !== 200) { showToast(t(res2.body?.message || 'Could not update quotation.'), 'error'); return; }
-      backToSection();
+      closeDetail();
       showToast(successMsg, 'success');
       loadQuotations();
     }
@@ -521,6 +533,167 @@
       if (!await zeebrooConfirm(t('Reject {label}?', { label: q.quote_number }), { okText: t('Reject'), tone: 'danger' })) return;
       runAction(() => API.markQuotationRejected(id), t('Quotation rejected.'));
     });
+  }
+
+  // ── New Quotation form ──────────────────────────────────────────────────
+  let qfLines = [];
+
+  function blankQfLine() { return { description: '', quantity: 1, unit_price: 0 }; }
+
+  async function renderQuotationForm() {
+    closeDetail();
+    qfLines = [blankQfLine()];
+    const today = new Date().toISOString().slice(0, 10);
+
+    sectionBody.innerHTML = `
+      <div class="inv-detail-header qf-form-header">
+        <button class="inv-back-btn" id="qf-back"><i class="fa-solid fa-arrow-left"></i> ${t('Back')}</button>
+        <span class="inv-detail-breadcrumb">${t('New Quotation')}</span>
+      </div>
+
+      <div class="qf-card">
+        <div class="qf-card-title"><i class="fa-solid fa-circle-info"></i> ${t('Quote Details')}</div>
+        <div class="qf-grid">
+          <label class="qf-field"><span>${t('Customer')}</span>
+            <select id="qf-customer"><option value="">${t('— Walk-in —')}</option></select>
+          </label>
+          <label class="qf-field"><span>${t('Reference No.')}</span>
+            <input type="text" id="qf-reference" placeholder="${t('e.g. PO-123')}">
+          </label>
+          <label class="qf-field"><span>${t('Quote Date')}</span>
+            <input type="date" id="qf-quote-date" value="${today}">
+          </label>
+          <label class="qf-field"><span>${t('Valid Until')}</span>
+            <input type="date" id="qf-expiry-date">
+          </label>
+        </div>
+      </div>
+
+      <div class="qf-card">
+        <div class="qf-card-title"><i class="fa-solid fa-list"></i> ${t('Line Items')}</div>
+        <div class="qf-line-table">
+          <div class="qf-line-head">
+            <span>${t('Description')}</span><span>${t('Qty')}</span><span>${t('Unit Price')}</span><span>${t('Total')}</span><span></span>
+          </div>
+          <div id="qf-line-rows"></div>
+        </div>
+        <button class="qf-add-line" id="qf-add-line" type="button"><i class="fa-solid fa-plus"></i> ${t('Add Line')}</button>
+      </div>
+
+      <div class="qf-bottom">
+        <div class="qf-card qf-notes-card">
+          <div class="qf-card-title"><i class="fa-solid fa-note-sticky"></i> ${t('Notes')}</div>
+          <textarea id="qf-notes" placeholder="${t('Terms, conditions or notes for this quotation…')}"></textarea>
+        </div>
+        <div class="qf-card qf-summary-card">
+          <div class="qf-card-title"><i class="fa-solid fa-receipt"></i> ${t('Summary')}</div>
+          <div class="qf-summary-row"><span>${t('Subtotal')}</span><span id="qf-subtotal">0.00</span></div>
+          <div class="qf-summary-row"><span>${t('Discount')}</span><input type="number" id="qf-discount" min="0" step="0.01" value="0"></div>
+          <div class="qf-summary-row"><span>${t('Tax')}</span><input type="number" id="qf-tax" min="0" step="0.01" value="0"></div>
+          <div class="qf-summary-row qf-total"><span>${t('Total')}</span><span id="qf-total">0.00</span></div>
+        </div>
+      </div>
+
+      <div class="qf-actions">
+        <button class="salm-btn-ghost" id="qf-cancel" type="button">${t('Cancel')}</button>
+        <button class="salm-btn-primary" id="qf-save" type="button"><i class="fa-solid fa-check"></i> ${t('Save Quotation')}</button>
+      </div>`;
+
+    document.getElementById('qf-back').addEventListener('click', loadQuotations);
+    document.getElementById('qf-cancel').addEventListener('click', loadQuotations);
+    document.getElementById('qf-add-line').addEventListener('click', () => { qfLines.push(blankQfLine()); renderQfLines(); });
+    document.getElementById('qf-discount').addEventListener('input', recalcQfSummary);
+    document.getElementById('qf-tax').addEventListener('input', recalcQfSummary);
+    document.getElementById('qf-save').addEventListener('click', submitQuotationForm);
+
+    renderQfLines();
+    await loadSettings();
+    recalcQfSummary();
+
+    const custRes = await API.customers();
+    if (custRes.status === 200) {
+      const sel = document.getElementById('qf-customer');
+      if (sel) {
+        sel.insertAdjacentHTML('beforeend', (custRes.body.data || []).map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join(''));
+      }
+    }
+  }
+
+  function renderQfLines() {
+    const rowsEl = document.getElementById('qf-line-rows');
+    rowsEl.innerHTML = qfLines.map((line, idx) => `
+      <div class="qf-line-row" data-idx="${idx}">
+        <input type="text" class="qf-line-desc" placeholder="${t('Item description')}" value="${esc(line.description)}">
+        <input type="number" class="qf-line-qty" min="0" step="0.001" value="${line.quantity}">
+        <input type="number" class="qf-line-price" min="0" step="0.01" value="${line.unit_price}">
+        <span class="qf-line-total">${money(line.quantity * line.unit_price)}</span>
+        <button type="button" class="qf-line-remove" title="${t('Remove')}" ${qfLines.length <= 1 ? 'disabled' : ''}><i class="fa-solid fa-trash"></i></button>
+      </div>`).join('');
+
+    rowsEl.querySelectorAll('.qf-line-row').forEach((row) => {
+      const idx = Number(row.dataset.idx);
+      row.querySelector('.qf-line-desc').addEventListener('input', (e) => { qfLines[idx].description = e.target.value; });
+      row.querySelector('.qf-line-qty').addEventListener('input', (e) => {
+        qfLines[idx].quantity = parseFloat(e.target.value) || 0;
+        row.querySelector('.qf-line-total').textContent = money(qfLines[idx].quantity * qfLines[idx].unit_price);
+        recalcQfSummary();
+      });
+      row.querySelector('.qf-line-price').addEventListener('input', (e) => {
+        qfLines[idx].unit_price = parseFloat(e.target.value) || 0;
+        row.querySelector('.qf-line-total').textContent = money(qfLines[idx].quantity * qfLines[idx].unit_price);
+        recalcQfSummary();
+      });
+      row.querySelector('.qf-line-remove').addEventListener('click', () => {
+        if (qfLines.length <= 1) return;
+        qfLines.splice(idx, 1);
+        renderQfLines();
+        recalcQfSummary();
+      });
+    });
+  }
+
+  function recalcQfSummary() {
+    const subtotal = qfLines.reduce((sum, l) => sum + (l.quantity * l.unit_price), 0);
+    const discount = parseFloat(document.getElementById('qf-discount')?.value) || 0;
+    const tax = parseFloat(document.getElementById('qf-tax')?.value) || 0;
+    const total = Math.max(0, subtotal - discount + tax);
+    document.getElementById('qf-subtotal').textContent = money(subtotal);
+    document.getElementById('qf-total').textContent = money(total);
+  }
+
+  async function submitQuotationForm() {
+    const quoteDate = document.getElementById('qf-quote-date').value;
+    if (!quoteDate) { showToast(t('Quote date is required.'), 'error'); return; }
+
+    const items = qfLines
+      .filter((l) => l.quantity > 0)
+      .map((l) => ({ item_type: 'custom', description: l.description.trim() || null, quantity: l.quantity, unit_price: l.unit_price }));
+    if (!items.length) { showToast(t('Add at least one line item.'), 'error'); return; }
+
+    const customerId = document.getElementById('qf-customer').value;
+    const payload = {
+      customer_id: customerId ? Number(customerId) : null,
+      reference: document.getElementById('qf-reference').value.trim() || null,
+      quote_date: quoteDate,
+      expiry_date: document.getElementById('qf-expiry-date').value || null,
+      notes: document.getElementById('qf-notes').value.trim() || null,
+      discount_amount: parseFloat(document.getElementById('qf-discount').value) || 0,
+      tax_amount: parseFloat(document.getElementById('qf-tax').value) || 0,
+      items,
+    };
+
+    const saveBtn = document.getElementById('qf-save');
+    saveBtn.disabled = true;
+    const res = await API.createQuotation(payload);
+    saveBtn.disabled = false;
+
+    if (res.status !== 201) {
+      const firstError = res.body?.errors ? Object.values(res.body.errors)[0]?.[0] : null;
+      showToast(t(firstError || res.body?.message || 'Could not create quotation.'), 'error');
+      return;
+    }
+    showToast(t(res.body?.message || 'Quotation created.'), 'success');
+    loadQuotations();
   }
 
   // ════════════════════════════════════════════════════════════════════════
@@ -618,7 +791,7 @@
     async function runAction(apiCall, successMsg) {
       const res2 = await apiCall();
       if (res2.status !== 200) { showToast(t(res2.body?.message || 'Could not update subscription.'), 'error'); return; }
-      backToSection();
+      closeDetail();
       showToast(successMsg, 'success');
       loadSubscriptions(subPage);
     }
@@ -728,7 +901,7 @@
       if (!await zeebrooConfirm(t('Mark this rental as returned?'), { okText: t('Mark Returned') })) return;
       const retRes = await API.returnProductRental(id);
       if (retRes.status !== 200) { showToast(t(retRes.body?.message || 'Could not update rental.'), 'error'); return; }
-      backToSection();
+      closeDetail();
       showToast(t('Rental marked as returned.'), 'success');
       loadRentals(rentPage);
     });
@@ -772,11 +945,13 @@
             <p class="sales-section-desc" id="sales-section-desc"></p>
             <div id="sales-section-body"></div>
           </div>
+        </div>
 
-          <div id="sales-detail-view" style="display:none">
-            <div class="inv-detail-header">
-              <button class="inv-back-btn" id="sales-detail-back"><i class="fa-solid fa-arrow-left"></i> ${t('Back')}</button>
-              <span class="inv-detail-breadcrumb" id="sales-detail-title"></span>
+        <div class="salm-detail-popup" id="sales-detail-view">
+          <div class="salm-detail-popup-card" role="dialog" aria-labelledby="sales-detail-title">
+            <div class="salm-detail-popup-head">
+              <span class="salm-detail-popup-title" id="sales-detail-title"></span>
+              <button class="salm-modal-close" id="sales-detail-back" type="button" aria-label="${t('Close')}"><i class="fa-solid fa-xmark"></i></button>
             </div>
             <div id="sales-detail-body"></div>
             <div class="salm-detail-foot" id="sales-detail-foot"></div>
@@ -786,6 +961,7 @@
       <div class="salm-toast" id="salm-toast"></div>`;
     document.body.appendChild(el);
 
+    cardEl = el.querySelector('.salm-modal-card');
     homeView = document.getElementById('sales-home-view');
     sectionView = document.getElementById('sales-section-view');
     detailView = document.getElementById('sales-detail-view');
@@ -805,7 +981,11 @@
     }
 
     function onKey(e) {
-      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); }
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (detailView.classList.contains('open')) { closeDetail(); return; }
+      close();
     }
 
     el.querySelector('.salm-modal-close').addEventListener('click', close);
@@ -813,7 +993,8 @@
     document.addEventListener('keydown', onKey, true);
 
     document.getElementById('sales-section-back').addEventListener('click', goHome);
-    document.getElementById('sales-detail-back').addEventListener('click', backToSection);
+    document.getElementById('sales-detail-back').addEventListener('click', closeDetail);
+    detailView.addEventListener('mousedown', (e) => { if (e.target === detailView) closeDetail(); });
 
     requestAnimationFrame(() => el.classList.add('open'));
     goHome();
