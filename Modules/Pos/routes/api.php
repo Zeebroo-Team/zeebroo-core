@@ -32,6 +32,7 @@ use Modules\Pos\Http\Controllers\Api\PosInvoiceApiController;
 use Modules\Pos\Http\Controllers\Api\PosSalesOrderApiController;
 use Modules\Pos\Http\Controllers\Api\PosFeatureReviewApiController;
 use Modules\Pos\Http\Controllers\Api\PosSettingsApiController;
+use Modules\Pos\Http\Controllers\Api\PosInvoiceSetupApiController;
 use Modules\Pos\Http\Controllers\Api\PosMediaApiController;
 use Modules\Pos\Http\Controllers\Api\PosCustomerApiController;
 use Modules\Pos\Http\Controllers\Api\PosCustomerCategoryApiController;
@@ -135,6 +136,9 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
     Route::put('online/settings', [PosSettingsApiController::class, 'update'])->name('online.settings.update');
     Route::patch('online/settings', [PosSettingsApiController::class, 'update']);
     Route::post('online/settings/logo', [PosSettingsApiController::class, 'updateLogo'])->name('online.settings.logo.update');
+    Route::get('online/invoice-setup', [PosInvoiceSetupApiController::class, 'show'])->name('online.invoice-setup.show');
+    Route::put('online/invoice-setup', [PosInvoiceSetupApiController::class, 'update'])->name('online.invoice-setup.update');
+    Route::patch('online/invoice-setup', [PosInvoiceSetupApiController::class, 'update']);
 
     // Invoices
     Route::get   ('invoices',                          [PosInvoiceApiController::class, 'index']          )->name('invoices.index');
