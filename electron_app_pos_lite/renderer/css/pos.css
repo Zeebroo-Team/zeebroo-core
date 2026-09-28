@@ -213,8 +213,18 @@ html, body {
   border-top: 1px solid var(--border);
 }
 
-.summary-row { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 6px; color: var(--muted); }
+.summary-row { display: flex; justify-content: space-between; align-items: center; font-size: 13px; margin-bottom: 6px; color: var(--muted); }
 .summary-row.total { color: var(--text); font-weight: 700; font-size: 15px; margin-top: 8px; }
+
+.discount-row input {
+  width: 70px;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 12.5px;
+  text-align: right;
+  color: var(--text);
+}
 
 .payment-methods { display: flex; gap: 8px; margin: 12px 0; }
 .pm-btn {

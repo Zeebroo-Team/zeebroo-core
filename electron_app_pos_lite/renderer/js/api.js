@@ -79,7 +79,12 @@ const API = (() => {
 
     // Business settings (delivery partners etc.) + file manager (product images)
     settingsGet: () => request('GET', '/online/settings'),
+    settingsUpdate: (payload) => request('PATCH', '/online/settings', payload),
     fileManagerBrowse: (folderId, imagesOnly) => request('GET', `/online/file-manager?folder=${folderId || ''}&images_only=${imagesOnly ? 1 : 0}`),
+
+    // Invoice Setup (template, paper, margins, arrangement — no letterhead)
+    invoiceSetupGet: () => request('GET', '/online/invoice-setup'),
+    invoiceSetupUpdate: (payload) => request('PATCH', '/online/invoice-setup', payload),
 
     // Customers
     customers: (params = {}) => {
