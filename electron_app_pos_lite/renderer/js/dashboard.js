@@ -58,6 +58,8 @@ const TILES = [
     title: 'Sales Management',
     desc: 'View, manage, and track past sales and returns.',
     accent: '#0d9488',
+    active: true,
+    modal: 'openSalesModal', // opens as an in-page dialog (js/sales.js) instead of a full-page navigation
   },
   {
     key: 'pos',
@@ -113,8 +115,9 @@ grid.querySelectorAll('.tile').forEach((el) => {
   const tile = TILES.find((x) => x.key === el.dataset.key);
 
   el.addEventListener('click', () => {
-    if (tile.active) window.location.href = tile.href;
-    else showToast(t('{title} is coming soon.', { title: t(tile.title) }));
+    if (!tile.active) { showToast(t('{title} is coming soon.', { title: t(tile.title) })); return; }
+    if (tile.modal) window[tile.modal]();
+    else window.location.href = tile.href;
   });
 
   // feed the cursor position to the CSS spotlight
