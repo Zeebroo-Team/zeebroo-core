@@ -113,5 +113,66 @@ const API = (() => {
     createCashier: (payload) => request('POST', '/cashiers', payload),
     updateCashier: (id, payload) => request('PATCH', `/cashiers/${id}`, payload),
     deleteCashier: (id) => request('DELETE', `/cashiers/${id}`),
+
+    // Sales Management — Transactions
+    sales: (params = {}) => {
+      const qs = new URLSearchParams();
+      if (params.q) qs.set('q', params.q);
+      if (params.channel) qs.set('channel', params.channel);
+      if (params.limit) qs.set('limit', params.limit);
+      const suffix = qs.toString();
+      return request('GET', '/sales' + (suffix ? `?${suffix}` : ''));
+    },
+    sale: (id) => request('GET', `/sales/${id}`),
+    voidSale: (id) => request('POST', `/sales/${id}/void`),
+
+    // Sales Management — History (paginated, with summary + filters)
+    salesHistory: (params = {}) => {
+      const qs = new URLSearchParams();
+      if (params.q) qs.set('q', params.q);
+      if (params.status) qs.set('status', params.status);
+      if (params.channel) qs.set('channel', params.channel);
+      if (params.dateFrom) qs.set('date_from', params.dateFrom);
+      if (params.dateTo) qs.set('date_to', params.dateTo);
+      qs.set('page', params.page || 1);
+      return request('GET', '/sales/history?' + qs.toString());
+    },
+
+    // Sales Management — Quotations
+    quotations: (params = {}) => {
+      const qs = new URLSearchParams();
+      if (params.q) qs.set('q', params.q);
+      qs.set('status', params.status || 'all');
+      return request('GET', '/quotations?' + qs.toString());
+    },
+    quotation: (id) => request('GET', `/quotations/${id}`),
+    markQuotationSent: (id) => request('POST', `/quotations/${id}/mark-sent`),
+    markQuotationAccepted: (id) => request('POST', `/quotations/${id}/accept`),
+    markQuotationRejected: (id) => request('POST', `/quotations/${id}/reject`),
+
+    // Sales Management — Recurring Sales (customer subscriptions)
+    subscriptions: (params = {}) => {
+      const qs = new URLSearchParams();
+      if (params.q) qs.set('q', params.q);
+      qs.set('status', params.status || 'all');
+      qs.set('page', params.page || 1);
+      return request('GET', '/subscriptions?' + qs.toString());
+    },
+    subscription: (id) => request('GET', `/subscriptions/${id}`),
+    cancelSubscription: (id) => request('POST', `/subscriptions/${id}/cancel`),
+    pauseSubscription: (id) => request('POST', `/subscriptions/${id}/pause`),
+    resumeSubscription: (id) => request('POST', `/subscriptions/${id}/resume`),
+    renewSubscription: (id) => request('POST', `/subscriptions/${id}/renew`),
+
+    // Sales Management — Rentals (product rentals)
+    productRentals: (params = {}) => {
+      const qs = new URLSearchParams();
+      if (params.q) qs.set('q', params.q);
+      qs.set('status', params.status || 'all');
+      qs.set('page', params.page || 1);
+      return request('GET', '/product-rentals?' + qs.toString());
+    },
+    productRental: (id) => request('GET', `/product-rentals/${id}`),
+    returnProductRental: (id) => request('POST', `/product-rentals/${id}/return`),
   };
 })();
