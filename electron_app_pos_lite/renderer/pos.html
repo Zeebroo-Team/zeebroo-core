@@ -23,6 +23,14 @@
           <i class="fa-solid fa-magnifying-glass"></i>
           <input id="search-input" type="text" placeholder="Search products by name or SKU…" />
         </div>
+        <div class="mode-tabs" id="mode-tabs">
+          <button class="mode-tab active" data-mode="products"><i class="fa-solid fa-box"></i> Products</button>
+          <button class="mode-tab" data-mode="rental"><i class="fa-solid fa-box-open"></i> Rental</button>
+          <button class="mode-tab" data-mode="dynamic"><i class="fa-solid fa-chart-line"></i> Dynamic</button>
+        </div>
+        <div class="chip-row" id="chip-row">
+          <button class="chip active" data-category="">All</button>
+        </div>
         <div class="product-grid" id="product-grid">
           <div class="loading-state">Loading products…</div>
         </div>
@@ -36,6 +44,34 @@
         <div class="cart-items" id="cart-items">
           <div class="cart-empty">Cart is empty. Click a product to add it.</div>
         </div>
+
+        <div class="customer-field" id="customer-field">
+          <span class="customer-field-label">Customer (optional)</span>
+
+          <div id="customer-chip" class="customer-chip" hidden>
+            <span id="customer-chip-label"></span>
+            <button type="button" id="customer-clear" aria-label="Remove customer">&times;</button>
+          </div>
+
+          <div id="customer-search-wrap" class="customer-search-wrap">
+            <div class="customer-search-input-wrap">
+              <i class="fa-solid fa-magnifying-glass"></i>
+              <input type="text" id="customer-search-input" placeholder="Search customer by name or phone…" autocomplete="off" spellcheck="false" />
+            </div>
+            <div id="customer-dropdown" class="customer-dropdown" hidden></div>
+          </div>
+
+          <div id="customer-quickadd" class="customer-quickadd" hidden>
+            <div class="customer-quickadd-title">New customer</div>
+            <div class="field"><label for="qa-name">Name *</label><input type="text" id="qa-name" maxlength="120" placeholder="Full name" autocomplete="off" /></div>
+            <div class="field"><label for="qa-phone">Phone</label><input type="text" id="qa-phone" maxlength="40" placeholder="Phone number" autocomplete="off" /></div>
+            <div class="customer-quickadd-actions">
+              <button type="button" class="ghost-btn" id="qa-cancel">Cancel</button>
+              <button type="button" class="ghost-btn primary" id="qa-save">Save &amp; select</button>
+            </div>
+          </div>
+        </div>
+
         <div class="cart-footer">
           <div class="summary-row"><span>Items</span><span id="sum-items">0</span></div>
           <div class="summary-row discount-row" id="discount-row" style="display:none">
@@ -56,6 +92,73 @@
   </div>
 
   <div class="toast" id="toast"></div>
+
+  <!-- Rental details modal: asks for a return date, previews days/total rent -->
+  <div class="modal-backdrop" id="rental-modal">
+    <div class="modal modal-sm">
+      <div class="modal-head">
+        <h2>Rental details</h2>
+        <button type="button" class="modal-close" data-close="rental-modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-subtitle" id="rental-subtitle"></p>
+        <div class="field">
+          <label for="rental-date-input">Return date</label>
+          <input type="date" id="rental-date-input" />
+        </div>
+        <div class="picker-hint">
+          <span id="rental-days-label">1 day</span>
+          <span id="rental-total-label">$0.00</span>
+        </div>
+        <div class="error-box" id="rental-error"></div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="ghost-btn" data-close="rental-modal">Cancel</button>
+        <button type="button" class="ghost-btn primary" id="rental-confirm-btn">Add to cart</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Dynamic pricing modal: asks for a custom price (or amount, when qty-linked) -->
+  <div class="modal-backdrop" id="dynamic-modal">
+    <div class="modal modal-sm">
+      <div class="modal-head">
+        <h2>Enter amount</h2>
+        <button type="button" class="modal-close" data-close="dynamic-modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-subtitle" id="dynamic-subtitle"></p>
+        <div class="field">
+          <label id="dynamic-input-label" for="dynamic-amount-input">Price</label>
+          <input type="number" min="0.01" step="0.01" inputmode="decimal" id="dynamic-amount-input" placeholder="0.00" />
+        </div>
+        <p class="picker-note" id="dynamic-hint"></p>
+        <div class="error-box" id="dynamic-error"></div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="ghost-btn" data-close="dynamic-modal">Cancel</button>
+        <button type="button" class="ghost-btn primary" id="dynamic-confirm-btn">Add to cart</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sale-completed receipt/invoice modal: preview + print/download -->
+  <div class="modal-backdrop" id="receipt-modal">
+    <div class="modal modal-receipt">
+      <div class="modal-head">
+        <h2>Sale Completed <span id="receipt-sale-number" class="receipt-sale-number"></span></h2>
+        <button type="button" class="modal-close" data-close="receipt-modal">&times;</button>
+      </div>
+      <div class="modal-body receipt-modal-body">
+        <div id="receipt-preview"></div>
+      </div>
+      <div class="modal-foot receipt-modal-foot">
+        <button type="button" class="ghost-btn" id="receipt-print-btn"><i class="fa-solid fa-print"></i> Print</button>
+        <button type="button" class="ghost-btn" id="receipt-download-btn"><i class="fa-solid fa-download"></i> Download PDF</button>
+        <button type="button" class="ghost-btn primary" id="receipt-new-sale-btn" data-close="receipt-modal">New Sale</button>
+      </div>
+    </div>
+  </div>
 
   <script src="js/lang/si.js"></script>
   <script src="js/i18n.js"></script>

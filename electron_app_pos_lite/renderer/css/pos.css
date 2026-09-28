@@ -93,6 +93,72 @@ html, body {
   background: transparent;
 }
 
+/* ── Mode tabs (Products / Rental / Dynamic) ────────────────────────────── */
+.mode-tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+.mode-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 13px;
+  font-size: 12.5px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--muted);
+  cursor: pointer;
+}
+.mode-tab:hover { color: var(--text); }
+.mode-tab.active { color: var(--accent); border-color: var(--accent); background: #eef0ff; }
+
+/* ── Category chips ──────────────────────────────────────────────────── */
+.chip-row { display: flex; align-items: center; gap: 6px; overflow-x: auto; margin-bottom: 14px; scrollbar-width: none; }
+.chip-row::-webkit-scrollbar { display: none; }
+.chip {
+  flex-shrink: 0;
+  padding: 6px 12px;
+  font-size: 11.5px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.chip:hover { color: var(--text); }
+.chip.active { color: var(--accent); border-color: var(--accent); background: #eef0ff; }
+
+/* ── Product card badges (rental / dynamic pricing) ─────────────────────── */
+.product-badge {
+  display: inline-block;
+  align-self: flex-start;
+  font-size: 9.5px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 5px;
+  border: 1px solid;
+}
+.product-badge.rental { color: #b45309; border-color: #fcd9a6; background: #fff6e8; }
+.product-badge.dynamic { color: #6d28d9; border-color: #ddd3fb; background: #f4f0ff; }
+
+/* ── Product card tags (warranty / rental details, under the name) ─────── */
+.product-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: -2px; }
+.tag-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 9.5px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 5px;
+  border: 1px solid;
+  line-height: 1.4;
+  cursor: default;
+}
+.tag-pill.warranty { color: #0369a1; border-color: #bae6fd; background: #f0f9ff; }
+.tag-pill.rental-info { color: #0f766e; border-color: #b7ebe4; background: #effbf9; }
+
 .product-grid {
   flex: 1;
   overflow-y: auto;
@@ -208,6 +274,69 @@ html, body {
 .cart-item-remove { color: var(--muted); cursor: pointer; padding: 4px; }
 .cart-item-remove:hover { color: var(--danger); }
 
+/* ── Customer select ─────────────────────────────────────────────────── */
+.customer-field { padding: 12px 18px; border-top: 1px solid var(--border); position: relative; }
+.customer-field-label { display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin-bottom: 8px; }
+
+.customer-chip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 9px;
+  border: 1px solid var(--accent);
+  background: #eef0ff;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+.customer-chip[hidden] { display: none !important; }
+.customer-chip button { border: none; background: none; color: var(--muted); cursor: pointer; font-size: 16px; line-height: 1; padding: 0; }
+.customer-chip button:hover { color: var(--danger); }
+
+.customer-search-wrap { position: relative; }
+.customer-search-wrap[hidden] { display: none !important; }
+.customer-search-input-wrap { position: relative; display: flex; align-items: center; }
+.customer-search-input-wrap i { position: absolute; left: 11px; color: var(--muted); font-size: 12px; }
+.customer-search-input-wrap input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 12px 9px 30px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 12.5px;
+  outline: none;
+}
+.customer-search-input-wrap input:focus { border-color: var(--accent); }
+
+.customer-dropdown {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 4px);
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.14);
+  max-height: 190px;
+  overflow-y: auto;
+  z-index: 30;
+}
+.customer-dropdown[hidden] { display: none !important; }
+.customer-option { padding: 9px 12px; cursor: pointer; border-bottom: 1px solid #f0f1f4; font-size: 12.5px; }
+.customer-option:last-child { border-bottom: none; }
+.customer-option:hover, .customer-option.focused { background: #f8f9fb; }
+.customer-option-name { font-weight: 600; color: var(--text); }
+.customer-option-sub { font-size: 11px; color: var(--muted); }
+.customer-option.add { color: var(--accent); font-weight: 700; display: flex; align-items: center; gap: 6px; }
+
+.customer-quickadd { margin-top: 10px; padding: 12px; border: 1px solid var(--border); border-radius: 9px; background: #f8f9fb; }
+.customer-quickadd[hidden] { display: none !important; }
+.customer-quickadd-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin-bottom: 8px; }
+.customer-quickadd .field { margin-bottom: 8px; }
+.customer-quickadd-actions { display: flex; justify-content: flex-end; gap: 6px; }
+
 .cart-footer {
   padding: 14px 18px 18px;
   border-top: 1px solid var(--border);
@@ -254,6 +383,89 @@ html, body {
 .checkout-btn:hover { background: var(--accent-dark); }
 .checkout-btn:disabled { opacity: 0.55; cursor: default; }
 
+/* ── Modal (rental / dynamic pricing pickers) ───────────────────────────── */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 22, 30, 0.45);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 60;
+}
+.modal-backdrop.show { display: flex; }
+
+.modal {
+  background: #fff;
+  border-radius: 14px;
+  width: 420px;
+  max-width: calc(100vw - 40px);
+  max-height: calc(100vh - 60px);
+  overflow-y: auto;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.18);
+}
+.modal.modal-sm { width: 340px; }
+
+.modal-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--border); }
+.modal-head h2 { font-size: 15px; margin: 0; }
+.modal-close { border: none; background: transparent; color: var(--muted); cursor: pointer; font-size: 15px; }
+.modal-close:hover { color: var(--text); }
+
+.modal-body { padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; }
+.modal-subtitle { margin: 0; font-size: 12.5px; color: var(--muted); }
+
+.field label { font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 4px; display: block; }
+.field input, .field select, .field textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 11px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 13px;
+  outline: none;
+  font-family: inherit;
+}
+.field input:focus, .field select:focus, .field textarea:focus { border-color: var(--accent); }
+
+.picker-hint {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-radius: 9px;
+  background: #eef0ff;
+  border: 1px solid #d8dcff;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+.picker-note { margin: 0; font-size: 12px; color: var(--muted); }
+
+.modal-foot { padding: 14px 20px 18px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; }
+
+.ghost-btn {
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--text);
+  border-radius: 8px;
+  padding: 9px 16px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.ghost-btn:hover { background: #f8f9fb; }
+.ghost-btn.primary { border-color: var(--accent); background: var(--accent); color: #fff; }
+.ghost-btn.primary:hover { background: var(--accent-dark); }
+
+.error-box {
+  display: none;
+  background: #fdecec;
+  color: var(--danger);
+  border-radius: 8px;
+  padding: 9px 11px;
+  font-size: 12.5px;
+}
+.error-box.show { display: block; }
+
 /* ── Toast ───────────────────────────────────────────────────────────── */
 .toast {
   position: fixed;
@@ -276,3 +488,62 @@ html, body {
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 .toast.error { background: var(--danger); }
 .toast.success { background: var(--success); }
+
+/* ── Sale-completed receipt / invoice modal ─────────────────────────────── */
+.modal.modal-receipt { width: 460px; }
+.receipt-sale-number { font-size: 12px; font-weight: 600; color: var(--muted); margin-left: 6px; }
+.receipt-modal-body { padding: 16px 20px; background: #f3f4f6; max-height: 60vh; overflow-y: auto; }
+.receipt-modal-foot { justify-content: stretch; }
+.receipt-modal-foot button { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+
+#receipt-preview { display: flex; justify-content: center; }
+
+/* Bill mode: narrow thermal-receipt layout */
+.receipt-doc.receipt-doc--bill {
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  background: #fff;
+  color: #000;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  width: 100%;
+  max-width: 320px;
+}
+.receipt-doc--bill .rd-center { text-align: center; }
+.receipt-doc--bill .rd-business { font-weight: bold; font-size: 13px; }
+.receipt-doc--bill .rd-meta { font-size: 10px; margin: 1px 0; }
+.receipt-doc--bill hr { border: none; border-top: 1px dashed #000; margin: 8px 0; }
+.receipt-doc--bill table { width: 100%; border-collapse: collapse; font-size: 10px; margin: 6px 0; }
+.receipt-doc--bill th { text-align: left; font-size: 9px; padding: 2px 2px 4px; border-bottom: 1px solid #000; }
+.receipt-doc--bill td { padding: 3px 2px; vertical-align: top; }
+.receipt-doc--bill .rd-item-name { font-weight: bold; font-size: 11px; }
+.receipt-doc--bill .rd-item-sub { font-size: 9px; color: #555; margin-top: 1px; }
+.receipt-doc--bill .rd-right { text-align: right; }
+.receipt-doc--bill .rd-center-col { text-align: center; }
+.receipt-doc--bill .rd-row { display: flex; justify-content: space-between; margin: 2px 0; font-size: 11px; }
+.receipt-doc--bill .rd-total { font-weight: bold; font-size: 13px; border-top: 1px solid #000; padding-top: 4px; margin-top: 4px; }
+.receipt-doc--bill .rd-footer { text-align: center; font-size: 10px; margin-top: 6px; }
+
+/* Invoice mode: the real template (window.InvoiceTemplates from navbar.js)
+   renders into an iframe — it's a full standalone document with its own CSS,
+   so it can't safely share styles with the rest of the app. The wrapper is
+   sized to the SCALED-DOWN footprint; the iframe itself stays at full page
+   size and is shrunk with a CSS transform (matches the Invoice Setup wizard's
+   own preview scaling). */
+.receipt-invoice-frame-wrap {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+}
+.receipt-invoice-frame {
+  border: none;
+  transform-origin: top left;
+  background: #fff;
+}
+
+.rd-warranty { color: #0369a1; }
+.rd-rental { color: #0f766e; }
+.rd-note { font-size: 9.5px; padding: 1px 0 4px; }

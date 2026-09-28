@@ -347,6 +347,59 @@ function apiDownloadFile(path_, token, businessId, branchId) {
   });
 }
 
+// Opens a native window loaded with the given HTML and triggers the OS print
+// dialog on it — used for receipt/invoice printing. window.open() from the
+// renderer is denied by default (no setWindowOpenHandler is registered, and
+// Electron 14+ denies popups by default), so printing has to go through a
+// real BrowserWindow created here rather than a popup document.write().
+ipcMain.handle('print-html', (_e, { html }) => {
+  return new Promise((resolve) => {
+    const win = new BrowserWindow({
+      width: 480,
+      height: 720,
+      title: 'Print',
+      show: false,
+      webPreferences: { sandbox: true },
+    });
+    win.once('ready-to-show', () => {
+      win.show();
+      win.webContents.print({ printBackground: true }, () => {
+        try { win.close(); } catch (_) {}
+      });
+      resolve(true);
+    });
+    win.loadURL('data:text/html;charset=UTF-8,' + encodeURIComponent(html));
+  });
+});
+
+// Renders the given HTML to a PDF (via Electron's printToPDF) and lets the
+// user save it — same save-dialog + fs.writeFileSync shape as api-download-file
+// below, just generating the PDF locally instead of fetching one from the API.
+ipcMain.handle('save-html-as-pdf', async (_e, { html, suggestedFilename }) => {
+  let win;
+  try {
+    win = new BrowserWindow({ show: false, webPreferences: { sandbox: true } });
+    await win.loadURL('data:text/html;charset=UTF-8,' + encodeURIComponent(html));
+    const buffer = await win.webContents.printToPDF({ printBackground: true });
+    win.destroy();
+    win = null;
+
+    const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+      defaultPath: suggestedFilename || 'document.pdf',
+      filters: [{ name: 'PDF', extensions: ['pdf'] }],
+    });
+    if (canceled || !filePath) {
+      return { status: 0, canceled: true };
+    }
+
+    fs.writeFileSync(filePath, buffer);
+    return { status: 200, savedPath: filePath };
+  } catch (err) {
+    if (win) { try { win.destroy(); } catch (_) {} }
+    return { status: 0, message: err.message };
+  }
+});
+
 ipcMain.handle('api-download-file', async (_e, { path: p, suggestedFilename }) => {
   try {
     const res = await apiDownloadFile(p, config.token, config.business_id, config.branch_id);

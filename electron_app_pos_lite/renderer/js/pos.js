@@ -2,6 +2,7 @@
 
 const grid = document.getElementById('product-grid');
 const searchInput = document.getElementById('search-input');
+const chipRowEl = document.getElementById('chip-row');
 const cartItemsEl = document.getElementById('cart-items');
 const sumItemsEl = document.getElementById('sum-items');
 const sumTotalEl = document.getElementById('sum-total');
@@ -10,13 +11,69 @@ const discountInput = document.getElementById('discount-input');
 const checkoutBtn = document.getElementById('checkout-btn');
 const toastEl = document.getElementById('toast');
 
+// Customer select
+const customerChipEl = document.getElementById('customer-chip');
+const customerChipLabelEl = document.getElementById('customer-chip-label');
+const customerClearBtn = document.getElementById('customer-clear');
+const customerSearchWrapEl = document.getElementById('customer-search-wrap');
+const customerSearchInputEl = document.getElementById('customer-search-input');
+const customerDropdownEl = document.getElementById('customer-dropdown');
+const customerQuickaddEl = document.getElementById('customer-quickadd');
+const qaNameInput = document.getElementById('qa-name');
+const qaPhoneInput = document.getElementById('qa-phone');
+const qaCancelBtn = document.getElementById('qa-cancel');
+const qaSaveBtn = document.getElementById('qa-save');
+
+// Rental picker
+const rentalModal = document.getElementById('rental-modal');
+const rentalSubtitleEl = document.getElementById('rental-subtitle');
+const rentalDateInput = document.getElementById('rental-date-input');
+const rentalDaysLabel = document.getElementById('rental-days-label');
+const rentalTotalLabel = document.getElementById('rental-total-label');
+const rentalErrorEl = document.getElementById('rental-error');
+const rentalConfirmBtn = document.getElementById('rental-confirm-btn');
+
+// Sale-completed receipt/invoice modal
+const receiptModal = document.getElementById('receipt-modal');
+const receiptSaleNumberEl = document.getElementById('receipt-sale-number');
+const receiptPreviewEl = document.getElementById('receipt-preview');
+const receiptPrintBtn = document.getElementById('receipt-print-btn');
+const receiptDownloadBtn = document.getElementById('receipt-download-btn');
+
+// Dynamic pricing picker
+const dynamicModal = document.getElementById('dynamic-modal');
+const dynamicSubtitleEl = document.getElementById('dynamic-subtitle');
+const dynamicLabelEl = document.getElementById('dynamic-input-label');
+const dynamicAmountInput = document.getElementById('dynamic-amount-input');
+const dynamicHintEl = document.getElementById('dynamic-hint');
+const dynamicErrorEl = document.getElementById('dynamic-error');
+const dynamicConfirmBtn = document.getElementById('dynamic-confirm-btn');
+
 let products = [];
-let cart = []; // { product_id, name, price, customPrice, qty, stock }
+let cart = []; // { cartKey, product_id, name, price, customPrice, qty, stock, isRental?, isDynamic?, ... }
 let paymentMethod = 'cash';
 let searchDebounce = null;
 let posSettings = {}; // POS/Sale settings from the General tab (Settings → General)
+let posInvoiceSetup = {}; // Template/paper/margins/accent color from Settings → Invoice Setup
 
-function money(n) { return `$${(Number(n) || 0).toFixed(2)}`; }
+let currentMode = 'products'; // 'products' | 'rental' | 'dynamic'
+let categories = [];
+let currentCategoryId = '';
+
+let selectedCustomer = null; // { id, label }
+let customerSearchDebounce = null;
+let customerFocusedIndex = -1;
+let lastCustomerResults = [];
+
+function money(n) {
+  const amount = (Number(n) || 0).toFixed(2);
+  const currency = (posSettings.currency || 'LKR').toUpperCase();
+  return posSettings.currency_position === 'before' ? `${currency} ${amount}` : `${amount} ${currency}`;
+}
+
+function esc(s) {
+  return (s ?? '').toString().replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
 
 function showToast(message, type = '') {
   toastEl.textContent = message;
@@ -30,6 +87,38 @@ document.getElementById('back-btn').addEventListener('click', () => {
   window.location.href = 'dashboard.html';
 });
 
+// ── Mode tabs (Products / Rental / Dynamic) ─────────────────────────────
+document.querySelectorAll('.mode-tab').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    if (btn.classList.contains('active')) return;
+    document.querySelectorAll('.mode-tab').forEach((b) => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentMode = btn.dataset.mode;
+    loadProducts(searchInput.value.trim());
+  });
+});
+
+// ── Category chips ──────────────────────────────────────────────────────
+async function loadCategories() {
+  const res = await API.posCategories();
+  if (res.status !== 200) return;
+  categories = res.body.data || [];
+  renderChips();
+}
+
+function renderChips() {
+  const chips = [`<button class="chip ${currentCategoryId === '' ? 'active' : ''}" data-category="">${t('All')}</button>`]
+    .concat(categories.map((c) => `<button class="chip ${String(currentCategoryId) === String(c.id) ? 'active' : ''}" data-category="${c.id}">${esc(c.name)}</button>`));
+  chipRowEl.innerHTML = chips.join('');
+  chipRowEl.querySelectorAll('.chip').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      currentCategoryId = btn.dataset.category || '';
+      renderChips();
+      loadProducts(searchInput.value.trim());
+    });
+  });
+}
+
 // ── Products ────────────────────────────────────────────────────────────
 function unitPrice(p) {
   return p.discounted_sell_price !== null && p.discounted_sell_price !== undefined
@@ -37,9 +126,41 @@ function unitPrice(p) {
     : p.unit_sell_price;
 }
 
+function priceLabel(p) {
+  if (p.is_rental) return `${money(p.rental_daily_rate)}/${t('day')}`;
+  if (p.is_dynamic_pricing) return p.dynamic_price_qty_linked ? t('Enter amount') : t('Set price');
+  return money(unitPrice(p));
+}
+
+// Resolves a configured warranty duration string (e.g. "1 Year", "30 Days", "Lifetime")
+// into a { type, date } pair — mirrors the web app's posResolveWarrantyFromDuration
+// (Modules/Pos/resources/views/partials/pos-cart-layers-script.blade.php).
+function resolveWarrantyFromDuration(duration) {
+  const d = String(duration || '').trim();
+  if (!d || d.toLowerCase() === 'lifetime') return { type: 'lifetime', date: null };
+  const m = d.match(/^(\d+(?:\.\d+)?)\s*(day|days|week|weeks|month|months|year|years)$/i);
+  if (m) {
+    const n = parseFloat(m[1]);
+    const unit = m[2].toLowerCase();
+    const exp = new Date();
+    if (unit.startsWith('day')) exp.setDate(exp.getDate() + Math.round(n));
+    else if (unit.startsWith('week')) exp.setDate(exp.getDate() + Math.round(n * 7));
+    else if (unit.startsWith('month')) exp.setMonth(exp.getMonth() + Math.round(n));
+    else if (unit.startsWith('year')) exp.setFullYear(exp.getFullYear() + Math.round(n));
+    return { type: 'date', date: exp.toISOString().slice(0, 10) };
+  }
+  return { type: 'lifetime', date: null };
+}
+
+function emptyProductsMessage() {
+  if (currentMode === 'rental') return t('No rental products found.');
+  if (currentMode === 'dynamic') return t('No dynamic-priced products found.');
+  return t('No products found.');
+}
+
 function renderProducts() {
   if (!products.length) {
-    grid.innerHTML = `<div class="empty-state">${t('No products found.')}</div>`;
+    grid.innerHTML = `<div class="empty-state">${emptyProductsMessage()}</div>`;
     return;
   }
 
@@ -48,25 +169,50 @@ function renderProducts() {
     const thumb = p.image_url
       ? `<img src="${p.image_url}" alt="">`
       : '<i class="fa-solid fa-box"></i>';
+    const badge = p.is_rental
+      ? `<span class="product-badge rental">${t('Rental')}</span>`
+      : p.is_dynamic_pricing
+        ? `<span class="product-badge dynamic">${t('Dynamic')}</span>`
+        : '';
+
+    const tags = [];
+    if (p.has_warranty) {
+      const resolved = resolveWarrantyFromDuration(p.warranty_duration);
+      const durationLabel = p.warranty_duration || t('Lifetime');
+      const tooltip = resolved.type === 'date'
+        ? t('Valid until {date}', { date: resolved.date })
+        : t('Lifetime warranty');
+      tags.push(`<span class="tag-pill warranty" title="${esc(tooltip)}"><i class="fa-solid fa-shield-halved"></i> ${esc(durationLabel)}</span>`);
+    }
+    if (p.is_rental) {
+      const rate = money(p.rental_daily_rate);
+      const maxDays = p.rental_max_days ? t('max {n}d', { n: p.rental_max_days }) : '';
+      tags.push(`<span class="tag-pill rental-info" title="${esc(t('Rental: {rate}/day', { rate }))}"><i class="fa-solid fa-calendar-days"></i> ${esc(rate)}/${t('day')}${maxDays ? ' · ' + esc(maxDays) : ''}</span>`);
+    }
+    const tagsRow = tags.length ? `<div class="product-tags">${tags.join('')}</div>` : '';
+
     return `
       <div class="product-card ${outOfStock ? 'out-of-stock' : ''}" data-id="${p.id}">
+        ${badge}
         <div class="product-thumb">${thumb}</div>
         <div class="product-name">${p.name}</div>
+        ${tagsRow}
         <div class="product-meta">
-          <span class="product-price">${money(unitPrice(p))}</span>
+          <span class="product-price">${priceLabel(p)}</span>
           <span class="product-stock">${outOfStock ? t('Out of stock') : t('{n} left', { n: Math.floor(p.stock_quantity) })}</span>
         </div>
       </div>`;
   }).join('');
 
   grid.querySelectorAll('.product-card:not(.out-of-stock)').forEach((card) => {
-    card.addEventListener('click', () => addToCart(Number(card.dataset.id)));
+    card.addEventListener('click', () => routeAddToCart(Number(card.dataset.id)));
   });
 }
 
 async function loadProducts(query = '') {
   grid.innerHTML = `<div class="loading-state">${t('Loading products…')}</div>`;
-  const res = await API.products(query);
+  const filter = currentMode === 'rental' ? 'rental' : currentMode === 'dynamic' ? 'dynamic' : null;
+  const res = await API.products(query, { filter, categoryId: currentCategoryId || null });
   if (res.status !== 200) {
     grid.innerHTML = `<div class="empty-state">${t('Could not load products ({reason}).', { reason: t(res.body?.message) || res.status })}</div>`;
     return;
@@ -80,12 +226,22 @@ searchInput.addEventListener('input', () => {
   searchDebounce = setTimeout(() => loadProducts(searchInput.value.trim()), 300);
 });
 
-// ── Cart ────────────────────────────────────────────────────────────────
+// ── Add-to-cart routing (plain product vs. rental vs. dynamic pricing) ──
+function routeAddToCart(productId) {
+  const product = products.find((p) => p.id === productId);
+  if (!product) return;
+  if (product.is_rental) return void addRentalToCart(product);
+  if (product.is_dynamic_pricing) return void addDynamicToCart(product);
+  return addToCart(productId);
+}
+
+// ── Cart: plain products ─────────────────────────────────────────────────
 function addToCart(productId) {
   const product = products.find((p) => p.id === productId);
   if (!product) return;
 
-  const existing = cart.find((c) => c.product_id === productId);
+  const cartKey = `p-${productId}`;
+  const existing = cart.find((c) => c.cartKey === cartKey);
   if (existing) {
     if (existing.qty < product.stock_quantity) existing.qty += 1;
     else showToast(t('No more stock available for this item.'), 'error');
@@ -105,28 +261,101 @@ function addToCart(productId) {
     }
   }
 
+  let hasWarranty = false;
+  let warrantyType = null;
+  let warrantyDate = null;
+  if (product.has_warranty) {
+    const resolved = resolveWarrantyFromDuration(product.warranty_duration);
+    hasWarranty = true;
+    warrantyType = resolved.type;
+    warrantyDate = resolved.date;
+  }
+
   cart.push({
+    cartKey,
     product_id: product.id,
     name: product.name,
     price,
     customPrice,
     qty: 1,
     stock: product.stock_quantity,
+    hasWarranty,
+    warrantyType,
+    warrantyDate,
   });
   renderCart();
 }
 
-function changeQty(productId, delta) {
-  const item = cart.find((c) => c.product_id === productId);
+// ── Cart: rental products ────────────────────────────────────────────────
+function requireCustomerForFlow(message) {
+  if (selectedCustomer) return true;
+  showToast(message, 'error');
+  customerSearchInputEl?.focus();
+  return false;
+}
+
+async function addRentalToCart(product) {
+  if (!requireCustomerForFlow(t('Select a customer before renting a product.'))) return;
+
+  const result = await pickRentalDetails(product);
+  if (!result) return;
+
+  const dailyRate = Number(product.rental_daily_rate) || 0;
+  const cartKey = `rental-${product.id}-${result.returnDate}`;
+  const existing = cart.find((c) => c.cartKey === cartKey);
+
+  if (existing) {
+    if (existing.qty < product.stock_quantity) existing.qty += 1;
+    else showToast(t('No more stock available for this rental.'), 'error');
+  } else {
+    cart.push({
+      cartKey,
+      product_id: product.id,
+      name: product.name,
+      price: Math.round(dailyRate * result.days * 100) / 100,
+      customPrice: null,
+      qty: 1,
+      stock: product.stock_quantity,
+      isRental: true,
+      rentalReturnDate: result.returnDate,
+      rentalDays: result.days,
+    });
+  }
+  renderCart();
+}
+
+// ── Cart: dynamic-pricing products ───────────────────────────────────────
+async function addDynamicToCart(product) {
+  const linked = !!product.dynamic_price_qty_linked;
+  const result = await pickDynamicPrice(product);
+  if (!result) return;
+
+  cart.push({
+    cartKey: `dyn-${product.id}-${Date.now()}`,
+    product_id: product.id,
+    name: product.name,
+    price: linked ? 1 : result.amount,
+    customPrice: null,
+    qty: linked ? result.amount : 1,
+    stock: product.stock_quantity,
+    isDynamic: true,
+    dynamicLinked: linked,
+    customUnitPrice: linked ? null : result.amount,
+  });
+  renderCart();
+}
+
+function changeQty(cartKey, delta) {
+  const item = cart.find((c) => c.cartKey === cartKey);
   if (!item) return;
   item.qty += delta;
-  if (item.qty <= 0) cart = cart.filter((c) => c.product_id !== productId);
+  if (item.qty <= 0) cart = cart.filter((c) => c.cartKey !== cartKey);
   else if (item.qty > item.stock) item.qty = item.stock;
   renderCart();
 }
 
-function removeFromCart(productId) {
-  cart = cart.filter((c) => c.product_id !== productId);
+function removeFromCart(cartKey) {
+  cart = cart.filter((c) => c.cartKey !== cartKey);
   renderCart();
 }
 
@@ -139,11 +368,15 @@ function renderCart() {
   if (!cart.length) {
     cartItemsEl.innerHTML = `<div class="cart-empty">${t('Cart is empty. Click a product to add it.')}</div>`;
   } else {
-    cartItemsEl.innerHTML = cart.map((c) => `
-      <div class="cart-item" data-id="${c.product_id}">
+    cartItemsEl.innerHTML = cart.map((c) => {
+      let sub = `${money(c.price)} × ${c.qty} = ${money(c.price * c.qty)}`;
+      if (c.isRental) sub += ` · ${t('Return')} ${c.rentalReturnDate} (${c.rentalDays}d)`;
+      if (c.isDynamic) sub += ` · ${t('Dynamic')}`;
+      return `
+      <div class="cart-item" data-key="${c.cartKey}">
         <div class="cart-item-info">
           <div class="cart-item-name">${c.name}</div>
-          <div class="cart-item-price">${money(c.price)} × ${c.qty} = ${money(c.price * c.qty)}</div>
+          <div class="cart-item-price">${sub}</div>
         </div>
         <div class="qty-stepper">
           <button data-action="dec">−</button>
@@ -151,13 +384,14 @@ function renderCart() {
           <button data-action="inc">+</button>
         </div>
         <div class="cart-item-remove" data-action="remove"><i class="fa-solid fa-trash"></i></div>
-      </div>`).join('');
+      </div>`;
+    }).join('');
 
     cartItemsEl.querySelectorAll('.cart-item').forEach((row) => {
-      const id = Number(row.dataset.id);
-      row.querySelector('[data-action="inc"]').addEventListener('click', () => changeQty(id, 1));
-      row.querySelector('[data-action="dec"]').addEventListener('click', () => changeQty(id, -1));
-      row.querySelector('[data-action="remove"]').addEventListener('click', () => removeFromCart(id));
+      const key = row.dataset.key;
+      row.querySelector('[data-action="inc"]').addEventListener('click', () => changeQty(key, 1));
+      row.querySelector('[data-action="dec"]').addEventListener('click', () => changeQty(key, -1));
+      row.querySelector('[data-action="remove"]').addEventListener('click', () => removeFromCart(key));
     });
   }
 
@@ -185,9 +419,572 @@ document.querySelectorAll('.pm-btn').forEach((btn) => {
   });
 });
 
+// ── Customer select ──────────────────────────────────────────────────────
+function selectCustomer(customer) {
+  selectedCustomer = {
+    id: customer.id,
+    label: customer.name + (customer.phone ? ` · ${customer.phone}` : ''),
+  };
+  customerChipLabelEl.textContent = selectedCustomer.label;
+  customerChipEl.hidden = false;
+  customerSearchWrapEl.hidden = true;
+  customerDropdownEl.hidden = true;
+  customerDropdownEl.innerHTML = '';
+  customerQuickaddEl.hidden = true;
+  customerSearchInputEl.value = '';
+}
+
+function clearCustomerSelection() {
+  selectedCustomer = null;
+  customerChipEl.hidden = true;
+  customerChipLabelEl.textContent = '';
+  customerSearchWrapEl.hidden = false;
+  customerSearchInputEl.value = '';
+  customerDropdownEl.hidden = true;
+  customerDropdownEl.innerHTML = '';
+  customerQuickaddEl.hidden = true;
+}
+
+function openCustomerQuickAdd(prefillName) {
+  customerDropdownEl.hidden = true;
+  qaNameInput.value = prefillName || '';
+  qaPhoneInput.value = '';
+  customerQuickaddEl.hidden = false;
+  qaNameInput.focus();
+}
+
+function renderCustomerDropdown(items, query) {
+  lastCustomerResults = items;
+  customerFocusedIndex = -1;
+
+  const rows = items.map((c) => `
+    <div class="customer-option" data-id="${c.id}">
+      <div class="customer-option-name">${esc(c.name)}</div>
+      ${(c.phone || c.email) ? `<div class="customer-option-sub">${esc(c.phone || '')}${c.phone && c.email ? ' · ' : ''}${esc(c.email || '')}</div>` : ''}
+    </div>`).join('');
+  const addRow = `<div class="customer-option add" data-add="1"><i class="fa-solid fa-plus"></i> ${t('Add customer')}${query ? ': ' + esc(query) : ''}</div>`;
+
+  customerDropdownEl.innerHTML = rows + addRow;
+  customerDropdownEl.hidden = false;
+
+  customerDropdownEl.querySelectorAll('.customer-option[data-id]').forEach((el) => {
+    el.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      const c = items.find((x) => String(x.id) === el.dataset.id);
+      if (c) selectCustomer(c);
+    });
+  });
+  customerDropdownEl.querySelector('[data-add]')?.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    openCustomerQuickAdd(query);
+  });
+}
+
+async function fetchCustomers(q) {
+  const res = await API.customers({ q });
+  if (res.status !== 200) return;
+  renderCustomerDropdown(res.body.data || [], q);
+}
+
+customerSearchInputEl.addEventListener('input', () => {
+  clearTimeout(customerSearchDebounce);
+  const q = customerSearchInputEl.value.trim();
+  customerSearchDebounce = setTimeout(() => fetchCustomers(q), 250);
+});
+
+customerSearchInputEl.addEventListener('focus', () => fetchCustomers(customerSearchInputEl.value.trim()));
+
+customerSearchInputEl.addEventListener('keydown', (e) => {
+  if (customerDropdownEl.hidden) return;
+  const opts = customerDropdownEl.querySelectorAll('.customer-option');
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    customerFocusedIndex = Math.min(customerFocusedIndex + 1, opts.length - 1);
+    opts.forEach((o, i) => o.classList.toggle('focused', i === customerFocusedIndex));
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    customerFocusedIndex = Math.max(customerFocusedIndex - 1, 0);
+    opts.forEach((o, i) => o.classList.toggle('focused', i === customerFocusedIndex));
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    const opt = opts[customerFocusedIndex];
+    if (!opt) return;
+    if (opt.dataset.add) openCustomerQuickAdd(customerSearchInputEl.value.trim());
+    else {
+      const c = lastCustomerResults.find((x) => String(x.id) === opt.dataset.id);
+      if (c) selectCustomer(c);
+    }
+  } else if (e.key === 'Escape') {
+    customerDropdownEl.hidden = true;
+  }
+});
+
+customerClearBtn.addEventListener('click', clearCustomerSelection);
+
+qaCancelBtn.addEventListener('click', () => { customerQuickaddEl.hidden = true; });
+
+qaSaveBtn.addEventListener('click', async () => {
+  const name = qaNameInput.value.trim();
+  if (!name) { qaNameInput.focus(); return; }
+  const phone = qaPhoneInput.value.trim();
+
+  qaSaveBtn.disabled = true;
+  try {
+    const res = await API.createCustomer({ name, phone: phone || null });
+    if (res.status !== 201) {
+      showToast(t(res.body?.message || 'Could not save customer.'), 'error');
+      return;
+    }
+    selectCustomer(res.body.data);
+  } finally {
+    qaSaveBtn.disabled = false;
+  }
+});
+
+document.addEventListener('click', (e) => {
+  if (customerDropdownEl.hidden) return;
+  if (!customerSearchWrapEl.contains(e.target)) customerDropdownEl.hidden = true;
+});
+
+// ── Rental details picker (modal) ────────────────────────────────────────
+let pendingRentalResolve = null;
+let currentRentalProduct = null;
+
+function rentalDaysBetween(dateStr) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const target = new Date(dateStr + 'T00:00:00');
+  return Math.max(1, Math.round((target - today) / 86400000));
+}
+
+function updateRentalHint() {
+  if (!rentalDateInput.value) {
+    rentalDaysLabel.textContent = '—';
+    rentalTotalLabel.textContent = money(0);
+    return;
+  }
+  const days = rentalDaysBetween(rentalDateInput.value);
+  const rate = currentRentalProduct ? Number(currentRentalProduct.rental_daily_rate) || 0 : 0;
+  rentalDaysLabel.textContent = days === 1 ? t('1 day') : t('{n} days', { n: days });
+  rentalTotalLabel.textContent = money(rate * days);
+  rentalErrorEl.classList.remove('show');
+}
+
+rentalDateInput.addEventListener('input', updateRentalHint);
+
+function closeRentalModal() {
+  rentalModal.classList.remove('show');
+  if (pendingRentalResolve) {
+    const resolve = pendingRentalResolve;
+    pendingRentalResolve = null;
+    resolve(null);
+  }
+}
+
+rentalConfirmBtn.addEventListener('click', () => {
+  if (!currentRentalProduct) return;
+  const maxDays = Number(currentRentalProduct.rental_max_days) || 1;
+  if (!rentalDateInput.value) {
+    rentalErrorEl.textContent = t('Choose a return date.');
+    rentalErrorEl.classList.add('show');
+    return;
+  }
+  const days = rentalDaysBetween(rentalDateInput.value);
+  if (days > maxDays) {
+    rentalErrorEl.textContent = t('Return date exceeds the maximum rental period ({n} days).', { n: maxDays });
+    rentalErrorEl.classList.add('show');
+    return;
+  }
+  const resolve = pendingRentalResolve;
+  pendingRentalResolve = null;
+  rentalModal.classList.remove('show');
+  resolve({ returnDate: rentalDateInput.value, days });
+});
+
+function pickRentalDetails(product) {
+  return new Promise((resolve) => {
+    currentRentalProduct = product;
+    const dailyRate = Number(product.rental_daily_rate) || 0;
+    const maxDays = Number(product.rental_max_days) || 1;
+    rentalSubtitleEl.textContent = `${product.name} — ${money(dailyRate)}/${t('day')} · ${t('max {n} days', { n: maxDays })}`;
+
+    const today = new Date();
+    const minStr = today.toISOString().slice(0, 10);
+    const maxDate = new Date(today);
+    maxDate.setDate(maxDate.getDate() + maxDays);
+    rentalDateInput.min = minStr;
+    rentalDateInput.max = maxDate.toISOString().slice(0, 10);
+    rentalDateInput.value = minStr;
+    rentalErrorEl.classList.remove('show');
+    updateRentalHint();
+
+    pendingRentalResolve = resolve;
+    rentalModal.classList.add('show');
+  });
+}
+
+// ── Dynamic price picker (modal) ─────────────────────────────────────────
+let pendingDynamicResolve = null;
+let currentDynamicProduct = null;
+
+function updateDynamicHint() {
+  dynamicErrorEl.classList.remove('show');
+  const amount = parseFloat(dynamicAmountInput.value);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    dynamicHintEl.textContent = currentDynamicProduct?.dynamic_price_qty_linked
+      ? t('Enter the amount sold — deducts that many units from stock.')
+      : t('Enter the price to charge for 1 unit.');
+    return;
+  }
+  if (currentDynamicProduct?.dynamic_price_qty_linked) {
+    const stock = Number(currentDynamicProduct.stock_quantity) || 0;
+    dynamicHintEl.textContent = t('{amount} units deducted · balance after: {balance}', {
+      amount: amount.toFixed(2),
+      balance: Math.max(0, stock - amount).toFixed(2),
+    });
+  } else {
+    dynamicHintEl.textContent = t('Sell 1 × {price}', { price: money(amount) });
+  }
+}
+
+dynamicAmountInput.addEventListener('input', updateDynamicHint);
+
+function closeDynamicModal() {
+  dynamicModal.classList.remove('show');
+  if (pendingDynamicResolve) {
+    const resolve = pendingDynamicResolve;
+    pendingDynamicResolve = null;
+    resolve(null);
+  }
+}
+
+dynamicConfirmBtn.addEventListener('click', () => {
+  const amount = parseFloat(dynamicAmountInput.value);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    dynamicErrorEl.textContent = t('Enter an amount greater than zero.');
+    dynamicErrorEl.classList.add('show');
+    return;
+  }
+  if (currentDynamicProduct?.dynamic_price_qty_linked && amount > (Number(currentDynamicProduct.stock_quantity) || 0)) {
+    dynamicErrorEl.textContent = t('Amount exceeds available stock.');
+    dynamicErrorEl.classList.add('show');
+    return;
+  }
+  const resolve = pendingDynamicResolve;
+  pendingDynamicResolve = null;
+  dynamicModal.classList.remove('show');
+  resolve({ amount });
+});
+
+function pickDynamicPrice(product) {
+  return new Promise((resolve) => {
+    currentDynamicProduct = product;
+    dynamicSubtitleEl.textContent = product.name || '';
+    dynamicLabelEl.textContent = product.dynamic_price_qty_linked ? t('Amount') : t('Price');
+    dynamicAmountInput.value = '';
+    dynamicErrorEl.classList.remove('show');
+    updateDynamicHint();
+
+    pendingDynamicResolve = resolve;
+    dynamicModal.classList.add('show');
+    setTimeout(() => dynamicAmountInput.focus(), 50);
+  });
+}
+
+// ── Shared modal chrome (close button / backdrop click / Escape) ───────────
+document.querySelectorAll('.modal-backdrop [data-close]').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    if (btn.dataset.close === 'rental-modal') closeRentalModal();
+    if (btn.dataset.close === 'dynamic-modal') closeDynamicModal();
+    if (btn.dataset.close === 'receipt-modal') closeReceiptModal();
+  });
+});
+[rentalModal, dynamicModal, receiptModal].forEach((bg) => {
+  bg.addEventListener('click', (e) => {
+    if (e.target !== bg) return;
+    if (bg === rentalModal) closeRentalModal();
+    else if (bg === dynamicModal) closeDynamicModal();
+    else closeReceiptModal();
+  });
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if (rentalModal.classList.contains('show')) closeRentalModal();
+  else if (dynamicModal.classList.contains('show')) closeDynamicModal();
+  else if (receiptModal.classList.contains('show')) closeReceiptModal();
+});
+
+// ── Sale-completed receipt/invoice preview + print/download ─────────────
+function fmtQty(n) {
+  return (Number(n) || 0).toFixed(3).replace(/\.?0+$/, '');
+}
+
+function warrantyLabel(item) {
+  if (!item.warranty_type) return null;
+  if (item.warranty_type === 'lifetime') return t('Lifetime warranty');
+  return item.warranty_expires_at ? t('Warranty until {date}', { date: item.warranty_expires_at }) : t('Warranty');
+}
+
+function rentalLabel(item) {
+  if (!item.rental_return_date) return null;
+  let s = t('Return {date}', { date: item.rental_return_date }) + ' · ' + t('Daily {rate}', { rate: money(item.rental_daily_rate) });
+  if (item.rental_late_fee_multiplier > 0) s += ' · ' + t('Late {mult}× rate/day', { mult: item.rental_late_fee_multiplier });
+  return s;
+}
+
+function buildReceiptData(sale) {
+  const soldAtDate = sale.sold_at ? new Date(sale.sold_at) : null;
+  return {
+    saleNumber: sale.sale_number,
+    soldAt: soldAtDate ? soldAtDate.toLocaleString() : '',
+    soldAtDate: soldAtDate ? soldAtDate.toLocaleDateString() : '',
+    paymentLabel: sale.payment_method_label || sale.payment_method,
+    customerName: sale.customer_name || '',
+    cashierName: sale.cashier?.name || '',
+    notes: sale.notes || '',
+    subtotal: sale.subtotal,
+    discountPercent: sale.discount_percent,
+    discountAmount: sale.discount_amount,
+    total: sale.total,
+    amountPaid: sale.amount_paid,
+    amountTendered: sale.amount_tendered,
+    changeAmount: sale.change_amount,
+    items: (sale.items || []).map((it) => ({
+      name: it.product_name,
+      sku: it.sku,
+      qty: it.quantity,
+      unit: it.unit_sell_price,
+      line: it.line_total,
+      warranty: warrantyLabel(it),
+      rental: rentalLabel(it),
+    })),
+  };
+}
+
+function renderBillHtml(data) {
+  const showName = posSettings.show_business_name !== false;
+  const showAddr = !!posSettings.show_business_address;
+  const businessName = posSettings.business_name || '';
+  const addr = posSettings.receipt_address_line || '';
+  const header = posSettings.receipt_header || '';
+  const footer = posSettings.receipt_footer || t('Thank you for your purchase!');
+
+  const rows = data.items.map((it) => {
+    let row = `<tr>
+      <td><div class="rd-item-name">${esc(it.name)}</div>${it.sku ? `<div class="rd-item-sub">${esc(it.sku)}</div>` : ''}</td>
+      <td class="rd-center-col">${esc(fmtQty(it.qty))}</td>
+      <td class="rd-right">${esc(money(it.unit))}</td>
+      <td class="rd-right"><strong>${esc(money(it.line))}</strong></td>
+    </tr>`;
+    if (it.warranty) row += `<tr><td colspan="4" class="rd-note rd-warranty">${esc(it.warranty)}</td></tr>`;
+    if (it.rental) row += `<tr><td colspan="4" class="rd-note rd-rental">${esc(it.rental)}</td></tr>`;
+    return row;
+  }).join('');
+
+  let totals = '';
+  if (data.discountAmount > 0.001) {
+    totals += `<div class="rd-row"><span>${t('Subtotal')}</span><span>${esc(money(data.subtotal))}</span></div>`;
+    const pctLabel = data.discountPercent ? ` (${data.discountPercent}%)` : '';
+    totals += `<div class="rd-row"><span>${t('Discount')}${pctLabel}</span><span>&minus;${esc(money(data.discountAmount))}</span></div>`;
+  }
+  totals += `<div class="rd-row rd-total"><span>${t('Total')}</span><span>${esc(money(data.total))}</span></div>`;
+  if (data.amountTendered != null) {
+    totals += `<div class="rd-row"><span>${t('Cash Received')}</span><span>${esc(money(data.amountTendered))}</span></div>`;
+    totals += `<div class="rd-row"><span>${t('Change')}</span><span>${esc(money(data.changeAmount || 0))}</span></div>`;
+  }
+
+  return `
+    <div class="rd-center">
+      ${showName ? `<div class="rd-business">${esc(businessName)}</div>` : ''}
+      ${showAddr && addr ? `<div class="rd-meta">${esc(addr)}</div>` : ''}
+      ${header ? `<div class="rd-meta" style="font-style:italic">${esc(header)}</div>` : ''}
+    </div>
+    <hr>
+    <div class="rd-row"><span>${t('Receipt #')}</span><strong>${esc(data.saleNumber)}</strong></div>
+    <div class="rd-row"><span>${t('Date & Time')}</span><strong>${esc(data.soldAt)}</strong></div>
+    <div class="rd-row"><span>${t('Payment')}</span><strong>${esc(data.paymentLabel)}</strong></div>
+    ${data.customerName ? `<div class="rd-row"><span>${t('Customer')}</span><strong>${esc(data.customerName)}</strong></div>` : ''}
+    ${data.cashierName ? `<div class="rd-row"><span>${t('Cashier')}</span><strong>${esc(data.cashierName)}</strong></div>` : ''}
+    <hr>
+    <table>
+      <thead><tr><th>${t('Item')}</th><th class="rd-center-col">${t('Qty')}</th><th class="rd-right">${t('Price')}</th><th class="rd-right">${t('Amount')}</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <hr>
+    ${totals}
+    ${data.notes ? `<hr><div class="rd-note">${t('Notes')}: ${esc(data.notes)}</div>` : ''}
+    <hr>
+    <div class="rd-footer">${esc(footer)}</div>
+  `;
+}
+
+function receiptDocStyles() {
+  const widthMm = posSettings.receipt_paper_width === '58' ? 58 : 80;
+  return `
+    @page { size: ${widthMm}mm auto; margin: 4mm; }
+    * { box-sizing: border-box; }
+    body { font-family: 'Courier New', monospace; font-size: 12px; line-height: 1.5; color:#000; background:#fff; margin:0; padding:0; width:${widthMm}mm; }
+    .rd-center { text-align:center; }
+    .rd-business { font-weight:bold; font-size:13px; }
+    .rd-meta { font-size:10px; margin:1px 0; }
+    hr { border:none; border-top:1px dashed #000; margin:8px 0; }
+    table { width:100%; border-collapse:collapse; font-size:10px; margin:6px 0; }
+    th { text-align:left; font-size:9px; padding:2px 2px 4px; border-bottom:1px solid #000; }
+    td { padding:3px 2px; vertical-align:top; }
+    .rd-item-name { font-weight:bold; font-size:11px; }
+    .rd-item-sub { font-size:9px; color:#555; margin-top:1px; }
+    .rd-right { text-align:right; }
+    .rd-center-col { text-align:center; }
+    .rd-row { display:flex; justify-content:space-between; margin:2px 0; font-size:11px; }
+    .rd-total { font-weight:bold; font-size:13px; border-top:1px solid #000; padding-top:4px; margin-top:4px; }
+    .rd-footer { text-align:center; font-size:10px; margin-top:6px; }
+    .rd-note { font-size:9px; padding:1px 0 4px; }
+    .rd-warranty { color:#0369a1; }
+    .rd-rental { color:#0f766e; }
+  `;
+}
+
+function buildFullReceiptDocument(data) {
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${esc(data.saleNumber || '')}</title><style>${receiptDocStyles()}</style></head><body>${renderBillHtml(data)}</body></html>`;
+}
+
+// Builds the "Invoice" mode document using the SAME 5 real templates (Classic /
+// Bold Banner / Minimal / Compact / Executive) and paper/margin/accent-color
+// settings as the Settings → Invoice Setup wizard (window.InvoiceTemplates,
+// exported from js/navbar.js) — fed with this sale's real data instead of that
+// wizard's own hard-coded demo content. Returns null if the template engine
+// isn't available (navbar.js failed to load), so callers can fall back to the
+// thermal-receipt layout.
+function buildInvoiceDocument(data) {
+  const IT = window.InvoiceTemplates;
+  if (!IT) return null;
+
+  const setup = posInvoiceSetup || {};
+  const template = (IT.templates || []).some((tp) => tp.id === setup.template) ? setup.template : 'classic';
+  const tplMeta = IT.byId(template);
+  const accent = setup.accent_color || tplMeta.accent;
+  const paperSize = ['a4', 'a5', 'letter', 'legal'].includes(setup.paper_size) ? setup.paper_size : 'a4';
+  const orientation = setup.orientation === 'landscape' ? 'landscape' : 'portrait';
+  const geom = IT.geom(paperSize, orientation);
+  const mg = {
+    top: Number.isFinite(setup.margin_top) ? setup.margin_top : 20,
+    bot: Number.isFinite(setup.margin_bottom) ? setup.margin_bottom : 20,
+    left: Number.isFinite(setup.margin_left) ? setup.margin_left : 15,
+    right: Number.isFinite(setup.margin_right) ? setup.margin_right : 15,
+  };
+  const headerLayout = ['num-left', 'num-right', 'num-center'].includes(setup.header_layout) ? setup.header_layout : 'num-left';
+
+  const items = data.items.map((it) => ({
+    name: esc(it.name),
+    desc: esc([it.sku, it.warranty, it.rental].filter(Boolean).join(' · ')),
+    qty: esc(fmtQty(it.qty)),
+    price: esc(money(it.unit)),
+    total: esc(money(it.line)),
+  }));
+
+  const totalsLines = [{ label: esc(t('Subtotal')), value: esc(money(data.subtotal)) }];
+  if (data.discountAmount > 0.001) {
+    const pctLabel = data.discountPercent ? ` (${data.discountPercent}%)` : '';
+    totalsLines.push({ label: esc(t('Discount') + pctLabel), value: '−' + esc(money(data.discountAmount)), color: '#ef4444' });
+  }
+
+  const build = (IT.builders || {})[template];
+  if (!build) return null;
+
+  const ctx = {
+    a: accent,
+    mg,
+    biz: posSettings.business_name || '',
+    addr: posSettings.receipt_address_line || '',
+    bizContact: '',
+    geomW: geom.wPx,
+    geomMinH: `min-height:${geom.hPx}px;`,
+    hdrCss: IT.hdrCss(headerLayout) + IT.pageAtCss(geom),
+    invoiceNumber: esc(`${posSettings.invoice_prefix || 'INV'}-${data.saleNumber}`),
+    issueDate: esc(data.soldAtDate),
+    dueDate: esc(data.soldAtDate),
+    statusLabel: esc(t('Paid')),
+    billToName: esc(data.customerName || t('Walk-in Customer')),
+    billToLines: '',
+    items,
+    totalsLines,
+    grandLabel: esc(t('Total')),
+    grandValue: esc(money(data.total)),
+    notesHtml: data.notes ? esc(data.notes) : '',
+    footerRight: '',
+  };
+
+  return { html: build(ctx), width: geom.wPx, height: geom.hPx };
+}
+
+let currentReceiptDoc = null; // { mode, data, html } for the open receipt modal
+
+function renderInvoicePreview(built) {
+  const maxW = 400; // preview column budget inside the modal
+  const scale = Math.min(1, maxW / built.width);
+  const w = Math.round(built.width * scale);
+  const h = Math.round(built.height * scale);
+  receiptPreviewEl.innerHTML = `<div class="receipt-invoice-frame-wrap" style="width:${w}px;height:${h}px;"><iframe class="receipt-invoice-frame" style="width:${built.width}px;height:${built.height}px;transform:scale(${scale});" scrolling="no"></iframe></div>`;
+  receiptPreviewEl.querySelector('iframe').srcdoc = built.html;
+}
+
+function showReceiptModal(sale) {
+  const mode = posSettings.receipt_mode === 'invoice' ? 'invoice' : 'bill';
+  const data = buildReceiptData(sale);
+  receiptSaleNumberEl.textContent = sale.sale_number || '';
+
+  const built = mode === 'invoice' ? buildInvoiceDocument(data) : null;
+  if (built) {
+    renderInvoicePreview(built);
+    currentReceiptDoc = { mode: 'invoice', data, html: built.html };
+  } else {
+    receiptPreviewEl.innerHTML = `<div class="receipt-doc receipt-doc--bill">${renderBillHtml(data)}</div>`;
+    currentReceiptDoc = { mode: 'bill', data, html: buildFullReceiptDocument(data) };
+  }
+  receiptModal.classList.add('show');
+}
+
+function closeReceiptModal() {
+  receiptModal.classList.remove('show');
+  currentReceiptDoc = null;
+}
+
+receiptPrintBtn.addEventListener('click', async () => {
+  if (!currentReceiptDoc) return;
+  receiptPrintBtn.disabled = true;
+  try {
+    await window.electronAPI.printHtml(currentReceiptDoc.html);
+  } catch (err) {
+    showToast(err.message, 'error');
+  } finally {
+    receiptPrintBtn.disabled = false;
+  }
+});
+
+receiptDownloadBtn.addEventListener('click', async () => {
+  if (!currentReceiptDoc) return;
+  receiptDownloadBtn.disabled = true;
+  try {
+    const filename = `${currentReceiptDoc.data.saleNumber || 'receipt'}.pdf`;
+    const res = await window.electronAPI.savePdf(currentReceiptDoc.html, filename);
+    if (res.status === 200) showToast(t('Saved to {path}', { path: res.savedPath }), 'success');
+    else if (!res.canceled) showToast(res.message || t('Could not save PDF.'), 'error');
+  } catch (err) {
+    showToast(err.message, 'error');
+  } finally {
+    receiptDownloadBtn.disabled = false;
+  }
+});
+
 // ── Checkout ────────────────────────────────────────────────────────────
 checkoutBtn.addEventListener('click', async () => {
   if (!cart.length) return;
+
+  if (!selectedCustomer && cart.some((c) => c.isRental)) {
+    showToast(t('Select a customer before completing a sale with rental products.'), 'error');
+    customerSearchInputEl?.focus();
+    return;
+  }
 
   const discountPct = discountPercent();
 
@@ -198,6 +995,7 @@ checkoutBtn.addEventListener('click', async () => {
     const lines = cart.map((c) => `${c.name} × ${c.qty} = ${money(c.price * c.qty)}`).join('\n');
     const summary = `${lines}\n\n${t('Items')}: ${itemCount}` +
       (discountPct ? `\n${t('Discount')}: ${discountPct}%` : '') +
+      (selectedCustomer ? `\n${t('Customer')}: ${selectedCustomer.label}` : '') +
       `\n${t('Payment method')}: ${t(paymentMethod === 'cash' ? 'Cash' : 'Card')}` +
       `\n${t('Total')}: ${money(total)}`;
     const ok = await zeebrooConfirm(summary, {
@@ -212,14 +1010,24 @@ checkoutBtn.addEventListener('click', async () => {
   checkoutBtn.textContent = t('Processing…');
   try {
     const res = await API.checkout({
-      items: cart.map((c) => ({
-        item_type: 'product',
-        product_id: c.product_id,
-        quantity: c.qty,
-        ...(c.customPrice != null ? { custom_unit_price: c.customPrice } : {}),
-      })),
+      items: cart.map((c) => {
+        const item = {
+          item_type: 'product',
+          product_id: c.product_id,
+          quantity: c.qty,
+        };
+        if (c.customPrice != null) item.custom_unit_price = c.customPrice;
+        if (c.isDynamic && !c.dynamicLinked && c.customUnitPrice != null) item.custom_unit_price = c.customUnitPrice;
+        if (c.isRental && c.rentalReturnDate) item.rental_return_date = c.rentalReturnDate;
+        if (c.hasWarranty) {
+          item.warranty_type = c.warrantyType;
+          if (c.warrantyType === 'date' && c.warrantyDate) item.warranty_date = c.warrantyDate;
+        }
+        return item;
+      }),
       payment_method: paymentMethod,
       ...(discountPct ? { discount_percent: discountPct } : {}),
+      ...(selectedCustomer ? { pos_customer_id: selectedCustomer.id } : {}),
     });
 
     if (res.status !== 201) {
@@ -231,7 +1039,9 @@ checkoutBtn.addEventListener('click', async () => {
     showToast(t('Sale {number} completed — total {total}', { number: sale.sale_number, total: money(sale.total) }), 'success');
     cart = [];
     renderCart();
+    clearCustomerSelection();
     loadProducts(searchInput.value.trim()); // refresh stock counts
+    showReceiptModal(sale);
   } catch (err) {
     showToast(err.message, 'error');
   } finally {
@@ -242,13 +1052,16 @@ checkoutBtn.addEventListener('click', async () => {
 
 // ── Settings ────────────────────────────────────────────────────────────
 async function loadSettings() {
-  const res = await API.settingsGet();
-  if (res.status === 200) posSettings = res.body?.data || {};
+  const [settingsRes, invoiceSetupRes] = await Promise.all([API.settingsGet(), API.invoiceSetupGet()]);
+  if (settingsRes.status === 200) posSettings = settingsRes.body?.data || {};
+  if (invoiceSetupRes.status === 200) posInvoiceSetup = invoiceSetupRes.body?.data || {};
   discountRow.style.display = posSettings.discount_field_enabled ? '' : 'none';
+  renderProducts();
   renderCart();
 }
 
 // ── Init ────────────────────────────────────────────────────────────────
 loadSettings();
+loadCategories();
 loadProducts();
 renderCart();
