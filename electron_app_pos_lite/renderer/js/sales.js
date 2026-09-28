@@ -538,11 +538,14 @@
   // ── New Quotation form ──────────────────────────────────────────────────
   let qfLines = [];
 
-  function blankQfLine() { return { description: '', quantity: 1, unit_price: 0 }; }
+  function blankQfLine() { return { product_id: null, description: '', quantity: 1, unit_price: 0 }; }
+  function qfUnitPrice(p) {
+    return (p.discounted_sell_price !== null && p.discounted_sell_price !== undefined) ? p.discounted_sell_price : p.unit_sell_price;
+  }
 
   async function renderQuotationForm() {
     closeDetail();
-    qfLines = [blankQfLine()];
+    qfLines = [];
     const today = new Date().toISOString().slice(0, 10);
 
     sectionBody.innerHTML = `
@@ -577,7 +580,10 @@
           </div>
           <div id="qf-line-rows"></div>
         </div>
-        <button class="qf-add-line" id="qf-add-line" type="button"><i class="fa-solid fa-plus"></i> ${t('Add Line')}</button>
+        <div class="qf-add-line-row">
+          <button class="qf-add-line" id="qf-add-line" type="button"><i class="fa-solid fa-plus"></i> ${t('Add Line')}</button>
+          <button class="qf-add-line qf-add-line-custom" id="qf-add-custom-line" type="button"><i class="fa-solid fa-pen"></i> ${t('Custom item')}</button>
+        </div>
       </div>
 
       <div class="qf-bottom">
@@ -599,9 +605,10 @@
         <button class="salm-btn-primary" id="qf-save" type="button"><i class="fa-solid fa-check"></i> ${t('Save Quotation')}</button>
       </div>`;
 
-    document.getElementById('qf-back').addEventListener('click', loadQuotations);
-    document.getElementById('qf-cancel').addEventListener('click', loadQuotations);
-    document.getElementById('qf-add-line').addEventListener('click', () => { qfLines.push(blankQfLine()); renderQfLines(); });
+    document.getElementById('qf-back').addEventListener('click', renderQuotations);
+    document.getElementById('qf-cancel').addEventListener('click', renderQuotations);
+    document.getElementById('qf-add-line').addEventListener('click', openQfProductPicker);
+    document.getElementById('qf-add-custom-line').addEventListener('click', () => { qfLines.push(blankQfLine()); renderQfLines(); recalcQfSummary(); });
     document.getElementById('qf-discount').addEventListener('input', recalcQfSummary);
     document.getElementById('qf-tax').addEventListener('input', recalcQfSummary);
     document.getElementById('qf-save').addEventListener('click', submitQuotationForm);
@@ -621,13 +628,21 @@
 
   function renderQfLines() {
     const rowsEl = document.getElementById('qf-line-rows');
+    if (!qfLines.length) {
+      rowsEl.innerHTML = `<div class="qf-line-empty">${t('No items yet — add a line to include products or charges.')}</div>`;
+      return;
+    }
+
     rowsEl.innerHTML = qfLines.map((line, idx) => `
       <div class="qf-line-row" data-idx="${idx}">
-        <input type="text" class="qf-line-desc" placeholder="${t('Item description')}" value="${esc(line.description)}">
+        <div class="qf-line-desc-wrap">
+          <input type="text" class="qf-line-desc" placeholder="${t('Item description')}" value="${esc(line.description)}">
+          ${line.product_id ? `<span class="qf-line-tag"><i class="fa-solid fa-box"></i> ${t('Catalog item')}</span>` : ''}
+        </div>
         <input type="number" class="qf-line-qty" min="0" step="0.001" value="${line.quantity}">
         <input type="number" class="qf-line-price" min="0" step="0.01" value="${line.unit_price}">
         <span class="qf-line-total">${money(line.quantity * line.unit_price)}</span>
-        <button type="button" class="qf-line-remove" title="${t('Remove')}" ${qfLines.length <= 1 ? 'disabled' : ''}><i class="fa-solid fa-trash"></i></button>
+        <button type="button" class="qf-line-remove" title="${t('Remove')}"><i class="fa-solid fa-trash"></i></button>
       </div>`).join('');
 
     rowsEl.querySelectorAll('.qf-line-row').forEach((row) => {
@@ -644,12 +659,85 @@
         recalcQfSummary();
       });
       row.querySelector('.qf-line-remove').addEventListener('click', () => {
-        if (qfLines.length <= 1) return;
         qfLines.splice(idx, 1);
         renderQfLines();
         recalcQfSummary();
       });
     });
+  }
+
+  // ── Product picker for "Add Line" (mirrors the full desktop app's
+  // "Add Product" dialog) — searches the catalog and adds the picked
+  // product as a new quotation line, pre-filled with its price. ──────────
+  function openQfProductPicker() {
+    if (document.getElementById('qf-picker-backdrop')) return;
+
+    const el = document.createElement('div');
+    el.className = 'qf-picker-backdrop';
+    el.id = 'qf-picker-backdrop';
+    el.setAttribute('role', 'dialog');
+    el.setAttribute('aria-modal', 'true');
+    el.innerHTML = `
+      <div class="qf-picker-card">
+        <div class="qf-picker-head">
+          <span class="qf-picker-head-icon"><i class="fa-solid fa-box"></i></span>
+          <span class="qf-picker-title">${t('Add Product')}</span>
+          <button class="salm-modal-close" id="qf-picker-close" type="button" aria-label="${t('Close')}"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="qf-picker-search"><i class="fa-solid fa-magnifying-glass"></i><input type="text" id="qf-picker-input" placeholder="${t('Search products…')}"></div>
+        <div class="qf-picker-list" id="qf-picker-list"><div class="salm-loading">${t('Loading…')}</div></div>
+        <div class="qf-picker-foot"><button class="salm-btn-ghost" id="qf-picker-cancel" type="button">${t('Cancel')}</button></div>
+      </div>`;
+    document.body.appendChild(el);
+
+    function close() { el.remove(); }
+    document.getElementById('qf-picker-close').addEventListener('click', close);
+    document.getElementById('qf-picker-cancel').addEventListener('click', close);
+    el.addEventListener('mousedown', (e) => { if (e.target === el) close(); });
+
+    let lastResults = [];
+    async function search(q) {
+      const listEl = document.getElementById('qf-picker-list');
+      listEl.innerHTML = `<div class="salm-loading">${t('Loading…')}</div>`;
+      const res = await API.products(q);
+      if (res.status !== 200) { listEl.innerHTML = `<div class="salm-empty">${t('Could not load products.')}</div>`; return; }
+      lastResults = res.body.data || [];
+      if (!lastResults.length) { listEl.innerHTML = `<div class="salm-empty">${t('No products found.')}</div>`; return; }
+
+      listEl.innerHTML = lastResults.map((p) => {
+        const outOfStock = Number(p.stock_quantity) <= 0;
+        const stockBadge = outOfStock
+          ? `<span class="qf-picker-badge red">${t('Out of stock')}</span>`
+          : `<span class="qf-picker-badge green">${t('{n} in stock', { n: Math.floor(p.stock_quantity) })}</span>`;
+        const thumb = p.image_url ? `<img src="${p.image_url}" alt="">` : '<i class="fa-solid fa-box"></i>';
+        return `
+          <div class="qf-picker-row" data-id="${p.id}">
+            <div class="qf-picker-thumb">${thumb}</div>
+            <div class="qf-picker-info">
+              <div class="qf-picker-name">${esc(p.name)}</div>
+              <div class="qf-picker-sub">${p.sku ? esc(p.sku) + ' · ' : ''}${stockBadge}</div>
+            </div>
+            <div class="qf-picker-price">${money(qfUnitPrice(p))}</div>
+          </div>`;
+      }).join('');
+
+      listEl.querySelectorAll('.qf-picker-row').forEach((row) => {
+        row.addEventListener('click', () => {
+          const p = lastResults.find((x) => String(x.id) === row.dataset.id);
+          if (!p) return;
+          qfLines.push({ product_id: p.id, description: p.name, quantity: 1, unit_price: qfUnitPrice(p) });
+          renderQfLines();
+          recalcQfSummary();
+          close();
+        });
+      });
+    }
+
+    const input = document.getElementById('qf-picker-input');
+    let debounceTimer;
+    input.addEventListener('input', () => { clearTimeout(debounceTimer); debounceTimer = setTimeout(() => search(input.value.trim()), 300); });
+    search('');
+    setTimeout(() => input.focus(), 30);
   }
 
   function recalcQfSummary() {
@@ -663,12 +751,18 @@
 
   async function submitQuotationForm() {
     const quoteDate = document.getElementById('qf-quote-date').value;
-    if (!quoteDate) { showToast(t('Quote date is required.'), 'error'); return; }
+    if (!quoteDate) { await zeebrooAlert(t('Quote date is required.'), { tone: 'warning', title: t('Missing information') }); return; }
 
     const items = qfLines
       .filter((l) => l.quantity > 0)
-      .map((l) => ({ item_type: 'custom', description: l.description.trim() || null, quantity: l.quantity, unit_price: l.unit_price }));
-    if (!items.length) { showToast(t('Add at least one line item.'), 'error'); return; }
+      .map((l) => ({
+        item_type: l.product_id ? 'product' : 'custom',
+        product_id: l.product_id || null,
+        description: l.description.trim() || null,
+        quantity: l.quantity,
+        unit_price: l.unit_price,
+      }));
+    if (!items.length) { await zeebrooAlert(t('Add at least one line item.'), { tone: 'warning', title: t('Missing information') }); return; }
 
     const customerId = document.getElementById('qf-customer').value;
     const payload = {
@@ -689,11 +783,11 @@
 
     if (res.status !== 201) {
       const firstError = res.body?.errors ? Object.values(res.body.errors)[0]?.[0] : null;
-      showToast(t(firstError || res.body?.message || 'Could not create quotation.'), 'error');
+      await zeebrooAlert(t(firstError || res.body?.message || 'Could not create quotation.'), { tone: 'danger', title: t('Could not save quotation') });
       return;
     }
-    showToast(t(res.body?.message || 'Quotation created.'), 'success');
-    loadQuotations();
+    await zeebrooAlert(t(res.body?.message || 'Quotation created.'), { tone: 'success', title: t('Quotation saved') });
+    renderQuotations();
   }
 
   // ════════════════════════════════════════════════════════════════════════
