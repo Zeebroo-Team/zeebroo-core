@@ -32,12 +32,12 @@ function setError(box, message) {
 }
 
 function firstValidationError(body) {
-  if (!body) return 'Something went wrong. Please try again.';
+  if (!body) return t('Something went wrong. Please try again.');
   if (body.errors) {
     const firstKey = Object.keys(body.errors)[0];
-    if (firstKey) return body.errors[firstKey][0];
+    if (firstKey) return t(body.errors[firstKey][0]);
   }
-  return body.message || 'Something went wrong. Please try again.';
+  return t(body.message) || t('Something went wrong. Please try again.');
 }
 
 function setBusy(button, busy, label) {
@@ -53,7 +53,7 @@ async function finishAuth(accessToken, user) {
   const bizRes = await API.businesses();
   const business = bizRes.status === 200 ? (bizRes.body.data || [])[0] : null;
   if (!business) {
-    throw new Error('No business is linked to this account yet.');
+    throw new Error(t('No business is linked to this account yet.'));
   }
   await window.electronAPI.setConfig({ business_id: business.id, business_name: business.name, branch_id: null });
   await window.electronAPI.authSuccess();
@@ -67,7 +67,7 @@ loginForm.addEventListener('submit', async (e) => {
   const password = document.getElementById('login-password').value;
   const submitBtn = document.getElementById('login-submit');
 
-  setBusy(submitBtn, true, 'Log In');
+  setBusy(submitBtn, true, t('Log In'));
   try {
     const res = await API.login(email, password);
     if (res.status !== 200) {
@@ -78,7 +78,7 @@ loginForm.addEventListener('submit', async (e) => {
   } catch (err) {
     setError(loginError, err.message);
   } finally {
-    setBusy(submitBtn, false, 'Log In');
+    setBusy(submitBtn, false, t('Log In'));
   }
 });
 
@@ -88,10 +88,10 @@ async function loadBusinessCategories() {
   try {
     const res = await API.businessCategories();
     const options = res.status === 200 ? (res.body.data || []) : [];
-    select.innerHTML = '<option value="">Select a category…</option>' +
-      options.map((o) => `<option value="${o.value}">${o.label}</option>`).join('');
+    select.innerHTML = `<option value="">${t('Select a category…')}</option>` +
+      options.map((o) => `<option value="${o.value}">${t(o.label)}</option>`).join('');
   } catch (_) {
-    select.innerHTML = '<option value="">Unable to load categories</option>';
+    select.innerHTML = `<option value="">${t('Unable to load categories')}</option>`;
   }
 }
 loadBusinessCategories();
@@ -109,11 +109,11 @@ signupForm.addEventListener('submit', async (e) => {
   const submitBtn = document.getElementById('signup-submit');
 
   if (password !== password2) {
-    setError(signupError, 'Passwords do not match.');
+    setError(signupError, t('Passwords do not match.'));
     return;
   }
 
-  setBusy(submitBtn, true, 'Create Account');
+  setBusy(submitBtn, true, t('Create Account'));
   try {
     const res = await API.register({
       name,
@@ -130,6 +130,6 @@ signupForm.addEventListener('submit', async (e) => {
   } catch (err) {
     setError(signupError, err.message);
   } finally {
-    setBusy(submitBtn, false, 'Create Account');
+    setBusy(submitBtn, false, t('Create Account'));
   }
 });

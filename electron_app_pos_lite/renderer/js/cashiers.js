@@ -20,17 +20,9 @@ function esc(s) {
   return (s ?? '').toString().replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
-// ── Header + back/logout ────────────────────────────────────────────────
+// ── Header (back button; account menu lives in js/navbar.js) ──────────────
 document.getElementById('back-btn').addEventListener('click', () => { window.location.href = 'dashboard.html'; });
-document.getElementById('reload-btn').addEventListener('click', () => { window.location.reload(); });
-document.getElementById('restart-btn').addEventListener('click', async () => { await window.electronAPI.restartApp(); });
-document.getElementById('logout-btn').addEventListener('click', async () => { await window.electronAPI.logout(); });
 
-(async () => {
-  const cfg = await window.electronAPI.getConfig();
-  document.getElementById('who-business').textContent = cfg.business_name || `#${cfg.business_id}`;
-  document.getElementById('who-user').textContent = cfg.user?.name || cfg.user?.email || '—';
-})();
 
 // ── List ────────────────────────────────────────────────────────────────
 function matchesFilters(c) {
@@ -43,10 +35,10 @@ function matchesFilters(c) {
 
 function renderRows() {
   const visible = cashiers.filter(matchesFilters);
-  countPill.textContent = `${visible.length} cashier${visible.length === 1 ? '' : 's'}`;
+  countPill.textContent = t(visible.length === 1 ? '{n} cashier' : '{n} cashiers', { n: visible.length });
 
   if (!visible.length) {
-    rowsEl.innerHTML = '<tr><td colspan="5" class="empty-state">No cashiers found.</td></tr>';
+    rowsEl.innerHTML = `<tr><td colspan="5" class="empty-state">${t('No cashiers found.')}</td></tr>`;
     return;
   }
 
@@ -54,12 +46,12 @@ function renderRows() {
     <tr data-id="${c.id}">
       <td><div class="cash-name">${esc(c.name)}</div></td>
       <td>${esc(c.username)}</td>
-      <td><span class="status-badge ${c.is_active ? 'active' : 'inactive'}">${c.is_active ? 'Active' : 'Inactive'}</span></td>
-      <td>${c.created_at ? new Date(c.created_at).toLocaleDateString() : '—'}</td>
+      <td><span class="status-badge ${c.is_active ? 'active' : 'inactive'}">${c.is_active ? t('Active') : t('Inactive')}</span></td>
+      <td>${c.created_at ? new Date(c.created_at).toLocaleDateString(i18n.locale) : '—'}</td>
       <td>
         <div class="row-actions">
-          <button data-action="edit" title="Edit"><i class="fa-solid fa-pen"></i></button>
-          <button data-action="delete" class="danger" title="Delete"><i class="fa-solid fa-trash"></i></button>
+          <button data-action="edit" title="${t('Edit')}"><i class="fa-solid fa-pen"></i></button>
+          <button data-action="delete" class="danger" title="${t('Delete')}"><i class="fa-solid fa-trash"></i></button>
         </div>
       </td>
     </tr>`).join('');
@@ -73,10 +65,10 @@ function renderRows() {
 }
 
 async function loadCashiers() {
-  rowsEl.innerHTML = '<tr><td colspan="5" class="loading-state">Loading cashiers…</td></tr>';
+  rowsEl.innerHTML = `<tr><td colspan="5" class="loading-state">${t('Loading cashiers…')}</td></tr>`;
   const res = await API.cashiers();
   if (res.status !== 200) {
-    rowsEl.innerHTML = `<tr><td colspan="5" class="empty-state">Could not load cashiers (${res.body?.message || res.status}).</td></tr>`;
+    rowsEl.innerHTML = `<tr><td colspan="5" class="empty-state">${t('Could not load cashiers ({reason}).', { reason: t(res.body?.message) || res.status })}</td></tr>`;
     return;
   }
   cashiers = res.body.data || [];
@@ -107,12 +99,12 @@ const passwordLabel = document.getElementById('f-password-label');
 
 document.getElementById('add-btn').addEventListener('click', () => {
   editingId = null;
-  document.getElementById('cashier-modal-title').textContent = 'Add Cashier';
+  document.getElementById('cashier-modal-title').textContent = t('Add Cashier');
   document.getElementById('f-name').value = '';
   document.getElementById('f-username').value = '';
   document.getElementById('f-password').value = '';
   document.getElementById('f-active').checked = true;
-  passwordLabel.textContent = 'Password *';
+  passwordLabel.textContent = t('Password *');
   passwordHint.style.display = 'none';
   activeRow.style.display = 'none';
   cashierDeleteBtn.style.display = 'none';
@@ -125,12 +117,12 @@ function openEdit(id) {
   const c = cashiers.find((x) => x.id === id);
   if (!c) return;
   editingId = id;
-  document.getElementById('cashier-modal-title').textContent = 'Edit Cashier';
+  document.getElementById('cashier-modal-title').textContent = t('Edit Cashier');
   document.getElementById('f-name').value = c.name;
   document.getElementById('f-username').value = c.username;
   document.getElementById('f-password').value = '';
   document.getElementById('f-active').checked = !!c.is_active;
-  passwordLabel.textContent = 'Password';
+  passwordLabel.textContent = t('Password');
   passwordHint.style.display = 'block';
   activeRow.style.display = 'flex';
   cashierDeleteBtn.style.display = 'inline-flex';
@@ -145,23 +137,23 @@ cashierSaveBtn.addEventListener('click', async () => {
   const password = document.getElementById('f-password').value;
 
   if (!name) {
-    cashierError.textContent = 'Name is required.';
+    cashierError.textContent = t('Name is required.');
     cashierError.classList.add('show');
     return;
   }
   if (!username) {
-    cashierError.textContent = 'Username is required.';
+    cashierError.textContent = t('Username is required.');
     cashierError.classList.add('show');
     return;
   }
   if (!editingId && !password) {
-    cashierError.textContent = 'Password is required.';
+    cashierError.textContent = t('Password is required.');
     cashierError.classList.add('show');
     return;
   }
 
   cashierSaveBtn.disabled = true;
-  cashierSaveBtn.textContent = 'Saving…';
+  cashierSaveBtn.textContent = t('Saving…');
   try {
     let res;
     if (editingId) {
@@ -174,16 +166,16 @@ cashierSaveBtn.addEventListener('click', async () => {
 
     if (res.status !== 200 && res.status !== 201) {
       const firstKey = res.body?.errors ? Object.keys(res.body.errors)[0] : null;
-      cashierError.textContent = firstKey ? res.body.errors[firstKey][0] : (res.body?.message || 'Could not save cashier.');
+      cashierError.textContent = t(firstKey ? res.body.errors[firstKey][0] : (res.body?.message || 'Could not save cashier.'));
       cashierError.classList.add('show');
       return;
     }
     closeModal('cashier-modal');
-    showToast(`${res.body.data.name} ${editingId ? 'updated' : 'added'}.`, 'success');
+    showToast(t(editingId ? '{name} updated.' : '{name} added.', { name: res.body.data.name }), 'success');
     loadCashiers();
   } finally {
     cashierSaveBtn.disabled = false;
-    cashierSaveBtn.textContent = 'Save Cashier';
+    cashierSaveBtn.textContent = t('Save Cashier');
   }
 });
 
@@ -195,15 +187,15 @@ cashierDeleteBtn.addEventListener('click', () => {
 async function deleteCashier(id, fromModal = false) {
   const cashier = cashiers.find((c) => c.id === id);
   const label = cashier ? cashier.name : `#${id}`;
-  if (!confirm(`Delete ${label}? This cannot be undone.`)) return;
+  if (!confirm(t('Delete {label}? This cannot be undone.', { label }))) return;
 
   const res = await API.deleteCashier(id);
   if (res.status !== 200) {
-    showToast(res.body?.message || 'Could not delete cashier.', 'error');
+    showToast(t(res.body?.message || 'Could not delete cashier.'), 'error');
     return;
   }
   if (fromModal) closeModal('cashier-modal');
-  showToast(`${label} deleted.`, 'success');
+  showToast(t('{label} deleted.', { label }), 'success');
   loadCashiers();
 }
 

@@ -5,28 +5,49 @@
 <title>Zeebroo POS Lite</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 <link rel="stylesheet" href="css/dashboard.css" />
+<link rel="stylesheet" href="css/navbar.css" />
 </head>
 <body>
-  <div class="topbar">
-    <div class="brand"><i class="fa-solid fa-cash-register"></i> Zeebroo POS Lite</div>
-    <div class="who">
-      <span>Business: <b id="who-business">—</b></span>
-      <span>User: <b id="who-user">—</b></span>
-      <button class="icon-btn" id="reload-btn" title="Reload page"><i class="fa-solid fa-rotate-right"></i></button>
-      <button class="icon-btn" id="restart-btn" title="Restart app"><i class="fa-solid fa-power-off"></i></button>
-      <button class="icon-btn" id="logout-btn"><i class="fa-solid fa-right-from-bracket"></i> Logout</button>
+  <div class="backdrop" aria-hidden="true">
+    <span class="orb o1"></span>
+    <span class="orb o2"></span>
+    <span class="orb o3"></span>
+  </div>
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark"><i class="fa-solid fa-cash-register"></i></span>
+      <span class="brand-name">Zeebroo <b>POS Lite</b></span>
     </div>
-  </div>
+    <div class="user-menu" id="user-menu"></div>
+  </header>
 
-  <div class="hero">
-    <h1 id="greeting">Welcome back</h1>
-    <p>What would you like to do?</p>
-  </div>
+  <main class="page">
+    <section class="hero">
+      <div class="hero-text">
+        <span class="hero-date" id="hero-date"></span>
+        <h1 id="greeting">Welcome back</h1>
+        <p>What would you like to do today?</p>
+      </div>
+      <div class="hero-side">
+        <div class="hero-time" id="hero-time"></div>
+        <div class="hero-biz"><i class="fa-solid fa-store"></i> <span id="hero-biz">—</span></div>
+      </div>
+    </section>
 
-  <div class="grid" id="tile-grid"></div>
+    <div class="section-title">
+      <span>Workspace</span>
+      <span class="section-meta" id="section-meta"></span>
+    </div>
 
-  <div class="toast" id="toast"></div>
+    <section class="grid" id="tile-grid"></section>
+  </main>
 
+  <div class="toast" id="toast"><i class="fa-solid fa-hourglass-half"></i><span id="toast-text"></span></div>
+
+  <script src="js/lang/si.js"></script>
+  <script src="js/i18n.js"></script>
+  <script src="js/navbar.js"></script>
   <script src="js/dashboard.js"></script>
 </body>
 </html>

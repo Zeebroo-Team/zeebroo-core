@@ -22,27 +22,9 @@ function showToast(message, type = '') {
   showToast._t = setTimeout(() => { toastEl.className = 'toast'; }, 3200);
 }
 
-// ── Header (business / user) ───────────────────────────────────────────
-async function loadHeader() {
-  const cfg = await window.electronAPI.getConfig();
-  document.getElementById('who-business').textContent = cfg.business_name || `#${cfg.business_id}`;
-  document.getElementById('who-user').textContent = cfg.user?.name || cfg.user?.email || '—';
-}
-
+// ── Header (account menu lives in js/navbar.js) ─────────────────────────
 document.getElementById('back-btn').addEventListener('click', () => {
   window.location.href = 'dashboard.html';
-});
-
-document.getElementById('reload-btn').addEventListener('click', () => {
-  window.location.reload();
-});
-
-document.getElementById('restart-btn').addEventListener('click', async () => {
-  await window.electronAPI.restartApp();
-});
-
-document.getElementById('logout-btn').addEventListener('click', async () => {
-  await window.electronAPI.logout();
 });
 
 // ── Products ────────────────────────────────────────────────────────────
@@ -54,7 +36,7 @@ function unitPrice(p) {
 
 function renderProducts() {
   if (!products.length) {
-    grid.innerHTML = '<div class="empty-state">No products found.</div>';
+    grid.innerHTML = `<div class="empty-state">${t('No products found.')}</div>`;
     return;
   }
 
@@ -69,7 +51,7 @@ function renderProducts() {
         <div class="product-name">${p.name}</div>
         <div class="product-meta">
           <span class="product-price">${money(unitPrice(p))}</span>
-          <span class="product-stock">${outOfStock ? 'Out of stock' : Math.floor(p.stock_quantity) + ' left'}</span>
+          <span class="product-stock">${outOfStock ? t('Out of stock') : t('{n} left', { n: Math.floor(p.stock_quantity) })}</span>
         </div>
       </div>`;
   }).join('');
@@ -80,10 +62,10 @@ function renderProducts() {
 }
 
 async function loadProducts(query = '') {
-  grid.innerHTML = '<div class="loading-state">Loading products…</div>';
+  grid.innerHTML = `<div class="loading-state">${t('Loading products…')}</div>`;
   const res = await API.products(query);
   if (res.status !== 200) {
-    grid.innerHTML = `<div class="empty-state">Could not load products (${res.body?.message || res.status}).</div>`;
+    grid.innerHTML = `<div class="empty-state">${t('Could not load products ({reason}).', { reason: t(res.body?.message) || res.status })}</div>`;
     return;
   }
   products = res.body.data || [];
@@ -103,7 +85,7 @@ function addToCart(productId) {
   const existing = cart.find((c) => c.product_id === productId);
   if (existing) {
     if (existing.qty < product.stock_quantity) existing.qty += 1;
-    else showToast('No more stock available for this item.', 'error');
+    else showToast(t('No more stock available for this item.'), 'error');
   } else {
     cart.push({
       product_id: product.id,
@@ -137,7 +119,7 @@ document.getElementById('clear-cart').addEventListener('click', () => {
 
 function renderCart() {
   if (!cart.length) {
-    cartItemsEl.innerHTML = '<div class="cart-empty">Cart is empty. Click a product to add it.</div>';
+    cartItemsEl.innerHTML = `<div class="cart-empty">${t('Cart is empty. Click a product to add it.')}</div>`;
   } else {
     cartItemsEl.innerHTML = cart.map((c) => `
       <div class="cart-item" data-id="${c.product_id}">
@@ -182,7 +164,7 @@ checkoutBtn.addEventListener('click', async () => {
   if (!cart.length) return;
 
   checkoutBtn.disabled = true;
-  checkoutBtn.textContent = 'Processing…';
+  checkoutBtn.textContent = t('Processing…');
   try {
     const res = await API.checkout({
       items: cart.map((c) => ({ item_type: 'product', product_id: c.product_id, quantity: c.qty })),
@@ -190,24 +172,23 @@ checkoutBtn.addEventListener('click', async () => {
     });
 
     if (res.status !== 201) {
-      showToast(res.body?.message || 'Checkout failed.', 'error');
+      showToast(t(res.body?.message || 'Checkout failed.'), 'error');
       return;
     }
 
     const sale = res.body.data;
-    showToast(`Sale ${sale.sale_number} completed — total ${money(sale.total)}`, 'success');
+    showToast(t('Sale {number} completed — total {total}', { number: sale.sale_number, total: money(sale.total) }), 'success');
     cart = [];
     renderCart();
     loadProducts(searchInput.value.trim()); // refresh stock counts
   } catch (err) {
     showToast(err.message, 'error');
   } finally {
-    checkoutBtn.textContent = 'Complete Sale';
+    checkoutBtn.textContent = t('Complete Sale');
     checkoutBtn.disabled = cart.length === 0;
   }
 });
 
 // ── Init ────────────────────────────────────────────────────────────────
-loadHeader();
 loadProducts();
 renderCart();

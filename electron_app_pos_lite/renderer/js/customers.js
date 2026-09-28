@@ -17,32 +17,26 @@ function showToast(message, type = '') {
   showToast._t = setTimeout(() => { toastEl.className = 'toast'; }, 3000);
 }
 
+function typeLabel(type) { return t(type === 'wholesale' ? 'Wholesale' : 'Retail'); }
+
 function esc(s) {
   return (s ?? '').toString().replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
-// ── Header + back/logout ────────────────────────────────────────────────
+// ── Header (back button; account menu lives in js/navbar.js) ──────────────
 document.getElementById('back-btn').addEventListener('click', () => { window.location.href = 'dashboard.html'; });
-document.getElementById('reload-btn').addEventListener('click', () => { window.location.reload(); });
-document.getElementById('restart-btn').addEventListener('click', async () => { await window.electronAPI.restartApp(); });
-document.getElementById('logout-btn').addEventListener('click', async () => { await window.electronAPI.logout(); });
 
-(async () => {
-  const cfg = await window.electronAPI.getConfig();
-  document.getElementById('who-business').textContent = cfg.business_name || `#${cfg.business_id}`;
-  document.getElementById('who-user').textContent = cfg.user?.name || cfg.user?.email || '—';
-})();
 
 // ── Category filter options ─────────────────────────────────────────────
 async function loadCategories(selectId = null) {
   const res = await API.customerCategories();
   if (res.status !== 200) return;
   const cats = res.body.data || [];
-  categoryFilter.innerHTML = '<option value="">All categories</option>' +
+  categoryFilter.innerHTML = `<option value="">${t('All categories')}</option>` +
     cats.map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
 
   const addSelect = document.getElementById('f-category');
-  addSelect.innerHTML = '<option value="">None</option>' +
+  addSelect.innerHTML = `<option value="">${t('None')}</option>` +
     cats.map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
   if (selectId) addSelect.value = String(selectId);
 }
@@ -62,7 +56,7 @@ document.getElementById('add-category-inline-btn').addEventListener('click', () 
 categorySaveBtn.addEventListener('click', async () => {
   const name = document.getElementById('cat-name').value.trim();
   if (!name) {
-    categoryError.textContent = 'Category name is required.';
+    categoryError.textContent = t('Category name is required.');
     categoryError.classList.add('show');
     return;
   }
@@ -73,36 +67,36 @@ categorySaveBtn.addEventListener('click', async () => {
   };
 
   categorySaveBtn.disabled = true;
-  categorySaveBtn.textContent = 'Saving…';
+  categorySaveBtn.textContent = t('Saving…');
   try {
     const res = await API.createCustomerCategory(payload);
     if (res.status !== 201) {
       const firstKey = res.body?.errors ? Object.keys(res.body.errors)[0] : null;
-      categoryError.textContent = firstKey ? res.body.errors[firstKey][0] : (res.body?.message || 'Could not save category.');
+      categoryError.textContent = t(firstKey ? res.body.errors[firstKey][0] : (res.body?.message || 'Could not save category.'));
       categoryError.classList.add('show');
       return;
     }
     closeModal('category-modal');
-    showToast(`${res.body.data.name} added.`, 'success');
+    showToast(t('{name} added.', { name: res.body.data.name }), 'success');
     await loadCategories(res.body.data.id);
   } finally {
     categorySaveBtn.disabled = false;
-    categorySaveBtn.textContent = 'Save Category';
+    categorySaveBtn.textContent = t('Save Category');
   }
 });
 
 // ── List ────────────────────────────────────────────────────────────────
 function matchesTypeFilter(c) {
-  const t = typeFilter.value;
-  return !t || (c.customer_type || 'retail') === t;
+  const type = typeFilter.value;
+  return !type || (c.customer_type || 'retail') === type;
 }
 
 function renderRows() {
   const visible = customers.filter(matchesTypeFilter);
-  countPill.textContent = `${visible.length} customer${visible.length === 1 ? '' : 's'}`;
+  countPill.textContent = t(visible.length === 1 ? '{n} customer' : '{n} customers', { n: visible.length });
 
   if (!visible.length) {
-    rowsEl.innerHTML = '<tr><td colspan="6" class="empty-state">No customers found.</td></tr>';
+    rowsEl.innerHTML = `<tr><td colspan="6" class="empty-state">${t('No customers found.')}</td></tr>`;
     return;
   }
 
@@ -116,13 +110,13 @@ function renderRows() {
         <div>${esc(c.phone) || '—'}</div>
         ${c.email ? `<div class="cust-sub">${esc(c.email)}</div>` : ''}
       </td>
-      <td><span class="type-badge ${c.customer_type || 'retail'}">${esc(c.customer_type || 'retail')}</span></td>
+      <td><span class="type-badge ${c.customer_type || 'retail'}">${typeLabel(c.customer_type)}</span></td>
       <td>${esc(c.category_name) || '—'}</td>
       <td>${c.sales_count ?? 0}</td>
       <td>
         <div class="row-actions">
-          <button data-action="view" title="View"><i class="fa-solid fa-eye"></i></button>
-          <button data-action="delete" class="danger" title="Delete"><i class="fa-solid fa-trash"></i></button>
+          <button data-action="view" title="${t('View')}"><i class="fa-solid fa-eye"></i></button>
+          <button data-action="delete" class="danger" title="${t('Delete')}"><i class="fa-solid fa-trash"></i></button>
         </div>
       </td>
     </tr>`).join('');
@@ -136,10 +130,10 @@ function renderRows() {
 }
 
 async function loadCustomers() {
-  rowsEl.innerHTML = '<tr><td colspan="6" class="loading-state">Loading customers…</td></tr>';
+  rowsEl.innerHTML = `<tr><td colspan="6" class="loading-state">${t('Loading customers…')}</td></tr>`;
   const res = await API.customers({ q: searchInput.value.trim(), categoryId: categoryFilter.value });
   if (res.status !== 200) {
-    rowsEl.innerHTML = `<tr><td colspan="6" class="empty-state">Could not load customers (${res.body?.message || res.status}).</td></tr>`;
+    rowsEl.innerHTML = `<tr><td colspan="6" class="empty-state">${t('Could not load customers ({reason}).', { reason: t(res.body?.message) || res.status })}</td></tr>`;
     return;
   }
   customers = res.body.data || [];
@@ -180,7 +174,7 @@ document.getElementById('add-btn').addEventListener('click', () => {
 addSaveBtn.addEventListener('click', async () => {
   const name = document.getElementById('f-name').value.trim();
   if (!name) {
-    addError.textContent = 'Name is required.';
+    addError.textContent = t('Name is required.');
     addError.classList.add('show');
     return;
   }
@@ -196,21 +190,21 @@ addSaveBtn.addEventListener('click', async () => {
   };
 
   addSaveBtn.disabled = true;
-  addSaveBtn.textContent = 'Saving…';
+  addSaveBtn.textContent = t('Saving…');
   try {
     const res = await API.createCustomer(payload);
     if (res.status !== 201) {
       const firstKey = res.body?.errors ? Object.keys(res.body.errors)[0] : null;
-      addError.textContent = firstKey ? res.body.errors[firstKey][0] : (res.body?.message || 'Could not save customer.');
+      addError.textContent = t(firstKey ? res.body.errors[firstKey][0] : (res.body?.message || 'Could not save customer.'));
       addError.classList.add('show');
       return;
     }
     closeModal('add-modal');
-    showToast(`${res.body.data.name} added.`, 'success');
+    showToast(t('{name} added.', { name: res.body.data.name }), 'success');
     loadCustomers();
   } finally {
     addSaveBtn.disabled = false;
-    addSaveBtn.textContent = 'Save Customer';
+    addSaveBtn.textContent = t('Save Customer');
   }
 });
 
@@ -219,13 +213,13 @@ let viewingId = null;
 
 async function openView(id) {
   viewingId = id;
-  document.getElementById('view-name').textContent = 'Loading…';
-  document.getElementById('view-body').innerHTML = '<div class="loading-state">Loading…</div>';
+  document.getElementById('view-name').textContent = t('Loading…');
+  document.getElementById('view-body').innerHTML = `<div class="loading-state">${t('Loading…')}</div>`;
   openModal('view-modal');
 
   const res = await API.customer(id);
   if (res.status !== 200) {
-    document.getElementById('view-body').innerHTML = `<div class="empty-state">Could not load customer (${res.body?.message || res.status}).</div>`;
+    document.getElementById('view-body').innerHTML = `<div class="empty-state">${t('Could not load customer ({reason}).', { reason: t(res.body?.message) || res.status })}</div>`;
     return;
   }
 
@@ -234,20 +228,20 @@ async function openView(id) {
 
   const salesRows = (c.recent_sales || []).map((s) => `
     <div class="sales-list-item">
-      <span>${esc(s.sale_number)} <span class="muted">· ${s.sold_at ? new Date(s.sold_at).toLocaleDateString() : ''}</span></span>
+      <span>${esc(s.sale_number)} <span class="muted">· ${s.sold_at ? new Date(s.sold_at).toLocaleDateString(i18n.locale) : ''}</span></span>
       <span>$${Number(s.total).toFixed(2)}</span>
-    </div>`).join('') || '<div class="sales-list-item"><span class="muted">No sales yet.</span></div>';
+    </div>`).join('') || `<div class="sales-list-item"><span class="muted">${t('No sales yet.')}</span></div>`;
 
   document.getElementById('view-body').innerHTML = `
-    <div class="view-row"><span>Phone</span><span>${esc(c.phone) || '—'}</span></div>
-    <div class="view-row"><span>Email</span><span>${esc(c.email) || '—'}</span></div>
-    <div class="view-row"><span>Address</span><span>${esc(c.address) || '—'}</span></div>
-    <div class="view-row"><span>Type</span><span>${esc(c.customer_type || 'retail')}</span></div>
-    <div class="view-row"><span>Category</span><span>${esc(c.category_name) || '—'}</span></div>
-    <div class="view-row"><span>Total sales</span><span>${c.sales_count ?? 0}</span></div>
-    ${c.notes ? `<div class="view-row"><span>Notes</span><span>${esc(c.notes)}</span></div>` : ''}
+    <div class="view-row"><span>${t('Phone')}</span><span>${esc(c.phone) || '—'}</span></div>
+    <div class="view-row"><span>${t('Email')}</span><span>${esc(c.email) || '—'}</span></div>
+    <div class="view-row"><span>${t('Address')}</span><span>${esc(c.address) || '—'}</span></div>
+    <div class="view-row"><span>${t('Type')}</span><span>${typeLabel(c.customer_type)}</span></div>
+    <div class="view-row"><span>${t('Category')}</span><span>${esc(c.category_name) || '—'}</span></div>
+    <div class="view-row"><span>${t('Total sales')}</span><span>${c.sales_count ?? 0}</span></div>
+    ${c.notes ? `<div class="view-row"><span>${t('Notes')}</span><span>${esc(c.notes)}</span></div>` : ''}
     <div style="margin-top:6px;">
-      <label style="font-size:12px;font-weight:600;color:var(--muted);">Recent sales</label>
+      <label style="font-size:12px;font-weight:600;color:var(--muted);">${t('Recent sales')}</label>
       <div class="sales-list">${salesRows}</div>
     </div>
   `;
@@ -261,15 +255,15 @@ document.getElementById('view-delete-btn').addEventListener('click', () => {
 async function deleteCustomer(id, fromModal = false) {
   const customer = customers.find((c) => c.id === id);
   const label = customer ? customer.name : `#${id}`;
-  if (!confirm(`Delete ${label}? This cannot be undone.`)) return;
+  if (!confirm(t('Delete {label}? This cannot be undone.', { label }))) return;
 
   const res = await API.deleteCustomer(id);
   if (res.status !== 200) {
-    showToast(res.body?.message || 'Could not delete customer.', 'error');
+    showToast(t(res.body?.message || 'Could not delete customer.'), 'error');
     return;
   }
   if (fromModal) closeModal('view-modal');
-  showToast(`${label} deleted.`, 'success');
+  showToast(t('{label} deleted.', { label }), 'success');
   loadCustomers();
 }
 

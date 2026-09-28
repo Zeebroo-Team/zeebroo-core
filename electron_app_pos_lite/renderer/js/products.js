@@ -20,20 +20,12 @@ function money(n) { return `$${(Number(n) || 0).toFixed(2)}`; }
 
 function firstErrorMessage(res, fallback) {
   const firstKey = res.body?.errors ? Object.keys(res.body.errors)[0] : null;
-  return firstKey ? res.body.errors[firstKey][0] : (res.body?.message || fallback);
+  return t(firstKey ? res.body.errors[firstKey][0] : (res.body?.message || fallback));
 }
 
-// ── Header ──────────────────────────────────────────────────────────────
+// ── Header (back button; account menu lives in js/navbar.js) ──────────────
 document.getElementById('back-btn').addEventListener('click', () => { window.location.href = 'dashboard.html'; });
-document.getElementById('reload-btn').addEventListener('click', () => { window.location.reload(); });
-document.getElementById('restart-btn').addEventListener('click', async () => { await window.electronAPI.restartApp(); });
-document.getElementById('logout-btn').addEventListener('click', async () => { await window.electronAPI.logout(); });
 
-(async () => {
-  const cfg = await window.electronAPI.getConfig();
-  document.getElementById('who-business').textContent = cfg.business_name || `#${cfg.business_id}`;
-  document.getElementById('who-user').textContent = cfg.user?.name || cfg.user?.email || '—';
-})();
 
 // ── Modal helpers ───────────────────────────────────────────────────────
 function openModal(id) { document.getElementById(id).classList.add('show'); }
@@ -74,8 +66,8 @@ function refreshPickers() {
 
   const prevFilter = catFilter.value;
 
-  catFilter.innerHTML = '<option value="">All categories</option>' + selectOptions(allCategories);
-  cParent.innerHTML = '<option value="">None</option>' + selectOptions(allCategories);
+  catFilter.innerHTML = `<option value="">${t('All categories')}</option>` + selectOptions(allCategories);
+  cParent.innerHTML = `<option value="">${t('None')}</option>` + selectOptions(allCategories);
 
   catFilter.value = prevFilter;
 }
@@ -95,7 +87,7 @@ function renderPaginationUI(prefix, page, lastPage, total) {
   const nextBtn = document.getElementById(`${prefix}-page-next`);
   if (!total || lastPage <= 1) { wrap.style.display = 'none'; return; }
   wrap.style.display = 'flex';
-  info.textContent = `Page ${page} of ${lastPage} · ${total} item${total === 1 ? '' : 's'}`;
+  info.textContent = `${t('Page {page} of {last}', { page, last: lastPage })} · ${t(total === 1 ? '{n} item' : '{n} items', { n: total })}`;
   prevBtn.disabled = page <= 1;
   nextBtn.disabled = page >= lastPage;
 }
@@ -107,7 +99,7 @@ let categoriesMeta = { current_page: 1, last_page: 1, total: 0 };
 
 async function loadCategories() {
   const res = await API.productCategories(document.getElementById('category-search').value.trim(), categoriesPage, CATEGORIES_PER_PAGE);
-  if (res.status !== 200) { showToast(res.body?.message || 'Could not load categories.', 'error'); return; }
+  if (res.status !== 200) { showToast(t(res.body?.message || 'Could not load categories.'), 'error'); return; }
   categories = res.body.data || [];
   categoriesMeta = res.body.meta || { current_page: 1, last_page: 1, total: categories.length };
   categoriesPage = categoriesMeta.current_page;
@@ -119,9 +111,9 @@ async function loadCategories() {
 function renderCategoryRows() {
   const rowsEl = document.getElementById('category-rows');
   const total = categoriesMeta.total ?? categories.length;
-  document.getElementById('category-count-pill').textContent = `${total} categor${total === 1 ? 'y' : 'ies'}`;
+  document.getElementById('category-count-pill').textContent = t(total === 1 ? '{n} category' : '{n} categories', { n: total });
   if (!categories.length) {
-    rowsEl.innerHTML = '<tr><td colspan="5" class="empty-state">No categories yet.</td></tr>';
+    rowsEl.innerHTML = `<tr><td colspan="5" class="empty-state">${t('No categories yet.')}</td></tr>`;
     return;
   }
   rowsEl.innerHTML = categories.map((c) => `
@@ -129,8 +121,8 @@ function renderCategoryRows() {
       <td class="row-title">${esc(c.name)}</td>
       <td>${esc(c.parent_name) || '—'}</td>
       <td>${c.products_count ?? 0}</td>
-      <td><span class="status-badge ${c.is_active ? 'active' : 'inactive'}">${c.is_active ? 'Active' : 'Inactive'}</span></td>
-      <td><div class="row-actions"><button data-action="delete" class="danger" title="Delete"><i class="fa-solid fa-trash"></i></button></div></td>
+      <td><span class="status-badge ${c.is_active ? 'active' : 'inactive'}">${c.is_active ? t('Active') : t('Inactive')}</span></td>
+      <td><div class="row-actions"><button data-action="delete" class="danger" title="${t('Delete')}"><i class="fa-solid fa-trash"></i></button></div></td>
     </tr>`).join('');
 
   rowsEl.querySelectorAll('tr[data-id]').forEach((tr) => {
@@ -154,7 +146,7 @@ document.getElementById('category-save-btn').addEventListener('click', async () 
   const errEl = document.getElementById('category-error');
   errEl.classList.remove('show');
   if (!name) {
-    errEl.textContent = 'Category name is required.';
+    errEl.textContent = t('Category name is required.');
     errEl.classList.add('show');
     return;
   }
@@ -167,7 +159,7 @@ document.getElementById('category-save-btn').addEventListener('click', async () 
   };
 
   const btn = document.getElementById('category-save-btn');
-  btn.disabled = true; btn.textContent = 'Saving…';
+  btn.disabled = true; btn.textContent = t('Saving…');
   try {
     const res = await API.createProductCategory(payload);
     if (res.status !== 201) {
@@ -176,19 +168,19 @@ document.getElementById('category-save-btn').addEventListener('click', async () 
       return;
     }
     closeModal('category-modal');
-    showToast(`${res.body.data.name} added.`, 'success');
+    showToast(t('{name} added.', { name: res.body.data.name }), 'success');
     await Promise.all([loadCategories(), loadAllCategories()]);
   } finally {
-    btn.disabled = false; btn.textContent = 'Save Category';
+    btn.disabled = false; btn.textContent = t('Save Category');
   }
 });
 
 async function deleteCategory(id) {
   const cat = categories.find((c) => c.id === id);
-  if (!confirm(`Delete ${cat ? cat.name : 'this category'}?`)) return;
+  if (!confirm(t('Delete {name}?', { name: cat ? cat.name : t('this category') }))) return;
   const res = await API.deleteProductCategory(id);
-  if (res.status !== 200) { showToast(res.body?.message || 'Could not delete category.', 'error'); return; }
-  showToast('Category deleted.', 'success');
+  if (res.status !== 200) { showToast(t(res.body?.message || 'Could not delete category.'), 'error'); return; }
+  showToast(t('Category deleted.'), 'success');
   if (categories.length === 1 && categoriesPage > 1) categoriesPage--;
   loadCategories();
   loadAllCategories();
@@ -205,7 +197,7 @@ let brandsMeta = { current_page: 1, last_page: 1, total: 0 };
 
 async function loadBrands() {
   const res = await API.productBrands(document.getElementById('brand-search').value.trim(), '', brandsPage, BRANDS_PER_PAGE);
-  if (res.status !== 200) { showToast(res.body?.message || 'Could not load brands.', 'error'); return; }
+  if (res.status !== 200) { showToast(t(res.body?.message || 'Could not load brands.'), 'error'); return; }
   brands = res.body.data || [];
   brandsMeta = res.body.meta || { current_page: 1, last_page: 1, total: brands.length };
   brandsPage = brandsMeta.current_page;
@@ -217,9 +209,9 @@ async function loadBrands() {
 function renderBrandRows() {
   const rowsEl = document.getElementById('brand-rows');
   const total = brandsMeta.total ?? brands.length;
-  document.getElementById('brand-count-pill').textContent = `${total} brand${total === 1 ? '' : 's'}`;
+  document.getElementById('brand-count-pill').textContent = t(total === 1 ? '{n} brand' : '{n} brands', { n: total });
   if (!brands.length) {
-    rowsEl.innerHTML = '<tr><td colspan="5" class="empty-state">No brands yet.</td></tr>';
+    rowsEl.innerHTML = `<tr><td colspan="5" class="empty-state">${t('No brands yet.')}</td></tr>`;
     return;
   }
   rowsEl.innerHTML = brands.map((b) => `
@@ -227,8 +219,8 @@ function renderBrandRows() {
       <td class="row-title">${esc(b.name)}</td>
       <td>${b.website ? `<a href="${esc(b.website)}" target="_blank" rel="noopener">${esc(b.website)}</a>` : '—'}</td>
       <td>${b.products_count ?? 0}</td>
-      <td><span class="status-badge ${b.is_active ? 'active' : 'inactive'}">${b.is_active ? 'Active' : 'Inactive'}</span></td>
-      <td><div class="row-actions"><button data-action="delete" class="danger" title="Delete"><i class="fa-solid fa-trash"></i></button></div></td>
+      <td><span class="status-badge ${b.is_active ? 'active' : 'inactive'}">${b.is_active ? t('Active') : t('Inactive')}</span></td>
+      <td><div class="row-actions"><button data-action="delete" class="danger" title="${t('Delete')}"><i class="fa-solid fa-trash"></i></button></div></td>
     </tr>`).join('');
 
   rowsEl.querySelectorAll('tr[data-id]').forEach((tr) => {
@@ -252,7 +244,7 @@ document.getElementById('brand-save-btn').addEventListener('click', async () => 
   const errEl = document.getElementById('brand-error');
   errEl.classList.remove('show');
   if (!name) {
-    errEl.textContent = 'Brand name is required.';
+    errEl.textContent = t('Brand name is required.');
     errEl.classList.add('show');
     return;
   }
@@ -265,7 +257,7 @@ document.getElementById('brand-save-btn').addEventListener('click', async () => 
   };
 
   const btn = document.getElementById('brand-save-btn');
-  btn.disabled = true; btn.textContent = 'Saving…';
+  btn.disabled = true; btn.textContent = t('Saving…');
   try {
     const res = await API.createProductBrand(payload);
     if (res.status !== 201) {
@@ -274,19 +266,19 @@ document.getElementById('brand-save-btn').addEventListener('click', async () => 
       return;
     }
     closeModal('brand-modal');
-    showToast(`${res.body.data.name} added.`, 'success');
+    showToast(t('{name} added.', { name: res.body.data.name }), 'success');
     await loadBrands();
   } finally {
-    btn.disabled = false; btn.textContent = 'Save Brand';
+    btn.disabled = false; btn.textContent = t('Save Brand');
   }
 });
 
 async function deleteBrand(id) {
   const brand = brands.find((b) => b.id === id);
-  if (!confirm(`Delete ${brand ? brand.name : 'this brand'}?`)) return;
+  if (!confirm(t('Delete {name}?', { name: brand ? brand.name : t('this brand') }))) return;
   const res = await API.deleteProductBrand(id);
-  if (res.status !== 200) { showToast(res.body?.message || 'Could not delete brand.', 'error'); return; }
-  showToast('Brand deleted.', 'success');
+  if (res.status !== 200) { showToast(t(res.body?.message || 'Could not delete brand.'), 'error'); return; }
+  showToast(t('Brand deleted.'), 'success');
   if (brands.length === 1 && brandsPage > 1) brandsPage--;
   loadBrands();
 }
@@ -303,7 +295,7 @@ let unitsPage = 1;
 
 async function loadUnits() {
   const res = await API.productUnits(document.getElementById('unit-search').value.trim());
-  if (res.status !== 200) { showToast(res.body?.message || 'Could not load units.', 'error'); return; }
+  if (res.status !== 200) { showToast(t(res.body?.message || 'Could not load units.'), 'error'); return; }
   units = res.body.data || [];
   refreshPickers();
   renderUnitRows();
@@ -315,7 +307,7 @@ function renderUnitRows() {
   const filtered = search
     ? units.filter((u) => u.name.toLowerCase().includes(search) || (u.abbreviation || '').toLowerCase().includes(search))
     : units;
-  document.getElementById('unit-count-pill').textContent = `${filtered.length} unit${filtered.length === 1 ? '' : 's'}`;
+  document.getElementById('unit-count-pill').textContent = t(filtered.length === 1 ? '{n} unit' : '{n} units', { n: filtered.length });
 
   const lastPage = Math.max(1, Math.ceil(filtered.length / UNITS_PER_PAGE));
   if (unitsPage > lastPage) unitsPage = lastPage;
@@ -324,7 +316,7 @@ function renderUnitRows() {
   renderPaginationUI('unit', unitsPage, lastPage, filtered.length);
 
   if (!visible.length) {
-    rowsEl.innerHTML = '<tr><td colspan="5" class="empty-state">No units yet.</td></tr>';
+    rowsEl.innerHTML = `<tr><td colspan="5" class="empty-state">${t('No units yet.')}</td></tr>`;
     return;
   }
   rowsEl.innerHTML = visible.map((u) => `
@@ -332,8 +324,8 @@ function renderUnitRows() {
       <td class="row-title">${esc(u.name)}</td>
       <td>${esc(u.abbreviation) || '—'}</td>
       <td>${u.products_count ?? 0}</td>
-      <td><span class="status-badge ${u.is_active ? 'active' : 'inactive'}">${u.is_active ? 'Active' : 'Inactive'}</span></td>
-      <td><div class="row-actions"><button data-action="delete" class="danger" title="Delete"><i class="fa-solid fa-trash"></i></button></div></td>
+      <td><span class="status-badge ${u.is_active ? 'active' : 'inactive'}">${u.is_active ? t('Active') : t('Inactive')}</span></td>
+      <td><div class="row-actions"><button data-action="delete" class="danger" title="${t('Delete')}"><i class="fa-solid fa-trash"></i></button></div></td>
     </tr>`).join('');
 
   rowsEl.querySelectorAll('tr[data-id]').forEach((tr) => {
@@ -356,7 +348,7 @@ document.getElementById('unit-save-btn').addEventListener('click', async () => {
   const errEl = document.getElementById('unit-error');
   errEl.classList.remove('show');
   if (!name) {
-    errEl.textContent = 'Unit name is required.';
+    errEl.textContent = t('Unit name is required.');
     errEl.classList.add('show');
     return;
   }
@@ -368,7 +360,7 @@ document.getElementById('unit-save-btn').addEventListener('click', async () => {
   };
 
   const btn = document.getElementById('unit-save-btn');
-  btn.disabled = true; btn.textContent = 'Saving…';
+  btn.disabled = true; btn.textContent = t('Saving…');
   try {
     const res = await API.createProductUnit(payload);
     if (res.status !== 201) {
@@ -377,7 +369,7 @@ document.getElementById('unit-save-btn').addEventListener('click', async () => {
       return;
     }
     closeModal('unit-modal');
-    showToast(`${res.body.data.name} added.`, 'success');
+    showToast(t('{name} added.', { name: res.body.data.name }), 'success');
     await loadUnits();
     const prodUnitSel = document.getElementById('prod-f-unit');
     if (prodUnitSel) {
@@ -389,16 +381,16 @@ document.getElementById('unit-save-btn').addEventListener('click', async () => {
       prodUnitSel.value = String(u.id);
     }
   } finally {
-    btn.disabled = false; btn.textContent = 'Save Unit';
+    btn.disabled = false; btn.textContent = t('Save Unit');
   }
 });
 
 async function deleteUnit(id) {
   const unit = units.find((u) => u.id === id);
-  if (!confirm(`Delete ${unit ? unit.name : 'this unit'}?`)) return;
+  if (!confirm(t('Delete {name}?', { name: unit ? unit.name : t('this unit') }))) return;
   const res = await API.deleteProductUnit(id);
-  if (res.status !== 200) { showToast(res.body?.message || 'Could not delete unit.', 'error'); return; }
-  showToast('Unit deleted.', 'success');
+  if (res.status !== 200) { showToast(t(res.body?.message || 'Could not delete unit.'), 'error'); return; }
+  showToast(t('Unit deleted.'), 'success');
   loadUnits();
 }
 
@@ -433,20 +425,20 @@ function categoryName(ids) {
 function renderProductRows() {
   const rowsEl = document.getElementById('product-rows');
   const total = productsMeta.total ?? products.length;
-  document.getElementById('product-count-pill').textContent = `${total} product${total === 1 ? '' : 's'}`;
+  document.getElementById('product-count-pill').textContent = t(total === 1 ? '{n} product' : '{n} products', { n: total });
   if (!products.length) {
-    rowsEl.innerHTML = '<tr><td colspan="7" class="empty-state">No products found.</td></tr>';
+    rowsEl.innerHTML = `<tr><td colspan="7" class="empty-state">${t('No products found.')}</td></tr>`;
     return;
   }
   rowsEl.innerHTML = products.map((p) => {
     const stock = Number(p.stock_quantity) || 0;
     const stockClass = stock <= 0 ? 'out' : (stock <= 5 ? 'low' : 'active');
-    const stockLabel = stock <= 0 ? 'Out of stock' : (stock <= 5 ? 'Low stock' : 'In stock');
+    const stockLabel = t(stock <= 0 ? 'Out of stock' : (stock <= 5 ? 'Low stock' : 'In stock'));
     const badges = [
-      p.has_warranty ? '<span class="row-flag" title="Warranty"><i class="fa-solid fa-shield-halved"></i></span>' : '',
-      p.is_rental ? '<span class="row-flag" title="Rental"><i class="fa-solid fa-key"></i></span>' : '',
-      p.is_subscription ? '<span class="row-flag" title="Subscription"><i class="fa-solid fa-repeat"></i></span>' : '',
-      p.is_bundle ? '<span class="row-flag" title="Bundle"><i class="fa-solid fa-cubes"></i></span>' : '',
+      p.has_warranty ? `<span class="row-flag" title="${t('Warranty')}"><i class="fa-solid fa-shield-halved"></i></span>` : '',
+      p.is_rental ? `<span class="row-flag" title="${t('Rental')}"><i class="fa-solid fa-key"></i></span>` : '',
+      p.is_subscription ? `<span class="row-flag" title="${t('Subscription')}"><i class="fa-solid fa-repeat"></i></span>` : '',
+      p.is_bundle ? `<span class="row-flag" title="${t('Bundle')}"><i class="fa-solid fa-cubes"></i></span>` : '',
     ].join('');
     return `
     <tr data-id="${p.id}">
@@ -461,8 +453,8 @@ function renderProductRows() {
       <td><span class="status-badge ${stockClass}">${stockLabel}</span></td>
       <td>
         <div class="row-actions">
-          <button data-action="edit" title="Edit"><i class="fa-solid fa-pen"></i></button>
-          <button data-action="delete" class="danger" title="Delete"><i class="fa-solid fa-trash"></i></button>
+          <button data-action="edit" title="${t('Edit')}"><i class="fa-solid fa-pen"></i></button>
+          <button data-action="delete" class="danger" title="${t('Delete')}"><i class="fa-solid fa-trash"></i></button>
         </div>
       </td>
     </tr>`;
@@ -483,7 +475,7 @@ let productsPage = 1;
 let productsMeta = { current_page: 1, last_page: 1, total: 0 };
 
 async function loadProducts() {
-  document.getElementById('product-rows').innerHTML = '<tr><td colspan="7" class="loading-state">Loading products…</td></tr>';
+  document.getElementById('product-rows').innerHTML = `<tr><td colspan="7" class="loading-state">${t('Loading products…')}</td></tr>`;
   const res = await API.productList({
     q: document.getElementById('product-search').value.trim(),
     categoryId: document.getElementById('product-category-filter').value,
@@ -492,7 +484,7 @@ async function loadProducts() {
   });
   if (res.status !== 200) {
     document.getElementById('product-rows').innerHTML =
-      `<tr><td colspan="7" class="empty-state">Could not load products (${res.body?.message || res.status}).</td></tr>`;
+      `<tr><td colspan="7" class="empty-state">${t('Could not load products ({reason}).', { reason: t(res.body?.message) || res.status })}</td></tr>`;
     return;
   }
   products = res.body.data || [];
@@ -504,10 +496,10 @@ async function loadProducts() {
 
 async function deleteProductRow(id) {
   const p = products.find((x) => x.id === id);
-  if (!confirm(`Delete ${p ? p.name : 'this product'}? This cannot be undone.`)) return;
+  if (!confirm(t('Delete {name}? This cannot be undone.', { name: p ? p.name : t('this product') }))) return;
   const res = await API.deleteProduct(id);
-  if (res.status !== 200) { showToast(res.body?.message || 'Could not delete product.', 'error'); return; }
-  showToast('Product deleted.', 'success');
+  if (res.status !== 200) { showToast(t(res.body?.message || 'Could not delete product.'), 'error'); return; }
+  showToast(t('Product deleted.'), 'success');
   if (products.length === 1 && productsPage > 1) productsPage--;
   loadProducts();
 }
@@ -579,8 +571,8 @@ function _imgPickerTabSwitch(tab) {
 }
 async function _imgPickerBrowseFile() {
   const result = await window.electronAPI.showOpenDialog({
-    title: 'Select Image',
-    filters: [{ name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'gif', 'webp'] }],
+    title: t('Select Image'),
+    filters: [{ name: t('Images'), extensions: ['jpg', 'jpeg', 'png', 'gif', 'webp'] }],
     properties: ['openFile'],
   });
   if (result.canceled || !result.filePaths.length) return;
@@ -596,24 +588,24 @@ async function _imgPickerUploadAndUse() {
   if (!_imgPicker._pendingFilePath) return;
   const btn = $('#img-upload-confirm');
   btn.disabled = true;
-  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Uploading…';
+  btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> ${t('Uploading…')}`;
   const res = await window.electronAPI.apiUpload('/online/file-manager/upload', _imgPicker._pendingFilePath);
   btn.disabled = false;
-  btn.innerHTML = '<i class="fa-solid fa-upload"></i> Upload &amp; Use';
+  btn.innerHTML = `<i class="fa-solid fa-upload"></i> ${esc(t('Upload & Use'))}`;
   if (res.status === 201 && res.body?.data?.length) {
     const file = res.body.data[0];
     _imgPickerSelected(file.id, file.url);
   } else {
-    showToast(res.body?.message || 'Upload failed', 'error');
+    showToast(t(res.body?.message || 'Upload failed'), 'error');
   }
 }
 async function _imgPickerLoadFm(folderId) {
   _imgPicker._folderId = folderId;
   $('#img-fm-grid').innerHTML = '<div class="img-fm-loading"><i class="fa-solid fa-spinner fa-spin"></i></div>';
   const res = await API.fileManagerBrowse(folderId, true);
-  if (res.status !== 200) { $('#img-fm-grid').innerHTML = '<div class="img-fm-loading">Failed to load</div>'; return; }
+  if (res.status !== 200) { $('#img-fm-grid').innerHTML = `<div class="img-fm-loading">${t('Failed to load')}</div>`; return; }
   const { folders, files, breadcrumbs } = res.body;
-  const bcParts = [{ id: null, name: 'Root' }, ...(breadcrumbs || [])];
+  const bcParts = [{ id: null, name: t('Root') }, ...(breadcrumbs || [])];
   $('#img-fm-breadcrumb').innerHTML = bcParts.map((b, i) =>
     i < bcParts.length - 1
       ? `<button class="img-fm-bc-btn" data-folder="${b.id ?? ''}">${esc(b.name)}</button><i class="fa-solid fa-chevron-right" style="font-size:9px"></i>`
@@ -628,7 +620,7 @@ async function _imgPickerLoadFm(folderId) {
   const fileHtml = (files || []).map((f) =>
     `<div class="img-fm-file" data-file-id="${f.id}" data-url="${esc(f.url)}"><img src="${esc(f.url)}" alt="" loading="lazy"><span class="img-fm-file-name">${esc(f.name)}</span></div>`
   ).join('');
-  $('#img-fm-grid').innerHTML = folderHtml + fileHtml || '<div class="img-fm-loading" style="color:var(--muted)">No images found</div>';
+  $('#img-fm-grid').innerHTML = folderHtml + fileHtml || `<div class="img-fm-loading" style="color:var(--muted)">${t('No images found')}</div>`;
   $('#img-fm-grid').querySelectorAll('.img-fm-folder').forEach((el) => {
     el.addEventListener('click', () => _imgPickerLoadFm(parseInt(el.dataset.folderId)));
   });
@@ -655,18 +647,18 @@ function _prodBatchRender() {
   const sku = ($('#prod-f-sku')?.value || '').trim();
   const pricing = _prod.batchPricing;
   if (!_prod.batches.length) {
-    wrap.innerHTML = '<div class="prod-batch-empty"><i class="fa-solid fa-inbox"></i> No batches yet — click "Add Batch" to start</div>';
+    wrap.innerHTML = `<div class="prod-batch-empty"><i class="fa-solid fa-inbox"></i> ${t('No batches yet — click "Add Batch" to start')}</div>`;
     return;
   }
   wrap.innerHTML = `<table class="prod-batch-table">
     <thead><tr>
       <th class="prod-batch-num">#</th>
-      <th>Batch SKU</th>
-      <th style="width:110px">Quantity</th>
+      <th>${t('Batch SKU')}</th>
+      <th style="width:110px">${t('Quantity')}</th>
       ${pricing ? `
-      <th style="width:120px">Cost Price</th>
-      <th style="width:120px">Selling Price</th>
-      <th style="width:120px">Wholesale Price</th>
+      <th style="width:120px">${t('Cost Price')}</th>
+      <th style="width:120px">${t('Selling Price')}</th>
+      <th style="width:120px">${t('Wholesale Price')}</th>
       ` : ''}
       <th style="width:36px"></th>
     </tr></thead>
@@ -680,7 +672,7 @@ function _prodBatchRender() {
         ${pricing ? `
         <td><input type="number" class="prod-batch-cost po-field-input" data-idx="${i}" value="${esc(String(b.cost))}" min="0" step="0.01" placeholder="0.00"></td>
         <td><input type="number" class="prod-batch-selling po-field-input" data-idx="${i}" value="${esc(String(b.selling))}" min="0" step="0.01" placeholder="0.00"></td>
-        <td><input type="number" class="prod-batch-wholesale po-field-input" data-idx="${i}" value="${esc(String(b.wholesale))}" min="0" step="0.01" placeholder="optional"></td>
+        <td><input type="number" class="prod-batch-wholesale po-field-input" data-idx="${i}" value="${esc(String(b.wholesale))}" min="0" step="0.01" placeholder="${t('optional')}"></td>
         ` : ''}
         <td><button type="button" class="prod-batch-del" data-idx="${i}"><i class="fa-solid fa-trash"></i></button></td>
       </tr>`;
@@ -700,10 +692,10 @@ function _prodBundleRender() {
   const list = $('#prod-bundle-items');
   const count = _prod.bundleItems.length;
   const countEl = $('#prod-bundle-count');
-  if (countEl) countEl.textContent = count === 1 ? '1 item in bundle' : `${count} items in bundle`;
+  if (countEl) countEl.textContent = t(count === 1 ? '{n} item in bundle' : '{n} items in bundle', { n: count });
 
   if (!count) {
-    list.innerHTML = '<div class="prod-bundle-empty"><i class="fa-solid fa-box-open"></i> No items yet — search above to add products</div>';
+    list.innerHTML = `<div class="prod-bundle-empty"><i class="fa-solid fa-box-open"></i> ${t('No items yet — search above to add products')}</div>`;
     return;
   }
   list.innerHTML = _prod.bundleItems.map((item, i) => `
@@ -715,7 +707,7 @@ function _prodBundleRender() {
         <input type="number" class="prod-bundle-item-qty" min="0.001" step="1" value="${item.quantity}" data-idx="${i}">
         <button class="prod-bundle-qty-btn" data-idx="${i}" data-action="inc" type="button">+</button>
       </div>
-      <button class="prod-bundle-item-rm" data-idx="${i}" type="button" title="Remove"><i class="fa-solid fa-xmark"></i></button>
+      <button class="prod-bundle-item-rm" data-idx="${i}" type="button" title="${t('Remove')}"><i class="fa-solid fa-xmark"></i></button>
     </div>`).join('');
 
   list.querySelectorAll('.prod-bundle-item-qty').forEach((inp) => {
@@ -768,7 +760,7 @@ function _prodBundleWireSearch() {
     const found = res.body?.data || [];
     if (!found.length) {
       _tagPositionDd(inp, dd);
-      dd.innerHTML = '<div class="tag-dd-empty">No products found</div>';
+      dd.innerHTML = `<div class="tag-dd-empty">${t('No products found')}</div>`;
       dd.style.display = 'block';
       return;
     }
@@ -777,7 +769,7 @@ function _prodBundleWireSearch() {
       const added = addedIds.has(p.id);
       return `<div class="bundle-dd-item${i === 0 && !added ? ' focused' : ''}" data-id="${p.id}" data-name="${esc(p.name)}">
         <span class="bundle-dd-item-name">${esc(p.name)}</span>
-        ${added ? '<span class="bundle-dd-item-added"><i class="fa-solid fa-check"></i> Added</span>' : '<button class="bundle-add-btn" type="button"><i class="fa-solid fa-plus"></i> Add</button>'}
+        ${added ? `<span class="bundle-dd-item-added"><i class="fa-solid fa-check"></i> ${t('Added')}</span>` : `<button class="bundle-add-btn" type="button"><i class="fa-solid fa-plus"></i> ${t('Add')}</button>`}
       </div>`;
     }).join('');
     _tagPositionDd(inp, dd);
@@ -841,11 +833,11 @@ function _tagShowDd(inputEl, ddEl, options, selectedIds, onSelect, onCreate) {
   });
   const hasExact = options.some((o) => o.name.toLowerCase() === qLower);
   if (q && !hasExact && onCreate) {
-    rows.push(`<div class="tag-dd-item tag-dd-create" data-create="${esc(q)}"><i class="fa-solid fa-plus"></i> Create "${esc(q)}"</div>`);
+    rows.push(`<div class="tag-dd-item tag-dd-create" data-create="${esc(q)}"><i class="fa-solid fa-plus"></i> ${t('Create "{name}"', { name: esc(q) })}</div>`);
   }
   _tagPositionDd(inputEl, ddEl);
   if (!rows.length) {
-    ddEl.innerHTML = `<div class="tag-dd-empty">${q ? 'No matches' : 'Type to search…'}</div>`;
+    ddEl.innerHTML = `<div class="tag-dd-empty">${q ? t('No matches') : t('Type to search…')}</div>`;
     ddEl.style.display = 'block';
     return;
   }
@@ -927,7 +919,7 @@ async function _prodLoadFormOptions() {
 
   if (unitRes.status === 200) {
     const list = unitRes.body?.data || [];
-    $('#prod-f-unit').innerHTML = '<option value="">— No unit —</option>' +
+    $('#prod-f-unit').innerHTML = `<option value="">${t('— No unit —')}</option>` +
       list.map((u) => `<option value="${u.id}">${esc(u.name)}${u.abbreviation ? ` (${esc(u.abbreviation)})` : ''}</option>`).join('');
   }
   if (catRes.status === 200) {
@@ -1019,11 +1011,11 @@ function _prodRenderDeliveryTab(deliveryEnabled, enabledKeys, selectedMethods) {
     partnersBox.style.display = 'none';
     partnersBox.innerHTML = '';
     if (!deliveryEnabled) {
-      titleEl.textContent = 'Delivery methods are turned off';
-      textEl.textContent = 'Enable delivery methods from the Zeebroo web dashboard to offer courier delivery for this product.';
+      titleEl.textContent = t('Delivery methods are turned off');
+      textEl.textContent = t('Enable delivery methods from the Zeebroo web dashboard to offer courier delivery for this product.');
     } else {
-      titleEl.textContent = 'No delivery partners enabled';
-      textEl.textContent = 'Enable at least one delivery partner from the Zeebroo web dashboard to offer courier delivery for this product.';
+      titleEl.textContent = t('No delivery partners enabled');
+      textEl.textContent = t('Enable at least one delivery partner from the Zeebroo web dashboard to offer courier delivery for this product.');
     }
     return;
   }
@@ -1041,12 +1033,12 @@ function _prodRenderDeliveryTab(deliveryEnabled, enabledKeys, selectedMethods) {
           <div class="prod-adv-card-icon"><i class="fa-solid ${meta.icon}"></i></div>
           <div class="prod-adv-card-text">
             <span class="prod-adv-card-name">${esc(meta.name)}</span>
-            <span class="prod-adv-card-desc">${esc(meta.desc)}</span>
+            <span class="prod-adv-card-desc">${esc(t(meta.desc))}</span>
           </div>
           <div class="prod-adv-card-sw"><div class="prod-adv-card-knob"></div></div>
         </label>
         <div class="prod-adv-card-fields">
-          <div class="po-field-label" style="margin-bottom:6px"><i class="fa-solid fa-money-bill-wave" style="color:var(--accent);margin-right:4px"></i> Island Wide Delivery Price</div>
+          <div class="po-field-label" style="margin-bottom:6px"><i class="fa-solid fa-money-bill-wave" style="color:var(--accent);margin-right:4px"></i> ${t('Island Wide Delivery Price')}</div>
           <input type="number" min="0" step="0.01" id="prod-delivery-price-${key}" class="po-field-input" style="max-width:220px" placeholder="0.00" value="${price}">
         </div>
       </div>`;
@@ -1057,7 +1049,7 @@ function _prodRenderDeliveryTab(deliveryEnabled, enabledKeys, selectedMethods) {
 async function _prodOpenModal(editId) {
   _prod.editingId = editId || null;
   const isEdit = !!editId;
-  document.getElementById('product-modal-title').innerHTML = isEdit ? '<i class="fa-solid fa-box"></i> Edit Product' : '<i class="fa-solid fa-box"></i> Add Product';
+  document.getElementById('product-modal-title').innerHTML = `<i class="fa-solid fa-box"></i> ${t(isEdit ? 'Edit Product' : 'Add Product')}`;
 
   // Reset fields
   ['prod-f-name', 'prod-f-sku', 'prod-f-model-no', 'prod-f-size', 'prod-f-mfg-date', 'prod-f-cost-price', 'prod-f-price', 'prod-f-wholesale-price', 'prod-f-stock', 'prod-f-description']
@@ -1131,7 +1123,7 @@ async function _prodOpenModal(editId) {
   if (isEdit) {
     const res = await API.product(editId);
     if (res.status !== 200) {
-      showToast(res.body?.message || 'Could not load product.', 'error');
+      showToast(t(res.body?.message || 'Could not load product.'), 'error');
       closeModal('product-modal');
       return;
     }
@@ -1220,8 +1212,8 @@ async function _prodSave(andNew) {
   const price = parseFloat($('#prod-f-price').value);
   const errEl = document.getElementById('product-error');
   errEl.classList.remove('show');
-  if (!name) { errEl.textContent = 'Product name is required.'; errEl.classList.add('show'); return; }
-  if (isNaN(price) || price < 0) { errEl.textContent = 'Selling price must be 0 or more.'; errEl.classList.add('show'); return; }
+  if (!name) { errEl.textContent = t('Product name is required.'); errEl.classList.add('show'); return; }
+  if (isNaN(price) || price < 0) { errEl.textContent = t('Selling price must be 0 or more.'); errEl.classList.add('show'); return; }
 
   const btn = $('#prod-modal-save') || document.getElementById('product-save-btn');
   const btnNew = $('#prod-modal-save-new');
@@ -1234,7 +1226,7 @@ async function _prodSave(andNew) {
     if (cat._new) {
       const res = await API.createProductCategory({ name: cat.name, is_active: true });
       if (res.status !== 201) {
-        errEl.textContent = firstErrorMessage(res, `Failed to create category "${cat.name}".`);
+        errEl.textContent = firstErrorMessage(res, t('Failed to create category "{name}".', { name: cat.name }));
         errEl.classList.add('show');
         btn.disabled = false; if (btnNew) btnNew.disabled = false;
         return;
@@ -1247,7 +1239,7 @@ async function _prodSave(andNew) {
     if (brand._new) {
       const res = await API.createProductBrand({ name: brand.name, is_active: true });
       if (res.status !== 201) {
-        errEl.textContent = firstErrorMessage(res, `Failed to create brand "${brand.name}".`);
+        errEl.textContent = firstErrorMessage(res, t('Failed to create brand "{name}".', { name: brand.name }));
         errEl.classList.add('show');
         btn.disabled = false; if (btnNew) btnNew.disabled = false;
         return;
@@ -1259,7 +1251,7 @@ async function _prodSave(andNew) {
   const isBundle = $('#prod-f-bundle').checked;
   const bundleItems = _prod.bundleItems.map((b) => ({ product_id: b.product_id, quantity: b.quantity }));
   if (isBundle && !bundleItems.length) {
-    errEl.textContent = 'Add at least one product to the bundle.';
+    errEl.textContent = t('Add at least one product to the bundle.');
     errEl.classList.add('show');
     btn.disabled = false; if (btnNew) btnNew.disabled = false;
     return;
@@ -1327,7 +1319,7 @@ async function _prodSave(andNew) {
       errEl.classList.add('show');
       return;
     }
-    showToast(`${res.body.data?.name || name} ${_prod.editingId ? 'updated' : 'added'}.`, 'success');
+    showToast(t(_prod.editingId ? '{name} updated.' : '{name} added.', { name: res.body.data?.name || name }), 'success');
     if (andNew && !_prod.editingId) {
       loadProducts();
       _prodOpenModal(null);
@@ -1400,7 +1392,7 @@ function _applyProdTabPrefs() {
         const meta = _PROD_PANE_META[pane.dataset.pane] || {};
         const hd = document.createElement('div');
         hd.className = 'prod-pane-section-hd';
-        hd.innerHTML = `<i class="fa-solid ${meta.icon || 'fa-layer-group'}"></i>&ensp;${esc(meta.label || pane.dataset.pane)}`;
+        hd.innerHTML = `<i class="fa-solid ${meta.icon || 'fa-layer-group'}"></i>&ensp;${esc(t(meta.label || pane.dataset.pane))}`;
         pane.insertBefore(hd, pane.firstChild);
       }
     } else {
@@ -1431,21 +1423,21 @@ function _openProdViewSettings() {
     genPanel.className = 'pfs-panel pfs-gen-body';
     genPanel.id = 'pfs-panel-general';
     genPanel.innerHTML = `
-      <div class="pfs-section-label">Display Mode</div>
+      <div class="pfs-section-label">${t('Display Mode')}</div>
       <div class="pfs-view-rows">
         <div class="pfs-view-row" data-view="tab">
           <div class="pfs-view-row-icon"><i class="fa-solid fa-table-columns"></i></div>
           <div class="pfs-view-row-body">
-            <div class="pfs-view-row-title">Tab View</div>
-            <div class="pfs-view-row-desc">Fields organized into sections — Basic, Pricing &amp; Stock, Media, and Advanced. Click the tabs to navigate.</div>
+            <div class="pfs-view-row-title">${t('Tab View')}</div>
+            <div class="pfs-view-row-desc">${esc(t('Fields organized into sections — Basic, Pricing & Stock, Media, and Advanced. Click the tabs to navigate.'))}</div>
           </div>
           <i class="fa-solid fa-circle-check pfs-view-row-chk"></i>
         </div>
         <div class="pfs-view-row" data-view="single">
           <div class="pfs-view-row-icon"><i class="fa-solid fa-bars"></i></div>
           <div class="pfs-view-row-body">
-            <div class="pfs-view-row-title">Single View</div>
-            <div class="pfs-view-row-desc">All fields in one continuous scrollable form with section headings.</div>
+            <div class="pfs-view-row-title">${t('Single View')}</div>
+            <div class="pfs-view-row-desc">${t('All fields in one continuous scrollable form with section headings.')}</div>
           </div>
           <i class="fa-solid fa-circle-check pfs-view-row-chk"></i>
         </div>
@@ -1465,7 +1457,7 @@ function _openProdViewSettings() {
     sectionOrder.forEach((sec) => {
       const hd = document.createElement('div');
       hd.className = 'pfs-fields-sec-hd';
-      hd.textContent = sec;
+      hd.textContent = t(sec);
       fieldsPanel.appendChild(hd);
       sectionMap[sec].forEach((f) => {
         const row = document.createElement('div');
@@ -1473,8 +1465,8 @@ function _openProdViewSettings() {
         row.dataset.fieldId = f.id;
         row.innerHTML = `
           <div class="pfs-field-icon"><i class="fa-solid ${f.icon}"></i></div>
-          <span class="pfs-field-label">${esc(f.label)}</span>
-          <label class="pfs-sw" title="Show / hide field">
+          <span class="pfs-field-label">${esc(t(f.label))}</span>
+          <label class="pfs-sw" title="${t('Show / hide field')}">
             <input type="checkbox" class="pfs-sw-input" data-field="${f.id}" checked>
             <span class="pfs-sw-track"><span class="pfs-sw-knob"></span></span>
           </label>`;
@@ -1490,17 +1482,17 @@ function _openProdViewSettings() {
     ov.innerHTML = `
       <div class="modal">
         <div class="modal-head">
-          <h2><i class="fa-solid fa-gear"></i> Product Form Settings</h2>
+          <h2><i class="fa-solid fa-gear"></i> ${t('Product Form Settings')}</h2>
           <button class="modal-close" id="prod-settings-close"><i class="fa-solid fa-xmark"></i></button>
         </div>
         <div class="modal-tabs" id="pfs-outer-nav">
-          <button type="button" class="modal-tab active" data-outer="general"><i class="fa-solid fa-sliders"></i> General</button>
-          <button type="button" class="modal-tab" data-outer="fields"><i class="fa-solid fa-list-check"></i> Fields</button>
+          <button type="button" class="modal-tab active" data-outer="general"><i class="fa-solid fa-sliders"></i> ${t('General')}</button>
+          <button type="button" class="modal-tab" data-outer="fields"><i class="fa-solid fa-list-check"></i> ${t('Fields')}</button>
         </div>
         <div class="modal-body" id="pfs-panels" style="padding:0"></div>
         <div class="modal-foot">
-          <button class="ghost-btn" id="prod-settings-cancel">Cancel</button>
-          <button class="primary-btn" id="prod-settings-apply"><i class="fa-solid fa-check"></i> Apply</button>
+          <button class="ghost-btn" id="prod-settings-cancel">${t('Cancel')}</button>
+          <button class="primary-btn" id="prod-settings-apply"><i class="fa-solid fa-check"></i> ${t('Apply')}</button>
         </div>
       </div>`;
 
@@ -1590,7 +1582,7 @@ async function openProductDetail(productId, productName) {
   _prodActiveData = null;
   $('#product-list-view').style.display = 'none';
   $('#product-detail-view').style.display = 'block';
-  $('#inv-detail-breadcrumb').textContent = productName || 'Product Detail';
+  $('#inv-detail-breadcrumb').textContent = productName || t('Product Detail');
 
   $$('#inv-tabs .inv-tab').forEach((t) => t.classList.remove('active'));
   $('#inv-tabs .inv-tab[data-tab="overview"]').classList.add('active');
@@ -1604,7 +1596,7 @@ async function openProductDetail(productId, productName) {
   $('#inv-tab-delivery').style.display = 'none';
   $('#inv-tab-rental').style.display = 'none';
   ['overview', 'pricing', 'stock', 'images', 'variants', 'delivery', 'rental'].forEach((t) => {
-    $(`#inv-pane-${t}`).innerHTML = '<div class="inv-pane-loading"><i class="fa-solid fa-spinner fa-spin"></i> Loading…</div>';
+    $(`#inv-pane-${t}`).innerHTML = `<div class="inv-pane-loading"><i class="fa-solid fa-spinner fa-spin"></i> ${window.t('Loading…')}</div>`;
   });
 
   const [res, histRes] = await Promise.all([
@@ -1613,7 +1605,7 @@ async function openProductDetail(productId, productName) {
   ]);
   const p = res.body?.data || res.body || null;
   if (!p || res.status !== 200) {
-    $('#inv-hero-meta').innerHTML = '<span style="color:var(--danger)">Failed to load product</span>';
+    $('#inv-hero-meta').innerHTML = `<span style="color:var(--danger)">${t('Failed to load product')}</span>`;
     return;
   }
   const stockHistory = histRes.status === 200 ? (histRes.body?.data || []) : [];
@@ -1638,25 +1630,25 @@ function renderProductDetail(p, stockHistory = []) {
 
   const stock = p.stock_quantity;
   const badges = [];
-  badges.push(p.is_active === false ? '<span class="inv-badge inv-badge-gray">Inactive</span>' : '<span class="inv-badge inv-badge-green">Active</span>');
+  badges.push(p.is_active === false ? `<span class="inv-badge inv-badge-gray">${t('Inactive')}</span>` : `<span class="inv-badge inv-badge-green">${t('Active')}</span>`);
   if (stock != null) {
-    if (stock <= 0) badges.push('<span class="inv-badge inv-badge-red">Out of stock</span>');
-    else if (stock <= 5) badges.push('<span class="inv-badge inv-badge-amber">Low stock</span>');
-    else badges.push('<span class="inv-badge inv-badge-blue">In stock</span>');
+    if (stock <= 0) badges.push(`<span class="inv-badge inv-badge-red">${t('Out of stock')}</span>`);
+    else if (stock <= 5) badges.push(`<span class="inv-badge inv-badge-amber">${t('Low stock')}</span>`);
+    else badges.push(`<span class="inv-badge inv-badge-blue">${t('In stock')}</span>`);
   }
-  if (p.is_bundle) badges.push('<span class="inv-badge inv-badge-purple"><i class="fa-solid fa-cubes"></i> Bundle</span>');
-  if (p.has_warranty) badges.push('<span class="inv-badge inv-badge-blue"><i class="fa-solid fa-shield-halved"></i> Warranty</span>');
-  if (p.track_expiry) badges.push('<span class="inv-badge inv-badge-amber"><i class="fa-solid fa-calendar-xmark"></i> Expiry</span>');
-  if (p.courier_delivery || p.delivery_methods?.length) badges.push('<span class="inv-badge inv-badge-purple"><i class="fa-solid fa-truck"></i> Courier</span>');
-  if (p.loyalty_redeemable) badges.push('<span class="inv-badge inv-badge-green"><i class="fa-solid fa-star"></i> Loyalty</span>');
-  if (p.is_rental) badges.push('<span class="inv-badge inv-badge-blue"><i class="fa-solid fa-key"></i> Rental</span>');
-  if (p.is_subscription) badges.push('<span class="inv-badge inv-badge-purple"><i class="fa-solid fa-repeat"></i> Subscription</span>');
+  if (p.is_bundle) badges.push(`<span class="inv-badge inv-badge-purple"><i class="fa-solid fa-cubes"></i> ${t('Bundle')}</span>`);
+  if (p.has_warranty) badges.push(`<span class="inv-badge inv-badge-blue"><i class="fa-solid fa-shield-halved"></i> ${t('Warranty')}</span>`);
+  if (p.track_expiry) badges.push(`<span class="inv-badge inv-badge-amber"><i class="fa-solid fa-calendar-xmark"></i> ${t('Expiry')}</span>`);
+  if (p.courier_delivery || p.delivery_methods?.length) badges.push(`<span class="inv-badge inv-badge-purple"><i class="fa-solid fa-truck"></i> ${t('Courier')}</span>`);
+  if (p.loyalty_redeemable) badges.push(`<span class="inv-badge inv-badge-green"><i class="fa-solid fa-star"></i> ${t('Loyalty')}</span>`);
+  if (p.is_rental) badges.push(`<span class="inv-badge inv-badge-blue"><i class="fa-solid fa-key"></i> ${t('Rental')}</span>`);
+  if (p.is_subscription) badges.push(`<span class="inv-badge inv-badge-purple"><i class="fa-solid fa-repeat"></i> ${t('Subscription')}</span>`);
   $('#inv-hero-badges').innerHTML = badges.join('');
 
   // ── Overview tab ──
-  const statusLabel = p.is_active === false ? 'Inactive' : 'Active';
+  const statusLabel = t(p.is_active === false ? 'Inactive' : 'Active');
   const statusClass = p.is_active === false ? 'inv-badge-gray' : 'inv-badge-green';
-  const typeLabel = p.is_bundle ? 'Bundle' : 'Single';
+  const typeLabel = t(p.is_bundle ? 'Bundle' : 'Single');
 
   const cats = p.category ? [p.category] : (Array.isArray(p.category_ids) ? p.category_ids.map((id) => allCategories.find((c) => c.id === id) || { id, name: String(id) }) : []);
   const catChips = cats.length ? cats.map((c) => `<span class="inv-detail-chip">${esc(c.name)}</span>`).join('') : '<span class="inv-detail-none">—</span>';
@@ -1666,39 +1658,39 @@ function renderProductDetail(p, stockHistory = []) {
   const tagChips = Array.isArray(p.tags) && p.tags.length ? p.tags.map((t) => `<span class="inv-detail-chip">${esc(t)}</span>`).join('') : '<span class="inv-detail-none">—</span>';
 
   const detailCells = [
-    { label: 'SKU', value: p.sku ? esc(p.sku) : '<span class="inv-detail-none">—</span>' },
-    { label: 'STATUS', value: `<span class="inv-badge ${statusClass}">${statusLabel}</span>` },
-    { label: 'TYPE', value: `<strong>${typeLabel}</strong>` },
-    { label: 'CATEGORIES', value: catChips },
-    { label: 'BRANDS', value: brandChip },
-    { label: 'TAGS', value: tagChips },
-    { label: 'UNIT', value: unitName ? esc(unitName) : '<span class="inv-detail-none">—</span>' },
+    { label: t('SKU'), value: p.sku ? esc(p.sku) : '<span class="inv-detail-none">—</span>' },
+    { label: t('STATUS'), value: `<span class="inv-badge ${statusClass}">${statusLabel}</span>` },
+    { label: t('TYPE'), value: `<strong>${typeLabel}</strong>` },
+    { label: t('CATEGORIES'), value: catChips },
+    { label: t('BRANDS'), value: brandChip },
+    { label: t('TAGS'), value: tagChips },
+    { label: t('UNIT'), value: unitName ? esc(unitName) : '<span class="inv-detail-none">—</span>' },
   ];
 
   const descHtml = p.description
-    ? `<div class="inv-section" style="margin-top:0"><div class="inv-section-title"><i class="fa-solid fa-align-left"></i> Description</div><div class="inv-desc-body">${esc(p.description)}</div></div>`
+    ? `<div class="inv-section" style="margin-top:0"><div class="inv-section-title"><i class="fa-solid fa-align-left"></i> ${t('Description')}</div><div class="inv-desc-body">${esc(p.description)}</div></div>`
     : '';
   const metaHtml = (p.created_at || p.updated_at)
     ? `<div class="inv-detail-meta-row">
-        ${p.created_at ? `<span><i class="fa-solid fa-calendar-plus"></i> Created ${new Date(p.created_at).toLocaleDateString()}</span>` : ''}
-        ${p.updated_at ? `<span><i class="fa-solid fa-calendar-check"></i> Updated ${new Date(p.updated_at).toLocaleDateString()}</span>` : ''}
+        ${p.created_at ? `<span><i class="fa-solid fa-calendar-plus"></i> ${t('Created {date}', { date: new Date(p.created_at).toLocaleDateString(i18n.locale) })}</span>` : ''}
+        ${p.updated_at ? `<span><i class="fa-solid fa-calendar-check"></i> ${t('Updated {date}', { date: new Date(p.updated_at).toLocaleDateString(i18n.locale) })}</span>` : ''}
        </div>`
     : '';
 
   $('#inv-pane-overview').innerHTML = `
     <div class="inv-section">
       <div class="inv-chart-header">
-        <div class="inv-chart-title"><i class="fa-solid fa-chart-column"></i> Units sold</div>
+        <div class="inv-chart-title"><i class="fa-solid fa-chart-column"></i> ${t('Units sold')}</div>
         <div class="inv-chart-periods">
-          <button class="inv-chart-period" data-period="daily">Daily</button>
-          <button class="inv-chart-period active" data-period="weekly">Weekly</button>
-          <button class="inv-chart-period" data-period="monthly">Monthly</button>
+          <button class="inv-chart-period" data-period="daily">${t('Daily')}</button>
+          <button class="inv-chart-period active" data-period="weekly">${t('Weekly')}</button>
+          <button class="inv-chart-period" data-period="monthly">${t('Monthly')}</button>
         </div>
       </div>
       <div id="inv-chart-container"></div>
     </div>
     <div class="inv-section">
-      <div class="inv-section-title"><i class="fa-solid fa-circle-info"></i> Details</div>
+      <div class="inv-section-title"><i class="fa-solid fa-circle-info"></i> ${t('Details')}</div>
       <div class="inv-detail-grid">
         ${detailCells.map((c) => `<div><div class="inv-detail-cell-label">${c.label}</div><div class="inv-detail-cell-value">${c.value}</div></div>`).join('')}
       </div>
@@ -1720,14 +1712,14 @@ function renderProductDetail(p, stockHistory = []) {
   const marginPct = (profit != null && costPrice > 0) ? ((profit / costPrice) * 100).toFixed(1) : null;
 
   const priceRows = [
-    ['Cost Price', costPrice != null ? `<strong style="font-size:16px">${money(costPrice)}</strong>` : '<span class="inv-detail-none">—</span>'],
-    ['Selling Price', sellingPrice != null ? `<strong style="font-size:18px;color:var(--accent)">${money(sellingPrice)}</strong>` : '<span class="inv-detail-none">—</span>'],
-    ['Wholesale Price', wholesalePrice != null ? `<span style="color:#d97706;font-weight:600"><i class="fa-solid fa-tags"></i> ${money(wholesalePrice)}</span>` : '<span class="inv-detail-none">—</span>'],
-    ['Profit', profit != null
-      ? `<span style="font-weight:700;color:${profit >= 0 ? 'var(--accent)' : 'var(--danger)'}">${profit >= 0 ? '+' : ''}${money(profit)}${marginPct != null ? ` <span style="font-size:11px;opacity:.8">(${marginPct >= 0 ? '+' : ''}${marginPct}% margin)</span>` : ''}</span>`
-      : '<span class="inv-detail-none">— set cost &amp; selling price</span>'],
+    [t('Cost Price'), costPrice != null ? `<strong style="font-size:16px">${money(costPrice)}</strong>` : '<span class="inv-detail-none">—</span>'],
+    [t('Selling Price'), sellingPrice != null ? `<strong style="font-size:18px;color:var(--accent)">${money(sellingPrice)}</strong>` : '<span class="inv-detail-none">—</span>'],
+    [t('Wholesale Price'), wholesalePrice != null ? `<span style="color:#d97706;font-weight:600"><i class="fa-solid fa-tags"></i> ${money(wholesalePrice)}</span>` : '<span class="inv-detail-none">—</span>'],
+    [t('Profit'), profit != null
+      ? `<span style="font-weight:700;color:${profit >= 0 ? 'var(--accent)' : 'var(--danger)'}">${profit >= 0 ? '+' : ''}${money(profit)}${marginPct != null ? ` <span style="font-size:11px;opacity:.8">(${marginPct >= 0 ? '+' : ''}${t('{pct}% margin', { pct: marginPct })})</span>` : ''}</span>`
+      : `<span class="inv-detail-none">${esc(t('— set cost & selling price'))}</span>`],
   ];
-  $('#inv-pane-pricing').innerHTML = `<div class="inv-section"><div class="inv-section-title"><i class="fa-solid fa-tag"></i> Pricing</div>
+  $('#inv-pane-pricing').innerHTML = `<div class="inv-section"><div class="inv-section-title"><i class="fa-solid fa-tag"></i> ${t('Pricing')}</div>
     <table class="inv-detail-table">${priceRows.map(([l, v]) => `<tr><td class="inv-dt-label">${l}</td><td class="inv-dt-val">${v}</td></tr>`).join('')}</table></div>`;
 
   // ── Stock tab ──
@@ -1735,8 +1727,8 @@ function renderProductDetail(p, stockHistory = []) {
   const grnRemaining = stockHistory.reduce((s, h) => s + parseFloat(h.quantity_remaining || 0), 0);
   const displayStock = stock ?? '—';
   const stockRows = [
-    ['Available Stock', displayStock !== '—' ? `<strong style="font-size:15px;color:var(--accent)">${Number(displayStock) % 1 === 0 ? Number(displayStock) : Number(displayStock).toFixed(3)}</strong>` : '—'],
-    ['Low Stock Alert', p.low_stock_threshold ?? p.alert_quantity ?? '—'],
+    [t('Available Stock'), displayStock !== '—' ? `<strong style="font-size:15px;color:var(--accent)">${Number(displayStock) % 1 === 0 ? Number(displayStock) : Number(displayStock).toFixed(3)}</strong>` : '—'],
+    [t('Low Stock Alert'), p.low_stock_threshold ?? p.alert_quantity ?? '—'],
   ].filter(([, v]) => v != null);
 
   const stockNum = stock != null ? Number(stock) : null;
@@ -1745,17 +1737,17 @@ function renderProductDetail(p, stockHistory = []) {
   const stockDisp = stockNum != null ? (stockNum % 1 === 0 ? stockNum : stockNum.toFixed(3)) : '—';
   const stockSummaryHtml = `
     <div class="inv-stock-summary">
-      <div class="inv-stock-kpi${stockKpiClass}"><div class="inv-stock-kpi-val">${stockDisp}</div><div class="inv-stock-kpi-label">Available Stock</div></div>
-      <div class="inv-stock-kpi inv-stock-kpi--blue"><div class="inv-stock-kpi-val">${totalReceived % 1 === 0 ? totalReceived : totalReceived.toFixed(3)}</div><div class="inv-stock-kpi-label">Total Received</div></div>
-      <div class="inv-stock-kpi inv-stock-kpi--gray"><div class="inv-stock-kpi-val">${grnRemaining % 1 === 0 ? grnRemaining : grnRemaining.toFixed(3)}</div><div class="inv-stock-kpi-label">Batches Remaining</div></div>
+      <div class="inv-stock-kpi${stockKpiClass}"><div class="inv-stock-kpi-val">${stockDisp}</div><div class="inv-stock-kpi-label">${t('Available Stock')}</div></div>
+      <div class="inv-stock-kpi inv-stock-kpi--blue"><div class="inv-stock-kpi-val">${totalReceived % 1 === 0 ? totalReceived : totalReceived.toFixed(3)}</div><div class="inv-stock-kpi-label">${t('Total Received')}</div></div>
+      <div class="inv-stock-kpi inv-stock-kpi--gray"><div class="inv-stock-kpi-val">${grnRemaining % 1 === 0 ? grnRemaining : grnRemaining.toFixed(3)}</div><div class="inv-stock-kpi-label">${t('Batches Remaining')}</div></div>
     </div>`;
 
   const batchHistoryHtml = stockHistory.length
-    ? `<div class="inv-section"><div class="inv-section-title"><i class="fa-solid fa-layer-group"></i> Stock Receive History (${stockHistory.length})</div>
+    ? `<div class="inv-section"><div class="inv-section-title"><i class="fa-solid fa-layer-group"></i> ${t('Stock Receive History ({n})', { n: stockHistory.length })}</div>
         ${stockHistory.map((h) => {
           const src = h.source_type || (h.grn_number ? 'grn' : 'opening');
-          const srcLabel = src === 'opening' ? 'Opening Stock' : src === 'po' ? 'Purchase Order' : src === 'transfer' ? 'Stock Transfer' : 'Goods Receive';
-          const date = h.received_at ? new Date(h.received_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+          const srcLabel = t(src === 'opening' ? 'Opening Stock' : src === 'po' ? 'Purchase Order' : src === 'transfer' ? 'Stock Transfer' : 'Goods Receive');
+          const date = h.received_at ? i18n.formatShortDate(new Date(h.received_at)) : '—';
           const qtyIn = parseFloat(h.quantity_received || 0);
           const qtyLeft = parseFloat(h.quantity_remaining || 0);
           const ref = [h.po_number, h.grn_number, h.transfer_number, h.supplier_name].filter(Boolean).join(' · ');
@@ -1764,10 +1756,10 @@ function renderProductDetail(p, stockHistory = []) {
             ${ref ? `<span class="stock-batch-ref">${esc(ref)}</span>` : ''}
             <span class="stock-batch-date">${esc(date)}</span>
             <div class="stock-batch-prices">
-              <span>Qty: <b>${qtyLeft % 1 === 0 ? qtyLeft : qtyLeft.toFixed(2)}</b> / ${qtyIn % 1 === 0 ? qtyIn : qtyIn.toFixed(2)}</span>
-              ${h.unit_cost != null ? `<span>Cost: <b>${money(h.unit_cost)}</b></span>` : ''}
-              ${h.selling_unit_price != null ? `<span>Selling: <b>${money(h.selling_unit_price)}</b></span>` : ''}
-              ${h.wholesale_unit_price != null ? `<span>Wholesale: <b>${money(h.wholesale_unit_price)}</b></span>` : ''}
+              <span>${t('Qty:')} <b>${qtyLeft % 1 === 0 ? qtyLeft : qtyLeft.toFixed(2)}</b> / ${qtyIn % 1 === 0 ? qtyIn : qtyIn.toFixed(2)}</span>
+              ${h.unit_cost != null ? `<span>${t('Cost:')} <b>${money(h.unit_cost)}</b></span>` : ''}
+              ${h.selling_unit_price != null ? `<span>${t('Selling:')} <b>${money(h.selling_unit_price)}</b></span>` : ''}
+              ${h.wholesale_unit_price != null ? `<span>${t('Wholesale:')} <b>${money(h.wholesale_unit_price)}</b></span>` : ''}
             </div>
           </div>`;
         }).join('')}
@@ -1775,37 +1767,37 @@ function renderProductDetail(p, stockHistory = []) {
     : '';
 
   $('#inv-pane-stock').innerHTML = `
-    <div class="inv-section"><div class="inv-section-title"><i class="fa-solid fa-boxes-stacked"></i> Stock Information</div>
-      <table class="inv-detail-table">${stockRows.map(([l, v]) => `<tr><td class="inv-dt-label">${esc(String(l))}</td><td class="inv-dt-val">${v}</td></tr>`).join('')}</table>
+    <div class="inv-section"><div class="inv-section-title"><i class="fa-solid fa-boxes-stacked"></i> ${t('Stock Information')}</div>
+      <table class="inv-detail-table">${stockRows.map(([l, v]) => `<tr><td class="inv-dt-label">${esc(t(String(l)))}</td><td class="inv-dt-val">${v}</td></tr>`).join('')}</table>
     </div>
     ${stockHistory.length ? stockSummaryHtml : ''}
     ${batchHistoryHtml}`;
 
   // ── Images tab ──
   $('#inv-pane-images').innerHTML = images.length
-    ? `<div class="inv-section"><div class="inv-section-title"><i class="fa-solid fa-images"></i> Product Images (${images.length})</div>
-        <div class="inv-images-grid">${images.map((img) => `<div class="inv-img-card"><img src="${esc(img.url || img.image_url || img)}" alt="Product image" loading="lazy"></div>`).join('')}</div></div>`
-    : '<div class="inv-pane-empty"><i class="fa-regular fa-image"></i><p>No images uploaded</p></div>';
+    ? `<div class="inv-section"><div class="inv-section-title"><i class="fa-solid fa-images"></i> ${t('Product Images ({n})', { n: images.length })}</div>
+        <div class="inv-images-grid">${images.map((img) => `<div class="inv-img-card"><img src="${esc(img.url || img.image_url || img)}" alt="${esc(t('Product image'))}" loading="lazy"></div>`).join('')}</div></div>`
+    : `<div class="inv-pane-empty"><i class="fa-regular fa-image"></i><p>${t('No images uploaded')}</p></div>`;
 
   // ── Variants tab ──
   const variants = p.variants || p.product_variants || [];
   $('#inv-pane-variants').innerHTML = variants.length
-    ? `<div class="inv-section"><div class="inv-section-title"><i class="fa-solid fa-layer-group"></i> Variants (${variants.length})</div>
-        <table class="inv-detail-table inv-variants-table"><thead><tr><th class="inv-dt-label">Variant</th><th class="inv-dt-val">SKU</th><th class="inv-dt-val">Price</th><th class="inv-dt-val">Stock</th><th class="inv-dt-val">Status</th></tr></thead>
-        <tbody>${variants.map((v) => `<tr><td class="inv-dt-label">${esc(v.name || v.variant_name || '—')}</td><td class="inv-dt-val">${esc(v.sku || '—')}</td><td class="inv-dt-val">${v.price != null ? money(v.price) : '—'}</td><td class="inv-dt-val">${v.stock_quantity ?? v.stock ?? '—'}</td><td class="inv-dt-val"><span class="inv-badge ${v.is_active !== false ? 'inv-badge-green' : 'inv-badge-gray'}">${v.is_active !== false ? 'Active' : 'Inactive'}</span></td></tr>`).join('')}</tbody></table></div>`
-    : '<div class="inv-pane-empty"><i class="fa-solid fa-layer-group"></i><p>No variants for this product</p></div>';
+    ? `<div class="inv-section"><div class="inv-section-title"><i class="fa-solid fa-layer-group"></i> ${t('Variants ({n})', { n: variants.length })}</div>
+        <table class="inv-detail-table inv-variants-table"><thead><tr><th class="inv-dt-label">${t('Variant')}</th><th class="inv-dt-val">${t('SKU')}</th><th class="inv-dt-val">${t('Price')}</th><th class="inv-dt-val">${t('Stock')}</th><th class="inv-dt-val">${t('Status')}</th></tr></thead>
+        <tbody>${variants.map((v) => `<tr><td class="inv-dt-label">${esc(v.name || v.variant_name || '—')}</td><td class="inv-dt-val">${esc(v.sku || '—')}</td><td class="inv-dt-val">${v.price != null ? money(v.price) : '—'}</td><td class="inv-dt-val">${v.stock_quantity ?? v.stock ?? '—'}</td><td class="inv-dt-val"><span class="inv-badge ${v.is_active !== false ? 'inv-badge-green' : 'inv-badge-gray'}">${v.is_active !== false ? t('Active') : t('Inactive')}</span></td></tr>`).join('')}</tbody></table></div>`
+    : `<div class="inv-pane-empty"><i class="fa-solid fa-layer-group"></i><p>${t('No variants for this product')}</p></div>`;
 
   // ── Delivery tab ──
   const deliveryMethods = Array.isArray(p.delivery_methods) ? p.delivery_methods : [];
   const deliveryTabBtn = $('#inv-tab-delivery');
   deliveryTabBtn.style.display = deliveryMethods.length ? '' : 'none';
   $('#inv-pane-delivery').innerHTML = deliveryMethods.length
-    ? `<div class="inv-section"><div class="inv-section-title"><i class="fa-solid fa-truck"></i> Delivery Partners (${deliveryMethods.length})</div>
+    ? `<div class="inv-section"><div class="inv-section-title"><i class="fa-solid fa-truck"></i> ${t('Delivery Partners ({n})', { n: deliveryMethods.length })}</div>
         <div class="inv-delivery-list">${deliveryMethods.map((m) => {
           const meta = _DELIVERY_PARTNERS_META[m.key] || { name: m.key, icon: 'fa-truck' };
           return `<div class="inv-delivery-row"><div class="inv-delivery-row-icon"><i class="fa-solid ${meta.icon}"></i></div><div class="inv-delivery-row-name">${esc(meta.name)}</div><div class="inv-delivery-row-price">${m.price != null ? money(m.price) : '—'}</div></div>`;
         }).join('')}</div></div>`
-    : '<div class="inv-pane-empty"><i class="fa-solid fa-truck"></i><p>Courier delivery is not enabled for this product</p></div>';
+    : `<div class="inv-pane-empty"><i class="fa-solid fa-truck"></i><p>${t('Courier delivery is not enabled for this product')}</p></div>`;
 
   // ── Rental tab ──
   const rentalTabBtn = $('#inv-tab-rental');
@@ -1816,16 +1808,16 @@ function renderProductDetail(p, stockHistory = []) {
     const lateFeeMul = p.rental_late_fee_multiplier != null ? parseFloat(p.rental_late_fee_multiplier) : null;
     let lateFeeVal = '<span class="inv-detail-none">—</span>';
     if (lateFeeMul != null) {
-      lateFeeVal = `${lateFeeMul}× daily rate`;
-      if (dailyRate != null) lateFeeVal += ` <span style="color:var(--text-muted);font-size:12px">(${(dailyRate * lateFeeMul).toFixed(2)} per late day)</span>`;
+      lateFeeVal = t('{n}× daily rate', { n: lateFeeMul });
+      if (dailyRate != null) lateFeeVal += ` <span style="color:var(--text-muted);font-size:12px">${t('({amount} per late day)', { amount: (dailyRate * lateFeeMul).toFixed(2) })}</span>`;
     }
     const rentalRows = [
-      ['Daily Rate', dailyRate != null ? money(dailyRate) : '<span class="inv-detail-none">—</span>'],
-      ['Max Rental Days', maxDays != null ? maxDays : '<span class="inv-detail-none">—</span>'],
-      ['Late Fee', lateFeeVal],
-      ['Cleaning Required', p.rental_needs_cleaning ? '<span class="inv-badge inv-badge-amber"><i class="fa-solid fa-broom"></i> Required before next rental</span>' : '<span class="inv-badge inv-badge-green">Not required</span>'],
+      [t('Daily Rate'), dailyRate != null ? money(dailyRate) : '<span class="inv-detail-none">—</span>'],
+      [t('Max Rental Days'), maxDays != null ? maxDays : '<span class="inv-detail-none">—</span>'],
+      [t('Late Fee'), lateFeeVal],
+      [t('Cleaning Required'), p.rental_needs_cleaning ? `<span class="inv-badge inv-badge-amber"><i class="fa-solid fa-broom"></i> ${t('Required before next rental')}</span>` : `<span class="inv-badge inv-badge-green">${t('Not required')}</span>`],
     ];
-    $('#inv-pane-rental').innerHTML = `<div class="inv-section"><div class="inv-section-title"><i class="fa-solid fa-key"></i> Rental Terms</div>
+    $('#inv-pane-rental').innerHTML = `<div class="inv-section"><div class="inv-section-title"><i class="fa-solid fa-key"></i> ${t('Rental Terms')}</div>
       <table class="inv-detail-table">${rentalRows.map(([l, v]) => `<tr><td class="inv-dt-label">${l}</td><td class="inv-dt-val">${v}</td></tr>`).join('')}</table></div>`;
   } else {
     rentalTabBtn.style.display = 'none';
@@ -1909,7 +1901,7 @@ async function loadAndRenderChart(productId, period) {
   if (res.status !== 200) { container.innerHTML = ''; return; }
   const { labels = [], series = [], total = 0, subtitle = '' } = res.body?.data || {};
   container.innerHTML = `
-    <div class="inv-chart-summary"><span class="inv-chart-total"><strong>${total % 1 === 0 ? total : total.toFixed(3)}</strong> units in this period</span><span>${esc(subtitle)}</span></div>
+    <div class="inv-chart-summary"><span class="inv-chart-total">${t('{n} units in this period', { n: `<strong>${total % 1 === 0 ? total : total.toFixed(3)}</strong>` })}</span><span>${esc(t(subtitle))}</span></div>
     <div class="inv-chart-wrap"><canvas id="inv-sales-canvas"></canvas></div>`;
   requestAnimationFrame(() => drawSalesChart('inv-sales-canvas', labels, series));
 }
@@ -1933,11 +1925,11 @@ $('#inv-back-btn')?.addEventListener('click', closeProductDetail);
 $('#prod-edit-btn')?.addEventListener('click', () => { if (_prodActiveId) _prodOpenModal(_prodActiveId); });
 $('#prod-delete-btn')?.addEventListener('click', async () => {
   if (!_prodActiveId) return;
-  const name = _prodActiveData?.name || 'this product';
-  if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
+  const name = _prodActiveData?.name || t('this product');
+  if (!confirm(t('Delete "{name}"? This cannot be undone.', { name }))) return;
   const res = await API.deleteProduct(_prodActiveId);
-  if (res.status !== 200) { showToast(res.body?.message || 'Could not delete product.', 'error'); return; }
-  showToast('Product deleted.', 'success');
+  if (res.status !== 200) { showToast(t(res.body?.message || 'Could not delete product.'), 'error'); return; }
+  showToast(t('Product deleted.'), 'success');
   closeProductDetail();
   loadProducts();
 });

@@ -4,7 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const http = require('http');
 const https = require('https');
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, dialog } = require('electron');
 const { API_BASE_URL } = require('./config');
 
 // ── Local config (token + selected business) ───────────────────────────────
@@ -36,6 +36,32 @@ let config = loadConfig();
 let authWindow = null;
 let mainWindow = null;
 
+// ── Menu bar ────────────────────────────────────────────────────────────
+// No application menu: on Windows/Linux this removes the menu bar from every
+// window. macOS always shows the system bar, but this drops File/Edit/View/…
+// With no menu, macOS also loses the Cmd+C/V/X/A/Z, Cmd+W/M and Cmd+Q
+// shortcuts (they come from the menu), so restore them by hand — otherwise
+// you can't paste into the login or search fields.
+function attachMacShortcuts(win) {
+  if (process.platform !== 'darwin') return;
+  win.webContents.on('before-input-event', (event, input) => {
+    if (input.type !== 'keyDown' || !input.meta || input.control || input.alt) return;
+    const wc = win.webContents;
+    switch (input.key.toLowerCase()) {
+      case 'c': wc.copy(); break;
+      case 'v': wc.paste(); break;
+      case 'x': wc.cut(); break;
+      case 'a': wc.selectAll(); break;
+      case 'z': if (input.shift) wc.redo(); else wc.undo(); break;
+      case 'w': win.close(); break;
+      case 'm': win.minimize(); break;
+      case 'q': app.quit(); break;
+      default: return;
+    }
+    event.preventDefault();
+  });
+}
+
 // ── Windows ─────────────────────────────────────────────────────────────
 function createAuthWindow() {
   if (mainWindow) { mainWindow.close(); mainWindow = null; }
@@ -55,6 +81,7 @@ function createAuthWindow() {
     show: false,
   });
 
+  attachMacShortcuts(authWindow);
   authWindow.loadFile(path.join(__dirname, 'renderer', 'auth.html'));
   authWindow.once('ready-to-show', () => authWindow.show());
   authWindow.on('closed', () => { authWindow = null; });
@@ -79,12 +106,15 @@ function createMainWindow() {
     show: false,
   });
 
+  attachMacShortcuts(mainWindow);
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'dashboard.html'));
   mainWindow.once('ready-to-show', () => mainWindow.show());
   mainWindow.on('closed', () => { mainWindow = null; });
 }
 
 app.whenReady().then(() => {
+  Menu.setApplicationMenu(null);
+
   const alreadyLoggedIn = !!(config.token && config.business_id);
   if (alreadyLoggedIn) createMainWindow();
   else createAuthWindow();
