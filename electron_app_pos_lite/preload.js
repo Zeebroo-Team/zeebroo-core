@@ -23,6 +23,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Binary download (e.g. a billing receipt PDF) -> native "Save As" dialog
   downloadFile: (path, suggestedFilename) => ipcRenderer.invoke('api-download-file', { path, suggestedFilename }),
 
+  // Sale receipt / invoice: open the OS print dialog on a built HTML document,
+  // or render it to a PDF and let the user save it (js/pos.js sale-completed modal).
+  printHtml: (html) => ipcRenderer.invoke('print-html', { html }),
+  savePdf: (html, suggestedFilename) => ipcRenderer.invoke('save-html-as-pdf', { html, suggestedFilename }),
+
   // File upload (product images) + native "choose file" dialog
   apiUpload: (apiPath, filePath) => ipcRenderer.invoke('api-upload', { path: apiPath, filePath }),
   showOpenDialog: (options) => ipcRenderer.invoke('show-open-dialog', options),

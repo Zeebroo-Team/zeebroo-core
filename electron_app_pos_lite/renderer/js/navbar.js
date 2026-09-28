@@ -1242,9 +1242,59 @@
     };
   }
 
+  // Normalizes the real-invoice content a template needs (invoice number, dates,
+  // bill-to, item rows, totals, notes, footer), falling back to this file's
+  // original hard-coded demo content field-by-field. `!= null` (not `||`) is used
+  // throughout so a real caller passing an explicit '' (e.g. "no notes on this
+  // sale") suppresses the field instead of falling back to demo filler text —
+  // only an omitted (undefined) field pulls in the demo default. This keeps the
+  // Invoice Setup wizard's own live preview (which never sets these ctx fields)
+  // pixel-identical to before, while POS Lite's real sale-completion invoice
+  // (js/pos.js) supplies every field explicitly.
+  function iswDocData(ctx, c, opts = {}) {
+    const nz = (v, def) => (v != null ? v : def);
+    const idx = (n) => (opts.italicIndex ? `<i>${n}</i>` : `${n}`);
+
+    const defaultItems = [
+      { name: 'Brand Identity Design', desc: 'Logo, colour palette, typography kit', qty: '1', price: `1,800.00${c}`, total: `1,800.00${c}` },
+      { name: 'UI / UX Design', desc: '10 screens, mobile-first, Figma source files', qty: '1', price: `3,500.00${c}`, total: `3,500.00${c}` },
+      { name: 'Frontend Development', desc: 'React, Next.js, Tailwind CSS — 40 hrs', qty: '40', price: `85.00${c}`, total: `3,400.00${c}` },
+      { name: 'SEO Optimisation', desc: 'On-page audit + 3-month strategy', qty: '1', price: `650.00${c}`, total: `650.00${c}` },
+      { name: 'Monthly Hosting &amp; Support', desc: 'VPS, monitoring, daily backups', qty: '3', price: `120.00${c}`, total: `360.00${c}` },
+    ];
+    const items = ctx.items || defaultItems;
+    const itemRows = items.map((it, i) => `<tr><td class="n">${idx(i + 1)}</td><td><b>${it.name}</b>${it.desc ? `<span class="ds">${it.desc}</span>` : ''}</td><td class="r">${it.qty}</td><td class="r">${it.price}</td><td class="r b">${it.total}</td></tr>`).join('');
+
+    const defaultTotalsLines = [
+      { label: 'Subtotal', value: `9,710.00${c}` },
+      { label: 'Discount (5%)', value: `−485.50${c}`, color: '#ef4444' },
+      { label: 'Tax (15%)', value: `+1,383.67${c}` },
+    ];
+    const totalsLines = ctx.totalsLines || defaultTotalsLines;
+    const totalsRows = totalsLines.map((l) => `<div class="tr"><span>${l.label}</span><span${l.color ? ` style="color:${l.color}"` : ''}>${l.value}</span></div>`).join('');
+
+    return {
+      invNo: nz(ctx.invoiceNumber, 'INV-0024'),
+      issueDate: nz(ctx.issueDate, '01 Aug 2026'),
+      dueDate: nz(ctx.dueDate, '15 Aug 2026'),
+      statusLabel: nz(ctx.statusLabel, 'Paid'),
+      statusColor: nz(ctx.statusColor, nz(opts.statusColorDefault, '#15803d')),
+      billToName: nz(ctx.billToName, 'Acme Corporation'),
+      billToLines: nz(ctx.billToLines, 'Jennifer Walters<br>45 Commerce Drive, Suite 3, New York NY 10001'),
+      bizContact: nz(ctx.bizContact, 'invoices@example.com · +1 555 000-0001'),
+      itemRows,
+      totalsRows,
+      grandLabel: nz(ctx.grandLabel, nz(opts.grandLabelDefault, 'Total Due')),
+      grandValue: nz(ctx.grandValue, `10,608.17${c}`),
+      notesHtml: nz(ctx.notesHtml, nz(opts.notesDefault, 'Payment due within 14 days.<br>Bank transfer only — details on file.<br>Thank you for your business!')),
+      footerRight: nz(ctx.footerRight, ''),
+    };
+  }
+
   // ── Template 1: Classic ── traditional bordered table ────────────────────
   function iTplClassic(ctx) {
     const a = ctx.a, mg = ctx.mg, { biz, addr, c } = iswDummy(ctx);
+    const d = iswDocData(ctx, c);
     return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{font-family:Inter,Arial,sans-serif;font-size:12px;color:#0f172a;background:#fff}
@@ -1277,43 +1327,36 @@ td.n{color:#94a3b8;text-align:center;width:26px}td.r{text-align:right}td.b{font-
 .ft{margin-top:22px;padding-top:12px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:10px;color:#94a3b8}
 ${ctx.hdrCss}</style></head><body><div class="pg">
 <div class="top">
-  <div><div class="bn">${biz}</div><div class="bi">${addr}<br>invoices@example.com · +1 555 000-0001</div></div>
-  <div><div class="it">Invoice</div><div class="in">INV-0024 · 01 Aug 2026</div></div>
+  <div><div class="bn">${biz}</div><div class="bi">${addr}${d.bizContact ? '<br>' + d.bizContact : ''}</div></div>
+  <div><div class="it">Invoice</div><div class="in">${d.invNo} · ${d.issueDate}</div></div>
 </div>
 <div class="meta">
-  <div><div class="btl">Billed To</div><div class="btn">Acme Corporation</div><div class="bti">Jennifer Walters<br>45 Commerce Drive, Suite 3, New York NY 10001</div></div>
+  <div><div class="btl">Billed To</div><div class="btn">${d.billToName}</div><div class="bti">${d.billToLines}</div></div>
   <div class="dts">
-    <div class="dr"><span class="dk">Issue Date</span><span class="dv">01 Aug 2026</span></div>
-    <div class="dr"><span class="dk">Due Date</span><span class="dv">15 Aug 2026</span></div>
-    <div class="dr"><span class="dk">Status</span><span class="dv" style="color:#15803d">Paid</span></div>
+    <div class="dr"><span class="dk">Issue Date</span><span class="dv">${d.issueDate}</span></div>
+    <div class="dr"><span class="dk">Due Date</span><span class="dv">${d.dueDate}</span></div>
+    <div class="dr"><span class="dk">Status</span><span class="dv" style="color:${d.statusColor}">${d.statusLabel}</span></div>
   </div>
 </div>
 <table>
   <thead><tr><th style="width:26px;text-align:center">#</th><th>Description</th><th class="r" style="width:50px">Qty</th><th class="r" style="width:100px">Unit Price</th><th class="r" style="width:100px">Total</th></tr></thead>
-  <tbody>
-    <tr><td class="n">1</td><td><b>Brand Identity Design</b><span class="ds">Logo, colour palette, typography kit</span></td><td class="r">1</td><td class="r">1,800.00${c}</td><td class="r b">1,800.00${c}</td></tr>
-    <tr><td class="n">2</td><td><b>UI / UX Design</b><span class="ds">10 screens, mobile-first, Figma source files</span></td><td class="r">1</td><td class="r">3,500.00${c}</td><td class="r b">3,500.00${c}</td></tr>
-    <tr><td class="n">3</td><td><b>Frontend Development</b><span class="ds">React, Next.js, Tailwind CSS — 40 hrs</span></td><td class="r">40</td><td class="r">85.00${c}</td><td class="r b">3,400.00${c}</td></tr>
-    <tr><td class="n">4</td><td><b>SEO Optimisation</b><span class="ds">On-page audit + 3-month strategy</span></td><td class="r">1</td><td class="r">650.00${c}</td><td class="r b">650.00${c}</td></tr>
-    <tr><td class="n">5</td><td><b>Monthly Hosting &amp; Support</b><span class="ds">VPS, monitoring, daily backups</span></td><td class="r">3</td><td class="r">120.00${c}</td><td class="r b">360.00${c}</td></tr>
-  </tbody>
+  <tbody>${d.itemRows}</tbody>
 </table>
 <div class="bot">
-  <div class="nb"><div class="nl">Notes &amp; Terms</div><div class="nt">Payment due within 14 days.<br>Bank transfer only — details on file.<br>Thank you for your business!</div></div>
+  <div class="nb"><div class="nl">Notes &amp; Terms</div><div class="nt">${d.notesHtml}</div></div>
   <div>
-    <div class="tr"><span>Subtotal</span><span>9,710.00${c}</span></div>
-    <div class="tr"><span>Discount (5%)</span><span style="color:#ef4444">−485.50${c}</span></div>
-    <div class="tr"><span>Tax (15%)</span><span>+1,383.67${c}</span></div>
-    <div class="tr gr"><span>Total Due</span><span>10,608.17${c}</span></div>
+    ${d.totalsRows}
+    <div class="tr gr"><span>${d.grandLabel}</span><span>${d.grandValue}</span></div>
   </div>
 </div>
-<div class="ft"><span>INV-0024 · ${biz}</span><span>${biz}</span></div>
+<div class="ft"><span>${d.invNo} · ${biz}</span><span>${d.footerRight || biz}</span></div>
 </div></body></html>`;
   }
 
   // ── Template 2: Bold Banner ── full-width colour header ──────────────────
   function iTplBold(ctx) {
     const a = ctx.a, mg = ctx.mg, { biz, addr, c } = iswDummy(ctx);
+    const d = iswDocData(ctx, c);
     return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{font-family:Inter,Arial,sans-serif;font-size:12px;color:#0f172a;background:#fff}
@@ -1346,31 +1389,23 @@ td.n{color:#94a3b8;text-align:center;width:26px}td.r{text-align:right}td.b{font-
 .gr span{color:#fff!important}
 ${ctx.hdrCss}</style></head><body><div class="pg">
 <div class="banner">
-  <div><div class="b-biz">${biz}</div><div class="b-addr">${addr}<br>invoices@example.com</div></div>
-  <div><div class="b-lbl">Invoice</div><div class="b-num">INV-0024</div></div>
+  <div><div class="b-biz">${biz}</div><div class="b-addr">${addr}${d.bizContact ? '<br>' + d.bizContact : ''}</div></div>
+  <div><div class="b-lbl">Invoice</div><div class="b-num">${d.invNo}</div></div>
 </div>
 <div class="body">
   <div class="cards">
-    <div class="card"><div class="cl">Billed To</div><div class="cn">Acme Corporation</div><div class="ci">Jennifer Walters<br>45 Commerce Drive, Suite 3, New York NY 10001</div></div>
-    <div class="card"><div class="cl">Invoice Details</div><div class="ci" style="line-height:1.9"><b>Issue Date</b> &nbsp; 01 Aug 2026<br><b>Due Date</b> &nbsp;&nbsp; 15 Aug 2026<br><b>Status</b> &nbsp;&nbsp;&nbsp;&nbsp; <span style="color:#15803d;font-weight:700">Paid</span></div></div>
+    <div class="card"><div class="cl">Billed To</div><div class="cn">${d.billToName}</div><div class="ci">${d.billToLines}</div></div>
+    <div class="card"><div class="cl">Invoice Details</div><div class="ci" style="line-height:1.9"><b>Issue Date</b> &nbsp; ${d.issueDate}<br><b>Due Date</b> &nbsp;&nbsp; ${d.dueDate}<br><b>Status</b> &nbsp;&nbsp;&nbsp;&nbsp; <span style="color:${d.statusColor};font-weight:700">${d.statusLabel}</span></div></div>
   </div>
   <table>
     <thead><tr><th style="width:26px;text-align:center">#</th><th>Description</th><th class="r" style="width:50px">Qty</th><th class="r" style="width:100px">Unit Price</th><th class="r" style="width:100px">Total</th></tr></thead>
-    <tbody>
-      <tr><td class="n">1</td><td><b>Brand Identity Design</b><span class="ds">Logo, colour palette, typography kit</span></td><td class="r">1</td><td class="r">1,800.00${c}</td><td class="r b">1,800.00${c}</td></tr>
-      <tr><td class="n">2</td><td><b>UI / UX Design</b><span class="ds">10 screens, mobile-first, Figma files</span></td><td class="r">1</td><td class="r">3,500.00${c}</td><td class="r b">3,500.00${c}</td></tr>
-      <tr><td class="n">3</td><td><b>Frontend Development</b><span class="ds">React, Next.js, Tailwind CSS — 40 hrs</span></td><td class="r">40</td><td class="r">85.00${c}</td><td class="r b">3,400.00${c}</td></tr>
-      <tr><td class="n">4</td><td><b>SEO Optimisation</b><span class="ds">On-page audit + 3-month strategy plan</span></td><td class="r">1</td><td class="r">650.00${c}</td><td class="r b">650.00${c}</td></tr>
-      <tr><td class="n">5</td><td><b>Monthly Hosting &amp; Support</b><span class="ds">VPS, monitoring, daily backups</span></td><td class="r">3</td><td class="r">120.00${c}</td><td class="r b">360.00${c}</td></tr>
-    </tbody>
+    <tbody>${d.itemRows}</tbody>
   </table>
   <div class="bot">
-    <div class="nb"><div class="nl">Notes &amp; Terms</div><div class="nt">Payment due within 14 days.<br>Bank transfer only — details on file.<br>Thank you for your business!</div></div>
+    <div class="nb"><div class="nl">Notes &amp; Terms</div><div class="nt">${d.notesHtml}</div></div>
     <div class="tc">
-      <div class="tr"><span>Subtotal</span><span>9,710.00${c}</span></div>
-      <div class="tr"><span>Discount (5%)</span><span style="color:#ef4444">−485.50${c}</span></div>
-      <div class="tr"><span>Tax (15%)</span><span>+1,383.67${c}</span></div>
-      <div class="tr gr"><span>Total Due</span><span>10,608.17${c}</span></div>
+      ${d.totalsRows}
+      <div class="tr gr"><span>${d.grandLabel}</span><span>${d.grandValue}</span></div>
     </div>
   </div>
 </div>
@@ -1380,6 +1415,11 @@ ${ctx.hdrCss}</style></head><body><div class="pg">
   // ── Template 3: Minimal ── typography-only, serif, no fills ──────────────
   function iTplMinimal(ctx) {
     const a = ctx.a, mg = ctx.mg, { biz, addr, c } = iswDummy(ctx);
+    const d = iswDocData(ctx, c, {
+      italicIndex: true,
+      notesDefault: 'Payment due within 14 days of invoice date.<br>Bank transfer only — account details on file.<br>Late payments may incur a 1.5% monthly fee.',
+      grandLabelDefault: 'Total',
+    });
     return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{font-family:Georgia,'Times New Roman',serif;font-size:12px;color:#1a1a1a;background:#fff}
@@ -1411,45 +1451,38 @@ td.n{color:#d1d5db;text-align:center;width:26px;font-style:italic}td.r{text-alig
 .ft{margin-top:28px;padding-top:12px;border-top:1px solid #e5e7eb;font-size:9px;color:#9ca3af;text-align:center;letter-spacing:.06em;font-family:Arial,sans-serif;text-transform:uppercase}
 ${ctx.hdrCss}</style></head><body><div class="pg">
 <div class="top">
-  <div><div class="bn">${biz}</div><div class="bi">${addr}<br>invoices@example.com · +1 555 000-0001</div></div>
-  <div><div class="inv-word">INVOICE</div><div class="inv-ref">INV-0024 / 01 Aug 2026</div></div>
+  <div><div class="bn">${biz}</div><div class="bi">${addr}${d.bizContact ? '<br>' + d.bizContact : ''}</div></div>
+  <div><div class="inv-word">INVOICE</div><div class="inv-ref">${d.invNo} / ${d.issueDate}</div></div>
 </div>
 <div class="rule"></div>
 <div class="meta">
-  <div><div class="btl">Billed To</div><div class="btn">Acme Corporation</div><div class="bti">Jennifer Walters<br>45 Commerce Drive, Suite 3<br>New York, NY 10001</div></div>
+  <div><div class="btl">Billed To</div><div class="btn">${d.billToName}</div><div class="bti">${d.billToLines}</div></div>
   <div class="dts">
-    <div class="dr"><span class="dk">Issued</span><span class="dv">01 Aug 2026</span></div>
-    <div class="dr"><span class="dk">Due</span><span class="dv">15 Aug 2026</span></div>
-    <div class="dr"><span class="dk">Status</span><span class="dv">PAID</span></div>
+    <div class="dr"><span class="dk">Issued</span><span class="dv">${d.issueDate}</span></div>
+    <div class="dr"><span class="dk">Due</span><span class="dv">${d.dueDate}</span></div>
+    <div class="dr"><span class="dk">Status</span><span class="dv">${d.statusLabel}</span></div>
   </div>
 </div>
 <table>
   <thead><tr><th style="width:26px;text-align:center">#</th><th>Description</th><th class="r" style="width:50px">Qty</th><th class="r" style="width:100px">Rate</th><th class="r" style="width:100px">Amount</th></tr></thead>
-  <tbody>
-    <tr><td class="n"><i>1</i></td><td><b>Brand Identity Design</b><span class="ds">Logo, colour palette, typography kit</span></td><td class="r">1</td><td class="r">1,800.00${c}</td><td class="r b">1,800.00${c}</td></tr>
-    <tr><td class="n"><i>2</i></td><td><b>UI / UX Design</b><span class="ds">10 screens, mobile-first, Figma source files</span></td><td class="r">1</td><td class="r">3,500.00${c}</td><td class="r b">3,500.00${c}</td></tr>
-    <tr><td class="n"><i>3</i></td><td><b>Frontend Development</b><span class="ds">React, Next.js, Tailwind CSS — 40 hrs</span></td><td class="r">40</td><td class="r">85.00${c}</td><td class="r b">3,400.00${c}</td></tr>
-    <tr><td class="n"><i>4</i></td><td><b>SEO Optimisation</b><span class="ds">On-page audit + 3-month strategy plan</span></td><td class="r">1</td><td class="r">650.00${c}</td><td class="r b">650.00${c}</td></tr>
-    <tr><td class="n"><i>5</i></td><td><b>Monthly Hosting &amp; Support</b><span class="ds">VPS, monitoring, daily backups</span></td><td class="r">3</td><td class="r">120.00${c}</td><td class="r b">360.00${c}</td></tr>
-  </tbody>
+  <tbody>${d.itemRows}</tbody>
 </table>
 <div class="bot">
-  <div class="nt">Payment due within 14 days of invoice date.<br>Bank transfer only — account details on file.<br>Late payments may incur a 1.5% monthly fee.</div>
+  <div class="nt">${d.notesHtml}</div>
   <div>
-    <div class="tr"><span>Subtotal</span><span>9,710.00${c}</span></div>
-    <div class="tr"><span>Discount (5%)</span><span>−485.50${c}</span></div>
-    <div class="tr"><span>Tax (15%)</span><span>+1,383.67${c}</span></div>
+    ${d.totalsRows}
     <div class="rule2"></div>
-    <div class="gr"><span>Total</span><span>10,608.17${c}</span></div>
+    <div class="gr"><span>${d.grandLabel}</span><span>${d.grandValue}</span></div>
   </div>
 </div>
-<div class="ft">Invoice INV-0024 &nbsp;·&nbsp; ${biz} &nbsp;·&nbsp; 01 Aug 2026</div>
+<div class="ft">Invoice ${d.invNo} &nbsp;·&nbsp; ${biz} &nbsp;·&nbsp; ${d.issueDate}</div>
 </div></body></html>`;
   }
 
   // ── Template 4: Compact ── card info grid, teal accent chips ─────────────
   function iTplCompact(ctx) {
     const a = ctx.a, mg = ctx.mg, { biz, addr, c } = iswDummy(ctx);
+    const d = iswDocData(ctx, c);
     return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{font-family:Inter,Arial,sans-serif;font-size:12px;color:#0f172a;background:#fff}
@@ -1484,45 +1517,38 @@ td.n{color:#94a3b8;text-align:center;width:26px}td.r{text-align:right}td.b{font-
 ${ctx.hdrCss}</style></head><body><div class="pg">
 <div class="topbar">
   <div><div class="tb-biz">${biz}</div><div class="tb-addr">${addr}</div></div>
-  <div><div class="tb-il">Invoice</div><div class="tb-in">INV-0024</div></div>
+  <div><div class="tb-il">Invoice</div><div class="tb-in">${d.invNo}</div></div>
 </div>
 <div class="grid4">
   <div class="bt-cell" style="grid-column:span 2">
     <div class="gcl">Billed To</div>
-    <div style="font-size:14px;font-weight:800;margin-bottom:3px">Acme Corporation</div>
-    <div style="font-size:11px;color:#64748b">Jennifer Walters · 45 Commerce Drive, New York NY 10001</div>
+    <div style="font-size:14px;font-weight:800;margin-bottom:3px">${d.billToName}</div>
+    <div style="font-size:11px;color:#64748b">${d.billToLines}</div>
   </div>
-  <div class="gc"><div class="gcl">Issue Date</div><div class="gcv">01 Aug 2026</div></div>
-  <div class="gc"><div class="gcl">Due Date</div><div class="gcv">15 Aug 2026</div></div>
-  <div class="gc"><div class="gcl">Status</div><div class="gcv" style="color:#15803d">Paid ✓</div></div>
-  <div class="gc"><div class="gcl">Amount</div><div class="gcv" style="color:${a}">10,608.17${c}</div></div>
+  <div class="gc"><div class="gcl">Issue Date</div><div class="gcv">${d.issueDate}</div></div>
+  <div class="gc"><div class="gcl">Due Date</div><div class="gcv">${d.dueDate}</div></div>
+  <div class="gc"><div class="gcl">Status</div><div class="gcv" style="color:${d.statusColor}">${d.statusLabel} ✓</div></div>
+  <div class="gc"><div class="gcl">Amount</div><div class="gcv" style="color:${a}">${d.grandValue}</div></div>
 </div>
 <table>
   <thead><tr><th style="width:26px;text-align:center">#</th><th>Description</th><th class="r" style="width:50px">Qty</th><th class="r" style="width:100px">Unit Price</th><th class="r" style="width:100px">Total</th></tr></thead>
-  <tbody>
-    <tr><td class="n">1</td><td><b>Brand Identity Design</b><span class="ds">Logo, colour palette, typography kit</span></td><td class="r">1</td><td class="r">1,800.00${c}</td><td class="r b">1,800.00${c}</td></tr>
-    <tr><td class="n">2</td><td><b>UI / UX Design</b><span class="ds">10 screens, mobile-first, Figma source files</span></td><td class="r">1</td><td class="r">3,500.00${c}</td><td class="r b">3,500.00${c}</td></tr>
-    <tr><td class="n">3</td><td><b>Frontend Development</b><span class="ds">React, Next.js, Tailwind CSS — 40 hrs</span></td><td class="r">40</td><td class="r">85.00${c}</td><td class="r b">3,400.00${c}</td></tr>
-    <tr><td class="n">4</td><td><b>SEO Optimisation</b><span class="ds">On-page audit + 3-month strategy plan</span></td><td class="r">1</td><td class="r">650.00${c}</td><td class="r b">650.00${c}</td></tr>
-    <tr><td class="n">5</td><td><b>Monthly Hosting &amp; Support</b><span class="ds">VPS, monitoring, daily backups</span></td><td class="r">3</td><td class="r">120.00${c}</td><td class="r b">360.00${c}</td></tr>
-  </tbody>
+  <tbody>${d.itemRows}</tbody>
 </table>
 <div class="bot">
-  <div class="nb"><div class="nl">Notes &amp; Terms</div><div class="nt">Payment due within 14 days.<br>Bank transfer only — details on file.<br>Thank you for your business!</div></div>
+  <div class="nb"><div class="nl">Notes &amp; Terms</div><div class="nt">${d.notesHtml}</div></div>
   <div class="tc">
-    <div class="tr"><span>Subtotal</span><span>9,710.00${c}</span></div>
-    <div class="tr"><span>Discount (5%)</span><span style="color:#ef4444">−485.50${c}</span></div>
-    <div class="tr"><span>Tax (15%)</span><span>+1,383.67${c}</span></div>
-    <div class="tr gr"><span>Total Due</span><span>10,608.17${c}</span></div>
+    ${d.totalsRows}
+    <div class="tr gr"><span>${d.grandLabel}</span><span>${d.grandValue}</span></div>
   </div>
 </div>
-<div class="ft"><span>INV-0024 · ${biz}</span><span>01 Aug 2026</span></div>
+<div class="ft"><span>${d.invNo} · ${biz}</span><span>${d.issueDate}</span></div>
 </div></body></html>`;
   }
 
   // ── Template 5: Executive ── dark navy header, gold accent, premium ──────
   function iTplExecutive(ctx) {
     const a = ctx.a, dk = '#0f172a', mg = ctx.mg, { biz, addr, c } = iswDummy(ctx);
+    const d = iswDocData(ctx, c, { statusColorDefault: '#4ade80' });
     return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{font-family:Inter,Arial,sans-serif;font-size:12px;color:#0f172a;background:#fff}
@@ -1562,43 +1588,48 @@ td.n{color:#94a3b8;text-align:center;width:26px}td.r{text-align:right}td.b{font-
 ${ctx.hdrCss}</style></head><body><div class="pg">
 <div class="hdr">
   <div class="hdr-top">
-    <div><div class="biz-n">${biz}</div><div class="biz-i">${addr}<br>invoices@example.com · +1 555 000-0001</div></div>
-    <div><div class="il">Invoice</div><div class="in">INV-0024</div></div>
+    <div><div class="biz-n">${biz}</div><div class="biz-i">${addr}${d.bizContact ? '<br>' + d.bizContact : ''}</div></div>
+    <div><div class="il">Invoice</div><div class="in">${d.invNo}</div></div>
   </div>
   <div class="hdr-rule"></div>
   <div class="hdr-meta">
-    <div class="hm"><div class="hml">Issue Date</div><div class="hmv">01 Aug 2026</div></div>
-    <div class="hm"><div class="hml">Due Date</div><div class="hmv">15 Aug 2026</div></div>
-    <div class="hm"><div class="hml">Status</div><div class="hmv" style="color:#4ade80">Paid</div></div>
+    <div class="hm"><div class="hml">Issue Date</div><div class="hmv">${d.issueDate}</div></div>
+    <div class="hm"><div class="hml">Due Date</div><div class="hmv">${d.dueDate}</div></div>
+    <div class="hm"><div class="hml">Status</div><div class="hmv" style="color:${d.statusColor}">${d.statusLabel}</div></div>
   </div>
 </div>
 <div class="body">
-  <div class="bt"><div class="btl">Billed To</div><div class="btn">Acme Corporation</div><div class="bti">Jennifer Walters · 45 Commerce Drive, Suite 3 · New York, NY 10001 · jennifer@acme.com</div></div>
+  <div class="bt"><div class="btl">Billed To</div><div class="btn">${d.billToName}</div><div class="bti">${d.billToLines}</div></div>
   <table>
     <thead><tr><th style="width:26px;text-align:center">#</th><th>Description</th><th class="r" style="width:50px">Qty</th><th class="r" style="width:100px">Unit Price</th><th class="r" style="width:100px">Total</th></tr></thead>
-    <tbody>
-      <tr><td class="n">1</td><td><b>Brand Identity Design</b><span class="ds">Logo, colour palette, typography kit</span></td><td class="r">1</td><td class="r">1,800.00${c}</td><td class="r b">1,800.00${c}</td></tr>
-      <tr><td class="n">2</td><td><b>UI / UX Design</b><span class="ds">10 screens, mobile-first, Figma source files</span></td><td class="r">1</td><td class="r">3,500.00${c}</td><td class="r b">3,500.00${c}</td></tr>
-      <tr><td class="n">3</td><td><b>Frontend Development</b><span class="ds">React, Next.js, Tailwind CSS — 40 hrs</span></td><td class="r">40</td><td class="r">85.00${c}</td><td class="r b">3,400.00${c}</td></tr>
-      <tr><td class="n">4</td><td><b>SEO Optimisation</b><span class="ds">On-page audit + 3-month strategy plan</span></td><td class="r">1</td><td class="r">650.00${c}</td><td class="r b">650.00${c}</td></tr>
-      <tr><td class="n">5</td><td><b>Monthly Hosting &amp; Support</b><span class="ds">VPS, monitoring, daily backups</span></td><td class="r">3</td><td class="r">120.00${c}</td><td class="r b">360.00${c}</td></tr>
-    </tbody>
+    <tbody>${d.itemRows}</tbody>
   </table>
   <div class="bot">
-    <div class="nb"><div class="nl">Notes &amp; Terms</div><div class="nt">Payment due within 14 days.<br>Bank transfer only — details on file.<br>Thank you for your business!</div></div>
+    <div class="nb"><div class="nl">Notes &amp; Terms</div><div class="nt">${d.notesHtml}</div></div>
     <div>
-      <div class="tr"><span>Subtotal</span><span>9,710.00${c}</span></div>
-      <div class="tr"><span>Discount (5%)</span><span style="color:#ef4444">−485.50${c}</span></div>
-      <div class="tr"><span>Tax (15%)</span><span>+1,383.67${c}</span></div>
-      <div class="tr gr"><span>Total Due</span><span>10,608.17${c}</span></div>
+      ${d.totalsRows}
+      <div class="tr gr"><span>${d.grandLabel}</span><span>${d.grandValue}</span></div>
     </div>
   </div>
-  <div class="ft"><span>INV-0024 · ${biz}</span><span>${biz}</span></div>
+  <div class="ft"><span>${d.invNo} · ${biz}</span><span>${d.footerRight || biz}</span></div>
 </div>
 </div></body></html>`;
   }
 
   const INV_TPL_BUILDERS = { classic: iTplClassic, bold: iTplBold, minimal: iTplMinimal, compact: iTplCompact, executive: iTplExecutive };
+
+  // Exposes the invoice template engine to js/pos.js (loaded after this file),
+  // so the sale-completed "Invoice" preview/print/download can render with the
+  // same template/accent/paper/margins the business configured here, fed with
+  // the real sale's data instead of this wizard's own hard-coded demo content.
+  window.InvoiceTemplates = {
+    builders: INV_TPL_BUILDERS,
+    templates: INV_TEMPLATES,
+    byId: iswTplById,
+    geom: iswGeom,
+    hdrCss: iswHdrCss,
+    pageAtCss: iswPageAtCss,
+  };
 
   function openInvoiceSetupWindow() {
     if ($('isw-backdrop')) return;

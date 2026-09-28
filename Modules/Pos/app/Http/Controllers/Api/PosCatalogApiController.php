@@ -58,6 +58,12 @@ class PosCatalogApiController extends Controller
         $brandId     = is_numeric($brandId) ? (int) $brandId : null;
         $sort        = in_array($request->query('sort'), ['name_asc', 'name_desc', 'price_asc', 'price_desc', 'stock_asc', 'stock_desc'], true)
             ? $request->query('sort') : 'name_asc';
+        // POS mode-tab filter — mirrors the register page's Rental / Dynamic tabs
+        // (Modules/Pos/app/Http/Controllers/PosController.php) for API-only clients
+        // such as the Electron POS Lite app.
+        $filter      = $request->query('filter');
+        $rentalOnly  = $filter === 'rental';
+        $dynamicOnly = $filter === 'dynamic';
 
         $branchPosSeparate     = (bool) get_settings('business.branch_pos_separate', false, $business);
         $branchProductSeparate = (bool) get_settings('business.branch_product_separate', false, $business);
@@ -76,6 +82,10 @@ class PosCatalogApiController extends Controller
             $stockStatus,
             $brandId,
             $sort,
+            recentSales: false,
+            discountOnly: false,
+            rentalOnly: $rentalOnly,
+            dynamicOnly: $dynamicOnly,
         );
 
         $data = $paginated['data'];

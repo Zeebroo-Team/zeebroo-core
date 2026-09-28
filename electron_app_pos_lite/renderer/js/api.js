@@ -29,7 +29,15 @@ const API = (() => {
     resumeBillingSubscription: () => request('POST', '/auth/payment/subscription/resume'),
 
     // Catalog / sales
-    products: (q) => request('GET', '/online/products' + (q ? `?q=${encodeURIComponent(q)}` : '')),
+    products: (q, opts = {}) => {
+      const qs = new URLSearchParams();
+      if (q) qs.set('q', q);
+      if (opts.filter) qs.set('filter', opts.filter); // 'rental' | 'dynamic' — POS mode tabs
+      if (opts.categoryId) qs.set('category', opts.categoryId);
+      const suffix = qs.toString();
+      return request('GET', '/online/products' + (suffix ? `?${suffix}` : ''));
+    },
+    posCategories: () => request('GET', '/online/categories'),
     checkout: (payload) => request('POST', '/online/checkout', payload),
 
     // Products & Categories management
