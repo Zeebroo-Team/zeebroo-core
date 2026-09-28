@@ -62,6 +62,7 @@ class PackageController extends Controller
             'is_free'           => ['boolean'],
             'is_active'         => ['boolean'],
             'is_mobile_only'    => ['boolean'],
+            'supports_pos_lite' => ['boolean'],
             'sort_order'        => ['nullable', 'integer', 'min:0'],
             'features'          => ['array'],
             'features.*'        => ['string', 'in:' . implode(',', array_keys(config('features.list', [])))],
@@ -72,6 +73,7 @@ class PackageController extends Controller
         $data['is_free'] = $request->boolean('is_free');
         $data['is_active'] = $request->boolean('is_active');
         $data['is_mobile_only'] = $request->boolean('is_mobile_only');
+        $data['supports_pos_lite'] = $request->boolean('supports_pos_lite');
         $data['sort_order'] = $data['sort_order'] ?? 0;
         $data['features'] = $data['features'] ?? [];
 

@@ -19,6 +19,7 @@ class Package extends Model
         'features',
         'is_active',
         'is_mobile_only',
+        'supports_pos_lite',
         'sort_order',
     ];
 
@@ -29,6 +30,7 @@ class Package extends Model
         'features'          => 'array',
         'is_active'         => 'boolean',
         'is_mobile_only'    => 'boolean',
+        'supports_pos_lite' => 'boolean',
         'sort_order'        => 'integer',
     ];
 
@@ -36,11 +38,17 @@ class Package extends Model
      * Mobile-only packages are sold exclusively through the mobile app — hide
      * them from every desktop/web-facing package listing (POS desktop
      * registration, web onboarding, business creation) unless the caller is
-     * the mobile app itself.
+     * the mobile app itself. A package also needs `supports_pos_lite` set to
+     * appear for the POS Lite Electron app; everything else (desktop/web)
+     * stays visible regardless of that flag.
      */
     public function scopeVisibleForPlatform(Builder $query, string $platform): Builder
     {
-        return $platform === 'mobile' ? $query : $query->where('is_mobile_only', false);
+        return match ($platform) {
+            'mobile'   => $query,
+            'pos_lite' => $query->where('is_mobile_only', false)->where('supports_pos_lite', true),
+            default    => $query->where('is_mobile_only', false),
+        };
     }
 
     public function featureLabels(): array

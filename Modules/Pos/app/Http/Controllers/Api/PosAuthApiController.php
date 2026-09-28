@@ -74,7 +74,7 @@ class PosAuthApiController extends Controller
             'email'             => ['required', 'email', 'max:255', 'unique:users,email'],
             'password'          => ['required', 'confirmed', Password::min(8)],
             'device_name'       => ['nullable', 'string', 'max:120'],
-            'platform'          => ['nullable', 'string', Rule::in(['desktop', 'mobile'])],
+            'platform'          => ['nullable', 'string', Rule::in(['desktop', 'mobile', 'pos_lite'])],
         ]);
 
         $platform = $validated['platform'] ?? 'desktop';
@@ -152,7 +152,9 @@ class PosAuthApiController extends Controller
 
     public function packages(Request $request): JsonResponse
     {
-        $platform = $request->query('platform') === 'mobile' ? 'mobile' : 'desktop';
+        $platform = in_array($request->query('platform'), ['mobile', 'pos_lite'], true)
+            ? $request->query('platform')
+            : 'desktop';
 
         $packages = Package::query()
             ->where('is_active', true)
@@ -171,6 +173,7 @@ class PosAuthApiController extends Controller
                 'currency_symbol'  => $package->currencySymbol(),
                 'is_free'          => $package->is_free,
                 'is_mobile_only'   => $package->is_mobile_only,
+                'supports_pos_lite' => $package->supports_pos_lite,
                 'features'         => $package->features ?? [],
                 'feature_labels'   => $package->featureLabels(),
             ])

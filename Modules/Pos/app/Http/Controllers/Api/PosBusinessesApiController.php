@@ -72,7 +72,7 @@ class PosBusinessesApiController extends Controller
             'package_id' => ['nullable', 'integer', 'exists:packages,id'],
             'features'   => ['nullable', 'array'],
             'features.*' => ['string'],
-            'platform'   => ['nullable', 'string', Rule::in(['desktop', 'mobile'])],
+            'platform'   => ['nullable', 'string', Rule::in(['desktop', 'mobile', 'pos_lite'])],
         ]);
 
         $platform = $validated['platform'] ?? 'desktop';
