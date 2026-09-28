@@ -111,7 +111,7 @@ class PosBusinessesApiController extends Controller
         $features['account_management'] = true;
         $business->setSetting('business.features', $features);
 
-        $payment = $this->paymentProvisioningService->createInitialPayment($business, $package, $user);
+        $payment = $this->paymentProvisioningService->createInitialPayment($business, $package, $user, $platform);
         $requiresPayment = $payment !== null && $payment->payment_type === Payment::TYPE_SUBSCRIPTION;
 
         return response()->json([

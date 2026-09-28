@@ -74,6 +74,7 @@ class PaymentController extends Controller
         return view('payment::desktop-return', [
             'status' => ($payment?->isSucceeded() ?? false) ? 'success' : 'failed',
             'paymentId' => $payment?->id,
+            'platform' => $payment?->platform ?? 'desktop',
         ]);
     }
 
@@ -88,6 +89,7 @@ class PaymentController extends Controller
         return view('payment::desktop-return', [
             'status' => 'cancel',
             'paymentId' => $payment?->id,
+            'platform' => $payment?->platform ?? 'desktop',
         ]);
     }
 

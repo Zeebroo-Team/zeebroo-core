@@ -255,7 +255,7 @@ document.getElementById('view-delete-btn').addEventListener('click', () => {
 async function deleteCustomer(id, fromModal = false) {
   const customer = customers.find((c) => c.id === id);
   const label = customer ? customer.name : `#${id}`;
-  if (!confirm(t('Delete {label}? This cannot be undone.', { label }))) return;
+  if (!await zeebrooConfirm(t('Delete {label}? This cannot be undone.', { label }), { okText: t('Delete'), tone: 'danger' })) return;
 
   const res = await API.deleteCustomer(id);
   if (res.status !== 200) {

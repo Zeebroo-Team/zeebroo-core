@@ -20,7 +20,7 @@ class PaymentProvisioningService
      * behavior where no package means nothing to record, just an active
      * business.
      */
-    public function createInitialPayment(Business $business, ?Package $package, User $user): ?Payment
+    public function createInitialPayment(Business $business, ?Package $package, User $user, string $platform = 'desktop'): ?Payment
     {
         if (! $package) {
             $business->setSetting('business.subscription_status', 'active');
@@ -29,7 +29,7 @@ class PaymentProvisioningService
         }
 
         if ($package->is_free) {
-            return $this->recordFree($business, $package, $user);
+            return $this->recordFree($business, $package, $user, $platform);
         }
 
         $amount = ($package->discounted_price !== null && (float) $package->discounted_price < (float) $package->price)
@@ -37,7 +37,7 @@ class PaymentProvisioningService
             : (float) $package->price;
 
         if ($amount <= 0) {
-            return $this->recordFree($business, $package, $user);
+            return $this->recordFree($business, $package, $user, $platform);
         }
 
         $payment = Payment::create([
@@ -47,6 +47,7 @@ class PaymentProvisioningService
             'payment_type' => Payment::TYPE_SUBSCRIPTION,
             'payment_status' => Payment::STATUS_PENDING,
             'billing_cycle' => 'monthly',
+            'platform' => $platform,
             'amount' => $amount,
             'currency' => strtolower($package->currency),
             'due_at' => now()->addDays(Payment::GRACE_PERIOD_DAYS),
@@ -57,7 +58,7 @@ class PaymentProvisioningService
         return $payment;
     }
 
-    private function recordFree(Business $business, Package $package, User $user): Payment
+    private function recordFree(Business $business, Package $package, User $user, string $platform = 'desktop'): Payment
     {
         $payment = Payment::create([
             'business_id' => $business->id,
@@ -66,6 +67,7 @@ class PaymentProvisioningService
             'payment_type' => Payment::TYPE_FREE,
             'payment_status' => Payment::STATUS_SUCCEEDED,
             'billing_cycle' => null,
+            'platform' => $platform,
             'amount' => 0,
             'currency' => strtolower($package->currency),
             'paid_at' => now(),

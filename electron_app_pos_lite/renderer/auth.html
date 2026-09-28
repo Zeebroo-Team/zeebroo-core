@@ -34,37 +34,82 @@
     </form>
 
     <div class="error-box" id="signup-error"></div>
-    <form class="form" id="signup-form">
-      <div class="field">
-        <label for="su-name">Your Name</label>
-        <input id="su-name" type="text" required placeholder="Jane Silva" />
+
+    <div class="form" id="signup-wizard">
+      <div class="ob-steps" id="ob-steps">
+        <div class="ob-step" data-step="1"><span class="ob-step-dot">1</span><span class="ob-step-label">Account</span></div>
+        <div class="ob-step" data-step="2"><span class="ob-step-dot">2</span><span class="ob-step-label">Package</span></div>
+        <div class="ob-step" data-step="3"><span class="ob-step-dot">3</span><span class="ob-step-label">Review</span></div>
+        <div class="ob-step" data-step="4"><span class="ob-step-dot">4</span><span class="ob-step-label">Payment</span></div>
       </div>
-      <div class="field">
-        <label for="su-business">Business Name</label>
-        <input id="su-business" type="text" required placeholder="Jane's Store" />
-      </div>
-      <div class="field">
-        <label for="su-category">Business Category</label>
-        <select id="su-category" required>
-          <option value="">Loading…</option>
-        </select>
-      </div>
-      <div class="field">
-        <label for="su-email">Email</label>
-        <input id="su-email" type="email" autocomplete="username" required placeholder="you@business.com" />
-      </div>
-      <div class="row-2">
+
+      <form class="form" id="signup-form" data-step-panel="1">
         <div class="field">
-          <label for="su-password">Password</label>
-          <input id="su-password" type="password" autocomplete="new-password" required placeholder="At least 8 chars" />
+          <label for="su-name">Your Name</label>
+          <input id="su-name" type="text" required placeholder="Jane Silva" />
         </div>
         <div class="field">
-          <label for="su-password2">Confirm</label>
-          <input id="su-password2" type="password" autocomplete="new-password" required placeholder="Repeat" />
+          <label for="su-business">Business Name</label>
+          <input id="su-business" type="text" required placeholder="Jane's Store" />
+        </div>
+        <div class="field">
+          <label for="su-category">Business Category</label>
+          <select id="su-category" required>
+            <option value="">Loading…</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="su-email">Email</label>
+          <input id="su-email" type="email" autocomplete="username" required placeholder="you@business.com" />
+        </div>
+        <div class="row-2">
+          <div class="field">
+            <label for="su-password">Password</label>
+            <input id="su-password" type="password" autocomplete="new-password" required placeholder="At least 8 chars" />
+          </div>
+          <div class="field">
+            <label for="su-password2">Confirm</label>
+            <input id="su-password2" type="password" autocomplete="new-password" required placeholder="Repeat" />
+          </div>
+        </div>
+        <button class="submit-btn" id="signup-submit" type="submit">Continue</button>
+      </form>
+
+      <div class="form" id="ob-package-panel" data-step-panel="2">
+        <div class="ob-package-card" id="ob-package-card">
+          <p class="ob-muted">Loading package…</p>
+        </div>
+        <div class="ob-btn-row">
+          <button class="ghost-btn" id="ob-package-back" type="button">Back</button>
+          <button class="submit-btn" id="ob-package-next" type="button">Continue</button>
         </div>
       </div>
-      <button class="submit-btn" id="signup-submit" type="submit">Create Account</button>
-    </form>
+
+      <div class="form" id="ob-review-panel" data-step-panel="3">
+        <div class="ob-review-card" id="ob-review-card"></div>
+        <div class="ob-btn-row">
+          <button class="ghost-btn" id="ob-review-back" type="button">Back</button>
+          <button class="submit-btn" id="ob-review-next" type="button">Confirm &amp; Continue</button>
+        </div>
+      </div>
+
+      <div class="form" id="ob-payment-panel" data-step-panel="4">
+        <div class="ob-payment-summary" id="ob-payment-summary"></div>
+        <div class="ob-btn-row">
+          <button class="ghost-btn" id="ob-payment-back" type="button">Back</button>
+          <button class="submit-btn" id="ob-payment-submit" type="button">Create Account</button>
+        </div>
+        <div class="ob-pay-waiting" id="ob-pay-waiting" style="display:none;">
+          <span class="spinner-lg"></span>
+          <p>Waiting for payment confirmation…</p>
+          <p class="ob-pay-error" id="ob-pay-waiting-error" style="display:none;"></p>
+          <div class="ob-btn-row">
+            <button class="ghost-btn" id="ob-pay-cancel-btn" type="button">Cancel</button>
+            <button class="submit-btn" id="ob-pay-retry-btn" type="button">I've completed payment</button>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <p class="switch-line" id="line-login">Don't have an account? <a id="go-signup">Sign up</a></p>
     <p class="switch-line" id="line-signup" style="display:none;">Already have an account? <a id="go-login">Log in</a></p>
