@@ -177,7 +177,7 @@ document.getElementById('category-save-btn').addEventListener('click', async () 
 
 async function deleteCategory(id) {
   const cat = categories.find((c) => c.id === id);
-  if (!confirm(t('Delete {name}?', { name: cat ? cat.name : t('this category') }))) return;
+  if (!await zeebrooConfirm(t('Delete {name}?', { name: cat ? cat.name : t('this category') }), { okText: t('Delete'), tone: 'danger' })) return;
   const res = await API.deleteProductCategory(id);
   if (res.status !== 200) { showToast(t(res.body?.message || 'Could not delete category.'), 'error'); return; }
   showToast(t('Category deleted.'), 'success');
@@ -275,7 +275,7 @@ document.getElementById('brand-save-btn').addEventListener('click', async () => 
 
 async function deleteBrand(id) {
   const brand = brands.find((b) => b.id === id);
-  if (!confirm(t('Delete {name}?', { name: brand ? brand.name : t('this brand') }))) return;
+  if (!await zeebrooConfirm(t('Delete {name}?', { name: brand ? brand.name : t('this brand') }), { okText: t('Delete'), tone: 'danger' })) return;
   const res = await API.deleteProductBrand(id);
   if (res.status !== 200) { showToast(t(res.body?.message || 'Could not delete brand.'), 'error'); return; }
   showToast(t('Brand deleted.'), 'success');
@@ -387,7 +387,7 @@ document.getElementById('unit-save-btn').addEventListener('click', async () => {
 
 async function deleteUnit(id) {
   const unit = units.find((u) => u.id === id);
-  if (!confirm(t('Delete {name}?', { name: unit ? unit.name : t('this unit') }))) return;
+  if (!await zeebrooConfirm(t('Delete {name}?', { name: unit ? unit.name : t('this unit') }), { okText: t('Delete'), tone: 'danger' })) return;
   const res = await API.deleteProductUnit(id);
   if (res.status !== 200) { showToast(t(res.body?.message || 'Could not delete unit.'), 'error'); return; }
   showToast(t('Unit deleted.'), 'success');
@@ -496,7 +496,7 @@ async function loadProducts() {
 
 async function deleteProductRow(id) {
   const p = products.find((x) => x.id === id);
-  if (!confirm(t('Delete {name}? This cannot be undone.', { name: p ? p.name : t('this product') }))) return;
+  if (!await zeebrooConfirm(t('Delete {name}? This cannot be undone.', { name: p ? p.name : t('this product') }), { okText: t('Delete'), tone: 'danger' })) return;
   const res = await API.deleteProduct(id);
   if (res.status !== 200) { showToast(t(res.body?.message || 'Could not delete product.'), 'error'); return; }
   showToast(t('Product deleted.'), 'success');
@@ -1926,7 +1926,7 @@ $('#prod-edit-btn')?.addEventListener('click', () => { if (_prodActiveId) _prodO
 $('#prod-delete-btn')?.addEventListener('click', async () => {
   if (!_prodActiveId) return;
   const name = _prodActiveData?.name || t('this product');
-  if (!confirm(t('Delete "{name}"? This cannot be undone.', { name }))) return;
+  if (!await zeebrooConfirm(t('Delete "{name}"? This cannot be undone.', { name }), { okText: t('Delete'), tone: 'danger' })) return;
   const res = await API.deleteProduct(_prodActiveId);
   if (res.status !== 200) { showToast(t(res.body?.message || 'Could not delete product.'), 'error'); return; }
   showToast(t('Product deleted.'), 'success');

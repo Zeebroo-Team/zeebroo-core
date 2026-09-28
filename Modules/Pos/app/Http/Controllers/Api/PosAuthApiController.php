@@ -117,7 +117,7 @@ class PosAuthApiController extends Controller
         $features['account_management'] = true; // always on
         $business->setSetting('business.features', $features);
 
-        $payment = $this->paymentProvisioningService->createInitialPayment($business, $package, $user);
+        $payment = $this->paymentProvisioningService->createInitialPayment($business, $package, $user, $platform);
 
         $deviceName = $validated['device_name'] ?? 'pos-api-client';
         $token = $user->createToken($deviceName);

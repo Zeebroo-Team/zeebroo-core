@@ -33,7 +33,7 @@ class PackageController extends Controller
 
     public function update(Request $request, Package $package): RedirectResponse
     {
-        $data = $this->validatePackage($request);
+        $data = $this->validatePackage($request, $package->id);
 
         $this->packages->update($package, $data, $request->file('image'));
 
@@ -50,7 +50,7 @@ class PackageController extends Controller
             ->with('success', 'Package "' . $name . '" deleted.');
     }
 
-    private function validatePackage(Request $request): array
+    private function validatePackage(Request $request, ?int $ignorePackageId = null): array
     {
         $data = $request->validate([
             'name'              => ['required', 'string', 'max:120'],
@@ -62,7 +62,22 @@ class PackageController extends Controller
             'is_free'           => ['boolean'],
             'is_active'         => ['boolean'],
             'is_mobile_only'    => ['boolean'],
-            'supports_pos_lite' => ['boolean'],
+            'supports_pos_lite' => [
+                'boolean',
+                function (string $attribute, mixed $value, \Closure $fail) use ($request, $ignorePackageId): void {
+                    if (! $request->boolean('supports_pos_lite')) {
+                        return;
+                    }
+
+                    $alreadyTaken = Package::where('supports_pos_lite', true)
+                        ->when($ignorePackageId, fn ($query) => $query->whereKeyNot($ignorePackageId))
+                        ->exists();
+
+                    if ($alreadyTaken) {
+                        $fail('Only one package can support POS Lite at a time. Disable it on the other package first.');
+                    }
+                },
+            ],
             'sort_order'        => ['nullable', 'integer', 'min:0'],
             'features'          => ['array'],
             'features.*'        => ['string', 'in:' . implode(',', array_keys(config('features.list', [])))],

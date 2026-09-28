@@ -187,7 +187,7 @@ cashierDeleteBtn.addEventListener('click', () => {
 async function deleteCashier(id, fromModal = false) {
   const cashier = cashiers.find((c) => c.id === id);
   const label = cashier ? cashier.name : `#${id}`;
-  if (!confirm(t('Delete {label}? This cannot be undone.', { label }))) return;
+  if (!await zeebrooConfirm(t('Delete {label}? This cannot be undone.', { label }), { okText: t('Delete'), tone: 'danger' })) return;
 
   const res = await API.deleteCashier(id);
   if (res.status !== 200) {

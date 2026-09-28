@@ -38,7 +38,8 @@
     'cancel'  => ['icon' => '!', 'cls' => 'cancel',  'title' => 'Payment canceled', 'text' => 'Your business setup is saved. Return to the app to try the payment again.'],
     'failed'  => ['icon' => '×', 'cls' => 'failed',  'title' => 'We could not confirm your payment', 'text' => 'Please return to the app and try again, or contact support if the problem continues.'],
   ][$status] ?? ['icon' => '×', 'cls' => 'failed', 'title' => 'Something went wrong', 'text' => 'Please return to the app and try again.'];
-  $deepLink = 'socibiz://payment?status=' . urlencode($status) . ($paymentId ? '&payment_id=' . urlencode((string) $paymentId) : '');
+  $scheme = ($platform ?? 'desktop') === 'pos_lite' ? 'zeebroopos' : 'socibiz';
+  $deepLink = $scheme . '://payment?status=' . urlencode($status) . ($paymentId ? '&payment_id=' . urlencode((string) $paymentId) : '');
 @endphp
 <div class="card">
   <div class="icon icon--{{ $copy['cls'] }}">{{ $copy['icon'] }}</div>

@@ -30,6 +30,7 @@ class Payment extends Model
         'payment_type',
         'payment_status',
         'billing_cycle',
+        'platform',
         'gateway',
         'amount',
         'currency',

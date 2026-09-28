@@ -13,9 +13,20 @@ const API = (() => {
     login: (email, password) =>
       request('POST', '/auth/token', { email, password, device_name: 'pos-lite' }),
     register: (payload) =>
-      request('POST', '/auth/register', { ...payload, password_confirmation: payload.password, device_name: 'pos-lite' }),
+      request('POST', '/auth/register', { ...payload, platform: 'pos_lite', password_confirmation: payload.password, device_name: 'pos-lite' }),
     businessCategories: () => request('GET', '/auth/business-categories'),
     businesses: () => request('GET', '/businesses'),
+
+    // Onboarding: the single "Support POS Lite" package, and its Stripe checkout
+    packages: () => request('GET', '/auth/packages?platform=pos_lite'),
+    startPaymentCheckout: (paymentId) => request('POST', '/auth/payment/checkout-session', { payment_id: paymentId }),
+    paymentStatus: (paymentId) => request('GET', `/auth/payment/${paymentId}/status`),
+
+    // Billing & Payments modal (subscription status + invoice history)
+    paymentHistory: () => request('GET', '/auth/payment/history'),
+    paymentDetail: (paymentId) => request('GET', `/auth/payment/${paymentId}`),
+    cancelBillingSubscription: () => request('POST', '/auth/payment/subscription/cancel'),
+    resumeBillingSubscription: () => request('POST', '/auth/payment/subscription/resume'),
 
     // Catalog / sales
     products: (q) => request('GET', '/online/products' + (q ? `?q=${encodeURIComponent(q)}` : '')),
