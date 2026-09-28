@@ -172,6 +172,10 @@
             <span class="pkg-mobile-badge"><i class="fa fa-mobile-screen" style="font-size:9px"></i> Mobile App Only</span>
           @endif
 
+          @if($package->supports_pos_lite)
+            <span class="pkg-mobile-badge"><i class="fa fa-cash-register" style="font-size:9px"></i> POS Lite</span>
+          @endif
+
           @if($package->description)
             <p class="pkg-card-desc">{{ $package->description }}</p>
           @endif
@@ -212,6 +216,7 @@
                     data-is-free="{{ $package->is_free ? '1' : '0' }}"
                     data-is-active="{{ $package->is_active ? '1' : '0' }}"
                     data-is-mobile-only="{{ $package->is_mobile_only ? '1' : '0' }}"
+                    data-supports-pos-lite="{{ $package->supports_pos_lite ? '1' : '0' }}"
                     data-sort-order="{{ $package->sort_order }}"
                     data-image="{{ $package->image ? asset('storage/' . $package->image) : '' }}"
                     data-features="{{ json_encode($package->features ?? []) }}">
@@ -324,6 +329,14 @@
         </div>
 
         <div class="pkg-field">
+          <label class="pkg-check-row" style="text-transform:none;letter-spacing:0;font-weight:normal;cursor:pointer">
+            <input type="checkbox" name="supports_pos_lite" id="pkg-f-supports-pos-lite" value="1" {{ old('supports_pos_lite') ? 'checked' : '' }}>
+            <span><strong>Support POS Lite</strong> — also visible and selectable in the POS Lite Electron app, in addition to the main POS (web &amp; desktop)</span>
+          </label>
+          @error('supports_pos_lite')<p class="pkg-field-err">{{ $message }}</p>@enderror
+        </div>
+
+        <div class="pkg-field">
           <label>Features</label>
           <div class="pkg-feat-grid">
             @foreach($features as $key => $label)
@@ -377,6 +390,7 @@
   var sortOrderEl  = document.getElementById('pkg-f-sort-order');
   var isActiveEl   = document.getElementById('pkg-f-is-active');
   var isMobileOnlyEl = document.getElementById('pkg-f-is-mobile-only');
+  var supportsPosLiteEl = document.getElementById('pkg-f-supports-pos-lite');
   var featureBoxes = document.querySelectorAll('.pkg-f-feature');
 
   function openModal() { modal.classList.add('is-open'); modal.scrollTop = 0; document.body.style.overflow = 'hidden'; }
@@ -419,6 +433,7 @@
     sortOrderEl.value = 0;
     isActiveEl.checked = true;
     isMobileOnlyEl.checked = false;
+    supportsPosLiteEl.checked = false;
     featureBoxes.forEach(function (cb) { cb.checked = false; });
     togglePriceFields();
     updateCurrencySymbol();
@@ -462,6 +477,7 @@
       sortOrderEl.value = btn.getAttribute('data-sort-order') || 0;
       isActiveEl.checked = btn.getAttribute('data-is-active') === '1';
       isMobileOnlyEl.checked = btn.getAttribute('data-is-mobile-only') === '1';
+      supportsPosLiteEl.checked = btn.getAttribute('data-supports-pos-lite') === '1';
       togglePriceFields();
       updateCurrencySymbol();
 
