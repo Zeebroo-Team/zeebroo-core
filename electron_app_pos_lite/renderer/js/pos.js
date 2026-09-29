@@ -1329,6 +1329,43 @@ async function loadSettings() {
   renderCart();
 }
 
+// ── Keyboard shortcuts (see js/navbar.js for the app-wide F1/F11 ones) ──
+function isAnyPosModalOpen() {
+  return [rentalModal, dynamicModal, customerPickerModal, checkoutModal, receiptModal]
+    .some((m) => m.classList.contains('show'));
+}
+
+document.addEventListener('keydown', (e) => {
+  if (isAnyPosModalOpen()) return;
+  switch (e.key) {
+    case 'F2':
+      e.preventDefault();
+      searchInput.focus();
+      searchInput.select();
+      break;
+    case 'F5':
+      e.preventDefault();
+      loadCategories();
+      loadProducts(searchInput.value.trim());
+      break;
+    case 'F8':
+      e.preventDefault();
+      cart = [];
+      renderCart();
+      break;
+    case 'F10':
+      e.preventDefault();
+      openCustomerPickerModal();
+      break;
+    case 'F12':
+      e.preventDefault();
+      openCheckoutModal();
+      break;
+    default:
+      return;
+  }
+});
+
 // ── Init ────────────────────────────────────────────────────────────────
 loadSettings();
 loadCategories();

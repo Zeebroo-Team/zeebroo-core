@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   authSuccess: () => ipcRenderer.invoke('auth-success'), // auth window -> main window
   logout: () => ipcRenderer.invoke('logout'),            // main window -> auth window
   restartApp: () => ipcRenderer.invoke('app-restart'),   // quit + relaunch the whole app
+  toggleFullscreen: () => ipcRenderer.invoke('toggle-fullscreen'), // F11 shortcut
 
   // Onboarding payment step: opens Stripe Checkout in the system browser,
   // then listens for the zeebroopos://payment deep link it returns via (see main.js).
