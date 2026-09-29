@@ -19,6 +19,8 @@ const TILES = [
     title: 'Barcodes',
     desc: 'Generate and print barcode labels for products.',
     accent: '#d97706',
+    active: true,
+    modal: 'openBarcodesModal', // opens as an in-page dialog (js/barcodes.js) instead of a full-page navigation
   },
   {
     key: 'stock',
