@@ -37,6 +37,8 @@ const TILES = [
     title: 'Reports & Summaries',
     desc: 'Daily summaries, profit, and sales reports.',
     accent: '#7c3aed',
+    active: true,
+    modal: 'openReportsModal', // opens as an in-page dialog (js/reports.js) instead of a full-page navigation
   },
   {
     key: 'cashiers',

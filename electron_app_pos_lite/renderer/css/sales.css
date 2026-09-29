@@ -793,3 +793,38 @@
   .bc-builder-body { flex-direction: column; }
   .bc-builder-options { width: auto; border-left: none; border-top: 1px solid var(--border); }
 }
+
+/* ── Reports & Summaries (js/reports.js) — two-column KPI panels, a generic
+   bar chart (reused for Today's hourly split and Analytics' by-weekday
+   split) and a generic SVG line chart (reused for the Profit Report's
+   3-series trend and Analytics' 1-series revenue trend, colours set inline
+   per series). Built on top of the same .salm-* shell/table/KPI/item-list
+   rules the other module dialogs use. ── */
+.rpt-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 720px) { .rpt-cols { grid-template-columns: 1fr; } }
+.rpt-col { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+
+.rpt-bar-chart { margin-bottom: 18px; }
+.rpt-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 140px;
+  padding: 10px 6px 0;
+  margin-bottom: 18px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.rpt-bar { flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; position: relative; }
+.rpt-bar-fill { width: 100%; max-width: 14px; background: var(--accent); border-radius: 3px 3px 0 0; min-height: 2px; }
+.rpt-bar-label { position: absolute; bottom: -18px; font-size: 9px; color: var(--muted); white-space: nowrap; }
+
+.rpt-trend-card { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 14px 14px 4px; margin-bottom: 18px; }
+.rpt-trend-svg { width: 100%; height: 220px; display: block; }
+.rpt-trend-axis { stroke: var(--border); stroke-width: 1; }
+.rpt-trend-line { fill: none; stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
+.rpt-trend-label { font-size: 9px; fill: var(--muted); }
+.rpt-legend { display: flex; gap: 16px; justify-content: center; padding: 8px 0 4px; font-size: 11.5px; color: var(--muted); }
+.rpt-legend-item { display: flex; align-items: center; gap: 6px; }
+.rpt-legend-item i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; font-style: normal; }
