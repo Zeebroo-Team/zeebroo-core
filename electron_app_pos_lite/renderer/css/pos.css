@@ -237,7 +237,12 @@ html, body {
   justify-content: space-between;
 }
 .cart-header i { color: var(--accent); margin-right: 6px; }
-.cart-header a { font-size: 12px; color: var(--danger); cursor: pointer; font-weight: 600; }
+
+.cart-customer-box {
+  padding: 0 18px 12px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 10px;
+}
 
 .cart-items {
   flex: 1;
@@ -276,7 +281,6 @@ html, body {
 
 /* ── Customer select ─────────────────────────────────────────────────── */
 .customer-field { padding: 12px 18px; border-top: 1px solid var(--border); position: relative; }
-.customer-field-label { display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin-bottom: 8px; }
 
 .customer-chip {
   display: flex;
@@ -355,7 +359,29 @@ html, body {
   color: var(--text);
 }
 
-.payment-methods { display: flex; gap: 8px; margin: 12px 0; }
+.discount-input-wrap { display: flex; align-items: center; gap: 6px; }
+
+.discount-type-toggle {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.discount-type-btn {
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  border: none;
+  background: #fff;
+  color: var(--muted);
+  cursor: pointer;
+  line-height: 1.4;
+}
+.discount-type-btn:first-child { border-right: 1px solid var(--border); }
+.discount-type-btn.active { background: var(--accent); color: #fff; }
+
+.payment-methods { display: flex; gap: 8px; margin: 0 0 12px; flex-shrink: 0; }
 .pm-btn {
   flex: 1;
   padding: 8px 0;
@@ -369,8 +395,32 @@ html, body {
 }
 .pm-btn.active { border-color: var(--accent); color: var(--accent); background: #eef0ff; }
 
+/* ── Cart footer actions (Clear / Checkout) ─────────────────────────────── */
+.cart-actions { display: flex; gap: 10px; margin-top: 14px; }
+
+.clear-btn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 12px 0;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: #fff;
+  color: var(--danger);
+  font-weight: 700;
+  font-size: 13.5px;
+  cursor: pointer;
+}
+.clear-btn:hover { background: #fdecec; border-color: #f3b4b4; }
+
 .checkout-btn {
-  width: 100%;
+  flex: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   padding: 12px 0;
   border: none;
   border-radius: 9px;
@@ -466,6 +516,279 @@ html, body {
 }
 .error-box.show { display: block; }
 
+/* Customer picker modal reuses .customer-field from the old sidebar — it no
+   longer sits under anything, so drop the divider/padding it had there. */
+.modal-body .customer-field { padding: 0; border-top: none; }
+
+/* The old sidebar version of this modal was cramped at modal-sm's 340px, and
+   its dropdown was an absolutely-positioned overlay that made sense floating
+   over sidebar content — but here, inside a dedicated modal, that overlay got
+   clipped by the modal's own overflow instead of growing the dialog. It's now
+   a fixed-height dialog with the results list laid out in normal flow (own
+   scroll) so the whole list and the Done button are always reachable. */
+#customer-picker-modal .modal {
+  width: 480px;
+  height: 620px;
+  max-height: calc(100vh - 60px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+#customer-picker-modal .modal-body {
+  flex: 1;
+  min-height: 0;
+  padding: 22px 24px;
+  gap: 16px;
+}
+#customer-picker-modal .customer-field { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+#customer-picker-modal .customer-search-wrap { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+#customer-picker-modal .customer-search-input-wrap { flex-shrink: 0; }
+#customer-picker-modal .customer-search-input-wrap input {
+  padding: 12px 14px 12px 36px;
+  font-size: 14.5px;
+  border-radius: 9px;
+}
+#customer-picker-modal .customer-search-input-wrap i { left: 14px; font-size: 13px; }
+#customer-picker-modal .customer-dropdown {
+  position: static;
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+  margin-top: 10px;
+  box-shadow: none;
+}
+#customer-picker-modal .customer-option { padding: 12px 14px; font-size: 14px; }
+#customer-picker-modal .customer-option-name { font-size: 14px; }
+#customer-picker-modal .customer-option-sub { font-size: 12.5px; }
+#customer-picker-modal .customer-chip { padding: 12px 14px; font-size: 14px; }
+#customer-picker-modal .customer-quickadd { padding: 16px; flex-shrink: 0; }
+#customer-picker-modal .customer-quickadd-title { font-size: 12px; }
+#customer-picker-modal .field input { padding: 11px 12px; font-size: 14px; }
+
+/* The customer picker can be opened from inside the (also-open) checkout
+   modal, so it needs to stack above it regardless of DOM order. */
+#customer-picker-modal { z-index: 70; }
+
+/* ── Checkout modal ──────────────────────────────────────────────────────
+   Opened from the cart's Checkout button. Sized to 80% of the window so the
+   summary / order items / payment columns all fit without cramping. */
+.modal.modal-checkout {
+  width: 96vw;
+  height: 94vh;
+  max-width: 96vw;
+  max-height: 94vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.checkout-modal-head h2 { display: flex; align-items: center; gap: 8px; }
+.checkout-modal-head h2 i { color: var(--accent); }
+.checkout-modal-head .modal-subtitle { margin-top: 2px; }
+
+.checkout-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.checkout-col { padding: 18px 20px; overflow-y: auto; }
+.checkout-col-summary { width: 300px; flex-shrink: 0; border-right: 1px solid var(--border); display: flex; flex-direction: column; }
+.checkout-col-items { flex: 1; min-width: 0; border-right: 1px solid var(--border); display: flex; flex-direction: column; }
+/* The payment column doesn't scroll as a whole — only #tender-section (the
+   numpad area) does, so the note field and Complete Sale button stay visible
+   without the user having to scroll past the numpad to reach them. */
+.checkout-col-payment { width: 380px; flex-shrink: 0; display: flex; flex-direction: column; gap: 14px; overflow: hidden; }
+
+.checkout-section-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--muted);
+  margin: 4px 0 10px;
+}
+.checkout-section-title i { color: var(--accent); margin-right: 4px; }
+
+.item-count-badge {
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 9px;
+  border-radius: 999px;
+}
+
+.save-value { color: var(--success); font-weight: 700; }
+
+.grand-total-box {
+  margin: 10px 0 18px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: #fff6e8;
+  border: 1px solid #fcd9a6;
+}
+.grand-total-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: #b45309; }
+.grand-total-value { font-size: 26px; font-weight: 800; color: #b45309; margin-top: 2px; }
+
+.checkout-customer-box .ghost-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.checkout-customer-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 9px;
+  border: 1px solid var(--accent);
+  background: #eef0ff;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+.checkout-customer-chip[hidden] { display: none !important; }
+.checkout-customer-chip i:first-child { color: var(--accent); }
+.checkout-customer-chip span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.checkout-customer-chip button { border: none; background: none; color: var(--muted); cursor: pointer; font-size: 14px; line-height: 1; padding: 2px; }
+.checkout-customer-chip button:hover { color: var(--accent-dark); }
+#checkout-customer-remove-btn:hover { color: var(--danger) !important; }
+
+.order-items-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.order-items-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.order-items-table th {
+  text-align: left;
+  padding: 10px 12px;
+  background: #f8f9fb;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+}
+.order-items-table td { padding: 10px 12px; border-bottom: 1px solid #f0f1f4; vertical-align: top; }
+.order-items-table tr:last-child td { border-bottom: none; }
+.order-items-table .oi-name { font-weight: 600; }
+.order-items-table .oi-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.order-items-table .oi-right { text-align: right; }
+.order-items-table .oi-disc { white-space: nowrap; }
+
+.oi-disc-input {
+  width: 54px;
+  padding: 5px 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 12px;
+  text-align: right;
+  color: var(--text);
+  font-family: inherit;
+}
+.oi-disc-input:focus { outline: none; border-color: var(--accent); }
+
+.order-items-foot {
+  display: flex;
+  justify-content: space-between;
+  padding: 12px 4px 0;
+  font-weight: 700;
+  font-size: 13.5px;
+}
+
+/* Everything here sizes itself off the section's own height (via flex:1 on
+   the numpad grid, and vh-based clamps on the rest) so the whole tender UI
+   shrinks to fit instead of ever needing to scroll. */
+#tender-section { display: flex; flex-direction: column; min-height: 0; flex: 1; overflow: hidden; }
+
+.tender-label { display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin-bottom: 6px; flex-shrink: 0; }
+
+.amount-received-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: clamp(8px, 1.6vh, 14px) 14px;
+  font-size: clamp(18px, 3.2vh, 28px);
+  font-weight: 800;
+  text-align: center;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin-bottom: clamp(6px, 1.4vh, 12px);
+  color: var(--text);
+  font-family: inherit;
+  flex-shrink: 0;
+}
+.amount-received-input:focus { outline: none; border-color: var(--accent); }
+
+.due-change-row { display: flex; gap: 10px; margin-bottom: clamp(6px, 1.4vh, 14px); flex-shrink: 0; }
+.due-box { flex: 1; background: #f8f9fb; border: 1px solid var(--border); border-radius: 9px; padding: clamp(6px, 1vh, 10px) 12px; font-size: 12px; color: var(--muted); overflow: hidden; }
+.due-box strong { display: block; font-size: 15px; color: var(--text); margin-top: 2px; }
+.change-value { color: var(--success); }
+.change-value.negative { color: var(--danger); }
+
+/* Numpad — grid rows use minmax(0, 1fr) and the grid itself is flex:1, so the
+   rows share whatever height is left in #tender-section and shrink together
+   instead of overflowing it. */
+.numpad {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(4, minmax(0, 1fr));
+  gap: clamp(4px, 1vh, 10px);
+  margin-bottom: clamp(6px, 1.4vh, 14px);
+  flex: 1;
+  min-height: 0;
+}
+.numpad button {
+  min-height: 0;
+  font-size: clamp(14px, 2.6vh, 22px);
+  font-weight: 700;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--text);
+  cursor: pointer;
+}
+.numpad button:hover { background: #f8f9fb; border-color: var(--accent); }
+.numpad button.numpad-back { color: var(--danger); }
+
+.numpad-actions { display: flex; gap: 10px; margin-bottom: clamp(6px, 1.4vh, 14px); flex-shrink: 0; }
+.numpad-actions .ghost-btn { flex: 1; display: flex; align-items: center; justify-content: center; }
+.ghost-btn.danger { color: var(--danger); border-color: #fbcaca; }
+.ghost-btn.danger:hover { background: #fdecec; }
+
+.note-field { flex-shrink: 0; padding-top: 4px; }
+
+.checkout-complete-btn {
+  width: 100%;
+  padding: 14px 0;
+  border: none;
+  border-radius: 10px;
+  background: var(--success);
+  color: #fff;
+  font-weight: 800;
+  font-size: 15px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.checkout-complete-btn:hover { background: #128a3e; }
+.checkout-complete-btn:disabled { opacity: 0.55; cursor: default; }
+
 /* ── Toast ───────────────────────────────────────────────────────────── */
 .toast {
   position: fixed;
@@ -546,4 +869,5 @@ html, body {
 
 .rd-warranty { color: #0369a1; }
 .rd-rental { color: #0f766e; }
+.rd-discount { color: #b45309; }
 .rd-note { font-size: 9.5px; padding: 1px 0 4px; }

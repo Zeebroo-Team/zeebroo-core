@@ -39,53 +39,30 @@
       <div class="cart-pane">
         <div class="cart-header">
           <span><i class="fa-solid fa-cart-shopping"></i>Cart</span>
-          <a id="clear-cart">Clear</a>
+        </div>
+        <div class="cart-customer-box checkout-customer-box" id="cart-customer-box">
+          <div id="cart-customer-empty">
+            <button type="button" class="ghost-btn" id="cart-customer-select-btn"><i class="fa-solid fa-user-plus"></i> Select customer</button>
+          </div>
+          <div class="checkout-customer-chip" id="cart-customer-chip" hidden>
+            <i class="fa-solid fa-user"></i>
+            <span id="cart-customer-chip-label"></span>
+            <button type="button" id="cart-customer-change-btn" title="Change customer"><i class="fa-solid fa-pen"></i></button>
+            <button type="button" id="cart-customer-remove-btn" title="Remove customer">&times;</button>
+          </div>
         </div>
         <div class="cart-items" id="cart-items">
           <div class="cart-empty">Cart is empty. Click a product to add it.</div>
         </div>
 
-        <div class="customer-field" id="customer-field">
-          <span class="customer-field-label">Customer (optional)</span>
-
-          <div id="customer-chip" class="customer-chip" hidden>
-            <span id="customer-chip-label"></span>
-            <button type="button" id="customer-clear" aria-label="Remove customer">&times;</button>
-          </div>
-
-          <div id="customer-search-wrap" class="customer-search-wrap">
-            <div class="customer-search-input-wrap">
-              <i class="fa-solid fa-magnifying-glass"></i>
-              <input type="text" id="customer-search-input" placeholder="Search customer by name or phone…" autocomplete="off" spellcheck="false" />
-            </div>
-            <div id="customer-dropdown" class="customer-dropdown" hidden></div>
-          </div>
-
-          <div id="customer-quickadd" class="customer-quickadd" hidden>
-            <div class="customer-quickadd-title">New customer</div>
-            <div class="field"><label for="qa-name">Name *</label><input type="text" id="qa-name" maxlength="120" placeholder="Full name" autocomplete="off" /></div>
-            <div class="field"><label for="qa-phone">Phone</label><input type="text" id="qa-phone" maxlength="40" placeholder="Phone number" autocomplete="off" /></div>
-            <div class="customer-quickadd-actions">
-              <button type="button" class="ghost-btn" id="qa-cancel">Cancel</button>
-              <button type="button" class="ghost-btn primary" id="qa-save">Save &amp; select</button>
-            </div>
-          </div>
-        </div>
-
         <div class="cart-footer">
           <div class="summary-row"><span>Items</span><span id="sum-items">0</span></div>
-          <div class="summary-row discount-row" id="discount-row" style="display:none">
-            <span>Discount %</span>
-            <input type="number" id="discount-input" min="0" max="100" step="0.01" value="0" />
-          </div>
           <div class="summary-row total"><span>Total</span><span id="sum-total">$0.00</span></div>
 
-          <div class="payment-methods">
-            <button class="pm-btn active" data-method="cash"><i class="fa-solid fa-money-bill"></i> Cash</button>
-            <button class="pm-btn" data-method="card"><i class="fa-solid fa-credit-card"></i> Card</button>
+          <div class="cart-actions">
+            <button type="button" class="clear-btn" id="clear-cart"><i class="fa-solid fa-trash"></i> Clear</button>
+            <button type="button" class="checkout-btn" id="checkout-btn" disabled><i class="fa-solid fa-arrow-right"></i> Checkout</button>
           </div>
-
-          <button class="checkout-btn" id="checkout-btn" disabled>Complete Sale</button>
         </div>
       </div>
     </div>
@@ -138,6 +115,153 @@
       <div class="modal-foot">
         <button type="button" class="ghost-btn" data-close="dynamic-modal">Cancel</button>
         <button type="button" class="ghost-btn primary" id="dynamic-confirm-btn">Add to cart</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Customer picker modal: search/select/quick-add a customer for the sale -->
+  <div class="modal-backdrop" id="customer-picker-modal">
+    <div class="modal modal-sm">
+      <div class="modal-head">
+        <h2>Select customer</h2>
+        <button type="button" class="modal-close" data-close="customer-picker-modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="customer-field" id="customer-field">
+          <div id="customer-chip" class="customer-chip" hidden>
+            <span id="customer-chip-label"></span>
+            <button type="button" id="customer-clear" aria-label="Remove customer">&times;</button>
+          </div>
+
+          <div id="customer-search-wrap" class="customer-search-wrap">
+            <div class="customer-search-input-wrap">
+              <i class="fa-solid fa-magnifying-glass"></i>
+              <input type="text" id="customer-search-input" placeholder="Search customer by name or phone…" autocomplete="off" spellcheck="false" />
+            </div>
+            <div id="customer-dropdown" class="customer-dropdown" hidden></div>
+          </div>
+
+          <div id="customer-quickadd" class="customer-quickadd" hidden>
+            <div class="customer-quickadd-title">New customer</div>
+            <div class="field"><label for="qa-name">Name *</label><input type="text" id="qa-name" maxlength="120" placeholder="Full name" autocomplete="off" /></div>
+            <div class="field"><label for="qa-phone">Phone</label><input type="text" id="qa-phone" maxlength="40" placeholder="Phone number" autocomplete="off" /></div>
+            <div class="customer-quickadd-actions">
+              <button type="button" class="ghost-btn" id="qa-cancel">Cancel</button>
+              <button type="button" class="ghost-btn primary" id="qa-save">Save &amp; select</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="ghost-btn primary" data-close="customer-picker-modal">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Checkout modal: full order review + payment, opened from the cart's Checkout button -->
+  <div class="modal-backdrop" id="checkout-modal">
+    <div class="modal modal-checkout">
+      <div class="modal-head checkout-modal-head">
+        <div>
+          <h2><i class="fa-solid fa-cash-register"></i> Checkout</h2>
+          <p class="modal-subtitle">Review your order and complete payment</p>
+        </div>
+        <button type="button" class="modal-close" data-close="checkout-modal">&times;</button>
+      </div>
+
+      <div class="checkout-body">
+        <div class="checkout-col checkout-col-summary">
+          <div class="checkout-section-title"><i class="fa-solid fa-receipt"></i> Summary</div>
+          <div class="summary-row"><span>Subtotal</span><span id="co-subtotal">0.00</span></div>
+          <div class="summary-row" id="co-item-discount-row" style="display:none">
+            <span>Item discounts</span><span class="save-value" id="co-item-discount">−0.00</span>
+          </div>
+          <div class="summary-row discount-row" id="discount-row" style="display:none">
+            <span>Discount</span>
+            <div class="discount-input-wrap">
+              <div class="discount-type-toggle" id="discount-type-toggle">
+                <button type="button" class="discount-type-btn active" data-type="percent">%</button>
+                <button type="button" class="discount-type-btn" data-type="flat" id="discount-type-flat-btn">$</button>
+              </div>
+              <input type="number" id="discount-input" min="0" max="100" step="0.01" value="0" />
+            </div>
+          </div>
+          <div class="summary-row" id="co-save-row" style="display:none">
+            <span>You save</span><span class="save-value" id="co-save">−0.00</span>
+          </div>
+          <div class="grand-total-box">
+            <div class="grand-total-label">Grand Total</div>
+            <div class="grand-total-value"><span id="co-grand-total">0.00</span></div>
+          </div>
+
+          <div class="checkout-section-title"><i class="fa-solid fa-user"></i> Customer</div>
+          <div class="checkout-customer-box" id="checkout-customer-box">
+            <div id="checkout-customer-empty">
+              <button type="button" class="ghost-btn" id="checkout-customer-select-btn"><i class="fa-solid fa-user-plus"></i> Select customer</button>
+            </div>
+            <div class="checkout-customer-chip" id="checkout-customer-chip" hidden>
+              <i class="fa-solid fa-user"></i>
+              <span id="checkout-customer-chip-label"></span>
+              <button type="button" id="checkout-customer-change-btn" title="Change customer"><i class="fa-solid fa-pen"></i></button>
+              <button type="button" id="checkout-customer-remove-btn" title="Remove customer">&times;</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="checkout-col checkout-col-items">
+          <div class="checkout-section-title">
+            <span><i class="fa-solid fa-basket-shopping"></i> Order Items</span>
+            <span class="item-count-badge" id="co-item-count">0</span>
+          </div>
+          <div class="order-items-wrap">
+            <table class="order-items-table">
+              <thead><tr><th>Item</th><th>Qty</th><th>Price</th><th>Disc</th><th>Total</th></tr></thead>
+              <tbody id="order-items-body"></tbody>
+            </table>
+          </div>
+          <div class="order-items-foot">
+            <span>Subtotal</span>
+            <span id="co-subtotal-foot">0.00</span>
+          </div>
+        </div>
+
+        <div class="checkout-col checkout-col-payment">
+          <div class="payment-methods" id="checkout-payment-methods">
+            <button type="button" class="pm-btn active" data-method="cash"><i class="fa-solid fa-money-bill"></i> Cash</button>
+            <button type="button" class="pm-btn" data-method="card"><i class="fa-solid fa-credit-card"></i> Card</button>
+            <button type="button" class="pm-btn" data-method="credit"><i class="fa-solid fa-file-invoice-dollar"></i> Credit</button>
+          </div>
+
+          <div id="tender-section">
+            <label class="tender-label" for="amount-received-input">Amount Received</label>
+            <input type="text" inputmode="decimal" id="amount-received-input" class="amount-received-input" value="0.00" />
+
+            <div class="due-change-row">
+              <div class="due-box"><span>Amount due</span><strong id="co-amount-due">0.00</strong></div>
+              <div class="due-box"><span>Change</span><strong id="co-change" class="change-value">0.00</strong></div>
+            </div>
+
+            <div class="numpad" id="numpad">
+              <button type="button" data-key="7">7</button><button type="button" data-key="8">8</button><button type="button" data-key="9">9</button>
+              <button type="button" data-key="4">4</button><button type="button" data-key="5">5</button><button type="button" data-key="6">6</button>
+              <button type="button" data-key="1">1</button><button type="button" data-key="2">2</button><button type="button" data-key="3">3</button>
+              <button type="button" data-key=".">.</button><button type="button" data-key="0">0</button><button type="button" class="numpad-back" data-key="back"><i class="fa-solid fa-delete-left"></i></button>
+            </div>
+            <div class="numpad-actions">
+              <button type="button" class="ghost-btn" id="exact-amount-btn">Exact amount</button>
+              <button type="button" class="ghost-btn danger" id="clear-amount-btn">Clear</button>
+            </div>
+          </div>
+
+          <div class="field note-field">
+            <label for="checkout-note-input">Note</label>
+            <textarea id="checkout-note-input" rows="2" placeholder="Add a note…"></textarea>
+          </div>
+
+          <button type="button" class="checkout-complete-btn" id="checkout-complete-btn">
+            <i class="fa-solid fa-circle-check"></i> Complete Sale
+          </button>
+        </div>
       </div>
     </div>
   </div>
