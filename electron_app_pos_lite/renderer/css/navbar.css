@@ -1,6 +1,96 @@
 /* Shared profile dropdown for the top bar (see js/navbar.js).
    Pages only need <div class="user-menu" id="user-menu"></div> inside .topbar. */
 
+/* ── Branch switcher ───────────────────────────────────────────────────────
+   Injected by js/navbar.js, grouped with #user-menu inside .topbar-right
+   (a page's .topbar is `justify-content: space-between` with normally just
+   .left + #user-menu, so the switcher needs a shared right-side wrapper to
+   sit snug against the account button instead of floating centered). Hidden
+   until the business has at least one branch. */
+.topbar-right { display: flex; align-items: center; gap: 12px; }
+
+.branch-sw { position: relative; flex-shrink: 0; }
+
+.bsw-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border: 1px solid var(--border, #e2e5eb);
+  background: #fff;
+  border-radius: 999px;
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--text, #1f2430);
+  font-size: 12.5px;
+  font-weight: 600;
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+.bsw-trigger i.fa-code-branch { color: var(--um-accent, #4f46e5); font-size: 11px; }
+.bsw-trigger:hover { background: #f8f9fc; border-color: #d3d8e2; }
+.bsw-trigger:focus-visible { outline: 2px solid var(--um-accent, #4f46e5); outline-offset: 2px; }
+.branch-sw.open .bsw-trigger {
+  border-color: var(--um-accent, #4f46e5);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.14);
+}
+.bsw-name { max-width: 140px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bsw-chevron { font-size: 10px; color: var(--muted, #6b7280); transition: transform 0.2s; }
+.branch-sw.open .bsw-chevron { transform: rotate(180deg); }
+
+.bsw-panel {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 10px);
+  width: 240px;
+  padding: 8px;
+  background: #fff;
+  border: 1px solid var(--border, #e2e5eb);
+  border-radius: 14px;
+  box-shadow: 0 20px 48px rgba(20, 24, 40, 0.18), 0 2px 8px rgba(20, 24, 40, 0.06);
+  z-index: 60;
+
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(-8px) scale(0.97);
+  transform-origin: top left;
+  transition: opacity 0.16s ease, transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1), visibility 0s linear 0.2s;
+}
+.branch-sw.open .bsw-panel {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: none;
+  transition-delay: 0s;
+}
+.bsw-head {
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  color: var(--muted, #6b7280);
+  padding: 6px 10px 8px;
+}
+.bsw-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 10px;
+  border: none;
+  background: transparent;
+  border-radius: 9px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--text, #1f2430);
+  text-align: left;
+}
+.bsw-item:hover { background: #f4f5fb; }
+.bsw-item.active { color: var(--um-accent, #4f46e5); font-weight: 700; }
+.bsw-item i:first-child { width: 14px; color: var(--muted, #6b7280); text-align: center; }
+.bsw-item.active i:first-child { color: var(--um-accent, #4f46e5); }
+.bsw-item-check { margin-left: auto; font-size: 11px; }
+
 .user-menu {
   --um-accent: #4f46e5;
   position: relative;
@@ -517,6 +607,55 @@
 .pm-badge.danger { background: #fee2e2; color: #dc2626; }
 .pm-badge.warning { background: #fef3c7; color: #d97706; }
 .pm-badge.info { background: #dbeafe; color: #2563eb; }
+.pm-badge.neutral { background: #f1f2f5; color: #6b7280; }
+
+/* ── Branches (Settings tab) ──────────────────────────────────────────── */
+.brm-toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.brm-toolbar-left { display: flex; align-items: center; gap: 10px; }
+.brm-toolbar-left i { color: var(--sm-accent, #4f46e5); }
+
+.brm-body { display: flex; gap: 16px; min-height: 360px; }
+.brm-list-col { width: 280px; flex-shrink: 0; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; max-height: 460px; }
+.brm-detail-col { flex: 1; min-width: 0; background: #fafbff; border: 1px solid var(--border, #e2e5eb); border-radius: 12px; padding: 20px; overflow-y: auto; max-height: 460px; }
+
+.brm-row { cursor: pointer; transition: border-color 0.15s, background 0.15s; }
+.brm-row.active { border-color: var(--sm-accent, #4f46e5); background: #f5f5ff; }
+.brm-row-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: #eef0ff;
+  color: var(--sm-accent, #4f46e5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.brm-detail-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; min-height: 300px; color: var(--muted, #6b7280); text-align: center; gap: 10px; }
+.brm-detail-empty i { font-size: 28px; opacity: 0.5; }
+
+.brm-detail-head { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 16px; }
+.brm-detail-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: #eef0ff;
+  color: var(--sm-accent, #4f46e5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 17px;
+  flex-shrink: 0;
+}
+.brm-detail-meta { flex: 1; min-width: 0; }
+.brm-detail-name { font-size: 16px; font-weight: 800; }
+.brm-detail-sub { font-size: 12.5px; color: var(--muted, #6b7280); margin-top: 2px; }
+.brm-detail-added { font-size: 11.5px; color: var(--muted, #6b7280); margin-top: 6px; display: flex; align-items: center; gap: 5px; }
+.brm-detail-actions { display: flex; gap: 8px; margin-bottom: 16px; }
+.brm-detail-section { padding-top: 14px; border-top: 1px solid var(--border, #e2e5eb); margin-top: 14px; }
+.brm-detail-row { display: flex; justify-content: space-between; font-size: 13px; padding: 4px 0; }
+.brm-detail-desc { font-size: 13px; color: var(--text, #1f2430); margin: 0; white-space: pre-wrap; }
 
 .pm-detail-row {
   display: flex;
@@ -595,6 +734,8 @@
 .sm-close:hover { background: #f2f3f9; color: var(--text, #1f2430); }
 
 #sm-alert.bm-alert { margin: 0 22px 14px; }
+#brf-alert.bm-alert { margin: 0 22px 14px; }
+#brf-backdrop .bm-card { --sm-accent: #4f46e5; } /* .sm-switch/.sm-input (reused here) read this var */
 
 .sm-body { display: flex; gap: 20px; padding: 0 22px; overflow: hidden; flex: 1 1 auto; min-height: 0; }
 
@@ -648,8 +789,11 @@
 
 .sm-field-row { display: flex; flex-direction: column; gap: 6px; }
 .sm-field-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-.sm-field-label { font-size: 12.5px; font-weight: 700; color: var(--text, #1f2430); }
+.sm-field-2col > div { display: flex; flex-direction: column; gap: 6px; }
+.sm-field-label { display: block; font-size: 12.5px; font-weight: 700; color: var(--text, #1f2430); }
 .sm-input, .sm-select {
+  width: 100%;
+  box-sizing: border-box;
   padding: 10px 12px;
   border: 1px solid var(--border, #e2e5eb);
   border-radius: 10px;

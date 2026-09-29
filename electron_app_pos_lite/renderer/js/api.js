@@ -234,5 +234,9 @@ const API = (() => {
     },
     accounts: () => request('GET', '/accounts'),
     branches: () => request('GET', '/branches'),
+    branchAdd: (payload) => request('POST', '/branches', payload),
+    branchUpdate: (id, payload) => request('PUT', `/branches/${id}`, payload),
+    branchRemove: (id) => request('DELETE', `/branches/${id}`),
+    branchesOnline: () => request('GET', '/online/branches'),
   };
 })();

@@ -564,6 +564,7 @@
     const returnFocusTo = document.activeElement;
     let logoUrl = '';
     let logoBusy = false;
+    const brm = { branches: [], selected: null, loaded: false };
 
     const el = document.createElement('div');
     el.className = 'sm-backdrop';
@@ -587,6 +588,7 @@
             <button class="sm-nav-item active" type="button" data-sm-tab="business"><i class="fa-solid fa-building"></i><span>${t('Business')}</span></button>
             <button class="sm-nav-item" type="button" data-sm-tab="general"><i class="fa-solid fa-sliders"></i><span>${t('General')}</span></button>
             <button class="sm-nav-item" type="button" data-sm-tab="accounts"><i class="fa-solid fa-building-columns"></i><span>${t('Accounts')}</span></button>
+            <button class="sm-nav-item" type="button" data-sm-tab="branches"><i class="fa-solid fa-code-branch"></i><span>${t('Branches')}</span></button>
             <button class="sm-nav-item" type="button" data-sm-tab="receipt"><i class="fa-solid fa-receipt"></i><span>${t('Receipt Setting')}</span></button>
             <button class="sm-nav-item" type="button" data-sm-tab="invoice-setup"><i class="fa-solid fa-file-invoice"></i><span>${t('Invoice Setup')}</span></button>
           </nav>
@@ -716,6 +718,29 @@
                 <span class="sm-hint">${t('Cash purchases (Goods Receive) are always paid as a Business Expense on this app. This setting cannot be changed.')}</span>
               </div>
             </div>
+            <div class="sm-panel" id="sm-tab-branches" style="display:none">
+              <div class="brm-toolbar">
+                <div class="brm-toolbar-left">
+                  <i class="fa-solid fa-code-branch"></i>
+                  <span class="sm-section-label" style="margin:0">${t('Branches')}</span>
+                  <span class="pm-badge info" id="brm-count">0</span>
+                </div>
+                <button class="bm-btn bm-btn-primary" id="brm-add-btn" type="button">
+                  <i class="fa-solid fa-plus"></i> ${t('Add Branch')}
+                </button>
+              </div>
+              <div class="brm-body">
+                <div class="brm-list-col" id="brm-list">
+                  <div class="pm-loading"><i class="fa-solid fa-spinner fa-spin"></i> ${t('Loading branches…')}</div>
+                </div>
+                <div class="brm-detail-col" id="brm-detail">
+                  <div class="brm-detail-empty">
+                    <i class="fa-solid fa-code-branch"></i>
+                    <p>${t('Select a branch to view its details')}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
         <div class="sm-foot">
@@ -756,7 +781,114 @@
       tabs.forEach((b) => b.classList.toggle('active', b === btn));
       el.querySelectorAll('.sm-panel').forEach((p) => { p.style.display = 'none'; });
       $(`sm-tab-${btn.dataset.smTab}`).style.display = '';
+      if (btn.dataset.smTab === 'branches' && !brm.loaded) loadBranches();
     }));
+
+    function brmFmtDate(str) {
+      if (!str) return '—';
+      const d = new Date(str);
+      if (isNaN(d.getTime())) return '—';
+      return d.toLocaleDateString(i18n.locale, { dateStyle: 'medium' });
+    }
+
+    async function loadBranches() {
+      $('brm-list').innerHTML = `<div class="pm-loading"><i class="fa-solid fa-spinner fa-spin"></i> ${t('Loading branches…')}</div>`;
+      const res = await API.branches();
+      if (res.status !== 200) {
+        $('brm-list').innerHTML = `<div class="pm-empty">${esc(res.body?.message || t('Could not load branches.'))}</div>`;
+        return;
+      }
+      brm.branches = res.body?.data || [];
+      brm.loaded = true;
+      renderBranchList();
+    }
+
+    function renderBranchList() {
+      $('brm-count').textContent = String(brm.branches.length);
+      const list = $('brm-list');
+      if (!brm.branches.length) {
+        list.innerHTML = `<div class="pm-empty">${t('No branches yet. Add your first branch to get started.')}</div>`;
+        return;
+      }
+      list.innerHTML = brm.branches.map((b) => `
+        <div class="pm-row brm-row${brm.selected?.id === b.id ? ' active' : ''}" data-brm-id="${b.id}">
+          <div class="brm-row-icon"><i class="fa-solid fa-code-branch"></i></div>
+          <div class="pm-row-body">
+            <div class="pm-row-plan">${esc(b.name)}</div>
+            <div class="pm-row-meta">${esc(b.address || b.phone || b.email || t('No details set'))}</div>
+          </div>
+          <span class="pm-badge ${b.is_active ? 'success' : 'neutral'}">${b.is_active ? t('Active') : t('Inactive')}</span>
+        </div>`).join('');
+      list.querySelectorAll('.brm-row').forEach((row) => {
+        row.addEventListener('click', () => {
+          const branch = brm.branches.find((b) => String(b.id) === row.dataset.brmId);
+          if (branch) selectBranch(branch);
+        });
+      });
+    }
+
+    function selectBranch(branch) {
+      brm.selected = branch;
+      renderBranchList();
+      renderBranchDetail(branch);
+    }
+
+    function renderBranchDetail(b) {
+      $('brm-detail').innerHTML = `
+        <div class="brm-detail-head">
+          <div class="brm-detail-icon"><i class="fa-solid fa-code-branch"></i></div>
+          <div class="brm-detail-meta">
+            <div class="brm-detail-name">${esc(b.name)}</div>
+            <div class="brm-detail-sub">${esc(b.address || t('No address set'))}</div>
+            <div class="brm-detail-added"><i class="fa-solid fa-calendar-days"></i> ${t('Added {date}', { date: brmFmtDate(b.created_at) })}</div>
+          </div>
+          <span class="pm-badge ${b.is_active ? 'success' : 'neutral'}">${b.is_active ? t('Active') : t('Inactive')}</span>
+        </div>
+        <div class="brm-detail-actions">
+          <button class="bm-btn bm-btn-outline" id="brm-edit-btn" type="button"><i class="fa-solid fa-pen"></i> ${t('Edit Branch')}</button>
+        </div>
+        <div class="brm-detail-section">
+          <div class="sm-section-label" style="margin:0 0 6px">${t('Contact')}</div>
+          <div class="brm-detail-row"><span>${t('Phone')}</span><b>${esc(b.phone || '—')}</b></div>
+          <div class="brm-detail-row"><span>${t('Email')}</span><b>${esc(b.email || '—')}</b></div>
+        </div>
+        ${b.description ? `<div class="brm-detail-section"><div class="sm-section-label" style="margin:0 0 6px">${t('Description')}</div><p class="brm-detail-desc">${esc(b.description)}</p></div>` : ''}
+        <div class="brm-detail-actions">
+          <button class="bm-btn bm-btn-outline" id="brm-delete-btn" type="button" style="color:#dc2626;border-color:#f5c6c6"><i class="fa-solid fa-trash"></i> ${t('Delete')}</button>
+        </div>`;
+      $('brm-edit-btn').addEventListener('click', () => openBranchFormModal(b, onBranchSaved));
+      $('brm-delete-btn').addEventListener('click', () => removeBranch(b));
+    }
+
+    async function onBranchSaved(savedBranch) {
+      await loadBranches();
+      const match = brm.branches.find((x) => x.id === savedBranch.id) || savedBranch;
+      selectBranch(match);
+      window.__refreshBranchSwitcher?.();
+    }
+
+    async function removeBranch(branch) {
+      const ok = await zeebrooConfirm(
+        t('Delete "{name}"? This cannot be undone.', { name: branch.name }),
+        { okText: t('Delete'), tone: 'danger' }
+      );
+      if (!ok) return;
+      const res = await API.branchRemove(branch.id);
+      if (res.status !== 200 && res.status !== 204) {
+        await zeebrooAlert(res.body?.message || t('Could not delete this branch.'));
+        return;
+      }
+      brm.selected = null;
+      await loadBranches();
+      $('brm-detail').innerHTML = `
+        <div class="brm-detail-empty">
+          <i class="fa-solid fa-code-branch"></i>
+          <p>${t('Select a branch to view its details')}</p>
+        </div>`;
+      window.__refreshBranchSwitcher?.();
+    }
+
+    $('brm-add-btn').addEventListener('click', () => openBranchFormModal(null, onBranchSaved));
 
     function currencyCode() {
       return ($('sm-currency').value || 'LKR').trim().toUpperCase() || 'LKR';
@@ -889,6 +1021,141 @@
   }
 
   window.openSettingsWindow = openSettingsWindow;
+
+  // ── Add / Edit Branch modal ─────────────────────────────────────────────
+  // Shared by the Settings → Branches tab for both creating and editing a
+  // branch (Modules/Business Branch model, via Modules/Pos/routes/api.php).
+  function openBranchFormModal(existingBranch, onSaved) {
+    if ($('brf-backdrop')) return;
+
+    const returnFocusTo = document.activeElement;
+    const isEdit = !!existingBranch;
+
+    const el = document.createElement('div');
+    el.className = 'bm-backdrop';
+    el.id = 'brf-backdrop';
+    el.setAttribute('role', 'dialog');
+    el.setAttribute('aria-modal', 'true');
+    el.setAttribute('aria-labelledby', 'brf-title');
+    el.innerHTML = `
+      <div class="bm-card" style="width:480px">
+        <div class="bm-head">
+          <span class="bm-head-icon"><i class="fa-solid fa-code-branch"></i></span>
+          <div class="bm-head-text">
+            <h2 id="brf-title">${isEdit ? t('Edit Branch') : t('Add Branch')}</h2>
+            <p>${isEdit ? t('Update this branch\'s details.') : t('Create a new branch for this business.')}</p>
+          </div>
+          <button class="bm-close" type="button" aria-label="${t('Close')}"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div id="brf-alert" class="bm-alert" style="display:none"></div>
+        <div class="sm-body" style="padding:0 22px 4px;display:block">
+          <div class="sm-field-row">
+            <label class="sm-field-label" for="brf-name">${t('Branch Name')} *</label>
+            <input type="text" id="brf-name" class="sm-input" placeholder="${t('e.g. Colombo Branch')}">
+          </div>
+          <div class="sm-field-row">
+            <label class="sm-field-label" for="brf-address">${t('Address')}</label>
+            <textarea id="brf-address" class="sm-input rle-textarea" rows="2"></textarea>
+          </div>
+          <div class="sm-field-2col">
+            <div>
+              <label class="sm-field-label" for="brf-phone">${t('Phone')}</label>
+              <input type="text" id="brf-phone" class="sm-input">
+            </div>
+            <div>
+              <label class="sm-field-label" for="brf-email">${t('Email')}</label>
+              <input type="email" id="brf-email" class="sm-input">
+            </div>
+          </div>
+          <div class="sm-field-row">
+            <label class="sm-field-label" for="brf-description">${t('Description')}</label>
+            <textarea id="brf-description" class="sm-input rle-textarea" rows="2"></textarea>
+          </div>
+          <div class="sm-toggle-row">
+            <div class="sm-toggle-info">
+              <span class="sm-toggle-name">${t('Active')}</span>
+              <span class="sm-toggle-desc">${t('Inactive branches are hidden from the switcher and stock transfer pickers.')}</span>
+            </div>
+            <label class="sm-switch"><input type="checkbox" id="brf-active" checked><span class="sm-switch-track"></span></label>
+          </div>
+        </div>
+        <div class="sm-foot">
+          <button class="bm-btn bm-btn-outline" id="brf-cancel" type="button">${t('Cancel')}</button>
+          <button class="bm-btn bm-btn-primary" id="brf-save" type="button"><i class="fa-solid fa-check"></i> ${isEdit ? t('Save Changes') : t('Add Branch')}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(el);
+
+    if (isEdit) {
+      $('brf-name').value = existingBranch.name || '';
+      $('brf-address').value = existingBranch.address || '';
+      $('brf-phone').value = existingBranch.phone || '';
+      $('brf-email').value = existingBranch.email || '';
+      $('brf-description').value = existingBranch.description || '';
+      $('brf-active').checked = existingBranch.is_active !== false;
+    }
+
+    function close() {
+      document.removeEventListener('keydown', onKey, true);
+      el.classList.remove('open');
+      setTimeout(() => el.remove(), 200);
+      if (returnFocusTo && returnFocusTo.focus) returnFocusTo.focus();
+    }
+
+    function onKey(e) {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); }
+    }
+
+    function showAlert(msg) {
+      const a = $('brf-alert');
+      a.textContent = msg;
+      a.style.display = 'block';
+    }
+
+    el.querySelector('.bm-close').addEventListener('click', close);
+    $('brf-cancel').addEventListener('click', close);
+    el.addEventListener('mousedown', (e) => { if (e.target === el) close(); });
+    document.addEventListener('keydown', onKey, true);
+
+    async function save() {
+      const name = $('brf-name').value.trim();
+      if (!name) {
+        showAlert(t('Branch name is required.'));
+        $('brf-name').focus();
+        return;
+      }
+      const payload = {
+        name,
+        address: $('brf-address').value.trim(),
+        phone: $('brf-phone').value.trim(),
+        email: $('brf-email').value.trim(),
+        description: $('brf-description').value.trim(),
+        is_active: $('brf-active').checked,
+      };
+
+      const btn = $('brf-save');
+      const originalHtml = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> ${t('Saving…')}`;
+      $('brf-alert').style.display = 'none';
+
+      const res = isEdit ? await API.branchUpdate(existingBranch.id, payload) : await API.branchAdd(payload);
+
+      btn.disabled = false;
+      btn.innerHTML = originalHtml;
+
+      if (res.status !== 200 && res.status !== 201) {
+        showAlert(res.body?.message || t('Could not save this branch.'));
+        return;
+      }
+      close();
+      onSaved?.(res.body?.data || { ...payload, id: existingBranch?.id });
+    }
+
+    $('brf-save').addEventListener('click', save);
+
+    requestAnimationFrame(() => el.classList.add('open'));
+  }
 
   // ── Receipt Layout Editor window ────────────────────────────────────────
   // Design/update the printed-receipt layout: what shows on it, its logo,
@@ -2009,6 +2276,106 @@ ${ctx.hdrCss}</style></head><body><div class="pg">
   // ── Profile dropdown ───────────────────────────────────────────────────
   const mount = $('user-menu');
   if (!mount) return;
+
+  // ── Branch switcher ─────────────────────────────────────────────────────
+  // Pill button + dropdown next to the account button, letting the user pick
+  // which branch subsequent API calls are scoped to. Selection is persisted
+  // as config.branch_id and sent as an X-Branch-Id header on every request
+  // (see main.js) — the switcher itself just reloads the current page so its
+  // own data-loading code re-runs with the new branch already active. Hidden
+  // entirely until the business has at least one branch.
+  const bsw = document.createElement('div');
+  bsw.className = 'branch-sw';
+  bsw.id = 'branch-sw';
+  bsw.style.display = 'none';
+  bsw.innerHTML = `
+    <button class="bsw-trigger" id="bsw-trigger" type="button" aria-haspopup="menu" aria-expanded="false">
+      <i class="fa-solid fa-code-branch"></i>
+      <span class="bsw-name" id="bsw-name">${t('All Branches')}</span>
+      <i class="fa-solid fa-chevron-down bsw-chevron"></i>
+    </button>
+    <div class="bsw-panel" id="bsw-panel" role="menu">
+      <div class="bsw-head">${t('SWITCH BRANCH')}</div>
+      <div id="bsw-list"></div>
+    </div>`;
+  // .topbar is `justify-content: space-between` with exactly two children
+  // (.left and #user-menu) on every page — a bare third sibling would float
+  // centered instead of docking next to the account button, so group the
+  // switcher and #user-menu into one right-side flex container instead.
+  const topbarRight = document.createElement('div');
+  topbarRight.className = 'topbar-right';
+  mount.parentNode.insertBefore(topbarRight, mount);
+  topbarRight.appendChild(bsw);
+  topbarRight.appendChild(mount);
+
+  const bswState = { branches: [], branchId: null };
+  const bswTrigger = $('bsw-trigger');
+
+  function bswSetOpen(open) {
+    bsw.classList.toggle('open', open);
+    bswTrigger.setAttribute('aria-expanded', String(open));
+  }
+
+  bswTrigger.addEventListener('click', (e) => {
+    e.stopPropagation();
+    bswSetOpen(!bsw.classList.contains('open'));
+  });
+  document.addEventListener('click', (e) => {
+    if (!bsw.contains(e.target)) bswSetOpen(false);
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && bsw.classList.contains('open')) {
+      bswSetOpen(false);
+      bswTrigger.focus();
+    }
+  });
+
+  function bswRenderList() {
+    const items = [{ id: null, name: t('All Branches') }, ...bswState.branches];
+    $('bsw-list').innerHTML = items.map((b) => `
+      <button class="bsw-item${b.id === bswState.branchId ? ' active' : ''}" type="button" role="menuitem" data-bsw-id="${b.id ?? ''}">
+        <i class="fa-solid ${b.id === null ? 'fa-layer-group' : 'fa-code-branch'}"></i>
+        <span>${esc(b.name)}</span>
+        ${b.id === bswState.branchId ? '<i class="fa-solid fa-check bsw-item-check"></i>' : ''}
+      </button>`).join('');
+    $('bsw-list').querySelectorAll('.bsw-item').forEach((item) => {
+      item.addEventListener('click', () => {
+        bswSetOpen(false);
+        const id = item.dataset.bswId ? Number(item.dataset.bswId) : null;
+        switchBranch(id);
+      });
+    });
+  }
+
+  async function switchBranch(branchId) {
+    if (branchId === bswState.branchId) return;
+    if (document.getElementById('cart-items')) {
+      const ok = await zeebrooConfirm(
+        t('Switching branch will reload this page and clear the current cart. Continue?'),
+        { okText: t('Switch Branch'), tone: 'warning' }
+      );
+      if (!ok) return;
+    }
+    await window.electronAPI.setConfig({ branch_id: branchId });
+    window.location.reload();
+  }
+
+  async function loadSwitcher() {
+    const res = await API.branchesOnline();
+    const list = res.status === 200 ? (res.body?.data?.branches || []) : [];
+    if (!list.length) { bsw.style.display = 'none'; return; }
+
+    bswState.branches = list;
+    const cfg = await window.electronAPI.getConfig();
+    bswState.branchId = cfg.branch_id ?? null;
+    const current = list.find((b) => b.id === bswState.branchId);
+    $('bsw-name').textContent = current ? current.name : t('All Branches');
+    bsw.style.display = '';
+    bswRenderList();
+  }
+
+  window.__refreshBranchSwitcher = loadSwitcher;
+  loadSwitcher();
 
   mount.innerHTML = `
     <button class="um-trigger" id="um-trigger" type="button" aria-haspopup="menu" aria-expanded="false" title="${t('Account')}">
