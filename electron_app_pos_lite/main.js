@@ -212,6 +212,16 @@ ipcMain.handle('app-restart', () => {
   app.exit(0);
 });
 
+// Toggles OS-level fullscreen for the main window (F11 shortcut) — with no
+// application menu (see attachMacShortcuts above), Electron has no built-in
+// accelerator for this, so the renderer asks the main process to do it.
+ipcMain.handle('toggle-fullscreen', () => {
+  if (!mainWindow) return false;
+  const next = !mainWindow.isFullScreen();
+  mainWindow.setFullScreen(next);
+  return next;
+});
+
 // ── API proxy (runs in the main process so the renderer never needs Node
 //    integration or has to fight the browser's CORS policy) ────────────────
 function apiRequest(method, path_, body, token, businessId, branchId) {

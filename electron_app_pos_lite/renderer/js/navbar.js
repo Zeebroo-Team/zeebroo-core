@@ -188,6 +188,102 @@
   window.zeebrooConfirm = zeebrooConfirm;
   window.zeebrooAlert = zeebrooAlert;
 
+  // ── Keyboard shortcuts ───────────────────────────────────────────────────
+  // Only lists shortcuts that are actually wired up (below and in each
+  // screen's own script) — screens with no shortcuts of their own just show
+  // the "Anywhere" group.
+  const SHORTCUT_GROUPS = () => [
+    {
+      title: t('Anywhere'),
+      rows: [
+        [t('F1'), t('Show this shortcuts list')],
+        [t('F11'), t('Toggle fullscreen')],
+        [t('Esc'), t('Close the open dialog')],
+      ],
+    },
+    {
+      title: t('POS screen'),
+      rows: [
+        [t('F2'), t('Focus product search')],
+        [t('F5'), t('Refresh products')],
+        [t('F8'), t('Clear cart')],
+        [t('F10'), t('Select customer')],
+        [t('F12'), t('Checkout')],
+      ],
+    },
+  ];
+
+  function openShortcutsWindow() {
+    if ($('sc-backdrop')) return;
+
+    const returnFocusTo = document.activeElement;
+    const el = document.createElement('div');
+    el.className = 'bm-backdrop';
+    el.id = 'sc-backdrop';
+    el.setAttribute('role', 'dialog');
+    el.setAttribute('aria-modal', 'true');
+    el.setAttribute('aria-labelledby', 'sc-title');
+    el.innerHTML = `
+      <div class="bm-card sck-card">
+        <div class="bm-head">
+          <span class="bm-head-icon"><i class="fa-solid fa-keyboard"></i></span>
+          <div class="bm-head-text">
+            <h2 id="sc-title">${t('Keyboard Shortcuts')}</h2>
+            <p>${t('Shortcuts available in this app.')}</p>
+          </div>
+          <button class="bm-close" type="button" aria-label="${t('Close')}"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="bm-body">
+          ${SHORTCUT_GROUPS().map((group) => `
+            <div class="sck-group">
+              <div class="sm-section-label">${esc(group.title)}</div>
+              <div class="sck-list">
+                ${group.rows.map(([key, label]) => `
+                  <div class="sck-row">
+                    <span class="sck-label">${esc(label)}</span>
+                    <span class="sck-key">${esc(key)}</span>
+                  </div>`).join('')}
+              </div>
+            </div>`).join('')}
+        </div>
+      </div>`;
+    document.body.appendChild(el);
+
+    function close() {
+      document.removeEventListener('keydown', onKey, true);
+      el.classList.remove('open');
+      setTimeout(() => el.remove(), 200);
+      if (returnFocusTo && returnFocusTo.focus) returnFocusTo.focus();
+    }
+
+    function onKey(e) {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); }
+    }
+
+    el.querySelector('.bm-close').addEventListener('click', close);
+    el.addEventListener('mousedown', (e) => { if (e.target === el) close(); });
+    document.addEventListener('keydown', onKey, true);
+
+    requestAnimationFrame(() => el.classList.add('open'));
+  }
+
+  window.openShortcutsWindow = openShortcutsWindow;
+
+  // F1 / "?" opens the shortcuts list from anywhere; F11 toggles fullscreen.
+  // Guarded against firing while typing "?" into a search box.
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'F11') {
+      e.preventDefault();
+      window.electronAPI.toggleFullscreen();
+      return;
+    }
+    const typing = ['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName) || document.activeElement?.isContentEditable;
+    if (e.key === 'F1' || (e.key === '?' && !typing)) {
+      e.preventDefault();
+      openShortcutsWindow();
+    }
+  });
+
   // ── Billing & Payments window ───────────────────────────────────────────
   // Subscription status + invoice history/detail, backed by the same
   // Modules/Pos billing endpoints (Modules/Pos/routes/api.php) the full
@@ -2408,6 +2504,11 @@ ${ctx.hdrCss}</style></head><body><div class="pg">
       <div class="um-sep"></div>
       <button class="um-item" id="um-settings" type="button" role="menuitem"><i class="fa-solid fa-gear"></i> ${t('Settings')}</button>
       <div class="um-sep"></div>
+      <button class="um-item" id="um-shortcuts" type="button" role="menuitem">
+        <i class="fa-solid fa-keyboard"></i> <span>${t('Keyboard Shortcuts')}</span>
+        <span class="um-item-value">?</span>
+      </button>
+      <div class="um-sep"></div>
       <button class="um-item" id="um-reload" type="button" role="menuitem"><i class="fa-solid fa-rotate-right"></i> ${t('Reload page')}</button>
       <button class="um-item" id="um-restart" type="button" role="menuitem"><i class="fa-solid fa-power-off"></i> ${t('Restart app')}</button>
       <div class="um-sep"></div>
@@ -2438,6 +2539,7 @@ ${ctx.hdrCss}</style></head><body><div class="pg">
   $('um-language').addEventListener('click', () => { setOpen(false); openLanguageWindow(); });
   $('um-billing').addEventListener('click', () => { setOpen(false); openBillingWindow(); });
   $('um-settings').addEventListener('click', () => { setOpen(false); openSettingsWindow(); });
+  $('um-shortcuts').addEventListener('click', () => { setOpen(false); openShortcutsWindow(); });
   $('um-reload').addEventListener('click', () => { window.location.reload(); });
   $('um-restart').addEventListener('click', async () => { setOpen(false); await window.electronAPI.restartApp(); });
   $('um-logout').addEventListener('click', async () => { setOpen(false); await window.electronAPI.logout(); });
