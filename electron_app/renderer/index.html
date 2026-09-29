@@ -4522,7 +4522,7 @@
               </div>
             </div>
             <div id="grn-payment-fields" style="">
-              <div class="po-field">
+              <div class="po-field" id="grn-f-account-wrap">
                 <label class="po-field-label">Account <span class="po-required">*</span></label>
                 <select id="grn-f-account" class="po-field-input"></select>
               </div>
@@ -4606,7 +4606,7 @@
               <button class="grn-method-btn" data-method="credit"><i class="fa fa-clock"></i> Credit</button>
             </div>
           </div>
-          <div class="po-field">
+          <div class="po-field" id="grn-pay-account-wrap">
             <label class="po-field-label">Account <span class="po-required">*</span></label>
             <select id="grn-pay-account" class="po-field-input"></select>
           </div>
@@ -4717,7 +4717,7 @@
               </div>
             </div>
             <div id="grn-direct-payment-fields">
-              <div class="po-field">
+              <div class="po-field" id="grn-direct-account-wrap">
                 <label class="po-field-label">Account <span class="po-required">*</span></label>
                 <select id="grn-direct-account" class="po-field-input"></select>
               </div>
@@ -13857,6 +13857,18 @@
                 <span class="psm-toggle-desc">Track cash in-hand instead of depositing to a bank account. Requires entering opening float when opening POS each day.</span>
               </div>
               <label class="psm-switch"><input type="checkbox" id="psm-dont-settle"><span class="psm-switch-track"></span></label>
+            </div>
+          </div>
+
+          <div class="psm-section">
+            <div class="psm-section-label"><i class="fa fa-truck-ramp-box"></i> Purchase payments</div>
+            <div class="psm-field-row">
+              <label class="psm-field-label" for="psm-grn-payment-source">Default Pay From</label>
+              <select id="psm-grn-payment-source" class="psm-select">
+                <option value="account">Bank / Cash Account</option>
+                <option value="expense">Business Expense (no account)</option>
+              </select>
+              <span class="psm-hint">How cash Goods Receive payments are settled by default — deducted from a real account, or logged as a plain business expense.</span>
             </div>
           </div>
 

@@ -106,6 +106,11 @@ class GoodsReceiveNote extends Model
         return $this->hasMany(ChequePayment::class)->orderByDesc('due_date')->orderByDesc('id');
     }
 
+    public function grnExpenses(): HasMany
+    {
+        return $this->hasMany(GrnExpense::class)->orderByDesc('paid_at')->orderByDesc('id');
+    }
+
     public function requiresImmediatePayment(): bool
     {
         return in_array($this->payment_method, [

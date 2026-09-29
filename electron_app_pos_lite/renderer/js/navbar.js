@@ -707,6 +707,14 @@
                 </select>
                 <span class="sm-hint">${t('Payments are settled at the end of day. This setting cannot be changed.')}</span>
               </div>
+              <div class="sm-field-row">
+                <label class="sm-field-label" for="sm-grn-payment-source">${t('Default Pay From (purchases)')}</label>
+                <select id="sm-grn-payment-source" class="sm-select" disabled>
+                  <option value="expense" selected>${t('Business Expense (no account)')}</option>
+                  <option value="account">${t('Bank / Cash Account')}</option>
+                </select>
+                <span class="sm-hint">${t('Cash purchases (Goods Receive) are always paid as a Business Expense on this app. This setting cannot be changed.')}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -823,6 +831,7 @@
       renderLogo();
       renderCurrPos();
       $('sm-settlement-mode').value = 'end_of_day';
+      $('sm-grn-payment-source').value = 'expense';
       $('sm-receipt-mode').value = d.receipt_mode || 'bill';
       $('sm-featured-products').value = d.featured_products_limit || 0;
       $('sm-featured-categories').value = d.featured_categories_limit || 0;
@@ -846,6 +855,7 @@
         currency_position: $('sm-currpos-before').checked ? 'before' : 'after',
         business_logo_url: logoUrl || '',
         payment_settlement_mode: 'end_of_day',
+        grn_payment_source: 'expense',
         receipt_mode: $('sm-receipt-mode').value,
         featured_products_limit: Number($('sm-featured-products').value) || 0,
         featured_categories_limit: Number($('sm-featured-categories').value) || 0,
@@ -868,6 +878,7 @@
         $('um-biz').textContent = payload.business_name;
         $('um-biz-name').textContent = payload.business_name;
       }
+      window.invalidateStockSettingsCache?.();
       showAlert(t('Settings saved.'), 'success');
     }
 
