@@ -26,6 +26,8 @@ const TILES = [
     title: 'Stock',
     desc: 'Track stock levels, batches, and adjustments.',
     accent: '#0284c7',
+    active: true,
+    modal: 'openStockModal', // opens as an in-page dialog (js/stock.js) instead of a full-page navigation
   },
   {
     key: 'reports',

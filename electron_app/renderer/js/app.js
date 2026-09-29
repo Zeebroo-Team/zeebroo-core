@@ -14422,7 +14422,7 @@ function _grnRenderDetail(g) {
   const payments = g.payments || [];
   $('#grn-dv-payments').innerHTML = payments.length
     ? `<div class="grn-dv-table-scroll"><table class="po-items-table"><thead><tr><th>Date</th><th>Account</th><th style="text-align:right">Amount</th></tr></thead><tbody>
-        ${payments.map(p => `<tr><td>${p.date||'—'}</td><td>${p.account||'—'}</td><td style="text-align:right">${formatMoney((p.amount||0), {currency: cur})}</td></tr>`).join('')}
+        ${payments.map(p => `<tr><td>${p.date||'—'}</td><td>${p.account || (p.is_expense ? 'Business Expense' : '—')}</td><td style="text-align:right">${formatMoney((p.amount||0), {currency: cur})}</td></tr>`).join('')}
        </tbody></table></div>`
     : `<div class="grn-dv-no-data"><i class="fa fa-money-bill-wave"></i> No payments recorded</div>`;
 
@@ -14537,6 +14537,30 @@ function _grnApplyDefaultMethod(method) {
   if (cf) cf.style.display = method === 'cheque' ? 'flex' : 'none';
   const ct = document.getElementById('grn-credit-terms');
   if (ct) ct.style.display = method === 'credit' ? '' : 'none';
+  _grnSyncAccountVisibility('grn-f-account-wrap', method);
+}
+
+// The business's Settings > Accounts "Default Pay From" decides whether a GRN
+// cash payment needs an account or is logged as a plain business expense —
+// there's no per-transaction override. Cheques always need a real account.
+let _grnPaymentSourceDefault = 'account';
+let _grnPaymentSourceLoaded  = false;
+
+async function _grnLoadPaymentSourceDefault() {
+  if (_grnPaymentSourceLoaded) return;
+  const res = await API.settingsGet();
+  if (res.status === 200) {
+    const v = res.body?.data?.grn_payment_source;
+    if (v === 'account' || v === 'expense') _grnPaymentSourceDefault = v;
+  }
+  _grnPaymentSourceLoaded = true;
+}
+
+function _grnSyncAccountVisibility(wrapId, method) {
+  const wrap = document.getElementById(wrapId);
+  if (!wrap) return;
+  const needsAccount = method === 'cheque' || _grnPaymentSourceDefault !== 'expense';
+  wrap.style.display = (method === 'credit' || !needsAccount) ? 'none' : '';
 }
 
 function _openGrnSettings() {
@@ -15053,7 +15077,9 @@ async function _grnOpenCreateModal(purchaseId) {
   document.querySelectorAll('input[name="grn-pay-opt"]').forEach(r => { r.checked = r.value === 'full'; });
   $('#grn-partial-row').style.display = 'none';
 
-  // Load accounts
+  // Load accounts + this business's default GRN payment source
+  await _grnLoadPaymentSourceDefault();
+  _grnSyncAccountVisibility('grn-f-account-wrap', _grnDefaultMethod);
   if (!_grn.accounts.length) {
     const res = await API.accounts();
     if (res.status === 200) _grn.accounts = res.body?.data || [];
@@ -15200,6 +15226,7 @@ async function _grnSubmitCreate() {
   const method    = $('#grn-method-btns')?.querySelector('.active')?.dataset.method || 'cash';
   const payOption = document.querySelector('input[name="grn-pay-opt"]:checked')?.value || 'full';
   const isCash    = method === 'cash' || method === 'cheque';
+  const needsAccount = isCash && $('#grn-f-account-wrap')?.style.display !== 'none';
   const body = {
     received_date:       $('#grn-f-date').value,
     branch_id:           parseInt($('#grn-f-branch')?.value) || null,
@@ -15207,7 +15234,7 @@ async function _grnSubmitCreate() {
     notes:               $('#grn-f-notes').value.trim() || null,
     payment_method:      method,
     payment_option:      isCash ? payOption : null,
-    deduct_account_id:   isCash ? (+$('#grn-f-account').value || null) : null,
+    deduct_account_id:   needsAccount ? (+$('#grn-f-account').value || null) : null,
     pay_amount:          (isCash && payOption === 'partial') ? (parseFloat($('#grn-f-amount').value) || null) : null,
     payment_reference:   method === 'cheque' ? ($('#grn-f-cheque-ref').value.trim() || null) : null,
     cheque_due_date:     method === 'cheque' ? ($('#grn-f-cheque-date').value || null) : null,
@@ -15232,7 +15259,7 @@ async function _grnSubmitCreate() {
 }
 
 // ── Pay GRN Modal ─────────────────────────────────────────────────────────
-function _grnOpenPayModal(grnId, g) {
+async function _grnOpenPayModal(grnId, g) {
   _grn.payGrnId = grnId;
   const cur = window._activeSession?.currency || '';
   $('#grn-pay-modal').style.display = 'flex';
@@ -15260,6 +15287,8 @@ function _grnOpenPayModal(grnId, g) {
   if (pcf) { pcf.style.display = 'none'; }
   const pRef = $('#grn-pay-cheque-ref');   if (pRef)  pRef.value  = '';
   const pDt  = $('#grn-pay-cheque-date');  if (pDt)   pDt.value   = '';
+  await _grnLoadPaymentSourceDefault();
+  _grnSyncAccountVisibility('grn-pay-account-wrap', 'cash');
 }
 
 async function _grnSubmitPay() {
@@ -15267,9 +15296,10 @@ async function _grnSubmitPay() {
   btn.disabled = true;
   const method    = $('#grn-pay-method-btns')?.querySelector('.active')?.dataset.method || 'cash';
   const payOption = document.querySelector('input[name="grn-pay2-opt"]:checked')?.value || 'full';
+  const needsAccount = $('#grn-pay-account-wrap')?.style.display !== 'none';
   const body = {
     payment_method:    method,
-    deduct_account_id: +$('#grn-pay-account').value || null,
+    deduct_account_id: needsAccount ? (+$('#grn-pay-account').value || null) : null,
     payment_option:    payOption,
     pay_amount:        payOption === 'partial' ? (parseFloat($('#grn-pay-amount').value) || null) : null,
     payment_reference: method === 'cheque' ? ($('#grn-pay-cheque-ref').value.trim() || null) : null,
@@ -15362,6 +15392,7 @@ $('#grn-method-btns')?.addEventListener('click', e => {
   const ct = $('#grn-credit-terms');
   if (ct) ct.style.display = method === 'credit' ? '' : 'none';
   if (method === 'credit') _grnUpdateCreditDue();
+  _grnSyncAccountVisibility('grn-f-account-wrap', method);
 });
 
 // Partial amount toggle in create modal
@@ -15383,6 +15414,7 @@ $('#grn-pay-method-btns')?.addEventListener('click', e => {
   btn.classList.add('active');
   const cf = $('#grn-pay-cheque-fields');
   if (cf) cf.style.display = btn.dataset.method === 'cheque' ? 'flex' : 'none';
+  _grnSyncAccountVisibility('grn-pay-account-wrap', btn.dataset.method);
 });
 
 document.querySelectorAll('input[name="grn-pay2-opt"]').forEach(r => {
@@ -15405,7 +15437,7 @@ const _dgrnState = {
   method: 'cash',
 };
 
-function _dgrnOpen() {
+async function _dgrnOpen() {
   const modal = $('#grn-direct-modal');
   if (!modal) return;
 
@@ -15435,6 +15467,8 @@ function _dgrnOpen() {
   const pr = $('#grn-direct-partial-row');
   if (pr) pr.style.display = 'none';
   document.querySelectorAll('input[name="grn-direct-pay-opt"]').forEach(r => { r.checked = r.value === 'full'; });
+  await _grnLoadPaymentSourceDefault();
+  _grnSyncAccountVisibility('grn-direct-account-wrap', _grnDefaultMethod);
 
   // Clear items table
   $('#grn-direct-items-tbody').innerHTML = '';
@@ -15649,14 +15683,17 @@ async function _dgrnSubmit() {
   if (!dateVal) { toast('Select received date', 'warning'); return; }
 
   const method = _dgrnState.method;
+  const needsAccount = method !== 'credit' && $('#grn-direct-account-wrap')?.style.display !== 'none';
   let accountId = null;
   let chequeRef = null;
   let chequeDate = null;
   let payAmount = null;
 
   if (method !== 'credit') {
-    accountId = parseInt($('#grn-direct-account')?.value) || null;
-    if (!accountId) { toast('Select an account for payment', 'warning'); return; }
+    if (needsAccount) {
+      accountId = parseInt($('#grn-direct-account')?.value) || null;
+      if (!accountId) { toast('Select an account for payment', 'warning'); return; }
+    }
     const payOpt = document.querySelector('input[name="grn-direct-pay-opt"]:checked')?.value ?? 'full';
     if (payOpt === 'partial') {
       payAmount = parseFloat($('#grn-direct-amount')?.value) || null;
@@ -15739,6 +15776,7 @@ $('#grn-direct-method-btns')?.addEventListener('click', e => {
   const ct = $('#grn-direct-credit-terms');
   if (ct) ct.style.display = btn.dataset.method === 'credit' ? '' : 'none';
   if (btn.dataset.method === 'credit') _dgrnUpdateCreditDue();
+  _grnSyncAccountVisibility('grn-direct-account-wrap', btn.dataset.method);
 });
 
 document.querySelectorAll('input[name="grn-direct-pay-opt"]').forEach(r => {
@@ -26883,6 +26921,7 @@ async function openPosSettings() {
   $('#psm-settlement-mode').value    = s.payment_settlement_mode ?? 'immediate';
   $('#psm-dont-settle').checked      = !!s.dont_settle_to_account;
   $('#psm-settlement-mode').disabled = !!s.dont_settle_to_account;
+  $('#psm-grn-payment-source').value = s.grn_payment_source === 'expense' ? 'expense' : 'account';
   $('#psm-show-account-info').checked = !!s.show_account_info;
 
   // Receipt
@@ -27190,6 +27229,7 @@ $('#psm-save').addEventListener('click', async () => {
     default_deposit_account_id:  $('#psm-default-account').value || null,
     payment_settlement_mode:     $('#psm-settlement-mode').value,
     dont_settle_to_account:      $('#psm-dont-settle').checked,
+    grn_payment_source:          $('#psm-grn-payment-source').value,
     show_account_info:           $('#psm-show-account-info').checked,
     show_business_name:          $('#psm-show-biz-name').checked,
     show_business_address:       $('#psm-show-biz-address').checked,
@@ -27239,6 +27279,10 @@ $('#psm-save').addEventListener('click', async () => {
   syncKeys.forEach(k => {
     if (saved[k] !== undefined) state.receiptSettings = { ...state.receiptSettings, [k]: saved[k] };
   });
+  if (saved.grn_payment_source === 'account' || saved.grn_payment_source === 'expense') {
+    _grnPaymentSourceDefault = saved.grn_payment_source;
+    _grnPaymentSourceLoaded  = true;
+  }
 
   // Apply layout mode locally (it's an electron config, not a server setting)
   const newLayout = $('#psm-layout-mode').value;

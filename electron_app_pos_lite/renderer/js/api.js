@@ -175,5 +175,60 @@ const API = (() => {
     },
     productRental: (id) => request('GET', `/product-rentals/${id}`),
     returnProductRental: (id) => request('POST', `/product-rentals/${id}/return`),
+
+    // Stock — Purchase Orders
+    purchaseOrders: (params = {}) => {
+      const qs = new URLSearchParams();
+      if (params.q) qs.set('q', params.q);
+      if (params.status) qs.set('status', params.status);
+      const suffix = qs.toString();
+      return request('GET', '/purchase-orders' + (suffix ? `?${suffix}` : ''));
+    },
+    purchaseOrder: (id) => request('GET', `/purchase-orders/${id}`),
+    createPurchaseOrder: (payload) => request('POST', '/purchase-orders', payload),
+    placePurchaseOrder: (id) => request('POST', `/purchase-orders/${id}/place`),
+    cancelPurchaseOrder: (id) => request('POST', `/purchase-orders/${id}/cancel`),
+
+    // Stock — Goods Receive (GRNs)
+    grns: (params = {}) => {
+      const qs = new URLSearchParams();
+      if (params.q) qs.set('q', params.q);
+      if (params.payment) qs.set('payment', params.payment);
+      const suffix = qs.toString();
+      return request('GET', '/grns' + (suffix ? `?${suffix}` : ''));
+    },
+    grn: (id) => request('GET', `/grns/${id}`),
+    grnFormForPurchase: (purchaseId) => request('GET', `/purchase-orders/${purchaseId}/grn-form`),
+    createGrnForPurchase: (purchaseId, payload) => request('POST', `/purchase-orders/${purchaseId}/grns`, payload),
+    createGrnDirect: (payload) => request('POST', '/grns', payload),
+    payGrn: (id, payload) => request('POST', `/grns/${id}/pay`, payload),
+    approveGrn: (id) => request('POST', `/grns/${id}/approve`),
+    rejectGrn: (id) => request('POST', `/grns/${id}/reject`),
+
+    // Stock — Cheques
+    cheques: (filter) => request('GET', '/cheques' + (filter && filter !== 'all' ? `?filter=${filter}` : '')),
+    clearCheque: (id, payload = {}) => request('POST', `/cheques/${id}/clear`, payload),
+
+    // Stock — Stock Transfers
+    stockTransfers: (params = {}) => {
+      const qs = new URLSearchParams();
+      if (params.q) qs.set('q', params.q);
+      qs.set('page', params.page || 1);
+      return request('GET', '/stock-transfers?' + qs.toString());
+    },
+    stockTransfer: (id) => request('GET', `/stock-transfers/${id}`),
+    createStockTransfer: (payload) => request('POST', '/stock-transfers', payload),
+    receiveStockTransfer: (id) => request('POST', `/stock-transfers/${id}/receive`),
+    cancelStockTransfer: (id) => request('POST', `/stock-transfers/${id}/cancel`),
+
+    // Stock — shared lookups (suppliers, finance accounts, branches)
+    suppliers: (params = {}) => {
+      const qs = new URLSearchParams();
+      if (params.q) qs.set('q', params.q);
+      qs.set('active', '1');
+      return request('GET', '/suppliers?' + qs.toString());
+    },
+    accounts: () => request('GET', '/accounts'),
+    branches: () => request('GET', '/branches'),
   };
 })();

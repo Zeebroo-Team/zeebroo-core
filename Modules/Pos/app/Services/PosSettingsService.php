@@ -7,9 +7,15 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Modules\Account\Models\Account;
 use Modules\Business\Models\Business;
+use Modules\Purchase\Services\GrnPaymentSettlementService;
 
 class PosSettingsService
 {
+    public function __construct(
+        private readonly GrnPaymentSettlementService $grnPaymentSettlement,
+    ) {
+    }
+
     public const KEY_DEFAULT_DEPOSIT_ACCOUNT = 'pos.default_deposit_account_id';
 
     public const KEY_DISCOUNT_FIELD_ENABLED = 'pos.discount_field_enabled';
@@ -214,6 +220,7 @@ class PosSettingsService
             // Purchasing
             'purchasing_mode'        => $this->resolvePurchasingMode($business),
             'purchase_order_enabled' => $this->resolvePurchasingMode($business) !== 'direct_only',
+            'grn_payment_source'     => $this->grnPaymentSettlement->defaultPaymentSource($business),
             // Rentals
             'rental_enabled' => (bool) $business->getSetting(self::KEY_RENTAL_ENABLED, true),
             // Customers
@@ -470,6 +477,14 @@ class PosSettingsService
             $enabled = filter_var($data['purchase_order_enabled'], FILTER_VALIDATE_BOOLEAN);
             $business->setSetting(self::KEY_PURCHASE_ORDER_ENABLED, $enabled);
             $business->setSetting(self::KEY_PURCHASING_MODE, $enabled ? 'po_only' : 'direct_only');
+        }
+
+        if (array_key_exists('grn_payment_source', $data)) {
+            $source = strtolower(trim((string) ($data['grn_payment_source'] ?? 'account')));
+            $business->setSetting(
+                GrnPaymentSettlementService::SETTING_GRN_PAYMENT_SOURCE,
+                in_array($source, ['account', 'expense'], true) ? $source : 'account',
+            );
         }
 
         // Rentals
