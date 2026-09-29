@@ -221,6 +221,10 @@ const API = (() => {
     receiveStockTransfer: (id) => request('POST', `/stock-transfers/${id}/receive`),
     cancelStockTransfer: (id) => request('POST', `/stock-transfers/${id}/cancel`),
 
+    // Reports & Summaries
+    todaySummary: () => request('GET', '/today-summary'),
+    profitReport: (period) => request('GET', `/profit-report?period=${period || 30}`),
+
     // Stock — shared lookups (suppliers, finance accounts, branches)
     suppliers: (params = {}) => {
       const qs = new URLSearchParams();
