@@ -13,6 +13,19 @@ function esc(s) {
   return (s ?? '').toString().replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
+let posSettings = {};
+
+function money(n) {
+  const amount = (Number(n) || 0).toFixed(2);
+  const currency = (posSettings.currency || 'LKR').toUpperCase();
+  return posSettings.currency_position === 'before' ? `${currency} ${amount}` : `${amount} ${currency}`;
+}
+
+(async () => {
+  const res = await API.settingsGet();
+  if (res.status === 200) posSettings = res.body?.data || {};
+})();
+
 function firstErrorMessage(res, fallback) {
   const firstKey = res.body?.errors ? Object.keys(res.body.errors)[0] : null;
   return t(firstKey ? res.body.errors[firstKey][0] : (res.body?.message || fallback));
@@ -283,7 +296,7 @@ async function openCustView(id) {
   const salesRows = (c.recent_sales || []).map((s) => `
     <div class="mini-list-item">
       <span>${esc(s.sale_number)} <span class="muted">· ${s.sold_at ? new Date(s.sold_at).toLocaleDateString(i18n.locale) : ''}</span></span>
-      <span>$${Number(s.total).toFixed(2)}</span>
+      <span>${money(s.total)}</span>
     </div>`).join('') || `<div class="mini-list-item"><span class="muted">${t('No sales yet.')}</span></div>`;
 
   document.getElementById('cust-view-body').innerHTML = `
@@ -796,7 +809,7 @@ async function openSupView(id) {
   const poRows = (s.recent_purchase_orders || []).map((p) => `
     <div class="mini-list-item">
       <span>${esc(p.po_number)} <span class="muted">· ${p.purchase_date ? new Date(p.purchase_date).toLocaleDateString(i18n.locale) : ''}</span></span>
-      <span>$${Number(p.total).toFixed(2)}</span>
+      <span>${money(p.total)}</span>
     </div>`).join('') || `<div class="mini-list-item"><span class="muted">${t('No purchase orders yet.')}</span></div>`;
 
   document.getElementById('sup-view-body').innerHTML = `
