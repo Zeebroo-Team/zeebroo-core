@@ -43,6 +43,7 @@ class SubscriptionSummaryService
         }
 
         $overdue = $business->overdueSubscriptionPayment();
+        $due = $overdue ? null : $business->dueSubscriptionPayment();
 
         return [
             'subscription_status' => $activeSubscription?->stripe_subscription_status
@@ -61,6 +62,8 @@ class SubscriptionSummaryService
                 'due_at' => $overdue->due_at?->toIso8601String(),
                 'can_pay' => $requester instanceof User && (int) $overdue->user_id === (int) $requester->id,
             ] : null,
+            // Unpaid but still inside the grace period — warn, don't lock yet.
+            'payment_due' => $due ? $this->formatDue($due, $requester) : null,
             'items' => $payments->map(fn (Payment $p) => $this->formatPayment($p))->all(),
         ];
     }
@@ -136,6 +139,24 @@ class SubscriptionSummaryService
                 $payment->update(['due_at' => now()->addDays(Payment::GRACE_PERIOD_DAYS)]);
             }
         }
+    }
+
+    /**
+     * Grace-period warning payload, shared by the billing summary and the
+     * web layout's warning bar (EnsureWebSubscriptionSettled).
+     *
+     * @return array<string, mixed>
+     */
+    public function formatDue(Payment $payment, ?User $requester): array
+    {
+        return [
+            'payment_id' => $payment->id,
+            'payment_status' => $payment->payment_status,
+            'due_at' => $payment->due_at?->toIso8601String(),
+            'amount' => (float) $payment->amount,
+            'currency' => $payment->currency,
+            'can_pay' => $requester instanceof User && (int) $payment->user_id === (int) $requester->id,
+        ];
     }
 
     /** @return array<string, mixed> */

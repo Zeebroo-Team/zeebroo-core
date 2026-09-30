@@ -6,7 +6,9 @@ namespace App\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\View;
 use Modules\Business\Models\Business;
+use Modules\Payment\Services\SubscriptionSummaryService;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -49,6 +51,13 @@ final class EnsureWebSubscriptionSettled
         $ended = ! $overdue && $business->subscriptionHasEnded();
 
         if (! $overdue && ! $ended) {
+            // Still inside the grace period — let the request through, but hand
+            // the layout what it needs for its "pay before …" warning bar.
+            if (! $request->ajax() && ! $request->wantsJson()) {
+                $due = $business->dueSubscriptionPayment();
+                View::share('subscriptionDue', $due ? app(SubscriptionSummaryService::class)->formatDue($due, $user) : null);
+            }
+
             return $next($request);
         }
 

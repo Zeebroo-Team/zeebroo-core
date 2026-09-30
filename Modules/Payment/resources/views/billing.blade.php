@@ -12,6 +12,7 @@
     $subStatus = $summary['subscription_status'] ?? null;
     $statusInfo = $statusLabels[$subStatus] ?? ['label' => $subStatus ? ucfirst(str_replace('_', ' ', $subStatus)) : 'No subscription', 'color' => '#6b7280'];
     $overdue = $summary['overdue'] ?? null;
+    $paymentDue = $summary['payment_due'] ?? null;
     $items = collect($summary['items'] ?? []);
     $paidItems = $items->where('payment_status', 'succeeded')->values();
     $dueItems = $items->whereIn('payment_status', ['pending', 'failed', 'canceled'])->values();
@@ -22,6 +23,10 @@
     .bill-status-pill{display:inline-flex;align-items:center;gap:7px;padding:5px 14px;border-radius:999px;font-size:12.5px;font-weight:700;}
     .bill-renewal{font-size:13px;color:var(--muted);margin-top:6px;}
     .bill-alert{display:flex;gap:12px;align-items:flex-start;padding:14px 16px;border-radius:14px;background:linear-gradient(135deg,#fef2f2,#fee2e2);border:1px solid #fca5a5;margin-bottom:16px;}
+    .bill-alert--warn{background:linear-gradient(135deg,#fffbeb,#fef3c7);border-color:#fcd34d;}
+    .bill-alert--warn .bill-alert-icon{background:#f59e0b;}
+    .bill-btn--warn{background:#f59e0b;border-color:#f59e0b;color:#fff;}
+    .bill-btn--warn:hover{background:#d97706;border-color:#d97706;color:#fff;}
     .bill-alert-icon{width:28px;height:28px;border-radius:999px;background:#ef4444;color:#fff;display:grid;place-items:center;font-weight:700;flex-shrink:0;}
     .bill-btn{display:inline-flex;align-items:center;gap:8px;padding:9px 18px;font-size:13px;font-weight:700;border-radius:9px;border:1.5px solid var(--border);background:transparent;color:var(--text);cursor:pointer;font-family:inherit;text-decoration:none;}
     .bill-btn:hover{border-color:var(--primary);color:var(--primary);}
@@ -78,6 +83,29 @@
                             <i class="fa fa-credit-card" aria-hidden="true"></i> Complete payment
                         </button>
                     </form>
+                @endif
+            </div>
+        </div>
+    @elseif($paymentDue)
+        <div class="bill-alert bill-alert--warn">
+            <div class="bill-alert-icon"><i class="fa fa-clock" aria-hidden="true" style="font-size:12px;"></i></div>
+            <div style="flex:1;min-width:0;">
+                <div style="color:#92400e;font-weight:700;">Your subscription payment is due</div>
+                <div style="color:#b45309;font-size:13px;margin-top:2px;">
+                    Pay {{ strtoupper($paymentDue['currency'] ?? '') }} {{ number_format((float) $paymentDue['amount'], 2) }}
+                    by {{ \Illuminate\Support\Carbon::parse($paymentDue['due_at'])->format('d M Y, g:i A') }}
+                    ({{ \Illuminate\Support\Carbon::parse($paymentDue['due_at'])->diffForHumans(['parts' => 2]) }}).
+                    After that, access to your workspace is locked until it's settled.
+                </div>
+                @if($paymentDue['can_pay'])
+                    <form method="post" action="{{ route('payment.checkout.resume', ['payment' => $paymentDue['payment_id']]) }}" style="margin-top:10px;">
+                        @csrf
+                        <button type="submit" class="bill-btn bill-btn--warn">
+                            <i class="fa fa-credit-card" aria-hidden="true"></i> Pay now
+                        </button>
+                    </form>
+                @else
+                    <div style="color:#92400e;font-size:13px;margin-top:6px;">Contact your business owner to settle this payment.</div>
                 @endif
             </div>
         </div>

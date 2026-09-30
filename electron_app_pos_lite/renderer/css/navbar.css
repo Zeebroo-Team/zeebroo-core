@@ -993,6 +993,144 @@
 .zc-btn.primary:hover { background: #4338ca; }
 .zc-btn.danger { background: #ef4444; color: #fff; box-shadow: 0 6px 14px rgba(239, 68, 68, 0.3); }
 .zc-btn.danger:hover { background: #dc2626; }
+.zc-btn:focus { outline: none; }
+.zc-btn:focus-visible { outline: 2px solid #a5b4fc; outline-offset: 2px; }
+.zc-btn.danger:focus-visible { outline-color: #fca5a5; }
+
+/* ── Subscription lock screen (payment overdue / subscription ended) ─────── */
+.sl-backdrop {
+  -webkit-app-region: no-drag;
+  position: fixed;
+  inset: 0;
+  z-index: 5000;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(20, 22, 34, 0.55);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  opacity: 0;
+  transition: opacity 0.18s ease;
+}
+body.sl-locked .sl-backdrop { display: flex; }
+.sl-backdrop.open { opacity: 1; }
+
+/* Billing + confirm dialogs must sit above the lock so the user can pay */
+body.sl-locked .bm-backdrop { z-index: 5100; }
+body.sl-locked .zc-backdrop { z-index: 5200; }
+
+.sl-card {
+  width: 440px;
+  max-width: 100%;
+  padding: 32px 30px 26px;
+  background: #fff;
+  border-radius: 20px;
+  box-shadow: 0 30px 70px rgba(20, 24, 40, 0.3);
+  transform: translateY(14px) scale(0.96);
+  transition: transform 0.24s cubic-bezier(0.2, 0.8, 0.2, 1);
+  color: var(--text, #1f2430);
+  font-family: inherit;
+  text-align: center;
+}
+.sl-backdrop.open .sl-card { transform: none; }
+
+.sl-icon {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 26px;
+  color: #dc2626;
+  background: #fee2e2;
+}
+.sl-card h2 { margin: 0 0 10px; font-size: 18px; font-weight: 800; }
+.sl-card p { margin: 0; font-size: 13.5px; line-height: 1.55; color: var(--muted, #6b7280); }
+.sl-card .sl-pay { width: 100%; margin-top: 22px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.sl-card .sl-contact { margin-top: 18px; font-weight: 600; color: var(--text, #1f2430); }
+.sl-signout {
+  margin-top: 16px;
+  padding: 4px 8px;
+  border: 0;
+  background: none;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--muted, #6b7280);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.sl-signout:hover { color: var(--text, #1f2430); }
+
+/* ── Subscription grace-period warning (payment due, not yet locked) ────── */
+.sdb-bar {
+  -webkit-app-region: no-drag;
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  z-index: 150;
+  width: min(760px, calc(100vw - 32px));
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px 12px 16px;
+  border-radius: 14px;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  box-shadow: 0 14px 34px rgba(146, 64, 14, 0.18);
+  color: #78350f;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.sdb-icon {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #f59e0b;
+  color: #fff;
+}
+.sdb-text { flex: 1; min-width: 0; }
+.sdb-text b { color: #92400e; }
+.sdb-pay {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 9px;
+  background: #f59e0b;
+  color: #fff;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.sdb-pay:hover { background: #d97706; }
+.sdb-close { flex-shrink: 0; border: 0; background: none; color: #b45309; font-size: 15px; padding: 4px 6px; cursor: pointer; }
+body.sl-locked .sdb-bar { display: none; }
+
+.pm-due-alert {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  color: #b45309;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.pm-due-alert > i { margin-top: 2px; color: #f59e0b; }
+.pm-due-alert b { color: #92400e; }
 
 /* ── Receipt Layout Editor window ──────────────────────────────────────── */
 .rle-backdrop {

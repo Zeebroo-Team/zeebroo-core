@@ -4,8 +4,17 @@
 // Talks to the same Laravel POS API the full desktop app uses:
 // Modules/Pos/routes/api.php, prefix /api/v1/pos.
 const API = (() => {
-  function request(method, path, body = null) {
-    return window.electronAPI.apiRequest(method, path, body);
+  // A 402 from EnsureSubscriptionSettled (Modules/Pos) means the business is
+  // locked out — navbar.js listens for these events and shows the lock screen.
+  async function request(method, path, body = null) {
+    const res = await window.electronAPI.apiRequest(method, path, body);
+    if (res?.status === 402 && res.body?.code === 'subscription_payment_overdue') {
+      window.dispatchEvent(new CustomEvent('api-payment-overdue', { detail: res.body }));
+    }
+    if (res?.status === 402 && res.body?.code === 'subscription_ended') {
+      window.dispatchEvent(new CustomEvent('api-subscription-ended'));
+    }
+    return res;
   }
 
   return {

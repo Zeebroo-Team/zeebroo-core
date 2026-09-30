@@ -384,6 +384,7 @@
         }
         const data = res.body?.data || {};
         bm.items = data.items || [];
+        applySubscriptionState(data);
         renderSummary(data);
         const hasDue = bm.items.some((p) => dueStatuses.includes(p.payment_status));
         if (!bm.tab) bm.tab = hasDue ? 'due' : 'paid';
@@ -398,8 +399,19 @@
 
     function renderSummary(data) {
       const summary = $('bm-summary');
+      const due = data.overdue ? null : data.payment_due;
+      const dueHtml = due ? `
+        <div class="pm-due-alert">
+          <i class="fa-solid fa-clock"></i>
+          <div>
+            <b>${t('Your subscription payment is due')}</b>
+            <div>${esc(t('Pay by {date} ({left} left). After that, access to Zeebroo POS is locked until it’s settled.', {
+              date: fmtDate(due.due_at, true), left: dueLeftText(due.due_at) || t('0 hours'),
+            }))}</div>
+          </div>
+        </div>` : '';
       if (!data.subscription_status && !data.next_renewal_at) {
-        summary.innerHTML = '';
+        summary.innerHTML = dueHtml;
         return;
       }
       const rawStatus = data.subscription_status || 'unknown';
@@ -422,7 +434,7 @@
           : `<button class="bm-btn bm-btn-outline bm-cancel-sub-btn" id="bm-cancel-sub" type="button"><i class="fa-solid fa-ban"></i> ${t('Cancel subscription')}</button>`;
       }
 
-      summary.innerHTML = `
+      summary.innerHTML = `${dueHtml}
         <div class="pm-summary">
           <div class="pm-summary-left">
             <div class="pm-summary-plan">${t('Subscription')}: ${esc(cancelling ? t('Cancels on {date}', { date: fmtDate(accessUntil) }) : statusLabel)}</div>
@@ -500,7 +512,7 @@
             <div class="pm-row-icon ${cls}"><i class="fa-solid ${icon}"></i></div>
             <div class="pm-row-body">
               <div class="pm-row-plan">${esc(p.plan || t('Subscription'))}</div>
-              <div class="pm-row-meta">${fmtDate(p.created_at)}${p.billing_cycle ? ' · ' + esc(p.billing_cycle) : ''}</div>
+              <div class="pm-row-meta">${showPayBtn && p.due_at ? esc(t('Due {date}', { date: fmtDate(p.due_at, true) })) : fmtDate(p.created_at)}${p.billing_cycle ? ' · ' + esc(p.billing_cycle) : ''}</div>
             </div>
             ${badgeHtml(p.payment_status)}
             <div class="pm-row-amount">${money(p.amount, p.currency)}</div>
@@ -650,6 +662,168 @@
   }
 
   window.openBillingWindow = openBillingWindow;
+
+  // ── Subscription lock screen ────────────────────────────────────────────
+  // Mirrors the full desktop app's lockout: once the subscription payment
+  // passes its due date (or a cancelled subscription's paid period ends),
+  // Modules/Pos EnsureSubscriptionSettled answers every gated endpoint with
+  // 402. We show a blocking overlay that only allows paying (via the Billing
+  // window, whose endpoints stay open) or signing out.
+  const subLock = { el: null, wasLocked: false };
+
+  function subLockEl() {
+    if (subLock.el) return subLock.el;
+    const el = document.createElement('div');
+    el.className = 'sl-backdrop';
+    el.id = 'sl-backdrop';
+    el.setAttribute('role', 'alertdialog');
+    el.setAttribute('aria-modal', 'true');
+    el.setAttribute('aria-labelledby', 'sl-title');
+    el.innerHTML = `
+      <div class="sl-card">
+        <span class="sl-icon"><i class="fa-solid fa-lock"></i></span>
+        <h2 id="sl-title"></h2>
+        <p id="sl-text"></p>
+        <button class="zc-btn primary sl-pay" id="sl-pay" type="button"><i class="fa-solid fa-credit-card"></i> ${t('Pay Now')}</button>
+        <p class="sl-contact" id="sl-contact">${t('Contact your business owner to settle this payment.')}</p>
+        <button class="sl-signout" id="sl-signout" type="button">${t('Sign Out')}</button>
+      </div>`;
+    document.body.appendChild(el);
+    el.querySelector('#sl-pay').addEventListener('click', openBillingWindow);
+    el.querySelector('#sl-signout').addEventListener('click', () => window.electronAPI.logout());
+    subLock.el = el;
+    return el;
+  }
+
+  function applySubscriptionLock(data) {
+    const overdue = data?.overdue;
+    const ended = !!data?.subscription_ended && !overdue;
+
+    if (!overdue && !ended) {
+      if (subLock.el) subLock.el.classList.remove('open');
+      document.body.classList.remove('sl-locked');
+      // Paid while locked — reload so the screen fetches the data it was denied.
+      if (subLock.wasLocked) window.location.reload();
+      return;
+    }
+
+    const el = subLockEl();
+    el.querySelector('#sl-title').textContent = ended ? t('Subscription Ended') : t('Subscription Payment Overdue');
+    el.querySelector('#sl-text').textContent = ended
+      ? t('Your subscription was cancelled and its paid period has ended. Contact Zeebroo to reactivate your account.')
+      : t("Access to Zeebroo POS is on hold because your subscription payment wasn't settled in time. Pay now to restore full access.");
+    el.querySelector('#sl-pay').style.display = !ended && overdue.can_pay ? '' : 'none';
+    el.querySelector('#sl-contact').style.display = !ended && !overdue.can_pay ? '' : 'none';
+
+    subLock.wasLocked = true;
+    document.body.classList.add('sl-locked');
+    requestAnimationFrame(() => {
+      el.classList.add('open');
+      if (!el.contains(document.activeElement) && !document.querySelector('.bm-backdrop')) {
+        el.querySelector(overdue?.can_pay ? '#sl-pay' : '#sl-signout').focus();
+      }
+    });
+  }
+
+  // ── Grace-period warning bar ────────────────────────────────────────────
+  // Before the lock kicks in (Payment::GRACE_PERIOD_DAYS after the payment
+  // was created), the server reports the unpaid payment as `payment_due`.
+  // Fixed to the bottom so it never pushes the full-height screens around;
+  // dismissible for the rest of this session.
+  function dueLeftText(dueAtIso) {
+    const ms = new Date(dueAtIso).getTime() - Date.now();
+    if (!(ms > 0)) return null;
+    const hours = Math.max(1, Math.ceil(ms / 3600000));
+    if (hours < 24) return t(hours === 1 ? '{n} hour' : '{n} hours', { n: hours });
+    const days = Math.ceil(hours / 24);
+    return t(days === 1 ? '{n} day' : '{n} days', { n: days });
+  }
+
+  function applyDueBar(data) {
+    const due = data?.overdue || data?.subscription_ended ? null : data?.payment_due;
+    const existing = $('sdb-bar');
+    const dismissKey = due ? `subDueDismissed:${due.payment_id}` : null;
+    let dismissed = false;
+    try { dismissed = !!(dismissKey && sessionStorage.getItem(dismissKey)); } catch (e) {}
+    const left = due ? dueLeftText(due.due_at) : null;
+
+    if (!due || !left || dismissed) {
+      existing?.remove();
+      return;
+    }
+
+    const reasons = {
+      failed: t('Your last subscription payment failed.'),
+      canceled: t('Your subscription checkout was canceled before it completed.'),
+    };
+    const dueDate = new Date(due.due_at).toLocaleString(i18n.locale, { dateStyle: 'medium', timeStyle: 'short' });
+    const amount = `${String(due.currency || '').toUpperCase()} ${(Number(due.amount) || 0).toFixed(2)}`;
+
+    const el = existing || document.createElement('div');
+    el.className = 'sdb-bar';
+    el.id = 'sdb-bar';
+    el.setAttribute('role', 'status');
+    el.innerHTML = `
+      <span class="sdb-icon"><i class="fa-solid fa-clock"></i></span>
+      <div class="sdb-text">
+        ${esc(reasons[due.payment_status] || t('Your subscription payment is pending.'))}
+        ${t('Please pay {amount} within {left} (by {date}) to avoid your account being locked.', {
+          amount: `<b>${esc(amount)}</b>`, left: `<b>${esc(left)}</b>`, date: esc(dueDate),
+        })}
+        ${due.can_pay ? '' : ' ' + esc(t('Contact your business owner to settle this payment.'))}
+      </div>
+      ${due.can_pay ? `<button class="sdb-pay" id="sdb-pay" type="button"><i class="fa-solid fa-credit-card"></i> ${t('Pay Now')}</button>` : ''}
+      <button class="sdb-close" id="sdb-close" type="button" aria-label="${t('Close')}"><i class="fa-solid fa-xmark"></i></button>`;
+    if (!existing) document.body.appendChild(el);
+
+    $('sdb-pay')?.addEventListener('click', openBillingWindow);
+    $('sdb-close').addEventListener('click', () => {
+      el.remove();
+      try { sessionStorage.setItem(dismissKey, '1'); } catch (e) {}
+    });
+  }
+
+  function applySubscriptionState(data) {
+    applySubscriptionLock(data);
+    applyDueBar(data);
+  }
+
+  async function checkSubscriptionLock() {
+    try {
+      const res = await API.paymentHistory();
+      if (res.status === 200) applySubscriptionState(res.body?.data || {});
+    } catch (e) {
+      console.error('[subscription-lock] check failed', e);
+    }
+  }
+
+  window.applySubscriptionLock = applySubscriptionLock;
+
+  // Reactive: any gated call returning 402 locks immediately (see api.js).
+  window.addEventListener('api-payment-overdue', (e) => {
+    const body = e.detail || {};
+    applySubscriptionLock({ overdue: { payment_id: body.payment_id, due_at: body.due_at, can_pay: !!body.can_pay } });
+  });
+  window.addEventListener('api-subscription-ended', () => applySubscriptionLock({ subscription_ended: true }));
+
+  // While locked, swallow keyboard shortcuts (F12 checkout etc.) unless the
+  // key is meant for the lock screen itself or the Billing / confirm dialogs.
+  window.addEventListener('keydown', (e) => {
+    if (!document.body.classList.contains('sl-locked')) return;
+    if (document.querySelector('.bm-backdrop, .zc-backdrop')) return;
+    if (e.target.closest?.('#sl-backdrop') && ['Tab', 'Enter', ' '].includes(e.key)) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+  }, true);
+
+  // Coming back from the browser checkout — re-check so the lock lifts.
+  window.addEventListener('focus', () => {
+    if (document.body.classList.contains('sl-locked')) checkSubscriptionLock();
+  });
+
+  // Proactive check on every signed-in screen (not the login window).
+  // Deferred so api.js has loaded regardless of script order.
+  if ($('user-menu')) window.addEventListener('DOMContentLoaded', checkSubscriptionLock);
 
   // ── Settings window (Business profile + Accounts) ───────────────────────
   // Trimmed version of the full desktop app's Settings modal, backed by the
