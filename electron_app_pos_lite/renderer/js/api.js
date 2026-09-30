@@ -145,6 +145,18 @@ const API = (() => {
     },
     sale: (id) => request('GET', `/sales/${id}`),
     voidSale: (id) => request('POST', `/sales/${id}/void`),
+    processReturn: (id, payload) => request('POST', `/sales/${id}/return`, payload),
+    returnReasons: () => request('GET', '/online/return-reasons'),
+
+    // Sales Management — Returns (read-only list of processed sale returns)
+    saleReturns: (params = {}) => {
+      const qs = new URLSearchParams();
+      if (params.q) qs.set('q', params.q);
+      if (params.page) qs.set('page', params.page);
+      const suffix = qs.toString();
+      return request('GET', '/sale-returns' + (suffix ? `?${suffix}` : ''));
+    },
+    saleReturn: (id) => request('GET', `/sale-returns/${id}`),
 
     // Sales Management — History (paginated, with summary + filters)
     salesHistory: (params = {}) => {

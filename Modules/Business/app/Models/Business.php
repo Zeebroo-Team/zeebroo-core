@@ -314,6 +314,11 @@ class Business extends Model
         return $this->hasMany(\Modules\Pos\Models\Sale::class);
     }
 
+    public function saleReturns(): HasMany
+    {
+        return $this->hasMany(\Modules\Pos\Models\SaleReturn::class);
+    }
+
     public function goodsReceiveNotes(): HasMany
     {
         return $this->hasMany(GoodsReceiveNote::class);

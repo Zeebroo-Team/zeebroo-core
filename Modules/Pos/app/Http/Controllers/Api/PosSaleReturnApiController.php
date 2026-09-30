@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesPosBusinessForApi;
 use Modules\Pos\Models\Sale;
+use Modules\Pos\Models\SaleReturn;
 use Modules\Pos\Services\PosOnlineApiService;
 use Modules\Pos\Services\SaleReturnService;
 
@@ -19,6 +20,36 @@ class PosSaleReturnApiController extends Controller
         private readonly SaleReturnService $returnService,
         private readonly PosOnlineApiService $api,
     ) {
+    }
+
+    /** Read-only, paginated list of processed sale returns (Sales Management → Returns tab). */
+    public function index(Request $request): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+
+        $filters = ['q' => (string) $request->query('q', '')];
+        $paginator = $this->returnService->indexForBusiness($business, $filters);
+
+        return response()->json([
+            'data' => $this->api->formatSaleReturnList($paginator->getCollection()),
+            'meta' => [
+                'current_page' => $paginator->currentPage(),
+                'last_page'    => $paginator->lastPage(),
+                'total'        => $paginator->total(),
+                'per_page'     => $paginator->perPage(),
+            ],
+        ]);
+    }
+
+    /** Read-only detail of a single processed sale return, including its returned line items. */
+    public function show(Request $request, SaleReturn $saleReturn): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        abort_unless((int) $saleReturn->business_id === (int) $business->id, 404);
+
+        return response()->json([
+            'data' => $this->api->formatSaleReturn($saleReturn),
+        ]);
     }
 
     public function store(Request $request, Sale $sale): JsonResponse
