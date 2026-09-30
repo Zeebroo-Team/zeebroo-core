@@ -73,6 +73,7 @@ class PosGoodsReceiveNoteApiController extends Controller
                     'po_number'     => $purchase->po_number,
                     'supplier_name' => $purchase->supplier?->name,
                     'status'        => $purchase->status,
+                    'branch_id'     => $purchase->branch_id,
                 ],
                 'items' => $purchase->items->map(fn ($item) => [
                     'id'                  => $item->id,

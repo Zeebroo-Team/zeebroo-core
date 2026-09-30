@@ -617,7 +617,11 @@
 .qf-picker-badge { font-size: 10px; font-weight: 700; text-transform: uppercase; padding: 2px 7px; border-radius: 999px; }
 .qf-picker-badge.green { background: #dcfce7; color: var(--success); }
 .qf-picker-badge.red { background: #fee2e2; color: var(--danger); }
+.qf-picker-badge.new { background: var(--accent); color: #fff; margin-left: 6px; }
 .qf-picker-price { font-size: 13px; font-weight: 800; white-space: nowrap; }
+
+.qf-picker-row-new { background: #eff8ff; border-left: 3px solid var(--accent); }
+.qf-picker-row-new:hover { background: #e4f2ff; }
 
 .qf-picker-foot { padding: 14px 18px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; flex-shrink: 0; }
 

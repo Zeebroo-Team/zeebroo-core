@@ -28,7 +28,7 @@ class PurchaseService
         ?int $supplierId = null,
     ): Collection {
         $query = $business->purchases()
-            ->with(['supplier'])
+            ->with(['supplier', 'branch'])
             ->withCount('items');
 
         if ($supplierId !== null && $supplierId > 0) {
@@ -79,6 +79,7 @@ class PurchaseService
             $purchase = $business->purchases()->create([
                 'po_number' => $this->nextPoNumber($business),
                 'supplier_id' => $this->nullableInt($data['supplier_id'] ?? null),
+                'branch_id' => $this->nullableInt($data['branch_id'] ?? null),
                 'reference' => filled($data['reference'] ?? null) ? trim((string) $data['reference']) : null,
                 'purchase_date' => $data['purchase_date'],
                 'expected_delivery_date' => $data['expected_delivery_date'] ?? null,
