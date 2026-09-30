@@ -29,6 +29,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
   printHtml: (html) => ipcRenderer.invoke('print-html', { html }),
   savePdf: (html, suggestedFilename) => ipcRenderer.invoke('save-html-as-pdf', { html, suggestedFilename }),
 
+  // App updates (js/navbar.js "Check for updates") — latest Lite release from
+  // /api/releases/latest?app=lite, installer download with % progress.
+  platform: process.platform,
+  checkForUpdate: () => ipcRenderer.invoke('check-for-update'),
+  downloadUpdate: (opts) => ipcRenderer.invoke('download-update', opts),
+  onDownloadProgress: (cb) => {
+    const handler = (_e, pct) => cb(pct);
+    ipcRenderer.on('download-progress', handler);
+    return () => ipcRenderer.removeListener('download-progress', handler);
+  },
+  openPath: (filePath) => ipcRenderer.invoke('open-path', filePath),
+  showInFolder: (filePath) => ipcRenderer.invoke('show-in-folder', filePath),
+  quit: () => ipcRenderer.invoke('app-quit'),
+
   // File upload (product images) + native "choose file" dialog
   apiUpload: (apiPath, filePath) => ipcRenderer.invoke('api-upload', { path: apiPath, filePath }),
   showOpenDialog: (options) => ipcRenderer.invoke('show-open-dialog', options),

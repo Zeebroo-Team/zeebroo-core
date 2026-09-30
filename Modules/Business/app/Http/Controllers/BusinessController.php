@@ -73,14 +73,7 @@ class BusinessController extends Controller
             $business->forceFill(['platform_choice_shown_at' => now()])->save();
         }
 
-        $latestDesktopRelease = \Modules\AppConnection\Models\AppRelease::query()
-            ->where('channel', 'stable')
-            ->where('is_latest', true)
-            ->first()
-            ?? \Modules\AppConnection\Models\AppRelease::query()
-                ->where('channel', 'stable')
-                ->orderByDesc('id')
-                ->first();
+        $latestDesktopRelease = \Modules\AppConnection\Models\AppRelease::latestStable();
 
         $pendingPayment = $business->payments()
             ->where('payment_type', Payment::TYPE_SUBSCRIPTION)

@@ -284,6 +284,186 @@
     }
   });
 
+  // ── Check for updates window ────────────────────────────────────────────
+  // Compares the running version against the latest stable Lite release
+  // published from the admin panel (Release Management → Zeebroo POS Lite,
+  // served by GET /api/releases/latest?app=lite — see main.js), then downloads
+  // the installer for this OS into Downloads and offers to run it.
+  function versionGt(a, b) {
+    const parse = (v) => String(v || '').replace(/^v/i, '').split(/[-+]/)[0].split('.').map((n) => parseInt(n, 10) || 0);
+    const pa = parse(a);
+    const pb = parse(b);
+    for (let i = 0; i < Math.max(pa.length, pb.length, 3); i++) {
+      if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) > (pb[i] || 0);
+    }
+    return false;
+  }
+
+  function releaseDownloadUrl(release) {
+    const p = window.electronAPI.platform;
+    return p === 'win32' ? release.windows_url : p === 'darwin' ? release.macos_url : release.linux_url;
+  }
+
+  async function fetchLatestRelease() {
+    const [res, cfg] = await Promise.all([window.electronAPI.checkForUpdate(), window.electronAPI.getConfig()]);
+    return { res, release: res?.body?.data || null, current: cfg.app_version || '0.0.0' };
+  }
+
+  async function openUpdateWindow(prefetched) {
+    if ($('upd-backdrop')) return;
+
+    const returnFocusTo = document.activeElement;
+    let busy = false; // downloading — keep the window open until it finishes
+    const el = document.createElement('div');
+    el.className = 'bm-backdrop';
+    el.id = 'upd-backdrop';
+    el.setAttribute('role', 'dialog');
+    el.setAttribute('aria-modal', 'true');
+    el.setAttribute('aria-labelledby', 'upd-title');
+    el.innerHTML = `
+      <div class="bm-card upd-card">
+        <div class="bm-head">
+          <span class="bm-head-icon"><i class="fa-solid fa-cloud-arrow-down"></i></span>
+          <div class="bm-head-text">
+            <h2 id="upd-title">${t('Check for updates')}</h2>
+            <p>${t('Keep Zeebroo POS Lite up to date with the latest fixes and features.')}</p>
+          </div>
+          <button class="bm-close" type="button" aria-label="${t('Close')}"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="bm-body" id="upd-body" aria-live="polite"></div>
+      </div>`;
+    document.body.appendChild(el);
+    const body = el.querySelector('#upd-body');
+
+    function close() {
+      if (busy) return;
+      document.removeEventListener('keydown', onKey, true);
+      el.classList.remove('open');
+      setTimeout(() => el.remove(), 200);
+      if (returnFocusTo && returnFocusTo.focus) returnFocusTo.focus();
+    }
+    function onKey(e) {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); }
+    }
+    el.querySelector('.bm-close').addEventListener('click', close);
+    el.addEventListener('mousedown', (e) => { if (e.target === el) close(); });
+    document.addEventListener('keydown', onKey, true);
+    requestAnimationFrame(() => el.classList.add('open'));
+
+    const stateHtml = (icon, tone, title, sub) => `
+      <div class="upd-state">
+        <i class="fa-solid ${icon} upd-state-icon ${tone}"></i>
+        <div class="upd-state-title">${title}</div>
+        <div class="upd-state-sub">${sub}</div>
+      </div>`;
+
+    async function check() {
+      body.innerHTML = stateHtml('fa-spinner fa-spin', '', t('Checking for updates…'), '');
+      const { res, release, current } = prefetched || await fetchLatestRelease();
+      prefetched = null; // "Try again" always re-fetches
+
+      if (!res || res.status === 0 || res.status >= 500) {
+        body.innerHTML = stateHtml('fa-triangle-exclamation', 'warn', t('Could not check for updates'),
+          t('Please check your connection and try again.')) +
+          `<div class="upd-foot"><button class="bm-btn bm-btn-primary" type="button" data-upd="retry"><i class="fa-solid fa-rotate-right"></i> ${t('Try again')}</button></div>`;
+        body.querySelector('[data-upd="retry"]').addEventListener('click', check);
+        return;
+      }
+
+      if (!release || !versionGt(release.version, current)) {
+        body.innerHTML = stateHtml('fa-circle-check', 'ok', t("You're up to date"),
+          `${t('Zeebroo POS Lite')} <b>v${esc(current)}</b> ${t('is the latest version.')}`);
+        return;
+      }
+
+      renderAvailable(release, current);
+    }
+
+    function renderAvailable(release, current, extra = '') {
+      const dlUrl = releaseDownloadUrl(release);
+      const released = release.release_date
+        ? new Date(release.release_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+        : '';
+      const notes = Array.isArray(release.notes) && release.notes.length
+        ? `<div class="sm-section-label">${t("What's new")}</div>
+           <ul class="upd-notes">${release.notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul>`
+        : '';
+
+      body.innerHTML = `
+        <div class="upd-meta">
+          <div class="upd-meta-row"><span>${t('Installed')}</span><b>v${esc(current)}</b></div>
+          <div class="upd-meta-row"><span>${t('New version')}</span><b class="new">v${esc(release.version)}</b></div>
+          ${released ? `<div class="upd-meta-row"><span>${t('Released')}</span><span>${esc(released)}</span></div>` : ''}
+        </div>
+        ${notes}
+        ${extra || `
+          <div class="upd-foot">
+            <button class="bm-btn bm-btn-outline" type="button" data-upd="later">${t('Later')}</button>
+            ${dlUrl
+              ? `<button class="bm-btn bm-btn-primary" type="button" data-upd="download"><i class="fa-solid fa-download"></i> ${t('Download & install')} v${esc(release.version)}</button>`
+              : `<span class="upd-hint">${t('No download is available for your operating system yet.')}</span>`}
+          </div>`}`;
+
+      body.querySelector('[data-upd="later"]')?.addEventListener('click', close);
+      body.querySelector('[data-upd="download"]')?.addEventListener('click', () => download(release, current, dlUrl));
+    }
+
+    async function download(release, current, dlUrl) {
+      const p = window.electronAPI.platform;
+      let filename = '';
+      try { filename = decodeURIComponent(new URL(dlUrl).pathname.split('/').pop() || ''); } catch (_) {}
+      if (!/\.(exe|msi|dmg|zip|pkg|AppImage|deb|rpm)$/i.test(filename)) {
+        filename = `ZeebrooPOSLite-${release.version}-${p}.${p === 'win32' ? 'exe' : p === 'darwin' ? 'dmg' : 'AppImage'}`;
+      }
+
+      busy = true;
+      el.querySelector('.bm-close').disabled = true;
+      renderAvailable(release, current, `
+        <div class="upd-progress">
+          <div class="upd-progress-top"><span>${t('Downloading')} v${esc(release.version)}…</span><span id="upd-pct"></span></div>
+          <div class="upd-bar indeterminate" id="upd-bar"><div></div></div>
+        </div>`);
+
+      const off = window.electronAPI.onDownloadProgress((pct) => {
+        const bar = $('upd-bar');
+        if (bar) { bar.classList.remove('indeterminate'); bar.firstElementChild.style.width = pct + '%'; }
+        if ($('upd-pct')) $('upd-pct').textContent = pct + '%';
+      });
+      const result = await window.electronAPI.downloadUpdate({ url: dlUrl, filename });
+      off();
+      busy = false;
+      el.querySelector('.bm-close').disabled = false;
+
+      if (!result || result.error) {
+        renderAvailable(release, current, `
+          <div class="bm-alert" style="margin:14px 0 0"><i class="fa-solid fa-circle-exclamation"></i> ${t('Download failed')}: ${esc(result?.error || '')}</div>
+          <div class="upd-foot">
+            <button class="bm-btn bm-btn-outline" type="button" data-upd="later">${t('Close')}</button>
+            <button class="bm-btn bm-btn-primary" type="button" data-upd="download"><i class="fa-solid fa-rotate-right"></i> ${t('Try again')}</button>
+          </div>`);
+        return;
+      }
+
+      const isWin = p === 'win32';
+      renderAvailable(release, current, `
+        <div class="upd-done"><i class="fa-solid fa-circle-check"></i> ${t('Download complete')}<small>${esc(result.path)}</small></div>
+        ${isWin ? `<div class="upd-hint">${t('The app will close so the installer can update it.')}</div>` : ''}
+        <div class="upd-foot">
+          <button class="bm-btn bm-btn-outline" type="button" data-upd="folder"><i class="fa-solid fa-folder-open"></i> ${t('Show in folder')}</button>
+          <button class="bm-btn bm-btn-primary" type="button" data-upd="install"><i class="fa-solid fa-bolt"></i> ${isWin ? t('Run installer') : t('Open')}</button>
+        </div>`);
+      body.querySelector('[data-upd="folder"]').addEventListener('click', () => window.electronAPI.showInFolder(result.path));
+      body.querySelector('[data-upd="install"]').addEventListener('click', async () => {
+        await window.electronAPI.openPath(result.path);
+        if (isWin) setTimeout(() => window.electronAPI.quit(), 1500);
+      });
+    }
+
+    check();
+  }
+
+  window.openUpdateWindow = () => openUpdateWindow();
+
   // ── Billing & Payments window ───────────────────────────────────────────
   // Subscription status + invoice history/detail, backed by the same
   // Modules/Pos billing endpoints (Modules/Pos/routes/api.php) the full
@@ -2682,6 +2862,10 @@ ${ctx.hdrCss}</style></head><body><div class="pg">
         <i class="fa-solid fa-keyboard"></i> <span>${t('Keyboard Shortcuts')}</span>
         <span class="um-item-value">?</span>
       </button>
+      <button class="um-item" id="um-updates" type="button" role="menuitem">
+        <i class="fa-solid fa-cloud-arrow-down"></i> <span>${t('Check for updates')}</span>
+        <span class="um-item-value" id="um-version"></span>
+      </button>
       <div class="um-sep"></div>
       <button class="um-item" id="um-reload" type="button" role="menuitem"><i class="fa-solid fa-rotate-right"></i> ${t('Reload page')}</button>
       <button class="um-item" id="um-restart" type="button" role="menuitem"><i class="fa-solid fa-power-off"></i> ${t('Restart app')}</button>
@@ -2714,6 +2898,22 @@ ${ctx.hdrCss}</style></head><body><div class="pg">
   $('um-billing').addEventListener('click', () => { setOpen(false); openBillingWindow(); });
   $('um-settings').addEventListener('click', () => { setOpen(false); openSettingsWindow(); });
   $('um-shortcuts').addEventListener('click', () => { setOpen(false); openShortcutsWindow(); });
+  $('um-updates').addEventListener('click', () => { setOpen(false); openUpdateWindow(); });
+
+  // Background check once per app launch (sessionStorage lives as long as the
+  // main window) — only pops the window when a newer Lite release exists.
+  // Dismissable, so a cashier mid-sale is never locked out of the POS.
+  try {
+    if (!sessionStorage.getItem('zb-update-checked')) {
+      sessionStorage.setItem('zb-update-checked', '1');
+      setTimeout(async () => {
+        try {
+          const latest = await fetchLatestRelease();
+          if (latest.release && versionGt(latest.release.version, latest.current)) openUpdateWindow(latest);
+        } catch (_) { /* silent — still available from the profile menu */ }
+      }, 2500);
+    }
+  } catch (_) {}
   $('um-reload').addEventListener('click', () => { window.location.reload(); });
   $('um-restart').addEventListener('click', async () => { setOpen(false); await window.electronAPI.restartApp(); });
   $('um-logout').addEventListener('click', async () => { setOpen(false); await window.electronAPI.logout(); });
@@ -2754,5 +2954,6 @@ ${ctx.hdrCss}</style></head><body><div class="pg">
     $('um-head-email').textContent = name ? email : '';
     $('um-head-email').title = email; // full address on hover when it's truncated
     $('um-biz-name').textContent = business || '—';
+    if (cfg.app_version) $('um-version').textContent = `v${cfg.app_version}`;
   })();
 })();

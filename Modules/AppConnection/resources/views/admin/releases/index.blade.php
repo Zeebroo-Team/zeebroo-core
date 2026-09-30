@@ -14,6 +14,16 @@
     background:color-mix(in srgb,#16a34a 9%,var(--card));}
 .arl-msg-err{border-color:color-mix(in srgb,#ef4444 38%,var(--border));background:color-mix(in srgb,#ef4444 9%,var(--card));color:#b91c1c;}
 
+/* ── app tabs ── */
+.arl-tabs{display:flex;gap:6px;margin-bottom:16px;padding:5px;border:1px solid var(--border);border-radius:14px;
+    background:var(--card);width:fit-content;max-width:100%;overflow-x:auto;}
+.arl-tab{display:inline-flex;align-items:center;gap:8px;padding:8px 16px;border-radius:10px;font-size:13px;font-weight:700;
+    color:var(--muted);text-decoration:none;white-space:nowrap;transition:.14s;}
+.arl-tab:hover{color:var(--text);background:color-mix(in srgb,var(--primary) 6%,transparent);}
+.arl-tab.is-active{color:var(--text);background:color-mix(in srgb,var(--primary) 13%,transparent);}
+.arl-tab.is-active i{color:var(--primary);}
+.arl-tab-count{padding:1px 8px;border-radius:999px;font-size:11px;background:color-mix(in srgb,var(--border) 70%,transparent);color:var(--muted);}
+
 /* ── table card ── */
 .arl-card{border:1px solid var(--border);border-radius:16px;overflow:hidden;background:var(--card);}
 .arl-table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;}
@@ -129,7 +139,7 @@
   <div class="arl-header">
     <div>
       <h1 class="arl-title"><i class="fa fa-rocket" style="color:var(--primary);margin-right:8px"></i>App Releases</h1>
-      <p class="arl-sub">Manage desktop app versions. The latest stable release is shown to users checking for updates.</p>
+      <p class="arl-sub">Manage desktop app versions per app. The latest stable release of each app is shown to its users checking for updates.</p>
     </div>
     <button class="arl-add-btn" id="arl-open-create">
       <i class="fa fa-plus"></i> New Release
@@ -144,12 +154,22 @@
     <div class="arl-msg arl-msg-err"><i class="fa fa-triangle-exclamation"></i> {{ $errors->first() }}</div>
   @endif
 
+  {{-- App tabs --}}
+  <nav class="arl-tabs" aria-label="App">
+    @foreach($apps as $appKey => $appLabel)
+      <a href="{{ route('admin.releases.index', ['app' => $appKey]) }}" class="arl-tab {{ $app === $appKey ? 'is-active' : '' }}">
+        <i class="fa {{ $appKey === 'lite' ? 'fa-feather' : 'fa-desktop' }}"></i> {{ $appLabel }}
+        <span class="arl-tab-count">{{ $counts[$appKey] ?? 0 }}</span>
+      </a>
+    @endforeach
+  </nav>
+
   {{-- Releases table --}}
   <div class="arl-card">
     @if($releases->isEmpty())
       <div class="arl-empty">
         <div class="arl-empty-icon"><i class="fa fa-rocket"></i></div>
-        <h3 class="arl-empty-title">No releases yet</h3>
+        <h3 class="arl-empty-title">No {{ $apps[$app] }} releases yet</h3>
         <p class="arl-empty-sub">Click <strong>New Release</strong> to publish your first version.</p>
       </div>
     @else
@@ -242,6 +262,7 @@
               <div class="arl-act">
                 <button type="button" class="arl-btn arl-edit-btn"
                         data-id="{{ $release->id }}"
+                        data-app="{{ $release->app }}"
                         data-version="{{ $release->version }}"
                         data-release-date="{{ $release->release_date?->toDateString() }}"
                         data-channel="{{ $release->channel }}"
@@ -261,7 +282,7 @@
                   </form>
                 @endunless
                 <form method="POST" action="{{ route('admin.releases.destroy', $release) }}"
-                      onsubmit="return confirm('Delete v{{ $release->version }}? This cannot be undone.')">
+                      onsubmit="return confirm('Delete {{ $apps[$release->app] ?? '' }} v{{ $release->version }}? This cannot be undone.')">
                   @csrf @method('DELETE')
                   <button type="submit" class="arl-btn arl-btn--del">
                     <i class="fa fa-trash"></i> Delete
@@ -303,6 +324,17 @@
       <input type="hidden" name="_method" id="arl-form-method" value="{{ old('_method', 'POST') }}">
       <input type="hidden" name="_release_id" id="arl-form-release-id" value="{{ old('_release_id') }}">
       <div class="arl-modal-body">
+
+        <div class="arl-field">
+          <label>App <span style="color:#ef4444">*</span></label>
+          <select name="app" id="arl-f-app">
+            @foreach($apps as $appKey => $appLabel)
+              <option value="{{ $appKey }}" {{ old('app', $app) === $appKey ? 'selected' : '' }}>{{ $appLabel }}</option>
+            @endforeach
+          </select>
+          <p class="arl-field-hint">Each app has its own versions and its own "latest" release.</p>
+          @error('app')<p class="arl-field-err">{{ $message }}</p>@enderror
+        </div>
 
         <div class="arl-field-row">
           <div class="arl-field">
@@ -392,6 +424,9 @@
   var submitLabel= document.getElementById('arl-submit-label');
   var submitIcon = document.getElementById('arl-submit-icon');
 
+  var appEl         = document.getElementById('arl-f-app');
+  var currentApp    = @json($app);
+  var defaultVersion = { main: '5.0.0', lite: '1.0.0' };
   var versionEl     = document.getElementById('arl-f-version');
   var releaseDateEl = document.getElementById('arl-f-release-date');
   var channelEl     = document.getElementById('arl-f-channel');
@@ -413,7 +448,8 @@
     submitLabel.textContent = 'Publish Release';
     submitIcon.className = 'fa fa-rocket';
 
-    versionEl.value = '5.0.0';
+    appEl.value = currentApp;
+    versionEl.value = defaultVersion[currentApp] || '1.0.0';
     releaseDateEl.value = new Date().toISOString().slice(0, 10);
     channelEl.value = 'stable';
     isLatestEl.checked = true;
@@ -424,6 +460,12 @@
   }
 
   openBtn.addEventListener('click', function () { setCreateMode(); openModal(); });
+  // Switching app while creating: swap the untouched default version too (5.0.0 ↔ 1.0.0)
+  appEl.addEventListener('change', function () {
+    if (methodEl.value !== 'POST') return;
+    var isDefault = Object.keys(defaultVersion).some(function (k) { return defaultVersion[k] === versionEl.value; });
+    if (isDefault) versionEl.value = defaultVersion[appEl.value] || versionEl.value;
+  });
   closeBtn.addEventListener('click', closeModal);
   cancelBtn.addEventListener('click', closeModal);
   backdrop.addEventListener('click', closeModal);
@@ -443,6 +485,7 @@
       submitLabel.textContent = 'Save Changes';
       submitIcon.className = 'fa fa-floppy-disk';
 
+      appEl.value = btn.getAttribute('data-app');
       versionEl.value = btn.getAttribute('data-version');
       releaseDateEl.value = btn.getAttribute('data-release-date');
       channelEl.value = btn.getAttribute('data-channel');
