@@ -10,12 +10,16 @@ const lineSignup = document.getElementById('line-signup');
 const loginError = document.getElementById('login-error');
 const signupError = document.getElementById('signup-error');
 
+const cashierForm = document.getElementById('cashier-form');
+
+// 'login' | 'cashier' | 'signup' — the cashier form lives under the Login tab.
 function showTab(which) {
-  const isLogin = which === 'login';
+  const isLogin = which !== 'signup';
   const wasSignupActive = tabSignup.classList.contains('active');
   tabLogin.classList.toggle('active', isLogin);
   tabSignup.classList.toggle('active', !isLogin);
-  loginForm.classList.toggle('active', isLogin);
+  loginForm.classList.toggle('active', which === 'login');
+  cashierForm.classList.toggle('active', which === 'cashier');
   signupWizard.classList.toggle('active', !isLogin);
   lineLogin.style.display = isLogin ? '' : 'none';
   lineSignup.style.display = isLogin ? 'none' : '';
@@ -28,6 +32,12 @@ tabLogin.addEventListener('click', () => showTab('login'));
 tabSignup.addEventListener('click', () => showTab('signup'));
 document.getElementById('go-signup').addEventListener('click', () => showTab('signup'));
 document.getElementById('go-login').addEventListener('click', () => showTab('login'));
+document.getElementById('go-cashier').addEventListener('click', () => {
+  showTab('cashier');
+  const biz = document.getElementById('cashier-business');
+  (biz.value ? document.getElementById('cashier-username') : biz).focus();
+});
+document.getElementById('go-owner').addEventListener('click', () => showTab('login'));
 
 function setError(box, message) {
   box.textContent = message;
@@ -52,7 +62,7 @@ function setBusy(button, busy, label) {
 // the main window yet — used mid-payment so config survives the app being
 // closed while the system browser is open (see main.js's deep-link handler).
 async function persistSession(accessToken, user) {
-  await window.electronAPI.setConfig({ token: accessToken, user });
+  await window.electronAPI.setConfig({ token: accessToken, user, is_cashier: false });
 
   const bizRes = await API.businesses();
   const business = bizRes.status === 200 ? (bizRes.body.data || [])[0] : null;
@@ -89,6 +99,68 @@ loginForm.addEventListener('submit', async (e) => {
     setError(loginError, err.message);
   } finally {
     setBusy(submitBtn, false, t('Log In'));
+  }
+});
+
+// ── Cashier login ───────────────────────────────────────────────────────
+// Cashier accounts are created by the owner (Cashiers screen) and scoped to
+// one business, which /cashier/login finds by Str::slug(business name) — so
+// the cashier types the business name and we slug it the same way here.
+// The session is POS-only: main.js blocks other screens, role-guard.js
+// locks the dashboard tiles, navbar.js hides owner menu items.
+const CASHIER_BUSINESS_KEY = 'cashierBusinessName';
+
+function laravelSlug(value) {
+  return value
+    .normalize('NFKD').replace(/[̀-ͯ]/g, '')
+    .replace(/_+/g, '-')
+    .replace(/@/g, '-at-')
+    .toLowerCase()
+    .replace(/[^-\p{L}\p{N}\s]+/gu, '')
+    .replace(/[-\s]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+try {
+  document.getElementById('cashier-business').value = localStorage.getItem(CASHIER_BUSINESS_KEY) || '';
+} catch (_) {}
+
+cashierForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  setError(loginError, '');
+  const businessName = document.getElementById('cashier-business').value.trim();
+  const username = document.getElementById('cashier-username').value.trim();
+  const password = document.getElementById('cashier-password').value;
+  const submitBtn = document.getElementById('cashier-submit');
+
+  const slug = laravelSlug(businessName);
+  if (!slug) {
+    setError(loginError, t('Enter your business name.'));
+    return;
+  }
+
+  setBusy(submitBtn, true, t('Cashier Log In'));
+  try {
+    const res = await API.cashierLogin(slug, username, password);
+    const d = res.body?.data;
+    if (res.status !== 200 || !d?.token) {
+      setError(loginError, firstValidationError(res.body));
+      return;
+    }
+    try { localStorage.setItem(CASHIER_BUSINESS_KEY, businessName); } catch (_) {}
+    await window.electronAPI.setConfig({
+      token: d.token,
+      business_id: d.business_id,
+      business_name: d.business_name,
+      branch_id: null,
+      is_cashier: true,
+      user: { name: d.cashier_name, username: d.cashier_username, cashier_id: d.cashier_id, is_cashier: true },
+    });
+    await window.electronAPI.authSuccess();
+  } catch (err) {
+    setError(loginError, err.message);
+  } finally {
+    setBusy(submitBtn, false, t('Cashier Log In'));
   }
 });
 
