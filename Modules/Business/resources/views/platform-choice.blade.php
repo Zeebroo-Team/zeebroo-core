@@ -124,20 +124,42 @@
         background:color-mix(in srgb,#16a34a 9%,var(--card));color:#15803d;
     }
     .plat-payment-alert{
-        max-width:640px;margin:0 auto 22px;text-align:left;padding:14px 16px;border-radius:14px;
-        background:linear-gradient(135deg,#fef2f2,#fee2e2);border:1px solid #fca5a5;
-        display:flex;gap:12px;align-items:flex-start;
+        --pa:#e11d48;
+        position:relative;z-index:1;max-width:760px;margin:0 auto 28px;text-align:left;
+        display:flex;align-items:center;gap:14px;padding:14px 14px 14px 16px;border-radius:14px;
+        background:color-mix(in srgb,var(--pa) 6%,var(--card));
+        border:1px solid color-mix(in srgb,var(--pa) 22%,var(--border));
+        box-shadow:0 8px 24px -14px color-mix(in srgb,var(--pa) 45%,transparent);
+        overflow:hidden;animation:platAlertIn .35s ease both;
+    }
+    .plat-payment-alert::before{
+        content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--pa);
     }
     .plat-payment-alert-icon{
-        width:28px;height:28px;border-radius:999px;background:#ef4444;color:#fff;
-        display:grid;place-items:center;font-weight:700;flex-shrink:0;
+        width:40px;height:40px;border-radius:11px;flex-shrink:0;display:grid;place-items:center;font-size:17px;
+        background:color-mix(in srgb,var(--pa) 13%,transparent);color:var(--pa);
     }
-    .plat-payment-alert-title{color:#991b1b;font-weight:700;font-size:13.5px;}
-    .plat-payment-alert-sub{color:#b91c1c;font-size:13px;margin-top:2px;}
+    .plat-payment-alert-body{flex:1;min-width:0;}
+    .plat-payment-alert-title{color:var(--text);font-weight:800;font-size:14px;letter-spacing:-.01em;}
+    .plat-payment-alert-sub{color:var(--muted);font-size:12.5px;line-height:1.5;margin-top:2px;}
+    .plat-payment-alert-form{margin:0;flex-shrink:0;}
     .plat-payment-alert-btn{
-        margin-top:10px;padding:8px 16px;font-size:12.5px;font-weight:700;border-radius:8px;
-        background:#ef4444;color:#fff;border:none;cursor:pointer;font-family:inherit;
+        display:inline-flex;align-items:center;gap:8px;white-space:nowrap;
+        padding:10px 16px;font-size:12.5px;font-weight:700;border-radius:10px;
+        background:var(--pa);color:#fff;border:none;cursor:pointer;font-family:inherit;
+        box-shadow:0 4px 12px color-mix(in srgb,var(--pa) 35%,transparent);
+        transition:opacity .2s,transform .15s;
     }
+    .plat-payment-alert-btn:hover{opacity:.92;transform:translateY(-1px);}
+    .plat-payment-alert-amount{
+        padding:2px 8px;border-radius:999px;background:rgba(255,255,255,.2);font-weight:800;font-size:11.5px;
+    }
+    @media(max-width:640px){
+        .plat-payment-alert{flex-wrap:wrap;align-items:flex-start;}
+        .plat-payment-alert-form{flex-basis:100%;}
+        .plat-payment-alert-btn{width:100%;justify-content:center;}
+    }
+    @keyframes platAlertIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
 </style>
 @php
     $platOs = [
@@ -204,20 +226,23 @@
 <div class="plat-shell">
     <div class="plat-card">
         @if($errors->has('payment') || $pendingPayment)
-            <div class="plat-payment-alert">
-                <div class="plat-payment-alert-icon">!</div>
-                <div style="flex:1;min-width:0;">
+            <div class="plat-payment-alert" role="alert">
+                <div class="plat-payment-alert-icon"><i class="fa fa-credit-card" aria-hidden="true"></i></div>
+                <div class="plat-payment-alert-body">
                     <div class="plat-payment-alert-title">{{ $errors->first('payment') ?: 'Your subscription payment needs attention' }}</div>
                     @if($pendingPayment)
-                        <div class="plat-payment-alert-sub">Your business setup is saved — complete payment to activate your monthly subscription.</div>
-                        <form method="post" action="{{ route('payment.checkout.resume', $pendingPayment) }}" style="margin:0;">
-                            @csrf
-                            <button type="submit" class="plat-payment-alert-btn">
-                                <i class="fa fa-credit-card" style="margin-right:6px;" aria-hidden="true"></i>Complete payment ({{ $pendingPayment->currencySymbol() }}{{ number_format((float) $pendingPayment->amount, 2) }}/mo)
-                            </button>
-                        </form>
+                        <div class="plat-payment-alert-sub">Your business setup is saved. Complete payment to activate your monthly subscription.</div>
                     @endif
                 </div>
+                @if($pendingPayment)
+                    <form method="post" action="{{ route('payment.checkout.resume', $pendingPayment) }}" class="plat-payment-alert-form">
+                        @csrf
+                        <button type="submit" class="plat-payment-alert-btn">
+                            <i class="fa fa-lock" aria-hidden="true"></i> Complete payment
+                            <span class="plat-payment-alert-amount">{{ $pendingPayment->currencySymbol() }}{{ number_format((float) $pendingPayment->amount, 2) }}/mo</span>
+                        </button>
+                    </form>
+                @endif
             </div>
         @endif
         @if(session('status'))

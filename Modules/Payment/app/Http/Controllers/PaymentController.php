@@ -56,7 +56,7 @@ class PaymentController extends Controller
         $payment = Payment::find($request->query('payment'));
         $this->markCanceledIfPending($payment);
 
-        return redirect()->route('business.platform-choice')->withErrors(['payment' => 'Payment was canceled. Your business setup is saved — complete payment to activate your subscription.']);
+        return redirect()->route('business.platform-choice')->withErrors(['payment' => 'Payment was canceled']);
     }
 
     /**
