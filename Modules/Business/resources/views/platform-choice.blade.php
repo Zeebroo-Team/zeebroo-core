@@ -123,6 +123,21 @@
         border:1px solid color-mix(in srgb,#16a34a 38%,var(--border));
         background:color-mix(in srgb,#16a34a 9%,var(--card));color:#15803d;
     }
+    .plat-payment-alert{
+        max-width:640px;margin:0 auto 22px;text-align:left;padding:14px 16px;border-radius:14px;
+        background:linear-gradient(135deg,#fef2f2,#fee2e2);border:1px solid #fca5a5;
+        display:flex;gap:12px;align-items:flex-start;
+    }
+    .plat-payment-alert-icon{
+        width:28px;height:28px;border-radius:999px;background:#ef4444;color:#fff;
+        display:grid;place-items:center;font-weight:700;flex-shrink:0;
+    }
+    .plat-payment-alert-title{color:#991b1b;font-weight:700;font-size:13.5px;}
+    .plat-payment-alert-sub{color:#b91c1c;font-size:13px;margin-top:2px;}
+    .plat-payment-alert-btn{
+        margin-top:10px;padding:8px 16px;font-size:12.5px;font-weight:700;border-radius:8px;
+        background:#ef4444;color:#fff;border:none;cursor:pointer;font-family:inherit;
+    }
 </style>
 @php
     $platOs = [
@@ -188,6 +203,23 @@
 </script>
 <div class="plat-shell">
     <div class="plat-card">
+        @if($errors->has('payment') || $pendingPayment)
+            <div class="plat-payment-alert">
+                <div class="plat-payment-alert-icon">!</div>
+                <div style="flex:1;min-width:0;">
+                    <div class="plat-payment-alert-title">{{ $errors->first('payment') ?: 'Your subscription payment needs attention' }}</div>
+                    @if($pendingPayment)
+                        <div class="plat-payment-alert-sub">Your business setup is saved — complete payment to activate your monthly subscription.</div>
+                        <form method="post" action="{{ route('payment.checkout.resume', $pendingPayment) }}" style="margin:0;">
+                            @csrf
+                            <button type="submit" class="plat-payment-alert-btn">
+                                <i class="fa fa-credit-card" style="margin-right:6px;" aria-hidden="true"></i>Complete payment ({{ $pendingPayment->currencySymbol() }}{{ number_format((float) $pendingPayment->amount, 2) }}/mo)
+                            </button>
+                        </form>
+                    @endif
+                </div>
+            </div>
+        @endif
         @if(session('status'))
             <div class="plat-status"><i class="fa fa-circle-check" aria-hidden="true"></i> {{ session('status') }}</div>
         @endif

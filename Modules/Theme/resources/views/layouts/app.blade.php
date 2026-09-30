@@ -1411,6 +1411,13 @@
                                 <i class="fa fa-sitemap" style="margin-right:6px;"></i>Business Map
                             </a>
                         </div>
+                        @if(Route::has('payment.billing.index'))
+                        <div class="menu-row" style="display:block;padding-top:2px;padding-bottom:2px;">
+                            <a href="{{ route('payment.billing.index') }}" class="dropdown-action-btn">
+                                <i class="fa fa-credit-card" style="margin-right:6px;"></i>Billing &amp; Payments
+                            </a>
+                        </div>
+                        @endif
                         <div class="menu-row" style="display:block;padding-top:2px;padding-bottom:2px;">
                             <button type="button" id="openFeaturesModalBtn" style="width:100%;display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:10px;border:1px solid var(--border);background:color-mix(in srgb,var(--primary) 8%,transparent);color:var(--text);cursor:pointer;font-size:13px;font-weight:600;text-align:left;">
                                 <i class="fa fa-sliders" style="color:var(--primary);width:14px;text-align:center;"></i>

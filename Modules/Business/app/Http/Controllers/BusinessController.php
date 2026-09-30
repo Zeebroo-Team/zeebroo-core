@@ -82,10 +82,17 @@ class BusinessController extends Controller
                 ->orderByDesc('id')
                 ->first();
 
+        $pendingPayment = $business->payments()
+            ->where('payment_type', Payment::TYPE_SUBSCRIPTION)
+            ->whereIn('payment_status', [Payment::STATUS_PENDING, Payment::STATUS_FAILED, Payment::STATUS_CANCELED])
+            ->latest()
+            ->first();
+
         return view('business::platform-choice', [
             'latestDesktopRelease' => $latestDesktopRelease,
             'currentPackage' => $business->package,
             'detectedOs' => $this->detectOsFromUserAgent($request->userAgent() ?? ''),
+            'pendingPayment' => $pendingPayment,
         ]);
     }
 
@@ -599,7 +606,7 @@ class BusinessController extends Controller
         } catch (\Throwable $e) {
             report($e);
 
-            return redirect()->route('dashboard')
+            return redirect()->route('business.platform-choice')
                 ->withErrors(['payment' => 'Your business profile was saved, but we could not start Stripe checkout. Please try again.']);
         }
 
