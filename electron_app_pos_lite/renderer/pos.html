@@ -15,6 +15,7 @@
         <div class="brand"><i class="fa-solid fa-cash-register"></i> POS</div>
       </div>
       <div class="right">
+        <button type="button" class="topbar-eod-btn" id="end-of-day-btn" title="End of Day"><i class="fa-solid fa-cash-register"></i> End of Day</button>
         <button type="button" class="topbar-return-btn" id="return-refund-btn" title="Return &amp; Refund (F9)"><i class="fa-solid fa-rotate-left"></i> Return</button>
         <div class="user-menu" id="user-menu"></div>
       </div>
@@ -359,6 +360,91 @@
             </div>
           </div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Open Shift modal: prompts for the day's opening cash float -->
+  <div class="modal-backdrop" id="shift-open-modal">
+    <div class="modal modal-sm">
+      <div class="modal-head">
+        <h2><i class="fa-solid fa-cash-register"></i> Open Shift</h2>
+      </div>
+      <div class="modal-body">
+        <p class="modal-subtitle">Enter the cash you're starting the day with. This becomes today's opening float.</p>
+        <div class="field">
+          <label for="shift-open-amount">Opening cash</label>
+          <input type="number" min="0" step="0.01" inputmode="decimal" id="shift-open-amount" placeholder="0.00" />
+        </div>
+        <div class="error-box" id="shift-open-error"></div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="ghost-btn" id="shift-open-skip-btn">Skip for now</button>
+        <button type="button" class="ghost-btn primary" id="shift-open-confirm-btn"><i class="fa-solid fa-check"></i> Start Shift</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- End of Day modal: today's sales summary + cash drawer status -->
+  <div class="modal-backdrop" id="eod-modal">
+    <div class="modal modal-eod">
+      <div class="modal-head">
+        <h2><i class="fa-solid fa-cash-register"></i> End of Day Settlement</h2>
+        <button type="button" class="modal-close" data-close="eod-modal">&times;</button>
+      </div>
+      <div class="modal-body eod-modal-body" id="eod-modal-body">
+        <div class="eod-loading"><i class="fa-solid fa-spinner fa-spin"></i></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Withdraw Cash modal: amount + note, opened from the End of Day modal -->
+  <div class="modal-backdrop" id="cash-withdraw-modal">
+    <div class="modal modal-sm">
+      <div class="modal-head">
+        <h2><i class="fa-solid fa-arrow-up-from-bracket"></i> Withdraw Cash</h2>
+        <button type="button" class="modal-close" data-close="cash-withdraw-modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-subtitle" id="cash-withdraw-balance-hint"></p>
+        <div class="field">
+          <label for="cash-withdraw-amount">Amount</label>
+          <div class="input-with-btn">
+            <input type="number" min="0.01" step="0.01" inputmode="decimal" id="cash-withdraw-amount" placeholder="0.00" />
+            <button type="button" class="ghost-btn" id="cash-withdraw-all-btn">All</button>
+          </div>
+        </div>
+        <div class="field">
+          <label for="cash-withdraw-note">Note <span class="field-label-optional">(optional)</span></label>
+          <input type="text" maxlength="255" id="cash-withdraw-note" placeholder="e.g. Bank deposit" />
+        </div>
+        <div class="error-box" id="cash-withdraw-error"></div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="ghost-btn" data-close="cash-withdraw-modal">Cancel</button>
+        <button type="button" class="ghost-btn primary" id="cash-withdraw-confirm-btn"><i class="fa-solid fa-arrow-up-from-bracket"></i> Withdraw</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Password confirm modal: gates sensitive actions (cash withdrawal) behind the account password -->
+  <div class="modal-backdrop" id="password-confirm-modal">
+    <div class="modal modal-sm">
+      <div class="modal-head">
+        <h2><i class="fa-solid fa-lock"></i> Confirm Password</h2>
+        <button type="button" class="modal-close" data-close="password-confirm-modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-subtitle" id="password-confirm-subtitle">Enter your account password to continue.</p>
+        <div class="field">
+          <label for="password-confirm-input">Password</label>
+          <input type="password" id="password-confirm-input" placeholder="Password" autocomplete="current-password" />
+        </div>
+        <div class="error-box" id="password-confirm-error"></div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="ghost-btn" data-close="password-confirm-modal">Cancel</button>
+        <button type="button" class="ghost-btn primary" id="password-confirm-btn"><i class="fa-solid fa-check"></i> Confirm</button>
       </div>
     </div>
   </div>

@@ -103,6 +103,27 @@ const rfndTotalDisplayEl = document.getElementById('rfnd-total-display');
 const rfndAlertEl = document.getElementById('rfnd-alert');
 const rfndSubmitBtn = document.getElementById('rfnd-submit');
 
+// Cash Drawer: Open Shift / End of Day / Withdraw Cash
+const endOfDayBtn = document.getElementById('end-of-day-btn');
+const shiftOpenModal = document.getElementById('shift-open-modal');
+const shiftOpenAmountInput = document.getElementById('shift-open-amount');
+const shiftOpenErrorEl = document.getElementById('shift-open-error');
+const shiftOpenSkipBtn = document.getElementById('shift-open-skip-btn');
+const shiftOpenConfirmBtn = document.getElementById('shift-open-confirm-btn');
+const eodModal = document.getElementById('eod-modal');
+const eodModalBodyEl = document.getElementById('eod-modal-body');
+const cashWithdrawModal = document.getElementById('cash-withdraw-modal');
+const cashWithdrawBalanceHintEl = document.getElementById('cash-withdraw-balance-hint');
+const cashWithdrawAmountInput = document.getElementById('cash-withdraw-amount');
+const cashWithdrawNoteInput = document.getElementById('cash-withdraw-note');
+const cashWithdrawErrorEl = document.getElementById('cash-withdraw-error');
+const cashWithdrawConfirmBtn = document.getElementById('cash-withdraw-confirm-btn');
+const cashWithdrawAllBtn = document.getElementById('cash-withdraw-all-btn');
+const passwordConfirmModal = document.getElementById('password-confirm-modal');
+const passwordConfirmInput = document.getElementById('password-confirm-input');
+const passwordConfirmErrorEl = document.getElementById('password-confirm-error');
+const passwordConfirmBtn = document.getElementById('password-confirm-btn');
+
 let products = [];
 let cart = []; // { cartKey, product_id, name, price, customPrice, qty, stock, isRental?, isDynamic?, ... }
 let paymentMethod = 'cash';
@@ -833,9 +854,12 @@ document.querySelectorAll('.modal-backdrop [data-close]').forEach((btn) => {
     if (btn.dataset.close === 'customer-picker-modal') closeCustomerPickerModal();
     if (btn.dataset.close === 'checkout-modal') closeCheckoutModal();
     if (btn.dataset.close === 'refund-modal') closeRefundModal();
+    if (btn.dataset.close === 'eod-modal') closeEodModal();
+    if (btn.dataset.close === 'cash-withdraw-modal') closeCashWithdrawModal();
+    if (btn.dataset.close === 'password-confirm-modal') closePasswordConfirmModal();
   });
 });
-[rentalModal, dynamicModal, receiptModal, customerPickerModal, checkoutModal, refundModal].forEach((bg) => {
+[rentalModal, dynamicModal, receiptModal, customerPickerModal, checkoutModal, refundModal, eodModal, cashWithdrawModal, passwordConfirmModal].forEach((bg) => {
   bg.addEventListener('click', (e) => {
     if (e.target !== bg) return;
     if (bg === rentalModal) closeRentalModal();
@@ -843,6 +867,9 @@ document.querySelectorAll('.modal-backdrop [data-close]').forEach((btn) => {
     else if (bg === customerPickerModal) closeCustomerPickerModal();
     else if (bg === checkoutModal) closeCheckoutModal();
     else if (bg === refundModal) closeRefundModal();
+    else if (bg === eodModal) closeEodModal();
+    else if (bg === cashWithdrawModal) closeCashWithdrawModal();
+    else if (bg === passwordConfirmModal) closePasswordConfirmModal();
     else closeReceiptModal();
   });
 });
@@ -854,6 +881,9 @@ document.addEventListener('keydown', (e) => {
   else if (checkoutModal.classList.contains('show')) closeCheckoutModal();
   else if (refundModal.classList.contains('show')) closeRefundModal();
   else if (receiptModal.classList.contains('show')) closeReceiptModal();
+  else if (passwordConfirmModal.classList.contains('show')) closePasswordConfirmModal();
+  else if (cashWithdrawModal.classList.contains('show')) closeCashWithdrawModal();
+  else if (eodModal.classList.contains('show')) closeEodModal();
 });
 
 // ── Return & Refund modal ───────────────────────────────────────────────
@@ -1587,6 +1617,248 @@ checkoutCompleteBtn.addEventListener('click', async () => {
   }
 });
 
+// ── Cash Drawer: Open Shift ──────────────────────────────────────────────
+// Checked once when the POS screen loads. If today's opening float hasn't
+// been recorded yet, prompt for it; cashiers can also skip (e.g. businesses
+// that don't track a cash drawer). Talks to the same /cash-drawer endpoints
+// the full desktop app uses.
+async function _checkShiftOpen() {
+  const res = await API.cashDrawer();
+  if (res.status !== 200) return; // fail open — don't block POS use
+  const d = res.body?.data || {};
+  if (d.is_opened) return;
+
+  shiftOpenAmountInput.value = '';
+  shiftOpenErrorEl.classList.remove('show');
+  shiftOpenModal.classList.add('show');
+  setTimeout(() => shiftOpenAmountInput.focus(), 80);
+}
+
+shiftOpenConfirmBtn.addEventListener('click', async () => {
+  const amount = parseFloat(shiftOpenAmountInput.value);
+  if (isNaN(amount) || amount < 0) {
+    shiftOpenErrorEl.textContent = t('Enter a valid opening amount.');
+    shiftOpenErrorEl.classList.add('show');
+    return;
+  }
+  shiftOpenErrorEl.classList.remove('show');
+  shiftOpenConfirmBtn.disabled = true;
+  shiftOpenConfirmBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i>`;
+
+  const res = await API.cashDrawerOpen(amount);
+  shiftOpenConfirmBtn.disabled = false;
+  shiftOpenConfirmBtn.innerHTML = `<i class="fa-solid fa-check"></i> ${t('Start Shift')}`;
+
+  if (res.status === 200) {
+    shiftOpenModal.classList.remove('show');
+    showToast(t('Shift started — opening float {amount}.', { amount: money(amount) }), 'success');
+  } else {
+    shiftOpenErrorEl.textContent = t(res.body?.message || 'Failed to start shift.');
+    shiftOpenErrorEl.classList.add('show');
+  }
+});
+
+shiftOpenSkipBtn.addEventListener('click', () => {
+  shiftOpenModal.classList.remove('show');
+});
+
+// ── Cash Drawer: End of Day ───────────────────────────────────────────────
+// Opened from the topbar's "End of Day" button. Combines /today-summary
+// (sales totals + payment split) with /cash-drawer (opening float, cash
+// sales, withdrawals, running balance) into one read-only overview, plus the
+// Withdraw Cash action (password-gated — see below).
+function methodLabel(method) {
+  return { cash: t('Cash'), card: t('Card'), credit: t('Credit') }[method] || esc(method);
+}
+
+function openEodModal() {
+  eodModal.classList.add('show');
+  eodModalBodyEl.innerHTML = `<div class="eod-loading"><i class="fa-solid fa-spinner fa-spin"></i></div>`;
+  _loadEodData();
+}
+
+function closeEodModal() {
+  eodModal.classList.remove('show');
+}
+
+let _eodDrawer = null; // last-loaded /cash-drawer response, so the withdraw modal knows the balance
+
+async function _loadEodData() {
+  const [summaryRes, drawerRes] = await Promise.all([API.todaySummary(), API.cashDrawer()]);
+
+  if (summaryRes.status !== 200) {
+    eodModalBodyEl.innerHTML = `<div class="eod-empty">${t('Could not load today’s summary.')}</div>`;
+    return;
+  }
+
+  const sales = summaryRes.body?.data?.sales || {};
+  const drawer = drawerRes.status === 200 ? (drawerRes.body?.data || null) : null;
+  _eodDrawer = drawer;
+
+  const byMethod = sales.by_method || {};
+  const methodTabs = ['cash', 'card', 'credit'].map((m) => {
+    const entry = byMethod[m] || { count: 0, total: 0 };
+    return `<div class="eod-method-tab">
+      <div class="eod-method-name">${esc(methodLabel(m))}</div>
+      <div class="eod-method-meta">${t('{n} sales', { n: entry.count })} · ${money(entry.total)}</div>
+    </div>`;
+  }).join('');
+
+  let drawerHtml;
+  if (!drawer || !drawer.is_opened) {
+    drawerHtml = `
+      <p class="eod-empty">${t('Shift not started yet — start it to track opening float and withdrawals.')}</p>
+      <div class="eod-actions"><button type="button" class="ghost-btn primary" id="eod-start-shift-btn"><i class="fa-solid fa-cash-register"></i> ${t('Start Shift')}</button></div>`;
+  } else {
+    const withdrawalsHtml = (drawer.withdrawals || []).length
+      ? drawer.withdrawals.map((w) => `
+        <div class="eod-withdraw-row">
+          <div>
+            <div>${esc(w.note || t('Cash withdrawal'))}</div>
+            <div class="eod-withdraw-time">${new Date(w.time).toLocaleTimeString(i18n.locale, { hour: '2-digit', minute: '2-digit' })}</div>
+          </div>
+          <div class="eod-withdraw-amt">−${money(w.amount)}</div>
+        </div>`).join('')
+      : `<div class="eod-empty">${t('No withdrawals yet today.')}</div>`;
+
+    drawerHtml = `
+      <div class="eod-stat-grid">
+        <div class="eod-stat"><div class="eod-stat-label">${t('Opening Float')}</div><div class="eod-stat-value">${money(drawer.opening_float)}</div></div>
+        <div class="eod-stat"><div class="eod-stat-label">${t('Withdrawals')}</div><div class="eod-stat-value neg">${money(drawer.total_withdrawals)}</div></div>
+        <div class="eod-stat accent"><div class="eod-stat-label">${t('Cash Balance')}</div><div class="eod-stat-value pos">${money(drawer.balance)}</div></div>
+      </div>
+      <div class="eod-section-label">${t('Withdrawals')}</div>
+      ${withdrawalsHtml}
+      <div class="eod-actions"><button type="button" class="ghost-btn primary" id="eod-withdraw-btn"><i class="fa-solid fa-arrow-up-from-bracket"></i> ${t('Withdraw Cash')}</button></div>`;
+  }
+
+  eodModalBodyEl.innerHTML = `
+    <div class="eod-section-label">${t("Today's Sales Summary")}</div>
+    <div class="eod-stat-grid">
+      <div class="eod-stat"><div class="eod-stat-label">${t('Sales')}</div><div class="eod-stat-value">${sales.count ?? 0}</div></div>
+      <div class="eod-stat accent"><div class="eod-stat-label">${t('Total Revenue')}</div><div class="eod-stat-value">${money(sales.revenue)}</div></div>
+      <div class="eod-stat"><div class="eod-stat-label">${t('Gross Profit')}</div><div class="eod-stat-value">${money(sales.gross_profit)}</div></div>
+    </div>
+    <div class="eod-section-label">${t('Sales by Payment Method')}</div>
+    <div class="eod-method-row">${methodTabs}</div>
+    <div class="eod-section-label">${t('Cash Drawer')}</div>
+    ${drawerHtml}`;
+
+  const withdrawBtn = document.getElementById('eod-withdraw-btn');
+  if (withdrawBtn) withdrawBtn.addEventListener('click', () => openCashWithdrawModal(drawer?.balance ?? null));
+
+  const startShiftBtn = document.getElementById('eod-start-shift-btn');
+  if (startShiftBtn) startShiftBtn.addEventListener('click', () => { closeEodModal(); _checkShiftOpen(); });
+}
+
+endOfDayBtn.addEventListener('click', openEodModal);
+
+// ── Cash Drawer: Withdraw Cash (password-gated) ──────────────────────────
+function openCashWithdrawModal(balance) {
+  cashWithdrawAmountInput.value = '';
+  cashWithdrawNoteInput.value = '';
+  cashWithdrawErrorEl.classList.remove('show');
+  cashWithdrawBalanceHintEl.textContent = balance !== null
+    ? t('Available balance: {amount}', { amount: money(balance) })
+    : '';
+  cashWithdrawModal.classList.add('show');
+  setTimeout(() => cashWithdrawAmountInput.focus(), 80);
+}
+
+function closeCashWithdrawModal() {
+  cashWithdrawModal.classList.remove('show');
+}
+
+cashWithdrawAllBtn.addEventListener('click', () => {
+  const balance = _eodDrawer?.balance ?? null;
+  if (balance === null || balance <= 0) return;
+  cashWithdrawAmountInput.value = balance.toFixed(2);
+  cashWithdrawErrorEl.classList.remove('show');
+});
+
+cashWithdrawConfirmBtn.addEventListener('click', () => {
+  const amount = parseFloat(cashWithdrawAmountInput.value);
+  const balance = _eodDrawer?.balance ?? null;
+
+  if (isNaN(amount) || amount <= 0) {
+    cashWithdrawErrorEl.textContent = t('Enter a valid amount.');
+    cashWithdrawErrorEl.classList.add('show');
+    return;
+  }
+  if (balance !== null && amount > balance) {
+    cashWithdrawErrorEl.textContent = t('Amount exceeds the available cash balance.');
+    cashWithdrawErrorEl.classList.add('show');
+    return;
+  }
+  cashWithdrawErrorEl.classList.remove('show');
+
+  const note = cashWithdrawNoteInput.value.trim() || null;
+  openPasswordConfirmModal(t('Enter your password to confirm this cash withdrawal.'), async () => {
+    const res = await API.cashDrawerWithdraw(amount, note);
+    if (res.status === 200) {
+      closeCashWithdrawModal();
+      showToast(t('Withdrawal of {amount} recorded.', { amount: money(amount) }), 'success');
+      _loadEodData();
+    } else {
+      cashWithdrawErrorEl.textContent = t(res.body?.message || 'Failed to record withdrawal.');
+      cashWithdrawErrorEl.classList.add('show');
+    }
+  });
+});
+
+// ── Generic password confirmation gate ────────────────────────────────────
+// Reusable for any sensitive action — currently just cash withdrawal.
+// Verifies against the logged-in account's own password via /verify-password.
+let _passwordConfirmAction = null;
+
+function openPasswordConfirmModal(subtitle, onConfirmed) {
+  _passwordConfirmAction = onConfirmed;
+  document.getElementById('password-confirm-subtitle').textContent = subtitle;
+  passwordConfirmInput.value = '';
+  passwordConfirmErrorEl.classList.remove('show');
+  passwordConfirmModal.classList.add('show');
+  setTimeout(() => passwordConfirmInput.focus(), 80);
+}
+
+function closePasswordConfirmModal() {
+  passwordConfirmModal.classList.remove('show');
+  passwordConfirmInput.value = '';
+  _passwordConfirmAction = null;
+}
+
+passwordConfirmBtn.addEventListener('click', async () => {
+  const password = passwordConfirmInput.value;
+  if (!password) {
+    passwordConfirmErrorEl.textContent = t('Enter your password.');
+    passwordConfirmErrorEl.classList.add('show');
+    return;
+  }
+
+  passwordConfirmBtn.disabled = true;
+  passwordConfirmBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i>`;
+  const res = await API.verifyPassword(password);
+  passwordConfirmBtn.disabled = false;
+  passwordConfirmBtn.innerHTML = `<i class="fa-solid fa-check"></i> ${t('Confirm')}`;
+
+  if (res.status !== 200) {
+    passwordConfirmErrorEl.textContent = t(res.body?.message || 'Incorrect password.');
+    passwordConfirmErrorEl.classList.add('show');
+    passwordConfirmInput.value = '';
+    passwordConfirmInput.focus();
+    return;
+  }
+
+  const action = _passwordConfirmAction;
+  passwordConfirmModal.classList.remove('show');
+  passwordConfirmInput.value = '';
+  _passwordConfirmAction = null;
+  if (action) await action();
+});
+
+passwordConfirmInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); passwordConfirmBtn.click(); }
+});
+
 // ── Settings ────────────────────────────────────────────────────────────
 async function loadSettings() {
   const [settingsRes, invoiceSetupRes] = await Promise.all([API.settingsGet(), API.invoiceSetupGet()]);
@@ -1600,7 +1872,8 @@ async function loadSettings() {
 
 // ── Keyboard shortcuts (see js/navbar.js for the app-wide F1/F11 ones) ──
 function isAnyPosModalOpen() {
-  return [rentalModal, dynamicModal, customerPickerModal, checkoutModal, receiptModal, refundModal]
+  return [rentalModal, dynamicModal, customerPickerModal, checkoutModal, receiptModal, refundModal,
+    shiftOpenModal, eodModal, cashWithdrawModal, passwordConfirmModal]
     .some((m) => m.classList.contains('show'));
 }
 
@@ -1643,4 +1916,5 @@ document.addEventListener('keydown', (e) => {
 loadSettings();
 loadCategories();
 loadProducts();
+_checkShiftOpen();
 renderCart();
