@@ -66,6 +66,7 @@ class PosProductQuickCreateService
                 $costPrice,      // unit cost (what was paid to acquire)
                 $unitPrice,      // selling price per unit
                 $wholesalePrice, // wholesale price per unit
+                $branchId,       // stock layer is scoped to this branch
             );
         }
 

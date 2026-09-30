@@ -14,6 +14,18 @@ let discountType = 'percent'; // 'percent' | 'flat' — which unit discount-inpu
 const checkoutBtn = document.getElementById('checkout-btn');
 const toastEl = document.getElementById('toast');
 
+// Add Product modal
+const addProductBtn = document.getElementById('add-product-btn');
+const addProductModal = document.getElementById('add-product-modal');
+const apNameInput = document.getElementById('ap-name');
+const apSkuInput = document.getElementById('ap-sku');
+const apSkuGenBtn = document.getElementById('ap-sku-gen');
+const apStockInput = document.getElementById('ap-stock');
+const apCostInput = document.getElementById('ap-cost');
+const apPriceInput = document.getElementById('ap-price');
+const apErrorEl = document.getElementById('ap-error');
+const apSaveBtn = document.getElementById('ap-save-btn');
+
 // Customer select (lives inside the customer-picker modal)
 const customerPickerModal = document.getElementById('customer-picker-modal');
 const customerChipEl = document.getElementById('customer-chip');
@@ -192,7 +204,147 @@ function renderChips() {
       loadProducts(searchInput.value.trim());
     });
   });
+  updateChipArrows();
 }
+
+// Lets mouse users scroll the category row sideways (vertical wheel + click-drag),
+// since touch already scrolls it natively.
+function enableHorizontalScroll(el) {
+  el.addEventListener('wheel', (e) => {
+    if (e.deltaY === 0) return;
+    el.scrollLeft += e.deltaY;
+    e.preventDefault();
+  }, { passive: false });
+
+  let isDown = false;
+  let dragMoved = false;
+  let startX = 0;
+  let startScrollLeft = 0;
+  let capturedPointerId = null;
+
+  el.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'touch') return;
+    isDown = true;
+    dragMoved = false;
+    startX = e.clientX;
+    startScrollLeft = el.scrollLeft;
+  });
+  el.addEventListener('pointermove', (e) => {
+    if (!isDown) return;
+    const dx = e.clientX - startX;
+    if (!dragMoved && Math.abs(dx) > 3) {
+      // Only start capturing once real dragging begins — capturing on every
+      // pointerdown (even plain clicks) redirects the click to `el` instead
+      // of the chip button, breaking category selection.
+      dragMoved = true;
+      capturedPointerId = e.pointerId;
+      el.setPointerCapture(capturedPointerId);
+    }
+    if (dragMoved) el.scrollLeft = startScrollLeft - dx;
+  });
+  const endDrag = (e) => {
+    if (!isDown) return;
+    isDown = false;
+    if (capturedPointerId !== null) {
+      el.releasePointerCapture(capturedPointerId);
+      capturedPointerId = null;
+    }
+    if (dragMoved) {
+      // Suppress the click that follows a drag so it doesn't switch category.
+      const suppressClick = (ev) => { ev.stopPropagation(); ev.preventDefault(); el.removeEventListener('click', suppressClick, true); };
+      el.addEventListener('click', suppressClick, true);
+    }
+  };
+  el.addEventListener('pointerup', endDrag);
+  el.addEventListener('pointercancel', endDrag);
+}
+enableHorizontalScroll(chipRowEl);
+
+// Left/right arrow buttons for scrolling the category row.
+const chipArrowLeftEl = document.getElementById('chip-arrow-left');
+const chipArrowRightEl = document.getElementById('chip-arrow-right');
+function updateChipArrows() {
+  const maxScroll = chipRowEl.scrollWidth - chipRowEl.clientWidth;
+  chipArrowLeftEl.disabled = chipRowEl.scrollLeft <= 1;
+  chipArrowRightEl.disabled = chipRowEl.scrollLeft >= maxScroll - 1;
+}
+chipArrowLeftEl.addEventListener('click', () => {
+  chipRowEl.scrollBy({ left: -160, behavior: 'smooth' });
+});
+chipArrowRightEl.addEventListener('click', () => {
+  chipRowEl.scrollBy({ left: 160, behavior: 'smooth' });
+});
+chipRowEl.addEventListener('scroll', updateChipArrows);
+window.addEventListener('resize', updateChipArrows);
+const chipRowResizeObserver = new ResizeObserver(updateChipArrows);
+chipRowResizeObserver.observe(chipRowEl);
+updateChipArrows();
+
+// ── Add Product modal (quick-add without leaving the register) ─────────
+function openAddProductModal() {
+  apNameInput.value = '';
+  apSkuInput.value = '';
+  apStockInput.value = '';
+  apCostInput.value = '';
+  apPriceInput.value = '';
+  apErrorEl.classList.remove('show');
+  addProductModal.classList.add('show');
+  apNameInput.focus();
+}
+function closeAddProductModal() {
+  addProductModal.classList.remove('show');
+}
+addProductBtn.addEventListener('click', openAddProductModal);
+apSkuGenBtn.addEventListener('click', () => {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let s = 'PRD-';
+  for (let i = 0; i < 8; i++) s += chars[Math.floor(Math.random() * chars.length)];
+  apSkuInput.value = s;
+});
+
+async function saveAddProduct() {
+  const name = apNameInput.value.trim();
+  const price = parseFloat(apPriceInput.value);
+  const cost = parseFloat(apCostInput.value);
+  const stock = parseFloat(apStockInput.value);
+
+  apErrorEl.classList.remove('show');
+  if (!name) {
+    apErrorEl.textContent = t('Product name is required.');
+    apErrorEl.classList.add('show');
+    return;
+  }
+  if (isNaN(price) || price < 0) {
+    apErrorEl.textContent = t('Selling price must be 0 or more.');
+    apErrorEl.classList.add('show');
+    return;
+  }
+
+  const payload = {
+    name,
+    sku: apSkuInput.value.trim() || null,
+    unit_price: price,
+    cost_price: isNaN(cost) ? null : cost,
+    stock_quantity: isNaN(stock) || stock < 0 ? 0 : stock,
+  };
+
+  apSaveBtn.disabled = true;
+  try {
+    const res = await API.createProduct(payload);
+    if (res.status !== 200 && res.status !== 201) {
+      const firstKey = res.body?.errors ? Object.keys(res.body.errors)[0] : null;
+      apErrorEl.textContent = t(firstKey ? res.body.errors[firstKey][0] : (res.body?.message || 'Could not save product.'));
+      apErrorEl.classList.add('show');
+      return;
+    }
+    closeAddProductModal();
+    showToast(t('{name} added.', { name: res.body.data?.name || name }), 'success');
+    loadProducts(searchInput.value.trim());
+  } finally {
+    apSaveBtn.disabled = false;
+  }
+}
+apSaveBtn.addEventListener('click', saveAddProduct);
 
 // ── Products ────────────────────────────────────────────────────────────
 function unitPrice(p) {
@@ -851,6 +1003,7 @@ document.querySelectorAll('.modal-backdrop [data-close]').forEach((btn) => {
     if (btn.dataset.close === 'rental-modal') closeRentalModal();
     if (btn.dataset.close === 'dynamic-modal') closeDynamicModal();
     if (btn.dataset.close === 'receipt-modal') closeReceiptModal();
+    if (btn.dataset.close === 'add-product-modal') closeAddProductModal();
     if (btn.dataset.close === 'customer-picker-modal') closeCustomerPickerModal();
     if (btn.dataset.close === 'checkout-modal') closeCheckoutModal();
     if (btn.dataset.close === 'refund-modal') closeRefundModal();
@@ -859,11 +1012,12 @@ document.querySelectorAll('.modal-backdrop [data-close]').forEach((btn) => {
     if (btn.dataset.close === 'password-confirm-modal') closePasswordConfirmModal();
   });
 });
-[rentalModal, dynamicModal, receiptModal, customerPickerModal, checkoutModal, refundModal, eodModal, cashWithdrawModal, passwordConfirmModal].forEach((bg) => {
+[rentalModal, dynamicModal, receiptModal, addProductModal, customerPickerModal, checkoutModal, refundModal, eodModal, cashWithdrawModal, passwordConfirmModal].forEach((bg) => {
   bg.addEventListener('click', (e) => {
     if (e.target !== bg) return;
     if (bg === rentalModal) closeRentalModal();
     else if (bg === dynamicModal) closeDynamicModal();
+    else if (bg === addProductModal) closeAddProductModal();
     else if (bg === customerPickerModal) closeCustomerPickerModal();
     else if (bg === checkoutModal) closeCheckoutModal();
     else if (bg === refundModal) closeRefundModal();
@@ -1873,7 +2027,7 @@ async function loadSettings() {
 // ── Keyboard shortcuts (see js/navbar.js for the app-wide F1/F11 ones) ──
 function isAnyPosModalOpen() {
   return [rentalModal, dynamicModal, customerPickerModal, checkoutModal, receiptModal, refundModal,
-    shiftOpenModal, eodModal, cashWithdrawModal, passwordConfirmModal]
+    shiftOpenModal, eodModal, cashWithdrawModal, passwordConfirmModal, addProductModal]
     .some((m) => m.classList.contains('show'));
 }
 

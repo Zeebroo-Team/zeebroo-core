@@ -15,6 +15,7 @@
         <div class="brand"><i class="fa-solid fa-cash-register"></i> POS</div>
       </div>
       <div class="right">
+        <button type="button" class="topbar-add-product-btn" id="add-product-btn" title="Add Product"><i class="fa-solid fa-plus"></i> Add Product</button>
         <button type="button" class="topbar-eod-btn" id="end-of-day-btn" title="End of Day"><i class="fa-solid fa-cash-register"></i> End of Day</button>
         <button type="button" class="topbar-return-btn" id="return-refund-btn" title="Return &amp; Refund (F9)"><i class="fa-solid fa-rotate-left"></i> Return</button>
         <div class="user-menu" id="user-menu"></div>
@@ -32,8 +33,12 @@
           <button class="mode-tab" data-mode="rental"><i class="fa-solid fa-box-open"></i> Rental</button>
           <button class="mode-tab" data-mode="dynamic"><i class="fa-solid fa-chart-line"></i> Dynamic</button>
         </div>
-        <div class="chip-row" id="chip-row">
-          <button class="chip active" data-category="">All</button>
+        <div class="chip-scroll-wrap">
+          <button type="button" class="chip-arrow chip-arrow-left" id="chip-arrow-left" aria-label="Scroll categories left"><i class="fa-solid fa-chevron-left"></i></button>
+          <div class="chip-row" id="chip-row">
+            <button class="chip active" data-category="">All</button>
+          </div>
+          <button type="button" class="chip-arrow chip-arrow-right" id="chip-arrow-right" aria-label="Scroll categories right"><i class="fa-solid fa-chevron-right"></i></button>
         </div>
         <div class="product-grid" id="product-grid">
           <div class="loading-state">Loading products…</div>
@@ -119,6 +124,46 @@
       <div class="modal-foot">
         <button type="button" class="ghost-btn" data-close="dynamic-modal">Cancel</button>
         <button type="button" class="ghost-btn primary" id="dynamic-confirm-btn">Add to cart</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Product modal: quick-add a new product without leaving the register -->
+  <div class="modal-backdrop" id="add-product-modal">
+    <div class="modal modal-sm">
+      <div class="modal-head">
+        <h2>Add Product</h2>
+        <button type="button" class="modal-close" data-close="add-product-modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <label for="ap-name">Name *</label>
+          <input type="text" id="ap-name" maxlength="255" placeholder="Product name" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="ap-sku">SKU</label>
+          <div class="input-with-btn">
+            <input type="text" id="ap-sku" maxlength="120" placeholder="Optional — auto-generated if left blank" autocomplete="off" />
+            <button type="button" class="ghost-btn" id="ap-sku-gen" title="Generate SKU"><i class="fa-solid fa-shuffle"></i></button>
+          </div>
+        </div>
+        <div class="field">
+          <label for="ap-stock">Opening Stock</label>
+          <input type="number" id="ap-stock" min="0" step="0.001" inputmode="decimal" placeholder="0" />
+        </div>
+        <div class="field">
+          <label for="ap-cost">Cost Price</label>
+          <input type="number" id="ap-cost" min="0" step="0.01" inputmode="decimal" placeholder="0.00" />
+        </div>
+        <div class="field">
+          <label for="ap-price">Selling Price *</label>
+          <input type="number" id="ap-price" min="0" step="0.01" inputmode="decimal" placeholder="0.00" />
+        </div>
+        <div class="error-box" id="ap-error"></div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="ghost-btn" data-close="add-product-modal">Cancel</button>
+        <button type="button" class="ghost-btn primary" id="ap-save-btn"><i class="fa-solid fa-check"></i> Save Product</button>
       </div>
     </div>
   </div>
