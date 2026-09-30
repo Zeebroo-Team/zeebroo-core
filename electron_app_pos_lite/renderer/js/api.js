@@ -237,6 +237,12 @@ const API = (() => {
     todaySummary: () => request('GET', '/today-summary'),
     profitReport: (period) => request('GET', `/profit-report?period=${period || 30}`),
 
+    // Cash Drawer — Open Shift (opening float) & End of Day (withdrawals)
+    cashDrawer: () => request('GET', '/cash-drawer'),
+    cashDrawerOpen: (openingFloat) => request('POST', '/cash-drawer/open', { opening_float: openingFloat }),
+    cashDrawerWithdraw: (amount, note) => request('POST', '/cash-drawer/withdraw', { amount, note }),
+    verifyPassword: (password) => request('POST', '/verify-password', { password }),
+
     // Stock — shared lookups (suppliers, finance accounts, branches)
     suppliers: (params = {}) => {
       const qs = new URLSearchParams();
