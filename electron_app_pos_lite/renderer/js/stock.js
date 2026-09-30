@@ -55,6 +55,28 @@
     return d.toLocaleDateString(i18n.locale, { month: 'short', day: 'numeric', year: 'numeric' });
   }
 
+  // Fills a <select> with this business's branches and defaults it to the
+  // given branch (e.g. a PO's own branch) or, failing that, the currently
+  // active branch picked in the top navbar switcher.
+  async function populateBranchSelect(selectEl, presetBranchId) {
+    if (!selectEl) return;
+    const res = await API.branches();
+    const branches = res.status === 200 ? (res.body.data || []) : [];
+    if (branches.length) {
+      selectEl.insertAdjacentHTML('beforeend', branches.map((b) => `<option value="${b.id}">${esc(b.name)}</option>`).join(''));
+    }
+    let branchId = presetBranchId || null;
+    if (!branchId) {
+      try {
+        const cfg = await window.electronAPI.getConfig();
+        branchId = cfg.branch_id || null;
+      } catch (_) { /* no active branch configured */ }
+    }
+    if (branchId && branches.some((b) => b.id === branchId)) {
+      selectEl.value = String(branchId);
+    }
+  }
+
   function fmtDateTime(iso) {
     if (!iso) return '—';
     const d = new Date(iso);
@@ -522,6 +544,9 @@
           <label class="qf-field"><span>${t('Supplier')}</span>
             <select id="po-supplier"><option value="">${t('— No supplier —')}</option></select>
           </label>
+          <label class="qf-field"><span>${t('Branch')}</span>
+            <select id="po-branch"><option value="">${t('— Unassigned —')}</option></select>
+          </label>
           <label class="qf-field"><span>${t('Reference')}</span>
             <input type="text" id="po-reference" placeholder="${t('e.g. REQ-123')}">
           </label>
@@ -585,6 +610,7 @@
       const sel = document.getElementById('po-supplier');
       if (sel) sel.insertAdjacentHTML('beforeend', (supRes.body.data || []).map((s) => `<option value="${s.id}">${esc(s.name)}</option>`).join(''));
     }
+    await populateBranchSelect(document.getElementById('po-branch'));
   }
 
   async function submitPurchaseOrderForm() {
@@ -595,6 +621,7 @@
     const supplierId = document.getElementById('po-supplier').value;
     const payload = {
       supplier_id: supplierId ? Number(supplierId) : null,
+      branch_id: Number(document.getElementById('po-branch').value) || null,
       reference: document.getElementById('po-reference').value.trim() || null,
       purchase_date: purchaseDate,
       expected_delivery_date: document.getElementById('po-expected').value || null,
@@ -785,6 +812,7 @@
           <span class="qf-picker-title">${t('Select Purchase Order')}</span>
           <button class="salm-modal-close" id="stk-picker-close" type="button" aria-label="${t('Close')}"><i class="fa-solid fa-xmark"></i></button>
         </div>
+        <div class="qf-picker-search"><i class="fa-solid fa-magnifying-glass"></i><input type="text" id="stk-po-picker-input" placeholder="${t('Search by PO number or supplier…')}"></div>
         <div class="qf-picker-list" id="stk-po-picker-list"><div class="salm-loading">${t('Loading…')}</div></div>
         <div class="qf-picker-foot"><button class="salm-btn-ghost" id="stk-picker-cancel" type="button">${t('Cancel')}</button></div>
       </div>`;
@@ -795,25 +823,52 @@
     el.addEventListener('mousedown', (e) => { if (e.target === el) close(); });
 
     const listEl = document.getElementById('stk-po-picker-list');
-    const res = await API.purchaseOrders({});
-    if (res.status !== 200) { listEl.innerHTML = `<div class="salm-empty">${t('Could not load purchase orders.')}</div>`; return; }
-    const receivable = (res.body.data || []).filter((p) => p.status === 'ordered' || p.status === 'partially_received');
-    if (!receivable.length) {
-      listEl.innerHTML = `<div class="salm-empty">${t('No purchase orders are ready to receive. Place an order first.')}</div>`;
-      return;
-    }
-    listEl.innerHTML = receivable.map((p) => `
-      <div class="qf-picker-row" data-id="${p.id}">
+    let lastResults = [];
+
+    async function search(q) {
+      listEl.innerHTML = `<div class="salm-loading">${t('Loading…')}</div>`;
+      const res = await API.purchaseOrders({ q });
+      if (res.status !== 200) { listEl.innerHTML = `<div class="salm-empty">${t('Could not load purchase orders.')}</div>`; return; }
+      const receivable = (res.body.data || []).filter((p) => p.status === 'ordered' || p.status === 'partially_received');
+      // Newest-created first, so a freshly placed order always surfaces at the top.
+      receivable.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0) || b.id - a.id);
+      lastResults = receivable;
+      if (!receivable.length) {
+        listEl.innerHTML = `<div class="salm-empty">${t('No purchase orders are ready to receive. Place an order first.')}</div>`;
+        return;
+      }
+      const newestId = receivable[0].id;
+      const isRecent = (p) => {
+        if (p.id !== newestId || !p.created_at) return false;
+        return (Date.now() - new Date(p.created_at).getTime()) < 24 * 60 * 60 * 1000;
+      };
+      listEl.innerHTML = receivable.map((p) => {
+        const highlight = isRecent(p);
+        return `
+      <div class="qf-picker-row${highlight ? ' qf-picker-row-new' : ''}" data-id="${p.id}">
         <div class="qf-picker-thumb"><i class="fa-solid fa-file-invoice"></i></div>
         <div class="qf-picker-info">
-          <div class="qf-picker-name">${esc(p.po_number)}</div>
+          <div class="qf-picker-name">${esc(p.po_number)} ${highlight ? `<span class="qf-picker-badge new">${t('New')}</span>` : ''}</div>
           <div class="qf-picker-sub">${esc(p.supplier_name) || t('No supplier')} · ${esc(p.status_label || p.status)}</div>
         </div>
         <div class="qf-picker-price">${money(p.total)}</div>
-      </div>`).join('');
-    listEl.querySelectorAll('.qf-picker-row').forEach((row) => {
-      row.addEventListener('click', () => { close(); renderGrnFromPoForm(Number(row.dataset.id)); });
-    });
+      </div>`;
+      }).join('');
+      listEl.querySelectorAll('.qf-picker-row').forEach((row) => {
+        row.addEventListener('click', () => {
+          const p = lastResults.find((x) => String(x.id) === row.dataset.id);
+          if (!p) return;
+          close();
+          renderGrnFromPoForm(p.id);
+        });
+      });
+    }
+
+    const input = document.getElementById('stk-po-picker-input');
+    let debounceTimer;
+    input.addEventListener('input', () => { clearTimeout(debounceTimer); debounceTimer = setTimeout(() => search(input.value.trim()), 300); });
+    search('');
+    setTimeout(() => input.focus(), 30);
   }
 
   async function renderGrnFromPoForm(purchaseId) {
@@ -837,6 +892,7 @@
         <div class="qf-card-title"><i class="fa-solid fa-circle-info"></i> ${t('Receipt Details')}</div>
         <div class="qf-grid">
           <label class="qf-field"><span>${t('Supplier')}</span><input type="text" value="${esc(purchase.supplier_name) || '—'}" disabled></label>
+          <label class="qf-field"><span>${t('Branch')}</span><select id="grnpo-branch"><option value="">${t('— Unassigned —')}</option></select></label>
           <label class="qf-field"><span>${t('Received Date')}</span><input type="date" id="grnpo-date" value="${today}"></label>
           <label class="qf-field"><span>${t('Reference')}</span><input type="text" id="grnpo-reference"></label>
         </div>
@@ -895,6 +951,7 @@
     document.getElementById('grnpo-cancel').addEventListener('click', renderGoodsReceive);
     document.getElementById('grnpo-pay-method').innerHTML = `<option value="cash">${t('Cash')}</option><option value="credit">${t('Credit')}</option><option value="cheque">${t('Cheque')}</option>`;
     wirePaymentFields('grnpo-pay');
+    await populateBranchSelect(document.getElementById('grnpo-branch'), purchase.branch_id);
 
     document.getElementById('grnpo-save').addEventListener('click', async () => {
       const lines = [...document.querySelectorAll('#grnpo-line-rows .qf-line-row')].map((row) => ({
@@ -906,6 +963,7 @@
 
       const payload = {
         received_date: document.getElementById('grnpo-date').value,
+        branch_id: Number(document.getElementById('grnpo-branch').value) || null,
         reference: document.getElementById('grnpo-reference').value.trim() || null,
         notes: document.getElementById('grnpo-notes').value.trim() || null,
         items: lines,
@@ -984,6 +1042,7 @@
           <label class="qf-field"><span>${t('Supplier')}</span>
             <select id="grndirect-supplier"><option value="">${t('— No supplier —')}</option></select>
           </label>
+          <label class="qf-field"><span>${t('Branch')}</span><select id="grndirect-branch"><option value="">${t('— Unassigned —')}</option></select></label>
           <label class="qf-field"><span>${t('Received Date')}</span><input type="date" id="grndirect-date" value="${today}"></label>
           <label class="qf-field"><span>${t('Reference')}</span><input type="text" id="grndirect-reference"></label>
         </div>
@@ -1038,6 +1097,7 @@
       const sel = document.getElementById('grndirect-supplier');
       if (sel) sel.insertAdjacentHTML('beforeend', (supRes.body.data || []).map((s) => `<option value="${s.id}">${esc(s.name)}</option>`).join(''));
     }
+    await populateBranchSelect(document.getElementById('grndirect-branch'));
   }
 
   async function submitGrnDirectForm() {
@@ -1046,6 +1106,7 @@
     const supplierId = document.getElementById('grndirect-supplier').value;
     const payload = {
       supplier_id: supplierId ? Number(supplierId) : null,
+      branch_id: Number(document.getElementById('grndirect-branch').value) || null,
       received_date: document.getElementById('grndirect-date').value,
       reference: document.getElementById('grndirect-reference').value.trim() || null,
       notes: document.getElementById('grndirect-notes').value.trim() || null,
