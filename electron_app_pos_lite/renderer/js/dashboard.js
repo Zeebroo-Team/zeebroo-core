@@ -50,13 +50,13 @@ const TILES = [
     href: 'cashiers.html',
   },
   {
-    key: 'customers',
-    icon: 'fa-users',
-    title: 'Customers',
-    desc: 'Manage customer profiles and purchase history.',
+    key: 'contacts',
+    icon: 'fa-address-book',
+    title: 'Contacts',
+    desc: 'Manage your customers and suppliers.',
     accent: '#ea580c',
     active: true,
-    href: 'customers.html',
+    href: 'contacts.html',
   },
   {
     key: 'sales',

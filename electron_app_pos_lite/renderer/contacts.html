@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Contacts — Zeebroo POS Lite</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<link rel="stylesheet" href="css/contacts.css" />
+<link rel="stylesheet" href="css/navbar.css" />
+</head>
+<body>
+  <div id="app">
+    <div class="topbar">
+      <div class="left">
+        <button class="icon-btn" id="back-btn"><i class="fa-solid fa-arrow-left"></i> Dashboard</button>
+        <div class="brand"><i class="fa-solid fa-address-book"></i> Contacts</div>
+      </div>
+      <div class="user-menu" id="user-menu"></div>
+    </div>
+
+    <div class="content">
+      <!-- Sub-navigation cards -->
+      <div class="subnav" id="subnav">
+        <button class="subnav-card active" data-panel="customers" style="--tint:#fff1e0;--icon-accent:#ea580c;--card-accent:#ea580c;--card-glow:rgba(234,88,12,0.14);">
+          <div class="subnav-icon"><i class="fa-solid fa-users"></i></div>
+          <div class="subnav-text">
+            <div class="subnav-title">Customers</div>
+            <div class="subnav-desc">Profiles &amp; purchase history</div>
+          </div>
+          <span class="subnav-count" id="cust-subnav-count"></span>
+        </button>
+        <button class="subnav-card" data-panel="suppliers" style="--tint:#e0f2fe;--icon-accent:#0284c7;--card-accent:#0284c7;--card-glow:rgba(2,132,199,0.14);">
+          <div class="subnav-icon"><i class="fa-solid fa-truck"></i></div>
+          <div class="subnav-text">
+            <div class="subnav-title">Suppliers</div>
+            <div class="subnav-desc">Vendors you buy from</div>
+          </div>
+          <span class="subnav-count" id="sup-subnav-count"></span>
+        </button>
+      </div>
+
+      <!-- Customers panel -->
+      <section class="panel active" id="panel-customers">
+        <div class="toolbar">
+          <div class="search-box">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <input id="cust-search-input" type="text" placeholder="Search by name, phone, or email…" />
+          </div>
+          <select class="filter-select" id="cust-category-filter">
+            <option value="">All categories</option>
+          </select>
+          <select class="filter-select" id="cust-type-filter">
+            <option value="">All types</option>
+            <option value="retail">Retail</option>
+            <option value="wholesale">Wholesale</option>
+          </select>
+          <span class="count-pill" id="cust-count-pill"></span>
+          <button class="ghost-btn" id="cst-import-csv-btn"><i class="fa-solid fa-file-arrow-up"></i> Import CSV</button>
+          <button class="primary-btn" id="cust-add-btn"><i class="fa-solid fa-plus"></i> Add Customer</button>
+        </div>
+
+        <div class="table-card">
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Contact</th>
+                <th>Type</th>
+                <th>Category</th>
+                <th>Sales</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="cust-rows">
+              <tr><td colspan="6" class="loading-state">Loading customers…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Suppliers panel -->
+      <section class="panel" id="panel-suppliers">
+        <div class="toolbar">
+          <div class="search-box">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <input id="sup-search-input" type="text" placeholder="Search by name, contact, phone, or email…" />
+          </div>
+          <select class="filter-select" id="sup-category-filter">
+            <option value="">All categories</option>
+          </select>
+          <select class="filter-select" id="sup-status-filter">
+            <option value="">All statuses</option>
+            <option value="1">Active</option>
+            <option value="0">Inactive</option>
+          </select>
+          <span class="count-pill" id="sup-count-pill"></span>
+          <button class="ghost-btn" id="sst-import-csv-btn"><i class="fa-solid fa-file-arrow-up"></i> Import CSV</button>
+          <button class="primary-btn" id="sup-add-btn"><i class="fa-solid fa-plus"></i> Add Supplier</button>
+        </div>
+
+        <div class="table-card">
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Contact</th>
+                <th>Category</th>
+                <th>Purchases</th>
+                <th>Status</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="sup-rows">
+              <tr><td colspan="6" class="loading-state">Loading suppliers…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <!-- Add / Edit Customer modal -->
+  <div class="modal-backdrop" id="cust-modal">
+    <div class="modal">
+      <div class="modal-head">
+        <h2 id="cust-modal-title">Add Customer</h2>
+        <button class="modal-close" data-close="cust-modal"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="error-box" id="cust-error"></div>
+        <div class="field">
+          <label for="cf-name">Name *</label>
+          <input id="cf-name" type="text" placeholder="Customer name" />
+        </div>
+        <div class="row-2">
+          <div class="field">
+            <label for="cf-phone">Phone</label>
+            <input id="cf-phone" type="text" placeholder="+1 555 0100" />
+          </div>
+          <div class="field">
+            <label for="cf-email">Email</label>
+            <input id="cf-email" type="email" placeholder="name@example.com" />
+          </div>
+        </div>
+        <div class="field">
+          <label for="cf-address">Address</label>
+          <input id="cf-address" type="text" placeholder="Optional" />
+        </div>
+        <div class="row-2">
+          <div class="field">
+            <label for="cf-type">Customer Type</label>
+            <select id="cf-type">
+              <option value="retail">Retail</option>
+              <option value="wholesale">Wholesale</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="cf-category">Category</label>
+            <div class="select-with-add">
+              <select id="cf-category"><option value="">None</option></select>
+              <button type="button" class="add-inline-btn" id="cust-add-category-inline-btn" title="Add category"><i class="fa-solid fa-plus"></i></button>
+            </div>
+          </div>
+        </div>
+        <div class="field">
+          <label for="cf-notes">Notes</label>
+          <textarea id="cf-notes" placeholder="Optional"></textarea>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="ghost-btn" data-close="cust-modal">Cancel</button>
+        <button class="primary-btn" id="cust-save-btn">Save Customer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- New Customer Category modal -->
+  <div class="modal-backdrop" id="cust-category-modal">
+    <div class="modal modal-sm">
+      <div class="modal-head">
+        <h2>New Customer Category</h2>
+        <button class="modal-close" data-close="cust-category-modal"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="error-box" id="cust-category-error"></div>
+        <div class="field">
+          <label for="cust-cat-name">Name *</label>
+          <input id="cust-cat-name" type="text" placeholder="Category name" />
+        </div>
+        <div class="field">
+          <label for="cust-cat-description">Description</label>
+          <textarea id="cust-cat-description" placeholder="Optional"></textarea>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="ghost-btn" data-close="cust-category-modal">Cancel</button>
+        <button class="primary-btn" id="cust-category-save-btn">Save Category</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- View Customer modal -->
+  <div class="modal-backdrop" id="cust-view-modal">
+    <div class="modal">
+      <div class="modal-head">
+        <h2 id="cust-view-name">Customer</h2>
+        <button class="modal-close" data-close="cust-view-modal"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body" id="cust-view-body"></div>
+      <div class="modal-foot">
+        <button class="ghost-btn danger-text" id="cust-view-delete-btn"><i class="fa-solid fa-trash"></i> Delete</button>
+        <button class="ghost-btn" id="cust-view-edit-btn"><i class="fa-solid fa-pen"></i> Edit</button>
+        <button class="primary-btn" data-close="cust-view-modal">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add / Edit Supplier modal -->
+  <div class="modal-backdrop" id="sup-modal">
+    <div class="modal">
+      <div class="modal-head">
+        <h2 id="sup-modal-title">Add Supplier</h2>
+        <button class="modal-close" data-close="sup-modal"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="error-box" id="sup-error"></div>
+        <div class="field">
+          <label for="sf-name">Name *</label>
+          <input id="sf-name" type="text" placeholder="Supplier / company name" />
+        </div>
+        <div class="field">
+          <label for="sf-contact-name">Contact Person</label>
+          <input id="sf-contact-name" type="text" placeholder="Optional" />
+        </div>
+        <div class="row-2">
+          <div class="field">
+            <label for="sf-phone">Phone</label>
+            <input id="sf-phone" type="text" placeholder="+1 555 0100" />
+          </div>
+          <div class="field">
+            <label for="sf-email">Email</label>
+            <input id="sf-email" type="email" placeholder="name@example.com" />
+          </div>
+        </div>
+        <div class="field">
+          <label for="sf-address">Address</label>
+          <input id="sf-address" type="text" placeholder="Optional" />
+        </div>
+        <div class="field">
+          <label for="sf-category">Category</label>
+          <div class="select-with-add">
+            <select id="sf-category"><option value="">None</option></select>
+            <button type="button" class="add-inline-btn" id="sup-add-category-inline-btn" title="Add category"><i class="fa-solid fa-plus"></i></button>
+          </div>
+        </div>
+        <div class="field">
+          <label for="sf-notes">Notes</label>
+          <textarea id="sf-notes" placeholder="Optional"></textarea>
+        </div>
+        <label class="check-row" id="sf-active-row" style="display:none">
+          <input type="checkbox" id="sf-active" checked /> Active
+        </label>
+      </div>
+      <div class="modal-foot">
+        <button class="ghost-btn" data-close="sup-modal">Cancel</button>
+        <button class="primary-btn" id="sup-save-btn">Save Supplier</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- New Supplier Category modal -->
+  <div class="modal-backdrop" id="sup-category-modal">
+    <div class="modal modal-sm">
+      <div class="modal-head">
+        <h2>New Supplier Category</h2>
+        <button class="modal-close" data-close="sup-category-modal"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="error-box" id="sup-category-error"></div>
+        <div class="field">
+          <label for="sup-cat-name">Name *</label>
+          <input id="sup-cat-name" type="text" placeholder="Category name" />
+        </div>
+        <div class="field">
+          <label for="sup-cat-description">Description</label>
+          <textarea id="sup-cat-description" placeholder="Optional"></textarea>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="ghost-btn" data-close="sup-category-modal">Cancel</button>
+        <button class="primary-btn" id="sup-category-save-btn">Save Category</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- View Supplier modal -->
+  <div class="modal-backdrop" id="sup-view-modal">
+    <div class="modal">
+      <div class="modal-head">
+        <h2 id="sup-view-name">Supplier</h2>
+        <button class="modal-close" data-close="sup-view-modal"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body" id="sup-view-body"></div>
+      <div class="modal-foot">
+        <button class="ghost-btn danger-text" id="sup-view-toggle-btn"><i class="fa-solid fa-ban"></i> Deactivate</button>
+        <button class="ghost-btn" id="sup-view-edit-btn"><i class="fa-solid fa-pen"></i> Edit</button>
+        <button class="primary-btn" data-close="sup-view-modal">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Import Customers from CSV -->
+  <div class="modal-backdrop" id="cust-csv-modal">
+    <div class="modal modal-lg">
+      <div class="modal-head">
+        <h2><i class="fa-solid fa-file-arrow-up"></i> Import Customers from CSV</h2>
+        <button class="modal-close" id="cust-csv-close"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+
+      <div class="csv-step-track">
+        <div class="csv-step active" id="cust-csv-step-ind-1"><span class="csv-step-num">1</span><span class="csv-step-label">Upload</span></div>
+        <div class="csv-step-line"></div>
+        <div class="csv-step" id="cust-csv-step-ind-2"><span class="csv-step-num">2</span><span class="csv-step-label">Preview</span></div>
+        <div class="csv-step-line"></div>
+        <div class="csv-step" id="cust-csv-step-ind-3"><span class="csv-step-num">3</span><span class="csv-step-label">Result</span></div>
+      </div>
+
+      <!-- Step 1: Upload -->
+      <div class="modal-body csv-step-body" id="cust-csv-step-1">
+        <div class="csv-dropzone" id="cust-csv-dropzone">
+          <i class="fa-solid fa-cloud-arrow-up csv-dropzone-icon"></i>
+          <p class="csv-dropzone-text">Drag &amp; drop your CSV file here</p>
+          <p class="csv-dropzone-sub">or click to browse</p>
+          <input type="file" id="cust-csv-file-input" accept=".csv,text/csv" style="position:absolute;inset:0;opacity:0;cursor:pointer" />
+        </div>
+        <div class="csv-upload-info">
+          <div class="csv-info-item"><i class="fa-solid fa-circle-check"></i> First row must be column headers</div>
+          <div class="csv-info-item"><i class="fa-solid fa-circle-check"></i> Required column: <strong>name</strong></div>
+          <div class="csv-info-item"><i class="fa-solid fa-circle-check"></i> Optional: phone, email, address, notes, category, customer_type</div>
+          <div class="csv-info-item"><i class="fa-solid fa-circle-check"></i> Max 500 rows per import</div>
+        </div>
+      </div>
+      <div class="csv-modal-footer" id="cust-csv-footer-1">
+        <button class="ghost-btn" id="cust-csv-download-sample"><i class="fa-solid fa-download"></i> Download Sample CSV</button>
+        <button class="ghost-btn" id="cust-csv-cancel-1">Cancel</button>
+      </div>
+
+      <!-- Step 2: Preview -->
+      <div class="modal-body csv-step-body" id="cust-csv-step-2" style="display:none">
+        <div class="csv-preview-summary" id="cust-csv-preview-summary"></div>
+        <div class="csv-preview-wrap">
+          <table class="csv-preview-tbl">
+            <thead id="cust-csv-preview-thead"></thead>
+            <tbody id="cust-csv-preview-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="csv-modal-footer" id="cust-csv-footer-2" style="display:none">
+        <button class="ghost-btn" id="cust-csv-back-btn"><i class="fa-solid fa-arrow-left"></i> Back</button>
+        <button class="primary-btn" id="cust-csv-import-btn"><i class="fa-solid fa-file-import" id="cust-csv-import-icon"></i> Import <span id="cust-csv-import-count"></span> Customers</button>
+      </div>
+
+      <!-- Step 3: Result -->
+      <div class="modal-body csv-step-body" id="cust-csv-step-3" style="display:none">
+        <div class="csv-result-summary" id="cust-csv-result-summary"></div>
+        <div class="csv-result-errors" id="cust-csv-result-errors" style="display:none">
+          <div class="csv-result-errors-title"><i class="fa-solid fa-triangle-exclamation"></i> Rows with errors</div>
+          <div class="csv-result-errors-list" id="cust-csv-result-errors-list"></div>
+        </div>
+      </div>
+      <div class="csv-modal-footer" id="cust-csv-footer-3" style="display:none">
+        <button class="ghost-btn" id="cust-csv-import-more-btn"><i class="fa-solid fa-plus"></i> Import More</button>
+        <button class="primary-btn" id="cust-csv-done-btn">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Import Suppliers from CSV -->
+  <div class="modal-backdrop" id="sup-csv-modal">
+    <div class="modal modal-lg">
+      <div class="modal-head">
+        <h2><i class="fa-solid fa-file-arrow-up"></i> Import Suppliers from CSV</h2>
+        <button class="modal-close" id="sup-csv-close"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+
+      <div class="csv-step-track">
+        <div class="csv-step active" id="sup-csv-step-ind-1"><span class="csv-step-num">1</span><span class="csv-step-label">Upload</span></div>
+        <div class="csv-step-line"></div>
+        <div class="csv-step" id="sup-csv-step-ind-2"><span class="csv-step-num">2</span><span class="csv-step-label">Preview</span></div>
+        <div class="csv-step-line"></div>
+        <div class="csv-step" id="sup-csv-step-ind-3"><span class="csv-step-num">3</span><span class="csv-step-label">Result</span></div>
+      </div>
+
+      <!-- Step 1: Upload -->
+      <div class="modal-body csv-step-body" id="sup-csv-step-1">
+        <div class="csv-dropzone" id="sup-csv-dropzone">
+          <i class="fa-solid fa-cloud-arrow-up csv-dropzone-icon"></i>
+          <p class="csv-dropzone-text">Drag &amp; drop your CSV file here</p>
+          <p class="csv-dropzone-sub">or click to browse</p>
+          <input type="file" id="sup-csv-file-input" accept=".csv,text/csv" style="position:absolute;inset:0;opacity:0;cursor:pointer" />
+        </div>
+        <div class="csv-upload-info">
+          <div class="csv-info-item"><i class="fa-solid fa-circle-check"></i> First row must be column headers</div>
+          <div class="csv-info-item"><i class="fa-solid fa-circle-check"></i> Required column: <strong>name</strong></div>
+          <div class="csv-info-item"><i class="fa-solid fa-circle-check"></i> Optional: contact_name, phone, email, address, notes, category</div>
+          <div class="csv-info-item"><i class="fa-solid fa-circle-check"></i> Max 500 rows per import</div>
+        </div>
+      </div>
+      <div class="csv-modal-footer" id="sup-csv-footer-1">
+        <button class="ghost-btn" id="sup-csv-download-sample"><i class="fa-solid fa-download"></i> Download Sample CSV</button>
+        <button class="ghost-btn" id="sup-csv-cancel-1">Cancel</button>
+      </div>
+
+      <!-- Step 2: Preview -->
+      <div class="modal-body csv-step-body" id="sup-csv-step-2" style="display:none">
+        <div class="csv-preview-summary" id="sup-csv-preview-summary"></div>
+        <div class="csv-preview-wrap">
+          <table class="csv-preview-tbl">
+            <thead id="sup-csv-preview-thead"></thead>
+            <tbody id="sup-csv-preview-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="csv-modal-footer" id="sup-csv-footer-2" style="display:none">
+        <button class="ghost-btn" id="sup-csv-back-btn"><i class="fa-solid fa-arrow-left"></i> Back</button>
+        <button class="primary-btn" id="sup-csv-import-btn"><i class="fa-solid fa-file-import" id="sup-csv-import-icon"></i> Import <span id="sup-csv-import-count"></span> Suppliers</button>
+      </div>
+
+      <!-- Step 3: Result -->
+      <div class="modal-body csv-step-body" id="sup-csv-step-3" style="display:none">
+        <div class="csv-result-summary" id="sup-csv-result-summary"></div>
+        <div class="csv-result-errors" id="sup-csv-result-errors" style="display:none">
+          <div class="csv-result-errors-title"><i class="fa-solid fa-triangle-exclamation"></i> Rows with errors</div>
+          <div class="csv-result-errors-list" id="sup-csv-result-errors-list"></div>
+        </div>
+      </div>
+      <div class="csv-modal-footer" id="sup-csv-footer-3" style="display:none">
+        <button class="ghost-btn" id="sup-csv-import-more-btn"><i class="fa-solid fa-plus"></i> Import More</button>
+        <button class="primary-btn" id="sup-csv-done-btn">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="js/lang/si.js"></script>
+  <script src="js/i18n.js"></script>
+  <script src="js/navbar.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/contacts.js"></script>
+</body>
+</html>

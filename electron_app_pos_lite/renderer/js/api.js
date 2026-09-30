@@ -104,9 +104,29 @@ const API = (() => {
     },
     customer: (id) => request('GET', `/customers/${id}`),
     createCustomer: (payload) => request('POST', '/customers', payload),
+    updateCustomer: (id, payload) => request('PATCH', `/customers/${id}`, payload),
     deleteCustomer: (id) => request('DELETE', `/customers/${id}`),
     customerCategories: () => request('GET', '/customer-categories'),
     createCustomerCategory: (payload) => request('POST', '/customer-categories', payload),
+    importCustomers: (rows) => request('POST', '/customers/import', { rows }),
+
+    // Suppliers — full CRUD (Contacts hub). `API.suppliers()` further below stays
+    // as the lightweight active-only picker used by Stock forms.
+    supplierList: (params = {}) => {
+      const qs = new URLSearchParams();
+      if (params.q) qs.set('q', params.q);
+      if (params.categoryId) qs.set('category_id', params.categoryId);
+      if (params.active !== undefined && params.active !== '') qs.set('active', params.active);
+      const suffix = qs.toString();
+      return request('GET', '/suppliers' + (suffix ? `?${suffix}` : ''));
+    },
+    supplier: (id) => request('GET', `/suppliers/${id}`),
+    createSupplier: (payload) => request('POST', '/suppliers', payload),
+    updateSupplier: (id, payload) => request('PATCH', `/suppliers/${id}`, payload),
+    deactivateSupplier: (id) => request('DELETE', `/suppliers/${id}`),
+    supplierCategories: () => request('GET', '/supplier-categories'),
+    createSupplierCategory: (payload) => request('POST', '/supplier-categories', payload),
+    importSuppliers: (rows) => request('POST', '/suppliers/import', { rows }),
 
     // Cashiers
     cashiers: () => request('GET', '/cashiers'),

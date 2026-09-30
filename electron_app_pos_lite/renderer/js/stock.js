@@ -542,7 +542,10 @@
         <div class="qf-card-title"><i class="fa-solid fa-circle-info"></i> ${t('Order Details')}</div>
         <div class="qf-grid">
           <label class="qf-field"><span>${t('Supplier')}</span>
-            <select id="po-supplier"><option value="">${t('— No supplier —')}</option></select>
+            <div class="qf-field-with-btn">
+              <select id="po-supplier"><option value="">${t('— No supplier —')}</option></select>
+              <button type="button" class="qf-field-add-btn" id="po-supplier-add" title="${t('Add new supplier')}" aria-label="${t('Add new supplier')}"><i class="fa-solid fa-plus"></i></button>
+            </div>
           </label>
           <label class="qf-field"><span>${t('Branch')}</span>
             <select id="po-branch"><option value="">${t('— Unassigned —')}</option></select>
@@ -600,17 +603,111 @@
       recalcPoTotal();
     }));
     document.getElementById('po-save').addEventListener('click', submitPurchaseOrderForm);
+    document.getElementById('po-supplier-add').addEventListener('click', () => {
+      openQuickAddSupplierModal((supplier) => {
+        const sel = document.getElementById('po-supplier');
+        if (!sel) return;
+        sel.insertAdjacentHTML('beforeend', `<option value="${supplier.id}">${esc(supplier.name)}</option>`);
+        sel.value = String(supplier.id);
+      });
+    });
 
     renderPoLines();
     await loadSettings();
     recalcPoTotal();
 
+    await populateSupplierSelect(document.getElementById('po-supplier'));
+    await populateBranchSelect(document.getElementById('po-branch'));
+  }
+
+  async function populateSupplierSelect(sel, selectedId = null) {
+    if (!sel) return;
     const supRes = await API.suppliers();
     if (supRes.status === 200) {
-      const sel = document.getElementById('po-supplier');
-      if (sel) sel.insertAdjacentHTML('beforeend', (supRes.body.data || []).map((s) => `<option value="${s.id}">${esc(s.name)}</option>`).join(''));
+      sel.insertAdjacentHTML('beforeend', (supRes.body.data || []).map((s) => `<option value="${s.id}">${esc(s.name)}</option>`).join(''));
+      if (selectedId) sel.value = String(selectedId);
     }
-    await populateBranchSelect(document.getElementById('po-branch'));
+  }
+
+  // ── Shared: quick "Add Supplier" dialog (mirrors openProductPicker's modal
+  // shell, but with a short form instead of a search list) ────────────────
+  function openQuickAddSupplierModal(onCreated) {
+    if (document.getElementById('stk-supadd-backdrop')) return;
+
+    const el = document.createElement('div');
+    el.className = 'qf-picker-backdrop';
+    el.id = 'stk-supadd-backdrop';
+    el.setAttribute('role', 'dialog');
+    el.setAttribute('aria-modal', 'true');
+    el.innerHTML = `
+      <div class="qf-picker-card" style="max-width:480px">
+        <div class="qf-picker-head">
+          <span class="qf-picker-head-icon"><i class="fa-solid fa-truck-field"></i></span>
+          <span class="qf-picker-title">${t('Add Supplier')}</span>
+          <button class="salm-modal-close" id="stk-supadd-close" type="button" aria-label="${t('Close')}"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="qf-picker-form">
+          <div class="qf-picker-form-error" id="stk-supadd-error"></div>
+          <div class="qf-grid">
+            <label class="qf-field" style="grid-column:1 / -1"><span>${t('Supplier Name')}</span>
+              <input type="text" id="stk-supadd-name" placeholder="${t('e.g. ABC Solutions')}">
+            </label>
+            <label class="qf-field"><span>${t('Contact Person')}</span>
+              <input type="text" id="stk-supadd-contact">
+            </label>
+            <label class="qf-field"><span>${t('Phone')}</span>
+              <input type="text" id="stk-supadd-phone">
+            </label>
+            <label class="qf-field" style="grid-column:1 / -1"><span>${t('Email')}</span>
+              <input type="email" id="stk-supadd-email">
+            </label>
+          </div>
+        </div>
+        <div class="qf-picker-foot">
+          <button class="salm-btn-ghost" id="stk-supadd-cancel" type="button">${t('Cancel')}</button>
+          <button class="salm-btn-primary" id="stk-supadd-save" type="button"><i class="fa-solid fa-check"></i> ${t('Save Supplier')}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(el);
+
+    function close() { el.remove(); }
+    document.getElementById('stk-supadd-close').addEventListener('click', close);
+    document.getElementById('stk-supadd-cancel').addEventListener('click', close);
+    el.addEventListener('mousedown', (e) => { if (e.target === el) close(); });
+
+    const nameInput = document.getElementById('stk-supadd-name');
+    const errorEl = document.getElementById('stk-supadd-error');
+    const saveBtn = document.getElementById('stk-supadd-save');
+
+    saveBtn.addEventListener('click', async () => {
+      const name = nameInput.value.trim();
+      if (!name) {
+        errorEl.textContent = t('Supplier name is required.');
+        errorEl.classList.add('show');
+        nameInput.focus();
+        return;
+      }
+      const payload = {
+        name,
+        contact_name: document.getElementById('stk-supadd-contact').value.trim() || null,
+        phone: document.getElementById('stk-supadd-phone').value.trim() || null,
+        email: document.getElementById('stk-supadd-email').value.trim() || null,
+      };
+      saveBtn.disabled = true;
+      saveBtn.textContent = t('Saving…');
+      const res = await API.createSupplier(payload);
+      saveBtn.disabled = false;
+      saveBtn.innerHTML = `<i class="fa-solid fa-check"></i> ${t('Save Supplier')}`;
+      if (res.status !== 201) {
+        errorEl.textContent = res.body?.errors ? Object.values(res.body.errors)[0]?.[0] : t(res.body?.message || 'Could not save supplier.');
+        errorEl.classList.add('show');
+        return;
+      }
+      close();
+      onCreated(res.body.data);
+    });
+
+    setTimeout(() => nameInput.focus(), 30);
   }
 
   async function submitPurchaseOrderForm() {
@@ -1040,7 +1137,10 @@
         <div class="qf-card-title"><i class="fa-solid fa-circle-info"></i> ${t('Receipt Details')}</div>
         <div class="qf-grid">
           <label class="qf-field"><span>${t('Supplier')}</span>
-            <select id="grndirect-supplier"><option value="">${t('— No supplier —')}</option></select>
+            <div class="qf-field-with-btn">
+              <select id="grndirect-supplier"><option value="">${t('— No supplier —')}</option></select>
+              <button type="button" class="qf-field-add-btn" id="grndirect-supplier-add" title="${t('Add new supplier')}" aria-label="${t('Add new supplier')}"><i class="fa-solid fa-plus"></i></button>
+            </div>
           </label>
           <label class="qf-field"><span>${t('Branch')}</span><select id="grndirect-branch"><option value="">${t('— Unassigned —')}</option></select></label>
           <label class="qf-field"><span>${t('Received Date')}</span><input type="date" id="grndirect-date" value="${today}"></label>
@@ -1087,16 +1187,20 @@
     document.getElementById('grndirect-pay-method').innerHTML = `<option value="cash">${t('Cash')}</option><option value="credit">${t('Credit')}</option><option value="cheque">${t('Cheque')}</option>`;
     wirePaymentFields('grndirect-pay');
     document.getElementById('grndirect-save').addEventListener('click', submitGrnDirectForm);
+    document.getElementById('grndirect-supplier-add').addEventListener('click', () => {
+      openQuickAddSupplierModal((supplier) => {
+        const sel = document.getElementById('grndirect-supplier');
+        if (!sel) return;
+        sel.insertAdjacentHTML('beforeend', `<option value="${supplier.id}">${esc(supplier.name)}</option>`);
+        sel.value = String(supplier.id);
+      });
+    });
 
     renderGrnDirectLines();
     await loadSettings();
     recalcGrnDirectTotal();
 
-    const supRes = await API.suppliers();
-    if (supRes.status === 200) {
-      const sel = document.getElementById('grndirect-supplier');
-      if (sel) sel.insertAdjacentHTML('beforeend', (supRes.body.data || []).map((s) => `<option value="${s.id}">${esc(s.name)}</option>`).join(''));
-    }
+    await populateSupplierSelect(document.getElementById('grndirect-supplier'));
     await populateBranchSelect(document.getElementById('grndirect-branch'));
   }
 
