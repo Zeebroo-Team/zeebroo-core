@@ -1665,12 +1665,17 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                         <div style="flex:1;min-width:0;">
                             <div style="color:#991b1b;font-weight:700;">Your subscription payment needs attention</div>
                             <div style="color:#b91c1c;font-size:13px;margin-top:2px;">Complete payment to activate your monthly subscription.</div>
-                            <form method="post" action="{{ route('payment.checkout.resume', $pendingPayment) }}" style="margin-top:10px;">
-                                @csrf
-                                <button type="submit" style="padding:8px 16px;font-size:12.5px;font-weight:700;border-radius:8px;background:#ef4444;color:#fff;border:none;cursor:pointer;">
-                                    <i class="fa fa-credit-card" style="margin-right:6px;" aria-hidden="true"></i>Complete payment ({{ $pendingPayment->currencySymbol() }}{{ number_format((float) $pendingPayment->amount, 2) }}/mo)
-                                </button>
-                            </form>
+                            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
+                                <form method="post" action="{{ route('payment.checkout.resume', $pendingPayment) }}">
+                                    @csrf
+                                    <button type="submit" style="padding:8px 16px;font-size:12.5px;font-weight:700;border-radius:8px;background:#ef4444;color:#fff;border:none;cursor:pointer;">
+                                        <i class="fa fa-credit-card" style="margin-right:6px;" aria-hidden="true"></i>Complete payment ({{ $pendingPayment->currencySymbol() }}{{ number_format((float) $pendingPayment->amount, 2) }}/mo)
+                                    </button>
+                                </form>
+                                <a href="{{ route('payment.billing.index') }}" style="padding:8px 16px;font-size:12.5px;font-weight:700;border-radius:8px;border:1.5px solid #fca5a5;color:#991b1b;text-decoration:none;display:inline-flex;align-items:center;">
+                                    View payment history
+                                </a>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1725,12 +1730,17 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                     <div style="color:#991b1b;font-weight:700;">{{ $errors->first('payment') ?: 'Your subscription payment needs attention' }}</div>
                     @if($pendingPayment)
                         <div style="color:#b91c1c;font-size:13px;margin-top:2px;">Your business setup is saved — complete payment to activate your monthly subscription.</div>
-                        <form method="post" action="{{ route('payment.checkout.resume', $pendingPayment) }}" style="margin-top:10px;">
-                            @csrf
-                            <button type="submit" style="padding:8px 16px;font-size:12.5px;font-weight:700;border-radius:8px;background:#ef4444;color:#fff;border:none;cursor:pointer;">
-                                <i class="fa fa-credit-card" style="margin-right:6px;" aria-hidden="true"></i>Complete payment ({{ $pendingPayment->currencySymbol() }}{{ number_format((float) $pendingPayment->amount, 2) }}/mo)
-                            </button>
-                        </form>
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
+                            <form method="post" action="{{ route('payment.checkout.resume', $pendingPayment) }}">
+                                @csrf
+                                <button type="submit" style="padding:8px 16px;font-size:12.5px;font-weight:700;border-radius:8px;background:#ef4444;color:#fff;border:none;cursor:pointer;">
+                                    <i class="fa fa-credit-card" style="margin-right:6px;" aria-hidden="true"></i>Complete payment ({{ $pendingPayment->currencySymbol() }}{{ number_format((float) $pendingPayment->amount, 2) }}/mo)
+                                </button>
+                            </form>
+                            <a href="{{ route('payment.billing.index') }}" style="padding:8px 16px;font-size:12.5px;font-weight:700;border-radius:8px;border:1.5px solid #fca5a5;color:#991b1b;text-decoration:none;display:inline-flex;align-items:center;">
+                                View payment history
+                            </a>
+                        </div>
                     @endif
                 </div>
             </div>

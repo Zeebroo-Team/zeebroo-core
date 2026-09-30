@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\EnsureAccountIsActive;
+use App\Http\Middleware\EnsureWebSubscriptionSettled;
 use App\Http\Middleware\RedirectHrPortalOnlyUsers;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -23,6 +24,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->web(append: [
             EnsureAccountIsActive::class,
             RedirectHrPortalOnlyUsers::class,
+            EnsureWebSubscriptionSettled::class,
         ]);
         $middleware->alias([
             'role' => RoleMiddleware::class,

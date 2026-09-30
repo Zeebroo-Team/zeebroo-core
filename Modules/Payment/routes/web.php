@@ -1,12 +1,22 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Modules\Payment\Http\Controllers\BillingController;
 use Modules\Payment\Http\Controllers\PaymentController;
 
 Route::middleware(['auth'])->prefix('payment')->name('payment.')->group(function (): void {
     Route::get('/checkout/success', [PaymentController::class, 'success'])->name('checkout.success');
     Route::get('/checkout/cancel', [PaymentController::class, 'cancel'])->name('checkout.cancel');
     Route::post('/{payment}/resume', [PaymentController::class, 'resume'])->name('checkout.resume');
+});
+
+// Web billing page — subscription status, payment history, cancel/resume and
+// receipts, mirroring the desktop app's "Billing & Payments" screen.
+Route::middleware(['auth'])->prefix('billing')->name('payment.billing.')->group(function (): void {
+    Route::get('/', [BillingController::class, 'index'])->name('index');
+    Route::post('/subscription/cancel', [BillingController::class, 'cancel'])->name('cancel');
+    Route::post('/subscription/resume', [BillingController::class, 'resume'])->name('resume');
+    Route::get('/{payment}/receipt', [BillingController::class, 'receipt'])->name('receipt');
 });
 
 // Desktop (Electron) counterpart — reached by the system browser after
