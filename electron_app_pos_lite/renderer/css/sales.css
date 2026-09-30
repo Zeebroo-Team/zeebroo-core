@@ -466,6 +466,37 @@
   font-family: inherit;
 }
 
+.qf-field-with-btn { display: flex; align-items: center; gap: 8px; }
+.qf-field-with-btn select { flex: 1; min-width: 0; }
+.qf-field-add-btn {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--accent);
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.qf-field-add-btn:hover { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+.qf-picker-form { padding: 4px 18px 18px; display: flex; flex-direction: column; gap: 14px; overflow-y: auto; }
+.qf-picker-form .qf-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.qf-picker-form-error {
+  display: none;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--danger);
+  background: #fee2e2;
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+.qf-picker-form-error.show { display: block; }
+
 .qf-line-table { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
 .qf-line-head, .qf-line-row {
   display: grid;
