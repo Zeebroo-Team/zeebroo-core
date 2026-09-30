@@ -86,6 +86,23 @@ const dynamicHintEl = document.getElementById('dynamic-hint');
 const dynamicErrorEl = document.getElementById('dynamic-error');
 const dynamicConfirmBtn = document.getElementById('dynamic-confirm-btn');
 
+// Return & Refund
+const returnRefundBtn = document.getElementById('return-refund-btn');
+const refundModal = document.getElementById('refund-modal');
+const rfndSearchInput = document.getElementById('rfnd-search');
+const rfndSaleListEl = document.getElementById('rfnd-sale-list');
+const rfndDetailEmptyEl = document.getElementById('rfnd-detail-empty');
+const rfndDetailViewEl = document.getElementById('rfnd-detail-view');
+const rfndSaleSummaryEl = document.getElementById('rfnd-sale-summary');
+const rfndSelectAllInput = document.getElementById('rfnd-select-all');
+const rfndItemsListEl = document.getElementById('rfnd-items-list');
+const rfndAccountRow = document.getElementById('rfnd-account-row');
+const rfndAccountSelect = document.getElementById('rfnd-account-select');
+const rfndReasonSelect = document.getElementById('rfnd-reason');
+const rfndTotalDisplayEl = document.getElementById('rfnd-total-display');
+const rfndAlertEl = document.getElementById('rfnd-alert');
+const rfndSubmitBtn = document.getElementById('rfnd-submit');
+
 let products = [];
 let cart = []; // { cartKey, product_id, name, price, customPrice, qty, stock, isRental?, isDynamic?, ... }
 let paymentMethod = 'cash';
@@ -815,15 +832,17 @@ document.querySelectorAll('.modal-backdrop [data-close]').forEach((btn) => {
     if (btn.dataset.close === 'receipt-modal') closeReceiptModal();
     if (btn.dataset.close === 'customer-picker-modal') closeCustomerPickerModal();
     if (btn.dataset.close === 'checkout-modal') closeCheckoutModal();
+    if (btn.dataset.close === 'refund-modal') closeRefundModal();
   });
 });
-[rentalModal, dynamicModal, receiptModal, customerPickerModal, checkoutModal].forEach((bg) => {
+[rentalModal, dynamicModal, receiptModal, customerPickerModal, checkoutModal, refundModal].forEach((bg) => {
   bg.addEventListener('click', (e) => {
     if (e.target !== bg) return;
     if (bg === rentalModal) closeRentalModal();
     else if (bg === dynamicModal) closeDynamicModal();
     else if (bg === customerPickerModal) closeCustomerPickerModal();
     else if (bg === checkoutModal) closeCheckoutModal();
+    else if (bg === refundModal) closeRefundModal();
     else closeReceiptModal();
   });
 });
@@ -833,7 +852,257 @@ document.addEventListener('keydown', (e) => {
   else if (dynamicModal.classList.contains('show')) closeDynamicModal();
   else if (customerPickerModal.classList.contains('show')) closeCustomerPickerModal();
   else if (checkoutModal.classList.contains('show')) closeCheckoutModal();
+  else if (refundModal.classList.contains('show')) closeRefundModal();
   else if (receiptModal.classList.contains('show')) closeReceiptModal();
+});
+
+// ── Return & Refund modal ───────────────────────────────────────────────
+// Opened from the cart header's Return button (or F9). Search a past sale,
+// pick returnable items and a refund method, then post to the same
+// /sales/{id}/return endpoint the full desktop app uses.
+const _rfnd = {
+  q: '', list: [], activeSaleId: null, activeSale: null,
+  accountsLoaded: false, reasonsLoaded: false,
+};
+let _rfndSearchTimer;
+
+function openRefundModal() {
+  refundModal.classList.add('show');
+  _rfnd.q = '';
+  _rfnd.activeSaleId = null;
+  _rfnd.activeSale = null;
+  rfndSearchInput.value = '';
+  rfndReasonSelect.value = '';
+  const cashOpt = document.querySelector('input[name="rfnd-method"][value="cash"]');
+  if (cashOpt) cashOpt.checked = true;
+  rfndAccountRow.hidden = true;
+  _rfndShowDetail(false);
+  _rfndLoadSales();
+  _rfndLoadAccounts();
+  _rfndLoadReasons();
+  setTimeout(() => rfndSearchInput.focus(), 80);
+}
+
+function closeRefundModal() {
+  refundModal.classList.remove('show');
+  _rfnd.activeSaleId = null;
+  _rfnd.activeSale = null;
+}
+
+async function _rfndLoadAccounts() {
+  if (_rfnd.accountsLoaded) return;
+  const res = await API.accounts();
+  if (res.status !== 200) return;
+  const list = res.body?.data || res.body || [];
+  rfndAccountSelect.innerHTML = list.map((a) => `<option value="${a.id}">${esc(a.name)}</option>`).join('');
+  _rfnd.accountsLoaded = true;
+}
+
+async function _rfndLoadReasons() {
+  if (_rfnd.reasonsLoaded) return;
+  const res = await API.returnReasons();
+  if (res.status !== 200) return;
+  const list = res.body?.data || [];
+  rfndReasonSelect.innerHTML = `<option value="">${t('— Select a reason —')}</option>` +
+    list.map((r) => `<option value="${esc(r.key)}">${esc(t(r.label))}</option>`).join('');
+  _rfnd.reasonsLoaded = true;
+}
+
+async function _rfndLoadSales(replace = true) {
+  if (replace) rfndSaleListEl.innerHTML = '<div class="rfnd-placeholder"><i class="fa-solid fa-spinner fa-spin"></i></div>';
+  const res = await API.sales({ q: _rfnd.q, limit: 10 });
+  if (res.status !== 200) {
+    rfndSaleListEl.innerHTML = '<div class="rfnd-placeholder"><i class="fa-solid fa-triangle-exclamation"></i></div>';
+    return;
+  }
+  const items = res.body?.data || res.body || [];
+  _rfnd.list = Array.isArray(items) ? items : [];
+  _rfndRenderList();
+}
+
+function _rfndRenderList() {
+  if (!_rfnd.list.length) {
+    rfndSaleListEl.innerHTML = `<div class="rfnd-placeholder" style="font-size:12px;padding:24px 10px">${t('No sales found')}</div>`;
+    return;
+  }
+  rfndSaleListEl.innerHTML = _rfnd.list.map((s) => {
+    const date = s.sold_at ? s.sold_at.substring(0, 10) : '';
+    const num = s.sale_number || `#${s.id}`;
+    const total = parseFloat(s.total || 0);
+    const active = s.id === _rfnd.activeSaleId ? ' active' : '';
+    return `<div class="rfnd-sale-item${active}" data-id="${s.id}">
+      <div class="rfnd-si-num">${esc(num)} <span class="rfnd-si-total">${money(total)}</span></div>
+      <div class="rfnd-si-meta">${esc(date)} &bull; ${esc(s.customer_name || t('Walk-in'))}</div>
+    </div>`;
+  }).join('');
+  rfndSaleListEl.querySelectorAll('.rfnd-sale-item').forEach((row) => {
+    row.addEventListener('click', () => _rfndSelectSale(parseInt(row.dataset.id, 10)));
+  });
+}
+
+function _rfndShowDetail(show) {
+  rfndDetailEmptyEl.style.display = show ? 'none' : 'flex';
+  rfndDetailViewEl.classList.toggle('show', show);
+  if (!show) {
+    rfndItemsListEl.innerHTML = '';
+    rfndSaleSummaryEl.innerHTML = '';
+    rfndTotalDisplayEl.textContent = '0.00';
+    rfndAlertEl.classList.remove('show');
+    rfndSelectAllInput.checked = false;
+  }
+}
+
+async function _rfndSelectSale(id) {
+  _rfnd.activeSaleId = id;
+  _rfndRenderList();
+  _rfndShowDetail(false);
+  rfndDetailEmptyEl.innerHTML = '<i class="fa-solid fa-spinner fa-spin" style="font-size:28px;opacity:.4"></i>';
+  rfndDetailEmptyEl.style.display = 'flex';
+
+  const res = await API.sale(id);
+  if (res.status !== 200) { showToast(t('Failed to load sale'), 'error'); return; }
+  const sale = res.body?.data || res.body;
+  _rfnd.activeSale = sale;
+  _rfndRenderDetail(sale);
+  _rfndShowDetail(true);
+}
+
+function _rfndRenderDetail(sale) {
+  const num = sale.sale_number || `#${sale.id}`;
+  const date = (sale.sold_at || '').substring(0, 10);
+
+  rfndSaleSummaryEl.innerHTML = `
+    <div><div class="rfnd-sum-label">${t('Sale')}</div><div class="rfnd-sum-val">${esc(num)}</div></div>
+    <div><div class="rfnd-sum-label">${t('Date')}</div><div class="rfnd-sum-val">${esc(date)}</div></div>
+    <div><div class="rfnd-sum-label">${t('Total')}</div><div class="rfnd-sum-val amount">${money(parseFloat(sale.total || 0))}</div></div>
+    <div><div class="rfnd-sum-label">${t('Customer')}</div><div class="rfnd-sum-val">${esc(sale.customer_name || t('Walk-in'))}</div></div>
+    <div><div class="rfnd-sum-label">${t('Payment')}</div><div class="rfnd-sum-val">${esc(sale.payment_method_label || sale.payment_method || '—')}</div></div>
+    <div><div class="rfnd-sum-label">${t('Status')}</div><div class="rfnd-sum-val">${esc(sale.status || '—')}</div></div>
+  `;
+
+  const items = sale.items || [];
+  if (!items.length) {
+    rfndItemsListEl.innerHTML = `<div style="color:var(--muted);font-size:12px;padding:10px 0">${t('No line items found')}</div>`;
+    _rfndCalcTotal();
+    return;
+  }
+
+  rfndItemsListEl.innerHTML = items.map((it) => {
+    const returnable = (it.quantity || 0) - (it.returned_quantity || 0);
+    const exhausted = returnable <= 0 ? ' exhausted' : '';
+    const price = money(parseFloat(it.unit_sell_price || 0));
+    return `<div class="rfnd-item-row${exhausted}" data-id="${it.id}" data-max="${returnable}" data-price="${it.unit_sell_price || 0}">
+      <input type="checkbox" class="rfnd-item-check" ${returnable <= 0 ? 'disabled' : ''}>
+      <div style="flex:1;min-width:0">
+        <div class="rfnd-item-name">${esc(it.product_name || t('Item'))}</div>
+        <div class="rfnd-item-meta">${t('Qty')}: ${fmtQty(it.quantity)}  ${t('Returned')}: ${fmtQty(it.returned_quantity || 0)}  ${t('Available')}: ${fmtQty(returnable > 0 ? returnable : 0)}</div>
+      </div>
+      <div class="rfnd-item-qty-wrap">
+        <span class="rfnd-item-qty-label">${t('Qty')}</span>
+        <input type="number" class="rfnd-item-qty" value="${returnable > 0 ? 1 : 0}" min="1" max="${returnable}" ${returnable <= 0 ? 'disabled' : ''}>
+      </div>
+      <div class="rfnd-item-price">${price}</div>
+    </div>`;
+  }).join('');
+
+  rfndItemsListEl.querySelectorAll('.rfnd-item-row').forEach((row) => {
+    const cb = row.querySelector('.rfnd-item-check');
+    const qty = row.querySelector('.rfnd-item-qty');
+    cb.addEventListener('change', () => { row.classList.toggle('selected', cb.checked); _rfndCalcTotal(); });
+    qty.addEventListener('input', () => { if (cb.checked) _rfndCalcTotal(); });
+    qty.addEventListener('change', () => {
+      const max = parseInt(row.dataset.max, 10);
+      const v = parseInt(qty.value, 10) || 1;
+      qty.value = Math.min(max, Math.max(1, v));
+      if (cb.checked) _rfndCalcTotal();
+    });
+  });
+
+  _rfndCalcTotal();
+}
+
+function _rfndCalcTotal() {
+  let total = 0;
+  rfndItemsListEl.querySelectorAll('.rfnd-item-row').forEach((row) => {
+    const cb = row.querySelector('.rfnd-item-check');
+    const qty = row.querySelector('.rfnd-item-qty');
+    if (cb && cb.checked) {
+      const price = parseFloat(row.dataset.price || 0);
+      const q = parseInt(qty?.value, 10) || 1;
+      total += price * q;
+    }
+  });
+  rfndTotalDisplayEl.textContent = money(total);
+  rfndSubmitBtn.disabled = total <= 0;
+}
+
+function _rfndGetSelectedItems() {
+  const result = [];
+  rfndItemsListEl.querySelectorAll('.rfnd-item-row').forEach((row) => {
+    const cb = row.querySelector('.rfnd-item-check');
+    const qty = row.querySelector('.rfnd-item-qty');
+    if (cb && cb.checked) {
+      result.push({ sale_item_id: parseInt(row.dataset.id, 10), quantity: parseInt(qty?.value, 10) || 1 });
+    }
+  });
+  return result;
+}
+
+async function _rfndSubmit() {
+  const items = _rfndGetSelectedItems();
+  if (!items.length) { _rfndShowAlert(t('Select at least one item to return.')); return; }
+
+  const method = document.querySelector('input[name="rfnd-method"]:checked')?.value || 'cash';
+  const creditAccId = method === 'credit' ? (parseInt(rfndAccountSelect.value, 10) || null) : null;
+  const reason = rfndReasonSelect.value.trim();
+
+  const body = { items, refund_method: method, refund_reason: reason || null };
+  if (creditAccId) body.credit_account_id = creditAccId;
+
+  rfndSubmitBtn.disabled = true;
+  rfndSubmitBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> ${t('Processing…')}`;
+
+  const res = await API.processReturn(_rfnd.activeSaleId, body);
+
+  rfndSubmitBtn.innerHTML = `<i class="fa-solid fa-rotate-left"></i> ${t('Process Return')}`;
+
+  if (res.status === 200 || res.status === 201) {
+    showToast(t('Return processed successfully'), 'success');
+    closeRefundModal();
+  } else {
+    const msg = res.body?.message || res.body?.error || t('Return failed');
+    _rfndShowAlert(msg);
+    _rfndCalcTotal();
+  }
+}
+
+function _rfndShowAlert(msg) {
+  rfndAlertEl.textContent = msg;
+  rfndAlertEl.classList.add('show');
+  setTimeout(() => { if (rfndAlertEl.textContent === msg) rfndAlertEl.classList.remove('show'); }, 4000);
+}
+
+returnRefundBtn.addEventListener('click', openRefundModal);
+rfndSubmitBtn.addEventListener('click', _rfndSubmit);
+
+rfndSelectAllInput.addEventListener('change', (e) => {
+  rfndItemsListEl.querySelectorAll('.rfnd-item-row:not(.exhausted) .rfnd-item-check').forEach((cb) => {
+    cb.checked = e.target.checked;
+    cb.closest('.rfnd-item-row').classList.toggle('selected', e.target.checked);
+  });
+  _rfndCalcTotal();
+});
+
+document.querySelectorAll('input[name="rfnd-method"]').forEach((r) => {
+  r.addEventListener('change', () => {
+    rfndAccountRow.hidden = !(r.value === 'credit' && r.checked);
+  });
+});
+
+rfndSearchInput.addEventListener('input', (e) => {
+  clearTimeout(_rfndSearchTimer);
+  _rfnd.q = e.target.value.trim();
+  _rfndSearchTimer = setTimeout(() => _rfndLoadSales(), 350);
 });
 
 // ── Sale-completed receipt/invoice preview + print/download ─────────────
@@ -1331,7 +1600,7 @@ async function loadSettings() {
 
 // ── Keyboard shortcuts (see js/navbar.js for the app-wide F1/F11 ones) ──
 function isAnyPosModalOpen() {
-  return [rentalModal, dynamicModal, customerPickerModal, checkoutModal, receiptModal]
+  return [rentalModal, dynamicModal, customerPickerModal, checkoutModal, receiptModal, refundModal]
     .some((m) => m.classList.contains('show'));
 }
 
@@ -1352,6 +1621,10 @@ document.addEventListener('keydown', (e) => {
       e.preventDefault();
       cart = [];
       renderCart();
+      break;
+    case 'F9':
+      e.preventDefault();
+      openRefundModal();
       break;
     case 'F10':
       e.preventDefault();

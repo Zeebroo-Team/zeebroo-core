@@ -110,15 +110,17 @@
   gap: 12px;
 }
 .salm-grid .salm-tile { grid-column: span 2; }
-/* 5 tiles in a 6-col grid: last row (tiles 4-5) centered instead of left-stuck */
-.salm-grid .salm-tile:nth-child(4) { grid-column: 2 / span 2; }
-.salm-grid .salm-tile:nth-child(5) { grid-column: 4 / span 2; }
+/* Only when a grid has exactly 5 tiles does the last row (tiles 4-5) end up
+   with a single leftover column in a 6-col grid — center that row instead of
+   leaving it left-stuck. :nth-last-child guards these so a 6-tile grid (which
+   already divides evenly into two full rows of 3) is left to flow naturally. */
+.salm-grid .salm-tile:nth-child(4):nth-last-child(2) { grid-column: 2 / span 2; }
+.salm-grid .salm-tile:nth-child(5):last-child { grid-column: 4 / span 2; }
 
 @media (max-width: 860px) {
   .salm-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .salm-grid .salm-tile { grid-column: span 2; }
-  .salm-grid .salm-tile:nth-child(4) { grid-column: span 2; }
-  .salm-grid .salm-tile:nth-child(5) { grid-column: 2 / span 2; }
+  .salm-grid .salm-tile:nth-child(5):last-child { grid-column: 2 / span 2; }
 }
 @media (max-width: 560px) {
   .salm-grid { grid-template-columns: 1fr; }

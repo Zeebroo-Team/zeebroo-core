@@ -30,6 +30,7 @@
     { key: 'quotations', icon: 'fa-file-lines', title: 'Quotations', desc: 'Quotes sent to customers awaiting approval.', accent: '#d97706' },
     { key: 'subscriptions', icon: 'fa-repeat', title: 'Recurring Sales', desc: 'Subscription sales and their billing cycles.', accent: '#7c3aed' },
     { key: 'rentals', icon: 'fa-calendar-days', title: 'Rental', desc: 'Rented items, due dates, and returns.', accent: '#e11d48' },
+    { key: 'returns', icon: 'fa-rotate-left', title: 'Returns', desc: 'Processed refunds and returned items (view only).', accent: '#64748b' },
   ];
 
   // ── Small shared helpers ──────────────────────────────────────────────────
@@ -143,6 +144,7 @@
     quotations: renderQuotations,
     subscriptions: renderSubscriptions,
     rentals: renderRentals,
+    returns: renderReturns,
   };
 
   function openSection(key) {
@@ -999,6 +1001,102 @@
       showToast(t('Rental marked as returned.'), 'success');
       loadRentals(rentPage);
     });
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  // Returns — read-only list of processed refunds. Processing a new return
+  // happens from the POS screen's Return button (F9), not here.
+  // ════════════════════════════════════════════════════════════════════════
+  let retPage = 1;
+
+  function renderReturns() {
+    sectionBody.innerHTML = `
+      <div class="salm-toolbar">
+        <div class="salm-search"><i class="fa-solid fa-magnifying-glass"></i><input id="ret-search" type="text" placeholder="${t('Search return #, sale #, customer…')}"></div>
+        <button class="salm-icon-btn" id="ret-refresh"><i class="fa-solid fa-arrows-rotate"></i> ${t('Refresh')}</button>
+        <span class="salm-count-pill" id="ret-count"></span>
+      </div>
+      <div class="salm-table-card"><table class="salm-table">
+        <thead><tr><th>${t('Return #')}</th><th>${t('Date')}</th><th>${t('Sale #')}</th><th>${t('Customer')}</th><th>${t('Method')}</th><th>${t('Reason')}</th><th style="text-align:right">${t('Total')}</th></tr></thead>
+        <tbody id="ret-rows"><tr><td colspan="7" class="salm-loading">${t('Loading…')}</td></tr></tbody>
+      </table></div>
+      <div class="salm-pagination" id="ret-pagination"></div>`;
+
+    document.getElementById('ret-search').addEventListener('input', debounce(() => loadReturns(1), 350));
+    document.getElementById('ret-refresh').addEventListener('click', () => loadReturns(retPage));
+    loadReturns(1);
+  }
+
+  async function loadReturns(page) {
+    retPage = page;
+    document.getElementById('ret-rows').innerHTML = `<tr><td colspan="7" class="salm-loading">${t('Loading…')}</td></tr>`;
+    await loadSettings();
+
+    const res = await API.saleReturns({ q: document.getElementById('ret-search').value.trim(), page });
+
+    if (res.status !== 200) {
+      document.getElementById('ret-rows').innerHTML = `<tr><td colspan="7" class="salm-empty">${t('Could not load returns ({reason}).', { reason: t(res.body?.message) || res.status })}</td></tr>`;
+      document.getElementById('ret-count').textContent = '';
+      document.getElementById('ret-pagination').innerHTML = '';
+      return;
+    }
+
+    const list = res.body.data || [];
+    document.getElementById('ret-count').textContent = res.body.meta?.total
+      ? t(res.body.meta.total === 1 ? '{n} return' : '{n} returns', { n: res.body.meta.total })
+      : t('No returns');
+
+    const rowsEl = document.getElementById('ret-rows');
+    if (!list.length) {
+      rowsEl.innerHTML = `<tr><td colspan="7" class="salm-empty">${t('No returns found.')}</td></tr>`;
+    } else {
+      rowsEl.innerHTML = list.map((r) => `
+        <tr data-id="${r.id}">
+          <td class="salm-ref"><i class="fa-solid fa-rotate-left"></i>${esc(r.return_number || `#${r.id}`)}</td>
+          <td class="salm-muted-cell">${fmtDateTime(r.returned_at)}</td>
+          <td class="salm-muted-cell">${esc(r.sale_number) || '—'}</td>
+          <td class="salm-muted-cell">${esc(r.customer_name) || '—'}</td>
+          <td class="salm-muted-cell">${esc(r.refund_method_label || r.refund_method) || '—'}</td>
+          <td class="salm-muted-cell">${esc(r.refund_reason_label) || '—'}</td>
+          <td class="salm-amt-cell">${money(r.total)}</td>
+        </tr>`).join('');
+      rowsEl.querySelectorAll('tr[data-id]').forEach((tr) => tr.addEventListener('click', () => openReturnDetail(Number(tr.dataset.id))));
+    }
+
+    renderPagination(document.getElementById('ret-pagination'), res.body.meta, loadReturns);
+  }
+
+  async function openReturnDetail(id) {
+    openDetail({ title: t('Loading…'), bodyHtml: `<div class="salm-loading">${t('Loading…')}</div>` });
+    const res = await API.saleReturn(id);
+    if (res.status !== 200) {
+      openDetail({ title: t('Return'), bodyHtml: `<div class="salm-empty">${t('Could not load return ({reason}).', { reason: t(res.body?.message) || res.status })}</div>` });
+      return;
+    }
+    const r = res.body.data;
+
+    const itemsHtml = (r.items || []).map((it) => `
+      <div class="salm-item-row">
+        <div><div class="salm-item-name">${esc(it.product_name)}</div><div class="salm-item-meta">${it.quantity} × ${money(it.unit_sell_price)}</div></div>
+        <div class="salm-item-total">${money(it.line_total)}</div>
+      </div>`).join('') || `<div class="salm-item-row"><span class="salm-item-meta">${t('No items.')}</span></div>`;
+
+    // View-only: no footHtml/actions — processing returns happens from the POS screen.
+    const bodyHtml = `
+      <div class="salm-view-row"><span>${t('Date')}</span><span>${fmtDateTime(r.returned_at)}</span></div>
+      <div class="salm-view-row"><span>${t('Original sale')}</span><span>${esc(r.sale_number) || t('Walk-in return')}</span></div>
+      <div class="salm-view-row"><span>${t('Customer')}</span><span>${esc(r.customer_name) || t('Walk-in')}</span></div>
+      <div class="salm-view-row"><span>${t('Processed by')}</span><span>${esc(r.cashier?.name) || '—'}</span></div>
+      <div class="salm-view-row"><span>${t('Refund method')}</span><span>${esc(r.refund_method_label || r.refund_method) || '—'}</span></div>
+      ${r.refund_reason_label ? `<div class="salm-view-row"><span>${t('Reason')}</span><span>${esc(r.refund_reason_label)}</span></div>` : ''}
+      ${r.notes ? `<div class="salm-view-row"><span>${t('Notes')}</span><span>${esc(r.notes)}</span></div>` : ''}
+      <div class="salm-section-label">${t('Items returned')}</div>
+      <div class="salm-item-list">${itemsHtml}</div>
+      <div class="salm-totals">
+        <div class="salm-view-row grand"><span>${t('Refund Total')}</span><span>${money(r.total)}</span></div>
+      </div>`;
+
+    openDetail({ title: r.return_number || `#${r.id}`, bodyHtml });
   }
 
   // ── Dialog shell: build the DOM, wire close/back handlers, show it ──────

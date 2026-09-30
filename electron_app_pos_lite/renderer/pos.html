@@ -14,7 +14,10 @@
         <button class="icon-btn" id="back-btn"><i class="fa-solid fa-arrow-left"></i> Dashboard</button>
         <div class="brand"><i class="fa-solid fa-cash-register"></i> POS</div>
       </div>
-      <div class="user-menu" id="user-menu"></div>
+      <div class="right">
+        <button type="button" class="topbar-return-btn" id="return-refund-btn" title="Return &amp; Refund (F9)"><i class="fa-solid fa-rotate-left"></i> Return</button>
+        <div class="user-menu" id="user-menu"></div>
+      </div>
     </div>
 
     <div class="body">
@@ -280,6 +283,82 @@
         <button type="button" class="ghost-btn" id="receipt-print-btn"><i class="fa-solid fa-print"></i> Print</button>
         <button type="button" class="ghost-btn" id="receipt-download-btn"><i class="fa-solid fa-download"></i> Download PDF</button>
         <button type="button" class="ghost-btn primary" id="receipt-new-sale-btn" data-close="receipt-modal">New Sale</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Return & Refund modal: find a past sale and refund selected items -->
+  <div class="modal-backdrop" id="refund-modal">
+    <div class="modal modal-refund">
+      <div class="modal-head">
+        <h2><i class="fa-solid fa-rotate-left"></i> Return &amp; Refund</h2>
+        <button type="button" class="modal-close" data-close="refund-modal">&times;</button>
+      </div>
+
+      <div class="rfnd-search-row">
+        <i class="fa-solid fa-magnifying-glass"></i>
+        <input type="text" id="rfnd-search" placeholder="Search by sale number, customer name…" autocomplete="off" />
+      </div>
+
+      <div class="rfnd-body">
+        <div class="rfnd-list-pane">
+          <div class="rfnd-pane-title">Recent Sales</div>
+          <div id="rfnd-sale-list" class="rfnd-sale-list">
+            <div class="rfnd-placeholder"><i class="fa-solid fa-spinner fa-spin"></i></div>
+          </div>
+        </div>
+
+        <div class="rfnd-detail-pane">
+          <div class="rfnd-detail-empty" id="rfnd-detail-empty">
+            <i class="fa-solid fa-receipt"></i>
+            <span>Select a sale to process a return</span>
+          </div>
+
+          <div id="rfnd-detail-view" class="rfnd-detail-view">
+            <div class="rfnd-sale-summary" id="rfnd-sale-summary"></div>
+
+            <div class="rfnd-section-label">Items to Return</div>
+            <div class="rfnd-select-all-row">
+              <label class="rfnd-check-label"><input type="checkbox" id="rfnd-select-all" /> Select all returnable</label>
+            </div>
+            <div id="rfnd-items-list" class="rfnd-items-list"></div>
+
+            <div class="rfnd-section-label" style="margin-top:12px">Refund Method</div>
+            <div class="rfnd-method-row" id="rfnd-method-row">
+              <label class="rfnd-method-opt">
+                <input type="radio" name="rfnd-method" value="cash" checked />
+                <span><i class="fa-solid fa-money-bill-wave"></i> Cash</span>
+              </label>
+              <label class="rfnd-method-opt">
+                <input type="radio" name="rfnd-method" value="card" />
+                <span><i class="fa-solid fa-credit-card"></i> Card</span>
+              </label>
+              <label class="rfnd-method-opt">
+                <input type="radio" name="rfnd-method" value="credit" />
+                <span><i class="fa-solid fa-building-columns"></i> Account</span>
+              </label>
+            </div>
+            <div id="rfnd-account-row" class="rfnd-account-row" hidden>
+              <label class="field-label">Deposit Account</label>
+              <select id="rfnd-account-select" class="rfnd-select"></select>
+            </div>
+
+            <div class="rfnd-reason-row">
+              <label class="field-label">Reason <span class="field-label-optional">(optional)</span></label>
+              <select id="rfnd-reason" class="rfnd-select">
+                <option value="">— Select a reason —</option>
+              </select>
+            </div>
+
+            <div class="rfnd-footer">
+              <div class="rfnd-total-row"><span>Refund Total</span><strong id="rfnd-total-display">0.00</strong></div>
+              <div id="rfnd-alert" class="error-box"></div>
+              <button type="button" class="checkout-complete-btn" id="rfnd-submit" disabled>
+                <i class="fa-solid fa-rotate-left"></i> Process Return
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>

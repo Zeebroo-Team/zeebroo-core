@@ -255,6 +255,32 @@ class SaleReturnService
         return $saleReturn;
     }
 
+    /**
+     * Paginated, read-only list of processed sale returns for a business.
+     *
+     * @param  array{q?: string}  $filters
+     */
+    public function indexForBusiness(Business $business, array $filters = []): \Illuminate\Contracts\Pagination\LengthAwarePaginator
+    {
+        $query = SaleReturn::query()
+            ->where('business_id', $business->id)
+            ->with(['sale:id,sale_number,customer_id', 'sale.customer:id,name', 'user:id,name'])
+            ->withCount('items');
+
+        $q = trim((string) ($filters['q'] ?? ''));
+        if ($q !== '') {
+            $query->where(function ($sub) use ($q) {
+                $sub->where('return_number', 'like', "%{$q}%")
+                    ->orWhereHas('sale', function ($saleQuery) use ($q) {
+                        $saleQuery->where('sale_number', 'like', "%{$q}%")
+                            ->orWhereHas('customer', fn ($c) => $c->where('name', 'like', "%{$q}%"));
+                    });
+            });
+        }
+
+        return $query->orderByDesc('returned_at')->orderByDesc('id')->paginate(20);
+    }
+
     /** Returns quantities already returned per sale_item_id for the given sale. */
     public function returnedQuantitiesForSale(Sale $sale): array
     {

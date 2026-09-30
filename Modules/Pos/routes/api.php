@@ -206,6 +206,8 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
     Route::get  ('sales/{sale}',           [PosSaleApiController::class, 'show']            )->name('sales.show');
     Route::post ('sales/{sale}/void',      [PosSaleApiController::class, 'void']            )->name('sales.void');
     Route::post ('sales/{sale}/return',    [PosSaleReturnApiController::class, 'store']     )->name('sales.return');
+    Route::get  ('sale-returns',           [PosSaleReturnApiController::class, 'index']     )->name('sale-returns.index');
+    Route::get  ('sale-returns/{saleReturn}', [PosSaleReturnApiController::class, 'show']   )->name('sale-returns.show');
     Route::get('online/return-reasons', [PosReturnReasonsApiController::class, 'index'])->name('online.return-reasons');
 
     // Product Units
