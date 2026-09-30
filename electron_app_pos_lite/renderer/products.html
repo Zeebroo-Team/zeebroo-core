@@ -60,6 +60,8 @@
             </div>
             <select class="filter-select" id="product-category-filter"><option value="">All categories</option></select>
             <span class="count-pill" id="product-count-pill"></span>
+            <button class="ghost-btn" id="inv-import-csv-btn"><i class="fa-solid fa-file-csv"></i> Import CSV</button>
+            <button class="ghost-btn" id="inv-dump-import-btn"><i class="fa-solid fa-database"></i> Import from SQL Dump</button>
             <button class="primary-btn" id="add-product-btn"><i class="fa-solid fa-plus"></i> Add Product</button>
           </div>
           <div class="table-card">
@@ -135,6 +137,7 @@
             <input id="category-search" type="text" placeholder="Search categories…" />
           </div>
           <span class="count-pill" id="category-count-pill"></span>
+          <button class="ghost-btn" id="cat-import-csv-btn"><i class="fa-solid fa-file-csv"></i> Import CSV</button>
           <button class="primary-btn" id="add-category-btn"><i class="fa-solid fa-plus"></i> Add Category</button>
         </div>
         <div class="table-card">
@@ -648,6 +651,221 @@
       <div class="modal-foot">
         <button class="ghost-btn" data-close="unit-modal">Cancel</button>
         <button class="primary-btn" id="unit-save-btn">Save Unit</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CSV Product Import modal -->
+  <div class="modal-backdrop" id="csv-import-modal">
+    <div class="modal modal-lg">
+      <div class="modal-head">
+        <h2><i class="fa-solid fa-file-csv"></i> Import Products from CSV</h2>
+        <button class="modal-close" id="csv-import-close" data-close="csv-import-modal"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+
+      <div class="csv-step-track">
+        <div class="csv-step active" id="csv-step-ind-1"><span class="csv-step-num">1</span><span class="csv-step-label">Upload</span></div>
+        <div class="csv-step-line"></div>
+        <div class="csv-step" id="csv-step-ind-2"><span class="csv-step-num">2</span><span class="csv-step-label">Preview</span></div>
+        <div class="csv-step-line"></div>
+        <div class="csv-step" id="csv-step-ind-3"><span class="csv-step-num">3</span><span class="csv-step-label">Result</span></div>
+      </div>
+
+      <div class="modal-body modal-body-tabs">
+        <!-- Step 1: Upload -->
+        <div class="csv-import-body" id="csv-step-1">
+          <div class="csv-dropzone" id="csv-dropzone">
+            <i class="fa-solid fa-cloud-arrow-up csv-dropzone-icon"></i>
+            <p class="csv-dropzone-text">Drag &amp; drop your CSV file here</p>
+            <p class="csv-dropzone-sub">or click to browse</p>
+            <input type="file" id="csv-file-input" accept=".csv,text/csv" style="position:absolute;inset:0;opacity:0;cursor:pointer">
+          </div>
+          <div class="csv-upload-info">
+            <div class="csv-info-item"><i class="fa-solid fa-circle-check"></i> First row must be column headers</div>
+            <div class="csv-info-item"><i class="fa-solid fa-circle-check"></i> Required columns: <strong>name</strong>, <strong>price</strong></div>
+            <div class="csv-info-item"><i class="fa-solid fa-circle-check"></i> Optional: sku, stock, category, brand, description</div>
+            <div class="csv-info-item"><i class="fa-solid fa-circle-check"></i> Max 500 rows per import</div>
+          </div>
+        </div>
+
+        <!-- Step 2: Preview -->
+        <div class="csv-import-body" id="csv-step-2" style="display:none">
+          <div class="csv-preview-summary" id="csv-preview-summary"></div>
+          <div class="csv-preview-wrap">
+            <table class="csv-preview-tbl">
+              <thead id="csv-preview-thead"></thead>
+              <tbody id="csv-preview-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Step 3: Result -->
+        <div class="csv-import-body" id="csv-step-3" style="display:none">
+          <div class="csv-result-summary" id="csv-result-summary"></div>
+          <div class="csv-result-errors" id="csv-result-errors" style="display:none">
+            <div class="csv-result-errors-title"><i class="fa-solid fa-triangle-exclamation"></i> Rows with errors</div>
+            <div class="csv-result-errors-list" id="csv-result-errors-list"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-foot">
+        <button class="ghost-btn" id="csv-download-sample" style="margin-right:auto"><i class="fa-solid fa-download"></i> Download Sample CSV</button>
+        <button class="ghost-btn" id="csv-back-btn" style="display:none">Back</button>
+        <button class="ghost-btn" id="csv-done-btn" style="display:none">Done</button>
+        <button class="primary-btn" id="csv-import-btn" style="display:none" disabled><i class="fa-solid fa-file-import"></i> Import <span id="csv-import-count"></span> Products</button>
+        <button class="primary-btn" id="csv-import-more-btn" style="display:none"><i class="fa-solid fa-plus"></i> Import More</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Category CSV Import modal -->
+  <div class="modal-backdrop" id="cat-csv-import-modal">
+    <div class="modal modal-lg">
+      <div class="modal-head">
+        <h2><i class="fa-solid fa-file-csv"></i> Import Categories from CSV</h2>
+        <button class="modal-close" id="cat-csv-close" data-close="cat-csv-import-modal"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+
+      <div class="csv-step-track">
+        <div class="csv-step active" id="cat-csv-ind-1"><span class="csv-step-num">1</span><span class="csv-step-label">Upload</span></div>
+        <div class="csv-step-line"></div>
+        <div class="csv-step" id="cat-csv-ind-2"><span class="csv-step-num">2</span><span class="csv-step-label">Preview</span></div>
+        <div class="csv-step-line"></div>
+        <div class="csv-step" id="cat-csv-ind-3"><span class="csv-step-num">3</span><span class="csv-step-label">Result</span></div>
+      </div>
+
+      <div class="modal-body modal-body-tabs">
+        <!-- Step 1: Upload -->
+        <div class="csv-import-body" id="cat-csv-step-1">
+          <div class="csv-dropzone" id="cat-csv-dropzone">
+            <i class="fa-solid fa-cloud-arrow-up csv-dropzone-icon"></i>
+            <p class="csv-dropzone-text">Drag &amp; drop your CSV file here</p>
+            <p class="csv-dropzone-sub">or click to browse</p>
+            <input type="file" id="cat-csv-file-input" accept=".csv,text/csv" style="position:absolute;inset:0;opacity:0;cursor:pointer">
+          </div>
+          <div class="csv-upload-info">
+            <div class="csv-info-item"><i class="fa-solid fa-circle-check"></i> First row must be column headers</div>
+            <div class="csv-info-item"><i class="fa-solid fa-circle-check"></i> Required column: <strong>name</strong></div>
+            <div class="csv-info-item"><i class="fa-solid fa-circle-check"></i> Optional: <strong>description</strong>, <strong>parent_name</strong></div>
+            <div class="csv-info-item"><i class="fa-solid fa-circle-check"></i> Max 500 rows per import</div>
+          </div>
+        </div>
+
+        <!-- Step 2: Preview -->
+        <div class="csv-import-body" id="cat-csv-step-2" style="display:none">
+          <div class="csv-preview-summary" id="cat-csv-preview-summary"></div>
+          <div class="csv-preview-wrap">
+            <table class="csv-preview-tbl">
+              <thead id="cat-csv-preview-thead"></thead>
+              <tbody id="cat-csv-preview-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Step 3: Result -->
+        <div class="csv-import-body" id="cat-csv-step-3" style="display:none">
+          <div class="csv-result-summary" id="cat-csv-result-summary"></div>
+          <div class="csv-result-errors" id="cat-csv-result-errors" style="display:none">
+            <div class="csv-result-errors-title"><i class="fa-solid fa-triangle-exclamation"></i> Rows with errors</div>
+            <div class="csv-result-errors-list" id="cat-csv-result-errors-list"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-foot">
+        <button class="ghost-btn" id="cat-csv-download-sample" style="margin-right:auto"><i class="fa-solid fa-download"></i> Download Sample CSV</button>
+        <button class="ghost-btn" id="cat-csv-back-btn" style="display:none">Back</button>
+        <button class="ghost-btn" id="cat-csv-done-btn" style="display:none">Done</button>
+        <button class="primary-btn" id="cat-csv-import-btn" style="display:none" disabled><i class="fa-solid fa-file-import"></i> Import <span id="cat-csv-import-count"></span> Categories</button>
+        <button class="primary-btn" id="cat-csv-more-btn" style="display:none"><i class="fa-solid fa-plus"></i> Import More</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SQL Dump Product Import modal -->
+  <div class="modal-backdrop" id="dump-import-modal">
+    <div class="modal modal-lg">
+      <div class="modal-head">
+        <h2><i class="fa-solid fa-database"></i> Import Products from SQL Dump</h2>
+        <button class="modal-close" id="dim-close" data-close="dump-import-modal"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+
+      <div class="dim-steps" id="dim-steps">
+        <div class="dim-step active" id="dim-st-1"><span>1</span> Upload</div>
+        <div class="dim-step-line"></div>
+        <div class="dim-step" id="dim-st-2"><span>2</span> Analyse</div>
+        <div class="dim-step-line"></div>
+        <div class="dim-step" id="dim-st-3"><span>3</span> Map Columns</div>
+        <div class="dim-step-line"></div>
+        <div class="dim-step" id="dim-st-4"><span>4</span> Preview</div>
+        <div class="dim-step-line"></div>
+        <div class="dim-step" id="dim-st-5"><span>5</span> Import</div>
+      </div>
+
+      <div class="modal-body modal-body-tabs">
+        <!-- Step 1: Upload -->
+        <div class="dim-body" id="dim-panel-1">
+          <div class="dim-dropzone" id="dim-dropzone">
+            <div class="dim-dz-icon"><i class="fa-solid fa-cloud-arrow-up"></i></div>
+            <div class="dim-dz-title">Drop your MySQL dump file here</div>
+            <div class="dim-dz-sub">Accepts <strong>.sql</strong>, <strong>.dump</strong>, or plain text MySQL export</div>
+            <label class="dim-dz-btn" for="dim-file-input"><i class="fa-solid fa-folder-open"></i> Choose File</label>
+            <input type="file" id="dim-file-input" accept=".sql,.dump,.txt" style="display:none">
+            <div class="dim-dz-note" id="dim-file-name" style="display:none"></div>
+          </div>
+          <div class="dim-alert" id="dim-alert-1" style="display:none"></div>
+        </div>
+
+        <!-- Step 2: Analysing -->
+        <div class="dim-body" id="dim-panel-2" style="display:none">
+          <div class="dim-analyse-wrap">
+            <div class="dim-analyse-icon"><i class="fa-solid fa-microchip"></i></div>
+            <div class="dim-analyse-title" id="dim-analyse-title">Reading file…</div>
+            <div class="dim-analyse-bar"><div class="dim-analyse-fill" id="dim-analyse-fill"></div></div>
+            <div class="dim-analyse-log" id="dim-analyse-log"></div>
+          </div>
+        </div>
+
+        <!-- Step 3: Map Columns -->
+        <div class="dim-body" id="dim-panel-3" style="display:none">
+          <div class="dim-map-intro">
+            <i class="fa-solid fa-wand-magic-sparkles"></i>
+            <span>Detected <strong id="dim-rows-count">0</strong> rows in <strong id="dim-table-name">—</strong>. Map the columns to product fields.</span>
+          </div>
+          <div class="dim-map-grid" id="dim-map-grid"></div>
+          <div class="dim-alert" id="dim-alert-3" style="display:none"></div>
+        </div>
+
+        <!-- Step 4: Preview -->
+        <div class="dim-body dim-body--scroll" id="dim-panel-4" style="display:none">
+          <div class="dim-preview-info">Showing first <strong id="dim-preview-count">10</strong> of <strong id="dim-total-count">0</strong> products to import.</div>
+          <div class="dim-preview-wrap">
+            <table class="dim-preview-table">
+              <thead id="dim-preview-thead"></thead>
+              <tbody id="dim-preview-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Step 5: Import progress -->
+        <div class="dim-body" id="dim-panel-5" style="display:none">
+          <div class="dim-import-wrap">
+            <div class="dim-import-icon" id="dim-import-icon"><i class="fa-solid fa-gear fa-spin"></i></div>
+            <div class="dim-import-status" id="dim-import-status">Importing…</div>
+            <div class="dim-import-counter" id="dim-import-counter">0 / 0</div>
+            <div class="dim-analyse-bar"><div class="dim-analyse-fill" id="dim-import-fill"></div></div>
+            <div class="dim-import-results" id="dim-import-results" style="display:none"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-foot">
+        <button class="ghost-btn" id="dim-btn-back" style="display:none"><i class="fa-solid fa-arrow-left"></i> Back</button>
+        <div style="flex:1"></div>
+        <button class="primary-btn" id="dim-btn-next" disabled><i class="fa-solid fa-arrow-right"></i> Next</button>
+        <button class="primary-btn" id="dim-btn-import" style="display:none"><i class="fa-solid fa-download"></i> Import Products</button>
+        <button class="primary-btn" id="dim-btn-done" style="display:none"><i class="fa-solid fa-check"></i> Done</button>
       </div>
     </div>
   </div>

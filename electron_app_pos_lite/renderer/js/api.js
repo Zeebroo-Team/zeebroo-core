@@ -51,6 +51,7 @@ const API = (() => {
     },
     product: (id) => request('GET', `/online/products/${id}`),
     createProduct: (payload) => request('POST', '/online/products', payload),
+    importProducts: (rows) => request('POST', '/online/products/import', { rows }),
     updateProduct: (id, payload) => request('PATCH', `/online/products/${id}`, payload),
     deleteProduct: (id) => request('DELETE', `/online/products/${id}`),
     productSearch: (q, perPage) => request('GET', `/online/products?q=${encodeURIComponent(q || '')}&per_page=${perPage || 20}`),
