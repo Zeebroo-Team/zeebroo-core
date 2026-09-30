@@ -31,6 +31,24 @@
         <input id="login-password" type="password" autocomplete="current-password" required placeholder="••••••••" />
       </div>
       <button class="submit-btn" id="login-submit" type="submit">Log In</button>
+      <p class="switch-line cashier-switch"><a id="go-cashier"><i class="fa-solid fa-id-badge"></i> Sign in as a cashier</a></p>
+    </form>
+
+    <form class="form" id="cashier-form">
+      <div class="field">
+        <label for="cashier-business">Business Name</label>
+        <input id="cashier-business" type="text" autocomplete="organization" required placeholder="Jane's Store" />
+      </div>
+      <div class="field">
+        <label for="cashier-username">Username</label>
+        <input id="cashier-username" type="text" autocomplete="username" required placeholder="cashier1" />
+      </div>
+      <div class="field">
+        <label for="cashier-password">Password</label>
+        <input id="cashier-password" type="password" autocomplete="current-password" required placeholder="••••••••" />
+      </div>
+      <button class="submit-btn" id="cashier-submit" type="submit">Cashier Log In</button>
+      <p class="switch-line cashier-switch"><a id="go-owner"><i class="fa-solid fa-arrow-left"></i> Owner login</a></p>
     </form>
 
     <div class="error-box" id="signup-error"></div>

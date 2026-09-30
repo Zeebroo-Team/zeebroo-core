@@ -3,6 +3,7 @@
 namespace Modules\Pos\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\User;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -34,8 +35,12 @@ class PosPaymentApiController extends Controller
     {
         $business = $this->businessOrAbort($request);
 
+        // PosCashier tokens are not App\Models\User — a cashier can see the
+        // lock/due state but never pay, so summarize as an anonymous requester.
+        $user = $request->user();
+
         return response()->json([
-            'data' => $this->summary->summarize($business, $request->user()),
+            'data' => $this->summary->summarize($business, $user instanceof User ? $user : null),
         ]);
     }
 

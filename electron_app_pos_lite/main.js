@@ -62,6 +62,22 @@ function attachMacShortcuts(win) {
   });
 }
 
+// ── Cashier sessions: POS only ──────────────────────────────────────────
+// A cashier (signed in via /cashier/login) may only use the POS screen; the
+// dashboard stays reachable as the home screen with every other tile locked
+// (renderer/js/role-guard.js). This blocks navigating to any other screen
+// even if the renderer-side lock is bypassed.
+const CASHIER_PAGES = ['dashboard.html', 'pos.html'];
+
+function attachCashierGuard(win) {
+  win.webContents.on('will-navigate', (event, url) => {
+    if (!config.is_cashier) return;
+    let page = '';
+    try { page = path.basename(new URL(url).pathname).toLowerCase(); } catch (_) {}
+    if (!CASHIER_PAGES.includes(page)) event.preventDefault();
+  });
+}
+
 // ── Windows ─────────────────────────────────────────────────────────────
 function createAuthWindow() {
   if (mainWindow) { mainWindow.close(); mainWindow = null; }
@@ -107,6 +123,7 @@ function createMainWindow() {
   });
 
   attachMacShortcuts(mainWindow);
+  attachCashierGuard(mainWindow);
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'dashboard.html'));
   mainWindow.once('ready-to-show', () => mainWindow.show());
   mainWindow.on('closed', () => { mainWindow = null; });
@@ -200,7 +217,7 @@ ipcMain.handle('auth-success', () => {
 
 // Called by the main renderer's Logout button.
 ipcMain.handle('logout', () => {
-  config = { ...config, token: null, business_id: null, branch_id: null, user: null };
+  config = { ...config, token: null, business_id: null, branch_id: null, user: null, is_cashier: false };
   saveConfig(config);
   createAuthWindow();
   return true;

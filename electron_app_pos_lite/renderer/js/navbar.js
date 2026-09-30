@@ -2673,10 +2673,10 @@ ${ctx.hdrCss}</style></head><body><div class="pg">
         <i class="fa-solid fa-language"></i> <span>${t('Language')}</span>
         <span class="um-item-value">${i18n.current().native}</span>
       </button>
-      <div class="um-sep"></div>
-      <button class="um-item" id="um-billing" type="button" role="menuitem"><i class="fa-solid fa-file-invoice-dollar"></i> ${t('Billing & Payments')}</button>
-      <div class="um-sep"></div>
-      <button class="um-item" id="um-settings" type="button" role="menuitem"><i class="fa-solid fa-gear"></i> ${t('Settings')}</button>
+      <div class="um-sep" data-owner-only></div>
+      <button class="um-item" id="um-billing" type="button" role="menuitem" data-owner-only><i class="fa-solid fa-file-invoice-dollar"></i> ${t('Billing & Payments')}</button>
+      <div class="um-sep" data-owner-only></div>
+      <button class="um-item" id="um-settings" type="button" role="menuitem" data-owner-only><i class="fa-solid fa-gear"></i> ${t('Settings')}</button>
       <div class="um-sep"></div>
       <button class="um-item" id="um-shortcuts" type="button" role="menuitem">
         <i class="fa-solid fa-keyboard"></i> <span>${t('Keyboard Shortcuts')}</span>
@@ -2735,7 +2735,12 @@ ${ctx.hdrCss}</style></head><body><div class="pg">
   (async () => {
     const cfg = await window.electronAPI.getConfig();
     const name = cfg.user?.name || '';
-    const email = cfg.user?.email || '';
+    // Cashier sessions (POS-only, see role-guard.js) have no email and no
+    // access to Billing / Settings.
+    const email = cfg.is_cashier
+      ? `${t('Cashier')}${cfg.user?.username ? ` · @${cfg.user.username}` : ''}`
+      : cfg.user?.email || '';
+    if (cfg.is_cashier) mount.querySelectorAll('[data-owner-only]').forEach((el) => el.remove());
     const business = cfg.business_name || (cfg.business_id ? `#${cfg.business_id}` : '');
     const letters = initials(name, email);
 
