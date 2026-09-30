@@ -188,6 +188,7 @@ class ProductStockLayerService
         float $unitCost,
         ?float $sellingUnitPrice = null,
         ?float $wholesaleUnitPrice = null,
+        ?int $branchId = null,
     ): ProductStockLayer {
         if ($quantity <= 0) {
             throw ValidationException::withMessages([
@@ -201,6 +202,7 @@ class ProductStockLayerService
 
         $layer = ProductStockLayer::query()->create([
             'business_id' => $business->id,
+            'branch_id' => $branchId,
             'product_id' => $product->id,
             'goods_receive_note_item_id' => null,
             'quantity_received' => round($quantity, 3),

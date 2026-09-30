@@ -83,6 +83,25 @@ html, body {
 .topbar-eod-btn:hover { background: var(--accent); color: #fff; }
 .topbar-eod-btn:active { transform: scale(0.97); }
 
+/* ── Top bar "Add Product" button — same shape, filled accent ───────────── */
+.topbar-add-product-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1.5px solid var(--accent);
+  background: var(--accent);
+  color: #fff;
+  border-radius: 10px;
+  padding: 10px 18px;
+  min-height: 44px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.topbar-add-product-btn i { font-size: 15px; }
+.topbar-add-product-btn:hover { background: var(--accent-dark); }
+.topbar-add-product-btn:active { transform: scale(0.97); }
+
 .icon-btn {
   border: 1px solid var(--border);
   background: #fff;
@@ -131,32 +150,50 @@ html, body {
   font-size: 13.5px;
   background: transparent;
 }
-
 /* ── Mode tabs (Products / Rental / Dynamic) ────────────────────────────── */
-.mode-tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+.mode-tabs { display: flex; gap: 8px; margin-bottom: 12px; }
 .mode-tab {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 7px 13px;
-  font-size: 12.5px;
+  gap: 8px;
+  padding: 12px 20px;
+  font-size: 14.5px;
   font-weight: 600;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 10px;
   background: #fff;
   color: var(--muted);
   cursor: pointer;
+  min-height: 44px;
 }
 .mode-tab:hover { color: var(--text); }
 .mode-tab.active { color: var(--accent); border-color: var(--accent); background: #eef0ff; }
 
 /* ── Category chips ──────────────────────────────────────────────────── */
-.chip-row { display: flex; align-items: center; gap: 6px; overflow-x: auto; margin-bottom: 14px; scrollbar-width: none; }
+.chip-scroll-wrap { display: flex; align-items: center; gap: 6px; margin-bottom: 16px; }
+.chip-arrow {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: #fff;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+.chip-arrow:hover { color: var(--text); background: #f8f9fb; }
+.chip-arrow:disabled { opacity: 0.35; cursor: default; pointer-events: none; }
+.chip-row { display: flex; align-items: center; gap: 8px; overflow-x: auto; scrollbar-width: none; cursor: grab; touch-action: pan-x; flex: 1; min-width: 0; }
+.chip-row:active { cursor: grabbing; }
 .chip-row::-webkit-scrollbar { display: none; }
 .chip {
   flex-shrink: 0;
-  padding: 6px 12px;
-  font-size: 11.5px;
+  padding: 11px 18px;
+  font-size: 13.5px;
   font-weight: 600;
   border: 1px solid var(--border);
   border-radius: 999px;
@@ -164,6 +201,9 @@ html, body {
   color: var(--muted);
   cursor: pointer;
   white-space: nowrap;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
 }
 .chip:hover { color: var(--text); }
 .chip.active { color: var(--accent); border-color: var(--accent); background: #eef0ff; }

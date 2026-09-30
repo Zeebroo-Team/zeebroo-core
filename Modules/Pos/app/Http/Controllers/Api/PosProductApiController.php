@@ -80,8 +80,19 @@ class PosProductApiController extends Controller
         $business = $this->businessOrAbort($request);
         $this->abortUnlessPerm($request, $business, 'inv_products');
 
+        // The desktop/POS clients scope stock to the branch the user currently has
+        // selected via the X-Branch-Id header (or a branch query/body param), rather
+        // than requiring every caller to pass branch_id explicitly.
+        $branchId = $request->input('branch_id') ?? $request->query('branch') ?? $request->header('X-Branch-Id');
+        $branchId = is_numeric($branchId) ? (int) $branchId : null;
+
+        $input = $request->all();
+        if ($branchId !== null && ! isset($input['branch_id'])) {
+            $input['branch_id'] = $branchId;
+        }
+
         try {
-            $quickResult = $this->quickCreate->create($business, $request->all());
+            $quickResult = $this->quickCreate->create($business, $input);
         } catch (ValidationException $e) {
             return response()->json([
                 'message' => $e->getMessage() ?: 'Could not save product.',
@@ -162,7 +173,7 @@ class PosProductApiController extends Controller
                         $selling = 1.0;
                     }
                     $wholesale = isset($batch['wholesale_price']) && $batch['wholesale_price'] !== null ? (float) $batch['wholesale_price'] : ($product->wholesale_price !== null ? (float) $product->wholesale_price : null);
-                    $this->stockLayers->createManualLayer($business, $product, $qty, $cost, $selling, $wholesale);
+                    $this->stockLayers->createManualLayer($business, $product, $qty, $cost, $selling, $wholesale, $branchId);
                 }
             }
         }
