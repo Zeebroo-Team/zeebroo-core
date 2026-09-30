@@ -16,7 +16,13 @@ function esc(s) {
   return (s ?? '').toString().replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
-function money(n) { return `$${(Number(n) || 0).toFixed(2)}`; }
+let posSettings = {};
+
+function money(n) {
+  const amount = (Number(n) || 0).toFixed(2);
+  const currency = (posSettings.currency || 'LKR').toUpperCase();
+  return posSettings.currency_position === 'before' ? `${currency} ${amount}` : `${amount} ${currency}`;
+}
 
 function firstErrorMessage(res, fallback) {
   const firstKey = res.body?.errors ? Object.keys(res.body.errors)[0] : null;
@@ -2706,6 +2712,8 @@ function debounce(fn, wait = 300) {
 
 // ── Init ────────────────────────────────────────────────────────────────
 (async () => {
+  const settingsRes = await API.settingsGet();
+  if (settingsRes.status === 200) posSettings = settingsRes.body?.data || {};
   await Promise.all([loadCategories(), loadAllCategories(), loadBrands(), loadUnits()]);
   loadProducts();
 })();
