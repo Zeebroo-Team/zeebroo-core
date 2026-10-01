@@ -1208,3 +1208,73 @@ html, body {
 .eod-empty { padding: 14px; text-align: center; color: var(--muted); font-size: 12px; }
 
 .eod-actions { display: flex; justify-content: flex-end; margin-top: 14px; }
+
+/* ── Gift cards (cart header button, checkout, balance check) ──────────── */
+.cart-gift-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 11px; border-radius: 8px; border: 1px solid var(--border);
+  background: #fff; color: var(--text); font-size: 12px; font-weight: 700; cursor: pointer;
+}
+.cart-gift-btn i { color: #db2777 !important; margin: 0 !important; }
+.cart-gift-btn:hover { border-color: #db2777; background: #fdf2f8; }
+
+.co-gc { display: flex; flex-direction: column; gap: 6px; margin: 0 0 12px; flex-shrink: 0; }
+.co-gc [hidden] { display: none !important; }
+.co-gc-toggle {
+  width: 100%; padding: 8px 10px; border-radius: 9px; border: 1.5px dashed var(--border);
+  background: transparent; color: var(--muted); font-size: 12px; font-weight: 700; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+}
+.co-gc-toggle[hidden] { display: none; }
+.co-gc-toggle:hover { border-color: #db2777; color: #db2777; background: #fdf2f8; }
+.co-gc-entry { display: flex; gap: 6px; }
+.co-gc-entry[hidden], .co-gc-applied[hidden] { display: none; }
+.co-gc-input {
+  flex: 1; min-width: 0; padding: 8px 10px; border: 1.5px solid var(--border); border-radius: 8px;
+  background: #f8f9fb; color: var(--text); font-size: 13px; outline: none;
+  font-family: Consolas, 'Courier New', monospace; text-transform: uppercase; letter-spacing: .05em;
+}
+.co-gc-input:focus { border-color: #db2777; background: #fff; }
+.co-gc-apply { padding: 0 14px; border: none; border-radius: 8px; background: #db2777; color: #fff; font-size: 12px; font-weight: 700; cursor: pointer; }
+.co-gc-apply:disabled { opacity: .6; }
+.co-gc-x { width: 30px; flex-shrink: 0; border: 1px solid var(--border); border-radius: 8px; background: #fff; color: var(--muted); cursor: pointer; }
+.co-gc-x:hover { color: var(--danger); border-color: var(--danger); }
+.co-gc-applied {
+  display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px;
+  border: 1.5px solid rgba(219,39,119,.45); background: #fdf2f8;
+}
+.co-gc-icon { color: #db2777; font-size: 18px; }
+.co-gc-info { flex: 1; min-width: 0; }
+.co-gc-code { font-family: Consolas, 'Courier New', monospace; font-size: 12px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.co-gc-sub { font-size: 11px; color: var(--muted); }
+.co-gc-amt { color: #db2777; font-size: 14px; white-space: nowrap; }
+.co-gc-applied .co-gc-x { height: 28px; }
+
+.modal.modal-gift-check { width: 480px; max-width: 94vw; }
+.gc-check-row { display: flex; gap: 8px; margin-bottom: 12px; }
+.gc-check-msg { font-size: 13px; color: var(--muted); padding: 6px 2px; }
+.gc-check-msg.err { color: var(--danger); }
+.gc-mono { font-family: Consolas, 'Courier New', monospace; font-weight: 700; }
+.gc-verdict { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 12px; border: 1.5px solid; }
+.gc-verdict > i { font-size: 26px; }
+.gc-verdict.ok  { border-color: rgba(22,163,74,.45); background: rgba(22,163,74,.08); color: #15803d; }
+.gc-verdict.bad { border-color: rgba(220,38,38,.45); background: rgba(220,38,38,.07); color: #b91c1c; }
+.gc-verdict-body { flex: 1; min-width: 0; }
+.gc-verdict-title { font-size: 14px; font-weight: 800; }
+.gc-verdict-sub { font-size: 11px; opacity: .85; }
+.gc-verdict-amt { font-size: 22px; font-weight: 800; white-space: nowrap; }
+.gc-verdict.bad .gc-verdict-amt { opacity: .6; }
+.gc-check-grid {
+  display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin-top: 12px;
+  padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; font-size: 12.5px;
+}
+.gc-check-k { color: var(--muted); }
+.gc-check-v { font-weight: 600; text-align: right; }
+.gc-check-v small { font-weight: 400; color: var(--muted); }
+.gc-check-history { margin-top: 10px; max-height: 200px; overflow-y: auto; font-size: 12px; }
+.gc-check-history summary { cursor: pointer; font-weight: 700; color: var(--muted); padding: 4px 0; }
+.gc-hist-row { display: flex; justify-content: space-between; gap: 10px; padding: 6px 2px; border-bottom: 1px solid var(--border); }
+.gc-hist-row small { display: block; color: var(--muted); font-size: 10.5px; }
+.gc-hist-row .neg { color: var(--danger); font-weight: 700; white-space: nowrap; }
+.gc-hist-row .pos { color: var(--success); font-weight: 700; white-space: nowrap; }
+.gc-use-btn { width: 100%; margin-top: 12px; justify-content: center; }

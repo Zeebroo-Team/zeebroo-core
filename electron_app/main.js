@@ -460,6 +460,10 @@ function _escposBuffer(receipt, paperWidth) {
   rowLR('TOTAL:', money(receipt.total));
   boldOff();
 
+  if (parseFloat(receipt.giftCardAmount) > 0.005) {
+    rowLR('Gift card' + (receipt.giftCardCode ? ' ' + receipt.giftCardCode : '') + ':', '-' + money(receipt.giftCardAmount));
+    if (receipt.giftCardBalance != null) rowLR('Gift card balance:', money(receipt.giftCardBalance));
+  }
   rowLR('Paid (' + (receipt.paymentMethod || 'Cash') + '):', money(receipt.paid));
   if (parseFloat(receipt.change) > 0.005) {
     rowLR('Change:', money(receipt.change));

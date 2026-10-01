@@ -48,6 +48,7 @@
       <div class="cart-pane">
         <div class="cart-header">
           <span><i class="fa-solid fa-cart-shopping"></i>Cart</span>
+          <button type="button" class="cart-gift-btn" id="gift-check-btn" title="Check gift card balance"><i class="fa-solid fa-gift"></i> Gift Card</button>
         </div>
         <div class="cart-customer-box checkout-customer-box" id="cart-customer-box">
           <div id="cart-customer-empty">
@@ -281,6 +282,25 @@
             <button type="button" class="pm-btn" data-method="credit"><i class="fa-solid fa-file-invoice-dollar"></i> Credit</button>
           </div>
 
+          <!-- Gift card: covers part (or all) of the total; the payment method pays the rest -->
+          <div class="co-gc" id="co-gc">
+            <button type="button" class="co-gc-toggle" id="co-gc-toggle"><i class="fa-solid fa-gift"></i> Pay with gift card</button>
+            <div class="co-gc-entry" id="co-gc-entry" hidden>
+              <input type="text" id="co-gc-code" class="co-gc-input" placeholder="Gift card code" autocomplete="off" />
+              <button type="button" class="co-gc-apply" id="co-gc-apply">Apply</button>
+              <button type="button" class="co-gc-x" id="co-gc-cancel" title="Cancel"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="co-gc-applied" id="co-gc-applied" hidden>
+              <i class="fa-solid fa-gift co-gc-icon"></i>
+              <div class="co-gc-info">
+                <div class="co-gc-code" id="co-gc-applied-code"></div>
+                <div class="co-gc-sub" id="co-gc-applied-sub"></div>
+              </div>
+              <strong class="co-gc-amt" id="co-gc-applied-amt"></strong>
+              <button type="button" class="co-gc-x" id="co-gc-remove" title="Remove gift card"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+          </div>
+
           <div id="tender-section">
             <label class="tender-label" for="amount-received-input">Amount Received</label>
             <input type="text" inputmode="decimal" id="amount-received-input" class="amount-received-input" value="0.00" />
@@ -410,6 +430,23 @@
   </div>
 
   <!-- Open Shift modal: prompts for the day's opening cash float -->
+  <!-- Gift card balance check: opened from the cart header's Gift Card button -->
+  <div class="modal-backdrop" id="gift-check-modal">
+    <div class="modal modal-gift-check">
+      <div class="modal-head">
+        <h2><i class="fa-solid fa-gift"></i> Check Gift Card</h2>
+        <button type="button" class="modal-close" data-close="gift-check-modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="gc-check-row">
+          <input type="text" id="gift-check-code" class="co-gc-input" placeholder="Enter or scan the gift card code" autocomplete="off" />
+          <button type="button" class="ghost-btn primary" id="gift-check-run"><i class="fa-solid fa-magnifying-glass"></i> Check</button>
+        </div>
+        <div id="gift-check-result"></div>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-backdrop" id="shift-open-modal">
     <div class="modal modal-sm">
       <div class="modal-head">

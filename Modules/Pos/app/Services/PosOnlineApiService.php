@@ -186,7 +186,7 @@ class PosOnlineApiService
      */
     public function formatSale(Sale $sale): array
     {
-        $sale->loadMissing(['items.product', 'items.productRental', 'creditAccount', 'user', 'branch', 'customer', 'returns.items']);
+        $sale->loadMissing(['items.product', 'items.productRental', 'creditAccount', 'user', 'branch', 'customer', 'returns.items', 'giftCard']);
 
         // Build returned-quantity map keyed by sale item id
         $returnedQtys = [];
@@ -211,6 +211,13 @@ class PosOnlineApiService
             'discount_amount' => round((float) $sale->discount_amount, 2),
             'total' => round((float) $sale->total, 2),
             'amount_paid' => round((float) $sale->amount_paid, 2),
+            'gift_card_amount' => round((float) $sale->gift_card_amount, 2),
+            'gift_card' => $sale->giftCard ? [
+                'id' => (int) $sale->giftCard->id,
+                'code' => $sale->giftCard->code,
+                'name' => $sale->giftCard->name,
+                'balance' => round((float) $sale->giftCard->balance, 2),
+            ] : null,
             'amount_tendered' => $sale->amount_tendered !== null ? round((float) $sale->amount_tendered, 2) : null,
             'change_amount' => $sale->change_amount !== null ? round((float) $sale->change_amount, 2) : null,
             'notes' => $sale->notes,

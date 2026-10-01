@@ -1029,7 +1029,9 @@ document.querySelectorAll('.modal-backdrop [data-close]').forEach((btn) => {
 });
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
-  if (rentalModal.classList.contains('show')) closeRentalModal();
+  const giftCheck = document.getElementById('gift-check-modal');
+  if (giftCheck.classList.contains('show')) giftCheck.classList.remove('show');
+  else if (rentalModal.classList.contains('show')) closeRentalModal();
   else if (dynamicModal.classList.contains('show')) closeDynamicModal();
   else if (customerPickerModal.classList.contains('show')) closeCustomerPickerModal();
   else if (checkoutModal.classList.contains('show')) closeCheckoutModal();
@@ -1338,6 +1340,9 @@ function buildReceiptData(sale) {
     amountPaid: sale.amount_paid,
     amountTendered: sale.amount_tendered,
     changeAmount: sale.change_amount,
+    giftCardAmount: Number(sale.gift_card_amount) || 0,
+    giftCardCode: sale.gift_card?.code || '',
+    giftCardBalance: sale.gift_card ? Number(sale.gift_card.balance) : null,
     items: (sale.items || []).map((it) => ({
       name: it.product_name,
       sku: it.sku,
@@ -1379,6 +1384,10 @@ function renderBillHtml(data) {
     totals += `<div class="rd-row"><span>${t('Discount')}${pctLabel}</span><span>&minus;${esc(money(data.discountAmount))}</span></div>`;
   }
   totals += `<div class="rd-row rd-total"><span>${t('Total')}</span><span>${esc(money(data.total))}</span></div>`;
+  if (data.giftCardAmount > 0.001) {
+    totals += `<div class="rd-row"><span>${t('Gift card')}${data.giftCardCode ? ` ${esc(data.giftCardCode)}` : ''}</span><span>&minus;${esc(money(data.giftCardAmount))}</span></div>`;
+    if (data.giftCardBalance != null) totals += `<div class="rd-row"><span>${t('Gift card balance')}</span><span>${esc(money(data.giftCardBalance))}</span></div>`;
+  }
   if (data.amountTendered != null) {
     totals += `<div class="rd-row"><span>${t('Cash Received')}</span><span>${esc(money(data.amountTendered))}</span></div>`;
     totals += `<div class="rd-row"><span>${t('Change')}</span><span>${esc(money(data.changeAmount || 0))}</span></div>`;
@@ -1478,6 +1487,9 @@ function buildInvoiceDocument(data) {
   if (data.discountAmount > 0.001) {
     const pctLabel = data.discountPercent ? ` (${data.discountPercent}%)` : '';
     totalsLines.push({ label: esc(t('Discount') + pctLabel), value: '−' + esc(money(data.discountAmount)), color: '#ef4444' });
+  }
+  if (data.giftCardAmount > 0.001) {
+    totalsLines.push({ label: esc(`${t('Paid by gift card')} ${data.giftCardCode}`.trim()), value: esc(money(data.giftCardAmount)) });
   }
 
   const build = (IT.builders || {})[template];
@@ -1634,9 +1646,98 @@ function refreshCheckoutSummary() {
   updateCheckoutTender();
 }
 
-function updateCheckoutTender() {
+// ── Gift card at checkout ────────────────────────────────────────────────
+// Applied on top of any payment method: the card covers up to its balance,
+// the selected method pays what's left. The server re-checks and locks the
+// card when the sale is submitted (Modules/Pos GiftCardService::redeemForSale).
+let checkoutGiftCard = null; // { code, name, balance }
+
+function giftCardApplied(total) {
+  if (!checkoutGiftCard) return 0;
+  return Math.round(Math.min(checkoutGiftCard.balance, total) * 100) / 100;
+}
+
+function amountDueAfterGiftCard() {
   const { total } = currentOrderTotals();
+  return Math.max(0, Math.round((total - giftCardApplied(total)) * 100) / 100);
+}
+
+function renderCheckoutGiftCard() {
+  const { total } = currentOrderTotals();
+  const applied = giftCardApplied(total);
+  const entryOpen = !document.getElementById('co-gc-entry').hidden;
+  document.getElementById('co-gc-toggle').hidden = !!checkoutGiftCard || entryOpen;
+  document.getElementById('co-gc-applied').hidden = !checkoutGiftCard;
+  if (!checkoutGiftCard) return;
+  document.getElementById('co-gc-applied-code').textContent = checkoutGiftCard.code;
+  document.getElementById('co-gc-applied-sub').textContent = t('Balance {from} → {to} left', {
+    from: money(checkoutGiftCard.balance),
+    to: money(Math.max(0, checkoutGiftCard.balance - applied)),
+  });
+  document.getElementById('co-gc-applied-amt').textContent = `−${money(applied)}`;
+}
+
+function showGiftCardEntry(show) {
+  const entry = document.getElementById('co-gc-entry');
+  entry.hidden = !show;
+  if (show) {
+    document.getElementById('co-gc-code').value = '';
+    setTimeout(() => document.getElementById('co-gc-code').focus(), 30);
+  }
+  renderCheckoutGiftCard();
+}
+
+// Reason text for a card the server says can't be redeemed right now.
+function giftCardBlockedReason(c) {
+  return {
+    expired: t('expired on {date}', { date: c.expires_at }),
+    scheduled: t('is not valid until {date}', { date: c.valid_from }),
+    used: t('has no remaining balance'),
+    disabled: t('is disabled'),
+  }[c.status] || t('cannot be used');
+}
+
+function applyGiftCardToCheckout(c) {
+  checkoutGiftCard = { code: c.code, name: c.name, balance: Number(c.balance) };
+  document.getElementById('co-gc-entry').hidden = true;
+  amountReceivedInput.value = amountDueAfterGiftCard().toFixed(2);
+  updateCheckoutTender();
+}
+
+async function submitGiftCardCode() {
+  const input = document.getElementById('co-gc-code');
+  const code = input.value.trim();
+  if (!code) { input.focus(); return; }
+  const btn = document.getElementById('co-gc-apply');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+  const res = await API.giftCardLookup(code);
+  btn.disabled = false;
+  btn.textContent = t('Apply');
+  if (res.status !== 200) { showToast(t(res.body?.message || 'Gift card not found.'), 'error'); return; }
+  const c = res.body.data;
+  if (!c.is_redeemable) { showToast(t('Gift card {code} {reason}.', { code: c.code, reason: giftCardBlockedReason(c) }), 'error'); return; }
+  applyGiftCardToCheckout(c);
+  showToast(t('Gift card applied — {amount} covered', { amount: money(giftCardApplied(currentOrderTotals().total)) }), 'success');
+}
+
+document.getElementById('co-gc-toggle').addEventListener('click', () => showGiftCardEntry(true));
+document.getElementById('co-gc-cancel').addEventListener('click', () => showGiftCardEntry(false));
+document.getElementById('co-gc-apply').addEventListener('click', submitGiftCardCode);
+document.getElementById('co-gc-code').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); submitGiftCardCode(); }
+  if (e.key === 'Escape') { e.stopPropagation(); showGiftCardEntry(false); }
+});
+document.getElementById('co-gc-remove').addEventListener('click', () => {
+  checkoutGiftCard = null;
+  amountReceivedInput.value = amountDueAfterGiftCard().toFixed(2);
+  updateCheckoutTender();
+});
+
+function updateCheckoutTender() {
+  const total = amountDueAfterGiftCard();
   coAmountDueEl.textContent = money(total);
+  renderCheckoutGiftCard();
 
   const received = parseFloat(amountReceivedInput.value) || 0;
   const change = received - total;
@@ -1664,8 +1765,7 @@ numpadEl.addEventListener('click', (e) => {
 amountReceivedInput.addEventListener('input', updateCheckoutTender);
 
 exactAmountBtn.addEventListener('click', () => {
-  const { total } = currentOrderTotals();
-  amountReceivedInput.value = total.toFixed(2);
+  amountReceivedInput.value = amountDueAfterGiftCard().toFixed(2);
   updateCheckoutTender();
 });
 
@@ -1687,15 +1787,17 @@ function openCheckoutModal() {
   paymentMethod = 'cash';
   tenderSection.style.display = '';
   checkoutNoteInput.value = '';
+  checkoutGiftCard = null;
+  document.getElementById('co-gc-entry').hidden = true;
 
   renderOrderItemsTable();
   refreshCheckoutCustomerBox();
   refreshCheckoutSummary();
-  const { total } = currentOrderTotals();
-  amountReceivedInput.value = total.toFixed(2);
+  amountReceivedInput.value = amountDueAfterGiftCard().toFixed(2);
   updateCheckoutTender();
 
   checkoutModal.classList.add('show');
+  return true;
 }
 
 function closeCheckoutModal() {
@@ -1718,7 +1820,8 @@ checkoutCompleteBtn.addEventListener('click', async () => {
     return;
   }
 
-  const { discountType: orderDiscountType, discountValue: orderDiscountValue } = currentOrderTotals();
+  const { discountType: orderDiscountType, discountValue: orderDiscountValue, total: orderTotal } = currentOrderTotals();
+  const giftAmount = giftCardApplied(orderTotal);
   const notes = checkoutNoteInput.value.trim();
   const amountTendered = parseFloat(amountReceivedInput.value) || 0;
 
@@ -1747,6 +1850,7 @@ checkoutCompleteBtn.addEventListener('click', async () => {
       ...(orderDiscountValue > 0 && orderDiscountType === 'percent' ? { discount_percent: orderDiscountValue } : {}),
       ...(selectedCustomer ? { pos_customer_id: selectedCustomer.id } : {}),
       ...(paymentMethod === 'cash' ? { amount_tendered: amountTendered } : {}),
+      ...(checkoutGiftCard && giftAmount > 0 ? { gift_card_code: checkoutGiftCard.code, gift_card_amount: giftAmount } : {}),
       ...(notes ? { notes } : {}),
     });
 
@@ -1770,6 +1874,109 @@ checkoutCompleteBtn.addEventListener('click', async () => {
     checkoutCompleteBtn.disabled = cart.length === 0;
   }
 });
+
+// ── Gift card balance check (cart header button) ─────────────────────────
+const giftCheckModal = document.getElementById('gift-check-modal');
+const giftCheckCodeInput = document.getElementById('gift-check-code');
+const giftCheckResultEl = document.getElementById('gift-check-result');
+const giftCheckRunBtn = document.getElementById('gift-check-run');
+
+function openGiftCheckModal() {
+  giftCheckCodeInput.value = '';
+  giftCheckResultEl.innerHTML = '';
+  giftCheckModal.classList.add('show');
+  setTimeout(() => giftCheckCodeInput.focus(), 60);
+}
+
+function closeGiftCheckModal() {
+  giftCheckModal.classList.remove('show');
+}
+
+function giftDaysFromToday(ymd) {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  return Math.round((new Date(`${ymd}T00:00:00`) - today) / 86400000);
+}
+
+function fmtGiftDateTime(iso) {
+  const d = iso ? new Date(iso) : null;
+  return d && !isNaN(d.getTime())
+    ? d.toLocaleString(i18n.locale, { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+    : '—';
+}
+
+function renderGiftCheckResult(c) {
+  let until = t('No expiry');
+  if (c.expires_at) {
+    const days = giftDaysFromToday(c.expires_at);
+    const rel = days > 0 ? t(days === 1 ? '{n} day left' : '{n} days left', { n: days })
+      : days === 0 ? t('last day today')
+      : t(days === -1 ? '{n} day ago' : '{n} days ago', { n: -days });
+    until = `${esc(c.expires_at)} <small>(${esc(rel)})</small>`;
+  }
+  const txns = c.transactions || [];
+  const redeems = txns.filter((x) => x.type === 'redeem');
+  const canApply = c.is_redeemable && cart.length > 0;
+  const typeLabel = { issue: t('Issued'), redeem: t('Used'), refund: t('Refunded'), adjust: t('Adjusted') };
+
+  const rows = [
+    [t('Gift card'), esc(c.name)],
+    [t('Code'), `<span class="gc-mono">${esc(c.code)}</span>`],
+    [t('Value'), esc(money(c.initial_value))],
+    [t('Used'), esc(money(c.used_amount))],
+    [t('Valid from'), c.valid_from ? esc(c.valid_from) : '—'],
+    [t('Valid until'), until],
+    [t('Times used'), String(redeems.length)],
+    [t('Last used'), redeems.length ? esc(fmtGiftDateTime(redeems[0].created_at)) : t('Never')],
+  ];
+  if (c.customer_name) rows.push([t('Customer'), esc(c.customer_name)]);
+
+  giftCheckResultEl.innerHTML = `
+    <div class="gc-verdict ${c.is_redeemable ? 'ok' : 'bad'}">
+      <i class="fa-solid ${c.is_redeemable ? 'fa-circle-check' : 'fa-circle-xmark'}"></i>
+      <div class="gc-verdict-body">
+        <div class="gc-verdict-title">${c.is_redeemable ? t('Valid — can be used') : t('Cannot be used')}</div>
+        <div class="gc-verdict-sub">${c.is_redeemable ? t('Available balance') : esc(t('This gift card {reason}.', { reason: giftCardBlockedReason(c) }))}</div>
+      </div>
+      <div class="gc-verdict-amt">${esc(money(c.balance))}</div>
+    </div>
+    <div class="gc-check-grid">
+      ${rows.map(([k, v]) => `<div class="gc-check-k">${k}</div><div class="gc-check-v">${v}</div>`).join('')}
+    </div>
+    <details class="gc-check-history">
+      <summary><i class="fa-solid fa-clock-rotate-left"></i> ${t('Usage history')} (${txns.length})</summary>
+      ${txns.map((x) => `
+        <div class="gc-hist-row">
+          <span>${esc(typeLabel[x.type] || x.type)}${x.sale_number ? ` · ${esc(x.sale_number)}` : ''}<small>${esc(fmtGiftDateTime(x.created_at))}</small></span>
+          <span class="${x.amount < 0 ? 'neg' : 'pos'}">${x.amount < 0 ? '−' : '+'}${esc(money(Math.abs(x.amount)))}</span>
+        </div>`).join('')}
+    </details>
+    ${canApply ? `<button type="button" class="checkout-btn gc-use-btn" id="gift-check-use"><i class="fa-solid fa-cash-register"></i> ${t('Use for this sale')}</button>` : ''}`;
+
+  document.getElementById('gift-check-use')?.addEventListener('click', () => {
+    closeGiftCheckModal();
+    if (openCheckoutModal()) applyGiftCardToCheckout(c);
+  });
+}
+
+async function runGiftCheck() {
+  const code = giftCheckCodeInput.value.trim();
+  if (!code) { giftCheckCodeInput.focus(); return; }
+  giftCheckRunBtn.disabled = true;
+  giftCheckResultEl.innerHTML = `<div class="gc-check-msg"><i class="fa-solid fa-spinner fa-spin"></i> ${t('Checking…')}</div>`;
+  const res = await API.giftCardLookup(code);
+  giftCheckRunBtn.disabled = false;
+  if (res.status !== 200) {
+    giftCheckResultEl.innerHTML = `<div class="gc-check-msg err"><i class="fa-solid fa-circle-exclamation"></i> ${esc(t(res.body?.message || 'Gift card not found.'))}</div>`;
+    return;
+  }
+  renderGiftCheckResult(res.body.data);
+}
+
+document.getElementById('gift-check-btn').addEventListener('click', openGiftCheckModal);
+giftCheckRunBtn.addEventListener('click', runGiftCheck);
+giftCheckCodeInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') runGiftCheck(); });
+giftCheckModal.querySelector('[data-close="gift-check-modal"]').addEventListener('click', closeGiftCheckModal);
+giftCheckModal.addEventListener('mousedown', (e) => { if (e.target === giftCheckModal) closeGiftCheckModal(); });
 
 // ── Cash Drawer: Open Shift ──────────────────────────────────────────────
 // Checked once when the POS screen loads. If today's opening float hasn't

@@ -32,6 +32,7 @@ class SaleService
         private readonly PosNotificationService $notifications,
         private readonly CustomerSubscriptionService $subscriptions,
         private readonly ProductRentalService $rentals,
+        private readonly GiftCardService $giftCards,
     ) {
     }
 
@@ -231,6 +232,8 @@ class SaleService
         ?int $posCounterId = null,
         ?string $creditDueDate = null,
         ?float $discountFlat = null,
+        ?string $giftCardCode = null,
+        ?float $giftCardAmount = null,
     ): Sale {
         $rawProductItems = array_values(array_filter(
             $items,
@@ -264,7 +267,7 @@ class SaleService
         $activeDiscounts = $this->discountService->activeForProducts($business, $cartProductIds)
             ->concat($this->campaignService->activeForProducts($business, $cartProductIds));
 
-        $sale = DB::transaction(function () use ($business, $user, $productLines, $serviceLines, $paymentMethod, $creditAccountId, $amountPaid, $notes, $channel, $discountPercent, $discountFlat, $amountTendered, $customerId, $deferSettlement, $branchId, $branchStockSeparate, $activeDiscounts, $scheduledAt, $posCounterId, $creditDueDate) {
+        $sale = DB::transaction(function () use ($business, $user, $productLines, $serviceLines, $paymentMethod, $creditAccountId, $amountPaid, $notes, $channel, $discountPercent, $discountFlat, $amountTendered, $customerId, $deferSettlement, $branchId, $branchStockSeparate, $activeDiscounts, $scheduledAt, $posCounterId, $creditDueDate, $giftCardCode, $giftCardAmount) {
             $sale = $business->sales()->create([
                 'branch_id'       => $branchId,
                 'pos_counter_id'  => $posCounterId,
@@ -501,23 +504,37 @@ class SaleService
             $tendered = null;
             $change = null;
 
+            // Gift card covers part (or all) of the total; payment_method pays the rest.
+            // Clamped to the total so a card is never charged more than the sale costs.
+            $giftApplied = 0.0;
+            $giftCard = null;
+            if (filled($giftCardCode) && $giftCardAmount !== null && $giftCardAmount > self::MONEY_TOLERANCE) {
+                $giftApplied = round(min($giftCardAmount, $total), 2);
+                if ($giftApplied > self::MONEY_TOLERANCE) {
+                    $giftCard = $this->giftCards->redeemForSale($business, (string) $giftCardCode, $giftApplied, $sale, $user);
+                } else {
+                    $giftApplied = 0.0;
+                }
+            }
+            $due = round(max(0, $total - $giftApplied), 2);
+
             if ($paymentMethod === Sale::PAYMENT_CASH) {
                 $tendered = $amountTendered !== null
                     ? round((float) $amountTendered, 2)
-                    : ($amountPaid !== null ? round((float) $amountPaid, 2) : $total);
+                    : ($amountPaid !== null ? round((float) $amountPaid, 2) : $due);
 
-                if ($tendered + self::MONEY_TOLERANCE < $total) {
+                if ($tendered + self::MONEY_TOLERANCE < $due) {
                     throw ValidationException::withMessages([
-                        'amount_tendered' => 'Amount received must be at least the sale total.',
+                        'amount_tendered' => 'Amount received must be at least the amount due.',
                     ]);
                 }
 
-                $change = round(max(0, $tendered - $total), 2);
+                $change = round(max(0, $tendered - $due), 2);
             }
 
             $paid = match ($paymentMethod) {
                 Sale::PAYMENT_CASH, Sale::PAYMENT_CARD => $total,
-                default => 0.0,
+                default => $giftApplied,
             };
 
             $sale->update([
@@ -526,12 +543,15 @@ class SaleService
                 'discount_amount' => $discountAmount,
                 'total' => $total,
                 'amount_paid' => $paid,
+                'gift_card_amount' => $giftApplied,
+                'pos_gift_card_id' => $giftCard?->id,
                 'amount_tendered' => $tendered,
                 'change_amount' => $change,
             ]);
 
-            if (!$deferSettlement && in_array($paymentMethod, [Sale::PAYMENT_CASH, Sale::PAYMENT_CARD], true)) {
-                $this->payments->settle($sale, $business, $user, (int) $creditAccountId, $total, $paymentMethod);
+            // Only the non-gift-card portion is new money into the deposit account.
+            if (!$deferSettlement && $due > self::MONEY_TOLERANCE && in_array($paymentMethod, [Sale::PAYMENT_CASH, Sale::PAYMENT_CARD], true)) {
+                $this->payments->settle($sale, $business, $user, (int) $creditAccountId, $due, $paymentMethod);
             }
 
             return $sale->refresh()->load(['items.product', 'items.serviceItem.products', 'creditAccount', 'user']);
@@ -594,6 +614,8 @@ class SaleService
                     }
                 }
             }
+
+            $this->giftCards->refundForSale($sale);
 
             $sale->update(['status' => Sale::STATUS_VOID]);
 

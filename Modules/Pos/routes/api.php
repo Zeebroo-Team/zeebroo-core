@@ -46,6 +46,7 @@ use Modules\Pos\Http\Controllers\Api\PosProductCategoryApiController;
 use Modules\Pos\Http\Controllers\Api\PosProductUnitApiController;
 use Modules\Pos\Http\Controllers\Api\PosProductDiscountApiController;
 use Modules\Pos\Http\Controllers\Api\PosSaleCampaignApiController;
+use Modules\Pos\Http\Controllers\Api\PosGiftCardApiController;
 use Modules\Pos\Http\Controllers\Api\PosProductBrandApiController;
 use Modules\Pos\Http\Controllers\Api\PosFileManagerApiController;
 use Modules\Pos\Http\Controllers\Api\PosTodaySummaryApiController;
@@ -235,6 +236,20 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
     Route::post  ('sale-campaigns',            [PosSaleCampaignApiController::class, 'store'])  ->name('sale-campaigns.store');
     Route::patch ('sale-campaigns/{campaign}', [PosSaleCampaignApiController::class, 'update']) ->name('sale-campaigns.update');
     Route::delete('sale-campaigns/{campaign}', [PosSaleCampaignApiController::class, 'destroy'])->name('sale-campaigns.destroy');
+
+    // Gift Cards
+    Route::get   ('gift-cards',                [PosGiftCardApiController::class, 'index'])       ->name('gift-cards.index');
+    Route::get   ('gift-cards/generate-code',  [PosGiftCardApiController::class, 'generateCode'])->name('gift-cards.generate-code');
+    Route::get   ('gift-cards/lookup',         [PosGiftCardApiController::class, 'lookup'])      ->name('gift-cards.lookup');
+    Route::post  ('gift-cards',                [PosGiftCardApiController::class, 'store'])       ->name('gift-cards.store');
+    Route::get   ('gift-cards/{giftCard}',     [PosGiftCardApiController::class, 'show'])        ->whereNumber('giftCard')->name('gift-cards.show');
+    Route::patch ('gift-cards/{giftCard}',     [PosGiftCardApiController::class, 'update'])      ->whereNumber('giftCard')->name('gift-cards.update');
+    Route::delete('gift-cards/{giftCard}',     [PosGiftCardApiController::class, 'destroy'])     ->whereNumber('giftCard')->name('gift-cards.destroy');
+    Route::get   ('gift-card-groups',               [PosGiftCardApiController::class, 'groups'])      ->name('gift-card-groups.index');
+    Route::get   ('gift-card-groups/{group}',       [PosGiftCardApiController::class, 'showGroup'])   ->whereNumber('group')->name('gift-card-groups.show');
+    Route::patch ('gift-card-groups/{group}',       [PosGiftCardApiController::class, 'updateGroup']) ->whereNumber('group')->name('gift-card-groups.update');
+    Route::delete('gift-card-groups/{group}',       [PosGiftCardApiController::class, 'destroyGroup'])->whereNumber('group')->name('gift-card-groups.destroy');
+    Route::post  ('gift-card-groups/{group}/cards', [PosGiftCardApiController::class, 'addCards'])    ->whereNumber('group')->name('gift-card-groups.cards.store');
 
     // Product Categories
     Route::get ('categories',              [PosProductCategoryApiController::class, 'index'])->name('categories.index');

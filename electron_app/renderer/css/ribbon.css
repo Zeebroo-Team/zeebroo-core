@@ -6281,7 +6281,7 @@ body.dark .product-card .p-icon { background: rgba(255,255,255,.07); }
 .cm-detail-empty i { font-size: 48px; opacity: .18; }
 
 /* Detail view */
-#cm-detail-view, #sm-detail-view, #um-detail-view, #sc-detail-view { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+#cm-detail-view, #sm-detail-view, #um-detail-view, #sc-detail-view, #gc-detail-view, #gc-group-view { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 .cm-dv-header {
   display: flex; align-items: center; gap: 14px;
   padding: 18px 20px 12px; border-bottom: 1px solid var(--border-light); flex-shrink: 0;
@@ -6446,7 +6446,7 @@ body.dark .product-card .p-icon { background: rgba(255,255,255,.07); }
 .cm-btn-delete:hover { background: #fef2f2; }
 
 /* Form view */
-#cm-form-view, #sm-form-view, #um-form-view, #sc-form-view { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+#cm-form-view, #sm-form-view, #um-form-view, #sc-form-view, #gc-form-view { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 .cm-form-title {
   font-size: 14px; font-weight: 800; padding: 16px 20px 10px;
   border-bottom: 1px solid var(--border-light); flex-shrink: 0;
@@ -12198,6 +12198,170 @@ body.dark .pc-modal-head {
   background: var(--surface2); color: var(--text-muted); margin-left: 6px;
 }
 /* ── End Sale Campaign Modal ──────────────────────────── */
+
+/* ── Gift Cards ───────────────────────────────────────── */
+#gift-card-modal .cm-header { padding: 10px 14px; font-size: 13px; gap: 8px; }
+#gift-card-modal .cm-new-btn { padding: 5px 10px; font-size: 11px; gap: 5px; }
+#gift-card-modal .cm-search-wrap { padding: 6px 10px; }
+#gift-card-modal .cm-search-icon { left: 20px; font-size: 11px; }
+#gift-card-modal .cm-search-input { padding: 6px 8px 6px 26px; font-size: 11px; }
+.gc-filter-tabs { flex-wrap: wrap; }
+
+#gc-form-view .cm-form-body { padding: 10px 16px; gap: 8px; }
+#gc-form-view .cm-label { margin-top: 0; font-size: 10px; }
+#gc-form-view .cm-input { padding: 6px 9px; font-size: 12px; }
+#gc-form-view .cm-textarea { min-height: 46px; }
+#gc-form-view .po-btn-ghost { padding: 5px 10px; font-size: 11px; border-radius: 6px; gap: 5px; }
+.gc-hint { font-size: 11px; color: var(--text-muted); margin-top: -4px; }
+.gc-code-input { font-family: ui-monospace, Consolas, monospace; letter-spacing: .06em; text-transform: uppercase; }
+.gc-list-code { font-family: ui-monospace, Consolas, monospace; font-size: 10px; }
+
+.gc-visual { padding: 16px 20px 6px; flex-shrink: 0; }
+
+/* Card visual */
+.gc-card {
+  position: relative; overflow: hidden; border-radius: 14px; padding: 16px 18px;
+  color: #fff; background: linear-gradient(135deg, #7c3aed 0%, #db2777 100%);
+  box-shadow: 0 8px 22px rgba(124,58,237,.25);
+}
+.gc-card::after {
+  content: ''; position: absolute; right: -40px; top: -40px; width: 150px; height: 150px;
+  border-radius: 50%; background: rgba(255,255,255,.12);
+}
+.gc-card-expired, .gc-card-disabled, .gc-card-used {
+  background: linear-gradient(135deg, #64748b 0%, #334155 100%); box-shadow: none;
+}
+.gc-card-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; position: relative; z-index: 1; }
+.gc-card-top .disc-status-active,
+.gc-card-top .disc-status-inactive,
+.gc-card-top .disc-status-expired { background: rgba(255,255,255,.22); color: #fff; }
+.gc-card-name { font-size: 13px; font-weight: 700; opacity: .95; }
+.gc-card-code {
+  margin-top: 10px; font-family: ui-monospace, Consolas, monospace; font-size: 17px; font-weight: 700;
+  letter-spacing: .12em; position: relative; z-index: 1; user-select: all;
+}
+.gc-card-bal-label { margin-top: 12px; font-size: 10px; text-transform: uppercase; letter-spacing: .08em; opacity: .8; }
+.gc-card-bal { font-size: 28px; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.gc-card-bar { margin-top: 10px; height: 5px; border-radius: 99px; background: rgba(255,255,255,.25); overflow: hidden; }
+.gc-card-bar span { display: block; height: 100%; background: #fff; border-radius: inherit; }
+.gc-card-foot { margin-top: 8px; display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 11px; opacity: .9; }
+
+.gc-txn-when { display: block; font-size: 10px; font-weight: 400; color: var(--text-muted); }
+.gc-txn-amt { font-size: 12px; font-weight: 700; white-space: nowrap; }
+.gc-txn-amt.neg { color: #dc2626; }
+.gc-txn-amt.pos { color: #16a34a; }
+
+/* POS balance check */
+.gc-check-msg { font-size: 13px; color: var(--text-muted); padding: 6px 2px; }
+.gc-check-msg.err { color: #dc2626; }
+.gc-check-history { margin-top: 10px; max-height: 220px; overflow-y: auto; }
+.gc-check-history summary { cursor: pointer; font-size: 12px; font-weight: 700; color: var(--text-muted); padding: 4px 0; }
+.gc-check-history summary:hover { color: var(--text); }
+.gc-verdict {
+  display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 12px; border: 1.5px solid;
+}
+.gc-verdict > i { font-size: 26px; }
+.gc-verdict.ok  { border-color: rgba(22,163,74,.45); background: rgba(22,163,74,.08); color: #15803d; }
+.gc-verdict.bad { border-color: rgba(220,38,38,.45); background: rgba(220,38,38,.07); color: #b91c1c; }
+.gc-verdict-body { flex: 1; min-width: 0; }
+.gc-verdict-title { font-size: 14px; font-weight: 800; }
+.gc-verdict-sub { font-size: 11px; opacity: .85; }
+.gc-verdict-amt { font-size: 24px; font-weight: 800; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.gc-verdict.bad .gc-verdict-amt { opacity: .6; }
+.gc-check-grid {
+  display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin-top: 12px;
+  padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; font-size: 12.5px;
+}
+.gc-check-k { color: var(--text-muted); }
+.gc-check-v { font-weight: 600; color: var(--text); text-align: right; }
+.gc-check-v small { font-weight: 400; color: var(--text-muted); }
+.gc-check-apply { width: 100%; margin-top: 12px; justify-content: center; padding: 10px; font-size: 13px; }
+
+/* Checkout: gift card */
+.co-gc { display: flex; flex-direction: column; gap: 6px; }
+.co-gc-toggle {
+  width: 100%; padding: 8px 10px; border-radius: 9px; border: 1.5px dashed var(--border);
+  background: transparent; color: var(--text-muted); font-size: 12px; font-weight: 700; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 6px; transition: all .14s;
+}
+.co-gc-toggle:hover { border-color: #db2777; color: #db2777; background: rgba(219,39,119,.05); }
+.co-gc-entry { display: flex; gap: 6px; align-items: stretch; }
+.co-gc-input {
+  flex: 1; min-width: 0; padding: 8px 10px; border: 1.5px solid var(--border); border-radius: 8px;
+  background: var(--surface2); color: var(--text); font-size: 13px; outline: none;
+  font-family: ui-monospace, Consolas, monospace; text-transform: uppercase; letter-spacing: .05em;
+}
+.co-gc-input:focus { border-color: #db2777; }
+.co-gc-apply {
+  padding: 0 14px; border: none; border-radius: 8px; background: #db2777; color: #fff;
+  font-size: 12px; font-weight: 700; cursor: pointer;
+}
+.co-gc-apply:disabled { opacity: .6; cursor: default; }
+.co-gc-x {
+  width: 30px; flex-shrink: 0; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--surface); color: var(--text-muted); cursor: pointer;
+}
+.co-gc-x:hover { color: #dc2626; border-color: #dc2626; }
+.co-gc-applied {
+  align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px;
+  border: 1.5px solid rgba(219,39,119,.45); background: rgba(219,39,119,.07);
+}
+.co-gc-icon { color: #db2777; font-size: 18px; }
+.co-gc-info { flex: 1; min-width: 0; }
+.co-gc-code { font-family: ui-monospace, Consolas, monospace; font-size: 12px; font-weight: 700; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.co-gc-sub { font-size: 11px; color: var(--text-muted); }
+.co-gc-amt { color: #db2777; font-size: 14px; white-space: nowrap; }
+.co-gc-applied .co-gc-x { height: 28px; }
+/* Gift card groups (list pane) */
+#gc-form-view .gc-f-block { display: flex; flex-direction: column; gap: 8px; }
+.gc-group-head { position: relative; padding-left: 4px; }
+.gc-caret {
+  width: 22px; height: 22px; flex-shrink: 0; border: none; background: none; border-radius: 6px;
+  color: var(--text-muted); cursor: pointer; font-size: 10px;
+}
+.gc-caret:hover { background: var(--surface2); color: var(--text); }
+.gc-count-pill {
+  flex-shrink: 0; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 99px;
+  background: var(--accent-light); color: var(--accent); white-space: nowrap;
+}
+.gc-sub-list { display: flex; flex-direction: column; gap: 2px; margin: 0 8px 6px 34px; padding-left: 10px; border-left: 2px solid var(--border); }
+.gc-sub-item {
+  display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 7px; cursor: pointer;
+  font-size: 11px; transition: background .12s;
+}
+.gc-sub-item:hover { background: var(--surface2); }
+.gc-sub-item.active { background: var(--accent-light); }
+.gc-sub-code { font-family: ui-monospace, Consolas, monospace; font-size: 11px; font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gc-sub-bal { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+
+/* Group detail */
+.gc-group-title { font-family: inherit; letter-spacing: 0; font-size: 20px; }
+.gc-group-notes { margin-top: 10px; font-size: 12px; color: var(--text-muted); }
+.gc-gv-cards-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 8px 20px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted);
+  flex-shrink: 0;
+}
+.gc-gv-add { display: flex; gap: 6px; align-items: center; text-transform: none; letter-spacing: 0; }
+.gc-gv-add .cm-input { width: 64px; padding: 5px 8px; font-size: 12px; margin: 0; }
+.gc-gv-add .po-btn-ghost { padding: 5px 10px; font-size: 11px; border-radius: 6px; gap: 5px; }
+.gc-gv-cards { flex: 1; min-height: 0; overflow-y: auto; padding: 0 20px 10px; }
+.gc-gv-row {
+  display: grid; grid-template-columns: 32px 1fr 150px 90px 30px; align-items: center; gap: 8px;
+  padding: 7px 8px; border-bottom: 1px solid var(--border-light, var(--border)); font-size: 12px; cursor: pointer;
+}
+.gc-gv-row:hover:not(.gc-gv-row-head) { background: var(--surface2); }
+.gc-gv-row-head { cursor: default; font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); position: sticky; top: 0; background: var(--surface); }
+.gc-gv-idx { color: var(--text-muted); font-size: 11px; }
+.gc-gv-of { color: var(--text-muted); font-size: 10px; }
+.gc-gv-copy { border: none; background: none; color: var(--text-muted); cursor: pointer; border-radius: 6px; height: 24px; }
+.gc-gv-copy:hover { background: var(--surface2); color: var(--accent); }
+.gc-back-link {
+  align-self: flex-start; margin: 12px 20px 0; padding: 4px 8px; border: none; border-radius: 6px;
+  background: var(--surface2); color: var(--text-muted); font-size: 11px; font-weight: 600; cursor: pointer;
+}
+.gc-back-link:hover { color: var(--accent); }
+/* ── End Gift Cards ───────────────────────────────────── */
 
 /* ── Brands View ──────────────────────────────────────── */
 #inv-brands-view { display: flex; flex-direction: column; flex: 1; min-height: 0; background: var(--bg); }
