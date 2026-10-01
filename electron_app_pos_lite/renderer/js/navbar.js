@@ -2849,6 +2849,7 @@ ${ctx.hdrCss}</style></head><body><div class="pg">
         <div><small>${t('Business')}</small><span id="um-biz-name">—</span></div>
       </div>
       <div class="um-sep"></div>
+      <button class="um-item" id="um-profile" type="button" role="menuitem" data-owner-only><i class="fa-solid fa-user-pen"></i> ${t('My Profile')}</button>
       <button class="um-item" id="um-language" type="button" role="menuitem">
         <i class="fa-solid fa-language"></i> <span>${t('Language')}</span>
         <span class="um-item-value">${i18n.current().native}</span>
@@ -2894,6 +2895,7 @@ ${ctx.hdrCss}</style></head><body><div class="pg">
     }
   });
 
+  $('um-profile').addEventListener('click', () => { setOpen(false); openProfileWindow(); });
   $('um-language').addEventListener('click', () => { setOpen(false); openLanguageWindow(); });
   $('um-billing').addEventListener('click', () => { setOpen(false); openBillingWindow(); });
   $('um-settings').addEventListener('click', () => { setOpen(false); openSettingsWindow(); });
@@ -2932,7 +2934,243 @@ ${ctx.hdrCss}</style></head><body><div class="pg">
     return letters.toUpperCase();
   }
 
-  (async () => {
+  // ── My Profile window ───────────────────────────────────────────────────
+  // Owner/staff account details (name, email) + password change, backed by
+  // Modules/Pos auth/me, auth/profile and auth/password (Modules/Pos/routes/api.php).
+  // Cashier sessions never see this — their accounts are managed under Cashiers.
+  function openProfileWindow() {
+    if ($('pf-backdrop')) return;
+
+    const returnFocusTo = document.activeElement;
+    let tab = 'details';
+
+    const el = document.createElement('div');
+    el.className = 'bm-backdrop';
+    el.id = 'pf-backdrop';
+    el.setAttribute('role', 'dialog');
+    el.setAttribute('aria-modal', 'true');
+    el.setAttribute('aria-labelledby', 'pf-title');
+    el.innerHTML = `
+      <div class="bm-card pf-card">
+        <div class="bm-head">
+          <span class="bm-head-icon"><i class="fa-solid fa-user-pen"></i></span>
+          <div class="bm-head-text">
+            <h2 id="pf-title">${t('My Profile')}</h2>
+            <p>${t('Update your account details and password.')}</p>
+          </div>
+          <button class="bm-close" type="button" aria-label="${t('Close')}"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="pf-identity">
+          <span class="um-avatar lg" id="pf-avatar"><i class="fa-solid fa-user"></i></span>
+          <div class="pf-identity-text">
+            <div class="pf-identity-name" id="pf-identity-name">—</div>
+            <div class="pf-identity-email" id="pf-identity-email"></div>
+          </div>
+        </div>
+        <div class="pm-tabs pf-tabs" role="tablist">
+          <button class="pm-tab active" type="button" role="tab" data-pf-tab="details"><i class="fa-solid fa-id-card"></i> ${t('Details')}</button>
+          <button class="pm-tab" type="button" role="tab" data-pf-tab="password"><i class="fa-solid fa-key"></i> ${t('Password')}</button>
+        </div>
+        <div id="pf-alert" class="bm-alert" style="display:none"></div>
+        <div id="pf-success" class="pf-success" style="display:none"></div>
+        <form class="pf-body" id="pf-details" autocomplete="off">
+          <div class="sm-field-row">
+            <label class="sm-field-label" for="pf-name">${t('Full Name')} *</label>
+            <input type="text" id="pf-name" class="sm-input" maxlength="255" required>
+          </div>
+          <div class="sm-field-row">
+            <label class="sm-field-label" for="pf-email">${t('Email')} *</label>
+            <input type="email" id="pf-email" class="sm-input" maxlength="255" required>
+            <span class="sm-hint">${t('You use this email to sign in.')}</span>
+          </div>
+        </form>
+        <form class="pf-body" id="pf-password" autocomplete="off" style="display:none">
+          <div class="sm-field-row">
+            <label class="sm-field-label" for="pf-current">${t('Current Password')} *</label>
+            <input type="password" id="pf-current" class="sm-input" autocomplete="current-password">
+          </div>
+          <div class="sm-field-row">
+            <label class="sm-field-label" for="pf-new">${t('New Password')} *</label>
+            <input type="password" id="pf-new" class="sm-input" autocomplete="new-password">
+            <span class="sm-hint">${t('At least 8 characters.')}</span>
+          </div>
+          <div class="sm-field-row">
+            <label class="sm-field-label" for="pf-confirm">${t('Confirm New Password')} *</label>
+            <input type="password" id="pf-confirm" class="sm-input" autocomplete="new-password">
+          </div>
+        </form>
+        <div class="sm-foot">
+          <button class="bm-btn bm-btn-outline" id="pf-cancel" type="button">${t('Close')}</button>
+          <button class="bm-btn bm-btn-primary" id="pf-save" type="button"><i class="fa-solid fa-check"></i> <span id="pf-save-label">${t('Save Changes')}</span></button>
+        </div>
+      </div>`;
+    document.body.appendChild(el);
+
+    const original = { name: '', email: '' };
+
+    function close() {
+      document.removeEventListener('keydown', onKey, true);
+      el.classList.remove('open');
+      setTimeout(() => el.remove(), 200);
+      if (returnFocusTo && returnFocusTo.focus) returnFocusTo.focus();
+    }
+
+    function onKey(e) {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); }
+      if (e.key === 'Enter' && el.contains(e.target) && e.target.classList.contains('sm-input')) { e.preventDefault(); save(); }
+    }
+
+    function showAlert(msg) {
+      $('pf-success').style.display = 'none';
+      $('pf-alert').textContent = msg;
+      $('pf-alert').style.display = 'block';
+    }
+    function showSuccess(msg) {
+      $('pf-alert').style.display = 'none';
+      $('pf-success').innerHTML = `<i class="fa-solid fa-circle-check"></i> ${esc(msg)}`;
+      $('pf-success').style.display = 'flex';
+    }
+    function clearMessages() {
+      $('pf-alert').style.display = 'none';
+      $('pf-success').style.display = 'none';
+    }
+
+    // Laravel 422 → { message, errors: { field: [msg] } } — show the first field error
+    function errorMessage(res, fallback) {
+      const errors = res.body?.errors;
+      if (errors) {
+        const first = Object.values(errors)[0];
+        if (Array.isArray(first) && first[0]) return first[0];
+      }
+      return res.body?.message || fallback;
+    }
+
+    function renderIdentityHeader(name, email) {
+      const letters = initials(name, email);
+      if (letters) $('pf-avatar').textContent = letters;
+      $('pf-identity-name').textContent = name || email || '—';
+      $('pf-identity-email').textContent = name ? email : '';
+    }
+
+    function setTab(next) {
+      tab = next;
+      el.querySelectorAll('[data-pf-tab]').forEach((b) => {
+        const on = b.dataset.pfTab === tab;
+        b.classList.toggle('active', on);
+        b.setAttribute('aria-selected', String(on));
+      });
+      $('pf-details').style.display = tab === 'details' ? '' : 'none';
+      $('pf-password').style.display = tab === 'password' ? '' : 'none';
+      $('pf-save-label').textContent = tab === 'details' ? t('Save Changes') : t('Update Password');
+      clearMessages();
+      (tab === 'details' ? $('pf-name') : $('pf-current')).focus();
+    }
+
+    async function load() {
+      const cfg = await window.electronAPI.getConfig();
+      original.name = cfg.user?.name || '';
+      original.email = cfg.user?.email || '';
+      $('pf-name').value = original.name;
+      $('pf-email').value = original.email;
+      renderIdentityHeader(original.name, original.email);
+
+      // Refresh from the server — the cached config may be stale if the
+      // profile was changed elsewhere (web dashboard, desktop app).
+      try {
+        const res = await API.me();
+        if (res.status === 200 && res.body?.data) {
+          const d = res.body.data;
+          original.name = d.name || '';
+          original.email = d.email || '';
+          // only overwrite fields the user hasn't started editing
+          if ($('pf-name').value === (cfg.user?.name || '')) $('pf-name').value = original.name;
+          if ($('pf-email').value === (cfg.user?.email || '')) $('pf-email').value = original.email;
+          renderIdentityHeader(original.name, original.email);
+        }
+      } catch (e) {
+        console.error('[profile] load failed', e);
+      }
+    }
+
+    async function saveDetails() {
+      const name = $('pf-name').value.trim();
+      const email = $('pf-email').value.trim();
+      if (!name) { showAlert(t('Name is required.')); $('pf-name').focus(); return false; }
+      if (!email || !$('pf-email').checkValidity()) { showAlert(t('Enter a valid email address.')); $('pf-email').focus(); return false; }
+      if (name === original.name && email === original.email) { showSuccess(t('No changes to save.')); return false; }
+
+      const res = await API.updateProfile({ name, email });
+      if (res.status !== 200) { showAlert(errorMessage(res, t('Could not update your profile.'))); return false; }
+
+      const d = res.body?.data || { name, email };
+      original.name = d.name;
+      original.email = d.email;
+      const cfg = await window.electronAPI.getConfig();
+      await window.electronAPI.setConfig({ user: { ...(cfg.user || {}), name: d.name, email: d.email } });
+      renderIdentityHeader(d.name, d.email);
+      await renderIdentity();
+      showSuccess(t('Your profile has been updated.'));
+      return true;
+    }
+
+    async function savePassword() {
+      const current = $('pf-current').value;
+      const next = $('pf-new').value;
+      const confirm = $('pf-confirm').value;
+      if (!current) { showAlert(t('Enter your current password.')); $('pf-current').focus(); return false; }
+      if (next.length < 8) { showAlert(t('New password must be at least 8 characters.')); $('pf-new').focus(); return false; }
+      if (next !== confirm) { showAlert(t('New passwords do not match.')); $('pf-confirm').focus(); return false; }
+
+      const res = await API.updatePassword({ current_password: current, password: next, password_confirmation: confirm });
+      if (res.status !== 200) { showAlert(errorMessage(res, t('Could not update your password.'))); return false; }
+
+      $('pf-current').value = '';
+      $('pf-new').value = '';
+      $('pf-confirm').value = '';
+      showSuccess(t('Your password has been updated.'));
+      return true;
+    }
+
+    let saving = false;
+    async function save() {
+      if (saving) return;
+      saving = true;
+      const btn = $('pf-save');
+      const originalHtml = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> ${t('Saving…')}`;
+      try {
+        if (tab === 'details') await saveDetails();
+        else await savePassword();
+      } catch (e) {
+        showAlert(t('Something went wrong. Please try again.'));
+        console.error('[profile] save failed', e);
+      } finally {
+        saving = false;
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+        $('pf-save-label').textContent = tab === 'details' ? t('Save Changes') : t('Update Password');
+      }
+    }
+
+    el.querySelector('.bm-close').addEventListener('click', close);
+    $('pf-cancel').addEventListener('click', close);
+    $('pf-save').addEventListener('click', save);
+    el.querySelectorAll('form').forEach((f) => f.addEventListener('submit', (e) => { e.preventDefault(); save(); }));
+    el.querySelectorAll('[data-pf-tab]').forEach((b) => b.addEventListener('click', () => setTab(b.dataset.pfTab)));
+    el.addEventListener('mousedown', (e) => { if (e.target === el) close(); });
+    document.addEventListener('keydown', onKey, true);
+
+    load();
+    requestAnimationFrame(() => {
+      el.classList.add('open');
+      $('pf-name').focus();
+    });
+  }
+
+  window.openProfileWindow = () => openProfileWindow();
+
+  async function renderIdentity() {
     const cfg = await window.electronAPI.getConfig();
     const name = cfg.user?.name || '';
     // Cashier sessions (POS-only, see role-guard.js) have no email and no
@@ -2955,5 +3193,7 @@ ${ctx.hdrCss}</style></head><body><div class="pg">
     $('um-head-email').title = email; // full address on hover when it's truncated
     $('um-biz-name').textContent = business || '—';
     if (cfg.app_version) $('um-version').textContent = `v${cfg.app_version}`;
-  })();
+  }
+
+  renderIdentity();
 })();

@@ -1585,6 +1585,37 @@ body.sl-locked .sdb-bar { display: none; }
 .upd-done { margin-top: 14px; padding: 12px 14px; border-radius: 11px; background: #f0fdf4; color: #15803d; font-size: 12.5px; font-weight: 600; }
 .upd-done small { display: block; margin-top: 4px; font-weight: 400; color: var(--muted, #6b7280); word-break: break-all; }
 
+/* ── My Profile window ──────────────────────────────────────────────────── */
+#pf-backdrop .bm-card { --sm-accent: #4f46e5; } /* .sm-input (reused here) reads this var */
+.pf-card { width: 460px; }
+.pf-identity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 22px 16px;
+  padding: 12px 14px;
+  border-radius: 13px;
+  background: #f5f6fb;
+}
+.pf-identity-text { min-width: 0; }
+.pf-identity-name { font-size: 14px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pf-identity-email { font-size: 12px; color: var(--muted, #6b7280); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pf-tabs { margin: 0 22px 16px; }
+.pf-tabs .pm-tab i { margin-right: 6px; }
+#pf-alert.bm-alert { margin: 0 22px 14px; }
+.pf-success {
+  align-items: center;
+  gap: 8px;
+  margin: 0 22px 14px;
+  padding: 10px 14px;
+  border-radius: 11px;
+  background: #f0fdf4;
+  color: #15803d;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.pf-body { display: flex; flex-direction: column; gap: 14px; padding: 0 22px 4px; margin: 0; }
+
 @media (prefers-reduced-motion: reduce) {
   .upd-bar.indeterminate > div { animation: none; width: 100%; opacity: 0.5; }
   .um-panel, .um-chevron, .um-trigger,
