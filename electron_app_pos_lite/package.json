@@ -1,6 +1,6 @@
 {
   "name": "zeebroo-pos-lite",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Zeebroo POS Lite — simple Electron POS client (login/sign up → main POS window)",
   "author": {
     "name": "Zeebroo",
