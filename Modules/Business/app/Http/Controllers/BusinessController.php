@@ -74,6 +74,7 @@ class BusinessController extends Controller
         }
 
         $latestDesktopRelease = \Modules\AppConnection\Models\AppRelease::latestStable();
+        $latestLiteRelease = \Modules\AppConnection\Models\AppRelease::latestStable(\Modules\AppConnection\Models\AppRelease::APP_LITE);
 
         $pendingPayment = $business->payments()
             ->where('payment_type', Payment::TYPE_SUBSCRIPTION)
@@ -83,6 +84,7 @@ class BusinessController extends Controller
 
         return view('business::platform-choice', [
             'latestDesktopRelease' => $latestDesktopRelease,
+            'latestLiteRelease' => $latestLiteRelease,
             'currentPackage' => $business->package,
             'detectedOs' => $this->detectOsFromUserAgent($request->userAgent() ?? ''),
             'pendingPayment' => $pendingPayment,
