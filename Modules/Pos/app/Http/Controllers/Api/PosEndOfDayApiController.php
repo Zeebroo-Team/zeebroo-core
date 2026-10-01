@@ -30,7 +30,7 @@ class PosEndOfDayApiController extends Controller
             ->whereIn('payment_method', [Sale::PAYMENT_CASH, Sale::PAYMENT_CARD])
             ->with(['creditAccount'])
             ->orderByDesc('sold_at')
-            ->get(['id', 'sale_number', 'payment_method', 'total', 'sold_at', 'credit_account_id']);
+            ->get(['id', 'sale_number', 'payment_method', 'total', 'gift_card_amount', 'sold_at', 'credit_account_id']);
 
         $byMethod = [
             'cash' => ['count' => 0, 'total' => 0.0],
@@ -40,7 +40,7 @@ class PosEndOfDayApiController extends Controller
             $m = $sale->payment_method;
             if (isset($byMethod[$m])) {
                 $byMethod[$m]['count']++;
-                $byMethod[$m]['total'] = round($byMethod[$m]['total'] + (float) $sale->total, 2);
+                $byMethod[$m]['total'] = round($byMethod[$m]['total'] + $sale->netPaymentAmount(), 2);
             }
         }
 
@@ -48,7 +48,7 @@ class PosEndOfDayApiController extends Controller
             ->where('is_settled', true)
             ->whereNotNull('settled_at')
             ->whereIn('payment_method', [Sale::PAYMENT_CASH, Sale::PAYMENT_CARD])
-            ->selectRaw('DATE(settled_at) as settle_date, COUNT(*) as sale_count, SUM(total) as total_amount')
+            ->selectRaw('DATE(settled_at) as settle_date, COUNT(*) as sale_count, SUM(total - gift_card_amount) as total_amount')
             ->groupBy('settle_date')
             ->orderByDesc('settle_date')
             ->limit(7)
@@ -60,13 +60,13 @@ class PosEndOfDayApiController extends Controller
                 'id'             => (int) $s->id,
                 'sale_number'    => $s->sale_number,
                 'payment_method' => $s->payment_method,
-                'total'          => round((float) $s->total, 2),
+                'total'          => $s->netPaymentAmount(),
                 'sold_at'        => $s->sold_at?->toIso8601String(),
                 'account_label'  => $s->creditAccount?->deductOptionLabel(),
             ])->values()->all(),
             'summary' => [
                 'total_count'  => $unsettled->count(),
-                'total_amount' => round($unsettled->sum(fn ($s) => (float) $s->total), 2),
+                'total_amount' => round($unsettled->sum(fn ($s) => $s->netPaymentAmount()), 2),
                 'by_method'    => $byMethod,
             ],
             'history' => $history->map(fn ($r) => [
@@ -99,14 +99,17 @@ class PosEndOfDayApiController extends Controller
 
         foreach ($unsettled as $sale) {
             try {
-                $this->payments->settle(
-                    $sale,
-                    $business,
-                    $user,
-                    (int) $sale->credit_account_id,
-                    (float) $sale->total,
-                    $sale->payment_method,
-                );
+                // A sale paid fully by gift card brings no new money to settle.
+                if ($sale->netPaymentAmount() > 0.005) {
+                    $this->payments->settle(
+                        $sale,
+                        $business,
+                        $user,
+                        (int) $sale->credit_account_id,
+                        $sale->netPaymentAmount(),
+                        $sale->payment_method,
+                    );
+                }
                 $sale->update(['is_settled' => true, 'settled_at' => now()]);
                 $settled++;
             } catch (ValidationException $e) {

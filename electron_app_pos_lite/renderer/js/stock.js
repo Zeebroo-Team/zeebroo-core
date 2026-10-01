@@ -16,6 +16,7 @@
   let sectionTitleEl, sectionDescEl, sectionBody;
   let detailTitleEl, detailBody, detailFoot;
   let toastEl;
+  let closeModal = null;
 
   let posSettings = {};
   let settingsLoaded = false;
@@ -25,6 +26,8 @@
     { key: 'goods-receive', icon: 'fa-dolly', title: 'Goods Receive', desc: 'Record incoming stock and supplier payments.', accent: '#059669' },
     { key: 'cheques', icon: 'fa-money-check-dollar', title: 'Cheques', desc: 'Track supplier cheque payments and due dates.', accent: '#d97706' },
     { key: 'stock-transfers', icon: 'fa-right-left', title: 'Stock Transfer', desc: 'Move stock between branches.', accent: '#7c3aed' },
+    // Lives in its own dialog (js/giftcards.js) — this tile hands off to it.
+    { key: 'giftcards', icon: 'fa-gift', title: 'Gift Cards', desc: 'Create gift cards, track balances, and usage.', accent: '#db2777', modal: 'openGiftCardsModal' },
   ];
 
   // ── Small shared helpers (same as js/sales.js) ──────────────────────────
@@ -162,6 +165,11 @@
   function openSection(key) {
     closeDetail();
     const meta = SECTIONS.find((s) => s.key === key);
+    if (meta.modal) {
+      if (closeModal) closeModal();
+      window[meta.modal]();
+      return;
+    }
     sectionTitleEl.textContent = t(meta.title);
     sectionDescEl.textContent = t(meta.desc);
     VIEWS[key]();
@@ -1642,7 +1650,9 @@
       el.classList.remove('open');
       setTimeout(() => el.remove(), 200);
       if (returnFocusTo && returnFocusTo.focus) returnFocusTo.focus();
+      closeModal = null;
     }
+    closeModal = close;
 
     function onKey(e) {
       if (e.key !== 'Escape') return;

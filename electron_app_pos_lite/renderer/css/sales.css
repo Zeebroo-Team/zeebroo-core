@@ -129,13 +129,6 @@
   .salm-grid .salm-tile:nth-child(5) { grid-column: auto; }
 }
 
-/* Stock modal's grid has 4 tiles (2 rows of 2), not 5 — the nth-child(4)
-   centering above (tuned for Sales Management's 5 tiles) would otherwise
-   nudge its last tile one column off from true center. */
-@media (min-width: 861px) {
-  #stk-grid .salm-tile:nth-child(4) { grid-column: 3 / span 2; }
-}
-
 .salm-tile {
   position: relative;
   overflow: hidden;

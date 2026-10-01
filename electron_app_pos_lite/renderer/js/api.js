@@ -271,6 +271,19 @@ const API = (() => {
     receiveStockTransfer: (id) => request('POST', `/stock-transfers/${id}/receive`),
     cancelStockTransfer: (id) => request('POST', `/stock-transfers/${id}/cancel`),
 
+    // Gift Cards — a group ("Birthday Gift Card") holds many cards, each with its own code
+    giftCardGroups: (q, status) => request('GET', `/gift-card-groups?q=${encodeURIComponent(q || '')}&status=${status || ''}`),
+    giftCardGroup: (id) => request('GET', `/gift-card-groups/${id}`),
+    updateGiftCardGroup: (id, payload) => request('PATCH', `/gift-card-groups/${id}`, payload),
+    deleteGiftCardGroup: (id) => request('DELETE', `/gift-card-groups/${id}`),
+    addGiftCardsToGroup: (id, quantity) => request('POST', `/gift-card-groups/${id}/cards`, { quantity }),
+    createGiftCards: (payload) => request('POST', '/gift-cards', payload), // payload.quantity = how many cards
+    giftCard: (id) => request('GET', `/gift-cards/${id}`),
+    updateGiftCard: (id, payload) => request('PATCH', `/gift-cards/${id}`, payload),
+    deleteGiftCard: (id) => request('DELETE', `/gift-cards/${id}`),
+    giftCardLookup: (code) => request('GET', `/gift-cards/lookup?code=${encodeURIComponent(code || '')}`),
+    giftCardGenerateCode: () => request('GET', '/gift-cards/generate-code'),
+
     // Reports & Summaries
     todaySummary: () => request('GET', '/today-summary'),
     profitReport: (period) => request('GET', `/profit-report?period=${period || 30}`),
