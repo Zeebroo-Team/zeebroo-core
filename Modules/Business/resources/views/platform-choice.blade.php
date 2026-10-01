@@ -6,97 +6,96 @@
 ])
 
 @section('content')
-<script>document.documentElement.classList.add('business-wizard-active');</script>
+@include('business::get-started.partials.topnav', ['gsActive' => 'platforms'])
 <style>
-    /* This page renders with minimalAppShell + hideNavbar (no sidebar/topbar),
-       so it needs its own full-height flex chain for vertical centering —
-       the dashboard page normally supplies this via the same class toggle. */
-    html.business-wizard-active,html.business-wizard-active body{overflow:hidden;height:100%;}
-    html.business-wizard-active .layout{height:100vh;max-height:100vh;overflow:hidden;}
-    html.business-wizard-active .content{display:flex;flex-direction:column;min-height:0;height:100vh;max-height:100vh;overflow:hidden;margin-left:0!important;border-left:0!important;width:100%!important;}
-    html.business-wizard-active .content-inner{flex:1;min-height:0;display:flex;flex-direction:column;padding:0!important;overflow:hidden;max-width:100%!important;}
-    .plat-topbar{
-        position:relative;display:flex;justify-content:space-between;align-items:center;gap:14px;flex-shrink:0;
-        padding:14px clamp(16px,4vw,32px);border-bottom:1px solid var(--border);
-        background:var(--bg);
-    }
-    .plat-topbar-center{
-        display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:var(--muted);
-        position:absolute;left:50%;transform:translateX(-50%);
-    }
-    .plat-topbar-dot{opacity:.5;}
-    @media(max-width:640px){
-        .plat-topbar{flex-wrap:wrap;row-gap:8px;}
-        .plat-topbar-center{position:static;transform:none;order:3;flex-basis:100%;justify-content:center;}
-    }
-    .plat-logout-form{margin:0;}
-    .plat-logout-btn{
-        display:inline-flex;align-items:center;gap:7px;padding:8px 16px;border-radius:9px;
-        border:1.5px solid var(--border);background:transparent;color:var(--muted);
-        font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;
-        transition:border-color .16s,color .16s,background .16s;
-    }
-    .plat-logout-btn:hover{border-color:#ef4444;color:#ef4444;background:color-mix(in srgb,#ef4444 6%,transparent);}
     .plat-shell{
         position:relative;flex:1;min-height:0;width:100%;overflow:auto;
         display:flex;align-items:center;justify-content:center;
         padding:clamp(24px,5vh,56px) clamp(16px,4vw,32px);box-sizing:border-box;
-        background:var(--bg);
-    }
-    .plat-shell::before{
-        content:'';position:absolute;inset:0;pointer-events:none;
-        background-image:radial-gradient(circle,color-mix(in srgb,var(--primary) 7%,transparent) 1px,transparent 1px);
-        background-size:28px 28px;
+        background:transparent;
     }
     .plat-card{position:relative;z-index:1;width:100%;max-width:1240px;text-align:center;margin:auto;}
-    .plat-logo{display:block;margin:0 auto 18px;height:44px;width:auto;object-fit:contain;}
-    .plat-title{margin:0 0 8px;font-size:clamp(24px,3.2vw,32px);font-weight:800;color:var(--text);letter-spacing:-.025em;}
-    .plat-sub{margin:0 0 18px;font-size:15px;color:var(--muted);line-height:1.55;}
+    .plat-logo{display:block;margin:0 auto 14px;height:38px;width:auto;object-fit:contain;}
+    .plat-greet{
+        display:flex;align-items:center;justify-content:center;gap:8px;margin:0 0 8px;
+        font-size:14.5px;font-weight:500;color:var(--muted);
+        animation:platGreetIn .4s ease both;
+    }
+    .plat-greet-icon{color:var(--gs-gold);font-size:13px;}
+    .plat-greet-name{font-weight:700;color:var(--text);}
+    @keyframes platGreetIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+    @media (prefers-reduced-motion:reduce){.plat-greet{animation:none;}}
+    .plat-title{margin:0 0 8px;font-size:clamp(22px,2.8vw,28px);font-weight:800;color:var(--text);letter-spacing:-.025em;}
+    .plat-sub{margin:0 0 18px;font-size:14px;color:var(--muted);line-height:1.55;}
     .plat-plan-pill{
         display:inline-flex;align-items:center;gap:7px;margin:0 auto 34px;padding:6px 16px;border-radius:999px;
-        background:color-mix(in srgb,var(--primary) 12%,transparent);color:var(--primary);
-        font-size:12.5px;font-weight:600;
+        background:color-mix(in srgb,var(--gs-gold) 8%,transparent);color:#8a6510;
+        border:1px solid color-mix(in srgb,var(--gs-gold) 30%,transparent);
+        -webkit-backdrop-filter:blur(10px) saturate(160%);backdrop-filter:blur(10px) saturate(160%);
+        font-size:12px;font-weight:600;
     }
     .plat-plan-pill strong{font-weight:800;}
-    .plat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;text-align:left;}
+    .plat-plan-pill i{color:var(--gs-gold);}
+    .plat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;text-align:left;}
     @media(max-width:1100px){.plat-grid{grid-template-columns:repeat(2,1fr);}}
     @media(max-width:560px){.plat-grid{grid-template-columns:1fr;}}
     .plat-option{
-        position:relative;display:flex;flex-direction:column;border-radius:16px;
-        border:1.5px solid var(--border);background:var(--card);padding:22px 20px;
-        transition:border-color .18s,box-shadow .18s,transform .18s;
+        position:relative;display:flex;flex-direction:column;border-radius:20px;
+        border:1px solid rgba(0,0,0,.07);background:rgba(255,255,255,.45);padding:10px 10px 18px;
+        -webkit-backdrop-filter:blur(12px) saturate(160%);backdrop-filter:blur(12px) saturate(160%);
+        box-shadow:0 1px 2px rgba(0,0,0,.04),0 8px 24px -16px rgba(0,0,0,.18);
+        transition:border-color .2s,box-shadow .2s,transform .2s;
     }
-    .plat-option--reco{border-color:var(--primary);box-shadow:0 10px 30px -10px color-mix(in srgb,var(--primary) 35%,transparent);}
-    .plat-option--disabled{opacity:.72;}
-    .plat-reco-pill{
-        position:absolute;top:-11px;left:20px;padding:3px 11px;border-radius:999px;
-        background:var(--primary);color:var(--card);font-size:10.5px;font-weight:800;
-        letter-spacing:.04em;text-transform:uppercase;box-shadow:0 3px 10px color-mix(in srgb,var(--primary) 45%,transparent);
+    .plat-option:not(.plat-option--disabled):hover{
+        transform:translateY(-2px);border-color:rgba(0,0,0,.12);
+        box-shadow:0 1px 2px rgba(0,0,0,.04),0 16px 32px -18px rgba(0,0,0,.25);
     }
-    .plat-soon-pill{
-        display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:999px;
-        background:color-mix(in srgb,var(--muted) 14%,transparent);color:var(--muted);
-        font-size:10.5px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;
+    .plat-option--reco,.plat-option--reco:hover{border-color:color-mix(in srgb,var(--gs-gold) 55%,transparent) !important;}
+    .plat-option--disabled{opacity:.7;}
+    /* Text and actions sit inset from the image panel, like an app-store tile. */
+    .plat-option > :not(.plat-media):not(.plat-reco-pill):not(.plat-soon-pill){margin-left:8px;margin-right:8px;}
+    .plat-option > .plat-btn{width:calc(100% - 16px);}
+
+    /* Product shot: inset rounded panel, image fills it. */
+    .plat-media{
+        position:relative;aspect-ratio:16/11;margin:0 0 16px;border-radius:14px;overflow:hidden;
+        background:#f4f4f3;
     }
-    .plat-icon{
-        width:44px;height:44px;border-radius:12px;display:grid;place-items:center;font-size:19px;margin-bottom:14px;
-        background:color-mix(in srgb,var(--primary) 12%,transparent);color:var(--primary);
+    .plat-media-img{
+        display:block;width:100%;height:100%;object-fit:cover;object-position:center;
+        transition:transform .4s ease;
     }
-    .plat-option--disabled .plat-icon{background:color-mix(in srgb,var(--muted) 14%,transparent);color:var(--muted);}
-    .plat-opt-title{margin:0 0 6px;font-size:15.5px;font-weight:800;color:var(--text);letter-spacing:-.01em;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
-    .plat-opt-desc{margin:0 0 16px;font-size:12.5px;color:var(--muted);line-height:1.55;flex:1;}
+    .plat-option:not(.plat-option--disabled):hover .plat-media-img{transform:scale(1.03);}
+    .plat-option--disabled .plat-media-img{filter:grayscale(.7);}
+    @media (prefers-reduced-motion:reduce){.plat-media-img{transition:none;}}
+
+    .plat-reco-pill,.plat-soon-pill{
+        position:absolute;top:20px;left:20px;z-index:2;
+        display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:999px;
+        font-size:10.5px;font-weight:700;letter-spacing:.03em;
+        -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);
+    }
+    .plat-reco-pill{background:var(--gs-gold);color:#fff;}
+    .plat-soon-pill{background:rgba(255,255,255,.85);color:var(--muted);border:1px solid rgba(0,0,0,.06);}
+    .plat-opt-title{
+        margin:0 0 6px;font-size:15px;font-weight:700;color:var(--text);letter-spacing:-.01em;
+        display:flex;align-items:center;gap:8px;
+    }
+    .plat-opt-title i{font-size:14px;color:var(--muted);width:16px;text-align:center;}
+    .plat-option--reco .plat-opt-title i{color:var(--gs-gold);}
+    .plat-opt-desc{margin:0 0 18px;font-size:13px;color:var(--muted);line-height:1.55;flex:1;}
     .plat-btn{
         display:inline-flex;align-items:center;justify-content:center;gap:8px;width:100%;
         padding:11px 16px;border-radius:11px;border:none;cursor:pointer;text-decoration:none;
         background:var(--btn-bg);color:var(--card);font-size:13.5px;font-weight:700;
-        box-shadow:0 4px 14px color-mix(in srgb,var(--primary) 30%,transparent);
+        box-shadow:0 6px 16px -6px rgba(0,0,0,.35);
         transition:opacity .2s,transform .15s;box-sizing:border-box;
     }
     .plat-btn:hover{opacity:.9;transform:translateY(-1px);}
     .plat-btn--outline{
         background:transparent;color:var(--text);border:1.5px solid var(--border);box-shadow:none;
     }
-    .plat-btn--outline:hover{border-color:var(--primary);color:var(--primary);}
+    .plat-btn--outline:hover{border-color:var(--text);color:var(--text);background:var(--gs-soft);}
     .plat-btn--disabled{
         background:color-mix(in srgb,var(--muted) 16%,transparent);color:var(--muted);
         box-shadow:none;cursor:not-allowed;pointer-events:none;
@@ -108,15 +107,9 @@
         color:var(--muted);font-size:11px;font-weight:700;text-decoration:none;
         transition:border-color .16s,color .16s;
     }
-    .plat-os-link:hover{border-color:var(--primary);color:var(--primary);}
+    .plat-os-link:hover{border-color:var(--text);color:var(--text);}
     .plat-os-link[aria-disabled="true"]{opacity:.45;pointer-events:none;}
-    .plat-os-link.is-active{border-color:var(--primary);color:var(--primary);background:color-mix(in srgb,var(--primary) 8%,transparent);}
-    .plat-qr{
-        width:96px;height:96px;margin:0 auto 14px;border-radius:10px;padding:8px;
-        background:#fff;border:1px solid var(--border);
-    }
-    .plat-qr-wrap{display:flex;justify-content:center;}
-    .plat-mobile-body{display:flex;flex-direction:column;}
+    .plat-os-link.is-active{border-color:var(--gs-gold);color:#8a6510;background:color-mix(in srgb,var(--gs-gold) 8%,#fff);}
     .plat-status{
         max-width:640px;margin:0 auto 22px;display:flex;align-items:center;justify-content:center;gap:8px;
         padding:11px 16px;border-radius:11px;font-size:13px;font-weight:600;
@@ -125,41 +118,33 @@
     }
     .plat-payment-alert{
         --pa:#e11d48;
-        position:relative;z-index:1;max-width:760px;margin:0 auto 28px;text-align:left;
-        display:flex;align-items:center;gap:14px;padding:14px 14px 14px 16px;border-radius:14px;
-        background:color-mix(in srgb,var(--pa) 6%,var(--card));
-        border:1px solid color-mix(in srgb,var(--pa) 22%,var(--border));
-        box-shadow:0 8px 24px -14px color-mix(in srgb,var(--pa) 45%,transparent);
-        overflow:hidden;animation:platAlertIn .35s ease both;
+        position:relative;z-index:1;max-width:720px;margin:0 auto 28px;text-align:left;
+        display:flex;align-items:center;gap:12px;padding:10px 10px 10px 16px;border-radius:12px;
+        background:rgba(255,255,255,.5);border:1px solid rgba(0,0,0,.07);
+        -webkit-backdrop-filter:blur(10px) saturate(160%);backdrop-filter:blur(10px) saturate(160%);
+        animation:platAlertIn .3s ease both;
     }
-    .plat-payment-alert::before{
-        content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--pa);
+    .plat-payment-alert-dot{
+        width:8px;height:8px;border-radius:999px;flex-shrink:0;background:var(--pa);
+        box-shadow:0 0 0 4px color-mix(in srgb,var(--pa) 14%,transparent);
     }
-    .plat-payment-alert-icon{
-        width:40px;height:40px;border-radius:11px;flex-shrink:0;display:grid;place-items:center;font-size:17px;
-        background:color-mix(in srgb,var(--pa) 13%,transparent);color:var(--pa);
-    }
-    .plat-payment-alert-body{flex:1;min-width:0;}
-    .plat-payment-alert-title{color:var(--text);font-weight:800;font-size:14px;letter-spacing:-.01em;}
-    .plat-payment-alert-sub{color:var(--muted);font-size:12.5px;line-height:1.5;margin-top:2px;}
+    .plat-payment-alert-body{flex:1;min-width:0;font-size:13px;line-height:1.45;color:var(--muted);}
+    .plat-payment-alert-title{color:var(--text);font-weight:700;}
     .plat-payment-alert-form{margin:0;flex-shrink:0;}
     .plat-payment-alert-btn{
-        display:inline-flex;align-items:center;gap:8px;white-space:nowrap;
-        padding:10px 16px;font-size:12.5px;font-weight:700;border-radius:10px;
-        background:var(--pa);color:#fff;border:none;cursor:pointer;font-family:inherit;
-        box-shadow:0 4px 12px color-mix(in srgb,var(--pa) 35%,transparent);
-        transition:opacity .2s,transform .15s;
+        display:inline-flex;align-items:center;gap:6px;white-space:nowrap;
+        padding:8px 14px;font-size:12.5px;font-weight:600;border-radius:9px;
+        background:var(--text);color:var(--card);border:none;cursor:pointer;font-family:inherit;
+        transition:opacity .2s;
     }
-    .plat-payment-alert-btn:hover{opacity:.92;transform:translateY(-1px);}
-    .plat-payment-alert-amount{
-        padding:2px 8px;border-radius:999px;background:rgba(255,255,255,.2);font-weight:800;font-size:11.5px;
-    }
+    .plat-payment-alert-btn:hover{opacity:.85;}
+    .plat-payment-alert-amount{opacity:.7;font-weight:500;}
     @media(max-width:640px){
-        .plat-payment-alert{flex-wrap:wrap;align-items:flex-start;}
+        .plat-payment-alert{flex-wrap:wrap;}
         .plat-payment-alert-form{flex-basis:100%;}
         .plat-payment-alert-btn{width:100%;justify-content:center;}
     }
-    @keyframes platAlertIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+    @keyframes platAlertIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
 </style>
 @php
     $platOs = [
@@ -172,74 +157,47 @@
     $platMainOsKey = $platDetectedOs ?? collect($platOs)->filter(fn ($os) => $os['url'])->keys()->first();
     $platMainUrl = $platMainOsKey ? $platOs[$platMainOsKey]['url'] : null;
 
-    // Purely decorative "dummy" QR code — a plausible-looking placeholder for
-    // the coming-soon mobile app card, not a real scannable code.
-    $qrSize = 21; $qrCell = 8;
-    $qrModules = [];
-    for ($qy = 0; $qy < $qrSize; $qy++) {
-        for ($qx = 0; $qx < $qrSize; $qx++) {
-            $inFinder = ($qx < 7 && $qy < 7) || ($qx >= $qrSize - 7 && $qy < 7) || ($qx < 7 && $qy >= $qrSize - 7);
-            if ($inFinder) continue;
-            if ((($qx * 13 + $qy * 7 + $qx * $qy) % 5) < 2) {
-                $qrModules[] = [$qx, $qy];
-            }
-        }
-    }
-    $qrFinderAt = function (int $fx, int $fy) use ($qrCell) {
-        $ox = $fx * $qrCell; $oy = $fy * $qrCell;
-        return '<rect x="'.$ox.'" y="'.$oy.'" width="'.($qrCell*7).'" height="'.($qrCell*7).'" fill="#000"/>'
-             . '<rect x="'.($ox+$qrCell).'" y="'.($oy+$qrCell).'" width="'.($qrCell*5).'" height="'.($qrCell*5).'" fill="#fff"/>'
-             . '<rect x="'.($ox+$qrCell*2).'" y="'.($oy+$qrCell*2).'" width="'.($qrCell*3).'" height="'.($qrCell*3).'" fill="#000"/>';
-    };
+    $liteOs = [
+        'windows' => ['label' => 'Windows', 'icon' => 'fa-brands fa-windows', 'url' => $latestLiteRelease?->windows_url],
+        'macos'   => ['label' => 'macOS',   'icon' => 'fa-brands fa-apple',   'url' => $latestLiteRelease?->macos_url],
+        'linux'   => ['label' => 'Linux',   'icon' => 'fa-brands fa-linux',   'url' => $latestLiteRelease?->linux_url],
+    ];
+    $liteMainOsKey = ($liteOs[$detectedOs ?? 'windows']['url'] ?? null)
+        ? ($detectedOs ?? 'windows')
+        : collect($liteOs)->filter(fn ($os) => $os['url'])->keys()->first();
+    $liteMainUrl = $liteMainOsKey ? $liteOs[$liteMainOsKey]['url'] : null;
     $platPlanLabel = $currentPackage
         ? $currentPackage->name . ($currentPackage->is_free ? ' (Free Trial)' : ' plan')
         : 'Free Trial';
+    // Product shots live in public/images/platform/ — a card whose file is missing shows an empty panel.
+    $platImgFiles = [
+        'desktop'  => 'Desktop App.webp',
+        'web'      => 'Web.webp',
+        'mobile'   => 'Mobile App.png',
+        'pos-lite' => 'POS Lite.png',
+    ];
+    $platImg = fn (string $key) => isset($platImgFiles[$key]) && file_exists(public_path('images/platform/' . $platImgFiles[$key]))
+        ? asset('images/platform/' . rawurlencode($platImgFiles[$key]))
+        : null;
+    $platFirstName =\Illuminate\Support\Str::ucfirst(\Illuminate\Support\Str::before(trim((string) auth()->user()?->name), ' '));
 @endphp
-<div class="plat-topbar">
-    <div>
-        <div class="navtitle">Get Started</div>
-        <div class="navmeta">{{ __('Welcome, :name', ['name' => auth()->user()->name ?? __('User')]) }}</div>
-    </div>
-    <div class="plat-topbar-center">
-        <span id="platTopbarDate">{{ now()->format('d M Y') }}</span>
-        <span class="plat-topbar-dot">•</span>
-        <span id="platTopbarTime">{{ now()->format('h:i A') }}</span>
-    </div>
-    <form method="post" action="{{ route('logout') }}" class="plat-logout-form">
-        @csrf
-        <button type="submit" class="plat-logout-btn">
-            <i class="fa fa-right-from-bracket" aria-hidden="true"></i> Logout
-        </button>
-    </form>
-</div>
-<script>
-(function () {
-    var timeEl = document.getElementById('platTopbarTime');
-    if (!timeEl) return;
-    function tick() {
-        timeEl.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    }
-    tick();
-    setInterval(tick, 1000 * 30);
-})();
-</script>
 <div class="plat-shell">
     <div class="plat-card">
         @if($errors->has('payment') || $pendingPayment)
             <div class="plat-payment-alert" role="alert">
-                <div class="plat-payment-alert-icon"><i class="fa fa-credit-card" aria-hidden="true"></i></div>
+                <span class="plat-payment-alert-dot" aria-hidden="true"></span>
                 <div class="plat-payment-alert-body">
-                    <div class="plat-payment-alert-title">{{ $errors->first('payment') ?: 'Your subscription payment needs attention' }}</div>
+                    <span class="plat-payment-alert-title">{{ rtrim($errors->first('payment') ?: 'Your subscription payment needs attention', '.') }}.</span>
                     @if($pendingPayment)
-                        <div class="plat-payment-alert-sub">Your business setup is saved. Complete payment to activate your monthly subscription.</div>
+                        Your setup is saved — complete payment to activate your subscription.
                     @endif
                 </div>
                 @if($pendingPayment)
                     <form method="post" action="{{ route('payment.checkout.resume', $pendingPayment) }}" class="plat-payment-alert-form">
                         @csrf
                         <button type="submit" class="plat-payment-alert-btn">
-                            <i class="fa fa-lock" aria-hidden="true"></i> Complete payment
-                            <span class="plat-payment-alert-amount">{{ $pendingPayment->currencySymbol() }}{{ number_format((float) $pendingPayment->amount, 2) }}/mo</span>
+                            Complete payment
+                            <span class="plat-payment-alert-amount">· {{ $pendingPayment->currencySymbol() }}{{ number_format((float) $pendingPayment->amount, 2) }}/mo</span>
                         </button>
                     </form>
                 @endif
@@ -249,6 +207,10 @@
             <div class="plat-status"><i class="fa fa-circle-check" aria-hidden="true"></i> {{ session('status') }}</div>
         @endif
         <img src="{{ asset('logo.png') }}" alt="Zeebroo" class="plat-logo">
+        <p class="plat-greet">
+            <i class="fa fa-sun plat-greet-icon" id="platGreetIcon" aria-hidden="true"></i>
+            <span><span id="platGreetText">Hello</span>@if($platFirstName), <span class="plat-greet-name">{{ $platFirstName }}</span>@endif</span>
+        </p>
         <h1 class="plat-title">Welcome to Zeebroo!</h1>
         <p class="plat-sub">Your workspace is ready — pick how you'd like to use Zeebroo. You can always switch later.</p>
         <div class="plat-plan-pill"><i class="fa fa-crown" aria-hidden="true"></i> You're on the <strong>{{ $platPlanLabel }}</strong></div>
@@ -257,9 +219,11 @@
             {{-- Desktop app — recommended --}}
             <div class="plat-option plat-option--reco">
                 <span class="plat-reco-pill"><i class="fa fa-star" aria-hidden="true"></i> Recommended</span>
-                <div class="plat-icon"><i class="fa fa-desktop" aria-hidden="true"></i></div>
-                <h3 class="plat-opt-title">Download Zeebroo Desktop App</h3>
-                <p class="plat-opt-desc">Faster performance, offline access and native OS integration — the best experience for daily use.</p>
+                <div class="plat-media">
+                    @if($src = $platImg('desktop'))<img src="{{ $src }}" alt="" class="plat-media-img" loading="lazy">@endif
+                </div>
+                <h3 class="plat-opt-title"><i class="fa fa-desktop" aria-hidden="true"></i> Desktop App</h3>
+                <p class="plat-opt-desc">Fastest performance with offline access — the best choice for daily use.</p>
                 @if($platAnyDesktopUrl)
                     <a href="{{ $platMainUrl }}" class="plat-btn" id="platDesktopBtn" target="_blank" rel="noopener">
                         <i class="fa fa-download" aria-hidden="true"></i>
@@ -281,45 +245,78 @@
 
             {{-- Web platform --}}
             <div class="plat-option">
-                <div class="plat-icon"><i class="fa fa-globe" aria-hidden="true"></i></div>
-                <h3 class="plat-opt-title">Open Zeebroo on the Web</h3>
-                <p class="plat-opt-desc">Jump straight into your workspace in the browser — nothing to install, works anywhere.</p>
+                <div class="plat-media">
+                    @if($src = $platImg('web'))<img src="{{ $src }}" alt="" class="plat-media-img" loading="lazy">@endif
+                </div>
+                <h3 class="plat-opt-title"><i class="fa fa-globe" aria-hidden="true"></i> Web App</h3>
+                <p class="plat-opt-desc">Use Zeebroo in your browser — nothing to install, works anywhere.</p>
                 <a href="{{ route('dashboard') }}" class="plat-btn plat-btn--outline">
                     <i class="fa fa-arrow-right" aria-hidden="true"></i> Continue to Dashboard
                 </a>
             </div>
 
-            {{-- Mobile app — coming soon --}}
-            <div class="plat-option plat-option--disabled">
-                <span class="plat-soon-pill" style="position:absolute;top:-11px;left:20px;"><i class="fa fa-clock" aria-hidden="true"></i> Coming Soon</span>
-                <div class="plat-mobile-body">
-                    <div class="plat-icon"><i class="fa fa-mobile-screen" aria-hidden="true"></i></div>
-                    <h3 class="plat-opt-title">Download Zeebroo Mobile App</h3>
-                    <p class="plat-opt-desc">Manage your business on the go, for iOS and Android.</p>
-                    <div class="plat-qr-wrap">
-                        <svg class="plat-qr" viewBox="0 0 {{ $qrSize * $qrCell }} {{ $qrSize * $qrCell }}" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                            <rect width="100%" height="100%" fill="#fff"/>
-                            {!! $qrFinderAt(0, 0) !!}
-                            {!! $qrFinderAt($qrSize - 7, 0) !!}
-                            {!! $qrFinderAt(0, $qrSize - 7) !!}
-                            @foreach($qrModules as [$mx, $my])
-                                <rect x="{{ $mx * $qrCell }}" y="{{ $my * $qrCell }}" width="{{ $qrCell }}" height="{{ $qrCell }}" fill="#000"/>
-                            @endforeach
-                        </svg>
-                    </div>
-                    <span class="plat-btn plat-btn--disabled"><i class="fa fa-qrcode" aria-hidden="true"></i> Scan when available</span>
+            {{-- Mobile app — store links not published yet, placeholders point to "#" --}}
+            <div class="plat-option">
+                <div class="plat-media">
+                    @if($src = $platImg('mobile'))<img src="{{ $src }}" alt="" class="plat-media-img" loading="lazy">@endif
+                </div>
+                <h3 class="plat-opt-title"><i class="fa fa-mobile-screen" aria-hidden="true"></i> Mobile App</h3>
+                <p class="plat-opt-desc">Manage your business on the go, for iOS and Android.</p>
+                <a href="#" class="plat-btn plat-btn--outline">
+                    <i class="fa fa-download" aria-hidden="true"></i> Download Mobile App
+                </a>
+                <div class="plat-os-row">
+                    <a href="#" class="plat-os-link"><i class="fa-brands fa-android" aria-hidden="true"></i> Android</a>
+                    <a href="#" class="plat-os-link"><i class="fa-brands fa-apple" aria-hidden="true"></i> iOS</a>
                 </div>
             </div>
 
-            {{-- Zeebroo Lite — coming soon --}}
-            <div class="plat-option plat-option--disabled">
-                <span class="plat-soon-pill" style="position:absolute;top:-11px;left:20px;"><i class="fa fa-clock" aria-hidden="true"></i> Coming Soon</span>
-                <div class="plat-icon"><i class="fa fa-feather" aria-hidden="true"></i></div>
-                <h3 class="plat-opt-title">Zeebroo POS Light</h3>
-                <p class="plat-opt-desc">A lightweight version for low-end devices — is on its way.</p>
-                <span class="plat-btn plat-btn--disabled"><i class="fa fa-clock" aria-hidden="true"></i> Notify me</span>
-            </div>
+            {{-- Zeebroo POS Lite — latest stable release from the admin panel --}}
+            @if($liteMainUrl)
+                <div class="plat-option">
+                    <div class="plat-media">
+                        @if($src = $platImg('pos-lite'))<img src="{{ $src }}" alt="" class="plat-media-img" loading="lazy">@endif
+                    </div>
+                    <h3 class="plat-opt-title"><i class="fa fa-feather" aria-hidden="true"></i> POS Lite</h3>
+                    <p class="plat-opt-desc">A lightweight POS for low-end devices — fast checkout, returns and day-end closing.</p>
+                    <a href="{{ $liteMainUrl }}" class="plat-btn plat-btn--outline" target="_blank" rel="noopener">
+                        <i class="fa fa-download" aria-hidden="true"></i>
+                        Download for {{ $liteOs[$liteMainOsKey]['label'] }}
+                    </a>
+                    <div class="plat-os-row">
+                        @foreach($liteOs as $osKey => $os)
+                            <a href="{{ $os['url'] ?? '#' }}" target="_blank" rel="noopener"
+                               class="plat-os-link{{ $osKey === $liteMainOsKey ? ' is-active' : '' }}"
+                               aria-disabled="{{ $os['url'] ? 'false' : 'true' }}">
+                                <i class="{{ $os['icon'] }}" aria-hidden="true"></i> {{ $os['label'] }}
+                            </a>
+                        @endforeach
+                    </div>
+                </div>
+            @else
+                <div class="plat-option plat-option--disabled">
+                    <span class="plat-soon-pill"><i class="fa fa-clock" aria-hidden="true"></i> Coming Soon</span>
+                    <div class="plat-media">
+                        @if($src = $platImg('pos-lite'))<img src="{{ $src }}" alt="" class="plat-media-img" loading="lazy">@endif
+                    </div>
+                    <h3 class="plat-opt-title"><i class="fa fa-feather" aria-hidden="true"></i> POS Lite</h3>
+                    <p class="plat-opt-desc">A lightweight POS for low-end devices — on its way.</p>
+                    <span class="plat-btn plat-btn--disabled"><i class="fa fa-clock" aria-hidden="true"></i> Notify me</span>
+                </div>
+            @endif
         </div>
     </div>
 </div>
+<script>
+    (function () {
+        // Greeting uses the viewer's local time, not the server's.
+        var el = document.getElementById('platGreetText');
+        if (!el) return;
+        var h = new Date().getHours();
+        var part = h < 12 ? ['Good morning', 'fa-sun'] : (h < 17 ? ['Good afternoon', 'fa-cloud-sun'] : ['Good evening', 'fa-moon']);
+        el.textContent = part[0];
+        var icon = document.getElementById('platGreetIcon');
+        if (icon) icon.className = 'fa ' + part[1] + ' plat-greet-icon';
+    })();
+</script>
 @endsection

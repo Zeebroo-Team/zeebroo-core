@@ -49,18 +49,23 @@ class BillingController extends Controller
 
     private function changeCancellation(Request $request, bool $cancel): RedirectResponse
     {
+        // The Get Started billing page posts here too and wants to land back on itself.
+        $returnRoute = $request->input('return_to') === 'get-started'
+            ? 'business.get-started.billing'
+            : 'payment.billing.index';
+
         $business = Business::currentForNavbar($request->user());
         if (! $business) {
-            return redirect()->route('payment.billing.index');
+            return redirect()->route($returnRoute);
         }
 
         try {
             $this->cancellation->change($business, $request->user(), $cancel);
         } catch (SubscriptionActionException $e) {
-            return redirect()->route('payment.billing.index')->withErrors(['payment' => $e->getMessage()]);
+            return redirect()->route($returnRoute)->withErrors(['payment' => $e->getMessage()]);
         }
 
-        return redirect()->route('payment.billing.index')->with('status', $cancel
+        return redirect()->route($returnRoute)->with('status', $cancel
             ? 'Your subscription is set to cancel at the end of the current billing period.'
             : 'Your subscription will now renew as normal — the scheduled cancellation was undone.');
     }

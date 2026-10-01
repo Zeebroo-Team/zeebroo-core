@@ -7,6 +7,7 @@ use Modules\Business\Http\Controllers\BusinessGoogleBusinessProfileController;
 use Modules\Business\Http\Controllers\BusinessLogoGenerationController;
 use Modules\Business\Http\Controllers\BusinessRoleController;
 use Modules\Business\Http\Controllers\BusinessUserController;
+use Modules\Business\Http\Controllers\GetStartedController;
 
 Route::middleware(['auth'])->group(function (): void {
     Route::get('/business/map', [BusinessController::class, 'map'])->name('business.map');
@@ -57,6 +58,12 @@ Route::middleware(['auth'])->group(function (): void {
 
     Route::get('/business/get-started', [BusinessController::class, 'platformChoice'])
         ->name('business.platform-choice');
+    Route::get('/business/get-started/community', [GetStartedController::class, 'community'])
+        ->name('business.get-started.community');
+    Route::get('/business/get-started/support', [GetStartedController::class, 'support'])
+        ->name('business.get-started.support');
+    Route::get('/business/get-started/billing', [GetStartedController::class, 'billing'])
+        ->name('business.get-started.billing');
 
     Route::get('/branches', [BranchController::class, 'index'])->name('business.branches.index');
     Route::post('/branches', [BranchController::class, 'store'])->name('business.branches.store');
