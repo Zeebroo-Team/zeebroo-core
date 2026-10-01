@@ -64,6 +64,7 @@ class PosCheckoutApiController extends Controller
             'pos_counter_id'                 => ['nullable', 'integer', 'min:1'],
             'gift_card_code'                 => ['nullable', 'string', 'max:40'],
             'gift_card_amount'               => ['nullable', 'required_with:gift_card_code', 'numeric', 'min:0.01'],
+            'coupon_code'                    => ['nullable', 'string', 'max:40'],
         ]);
 
         $branchId = $validated['branch_id']
@@ -127,6 +128,7 @@ class PosCheckoutApiController extends Controller
                 isset($validated['discount_flat']) ? (float) $validated['discount_flat'] : null,
                 $validated['gift_card_code'] ?? null,
                 isset($validated['gift_card_amount']) ? (float) $validated['gift_card_amount'] : null,
+                $validated['coupon_code'] ?? null,
             );
         } catch (ValidationException $e) {
             return response()->json([

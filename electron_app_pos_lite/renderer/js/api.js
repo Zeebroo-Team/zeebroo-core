@@ -284,6 +284,15 @@ const API = (() => {
     giftCardLookup: (code) => request('GET', `/gift-cards/lookup?code=${encodeURIComponent(code || '')}`),
     giftCardGenerateCode: () => request('GET', '/gift-cards/generate-code'),
 
+    // Coupons — one shared code per coupon, usable `quantity` times
+    coupons: (q, status) => request('GET', `/coupons?q=${encodeURIComponent(q || '')}&status=${status || ''}`),
+    coupon: (id) => request('GET', `/coupons/${id}`),
+    createCoupon: (payload) => request('POST', '/coupons', payload),
+    updateCoupon: (id, payload) => request('PATCH', `/coupons/${id}`, payload),
+    deleteCoupon: (id) => request('DELETE', `/coupons/${id}`),
+    couponLookup: (code) => request('GET', `/coupons/lookup?code=${encodeURIComponent(code || '')}`),
+    couponGenerateCode: () => request('GET', '/coupons/generate-code'),
+
     // Reports & Summaries
     todaySummary: () => request('GET', '/today-summary'),
     profitReport: (period) => request('GET', `/profit-report?period=${period || 30}`),

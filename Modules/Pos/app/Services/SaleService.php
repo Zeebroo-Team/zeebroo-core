@@ -33,6 +33,7 @@ class SaleService
         private readonly CustomerSubscriptionService $subscriptions,
         private readonly ProductRentalService $rentals,
         private readonly GiftCardService $giftCards,
+        private readonly CouponService $coupons,
     ) {
     }
 
@@ -234,6 +235,7 @@ class SaleService
         ?float $discountFlat = null,
         ?string $giftCardCode = null,
         ?float $giftCardAmount = null,
+        ?string $couponCode = null,
     ): Sale {
         $rawProductItems = array_values(array_filter(
             $items,
@@ -267,7 +269,7 @@ class SaleService
         $activeDiscounts = $this->discountService->activeForProducts($business, $cartProductIds)
             ->concat($this->campaignService->activeForProducts($business, $cartProductIds));
 
-        $sale = DB::transaction(function () use ($business, $user, $productLines, $serviceLines, $paymentMethod, $creditAccountId, $amountPaid, $notes, $channel, $discountPercent, $discountFlat, $amountTendered, $customerId, $deferSettlement, $branchId, $branchStockSeparate, $activeDiscounts, $scheduledAt, $posCounterId, $creditDueDate, $giftCardCode, $giftCardAmount) {
+        $sale = DB::transaction(function () use ($business, $user, $productLines, $serviceLines, $paymentMethod, $creditAccountId, $amountPaid, $notes, $channel, $discountPercent, $discountFlat, $amountTendered, $customerId, $deferSettlement, $branchId, $branchStockSeparate, $activeDiscounts, $scheduledAt, $posCounterId, $creditDueDate, $giftCardCode, $giftCardAmount, $couponCode) {
             $sale = $business->sales()->create([
                 'branch_id'       => $branchId,
                 'pos_counter_id'  => $posCounterId,
@@ -500,7 +502,21 @@ class SaleService
                     ? round($subtotal * ($discountPercentValue / 100), 2)
                     : 0.0;
             }
-            $total = round(max(0, $subtotal - $discountAmount), 2);
+            // Coupon is taken off what's left after the order discount; the server
+            // works the amount out itself so the client can't inflate it.
+            $coupon = null;
+            $couponDiscount = 0.0;
+            if (filled($couponCode)) {
+                [$coupon, $couponDiscount] = $this->coupons->redeemForSale(
+                    $business,
+                    (string) $couponCode,
+                    max(0, $subtotal - $discountAmount),
+                    $sale,
+                    $user,
+                );
+            }
+
+            $total = round(max(0, $subtotal - $discountAmount - $couponDiscount), 2);
             $tendered = null;
             $change = null;
 
@@ -541,6 +557,8 @@ class SaleService
                 'subtotal' => $subtotal,
                 'discount_percent' => $discountPercentValue,
                 'discount_amount' => $discountAmount,
+                'coupon_discount' => $couponDiscount,
+                'pos_coupon_id' => $coupon?->id,
                 'total' => $total,
                 'amount_paid' => $paid,
                 'gift_card_amount' => $giftApplied,
@@ -616,6 +634,7 @@ class SaleService
             }
 
             $this->giftCards->refundForSale($sale);
+            $this->coupons->reverseForSale($sale);
 
             $sale->update(['status' => Sale::STATUS_VOID]);
 

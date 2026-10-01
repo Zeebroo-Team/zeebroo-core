@@ -1030,7 +1030,9 @@ document.querySelectorAll('.modal-backdrop [data-close]').forEach((btn) => {
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
   const giftCheck = document.getElementById('gift-check-modal');
-  if (giftCheck.classList.contains('show')) giftCheck.classList.remove('show');
+  const couponCheck = document.getElementById('coupon-check-modal');
+  if (couponCheck.classList.contains('show')) couponCheck.classList.remove('show');
+  else if (giftCheck.classList.contains('show')) giftCheck.classList.remove('show');
   else if (rentalModal.classList.contains('show')) closeRentalModal();
   else if (dynamicModal.classList.contains('show')) closeDynamicModal();
   else if (customerPickerModal.classList.contains('show')) closeCustomerPickerModal();
@@ -1336,6 +1338,8 @@ function buildReceiptData(sale) {
     subtotal: sale.subtotal,
     discountPercent: sale.discount_percent,
     discountAmount: sale.discount_amount,
+    couponDiscount: Number(sale.coupon_discount) || 0,
+    couponCode: sale.coupon?.code || '',
     total: sale.total,
     amountPaid: sale.amount_paid,
     amountTendered: sale.amount_tendered,
@@ -1378,10 +1382,15 @@ function renderBillHtml(data) {
   }).join('');
 
   let totals = '';
-  if (data.discountAmount > 0.001) {
+  if (data.discountAmount > 0.001 || data.couponDiscount > 0.001) {
     totals += `<div class="rd-row"><span>${t('Subtotal')}</span><span>${esc(money(data.subtotal))}</span></div>`;
+  }
+  if (data.discountAmount > 0.001) {
     const pctLabel = data.discountPercent ? ` (${data.discountPercent}%)` : '';
     totals += `<div class="rd-row"><span>${t('Discount')}${pctLabel}</span><span>&minus;${esc(money(data.discountAmount))}</span></div>`;
+  }
+  if (data.couponDiscount > 0.001) {
+    totals += `<div class="rd-row"><span>${t('Coupon')}${data.couponCode ? ` ${esc(data.couponCode)}` : ''}</span><span>&minus;${esc(money(data.couponDiscount))}</span></div>`;
   }
   totals += `<div class="rd-row rd-total"><span>${t('Total')}</span><span>${esc(money(data.total))}</span></div>`;
   if (data.giftCardAmount > 0.001) {
@@ -1488,6 +1497,9 @@ function buildInvoiceDocument(data) {
     const pctLabel = data.discountPercent ? ` (${data.discountPercent}%)` : '';
     totalsLines.push({ label: esc(t('Discount') + pctLabel), value: '−' + esc(money(data.discountAmount)), color: '#ef4444' });
   }
+  if (data.couponDiscount > 0.001) {
+    totalsLines.push({ label: esc(`${t('Coupon')} ${data.couponCode}`.trim()), value: '−' + esc(money(data.couponDiscount)), color: '#ef4444' });
+  }
   if (data.giftCardAmount > 0.001) {
     totalsLines.push({ label: esc(`${t('Paid by gift card')} ${data.giftCardCode}`.trim()), value: esc(money(data.giftCardAmount)) });
   }
@@ -1588,9 +1600,96 @@ function currentOrderTotals() {
   const itemDiscountTotal = rawSubtotal - subtotal;
   const discountAmount = discountAmountFor(subtotal);
   const discountValue = Math.max(0, Number(discountInput.value) || 0);
-  const total = subtotal - discountAmount;
-  return { itemCount, rawSubtotal, subtotal, itemDiscountTotal, discountType, discountValue, discountAmount, total };
+  const couponAmount = couponDiscountFor(subtotal - discountAmount);
+  const total = subtotal - discountAmount - couponAmount;
+  return { itemCount, rawSubtotal, subtotal, itemDiscountTotal, discountType, discountValue, discountAmount, couponAmount, total };
 }
+
+// ── Coupon at checkout ───────────────────────────────────────────────────
+// One shared code per coupon; it takes a % or flat amount off the bill after
+// the order discount. The server works the discount out again and uses up one
+// of the coupon's uses (Modules/Pos CouponService::redeemForSale).
+let checkoutCoupon = null; // { code, name, discount_type, discount_value }
+
+function couponDiscountFor(amount) {
+  if (!checkoutCoupon) return 0;
+  const base = Math.max(0, amount);
+  const v = Number(checkoutCoupon.discount_value) || 0;
+  const d = checkoutCoupon.discount_type === 'percent' ? base * Math.min(100, Math.max(0, v)) / 100 : v;
+  return Math.round(Math.min(base, Math.max(0, d)) * 100) / 100;
+}
+
+function couponOffText(c) {
+  return c.discount_type === 'percent' ? t('{pct}% off', { pct: Number(c.discount_value) }) : t('{amount} off', { amount: money(c.discount_value) });
+}
+
+function couponBlockedReason(c) {
+  return {
+    expired: t('expired on {date}', { date: c.expires_at }),
+    scheduled: t('is not valid until {date}', { date: c.valid_from }),
+    used: t('has been fully used — no uses left'),
+    disabled: t('is disabled'),
+  }[c.status] || t('cannot be used');
+}
+
+function renderCheckoutCoupon() {
+  const { couponAmount } = currentOrderTotals();
+  const entryOpen = !document.getElementById('co-cp-entry').hidden;
+  document.getElementById('co-cp-toggle').hidden = !!checkoutCoupon || entryOpen;
+  document.getElementById('co-cp-applied').hidden = !checkoutCoupon;
+  if (!checkoutCoupon) return;
+  document.getElementById('co-cp-applied-code').textContent = checkoutCoupon.code;
+  document.getElementById('co-cp-applied-sub').textContent = `${checkoutCoupon.name} · ${couponOffText(checkoutCoupon)}`;
+  document.getElementById('co-cp-applied-amt').textContent = `−${money(couponAmount)}`;
+}
+
+function showCouponEntry(show) {
+  document.getElementById('co-cp-entry').hidden = !show;
+  if (show) {
+    document.getElementById('co-cp-code').value = '';
+    setTimeout(() => document.getElementById('co-cp-code').focus(), 30);
+  }
+  renderCheckoutCoupon();
+}
+
+function applyCouponToCheckout(c) {
+  checkoutCoupon = { code: c.code, name: c.name, discount_type: c.discount_type, discount_value: Number(c.discount_value) };
+  document.getElementById('co-cp-entry').hidden = true;
+  refreshCheckoutSummary();
+  amountReceivedInput.value = amountDueAfterGiftCard().toFixed(2);
+  updateCheckoutTender();
+}
+
+async function submitCouponCode() {
+  const input = document.getElementById('co-cp-code');
+  const code = input.value.trim();
+  if (!code) { input.focus(); return; }
+  const btn = document.getElementById('co-cp-apply');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+  const res = await API.couponLookup(code);
+  btn.disabled = false;
+  btn.textContent = t('Apply');
+  if (res.status !== 200) { showToast(t(res.body?.message || 'Coupon not found.'), 'error'); return; }
+  const c = res.body.data;
+  if (!c.is_redeemable) { showToast(t('Coupon {code} {reason}.', { code: c.code, reason: couponBlockedReason(c) }), 'error'); return; }
+  applyCouponToCheckout(c);
+  showToast(t('Coupon applied — {amount} off', { amount: money(currentOrderTotals().couponAmount) }), 'success');
+}
+
+document.getElementById('co-cp-toggle').addEventListener('click', () => showCouponEntry(true));
+document.getElementById('co-cp-cancel').addEventListener('click', () => showCouponEntry(false));
+document.getElementById('co-cp-apply').addEventListener('click', submitCouponCode);
+document.getElementById('co-cp-code').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); submitCouponCode(); }
+  if (e.key === 'Escape') { e.stopPropagation(); showCouponEntry(false); }
+});
+document.getElementById('co-cp-remove').addEventListener('click', () => {
+  checkoutCoupon = null;
+  refreshCheckoutSummary();
+  amountReceivedInput.value = amountDueAfterGiftCard().toFixed(2);
+  updateCheckoutTender();
+});
 
 function renderOrderItemsTable() {
   orderItemsBodyEl.innerHTML = cart.map((c) => {
@@ -1737,6 +1836,7 @@ document.getElementById('co-gc-remove').addEventListener('click', () => {
 function updateCheckoutTender() {
   const total = amountDueAfterGiftCard();
   coAmountDueEl.textContent = money(total);
+  renderCheckoutCoupon();
   renderCheckoutGiftCard();
 
   const received = parseFloat(amountReceivedInput.value) || 0;
@@ -1789,6 +1889,8 @@ function openCheckoutModal() {
   checkoutNoteInput.value = '';
   checkoutGiftCard = null;
   document.getElementById('co-gc-entry').hidden = true;
+  checkoutCoupon = null;
+  document.getElementById('co-cp-entry').hidden = true;
 
   renderOrderItemsTable();
   refreshCheckoutCustomerBox();
@@ -1802,6 +1904,11 @@ function openCheckoutModal() {
 
 function closeCheckoutModal() {
   checkoutModal.classList.remove('show');
+  // A coupon only lives for one checkout — drop it so the cart total goes back to normal.
+  if (checkoutCoupon) {
+    checkoutCoupon = null;
+    refreshCheckoutSummary();
+  }
 }
 
 checkoutBtn.addEventListener('click', openCheckoutModal);
@@ -1851,6 +1958,7 @@ checkoutCompleteBtn.addEventListener('click', async () => {
       ...(selectedCustomer ? { pos_customer_id: selectedCustomer.id } : {}),
       ...(paymentMethod === 'cash' ? { amount_tendered: amountTendered } : {}),
       ...(checkoutGiftCard && giftAmount > 0 ? { gift_card_code: checkoutGiftCard.code, gift_card_amount: giftAmount } : {}),
+      ...(checkoutCoupon ? { coupon_code: checkoutCoupon.code } : {}),
       ...(notes ? { notes } : {}),
     });
 
@@ -1977,6 +2085,92 @@ giftCheckRunBtn.addEventListener('click', runGiftCheck);
 giftCheckCodeInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') runGiftCheck(); });
 giftCheckModal.querySelector('[data-close="gift-check-modal"]').addEventListener('click', closeGiftCheckModal);
 giftCheckModal.addEventListener('mousedown', (e) => { if (e.target === giftCheckModal) closeGiftCheckModal(); });
+
+// ── Coupon check (cart header button) ────────────────────────────────────
+const couponCheckModal = document.getElementById('coupon-check-modal');
+const couponCheckCodeInput = document.getElementById('coupon-check-code');
+const couponCheckResultEl = document.getElementById('coupon-check-result');
+const couponCheckRunBtn = document.getElementById('coupon-check-run');
+
+function openCouponCheckModal() {
+  couponCheckCodeInput.value = '';
+  couponCheckResultEl.innerHTML = '';
+  couponCheckModal.classList.add('show');
+  setTimeout(() => couponCheckCodeInput.focus(), 60);
+}
+
+function closeCouponCheckModal() {
+  couponCheckModal.classList.remove('show');
+}
+
+function renderCouponCheckResult(c) {
+  let until = t('No expiry');
+  if (c.expires_at) {
+    const days = giftDaysFromToday(c.expires_at);
+    const rel = days > 0 ? t(days === 1 ? '{n} day left' : '{n} days left', { n: days })
+      : days === 0 ? t('last day today')
+      : t(days === -1 ? '{n} day ago' : '{n} days ago', { n: -days });
+    until = `${esc(c.expires_at)} <small>(${esc(rel)})</small>`;
+  }
+  const uses = c.redemptions || [];
+  const canApply = c.is_redeemable && cart.length > 0;
+
+  const rows = [
+    [t('Coupon'), esc(c.name)],
+    [t('Code'), `<span class="gc-mono">${esc(c.code)}</span>`],
+    [t('Discount'), esc(couponOffText(c))],
+    [t('Uses left'), `${c.remaining} <small>${esc(t('of {n}', { n: c.quantity }))}</small>`],
+    [t('Valid from'), c.valid_from ? esc(c.valid_from) : '—'],
+    [t('Valid until'), until],
+  ];
+
+  couponCheckResultEl.innerHTML = `
+    <div class="gc-verdict ${c.is_redeemable ? 'ok' : 'bad'}">
+      <i class="fa-solid ${c.is_redeemable ? 'fa-circle-check' : 'fa-circle-xmark'}"></i>
+      <div class="gc-verdict-body">
+        <div class="gc-verdict-title">${c.is_redeemable ? t('Valid — can be used') : t('Cannot be used')}</div>
+        <div class="gc-verdict-sub">${c.is_redeemable ? t('Discount on this bill') : esc(t('This coupon {reason}.', { reason: couponBlockedReason(c) }))}</div>
+      </div>
+      <div class="gc-verdict-amt">${esc(couponOffText(c))}</div>
+    </div>
+    <div class="gc-check-grid">
+      ${rows.map(([k, v]) => `<div class="gc-check-k">${k}</div><div class="gc-check-v">${v}</div>`).join('')}
+    </div>
+    <details class="gc-check-history">
+      <summary><i class="fa-solid fa-clock-rotate-left"></i> ${t('Usage history')} (${uses.length})</summary>
+      ${uses.map((x) => `
+        <div class="gc-hist-row">
+          <span>${esc(x.sale_number || t('Sale'))}${x.reversed ? ` · ${t('voided')}` : ''}<small>${esc(fmtGiftDateTime(x.created_at))}</small></span>
+          <span class="${x.reversed ? 'pos' : 'neg'}">${x.reversed ? '' : '−'}${esc(money(x.discount_amount))}</span>
+        </div>`).join('')}
+    </details>
+    ${canApply ? `<button type="button" class="checkout-btn gc-use-btn cp-use-btn" id="coupon-check-use"><i class="fa-solid fa-cash-register"></i> ${t('Use for this sale')}</button>` : ''}`;
+
+  document.getElementById('coupon-check-use')?.addEventListener('click', () => {
+    closeCouponCheckModal();
+    if (openCheckoutModal()) applyCouponToCheckout(c);
+  });
+}
+
+async function runCouponCheck() {
+  const code = couponCheckCodeInput.value.trim();
+  if (!code) { couponCheckCodeInput.focus(); return; }
+  couponCheckRunBtn.disabled = true;
+  couponCheckResultEl.innerHTML = `<div class="gc-check-msg"><i class="fa-solid fa-spinner fa-spin"></i> ${t('Checking…')}</div>`;
+  const res = await API.couponLookup(code);
+  couponCheckRunBtn.disabled = false;
+  if (res.status !== 200) {
+    couponCheckResultEl.innerHTML = `<div class="gc-check-msg err"><i class="fa-solid fa-circle-exclamation"></i> ${esc(t(res.body?.message || 'Coupon not found.'))}</div>`;
+    return;
+  }
+  renderCouponCheckResult(res.body.data);
+}
+
+document.getElementById('coupon-check-btn').addEventListener('click', openCouponCheckModal);
+couponCheckRunBtn.addEventListener('click', runCouponCheck);
+couponCheckCodeInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') runCouponCheck(); });
+couponCheckModal.querySelector('[data-close="coupon-check-modal"]').addEventListener('click', closeCouponCheckModal);
+couponCheckModal.addEventListener('mousedown', (e) => { if (e.target === couponCheckModal) closeCouponCheckModal(); });
 
 // ── Cash Drawer: Open Shift ──────────────────────────────────────────────
 // Checked once when the POS screen loads. If today's opening float hasn't

@@ -49,6 +49,7 @@
         <div class="cart-header">
           <span><i class="fa-solid fa-cart-shopping"></i>Cart</span>
           <button type="button" class="cart-gift-btn" id="gift-check-btn" title="Check gift card balance"><i class="fa-solid fa-gift"></i> Gift Card</button>
+          <button type="button" class="cart-gift-btn cart-coupon-btn" id="coupon-check-btn" title="Check coupon"><i class="fa-solid fa-ticket"></i> Coupon</button>
         </div>
         <div class="cart-customer-box checkout-customer-box" id="cart-customer-box">
           <div id="cart-customer-empty">
@@ -282,6 +283,25 @@
             <button type="button" class="pm-btn" data-method="credit"><i class="fa-solid fa-file-invoice-dollar"></i> Credit</button>
           </div>
 
+          <!-- Coupon: a % or flat discount on the bill, applied before any gift card -->
+          <div class="co-gc co-cp" id="co-cp">
+            <button type="button" class="co-gc-toggle" id="co-cp-toggle"><i class="fa-solid fa-ticket"></i> Apply coupon</button>
+            <div class="co-gc-entry" id="co-cp-entry" hidden>
+              <input type="text" id="co-cp-code" class="co-gc-input" placeholder="Coupon code" autocomplete="off" />
+              <button type="button" class="co-gc-apply" id="co-cp-apply">Apply</button>
+              <button type="button" class="co-gc-x" id="co-cp-cancel" title="Cancel"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="co-gc-applied" id="co-cp-applied" hidden>
+              <i class="fa-solid fa-ticket co-gc-icon"></i>
+              <div class="co-gc-info">
+                <div class="co-gc-code" id="co-cp-applied-code"></div>
+                <div class="co-gc-sub" id="co-cp-applied-sub"></div>
+              </div>
+              <strong class="co-gc-amt" id="co-cp-applied-amt"></strong>
+              <button type="button" class="co-gc-x" id="co-cp-remove" title="Remove coupon"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+          </div>
+
           <!-- Gift card: covers part (or all) of the total; the payment method pays the rest -->
           <div class="co-gc" id="co-gc">
             <button type="button" class="co-gc-toggle" id="co-gc-toggle"><i class="fa-solid fa-gift"></i> Pay with gift card</button>
@@ -310,21 +330,18 @@
               <div class="due-box"><span>Change</span><strong id="co-change" class="change-value">0.00</strong></div>
             </div>
 
+            <!-- 4-column pad: Exact / Clear live in the right column so there's no separate actions row -->
             <div class="numpad" id="numpad">
-              <button type="button" data-key="7">7</button><button type="button" data-key="8">8</button><button type="button" data-key="9">9</button>
-              <button type="button" data-key="4">4</button><button type="button" data-key="5">5</button><button type="button" data-key="6">6</button>
-              <button type="button" data-key="1">1</button><button type="button" data-key="2">2</button><button type="button" data-key="3">3</button>
-              <button type="button" data-key=".">.</button><button type="button" data-key="0">0</button><button type="button" class="numpad-back" data-key="back"><i class="fa-solid fa-delete-left"></i></button>
-            </div>
-            <div class="numpad-actions">
-              <button type="button" class="ghost-btn" id="exact-amount-btn">Exact amount</button>
-              <button type="button" class="ghost-btn danger" id="clear-amount-btn">Clear</button>
+              <button type="button" data-key="7">7</button><button type="button" data-key="8">8</button><button type="button" data-key="9">9</button><button type="button" class="numpad-back" data-key="back"><i class="fa-solid fa-delete-left"></i></button>
+              <button type="button" data-key="4">4</button><button type="button" data-key="5">5</button><button type="button" data-key="6">6</button><button type="button" class="numpad-action numpad-clear" id="clear-amount-btn">Clear</button>
+              <button type="button" data-key="1">1</button><button type="button" data-key="2">2</button><button type="button" data-key="3">3</button><button type="button" class="numpad-action numpad-exact" id="exact-amount-btn">Exact</button>
+              <button type="button" data-key=".">.</button><button type="button" class="numpad-zero" data-key="0">0</button>
             </div>
           </div>
 
           <div class="field note-field">
             <label for="checkout-note-input">Note</label>
-            <textarea id="checkout-note-input" rows="2" placeholder="Add a note…"></textarea>
+            <textarea id="checkout-note-input" rows="1" placeholder="Add a note…"></textarea>
           </div>
 
           <button type="button" class="checkout-complete-btn" id="checkout-complete-btn">
@@ -443,6 +460,23 @@
           <button type="button" class="ghost-btn primary" id="gift-check-run"><i class="fa-solid fa-magnifying-glass"></i> Check</button>
         </div>
         <div id="gift-check-result"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Coupon check: opened from the cart header's Coupon button -->
+  <div class="modal-backdrop" id="coupon-check-modal">
+    <div class="modal modal-gift-check">
+      <div class="modal-head">
+        <h2><i class="fa-solid fa-ticket"></i> Check Coupon</h2>
+        <button type="button" class="modal-close" data-close="coupon-check-modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="gc-check-row">
+          <input type="text" id="coupon-check-code" class="co-gc-input" placeholder="Enter or scan the coupon code" autocomplete="off" />
+          <button type="button" class="ghost-btn primary" id="coupon-check-run"><i class="fa-solid fa-magnifying-glass"></i> Check</button>
+        </div>
+        <div id="coupon-check-result"></div>
       </div>
     </div>
   </div>

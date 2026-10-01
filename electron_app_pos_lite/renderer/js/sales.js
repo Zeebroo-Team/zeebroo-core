@@ -303,6 +303,7 @@
       <div class="salm-totals">
         <div class="salm-view-row"><span>${t('Subtotal')}</span><span>${money(s.subtotal)}</span></div>
         ${parseFloat(s.discount_amount || 0) > 0 ? `<div class="salm-view-row"><span>${t('Discount')}</span><span>-${money(s.discount_amount)}</span></div>` : ''}
+        ${parseFloat(s.coupon_discount || 0) > 0 ? `<div class="salm-view-row"><span>${t('Coupon')}${s.coupon?.code ? ` (${esc(s.coupon.code)})` : ''}</span><span>-${money(s.coupon_discount)}</span></div>` : ''}
         <div class="salm-view-row grand"><span>${t('Total')}</span><span>${money(s.total)}</span></div>
         ${parseFloat(s.gift_card_amount || 0) > 0 ? `<div class="salm-view-row"><span>${t('Gift card')}${s.gift_card?.code ? ` (${esc(s.gift_card.code)})` : ''}</span><span>-${money(s.gift_card_amount)}</span></div>` : ''}
         <div class="salm-view-row"><span>${t('Amount paid')}</span><span>${money(s.amount_paid)}</span></div>
