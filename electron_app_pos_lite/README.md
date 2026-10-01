@@ -32,7 +32,7 @@ it needs (`auth/token`, `auth/register`, `auth/business-categories`,
    them).
 
 Every screen's top bar has the same profile dropdown (avatar, name, email,
-business, Language, Reload page, Restart app, Log out). "Dashboard" goes back to the
+business, My Profile, Language, Reload page, Restart app, Log out). "Dashboard" goes back to the
 tile grid from any module screen; Log out returns to the auth window.
 
 ## Languages (English / Sinhala)

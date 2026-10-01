@@ -34,6 +34,11 @@ const API = (() => {
     startPaymentCheckout: (paymentId) => request('POST', '/auth/payment/checkout-session', { payment_id: paymentId }),
     paymentStatus: (paymentId) => request('GET', `/auth/payment/${paymentId}/status`),
 
+    // My Profile modal (PosAuthApiController me / updateProfile / updatePassword)
+    me: () => request('GET', '/auth/me'),
+    updateProfile: (payload) => request('PUT', '/auth/profile', payload),
+    updatePassword: (payload) => request('PUT', '/auth/password', payload),
+
     // Billing & Payments modal (subscription status + invoice history)
     paymentHistory: () => request('GET', '/auth/payment/history'),
     paymentDetail: (paymentId) => request('GET', `/auth/payment/${paymentId}`),
